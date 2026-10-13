@@ -2,17 +2,20 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-11（Asia/Taipei）。main 已合併 #380／#384／#385，目前 **V2.6.19 Build 0** 調整查無買方名稱留空行為並保留 CYID Consumer。#216／#379 head 已包含於 main ancestry，不重複合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認。2026-10-13 使用者決定折讓人工歷史缺欄位不在 V2.6.19 修正，併入 V3.0 折讓流程重做；本批其餘項目准以本地／隔離測試及已通過的精確 source CI 作版本驗收，無須額外要求使用者逐項實機操作。此決定只調整本批驗收 gate，不代表尚未執行的實機或實際 Cloud 權限驗收已通過。**本批正式 Release 已完成**：2026-10-13 [CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，Windows 正式 [GitHub Actions #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 27 steps success，由 main `95fa5deab097c262d55e67391f32693d68573954` 建置；Release 附正式 ZIP 與 SHA-256。原 #38336017123 因 Cloud.Tests 命令不當而失敗，已由治理 PR #429 修正並在成功 run 中通過測試；未產生重複 tag。折讓歷史缺陷留待 V3.0，沒有改 Cloudflare Worker／D1。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 13，已由 Development Deploy #12 完成 additive 部署並比對原資料；CYID disabled、Built-in 保留，詳見 §7.3.3。V2.6.18 不改 Cloud／provider，不新增部署。CI 成功不等於實機驗收或正式 CYID 切換。
+Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 已核對 CYID_ENABLED=true 與原 Workspace／Device Token hashes／history／FK 保留。單台原機設定驗證成功；其餘角色／裝置、60 秒刷新／斷線／撤銷的真實多裝置操作未做，交由既有自動化／本地替身作本批版本驗收，未取得的 live 證據仍如實保留供後續確認。**禁止為測試建立／上傳／部署任何 Cloudflare 測試 Worker／測試版本／handler；既有無法刪除的測試 Worker 不重試刪除、不增建替代物；不更動現有 Cloudflare Worker、D1 或真實裝置／帳號。** 舊版本段落為歷史證據，不能當現行旗標。
 
 ## 0. 接續優先順序
 
+- [x] **V2.6.19 正式發行已完成**：tag `cyinvoice-v2.6.19`、Windows/Cloud Client tests、PE/package/portable smoke、安全掃描、SHA-256 與 GitHub Release 均完成；[正式 Run](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968)。此項不再列為阻塞；未取得 live AA／AB／AC 證據維持其實際未驗狀態。
+
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
-| 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過，實機待驗收 |
+| V3.0 延後 | 折讓人工處理歷史缺申請／處理欄位；隨 V3 雲端 Work Item／正式折讓流程整體重做 | §1.1／§6／§7.5；V2.6.19 已知缺陷，不再阻擋本批 Release |
+| 本批本地核准 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過；本批不以新的真人實機操作為必要條件 |
 | 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |
@@ -21,15 +24,27 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 | 接續 | Invitation、Employee identity matrix／CRUD／Email／password recovery／transfer | 7.2；使用最新測試包，舊 Run343 Artifact 已到期 |
 | 本輪 | CYID Consumer source CI／Windows 實機／隔離 staging 與切換計畫 | 7.3／RC AA；provider／gateway／offline 已接線，正式切換及 0-Device recovery 未完成 |
 | V3 協同 | Cloud Work Item／原子結案／revision、多機 OrderID 防撞、Audit | 7.5／7.6；identity gate 後分項開發 |
+| 已完成 source、後續遠端 gate | **本公司 CYID-only D1 實體移除 Built-in 員工表**；PR #432 原始碼／SQLite／CYID／Windows CI 全綠，**線上原 D1 未執行刪表** | 7.7／CLOUD_IDENTITY_LIFECYCLE §20；唯一原 business D1、原 Workspace／Device／Audit、私有備份核對後再核准維護 |
 | 後續 | 正式折讓 API／全域單號、自架手冊、酷澎樣本 | 5／6／9；不可用人工流程冒充完成 |
 
 - [ ] 完成 RC Y 的介面實機驗收（96 DPI）；125／150 DPI 與 High Contrast 尚未取得證據。使用版本／最後使用為成功啟動回報，不代表即時在線；持續 heartbeat 不在本次範圍。
 - [ ] 完成 RC W 的實機驗收並記錄包／環境／結果：正常等待→完成、等待→錯誤→恢復、數量／公司隔離、舊折讓 null 分類、無 active upload issue 的作廢仍能管理員結案。
 - [x] PR #216／#379 head 已包含於 #380 ancestry 並合併 main；V2.6.14 裝置管理／邀請／分流實機驗收仍在 RC Z／X／W，不以工程合併代替。
 
-本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
+本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。**使用者本次批准改用本地驗收作 V2.6.19 本批發行判斷；未執行的真實 AMEGO、Windows DPI、CYID 角色與多裝置撤銷等仍不能標成實機通過。** 已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
 
 - [ ] 完成 RC Z：active 清單、獨立新增視窗標籤／欄位、A/B 升級重啟回報、離線值保留、超管改名與 revoked 歷史仍可由雲端管理查詢。
+
+## 1.1 折讓人工處理歷史缺欄位（V3.0 整體重做；本批不修）
+
+2026-10-13 使用者決定停止 V2.6.x 的這項缺陷修正，併入 V3.0 折讓／Cloud Work Item／Audit 正式重做；**此處不是已修復或已驗收**。V2.6.19 已知缺陷保留，不作本批 Release 阻塞。不可自行補造原本機遺失的人員、日期、原因、金額，也不因延期清空既有資料。
+
+- [x] 既有 screenshot／source 差異與不確定根因已記錄在 CLOUD_WORK_HANDOFF 歷史停點；原機 DB／備份未取得，不宣稱恢復成功。
+- [x] 使用者明確將本項留待 V3.0 重做；不在 V2.6.19 變動 metadata／sync_issues／UI／schema／VERSION。
+- [ ] V3.0 設計時重新確認多機 Work Item、正式折讓 API、不可覆寫逐筆歷史、申請／處理 actor／時間／原因／金額、結束結果、同步／中斷與 retention；落實詳情狀態區別與可靠的舊資料處理。
+- [ ] 對 V3.0 新流程提供對應的本地／整合與必要實機驗收。原 RC AD 轉成 V3 需求參考，不能把 V2 既有缺陷當作通過測試。
+
+本批 Release 判斷依本地／隔離驗證及既有精確 source GitHub CI；不得上傳任何 Cloudflare 測試 Worker／版本，正式／development 雲端資料與裝置不因驗收而變更。
 
 ## 1. V2.6.x 實機與光貿驗證
 
@@ -89,9 +104,9 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 折扣／負數調整樣本。
 - [ ] 取得樣本後補 parser、金額、防重與測試案例。
 
-## 6. 正式折讓 API（雲端化階段）
+## 6. 正式折讓 API（V3.0 雲端化階段）
 
-目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。
+目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。2026-10-13 使用者決定目前人工折讓歷史缺欄位不單獨修補，V3.0 隨正式折讓及 Cloud Work Item／Audit 重做；既有 V2 缺陷不因此視為修復。
 
 - [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
@@ -196,7 +211,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] 實際 prepare-cyid #39（38203790273），source 2e21c870／tree c1d303e4，IDENTITY／IDENTITY_AUTHORITY 和三個 approved vars readback／100% business 部署通過。原 Cloud0.9.2／schema13／Workspace1／Device4／Token hashes／employee／history／FK／routes 保留；migration skipped、private cleanup 通過、Built-in／CYID false。精確證據及工程包見 CLOUD_WORK_HANDOFF 最新停點。
 - [x] 2026-10-12 使用者確認原 Windows 升級後發票／設定保留且原帳密可進設定，授權接續；此為單次原安裝 Built-in continuity 回報，不勾選整份 AA／AB／AC 或全部角色／裝置。
 - [x] 原 development 受控 activate-cyid：#420 head70514413／treec8fb38c1 全部 CI 通過並合併；actual #42（38206372325）source8488ce3d／同 tree 確認 CYID_ENABLED=true、100% business 部署、原 Workspace1／Device4／Token hashes／history／FK／routes 保留，migration skipped／private cleanup 通過。Recovery UTC2026-10-12T05:05:10.603Z；無 reset／rejoin／D1 restore／production／Release。
-- [ ] 原 V2.6.19 安裝重開，以 CY Web／CYID Super Admin 員工帳密進入設定，核對原資料／裝置續用、discovery 與中央當次驗證；一般員工 App Access／Role、private RPC 及 AA／AB／AC 另驗，不自動授予一般員工權限。
+- [x] 使用者於 2026-10-12 16:52／16:59 回報原 V2.6.19 安裝重開、CYID 員工帳密進設定與原資料續用正常；此為單台使用者回報。一般員工 App Access／Role、其餘裝置／private RPC／AA／AB／AC 仍另驗，不自動授權或擴大勾選。
 - [x] 官方active與retired部署入口已同步Secret並read-back：Provider development #153／preflight #154通過；Invoice #31於Provider切換時在upload前阻擋，等待Provider完成的新snapshot #32通過，原Workspace／Device hashes／history／Builtin保留、無test upload／authority switch。Exact source／refs／run evidence見現行交接及Provider DEVELOPMENT_DEPLOYMENT。
 - [x] 使用者已刪除 development 同名 CYID_WORKER_NAME Variable 並保留 Secret；唯讀 #34（38195315134）通過，原 Cloud0.9.2／storage13／Workspace／Device／Builtin／FK 保留，Provider scope 仍 false，無 upload／Identity D1 access。
 - [ ] 已配置的 private IDENTITY Fetcher／IDENTITY_AUTHORITY RPC 實際 transport、真實 Employee／App Access／Role／verified Email／原 Windows 驗收，使用真實 consumer 功能，不新增遠端測試 handler；temporary Workers Admin 取消待確認。
@@ -213,6 +228,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.5 跨機 Work Item / Sync
 
+- [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
 - [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
@@ -224,6 +240,22 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] 補齊 Employee、Work Item、SUPER_ADMIN transfer 與維運事件的必要摘要；現有 Device pairing／invitation／join／revoke audit 不重做。
 
 Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code、OTP、Device Token、App Key 或不必要的完整發票內容；這是持續約束，不另列一個可勾選功能。
+
+### 7.7 CYID 上線後 CYInvoice D1 舊帳號資料退役（2026-10-13 規劃，尚未執行）
+
+使用者確認 TODO 已打勾的工作視為完成；本公司目前已全面轉由 CYID 管理帳號，要求原 CYInvoice 業務 D1 **實體移除 Built-in Employee／Credential／Transition 相關表**。未來其他公司 Built-in／Self-hosted 使用自己的新 D1，程式功能與原 migration 保留。§19 為初版 credential-only 歷史規劃，**現行落地方案見 `CLOUD_IDENTITY_LIFECYCLE.md` §20**。本批是 source 與本地 CI 實作，尚無遠端 D1 刪表授權／實際數據，不新建測試 Worker。
+
+- [x] 原始碼唯讀盤點：`CYID_ENABLED=true` 的 Worker 拒絕舊員工與 Web Auth route，`runtime-sync` 改走 CYID 權限服務；既有 Built-in/self-hosted 模式仍被支援，不能全域 DROP 帳號表。
+- [x] SQL schema 唯讀盤點：`cloud_employees` 仍被 `device_employee_links`、`employee_link_candidates`、`employee_transition_items`、舊 `device_invitations.issued_by_employee_id` 以 FK 引用；`email_otp_challenges` 亦被現行 CYID 配對 OTP 使用。先保留歷史 actor、Device、Workspace、Audit。
+- [ ] **唯讀原 D1 盤點 gate：**以受控只讀方式確認目前活躍 Worker／原 D1 binding／目標 Workspace 及 `CYID_ENABLED`，收集匿名化 table counts、舊 verifier 非 NULL 筆數、FK/歷史、未完成 transition、有效 pairing OTP、舊／CYID invitation actor；目前尚無直接即時 D1 查詢結果，不能填入或推測資料筆數。禁止將姓名、Email、雜湊值、Secrets、實際 ID 寫到 Public PR 或 log。
+- [ ] **本地雙模式回歸：**用本地 synthetic SQLite／Worker fixture 驗證 CYID mode 在舊 verifier 為 NULL 時，裝置／邀請／Email OTP／權限／runtime sync 不回歸；同時驗證 Built-in/self-hosted 的帳號 CRUD、recover、transfer 與裝置流程繼續有效。
+- [x] **CYID-only 物理 schema 清理 source 已實作：**獨立 `cloud/maintenance/retire-built-in-for-cyid-only.sql`（不進常規 migrations）移除 `cloud_employees`、`device_employee_links`、`employee_link_candidates`、`employee_transition_items`；重建 invitation FK 保留 old actor、保留 Device／Workspace／Audit／共用配對 OTP，並以 profile marker 標記合法清理。Cloud source **0.9.3 已於 PR #432 合併 main**；原 business Worker 實際活躍版本尚未升級，**尚未操作真實 D1**。
+- [x] **本地／CI source 驗證完成：**[PR #432](https://github.com/simonliu1118-byte/CYapps/pull/432) 合併 main `0cc97c9a`；[Cloud Check #38340836036](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836036) Linux／SQLite／CYID real-provider／Windows Client／工程包與安全掃描全綠，[Development Cloud Validate #38340836071](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836071) 僅 validate 成功，遠端 deploy job **skipped**；[Governance #38340836060](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836060) 成功。這是本地／CI 證據，不代表原 D1 已清理或原 Worker 已部署。
+- [ ] **原 Worker 相容部署 gate：**未來只在核准原 business Worker 升級 0.9.3 且留住 `CYID_ENABLED=true`、原 D1／service binding／Device／history 后才能進行清表；先 code-only 後 D1 maintenance，不能用測試 Worker/handler 驗收。
+- [ ] **真實 D1 清理 gate：**獲得原 D1 最新唯讀證據、業務影響盤點、私有備份／回復窗口及確切使用者批准後，才執行 CYID-only 完整舊帳號／轉換表移除。原 D1、CYID D1 與任何測試 Worker 目前均未修改。
+- [ ] **V3.0 設計銜接：**Work Item／Cloud Audit 新增 actor 必須明確區分 CYID 外部身分與舊 Built-in 歷史，不能靠員編猜測同人；跨機原子操作、OrderID 防撞與正式折讓流程等核心功能仍獨立規劃。
+
+**資源保護：**不建立／上傳／部署任何 Cloudflare 測試 Worker／handler，不重試刪除舊測試 Worker，不刪 CYID D1，不變更原 Workspace／Device/Token，不把 Local EmployeeStore 或 Built-in/self-hosted 的正式支持一起移除。
 
 ## 8. 後續大版本：多公司 Workspace
 

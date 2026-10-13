@@ -1,15 +1,25 @@
 # CYInvoice Cloud Reference Backend
 
-Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination and central Employee identity.
+Cloudflare Worker + D1 reference implementation for CYInvoice coordination. Built-in/self-hosted deployments store their own Employee authority; CYID deployments use the external CYID Employee authority and may opt into a separately approved **CYID-only D1 account-table retirement**.
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
 The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current source baseline is V2.6.17 Build 2 (CYID Consumer candidate); V2.6.14 predecessor PR #216 remains open; exact source CI, package and remote deployment evidence are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
+## CYID-only D1 Employee table retirement (source 0.9.3; NOT applied remotely)
+
+The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no longer needs the Built-in Employee account tables, but it must preserve its Workspace, Devices, token hashes, pairing/invitations, shared pairing OTP, and security audit history. This does **not** remove Built-in Cloud/self-hosted functionality: a separate Built-in deployment gets a new D1 with its own original schema.
+
+- New optional maintenance SQL: `maintenance/retire-built-in-for-cyid-only.sql`. Deliberately **outside** `migrations/`, so normal Built-in and deployment migrations NEVER remove an Employee table.
+- It preserves legacy invitation issuer IDs as **historic opaque strings**, removes the old Employee FK before removing the employee/transition tables, and keeps CYID issuer IDs separate. Shared `email_otp_challenges` remains for Device pairing; only account-specific challenges are removed.
+- A `cyid_storage_profile` marker identifies an intentionally retired CYID-only schema. Deployment audits support both original Built-in and CYID-only profiles, fail closed on mismatches, and refuse ordinary deployments that change profile.
+- Runtime compatibility removes a hidden `cloud_employees` SQL reference in CYID Device rename; Built-in Device rename still checks the Built-in Employee table.
+- Maintenance is **not** run by any CI, GitHub workflow or cloud deployment. The prerequisite is a separately approved, private, atomic and recoverable operation against the verified original business D1, after a compatible Worker deployment and read-only inventory. No remote D1 operation, Cloudflare Worker upload or test Worker is performed by this source change. See `../docs/CLOUD_IDENTITY_LIFECYCLE.md` §20.
+
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.9.2`
+- Cloud implementation source candidate: `0.9.3` (the original remote Worker remains on its previously verified active version until a separate approved deployment)
 - API: `1`
 - Legacy API compatibility marker: `schemaVersion=8`
 - Actual storage schema: `storageSchemaVersion=13`

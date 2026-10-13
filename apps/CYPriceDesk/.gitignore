@@ -1,0 +1,12 @@
+node_modules/
+dist/
+artifacts/
+.openai/
+.env
+.env.*
+!.env.example
+*.log
+*.tar
+*.tar.gz
+*.csv
+*.tsv

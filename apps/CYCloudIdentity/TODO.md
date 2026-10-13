@@ -2,6 +2,14 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## Verification Email clickable CY Web link — 2026-10-13
+
+- [x] CYID source 0.3.8: use existing runtime `ACCOUNT_PORTAL_URL` to include the CY Web root login address in both HTML-clickable and plaintext new-Employee / resend-initial Email; clarify that initial passwords cannot log into CYACCweb, that permanent password setting happens in CY Web, and that fresh login is required.
+- [x] Validate URL before writing or rotating an initial credential; production URL must be HTTPS, without embedded credentials/query/fragment. No URL with password, token or employee data is sent.
+- [ ] After PR CI and a **separately authorized** CYID deployment, read back the actual Provider `ACCOUNT_PORTAL_URL` and CY Web Service Binding to verify both address the same CYID authority; do not expose real IDs or credentials in Public logs.
+- [ ] Controlled real Email/browser acceptance (new Employee + resend): received email HTML/text link, click-through, initial login, permanent password, confirmation read-back, fresh login, CYACC app access and error classification. Do not reissue actual employee credentials during this source-only change.
+- **CYID Consumer Impact: NONE**; API/Session/Role/App Access/CYID consumer contract 1.0.4 unchanged. Existing CYACC automatic deployment and Cloudflare workers are not touched by this CYID-only PR.
+
 ## Current checkpoint — 2026-10-12
 
 - Current source **CYCloudIdentity 0.3.7 Build 0／contract 1.0.4** 已由 #416 合併，八項 final-head CI 通過；development actual #158（38197480766）同已測 tree 升級成功，保留原 authority／history／settings／Secrets／七 migrations／FK。Production未部署此批；不自動登記App或授予員工權限。

@@ -6,6 +6,7 @@ import {
   verifyCredential,
 } from "./crypto";
 import { createEmailSender, normalizeAddress } from "./email";
+import { createFirstLoginEmail } from "./first-login-email";
 import { json, readJsonObject } from "./http";
 import { reserveEmailBudget, settleEmailBudget, type EmailBudgetReservation } from "./email-budget";
 import { requireWorkspaceAdmin } from "./admin-auth";
@@ -185,6 +186,8 @@ export async function issueInitialCredential(
   }
 
   const password = createInitialPassword();
+  // Reject absent or unsafe portal settings before creating/replacing any initial credential.
+  const firstLoginEmail = createFirstLoginEmail(employee.employee_no, password, env.ACCOUNT_PORTAL_URL, env.APP_ENV);
   const verifier = await createCredentialVerifier(password);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + INITIAL_PASSWORD_TTL_MS).toISOString();
@@ -224,20 +227,8 @@ export async function issueInitialCredential(
     await emailSenderFrom(env).send({
       to: employee.email_normalized,
       subject: "CY Web 帳號 Email 驗證",
-      text: [
-        "您的 CY Web 帳號已建立。",
-        "",
-        `帳號：${employee.employee_no}`,
-        `一次性首次登入密碼：${password}`,
-        "",
-        "此密碼僅可使用一次，並於 24 小時後失效。",
-        "請前往 CY Web，使用上述帳號與首次登入密碼登入。",
-        "登入後請在 10 分鐘內設定新的正式密碼。",
-        "設定完成後系統會回到登入頁，請使用新密碼重新登入。",
-        "",
-        "若首次登入密碼或驗證流程已逾期，請聯絡有權限的管理員重寄驗證 Email。",
-        "若您未預期收到此信，請聯絡系統管理員。",
-      ].join("\n"),
+      text: firstLoginEmail.text,
+      html: firstLoginEmail.html,
     });
     sent = true;
     await env.DB.prepare(
