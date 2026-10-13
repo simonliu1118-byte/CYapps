@@ -42,11 +42,11 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 
 ## GitHub 清理 — 2026/10/13
 
-- 正式 `cyaccountingweb-deploy.yml`、`cyaccountingweb-release.yml` 與 Stable Release／tag／assets 保留。
-- 清理清單固定舊 branch 名稱與已盤點 SHA；main 執行前再次核對 head，若改動或仍有 open PR 就保留。#435 與 optimistic create 明確排除；其他 App／共通治理流程不清理。
-- 只刪 CYACCweb 已從 main 移除的 workflow 所屬 **completed** runs；執行中紀錄及現行部署／Release 的歷史證據全部保留。Artifact 僅處理確認屬本 App 且已到期者。
-- 舊文件 PR #268、#291、#383 內容已被現行 README／本交接／平板文件涵蓋，將以 superseded 關閉，保留 PR 歷史。
-- 一次性 maintenance workflow 先在 PR 做唯讀盤點，再於合併後 main 執行；完成後移除 workflow、script 及 manifest。**本節目前為清理待執行，最後結果需在作業回讀後更新。**
+- PR **#436** 已合併；[清理 run 38383025033](https://github.com/simonliu1118-byte/CYapps/actions/runs/38383025033) completed／success，作業回讀確認 **34 個過期 branch、16 個已退場流程的 22 筆 completed runs** 已清理。候選 branch／run／到期 Artifact 殘留均為 **0**；沒有需要處理的到期 Artifact，共 56 次刪除。
+- 舊文件 PR **#268、#291、#383** 已關閉，現行文件已涵蓋有效內容；PR 歷史保留。已完成分支清單與盤點 SHA 可由 #436 commit 追溯。
+- **#435 首次登入引導**與 **optimistic create** 未合併工作線保留；執行中 run、現行部署／Release 全部歷史及 Stable Release／tag／assets、其他 App／共通流程保留。
+- 一次性 maintenance workflow、script 及 manifest 已從本次收尾 source 移除；主線僅保留正式 `cyaccountingweb-deploy.yml` 與 `cyaccountingweb-release.yml`。本次清理的驗證／執行紀錄保留作維護證據，不留下長期清理權限入口。
+- 文件、Backup schema、平板現況與 TODO 已彙整；產品維持 **V0.23.1 Build 2／schema 8**。部署驗證不代表更動帳務資料，也不合併未完成的 #435。
 
 ## Canonical owner
 
