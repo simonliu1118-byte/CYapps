@@ -1,12 +1,12 @@
 # CYInvoice Windows 候選版驗證清單
 
-本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
+本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。**2026-10-13 本批 V2.6.19 驗收決策：使用者批准其餘項目由 AI 以本地／隔離測試及已完成精確 source CI 核對即可，不要求再次逐項真人實機驗收；已知人工折讓逐筆歷史缺欄位併入 V3.0 重做，不當作本批阻塞，也不得標示修復。** 這是本批發行判斷，不是實機／雲端行為已全部驗證。**禁止建立、上傳、部署任何 Cloudflare 測試 Worker／版本／handler；不可重試刪除先前刪不掉的測試 Worker，也不得以新的測試 Worker 取代。** 不更動既有 Workspace／Device／Token／D1／真實帳號；撤銷會完整清除 portable folder，不以真實裝置代替測試。
 
-- 目前工程測試基準：**V2.6.17**；CYID source 未部署，精確 head Windows 工程包另記交接。
-- Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
-- 前置 V2.6.14 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
-- 最新公開正式 Release：**V2.4.2**。
-- V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
+- **正式版已發布：**2026-10-13 [CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，[正式 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) Windows 全套測試／Cloud Client／PE／套件／啟動／安全掃描／SHA-256 成功；tag `cyinvoice-v2.6.19`，ZIP 與 .sha256 已可下載。**以下工程包、待驗實機勾選維持其原本意義，不冒充正式環境逐項實測。** 折讓人工歷史於 V3.0 重做；Cloudflare 測試 Worker 禁令持續有效。
+- 目前工程基準：**V2.6.19 Build 0**；[Cloud Check #412 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)，source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，2026-10-15 11:06 Asia/Taipei 到期。該 source 的 Invoice subtree 與本輪 main 基準 `2c3071c8` 完全一致；不是正式 Release。
+- Development Cloud：**0.9.2 / API 1 / compatibility marker 8 / storage Schema 13**；prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows CYID 帳密進設定已由使用者回報成功；其餘角色／裝置／AA／AB／AC 真實實機項目未驗，僅可引用本地／CI 證據作本批版本接受；折讓歷史缺欄位已經使用者改列 V3.0 重做（AD），不阻塞本批 Release。
+- PR #216／#379 的 source 已隨 #380 進入 main；舊 Windows／Cloud runs 僅為歷史證據，不再作現行停點。下方節名中的舊版號表示功能首次引入；本次一律使用 V2.6.19 驗收。
+- 升級原安裝：先關閉程式並備份完整 portable folder，以工程包程式檔覆蓋原位置（含 Runtime／package-files.json），保留 Data／Cache／Logs 與原 Windows 使用者。重開應延續原 Workspace／Device／資料，不重新加入或進行 reset。
 
 ## A. 全新啟動、超級管理員與設定
 
@@ -321,9 +321,11 @@
 
 自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。
 
-## AA. V2.6.15 CYID Consumer 實機驗收（尚未執行）
+## AA. V2.6.19 CYID Consumer 實機驗收（原機設定驗證已回報，其餘待驗）
 
-先安排隔離 staging，確認 registered Application／Workspace enablement／App Access、private IDENTITY binding、兩 Workspace 配對、0013 backup/FK；記錄 PR 精確 head、工程包 hash 和環境，不把上一版包或 local provider fixture 當 live 證據。原 Local／Built-in A/B/C 與業務驗收保留。
+- [x] 2026-10-12 16:52／16:59 使用者确认原安裝重開後以 CYID 員工帳密進設定、CYID 模式與原資料續用正常。這是單台使用者回報，未取得 DB／HTTP trace，不代替下列完整 matrix。
+
+中央登記／runtime scope 與兩個私有 bindings 的配置已完成，#39 確認原 schema13／資料保留；這不代替 Employee／App Access／Role 或 transport 授權。先驗原安裝 Built-in continuity 與員工 readiness，再受控驗 CYID；不新增遠端測試程式或 synthetic 帳號。記錄精確 source、工程包 hash、環境與備份，不把配置或 local fixture 當 live 授權。原 Local／Built-in A/B/C 與業務驗收保留。
 
 - [ ] Local／Built-in 原流程及舊 discovery-404 Worker 不受影響；已確認 CYID 的 client 不自動降級。
 - [ ] 原 A/B/C 安裝先升級到 CYID-capable Windows，備妥各員工啟用／App Access／Role／verified 超管 Email，再受控啟用。前後核對同一 CYInvoice Workspace、原 Device／Token、公司／印表機／protected secrets、發票／pending／買方／PDF；重開可繼續原工作，不重新加入／建立 Workspace／reset，錯綁定拒絕且保留原設定。
@@ -340,7 +342,7 @@
 - [ ] Cloud→Local reset 清 CYID cache/binding，保留原 crash-safe 流程；未實作 0-Device recovery 前 LAST_ACTIVE_DEVICE 仍拒絕最後撤銷。
 - [ ] Migration 0013 保留舊邀請與 audit；external actor 不建 fake employee／verifier，rollback 不自動降級已確認 CYID client。
 
-125／150 DPI 仍 Deferred。本節全部為人工待驗，不以自動化測試勾選；正式切換／Release 另行授權。
+125／150 DPI 仍 Deferred。本節保留原本實機逐項檢查表；本批使用者另允許以已完成本地／CI 證據判斷版本可發行，未跑的實機操作不因此勾選。正式切換屬獨立高風險部署，不以此例外自動執行。
 
 
 ## AB. V2.6.16 服務連線／原有降級／恢復實機驗收（尚未執行）
@@ -372,3 +374,15 @@
 - [ ] 撤銷時已送出的 AMEGO 操作不假稱取消、不自動重送，結果不明有既有查核途徑，不保留已撤銷裝置業務資料。
 
 正式部署／CYID 切換／Release 未授權；RC AA／AB 未完成項仍保留。
+
+
+## AD. 折讓人工申請／處理歷史（V3.0 重做項目，V2.6.19 不處理）
+
+2026-10-12 使用者回報已結束折讓詳情全部人工欄位空白；尚未修正。2026-10-13 使用者決定延期至 V3.0 正式折讓流程／Cloud Work Item／Audit 一併重做。此處保留 V3 驗收需求供將來實作，不是本批測試失敗需補修的 release gate，更不是已修復。既有 source 缺口與不確定性見 CLOUD_WORK_HANDOFF，唯一實作待辦見 TODO §1.1。
+
+- [ ] 正常申請到官方確認完成：申請人／時間／原因／金額、管理員／人工處理時間及官方結果完整；重啟／重新整理仍可讀。
+- [ ] 等待光貿確認不當作完成，保留原人工資料，不盲目重送。
+- [ ] 取消退回與行政結案保留原申請及結束 actor／時間／結果；列表／詳情顯示正確，不冒充官方完成。
+- [ ] 同發票再申請後，兩筆歷史各對應自己的資料，跨五分鐘／重啟／同步不空白或誤取較新申請。
+- [ ] 寫入失敗／中斷不留下只有成功狀態而沒有人工紀錄的半成品，原發票／待辦／資料保留。
+- [ ] 舊紀錄只用可核對的本機 metadata／備份恢復；缺失明确顯示，不編造人員／時間／原因或依光貿猜補。

@@ -1,0 +1,27 @@
+name: CYERPAutoInput Release Cleanup
+
+# Removes a superseded CYERPAutoInput Release and its tag when the user asks for it (the
+# user, 2026-10-12: V0.2.7 replaced by V0.2.9). Started by hand from main only, and only for
+# this project's own tags.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to delete (cyerp-auto-input-vX.Y.Z)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  delete-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the release and its tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "main" ]; then echo "Run from main only; got $GITHUB_REF_NAME"; exit 1; fi
+          if ! printf '%s' "$TAG" | grep -Eq '^cyerp-auto-input-v[0-9]+\.[0-9]+\.[0-9]+$'; then echo "Not a CYERPAutoInput release tag: $TAG"; exit 1; fi
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes

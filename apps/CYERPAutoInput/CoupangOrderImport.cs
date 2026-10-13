@@ -29,7 +29,8 @@ internal sealed record CoupangMapping(
     string NotePrefix,
     string DiscountItemCode,
     string ShippingItemCode,
-    IReadOnlyDictionary<string, string> FreightTypes);
+    IReadOnlyDictionary<string, string> FreightTypes,
+    string PromotionItemCode = "");
 
 /// <summary>
 /// Parses the 酷澎 DeliveryList export (.xlsx). Rules (user, 2026-10-11): 單價＝銷售價格; 運費
@@ -131,11 +132,11 @@ internal static class CoupangOrderImport
         {
             var code = group.Key.ItemCode;
             if (code.Length == 0) { handoff.Add($"商品「{group.First().Name}」沒有公司商品代碼"); continue; }
-            if (MoOrderImport.IsCombination(code)) handoff.Add($"公司商品代碼「{code}」是組合品號");
             items.Add(new ImportedItem(code, Number(group.Sum(l => l.Quantity)), Number(group.Key.Price)));
         }
         if (order.Discount > 0) items.Add(new ImportedItem(mapping.DiscountItemCode, "1", Number(-order.Discount)));
         if (order.Shipping > 0) items.Add(new ImportedItem(mapping.ShippingItemCode, "1", Number(order.Shipping)));
+        items = Bundles.Expand(items, mapping.PromotionItemCode, handoff);
 
         var freightType = FreightCarriers.Match(order.Carrier, mapping.FreightTypes);
         if (freightType.Length == 0) handoff.Add($"物流商「{order.Carrier}」沒有設定貨運別");

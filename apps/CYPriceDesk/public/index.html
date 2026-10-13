@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#132f2c"><meta name="robots" content="noindex,nofollow">
+  <meta name="description" content="私有的競品價格比較工作臺，集中記錄商品、平台價格與查價時間。">
+  <title>價格觀測室 · Price Desk</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23132f2c'/%3E%3Cpath d='M17 43V31M32 43V21M47 43V13' stroke='%23d8ef8b' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="價格觀測室首頁"><span class="brand-icon"><svg viewBox="0 0 32 32"><path d="M8 24v-7m8 7V11m8 13V6"/></svg></span><span>價格觀測室<small>PRICE DESK</small></span></a>
+    <span class="nav-label">我的工作空間</span>
+    <a class="nav-item active" href="#overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>比價總覽<span class="nav-dot"></span></a>
+    <button class="nav-item" id="sidebar-import"><svg viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>匯入查價資料</button>
+    <div class="sidebar-note"><span class="tiny-dot"></span>只屬於你的價格筆記<p>每個價格，都有來源與時間。<br>每次決策，都多一點依據。</p></div>
+    <div class="sidebar-bottom"><div class="avatar">S</div><div>個人工作空間<small>私有網站 · 僅擁有者</small></div></div>
+  </aside>
+  <main id="overview">
+    <div class="topbar"><span>工作空間 <span class="crumb">/</span> <strong>比價總覽</strong></span><span class="private-badge"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>私有</span></div>
+    <div class="workspace">
+      <section class="heading-section"><div><div class="eyebrow">YOUR PRICE INTELLIGENCE</div><h1>好價格，一目瞭然<span class="heading-dot">。</span></h1><p>集中記錄各平台報價，找到同規格商品的最低價。</p></div><button class="button primary" id="add-btn"><span class="plus">＋</span>新增查價</button></section>
+      <div id="storage-warning" class="notice error" hidden></div>
+      <div id="demo-banner" class="notice demo" hidden><span><strong>範例模式</strong>　以下價格為示意資料，並非平台即時行情。</span><button id="exit-demo">返回我的資料 →</button></div>
+      <section class="stats-grid" aria-label="查價摘要" id="stats"></section>
+      <section class="comparison-panel" aria-labelledby="comparison-title">
+        <div class="panel-heading"><div><h2 id="comparison-title">商品價格比較 <span class="small-count" id="group-count">0</span></h2><p>依同商品、同規格分組 · 金額皆為新臺幣</p></div><div class="panel-tools"><button class="button ghost" id="demo-btn">看看範例</button><button class="button secondary small" id="import-btn"><svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>匯入</button><button class="icon-button" id="export-btn" title="匯出目前資料為 CSV" aria-label="匯出 CSV"><svg viewBox="0 0 24 24"><path d="M12 16V3m-4 4 4-4 4 4M4 16v5h16v-5"/></svg></button></div></div>
+        <div class="filterbar"><label class="searchbox"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="search" placeholder="搜尋商品、規格或賣家…" aria-label="搜尋商品"></label><select id="platform-filter" aria-label="篩選平台"><option value="">所有平台</option></select><div class="basis-switch" role="group" aria-label="價格比較基準"><button class="selected" data-basis="price" aria-pressed="true">商品價格</button><button data-basis="total" aria-pressed="false">含運總價</button></div></div>
+        <div id="groups" class="groups"></div>
+      </section>
+      <footer><span><span class="tiny-dot"></span><span id="save-status">資料儲存在此瀏覽器</span> · 建議定期匯出備份</span><span>手動查價 · 時區：臺北 UTC+8</span></footer>
+    </div>
+  </main>
+  <dialog id="offer-dialog" aria-labelledby="offer-dialog-title">
+    <form id="offer-form"><div class="dialog-heading"><div><span class="eyebrow">PRICE RECORD</span><h2 id="offer-dialog-title">新增查價</h2></div><button type="button" class="icon-button" data-close="offer-dialog" aria-label="關閉新增查價">✕</button></div>
+      <p class="dialog-intro">同商品、同規格會自動放在一起比較。</p>
+      <div class="form-grid"><label class="wide">商品名稱 <span class="required">*</span><input name="product" id="product-input" required maxlength="200" placeholder="例如：無線降噪耳機" list="product-suggestions"><datalist id="product-suggestions"></datalist></label>
+      <label class="wide">規格／型號<input name="spec" maxlength="200" placeholder="例如：型號 A1／黑色／公司貨"><span class="field-hint">不同容量、型號或組合請填入不同規格。</span></label>
+      <label class="wide">商品連結<input name="url" id="url-input" type="url" maxlength="2048" placeholder="https://shopee.tw/…"><span class="field-hint">會辨識常見平台；尚未查價時可只存連結。</span></label>
+      <label>平台 <span class="required">*</span><input name="platform" id="platform-input" list="platform-suggestions" required maxlength="200" placeholder="蝦皮、momo…"><datalist id="platform-suggestions"><option value="蝦皮"><option value="momo"><option value="PChome"><option value="Yahoo"><option value="其他"></datalist></label>
+      <label>賣家／通路<input name="seller" maxlength="200" placeholder="例如：品牌官方商城"></label>
+      <label>商品價格（NT$）<input name="price" id="price-input" type="number" min="0" max="1000000000" step="0.01" placeholder="尚未查價可留白"></label>
+      <label>運費（NT$）<input name="shipping" type="number" min="0" max="1000000000" step="0.01" placeholder="免運填 0，未知留白"></label>
+      <label class="wide">查價時間（臺北時間）<input name="checkedAt" id="time-input" type="datetime-local"><span class="field-hint">記錄你實際看到價格的時間；此網站不會自動查價。 <button class="button ghost" type="button" id="set-now" style="padding:0 4px;font-size:9px">設為現在</button></span></label>
+      <label class="wide">備註<textarea name="note" rows="2" maxlength="1000" placeholder="例如：一般售價；限時折扣；需領券等條件"></textarea></label></div>
+      <div class="form-error" id="offer-error" role="alert" hidden></div>
+      <div class="dialog-footer"><button class="button secondary" type="button" data-close="offer-dialog">取消</button><button class="button primary" type="submit">儲存查價</button></div>
+    </form>
+  </dialog>
+  <dialog id="import-dialog" aria-labelledby="import-title"><div class="dialog-heading"><div><span class="eyebrow">BRING YOUR DATA</span><h2 id="import-title">匯入查價資料</h2></div><button class="icon-button" data-close="import-dialog" aria-label="關閉匯入">✕</button></div>
+    <p class="dialog-intro">貼上 CSV／試算表資料，或選擇 CSV 檔。先預覽，再匯入。</p>
+    <label class="file-label button secondary"><svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>選擇 CSV 檔<input type="file" id="csv-file" accept=".csv,.tsv,text/csv,text/tab-separated-values" hidden></label><button class="button ghost" id="sample-csv">填入格式範例</button>
+    <label class="paste-label">查價資料<textarea id="paste-input" rows="7" spellcheck="false" placeholder="商品,規格,平台,價格,運費,查價時間,連結,賣家,備註"></textarea></label>
+    <p class="field-hint">標題列至少需含「商品、平台、價格」或「商品、平台、連結」。查價時間留白會使用匯入時間；運費留白視為未知。同商品連結只保留最新查價，舊資料不會覆蓋新資料。</p>
+    <div id="import-preview" aria-live="polite"></div><div id="import-error" class="form-error" role="alert" hidden></div>
+    <div class="dialog-footer"><button class="button secondary" id="preview-btn">預覽資料</button><button class="button primary" id="confirm-import" disabled>確認匯入</button></div>
+  </dialog>
+  <dialog id="delete-dialog" class="compact-dialog" aria-labelledby="delete-title"><div class="dialog-heading"><h2 id="delete-title">刪除此筆查價？</h2></div><p id="delete-description"></p><div class="dialog-footer"><button class="button secondary" data-close="delete-dialog">保留資料</button><button class="button danger" id="confirm-delete">刪除查價</button></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

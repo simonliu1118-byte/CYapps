@@ -1,12 +1,12 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-10-11（原設計基準：2026-09-29）
+更新日期：2026-10-13（原設計基準：2026-09-29）
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；原 development Cloud 0.9.2 additive rollout 與 Provider 0.3.6 升級已完成，CYID flag 仍關閉、Built-in 與原 Workspace／Device 保留；真實授權／Windows 驗收及正式切換未完成，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；development Cloud0.9.2／Provider0.3.7 已部署，使用者完成中央登記／scope，prepare-cyid #39 完成私有綁定配置。使用者回報原 Windows Built-in continuity 後，實際 activate-cyid #42 確認 CYID_ENABLED=true，原 Workspace／Device Token hashes／資料保留；單台原 Windows CYID 帳密進設定已由使用者回報成功；其餘 transport／角色／AA／AB／AC 及 production 切換仍待驗收，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
 
-CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.3）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
+CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.4）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
 ## 1. 產品目標
 
@@ -388,7 +388,16 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 ### 14.8 保留原 Workspace 的綁定準備與共通參數
 
-#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#25仍是最新 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。
+#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#32是目前 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。
 
 
 2026-10-12 actual checkpoint：#413七項CI通過並合併，使用者完成Secret、唯讀#29及CYACC main #608通過；#29確認Invoice scope configured=false，metadata／registered enablement及private acceptance仍待補，不因common input成功開CYID flag。舊Variable尚有舊deployment refs使用，退場條件與精確證據見現行交接及TODO，不重播bootstrap或猜scope。
+
+
+後續同一已測source的Provider #153／Invoice #32 real-business入口更新通過，Builtin／原Workspace與資料保留；#31於Provider版本切換期間在upload前被穩定性guard攔住，#32使用fresh snapshot。Active／retired refs的Variable引用已收斂，使用者已刪除同名 Variable 並保留 Secret，唯讀 #34（38195315134）通過。中央scope仍未確認；完整refs／events僅在現行交接及TODO追蹤。
+
+### 14.9 中央登記接續（2026-10-12）
+
+Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138）。使用者已透過中央管理完成 CYInvoice 登記／目前身分 Workspace 啟用與 Provider runtime scope；唯讀 #38 及實際 prepare-cyid #39 完成兩個私有 bindings／三個 approved scope vars readback，原 Invoice Workspace／Device／Token hashes／資料保留，CYID_ENABLED=false。配置不等於私有 transport 或 Employee／App Access／Role 已驗收；原 Windows／AA／AB／AC 與受控切換仍待完成，證據集中現行交接與 TODO §7.3.3。
+
+綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代員工 App Access／Role 與原 Windows 驗收，Device Token 不代表 Employee 授權。

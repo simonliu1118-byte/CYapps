@@ -1,5 +1,30 @@
 # CYApps Governance Changelog
 
+## 2.3.39 — 2026/10/13
+
+- CYAccountingWeb 一次性清理 #436／run 38383025033 完成並回讀：34 個過期分支、16 個退場流程的 22 筆 completed runs 已刪，候選殘留為零，沒有到期 Artifact。#268／#291／#383 過期文件 PR 已關閉；現行部署／Release、未合併 #435 與 optimistic create、其他 App／共通流程保留。
+- 移除本次 maintenance workflow／script／manifest，彙整現況、驗收及後續工作；不留永久清理權限入口，產品 VERSION／BUILD、正式資料與 Stable Release 不變。
+
+## 2.3.38 — 2026/10/13
+
+- 使用者授權清理 CYAccountingWeb 無用 GitHub 產物；新增一次性 maintenance 流程，PR 僅唯讀盤點，main 才執行已檢視的 branch SHA 清單、已退場 workflow 的 completed runs 與本 App 到期 Artifact 清理。現行部署／Release、執行中 run、open PR 及指定未完成工作保留；不接入 Cloudflare 或讀取帳務。
+- 清理完成後移除一次性 workflow／script／manifest，保留正式流程及可追溯維護紀錄；不新增永久授權例外，不改產品 VERSION／BUILD。
+
+## 2.3.37 — 2026/10/13
+
+- CYInvoice V2.6.19 首次正式 Release 將 Cloud client contract test 以 `--no-build` 執行，但 Cloud.Tests 不在 CYInvoice.sln 內，Windows runner 未產生 exe；修成測試專案自行建置，保留此額外 test gate，不繞過測試。
+- 若同一授權版本的正式 Release 在未產生 tag／Release 前失敗，允許在驗證原失敗並完成治理 PR 後，從最新 main 一次建立明確命名 `release/cyinvoice-vX.Y.Z-retryN` 的新分支重試；仍僅分支建立事件有效，不能推送舊分支、自動發行其他版本或部署 Cloudflare。
+
+## 2.3.36 — 2026/10/13
+
+- CYInvoice 明確核准在已有當次版本 Release 授權時，使用從 main 精確 commit 建立的 `release/cyinvoice-vX.Y.Z` 一次性 push 作為正式 Windows Release 的額外啟動入口；只有分支新建事件符合，分支後續 push 不會再次發行。
+- 正式 Release 仍從 main checkout、核對精確來源 commit、VERSION／BUILD、全部必要 Windows 驗證／掃描、ZIP／SHA-256 與未占用 tag；不自動從一般 PR／main push 發布，亦不涉及 Cloudflare Worker／D1。
+
+## 2.3.35 — 2026/10/12
+
+- 依使用者確認新增 `apps/CYPriceDesk/` 的最小 `PROJECT_RULES.md`、VERSION／BUILD 與必要 prototype validation workflow。專案採用既有共通／repository 規則，沒有新增永久架構或身分例外。
+- 原型獨立保存，CYWEB 僅提供外部入口；正式需求與併入／獨立發展尚未定案。沒有變更 CYID、其他程式的部署或現有 Sites audience。
+
 ## 2.3.34 — 2026/10/10
 
 - CYInvoice `PROJECT_RULES.md` 明列採用 CYID canonical Consumer Integration Standard；完成使用者授權 consumer 接入所需的專案 adoption gate，直接引用同 repo canonical package，不新增身分語意／規則層，也不授權正式切換。

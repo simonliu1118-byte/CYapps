@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.19 Build 0**（查無買方名稱可留空，並保留重複開立失敗修正；development Cloud 維持 0.9.2／Built-in，CYID 尚未正式切換）。
+- 目前工程測試基準：**V2.6.19 Build 0**（查無買方名稱可留空，並保留重複開立失敗修正；development Cloud0.9.2 已啟用 CYID，原機帳密進設定已由使用者确认；其餘驗收與折讓歷史缺欄位待完成，Release 暫停）。
 - Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
@@ -100,7 +100,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
 - Source 為 Cloud 0.9.2／API 1／compatibility marker 8／storage 13（未部署）。2026-10-10 development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已驗證 Cloud 0.8.9／storage 12 與新能力；人工 A/B/C 行為仍待驗收。
-- V2.6.16 CYID provider／gateway／Windows 原有降級與服務連線 source 已接線，隔離 staging／實機驗收與正式切換尚待完成；0-Device recovery 及跨機業務 Work Item 未實作。詳見 [CY ID 整合](docs/CY_ID_INTEGRATION.md)。
+- CYID provider／gateway 與原降級已接線；actual development #42 已啟用並保留原 Workspace／Device／資料，使用者确认原機 CYID 帳密進設定成功。其餘角色／多裝置／刷新／斷線／撤銷驗收待完成；0-Device recovery 與跨機 Work Item 為後續項目。折讓人工歷史缺欄位已回報、尚未修正；詳見 [現行交接](docs/CLOUD_WORK_HANDOFF.md) 與 [TODO](docs/TODO.md)。
 
 ### 系統診斷（V2.6.3）
 

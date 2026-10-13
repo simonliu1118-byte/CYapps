@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, providerConfiguration, resolveCyIdPreparation } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation } from '../scripts/deployment-preflight.mjs';
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 let activeReads = 0;
@@ -69,7 +69,7 @@ assert.throws(() => fingerprintRows([{ id: 'duplicate' }, { id: 'duplicate' }], 
 const statements = [];
 const before = await snapshot(async sql => {
   statements.push(sql);
-  if (sql === 'PRAGMA foreign_key_check') return [];
+  if (sql === 'PRAGMA foreign_key_check' || sql.startsWith('SELECT name FROM sqlite_master')) return [];
   const id = sql.match(/^SELECT ([a-z_]+)/)[1];
   return [{ [id]: 'synthetic_original', workspace_id: 'synthetic_workspace' }];
 });
@@ -79,21 +79,49 @@ checkContinuity(before, structuredClone(before));
 const appended = structuredClone(before);
 appended.security_audit_events.newEvent = 'newHash';
 checkContinuity(before, appended); // Ordinary new audit events do not erase history.
-for (const table of Object.keys(before)) {
+for (const table of Object.keys(before).filter(name => name !== 'storageProfile')) {
   const changed = structuredClone(before);
   changed[table][Object.keys(changed[table])[0]] = 'changed';
   assert.throws(() => checkContinuity(before, changed), /HISTORY_CHANGED_/);
 }
 await assert.rejects(snapshot(async sql => sql === 'PRAGMA foreign_key_check' ? [{ table: 'broken' }] : []), /FOREIGN_KEY_CHECK_FAILED/);
 
+// A CYID-only D1 has intentionally retired Built-in account tables. Preserve
+// its profile fingerprint but reject unexpected table leftovers and deployments
+// that try to cross between profiles without an explicit maintenance gate.
+const retired = await snapshot(async sql => {
+  if (sql === "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cyid_storage_profile'")
+    return [{name:'cyid_storage_profile'}];
+  if (sql.startsWith("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN")) return [];
+  if (sql.startsWith('SELECT profile, workspace_id, retired_at FROM cyid_storage_profile'))
+    return [{profile:'CYID_ONLY',workspace_id:'synthetic_workspace',retired_at:'2026-10-13'}];
+  if (sql === 'PRAGMA foreign_key_check') return [];
+  const id = sql.match(/^SELECT ([a-z_]+)/)?.[1];
+  assert.ok(id && !sql.includes('cloud_employees'), 'retired CYID query touched legacy Employee table');
+  return [{[id]:'synthetic_original',workspace_id:'synthetic_workspace'}];
+});
+assert.equal(retired.storageProfile, 'CYID_ONLY');
+assert.equal(Object.hasOwn(retired, 'cloud_employees'), false);
+checkContinuity(retired, structuredClone(retired));
+assert.throws(() => checkContinuity(before, retired), /STORAGE_PROFILE_CHANGED_UNREVIEWED/);
+assert.throws(() => checkContinuity(retired, before), /STORAGE_PROFILE_CHANGED_UNREVIEWED/);
+await assert.rejects(snapshot(async sql => {
+  if (sql.endsWith("'cyid_storage_profile'")) return [{name:'cyid_storage_profile'}];
+  if (sql.includes("AND name IN ('cloud_employees'")) return [{name:'cloud_employees'}];
+  if (sql.startsWith('SELECT profile, workspace_id, retired_at FROM cyid_storage_profile'))
+    return [{profile:'CYID_ONLY',workspace_id:'synthetic_workspace',retired_at:'2026-10-13'}];
+  return [];
+}), /CYID_LEGACY_TABLES_STILL_PRESENT/);
+
+
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.2',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.3',
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.2', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.2', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.2', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+checkHealth(health, { version: '0.9.3', schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.3', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.3', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
 for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.2', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.3', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
@@ -300,6 +328,66 @@ for (const scenario of ['new','existing','partial','wrong-readback','scope-drift
   else {await assert.rejects(action(),/UPLOADED_BINDINGS_MISMATCH|CYID_SCOPE_BINDING_CONFLICT|UNREVIEWED_SERVICE_BINDING_CHANGE|CYID_SCOPE_PREPARATION_REQUIRED|CYID_PROVIDER_CHANGED/);assert.equal(posts,['wrong-readback','provider-changed-before-deploy'].includes(scenario)?1:0);}
 }
 
+// Explicit activation changes only the flag, after preparation, without authority SQL.
+const activationSettings = {bindings:[...structuredClone(preparationAudit.settings.bindings),
+  ...preparedConfig.services.filter(b=>b.binding!=='UNRELATED').map(({binding,...b})=>({name:binding,type:'service',...b})),
+  ...Object.entries(preparedConfig.vars).map(([name,text])=>({name,type:'plain_text',text}))]};
+// The fixture base already contains APP_ENV/API_VERSION; retain one binding per name.
+activationSettings.bindings = [...new Map(activationSettings.bindings.map(b=>[b.name,b])).values()];
+verifyPreparedCyId(preparedConfig,activationSettings,preparation,preparationAudit.state.workspaces);
+for(const name of ['IDENTITY','IDENTITY_AUTHORITY',...Object.keys(preparation).filter(n=>n!=='CYID_WORKER_NAME')])
+  assert.throws(()=>verifyPreparedCyId(preparedConfig,{bindings:activationSettings.bindings.filter(b=>b.name!==name)},
+    preparation,preparationAudit.state.workspaces),/CYID_PREPARATION_REQUIRED/);
+assert.equal(checkSettings({bindings:activationSettings.bindings.map(b=>b.name==='CYID_ENABLED'?{...b,text:'true'}:b)},
+  preparedConfig,{allowCyId:true}).CYID_ENABLED,'true');
+for(const scenario of ['success','unapproved-mode','missing-preparation','changed-variable','wrong-flag',
+  'provider-before-upload','provider-before-deploy','lost-upload','lost-deploy']) {
+  const checkpoint={...structuredClone(preparationAudit),operation:'activate-cyid',settings:structuredClone(activationSettings),
+    cyIdActivation:preparation};
+  delete checkpoint.cyIdPreparation;
+  const desired={...preparedConfig,vars:{...preparedConfig.vars,CYID_ENABLED:'true'}};
+  if(scenario==='unapproved-mode') checkpoint.operation='deploy';
+  if(scenario==='missing-preparation') checkpoint.settings.bindings=checkpoint.settings.bindings.filter(b=>b.name!=='IDENTITY_AUTHORITY');
+  if(scenario==='changed-variable') desired.vars.CUSTOM_POLICY='unexpected';
+  let current=activeId,uploaded,posts=0,saved;
+  const request=async(route,body)=>{
+    if(route.includes('/synthetic-provider/')) {
+      if(route.endsWith('/deployments')) return {deployments:[{versions:[{version_id:activeId,percentage:100}]}]};
+      const bindings=structuredClone(providerSettings.bindings);
+      if(scenario==='provider-before-upload'||(scenario==='provider-before-deploy'&&uploaded)) bindings.find(b=>b.name==='CYINVOICE_WORKSPACE_ID').text='changed_workspace';
+      return {id:activeId,bindings};
+    }
+    if(body&&route.endsWith('?deploy=false')) {
+      posts++;uploaded=body;assert.equal(saved.uploadAttempted,true);
+      assert.equal(body.bindings.find(b=>b.name==='CYID_ENABLED').text,'true');
+      assert.ok(body.bindings.filter(b=>b.type!=='plain_text').every(b=>b.type==='inherit'&&b.version_id===activeId));
+      assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),checkpoint.settings.bindings.filter(b=>b.type!=='plain_text').map(b=>b.name).sort());
+      if(scenario==='lost-upload') throw Error('RESPONSE_LOST');
+      return {id:deployedId};
+    }
+    if(body&&route.endsWith('/deployments')) {
+      posts++;assert.equal(saved.deploymentRequested,true);current=deployedId;
+      if(scenario==='lost-deploy') throw Error('RESPONSE_LOST');
+      return {};
+    }
+    if(route.endsWith('/deployments')) return {deployments:[{versions:[{version_id:current,percentage:100}]}]};
+    if(route.endsWith('/routes')) return checkpoint.routes;
+    if(route.endsWith('/subdomain')) return checkpoint.workerSubdomain;
+    if(route.endsWith('/versions/'+activeId)) return {id:activeId,bindings:checkpoint.settings.bindings};
+    if(route.endsWith('/versions/'+deployedId)) {
+      const bindings=uploaded.bindings.map(b=>b.type==='inherit'?structuredClone(checkpoint.settings.bindings.find(x=>x.name===b.name)):structuredClone(b));
+      if(scenario==='wrong-flag') bindings.find(b=>b.name==='CYID_ENABLED').text='false';
+      return {id:deployedId,bindings,compatibility_date:desired.compatibility_date,compatibility_flags:[]};
+    }
+    throw Error('UNEXPECTED_TEST_REQUEST');
+  };
+  const action=()=>deployReviewedVersion(checkpoint,desired,'export default {};',request,value=>{saved=structuredClone(value);},deploymentNow);
+  if(scenario==='success') {await action();assert.equal(posts,2);assert.equal(current,deployedId);}
+  else {await assert.rejects(action(),/AUDIT_DEPLOYMENT_MODE_MISMATCH|CYID_PREPARATION_REQUIRED|CYID_ACTIVATION_VARIABLE_CHANGE|UPLOADED_BINDINGS_MISMATCH|CYID_PROVIDER_CHANGED|RESPONSE_LOST/);
+    assert.equal(posts,scenario==='lost-deploy'?2:['wrong-flag','provider-before-deploy','lost-upload'].includes(scenario)?1:0);}
+  if(saved) await assert.rejects(deployReviewedVersion(saved,desired,'export default {};',request,()=>{},deploymentNow),/DEPLOYMENT_ALREADY_ATTEMPTED/);
+}
+
 // Run the actual CLI orchestration against synthetic Cloudflare HTTP responses.
 const deploymentConfig = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cyinvoice-deployment-test-'));
@@ -308,7 +396,7 @@ const priorGenerated = fs.existsSync(generatedPath) ? fs.readFileSync(generatedP
 const originalFetch = globalThis.fetch;
 const originalLog = console.log;
 let applied = canonical.slice(0, 12), currentDatabase = '11111111-1111-4111-8111-111111111111';
-let retainedProbe = false, configuredProviderScope = true, providerRevisionChanged = false;
+let retainedProbe = false, configuredProviderScope = true, providerRevisionChanged = false, preparedRuntime = false, cyIdActive = false;
 const retainedId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const retainedNonce = 'a'.repeat(32);
 const calls = [], logs = [];
@@ -336,6 +424,9 @@ globalThis.fetch = async (url, options = {}) => {
     ...deploymentConfig.ratelimits.map(r => ({ ...r, type: 'ratelimit' })),
     { name: 'IDENTITY', type: 'service', service: 'synthetic-provider' },
     { name: 'IDENTITY_AUTHORITY', type: 'service', service: 'synthetic-provider', entrypoint: 'ConsumerAuthoritySync' },
+    ...(preparedRuntime ? Object.entries(preparation).filter(([name])=>name!=='CYID_WORKER_NAME')
+      .map(([name,text])=>({name,type:'plain_text',text})) : []),
+    ...(preparedRuntime ? [{name:'CYID_ENABLED',type:'plain_text',text:cyIdActive?'true':'false'}] : []),
   ] };
   else if (u.pathname.endsWith('/query')) {
     const { sql, params } = JSON.parse(options.body);
@@ -351,7 +442,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:'development',status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.2' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.3' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });
@@ -380,6 +471,28 @@ try {
   assert.equal(prepared.vars.CYID_ENABLED,'false');
   assert.deepEqual(prepared.services.map(b=>b.binding).sort(),['IDENTITY','IDENTITY_AUTHORITY']);
   await main('after',statePath,prepareEnv);
+  const activateEnv={...env,CYINVOICE_DEPLOYMENT_MODE:'activate-cyid'};
+  await assert.rejects(main('before',statePath,activateEnv),/CYID_PREPARATION_REQUIRED/);
+  preparedRuntime=true;
+  await main('before',statePath,activateEnv);
+  assert.equal(JSON.parse(fs.readFileSync(generatedPath,'utf8')).vars.CYID_ENABLED,'true');
+  assert.equal(JSON.parse(fs.readFileSync(statePath,'utf8')).cyIdActivation.IDENTITY_CYINVOICE_WORKSPACE_ID,'workspace_synthetic');
+  // Failed activation can still audit the unchanged Built-in target; no success claim.
+  await main('after',statePath,activateEnv);
+  cyIdActive=true;
+  await main('before',statePath,env);
+  assert.equal(JSON.parse(fs.readFileSync(generatedPath,'utf8')).vars.CYID_ENABLED,'true');
+  await main('after',statePath,env);
+  // A previously activated CYID installation can receive reviewed code-only
+  // deployments without silently reverting its authority to Built-in.
+  for(const operation of ['activate-cyid','prepare-cyid'])
+    await assert.rejects(main('before',statePath,{...env,CYINVOICE_DEPLOYMENT_MODE:operation}),/BUILT_IN_AUTHORITY_REQUIRED/);
+  const cyidDeployEnv={...env,CYINVOICE_DEPLOYMENT_MODE:'deploy'};
+  await main('before',statePath,cyidDeployEnv);
+  assert.equal(JSON.parse(fs.readFileSync(generatedPath,'utf8')).vars.CYID_ENABLED,'true');
+  await main('after',statePath,cyidDeployEnv);
+  cyIdActive=false;preparedRuntime=false;
+  await main('before',statePath,prepareEnv);
   const bundleDir=path.join(tmp,'business-bundle');fs.mkdirSync(bundleDir);
   const bundlePath=path.join(bundleDir,'app.js');fs.writeFileSync(bundlePath,'export default {};');
   const countBeforeRejectedDeploy=calls.length;

@@ -25,7 +25,7 @@ internal sealed record ShopeeImportResult(IReadOnlyList<ShopeeOrder> Orders, IRe
 
 /// <summary>Where the local Shopee settings put an order on the COPI08 form.</summary>
 internal sealed record ShopeeMapping(string OrderType, string CustomerCode, string NotePrefix,
-    IReadOnlyDictionary<string, string>? FreightTypes = null);
+    IReadOnlyDictionary<string, string>? FreightTypes = null, string PromotionItemCode = "");
 
 /// <summary>
 /// Parses the official Shopee order export (one order per row; all items of an order in
@@ -150,12 +150,15 @@ internal static partial class ShopeeOrderImport
             if (freightType.Length > 0) header["freight_type"] = freightType;
             else handoff = string.Join("；", new[] { handoff, $"物流商「{order.Carrier}」沒有設定貨運別" }.Where(x => x.Length > 0));
         }
+        var problems = new List<string>();
+        var items = Bundles.Expand(order.Items.Select(i => new ImportedItem(i.ItemCode, i.Quantity, i.UnitPrice)), mapping.PromotionItemCode, problems);
+        if (problems.Count > 0) handoff = string.Join("；", new[] { handoff }.Concat(problems).Where(x => x.Length > 0));
         return new ImportedOrder
         {
             Source = Source,
             OrderSn = order.OrderSn,
             Header = header,
-            Items = order.Items.Select(i => new ImportedItem(i.ItemCode, i.Quantity, i.UnitPrice)).ToList(),
+            Items = items,
             HandoffReason = handoff,
             Carrier = order.Carrier,
             TrackingNumber = order.TrackingNumber

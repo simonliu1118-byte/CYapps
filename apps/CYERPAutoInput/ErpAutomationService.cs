@@ -1,3 +1,4 @@
+using System.Globalization;
 namespace CYERPAutoInput;
 
 internal sealed class ErpAutomationService
@@ -8,7 +9,14 @@ internal sealed class ErpAutomationService
 
     private readonly AppLogger _log;
     private readonly FastDetailGridVisionService _gridVision;
+    /// <summary>
+    /// Where ERP's editor really opened for each detail row (center Y inside the grid), so the
+    /// row pitch is measured instead of assumed: rows were 22 px on the user's PC (2026-10-12)
+    /// and the 24 px pitch put the 7th row's click below the row.
+    /// </summary>
+    private readonly Dictionary<int, int> _editorRowCenter = [];
     private readonly OpticalTextLocator _textVision;
+    private HashSet<string> _noBatchItemCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly F2UnitCellLocator _unitCellLocator;
     private readonly F2BatchCellLocator _batchCellLocator;
 
@@ -95,6 +103,7 @@ internal sealed class ErpAutomationService
     {
         var result = new AutomationRunResult();
         LastSalesOrderNumber = string.Empty;
+        _noBatchItemCodes = snapshot.NoBatchItemCodes;
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
             result.SalesOrderType = orderType.Trim();
         var windows = Win32Automation.FindCopi08Windows();
@@ -180,45 +189,28 @@ internal sealed class ErpAutomationService
             _log.Warn("print", $"direct print skipped document={_log.Value(result.DocumentKey)} reason={reason}");
         }
 
-        if (!Win32Automation.PrepareForeground(root, _log)) { Skip("無法把 COPI08 帶到前景，未列印"); return; }
-        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0 || DetectMode(root) != ErpMode.Browse)
+        // ERP keeps working for a while after the save shows browse mode, and how long varies
+        // (user, 2026-10-11): 列印 may be greyed out or ignore a click. So the whole
+        // 列印 → 直接列印 step is retried until it lands or the time is up.
+        var deadline = Environment.TickCount64 + 20000;
+        var attempt = 0;
+        var lastReason = string.Empty;
+        await Delay(500, cancellationToken);
+        while (Environment.TickCount64 < deadline)
         {
-            Skip("ERP 不在檢視狀態或有其他視窗，未列印");
-            return;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (attempt++ > 0) await Delay(800, cancellationToken);
+            var outcome = await TryDirectPrintOnceAsync(root, attempt, cancellationToken);
+            if (outcome.Length == 0)
+            {
+                result.Printed = true;
+                _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)} attempt={attempt}");
+                break;
+            }
+            lastReason = outcome;
+            _log.Info("print", $"direct print attempt={attempt} not yet: {outcome}");
         }
-        if (!NativeMethods.GetWindowRect(root, out var window)) { Skip("讀不到 COPI08 視窗位置，未列印"); return; }
-
-        // The Ribbon is the top strip of COPI08; 列印 sits in its left part.
-        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
-        OcrToken? label;
-        using (var image = ScreenCapture.Capture(ribbon))
-            label = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text) == "列印");
-        if (label is null) { Skip("Ribbon 上找不到「列印」，未列印"); return; }
-        var labelScreen = new Rectangle(ribbon.Left + label.Rect.Left, ribbon.Top + label.Rect.Top, label.Rect.Width, label.Rect.Height);
-        cancellationToken.ThrowIfCancellationRequested();
-        InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
-        _log.Info("print", "ribbon 列印 clicked");
-
-        // The drop-down opens below the button: 直接列印 / 預覽列印.
-        var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
-        OcrToken? item = null;
-        var deadline = Environment.TickCount64 + 2000;
-        while (item is null && Environment.TickCount64 < deadline)
-        {
-            await Delay(250, cancellationToken);
-            using var image = ScreenCapture.Capture(menu);
-            item = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text).Contains("直接列印", StringComparison.Ordinal));
-        }
-        if (item is null)
-        {
-            InputSender.Press(NativeMethods.VK_ESCAPE);
-            Skip("列印選單找不到「直接列印」，已關閉選單，未列印");
-            return;
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        InputSender.Click(new Point(menu.Left + item.Rect.Left + item.Rect.Width / 2, menu.Top + item.Rect.Top + item.Rect.Height / 2));
-        result.Printed = true;
-        _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)}");
+        if (!result.Printed) { Skip($"{lastReason}（重試 {attempt} 次、20 秒），未列印"); return; }
 
         // Let ERP hand the job to the printer; a window it opens is logged and left alone.
         await Delay(1500, cancellationToken);
@@ -226,7 +218,91 @@ internal sealed class ErpAutomationService
         if (peers.Count > 0) LogPeerWindows("after-direct-print", peers);
     }
 
+    /// <summary>
+    /// One 列印 → 直接列印 try. Returns empty when 直接列印 was clicked, else why not. A drop-down
+    /// left open without 直接列印 is closed with Esc only when ERP shows a popup window, so a
+    /// stray Esc never reaches COPI08 itself.
+    /// </summary>
+    private async Task<string> TryDirectPrintOnceAsync(nint root, int attempt, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log)) return "無法把 COPI08 帶到前景";
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0) return "ERP 有其他視窗開著";
+        if (DetectMode(root) != ErpMode.Browse) return "ERP 不在檢視狀態";
+        if (!NativeMethods.GetWindowRect(root, out var window)) return "讀不到 COPI08 視窗位置";
+
+        // The Ribbon is the top strip of COPI08; 列印 sits in its left part.
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(ribbon))
+            tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+        // Logged on the first try: Build 31 found no exact 「列印」 token on the user's PC
+        // (2026-10-11) and the log could not show what the OCR read instead.
+        if (attempt == 1)
+            foreach (var t in tokens)
+                _log.Info("print", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect)
+            return "Ribbon 上找不到「列印」";
+        var labelScreen = new Rectangle(ribbon.Left + labelRect.Left, ribbon.Top + labelRect.Top, labelRect.Width, labelRect.Height);
+        // The drop-down (直接列印 / 預覽列印) opens over the button itself, not only below it:
+        // Build 1 on the user's PC read only COPI08's form below 「列印」 and the retry's click
+        // on 「列印」 landed on 預覽列印 (2026-10-12). So the area around the label is read, and
+        // when ERP shows a popup window there, that window is read.
+        var near = new Rectangle(labelScreen.Left - 120, labelScreen.Top - 180, 420, 400);
+
+        // A menu left open by an earlier try is used as it is; clicking 列印 again would close it.
+        if (await FindDirectPrintAsync(root, near, attempt, logTokens: false, cancellationToken) is { } already)
+        {
+            InputSender.Click(already);
+            _log.Info("print", $"direct print clicked in a menu already open attempt={attempt}");
+            return string.Empty;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
+        _log.Info("print", $"ribbon 列印 clicked attempt={attempt} label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
+
+        var menuDeadline = Environment.TickCount64 + 3000;
+        while (Environment.TickCount64 < menuDeadline)
+        {
+            await Delay(250, cancellationToken);
+            if (await FindDirectPrintAsync(root, near, attempt, logTokens: Environment.TickCount64 >= menuDeadline, cancellationToken) is { } item)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                InputSender.Click(item);
+                _log.Info("print", $"direct print clicked at ({item.X},{item.Y}) attempt={attempt}");
+                return string.Empty;
+            }
+        }
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+        {
+            InputSender.Press(NativeMethods.VK_ESCAPE);
+            await Delay(200, cancellationToken);
+        }
+        return "列印選單沒有出現「直接列印」";
+    }
+
+    /// <summary>Screen point of 「直接列印」 in an open 列印 drop-down, or null.</summary>
+    private async Task<Point?> FindDirectPrintAsync(nint root, Rectangle near, int attempt, bool logTokens, CancellationToken cancellationToken)
+    {
+        var popups = Win32Automation.FindProcessPopupsNear(root, near);
+        var areas = popups.Count > 0 ? popups.ToList() : [];
+        areas.Add(near);
+        foreach (var area in areas)
+        {
+            using var image = ScreenCapture.CaptureWithLayers(area);
+            var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            // 「直接」 alone is enough: the other item is 「預覽列印」.
+            if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } item)
+                return new Point(area.Left + item.Left + item.Width / 2, area.Top + item.Top + item.Height / 2);
+            if (!logTokens) continue;
+            _log.Info("print", $"  menu area=({area.Left},{area.Top},{area.Width},{area.Height}) popup={popups.Contains(area)} attempt={attempt}");
+            foreach (var t in tokens)
+                _log.Info("print", $"  menu token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        }
+        return null;
+    }
+
     private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
 
     /// <summary>
     /// Saves with ERP's F12 shortcut (the Ribbon 儲存 group also holds 取消, so a click is
@@ -260,7 +336,7 @@ internal sealed class ErpAutomationService
                 if (warningsAcknowledged >= 2)
                     throw new InvalidOperationException("按 F12 儲存後 ERP 連續出現庫存不足提示；請人工確認單據是否已儲存。");
                 await AcknowledgeStockWarningIfShownAsync(root, details.Count, lastRow,
-                    "按 F12 儲存後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。", cancellationToken);
+                    "按 F12 儲存後 ERP 出現訊息視窗；程式未代為處理，請人工確認單據是否已儲存。", cancellationToken);
                 warningsAcknowledged++;
                 AddStockWarning(result, details.Count, lastRow);
                 Win32Automation.PrepareForeground(root, _log);
@@ -320,7 +396,7 @@ internal sealed class ErpAutomationService
         {
             var shown = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
             if (shown != expectedSalesOrderNumber)
-                throw new InvalidOperationException("ERP 目前的單號與 CY 建立的單據不同；未執行放棄，請人工處理。");
+                throw new InvalidOperationException("ERP 目前的單號與本程式建立的單據不同；未執行放棄，請人工處理。");
         }
 
         var customer = ErpLayoutResolver.ResolveHeader(root, "customer_code");
@@ -351,7 +427,7 @@ internal sealed class ErpAutomationService
         if (!isAbandonPrompt)
         {
             LogPeerWindows("abandon", [confirm]);
-            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；CY 未代為處理，請人工確認。");
+            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；程式未代為處理，請人工確認。");
         }
 
         if (!Win32Automation.PrepareForeground(confirm, _log))
@@ -751,7 +827,7 @@ internal sealed class ErpAutomationService
         if (!isTaxIdWarning)
         {
             LogPeerWindows("tax-id", [dialog]);
-            throw new InvalidOperationException("輸入統一編號後 ERP 跳出未預期的訊息；CY 未代為處理，請人工確認。");
+            throw new InvalidOperationException("輸入統一編號後 ERP 跳出未預期的訊息；程式未代為處理，請人工確認。");
         }
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法取得「統一編號輸入錯誤」視窗焦點；請人工處理。");
@@ -843,6 +919,15 @@ internal sealed class ErpAutomationService
         if (geometry.RowCenterY.Count == 0)
             throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
+        // Bundles (user, 2026-10-12): their parts take ERP's own list price, read back here, and
+        // the gap to what each bundle sold for goes to the 促銷組合 line after them.
+        var bundleList = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var bundleSold = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var gapRow = rows.ToList().FindIndex(r => r.TakesBundleGap);
+        var lastBundleRow = rows.ToList().FindLastIndex(r => r.BundleKey.Length > 0);
+        if (lastBundleRow >= 0 && gapRow < lastBundleRow)
+            throw new InvalidOperationException("表單有套裝品項，但促銷組合那一列不在套裝品項之後（或被刪除）；套裝與原價的差額無處可放，未開始輸入，請檢查表單。");
+
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -874,8 +959,33 @@ internal sealed class ErpAutomationService
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 3, row.GiftQuantity, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.Warehouse))
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(row.UnitPrice))
-                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);
+            if (row.BundleKey.Length > 0 && string.IsNullOrWhiteSpace(row.UnitPrice))
+            {
+                var listPrice = await ReadDetailUnitPriceAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
+                var quantity = decimal.Parse(row.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+                bundleList[row.BundleKey] = bundleList.GetValueOrDefault(row.BundleKey) + listPrice * quantity;
+                if (decimal.TryParse(row.BundleTotal, NumberStyles.Number, CultureInfo.InvariantCulture, out var sold))
+                    bundleSold[row.BundleKey] = bundleSold.GetValueOrDefault(row.BundleKey) + sold;
+                _log.Info("detail", $"bundle part row={visibleRow + 1} item={_log.Value(row.ItemCode)} list_price={listPrice} quantity={quantity} bundle={_log.Value(row.BundleKey)}");
+            }
+            var unitPrice = row.UnitPrice;
+            if (row.TakesBundleGap && bundleList.Count > 0)
+            {
+                var missing = bundleList.Keys.Where(k => !bundleSold.ContainsKey(k)).ToList();
+                if (missing.Count > 0)
+                    throw new InvalidOperationException($"套裝 {string.Join("、", missing)} 少了套裝售價；未輸入促銷組合，請人工處理此單。");
+                // A bundle sold above its parts' list prices is for a person (user, 2026-10-12).
+                var dearer = bundleList.Where(p => p.Value < bundleSold[p.Key]).ToList();
+                if (dearer.Count > 0)
+                    throw new InvalidOperationException("套裝售價高於 ERP 原價合計，轉人工處理：" +
+                        string.Join("、", dearer.Select(p => $"{p.Key}（原價合計 {p.Value:0.##}，售價 {bundleSold[p.Key]:0.##}）")) + "。");
+                var gap = bundleList.Sum(p => p.Value - bundleSold[p.Key]);
+                var basePrice = decimal.Parse(row.UnitPrice.Length > 0 ? row.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
+                unitPrice = (basePrice - gap).ToString("0.####", CultureInfo.InvariantCulture);
+                _log.Info("detail", $"促銷組合 takes bundle gap={gap} base={basePrice} price={unitPrice}");
+            }
+            if (!string.IsNullOrWhiteSpace(unitPrice))
+                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, unitPrice, cancellationToken);
 
             geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
         }
@@ -917,6 +1027,7 @@ internal sealed class ErpAutomationService
             {
                 var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
                 _log.Info("detail", $"geometry ready after first-row prime attempt={attempt} rows={geometry.RowCenterY.Count} columns={geometry.ColumnX.Count}");
+                _editorRowCenter.Clear();
                 return (grid, geometry);
             }
             catch (InvalidOperationException ex) when (attempt < 3 && ex.Message.StartsWith("Optical detail", StringComparison.Ordinal))
@@ -983,9 +1094,12 @@ internal sealed class ErpAutomationService
             if (editor == 0)
             {
                 var focus = NativeMethods.FocusedControlOfForeground(root);
-                _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+                NativeMethods.GetWindowRect(focus, out var focusRect);
+                _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)} focus_rect={focusRect.Left},{focusRect.Top},{focusRect.Width}x{focusRect.Height} grid_top={freshRect.Top}");
                 continue;
             }
+            if (NativeMethods.GetWindowRect(editor, out var editorRect) && editorRect.Height > 0)
+                _editorRowCenter[visibleRow] = (editorRect.Top + editorRect.Bottom) / 2 - freshRect.Top;
 
             _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
             await Delay(90, cancellationToken);
@@ -1000,6 +1114,45 @@ internal sealed class ErpAutomationService
         }
 
         throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續兩次都沒有進入編輯模式。");
+    }
+
+    /// <summary>
+    /// The 單價 ERP filled in for a bundle part (its list price): the cell's editor is opened and
+    /// its text read (WM_GETTEXT, else OCR of the editor), then Enter leaves it unchanged.
+    /// Nothing is guessed: a price that cannot be read stops the run.
+    /// </summary>
+    private async Task<decimal> ReadDetailUnitPriceAsync(nint root, WindowControl grid, GridGeometry geometry, int visibleRow, string itemCode, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("讀取 ERP 單價前無法把 ERP 帶到前景。");
+            var (_, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 7, cancellationToken);
+            InputSender.Click(point);
+            await Delay(150, cancellationToken);
+            var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 600);
+            if (editor == 0)
+            {
+                InputSender.Press(NativeMethods.VK_RETURN);
+                editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
+            }
+            if (editor == 0) { await Delay(250, cancellationToken); continue; }
+
+            var text = (NativeMethods.ControlText(editor) ?? string.Empty).Trim();
+            if (text.Length == 0 && NativeMethods.GetWindowRect(editor, out var rect) && rect.Width > 0 && rect.Height > 0)
+            {
+                using var image = ScreenCapture.Capture(rect.ToRectangle());
+                text = string.Concat((await _textVision.RecognizeAsync(image, cancellationToken)).OrderBy(t => t.Rect.Left).Select(t => t.Text)).Trim();
+            }
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await Delay(250, cancellationToken);
+            _log.Info("detail", $"unit price read row={visibleRow + 1} item={_log.Value(itemCode)} attempt={attempt} text={_log.Value(text)}");
+            if (decimal.TryParse(text.Replace(",", string.Empty), NumberStyles.Number, CultureInfo.InvariantCulture, out var price) && price > 0)
+                return price;
+            await Delay(300, cancellationToken);
+        }
+        throw new InvalidOperationException($"讀不到套裝品項 {itemCode} 在 ERP 帶出的單價；未繼續，請人工處理此單。");
     }
 
     private async Task<GridGeometry> SelectUnitAsync(
@@ -1092,6 +1245,13 @@ internal sealed class ErpAutomationService
         string itemCode,
         CancellationToken cancellationToken)
     {
+        // 折價券／運費／促銷組合 lines never have a batch; their F2 check only waited ~2 s each
+        // (user, 2026-10-11).
+        if (_noBatchItemCodes.Contains(itemCode.Trim()))
+        {
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=settings-item-without-batch");
+            return geometry;
+        }
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
@@ -1322,10 +1482,11 @@ internal sealed class ErpAutomationService
         if (geometry.RowCenterY.Count == 0 || !NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             throw new InvalidOperationException("無法取得商品明細位置，無法確認 ERP 是否已建立下一列；已停止避免錯位。");
 
-        var firstY = geometry.RowCenterY[0];
-        var maxVisible = Math.Max(0, (rect.Height - firstY - 6) / ProvenDetailRowPitch);
+        var firstY = _editorRowCenter.TryGetValue(0, out var seenFirst) ? seenFirst : geometry.RowCenterY[0];
+        var pitch = DetailRowPitch();
+        var maxVisible = Math.Max(0, (int)((rect.Height - firstY - 6) / pitch));
         var slot = Math.Min(rowNumber - 1, maxVisible);
-        var centerY = rect.Top + firstY + slot * ProvenDetailRowPitch;
+        var centerY = rect.Top + firstY + (int)Math.Round(slot * pitch);
         // 序號 digits sit at x≈13–46; the left edge holds the row indicator (*).
         var cell = Rectangle.FromLTRB(rect.Left + 12, centerY - 10, rect.Left + Math.Min(rect.Width, 48), centerY + 10);
 
@@ -1428,6 +1589,20 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException($"ERP 明細 column={column} 目前不在可視範圍，嘗試水平捲動後仍無法定位。");
     }
 
+    /// <summary>
+    /// Detail row pitch: measured from the first and the furthest of the first six rows whose
+    /// editor has opened in this document, else the long-standing 24 px.
+    /// </summary>
+    private double DetailRowPitch()
+    {
+        var known = _editorRowCenter.Where(p => p.Key <= 5).OrderBy(p => p.Key).ToList();
+        if (known.Count < 2) return ProvenDetailRowPitch;
+        var (first, last) = (known[0], known[^1]);
+        var pitch = (last.Value - first.Value) / (double)(last.Key - first.Key);
+        // Outside a sane range the measurement is wrong (an editor in another row); keep 24.
+        return pitch is >= 16 and <= 36 ? pitch : ProvenDetailRowPitch;
+    }
+
     private async Task<(GridGeometry Geometry, Point Point, Rectangle GridRect)> ResolveFreshDetailCellPointAsync(
         nint gridHwnd,
         GridGeometry geometry,
@@ -1451,12 +1626,13 @@ internal sealed class ErpAutomationService
             if (visibleRow <= 0 || activeGeometry.RowCenterY.Count == 0 || !activeGeometry.ColumnX.TryGetValue(column, out var x))
                 throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
 
-            var firstY = activeGeometry.RowCenterY[0];
-            var maxVisible = Math.Max(0, (activeGeometry.ScreenRect.Height - firstY - 6) / ProvenDetailRowPitch);
+            var firstY = _editorRowCenter.TryGetValue(0, out var seenFirst) ? seenFirst : activeGeometry.RowCenterY[0];
+            var pitch = DetailRowPitch();
+            var maxVisible = Math.Max(0, (int)((activeGeometry.ScreenRect.Height - firstY - 6) / pitch));
             var clickRow = Math.Min(visibleRow, maxVisible);
-            var y = firstY + clickRow * ProvenDetailRowPitch;
+            var y = firstY + (int)Math.Round(clickRow * pitch);
             capturedPoint = new Point(activeGeometry.ScreenRect.Left + x, activeGeometry.ScreenRect.Top + y);
-            _log.Info("detail", $"row point extrapolated logical_row={visibleRow + 1} visible_slot={clickRow + 1} pitch={ProvenDetailRowPitch}");
+            _log.Info("detail", $"row point extrapolated logical_row={visibleRow + 1} visible_slot={clickRow + 1} pitch={pitch:0.##}");
         }
 
         if (!NativeMethods.GetWindowRect(gridHwnd, out fresh) || fresh.Width <= 0 || fresh.Height <= 0)

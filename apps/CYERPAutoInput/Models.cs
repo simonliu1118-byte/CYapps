@@ -25,6 +25,11 @@ internal sealed class DetailRow
     public string Batch { get; set; } = string.Empty;
     public string Warehouse { get; set; } = string.Empty;
     public string UnitPrice { get; set; } = string.Empty;
+    /// <summary>Bundle part: ERP's own price is read back and counted against <see cref="BundleTotal"/>.</summary>
+    public string BundleKey { get; set; } = string.Empty;
+    public string BundleTotal { get; set; } = string.Empty;
+    /// <summary>促銷組合 line: its price takes the bundles' gap (list prices − what the bundles sold for).</summary>
+    public bool TakesBundleGap { get; set; }
 
     public bool HasAnyData =>
         !string.IsNullOrWhiteSpace(ItemCode) ||
@@ -47,6 +52,11 @@ internal sealed class FormSnapshot
     public string HandoffBeforeDetails { get; init; } = string.Empty;
     /// <summary>ERP combo options by field key, in ERP list order (see <see cref="ErpComboOptions"/>).</summary>
     public Dictionary<string, List<string>> ComboOptions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Item codes that never carry a batch — the 折價券／運費／促銷組合 lines from the settings —
+    /// so their batch check (an F2 that waits for a lookup that never comes) is skipped.
+    /// </summary>
+    public HashSet<string> NoBatchItemCodes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

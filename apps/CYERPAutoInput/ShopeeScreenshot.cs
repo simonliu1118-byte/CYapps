@@ -24,7 +24,8 @@ internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string Tr
 /// into 數量 × 2 and 單價 ÷ 2, and the product's amount before promotions (單價 × 數量 as
 /// shown). <see cref="Group"/> is the 編號 it is listed under (0 when no 編號 was visible).
 /// </summary>
-internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount);
+/// <param name="SortKey">For the parts of a bundle: the bundle's first code, so its lines stay together.</param>
+internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount, string? SortKey = null);
 
 /// <summary>A 編號 of the detail: several products of one promotion share one 小計 (shown, and the struck-out original).</summary>
 internal sealed record ShopeeShotGroup(int Index, decimal Shown, decimal Original);
@@ -97,25 +98,33 @@ internal static partial class ShopeeScreenshot
         return ShopeeShotKind.Unknown;
     }
 
+    /// <summary>The box under 「訂單編號」 that holds the order number, or null.</summary>
+    public static OcrBox? OrderSnBox(IReadOnlyList<OcrBox> lines)
+    {
+        var label = lines.FirstOrDefault(l => Compact(l.Text).Contains("訂單編號", StringComparison.Ordinal));
+        if (label is null) return null;
+        return lines
+            .Where(l => l.Top > label.Top + label.Height / 2 && l.Top - label.Bottom < 80)
+            .OrderBy(l => l.Top)
+            .FirstOrDefault(l => OrderSnPattern().IsMatch(Compact(l.Text).ToUpperInvariant()));
+    }
+
     public static ShopeeShotOrder ParseOrder(IReadOnlyList<OcrBox> lines, List<string> problems)
     {
-        var orderSn = string.Empty;
-        var label = lines.FirstOrDefault(l => Compact(l.Text).Contains("訂單編號", StringComparison.Ordinal));
-        if (label is not null)
-        {
-            orderSn = lines
-                .Where(l => l.Top > label.Top + label.Height / 2 && l.Top - label.Bottom < 80)
-                .OrderBy(l => l.Top)
-                .Select(l => Compact(l.Text).ToUpperInvariant())
-                .FirstOrDefault(t => OrderSnPattern().IsMatch(t)) ?? string.Empty;
-        }
+        var orderSn = OrderSnBox(lines) is { } snBox ? OrderSnDateDigits(Compact(snBox.Text).ToUpperInvariant()) : string.Empty;
         if (orderSn.Length == 0) problems.Add("訂單資訊截圖讀不到訂單編號。");
+        // A Shopee order number is 6 date digits and 8 letters or digits; the OCR once read
+        // 「QV」 as 「QWW」 (user's PC, 2026-10-11), so anything else is flagged.
+        else if (!OrderSnFormatPattern().IsMatch(orderSn))
+            problems.Add($"訂單編號「{orderSn}」不是蝦皮的 14 碼格式（6 碼日期＋8 碼英數），可能讀錯，請核對。");
 
         var carrier = string.Empty;
         var tracking = string.Empty;
         foreach (var line in lines)
         {
-            var text = Compact(line.Text).Replace('＃', '#');
+            // The OCR reads 「包裹」 as 「包裏」 or 「包里」 (2026-10-11): any one glyph after 包,
+            // then the package number and a colon, marks the line.
+            var text = PackagePattern().Replace(Compact(line.Text).Replace('＃', '#'), "包裹");
             var hash = text.IndexOf('#');
             var head = hash >= 0 ? text[..hash] : text;
             if (head.StartsWith("包裹", StringComparison.Ordinal) && carrier.Length == 0)
@@ -126,12 +135,102 @@ internal static partial class ShopeeScreenshot
             if (hash >= 0 && tracking.Length == 0)
             {
                 var candidate = new string(text[(hash + 1)..].Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
-                if (candidate.Length >= 8) tracking = candidate;
+                if (candidate.Length >= 8) tracking = TrackingDigits(candidate);
             }
         }
         if (carrier.Length == 0) problems.Add("訂單資訊截圖讀不到物流方式（包裹）。");
         if (tracking.Length == 0) problems.Add("訂單資訊截圖讀不到物流單號；可在表單的送貨地址(一) 補上。");
         return new ShopeeShotOrder(orderSn, carrier, tracking);
+    }
+
+    /// <summary>
+    /// An order number starts with its date (YYMMDD), where an 「O」 can only be a 0
+    /// (user, 2026-10-12: the OCR mixes up 0 and O).
+    /// </summary>
+    internal static string OrderSnDateDigits(string orderSn) =>
+        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0').Replace('I', '1').Replace('L', '1') + orderSn[6..];
+
+    /// <summary>
+    /// 0 and O where the tracking number's format decides them: Shopee 店到店 numbers are
+    /// TW, 12 digits and one more character (seen as a letter, not always); carrier numbers
+    /// (新竹, 黑貓…) are digits only. The last character of a TW number is left as read.
+    /// </summary>
+    internal static string TrackingDigits(string tracking)
+    {
+        // I／L read for 1 likewise (user, 2026-10-12: 1 and I look alike).
+        static string Digits(string s) => s.Replace('O', '0').Replace('I', '1').Replace('L', '1');
+        if (TwTrackingPattern().IsMatch(tracking))
+            return "TW" + Digits(tracking[2..^1]) + tracking[^1];
+        return tracking.All(c => char.IsAsciiDigit(c) || c is 'O' or 'I' or 'L') && tracking.Any(char.IsAsciiDigit) ? Digits(tracking) : tracking;
+    }
+
+    /// <summary>
+    /// Decides 0 or O in the order number's last 8 letters and digits from the glyphs' widths
+    /// (user, 2026-10-12): in Shopee's font a 0 is as wide as the other digits and an O is about
+    /// a third wider. <paramref name="runWidths"/> are the ink runs of the box, left to right;
+    /// touching glyphs make one run, so the runs are first aligned to the characters by their
+    /// usual widths. Only a 0／O that stands alone in its run, with at least two other digits
+    /// alone to compare with, is decided; otherwise the OCR's reading is kept.
+    /// </summary>
+    internal static (string Text, List<string> Decisions) ResolveZeroO(string text, IReadOnlyList<int> runWidths)
+    {
+        var decisions = new List<string>();
+        var ambiguous = Enumerable.Range(6, Math.Max(0, text.Length - 6)).Where(i => text[i] is '0' or 'O').ToList();
+        if (ambiguous.Count == 0 || runWidths.Count == 0) return (text, decisions);
+
+        static double Expected(char c) => c switch
+        {
+            '1' or 'I' => 3.5,
+            'M' or 'W' => 11,
+            >= '0' and <= '9' => 7,
+            'J' or 'L' or 'F' or 'T' or 'S' or 'E' or 'P' or 'Z' or 'Y' => 7.5,
+            >= 'A' and <= 'Z' => 8.5,
+            _ => 7
+        };
+        var scale = runWidths.Sum() / text.Sum(Expected);
+        var n = text.Length;
+        var m = runWidths.Count;
+        // cost[i, j]: the first i characters drawn by the first j runs; a run holds 1–3 characters.
+        var cost = new double[n + 1, m + 1];
+        var take = new int[n + 1, m + 1];
+        for (var i = 0; i <= n; i++)
+            for (var j = 0; j <= m; j++) cost[i, j] = double.PositiveInfinity;
+        cost[0, 0] = 0;
+        for (var j = 1; j <= m; j++)
+            for (var i = 1; i <= n; i++)
+                for (var k = 1; k <= Math.Min(3, i); k++)
+                {
+                    if (double.IsPositiveInfinity(cost[i - k, j - 1])) continue;
+                    var expected = 0.0;
+                    for (var c = i - k; c < i; c++) expected += Expected(text[c]) * scale;
+                    var candidate = cost[i - k, j - 1] + Math.Abs(runWidths[j - 1] - expected) + (k - 1) * 0.5;
+                    if (candidate < cost[i, j]) { cost[i, j] = candidate; take[i, j] = k; }
+                }
+        if (double.IsPositiveInfinity(cost[n, m])) return (text, decisions);
+
+        var single = new int?[n]; // width of each character that has a run to itself
+        for (int i = n, j = m; i > 0; j--)
+        {
+            var k = take[i, j];
+            if (k == 1) single[i - 1] = runWidths[j - 1];
+            i -= k;
+        }
+        var reference = Enumerable.Range(0, n)
+            .Where(i => text[i] is >= '2' and <= '9' && single[i] is not null)
+            .Select(i => (double)single[i]!.Value).OrderBy(w => w).ToList();
+        if (reference.Count < 2) return (text, decisions);
+        var digitWidth = reference[reference.Count / 2];
+
+        var chars = text.ToCharArray();
+        foreach (var i in ambiguous)
+        {
+            if (single[i] is not { } width) continue;
+            var ratio = width / digitWidth;
+            var decided = ratio <= 1.12 ? '0' : ratio >= 1.25 ? 'O' : chars[i];
+            decisions.Add($"pos={i + 1} read={chars[i]} width={width} digit={digitWidth:0.#} ratio={ratio:0.00} → {decided}");
+            chars[i] = decided;
+        }
+        return (new string(chars), decisions);
     }
 
     /// <summary>
@@ -144,10 +243,11 @@ internal static partial class ShopeeScreenshot
     public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
         IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
     {
+        var raw = lines;
         lines = WithLoneGlyphDigits(lines);
         var items = new List<ShopeeShotItem>();
         var groups = new List<ShopeeShotGroup>();
-        var anchors = IndexAnchors(lines, imageWidth).OrderBy(l => l.Top).ToList();
+        var anchors = IndexAnchors(raw, imageWidth).OrderBy(l => l.Top).ToList();
 
         // Numbers in the right half, each assigned to the nearest 單價／數量／小計 column.
         var numbers = lines
@@ -166,7 +266,10 @@ internal static partial class ShopeeScreenshot
         var quantityColumn = InColumn(layout.Quantity);
         var subtotalColumn = InColumn(layout.Subtotal);
 
-        int GroupOf(int centerY) => anchors.Count == 0 ? 0
+        // No 編號 read at all (a lone 「1」 is often missed; user's PC, 2026-10-12): a table whose
+        // 小計 column holds one group's price (and struck original) is that one group, 第 1 項.
+        var singleGroup = anchors.Count == 0 && subtotalColumn.Count is >= 1 and <= 2;
+        int GroupOf(int centerY) => anchors.Count == 0 ? (singleGroup ? 1 : 0)
             : int.Parse(Compact(anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First().Text), CultureInfo.InvariantCulture);
 
         var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).OrderBy(l => l.Top).ToList();
@@ -175,6 +278,19 @@ internal static partial class ShopeeScreenshot
         var noQuantity = new List<(int Group, string RawCode, decimal Unit)>();
         void AddItem(int group, string rawCode, decimal unit, decimal quantity)
         {
+            // A bundle 「C00244+C00011」 (user, 2026-10-12): every part goes out as many times as
+            // bundles were sold; the first part carries the bundle's price and the others are 0.
+            var parts = BundleParts(rawCode);
+            if (parts.Count > 1)
+            {
+                for (var i = 0; i < parts.Count; i++)
+                {
+                    var (partCode, partTimes) = SplitSet(parts[i]);
+                    var partUnit = i == 0 ? Math.Round(unit / partTimes, 2, MidpointRounding.AwayFromZero) : 0m;
+                    items.Add(new ShopeeShotItem(group, partCode, partUnit, quantity * partTimes, i == 0 ? unit * quantity : 0m, parts[0]));
+                }
+                return;
+            }
             var (code, multiplier) = SplitSet(rawCode);
             if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
             // A set price that does not divide evenly is entered to 2 decimals (119 ÷ 3 → 39.67;
@@ -210,6 +326,11 @@ internal static partial class ShopeeScreenshot
         if (unitColumn.Any(n => !used.Contains(n.Box)))
             problems.Add("明細有商品讀不到商品選項貨號，請核對截圖。");
 
+        if (singleGroup)
+        {
+            var values = subtotalColumn.OrderBy(n => n.Box.Top).Select(n => n.Value).ToList();
+            groups.Add(new ShopeeShotGroup(1, values[0], values[^1]));
+        }
         foreach (var anchor in anchors)
         {
             var index = int.Parse(Compact(anchor.Text), CultureInfo.InvariantCulture);
@@ -226,7 +347,9 @@ internal static partial class ShopeeScreenshot
             var g = groups[i];
             var sum = items.Where(it => it.Group == g.Index).Sum(it => it.Amount);
             // At most half off: a misread quantity (450 × 450) must still fail the checks.
-            if (g.Shown == g.Original && sum > g.Shown && g.Shown * 2 >= sum) groups[i] = g with { Original = sum };
+            // An original below the price shown is a misread struck number (480 read as 180;
+            // user's PC, 2026-10-11) and is treated as missed.
+            if (g.Original <= g.Shown && sum > g.Shown && g.Shown * 2 >= sum) groups[i] = g with { Original = sum };
         }
 
         // A 數量 the detector and the re-read both missed (a lone "1"; user's PC, 2026-10-11).
@@ -243,7 +366,37 @@ internal static partial class ShopeeScreenshot
             }
             else problems.Add($"商品「{rawCode}」讀不到數量，請在表單補上該商品。");
         }
+
+        SuggestQuantity(items, groups, problems);
         return (items, groups);
+    }
+
+    /// <summary>
+    /// A 數量 read as another digit (「2」 read as 「7」, user's PC, 2026-10-12) makes a group's
+    /// 單價×數量 differ from its 小計 original. Nothing is changed (user: a wrong quantity makes
+    /// a wrong document): when exactly one product's quantity, as some whole number, would make
+    /// the group add up, the problem names that product and number so the check is quick.
+    /// </summary>
+    private static void SuggestQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string> problems)
+    {
+        foreach (var group in groups)
+        {
+            var members = items.Where(i => i.Group == group.Index).ToList();
+            var sum = members.Sum(i => i.Amount);
+            if (members.Count == 0 || sum == group.Original) continue;
+            var candidates = new List<(ShopeeShotItem Item, decimal Quantity)>();
+            foreach (var item in members)
+            {
+                if (item.UnitPrice <= 0 || item.UnitPrice * item.Quantity != item.Amount) continue;
+                var amount = group.Original - (sum - item.Amount);
+                if (amount <= 0 || amount % item.UnitPrice != 0) continue;
+                var quantity = amount / item.UnitPrice;
+                if (quantity is >= 1 and <= 999 && quantity != item.Quantity) candidates.Add((item, quantity));
+            }
+            if (candidates.Count != 1) continue;
+            var (item1, right) = candidates[0];
+            problems.Add($"第 {group.Index} 項 {item1.ItemCode} 數量讀到 {Number(item1.Quantity)}；若是 {Number(right)}，這一項的小計 {Number(group.Original)} 才對得上，請看截圖核對後在表單修正。");
+        }
     }
 
     /// <summary>
@@ -255,6 +408,7 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     public static List<CellProbe> MissingCellProbes(IReadOnlyList<OcrBox> lines, int imageWidth, int imageHeight)
     {
+        var raw = lines;
         lines = WithLoneGlyphDigits(lines);
         var probes = new List<CellProbe>();
         var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
@@ -263,7 +417,7 @@ internal static partial class ShopeeScreenshot
         var unitX = layout.Unit;
         var quantityX = layout.Quantity;
         var subtotalX = layout.Subtotal;
-        var anchors = IndexAnchors(lines, imageWidth);
+        var anchors = IndexAnchors(raw, imageWidth);
         var anchorX = IndexColumnX(lines)
             ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
 
@@ -304,12 +458,17 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     private static List<OcrBox> IndexAnchors(IReadOnlyList<OcrBox> lines, int imageWidth)
     {
-        // The 編號 glyph alone is often misread: "1" as "-", "2" as "乙" (user's PC, 2026-10-11).
-        var candidates = lines
-            .Where(l => l.CenterX < imageWidth * 0.2)
-            .Select(l => TryIndexDigits(l.Text, out var digits) ? l with { Text = digits } : null)
-            .OfType<OcrBox>()
-            .ToList();
+        // The 編號 glyph alone is often misread: "1" as "-", "2" as "乙" — and "2" as "-" too
+        // (user's PC, 2026-10-11), so a look-alike is only a guess, settled below.
+        var guessed = new HashSet<OcrBox>();
+        var candidates = new List<OcrBox>();
+        foreach (var l in lines.Where(l => l.CenterX < imageWidth * 0.2))
+        {
+            if (!TryIndexDigits(l.Text, out var digits)) continue;
+            var box = l with { Text = digits };
+            if (!TryNumber(l.Text, out _, digitsOnly: true)) guessed.Add(box);
+            candidates.Add(box);
+        }
         // Product thumbnails sit between 編號 and the product text and carry small print
         // (「5號杯」 read as "5"); a 編號 is well left of them, about 6 text heights before the
         // product text, a thumbnail's print about 3.
@@ -340,7 +499,29 @@ internal static partial class ShopeeScreenshot
         }
         if (candidates.Count == 0) return candidates;
         var x = IndexColumnX(lines) ?? candidates.Min(c => c.CenterX);
-        return candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).ToList();
+        var anchors = new List<OcrBox>();
+        // One 編號 cell can carry two boxes (a guessed glyph and a re-read digit); keep one,
+        // preferring a real digit.
+        foreach (var c in candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).OrderBy(c => guessed.Contains(c)).ThenBy(c => c.Top))
+            if (!anchors.Any(a => Math.Abs(a.CenterY - c.CenterY) < Math.Max(a.Height, c.Height)))
+                anchors.Add(c);
+        anchors = anchors.OrderBy(c => c.Top).ToList();
+
+        // 編號 run 1, 2, 3… down the screenshot, so a guessed one takes its number from the
+        // nearest one read as a real digit; with none, from the one above it.
+        var settled = anchors.Select(a => int.Parse(a.Text, CultureInfo.InvariantCulture)).ToArray();
+        var sure = Enumerable.Range(0, anchors.Count).Where(i => !guessed.Contains(anchors[i])).ToList();
+        for (var i = 0; i < anchors.Count; i++)
+        {
+            if (!guessed.Contains(anchors[i])) continue;
+            if (sure.Count > 0)
+            {
+                var j = sure.OrderBy(k => Math.Abs(k - i)).First();
+                settled[i] = settled[j] + (i - j);
+            }
+            else if (i > 0) settled[i] = settled[i - 1] + 1;
+        }
+        return anchors.Select((a, i) => settled[i] >= 1 ? a with { Text = settled[i].ToString(CultureInfo.InvariantCulture) } : a).ToList();
     }
 
     private const int ColumnTolerance = 40;
@@ -412,6 +593,12 @@ internal static partial class ShopeeScreenshot
             .Select(l => Compact(l.Text))
             .FirstOrDefault() ?? string.Empty;
     }
+
+    /// <summary>The codes of a bundle 「A+B」 (the OCR may read + as ＋ or 十); one code otherwise.</summary>
+    internal static List<string> BundleParts(string rawCode) =>
+        Compact(rawCode).Replace('＋', '+').Replace('十', '+')
+            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
 
     /// <summary>
     /// A set listed as "Y0033x2", "Y0033*2" or "Y0033 x 2" is item Y0033 two times (user,
@@ -493,8 +680,19 @@ internal static partial class ShopeeScreenshot
         }
 
         var formItems = new List<ImportedItem>();
-        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice)))
-            formItems.Add(new ImportedItem(group.Key.ItemCode, Number(group.Sum(l => l.Quantity)), Number(group.Key.UnitPrice)));
+        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice, l.SortKey)))
+        {
+            var quantity = Number(group.Sum(l => l.Quantity));
+            // A bundle's parts leave 單價 to ERP; the first part remembers what the bundle sold for.
+            formItems.Add(group.Key.SortKey is { } bundle
+                ? new ImportedItem(group.Key.ItemCode, quantity, string.Empty)
+                {
+                    SortKey = bundle,
+                    BundleTotal = group.Key.UnitPrice > 0 ? Number(group.Sum(l => l.Amount)) : null
+                }
+                : new ImportedItem(group.Key.ItemCode, quantity, Number(group.Key.UnitPrice)));
+        }
+        var hasBundles = lines.Any(l => l.SortKey is not null);
 
         var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
         if (promotion < 0) problems.Add($"單價×數量合計低於訂單金額 {Number(-promotion)}，請核對明細。");
@@ -506,12 +704,14 @@ internal static partial class ShopeeScreenshot
             problems.Add($"明細數字對不起來，沒有加入促銷組合（推算 {Number(promotion)}），請核對數量後在表單補上。");
             promotion = 0;
         }
-        void AddLine(string code, decimal price, string what)
+        void AddLine(string code, decimal price, string what, bool takesBundleGap = false)
         {
             if (code.Length == 0) problems.Add($"請在設定填入{what}品號（本張有{what} {Number(price)}）。");
-            formItems.Add(new ImportedItem(code, "1", Number(price)));
+            formItems.Add(new ImportedItem(code, "1", Number(price)) { TakesBundleGap = takesBundleGap });
         }
-        if (promotion > 0) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合");
+        // With a bundle the 促銷組合 line is always there: it also takes the gap between ERP's
+        // list prices for the bundle's parts and what the bundle sold for.
+        if (promotion > 0 || hasBundles) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合", hasBundles);
         if (amounts.Coupons < 0) AddLine(mapping.DiscountItemCode, amounts.Coupons, "折價券");
         if (amounts.Shipping > 0) AddLine(mapping.ShippingItemCode, amounts.Shipping, "運費");
 
@@ -579,6 +779,22 @@ internal static partial class ShopeeScreenshot
         return TryNumber(digits, out _, digitsOnly: true) && digits.Length <= 3;
     }
 
+    /// <summary>
+    /// The 編號 the numbering implies at <paramref name="centerY"/>: one less than the next 編號
+    /// below, one more than the last above (both must agree when both exist). Null when the
+    /// numbers read so far do not say.
+    /// </summary>
+    public static int? ExpectedIndexAt(IReadOnlyList<OcrBox> lines, int imageWidth, int centerY)
+    {
+        var anchors = IndexAnchors(lines, imageWidth)
+            .Select(a => (a.CenterY, Index: int.Parse(Compact(a.Text), CultureInfo.InvariantCulture)))
+            .ToList();
+        var above = anchors.Where(a => a.CenterY < centerY).OrderByDescending(a => a.CenterY).Select(a => (int?)a.Index + 1).FirstOrDefault();
+        var below = anchors.Where(a => a.CenterY > centerY).OrderBy(a => a.CenterY).Select(a => (int?)a.Index - 1).FirstOrDefault();
+        var expected = above is not null && below is not null ? (above == below ? above : null) : above ?? below;
+        return expected is >= 1 ? expected : null;
+    }
+
     internal static bool TryProbeDigits(string text, out string digits)
     {
         var mapped = new string(Compact(text).Select(c => c switch
@@ -591,14 +807,39 @@ internal static partial class ShopeeScreenshot
         return DigitsPattern().IsMatch(mapped) && mapped.Length <= 3;
     }
 
-    private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    /// <summary>
+    /// Text without spaces, with the simplified glyphs the OCR model sometimes returns for
+    /// Shopee's labels folded to traditional (diagnostic log, 2026-10-12: 「訂單金额」).
+    /// </summary>
+    internal static string Compact(string text) =>
+        new(text.Where(c => !char.IsWhiteSpace(c)).Select(c => SimplifiedGlyphs.TryGetValue(c, out var t) ? t : c).ToArray());
+
+    private static readonly Dictionary<char, char> SimplifiedGlyphs = new()
+    {
+        ['额'] = '額', ['订'] = '訂', ['单'] = '單', ['总'] = '總', ['费'] = '費', ['运'] = '運', ['优'] = '優',
+        ['币'] = '幣', ['虾'] = '蝦', ['实'] = '實', ['计'] = '計', ['价'] = '價', ['数'] = '數',
+        ['项'] = '項', ['选'] = '選', ['货'] = '貨', ['号'] = '號', ['规'] = '規', ['编'] = '編',
+        ['买'] = '買', ['卖'] = '賣', ['场'] = '場', ['帐'] = '帳', ['账'] = '帳', ['进'] = '進', ['讯'] = '訊',
+        ['资'] = '資', ['录'] = '錄', ['细'] = '細', ['隐'] = '隱', ['调'] = '調'
+    };
 
     private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     [GeneratedRegex(@"^[0-9A-Z]{10,20}$")]
     private static partial Regex OrderSnPattern();
 
-    [GeneratedRegex(@"(貨|货)(號|号)")]
+    [GeneratedRegex(@"^包\S(?=\d*[:：])")]
+    private static partial Regex PackagePattern();
+
+    [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
+    private static partial Regex OrderSnFormatPattern();
+
+    [GeneratedRegex(@"^TW[0-9OIL]{12}[0-9A-Z]$")]
+    private static partial Regex TwTrackingPattern();
+
+    // 「商品選項貨號：」; the OCR once dropped the 貨 (「商品選項」 + 「號：A0…」, user's PC,
+    // 2026-10-12), so 號 with a colon after 選項 or at a box's start is a label too.
+    [GeneratedRegex(@"(貨|货)(號|号)|(^|選項|选项)(號|号)(?=[:：])")]
     private static partial Regex CodeLabelPattern();
 
     [GeneratedRegex(@"^(?<code>.*[0-9A-Za-z])[xX×*＊](?<n>\d{1,3})$")]

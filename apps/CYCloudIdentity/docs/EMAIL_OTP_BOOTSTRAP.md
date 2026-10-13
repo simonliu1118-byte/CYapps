@@ -13,6 +13,7 @@ The deployed Identity Worker requires protected runtime configuration for Email 
 - `OTP_PEPPER` — HMAC secret, minimum 32 bytes; never committed/backed up with data.
 - `BOOTSTRAP_SECRET` — one-time/temporary bootstrap authorization secret, minimum 32 bytes. Rotate/remove after initial bootstrap is accepted.
 - `LOGIN_RATE_LIMITER` — Cloudflare Rate Limit binding used before login credential/D1 work.
+- `ACCOUNT_PORTAL_URL` — existing CY Web account-portal base URL, injected from protected deployment/runtime configuration. New Employee and resend-first-verification emails link directly to this HTTPS root login entry. Never embed an Employee password/token in a URL. Validate the provider runtime points to the CY Web instance using the **same CYID authority** before real Email acceptance.
 
 Cloudflare resource names/IDs, rate-limit namespace IDs and all real values are Deployment Environment/runtime data, not Public source.
 
@@ -33,6 +34,14 @@ Shared OTP behavior:
 - daily delivery reservation occurs before provider send, preventing concurrent requests from passing the configured daily budget.
 
 Current OTP purposes are generic Identity lifecycle values: Workspace bootstrap/recovery, Employee email verification/password reset, highest-authority transfer authorization and Recovery Email change.
+
+## First Employee Email verification
+
+When an administrator creates a pending Employee or resends the initial verification Email, CYID builds both plaintext and HTML email using the **same existing** `ACCOUNT_PORTAL_URL`. The HTML link opens CY Web's root login page; plaintext includes the actual URL for clients without HTML support. No new GitHub Variable or new email provider is required.
+
+The email explains: use the eight-character one-time initial password **only** on CY Web; complete Email verification by setting an 8–16-character permanent password within the short first-login ticket window; then use the new password to log in normally (including CYACCweb). Do not interpret the temporary password as valid credentials for another consumer.
+
+Missing/invalid/non-HTTPS production portal URLs fail before generating a new initial credential. Only non-production loopback HTTP is accepted for local testing. Existing Employee/OTP/audit/Session authority and credential expiry/revocation behavior are unchanged. **A link in email does not automatically prove real-browser/Email acceptance or repair pending Employee data.**
 
 ## First Workspace bootstrap
 

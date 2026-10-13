@@ -1,6 +1,32 @@
+using System.Globalization;
 namespace CYERPAutoInput;
 
-internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice);
+internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice)
+{
+    /// <summary>For the parts of a bundle: the bundle's first code, so its lines stay together in that order.</summary>
+    public string? SortKey { get; init; }
+    /// <summary>
+    /// On a bundle's first part: what the bundle sold for. Bundle parts carry no 單價, so ERP
+    /// enters its own list price, and the gap between those and this goes to 促銷組合 (user,
+    /// 2026-10-12: the report's figures stay right per product).
+    /// </summary>
+    public string? BundleTotal { get; init; }
+    /// <summary>The 促銷組合 line that also takes the bundles' gap, worked out while ERP is filled in.</summary>
+    public bool TakesBundleGap { get; init; }
+
+    /// <summary>
+    /// Products in item-code order, smallest first (user, 2026-10-12); the lines for the
+    /// configured 折價券／運費／促銷組合 codes stay last, in their own order.
+    /// </summary>
+    public static List<ImportedItem> InEntryOrder(IEnumerable<ImportedItem> items, IEnumerable<string> trailingCodes)
+    {
+        var trailing = new HashSet<string>(trailingCodes.Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+        var list = items.ToList();
+        return list.Where(i => !trailing.Contains(i.ItemCode)).OrderBy(i => i.SortKey ?? i.ItemCode, StringComparer.OrdinalIgnoreCase)
+            .Concat(list.Where(i => trailing.Contains(i.ItemCode)))
+            .ToList();
+    }
+}
 
 /// <summary>
 /// One platform order ready for the COPI08 form, whatever its source (蝦皮, MO店+). The
@@ -67,6 +93,55 @@ internal sealed class ImportedOrder
 /// 2026-10-11). A carrier applies when its name appears in the export's carrier text
 /// (e.g. 第三方物流-新竹貨運, 7-11店出); only the ERP codes are local settings.
 /// </summary>
+/// <summary>
+/// Bundles 「A+B」 from any source (user, 2026-10-12): every part goes out as many times as
+/// bundles were sold, with no 單價 so ERP enters its own list price; the first part remembers
+/// what the bundle sold for, and the 促銷組合 line takes the gap while ERP is filled in.
+/// </summary>
+internal static class Bundles
+{
+    public static List<string> Parts(string code) =>
+        code.Replace('＋', '+').Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    public static bool IsBundle(string code) => Parts(code).Count > 1;
+
+    /// <summary>The items with every bundle expanded, and the 促銷組合 line marked (added at 0 when missing).</summary>
+    public static List<ImportedItem> Expand(IEnumerable<ImportedItem> items, string promotionCode, List<string> problems)
+    {
+        var result = new List<ImportedItem>();
+        var any = false;
+        foreach (var item in items)
+        {
+            var parts = Parts(item.ItemCode);
+            if (parts.Count < 2) { result.Add(item); continue; }
+            any = true;
+            var quantity = decimal.Parse(item.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+            var unit = decimal.Parse(item.UnitPrice.Length > 0 ? item.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
+            for (var i = 0; i < parts.Count; i++)
+            {
+                var (code, times) = ShopeeScreenshot.SplitSet(parts[i]);
+                result.Add(new ImportedItem(code, Number(quantity * times), string.Empty)
+                {
+                    SortKey = parts[0],
+                    BundleTotal = i == 0 ? Number(unit * quantity) : null
+                });
+            }
+        }
+        if (!any) return result;
+        if (promotionCode.Length == 0)
+        {
+            problems.Add("有套裝商品，請在設定填入促銷組合品號（套裝與原價的差額要打在這裡）");
+            return result;
+        }
+        var promotion = result.FindIndex(i => i.ItemCode.Equals(promotionCode, StringComparison.OrdinalIgnoreCase));
+        if (promotion >= 0) result[promotion] = result[promotion] with { TakesBundleGap = true };
+        else result.Add(new ImportedItem(promotionCode, "1", "0") { TakesBundleGap = true });
+        return result;
+    }
+
+    private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+}
+
 internal static class FreightCarriers
 {
     /// <summary>The company's own delivery, kept apart from the carriers (user, 2026-10-11).</summary>
@@ -83,7 +158,11 @@ internal static class FreightCarriers
     /// <summary>Other names a platform may print for a carrier.</summary>
     private static readonly Dictionary<string, string[]> Aliases = new(StringComparer.Ordinal)
     {
-        ["郵局"] = ["中華郵政"]
+        ["郵局"] = ["中華郵政"],
+        // Shopee prints 7-11 as 「7-ELEVEN」 (user, 2026-10-12).
+        ["7-11"] = ["7-ELEVEN", "7ELEVEN", "統一超商"],
+        ["全家"] = ["FamilyMart"],
+        ["萊爾富"] = ["Hi-Life", "HiLife"]
     };
 
     /// <summary>

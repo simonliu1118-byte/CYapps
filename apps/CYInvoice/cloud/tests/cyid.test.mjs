@@ -260,3 +260,40 @@ assert.equal((await call('/v1/devices/revoke', { ...credentials, targetDeviceId:
 assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
 assert.equal(provider.db.prepare('PRAGMA foreign_key_check').all().length, 0);
 console.log('PASS CYID real-provider gateway/session/access/device contracts');
+
+// After all historical CYID contracts pass, physically retire Built-in tables
+// in this *synthetic* CYID-only D1, then exercise actual CYID Worker handlers
+// against the D1 without cloud_employees. Other Built-in tests retain their
+// fresh, untouched databases and standard schema.
+consumer.db.prepare("UPDATE devices SET employee_authority_state='cloud' WHERE device_id='dev_history'").run();
+consumer.db.exec('BEGIN');
+try {
+  consumer.db.exec(readFileSync('maintenance/retire-built-in-for-cyid-only.sql', 'utf8'));
+  assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
+  consumer.db.exec('COMMIT');
+} catch (error) {
+  consumer.db.exec('ROLLBACK');
+  throw error;
+}
+assert.equal(consumer.db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='cloud_employees'").get().n, 0);
+assert.equal(consumer.db.prepare("SELECT issued_by_employee_id FROM device_invitations WHERE invitation_id='inv_history'").get().issued_by_employee_id, 'emp_history');
+assert.equal((await call('/v1/cyid/authenticate', credentials)).status, 200);
+assert.equal((await call('/v1/runtime/sync', syncRequest)).status, 200);
+assert.equal((await call('/v1/devices/rename', { ...credentials, targetDeviceId: ids[0],
+  displayName: 'CYID-only Device' })).status, 200);
+assert.equal(consumer.db.prepare('SELECT display_name FROM devices WHERE device_id=?').get(ids[0]).display_name, 'CYID-only Device');
+for (const oldPath of ['/v1/employees', '/v1/employee-authority/snapshot', '/v1/web-auth/login'])
+  assert.equal((await call(oldPath, oldPath.endsWith('login') ? credentials : undefined)).status, 409);
+const previousFetch = globalThis.fetch;
+globalThis.fetch = async (_url, _init) => Response.json({ id: 'synthetic_delivery' });
+try {
+  const afterRetirementInvitation = await call('/v1/device-invitations', credentials, tokens[0], emailEnv);
+  assert.equal(afterRetirementInvitation.status, 201);
+  const saved = consumer.db.prepare('SELECT issued_by_employee_id, issued_by_cyid_employee_id FROM device_invitations WHERE invitation_id=?')
+    .get(afterRetirementInvitation.body.invitation.invitationId);
+  assert.equal(saved.issued_by_employee_id, null);
+  assert.equal(saved.issued_by_cyid_employee_id, 'emp_owner');
+} finally { globalThis.fetch = previousFetch; }
+assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
+console.log('PASS CYID real-provider authentication, runtime sync, device rename and invitations after physical Built-in table removal');
+

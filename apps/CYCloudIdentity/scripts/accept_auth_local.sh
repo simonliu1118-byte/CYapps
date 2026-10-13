@@ -200,6 +200,32 @@ assert p['workspaceRole'] == 'SUPER_ADMIN'
 assert p['isWorkspaceSuperAdmin'] is True
 PY
 
+# Application registration uses the real local Worker/D1 only. No remote
+# fixture, bootstrap replay, business Workspace or automatic grant is created.
+PORT="$PORT" SUPER_TOKEN="$SUPER_TOKEN" ADMIN_TOKEN="$ADMIN_TOKEN" IDENTITY_ADMIN_TOKEN="$IDENTITY_ADMIN_TOKEN" python3 - <<'PY'
+import json, os, urllib.request, urllib.error
+base = 'http://127.0.0.1:' + os.environ['PORT']
+def call(path, token, body=None):
+    request = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode(),
+        headers={'authorization': 'Bearer ' + token, 'x-identity-application': 'APP_TEST_LOGIN', 'content-type': 'application/json'})
+    try:
+        response = urllib.request.urlopen(request)
+    except urllib.error.HTTPError as error:
+        response = error
+    return response.status, json.load(response)
+body = {'applicationId': 'APP_TEST_REGISTERED', 'displayName': 'Synthetic Registered App'}
+for key in ['ADMIN_TOKEN', 'IDENTITY_ADMIN_TOKEN']:
+    assert call('/v1/admin/identity/applications', os.environ[key], body)[0] == 403
+for _ in range(2):
+    status, result = call('/v1/admin/identity/applications', os.environ['SUPER_TOKEN'], body)
+    assert status == 200 and result['workspaceId'] == 'workspace-test-001'
+status, snapshot = call('/v1/admin/identity/snapshot', os.environ['SUPER_TOKEN'])
+assert status == 200
+assert len([app for app in snapshot['applications'] if app['application_id'] == 'APP_TEST_REGISTERED' and app['enabled'] == 1]) == 1
+assert not any(access['application_id'] == 'APP_TEST_REGISTERED' for access in snapshot['directAccess'])
+assert call('/v1/admin/identity/applications', os.environ['SUPER_TOKEN'], {**body, 'displayName': 'Conflicting Name'})[0] == 409
+PY
+
 # Group access must no longer authorize a non-core App.
 LEGACY_STATUS="$(curl --silent --output "$STATE_DIR/legacy.json" --write-out '%{http_code}' \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
