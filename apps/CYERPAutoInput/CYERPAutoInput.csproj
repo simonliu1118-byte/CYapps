@@ -3,6 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- UI Automation client (System.Windows.Automation) to read Chrome page text; no WPF UI is used. -->
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -19,6 +21,12 @@
     <AssemblyName>CYERPAutoInput</AssemblyName>
     <RootNamespace>CYERPAutoInput</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UseWPF drops these from the implicit usings; the WinForms code relies on them. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Unit tests are a separate project (tests/CYERPAutoInput.Tests). -->

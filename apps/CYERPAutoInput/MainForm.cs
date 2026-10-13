@@ -1092,6 +1092,46 @@ internal sealed class MainForm : Form
         Session.Begin(AutomationSession.BatchTitle);
     }
 
+    /// <summary>
+    /// Diagnostic (user, 2026-10-13): what Chrome tells UI Automation about the page in front —
+    /// every piece of text with its position — written to the local log, nothing clicked. To
+    /// see whether the batch and the order scan can read the page text instead of OCR.
+    /// </summary>
+    private async Task DiagnoseChromeTextAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (MessageBox.Show(this,
+                "按「確定」後 5 秒，讀取最前面的 Chrome 視窗的網頁文字，寫入本機 LOG（不會點任何東西）。\n\n" +
+                "請在 5 秒內切到 Chrome 要讀的畫面：蝦皮清單、訂單明細、查看寄件編號視窗、寄件單分頁、Chrome 列印視窗（可先打開下拉選單）。",
+                "讀取 Chrome 網頁文字", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+        SetStatus("5 秒後讀取 Chrome 網頁文字…");
+        await Task.Delay(5000);
+        var foreground = NativeMethods.GetForegroundWindow();
+        var window = NativeMethods.ClassName(foreground) == "Chrome_WidgetWin_1" ? foreground : ShopeePageScanner.FindBrowser();
+        if (window == 0)
+        {
+            MessageBox.Show(this, "找不到 Chrome 視窗。", "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("page-text", $"diagnostic read window class={NativeMethods.ClassName(window)} title={_log.Value(NativeMethods.WindowText(window))}");
+        try
+        {
+            var (items, ms) = await Task.Run(() => (ChromePageText.Read(window, _log, out var elapsed), elapsed));
+            foreach (var item in items)
+                _log.Info("page-text", $"  {item.Type} x={item.Rect.Left} y={item.Rect.Top} w={item.Rect.Width} h={item.Rect.Height} text={_log.Value(item.Text)}");
+            SetStatus($"Chrome 網頁文字：{items.Count} 段，{ms} ms，已寫入 LOG");
+            var sample = string.Join("\n", items.Where(i => i.Text.Length <= 40).Take(12).Select(i => "・" + i.Text));
+            MessageBox.Show(this, $"讀到 {items.Count} 段文字，用了 {ms} 毫秒，已寫入本機 LOG（page-text）。\n\n前幾段：\n{sample}",
+                "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("page-text", ex);
+            MessageBox.Show(this, $"讀取失敗：{ex.Message}", "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
     /// <summary>The batch stopped and needs a person (user, 2026-10-12: with a sound).</summary>
     private static void Alarm()
     {
@@ -1695,6 +1735,7 @@ internal sealed class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add($"光學辨識輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("蝦皮全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
+            menu.Items.Add("讀取 Chrome 網頁文字（診斷）", null, async (_, _) => await DiagnoseChromeTextAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

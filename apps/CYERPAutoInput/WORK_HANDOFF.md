@@ -81,6 +81,7 @@
 - V0.3.0 Build 7：`ShopeePageScanner.ReadCardsAsync` 進帳資訊的讀取範圍延伸到下一個 wanted 卡片上緣（仍在讀到入帳明細時停止）。依據：LOG 卡片 `進帳資訊 top=1197 h=1186` 之後 `top=2385 h=598 title=買10送1…`（同一商品表被灰線切開）。
 - V0.3.0 Build 8：`SetDetailCellAsync` 3 次嘗試，重試前等 500×attempt ms（LOG 14:03 `editor not ready row=1 col=1`，focus 仍在品號編輯框；使用者重跑即成功）。
 - V0.3.0 Build 9：`CloseOrderTabAsync` 先點頁面左側＋Home 再核對（LOG 14:44 第 1 筆完成後頁面停在底部）。速度：`PageArea()`（最大的 Chrome_RenderWidgetHostHWND）只讀網頁；`ReadAsync(part, reuse)`＋`_inputs` 計數（Click／Keys／Type／Wheel／ERP 後遞增），`WaitAsync(reuseFirst, part)`；列印視窗 `part` 右半（0.5–1.0）。實測 Build 8：一筆蝦皮端 14:41:59→14:43:53（約 2 分），ERP 約 50 秒。
+- V0.3.0 Build 10：`ChromePageText.Read`（System.Windows.Automation，`CacheRequest` 一次取 Name／Value／BoundingRectangle／ControlType，空結果重讀最多 3 次）；`MainForm.DiagnoseChromeTextAsync`。csproj 加 `UseWPF`（只為 UIAutomationClient）並補回 `System.IO`、`System.Net.Http` 全域 using。待使用者在各畫面實測 LOG；可行則下一步以網頁文字取代蝦皮全自動與訂單頁的 OCR（OCR 留作退路）。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 
