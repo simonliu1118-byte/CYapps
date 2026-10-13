@@ -183,6 +183,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] **設計與 source 核對：**區分可用舊裝置、有效加入碼、所有 Token 遺失及服務／資料毀損；確認 active 筆數不是可用 Token 數、現有 issuer Device FK 與 app-scoped Session 邊界。
 - [ ] **V3 CYWEB 管理接線：**核對實際 CYWEB source／core Session／CSRF owner；超管簽發／撤銷／狀態查核經專用 private capability 與當次 CYInvoice App authority，不轉用 core token、不要求舊 Device。
 - [ ] **V3 邀請與 Audit schema：**forward migration 擴充 issuer channel／RECOVERY purpose／nullable CYWEB Device issuer 與 constraint，保留歷史 actor；原子單次 claim／Audit、失敗及 delivery 不明安全收斂。
+  - [ ] 工程中：[CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已加入 canonical 0014／optional CYID_ONLY issuer maintenance 與 synthetic Built-in／CYID_ONLY／FK／Audit／唯一 operation ID 測試；**尚未合併或套用原 D1，也沒有私有簽發／claim**。與 [CYWEB Draft PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的超管 Auth/CSRF gate 同步收斂，不把 CI 等同 DR 實機完成。
 - [ ] **V3 新裝置復原加入：**沿用 protected Pending Token owner，固定兩 Workspace／Application scope；同 Token retry／重啟／scope mismatch／revoked 不復活，成功加入原 Workspace 後才明確撤銷選定失聯舊 Device。LAST_ACTIVE_DEVICE 維持。
 - [ ] **私有備份異機回復工具與保管：**設計建議 age recipient encryption；仍待核准 recipient／獨立金鑰及備份位置、工具、RPO／RTO／retention 與真正異機 drill。現有 DPAPI 只證明原帳戶／機器本地回復。
 - [ ] **人工維運回復：**CYWEB／CYID／D1 故障先由各 owner 恢復服務；先保留目前 snapshot／新資料，核對 storage profile 與相容 Worker，遠端 restore 另以具體範圍批准。回復後舊 revoked Token／已用邀請不得倒退復活。
