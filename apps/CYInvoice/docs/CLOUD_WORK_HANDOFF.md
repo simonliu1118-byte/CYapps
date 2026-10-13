@@ -4,7 +4,15 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：災難復原併入 V3；CYWEB 超管復原邀請設計（2026-10-13）
+## 最新停點：V3 CYWEB 復原邀請開始工程接線（Draft，2026-10-13）
+
+- 使用者要求接手已完成 D1 維護後的 Work 停點，並批准「繼續」。本批新增 [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的 core Session SUPER_ADMIN／Email／Same-Origin 限制、私有 CYInvoice RPC interface 與隔離行為測試；該 PR CI 全綠，但**沒有私有 issuer 實作／配置，尚不能簽發復原碼，也沒有部署**。
+- [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 正在進行 V3 D1 forward 0014：同一 device_invitations 新增 issuer channel/purpose、credential version/revision 與每 Workspace 唯一 opaque recovery operation ID；同一 audit 增加 recovery event／actor_provider，保留原 rows、Built-in Device/Employee FK。
+- 本公司原 `CYID_ONLY` D1 的「無舊 Device」issuer 必須透過**另行批准的獨立 maintenance** `enable-cyweb-recovery-issuer.sql` 才能開啟，gate 會查唯一活躍 Workspace、CYID_ONLY、已無四張 Built-in 帳號表、歷史 invitation 皆為 DEVICE JOIN；Built-in 與 self-hosted 不套用。所有改動目前只在 GitHub source 與 isolated SQLite/CI，**原 Cloudflare Worker／D1／CYID D1 未改**；原 D1 的 Built-in 表退役已完成，不能重跑那份舊退役 script。
+- 發行順序仍是 **CYInvoice private RPC + per-operation CYID Application-scoped reauth → 本地 invitation 發信／replay/status/atomic claim/Windows Pending Device Token → PR／CI 全綠 → 明確核准原 Worker／binding／forward migration／private maintenance**；不可把兩份 Draft PR 或 schema 測試說成遠端災難復原已可用。CYWEB core Session 不可代替 CYInvoice Session，不能新增任何測試 Worker／handler。
+- 原 V2.6.19 Release、Cloud0.9.3/CYID_ONLY 與私有 D1 維護證據保持完成；V3 DR-01～DR-13 仍未取得驗收。
+
+## 歷史停點：災難復原併入 V3；CYWEB 超管復原邀請設計（2026-10-13）
 
 - **使用者方向**：災難復原與 V3 多機協同一起做；由 CYID 超管在 CYWEB 簽發短效一次性復原邀請，新機加入原 CYInvoice business Workspace，不靠遺失的舊 Token。
 - **設計已整理**：[CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md) 定義情境、CYWEB/core 與 CYInvoice App scoped 授權、private issuer、現有 invitation／Audit migration、protected Pending Token／scope／結果不明、舊 Device history、V3 Work Item 重整及服務故障備份邊界。未增加永久規則或 shared Identity authority。
