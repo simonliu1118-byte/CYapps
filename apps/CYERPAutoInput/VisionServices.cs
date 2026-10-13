@@ -352,7 +352,37 @@ internal sealed class GridVisionService
         _log = log;
     }
 
-    internal static bool TryGetLogicalOrder(int erpColumn, out int order) => LogicalColumnOrder.TryGetValue(erpColumn, out order);
+    /// <summary>The order learned from this ERP's header (<see cref="LearnColumnOrder"/>), else the usual one.</summary>
+    internal static bool TryGetLogicalOrder(int erpColumn, out int order)
+    {
+        lock (LearnedOrder)
+            if (LearnedOrder.TryGetValue(erpColumn, out order)) return true;
+        return LogicalColumnOrder.TryGetValue(erpColumn, out order);
+    }
+
+    private static readonly Dictionary<int, int> LearnedOrder = [];
+
+    /// <summary>
+    /// Columns seen side by side in one header read keep their order slots but take them in
+    /// the order they stand on screen (user, 2026-10-13: the column layout differs between
+    /// users, e.g. 批號 after 庫別名稱). Columns not seen keep their usual slot.
+    /// </summary>
+    internal static void LearnColumnOrder(IReadOnlyDictionary<int, int> columnX, AppLogger? log = null)
+    {
+        var seen = columnX.Where(p => LogicalColumnOrder.ContainsKey(p.Key)).OrderBy(p => p.Value).Select(p => p.Key).ToList();
+        if (seen.Count < 2) return;
+        lock (LearnedOrder)
+        {
+            var slots = seen.Select(c => LearnedOrder.TryGetValue(c, out var o) ? o : LogicalColumnOrder[c]).OrderBy(o => o).ToList();
+            var changed = false;
+            for (var i = 0; i < seen.Count; i++)
+            {
+                changed |= !LearnedOrder.TryGetValue(seen[i], out var old) || old != slots[i];
+                LearnedOrder[seen[i]] = slots[i];
+            }
+            if (changed) log?.Info("vision", "detail column order learned " + string.Join(",", seen.Select(c => $"{c}:{LearnedOrder[c]}")));
+        }
+    }
 
     public async Task<GridGeometry> AnalyzeDetailGridAsync(nint gridHwnd, CancellationToken cancellationToken)
     {
@@ -367,7 +397,7 @@ internal sealed class GridVisionService
         var headerBottom = 0;
         foreach (var pair in ColumnAliases)
         {
-            var match = FindPhrase(tokens, pair.Value);
+            var match = FastDetailGridVisionService.FindExactPhrase(tokens, pair.Value);
             if (match is null)
             {
                 _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=false");
@@ -378,6 +408,7 @@ internal sealed class GridVisionService
             _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=true rect={match.Value.Left},{match.Value.Top},{match.Value.Width},{match.Value.Height}");
         }
 
+        LearnColumnOrder(geometry.ColumnX, _log);
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
             if (!TryInferColumnsFromGridLines(image, tokens, geometry, out var inferredHeaderBottom))

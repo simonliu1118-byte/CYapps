@@ -81,6 +81,9 @@ internal sealed class FastDetailGridVisionService
         // ErpAutomationService treats these values as the trusted visible-column X: the grid
         // cell center whenever vertical boundaries are available, otherwise the text-box center.
         _exactColumnX[gridHwnd] = exact;
+        // The columns' order as this ERP shows it (user, 2026-10-13: another user's grid has
+        // 批號 after 庫別名稱); horizontal scrolling goes by it.
+        GridVisionService.LearnColumnOrder(geometry.ColumnX, _log);
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
@@ -122,6 +125,37 @@ internal sealed class FastDetailGridVisionService
         return geometry;
     }
 
+    /// <summary>
+    /// Where to click to open the first detail row (user, 2026-10-13: each user's grid can lay
+    /// its columns out differently, so no fixed position): the 品號 header's cell, read from
+    /// the header, one row below it. Relative to the grid; null when the header is not read.
+    /// </summary>
+    public async Task<Point?> FindFirstItemCellAsync(nint gridHwnd, CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(gridHwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0) return null;
+        using var image = ScreenCapture.Capture(rect.ToRectangle());
+        var headerHeight = Math.Clamp(Math.Min(image.Height, 62), 24, image.Height);
+        using var header = image.Clone(new Rectangle(0, 0, image.Width, headerHeight), image.PixelFormat);
+        var tokens = await _ocr.RecognizeAsync(header, cancellationToken, requireChinese: true);
+        var match = FindExactPhrase(tokens, ColumnAliases[0]);
+        if (match is null)
+        {
+            _log.Warn("vision", $"first row: 品號 header not read tokens={tokens.Count}");
+            return null;
+        }
+        var boundaries = NormalizeVerticalBoundaries(GridVisionService.FindVerticalLines(image, Math.Max(8, image.Height - 1)), image.Width);
+        var textX = match.Value.Left + match.Value.Width / 2;
+        var x = boundaries.Count >= 6 ? SnapToContainingCell(textX, boundaries) ?? textX : textX;
+        // The header line sits just below its text; the first row's centre is half a row below that.
+        var headerLine = GridVisionService.FindHorizontalLines(image, Math.Max(0, match.Value.Bottom - 2)).FirstOrDefault(y => y >= match.Value.Bottom - 2 && y <= match.Value.Bottom + 12);
+        var y = (headerLine > 0 ? headerLine : match.Value.Bottom + 4) + ErpDetailRowHeight / 2;
+        _log.Info("vision", $"first row: 品號 header rect={match.Value.Left},{match.Value.Top},{match.Value.Width},{match.Value.Height} cell_x={x} header_line={headerLine} y={y}");
+        return new Point(x, Math.Min(y, image.Height - 4));
+    }
+
+    /// <summary>The COPI08 detail row height (user, 2026-10-13: always 22 px).</summary>
+    internal const int ErpDetailRowHeight = 22;
+
     public bool TryGetExactColumnX(nint gridHwnd, int logicalColumn, out int relativeX)
     {
         relativeX = 0;
@@ -143,13 +177,13 @@ internal sealed class FastDetailGridVisionService
         // First handle a detector token that contains more text than the requested
         // phrase. Crop the returned rectangle to the matching character span instead
         // of returning the whole token rectangle.
-        foreach (var token in tokens)
+        foreach (var token in tokens.OrderBy(t => t.Rect.Left))
         {
             var text = OcrTextNormalizer.Normalize(token.Text);
             if (text.Length == 0) continue;
             foreach (var alias in normalizedAliases)
             {
-                var index = text.IndexOf(alias, StringComparison.Ordinal);
+                var index = IndexOfHeader(text, alias);
                 if (index >= 0)
                     return SliceRect(token.Rect, text.Length, index, alias.Length);
             }
@@ -187,7 +221,7 @@ internal sealed class FastDetailGridVisionService
 
                     foreach (var alias in normalizedAliases)
                     {
-                        var index = combined.IndexOf(alias, StringComparison.Ordinal);
+                        var index = IndexOfHeader(combined, alias);
                         if (index < 0) continue;
                         var matched = BuildSpanRect(pieces, index, alias.Length);
                         if (matched is not null) return matched;
@@ -197,6 +231,20 @@ internal sealed class FastDetailGridVisionService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Where <paramref name="alias"/> stands as a header of its own: 庫別 is not the start of
+    /// 庫別名稱, a separate column next to it.
+    /// </summary>
+    internal static int IndexOfHeader(string text, string alias)
+    {
+        for (var index = text.IndexOf(alias, StringComparison.Ordinal); index >= 0; index = text.IndexOf(alias, index + 1, StringComparison.Ordinal))
+        {
+            var rest = text[(index + alias.Length)..];
+            if (!rest.StartsWith("名稱", StringComparison.Ordinal) && !rest.StartsWith("名称", StringComparison.Ordinal)) return index;
+        }
+        return -1;
     }
 
     internal static int? SnapToContainingCell(int x, IReadOnlyList<int> boundaries)

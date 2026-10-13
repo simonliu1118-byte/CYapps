@@ -3,7 +3,8 @@ namespace CYERPAutoInput;
 
 internal sealed class ErpAutomationService
 {
-    private const int ProvenDetailRowPitch = 24;
+    /// <summary>COPI08 detail rows are 22 px high (user, 2026-10-13: it does not change).</summary>
+    private const int ProvenDetailRowPitch = FastDetailGridVisionService.ErpDetailRowHeight;
     private const ushort VkLeft = 0x25;
     private const ushort VkRight = 0x27;
 
@@ -998,15 +999,19 @@ internal sealed class ErpAutomationService
         if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 45)
             throw new InvalidOperationException("商品明細區目前沒有有效畫面位置。");
 
-        var relativeX = (int)Math.Round(rect.Width * 0.052);
-        relativeX = Math.Clamp(relativeX, 28, Math.Max(28, rect.Width - 24));
-        var relativeY = Math.Clamp(33, 24, Math.Max(24, rect.Height - 12));
+        // The 品號 cell of the first row, found from the header (user, 2026-10-13: a fixed
+        // spot missed on another user's layout). The old spot only when the header is not read.
+        var cell = await _gridVision.FindFirstItemCellAsync(grid.Handle, cancellationToken);
+        var relativeX = cell?.X ?? Math.Clamp((int)Math.Round(rect.Width * 0.052), 28, Math.Max(28, rect.Width - 24));
+        var relativeY = Math.Clamp(cell?.Y ?? 33, 24, Math.Max(24, rect.Height - 12));
         var point = new Point(rect.Left + relativeX, rect.Top + relativeY);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("啟用商品明細區前無法把 ERP 帶到前景。");
         InputSender.Click(point);
         await Delay(320, cancellationToken);
 
         var focus = NativeMethods.FocusedControlOfForeground(root);
-        _log.Info("detail", $"first-row prime click once point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+        _log.Info("detail", $"first-row prime click once from_header={cell.HasValue} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
     }
 
     private async Task<(WindowControl Grid, GridGeometry Geometry)> AnalyzePrimedDetailGridAsync(
@@ -1599,7 +1604,7 @@ internal sealed class ErpAutomationService
         if (known.Count < 2) return ProvenDetailRowPitch;
         var (first, last) = (known[0], known[^1]);
         var pitch = (last.Value - first.Value) / (double)(last.Key - first.Key);
-        // Outside a sane range the measurement is wrong (an editor in another row); keep 24.
+        // Outside a sane range the measurement is wrong (an editor in another row); keep 22.
         return pitch is >= 16 and <= 36 ? pitch : ProvenDetailRowPitch;
     }
 
