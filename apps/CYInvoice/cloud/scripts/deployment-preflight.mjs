@@ -171,7 +171,12 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
   const original = audit.deployments?.deployments?.[0]?.versions;
   check(original?.length === 1 && original[0].percentage === 100 && uuid(original[0].version_id),
     'SINGLE_ACTIVE_DEPLOYMENT_REQUIRED');
-  checkSettings(audit.settings, config);
+  // A CYID-activated installation remains CYID on later code-only deploys.
+  const activeCyId = audit.settings.bindings.some(b =>
+    b.name === 'CYID_ENABLED' && b.type === 'plain_text' && b.text === 'true');
+  checkSettings(audit.settings, config, {allowCyId:activeCyId});
+  check((audit.state?.storageProfile ?? 'BUILT_IN') !== 'CYID_ONLY' || activeCyId,
+    'CYID_ONLY_REQUIRES_CYID_AUTHORITY');
   const activating = audit.operation === 'activate-cyid';
   check(Boolean(audit.cyIdActivation) === activating && !(activating && audit.cyIdPreparation),
     'AUDIT_DEPLOYMENT_MODE_MISMATCH');
@@ -182,9 +187,9 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
   }
   check(typeof code === 'string' && code.length > 0 && !code.includes('PROBE_AUTH_KEY'), 'BUSINESS_BUNDLE_REQUIRED');
   check(config.vars?.APP_ENV === 'development' && config.vars?.API_VERSION === '1' &&
-    (activating ? config.vars?.CYID_ENABLED === 'true' : config.vars?.CYID_ENABLED !== 'true'),
+    (activating || activeCyId ? config.vars?.CYID_ENABLED === 'true' : config.vars?.CYID_ENABLED !== 'true'),
     'BUILT_IN_AUTHORITY_REQUIRED');
-  const enabled = activating ? 'true' : 'false';
+  const enabled = activating || activeCyId ? 'true' : 'false';
   const vars = { ...Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text])),
     ...config.vars, CYID_ENABLED:enabled };
   const preserved = audit.settings.bindings.filter(b => b.type !== 'plain_text');
@@ -205,7 +210,7 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
   const additions = expectedServices.filter(b => !preserved.some(existing => existing.name === b.name));
   check(!Object.keys(vars).some(name => preserved.some(b => b.name === name)), 'BINDING_NAMES_INVALID');
   const expected = [...preserved, ...additions, ...Object.entries(vars).map(([name,text]) => ({type:'plain_text',name,text}))];
-  checkSettings({bindings:expected}, config, {allowCyId:activating});
+  checkSettings({bindings:expected}, config, {allowCyId:activating || activeCyId});
   const prefix = `/workers/workers/${encodeURIComponent(config.name)}/versions`;
   const routing = `/workers/scripts/${encodeURIComponent(config.name)}`;
   async function unchanged() {
@@ -280,7 +285,15 @@ export function fingerprintRows(rows, idColumn) {
 
 export function checkContinuity(before, after) {
   check(before && after, 'AUDIT_SNAPSHOT_INVALID');
-  for (const table of Object.keys(tables)) {
+  // Storage-profile conversion is an independent, manually reviewed maintenance
+  // operation; an ordinary Worker deploy is NEVER authorized to remove tables.
+  check((before.storageProfile ?? 'BUILT_IN') === (after.storageProfile ?? 'BUILT_IN'),
+    'STORAGE_PROFILE_CHANGED_UNREVIEWED');
+  const profile = before.storageProfile ?? 'BUILT_IN';
+  const required = profile === 'CYID_ONLY'
+    ? Object.keys(tables).filter(t => t !== 'cloud_employees').concat('cyid_storage_profile')
+    : Object.keys(tables);
+  for (const table of required) {
     check(before[table] && after[table], 'AUDIT_SNAPSHOT_INVALID');
     for (const [key, hash] of Object.entries(before[table]))
       check(after[table][key] === hash, `HISTORY_CHANGED_${table.toUpperCase()}`);
@@ -300,11 +313,28 @@ export function checkHealth(health, { version, schema }) {
 
 // Only these read-only SQL statements are transported. No arbitrary query input.
 export async function snapshot(query) {
-  const state = {};
+  const markers = await query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cyid_storage_profile'");
+  check(markers.length <= 1, 'STORAGE_PROFILE_INVALID');
+  const cyidOnly = markers.length === 1;
+  if (cyidOnly) {
+    const markerRows = await query("SELECT profile, workspace_id, retired_at FROM cyid_storage_profile");
+    check(markerRows.length === 1 && markerRows[0].profile === 'CYID_ONLY' &&
+      typeof markerRows[0].workspace_id === 'string' && markerRows[0].workspace_id.length > 0 &&
+      typeof markerRows[0].retired_at === 'string', 'STORAGE_PROFILE_INVALID');
+    const legacy = await query("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('cloud_employees','device_employee_links','employee_link_candidates','employee_transition_items')");
+    check(legacy.length === 0, 'CYID_LEGACY_TABLES_STILL_PRESENT');
+  }
+  const state = { storageProfile: cyidOnly ? 'CYID_ONLY' : 'BUILT_IN' };
   for (const [table, columns] of Object.entries(tables)) {
+    if (cyidOnly && table === 'cloud_employees') continue;
     const id = columns.split(',')[0];
     const rows = await query(`SELECT ${columns} FROM ${table} ORDER BY ${id} LIMIT ${rowLimit + 1}`);
     state[table] = fingerprintRows(rows, id);
+  }
+  if (cyidOnly) {
+    state.cyid_storage_profile = fingerprintRows(
+      await query("SELECT profile, workspace_id, retired_at FROM cyid_storage_profile"), 'profile');
+    check(Object.keys(state.workspaces).length === 1, 'CYID_ONLY_WORKSPACE_COUNT_INVALID');
   }
   const fk = await query('PRAGMA foreign_key_check');
   check(fk.length === 0, 'FOREIGN_KEY_CHECK_FAILED');
@@ -398,7 +428,12 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   const database = await request(`/d1/database/${encodeURIComponent(databaseId)}`);
   check(database?.uuid === databaseId && database.name === config.d1_databases[0].database_name, 'ORIGINAL_DEVELOPMENT_DATABASE_REQUIRED');
   const runtimeConfig = { ...config, d1_databases: [{ ...config.d1_databases[0], database_id: databaseId }] };
-  const vars = checkSettings(settings, runtimeConfig, {allowCyId:operation === 'preflight' || (mode === 'after' && operation === 'activate-cyid')});
+  const cyidAlreadyActive = settings.bindings.some(b =>
+    b.name === 'CYID_ENABLED' && b.type === 'plain_text' && b.text === 'true');
+  const vars = checkSettings(settings, runtimeConfig, {
+    allowCyId:operation === 'preflight' || (mode === 'after' && operation === 'activate-cyid') ||
+      (operation === 'deploy' && cyidAlreadyActive),
+  });
   const databasePath = `/d1/database/${encodeURIComponent(databaseId)}`;
   async function query(sql, params) {
     const results = await request(databasePath + '/query', { sql, ...(params ? {params} : {}) });
@@ -411,6 +446,8 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   const activating = mode === 'before' && operation === 'activate-cyid';
   const pending = checkMigrations(applied, canonical, mode === 'after' || preparing || activating || vars.CYID_ENABLED === 'true');
   const state = await snapshot(query);
+  if (state.storageProfile === 'CYID_ONLY')
+    check(vars.CYID_ENABLED === 'true', 'CYID_ONLY_REQUIRES_CYID_AUTHORITY');
   const cyIdPreparation = preparing ? resolveCyIdPreparation(provider, env.CYID_WORKER_NAME,
     await query("SELECT workspace_id, status FROM workspaces WHERE status = 'active' ORDER BY workspace_id LIMIT 2")) : undefined;
   const cyIdActivation = activating ? resolveCyIdPreparation(provider, env.CYID_WORKER_NAME,
