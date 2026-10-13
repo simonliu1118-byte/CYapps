@@ -110,8 +110,10 @@ builtIn.close();
 
 // Fail closed on unexpected tenant count and incomplete employee migration;
 // the transaction wrapper is required for no partial schema change on failure.
+// Schema 0013 already enforces a single Workspace at storage level.
+assert.throws(() => makeDatabase({ secondWorkspace: true }), /UNIQUE constraint failed/i);
 for (const scenario of [
-  { secondWorkspace: true }, { transitioning: true }, { pending: true },
+  { transitioning: true }, { pending: true },
 ]) {
   const invalid = makeDatabase(scenario);
   assert.throws(() => transact(invalid), /CHECK constraint failed/i);
