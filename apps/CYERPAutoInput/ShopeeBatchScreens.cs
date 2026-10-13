@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -107,6 +107,7 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("蝦皮店到店", StringComparison.Ordinal) || text.Contains("蝦皮店到宅", StringComparison.Ordinal)) return ShopeeBatchCarrier.Shopee;
         if (text.Contains("7ELEVEN", StringComparison.Ordinal) || text.Contains("711", StringComparison.Ordinal) || text.Contains("統一超商", StringComparison.Ordinal))
             return ShopeeBatchCarrier.SevenEleven;
+        if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
         return ShopeeBatchCarrier.Other;
     }
 
@@ -167,8 +168,20 @@ internal static partial class ShopeeBatchScreens
     public static bool TrackingRequested(IReadOnlyList<OcrBox> boxes) => Has(boxes, "寄件編號申請中");
 
     /// <summary>The TW number the dialog shows once assigned (spaces dropped).</summary>
-    public static string DialogTracking(IReadOnlyList<OcrBox> boxes) =>
-        boxes.Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0) ?? string.Empty;
+    public static string DialogTracking(IReadOnlyList<OcrBox> boxes)
+    {
+        var known = boxes.Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0);
+        if (known is not null) return known;
+        // Other formats (全家, not yet seen): the number line just under the dialog's title.
+        var title = TrackingDialogTitle(boxes);
+        if (title is null) return string.Empty;
+        return boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + title.Height * 4)
+            .Select(b => C(b).ToUpperInvariant())
+            .FirstOrDefault(t => OtherTrackingPattern().IsMatch(t) && t.Count(char.IsAsciiDigit) >= 8) ?? string.Empty;
+    }
+
+    /// <summary>全家 asks first (user, 2026-10-13): 「申請寄件編號」 at the dialog's bottom right.</summary>
+    public static OcrBox? ApplyTrackingButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "申請寄件編號");
 
     public static OcrBox? PrintLabelButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "列印寄件單");
 
@@ -240,7 +253,53 @@ internal static partial class ShopeeBatchScreens
     public static string SevenLabelCode(IReadOnlyList<OcrBox> boxes) =>
         boxes.Where(b => C(b).Contains("服務代碼", StringComparison.Ordinal)).Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0) ?? string.Empty;
 
+    // ---- 全家 FamilyMart寄取貨單 (api.sls.shopee.tw) ----
+
+    public static bool IsFamilyLabelPage(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Any(b => C(b).ToUpperInvariant().Contains("FAMILYMART", StringComparison.Ordinal) || C(b).Contains("寄取貨單", StringComparison.Ordinal));
+
+    /// <summary>The order's number anywhere on the page (全家 prints it on the line under 蝦皮訂單編號).</summary>
+    public static bool ShowsOrderSn(IReadOnlyList<OcrBox> boxes, string orderSn) => boxes.Any(b => OrderSnIn(C(b)) == orderSn);
+
     // ---- Chrome 列印 ----
+
+    /// <summary>「N 張紙」 at the dialog's top right.</summary>
+    public static int? SheetCount(IReadOnlyList<OcrBox> boxes)
+    {
+        foreach (var box in boxes)
+        {
+            var match = SheetPattern().Match(C(box));
+            if (match.Success) return int.Parse(match.Groups[1].Value);
+        }
+        return null;
+    }
+
+    /// <summary>The value shown beside a print setting's label (頁面 → 全部／自訂, 縮放比例 → 自訂…).</summary>
+    public static OcrBox? PrintRowValue(IReadOnlyList<OcrBox> boxes, string label)
+    {
+        var name = boxes.FirstOrDefault(b => C(b) == label);
+        return name is null ? null : boxes.Where(b => b.Left > name.Right + 20 && SameRow(b, name)).OrderBy(b => b.Left).FirstOrDefault();
+    }
+
+    /// <summary>The number box under 縮放比例's 自訂.</summary>
+    public static OcrBox? PrintScaleBox(IReadOnlyList<OcrBox> boxes)
+    {
+        var label = boxes.FirstOrDefault(b => C(b) == "縮放比例");
+        if (label is null) return null;
+        return boxes.Where(b => b.Left > label.Right && b.Top >= label.Top - 4 && b.Top <= label.Bottom + label.Height * 4 && ScalePattern().IsMatch(C(b)))
+            .OrderBy(b => b.Top).FirstOrDefault();
+    }
+
+    /// <summary>The page list typed under 頁面's 自訂 (例如 2), when shown.</summary>
+    public static OcrBox? PrintPagesBox(IReadOnlyList<OcrBox> boxes)
+    {
+        var label = boxes.FirstOrDefault(b => C(b) == "頁面");
+        var copies = boxes.FirstOrDefault(b => C(b) is "份數" or "份数");
+        if (label is null) return null;
+        var bottom = copies?.Top ?? label.Bottom + label.Height * 4;
+        return boxes.Where(b => b.Left > label.Right + 20 && b.Top > label.Bottom && b.Bottom <= bottom && !SameRow(b, label))
+            .OrderBy(b => b.Top).FirstOrDefault();
+    }
 
     /// <summary>
     /// Chrome's print dialog; 縮放比例 shows only once 顯示更多設定 is open (user, 2026-10-13),
@@ -262,14 +321,7 @@ internal static partial class ShopeeBatchScreens
     }
 
     /// <summary>The number under 縮放比例's 自訂 (null when the scale is not 自訂 or not read).</summary>
-    public static int? PrintScale(IReadOnlyList<OcrBox> boxes)
-    {
-        var label = boxes.FirstOrDefault(b => C(b) == "縮放比例");
-        if (label is null) return null;
-        var number = boxes.Where(b => b.Left > label.Right && b.Top >= label.Top - 4 && b.Top <= label.Bottom + label.Height * 4 && ScalePattern().IsMatch(C(b)))
-            .OrderBy(b => b.Top).FirstOrDefault();
-        return number is null ? null : int.Parse(C(number));
-    }
+    public static int? PrintScale(IReadOnlyList<OcrBox> boxes) => PrintScaleBox(boxes) is { } number ? int.Parse(C(number)) : null;
 
     /// <summary>The dialog's 列印 button: the 列印 with 取消 beside it on its right (not the dialog's title).</summary>
     public static OcrBox? PrintButton(IReadOnlyList<OcrBox> boxes)
@@ -343,6 +395,12 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"(\d+)個包[裹里裏]下載失敗")]
     private static partial Regex AwbFailedPattern();
+
+    [GeneratedRegex(@"(\d+)張[紙纸]")]
+    private static partial Regex SheetPattern();
+
+    [GeneratedRegex(@"^[0-9A-Z]{8,20}$")]
+    private static partial Regex OtherTrackingPattern();
 
     [GeneratedRegex(@"^\d{2,3}$")]
     private static partial Regex ScalePattern();

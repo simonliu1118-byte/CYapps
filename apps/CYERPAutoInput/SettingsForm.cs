@@ -18,6 +18,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeLabelPrinter = new();
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
+    private readonly TextBox _familyLabelScale = new();
+    private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -203,7 +205,9 @@ internal sealed class SettingsForm : Form
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
             ("寄件單印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 150),
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+            ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -357,7 +361,17 @@ internal sealed class SettingsForm : Form
             _sevenLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_familyLabelScale.Text.Trim(), out var familyScale) || familyScale is < 10 or > 200 ||
+            !System.Text.RegularExpressions.Regex.IsMatch(_familyLabelPages.Text.Trim(), @"^\d+$"))
+        {
+            MessageBox.Show(this, "全家縮放請填 10–200 的數字，全家列印頁請填頁碼（例如 2）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            _familyLabelScale.Focus();
+            return;
+        }
         _settings.SevenLabelScale = sevenScale;
+        _settings.FamilyLabelScale = familyScale;
+        _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();
         _settings.ShopeeLabelPrinter = _shopeeLabelPrinter.Text.Trim();
         _settings.ShopeeLabelScale = labelScale;
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();

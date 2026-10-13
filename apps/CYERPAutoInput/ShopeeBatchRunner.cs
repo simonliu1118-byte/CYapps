@@ -10,6 +10,13 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
     public bool Shipped { get; } = shipped;
 }
 
+/// <summary>
+/// The label printer and, per carrier, Chrome's 縮放比例 and 頁面 (null = 全部). Chrome keeps the
+/// last print's settings (user, 2026-10-13: after a 全家 label the next one would print page 2
+/// at 165 %), so every label sets them again.
+/// </summary>
+internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages);
+
 /// <summary>What the batch knows of the order it is on, for the ERP step and the messages.</summary>
 internal sealed class ShopeeBatchOrder
 {
@@ -36,20 +43,16 @@ internal sealed class ShopeeBatchRunner
     private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
     private readonly string _printer;
-    private readonly int _scale;
-    private readonly int _sevenScale;
+    private readonly ShopeeBatchPrint _print;
     private readonly CancellationToken _token;
     private nint _window;
 
-    /// <param name="scale">Chrome's 縮放比例 for Shopee's own labels.</param>
-    /// <param name="sevenScale">Chrome's 縮放比例 for 7-11's 交貨便 slips (user, 2026-10-13: 100).</param>
-    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, string printer, int scale, int sevenScale, CancellationToken token)
+    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, ShopeeBatchPrint print, CancellationToken token)
     {
-        _sevenScale = sevenScale;
+        _print = print;
+        _printer = print.Printer;
         _ocr = ocr;
         _log = log;
-        _printer = printer;
-        _scale = scale;
         _token = token;
     }
 
@@ -166,9 +169,10 @@ internal sealed class ShopeeBatchRunner
         public void Dispose() => Image.Dispose();
     }
 
-    private async Task<Screen> ReadAsync()
+    /// <param name="front">False while a drop-down list is open: bringing the window forward would close it.</param>
+    private async Task<Screen> ReadAsync(bool front = true)
     {
-        Front();
+        if (front) Front();
         await Task.Delay(150, _token);
         if (!NativeMethods.GetWindowRect(_window, out var raw)) throw new ShopeeBatchStop("讀不到 Chrome 視窗的位置。");
         var area = Rectangle.Intersect(raw.ToRectangle(), System.Windows.Forms.Screen.FromHandle(_window).Bounds);
@@ -207,9 +211,9 @@ internal sealed class ShopeeBatchRunner
         }
     }
 
-    private void Click(Screen screen, OcrBox box, string what)
+    private void Click(Screen screen, OcrBox box, string what, bool front = true)
     {
-        Front();
+        if (front) Front();
         var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
         _log.Info("shopee-batch", $"click {what} at {point.X},{point.Y}");
         InputSender.Click(point);
@@ -305,9 +309,16 @@ internal sealed class ShopeeBatchRunner
         }
         order.Shipped = true;
 
-        // 寄件編號申請中… then the TW number.
+        // 寄件編號申請中… then the number. 全家 first shows 「申請寄件編號」 (user, 2026-10-13), pressed once.
+        var applied = false;
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
+            if (!applied && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply)
+            {
+                Click(s, apply, "申請寄件編號");
+                applied = true;
+                return null;
+            }
             if (ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null || ShopeeBatchScreens.TrackingRequested(s.Boxes)) return null;
             var t = ShopeeBatchScreens.DialogTracking(s.Boxes);
             return t.Length > 0 ? t : null;
@@ -317,8 +328,12 @@ internal sealed class ShopeeBatchRunner
         dialog.Dispose();
 
         await ClickPrintLabelAsync(order);
-        if (order.Kind == ShopeeBatchCarrier.SevenEleven) await PrintSevenSlipAsync(order);
-        else await PrintShopeeLabelAsync(order);
+        switch (order.Kind)
+        {
+            case ShopeeBatchCarrier.SevenEleven: await PrintSevenSlipAsync(order); break;
+            case ShopeeBatchCarrier.FamilyMart: await PrintFamilySlipAsync(order); break;
+            default: await PrintShopeeLabelAsync(order); break;
+        }
         var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
         printed.Dispose();
         _log.Info("shopee-batch", "label printed");
@@ -346,7 +361,7 @@ internal sealed class ShopeeBatchRunner
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
-        await PrintDialogAsync(_scale);
+        await PrintDialogAsync(_print.ShopeeScale, pages: null);
     }
 
     /// <summary>
@@ -367,53 +382,143 @@ internal sealed class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"交貨便服務代碼（{(code.Length > 0 ? code : "讀不到")}）與寄件編號 {order.Tracking} 不同，未列印。", true);
         }
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
-        await PrintDialogAsync(_sevenScale);
+        await PrintDialogAsync(_print.SevenScale, pages: null);
     }
 
     /// <summary>
-    /// Chrome's own print dialog: the thermal printer at <paramref name="wanted"/> %, or nothing
-    /// is printed and the batch stops. 縮放比例 is under 顯示更多設定 (user, 2026-10-13), opened
-    /// once when it is not shown. The dialog fills in its printer a moment after it opens, so it
-    /// is read until it matches; what it last showed is reported when it never does.
+    /// 全家 (user, 2026-10-13): 列印寄件單 opens the FamilyMart寄取貨單 in a new tab; Ctrl+P, then
+    /// 頁面 自訂 2 and 縮放比例 自訂 165 print it right.
     /// </summary>
-    private async Task PrintDialogAsync(int wanted)
+    private async Task PrintFamilySlipAsync(ShopeeBatchOrder order)
+    {
+        var (slip, _) = await WaitAsync("全家 FamilyMart寄取貨單", 60, s => ShopeeBatchScreens.IsFamilyLabelPage(s.Boxes) && !ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true);
+        using (slip)
+        {
+            if (!ShopeeBatchScreens.ShowsOrderSn(slip.Boxes, order.OrderSn))
+                throw new ShopeeBatchStop($"全家寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
+        }
+        Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+        await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);
+    }
+
+    /// <summary>
+    /// Chrome's own print dialog (user, 2026-10-12/13). Chrome keeps the last print's settings,
+    /// so 頁面 (全部, or 自訂 with <paramref name="pages"/>) and 縮放比例 (自訂 <paramref name="wanted"/>)
+    /// are set every time, opening 顯示更多設定 when 縮放比例 is folded away; then everything is
+    /// read back — the set printer, the scale, the pages and 「1 張紙」 — before 列印 is pressed.
+    /// What does not come right stops the batch without printing.
+    /// </summary>
+    private async Task PrintDialogAsync(int wanted, string? pages)
     {
         var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true);
         opened.Dispose();
-        string destination = string.Empty;
-        int? scale = null;
         var expanded = false;
+        var actions = 0;
         var watch = Stopwatch.StartNew();
+        string last = string.Empty;
         while (true)
         {
+            if (watch.Elapsed > TimeSpan.FromSeconds(40) || actions > 10)
+            {
+                _log.Warn("shopee-batch", $"print dialog not as set: {last}");
+                throw new ShopeeBatchStop($"Chrome 列印視窗設定不成（{last}），未列印。", true);
+            }
             using var screen = await ReadAsync();
-            destination = ShopeeBatchScreens.PrintDestination(screen.Boxes);
-            scale = ShopeeBatchScreens.PrintScale(screen.Boxes);
-            if (scale is null && !expanded && ShopeeBatchScreens.IsPrintDialog(screen.Boxes) && ShopeeBatchScreens.MoreSettings(screen.Boxes) is { } more)
+            var boxes = screen.Boxes;
+            if (!ShopeeBatchScreens.IsPrintDialog(boxes)) { last = "列印視窗不見了"; await Task.Delay(600, _token); continue; }
+
+            var scaleBox = ShopeeBatchScreens.PrintScaleBox(boxes);
+            var scaleValue = ShopeeBatchScreens.PrintRowValue(boxes, "縮放比例");
+            if (scaleValue is null && !expanded && ShopeeBatchScreens.MoreSettings(boxes) is { } more)
             {
                 Click(screen, more, "顯示更多設定");
                 expanded = true;
-                await Task.Delay(600, _token);
+                await Task.Delay(700, _token);
                 continue;
             }
-            if (ShopeeBatchScreens.IsPrintDialog(screen.Boxes) && ShopeeBatchScreens.SamePrinter(destination, _printer) && scale == wanted &&
-                ShopeeBatchScreens.PrintButton(screen.Boxes) is { } printButton)
+
+            // 頁面
+            var pagesValue = ShopeeBatchScreens.PrintRowValue(boxes, "頁面");
+            if (pagesValue is null) { last = "讀不到頁面"; await Task.Delay(600, _token); continue; }
+            var shownPages = ShopeeScreenshot.Compact(pagesValue.Text);
+            if (pages is null && shownPages != "全部") { actions++; await ChooseAsync(screen, pagesValue, "全部"); continue; }
+            if (pages is not null)
             {
-                _log.Info("shopee-batch", $"print dialog destination={_log.Value(destination)} scale={scale}");
-                Click(screen, printButton, "列印");
-                break;
+                if (shownPages != "自訂") { actions++; await ChooseAsync(screen, pagesValue, "自訂"); continue; }
+                var typed = ShopeeBatchScreens.PrintPagesBox(boxes);
+                if (typed is null || ShopeeScreenshot.Compact(typed.Text) != pages)
+                {
+                    actions++;
+                    var at = typed is not null ? new Point(typed.CenterX, typed.CenterY) : new Point(pagesValue.CenterX, pagesValue.CenterY + RowGap(boxes));
+                    await TypeIntoAsync(screen, at, pages, "頁面");
+                    continue;
+                }
             }
-            if (watch.Elapsed > TimeSpan.FromSeconds(12))
+
+            // 縮放比例
+            if (scaleValue is null) { last = "讀不到縮放比例"; await Task.Delay(600, _token); continue; }
+            if (ShopeeScreenshot.Compact(scaleValue.Text) != "自訂") { actions++; await ChooseAsync(screen, scaleValue, "自訂"); continue; }
+            var scale = scaleBox is null ? (int?)null : int.Parse(ShopeeScreenshot.Compact(scaleBox.Text));
+            if (scale != wanted)
             {
-                _log.Warn("shopee-batch", $"print dialog not as set destination={_log.Value(destination)} scale={scale}");
-                if (!ShopeeBatchScreens.SamePrinter(destination, _printer))
-                    throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是設定的「{_printer}」，未列印。", true);
-                if (scale != wanted)
-                    throw new ShopeeBatchStop($"Chrome 列印的縮放比例是 {(scale?.ToString() ?? "讀不到")}，不是設定的 {wanted}，未列印。", true);
-                throw new ShopeeBatchStop("Chrome 列印視窗讀不到「列印」按鈕，未列印。", true);
+                actions++;
+                var at = scaleBox is not null ? new Point(scaleBox.CenterX, scaleBox.CenterY) : new Point(scaleValue.CenterX, scaleValue.CenterY + RowGap(boxes));
+                await TypeIntoAsync(screen, at, wanted.ToString(System.Globalization.CultureInfo.InvariantCulture), "縮放比例");
+                continue;
             }
-            await Task.Delay(600, _token);
+
+            // Read back and print.
+            var destination = ShopeeBatchScreens.PrintDestination(boxes);
+            var sheets = ShopeeBatchScreens.SheetCount(boxes);
+            last = $"目的地「{destination}」、頁面「{shownPages}{(pages is null ? string.Empty : " " + pages)}」、縮放 {scale}、{sheets?.ToString() ?? "?"} 張紙";
+            if (!ShopeeBatchScreens.SamePrinter(destination, _printer))
+                throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是設定的「{_printer}」，未列印。", true);
+            if (sheets is > 1 || pages is not null && sheets is null) { await Task.Delay(800, _token); continue; }
+            if (ShopeeBatchScreens.PrintButton(boxes) is not { } printButton) { await Task.Delay(600, _token); continue; }
+            _log.Info("shopee-batch", $"print dialog set: {last}");
+            Click(screen, printButton, "列印");
+            return;
         }
+    }
+
+    /// <summary>Distance from a setting's value to the box typed into under it (縮放比例 自訂 → its number), else 38 px.</summary>
+    private static int RowGap(IReadOnlyList<OcrBox> boxes)
+    {
+        var value = ShopeeBatchScreens.PrintRowValue(boxes, "縮放比例");
+        var number = ShopeeBatchScreens.PrintScaleBox(boxes);
+        return value is not null && number is not null && number.CenterY > value.CenterY ? number.CenterY - value.CenterY : 38;
+    }
+
+    /// <summary>Opens a print setting's list and picks <paramref name="option"/>: an option that appears only once the list is open, nearest the list.</summary>
+    private async Task ChooseAsync(Screen screen, OcrBox dropdown, string option)
+    {
+        var before = screen.Boxes;
+        Click(screen, dropdown, $"列印設定 {dropdown.Text.Trim()}");
+        await Task.Delay(600, _token);
+        using var open = await ReadAsync(front: false);
+        var pick = open.Boxes
+            .Where(b => ShopeeScreenshot.Compact(b.Text) == option &&
+                        !before.Any(o => ShopeeScreenshot.Compact(o.Text) == option && Math.Abs(o.CenterX - b.CenterX) < 8 && Math.Abs(o.CenterY - b.CenterY) < 8))
+            .OrderBy(b => Math.Abs(b.CenterY - dropdown.CenterY) + Math.Abs(b.CenterX - dropdown.CenterX))
+            .FirstOrDefault()
+            ?? throw new ShopeeBatchStop($"Chrome 列印的「{dropdown.Text.Trim()}」清單裡找不到「{option}」，未列印。", true);
+        Click(open, pick, $"選 {option}", front: false);
+        await Task.Delay(900, _token);
+    }
+
+    /// <summary>Replaces a print setting's typed value (click, Ctrl+A, the text, Tab to apply).</summary>
+    private async Task TypeIntoAsync(Screen screen, Point at, string text, string what)
+    {
+        Front();
+        _log.Info("shopee-batch", $"type {what}={text} at {screen.Area.Left + at.X},{screen.Area.Top + at.Y}");
+        InputSender.Click(new Point(screen.Area.Left + at.X, screen.Area.Top + at.Y));
+        await Task.Delay(200, _token);
+        InputSender.Chord(NativeMethods.VK_CONTROL, 0x41 /* A */);
+        await Task.Delay(80, _token);
+        InputSender.UnicodeText(text);
+        await Task.Delay(80, _token);
+        InputSender.Press(NativeMethods.VK_TAB);
+        await Task.Delay(1000, _token);
     }
 
     /// <summary>「列印寄件單」 sits at the dialog's bottom; when the zoom hides it, the dialog is scrolled.</summary>

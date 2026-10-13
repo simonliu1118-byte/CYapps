@@ -50,7 +50,7 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.SupportedCarrier(first.Carrier));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("蝦皮店到宅"));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
-        Assert.False(ShopeeBatchScreens.SupportedCarrier("全家"));
+        Assert.False(ShopeeBatchScreens.SupportedCarrier("萊爾富"));
     }
 
     private static List<OcrBox> Detail(params OcrBox[] card) =>
@@ -157,7 +157,7 @@ public sealed class ShopeeBatchScreensTests
     {
         Assert.Equal(ShopeeBatchCarrier.SevenEleven, ShopeeBatchScreens.CarrierKind("7-ELEVEN"));
         Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("蝦皮店到店-隔日到貨"));
-        Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("全家"));
+        Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("萊爾富"));
 
         List<OcrBox> dialog = [B("查看寄件編號", 35, 35), B("G12 345 678 9O1", 244, 89), B("寄件編號將於2026/10/1523:59失效", 245, 119), B("列印寄件單", 545, 711)];
         Assert.Equal("G12345678901", ShopeeBatchScreens.DialogTracking(dialog));
@@ -179,6 +179,36 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.IsPrintDialog(folded));
         Assert.Null(ShopeeBatchScreens.PrintScale(folded));
         Assert.Equal(324, ShopeeBatchScreens.MoreSettings(folded)!.Top);
+    }
+
+    [Fact]
+    public void Handles_familymart()
+    {
+        Assert.Equal(ShopeeBatchCarrier.FamilyMart, ShopeeBatchScreens.CarrierKind("全家"));
+        List<OcrBox> ask = [B("查看寄件編號", 94, 57), B("使用說明", 111, 192), B("申請寄件編號", 600, 553)];
+        Assert.NotNull(ShopeeBatchScreens.ApplyTrackingButton(ask));
+        Assert.Null(ShopeeBatchScreens.ApplyTrackingButton([B("寄件編號申請中……", 330, 110)]));
+        // A number format not seen yet: the line right under the title.
+        List<OcrBox> code = [B("查看寄件編號", 94, 57, 138, 29), B("12 3456 7890", 330, 105), B("寄件編號將於2026/10/1523:59失效", 330, 135)];
+        Assert.Equal("1234567890", ShopeeBatchScreens.DialogTracking(code));
+
+        List<OcrBox> slip = [B("FamilyMart寄取貨單", 694, 138), B("訂单编號：16351972389", 676, 213), B("蝦皮订單编號：", 677, 245), B("261011AB12CD34", 679, 261)];
+        Assert.True(ShopeeBatchScreens.IsFamilyLabelPage(slip));
+        Assert.True(ShopeeBatchScreens.ShowsOrderSn(slip, "261011AB12CD34"));
+        Assert.False(ShopeeBatchScreens.ShowsOrderSn(slip, "261011AB12CD35"));
+
+        List<OcrBox> dialog =
+        [
+            B("列印", 961, 33), B("3張纸", 1257, 32), B("目的地", 962, 92), B("GG-D410 Printer", 1138, 93),
+            B("頁面", 963, 148), B("自訂", 1117, 147), B("2", 1117, 186), B("份数", 962, 239),
+            B("縮放比例", 961, 507), B("自訂", 1118, 509), B("165", 1116, 547), B("列印", 1176, 821), B("取消", 1251, 822)
+        ];
+        Assert.Equal(3, ShopeeBatchScreens.SheetCount(dialog));
+        Assert.Equal("自訂", ShopeeBatchScreens.PrintRowValue(dialog, "頁面")!.Text);
+        Assert.Equal("2", ShopeeBatchScreens.PrintPagesBox(dialog)!.Text);
+        Assert.Equal("自訂", ShopeeBatchScreens.PrintRowValue(dialog, "縮放比例")!.Text);
+        Assert.Equal(165, ShopeeBatchScreens.PrintScale(dialog));
+        Assert.Null(ShopeeBatchScreens.PrintPagesBox(dialog.Where(b => b.Text != "2").ToList()));
     }
 
     [Fact]
