@@ -22,8 +22,8 @@
 - 正式 Release 至少附 ZIP 與 SHA-256；package 根目錄保留當版 `VX.Y.Z.txt` 與 `使用說明.txt`。
 - Release workflow 必須重新執行必要測試、source confidentiality scan、Windows x64 build、PE／manifest／icon、package 驗證與 hash，不得只依賴較早的 CI 成功。
 - 開發測試 package 必須明確標示 preview／engineering，不得與正式 Release asset 混淆。
-- **受限的一次性 Release 觸發例外（使用者 2026-10-13 核准）：**除了從 `main` 執行 `workflow_dispatch`，允許在使用者已明確要求發布當次版本時，從 `main` 當前完整 commit **建立一次** 命名為 `release/cyinvoice-vX.Y.Z` 的專用分支，以此分支建立所產生的 `push` 事件觸發既有 `cyinvoice-release.yml`。該次必須從 `main` checkout 原始碼，核對事件 commit SHA 與當下 `main` SHA 完全一致、`VERSION=X.Y.Z`、`BUILD=0` 且 tag／Release 不存在；任何不符則停止，禁止以發布分支自己的分叉程式碼建置或降級檢查。
-- 專用發布分支不得由一般 PR／`main` push 自動建立；不能因日常修改或分支上再推送而自動發布新版本。只能由使用者本次明確批准的版本進行單次受控建立，已發布的 tag／Release 不得重建或覆寫；本例外不允許新增 Cloudflare Worker、D1 變更、繞過 Windows 必要測試或改由工程包發布。
+- **受限的一次性 Release 觸發例外（使用者 2026-10-13 核准）：**除了從 `main` 執行 `workflow_dispatch`，允許在使用者已明確要求發布當次版本時，從 `main` 當前完整 commit **建立一次** 命名為 `release/cyinvoice-vX.Y.Z` 的專用分支，以此分支**新建**所產生的 `push` 事件觸發既有 `cyinvoice-release.yml`；**若本批正式 Release workflow 曾失敗、沒有 tag／Release，且使用者的本批發布授權仍有效**，可另建一次明確標記的 `release/cyinvoice-vX.Y.Z-retryN` 新分支從修正後的最新 `main` 重新驗證／發布，不得直接更新舊分支試圖重跑。該次必須從 `main` checkout 原始碼，核對事件 commit SHA 與當下 `main` SHA 完全一致、`VERSION=X.Y.Z`、`BUILD=0` 且 tag／Release 不存在；任何不符則停止，禁止以發布分支自己的分叉程式碼建置或降級檢查。
+- 專用發布分支不得由一般 PR／`main` push 自動建立；不能因日常修改或分支上再推送而自動發布新版本。僅可由使用者當次明確批准的版本進行受控建立，失敗重試必須先核對前次失敗及同版不存在的 tag／Release；已發布的 tag／Release 不得重建或覆寫；本例外不允許新增 Cloudflare Worker、D1 變更、繞過 Windows 必要測試或改由工程包發布。
 
 ## 3. 憑證、設定與正式資料
 

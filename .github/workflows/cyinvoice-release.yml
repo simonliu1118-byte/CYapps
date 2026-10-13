@@ -55,8 +55,9 @@ jobs:
           }
           elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
             $expectedBranch = "release/cyinvoice-v$version"
-            if ($env:GITHUB_REF_NAME -cne $expectedBranch) {
-              throw "Formal release branch must be $expectedBranch; got $env:GITHUB_REF_NAME"
+            $retryPattern = '^release/cyinvoice-v' + [regex]::Escape($version) + '-retry[1-9][0-9]*$'
+            if ($env:GITHUB_REF_NAME -cne $expectedBranch -and $env:GITHUB_REF_NAME -cnotmatch $retryPattern) {
+              throw "Formal release branch must be $expectedBranch or an explicit failed-run retry; got $env:GITHUB_REF_NAME"
             }
           }
           else {
@@ -140,7 +141,8 @@ jobs:
 
       - name: Run cloud client contract tests
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
-        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release --no-build
+        # Cloud.Tests is intentionally not part of CYInvoice.sln; compile it before running.
+        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
 
       - name: Build and verify Windows x64 release
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
