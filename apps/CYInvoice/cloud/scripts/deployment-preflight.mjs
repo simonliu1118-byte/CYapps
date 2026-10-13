@@ -265,8 +265,12 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
 export function checkMigrations(applied, canonical, requireComplete = false) {
   check(applied.every((name, i) => canonical[i] === name), 'MIGRATION_HISTORY_NOT_CANONICAL_PREFIX');
   const pending = canonical.slice(applied.length);
-  check(pending.length === 0 || (pending.length === 1 && pending[0] === '0013_cyid_invitation_actor.sql'),
-    'UNREVIEWED_PENDING_MIGRATIONS');
+  // Only the two specifically reviewed forward migrations may appear as
+  // pending in an INACTIVE / built-in read-only preflight. Active CYID mode,
+  // actual deploy, and post-deploy still require an exact complete history.
+  const approvedPending = ['', '0014_invitation_recovery_metadata.sql',
+    '0013_cyid_invitation_actor.sql,0014_invitation_recovery_metadata.sql'];
+  check(approvedPending.includes(pending.join(',')), 'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;
 }
