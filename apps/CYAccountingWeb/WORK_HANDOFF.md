@@ -2,6 +2,14 @@
 
 更新：2026/10/11（台灣時間）。本文件描述工作現況；永久規則仍依正式三層規則。
 
+## V0.23.2 — CY Web 首次登入引導
+
+- CYACCweb 依 CYID non-core consumer 規則，不接受一次性首次登入密碼、不替 CYID 建立 first-login ticket；登入頁固定加入明確說明與可點擊入口。
+- 部署時從既有 CYID Production Worker `ACCOUNT_PORTAL_URL` 唯讀取得登入根網址，經原有 CYACC Deploy Runner 注入 `CYWEB_PORTAL_URL`；無需新增 GitHub Variable。無帳密的 `GET /api/auth/account-portal` 提供公開連結，與登入 API/Session 不混合；憑證絕不跨站傳送或附在 URL。
+- URL 無法核對、不是 HTTPS、含帳密／查詢參數時 Production Deploy 在 Wrangler Render 前直接阻擋；未配置時只顯示首次登入說明，不顯示無效連結。正式 deployment 前仍應核對 CY Web 實際服務確實連至同一個 CYID Production authority。
+- 401 密碼錯誤訊息提醒可能的首次登入，但不聲稱已確認帳號存在或一次性密碼正確；真正 5xx 中央服務無法使用維持原分類。
+- GitHub `main` 自動正式部署依使用者決定保留；Source PR 測試不對正式 D1/Worker 執行變更。Employee 1999 的舊驗證狀態／Dev-Production 身分差異不由此改動自動修復。
+
 ## 目前工作
 
 - V0.23.1 Build 2 統計返修：圖表／統計頁籤共用於單月與多月；圓餅圖直接標示，較小區段引線排字，手機平板少顯示金額但保留圖例清單。左右式損益表依實際視窗高度分頁，保留完整科目及整月合計；不使用內部捲軸。帳號重畫與 role observer 已移除，Auth 為唯一來源。
