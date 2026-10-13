@@ -10,7 +10,8 @@
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
 | 產品版本 | **V0.23.2**（桌機日期修復）；V0.23.1 Build 2 為前一版統計返修 |
-| 部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
+| 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
+| 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
 | D1 schema | **8**；`0008_excel_import_runs.sql` 保存 append-only Excel 替換稽核 |
 | CYID consumer | 本 App `CYID_CONSUMER_VERSION` 為 1.0.1；同 repo 已發布 contract 1.0.4、minimum 1.0.0，仍在支援範圍內；不據此推定所有 Provider 環境皆已部署最新版 |

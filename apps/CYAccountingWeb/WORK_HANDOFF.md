@@ -7,6 +7,7 @@
 | 項目 | 已確認狀態 |
 | --- | --- |
 | 產品 | **V0.23.2**；VERSION `0.23.2`、BUILD `0`，桌機日期修復 |
+| 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
@@ -22,7 +23,7 @@
 - 原 picker markup 的 `data-desktopUi-date-*` 經 HTML parser 全部轉小寫，dataset key 與 handler 不符；選日把 native `#txDate` 清空，label fallback 今天，造成必填驗證阻擋儲存，日／月／年導覽也讀不到數值。正式舊版已在瀏覽器重現此資料／畫面落差。
 - 在原 Adaptive date presentation owner 統一改為 lowercase kebab-case `data-desktop-ui-date-*`，不新增 renderer、writer、observer 或 fallback。既有 `change` lifecycle、lock 判斷及 submit 讀同一 input。
 - 行為回歸涵蓋選日後 canonical value／label、單次 change、儲存 payload、前後月與跨年、指定年月、閏日、今天、外部變更及重複初始化。舊 source 會使該測試失敗；修復後通過。
-- Adaptive script cache revision 改為 `desktop-date-dataset`，正式 semantic verification 使用同一 URL 並確認新的日期 attribute。部署及修復後瀏覽器驗收待本 PR 完成，不把舊版重現當成新版通過。
+- Adaptive script cache revision 改為 `desktop-date-dataset`，正式 semantic verification 使用同一 URL 並確認新的日期 attribute。本版部署與正式瀏覽器驗收證據追蹤 [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions，不把舊版重現當成新版通過。
 
 ## 已交付內容與實際驗收界線
 
