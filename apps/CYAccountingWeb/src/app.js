@@ -10,6 +10,7 @@ import { handleBackupApi, runScheduledBackup } from './backup-service.js';
 import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
+  cyWebPortalUrl,
   clearProviderSessionCookie,
   confirmPasswordRecovery,
   loginWithCyid,
@@ -85,6 +86,13 @@ export default {
 
       if (url.pathname === '/api/health' && request.method === 'GET') {
         return coreWorker.fetch(request, env);
+      }
+
+      if (url.pathname === '/api/auth/account-portal' && request.method === 'GET') {
+        const portalUrl = cyWebPortalUrl(env);
+        return portalUrl
+          ? json({ ok: true, url: portalUrl })
+          : json({ ok: false, code: 'ACCOUNT_PORTAL_NOT_CONFIGURED' }, 503);
       }
 
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
@@ -275,11 +283,11 @@ function apiLoginFailure(result) {
   const key = loginErrorKey(result);
   const messages = {
     invalid: '請輸入正確的 4 碼員工編號與密碼。',
-    failed: '員工編號或密碼不正確。',
+    failed: '員工編號或密碼不正確。如為首次登入，請先在 CY Web 完成 Email 驗證與正式密碼設定。',
     access: '此員工帳號沒有記帳系統 App Access。',
     rate: '登入嘗試次數過多，請稍後再試。',
     service: '中央帳號服務目前無法使用，請稍後再試。',
-    'first-login': '請先至 CY Web 帳號管理入口完成首次帳號啟用與 Email 驗證。'
+    'first-login': '請先前往 CY Web 完成 Email 驗證與正式密碼設定，再回來登入。'
   };
   const status = result.status >= 500 ? 503 : Math.max(400, Number(result.status) || 401);
   return json({

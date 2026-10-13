@@ -43,7 +43,8 @@
   "vars": {
     "BACKUP_TOPOLOGY": "__CF_BACKUP_TOPOLOGY__",
     "CYID_APPLICATION_ID": "__CF_CYID_APPLICATION_ID__",
-    "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__"
+    "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__",
+    "CYWEB_PORTAL_URL": "__CF_CYWEB_PORTAL_URL__"
   },
   "triggers": {
     "crons": [

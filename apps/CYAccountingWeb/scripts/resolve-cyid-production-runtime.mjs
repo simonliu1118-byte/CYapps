@@ -34,7 +34,19 @@ export function parseCyidProductionSettings(payload, configuredService) {
     throw new Error('CYID production provider is missing a valid CYACC Workspace ID.');
   }
 
-  return { service, applicationId, workspaceId };
+  // Reuse the CYID provider's established portal setting; do not duplicate GitHub variables.
+  let portalUrl;
+  try {
+    const url = new URL(text('ACCOUNT_PORTAL_URL'));
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash) {
+      throw new Error('invalid portal');
+    }
+    portalUrl = url.origin + '/';
+  } catch {
+    throw new Error('CYID production provider has no safe CY Web account portal URL.');
+  }
+
+  return { service, applicationId, workspaceId, portalUrl };
 }
 
 export function deriveCyidProductionServiceName(developmentService) {
@@ -76,7 +88,7 @@ async function cli() {
       developmentService: process.env.CYID_WORKER_NAME
     });
 
-    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId]) {
+    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId, runtime.portalUrl]) {
       console.log(`::add-mask::${value}`);
     }
 
@@ -84,7 +96,7 @@ async function cli() {
     if (!githubEnv) throw new Error('GITHUB_ENV is unavailable.');
     fs.appendFileSync(
       githubEnv,
-      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\n`,
+      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\nCF_CYWEB_PORTAL_URL=${runtime.portalUrl}\n`,
       { encoding: 'utf8' }
     );
 
