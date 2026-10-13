@@ -6,6 +6,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.23.4 Build 0 | 桌機收支／問號同列、確認狀態靠右並移除十筆說明；成功存檔直接回摘要，移除金額焦點競爭與 timer。桌機清單編輯帶回左側共用表單，清空變取消，未儲存退出回復新增草稿；原筆 PUT／optimistic rollback 共用既有 writer，移除被取代的 inline editor。日期改文字＋日曆按鈕，四碼／八碼、Ctrl＋↑↓、Enter 與無效日期驗證；移除日期 observer／synthetic keyboard bridge，RWD teardown abort listeners。桌機單月統計移除括號路徑，右下新增回到頂端圓形按鈕；移轉排除、手機／平板版面及 schema 不變。 |
 | V0.23.3 Build 1 | 同一桌機確認清單驗收：移除 inherited grid gap、修正狀態符號 inline baseline 額外列高，十筆維持單行且更緊湊；存檔提示置中、日期倒序與帳戶分組已在正式瀏覽器確認，餘額不變。 |
 | V0.23.3 | 桌機存檔提示移至輸入確認標題列中央；確認改單行無卡片、最新十筆淘汰，保留完整內容與失敗原因。日期表頭切換新到舊／舊到新，分組顯示「帳戶 [分組]」；只改顯示順序，餘額仍按完整月份時間順序計算。既有 owner 使用明確 lifecycle，移除確認模組內部兩個 observer 與重複字級規則；手機／平板原呈現保留。 |
 | V0.23.2 | 獨立桌機日期 Bug 修復：HTML data attribute 全部改為小寫 kebab-case，正確對應 dataset；選取日／月／年不再清空真正日期欄位，儲存沿用所選日期，前後月份與跨年恢復。更新 Adaptive asset 語意 revision 及正式驗證；行為回歸涵蓋 required date、submit payload、閏日、今天、外部變更與單一初始化。手機／平板原生日期及帳務 writer 不變。 |

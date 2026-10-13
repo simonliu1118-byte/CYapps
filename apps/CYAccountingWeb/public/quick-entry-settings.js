@@ -71,6 +71,14 @@ function validDateValue(year, month, day) {
   return localDateString(date);
 }
 
+function parseEntryDateText(text) {
+  const raw = String(text || '').trim();
+  if (/^\d{4}$/.test(raw)) return validDateValue(new Date().getFullYear(), Number(raw.slice(0, 2)), Number(raw.slice(2)));
+  if (/^\d{8}$/.test(raw)) return validDateValue(Number(raw.slice(0, 4)), Number(raw.slice(4, 6)), Number(raw.slice(6)));
+  const match = /^(\d{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})$/.exec(raw);
+  return match ? validDateValue(Number(match[1]), Number(match[2]), Number(match[3])) : '';
+}
+
 function stepEntryDate(delta) {
   const current = /^\d{4}-\d{2}-\d{2}$/.test(els.txDate.value || '') ? els.txDate.value : localDateString(new Date());
   const [year, month, day] = current.split('-').map(Number);

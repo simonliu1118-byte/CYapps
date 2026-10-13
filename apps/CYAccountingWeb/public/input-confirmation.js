@@ -41,7 +41,7 @@ function setupEntryWorkflowUi() {
 function bindEntryKindShortcut() {
   els.form?.addEventListener('keydown', event => {
     if (event.key !== 'Tab' || event.shiftKey || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (document.body.classList.contains('auth-locked')) return;
+    if (document.body.classList.contains('auth-locked') || els.kindButtons.some(button => button.disabled)) return;
     if (document.querySelector('dialog[open]')) return;
     if (!(event.target instanceof HTMLElement) || !event.target.matches('input, select')) return;
 

@@ -64,7 +64,7 @@ assert.match(backupUi, /user\?\.role !== 'SUPER_ADMIN'/);
 assert.match(backupUi, /window\.cyOpenMobileBackupInfo = openMobileBackupInfo/);
 assert.match(css, /tbody > tr:not\(\.account-group-row\):not\(\.ledger-message-row\)/);
 assert.match(css, /\.ledger-card tbody > tr\.ledger-message-row > td\.empty[\s\S]*?border:\s*0 !important;[\s\S]*?text-align:\s*center !important/);
-assert.match(css, /tr\.ledger-row:not\(\.inline-editing\) > td:nth-child\(4\)[\s\S]*?padding-left:\s*5px !important/);
+assert.match(css, /tr\.ledger-row > td:nth-child\(4\)[\s\S]*?padding-left:\s*5px !important/);
 assert.match(css, /@media \(max-width: 767px\)[\s\S]*?#mobileEntrySecondaryButton[\s\S]*?display:\s*block !important/);
 assert.match(css, /\.entry-grid #txDate[\s\S]*?appearance:\s*auto !important;[\s\S]*?-webkit-text-fill-color:\s*#243345 !important/);
 assert.match(css, /grid-template-areas:[\s\S]*?"amount"[\s\S]*?"\."[\s\S]*?"message"[\s\S]*?"save"[\s\S]*?"secondary"[\s\S]*?grid-template-rows:\s*repeat\(8, max-content\) auto repeat\(3, max-content\) !important/);
@@ -73,7 +73,7 @@ assert.match(css, /\.entry-card label > span,[\s\S]*?\.quick-tool-label\s*\{[\s\
 assert.match(css, /\.entry-grid input,[\s\S]*?\.entry-grid select\s*\{[\s\S]*?height:\s*36px !important;[\s\S]*?font-size:\s*17px !important/);
 assert.doesNotMatch(css, /\.tablet-entry-controls,\s*#mobileEntrySecondaryButton\s*\{\s*display:\s*none !important;/);
 assert.match(js, /function setupTouchWorkspaceEntrySecondaryAction\(\)/);
-assert.match(js, /button\.textContent = cyTouchWorkspaceEdit \? '取消' : '清空'/);
+assert.match(js, /button\.textContent = cyEntryTransactionEdit \? '取消' : '清空'/);
 assert.match(css, /\.entry-grid > #saveButton\s*\{[\s\S]*?grid-area:\s*save !important;[\s\S]*?width:\s*100% !important/);
 assert.doesNotMatch(css, /\.entry-grid > #saveButton\s*\{\s*grid-area:\s*save !important;[\s\S]{0,220}?grid-row:\s*auto !important/);
 assert.match(js, /trigger\.hidden = true;[\s\S]*?cy-mobile-account-name\"><\/span>/);
@@ -88,7 +88,7 @@ assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]
 assert.match(js, /triggerName\.textContent = main;[\s\S]*?trigger\.hidden = false;/);
 assert.doesNotMatch(js, /new MutationObserver\(syncMobileWorkspaceMobileIdentity\)/);
 assert.doesNotMatch(js, /cy-mobile-account-name\">帳號|mobileAccountMenuName\">帳號/);
-assert.match(js, /cancelTouchWorkspaceMobileEditAndReturn\(\)/);
+assert.match(js, /cancelEntryTransactionEditAndReturn\(\)/);
 assert.doesNotMatch(js, /setupMobileEntryDateDisplay|cySyncMobileEntryDateDisplay|cy-mobile-entry-date-display/);
 assert.doesNotMatch(css, /cy-mobile-entry-date-display/);
 assert.doesNotMatch(ledger, /data-mobile-ledger-action="opening">期初餘額/);

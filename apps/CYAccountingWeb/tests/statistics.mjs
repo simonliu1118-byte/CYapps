@@ -81,6 +81,8 @@ const synthetic = structuredClone(classified); synthetic.groups[0].subjects[0].n
 synthetic.groups.find(group => group.kind === 'expense').subjects[0].name = '<script>bad</script>';
 assert.ok(ui.renderStatistics(synthetic).includes('&lt;script&gt;bad&lt;/script&gt;'));
 assert.ok(ui.renderStatistics(synthetic).includes('均排除指定移轉科目'));
+assert.ok(!ui.renderStatistics(synthetic, { compactScope: true }).includes('（設定 → 統計／損益）'));
+assert.ok(ui.renderStatistics(synthetic).includes('（設定 → 統計／損益）'), 'touch and report reference remains unchanged');
 assert.ok(!ui.renderStatistics(classified).includes('data-statistics-group="income:'));
 assert.ok(ui.renderStatistics(classified).includes('非移轉記帳共 2 筆'));
 assert.equal(ui.statisticsItems(period,'income').reduce((sum,item)=>sum+item.amount,0),1651);

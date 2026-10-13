@@ -79,7 +79,6 @@ jobs:
           node --check public/quick-entry-settings.js
           node --check public/category-management.js
           node --check public/excel-export-ui.js
-          node --check public/ledger-inline-edit.js
           node --check public/excel-import-ui.js
           node --check public/backup-ui.js
           node --check public/desktop-migration-ui.js
@@ -88,6 +87,7 @@ jobs:
       - name: Run application tests
         run: |
           node tests/entry-confirmation.mjs
+          node tests/entry-workflow.mjs
           node tests/statistics.mjs
           node tests/excel-transfer.mjs
           node tests/period-replacement.mjs
@@ -266,112 +266,114 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'touch-action: manipulation'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'Canonical shared ledger presentation'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function setupDesktopEntryQuickTools'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'data-desktop-ui-date-value'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Canonical shared ledger presentation'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupDesktopEntryQuickTools'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'data-desktop-ui-date-value'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'id="ledgerMonthLoading"'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
+          verify_asset "$base/app.js?rev=entry-save-focus" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
           verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'startSettingsCategoryPointerDrag'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'data-settings-group-move'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'startSettingsCategoryPointerDrag'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=session-expiry-navigation" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=session-expiry-navigation" 'Promise.race([request, timeout])'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" "new CustomEvent('cyacc:ledger-rendered'"
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'id="ledgerMoreButton"'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'id="ledgerBalanceButton"'
-          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" "addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered)"
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'function initialEntryKind'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" "new CustomEvent('cyacc:entry-kind-changed'"
-          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
-          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
+          verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'window.cyAfterEntrySaved = handleFastEntrySaved'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'function initialEntryKind'
+          verify_asset "$base/app.js?rev=entry-save-focus" "new CustomEvent('cyacc:entry-kind-changed'"
+          verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
+          verify_asset "$base/quick-entry.js?rev=entry-saved-focus" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" "addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual)"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" "new CustomEvent('cyacc:confirmation-ready')"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" 'confirmationMessageSlot'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'cyacc:entry-message'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'cyacc:entry-message'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'compareLedgerDisplayOrder'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" "addEventListener('cyacc:confirmation-ready', sync)"
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '.desktopUi-native-date-source'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function setupTouchWorkspaceEntrySecondaryAction'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function cancelTouchWorkspaceMobileEditAndReturn'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '.ledger-card tbody > tr.ledger-message-row > td.empty'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#mobileEntrySecondaryButton'
-          verify_asset "$base/quick-entry-settings.js?rev=quick-entry-settings" 'setupQuickEntrySettingsPane'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "addEventListener('cyacc:confirmation-ready', sync)"
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.desktopUi-native-date-source'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupTouchWorkspaceEntrySecondaryAction'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'desktopEntryDateText'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'window.cyBeginEntryTransactionEdit = beginEntryTransactionEdit'
+          verify_asset "$base/quick-entry-settings.js?rev=editable-date-shortcuts" 'function parseEntryDateText'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function cancelEntryTransactionEditAndReturn'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.ledger-card tbody > tr.ledger-message-row > td.empty'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#mobileEntrySecondaryButton'
+          verify_asset "$base/quick-entry-settings.js?rev=editable-date-shortcuts" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
           verify_asset "$base/backup-ui.js?rev=desktop-readable-backup" 'setupBackupSettings'
           verify_asset "$base/backup-ui.js?rev=desktop-readable-backup" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'class="ledger-message-row"'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" "await api('/api/opening-balance-overrides'"
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'setupArchivedAccountDialog'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function settingsActionIcon'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" '帳戶名稱最多八字'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'function openingAccountRowHtml'
+          verify_asset "$base/app.js?rev=entry-save-focus" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'setupArchivedAccountDialog'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function settingsActionIcon'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '帳戶名稱最多八字'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'function openingAccountRowHtml'
           verify_asset "$base/app.css?rev=app-shell" '.opening-source'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" 'data-settings-kind-choice'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" '.ledger-account-color::before'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'const groupName = category.group_name'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '--settings-kind-canvas'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'function mergePendingTransactionUpdates'
-          verify_asset "$base/ledger-inline-edit.js?rev=desktop-entry-ledger-0.22.30" 'await persistTransactionUpdate'
-          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" 'await mutateSettings'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function setupTabletWorkspace'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'data-tablet-layout="portrait"'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'class="tablet-entry-handle"'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '.tablet-entry-handle-label'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#tabletPreviewReturnButton:not([hidden])'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'grid-template-rows: repeat(3, 40px)'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '-webkit-appearance: searchfield'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#ledgerQuickLockButton.is-locked'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'Tablet portrait touch parity'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'const groupName = category.group_name'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '--settings-kind-canvas'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'function mergePendingTransactionUpdates'
+          verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'await mutateSettings'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupTabletWorkspace'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'data-tablet-layout="portrait"'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'class="tablet-entry-handle"'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.tablet-entry-handle-label'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#tabletPreviewReturnButton:not([hidden])'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-rows: repeat(3, 40px)'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '-webkit-appearance: searchfield'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#ledgerQuickLockButton.is-locked'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet portrait touch parity'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'function handleLedgerQuickLock'
-          verify_asset "$base/app.js?rev=entry-save-lifecycle" 'window.cyaccSaveLock = saveLock'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'syncTabletPickerOwnership'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'setupLedgerBalancePopover'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'showMigrationComplete'
+          verify_asset "$base/app.js?rev=entry-save-focus" 'window.cyaccSaveLock = saveLock'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'syncTabletPickerOwnership'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'setupLedgerBalancePopover'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'showMigrationComplete'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'function setupLedgerToolbar'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'function ledgerAccountVisual'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'LEDGER_ACCOUNT_LIGHT_PALETTE'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'const cycle = (slot - 1) % 40'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function isDesktopInteractionWorkspace'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function isDesktopInteractionWorkspace'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'function syncLedgerMonthDisplay'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'Tablet landscape picker convergence: reuse the same touch controls as phone'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '.cy-mobile-main-nav'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet landscape picker convergence: reuse the same touch controls as phone'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.cy-mobile-main-nav'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'button.dataset.excelExportBound'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'nativeShare'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'Tablet portrait ledger polish'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'Tablet summary/header cleanup'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'V0.22.26 portrait tab handle hotfix'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#settingsDialog.settings-modal'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'grid-template-columns: repeat(5, minmax(0, 1fr))'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'writing-mode: vertical-rl'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet portrait ledger polish'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet summary/header cleanup'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'V0.22.26 portrait tab handle hotfix'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#settingsDialog.settings-modal'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-columns: repeat(5, minmax(0, 1fr))'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'writing-mode: vertical-rl'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'window.__cyaccTabletPreviewEnabled === true'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'border-radius: 11px 11px 0 0'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'grid-row: 3 !important'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'th.action-col'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'grid-template-columns: 46px minmax(0, 1fr)'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'grid-template-rows: repeat(2, minmax(0, 1fr))'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" '展開新增'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" '收合隱藏'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#ledgerMonthDisplay::after'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'font-size: 16px !important'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'syncLedgerToolbarPlacement'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'border-radius: 11px 11px 0 0'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-row: 3 !important'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'th.action-col'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-columns: 46px minmax(0, 1fr)'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-rows: repeat(2, minmax(0, 1fr))'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '展開新增'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '收合隱藏'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#ledgerMonthDisplay::after'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'font-size: 16px !important'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'syncLedgerToolbarPlacement'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'aria-label="編輯"'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'Boolean(document.documentElement.dataset.tabletLayout)'
           verify_asset "$base/excel-import-ui.js?rev=excel-import-template" 'button.dataset.excelImportBound'
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" 'function setupConfirmationDrawer'
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" 'window.cyDesktopMigrationConfirmationModel'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" 'function startAdaptiveUi'
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" "controls.parentElement !== rail"
-          verify_asset "$base/adaptive-ui.js?rev=entry-message-placement" "!isDesktopInteractionWorkspace()) return;"
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" 'width: min(640px, calc(100vw - 48px))'
-          verify_asset "$base/adaptive-ui.css?rev=compact-confirmation-rows" '#backupRefreshStatus'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function startAdaptiveUi'
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "controls.parentElement !== rail"
+          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "!isDesktopInteractionWorkspace()) return;"
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'width: min(640px, calc(100vw - 48px))'
+          verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#backupRefreshStatus'
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" "!window.cyIsDesktopInteractionWorkspace()) return;"
-          verify_asset "$base/statistics-ui.js?rev=statistics-workspace" 'renderIncomeStatement'
-          verify_asset "$base/statistics.css?rev=statistics-workspace" 'statistics-dialog'
+          verify_asset "$base/statistics-ui.js?rev=statistics-scope-text" 'renderIncomeStatement'
+          verify_asset "$base/statistics.css?rev=statistics-scope-text" 'statistics-dialog'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
