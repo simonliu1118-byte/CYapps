@@ -19,6 +19,9 @@ internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart }
 
 internal static partial class ShopeeBatchScreens
 {
+    /// <summary>A button the page gives no text (a dialog's ×), as page text reports it.</summary>
+    public const string NamelessButton = "[button]";
+
     private static string C(OcrBox box) => ShopeeScreenshot.Compact(box.Text);
 
     private static bool Has(IEnumerable<OcrBox> boxes, string text) => boxes.Any(b => C(b).Contains(text, StringComparison.Ordinal));
@@ -43,6 +46,13 @@ internal static partial class ShopeeBatchScreens
         {
             var match = ChipCountPattern().Match(C(box));
             if (match.Success && match.Groups[1].Value.Replace('虚', '處') == label) return int.Parse(match.Groups[2].Value);
+        }
+        // Page text gives the label and its count apart: 「待處理」 「(19)」.
+        foreach (var box in boxes.Where(b => C(b).Replace('虚', '處') == label))
+        {
+            var count = boxes.Where(b => b.Left >= box.Right - 2 && b.Left - box.Right < 30 && SameRow(b, box))
+                .Select(b => CountPattern().Match(C(b))).FirstOrDefault(m => m.Success);
+            if (count is not null) return int.Parse(count.Groups[1].Value);
         }
         return null;
     }
@@ -74,7 +84,7 @@ internal static partial class ShopeeBatchScreens
         var header = boxes.Where(b => C(b) == "買家實付金額").OrderByDescending(b => b.Top).FirstOrDefault();
         if (header is null) return null;
         var status = boxes.Where(b => C(b) == "待出貨" && b.Top > header.Bottom).OrderBy(b => b.Top).FirstOrDefault();
-        if (status is null) return null;
+        if (status is null) return FirstOrderRow(boxes, header);
         var number = boxes.Where(b => b.Bottom <= status.Top + 2 && b.Top > header.Bottom && C(b).Contains("訂單編號", StringComparison.Ordinal))
             .OrderByDescending(b => b.Top).FirstOrDefault();
         var orderSn = number is null ? string.Empty : OrderSnIn(C(number));
@@ -94,6 +104,31 @@ internal static partial class ShopeeBatchScreens
                 .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
         }
         return new ShopeeListOrder(orderSn, status, carrier);
+    }
+
+    /// <summary>
+    /// Page text (user's PC, 2026-10-13): each order of the list is one link whose text is the
+    /// whole row — buyer, 「訂單編號 …」, products, amount, status, carrier. The click goes to
+    /// the row's 狀態 column, a little below its top (where 待出貨 stands); never the row's
+    /// 安排出貨 button.
+    /// </summary>
+    private static ShopeeListOrder? FirstOrderRow(IReadOnlyList<OcrBox> boxes, OcrBox header)
+    {
+        var row = boxes.Where(b => b.Top > header.Bottom && b.Height >= 60 && C(b).Contains("訂單編號", StringComparison.Ordinal))
+            .OrderBy(b => b.Top).FirstOrDefault();
+        if (row is null) return null;
+        var text = C(row);
+        // From the row's own text, spaces kept: 「訂單編號 261011… 2 件」 would run on into 2 without them.
+        var raw = row.Text;
+        var at = raw.IndexOf("訂單編號", StringComparison.Ordinal);
+        var orderSn = at >= 0 ? OrderSnIn(raw[at..]) : string.Empty;
+        if (orderSn.Length == 0) return null;
+        var statusHeader = boxes.FirstOrDefault(b => C(b) == "狀態" && SameRow(b, header));
+        var x = statusHeader?.CenterX ?? header.Right + 120;
+        var target = new OcrBox("待出貨", x - 20, row.Top + 52, 40, 20);
+        var carrier = new[] { "蝦皮店到店-隔日到貨", "蝦皮店到店", "蝦皮店到宅", "7-ELEVEN", "全家", "萊爾富", "OK超商", "黑貓", "新竹", "郵局", "宅配" }
+            .FirstOrDefault(c => text.Contains(c, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+        return new ShopeeListOrder(orderSn, target, carrier);
     }
 
     /// <summary>
@@ -148,7 +183,8 @@ internal static partial class ShopeeBatchScreens
         var button = buttons[0];
         foreach (var cancel in boxes.Where(b => C(b).Contains("不成立", StringComparison.Ordinal)))
         {
-            var guard = Rectangle.Inflate(new Rectangle(cancel.Left, cancel.Top, cancel.Width, cancel.Height), 12, 12);
+            // Page text gives whole buttons, 7 px apart (user's PC, 2026-10-13); a few pixels of guard.
+            var guard = Rectangle.Inflate(new Rectangle(cancel.Left, cancel.Top, cancel.Width, cancel.Height), 3, 3);
             if (guard.IntersectsWith(new Rectangle(button.Left, button.Top, button.Width, button.Height))) return null;
             if (SameRow(cancel, button) && button.Left < cancel.Right) return null;
         }
@@ -162,7 +198,7 @@ internal static partial class ShopeeBatchScreens
 
     /// <summary>The dialog's × when the OCR reads it (an X on the title's row, right of it).</summary>
     public static OcrBox? DialogCloseMark(IReadOnlyList<OcrBox> boxes, OcrBox title) =>
-        boxes.Where(b => C(b) is "X" or "×" or "x" && b.Left > title.Right && SameRow(b, title) && b.Width <= 30 && b.Height <= 30)
+        boxes.Where(b => C(b) is "X" or "×" or "x" or NamelessButton && b.Left > title.Right && SameRow(b, title) && b.Width <= 48 && b.Height <= 48)
             .OrderBy(b => b.Left).FirstOrDefault();
 
     public static bool TrackingRequested(IReadOnlyList<OcrBox> boxes) => Has(boxes, "寄件編號申請中");
@@ -218,7 +254,7 @@ internal static partial class ShopeeBatchScreens
 
     // ---- 預覽列印 (seller.shopee.tw/awbprint) ----
 
-    public static bool IsAwbPage(IReadOnlyList<OcrBox> boxes) => Has(boxes, "預覽列印");
+    public static bool IsAwbPage(IReadOnlyList<OcrBox> boxes) => Has(boxes, "預覽列印") || Has(boxes, "列印出貨文件") || Has(boxes, "下載出貨文件中");
 
     public static bool AwbDownloading(IReadOnlyList<OcrBox> boxes) => Has(boxes, "下載出貨文件中");
 
@@ -233,7 +269,9 @@ internal static partial class ShopeeBatchScreens
         return new ShopeeAwbDownload(int.Parse(done.Groups[2].Value), int.Parse(done.Groups[1].Value), int.Parse(failed.Groups[1].Value));
     }
 
-    public static OcrBox? PrintDocumentsButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "列印出貨文件");
+    // Page text prefixes the button's icon (「 列印出貨文件」).
+    public static OcrBox? PrintDocumentsButton(IReadOnlyList<OcrBox> boxes) =>
+        boxes.FirstOrDefault(b => C(b).EndsWith("列印出貨文件", StringComparison.Ordinal) && C(b).Length <= 8);
 
     /// <summary>The 蝦皮訂單編號 printed on the label.</summary>
     public static string LabelOrderSn(IReadOnlyList<OcrBox> boxes) =>
@@ -399,6 +437,9 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"(\d+)個包[裹里裏]下載失敗")]
     private static partial Regex AwbFailedPattern();
+
+    [GeneratedRegex(@"^[\(（](\d+)[\)）]$")]
+    private static partial Regex CountPattern();
 
     [GeneratedRegex(@"(\d+)張[紙纸]")]
     private static partial Regex SheetPattern();

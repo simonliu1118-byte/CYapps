@@ -217,6 +217,37 @@ public sealed class ShopeeBatchScreensTests
     }
 
     [Fact]
+    public void Reads_the_page_text_shapes()
+    {
+        // As Chrome gives page text (made-up values): labels and counts apart, whole buttons
+        // 7 px apart, each list row one link with the row's text.
+        List<OcrBox> list =
+        [
+            B("我的銷售", 244, 109), B("待處理", 418, 246), B("(19)", 464, 246, 33),
+            B("建議出貨期限", 244, 299), B("全部", 372, 300), B("建議今天內出貨", 595, 300), B("(18)", 703, 300, 33),
+            B("買家實付金額", 774, 474), B("狀態", 966, 474), B("物流方式", 1286, 474),
+            new("buyer 訂單編號 261011AB12CD34 2 件 9.9折 【測試】商品 NT$208 待出貨 蝦皮店到店 安排出貨", 244, 524, 1556, 277),
+            B("安排出貨", 1542, 586, 65, 21)
+        ];
+        Assert.Equal(19, ShopeeBatchScreens.PendingCount(list));
+        Assert.Equal(18, ShopeeBatchScreens.TodayCount(list));
+        var first = ShopeeBatchScreens.FirstOrder(list)!;
+        Assert.Equal("261011AB12CD34", first.OrderSn);
+        Assert.Equal("蝦皮店到店", first.Carrier);
+        Assert.InRange(first.Status.CenterX, 940, 1000);
+        Assert.True(first.Status.Right < 1542); // never the row's 安排出貨
+
+        var detail = new List<OcrBox> { B("訂單明細", 241, 22), B("待出貨", 310, 125), new("不成立訂單", 985, 228, 116, 36), new("安排出貨", 1108, 228, 100, 36), B("訂單編號", 310, 585) };
+        Assert.Equal(1108, ShopeeBatchScreens.ShipButton(detail)!.Left);
+        Assert.Null(ShopeeBatchScreens.ShipButton([.. detail.Take(2), new("不成立訂單", 985, 228, 116, 36), new("安排出貨", 1099, 228, 100, 36)]));
+
+        Assert.NotNull(ShopeeBatchScreens.PrintDocumentsButton([new(" 列印出貨文件", 1746, 39, 157, 36)]));
+        Assert.True(ShopeeBatchScreens.IsAwbPage([new(" 列印出貨文件", 1746, 39, 157, 36)]));
+        List<OcrBox> dialog = [new("查看寄件編號", 648, 72, 133, 26), new(ShopeeBatchScreens.NamelessButton, 1226, 70, 30, 30)];
+        Assert.Equal(1226, ShopeeBatchScreens.DialogCloseMark(dialog, dialog[0])!.Left);
+    }
+
+    [Fact]
     public void Checks_chromes_print_dialog()
     {
         List<OcrBox> dialog =

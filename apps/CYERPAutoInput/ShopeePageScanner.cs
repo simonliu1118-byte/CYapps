@@ -280,6 +280,44 @@ internal sealed class ShopeePageScanner
         return ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top + column.Top, t.Rect.Width, t.Rect.Height)));
     }
 
+    /// <summary>
+    /// The order from Chrome's page text (user, 2026-10-13): every piece of text of the whole
+    /// page with its position, so no scrolling and no OCR. Positions are relative to the page's
+    /// top left; pieces close together on a row are joined as the OCR lines were, and the three
+    /// parts are cut as from the scan. Null when Chrome gives no page.
+    /// </summary>
+    public static Result? ReadPageText(nint browser, AppLogger log)
+    {
+        var texts = ChromePageText.Read(browser, log, out var elapsed);
+        var document = texts.Where(t => t.Type == "Document").OrderByDescending(t => t.Rect.Width * t.Rect.Height).FirstOrDefault();
+        if (document is null) return null;
+        var result = new Result();
+        var boxes = ChromePageText.PageBoxes(texts, document.Rect, pieces: true)
+            .Where(b => b.Left >= 0 && b.Left < document.Rect.Width);
+        result.Page.AddRange(ShopeeScreenshot.MergeLines(boxes));
+        result.Sections = ShopeePageScan.Sections(result.Page, result.Problems);
+        log.Info("page-text", $"order page text lines={result.Page.Count} sections={result.Sections.Count} problems={result.Problems.Count} elapsed_ms={elapsed}");
+        foreach (var b in result.Page)
+            log.Info("page-text", $"  page box x={b.Left} y={b.Top} w={b.Width} h={b.Height} text={log.Value(b.Text)}");
+        return result;
+    }
+
+    /// <summary>A picture of a part read as text, for the card on the screen (the text drawn where it stands).</summary>
+    public static Bitmap TextImage(ShopeePageSection section)
+    {
+        var bitmap = new Bitmap(Math.Max(1, section.PageArea.Width), Math.Max(1, section.PageArea.Height), PixelFormat.Format24bppRgb);
+        using var g = Graphics.FromImage(bitmap);
+        g.Clear(Color.White);
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var font = new Font("Microsoft JhengHei UI", 10f, GraphicsUnit.Pixel);
+        foreach (var line in section.Lines)
+        {
+            using var lineFont = new Font("Microsoft JhengHei UI", Math.Clamp(line.Height * 0.72f, 8f, 28f), GraphicsUnit.Pixel);
+            g.DrawString(line.Text, lineFont, Brushes.Black, line.Left, line.Top);
+        }
+        return bitmap;
+    }
+
     /// <summary>The page area assembled from the captures that show it.</summary>
     public static Bitmap Stitch(Result result, Rectangle pageArea)
     {

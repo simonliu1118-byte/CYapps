@@ -75,6 +75,7 @@ internal sealed class ShopeeBatchRunner
             _token.ThrowIfCancellationRequested();
             status($"蝦皮全自動：找待處理訂單（已完成 {Done.Count} 筆）…");
             Current = null;
+            _shippedHint = false;
             var order = await NextOrderAsync();
             if (order is null) break;
             Current = order;
@@ -181,7 +182,13 @@ internal sealed class ShopeeBatchRunner
     /// <param name="front">False while a drop-down list is open: bringing the window forward would close it.</param>
     /// <param name="part">Only this share of the page (fractions of its width and height): fewer lines, a faster read.</param>
     /// <param name="reuse">The latest read, when nothing was clicked or typed since (a page that is still loading needs a new read).</param>
-    private async Task<Screen> ReadAsync(bool front = true, RectangleF? part = null, bool reuse = false)
+    /// <summary>Whether a stop from <see cref="Click"/> happens after 安排出貨 (for its message).</summary>
+    private bool _shippedHint;
+
+    /// <summary>OCR instead of page text (Chrome gave no page, or not what a step needs).</summary>
+    private bool _ocrOnly;
+
+    private async Task<Screen> ReadAsync(bool front = true, RectangleF? part = null, bool reuse = false, bool ocr = false)
     {
         if (reuse && _latest is { } latest && latest.Inputs == _inputs && latest.Part == part)
         {
@@ -191,6 +198,22 @@ internal sealed class ShopeeBatchRunner
         if (front) Front();
         await Task.Delay(150, _token);
         var page = PageArea();
+        // The page's own text through UI Automation (user's PC, 2026-10-13: whole screens in
+        // 22–150 ms, exact text); the pixels are still captured for the colour and × checks.
+        if (!ocr && !_ocrOnly)
+        {
+            var texts = await Task.Run(() => ChromePageText.Read(_window, _log, out _), _token);
+            if (texts.Any(t => t.Type == "Document"))
+            {
+                var pageImage = ScreenCapture.Capture(page);
+                var textBoxes = ChromePageText.PageBoxes(texts, page);
+                _log.Info("shopee-batch", $"page text lines={textBoxes.Count} list={ShopeeBatchScreens.IsOrderList(textBoxes)} detail={ShopeeBatchScreens.IsOrderDetail(textBoxes)} dialog={ShopeeBatchScreens.TrackingDialogTitle(textBoxes) is not null} awb={ShopeeBatchScreens.IsAwbPage(textBoxes)} print={ShopeeBatchScreens.IsPrintDialog(textBoxes)}");
+                _latest?.Image.Dispose();
+                _latest = ((Bitmap)pageImage.Clone(), page, textBoxes, _inputs, part);
+                return new Screen(pageImage, page, textBoxes);
+            }
+            _log.Warn("shopee-batch", "no page text from Chrome; reading the screen with OCR");
+        }
         var area = part is { } p
             ? Rectangle.FromLTRB(page.Left + (int)(page.Width * p.Left), page.Top + (int)(page.Height * p.Top), page.Left + (int)(page.Width * p.Right), page.Top + (int)(page.Height * p.Bottom))
             : page;
@@ -257,9 +280,12 @@ internal sealed class ShopeeBatchRunner
 
     private void Click(Screen screen, OcrBox box, string what, bool front = true)
     {
+        var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
+        // Page text includes what is scrolled out of view; a click goes only on what is shown.
+        if (!screen.Area.Contains(point))
+            throw new ShopeeBatchStop($"「{what}」不在畫面可見範圍內（{point.X},{point.Y}），為避免點錯已停止。", _shippedHint);
         _inputs++;
         if (front) Front();
-        var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
         _log.Info("shopee-batch", $"click {what} at {point.X},{point.Y}");
         InputSender.Click(point);
         NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
@@ -354,6 +380,7 @@ internal sealed class ShopeeBatchRunner
             Click(detail, button, button.Text.Trim());
         }
         order.Shipped = true;
+        _shippedHint = true;
 
         // 寄件編號申請中… then the number. 全家 first shows 「申請寄件編號」 (user, 2026-10-13), pressed once.
         var applied = false;
@@ -465,6 +492,7 @@ internal sealed class ShopeeBatchRunner
         var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true, part: panel);
         opened.Dispose();
         var reuse = true;
+        var ocrDialog = false;
         var expanded = false;
         var actions = 0;
         var watch = Stopwatch.StartNew();
@@ -476,9 +504,17 @@ internal sealed class ShopeeBatchRunner
                 _log.Warn("shopee-batch", $"print dialog not as set: {last}");
                 throw new ShopeeBatchStop($"Chrome 列印視窗設定不成（{last}），未列印。", true);
             }
-            using var screen = await ReadAsync(part: panel, reuse: reuse);
+            using var screen = await ReadAsync(part: panel, reuse: reuse, ocr: ocrDialog);
             reuse = false;
             var boxes = screen.Boxes;
+            // Page text gives the drop-downs' labels; when it does not also give what they show,
+            // the dialog is read from the screen instead.
+            if (!ocrDialog && new[] { "目的地", "頁面", "縮放比例" }.Any(l => ShopeeBatchScreens.PrintRowValue(boxes, l) is { } v && ShopeeScreenshot.Compact(v.Text) == l))
+            {
+                _log.Info("shopee-batch", "print dialog values not in the page text; reading it with OCR");
+                ocrDialog = true;
+                continue;
+            }
             if (!ShopeeBatchScreens.IsPrintDialog(boxes)) { last = "列印視窗不見了"; await Task.Delay(600, _token); continue; }
 
             var scaleBox = ShopeeBatchScreens.PrintScaleBox(boxes);
@@ -543,20 +579,25 @@ internal sealed class ShopeeBatchRunner
         return value is not null && number is not null && number.CenterY > value.CenterY ? number.CenterY - value.CenterY : 38;
     }
 
-    /// <summary>Opens a print setting's list and picks <paramref name="option"/>: an option that appears only once the list is open, nearest the list.</summary>
+    /// <summary>
+    /// Picks a print setting's option by keyboard: open the list, Home for the first option
+    /// (頁面 全部) or End for the last (自訂, in 頁面 and 縮放比例 alike), Enter. No option has to
+    /// be found on screen; the value is read back afterwards.
+    /// </summary>
     private async Task ChooseAsync(Screen screen, OcrBox dropdown, string option, RectangleF? part)
     {
-        var before = screen.Boxes;
+        var key = option switch
+        {
+            "全部" => NativeMethods.VK_HOME,
+            "自訂" => NativeMethods.VK_END,
+            _ => throw new ShopeeBatchStop($"Chrome 列印設定不支援選「{option}」。", true)
+        };
         Click(screen, dropdown, $"列印設定 {dropdown.Text.Trim()}");
-        await Task.Delay(600, _token);
-        using var open = await ReadAsync(front: false, part: part);
-        var pick = open.Boxes
-            .Where(b => ShopeeScreenshot.Compact(b.Text) == option &&
-                        !before.Any(o => ShopeeScreenshot.Compact(o.Text) == option && Math.Abs(o.CenterX - b.CenterX) < 8 && Math.Abs(o.CenterY - b.CenterY) < 8))
-            .OrderBy(b => Math.Abs(b.CenterY - dropdown.CenterY) + Math.Abs(b.CenterX - dropdown.CenterX))
-            .FirstOrDefault()
-            ?? throw new ShopeeBatchStop($"Chrome 列印的「{dropdown.Text.Trim()}」清單裡找不到「{option}」，未列印。", true);
-        Click(open, pick, $"選 {option}", front: false);
+        await Task.Delay(400, _token);
+        _log.Info("shopee-batch", $"keys {(key == NativeMethods.VK_HOME ? "Home" : "End")}+Enter ({option})");
+        InputSender.Press(key);
+        await Task.Delay(150, _token);
+        InputSender.Press(NativeMethods.VK_RETURN);
         await Task.Delay(900, _token);
     }
 
@@ -583,7 +624,8 @@ internal sealed class ShopeeBatchRunner
         {
             using var screen = await ReadAsync(reuse: attempt == 0);
             var title = ShopeeBatchScreens.TrackingDialogTitle(screen.Boxes) ?? throw new ShopeeBatchStop("「查看寄件編號」視窗不見了。", true);
-            if (ShopeeBatchScreens.PrintLabelButton(screen.Boxes) is { } button)
+            if (ShopeeBatchScreens.PrintLabelButton(screen.Boxes) is { } button &&
+                screen.Area.Contains(new Point(screen.Area.Left + button.CenterX, screen.Area.Top + button.CenterY)))
             {
                 Click(screen, button, "列印寄件單");
                 return;
