@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.37 — 2026/10/13
+
+- CYInvoice V2.6.19 首次正式 Release 將 Cloud client contract test 以 `--no-build` 執行，但 Cloud.Tests 不在 CYInvoice.sln 內，Windows runner 未產生 exe；修成測試專案自行建置，保留此額外 test gate，不繞過測試。
+- 若同一授權版本的正式 Release 在未產生 tag／Release 前失敗，允許在驗證原失敗並完成治理 PR 後，從最新 main 一次建立明確命名 `release/cyinvoice-vX.Y.Z-retryN` 的新分支重試；仍僅分支建立事件有效，不能推送舊分支、自動發行其他版本或部署 Cloudflare。
+
 ## 2.3.36 — 2026/10/13
 
 - CYInvoice 明確核准在已有當次版本 Release 授權時，使用從 main 精確 commit 建立的 `release/cyinvoice-vX.Y.Z` 一次性 push 作為正式 Windows Release 的額外啟動入口；只有分支新建事件符合，分支後續 push 不會再次發行。
