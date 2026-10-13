@@ -59,6 +59,9 @@ function runtime(db){
     IDENTITY_APPLICATION_ID:"CYINVOICE",
     IDENTITY_WORKSPACE_ID:identityWs,
     IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
+    // App-binding exists in production; actual CYID login/Resolve lifecycle
+    // is separately covered by recovery-authority.test.mjs.
+    IDENTITY:{ async fetch(){throw new Error("Synthetic test must not call provider fetch")} },
     DB:{
       prepare(sql){return new Statement(db,sql)},
       async batch(statements){
