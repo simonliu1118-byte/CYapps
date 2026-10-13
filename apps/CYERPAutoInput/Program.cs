@@ -22,6 +22,19 @@ internal static class Program
             return UiSnapshot.Run(logger, folder);
         }
 
+        // One copy at a time (user, 2026-10-13): two would drive the same ERP, browser and
+        // mouse at once. Per Windows session, whichever folder the copy runs from.
+        using var instance = new Mutex(false, @"Local\CYERPAutoInput");
+        bool acquired;
+        try { acquired = instance.WaitOne(0); }
+        catch (AbandonedMutexException) { acquired = true; }
+        if (!acquired)
+        {
+            logger.Info("app", "another copy is already running; this one exits");
+            MessageBox.Show("ERP AutoInput 已經開啟，請使用原本的視窗。", "ERP AutoInput", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 0;
+        }
+
         var appIdHr = NativeMethods.SetCurrentProcessExplicitAppUserModelID("Chihyuan.CYERPAutoInput");
         if (appIdHr != 0)
             logger.Warn("app", $"SetCurrentProcessExplicitAppUserModelID failed HRESULT=0x{appIdHr:X8}");
