@@ -82,7 +82,7 @@ internal sealed class CloudRecoveryForm : Form
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false,
-            Padding = new Padding(2, 9),
+            Padding = new Padding(2, 9, 2, 9),
         };
         confirmButton.Width = 265;
         previewButton.Width = 152;
