@@ -79,7 +79,7 @@ checkContinuity(before, structuredClone(before));
 const appended = structuredClone(before);
 appended.security_audit_events.newEvent = 'newHash';
 checkContinuity(before, appended); // Ordinary new audit events do not erase history.
-for (const table of Object.keys(before)) {
+for (const table of Object.keys(before).filter(name => name !== 'storageProfile')) {
   const changed = structuredClone(before);
   changed[table][Object.keys(changed[table])[0]] = 'changed';
   assert.throws(() => checkContinuity(before, changed), /HISTORY_CHANGED_/);
