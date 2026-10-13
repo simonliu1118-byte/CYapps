@@ -4,7 +4,18 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V2.6.19 本批改本地驗收，折讓歷史改列 V3.0 — 2026-10-13
+## 最新停點：CYInvoice V2.6.19 正式發布成功 — 2026-10-13
+
+本批正式 Windows 版本 **V2.6.19 Build 0** 已由使用者 2026-10-12 的發行授權及 2026-10-13 的本地／CI 驗收決策完成發布：
+
+- [正式 GitHub Release：CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)；tag `cyinvoice-v2.6.19`，正式 ZIP `CYInvoice_V2.6.19.zip`（81,502,918 bytes）、同名 `.zip.sha256` 已存在，非 draft/pre-release。
+- 成功的 [CYInvoice Stable Release #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968)：從精確 `main` commit `95fa5deab097c262d55e67391f32693d68573954` 重建；Windows Build、核心／Void／Allowance／SQLite／Sync／SyncCoordinator／Cloud Client 測試、package 與 PE 驗證、portable 啟動、安全掃描與 checksum，全部 27 個 GitHub job steps 成功。這是 Windows CI 證據，不等於沒有執行的真實多角色／多裝置／AMEGO live 驗收。
+- 前一次 [Release #38336017123](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336017123) 因 `CYInvoice.Cloud.Tests` 不在主 solution、卻以 `--no-build` 執行而無 exe，於發行前失敗，當次沒有建立 tag／Release。治理 [PR #428](https://github.com/simonliu1118-byte/CYapps/pull/428) 建立 main-only 指定發行分支；[PR #429](https://github.com/simonliu1118-byte/CYapps/pull/429) 更正測試執行，驗證失敗原因後用 `release/cyinvoice-v2.6.19-retry1` 精確指向最新 main，一次觸發成功。沒有使用 Browser Use，也沒有新增或上傳任何 Cloudflare 測試 Worker／版本／handler。
+- 使用者決定的人工折讓逐筆歷史／狀態缺陷仍為 **V3.0 重做項目**，已於 Release notes 明列已知限制，不假稱修復。其他真人 AMEGO、DPI、CYID role／A/B/C／60 秒 refresh／revoke 等驗收未取得 live evidence，TODO／RC_TEST 保留供後續迭代；不是本次完成證據。
+- 現有 Cloudflare development Worker 0.9.2/storage13、原 D1／Workspace／Device／Token／CYID 啟用狀態未因本次 Windows Release 被改動。**不可再創建／上傳／部署任何 Cloudflare 測試 Worker，既有無法刪除紀錄不重試清理。**
+- 下方所有「Release 暫停／尚未建立／需要手動 dispatch」敘述均屬**發布前歷史停點**，不能覆蓋本節成功結果；本批的發布授權已用於本次 `cyinvoice-v2.6.19`，**不延伸為往後版本自動發布許可**。現行發布 owner 仍是 `cyinvoice-release.yml`，允許治理核准的精確 main／一次性版本發行分支，其他 PR／main push 不自動 Release。
+
+## 歷史停點：V2.6.19 本批改本地驗收，折讓歷史改列 V3.0 — 2026-10-13
 
 2026-10-13 使用者決定：折讓人工處理的逐筆歷史／狀態缺陷**本版不修**，隨 V3.0 正式折讓流程與 Cloud Work Item／Audit 重新設計；已知資料缺漏不標示已修復、也不阻擋本批 Release。其餘待驗項目由 AI 以**本地／隔離自動測試與已通過的精確 source GitHub CI** 作本批接受判斷，無須使用者再逐項進行 Windows、光貿、CYID 多裝置實測；過去未取得的 live 證據仍保持未驗，不將 CI 冒充真實裝置的結果。這是本批驗收例外，不自行修改永久規則或直接代表正式環境全部驗收。
 
@@ -80,7 +91,7 @@
 | 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |
 | 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
-| 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
+| 當時最新正式 Release（歷史） | `cyinvoice-v2.4.2`；本批當時未建立新 tag／Release，已由本文最新停點更新 |
 
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
 
