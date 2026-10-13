@@ -7,17 +7,19 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.17。
+- Windows 正式版本：V2.6.19 Build 0 已發布。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
-- Cloud implementation version：`0.9.2`。
+- Cloud implementation source／原 development Worker：`0.9.3`，CYID_ENABLED=true，本公司原 D1 為 CYID_ONLY。
 - Legacy API compatibility schemaVersion：8；actual storageSchemaVersion：13，forward migrations 0001～0013。
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
 GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](CLOUD_WORK_HANDOFF.md)。不等同 live deployment 或人工驗收。
 
-目前 development 遠端部署證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)：Cloud 0.8.9／API 1／compatibility marker 8／storage Schema 12／storage ok，包含 device-usage-v1／device-rename-v1；0012 已套用，aggregate Device 狀態保持、FK 無異常，重跑無 pending migration。第一次即時 health 尚讀到 0.8.8，相同 source 再驗證正常。Windows A/B/C 操作仍待 RC Z，不能以部署 health 冒充人工通過。
+目前原 development 遠端部署證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。未執行的 Windows 全角色／多裝置實機矩陣仍待 RC 證據，不以 health 冒充人工通過。
+
+本公司原 D1 的帳號 authority 已改由 CYID；CYInvoice 保留自己的業務 Workspace／Device 與資料。以下 Local／Built-in Employee 轉換、CRUD、帳號 OTP、移交等既有能力仍供 Local 或其他公司獨立新建的 Built-in D1 使用，不代表本公司已退役 D1 應重建帳號表。
 
 ## 2. 帳號權威模型
 
@@ -215,22 +217,22 @@ Cloud → Local 已完成雙重確認及 crash-safe reset：關閉主 UI／同�
 
 A 機連線與 B 機 Run255 pairing 曾通過實機；四個 identity／freshness／revoke／reset 包已合併，不重新列為未實作。新版 A/B/C lifecycle、invitation、Employee identity matrix／Email OTP／password recovery／SUPER_ADMIN transfer 仍待實機驗收。
 
-CYID consumer 已接線但尚待實機／staging／切換；尚未實作的 Recovery Device flow、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 已發布為 1.0.3／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
+CYID consumer 已在原 development 啟用，本公司 CYID_ONLY 維護完成；尚未實作的 Recovery Device flow、可攜式加密備份、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 為 1.0.4／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
 
 
 ## V2.6.14 Device metadata
 
 Windows inventory 僅顯示 active；Cloud API／DB 保留 revoked history。啟動 POST usage 以 Device Token 更新本 Device 的 client_version／last_seen_at，沒有新增 heartbeat owner。改名 POST rename 以中央 SUPER_ADMIN 執行時驗證，同 Workspace active Device，交易重查 actor／Workspace／credential 並保存 device_renamed audit。0012 擴充 audit vocabulary，不修改已套用 migrations。新增裝置由獨立 CloudAddDeviceForm 管理既有配對／邀請生命周期。
 
-## CYID Consumer source（V2.6.15，未部署／未正式切換）
+## CYID Consumer（V2.6.15 引入；本公司已啟用）
 
 IdentityProviderRuntime 增加第三個 provider，不新增第二個 desktop 選擇 owner。Worker app.ts 仍唯一 dispatch；cyid.ts 管理 private IDENTITY Session lifecycle，Device／onboarding 保留業務 mutation owner。新 authenticated discovery 確認 provider／Device／兩 Workspace／Application，Windows 整筆 DPAPI 保存；CYID 確認後不自動降回 Built-in／Local。
 
 Employee／credential／enabled／App Access／Role 由 CYID canonical endpoints 決定，Device 及 app-local business permission 仍由 CYInvoice 負責。一次性 pairing ticket 只加入 Device。CYID Session 在 Worker 當次記憶體內使用，finally Logout，response loss 留給 provider expiry／revocation，不 replay mutation。CYID mode 阻擋 legacy account/bootstrap routes；verified owner Email transient lookup 不建立 Employee replica。0013 保留邀請歷史，區分 Built-in／external actor。
 
-Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope 全 DPAPI 保護；V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級，帳密／權限／Device 拒絕不 fallback。無新增 TTL，保留 last-trusted semantics；重新連線用最新權限。本輪沒有 live binding／application enablement 驗證或切換，完整安全邊界見 CY_ID_INTEGRATION §14、現行 CI／人工停點見 CLOUD_WORK_HANDOFF／TODO。
+Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope 全 DPAPI 保護；V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級，帳密／權限／Device 拒絕不 fallback。無新增 TTL，保留 last-trusted semantics；重新連線用最新權限。初次 source 實作當時尚未啟用；後續已完成原 development 綁定、啟用與本公司 D1 維護，全角色／多裝置實機證據仍待補。完整安全邊界見 CY_ID_INTEGRATION §14、現行 CI／人工停點見 CLOUD_WORK_HANDOFF／TODO。
 
 
 ServiceConnectivity 收斂既有光貿 probe 與 authenticated Cloud discovery；MainForm 管理唯一連線提示及 15 秒檢查。Cloud 0.9.1 discovery 在 CYID enabled 時經原 private IDENTITY 檢查 canonical health，liveness 不授予權限。無新 schema／migration／authority；Cloud 與光貿功能及純 Local 矩陣見 CY_ID_INTEGRATION §14.2。
 
-V2.6.17 runtime 採 aggregate Device／binding／permission，具 durable revoke marker、manifest 全 portable runtime 清除與單程序寫入保護。canonical private invalidation 只移除失效快取；shared authority／支援窗仍由 CYID 保存。測試證據見現行交接，live binding／實機／正式切換未完成。
+V2.6.17 runtime 採 aggregate Device／binding／permission，具 durable revoke marker、manifest 全 portable runtime 清除與單程序寫入保護。canonical private invalidation 只移除失效快取；shared authority／支援窗仍由 CYID 保存。啟用、部署與本公司 D1 維護證據見現行交接；完整實機矩陣及 0-Device recovery 仍未完成。

@@ -4,7 +4,17 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：本公司 CYID-only D1 退除舊員工表 — source 已合併、真實 D1 未清（2026-10-13）
+## 最新停點：CYID_ONLY 維護完成；接續災難復原設計（2026-10-13）
+
+- **實際維護已完成**：使用者獨立批准私有備份、原 Worker 相容部署及指定 D1 退役。Cloud0.9.3／API1／marker8／storage13 由 [Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 部署，保持 CYID=true／原全部 bindings；storage health 正常。
+- **原 D1 已清理**：四張 Built-in 員工／轉換表物理移除，CYID_ONLY marker 正確；invitation 歷史 actor 保留並移除舊員工 FK；Workspace／Device／Token／pairing／invitation／audit／migration history 逐筆符合預期；共用 pairing OTP 保留，舊帳號 purpose／recovery fields 已清。foreign_key_check 無違規、quick_check ok。Provider 未變，未操作 CYID D1、未建測試 Worker。
+- **私有回復證據**：直接唯讀取得完整應用程式邏輯備份，前後 bookmark 一致；DPAPI CurrentUser 加密、解密／SQLite 還原／完整資料核對與真實資料模擬通過後才執行維護。Cloudflare 內部系統表不在應用程式 dump；原始筆數、ID／hash、備份／Time Travel bookmark／本機路徑留在私有紀錄，未加密暫存已移除。DPAPI 依賴原 Windows 使用者／機器，異機災復尚未完成。
+- **執行路徑**：API MCP 的 export／Worker write 權限不可用，備份採唯讀 query，升級沿用原 GitHub workflow；原 D1 由已連線 Bindings MCP 一次 batch 清理，再由 API MCP 逐筆 read-back。沒有增加測試 handler 或自動清表 workflow。
+- **驗收界線**：Provider ready、舊 Built-in route／未授權 Device 拒絕已檢查，沒有真人帳密／多裝置全矩陣。保留本批本地／CI 驗收決定；V2.6.19 已發布，折讓歷史缺欄位仍留 V3.0。
+- **接續順序**：TODO §0／§7.4 的零裝置／Token recovery、可攜加密備份及人工維運設計 → §7.5 的 V3 Work Item／revision／OrderID 防撞 → 正式折讓／逐筆歷史 → 業務 Audit／viewer。Recovery Device flow 尚未實作，LAST_ACTIVE_DEVICE 保護維持。
+- **當前適用範圍**：本公司 CYID_ONLY；其他公司 Built-in／Self-hosted 使用自己的新 D1。本次成功不是關回 Built-in、重跑一次性 DDL或另一環境變更的授權。
+
+## 歷史停點：source 已合併、原 D1 當時未清（2026-10-13，維護前）
 
 - **已完成**：[CYInvoice PR #432](https://github.com/simonliu1118-byte/CYapps/pull/432) 經 squash `0cc97c9a5cf2e63cd6bf887510508f301163c9f4` 合併 main。Cloud source version **0.9.3**；本公司 CYID-only 的帳號表實體移除 maintenance SQL、歷史 invitation actor 脫鉤、配對 OTP 保留、Workspace recovery 清理、CYID Device rename SQL 分流與雙 storage-profile history audit 已入庫。一般 migrations 與 Built-in/self-hosted 的新 D1 架構保持原樣。
 - **已驗證**：[CYInvoice Cloud Check #38340836036](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836036) Linux／SQLite／CYID real-provider／Windows Client／WinForms Smoke／工程包與安全掃描成功；[Cloud Development Validate #38340836071](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836071) validate 成功，**遠端 deployment skipped**；[Governance #38340836060](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836060) 成功。

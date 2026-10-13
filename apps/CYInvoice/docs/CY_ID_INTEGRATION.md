@@ -4,7 +4,7 @@
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；development Cloud0.9.2／Provider0.3.7 已部署，使用者完成中央登記／scope，prepare-cyid #39 完成私有綁定配置。使用者回報原 Windows Built-in continuity 後，實際 activate-cyid #42 確認 CYID_ENABLED=true，原 Workspace／Device Token hashes／資料保留；單台原 Windows CYID 帳密進設定已由使用者回報成功；其餘 transport／角色／AA／AB／AC 及 production 切換仍待驗收，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；development 經 activate-cyid #42 啟用，原 Windows CYID 帳密進設定由使用者回報成功。2026-10-13 [原 Worker 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 已升級 Cloud 0.9.3，保留 CYID_ENABLED=true／全部 bindings；另行批准的本公司原 D1 CYID_ONLY 維護、私有備份／本機還原驗證與原資料／FK／health 核對完成。其餘全角色／多裝置實機矩陣仍待補，0-Device recovery 尚未實作；不宣稱已完成另一個 production promotion。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。以下有日期的 source／準備／首次切換段落保留歷史脈絡，以本段及現行交接為目前狀態。
 
 CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.4）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
@@ -229,7 +229,9 @@ Built-in 與 CY ID 共用 CYInvoice 的 Device／Workspace／業務層；差別�
 
 任何正式 source 修改、Build 推進、Cloud migration、CY ID binding 或 production cutover 都需另行規劃與驗收。
 
-## 13. CYID Consumer 接入交接 — 2026-10-10
+## 13. 歷史：CYID Consumer 接入交接 — 2026-10-10
+
+本節保留實作前的交接快照；「尚無 CYID Provider」等描述屬當時狀態，目前實作／啟用／維護狀態以文件首段、§14 與現行交接為準。
 
 > **範圍**：本節供 CYInvoice 主控工作線接手，僅整理已確認設計、GitHub source 事實與待決問題。沒有授權 CYInvoice runtime、CYID Provider、D1 Migration、部署、Release 或資料切換。持續性的 shared Identity 語意以 CYID 的 `docs/CONSUMER_INTEGRATION_STANDARD.md` 等 canonical contract 為準；本節不另立規範。
 
@@ -337,11 +339,15 @@ finally 呼叫 Logout；Logout 失敗只留下不含憑證的 CYID_LOGOUT_UNCONF
 
 ### 14.4 驗證與正式切換 gate
 
+本公司原 development 的啟用、0.9.3 部署及 CYID_ONLY D1 維護已分別批准並完成；以下為初次切換條件與其他 deployment 的參考，不要求本公司重新切換或重複授權。全角色／多裝置實機矩陣仍未全部執行；Windows V2.6.19 已依使用者接受的本地／CI 證據發布，另一個 production promotion 仍須按其範圍評估。
+
 本機使用 repository 真實 CYID Worker、獨立 synthetic DB／migrations 測 Login／Resolve／Logout、Role／App Access／enabled／credential change、錯 scope、first-login、provider outage、logout loss 不 replay，以及 pairing／invitation／rename／revoke；C# 測整筆 protected cache、transport／timeout／503／HTML 503 降級、四種服務狀態、純 Local、拒絕後 outage 不復活、cancel、scope、Unicode 邊界。Windows CI 執行真實 DPAPI、加入控件 smoke、原本完整 business regressions 與封裝；Windows 阻擋 modal／不能關閉略過／重新檢查恢復 smoke 隨本輪 CI 驗證；實機依 RC_TEST AA／AB 尚待驗收，125／150 DPI 維持 Deferred。
 
 實際部署／正式 CYID 切換前仍需：核對已註冊 Application 與 Workspace enablement／App Access、核准 private binding 與兩 Workspace 配對、備份／migration 0013 與 FK check、EmployeeNo 及歷史業務 actor 稽核、A/B/C device／offline reconnect 驗收、server rollback 與已確認 CYID client 的 fail-closed 邊界。先做隔離 staging，不將 source bundle／CI 視為 live 成功。0-active-Device recovery 未完成，LAST_ACTIVE_DEVICE 保護維持；未授權 production cutover、正式 tag 或 Release。V2.6.17 CYID Consumer Impact: BACKWARD_COMPATIBLE；provider source 0.3.6 與 canonical 1.0.3 新增 optional private invalidation，最低相容 1.0.0 保留。
 
 ### 14.5 原 Workspace 接續使用（2026-10-10 使用者明確要求）
+
+本公司目前已採 CYID_ONLY，原業務 Workspace／Device／Token 與資料延續，後續升級保留 CYID_ENABLED=true。下述為初次升級／切換時的歷史步驟；已退役 D1 不得僅關閉 CYID flag 回退 Built-in。需要回復時須核對私有 checkpoint 與 storage-profile 相容 Worker，不以重建 Workspace／Device 代替回復。
 
 切換 CYID 只替換 Employee identity authority，沿用既有 CYInvoice Workspace、Device ID、Device Token、業務資料與本機設定。CYID Workspace 是外部身分 scope，與既有 CYInvoice Workspace 建立綁定，不取代業務 Workspace、不搬到新 D1，也不要求現有裝置重新加入、重新設定或 destructive reset。
 
@@ -396,7 +402,7 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 後續同一已測source的Provider #153／Invoice #32 real-business入口更新通過，Builtin／原Workspace與資料保留；#31於Provider版本切換期間在upload前被穩定性guard攔住，#32使用fresh snapshot。Active／retired refs的Variable引用已收斂，使用者已刪除同名 Variable 並保留 Secret，唯讀 #34（38195315134）通過。中央scope仍未確認；完整refs／events僅在現行交接及TODO追蹤。
 
-### 14.9 中央登記接續（2026-10-12）
+### 14.9 歷史：中央登記接續（2026-10-12）
 
 Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138）。使用者已透過中央管理完成 CYInvoice 登記／目前身分 Workspace 啟用與 Provider runtime scope；唯讀 #38 及實際 prepare-cyid #39 完成兩個私有 bindings／三個 approved scope vars readback，原 Invoice Workspace／Device／Token hashes／資料保留，CYID_ENABLED=false。配置不等於私有 transport 或 Employee／App Access／Role 已驗收；原 Windows／AA／AB／AC 與受控切換仍待完成，證據集中現行交接與 TODO §7.3.3。
 
