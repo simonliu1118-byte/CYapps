@@ -85,6 +85,7 @@
 - V0.3.0 Build 11：網頁原文（UI Automation）取代 OCR。`ChromePageText.Read`（ComboBox／Spinner／Edit 取 Value、無名 Button 記為 `ShopeeBatchScreens.NamelessButton`、無 Document 重讀）、`PageBoxes`（去 TabItem／ToolBar／瀏覽器列、相對頁面區）。`ShopeeBatchRunner.ReadAsync` 先讀網頁原文（同時截圖供橘色與 × 像素判斷），無 Document 才 OCR；`Click` 只點可見範圍內；`ChooseAsync` 改 Home／End＋Enter；列印視窗下拉讀不到值（只有標籤名）即改 OCR。`ShopeeBatchScreens`：分開的「待處理」「(19)」、清單整列連結（`FirstOrderRow`，點狀態欄、列頂下 52 px）、整顆按鈕間距 7 px 的防護改為 3 px、「 列印出貨文件」前綴圖示。`ShopeePageScanner.ReadPageText`＋`TextImage`、`ShopeeScreenshotForm.TryPageTextAsync`（三段齊全才採用，`fromText` 不做補讀與 0／O 字寬）。以使用者診斷 LOG（本機）驗證清單、明細、寄件編號視窗、預覽列印、列印視窗與訂單頁解析。
 - V0.3.0 Build 12：`WaitAsync` 需 probe 成功＋與上一讀文字相同＋無 Loading／載入中（LOG 15:30 明細頁 `包裹1: Loadingshippingchannel`）；成功後 250 ms、否則 500 ms 再讀。
 - V0.3.0 Build 13：清單列文字可能被截斷（長訂單）；清單不再讀物流（使用者：所有物流之後都會支援），`ShipAsync` 以明細頁 `DetailCarrier` 決定 `order.Kind`（Other＝尚無流程，安排出貨之前停止）。
+- V0.3.0 Build 14：`ShopeeBatchRunner.Orange` 取樣 8 點（框外 4＋框內緣 4），≥3 點橘色（Build 13 實測：整顆按鈕的 page-text 框外為背景色）。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

@@ -690,8 +690,14 @@ internal sealed class ShopeeBatchRunner
     /// <summary>Shopee's orange around the button text (inside the button, beside the text).</summary>
     private static bool Orange(Bitmap image, OcrBox button)
     {
+        // Just outside an OCR box (the text, inside the button) and just inside a page-text box
+        // (the whole button, user's PC 2026-10-13: the outside points fell on the grey page).
         var hits = 0;
-        foreach (var (x, y) in new[] { (button.Left - 5, button.CenterY), (button.Right + 5, button.CenterY), (button.CenterX, button.Top - 4), (button.CenterX, button.Bottom + 4) })
+        foreach (var (x, y) in new[]
+                 {
+                     (button.Left - 5, button.CenterY), (button.Right + 5, button.CenterY), (button.CenterX, button.Top - 4), (button.CenterX, button.Bottom + 4),
+                     (button.Left + 4, button.CenterY), (button.Right - 4, button.CenterY), (button.CenterX, button.Top + 3), (button.CenterX, button.Bottom - 3)
+                 })
         {
             if (x < 0 || y < 0 || x >= image.Width || y >= image.Height) continue;
             var c = image.GetPixel(x, y);
