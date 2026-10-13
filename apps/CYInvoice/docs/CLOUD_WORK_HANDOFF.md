@@ -4,7 +4,17 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：CYInvoice V2.6.19 正式發布成功 — 2026-10-13
+## 最新停點：規劃 CYID 時代舊 D1 帳號資料退場（**未刪除**）— 2026-10-13
+
+- 使用者明確表示 TODO **已勾選項目驗收完成**，授權開始規劃下一階段，並要求調查 CYInvoice 自身 D1 原有 Built-in 帳號資料可否在員工權威改由 CYID 後退役。保留已完成勾選項，不把前次發布完成項目重新打開。本工作只做 **GitHub 原始碼／SQL 外鍵與現有部署證據的唯讀調查 + 文件規劃**；尚未連線做即時原 D1 查詢，沒有任何實際 D1 UPDATE／DELETE、migration、Worker deploy 或 CYID D1 操作。
+- **原理**：2026-10-12 的 CYID activation #42 有 `CYID_ENABLED=true`、原 1 Workspace／4 Device 連續性；`cloud/src/app.ts` 在 CYID mode 排除舊 Employee／Web Auth，`runtime-sync.ts` 改由 CYID 查 employee 權限。但這是**目前身分權威已轉向 CYID**，**不是舊 CYInvoice D1 員工列全部已搬移／安全可刪**的證據，且無本次直接讀取原 D1 帳號筆數。
+- **立即清理風險**：`cloud_employees` 為 `device_employee_links`、`employee_link_candidates`、`employee_transition_items` 及舊 `device_invitations.issued_by_employee_id` 的 FK 來源；舊 `security_audit_events.actor_employee_id` 有歷史身分語意。`email_otp_challenges` 在 CYID mode 配對授權仍使用，**不是全部可刪的舊帳號資料**。原 `workspaces`／`devices`／token hashes／邀請歷史／audit 保留；reference source 仍需支持 Built-in Cloud／Self-hosted，不能全域刪 schema。
+- **清理優先順序**：先受控只讀盤點當前正式綁定原 D1、目標 Workspace 的 `credential_verifier` 非 NULL 數、未結束 transition、FK、invitation legacy actor、有效 OTP、Audit，並做本地雙模式 SQLite fixtures 測試；**第一批僅規劃清除已切 CYID Workspace 的舊 credential material**，既有帳號身份行與外鍵不動。之後才獨立設計／批准歷史個資最小化與真的資料銷毀。
+- **目前沒有直接 Cloudflare D1 查詢連接能力**；不可由 GitHub source 推定即時筆數，也不可上傳遠端測試 handler 繞過。規劃全文：[`CLOUD_IDENTITY_LIFECYCLE.md` §19](CLOUD_IDENTITY_LIFECYCLE.md)；唯一核准前待辦：[`TODO.md` §7.7](TODO.md)。
+- 本地／CI 的既有工程測試與新設計需遵守絕對禁止建立、上傳或部署任何 Cloudflare **測試 Worker**（舊失敗 DELETE 不再重試），不更換原業務 Workspace／Device／Token、不動 CYID D1。**實際不可逆 D1 清理** 必須在 scope、備份、保留與停損條件確定後，另取使用者明確批准；當前本節絕不代表已授權清理。
+- 後續施工方向：先保護已運作的 CYID + Device 基礎，再做 0-Device Recovery、V3 Cloud Work Item／revision／OrderID 防撞／Audit、正式折讓 API 與逐筆歷史；其他原 TODO 未勾選者保留原待辦語意，只有使用者另有指示才調整。
+
+## 歷史停點：CYInvoice V2.6.19 正式發布成功 — 2026-10-13
 
 本批正式 Windows 版本 **V2.6.19 Build 0** 已由使用者 2026-10-12 的發行授權及 2026-10-13 的本地／CI 驗收決策完成發布：
 

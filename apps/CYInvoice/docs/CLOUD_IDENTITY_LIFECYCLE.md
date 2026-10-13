@@ -1,8 +1,8 @@
 # CYInvoice V3.0 Workspace／Device／Employee 身分生命週期定案
 
-更新日期：2026-10-09（原設計基準：2026-09-29）
+更新日期：2026-10-13（原設計基準：2026-09-29）
 
-目前工程版 V2.6.16；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。V2.6.15 CYID consumer source 已接線但尚未部署／正式切換，0-Device recovery 仍待實作；具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
+現行 Windows 正式版 **V2.6.19 Build 0** 已發布；CYID Consumer source 與原 development 啟用有既有驗證，但實機／Workspace 全矩陣及 0-Device recovery 仍依 [現行交接](CLOUD_WORK_HANDOFF.md) 和唯一 [TODO.md](TODO.md) 的未完成項目追蹤。CYID 與 CYInvoice 不是同一個 D1；本文件 §19 開始記錄舊 Built-in account material 的**退役準備規劃**，目前尚無即時 D1 盤點或任何清除。具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 
@@ -472,3 +472,110 @@ Merge／deploy 依 repository governance 與當前使用者授權執行；tag �
 ## V2.6.14 使用版本、最後使用與裝置名稱
 
 每次開啟成功回報，僅由該 Device Token 更新自己的 VERSION／BUILD 與 Cloud UTC last_seen_at；不從本機提交時間或另一台 target。舊版、離線及失敗保留先前確認值，不等同目前在線。改名沿用中央 SUPER_ADMIN 執行時驗證，不改 token／Device identity／Employee authority；同一 Workspace active Device 與當前 credential 在 transaction 再核對，device_renamed audit 與名稱同交易。撤銷 Device 仍保留 DB／audit，Windows inventory 不再顯示歷史；LAST_ACTIVE_DEVICE 與安全 reset 契約不變。
+
+## 19. CYID 部署的 D1 舊帳號資料退場（規劃中，2026-10-13）
+
+**性質：設計／清理準備，不是已執行的 D1 清除、migration 或 Worker 部署。** 使用者已確認本批 TODO 已勾選項目完成，指示先研究及規劃 CYInvoice D1 中舊 Built-in Employee 資料的退場；本階段不修改遠端資料、真實 Workspace、Device Token、Cloudflare Worker 或 CYID。所有實際資料刪除／不可逆清理仍需對應環境的精確範圍、備份及另行確認。
+
+### 19.1 目前有證據的架構事實
+
+1. **兩個 authority／兩個資料範圍**：目前 development CYInvoice Worker 曾於 2026-10-12 的受控 Run #42 驗到 `CYID_ENABLED=true`，已有 1 個原 CYInvoice Workspace、4 筆 Device record 保留；這是當次 deployment 證據，不是 2026-10-13 的即時 D1 SELECT 或 Employee 實際筆數。Employee／Credential／Role 的線上權威已改由 CYID；CYInvoice D1 仍承載自己的 Workspace、Device、Pairing、Invitation、Security Audit，未來還會承載 Work Item，絕不能與 CYID D1 合併／整庫刪除。
+2. `cloud/src/app.ts` 在 CYID mode 已拒絕 `/v1/employees*`、`/v1/employee-*`、`/v1/web-auth*`、`/v1/web-password*`、`/v1/super-admin*` 及舊 bootstrap authority 路由；`runtime-sync.ts` 在 CYID mode 取 CYID `IDENTITY_AUTHORITY` 結果而不是 Built-in `employeeSnapshot`。目前只足以判斷 **CYID mode 的正常帳號 authority 不依賴 Built-in credential rows**，不能由此直接斷言所有舊資料安全可刪。
+3. `cloud/migrations/0004_central_employees.sql` 建立 `cloud_employees`、`device_employee_links`、`employee_link_candidates`；`0006_employee_transition_items.sql` 建立轉換資料。它們有多層 `ON DELETE RESTRICT`：`device_employee_links.employee_id`、`employee_link_candidates.resolved_employee_id`、`employee_transition_items.matched_employee_id/employee_no_match_id/email_match_id`；`0013_cyid_invitation_actor.sql` 仍讓 **舊 `device_invitations.issued_by_employee_id` 參照 `cloud_employees`**，新的 `issued_by_cyid_employee_id` 則分開保存。刪除父表或舊 Employee row 會遇到外鍵／歷史斷鏈。
+4. `security_audit_events.actor_employee_id` 為歷史身分參照（未宣告指向 Built-in Employee 的 FK），CYID 新事件可記錄外部 ID；在未核對事件來源與保留策略前，不得改寫成「相同員編就是同一人」或全面清空。
+5. `email_otp_challenges` 不是純舊帳號表。`index.ts` 的 Device pairing Email OTP 在 CYID 路徑仍可能使用這張表；`workspaces.recovery_email`、`devices.employee_authority_state`、`workspaces.employee_revision` 也牽涉既有 Built-in／復原／相容生命週期，不能僅按欄位名稱直接刪除。
+6. **Built-in Cloud／Self-hosted 是仍受支援的獨立正式模式，非 CYID fallback**；同一套 reference schema 與 source 還需要 `cloud_employees` 和 Employee/OTP 程式。不能為清理目前的 CYID 部署而全域 `DROP TABLE cloud_employees`、刪除 Built-in handler／migrations，或對其他 Self-hosted／Built-in Workspace 做相同清理。
+7. `cloud/scripts/deployment-preflight.mjs` 在遠端部署前會對 `cloud_employees`、Device／Invitation／Audit 等資料作歷史 fingerprint，並要求 `PRAGMA foreign_key_check` 通過。**任何正式核准的清理都應由專用、可稽核的資料維護步驟處理，調整保存證據的比對邏輯；不得為了讓部署通過而無條件取消 `HISTORY_CHANGED_CLOUD_EMPLOYEES` 保護。**
+
+### 19.2 資料分組與預設決策
+
+| CYInvoice D1 區域 | CYID mode 的原則 | 目前動作 |
+| --- | --- | --- |
+| `cloud_employees` 的 `credential_verifier`、`credential_algorithm` 等 Built-in 憑證 | 優先考慮**只對已確認的 CYID Workspace**清除不再使用的 credential material；現有 Built-in mode 保留 | 先列出非 NULL 筆數、所屬 Workspace 和依賴，再評估局部 `UPDATE`，**不立即執行** |
+| `cloud_employees` 其餘員編／姓名／Email／Role／ID | 可能仍是邀請、轉換與歷史事件的關聯錨點；不能不分先後刪除 | 暫時唯讀保留；確認審計留存、FK 與資料最小化方案，再討論 placeholder／歸檔／個資消除 |
+| `device_employee_links`、`employee_link_candidates`、`employee_transition_items` | Built-in 的 Local→Cloud 歷史／過渡，部分有 Employee FK | 核對尚未結束 state 與關聯；沒有引用且已經過核定保存期才可規劃刪除 |
+| `email_otp_challenges` | Device pairing OTP 與舊 Employee／Recovery OTP 混在同表 | 依 `purpose`、有效期限、是否消耗分類；**禁止整表刪除**，有效 pairing OTP 不碰 |
+| `device_invitations`、`security_audit_events` | 裝置加入與歷史 actor 證據（含舊 Built-in 指標） | 保留外鍵與審計鏈，不為清 Employee 而刪除／偽造 actor |
+| `workspaces`、`devices`、`device_pairing_codes` | 現行 CYInvoice 業務 Workspace／Device／入網授權的必要資產 | **維持原樣**，不更換 Workspace ID／Device ID／token hash，不 reset/rejoin |
+| `workspaces.recovery_email`、`employee_revision`、`devices.employee_authority_state` | 可能仍涉及配對 OTP、Built-in 或舊端相容 | 暫不清理；依實際讀寫與 live scope 確認，不能猜成無用欄位 |
+
+### 19.3 分階段執行方案與停損門檻
+
+**階段 A — 唯讀現況盤點（現在可準備，不部署 Worker）**
+
+- 從現行已授權的 GitHub source／正式部署紀錄確認目標為 CYInvoice **原本那個** Worker 綁定的 D1（非 CYID D1、非任何舊的測試 Worker），精確對照 worker version、D1 binding ID（只在私有執行環境核對）、`CYID_ENABLED`、CYID Application/Workspace binding。
+- 對原 D1 使用既有受控的 **read-only 管理介面／授權工具**，只取每表總筆數及目標 Workspace 分組計數、`cloud_employees` credential 非 NULL 數、`device_invitations` 舊／CYID actor 筆數、Transition 未完成筆數、OTP `purpose`／過期數、`PRAGMA foreign_key_list`／`PRAGMA foreign_key_check` 結果；**不可 `SELECT *` 或在 Public PR／Actions log 列出員工姓名、Email、hash、Device token、OTP**。對照既有 Run #42 歷史數據，不把它冒稱現在的即時數據。
+- 建立唯讀、無個資的 inventory checkpoint，先驗證 CYID 管理員及員工 App Access、Device 管理與既有 Windows 授權邊界；若有仍使用 Built-in 的 Workspace、失效的 CYID scope、未知 Worker binding 或未結束 Employee transition，**停止清理**。
+
+**階段 B — 清理方案與本機驗證（不動真實 D1）**
+
+- 以既有 Cloud Worker／SQLite fixture 在本地驗證 CYID mode：Employee route 拒絕、配對 Email OTP、邀請歷史、Device rename/revoke、runtime sync、A/B/C 不受影響；Built-in/self-hosted 模式以另一個 fixture 驗證舊 Employee lifecycle 完整保留。
+- 對照 FK 與 Audit，設計第一批只清除 CYID Workspace 的**舊 credential material**的受限／可重試維護操作；要有正式 Workspace scope、預計變更數、資料條件、交易完整性、dry-run 數量與修改後 invariant／FK check。不能用未指定 Workspace 的 `DELETE FROM cloud_employees` 或廣域 `DROP TABLE`。
+- 設計獨立的歷史資料保留／個資最小化政策。舊 Invitation 的 Built-in Employee ID 如需移轉成不可識別的留存識別，應透過核准的 forward migration、明確欄位語意及審計證據，不挪用 `issued_by_cyid_employee_id` 來偽裝舊 actor。
+- D1 的 Time Travel 是有限期間恢復，不代表永久備份；依當時方案／計畫確認時限及 recovery bookmark，另外準備**私有、受存取與銷毀規則管理**的核准備份／回復方案，不把原始 DB 匯出到公開 repo 或 PR artifact。
+
+**階段 C — 使用者批准後的受控清理（本階段尚不授權執行）**
+
+- 使用者核可**確切 D1／Workspace、要清的欄位與資料保留範圍、備份/回復策略、執行窗口**後，才進行指定 Workspace 的最小變更。先記錄唯讀 fingerprint，再以受限批次／交易實作 credential 清理，保留所有 FK 身分連結與安全 audit。
+- 清理後重做唯讀 counts／外鍵／history fingerprint 差異審查、CYID Device／Identity runtime contract、本地／CI 回歸；若和預期不一致，停止後續清理並依已核准的回復程序處理。對任何既有本機 Offline cache 不主張已實體清除；該 cache 需另行審視其原保護與失效生命週期。
+- 舊名稱／Email／Transition data 的永久歸檔或銷毀列為**獨立第二批提案**，不得在 credential 第一批內默默進行；整表 schema removal 不是現在的目標。
+
+**階段 D — 與 V3.0 開發接續**
+
+- 優先實作已規劃的 Recovery Device 與真實角色／裝置 contract 驗證，再建立帶有明確 `actor_provider` 或等效來源語意的 Cloud Work Item／Audit，以免新資料再依賴 Built-in `cloud_employees.employee_id`。
+- 然後才推進多裝置 Work Item revision／原子結案、離線 OrderID 防撞和正式折讓 API／逐筆歷史重做；不要把 D1 清理誤當作這些功能已完成。
+
+### 19.4 原 D1 的只讀 SQL 核對清單（僅供後續受控執行）
+
+以下為 **唯讀 SELECT／PRAGMA** 模板，不包含任何變更語句；`?1` 的 CYInvoice Workspace ID 必須由**私有、已確認原 D1** 的受控工具注入，不得改成未經驗證的文字拼接，也不得把結果內的實際 Workspace ID、Employee ID、員編、Email、Token hash、OTP digest 公開貼到 PR／Actions。唯讀成功並不代表可以直接做下一步刪除。
+
+```sql
+-- 1. 確認 schema 與完整性：必須 0 FK violation
+PRAGMA foreign_key_check;
+PRAGMA foreign_key_list('device_invitations');
+PRAGMA foreign_key_list('device_employee_links');
+PRAGMA foreign_key_list('employee_link_candidates');
+PRAGMA foreign_key_list('employee_transition_items');
+
+-- 2. 目標 Workspace 帳號／仍留存的 Built-in credential material
+SELECT COUNT(*) AS employee_rows,
+       SUM(CASE WHEN credential_verifier IS NOT NULL THEN 1 ELSE 0 END) AS verifier_rows,
+       SUM(CASE WHEN credential_algorithm IS NOT NULL THEN 1 ELSE 0 END) AS algorithm_rows
+  FROM cloud_employees WHERE workspace_id = ?1;
+
+-- 3. 會使舊 cloud_employees 仍被引用的記錄
+SELECT COUNT(*) AS link_rows
+  FROM device_employee_links l
+  JOIN devices d ON d.device_id = l.device_id WHERE d.workspace_id = ?1;
+SELECT state, COUNT(*) AS rows
+  FROM employee_link_candidates WHERE workspace_id = ?1 GROUP BY state;
+SELECT state, COUNT(*) AS rows
+  FROM employee_transition_items WHERE workspace_id = ?1 GROUP BY state;
+
+-- 4. 邀請簽發者來源，尤其需要保留的舊 Built-in FK
+SELECT COUNT(*) AS invitations,
+       SUM(CASE WHEN issued_by_employee_id IS NOT NULL THEN 1 ELSE 0 END) AS legacy_actor_rows,
+       SUM(CASE WHEN issued_by_cyid_employee_id IS NOT NULL THEN 1 ELSE 0 END) AS cyid_actor_rows,
+       SUM(CASE WHEN consumed_at IS NULL AND revoked_at IS NULL
+                    AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           THEN 1 ELSE 0 END) AS active_invitation_rows
+  FROM device_invitations WHERE workspace_id = ?1;
+
+-- 5. 原 Workspace 的保留資產（不可清除／重建）
+SELECT status, COUNT(*) AS rows FROM devices
+ WHERE workspace_id = ?1 GROUP BY status;
+SELECT event_type, COUNT(*) AS rows FROM security_audit_events
+ WHERE workspace_id = ?1 GROUP BY event_type;
+
+-- 6. OTP 為共享用途表，沒有 workspace_id；僅依 purpose 匯總，
+--    不查出 challenge/email/digest 明文。
+SELECT purpose, COUNT(*) AS rows,
+       SUM(CASE WHEN consumed_at IS NULL
+                    AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           THEN 1 ELSE 0 END) AS unexpired_unconsumed_rows
+  FROM email_otp_challenges GROUP BY purpose;
+```
+
+**判定條件**：必須先核對 `PRAGMA foreign_key_check` 為零、上述 counts 在可預期範圍、沒有未知的 Built-in 使用者／未完成 transition、CYID 與 Device 最新驗證正常；若有不一致，停止。執行階段的 D1 變更要另行產生明確 dry-run／expected-change-count／transaction 計畫及私有備份與回復證據，不能從本節 SQL 直接推定可刪除員工基本資料。
+
+**全程限制：**既有 Cloudflare 測試 Worker 刪不掉的問題已由使用者明確禁止重試。這項清理的研究、本地驗證與 PR 不得建立／上傳／部署任何測試 Worker、遠端測試 handler 或替代測試服務，也不得修改 CYID D1。正式 Cloud D1 資料操作不是本規劃的隱含授權。
