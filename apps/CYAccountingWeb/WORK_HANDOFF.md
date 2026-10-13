@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.23.3**；VERSION `0.23.3`、BUILD `0`，桌機確認清單及表頭排序 |
+| 產品 | **V0.23.3 Build 1**；VERSION `0.23.3`、BUILD `1`，桌機確認清單及表頭排序 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -16,7 +16,7 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次為獨立桌機 UI 修改，Patch 升至 V0.23.3、Build 歸零。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+本次為獨立桌機 UI 修改，Patch 升至 V0.23.3；目前 Build 1 為同一確認清單的密度返修。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
 
 ## V0.23.3 提示、確認清單與排序
 
@@ -25,7 +25,7 @@
 - 桌機改 23px 單行清單、11.5px 文字、成功／失敗標記，長內容可查看完整文字；取代 17 個舊 confirmation 字級／卡片樣式規則，集中為一個 Desktop presentation owner，不增加 override chain。
 - 日期表頭為 native button，切換 ascending／descending；日期比較只影響 displayed rows，相同日期及 balance calculation 沿用 chronological owner。分組同時遵守日期方向；桌機帳戶標籤改「帳戶 [分組]」，觸控保留原標籤。
 - 裝置呈現切換由既有 Adaptive lifecycle 呼叫 Ledger render owner，避免桌機倒序／表頭控件帶到手機和平板；transaction snapshot、每筆餘額、月合計、搜尋及 API 不改。
-- 行為回歸涵蓋最新十筆淘汰、成功／失敗、逃脫文字、唯一訊息節點 placement，及日期順序／同日收支／分組／搜尋下的正確餘額與裝置切換。正式驗收追蹤本次 PR 與 main Actions。
+- 行為回歸涵蓋最新十筆淘汰、成功／失敗、逃脫文字、唯一訊息節點 placement，及日期順序／同日收支／分組／搜尋下的正確餘額與裝置切換。正式驗收見 PR #442：唯一提示置中、最新十筆淘汰、日期倒序與分組／每筆餘額一致已回讀。Build 1 移除舊 grid gap 及符號 baseline 留白；密度驗收追蹤收尾 PR 與 main Actions。
 
 ## V0.23.2 日期修復
 
