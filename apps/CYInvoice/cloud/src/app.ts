@@ -15,7 +15,7 @@ import { handleWebPasswordRecovery } from "./web-password-recovery";
 import { handleRuntimeSync } from "./runtime-sync";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
-  issueCyWebRecoveryInvitation, recoveryInvitationStatus,
+  issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation,
   type RecoveryIssueResult,
 } from "./recovery-issuer";
 import type { CyWebRecoveryRequest } from "./recovery-authority";
@@ -50,6 +50,10 @@ export class CyInvoiceRecoveryEntrypoint extends WorkerEntrypoint<Env> {
 
   async getRecoveryInvitationStatus(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
     return recoveryInvitationStatus(this.env, input);
+  }
+
+  async revokeRecoveryInvitation(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    return revokeRecoveryInvitation(this.env, input);
   }
 }
 
