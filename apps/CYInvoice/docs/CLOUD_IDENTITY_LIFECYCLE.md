@@ -525,4 +525,57 @@ Merge／deploy 依 repository governance 與當前使用者授權執行；tag �
 - 優先實作已規劃的 Recovery Device 與真實角色／裝置 contract 驗證，再建立帶有明確 `actor_provider` 或等效來源語意的 Cloud Work Item／Audit，以免新資料再依賴 Built-in `cloud_employees.employee_id`。
 - 然後才推進多裝置 Work Item revision／原子結案、離線 OrderID 防撞和正式折讓 API／逐筆歷史重做；不要把 D1 清理誤當作這些功能已完成。
 
+### 19.4 原 D1 的只讀 SQL 核對清單（僅供後續受控執行）
+
+以下為 **唯讀 SELECT／PRAGMA** 模板，不包含任何變更語句；`?1` 的 CYInvoice Workspace ID 必須由**私有、已確認原 D1** 的受控工具注入，不得改成未經驗證的文字拼接，也不得把結果內的實際 Workspace ID、Employee ID、員編、Email、Token hash、OTP digest 公開貼到 PR／Actions。唯讀成功並不代表可以直接做下一步刪除。
+
+```sql
+-- 1. 確認 schema 與完整性：必須 0 FK violation
+PRAGMA foreign_key_check;
+PRAGMA foreign_key_list('device_invitations');
+PRAGMA foreign_key_list('device_employee_links');
+PRAGMA foreign_key_list('employee_link_candidates');
+PRAGMA foreign_key_list('employee_transition_items');
+
+-- 2. 目標 Workspace 帳號／仍留存的 Built-in credential material
+SELECT COUNT(*) AS employee_rows,
+       SUM(CASE WHEN credential_verifier IS NOT NULL THEN 1 ELSE 0 END) AS verifier_rows,
+       SUM(CASE WHEN credential_algorithm IS NOT NULL THEN 1 ELSE 0 END) AS algorithm_rows
+  FROM cloud_employees WHERE workspace_id = ?1;
+
+-- 3. 會使舊 cloud_employees 仍被引用的記錄
+SELECT COUNT(*) AS link_rows
+  FROM device_employee_links l
+  JOIN devices d ON d.device_id = l.device_id WHERE d.workspace_id = ?1;
+SELECT state, COUNT(*) AS rows
+  FROM employee_link_candidates WHERE workspace_id = ?1 GROUP BY state;
+SELECT state, COUNT(*) AS rows
+  FROM employee_transition_items WHERE workspace_id = ?1 GROUP BY state;
+
+-- 4. 邀請簽發者來源，尤其需要保留的舊 Built-in FK
+SELECT COUNT(*) AS invitations,
+       SUM(CASE WHEN issued_by_employee_id IS NOT NULL THEN 1 ELSE 0 END) AS legacy_actor_rows,
+       SUM(CASE WHEN issued_by_cyid_employee_id IS NOT NULL THEN 1 ELSE 0 END) AS cyid_actor_rows,
+       SUM(CASE WHEN consumed_at IS NULL AND revoked_at IS NULL
+                    AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           THEN 1 ELSE 0 END) AS active_invitation_rows
+  FROM device_invitations WHERE workspace_id = ?1;
+
+-- 5. 原 Workspace 的保留資產（不可清除／重建）
+SELECT status, COUNT(*) AS rows FROM devices
+ WHERE workspace_id = ?1 GROUP BY status;
+SELECT event_type, COUNT(*) AS rows FROM security_audit_events
+ WHERE workspace_id = ?1 GROUP BY event_type;
+
+-- 6. OTP 為共享用途表，沒有 workspace_id；僅依 purpose 匯總，
+--    不查出 challenge/email/digest 明文。
+SELECT purpose, COUNT(*) AS rows,
+       SUM(CASE WHEN consumed_at IS NULL
+                    AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           THEN 1 ELSE 0 END) AS unexpired_unconsumed_rows
+  FROM email_otp_challenges GROUP BY purpose;
+```
+
+**判定條件**：必須先核對 `PRAGMA foreign_key_check` 為零、上述 counts 在可預期範圍、沒有未知的 Built-in 使用者／未完成 transition、CYID 與 Device 最新驗證正常；若有不一致，停止。執行階段的 D1 變更要另行產生明確 dry-run／expected-change-count／transaction 計畫及私有備份與回復證據，不能從本節 SQL 直接推定可刪除員工基本資料。
+
 **全程限制：**既有 Cloudflare 測試 Worker 刪不掉的問題已由使用者明確禁止重試。這項清理的研究、本地驗證與 PR 不得建立／上傳／部署任何測試 Worker、遠端測試 handler 或替代測試服務，也不得修改 CYID D1。正式 Cloud D1 資料操作不是本規劃的隱含授權。
