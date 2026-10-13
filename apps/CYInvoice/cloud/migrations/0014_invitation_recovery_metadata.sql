@@ -12,6 +12,12 @@ ALTER TABLE device_invitations ADD COLUMN issuer_credential_version INTEGER
     CHECK (issuer_credential_version IS NULL OR issuer_credential_version >= 1);
 ALTER TABLE device_invitations ADD COLUMN issuer_employee_revision INTEGER
     CHECK (issuer_employee_revision IS NULL OR issuer_employee_revision >= 1);
+-- Stable opaque operation ID allows a private issuer to look up an ambiguous
+-- delivery result without generating or emailing a second invitation.
+ALTER TABLE device_invitations ADD COLUMN recovery_operation_id TEXT;
+CREATE UNIQUE INDEX idx_device_invitations_recovery_operation
+    ON device_invitations (workspace_id, recovery_operation_id)
+    WHERE recovery_operation_id IS NOT NULL;
 
 -- Future RECOVERY events are explicit, not mislabeled as normal Device issuance.
 -- Old actor provider cannot be inferred from employee number / identifier.
