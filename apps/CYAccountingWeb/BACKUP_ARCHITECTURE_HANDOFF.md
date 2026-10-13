@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/05。CYAccountingWeb 目前正式功能版本 **V0.22.11 Build 0**、D1 schema **7**。V0.22.4～V0.22.11 未改變 Backup topology 或 outer/inner format version；V0.22.11 只以 additive account metadata 保存 `colorSlot`。永久規則依 `PROJECT_RULES.md`、根 `REPO_POLICY.md` 與 `REPOSITORY_RULES.md`；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。
+更新：2026/10/13（台灣時間）。正式程式版本 **V0.23.1 Build 2**、D1 schema **8**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
@@ -38,11 +38,11 @@ binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`
 | --- | --- |
 | Outer | `CYAccountingWebBackupSet / formatVersion 2` |
 | Inner | `CYAccountingWebBackup / formatVersion 2` |
-| 目前新備份 schema | **7** |
+| 目前新備份 schema | **8** |
 | 物件 | `CYAccountingWeb/<backup-id>/manifest.json` 與 `data.json` |
 | Manifest | app/schema version、row counts、SHA-256、byte size、dataFormat／dataFormatVersion |
 
-現行 inner v2 payload 包含交易、帳戶、科目、設定、openingBalanceOverrides、append-only openingBalanceAudit 等必要帳務資料。schema 7 帳戶可包含 additive `colorSlot`，用於保留 V0.22.11 的固定帳戶色號；這次沒有提升 `formatVersion`／`dataFormatVersion`。
+現行 inner v2 payload 包含交易、帳戶、科目、設定、openingBalanceOverrides、append-only openingBalanceAudit 等必要帳務資料。schema 7 起包含 additive `colorSlot`；schema 8 納入 `excelImportRuns` 指定期間替換稽核。統計指定移轉科目沿用 app settings 一同保存。`formatVersion`／`dataFormatVersion` 維持 2，不改寫舊備份。
 
 歷史相容範圍仍包括：
 
