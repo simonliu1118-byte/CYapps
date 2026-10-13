@@ -86,6 +86,7 @@
 - V0.3.0 Build 12：`WaitAsync` 需 probe 成功＋與上一讀文字相同＋無 Loading／載入中（LOG 15:30 明細頁 `包裹1: Loadingshippingchannel`）；成功後 250 ms、否則 500 ms 再讀。
 - V0.3.0 Build 13：清單列文字可能被截斷（長訂單）；清單不再讀物流（使用者：所有物流之後都會支援），`ShipAsync` 以明細頁 `DetailCarrier` 決定 `order.Kind`（Other＝尚無流程，安排出貨之前停止）。
 - V0.3.0 Build 14：`ShopeeBatchRunner.Orange` 取樣 8 點（框外 4＋框內緣 4），≥3 點橘色（Build 13 實測：整顆按鈕的 page-text 框外為背景色）。
+- V0.3.0 Build 15：`ShopeeBatchRunner.Skipped`／`Notes`、`ShopeeBatchSkip`（物流無流程，安排出貨前）、`RunAsync(Func<order, Task<string?>>)`；`NextInList` 略過 Skipped，`OpenOrderAsync` 目標不在畫面時滾輪往下找；`ShopeeBatchScreens.Orders` 列出全部訂單（OCR：每個待出貨＋上方訂單編號；網頁原文：每列連結）。`MainForm.EnterShopeeBatchOrderAsync` 回傳 note（未輸入 ERP 或已儲存但有警告）；轉人工／未儲存仍停止；`ShowBatchSummary` 可捲動可複製。`AutomationSession.Pin/Unpin`（全自動期間標題固定＋計時，步驟結束不顯示），`FullAutoTitle`＝自動擷取輸入中、`BatchTitle`＝全自動運轉中；`AutomationOverlay.ShowNotice(since)` 先以 Opacity 0 顯示並 Refresh 再顯示。診斷按鈕移到設定一般頁（`SettingsForm.DiagnoseChromeText`）。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

@@ -46,8 +46,8 @@ public sealed class ShopeeBatchScreensTests
         var first = ShopeeBatchScreens.FirstOrder(boxes)!;
         Assert.Equal("261012AB1C23D4", first.OrderSn);
         Assert.Equal(708, first.Status.Top);
-        Assert.Equal("蝦皮店到店-隔日到貨", first.Carrier);
-        Assert.True(ShopeeBatchScreens.SupportedCarrier(first.Carrier));
+        // The second order too, for when the first is passed over.
+        Assert.Equal(["261012AB1C23D4", "261012XY9Z87W6"], ShopeeBatchScreens.Orders(boxes).Select(o => o.OrderSn));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("蝦皮店到宅"));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
         Assert.False(ShopeeBatchScreens.SupportedCarrier("萊爾富"));
@@ -141,7 +141,7 @@ public sealed class ShopeeBatchScreensTests
         var first = ShopeeBatchScreens.FirstOrder(list)!;
         Assert.Equal("261011AB12CD34", first.OrderSn);
         Assert.Equal(732, first.Status.Top);
-        Assert.Equal("蝦皮店到店", first.Carrier);
+        Assert.Equal(2, ShopeeBatchScreens.Orders(list).Count);
 
         List<OcrBox> awb = [B("預覽列印", 13, 137), B("出貨文件已下載完成。已成功下載1個包里中的1個包里的出貨文件・0個包里下載失敗。", 28, 171), B("列印出货文件", 1783, 165)];
         Assert.Equal(new ShopeeAwbDownload(1, 1, 0), ShopeeBatchScreens.AwbDownloaded(awb));
@@ -233,7 +233,6 @@ public sealed class ShopeeBatchScreensTests
         Assert.Equal(18, ShopeeBatchScreens.TodayCount(list));
         var first = ShopeeBatchScreens.FirstOrder(list)!;
         Assert.Equal("261011AB12CD34", first.OrderSn);
-        Assert.Equal("蝦皮店到店", first.Carrier);
         Assert.InRange(first.Status.CenterX, 940, 1000);
         Assert.True(first.Status.Right < 1542); // never the row's 安排出貨
 

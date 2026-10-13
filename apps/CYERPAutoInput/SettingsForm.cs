@@ -40,6 +40,9 @@ internal sealed class SettingsForm : Form
         "inv_copies", "tax_type", "customs", "tax_rate"
     ];
 
+    /// <summary>「讀取 Chrome 網頁文字（診斷）」 was pressed: the window closed for it to run.</summary>
+    public bool DiagnoseChromeText { get; private set; }
+
     public SettingsForm(UserSettings settings)
     {
         _settings = settings;
@@ -143,6 +146,11 @@ internal sealed class SettingsForm : Form
         warehouseRow.Controls.Add(_firstRowWarehouse);
         warehouseRow.Controls.Add(_firstRowWarehouseCode);
         flow.Controls.Add(warehouseRow);
+
+        // Diagnostic (user, 2026-10-13: kept out of the 蝦皮 menu, here in 設定).
+        var diagnose = new CyButton { Text = "讀取 Chrome 網頁文字（診斷）", AutoSize = true, Height = 34, Margin = new Padding(0, 14, 0, 0) };
+        diagnose.Click += (_, _) => { DiagnoseChromeText = true; DialogResult = DialogResult.Cancel; Close(); };
+        flow.Controls.Add(diagnose);
 
         // Advanced mode is hidden for now (user, 2026-10-09); the setting is kept.
         _advanced.Checked = _settings.AdvancedMode;

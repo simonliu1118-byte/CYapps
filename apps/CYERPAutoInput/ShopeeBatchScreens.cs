@@ -79,56 +79,51 @@ internal static partial class ShopeeBatchScreens
     /// clear): the topmost 「待出貨」 below the table header, the 訂單編號 above it and the
     /// 物流方式 column beside it. Null when the header or the number is not read.
     /// </summary>
-    public static ShopeeListOrder? FirstOrder(IReadOnlyList<OcrBox> boxes)
-    {
-        var header = boxes.Where(b => C(b) == "買家實付金額").OrderByDescending(b => b.Top).FirstOrDefault();
-        if (header is null) return null;
-        var status = boxes.Where(b => C(b) == "待出貨" && b.Top > header.Bottom).OrderBy(b => b.Top).FirstOrDefault();
-        if (status is null) return FirstOrderRow(boxes, header);
-        var number = boxes.Where(b => b.Bottom <= status.Top + 2 && b.Top > header.Bottom && C(b).Contains("訂單編號", StringComparison.Ordinal))
-            .OrderByDescending(b => b.Top).FirstOrDefault();
-        var orderSn = number is null ? string.Empty : OrderSnIn(C(number));
-        if (orderSn.Length == 0) return null;
+    public static ShopeeListOrder? FirstOrder(IReadOnlyList<OcrBox> boxes) => Orders(boxes).FirstOrDefault();
 
-        var carrierHeader = boxes.FirstOrDefault(b => C(b) == "物流方式" && SameRow(b, header));
-        var actionHeader = boxes.FirstOrDefault(b => C(b) == "操作" && SameRow(b, header));
-        var carrier = string.Empty;
-        if (carrierHeader is not null)
+    /// <summary>
+    /// The list's orders top to bottom (user, 2026-10-13: orders left for a person are passed
+    /// over, so the batch needs the next ones too). From the OCR: each 「待出貨」 below the
+    /// table header with the 訂單編號 above it; from page text: one link per row.
+    /// </summary>
+    public static List<ShopeeListOrder> Orders(IReadOnlyList<OcrBox> boxes)
+    {
+        var orders = new List<ShopeeListOrder>();
+        var header = boxes.Where(b => C(b) == "買家實付金額").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (header is null) return orders;
+        var statuses = boxes.Where(b => C(b) == "待出貨" && b.Top > header.Bottom).OrderBy(b => b.Top).ToList();
+        if (statuses.Count == 0) return OrderRows(boxes, header);
+        var above = header.Bottom;
+        foreach (var status in statuses)
         {
-            // The order's row: from its 訂單編號 down to the next order's (the carrier sits at the
-            // row's top, beside the amount, above 待出貨 when a tag such as 在1天內確認 is shown).
-            var right = actionHeader?.Left - 8 ?? int.MaxValue;
-            var next = boxes.Where(b => b.Top > number!.Bottom && C(b).Contains("訂單編號", StringComparison.Ordinal)).Select(b => b.Top).DefaultIfEmpty(int.MaxValue).Min();
-            carrier = string.Concat(boxes
-                .Where(b => b.Left >= carrierHeader.Left - 24 && b.Left < right && b.Top > number!.Bottom && b.Top < next && b.Top <= status.Bottom + 80)
-                .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+            var number = boxes.Where(b => b.Bottom <= status.Top + 2 && b.Top > above && C(b).Contains("訂單編號", StringComparison.Ordinal))
+                .OrderByDescending(b => b.Top).FirstOrDefault();
+            above = status.Bottom;
+            var orderSn = number is null ? string.Empty : OrderSnIn(C(number));
+            if (orderSn.Length > 0) orders.Add(new ShopeeListOrder(orderSn, status, string.Empty));
         }
-        return new ShopeeListOrder(orderSn, status, carrier);
+        return orders;
     }
 
     /// <summary>
     /// Page text (user's PC, 2026-10-13): each order of the list is one link whose text is the
-    /// whole row — buyer, 「訂單編號 …」, products, amount, status, carrier. The click goes to
-    /// the row's 狀態 column, a little below its top (where 待出貨 stands); never the row's
-    /// 安排出貨 button.
+    /// whole row (cut short on a long row). The click goes to the row's 狀態 column, a little
+    /// below its top (where 待出貨 stands); never the row's 安排出貨 button.
     /// </summary>
-    private static ShopeeListOrder? FirstOrderRow(IReadOnlyList<OcrBox> boxes, OcrBox header)
+    private static List<ShopeeListOrder> OrderRows(IReadOnlyList<OcrBox> boxes, OcrBox header)
     {
-        var row = boxes.Where(b => b.Top > header.Bottom && b.Height >= 60 && C(b).Contains("訂單編號", StringComparison.Ordinal))
-            .OrderBy(b => b.Top).FirstOrDefault();
-        if (row is null) return null;
-        var text = C(row);
-        // From the row's own text, spaces kept: 「訂單編號 261011… 2 件」 would run on into 2 without them.
-        var raw = row.Text;
-        var at = raw.IndexOf("訂單編號", StringComparison.Ordinal);
-        var orderSn = at >= 0 ? OrderSnIn(raw[at..]) : string.Empty;
-        if (orderSn.Length == 0) return null;
+        var orders = new List<ShopeeListOrder>();
         var statusHeader = boxes.FirstOrDefault(b => C(b) == "狀態" && SameRow(b, header));
         var x = statusHeader?.CenterX ?? header.Right + 120;
-        var target = new OcrBox("待出貨", x - 20, row.Top + 52, 40, 20);
-        var carrier = new[] { "蝦皮店到店-隔日到貨", "蝦皮店到店", "蝦皮店到宅", "7-ELEVEN", "全家", "萊爾富", "OK超商", "黑貓", "新竹", "郵局", "宅配" }
-            .FirstOrDefault(c => text.Contains(c, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
-        return new ShopeeListOrder(orderSn, target, carrier);
+        foreach (var row in boxes.Where(b => b.Top > header.Bottom && b.Height >= 60 && C(b).Contains("訂單編號", StringComparison.Ordinal)).OrderBy(b => b.Top))
+        {
+            // From the row's own text, spaces kept: 「訂單編號 261011… 2 件」 would run on into 2 without them.
+            var raw = row.Text;
+            var at = raw.IndexOf("訂單編號", StringComparison.Ordinal);
+            var orderSn = at >= 0 ? OrderSnIn(raw[at..]) : string.Empty;
+            if (orderSn.Length > 0) orders.Add(new ShopeeListOrder(orderSn, new OcrBox("待出貨", x - 20, row.Top + 52, 40, 20), string.Empty));
+        }
+        return orders;
     }
 
     /// <summary>

@@ -602,10 +602,17 @@ internal sealed class MainForm : Form
         FitAllFieldRows();
     }
 
-    private void OpenSettings()
+    private async void OpenSettings()
     {
         using var form = new SettingsForm(_settings);
-        if (form.ShowDialog(this) != DialogResult.OK) return;
+        var answer = form.ShowDialog(this);
+        // The diagnostic lives in 設定 (user, 2026-10-13); it runs once the window is closed.
+        if (form.DiagnoseChromeText)
+        {
+            await DiagnoseChromeTextAsync();
+            return;
+        }
+        if (answer != DialogResult.OK) return;
         try
         {
             _settingsStore.Save(_settings);
@@ -997,6 +1004,7 @@ internal sealed class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
 
         _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
@@ -1007,7 +1015,13 @@ internal sealed class MainForm : Form
         _log.Info("shopee-batch", "started");
         try
         {
-            await runner.RunAsync(order => EnterShopeeBatchOrderAsync(order, runner, mapping, ledger, token), SetStatus);
+            await runner.RunAsync(async order =>
+            {
+                var note = await EnterShopeeBatchOrderAsync(order, runner, mapping, ledger, token);
+                // Back to the batch's notice and the locked mouse for the next order.
+                Session.Begin(AutomationSession.BatchTitle);
+                return note;
+            }, SetStatus);
             outcome = AutomationOutcome.Done;
         }
         catch (OperationCanceledException)
@@ -1029,36 +1043,83 @@ internal sealed class MainForm : Form
         }
         finally
         {
-            Session.End(outcome);
+            Session.Unpin();
+            Session.End(outcome == AutomationOutcome.Done && runner.Notes.Count > 0 ? AutomationOutcome.NeedsAttention : outcome);
             _shopeeBatchRunning = false;
         }
         _log.Info("shopee-batch", $"ended outcome={outcome} done={runner.Done.Count} shipped_current={shipped}");
 
-        var done = $"已完成 {runner.Done.Count} 筆。";
-        if (outcome == AutomationOutcome.Done)
+        // One list at the end (user, 2026-10-13): what is done, what was passed over or needs a
+        // look, and where it stopped if it did.
+        var text = new System.Text.StringBuilder();
+        text.AppendLine(outcome switch
         {
-            SetStatus($"蝦皮全自動完成：{runner.Done.Count} 筆");
-            MessageBox.Show(this, $"蝦皮全自動完成，待處理訂單都已處理。{done}", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            AutomationOutcome.Done => "蝦皮全自動完成。",
+            AutomationOutcome.Cancelled => "已按 Esc 停止蝦皮全自動。",
+            _ => "蝦皮全自動已停止，請人工處理：\r\n" + problem
+        });
+        text.AppendLine();
+        text.AppendLine($"已完成 {runner.Done.Count} 筆。");
+        if (runner.Notes.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine($"需要人工處理 {runner.Notes.Count} 筆：");
+            foreach (var note in runner.Notes)
+                text.AppendLine($"・訂單 {note.OrderSn}：{note.Message.Replace("\n", "\r\n    ")}");
         }
-        Alarm();
-        var where = runner.Current is { } current
-            ? $"停在訂單 {current.OrderSn}：" + (shipped
+        if (outcome != AutomationOutcome.Done && runner.Current is { } current)
+        {
+            text.AppendLine();
+            text.AppendLine($"停在訂單 {current.OrderSn}：" + (shipped
                 ? "這筆在蝦皮已按「安排出貨」" + (current.Tracking.Length > 0 ? $"（寄件編號 {current.Tracking}）" : string.Empty) + "，請人工確認寄件單是否已列印，並完成 ERP 輸入。"
-                : "這筆在蝦皮尚未安排出貨。")
-            : string.Empty;
-        SetStatus($"蝦皮全自動已停止：{done}");
-        MessageBox.Show(this,
-            (outcome == AutomationOutcome.Cancelled ? "已按 Esc 停止蝦皮全自動。" : $"蝦皮全自動已停止，請人工處理：\n\n{problem}") +
-            $"\n\n{where}\n\n{done}",
-            ShopeeBatchTitle, MessageBoxButtons.OK, outcome == AutomationOutcome.Cancelled ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                : "這筆在蝦皮尚未安排出貨。"));
+        }
+        SetStatus(outcome == AutomationOutcome.Done
+            ? $"蝦皮全自動完成：{runner.Done.Count} 筆，需人工處理 {runner.Notes.Count} 筆"
+            : $"蝦皮全自動已停止：已完成 {runner.Done.Count} 筆");
+        if (outcome != AutomationOutcome.Done || runner.Notes.Count > 0) Alarm();
+        ShowBatchSummary(text.ToString(), outcome == AutomationOutcome.Done && runner.Notes.Count == 0);
+    }
+
+    /// <summary>The batch's closing list in a window that scrolls and copies (it can be long).</summary>
+    private void ShowBatchSummary(string text, bool clean)
+    {
+        using var form = new Form
+        {
+            Text = ShopeeBatchTitle,
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(720, clean ? 260 : 480),
+            MinimizeBox = false,
+            ShowIcon = false,
+            Font = new Font("Microsoft JhengHei UI", 10F)
+        };
+        var box = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Text = text, BorderStyle = BorderStyle.None, BackColor = SystemColors.Window };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 50, Padding = new Padding(8) };
+        var ok = new CyPrimaryButton { Text = "確定", Size = new Size(92, 34), DialogResult = DialogResult.OK };
+        var copy = new CyButton { Text = "複製", Size = new Size(92, 34) };
+        copy.Click += (_, _) => Clipboard.SetText(text);
+        buttons.Controls.Add(ok);
+        buttons.Controls.Add(copy);
+        var pad = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 14, 16, 4) };
+        pad.Controls.Add(box);
+        form.Controls.Add(pad);
+        form.Controls.Add(buttons);
+        form.AcceptButton = ok;
+        CyVisualTheme.Apply(form);
+        box.Select(0, 0);
+        form.ShowDialog(this);
     }
 
     private const string ShopeeBatchTitle = "蝦皮全自動";
     private bool _shopeeBatchRunning;
 
-    /// <summary>The page scan and ERP for the batch's order on screen; anything short of a clean, saved document stops the batch.</summary>
-    private async Task EnterShopeeBatchOrderAsync(ShopeeBatchOrder order, ShopeeBatchRunner runner, ShopeeShotMapping mapping, OrderLedger ledger, CancellationToken token)
+    /// <summary>
+    /// The page scan and ERP for the batch's order on screen (shipped already). Null when clean;
+    /// a note for the closing list when ERP was left untouched (something to check before
+    /// input) or the document was saved with something to check (user, 2026-10-13: note it and
+    /// go on). A document ERP left open or unsaved stops the batch: ERP is not in a state to go on.
+    /// </summary>
+    private async Task<string?> EnterShopeeBatchOrderAsync(ShopeeBatchOrder order, ShopeeBatchRunner runner, ShopeeShotMapping mapping, OrderLedger ledger, CancellationToken token)
     {
         runner.Front();
         ShopeeShotResult? read;
@@ -1068,28 +1129,28 @@ internal sealed class MainForm : Form
             token.ThrowIfCancellationRequested();
             read = ok ? dialog.Result : null;
         }
-        if (read?.Order is not { } imported) throw new ShopeeBatchStop("光學辨識沒有帶入表單。", true);
+        const string NotEntered = "已出貨（寄件單已印），ERP 未輸入：";
+        if (read?.Order is not { } imported) return NotEntered + "訂單頁沒有讀進表單。";
         if (imported.OrderSn != order.OrderSn)
-            throw new ShopeeBatchStop($"光學辨識讀到的訂單編號 {imported.OrderSn} 不是 {order.OrderSn}。", true);
+            return NotEntered + $"訂單頁讀到的訂單編號 {imported.OrderSn} 不是這筆。";
         if (!ShopeeBatchScreens.SameTracking(imported.TrackingNumber, order.Tracking))
-            throw new ShopeeBatchStop($"訂單頁讀到的物流單號「{imported.TrackingNumber}」與寄件編號 {order.Tracking} 不同。", true);
-        LoadOrder(imported);
+            return NotEntered + $"訂單頁讀到的物流單號「{imported.TrackingNumber}」與寄件編號 {order.Tracking} 不同。";
         var notes = read.Problems.ToList();
         if (ledger.Find(imported.LedgerKey) is { } entry) notes.Insert(0, $"這張訂單{entry.Describe()}。");
         if (notes.Count > 0)
-            throw new ShopeeBatchStop("訂單已帶入表單，但有以下項目需要確認：\n" + string.Join("\n", notes.Select(n => "・" + n)), true);
+            return NotEntered + "有項目要確認：\n" + string.Join("\n", notes.Select(n => "・" + n));
+        LoadOrder(imported);
 
         var started = await StartAutomationAsync(fullAuto: true, batch: true);
         token.ThrowIfCancellationRequested();
         if (!started || _lastRunResult is not { } result) throw new ShopeeBatchStop("ERP 輸入沒有完成（請看前一個訊息或本機 LOG）。", true);
         var key = DocumentKeyText(result);
         if (result.HandedOff.Length > 0) throw new ShopeeBatchStop($"ERP 銷貨單 {key} 轉人工：{result.HandedOff}", true);
-        if (result.Warnings.Count > 0)
-            throw new ShopeeBatchStop($"ERP 銷貨單 {key} 有需人工確認的項目：\n" + string.Join("\n", result.Warnings.Select(w => "・" + w.Message)), true);
         if (!result.Saved) throw new ShopeeBatchStop($"ERP 銷貨單 {key} 未儲存：{result.SaveSkippedReason}", true);
-        if (result.PrintProblem.Length > 0) throw new ShopeeBatchStop($"ERP 銷貨單 {key} 已儲存，但列印有問題：{result.PrintProblem}", true);
-        // Back to the batch's notice and the locked mouse for the next order.
-        Session.Begin(AutomationSession.BatchTitle);
+        var later = new List<string>();
+        if (result.Warnings.Count > 0) later.AddRange(result.Warnings.Select(w => "・" + w.Message));
+        if (result.PrintProblem.Length > 0) later.Add("・ERP 列印：" + result.PrintProblem);
+        return later.Count > 0 ? $"已出貨，ERP 銷貨單 {key} 已儲存，請確認：\n" + string.Join("\n", later) : null;
     }
 
     /// <summary>
@@ -1735,7 +1796,6 @@ internal sealed class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add($"光學辨識輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("蝦皮全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
-            menu.Items.Add("讀取 Chrome 網頁文字（診斷）", null, async (_, _) => await DiagnoseChromeTextAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

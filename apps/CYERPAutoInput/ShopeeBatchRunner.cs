@@ -17,6 +17,16 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages);
 
+/// <summary>
+/// An order left for a person without stopping the batch (user, 2026-10-13: note it, go on,
+/// list everything at the end): nothing was done in Shopee for it (a carrier with no flow yet),
+/// so it stays in 待處理 and is passed over.
+/// </summary>
+internal sealed class ShopeeBatchSkip(string message) : Exception(message);
+
+/// <summary>One line of the batch's closing list.</summary>
+internal sealed record ShopeeBatchNote(string OrderSn, string Message);
+
 /// <summary>What the batch knows of the order it is on, for the ERP step and the messages.</summary>
 internal sealed class ShopeeBatchOrder
 {
@@ -64,9 +74,18 @@ internal sealed class ShopeeBatchRunner
     /// <summary>Order numbers done in this batch (one coming back means the list did not move on).</summary>
     public List<string> Done { get; } = [];
 
-    /// <param name="enterErp">The page scan and ERP for the order on screen; throws <see cref="ShopeeBatchStop"/> to stop.</param>
+    /// <summary>Orders left in 待處理 for a person; passed over in the list.</summary>
+    public HashSet<string> Skipped { get; } = [];
+
+    /// <summary>Everything a person has to look at, in order (user, 2026-10-13: listed at the end).</summary>
+    public List<ShopeeBatchNote> Notes { get; } = [];
+
+    /// <param name="enterErp">
+    /// The page scan and ERP for the order on screen: null when clean, a note to list when it
+    /// went on with something for a person to check; throws <see cref="ShopeeBatchStop"/> to stop.
+    /// </param>
     /// <param name="status">Progress text for the main window.</param>
-    public async Task RunAsync(Func<ShopeeBatchOrder, Task> enterErp, Action<string> status)
+    public async Task RunAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
     {
         status("蝦皮全自動：開啟 Chrome…");
         await OpenWindowAsync();
@@ -80,10 +99,21 @@ internal sealed class ShopeeBatchRunner
             if (order is null) break;
             Current = order;
             status($"蝦皮全自動：訂單 {order.OrderSn} 安排出貨…");
-            await ShipAsync(order);
+            try { await ShipAsync(order); }
+            catch (ShopeeBatchSkip skip)
+            {
+                // Nothing done in Shopee: noted, passed over, on to the next.
+                _log.Info("shopee-batch", "order passed over before shipping");
+                Notes.Add(new ShopeeBatchNote(order.OrderSn, skip.Message));
+                Skipped.Add(order.OrderSn);
+                Current = null;
+                await CloseOrderTabAsync(order);
+                continue;
+            }
             status($"蝦皮全自動：訂單 {order.OrderSn} 輸入 ERP…");
-            await enterErp(order);
+            var note = await enterErp(order);
             _inputs++; // the page scan and ERP moved and clicked
+            if (note is not null) Notes.Add(new ShopeeBatchNote(order.OrderSn, note));
             Done.Add(order.OrderSn);
             Current = null;
             _log.Info("shopee-batch", $"order done count={Done.Count}");
@@ -285,6 +315,10 @@ internal sealed class ShopeeBatchRunner
         }
     }
 
+    private static bool Visible(Screen screen, OcrBox box) =>
+        screen.Area.Contains(new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY)) &&
+        box.CenterY > 40 && box.CenterY < screen.Area.Height - 40;
+
     private void Click(Screen screen, OcrBox box, string what, bool front = true)
     {
         var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
@@ -328,10 +362,11 @@ internal sealed class ShopeeBatchRunner
         }
         using (screen)
         {
-            _log.Info("shopee-batch", $"list pending={ShopeeBatchScreens.PendingCount(screen.Boxes)} today={ShopeeBatchScreens.TodayCount(screen.Boxes)}");
+            _log.Info("shopee-batch", $"list pending={ShopeeBatchScreens.PendingCount(screen.Boxes)} today={ShopeeBatchScreens.TodayCount(screen.Boxes)} passed_over={Skipped.Count}");
             if (ShopeeBatchScreens.PendingCount(screen.Boxes) == 0) return null;
-            if (ShopeeBatchScreens.FirstOrder(screen.Boxes) is { } first) return await OpenOrderAsync(screen, first);
-            if (!ShopeeBatchScreens.NoOrders(screen.Boxes)) throw new ShopeeBatchStop("清單上讀不到第一筆訂單的「待出貨」或訂單編號。");
+            if (NextInList(screen) is { } first) return await OpenOrderAsync(screen, first);
+            if (ShopeeBatchScreens.FirstOrder(screen.Boxes) is null && !ShopeeBatchScreens.NoOrders(screen.Boxes))
+                throw new ShopeeBatchStop("清單上讀不到第一筆訂單的「待出貨」或訂單編號。");
             var all = ShopeeBatchScreens.DeadlineAll(screen.Boxes) ?? throw new ShopeeBatchStop("讀不到「建議出貨期限」的「全部」。");
             Click(screen, all, "建議出貨期限 全部");
         }
@@ -344,7 +379,7 @@ internal sealed class ShopeeBatchRunner
                 ? s : null);
         using (next)
         {
-            if (ShopeeBatchScreens.FirstOrder(next.Boxes) is { } first) return await OpenOrderAsync(next, first);
+            if (NextInList(next) is { } first) return await OpenOrderAsync(next, first);
             return null;
         }
 
@@ -352,8 +387,28 @@ internal sealed class ShopeeBatchRunner
         static bool Settled(List<OcrBox> boxes) => ShopeeBatchScreens.NoOrders(boxes) || ShopeeBatchScreens.FirstOrder(boxes) is not null;
     }
 
+    /// <summary>The first order of the list not passed over (orders left for a person stay in 待處理).</summary>
+    private ShopeeListOrder? NextInList(Screen screen) =>
+        ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn));
+
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
+        // An order further down (the ones above passed over) is scrolled into view first.
+        for (var scroll = 0; !Visible(screen, first.Status) && scroll < 20; scroll++)
+        {
+            var page = screen.Area;
+            _inputs++;
+            Wheel(new Point(page.Left + page.Width / 2, page.Top + page.Height / 2), -3);
+            await Task.Delay(400, _token);
+            var (moved, found) = await WaitAsync("清單上的下一筆訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == first.OrderSn));
+            if (!ReferenceEquals(screen, moved))
+            {
+                if (scroll > 0) screen.Dispose(); // the caller disposes the first screen
+                screen = moved;
+            }
+            first = found;
+        }
         if (Done.Contains(first.OrderSn))
             throw new ShopeeBatchStop($"訂單 {first.OrderSn} 已處理過，卻還在待處理清單上；為避免重複出貨，已停止。");
         // The carrier is not taken from the list (user, 2026-10-13: a long row's text came cut
@@ -384,7 +439,7 @@ internal sealed class ShopeeBatchRunner
             // Each carrier has its own label flow after 安排出貨; one without a flow yet stops here,
             // before anything is shipped.
             if (kind == ShopeeBatchCarrier.Other)
-                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，程式還沒有這種物流的出貨流程，請人工處理。");
+                throw new ShopeeBatchSkip($"未出貨：物流「{carrier}」程式還沒有出貨流程，請人工處理。");
             order.Kind = kind;
             order.Carrier = carrier;
             if (!Orange(detail.Image, button))
