@@ -43,7 +43,7 @@ internal sealed class ShopeeScreenshotForm : Form
         _mapping = mapping;
         _log = log;
         _session = session;
-        Text = "蝦皮訂單光學辨識輸入";
+        Text = "蝦皮訂單自動擷取輸入";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)

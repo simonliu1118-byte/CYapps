@@ -948,7 +948,7 @@ internal sealed class MainForm : Form
         if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
-            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單自動擷取輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var ledger = LoadLedger();
@@ -991,9 +991,9 @@ internal sealed class MainForm : Form
             return;
         }
         if (MessageBox.Show(this,
-                "蝦皮全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
+                "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
                 "・按「安排出貨」並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）\n" +
-                "・光學辨識訂單、輸入 ERP、儲存並列印\n\n" +
+                "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
                 "目前只處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN 與全家；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
@@ -1054,9 +1054,9 @@ internal sealed class MainForm : Form
         var text = new System.Text.StringBuilder();
         text.AppendLine(outcome switch
         {
-            AutomationOutcome.Done => "蝦皮全自動完成。",
-            AutomationOutcome.Cancelled => "已按 Esc 停止蝦皮全自動。",
-            _ => "蝦皮全自動已停止，請人工處理：\r\n" + problem
+            AutomationOutcome.Done => "全自動完成。",
+            AutomationOutcome.Cancelled => "已按 Esc 停止全自動。",
+            _ => "全自動已停止，請人工處理：\r\n" + problem
         });
         text.AppendLine();
         text.AppendLine($"已完成 {runner.Done.Count} 筆。");
@@ -1075,8 +1075,8 @@ internal sealed class MainForm : Form
                 : "這筆在蝦皮尚未安排出貨。"));
         }
         SetStatus(outcome == AutomationOutcome.Done
-            ? $"蝦皮全自動完成：{runner.Done.Count} 筆，需人工處理 {runner.Notes.Count} 筆"
-            : $"蝦皮全自動已停止：已完成 {runner.Done.Count} 筆");
+            ? $"全自動完成：{runner.Done.Count} 筆，需人工處理 {runner.Notes.Count} 筆"
+            : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         if (outcome != AutomationOutcome.Done || runner.Notes.Count > 0) Alarm();
         ShowBatchSummary(text.ToString(), outcome == AutomationOutcome.Done && runner.Notes.Count == 0);
     }
@@ -1110,7 +1110,7 @@ internal sealed class MainForm : Form
         form.ShowDialog(this);
     }
 
-    private const string ShopeeBatchTitle = "蝦皮全自動";
+    private const string ShopeeBatchTitle = "全自動";
     private bool _shopeeBatchRunning;
 
     /// <summary>
@@ -1233,7 +1233,7 @@ internal sealed class MainForm : Form
         if (notes.Count > 0)
             MessageBox.Show(this,
                 $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
-                "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                "蝦皮訂單自動擷取輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private async Task ImportMoAsync()
@@ -1794,8 +1794,8 @@ internal sealed class MainForm : Form
         {
             // Screenshots (OCR) are the main way for now; the official export stays available.
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add($"光學辨識輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
-            menu.Items.Add("蝦皮全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
+            menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add("全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

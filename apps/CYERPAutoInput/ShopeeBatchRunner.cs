@@ -87,18 +87,18 @@ internal sealed class ShopeeBatchRunner
     /// <param name="status">Progress text for the main window.</param>
     public async Task RunAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
     {
-        status("蝦皮全自動：開啟 Chrome…");
+        status("全自動：開啟 Chrome…");
         await OpenWindowAsync();
         while (true)
         {
             _token.ThrowIfCancellationRequested();
-            status($"蝦皮全自動：找待處理訂單（已完成 {Done.Count} 筆）…");
+            status($"全自動：找待處理訂單（已完成 {Done.Count} 筆）…");
             Current = null;
             _shippedHint = false;
             var order = await NextOrderAsync();
             if (order is null) break;
             Current = order;
-            status($"蝦皮全自動：訂單 {order.OrderSn} 安排出貨…");
+            status($"全自動：訂單 {order.OrderSn} 安排出貨…");
             try { await ShipAsync(order); }
             catch (ShopeeBatchSkip skip)
             {
@@ -110,7 +110,7 @@ internal sealed class ShopeeBatchRunner
                 await CloseOrderTabAsync(order);
                 continue;
             }
-            status($"蝦皮全自動：訂單 {order.OrderSn} 輸入 ERP…");
+            status($"全自動：訂單 {order.OrderSn} 輸入 ERP…");
             var note = await enterErp(order);
             _inputs++; // the page scan and ERP moved and clicked
             if (note is not null) Notes.Add(new ShopeeBatchNote(order.OrderSn, note));
@@ -129,7 +129,7 @@ internal sealed class ShopeeBatchRunner
 
     private async Task OpenWindowAsync()
     {
-        var chrome = ChromePath() ?? throw new ShopeeBatchStop("找不到 Chrome（chrome.exe）。蝦皮全自動需要 Chrome。");
+        var chrome = ChromePath() ?? throw new ShopeeBatchStop("找不到 Chrome（chrome.exe）。全自動需要 Chrome。");
         var before = ChromeWindows().ToHashSet();
         Process.Start(new ProcessStartInfo(chrome, $"--new-window \"{ListUrl}\"") { UseShellExecute = false })?.Dispose();
         var watch = Stopwatch.StartNew();
@@ -189,7 +189,7 @@ internal sealed class ShopeeBatchRunner
     /// <summary>Brings the batch's window to the front (the ERP step leaves ERP in front).</summary>
     public void Front()
     {
-        if (!NativeMethods.IsWindow(_window)) throw new ShopeeBatchStop("蝦皮全自動的 Chrome 視窗已被關閉。");
+        if (!NativeMethods.IsWindow(_window)) throw new ShopeeBatchStop("全自動的 Chrome 視窗已被關閉。");
         if (NativeMethods.IsIconic(_window)) NativeMethods.ShowWindow(_window, 3 /* SW_MAXIMIZE */);
         NativeMethods.SetForegroundWindow(_window);
     }

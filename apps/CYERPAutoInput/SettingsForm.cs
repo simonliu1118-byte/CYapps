@@ -131,7 +131,7 @@ internal sealed class SettingsForm : Form
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
-        flow.Controls.Add(Option(_browserHotkey, $"在瀏覽器按 {CYERPAutoInput.BrowserHotkey.KeyName} 開啟蝦皮光學辨識並開始擷取（程式開著即可）", _settings.BrowserHotkey));
+        flow.Controls.Add(Option(_browserHotkey, $"在瀏覽器按 {CYERPAutoInput.BrowserHotkey.KeyName} 開啟蝦皮自動擷取輸入並開始擷取（程式開著即可）", _settings.BrowserHotkey));
         flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮自動擷取：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };

@@ -918,7 +918,7 @@ internal sealed class ErpAutomationService
         await PrimeDetailGridAsync(root, grid, cancellationToken);
         (grid, var geometry) = await AnalyzePrimedDetailGridAsync(root, grid, cancellationToken);
         if (geometry.RowCenterY.Count == 0)
-            throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
+            throw new InvalidOperationException("辨識沒有找到任何可輸入的明細列。");
 
         // Bundles (user, 2026-10-12): their parts take ERP's own list price, read back here, and
         // the gap to what each bundle sold for goes to the 促銷組合 line after them.
