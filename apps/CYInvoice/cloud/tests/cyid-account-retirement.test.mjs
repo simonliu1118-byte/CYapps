@@ -14,7 +14,8 @@ function makeDatabase({ secondWorkspace = false, transitioning = false, pending 
   for (const migration of migrations)
     db.exec(fs.readFileSync('migrations/' + migration, 'utf8'));
   db.exec(`
-    INSERT INTO workspaces (workspace_id, display_name) VALUES ('workspace_synthetic', 'Synthetic');
+    INSERT INTO workspaces (workspace_id, display_name, recovery_email, recovery_email_verified_at)
+      VALUES ('workspace_synthetic', 'Synthetic', 'owner@example.test', '2026-10-01');
     INSERT INTO devices (device_id, workspace_id, display_name, token_hash, status, employee_authority_state)
       VALUES ('device_synthetic', 'workspace_synthetic', 'Original Device', 'token_digest_synthetic',
         'active', '${transitioning ? 'transitioning' : 'cloud'}');
@@ -89,6 +90,8 @@ assert.deepEqual(db.prepare('SELECT * FROM device_invitations ORDER BY invitatio
 assert.deepEqual(db.prepare("SELECT * FROM security_audit_events WHERE event_id='audit_legacy'").get(), beforeAudit);
 assert.equal(db.prepare("SELECT COUNT(*) AS n FROM email_otp_challenges WHERE purpose='device_pairing_authorization'").get().n, 1);
 assert.equal(db.prepare("SELECT COUNT(*) AS n FROM email_otp_challenges WHERE purpose='employee_password_recovery'").get().n, 0);
+assert.deepEqual(db.prepare("SELECT recovery_email, recovery_email_verified_at FROM workspaces WHERE workspace_id='workspace_synthetic'").get(),
+  { recovery_email: null, recovery_email_verified_at: null });
 assert.equal(db.prepare("SELECT profile FROM cyid_storage_profile").get().profile, 'CYID_ONLY');
 assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
 assert.throws(() => transact(db), /already exists/i, 'maintenance must refuse a second execution');
@@ -99,6 +102,7 @@ db.close();
 const builtIn = makeDatabase();
 assert.equal(tableExists(builtIn, 'cloud_employees'), true);
 assert.equal(builtIn.prepare('SELECT COUNT(*) AS n FROM cloud_employees').get().n, 1);
+assert.equal(builtIn.prepare("SELECT recovery_email FROM workspaces WHERE workspace_id='workspace_synthetic'").get().recovery_email, 'owner@example.test');
 assert.equal(builtIn.prepare("PRAGMA foreign_key_list('device_invitations')").all()
   .some(row => row.table === 'cloud_employees'), true);
 builtIn.close();
