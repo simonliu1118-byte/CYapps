@@ -13,6 +13,7 @@ import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
 import { handleWebPasswordRecovery } from "./web-password-recovery";
 import { handleRuntimeSync } from "./runtime-sync";
+import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation,
@@ -74,7 +75,10 @@ export default {
       }
     } catch (error) { return cyIdErrorResponse(error); }
     const path = new URL(request.url).pathname;
+    const recoveryRoute = request.method === "POST"
+      && (path === "/v1/device-recovery/preview" || path === "/v1/device-recovery/claim");
     const needsEmployee = request.method === "POST" && [
+      "/v1/device-recovery/preview", "/v1/device-recovery/claim",
       "/v1/devices/revoke", "/v1/devices/rename", "/v1/device-pairings/authorization-email",
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
@@ -84,7 +88,8 @@ export default {
         cyIdBinding(env);
         if (path === "/v1/bootstrap") return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
         if (needsEmployee) {
-          if (!["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
+          if (!recoveryRoute
+              && !["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
             await cyIdDevice(request, env);
           const body = await request.clone().json<Record<string, unknown>>().catch(() => null);
           return await withCyIdSession(env, body?.employeeNo, body?.password, async (_, revalidate, verifiedEmail) =>
@@ -97,6 +102,9 @@ export default {
 };
 
 async function dispatchRequest(request: Request, env: Env): Promise<Response> {
+    const disasterRecoveryResponse = await handleRecoveryRoutes(request, env);
+    if (disasterRecoveryResponse) return disasterRecoveryResponse;
+
     const passwordRecoveryResponse = await handleWebPasswordRecovery(request, env);
     if (passwordRecoveryResponse) return passwordRecoveryResponse;
 
