@@ -1,8 +1,8 @@
 # CYInvoice V3.0 Workspace／Device／Employee 身分生命週期定案
 
-更新日期：2026-10-09（原設計基準：2026-09-29）
+更新日期：2026-10-13（原設計基準：2026-09-29）
 
-目前工程版 V2.6.16；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。V2.6.15 CYID consumer source 已接線但尚未部署／正式切換，0-Device recovery 仍待實作；具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
+現行 Windows 正式版 **V2.6.19 Build 0** 已發布；CYID Consumer source 與原 development 啟用有既有驗證，但實機／Workspace 全矩陣及 0-Device recovery 仍依 [現行交接](CLOUD_WORK_HANDOFF.md) 和唯一 [TODO.md](TODO.md) 的未完成項目追蹤。CYID 與 CYInvoice 不是同一個 D1；本文件 §19 開始記錄舊 Built-in account material 的**退役準備規劃**，目前尚無即時 D1 盤點或任何清除。具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 
