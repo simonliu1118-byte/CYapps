@@ -19,6 +19,7 @@ const payload = {
       { name: 'CYACC_SERVICE_BINDING_TARGET', type: 'plain_text', text: service },
       { name: 'CYACC_APPLICATION_ID', type: 'plain_text', text: 'CYACC_PROD_TEST' },
       { name: 'CYACC_WORKSPACE_ID', type: 'plain_text', text: 'workspace-prod-test' },
+      { name: 'ACCOUNT_PORTAL_URL', type: 'plain_text', text: 'https://portal.example.test/' },
       { name: 'OTP_PEPPER', type: 'secret_text' }
     ]
   }
@@ -27,7 +28,8 @@ const payload = {
 assert.deepEqual(parseCyidProductionSettings(payload, service), {
   service,
   applicationId: 'CYACC_PROD_TEST',
-  workspaceId: 'workspace-prod-test'
+  workspaceId: 'workspace-prod-test',
+  portalUrl: 'https://portal.example.test/'
 });
 
 assert.throws(
@@ -51,6 +53,12 @@ assert.throws(
   /Application ID/
 );
 
+for (const badUrl of ['', 'http://portal.example.test/', 'https://user:pass@portal.example.test/', 'https://portal.example.test/?token=leak']) {
+  assert.throws(() => parseCyidProductionSettings({
+    result: { bindings: payload.result.bindings.map(binding => binding.name === 'ACCOUNT_PORTAL_URL' ? { ...binding, text: badUrl } : binding) }
+  }, service), /safe CY Web account portal URL/);
+}
+
 let requestedUrl = '';
 let authorization = '';
 const runtime = await resolveCyidProductionRuntime({
@@ -64,6 +72,7 @@ const runtime = await resolveCyidProductionRuntime({
   }
 });
 assert.equal(runtime.applicationId, 'CYACC_PROD_TEST');
+assert.equal(runtime.portalUrl, 'https://portal.example.test/');
 assert.match(requestedUrl, /workers\/scripts\/cyid-development-provider-prod\/settings$/);
 assert.equal(authorization, 'Bearer token-ci');
 

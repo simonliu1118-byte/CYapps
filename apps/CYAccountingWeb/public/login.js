@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginEmployeeNo = document.querySelector('#employeeNo');
   const loginPassword = document.querySelector('input[name="password"]');
   const loginButton = document.querySelector('#loginButton');
+  const firstLoginLink = document.querySelector('#firstLoginCyWebLink');
 
   const form = document.querySelector('#recoveryForm');
   const employeeNo = document.querySelector('#recoveryEmployeeNo');
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let viewportFrame = 0;
 
   showLoginError();
+  void loadFirstLoginPortal();
   setupLoginViewport();
   focusLoginOnDesktop();
 
@@ -67,6 +69,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     await confirmRecovery();
   });
+
+  // The public portal address contains no employee number, password or session token.
+  async function loadFirstLoginPortal() {
+    if (!firstLoginLink) return;
+    try {
+      const response = await fetch('/api/auth/account-portal', {
+        method: 'GET', credentials: 'same-origin', cache: 'no-store'
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const url = new URL(data?.url);
+      if (!data?.ok || url.protocol !== 'https:' || !url.hostname || url.username || url.password
+        || url.search || url.hash || url.pathname !== '/') return;
+      firstLoginLink.href = url.href;
+      firstLoginLink.hidden = false;
+    } catch {
+      // Keep first-login instructions visible if portal discovery is unavailable.
+    }
+  }
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
@@ -345,11 +366,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const error = new URLSearchParams(location.search).get('error');
     const messages = {
       invalid: '請輸入正確的 4 碼員工編號與密碼。',
-      failed: '員工編號或密碼不正確。',
+      failed: '員工編號或密碼不正確。如為首次登入，請先在 CY Web 完成 Email 驗證與正式密碼設定。',
       access: '此員工帳號沒有記帳系統 App Access。',
       rate: '登入嘗試次數過多，請稍後再試。',
       service: '中央帳號服務目前無法使用，請稍後再試。',
-      'first-login': '請先至 CY Web 帳號管理入口完成首次帳號啟用與 Email 驗證。'
+      'first-login': '請先前往 CY Web 完成 Email 驗證與正式密碼設定，再回來登入。'
     };
     if (!error || !messages[error]) return;
     loginMessage.textContent = messages[error];

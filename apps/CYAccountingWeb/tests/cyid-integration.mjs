@@ -6,6 +6,7 @@ import {
   appUserFromPrincipal,
   canWriteAccounting,
   loginWithCyid,
+  cyWebPortalUrl,
   passwordWithinCyidBounds,
   resolveIdentitySession,
   startPasswordRecovery
@@ -62,6 +63,17 @@ const env = {
     }
   }
 };
+
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/start' }), 'https://portal.example.test/');
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'http://portal.example.test/' }), null);
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/?token=secret' }), null);
+const portalResponse = await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {
+  CYWEB_PORTAL_URL: 'https://portal.example.test/',
+  IDENTITY: { fetch() { throw new Error('Portal metadata must not contact CYID'); } }
+});
+assert.equal(portalResponse.status, 200);
+assert.deepEqual(await portalResponse.json(), { ok: true, url: 'https://portal.example.test/' });
+assert.equal((await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {})).status, 503);
 
 assert.equal(passwordWithinCyidBounds('12345678'), true);
 assert.equal(passwordWithinCyidBounds('1234567'), false);
@@ -269,6 +281,13 @@ const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
 assert.match(loginHtml, /id="loginForm"/);
+assert.match(loginHtml, /id="firstLoginHelp"/);
+assert.match(loginHtml, /id="firstLoginCyWebLink"/);
+const loginJs = fs.readFileSync(path.join(ROOT, 'public/login.js'), 'utf8');
+assert.match(loginJs, /\/api\/auth\/account-portal/);
+assert.match(loginJs, /firstLoginLink\.href = url\.href/);
+assert.match(loginJs, /failed: '員工編號或密碼不正確。如為首次登入/);
+assert.match(loginJs, /service: '中央帳號服務目前無法使用/);
 assert.match(workerApp, /url\.pathname === '\/api\/auth\/login'/);
 assert.match(loginHtml, /window\.location\.protocol === 'http:'/);
 assert.match(loginHtml, /window\.location\.replace/);
