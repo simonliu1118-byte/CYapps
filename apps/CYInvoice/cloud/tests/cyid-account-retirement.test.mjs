@@ -90,8 +90,9 @@ assert.deepEqual(db.prepare('SELECT * FROM device_invitations ORDER BY invitatio
 assert.deepEqual(db.prepare("SELECT * FROM security_audit_events WHERE event_id='audit_legacy'").get(), beforeAudit);
 assert.equal(db.prepare("SELECT COUNT(*) AS n FROM email_otp_challenges WHERE purpose='device_pairing_authorization'").get().n, 1);
 assert.equal(db.prepare("SELECT COUNT(*) AS n FROM email_otp_challenges WHERE purpose='employee_password_recovery'").get().n, 0);
-assert.deepEqual(db.prepare("SELECT recovery_email, recovery_email_verified_at FROM workspaces WHERE workspace_id='workspace_synthetic'").get(),
-  { recovery_email: null, recovery_email_verified_at: null });
+const retiredRecovery = db.prepare("SELECT recovery_email, recovery_email_verified_at FROM workspaces WHERE workspace_id='workspace_synthetic'").get();
+assert.equal(retiredRecovery.recovery_email, null);
+assert.equal(retiredRecovery.recovery_email_verified_at, null);
 assert.equal(db.prepare("SELECT profile FROM cyid_storage_profile").get().profile, 'CYID_ONLY');
 assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
 assert.throws(() => transact(db), /already exists/i, 'maintenance must refuse a second execution');
