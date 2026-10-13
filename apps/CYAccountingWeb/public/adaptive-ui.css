@@ -12165,6 +12165,7 @@ html[data-viewport="desktop"] .confirmation-drawer-header .hint {
   text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 html[data-viewport="desktop"] .confirmation-list {
+  display: block; gap: 0;
   height: auto; max-height: none; padding: 0 10px 8px;
   overflow: visible; background: #fff;
 }
@@ -12183,7 +12184,7 @@ html[data-viewport="desktop"] .confirmation-main {
 html[data-viewport="desktop"] .confirmation-main > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html[data-viewport="desktop"] .confirmation-kind { display: inline; margin: 0; padding: 0; border-radius: 0; background: none; font-size: inherit; }
 html[data-viewport="desktop"] .confirmation-amount { text-align: right; font-variant-numeric: tabular-nums; }
-html[data-viewport="desktop"] .confirmation-status { display: block; margin: 0; font-size: 0; line-height: 16px; text-align: right; }
+html[data-viewport="desktop"] .confirmation-status { display: flex; align-items: center; justify-content: flex-end; margin: 0; font-size: 0; line-height: 16px; text-align: right; }
 html[data-viewport="desktop"] .confirmation-status::before { font-size: 11.5px; }
 html[data-viewport="desktop"] .confirmation-item.success .confirmation-status::before { content: '✓'; }
 html[data-viewport="desktop"] .confirmation-item.error .confirmation-status::before { content: '!'; }
