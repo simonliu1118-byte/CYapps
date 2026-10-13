@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.36 — 2026/10/13
+
+- CYInvoice 明確核准在已有當次版本 Release 授權時，使用從 main 精確 commit 建立的 `release/cyinvoice-vX.Y.Z` 一次性 push 作為正式 Windows Release 的額外啟動入口；只有分支新建事件符合，分支後續 push 不會再次發行。
+- 正式 Release 仍從 main checkout、核對精確來源 commit、VERSION／BUILD、全部必要 Windows 驗證／掃描、ZIP／SHA-256 與未占用 tag；不自動從一般 PR／main push 發布，亦不涉及 Cloudflare Worker／D1。
+
 ## 2.3.35 — 2026/10/12
 
 - 依使用者確認新增 `apps/CYPriceDesk/` 的最小 `PROJECT_RULES.md`、VERSION／BUILD 與必要 prototype validation workflow。專案採用既有共通／repository 規則，沒有新增永久架構或身分例外。
