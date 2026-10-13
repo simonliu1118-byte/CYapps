@@ -243,14 +243,16 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 
 ### 7.7 CYID 上線後 CYInvoice D1 舊帳號資料退役（2026-10-13 規劃，尚未執行）
 
-使用者確認 TODO 已打勾的工作視為完成，並要求盤點已由 CYID 接管後 CYInvoice **原業務 D1** 中的舊 Built-in 帳號資料，準備安全退場。本節是下一階段的**研究與執行 gate**；不是目前已進行資料刪除，也不是允許再上傳 Cloudflare 測試 Worker。詳細資料表／外鍵／依賴、分期及停止條件見 `CLOUD_IDENTITY_LIFECYCLE.md` §19。
+使用者確認 TODO 已打勾的工作視為完成；本公司目前已全面轉由 CYID 管理帳號，要求原 CYInvoice 業務 D1 **實體移除 Built-in Employee／Credential／Transition 相關表**。未來其他公司 Built-in／Self-hosted 使用自己的新 D1，程式功能與原 migration 保留。§19 為初版 credential-only 歷史規劃，**現行落地方案見 `CLOUD_IDENTITY_LIFECYCLE.md` §20**。本批是 source 與本地 CI 實作，尚無遠端 D1 刪表授權／實際數據，不新建測試 Worker。
 
 - [x] 原始碼唯讀盤點：`CYID_ENABLED=true` 的 Worker 拒絕舊員工與 Web Auth route，`runtime-sync` 改走 CYID 權限服務；既有 Built-in/self-hosted 模式仍被支援，不能全域 DROP 帳號表。
 - [x] SQL schema 唯讀盤點：`cloud_employees` 仍被 `device_employee_links`、`employee_link_candidates`、`employee_transition_items`、舊 `device_invitations.issued_by_employee_id` 以 FK 引用；`email_otp_challenges` 亦被現行 CYID 配對 OTP 使用。先保留歷史 actor、Device、Workspace、Audit。
 - [ ] **唯讀原 D1 盤點 gate：**以受控只讀方式確認目前活躍 Worker／原 D1 binding／目標 Workspace 及 `CYID_ENABLED`，收集匿名化 table counts、舊 verifier 非 NULL 筆數、FK/歷史、未完成 transition、有效 pairing OTP、舊／CYID invitation actor；目前尚無直接即時 D1 查詢結果，不能填入或推測資料筆數。禁止將姓名、Email、雜湊值、Secrets、實際 ID 寫到 Public PR 或 log。
 - [ ] **本地雙模式回歸：**用本地 synthetic SQLite／Worker fixture 驗證 CYID mode 在舊 verifier 為 NULL 時，裝置／邀請／Email OTP／權限／runtime sync 不回歸；同時驗證 Built-in/self-hosted 的帳號 CRUD、recover、transfer 與裝置流程繼續有效。
-- [ ] **資料清理方案評估：**優先研究已切 CYID 的 Workspace 內舊 `credential_verifier`／`credential_algorithm` 的分批清除；必須具明確 scope、expected changes、FK/actor preservation、idempotent SQL、備份／rollback，且不關掉現有部署歷史 fingerprint guard。
-- [ ] **不可逆清理另行核准：**以當時已完成的唯讀清單及私有 recovery checkpoint，先請使用者核准精確 D1／Workspace／欄位／保留策略／操作窗口；未批准前不執行 UPDATE／DELETE／migration／部署。舊帳號姓名／Email／轉換資料的歸檔或永久銷毀是獨立第二階段。
+- [x] **CYID-only 物理 schema 清理 source 已實作：**獨立 `cloud/maintenance/retire-built-in-for-cyid-only.sql`（不進常規 migrations）移除 `cloud_employees`、`device_employee_links`、`employee_link_candidates`、`employee_transition_items`；重建 invitation FK 保留 old actor、保留 Device／Workspace／Audit／共用配對 OTP，並以 profile marker 標記合法清理。Cloud source 候選 0.9.3；**尚未操作真實 D1**。
+- [ ] **本地／CI 完整驗證：**新增真實 SQLite 清理與 fail-closed 測試及兩種資料庫 profile 的部署 snapshot 檢查；需待本 PR GitHub Cloud Check 全綠，並確認 CYID Device 管理不再解析已移除的 Employee 表。
+- [ ] **原 Worker 相容部署 gate：**未來只在核准原 business Worker 升級 0.9.3 且留住 `CYID_ENABLED=true`、原 D1／service binding／Device／history 后才能進行清表；先 code-only 後 D1 maintenance，不能用測試 Worker/handler 驗收。
+- [ ] **真實 D1 清理 gate：**獲得原 D1 最新唯讀證據、業務影響盤點、私有備份／回復窗口及確切使用者批准後，才執行 CYID-only 完整舊帳號／轉換表移除。原 D1、CYID D1 與任何測試 Worker 目前均未修改。
 - [ ] **V3.0 設計銜接：**Work Item／Cloud Audit 新增 actor 必須明確區分 CYID 外部身分與舊 Built-in 歷史，不能靠員編猜測同人；跨機原子操作、OrderID 防撞與正式折讓流程等核心功能仍獨立規劃。
 
 **資源保護：**不建立／上傳／部署任何 Cloudflare 測試 Worker／handler，不重試刪除舊測試 Worker，不刪 CYID D1，不變更原 Workspace／Device/Token，不把 Local EmployeeStore 或 Built-in/self-hosted 的正式支持一起移除。
