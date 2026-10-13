@@ -579,3 +579,26 @@ SELECT purpose, COUNT(*) AS rows,
 **判定條件**：必須先核對 `PRAGMA foreign_key_check` 為零、上述 counts 在可預期範圍、沒有未知的 Built-in 使用者／未完成 transition、CYID 與 Device 最新驗證正常；若有不一致，停止。執行階段的 D1 變更要另行產生明確 dry-run／expected-change-count／transaction 計畫及私有備份與回復證據，不能從本節 SQL 直接推定可刪除員工基本資料。
 
 **全程限制：**既有 Cloudflare 測試 Worker 刪不掉的問題已由使用者明確禁止重試。這項清理的研究、本地驗證與 PR 不得建立／上傳／部署任何測試 Worker、遠端測試 handler 或替代測試服務，也不得修改 CYID D1。正式 Cloud D1 資料操作不是本規劃的隱含授權。
+
+## 20. 現行決策：公司 CYID 專用 D1 完整退除 Built-in 帳號表（2026-10-13）
+
+**本節取代 §19「只優先清除 verifier、保留員工表」的早期提案。** 使用者已明確重申：本公司 CYInvoice 原本的 D1 現已全面使用 CYID，應真正移除舊 Built-in 員工帳號與驗證資料表；未來不使用 CYID 的其他公司則從獨立新 D1 建立 Built-in 帳號資料，**絕不共用本公司 D1**。Built-in Cloud 的程式、API 與原始 migrations 均須保留正常運作。這是 **CYID-only deployment 的實體資料庫退役**，不是刪除整套 Built-in 功能，也不是把 CYID 資料搬回 CYInvoice。
+
+### 已開始實作（source 0.9.3 候選；尚未操作遠端）
+
+- `cloud/maintenance/retire-built-in-for-cyid-only.sql` 為**需獨立核准**的 CYID-only 維護 SQL，**刻意不放** `migrations/`，避免任何 Built-in／自架使用者因一般 Cloud migration 誤刪帳號。僅可對核對過的本公司原 CYInvoice D1 執行，且應納入原子交易／私有備份與回復窗口；不得對 CYID D1 或舊測試 Worker 操作。
+- 移除 `cloud_employees`、`device_employee_links`、`employee_link_candidates`、`employee_transition_items` 四張 Built-in Employee 與 Local→Cloud transition 表；**不保留空表**。同時重建 `device_invitations` 去除對 `cloud_employees` 的 FK，但保留所有已存在的舊 `issued_by_employee_id` 原值作歷史 opaque actor reference（不等同 CYID 身分）、`issued_by_cyid_employee_id`、邀請與 Device 外鍵、狀態與事件。未來 audit/Work Item 必須明確標出 actor provider，不能將舊 ID 默認為 CYID。
+- `email_otp_challenges` 屬共用驗證碼機制，CYID 新裝置的 pairing authorization 仍需要；因此**保留 OTP 表**，只清除 Built-in 員工 Email 驗證、密碼復原與 SUPER_ADMIN 移交等已廢棄 purpose 的紀錄。`workspaces`、`devices`、`device_pairing_codes`、`device_invitations`、`security_audit_events` 及歷史 actor 依約保留。
+- 加入 `cyid_storage_profile` 唯一標記，只有經受控清理的原 D1 才能宣告 `CYID_ONLY`。部署前檢查可辨識 Built-in 或 CYID-only；缺少舊表卻無合法標記、部分表殘存或發行期間 profile 變動皆應 fail closed，不能以缺表為由關閉整體歷史 fingerprint／FK 監測。
+- `device-lifecycle.ts` 的 CYID Device rename 另採不引用 Built-in Employee 表的 SQL；Built-in 仍保留 SUPER_ADMIN verifier 檢查，避免 `OR` 分支即使不執行也需要 SQLite 解析已刪表。Cloud Runtime Sync CYID 依賴 CYID private authority，Built-in 仍用原快照路徑。
+- `cloud/tests/cyid-account-retirement.test.mjs` 使用真實 SQLite migration fixture 驗證 CYID-only 實體刪表、Device／Invitation／Audit／OTP 保留、Built-in schema 不受影響，並測試未完成 transition／多 Workspace 時拒絕操作；CI 包含其測試。
+
+### 後續尚缺的真正遠端切換 Gate
+
+1. **受控唯讀現況**：從原 business Worker 的活躍版本取得唯一 D1 binding、`CYID_ENABLED=true`、原業務 Workspace，核對單 Workspace、Device/Token continuity、舊員工／轉換／邀請筆數、無 pending transition、當前配對 OTP 與全部 FK；source 或 2026-10-12 的部署報告不是目前 D1 row counts。
+2. **本地＋GitHub CI**：維護 SQL 在真實 SQLite 0013 schema 上以**明確原子交易**驗證；CYID 模式的配對／邀請／改名／撤銷／權限同步與 Built-in/self-hosted 功能回歸都必須成功。任何測試 Worker／測試 handler 遠端上傳**一律禁止**。
+3. **先後順序不可顛倒**：先以另行批准的原 business Worker 正式 code-only rollout 部署支援兩種 profile 的相容程式（不能在來源上偷偷把 `CYID_ENABLED` 切回 false），再在單獨維護窗口使用原 D1 的受控且不公開資料的管理工具操作本節 SQL；**不以新增測試 Worker 代替驗收，也不在一般 migrations 自動執行刪表**。
+4. **獨立授權與備份**：執行前另行核對原始 DB 的私有備份（不把完整 DB 放 GitHub Public／Artifact）、可回復資訊、精確影響筆數／table FKs、執行者權限、停機窗口與回復步驟。此 source/PR 不能替代真正操作授權；目前沒有對原 D1 做資料刪除／部署。
+5. **切換後驗證**：profile `CYID_ONLY`、4 張表物理不存在、原 Workspace／Device hash／綁定／invitation/audit row 一致、共用 pairing OTP 仍正常、`PRAGMA foreign_key_check` 零錯誤、Worker/Windows CYID permission／device contract 可用；同版 retry 不得盲目重跑非冪等 DDL。
+
+**長期資料庫模式**：本公司 CYID deployment 可以是帶有 `CYID_ONLY` marker 的小型協同業務 D1；未來其他公司 Built-in deployment 則全新 D1 依 0001..0013 schema 建立帳戶權威。兩者共用 provider-neutral CYInvoice 程式，不共用員工列、密碼或原 Workspace。
