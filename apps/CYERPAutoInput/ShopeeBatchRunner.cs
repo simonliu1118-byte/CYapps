@@ -487,7 +487,10 @@ internal sealed class ShopeeBatchRunner
     /// <summary>Shopee's 預覽列印 tab: 下載出貨文件中 → 下載完成 → checked → 列印出貨文件 → Chrome's print dialog.</summary>
     private async Task PrintShopeeLabelAsync(ShopeeBatchOrder order)
     {
-        var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s => ShopeeBatchScreens.IsAwbPage(s.Boxes) ? ShopeeBatchScreens.AwbDownloaded(s.Boxes) : null, shipped: true);
+        // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
+        // 17 with the label's 訂單編號), so the label's order number is waited for too.
+        var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s => ShopeeBatchScreens.IsAwbPage(s.Boxes) &&
+            ShopeeBatchScreens.LabelOrderSn(s.Boxes).Length > 0 ? ShopeeBatchScreens.AwbDownloaded(s.Boxes) : null, shipped: true);
         using (awb)
         {
             if (download.Failed != 0 || download.Done != 1 || download.Total != 1)
