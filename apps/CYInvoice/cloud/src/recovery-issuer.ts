@@ -231,3 +231,61 @@ export async function recoveryInvitationStatus(
     return publicState(previous);
   });
 }
+
+/**
+ * Admin cancellation of the SAME operation, used after ambiguous provider
+ * response so a fresh operation can be explicitly authorized later. Any
+ * current CYInvoice-app SUPER_ADMIN of the same fixed business workspace
+ * may revoke an older issuer's pending invitation after a credential change.
+ * This is revocation only: it NEVER revokes Devices or issues a new code.
+ */
+export async function revokeRecoveryInvitation(
+  env: RecoveryIssuerEnv, raw: CyWebRecoveryRequest,
+): Promise<RecoveryIssueResult> {
+  return withAuthorizedCyWebRecovery(env, raw, async verifyNow => {
+    const actor = await verifyNow();
+    const row = await existingOperation(env.DB, actor);
+    if (!row) throw new CyIdError(404, "RECOVERY_OPERATION_NOT_FOUND");
+    if (row.workspace_id !== actor.workspaceId ||
+        row.issuer_channel !== "CYWEB" || row.purpose !== "RECOVERY")
+      throw new CyIdError(409, "RECOVERY_OPERATION_CONFLICT");
+    if (row.revoked_at || row.consumed_at) return { status: "failed" };
+    const fresh = await recheckActor(verifyNow, actor);
+    const now = new Date().toISOString();
+    try {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO cyweb_recovery_issuer_guard(passed)
+          SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM device_invitations i
+            JOIN workspaces w ON w.workspace_id = i.workspace_id AND w.status='active'
+            JOIN cyid_storage_profile cp ON cp.workspace_id = w.workspace_id AND cp.profile='CYID_ONLY'
+            JOIN cyweb_recovery_storage_profile rp ON rp.workspace_id = w.workspace_id AND rp.profile='CYWEB_RECOVERY'
+            WHERE i.invitation_id=?1 AND i.workspace_id=?2 AND i.recovery_operation_id=?3
+              AND i.issuer_channel='CYWEB' AND i.purpose='RECOVERY'
+              AND i.revoked_at IS NULL AND i.consumed_at IS NULL
+          ) THEN 1 ELSE 0 END`)
+          .bind(row.invitation_id, actor.workspaceId, actor.operationId),
+        env.DB.prepare(`UPDATE device_invitations SET revoked_at=?1
+          WHERE invitation_id=?2 AND workspace_id=?3
+            AND issuer_channel='CYWEB' AND purpose='RECOVERY'
+            AND consumed_at IS NULL AND revoked_at IS NULL`)
+          .bind(now, row.invitation_id, fresh.workspaceId),
+        env.DB.prepare(`INSERT INTO security_audit_events (
+            event_id,workspace_id,event_type,outcome,actor_employee_id,
+            invitation_id,reason_code,request_id,occurred_at,
+            actor_provider,issuer_channel,purpose)
+          VALUES (?1,?2,'recovery_invitation_revoked','success',?3,
+            ?4,'ADMIN_REVOKED',?5,?6,'CYID','CYWEB','RECOVERY')`)
+          .bind(`evt_${crypto.randomUUID()}`, actor.workspaceId, fresh.employeeId,
+            row.invitation_id, actor.operationId, now),
+        env.DB.prepare("DELETE FROM cyweb_recovery_issuer_guard"),
+      ]);
+    } catch {
+      // Response lost could mean revoke committed; re-query same operation
+      // through the authenticated status operation, never retry blindly.
+      throw new CyIdError(503, "RECOVERY_RESULT_UNKNOWN");
+    }
+    return { status: "failed" };
+  });
+}
+
