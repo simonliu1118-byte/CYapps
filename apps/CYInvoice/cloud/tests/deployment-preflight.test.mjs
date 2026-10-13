@@ -51,7 +51,7 @@ assert.throws(() => checkSettings({ bindings: [...settings.bindings, { name: 'KV
 assert.throws(() => checkSettings({ bindings: [...settings.bindings, { name: 'SECOND_DB', type: 'd1', id: 'other' }] }, config), /ORIGINAL_DATABASE_BINDING_REQUIRED/);
 assert.throws(() => checkSettings({ bindings: settings.bindings.filter(b => b.name !== 'LOGIN') }, config), /RATE_LIMIT_BINDINGS_REQUIRED/);
 
-const migrations = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(4, '0')}_existing.sql`).concat('0013_cyid_invitation_actor.sql');
+const migrations = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(4, '0')}_existing.sql`).concat('0013_cyid_invitation_actor.sql', '0014_invitation_recovery_metadata.sql');
 assert.deepEqual(checkMigrations(migrations.slice(0, 12), migrations),
   ['0013_cyid_invitation_actor.sql', '0014_invitation_recovery_metadata.sql']);
 assert.deepEqual(checkMigrations(migrations.slice(0, 13), migrations), ['0014_invitation_recovery_metadata.sql']);
