@@ -4,9 +4,15 @@
 
 - **正式版已發布：**2026-10-13 [CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，[正式 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) Windows 全套測試／Cloud Client／PE／套件／啟動／安全掃描／SHA-256 成功；tag `cyinvoice-v2.6.19`，ZIP 與 .sha256 已可下載。**以下工程包、待驗實機勾選維持其原本意義，不冒充正式環境逐項實測。** 折讓人工歷史於 V3.0 重做；Cloudflare 測試 Worker 禁令持續有效。
 - 目前工程基準：**V2.6.19 Build 0**；[Cloud Check #412 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)，source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，2026-10-15 11:06 Asia/Taipei 到期。該 source 的 Invoice subtree 與本輪 main 基準 `2c3071c8` 完全一致；不是正式 Release。
-- Development Cloud：**0.9.2 / API 1 / compatibility marker 8 / storage Schema 13**；prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows CYID 帳密進設定已由使用者回報成功；其餘角色／裝置／AA／AB／AC 真實實機項目未驗，僅可引用本地／CI 證據作本批版本接受；折讓歷史缺欄位已經使用者改列 V3.0 重做（AD），不阻塞本批 Release。
+- Development Cloud：**0.9.3 / API 1 / compatibility marker 8 / storage Schema 13 / CYID_ONLY**；2026-10-13 [原 Worker 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 完成，另經使用者批准完成私有備份、本機還原驗證與原 D1 退役維護；保留資料逐筆一致、FK 無異常。首次啟用歷史：prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows CYID 帳密進設定已由使用者回報成功；其餘角色／裝置／AA／AB／AC 真實實機項目未驗，僅可引用本地／CI 證據作本批版本接受；折讓歷史缺欄位已經使用者改列 V3.0 重做（AD），不阻塞本批 Release。
 - PR #216／#379 的 source 已隨 #380 進入 main；舊 Windows／Cloud runs 僅為歷史證據，不再作現行停點。下方節名中的舊版號表示功能首次引入；本次一律使用 V2.6.19 驗收。
 - 升級原安裝：先關閉程式並備份完整 portable folder，以工程包程式檔覆蓋原位置（含 Runtime／package-files.json），保留 Data／Cache／Logs 與原 Windows 使用者。重開應延續原 Workspace／Device／資料，不重新加入或進行 reset。
+
+## 本次維護與驗收範圍（2026-10-13）
+
+本公司原 D1 已採 CYID_ONLY；員工帳號與權限由 CYID 管理。本清單 A／B 的 Local 初始設定及 Q／R 等 Built-in Employee、轉換、帳號 OTP、移交案例，僅適用對應的 Local 模式或其他公司獨立新建的 Built-in D1，不應在已退役的本公司 D1 重建舊帳號表來驗收。原 Device／Workspace 的 CYID、邀請、配對與業務案例仍適用。
+
+本次部署、備份及 D1 維護已完成，證據見 [交接](CLOUD_WORK_HANDOFF.md) 與 [TODO §7.7](TODO.md)。未執行的實機勾選仍代表待補證據；使用者接受本地／CI 證據發布 V2.6.19 的決定，以及折讓歷史改列 V3.0 的決定均維持。
 
 ## A. 全新啟動、超級管理員與設定
 
