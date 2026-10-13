@@ -262,19 +262,26 @@ internal sealed class ShopeeBatchRunner
     {
         var watch = Stopwatch.StartNew();
         var reuse = reuseFirst;
+        string? previous = null;
         while (true)
         {
             var screen = await ReadAsync(part: part, reuse: reuse);
             reuse = false;
             var value = probe(screen);
-            if (value is not null) return (screen, value);
+            // Page text is read the moment the page starts to show (user's PC, 2026-10-13: the
+            // carrier was still 「Loading shipping channel」): a screen counts once two reads in a
+            // row give the same text and nothing is still loading.
+            var signature = string.Join("\n", screen.Boxes.Select(b => b.Text));
+            var loading = screen.Boxes.Any(b => b.Text.Contains("Loading", StringComparison.OrdinalIgnoreCase) || b.Text.Contains("載入中", StringComparison.Ordinal));
+            if (value is not null && !loading && signature == previous) return (screen, value);
+            previous = loading ? null : signature;
             screen.Dispose();
             if (watch.Elapsed > TimeSpan.FromSeconds(seconds))
             {
-                _log.Warn("shopee-batch", $"timeout waiting for {what}");
+                _log.Warn("shopee-batch", $"timeout waiting for {what} found={value is not null} loading={loading}");
                 throw new ShopeeBatchStop($"等不到{what}（{seconds} 秒）。", shipped);
             }
-            await Task.Delay(600, _token);
+            await Task.Delay(value is not null ? 250 : 500, _token);
         }
     }
 
