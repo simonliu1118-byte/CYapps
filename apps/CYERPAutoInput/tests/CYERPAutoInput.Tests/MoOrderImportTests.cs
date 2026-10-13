@@ -238,4 +238,46 @@ public class FreightCarrierTests
         var codes = new Dictionary<string, string> { ["郵局"] = "G2", ["大榮"] = "G3", ["嘉里"] = "G7" };
         Assert.Equal(expected, FreightCarriers.Match(text, codes));
     }
+
+    private static string[] TrackingRow(string sn, string tracking) => [sn, "001", tracking];
+
+    private static MoOrder TrackingOrder(string sn, string tracking = "") =>
+        new(2, sn, [new MoOrderLine("A1", 1, 100, 100, "x")], "全家店出", tracking, "", "", "", "", 100);
+
+    [Fact]
+    public void Reads_tracking_numbers_and_tells_the_shipped_export_apart()
+    {
+        string[] header = ["訂單編號", "訂單編號(序號)", "物流單號"];
+        var before = MoOrderImport.ReadTracking([header, TrackingRow("90000000000011", ""), TrackingRow("90000000000011", ""), TrackingRow("90000000000012", "")])!;
+        var after = MoOrderImport.ReadTracking([header, TrackingRow("90000000000011", "10000000001"), TrackingRow("90000000000011", "10000000001"),
+            TrackingRow("90000000000099", "G1234567"), TrackingRow("90000000000012", "")])!;
+        Assert.False(MoOrderImport.IsShippedExport(before));
+        Assert.True(MoOrderImport.IsShippedExport(after));
+        Assert.Equal(["10000000001"], after["90000000000011"]);
+        Assert.Empty(after["90000000000012"]);
+        Assert.Null(MoOrderImport.ReadTracking([["日期", "金額"], ["2026/01/01", "1"]]));
+    }
+
+    [Fact]
+    public void Fills_only_the_batch_and_never_guesses()
+    {
+        var shipped = new Dictionary<string, HashSet<string>>
+        {
+            ["90000000000011"] = ["10000000001"],
+            ["90000000000012"] = [],
+            ["90000000000013"] = ["2000000001", "2000000002"],
+            ["90000000000014"] = ["G1234567"],
+            ["90000000000099"] = ["3000000001"] // an earlier order, not in the batch
+        };
+        var (orders, notes) = MoOrderImport.FillTracking([TrackingOrder("90000000000011"), TrackingOrder("90000000000012"),
+            TrackingOrder("90000000000013"), TrackingOrder("90000000000014", "G7654321"), TrackingOrder("90000000000015")], shipped);
+        Assert.Equal(5, orders.Count);
+        Assert.Equal(["10000000001", "", "", "G7654321", ""], orders.Select(o => o.TrackingNumber));
+        Assert.Equal(4, notes.Count);
+        Assert.Contains(notes, n => n.Contains("90000000000012") && n.Contains("還沒有物流單號"));
+        Assert.Contains(notes, n => n.Contains("90000000000013") && n.Contains("不同的物流單號"));
+        Assert.Contains(notes, n => n.Contains("90000000000014") && n.Contains("保留原本的"));
+        Assert.Contains(notes, n => n.Contains("90000000000015") && n.Contains("沒有這張訂單"));
+        Assert.DoesNotContain(notes, n => n.Contains("90000000000099"));
+    }
 }

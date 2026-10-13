@@ -1,52 +1,13 @@
-using System.Reflection;
-
 namespace CYERPAutoInput;
 
 /// <summary>
 /// How to take the screenshots for the Shopee OCR input (user, 2026-10-11), with example
 /// images whose order number, tracking number and item code are pixelated.
 /// </summary>
-internal sealed class ShopeeScreenshotHelpForm : Form
+internal sealed class ShopeeScreenshotHelpForm : HelpForm
 {
-    public ShopeeScreenshotHelpForm()
+    public ShopeeScreenshotHelpForm() : base("蝦皮訂單自動擷取輸入說明", new Size(1100, 760))
     {
-        Text = "蝦皮訂單自動擷取輸入說明";
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(1100, 760);
-        MinimumSize = new Size(720, 480);
-        Font = new Font("Microsoft JhengHei UI", 9.5F);
-
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(20, 12, 20, 12) };
-        var flow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Location = new Point(20, 12) };
-        scroll.Controls.Add(flow);
-        Controls.Add(scroll);
-
-        void Heading(string text) => flow.Controls.Add(new Label
-        {
-            Text = text,
-            AutoSize = true,
-            Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold),
-            Margin = new Padding(0, 14, 0, 4)
-        });
-        void Body(string text) => flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(1000, 0), Margin = new Padding(0, 2, 0, 2) });
-        void Example(string resource)
-        {
-            var image = LoadImage(resource);
-            if (image is null) return;
-            var picture = new PictureBox
-            {
-                Image = image,
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BorderStyle = BorderStyle.FixedSingle,
-                Margin = new Padding(0, 4, 0, 6),
-                Size = image.Size
-            };
-            _pictures.Add(picture);
-            flow.Controls.Add(picture);
-        }
-
         Heading("自動擷取（建議）");
         Body("1. 在瀏覽器開好蝦皮賣家中心的訂單詳情頁。");
         Body($"2. 在瀏覽器按 {BrowserHotkey.KeyName}（程式開著即可，可在設定關閉）；或在主畫面按「蝦皮 → 自動擷取輸入」後按「開始」。");
@@ -79,34 +40,6 @@ internal sealed class ShopeeScreenshotHelpForm : Form
         Body("・帶回表單時，商品依品號由小到大排列，折價券、運費、促銷組合排在最後。");
         Body("・買家備註、賣家備註不在截圖內，請自行查看。");
 
-        CyVisualTheme.Apply(this);
-        // Images and text follow the window width so there is never a horizontal scrollbar.
-        void Fit()
-        {
-            var available = scroll.ClientSize.Width - scroll.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 4;
-            if (available < 200) return;
-            flow.SuspendLayout();
-            foreach (var picture in _pictures)
-            {
-                var width = Math.Min(picture.Image!.Width + 2, available);
-                picture.Size = new Size(width, (int)Math.Round((picture.Image.Height + 2) * (width / (double)(picture.Image.Width + 2))));
-            }
-            foreach (var label in flow.Controls.OfType<Label>()) label.MaximumSize = new Size(available, 0);
-            flow.ResumeLayout();
-            scroll.HorizontalScroll.Visible = false;
-        }
-        scroll.HorizontalScroll.Enabled = false;
-        Shown += (_, _) => Fit();
-        Resize += (_, _) => Fit();
-    }
-
-    private readonly List<PictureBox> _pictures = [];
-
-    private static Image? LoadImage(string name)
-    {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"CYERPAutoInput.help.{name}");
-        if (stream is null) return null;
-        using var image = Image.FromStream(stream);
-        return new Bitmap(image);
+        Finish();
     }
 }

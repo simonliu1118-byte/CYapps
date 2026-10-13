@@ -77,6 +77,12 @@ internal static class UiSnapshot
             using (var help = new ShopeeScreenshotHelpForm())
                 Capture(help, Path.Combine(folder, "shopee-help.png"), help.Size);
 
+            using (var files = new MoImportForm(_ => []))
+                Capture(files, Path.Combine(folder, "mo-files.png"), files.Size);
+
+            using (var moHelp = new MoImportHelpForm())
+                Capture(moHelp, Path.Combine(folder, "mo-help.png"), moHelp.Size);
+
             Console.WriteLine($"ui snapshots written to {folder}");
             return 0;
         }

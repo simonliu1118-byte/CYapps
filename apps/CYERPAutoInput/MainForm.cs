@@ -1252,70 +1252,23 @@ internal sealed class MainForm : Form
             return;
         }
 
-        // The export and, optionally, the 寄件單 PDFs of 批次出貨 in one pick (user, 2026-10-13:
-        // the PDFs fill the tracking numbers; the 總表 PDF may be picked too and is named).
-        var paths = PickExportFiles("選擇 MO店+ 訂單匯出檔（OrderExport），可一起選寄件單 PDF（LogisticsLabel）",
-            "MO店+ 匯出檔與寄件單 (*.xls;*.xlsx;*.pdf)|*.xls;*.xlsx;*.pdf");
-        if (paths is null) return;
-        var exports = paths.Where(p => !p.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (exports.Count != 1)
-        {
-            MessageBox.Show(this, exports.Count == 0 ? "請一起選 MO店+ 訂單匯出檔（OrderExport 的 .xls）。" : "訂單匯出檔一次只能選一個。",
-                "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        var path = exports[0];
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
-
-        MoImportResult parsed;
-        try
+        List<string[]> Read(string path)
         {
-            await using var stream = File.OpenRead(path);
-            var rows = Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+            using var stream = File.OpenRead(path);
+            return Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
                 ? XlsxReader.ReadFirstSheet(stream)
                 : XlsReader.ReadFirstSheet(stream, password);
-            parsed = MoOrderImport.Parse(rows);
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
-        {
-            _log.Warn("mo", $"export read failed: {ex.GetType().Name}");
-            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        _log.Info("mo", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
-
-        var moOrders = parsed.Orders.ToList();
-        var notes = new List<string>();
-        var pdfs = paths.Where(p => p.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (pdfs.Count > 0)
-        {
-            var files = new List<MoLabelFile>();
-            foreach (var pdf in pdfs)
-            {
-                try
-                {
-                    files.Add(await Task.Run(() => MoShippingLabels.Read(pdf, password)));
-                }
-                catch (UglyToad.PdfPig.Exceptions.PdfDocumentEncryptedException)
-                {
-                    _log.Warn("mo", "label pdf password rejected");
-                    notes.Add($"{Path.GetFileName(pdf)}：密碼不對，無法開啟（使用設定裡的 MO店+ 匯出檔密碼），已略過。");
-                }
-                catch (Exception ex)
-                {
-                    _log.Warn("mo", $"label pdf read failed: {ex.GetType().Name}");
-                    notes.Add($"{Path.GetFileName(pdf)}：無法讀取（{ex.Message}），已略過。");
-                }
-            }
-            (moOrders, var labelNotes) = MoShippingLabels.Apply(moOrders, files);
-            notes.AddRange(labelNotes);
-            _log.Info("mo", $"label pdfs={pdfs.Count} labels={files.Sum(f => f.Labels.Count)} tracking_filled={moOrders.Count(o => o.TrackingNumber.Length > 0)} notes={notes.Count}");
-        }
+        // Two exports, before and after 批次出貨 (user, 2026-10-13): the batch, and its tracking numbers.
+        using var files = new MoImportForm(Read);
+        if (files.ShowDialog(this) != DialogResult.OK) return;
+        _log.Info("mo", $"exports orders={files.Orders.Count} errors={files.Errors.Count} tracking_filled={files.Orders.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
 
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var orders = moOrders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        await PreviewAndRunAsync(MoOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors, notes);
+        var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, files.Notes);
     }
 
     private async Task ImportCoupangAsync()
@@ -1361,12 +1314,6 @@ internal sealed class MainForm : Form
     {
         using var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true };
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
-    }
-
-    private string[]? PickExportFiles(string title, string filter)
-    {
-        using var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true, Multiselect = true };
-        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileNames : null;
     }
 
     private async Task PreviewAndRunAsync(string source, string fileName, List<ImportedOrder> orders, IReadOnlyList<string> errors,

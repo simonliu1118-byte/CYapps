@@ -43,7 +43,7 @@ internal sealed class OrderImportForm : Form
         Controls.Add(root);
 
         var summary = $"{fileName}：可匯入 {orders.Count} 張訂單" + (errors.Count > 0 ? $"，{errors.Count} 筆無法匯入（見下方）" : string.Empty)
-            + (notes.Count > 0 ? $"，寄件單有 {notes.Count} 項要注意（見下方）" : string.Empty);
+            + (notes.Count > 0 ? $"，物流單號有 {notes.Count} 項要注意（見下方）" : string.Empty);
         if (_editable) summary += "\n白底欄位可直接填寫：物流單號（可空白，之後回補）、客戶全名（有統編時自動查詢經濟部登記名稱）、發票日期、發票號碼。";
         root.Controls.Add(new Label
         {
