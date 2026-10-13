@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 
 // Use real migrations and isolated SQLite, not any Cloudflare Worker, remote D1,
 // application secret, or historical live Identity/Device data.
-const migrations = readdirSync("migrations").filter(name => /^\\d{4}_.*\\.sql$/.test(name)).sort();
+const migrations = readdirSync("migrations").filter(name => /^[0-9]{4}_.*[.]sql$/.test(name)).sort();
 assert.equal(migrations.at(-1), "0014_invitation_recovery_metadata.sql");
 const optionalScript = readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8");
 const retireScript = readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8");
