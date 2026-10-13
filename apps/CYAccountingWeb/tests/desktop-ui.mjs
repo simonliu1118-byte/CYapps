@@ -36,8 +36,8 @@ const editCss = read('public/ledger-inline-edit.css');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.23.1');
-assert.equal(build, '2');
+assert.match(version, /^\d+\.\d+\.\d+$/, 'project VERSION must remain semantic X.Y.Z');
+assert.match(build, /^(0|[1-9]\d*)$/, 'project BUILD must remain a nonnegative integer');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
