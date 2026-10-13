@@ -483,8 +483,14 @@ try {
   await main('before',statePath,env);
   assert.equal(JSON.parse(fs.readFileSync(generatedPath,'utf8')).vars.CYID_ENABLED,'true');
   await main('after',statePath,env);
-  for(const operation of ['activate-cyid','prepare-cyid','deploy'])
+  // A previously activated CYID installation can receive reviewed code-only
+  // deployments without silently reverting its authority to Built-in.
+  for(const operation of ['activate-cyid','prepare-cyid'])
     await assert.rejects(main('before',statePath,{...env,CYINVOICE_DEPLOYMENT_MODE:operation}),/BUILT_IN_AUTHORITY_REQUIRED/);
+  const cyidDeployEnv={...env,CYINVOICE_DEPLOYMENT_MODE:'deploy'};
+  await main('before',statePath,cyidDeployEnv);
+  assert.equal(JSON.parse(fs.readFileSync(generatedPath,'utf8')).vars.CYID_ENABLED,'true');
+  await main('after',statePath,cyidDeployEnv);
   cyIdActive=false;preparedRuntime=false;
   await main('before',statePath,prepareEnv);
   const bundleDir=path.join(tmp,'business-bundle');fs.mkdirSync(bundleDir);
