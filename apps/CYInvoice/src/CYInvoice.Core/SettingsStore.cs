@@ -100,8 +100,9 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         DateTimeOffset startedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0)
-            throw new InvalidOperationException("已有未完成的裝置加入流程，請先完成或清除後再建立第一個 Workspace。");
+        if (settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0
+            || settings.CloudPendingRecoveryTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有未完成的裝置加入或復原流程，請先處理原有 Pending Token。");
 
         baseUrl = NormalizeCloudBaseUrl(baseUrl);
         workspaceDisplayName = workspaceDisplayName.Trim();
@@ -173,8 +174,9 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         DateTimeOffset startedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0)
-            throw new InvalidOperationException("已有未完成的第一台裝置初始化流程，請先完成或確認無法復原後再加入既有 Workspace。");
+        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0
+            || settings.CloudPendingRecoveryTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有未完成的第一台裝置或復原流程，請先處理原有 Pending Token。");
 
         baseUrl = NormalizeCloudBaseUrl(baseUrl);
         deviceDisplayName = deviceDisplayName.Trim();
@@ -232,6 +234,86 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudPendingDeviceJoinTokenEncrypted = string.Empty;
     }
 
+    public void SetCloudPendingRecovery(
+        Settings settings,
+        string baseUrl,
+        string workspaceId,
+        string identityWorkspaceId,
+        string invitationId,
+        string deviceDisplayName,
+        string deviceToken,
+        DateTimeOffset startedAtUtc)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (HasCloudIdentity(settings))
+            throw new InvalidOperationException("目前已經有 Cloud Device，災難復原只能從尚未加入的新裝置進行。");
+        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0
+            || settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有其他未完成的裝置加入流程，不能改用災難復原。");
+        if (settings.CloudPendingRecoveryTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有未完成的復原 Token；請先查回原操作，不能建立新的 Token。");
+
+        baseUrl = NormalizeCloudBaseUrl(baseUrl);
+        deviceDisplayName = deviceDisplayName.Trim();
+        deviceToken = deviceToken.Trim();
+        if (!ValidCloudDeviceToken(deviceToken)
+            || !ValidRecoveryIdentifier(workspaceId)
+            || !ValidRecoveryIdentifier(identityWorkspaceId)
+            || !ValidRecoveryInvitationId(invitationId)
+            || deviceDisplayName.Length is < 1 or > 120
+            || deviceDisplayName.Any(char.IsControl))
+            throw new InvalidOperationException("災難復原目標範圍或 Pending Token 無效。");
+
+        settings.CloudPendingRecoveryUrl = baseUrl;
+        settings.CloudPendingRecoveryWorkspaceId = workspaceId;
+        settings.CloudPendingRecoveryIdentityWorkspaceId = identityWorkspaceId;
+        settings.CloudPendingRecoveryInvitationId = invitationId;
+        settings.CloudPendingRecoveryDeviceName = deviceDisplayName;
+        settings.CloudPendingRecoveryStartedUtc = startedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        settings.CloudPendingRecoveryTokenEncrypted = protector.Protect(Encoding.UTF8.GetBytes(deviceToken));
+        Validate(settings);
+    }
+
+    public CloudPendingRecoveryState? CloudPendingRecovery(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Validate(settings);
+        if (settings.CloudPendingRecoveryTokenEncrypted.Length == 0) return null;
+        try
+        {
+            var token = Unprotect(settings.CloudPendingRecoveryTokenEncrypted);
+            if (!ValidCloudDeviceToken(token)
+                || !DateTimeOffset.TryParseExact(settings.CloudPendingRecoveryStartedUtc,
+                    "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                    out var startedAt))
+                throw new InvalidDataException("Pending Recovery Token 格式無效。");
+            return new CloudPendingRecoveryState(
+                settings.CloudPendingRecoveryUrl,
+                settings.CloudPendingRecoveryWorkspaceId,
+                settings.CloudPendingRecoveryIdentityWorkspaceId,
+                settings.CloudPendingRecoveryInvitationId,
+                settings.CloudPendingRecoveryDeviceName,
+                startedAt.ToUniversalTime(),
+                token);
+        }
+        catch (Exception error) when (error is not InvalidOperationException)
+        {
+            throw new InvalidOperationException("無法讀取已保護的 Pending Recovery Token；不可另建 Token 重試。", error);
+        }
+    }
+
+    public void ClearCloudPendingRecovery(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.CloudPendingRecoveryUrl = string.Empty;
+        settings.CloudPendingRecoveryWorkspaceId = string.Empty;
+        settings.CloudPendingRecoveryIdentityWorkspaceId = string.Empty;
+        settings.CloudPendingRecoveryInvitationId = string.Empty;
+        settings.CloudPendingRecoveryDeviceName = string.Empty;
+        settings.CloudPendingRecoveryStartedUtc = string.Empty;
+        settings.CloudPendingRecoveryTokenEncrypted = string.Empty;
+    }
+
     public void ClearCloudIdentity(Settings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -243,6 +325,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CyIdBindingEncrypted = string.Empty;
         ClearCloudPendingBootstrap(settings);
         ClearCloudPendingDeviceJoin(settings);
+        ClearCloudPendingRecovery(settings);
         settings.CloudMode = CloudModes.LocalOnly;
     }
 
@@ -301,9 +384,14 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException("CYID 模式缺少已確認的綁定。");
         ValidateCloudPendingBootstrap(settings);
         ValidateCloudPendingDeviceJoin(settings);
-        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0
-            && settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0)
-            throw new InvalidDataException("Pending Cloud bootstrap 與 Device Join 不可同時存在。");
+        ValidateCloudPendingRecovery(settings);
+        var activePending = (settings.CloudPendingBootstrapTokenEncrypted.Length != 0 ? 1 : 0)
+            + (settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0 ? 1 : 0)
+            + (settings.CloudPendingRecoveryTokenEncrypted.Length != 0 ? 1 : 0);
+        if (activePending > 1)
+            throw new InvalidDataException("同時只能有一個 Pending Cloud Device 流程。");
+        if (settings.CloudPendingRecoveryTokenEncrypted.Length != 0 && HasCloudIdentity(settings))
+            throw new InvalidDataException("已有正式 Cloud Device 時不能保留災難復原 Pending Token。");
     }
 
     private static void ValidateCloudPendingBootstrap(Settings settings)
@@ -360,6 +448,41 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
                 out _))
             throw new InvalidDataException("Pending Device Join 時間格式無效。");
     }
+
+    private static void ValidateCloudPendingRecovery(Settings settings)
+    {
+        var fields = new[]
+        {
+            settings.CloudPendingRecoveryUrl,
+            settings.CloudPendingRecoveryWorkspaceId,
+            settings.CloudPendingRecoveryIdentityWorkspaceId,
+            settings.CloudPendingRecoveryInvitationId,
+            settings.CloudPendingRecoveryDeviceName,
+            settings.CloudPendingRecoveryStartedUtc,
+            settings.CloudPendingRecoveryTokenEncrypted
+        };
+        var present = fields.Count(value => value.Length != 0);
+        if (present == 0) return;
+        if (present != fields.Length
+            || !ValidCloudBaseUrl(settings.CloudPendingRecoveryUrl)
+            || !ValidRecoveryIdentifier(settings.CloudPendingRecoveryWorkspaceId)
+            || !ValidRecoveryIdentifier(settings.CloudPendingRecoveryIdentityWorkspaceId)
+            || !ValidRecoveryInvitationId(settings.CloudPendingRecoveryInvitationId)
+            || settings.CloudPendingRecoveryDeviceName.Trim().Length is < 1 or > 120
+            || settings.CloudPendingRecoveryDeviceName.Any(char.IsControl)
+            || !DateTimeOffset.TryParseExact(settings.CloudPendingRecoveryStartedUtc,
+                "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _))
+            throw new InvalidDataException("Pending Recovery 資料不完整或目標範圍無效。");
+    }
+
+    private static bool ValidRecoveryIdentifier(string value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 100
+        && value.All(character => char.IsLetterOrDigit(character)
+            || character is '_' or '-' or '.');
+
+    private static bool ValidRecoveryInvitationId(string value) =>
+        value is not null && value.StartsWith("inv_", StringComparison.Ordinal)
+        && Guid.TryParseExact(value.AsSpan(4), "D", out _);
 
     private static string NormalizeCloudBaseUrl(string value)
     {
