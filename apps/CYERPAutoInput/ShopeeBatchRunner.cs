@@ -168,8 +168,39 @@ internal sealed class ShopeeBatchRunner
         if (!NativeMethods.GetWindowRect(_window, out var raw)) throw new ShopeeBatchStop("讀不到 Chrome 視窗的位置。");
         var area = Rectangle.Intersect(raw.ToRectangle(), System.Windows.Forms.Screen.FromHandle(_window).Bounds);
         var image = ScreenCapture.Capture(area);
-        var tokens = await _ocr.RecognizeAsync(image, _token, maxScale: 1.0);
-        return new Screen(image, area, tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList());
+        try
+        {
+            var tokens = await _ocr.RecognizeAsync(image, _token, maxScale: 1.0);
+            return new Screen(image, area, tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The OCR engine failed on the whole window (user's PC, 2026-10-13: an
+            // IndexOutOfRangeException inside it); the same pixels in two overlapping halves.
+            _log.Warn("shopee-batch", $"window OCR failed, reading it in halves: {ex}");
+            try { return new Screen(image, area, await ReadInHalvesAsync(image)); }
+            catch { image.Dispose(); throw; }
+        }
+    }
+
+    /// <summary>The window read as a top and a bottom half overlapping by 80 px; each line is kept by the half holding its centre.</summary>
+    private async Task<List<OcrBox>> ReadInHalvesAsync(Bitmap image)
+    {
+        const int Overlap = 80;
+        var split = image.Height / 2;
+        var boxes = new List<OcrBox>();
+        foreach (var (top, bottom) in new[] { (0, Math.Min(image.Height, split + Overlap / 2)), (Math.Max(0, split - Overlap / 2), image.Height) })
+        {
+            using var part = image.Clone(Rectangle.FromLTRB(0, top, image.Width, bottom), image.PixelFormat);
+            var tokens = await _ocr.RecognizeAsync(part, _token, maxScale: 1.0);
+            foreach (var t in tokens)
+            {
+                var centre = top + t.Rect.Top + t.Rect.Height / 2;
+                if (top == 0 ? centre < split : centre >= split)
+                    boxes.Add(new OcrBox(t.Text, t.Rect.Left, top + t.Rect.Top, t.Rect.Width, t.Rect.Height));
+            }
+        }
+        return boxes;
     }
 
     /// <summary>Reads the window until <paramref name="probe"/> finds what it wants; stops the batch after <paramref name="seconds"/>.</summary>
