@@ -1,6 +1,6 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/13（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/14（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 裝置與 UI 驗收
 
@@ -22,7 +22,7 @@
 
 ## 帳務與 Identity
 
-- [ ] PR #435／V0.23.2 首次登入引導：合併前取得正式 CY Web portal 與 CYID authority 相同的 live binding 證據；目前保留未合併，不將 CI 成功當成此 gate 通過。
+- [ ] PR #435 首次登入引導：依最新 main 重新基底及升版；合併前取得正式 CY Web portal 與 CYID authority 相同的 live binding 證據；目前保留未合併，不將 CI 成功當成此 gate 通過。
 
 - [ ] 開帳基準／首期期初的後續工作以私人檢查點及使用者當次指示為準；先確認已完成操作與待補資料，再評估調整及歷史保留，不以公開文件推定帳務狀態。
 - [ ] Password Recovery 真實 Email delivery／browser 完整驗收。
