@@ -8,7 +8,7 @@ const bundle = await build({
   entryPoints: ["src/recovery-issuer.ts"],
   bundle: true, write: false, format: "esm", platform: "node", target: "node24",
 });
-const { issueCyWebRecoveryInvitation, recoveryInvitationStatus } = await import(
+const { issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation } = await import(
   "data:text/javascript;base64," + Buffer.from(bundle.outputFiles[0].text).toString("base64"),
 );
 
@@ -164,6 +164,19 @@ await assert.rejects(() => issueCyWebRecoveryInvitation(one.env,{
 },mailbox.sender),/RECOVERY_ALREADY_PENDING/);
 assert.equal(mailbox.sent.length,1,"second outstanding operation must never email");
 assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+// Explicit current SUPER_ADMIN cancellation frees the single-open-grant slot,
+// without revoking any device. It is separate from successful Device recovery.
+const cancelled=await revokeRecoveryInvitation(one.env,input);
+assert.deepEqual(cancelled,{status:"failed"});
+assert.equal(row(db).revoked_at !== null,true);
+assert.equal(count(db,"security_audit_events"),2);
+assert.equal(count(db,"devices"),1);
+assert.deepEqual(await recoveryInvitationStatus(one.env,input),{status:"failed"});
+assert.deepEqual(await revokeRecoveryInvitation(one.env,input),{status:"failed"});
+assert.equal(count(db,"security_audit_events"),2,"idempotent cancellation no double audit");
+const secondOperation={...input,operationId:"22222222-2222-4222-8222-222222222222"};
+assert.equal((await issueCyWebRecoveryInvitation(one.env,secondOperation,mailbox.sender)).status,"sent");
+assert.equal(mailbox.sent.length,2,"explicit revocation permits a new, distinct operation");
 assert.equal(one.sessions().logins,one.sessions().logouts);
 db.close();
 
@@ -179,6 +192,9 @@ assert.deepEqual(await issueCyWebRecoveryInvitation(uncertain.env,input,brokenMa
 assert.deepEqual(await recoveryInvitationStatus(uncertain.env,input),first);
 assert.equal(brokenMail.sent.length,1);
 assert.equal(count(uncertainDb,"security_audit_events"),0);
+assert.deepEqual(await revokeRecoveryInvitation(uncertain.env,input),{status:"failed"});
+assert.equal(row(uncertainDb).revoked_at !== null,true);
+assert.equal(count(uncertainDb,"security_audit_events"),1);
 assert.equal(uncertain.sessions().logins,uncertain.sessions().logouts);
 uncertainDb.close();
 
