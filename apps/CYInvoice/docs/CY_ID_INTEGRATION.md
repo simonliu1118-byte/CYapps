@@ -407,3 +407,11 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138）。使用者已透過中央管理完成 CYInvoice 登記／目前身分 Workspace 啟用與 Provider runtime scope；唯讀 #38 及實際 prepare-cyid #39 完成兩個私有 bindings／三個 approved scope vars readback，原 Invoice Workspace／Device／Token hashes／資料保留，CYID_ENABLED=false。配置不等於私有 transport 或 Employee／App Access／Role 已驗收；原 Windows／AA／AB／AC 與受控切換仍待完成，證據集中現行交接與 TODO §7.3.3。
 
 綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代員工 App Access／Role 與原 Windows 驗收，Device Token 不代表 Employee 授權。
+
+## 15. V3 CYWEB 裝置復原邀請（2026-10-13 設計）
+
+使用者決定此功能與 V3 多機協同一併做，CYWEB 是超管簽發／撤銷復原邀請的管理入口，CYInvoice Worker／D1 持有邀請、Device 與業務 Audit，不新建 Identity／Password authority。設計見 [CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md)，待辦只在 TODO §7.4／§7.5。
+
+建議第一版由 CYWEB server 重新 resolve core Session、以專用 private capability 呼叫 CYInvoice，簽發時再用當次超管帳密取得 CYInvoice Application scoped Session並 Resolve／finally Logout。兩端都核對當下 stable actor 與配置 scope，不傳遞 raw core token 當另一 App Session；簽發入口不依賴舊 Device，不擴大一般公開 API 的 Device gate。
+
+目前 canonical shared contract 未增加跨 App delegation；若未來去掉該次帳密 re-auth，必須先由 CYID 定義正式委派能力並更新 canonical／versions／acceptance。這是 CYInvoice-specific 設計，不宣稱 CYWEB source／runtime、private binding、新 schema 或完整驗收已完成。
