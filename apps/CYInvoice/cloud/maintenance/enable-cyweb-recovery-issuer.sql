@@ -49,6 +49,7 @@ CREATE TABLE device_invitations_cyweb_recovery (
     purpose TEXT NOT NULL DEFAULT 'JOIN' CHECK (purpose IN ('JOIN','RECOVERY')),
     issuer_credential_version INTEGER CHECK (issuer_credential_version IS NULL OR issuer_credential_version >= 1),
     issuer_employee_revision INTEGER CHECK (issuer_employee_revision IS NULL OR issuer_employee_revision >= 1),
+    recovery_operation_id TEXT,
     CHECK ((issued_by_employee_id IS NOT NULL AND issued_by_cyid_employee_id IS NULL)
         OR (issued_by_employee_id IS NULL AND issued_by_cyid_employee_id IS NOT NULL
             AND length(issued_by_cyid_employee_id) BETWEEN 1 AND 100)),
@@ -59,7 +60,8 @@ CREATE TABLE device_invitations_cyweb_recovery (
           AND issued_by_device_id IS NULL AND issued_by_employee_id IS NULL
           AND issued_by_cyid_employee_id IS NOT NULL
           AND issuer_credential_version IS NOT NULL
-          AND issuer_employee_revision IS NOT NULL)
+          AND issuer_employee_revision IS NOT NULL
+          AND recovery_operation_id IS NOT NULL)
     )
 );
 INSERT INTO device_invitations_cyweb_recovery (
@@ -67,18 +69,21 @@ INSERT INTO device_invitations_cyweb_recovery (
     issued_by_employee_id, issued_by_cyid_employee_id, delivery_state,
     expires_at, sent_at, revoked_at, consumed_at, consumed_by_device_id,
     created_at, issuer_channel, purpose, issuer_credential_version,
-    issuer_employee_revision
+    issuer_employee_revision, recovery_operation_id
 )
 SELECT invitation_id, workspace_id, code_hash, issued_by_device_id,
        issued_by_employee_id, issued_by_cyid_employee_id, delivery_state,
        expires_at, sent_at, revoked_at, consumed_at, consumed_by_device_id,
        created_at, issuer_channel, purpose, issuer_credential_version,
-       issuer_employee_revision
+       issuer_employee_revision, recovery_operation_id
   FROM device_invitations;
 DROP TABLE device_invitations;
 ALTER TABLE device_invitations_cyweb_recovery RENAME TO device_invitations;
 CREATE INDEX idx_device_invitations_workspace_created
     ON device_invitations (workspace_id, created_at DESC);
+CREATE UNIQUE INDEX idx_device_invitations_recovery_operation
+    ON device_invitations (workspace_id, recovery_operation_id)
+    WHERE recovery_operation_id IS NOT NULL;
 
 INSERT INTO cyweb_recovery_storage_profile (profile, workspace_id)
 SELECT 'CYWEB_RECOVERY', workspace_id FROM workspaces WHERE status = 'active';
