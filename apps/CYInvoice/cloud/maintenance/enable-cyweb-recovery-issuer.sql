@@ -88,5 +88,14 @@ CREATE UNIQUE INDEX idx_device_invitations_recovery_operation
 INSERT INTO cyweb_recovery_storage_profile (profile, workspace_id)
 SELECT 'CYWEB_RECOVERY', workspace_id FROM workspaces WHERE status = 'active';
 
+-- D1 batch abort guard for the atomic recovery cutover. The claim must
+-- INSERT a value satisfying CHECK (passed=1) before any business mutation,
+-- then DELETE it as the final statement of the very same D1 transaction.
+-- An invalid invitation/profile/token aborts every write rather than leaving
+-- a partially joined Device or partially revoked fleet.
+CREATE TABLE cyweb_recovery_claim_guard (
+    passed INTEGER NOT NULL CHECK (passed = 1)
+);
+
 PRAGMA defer_foreign_keys = OFF;
 PRAGMA foreign_key_check;
