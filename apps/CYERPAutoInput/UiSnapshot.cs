@@ -80,6 +80,11 @@ internal static class UiSnapshot
             using (var files = new MoImportForm(_ => []))
                 Capture(files, Path.Combine(folder, "mo-files.png"), files.Size);
 
+            using (var summary = new BatchSummaryForm("MO店+批次結果", "已儲存 2 / 3 張。",
+                       [new("已完成 2 張：", ["90000000000001 → T01-20260101001", "90000000000002 → T01-20260101002"]),
+                        new("需人工處理 1 張（未輸入 ERP）：", ["90000000000003：物流商「測試物流」沒有設定貨運別"])]))
+                Capture(summary, Path.Combine(folder, "batch-summary.png"), summary.Size);
+
             using (var moHelp = new MoImportHelpForm())
                 Capture(moHelp, Path.Combine(folder, "mo-help.png"), moHelp.Size);
 

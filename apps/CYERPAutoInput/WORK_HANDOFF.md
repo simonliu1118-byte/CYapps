@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-13（V0.3.0 Build 18 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
+> 更新：2026-10-13（V0.3.0 Build 19 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -18,7 +18,7 @@
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - `main`：`V0.2.9`（2026-10-12 由 PR #423 squash merge），正式 Release `cyerp-auto-input-v0.2.9`。`CYERPAutoInput Release` workflow：只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。舊 Release `cyerp-auto-input-v0.2.7` 依使用者要求以 `CYERPAutoInput Release Cleanup` workflow（只從 main、只接受本專案 tag）刪除。之前的合併：PR #421（V0.2.5–V0.2.7）、PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
-- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 18（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入）。使用者指示 V0.3.0 先不發布，等後續項目（§4「V0.3.0 下一輪待做」）一起；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
+- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 19（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入、預覽勾選與共用結果清單）。使用者交代的下一輪項目已在 Build 19 完成，2026-10-14 實單測試後再決定合併與發布；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。正式版：GitHub Release（`CYERPAutoInput_VX.Y.Z.zip`＋SHA-256）。
@@ -61,10 +61,10 @@
 
 - V0.2.4–V0.2.9：已實測通過並隨 Release V0.2.9 發布；逐版內容見 `CHANGELOG.md`。0／O 字寬判斷（V0.2.5）尚未遇到實例，日後有 `order number 0/O` LOG 再核對。
 
-V0.3.0（Build 0–18，未發布）現況：
+V0.3.0（Build 0–19，未發布）現況：
 
 - 實機已確認（使用者 2026-10-13 LOG）：網頁原文讀取（清單、明細、寄件編號視窗、出貨文件頁、列印視窗）；蝦皮店到店連續 3 筆完成（每筆約 1 分鐘，16:06–16:09），第 4 筆 ERP 儲存列印後停止（原因未查）；MO店+ 匯入視窗以兩份真實匯出檔帶入 2 筆物流單號。
-- 未實機確認：7-11 與全家寄件單流程（列印視窗頁面／縮放下拉的實際值）、捲動找下一筆、萊爾富跳過與結束清單、Build 15 起的計時提示、Build 1 明細欄位順序學習（另一台電腦欄位排法）、Build 18 兩項修正、MO 匯入的全家／7-11 單號帶入。
+- 未實機確認：7-11 與全家寄件單流程（列印視窗頁面／縮放下拉的實際值）、捲動找下一筆、萊爾富跳過與結束清單、Build 15 起的計時提示、Build 1 明細欄位順序學習（另一台電腦欄位排法）、Build 18 兩項修正、MO 匯入的全家／7-11 單號帶入、Build 19 預覽勾選與結果清單。
 - 架構重點：
   - `ShopeeBatchRunner`（流程與操作）＋`ShopeeBatchScreens`（純判讀，有單元測試）。`ReadAsync` 先讀 `ChromePageText`（UI Automation，`CacheRequest`），沒有 Document 才整窗 OCR（`RecognizeLinesAsync` 行模式引擎；逐字模式整窗會在 RapidOCR `GetWordInfo` IndexOutOfRange）。`WaitAsync`：probe 成功、與上一讀相同、無 Loading 才行動。
   - 物流只看訂單明細頁「包裹1」（清單列文字可能截斷）；安排出貨按鈕需完整讀到、與「不成立訂單」間距 ≥3 px、橘色取樣 8 點 ≥3 點。全家先按「申請寄件編號」。寄件單：蝦皮出貨文件頁等到寄件單訂單編號出現才核對（Build 18）；7-11、全家用 Ctrl+P；`PrintDialogAsync` 主動設定頁面與縮放（Home／End＋Enter、輸入後讀回），核對印表機與「1 張紙」。
@@ -73,7 +73,7 @@ V0.3.0（Build 0–18，未發布）現況：
   - ERP 端：`PrimeDetailGridAsync` 以表頭「品號」定位第一列並學欄位順序，列高 22 px；`SetDetailCellAsync` 3 次重試；開始前多個 COPI08 或找不到即提示不開始（Build 18）。
   - MO店+：`MoImportForm` 依內容分類（過半訂單有物流單號＝出貨後），`MoOrderImport.FillTracking` 只填單一號碼、其餘列在預覽下方；寄件單 PDF 路線試過後移除（全家寄件單是圖片且沒有 14 碼訂單編號）。說明視窗共用 `HelpForm`。
 - 設定：`ShopeeLabelPrinter`、`ShopeeLabelScale` 110、`SevenLabelScale` 100、`FamilyLabelScale` 165、`FamilyLabelPages` "2"；Chrome 網頁文字診斷在「設定 › 一般」。
-- V0.3.0 下一輪待做（使用者 2026-10-13 交代，尚未開始，做完一起發布）：(1) MO 說明加後台截圖 `assets/help/mo-export-before.png`（未出貨頁→匯出報表、批次出貨）、`mo-export-after.png`（配送中頁→匯出報表），已馬賽克並入庫，尚未接到 `MoImportHelpForm`。(2) 匯入預覽拿掉「轉人工原因」「輸入紀錄」欄，其他欄加寬；輸入前就知道的問題（貨運別未設定等）該列紅字＋tooltip、預設不勾、列在下方。(3) 批次結束清單做成共用元件（蝦皮全自動的 `ShowBatchSummary` 一般化），蝦皮全自動／MO店+／酷澎／蝦皮匯入都用。(4) 兩個開始按鈕合併為「開始輸入（N 張）」，每列前加 checkbox；勾 2 張以上需自動儲存。(5) 已輸入完成（ledger Saved）的訂單在預覽灰掉、不能勾、顯示「已輸入過」。
+- V0.3.0 Build 19（使用者 2026-10-13 交代的下一輪項目，已完成、待實機）：`OrderImportForm` 勾選框欄 `Pick`（已儲存 ledger＝唯讀並畫「已輸入過」；HandoffReason＝紅字、預設不勾、原因併入下方提示）、單一「開始輸入」（1 張＝`StartSelected`，多張＝`RunAll`＋`SelectedOrders`，需自動儲存），拿掉轉人工原因／輸入紀錄欄；`BatchSummaryForm`（標題、headline、`BatchSummarySection`、停止說明）取代 MessageBox 與蝦皮全自動的 `ShowBatchSummary`；`MoImportHelpForm` 加 `mo-export-before.png`／`mo-export-after.png`。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

@@ -3,10 +3,12 @@ namespace CYERPAutoInput;
 internal enum OrderImportAction { None, StartSelected, RunAll }
 
 /// <summary>
-/// Preview of a parsed platform export (蝦皮, MO店+): lists the importable orders and the rows
-/// that were left out, then starts one order or the batch. MO店+ orders get their tracking
-/// number and invoice fields filled here, because MO店+ issues tracking numbers only after
-/// the export (user, 2026-10-10).
+/// Preview of a parsed platform export (蝦皮, MO店+, 酷澎): lists the importable orders and the
+/// rows that were left out; the ticked orders are entered, one alone or as a batch (user,
+/// 2026-10-13: one button, a tick box per row). An order already saved by this program is shown
+/// as such and cannot be ticked; one with a reason for a person is red and not ticked at first.
+/// What happened is the batch's closing list, not columns here. MO店+ orders get their invoice
+/// fields filled here (user, 2026-10-10).
 /// </summary>
 internal sealed class OrderImportForm : Form
 {
@@ -18,12 +20,21 @@ internal sealed class OrderImportForm : Form
     public OrderImportAction Action { get; private set; }
     public ImportedOrder? SelectedOrder { get; private set; }
 
+    /// <summary>The ticked orders, in list order, for <see cref="OrderImportAction.RunAll"/>.</summary>
+    public IReadOnlyList<ImportedOrder> SelectedOrders { get; private set; } = [];
+
+    private readonly bool _autoSave;
+    private readonly CyPrimaryButton _start = new() { Width = 170, Height = 34 };
+
     public OrderImportForm(string source, string fileName, IReadOnlyList<ImportedOrder> orders, IReadOnlyList<string> errors,
         bool autoSave, Func<ImportedOrder, LedgerEntry?> ledger, Func<string, Task<string>>? lookupName = null,
         IReadOnlyList<string>? notes = null)
     {
-        notes ??= [];
         _orders = orders;
+        _autoSave = autoSave;
+        // Orders for a person are named below too, so the reason is there without hovering.
+        notes = [.. orders.Where(o => o.HandoffReason.Length > 0).Select(o => $"訂單 {o.OrderSn} 需人工處理（預設不勾）：{o.HandoffReason}"),
+            .. notes ?? []];
         _ledger = ledger;
         _editable = orders.Any(o => o.InvoiceEditable);
         Text = $"{source}訂單匯入";
@@ -36,14 +47,15 @@ internal sealed class OrderImportForm : Form
         Font = new Font("Microsoft JhengHei UI", 9.5F);
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, _editable ? 52 : 32));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, _editable ? 52 : 40));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, errors.Count + notes.Count > 0 ? 110 : 0));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
 
         var summary = $"{fileName}：可匯入 {orders.Count} 張訂單" + (errors.Count > 0 ? $"，{errors.Count} 筆無法匯入（見下方）" : string.Empty)
-            + (notes.Count > 0 ? $"，物流單號有 {notes.Count} 項要注意（見下方）" : string.Empty);
+            + (notes.Count > 0 ? $"，{notes.Count} 項要注意（見下方）" : string.Empty)
+            + "。勾選要輸入的訂單後按「開始輸入」（勾一張單獨輸入，多張為批次）。";
         if (_editable) summary += "\n白底欄位可直接填寫：物流單號（可空白，之後回補）、客戶全名（有統編時自動查詢經濟部登記名稱）、發票日期、發票號碼。";
         root.Controls.Add(new Label
         {
@@ -74,15 +86,11 @@ internal sealed class OrderImportForm : Form
             WrapContents = false,
             Padding = new Padding(4, 8, 4, 0)
         };
-        var runAll = new CyPrimaryButton { Text = $"批次輸入（{orders.Count} 張）", Width = 150, Height = 34, Enabled = autoSave && orders.Count > 0 };
-        runAll.Click += (_, _) => RunAll();
-        var start = new CyPrimaryButton { Text = "開始輸入選取的訂單", Width = 170, Height = 34, Enabled = orders.Count > 0 };
-        start.Click += (_, _) => StartSelected();
+        _start.Click += (_, _) => Start();
         var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
-        buttons.Controls.Add(runAll);
-        buttons.Controls.Add(start);
+        buttons.Controls.Add(_start);
         buttons.Controls.Add(cancel);
-        if (!autoSave) ExplainDisabled(buttons, runAll, "批次輸入需要每張單儲存後才能接續下一張；請先在「設定」勾選自動儲存。");
+        UpdateStart();
         root.Controls.Add(buttons, 0, 3);
         CancelButton = cancel;
 
@@ -108,7 +116,7 @@ internal sealed class OrderImportForm : Form
     private void ConfigureGrid()
     {
         _grid.Dock = DockStyle.Fill;
-        _grid.ReadOnly = !_editable;
+        _grid.ReadOnly = false; // the tick boxes; the other columns are read-only one by one
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
         _grid.RowHeadersVisible = false;
@@ -132,6 +140,15 @@ internal sealed class OrderImportForm : Form
                 SortMode = DataGridViewColumnSortMode.NotSortable
             });
 
+        _grid.Columns.Add(new DataGridViewCheckBoxColumn
+        {
+            Name = "Pick",
+            HeaderText = "輸入",
+            ToolTipText = "勾選要輸入的訂單；按這裡全選或全不選",
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+            Width = 76,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
         Column("OrderSn", "訂單編號", 140, 128);
         if (_editable) Column("Carrier", "物流商", 100, 70);
         Column("Tracking", "物流單號", 120, 90, _editable);
@@ -154,8 +171,6 @@ internal sealed class OrderImportForm : Form
             Column("Total", "代收", 55, 50);
         }
         Column("Items", "明細（品號×數量＠單價）", 260, 120);
-        Column("Handoff", "轉人工原因", 170, 90);
-        Column("Ledger", "輸入紀錄", 90, 70);
         _grid.ShowCellToolTips = true; // truncated details and reasons show in full on hover
 
         foreach (var order in _orders)
@@ -175,20 +190,57 @@ internal sealed class OrderImportForm : Form
                 row.Cells["Total"].Value = order.Total;
             }
             row.Cells["Items"].Value = order.ItemSummary();
-            row.Cells["Handoff"].Value = order.HandoffReason;
             var entry = _ledger(order);
-            row.Cells["Ledger"].Value = entry?.ShortText ?? string.Empty;
-            if (entry?.Status == LedgerStatus.Saved) row.DefaultCellStyle.ForeColor = CyVisualTheme.TextDisabled;
+            if (entry?.Status == LedgerStatus.Saved)
+            {
+                // Entered and saved before: shown, never entered again.
+                row.Cells["Pick"].Value = false;
+                row.Cells["Pick"].ReadOnly = true;
+                row.DefaultCellStyle.ForeColor = CyVisualTheme.TextDisabled;
+                foreach (DataGridViewCell cell in row.Cells) cell.ToolTipText = "已輸入過，不能再次輸入：" + entry.Describe();
+                foreach (DataGridViewCell cell in row.Cells) if (cell.OwningColumn.Name != "Pick") cell.ReadOnly = true;
+            }
+            else
+            {
+                row.Cells["Pick"].Value = order.HandoffReason.Length == 0;
+                var tip = string.Join("\n", new[]
+                {
+                    order.HandoffReason.Length > 0 ? "需人工處理：" + order.HandoffReason : string.Empty,
+                    entry is not null ? entry.Describe() : string.Empty
+                }.Where(t => t.Length > 0));
+                if (order.HandoffReason.Length > 0) row.DefaultCellStyle.ForeColor = CyVisualTheme.Danger;
+                if (tip.Length > 0)
+                    foreach (DataGridViewCell cell in row.Cells) if (cell.OwningColumn.Name is "OrderSn" or "Items" or "Pick") cell.ToolTipText = tip;
+            }
         }
+
+        // A tick counts at once, not when the cell is left.
+        _grid.CurrentCellDirtyStateChanged += (_, _) =>
+        {
+            if (_grid.CurrentCell?.OwningColumn.Name == "Pick" && _grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        };
+        _grid.CellValueChanged += (_, e) => { if (e.RowIndex >= 0 && _grid.Columns[e.ColumnIndex].Name == "Pick") UpdateStart(); };
+        _grid.ColumnHeaderMouseClick += (_, e) =>
+        {
+            if (_grid.Columns[e.ColumnIndex].Name != "Pick") return;
+            var open = _grid.Rows.Cast<DataGridViewRow>().Where(r => !r.Cells["Pick"].ReadOnly).ToList();
+            var tick = open.Any(r => r.Cells["Pick"].Value is not true);
+            foreach (var r in open) r.Cells["Pick"].Value = tick;
+            UpdateStart();
+        };
+        // Already entered: the tick box gives way to the words.
+        _grid.CellPainting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "Pick" || e.Graphics is null) return;
+            if (!_grid.Rows[e.RowIndex].Cells[e.ColumnIndex].ReadOnly) return;
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border);
+            TextRenderer.DrawText(e.Graphics, "已輸入過", _grid.Font, e.CellBounds, CyVisualTheme.TextDisabled,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            e.Handled = true;
+        };
 
         _grid.CellFormatting += TintReadOnlyCells;
         _grid.CellEndEdit += (_, e) => WriteBack(e.RowIndex, e.ColumnIndex);
-        _grid.CellDoubleClick += (_, e) =>
-        {
-            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _grid.Columns[e.ColumnIndex].ReadOnly &&
-                _grid.Columns[e.ColumnIndex].Name != "InvoiceDatePick")
-                StartSelected();
-        };
         if (!_editable) return;
 
         // 發票日期 gets the slashes while typing, like the main form's date fields.
@@ -225,7 +277,7 @@ internal sealed class OrderImportForm : Form
     /// </summary>
     private void TintReadOnlyCells(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        if (!_editable || e.ColumnIndex < 0 || e.CellStyle is null) return;
+        if (!_editable || e.ColumnIndex < 0 || e.CellStyle is null || _grid.Columns[e.ColumnIndex].Name == "Pick") return;
         e.CellStyle.BackColor = _grid.Columns[e.ColumnIndex].ReadOnly ? CyVisualTheme.ReadOnly : CyVisualTheme.White;
     }
 
@@ -258,24 +310,6 @@ internal sealed class OrderImportForm : Form
         }
     }
 
-    /// <summary>
-    /// A disabled button gets no mouse messages, so its explanation is shown from the
-    /// container when the pointer is over the button's area.
-    /// </summary>
-    private static void ExplainDisabled(Control host, Control button, string text)
-    {
-        var tip = new ToolTip();
-        var shown = false;
-        host.MouseMove += (_, e) =>
-        {
-            var over = button.Bounds.Contains(e.Location);
-            if (over && !shown) { tip.Show(text, host, button.Left, button.Top - 44, 6000); shown = true; }
-            else if (!over && shown) { tip.Hide(host); shown = false; }
-        };
-        host.MouseLeave += (_, _) => { tip.Hide(host); shown = false; };
-        host.Disposed += (_, _) => tip.Dispose();
-    }
-
     private bool CommitEdits()
     {
         if (_grid.IsCurrentCellInEditMode && !_grid.EndEdit()) return false;
@@ -292,12 +326,40 @@ internal sealed class OrderImportForm : Form
         return true;
     }
 
-    private void StartSelected()
+    private List<ImportedOrder> Ticked() =>
+        _grid.Rows.Cast<DataGridViewRow>()
+            .Where(r => r.Cells["Pick"].Value is true && !r.Cells["Pick"].ReadOnly && r.Tag is ImportedOrder)
+            .Select(r => (ImportedOrder)r.Tag!).ToList();
+
+    private void UpdateStart()
+    {
+        var count = Ticked().Count;
+        _start.Text = count > 1 ? $"開始輸入（{count} 張）" : "開始輸入";
+        _start.Enabled = count > 0;
+    }
+
+    /// <summary>One ticked order is entered alone; two or more are a batch, which saves each one.</summary>
+    private void Start()
     {
         if (!CommitEdits()) return;
-        var index = _grid.CurrentCell?.RowIndex ?? -1;
-        if (index < 0 || index >= _orders.Count) return;
-        var order = _orders[index];
+        var ticked = Ticked();
+        if (ticked.Count == 0) return;
+        if (ticked.Count == 1)
+        {
+            StartSelected(ticked[0]);
+            return;
+        }
+        if (!_autoSave)
+        {
+            MessageBox.Show(this, $"勾了 {ticked.Count} 張：批次輸入需要每張單儲存後才能接續下一張，請先在「設定」勾選自動儲存；或只勾一張輸入。",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        RunAll(ticked);
+    }
+
+    private void StartSelected(ImportedOrder order)
+    {
         if (ShowProblem(order, order.ValidationError())) return;
         if (order.MissingInvoiceName && order.HandoffReason.Length == 0 &&
             MessageBox.Show(this, $"訂單 {order.OrderSn} 有統一編號，但沒有發票的客戶全名（經濟部查無或未填）。\n\n建議先填寫客戶全名；仍要輸入嗎？",
@@ -308,11 +370,10 @@ internal sealed class OrderImportForm : Form
         DialogResult = DialogResult.OK;
     }
 
-    private void RunAll()
+    private void RunAll(List<ImportedOrder> ticked)
     {
-        if (!CommitEdits()) return;
-        // Orders the batch will skip anyway (handed off, already saved) need no fixing here.
-        var toEnter = _orders.Where(o => o.HandoffReason.Length == 0 && _ledger(o)?.Status != LedgerStatus.Saved).ToList();
+        // Orders the batch will skip anyway (handed off) need no fixing here.
+        var toEnter = ticked.Where(o => o.HandoffReason.Length == 0).ToList();
         foreach (var order in toEnter)
             if (ShowProblem(order, order.ValidationError())) return;
         var noName = toEnter.Where(o => o.MissingInvoiceName).Select(o => o.OrderSn).ToList();
@@ -320,6 +381,7 @@ internal sealed class OrderImportForm : Form
             MessageBox.Show(this, $"以下 {noName.Count} 張有統一編號，但沒有發票的客戶全名（經濟部查無或未填）：\n{string.Join("、", noName)}\n\n建議先填寫；仍要開始批次輸入嗎？",
                 Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
+        SelectedOrders = ticked;
         Action = OrderImportAction.RunAll;
         DialogResult = DialogResult.OK;
     }

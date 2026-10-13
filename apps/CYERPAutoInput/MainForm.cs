@@ -1063,63 +1063,31 @@ internal sealed class MainForm : Form
 
         // One list at the end (user, 2026-10-13): what is done, what was passed over or needs a
         // look, and where it stopped if it did.
-        var text = new System.Text.StringBuilder();
-        text.AppendLine(outcome switch
+        var headline = outcome switch
         {
-            AutomationOutcome.Done => "全自動完成。",
-            AutomationOutcome.Cancelled => "已按 Esc 停止全自動。",
-            _ => "全自動已停止，請人工處理：\r\n" + problem
-        });
-        text.AppendLine();
-        text.AppendLine($"已完成 {runner.Done.Count} 筆。");
-        if (runner.Notes.Count > 0)
+            AutomationOutcome.Done => $"全自動完成：已完成 {runner.Done.Count} 筆。",
+            AutomationOutcome.Cancelled => $"已按 Esc 停止全自動：已完成 {runner.Done.Count} 筆。",
+            _ => $"全自動已停止：已完成 {runner.Done.Count} 筆。"
+        };
+        string? stopped = null;
+        if (outcome != AutomationOutcome.Done)
         {
-            text.AppendLine();
-            text.AppendLine($"需要人工處理 {runner.Notes.Count} 筆：");
-            foreach (var note in runner.Notes)
-                text.AppendLine($"・訂單 {note.OrderSn}：{note.Message.Replace("\n", "\r\n    ")}");
-        }
-        if (outcome != AutomationOutcome.Done && runner.Current is { } current)
-        {
-            text.AppendLine();
-            text.AppendLine($"停在訂單 {current.OrderSn}：" + (shipped
-                ? "這筆在蝦皮已按「安排出貨」" + (current.Tracking.Length > 0 ? $"（寄件編號 {current.Tracking}）" : string.Empty) + "，請人工確認寄件單是否已列印，並完成 ERP 輸入。"
-                : "這筆在蝦皮尚未安排出貨。"));
+            var lines = new List<string>();
+            if (outcome != AutomationOutcome.Cancelled) lines.Add("停止原因：" + problem);
+            if (runner.Current is { } current)
+                lines.Add($"停在訂單 {current.OrderSn}：" + (shipped
+                    ? "這筆在蝦皮已按「安排出貨」" + (current.Tracking.Length > 0 ? $"（寄件編號 {current.Tracking}）" : string.Empty) + "，請人工確認寄件單是否已列印，並完成 ERP 輸入。"
+                    : "這筆在蝦皮尚未安排出貨。"));
+            stopped = lines.Count > 0 ? string.Join("\r\n", lines) : null;
         }
         SetStatus(outcome == AutomationOutcome.Done
             ? $"全自動完成：{runner.Done.Count} 筆，需人工處理 {runner.Notes.Count} 筆"
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         if (outcome != AutomationOutcome.Done || runner.Notes.Count > 0) Alarm();
-        ShowBatchSummary(text.ToString(), outcome == AutomationOutcome.Done && runner.Notes.Count == 0);
-    }
-
-    /// <summary>The batch's closing list in a window that scrolls and copies (it can be long).</summary>
-    private void ShowBatchSummary(string text, bool clean)
-    {
-        using var form = new Form
-        {
-            Text = ShopeeBatchTitle,
-            StartPosition = FormStartPosition.CenterParent,
-            Size = new Size(720, clean ? 260 : 480),
-            MinimizeBox = false,
-            ShowIcon = false,
-            Font = new Font("Microsoft JhengHei UI", 10F)
-        };
-        var box = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Text = text, BorderStyle = BorderStyle.None, BackColor = SystemColors.Window };
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 50, Padding = new Padding(8) };
-        var ok = new CyPrimaryButton { Text = "確定", Size = new Size(92, 34), DialogResult = DialogResult.OK };
-        var copy = new CyButton { Text = "複製", Size = new Size(92, 34) };
-        copy.Click += (_, _) => Clipboard.SetText(text);
-        buttons.Controls.Add(ok);
-        buttons.Controls.Add(copy);
-        var pad = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 14, 16, 4) };
-        pad.Controls.Add(box);
-        form.Controls.Add(pad);
-        form.Controls.Add(buttons);
-        form.AcceptButton = ok;
-        CyVisualTheme.Apply(form);
-        box.Select(0, 0);
-        form.ShowDialog(this);
+        using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
+            [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList())],
+            stopped);
+        summary.ShowDialog(this);
     }
 
     private const string ShopeeBatchTitle = "全自動";
@@ -1348,7 +1316,7 @@ internal sealed class MainForm : Form
             }
             else if (preview.Action == OrderImportAction.RunAll)
             {
-                if (await RunImportBatchAsync(source, orders, ledger)) return;
+                if (await RunImportBatchAsync(source, preview.SelectedOrders, ledger)) return;
             }
             else return;
             _log.Info("import", "start stopped by a check; back to the preview");
@@ -1583,31 +1551,24 @@ internal sealed class MainForm : Form
             }
         });
 
-        var lines = new List<string> { $"已儲存 {done.Count} / {orders.Count} 張" };
-        lines.AddRange(done.Select(d => "・" + d));
-        void Section(string title, List<string> items)
-        {
-            if (items.Count == 0) return;
-            lines.Add(string.Empty);
-            lines.Add(title);
-            lines.AddRange(items.Select(i => "・" + i));
-        }
-        Section($"需回補物流單號 {noTracking.Count} 張（送貨地址(一) 空白）：", noTracking);
-        Section("需人工確認：", review);
-        Section($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff);
-        Section($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates);
-        Section($"失敗 {failed.Count} 張（未儲存，已略過）：", failed);
+        string? stopped = null;
         if (stoppedAt is not null)
         {
-            lines.Add(string.Empty);
-            lines.Add("停止於：" + stoppedAt);
+            stopped = "停止於：" + stoppedAt;
             var rest = orders.Skip(next + 1).Select(o => o.OrderSn).ToList();
-            if (rest.Count > 0) lines.Add($"未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）");
+            if (rest.Count > 0) stopped += $"\r\n未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）";
         }
         SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
-        var clean = stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 && duplicates.Count == 0 && noTracking.Count == 0;
-        MessageBox.Show(this, string.Join(Environment.NewLine, lines), $"{source}批次結果", MessageBoxButtons.OK,
-            clean ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
+        [
+            new($"已完成 {done.Count} 張：", done),
+            new($"需回補物流單號 {noTracking.Count} 張（送貨地址(一) 空白）：", noTracking),
+            new("需人工確認：", review),
+            new($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff),
+            new($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates),
+            new($"失敗 {failed.Count} 張（未儲存，已略過）：", failed)
+        ], stopped);
+        summary.ShowDialog(this);
         return true;
     }
 
