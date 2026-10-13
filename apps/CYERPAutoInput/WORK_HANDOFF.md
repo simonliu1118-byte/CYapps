@@ -78,6 +78,7 @@
 - V0.3.0 Build 4：7-ELEVEN。`ShopeeBatchScreens.CarrierKind`（Shopee／SevenEleven／Other；7ELEVEN／711／統一超商）、`TrackingIn` 加交貨便代碼 `[A-Z][0-9OIL]{11}`、`IsSevenLabelPage`／`SevenLabelCode`、`IsPrintDialog` 改為 目的地＋（縮放比例或顯示更多設定）、`MoreSettings`。`ShopeeBatchRunner.ShipAsync` 依 Kind 分 `PrintShopeeLabelAsync`／`PrintSevenSlipAsync`（等 7-11 分頁、核對寄貨訂單編號與服務代碼、Ctrl+P），共用 `PrintDialogAsync(scale)`（讀不到縮放比例先點一次顯示更多設定）。設定 `SevenLabelScale`=100。以使用者 7-11 截圖（本機）驗證。待確認：7-11 訂單在蝦皮訂單頁的物流單號是否等於交貨便代碼（ERP 前會比對，不同則停止）。全家／萊爾富待使用者提供。
 - V0.3.0 Build 5：全家。`CarrierKind` FamilyMart（全家／FamilyMart）、`ApplyTrackingButton`（申請寄件編號，WaitAsync 內按一次）、`DialogTracking` 其他格式退而讀標題下方 8–20 碼英數（≥8 數字）、`IsFamilyLabelPage`、`ShowsOrderSn`（全家把訂單編號印在下一行）、`SheetCount`、`PrintRowValue`、`PrintScaleBox`、`PrintPagesBox`。`ShopeeBatchRunner.PrintDialogAsync(scale, pages)` 改為主動設定：頁面全部／自訂＋頁碼、縮放比例自訂＋數字（`ChooseAsync` 開下拉後只點新出現的選項，讀畫面與點擊時不 Front 以免關掉下拉；`TypeIntoAsync` 點、Ctrl+A、輸入、Tab），最後確認目的地、1 張紙；超過 10 次操作或 40 秒即停止。`ShopeeBatchPrint` record 帶印表機與三種縮放、全家頁碼。以使用者全家截圖（本機）驗證辨識；下拉清單的實際樣子未見過，實測時注意 LOG 的 `click 列印設定`／`選 …`／`type …`。
 - V0.3.0 Build 6：`ShopeePageScan.Sections` 商品表 bottom 不超過其下第一個「買家實付金額」上緣（讀不到隱藏入帳明細時，`stop` 會落到買家卡片的「訂單金額」）；`ShopeeScreenshotForm.AddAsync(..., kind)` 沿用 `ShopeePageSection.Kind`。全家寄件編號 11 碼數字＝寄取貨單「訂單編號」，`ShowsNumber` 核對。
+- V0.3.0 Build 7：`ShopeePageScanner.ReadCardsAsync` 進帳資訊的讀取範圍延伸到下一個 wanted 卡片上緣（仍在讀到入帳明細時停止）。依據：LOG 卡片 `進帳資訊 top=1197 h=1186` 之後 `top=2385 h=598 title=買10送1…`（同一商品表被灰線切開）。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

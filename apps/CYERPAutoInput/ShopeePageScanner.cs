@@ -196,8 +196,18 @@ internal sealed class ShopeePageScanner
 
         var targeted = wanted.Count >= 3;
         if (!targeted) _log.Info("page-scan", $"card titles not all found wanted={wanted.Count}; reading the whole column");
-        var parts = targeted ? wanted.Select(w => (w.Card.Top, w.Card.Bottom, StopAtLedger: w.Title.Contains("進帳", StringComparison.Ordinal))).ToList()
-                             : [(0, page.Height, false)];
+        // The product table can run on past its card: a long order (user's PC, 2026-10-13: 8
+        // products) showed a grey gap inside it, and the rest read as a card titled with a
+        // product name. So 進帳資訊 is read on, over whatever follows, until 隱藏入帳明細 or the
+        // next wanted card (買家實付金額).
+        var parts = targeted
+            ? wanted.Select((w, i) =>
+            {
+                var ledger = w.Title.Contains("進帳", StringComparison.Ordinal);
+                var bottom = ledger ? (i + 1 < wanted.Count ? wanted[i + 1].Card.Top : page.Height) : w.Card.Bottom;
+                return (w.Card.Top, Bottom: bottom, StopAtLedger: ledger);
+            }).ToList()
+            : [(0, page.Height, false)];
         // Progress follows the rows still to read (user, 2026-10-12: a step count stood still
         // while one long 進帳資訊 card was read); the title strip counts as a short card.
         const int TitleWork = 400;
