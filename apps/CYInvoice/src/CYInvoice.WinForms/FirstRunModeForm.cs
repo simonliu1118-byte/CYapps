@@ -22,8 +22,8 @@ internal sealed class FirstRunModeForm : Form
         detail = new Label
         {
             Text = "1. 使用單機版\n   建立這台電腦的本機超級管理員。\n\n"
-                + "2. 直接加入雲端\n   使用配對碼，或邀請碼與既有超管帳密加入。\n   沿用雲端帳號，不建立本機帳號。\\n\\n"
-                + "3. 公司級災難復原\\n   舊裝置 Token 全遺失時，由 CYWEB 超管邀請接管，成功後撤銷所有舊裝置。",
+                + "2. 直接加入雲端\n   使用配對碼，或邀請碼與既有超管帳密加入。\n   沿用雲端帳號，不建立本機帳號。\n\n"
+                + "3. 公司級災難復原\n   舊裝置 Token 全遺失時，由 CYWEB 超管邀請接管，成功後撤銷所有舊裝置。",
             Dock = DockStyle.Top,
             Height = 203,
             Padding = new Padding(20, 4, 20, 4),
@@ -62,7 +62,7 @@ internal sealed class FirstRunModeForm : Form
             throw new InvalidOperationException("首次使用三點說明被裁切");
         if (!detail.Text.Contains("1. 使用單機版\n", StringComparison.Ordinal)
             || !detail.Text.Contains("2. 直接加入雲端\n", StringComparison.Ordinal)
-            || !detail.Text.Contains("3. 公司級災難復原\\n", StringComparison.Ordinal))
+            || !detail.Text.Contains("3. 公司級災難復原\n", StringComparison.Ordinal))
             throw new InvalidOperationException("首次使用說明缺少三點分流");
     }
 }
