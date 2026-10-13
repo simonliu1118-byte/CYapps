@@ -1,10 +1,9 @@
 /* CYAccountingWeb quick entry functional module. */
 
 let cyFastSummaryRequest = 0;
-let cyFocusSummaryAfterSave = false;
 
 window.cyPrepareQuickEntryUi = prepareQuickEntryUi;
-window.addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered);
+window.cyAfterEntrySaved = handleFastEntrySaved;
 window.addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged);
 
 window.addEventListener('load', () => {
@@ -29,13 +28,8 @@ function bindFastEntryKeys() {
   });
   enterStep(els.amount, () => {
     if (!els.saveButton.disabled) {
-      cyFocusSummaryAfterSave = true;
       els.form.requestSubmit();
     }
-  });
-
-  els.form?.addEventListener('submit', () => {
-    cyFocusSummaryAfterSave = true;
   });
 
   els.accountName?.addEventListener('change', loadFrequentSummaries);
@@ -79,13 +73,9 @@ function handleQuickEntryKindChanged() {
   void loadFrequentSummaries();
 }
 
-function handleFastEntryLedgerRendered() {
-  if (!cyFocusSummaryAfterSave || els.saveMessage?.textContent !== '存檔成功') return;
-  cyFocusSummaryAfterSave = false;
-  setTimeout(() => {
-    els.summary.focus();
-    loadFrequentSummaries();
-  }, 0);
+function handleFastEntrySaved() {
+  els.summary.focus();
+  void loadFrequentSummaries();
 }
 
 async function prepareQuickEntryUi() {

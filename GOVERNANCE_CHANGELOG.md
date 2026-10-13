@@ -1,5 +1,20 @@
 # CYApps Governance Changelog
 
+## 2.3.40 — 2026/10/14
+
+- 依使用者要求，CYAccountingWeb 桌機編輯回到原記帳表單；跨裝置共用既有 Adaptive entry editor／draft／cancel 與 app.js transaction writer，移除被取代的 ledger inline renderer、listener、assets 及樣式。PROJECT_RULES owner 地圖同步更新，不新增第二 writer 或 authority。
+- 日期 presentation 改可輸入文字＋日曆按鈕，消費既有日期 parser／setter；移除 owned-DOM observer 及 synthetic-keyboard retry bridge，datepicker teardown 中止舊 lifecycle listeners。產品 V0.23.4；帳務 schema、Identity contract、Stable Release 不變。
+
+## 2.3.39 — 2026/10/13
+
+- CYAccountingWeb 一次性清理 #436／run 38383025033 完成並回讀：34 個過期分支、16 個退場流程的 22 筆 completed runs 已刪，候選殘留為零，沒有到期 Artifact。#268／#291／#383 過期文件 PR 已關閉；現行部署／Release、未合併 #435 與 optimistic create、其他 App／共通流程保留。
+- 移除本次 maintenance workflow／script／manifest，彙整現況、驗收及後續工作；不留永久清理權限入口，產品 VERSION／BUILD、正式資料與 Stable Release 不變。
+
+## 2.3.38 — 2026/10/13
+
+- 使用者授權清理 CYAccountingWeb 無用 GitHub 產物；新增一次性 maintenance 流程，PR 僅唯讀盤點，main 才執行已檢視的 branch SHA 清單、已退場 workflow 的 completed runs 與本 App 到期 Artifact 清理。現行部署／Release、執行中 run、open PR 及指定未完成工作保留；不接入 Cloudflare 或讀取帳務。
+- 清理完成後移除一次性 workflow／script／manifest，保留正式流程及可追溯維護紀錄；不新增永久授權例外，不改產品 VERSION／BUILD。
+
 ## 2.3.37 — 2026/10/13
 
 - CYInvoice V2.6.19 首次正式 Release 將 Cloud client contract test 以 `--no-build` 執行，但 Cloud.Tests 不在 CYInvoice.sln 內，Windows runner 未產生 exe；修成測試專案自行建置，保留此額外 test gate，不繞過測試。

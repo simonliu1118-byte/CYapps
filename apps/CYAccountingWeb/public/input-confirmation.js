@@ -2,7 +2,6 @@
 
 const cyInputConfirmations = [];
 let cyPendingConfirmation = null;
-let cyConfirmationObserver = null;
 
 window.addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual);
 
@@ -30,6 +29,7 @@ function setupEntryWorkflowUi() {
     section.innerHTML = `
       <div class="section-title">
         <div><h2>輸入確認</h2></div>
+        <div id="confirmationMessageSlot" hidden></div>
         <span class="hint">本次使用最近 10 筆</span>
       </div>
       <div id="inputConfirmationList" class="confirmation-list" aria-live="polite"></div>
@@ -41,7 +41,7 @@ function setupEntryWorkflowUi() {
 function bindEntryKindShortcut() {
   els.form?.addEventListener('keydown', event => {
     if (event.key !== 'Tab' || event.shiftKey || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (document.body.classList.contains('auth-locked')) return;
+    if (document.body.classList.contains('auth-locked') || els.kindButtons.some(button => button.disabled)) return;
     if (document.querySelector('dialog[open]')) return;
     if (!(event.target instanceof HTMLElement) || !event.target.matches('input, select')) return;
 
@@ -67,11 +67,11 @@ function bindInputConfirmation() {
 
   els.form.addEventListener('submit', () => {
     cyPendingConfirmation = snapshotPendingConfirmation();
-  });
+  }, true);
 
-  cyConfirmationObserver = new MutationObserver(() => {
+  window.addEventListener('cyacc:entry-message', event => {
     if (!cyPendingConfirmation) return;
-    const text = String(els.saveMessage.textContent || '').trim();
+    const text = String(event.detail?.text || '').trim();
     if (!text) return;
 
     if (text === '存檔成功') {
@@ -80,12 +80,11 @@ function bindInputConfirmation() {
       return;
     }
 
-    if (els.saveMessage.classList.contains('error')) {
+    if (event.detail?.isError) {
       pushInputConfirmation({ ...cyPendingConfirmation, ok: false, message: text });
       cyPendingConfirmation = null;
     }
   });
-  cyConfirmationObserver.observe(els.saveMessage, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
 }
 
 function snapshotPendingConfirmation() {
@@ -110,6 +109,7 @@ function renderInputConfirmations() {
   if (!container) return;
   if (!cyInputConfirmations.length) {
     container.innerHTML = '<div class="confirmation-empty">本次使用尚無輸入紀錄。</div>';
+    syncConfirmationCount();
     return;
   }
 
@@ -119,13 +119,17 @@ function renderInputConfirmations() {
     const amountText = Number.isFinite(amountNumber) && amountNumber > 0 ? money(amountNumber) : `$${escapeHtml(entry.amount || '0')}`;
     const kindText = entry.kind === 'income' ? '收入' : '支出';
     const date = escapeHtml(String(entry.txDate || '').replaceAll('-', '/'));
-    return `<div class="confirmation-item ${entry.ok ? 'success' : 'error'}">
+    const status = entry.ok ? '存檔成功' : (entry.message || '存檔失敗');
+    const fullText = `${String(entry.txDate || '').replaceAll('-', '/')} [${entry.accountName}] ${kindText} ${entry.categoryName} - ${summary} ${amountText} ${status}`;
+    return `<div class="confirmation-item ${entry.ok ? 'success' : 'error'}" title="${escapeHtml(fullText)}">
       <div class="confirmation-main">
-        ${date}　[${escapeHtml(entry.accountName)}]　<span class="confirmation-kind ${entry.kind}">${kindText}</span> ${escapeHtml(entry.categoryName)} - ${escapeHtml(summary)}　${amountText}
+        <span class="confirmation-date">${date}</span> <span class="confirmation-account">[${escapeHtml(entry.accountName)}]</span> <span class="confirmation-kind ${entry.kind}">${kindText}</span> <span class="confirmation-description">${escapeHtml(entry.categoryName)} - ${escapeHtml(summary)}</span> <span class="confirmation-amount">${amountText}</span>
       </div>
-      <span class="confirmation-status">${entry.ok ? '存檔成功' : escapeHtml(entry.message || '存檔失敗')}</span>
+      <span class="confirmation-status" aria-label="${escapeHtml(status)}">${escapeHtml(status)}</span>
     </div>`;
   }).join('');
+  syncConfirmationCount();
+  if (cyInputConfirmations.some(entry => !entry.ok)) setConfirmationDrawer(true);
 }
 
 const CY_CONFIRMATION_DRAWER_KEY = 'cyaccounting.confirmationDrawerOpen';
@@ -191,15 +195,6 @@ function setupConfirmationDrawer() {
     setConfirmationDrawer(false);
     edgeOpen.focus();
   });
-
-  const list = panel.querySelector('#inputConfirmationList');
-  if (list) {
-    const observer = new MutationObserver(() => {
-      syncConfirmationCount();
-      if (list.querySelector('.confirmation-item.error')) setConfirmationDrawer(true);
-    });
-    observer.observe(list, { childList: true, subtree: true });
-  }
 
   const topbar = document.querySelector('.topbar');
   const syncBounds = () => {

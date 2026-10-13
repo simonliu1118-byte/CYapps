@@ -15,7 +15,6 @@ const state = {
   transactions: [],
   lockedThrough: null,
   ledgerLocked: false,
-  editingTx: null,
   settingsKind: 'income',
   activeSettingsTab: 'accounts',
   openingData: null
@@ -80,16 +79,6 @@ async function startCyaccApp() {
     saveLockButton: document.querySelector('#saveLockButton'),
     clearLockButton: document.querySelector('#clearLockButton'),
     lockStatusText: document.querySelector('#lockStatusText'),
-    editDialog: document.querySelector('#editDialog'),
-    editForm: document.querySelector('#editTransactionForm'),
-    editKindLabel: document.querySelector('#editKindLabel'),
-    editDate: document.querySelector('#editDate'),
-    editAccount: document.querySelector('#editAccount'),
-    editCategory: document.querySelector('#editCategory'),
-    editSummary: document.querySelector('#editSummary'),
-    editAmount: document.querySelector('#editAmount'),
-    editMessage: document.querySelector('#editMessage'),
-    editSaveButton: document.querySelector('#editSaveButton')
   });
 
     const today = localDateString(new Date());
@@ -142,7 +131,6 @@ function finishCyaccBoot(error = null) {
 function bindEvents() {
   els.kindButtons.forEach(button => button.addEventListener('click', () => setEntryKind(button.dataset.kind)));
   els.amount.addEventListener('input', numericInput);
-  els.editAmount.addEventListener('input', numericInput);
   els.txDate.addEventListener('change', updateEntryLockState);
   els.form.addEventListener('submit', saveTransaction);
   els.monthFilter.addEventListener('change', loadTransactions);
@@ -157,7 +145,6 @@ function bindEvents() {
     }
   });
 
-  els.editForm.addEventListener('submit', saveTransactionEdit);
   els.settingsButton.addEventListener('click', openSettings);
   document.addEventListener('click', event => {
     const close = event.target.closest('[data-close-dialog]');
@@ -291,7 +278,7 @@ async function saveTransaction(event) {
     els.amount.value = '';
     els.monthFilter.value = els.txDate.value.slice(0, 7);
     await loadTransactions();
-    els.amount.focus();
+    window.cyAfterEntrySaved?.();
   } catch (error) {
     showMessage(error.message, true);
   } finally {
@@ -344,20 +331,7 @@ function setLedgerLoadingState(loading) {
 }
 
 function openEditTransaction(id) {
-  const tx = state.transactions.find(item => Number(item.id) === id);
-  if (!tx || isLocked(tx.tx_date.slice(0, 7))) return;
-  state.editingTx = tx;
-  els.editKindLabel.textContent = tx.kind === 'income' ? '收入' : '支出';
-  els.editDate.value = tx.tx_date;
-  els.editSummary.value = tx.summary || '';
-  els.editAmount.value = String(tx.amount);
-  els.editAccount.innerHTML = optionsWithHistorical(state.accounts.map(a => a.name), tx.account_name);
-  els.editAccount.value = tx.account_name;
-  const categories = state.categories.filter(c => c.kind === tx.kind).map(c => c.name);
-  els.editCategory.innerHTML = optionsWithHistorical(categories, tx.category_name);
-  els.editCategory.value = tx.category_name;
-  setDialogMessage(els.editMessage, '');
-  els.editDialog.showModal();
+  window.cyBeginEntryTransactionEdit?.(id);
 }
 
 function summaryCharacterUnits(char) {
@@ -430,25 +404,6 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
   } finally {
     cyPendingTransactionUpdates.delete(id);
     cyTransactionMutationRevision += 1;
-  }
-}
-
-async function saveTransactionEdit(event) {
-  event.preventDefault();
-  if (!state.editingTx) return;
-  const amount = Number(els.editAmount.value);
-  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) return setDialogMessage(els.editMessage, '金額必須為 1～9,999,999。', true);
-  els.editSaveButton.disabled = true;
-  try {
-    await persistTransactionUpdate(state.editingTx.id, {
-      txDate: els.editDate.value, accountName: els.editAccount.value,
-      categoryName: els.editCategory.value, summary: els.editSummary.value, amount
-    }, () => { els.editDialog.close(); showMessage('正在儲存修改…'); });
-    showMessage('修改成功');
-  } catch (error) {
-    showMessage(`${error.message} 已還原原資料。`, true);
-  } finally {
-    els.editSaveButton.disabled = false;
   }
 }
 
@@ -903,11 +858,6 @@ async function saveLock(lockedThrough) {
 }
 window.cyaccSaveLock = saveLock;
 
-function optionsWithHistorical(currentNames, selected) {
-  const names = [...currentNames];
-  if (selected && !names.includes(selected)) names.unshift(selected);
-  return names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}${currentNames.includes(name) ? '' : '（歷史）'}</option>`).join('');
-}
 
 function isLocked(month) {
   return Boolean(state.lockedThrough && /^\d{4}-\d{2}$/.test(month) && month <= state.lockedThrough);
@@ -959,8 +909,10 @@ function jsonHeaders() { return { 'content-type': 'application/json' }; }
 function setConnection(text, type) { els.connectionStatus.textContent = text; els.connectionStatus.className = `status ${type || ''}`.trim(); }
 function showMessage(text, isError = false) {
   els.saveMessage.textContent = text;
+  els.saveMessage.title = text;
   els.saveMessage.classList.toggle('error', isError);
   window.cyAfterSaveMessage?.(els.saveMessage, text, isError);
+  window.dispatchEvent(new CustomEvent('cyacc:entry-message', { detail: { text, isError } }));
 }
 function setDialogMessage(element, text, isError = false) { element.textContent = text; element.classList.toggle('error', isError); }
 function money(value) { return `$${Number(value || 0).toLocaleString('zh-TW')}`; }

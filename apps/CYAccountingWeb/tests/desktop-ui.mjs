@@ -16,7 +16,6 @@ const css = [
   'quick-entry-settings.css',
   'category-management.css',
   'excel-export.css',
-  'ledger-inline-edit.css',
   'excel-import.css',
   'backup.css',
   'desktop-migration.css',
@@ -26,18 +25,19 @@ const appJs = read('public/app.js');
 const quick = read('public/quick-entry.js');
 const category = read('public/category-management.js');
 const exportUi = read('public/excel-export-ui.js');
-const inlineEdit = read('public/ledger-inline-edit.js');
 const adaptive = read('public/adaptive-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
 const confirmationJs = read('public/input-confirmation.js');
 const markup = read('public/index.html');
 const ledgerSource = read('public/ledger-tools.js');
-const editCss = read('public/ledger-inline-edit.css');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
+const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
+const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
+assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.match(version, /^\d+\.\d+\.\d+$/, 'project VERSION must remain semantic X.Y.Z');
-assert.match(build, /^(0|[1-9]\d*)$/, 'project BUILD must remain a nonnegative integer');
+assert.equal(version, '0.23.5');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -54,7 +54,6 @@ assert.match(exportUi, /button\.textContent = '匯出中…'/);
 assert.match(exportUi, /aria-busy/);
 assert.match(exportUi, /navigator\.share/);
 assert.match(exportUi, /navigator\.canShare/);
-assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
 assert.match(adaptive, /renderSettingsCategoryManager/);
 assert.match(appJs, /const defaultButton = event\.target\.closest\('\[data-account-default\]'\)/, 'account default stays with the canonical account action owner');
@@ -82,6 +81,126 @@ for (const cls of ['desktopUi-date-picker', 'desktopUi-date-trigger', 'desktopUi
 }
 assert.doesNotMatch(adaptiveCss, /\.cy-native-date-source|\.cy-date-(?:picker|trigger|popover|day|head)/,
   'obsolete renamed date CSS must not remain');
+
+// Exercise the actual picker handlers with HTML-style attribute normalization.
+// HTML parsers lowercase attribute names; mixed-case data-* markup must not
+// silently pass because a fixture constructed dataset objects by hand.
+class PickerElement {
+  constructor() { this.attributes = {}; this.dataset = {}; this.listeners = {}; this.children = []; this.hidden = false; this.classList = { add() {}, toggle() {} }; }
+  setAttribute(name, value) {
+    name = name.toLowerCase();
+    this.attributes[name] = String(value);
+    if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = String(value);
+    if (name === 'hidden') this.hidden = true;
+  }
+  set innerHTML(markup) {
+    this.children = [...markup.matchAll(/<[a-z][\w-]*\b([^>]*)>/gi)].map(tag => {
+      const child = new PickerElement();
+      for (const attr of tag[1].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) child.setAttribute(attr[1], attr[2] || '');
+      return child;
+    });
+  }
+  matches(selector) {
+    if (selector.startsWith('.')) return (this.attributes.class || '').split(/\s+/).includes(selector.slice(1));
+    const match = /^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(selector);
+    return Boolean(match && match[1].toLowerCase() in this.attributes &&
+      (match[2] === undefined || this.attributes[match[1].toLowerCase()] === match[2]));
+  }
+  querySelectorAll(selector) { return this.children.filter(child => child.matches(selector)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+  closest(selector) { return this.matches(selector) ? this : null; }
+  addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
+  dispatchEvent(event) { for (const listener of this.listeners[event.type] || []) listener(event); }
+  click(target = this) { this.dispatchEvent({ type: 'click', target, stopPropagation() {} }); }
+  focus() {}
+}
+function pickerFixture(entryDate = false) {
+  const input = new PickerElement();
+  if (entryDate) input.id = 'txDate';
+  let value = '2026-10-13';
+  Object.defineProperty(input, 'value', {
+    get: () => value,
+    set: next => { value = /^\d{4}-\d{2}-\d{2}$/.test(String(next)) ? String(next) : ''; }
+  });
+  const roots = [];
+  input.insertAdjacentElement = (_, root) => roots.push(root);
+  const context = vm.createContext({ Date, Event, String, Number, AbortController,
+    els: { txDate: input, summary: { focus() { context.summaryFocused = true; } } },
+    updateEntryLockState() {}, showMessage(message) { context.message = message; },
+    localDateString: date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'),
+    CY_DesktopUi_WEEKDAYS: ['日', '一', '二', '三', '四', '五', '六'],
+    CY_DesktopUi_MONTHS: Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
+    document: { createElement: () => new PickerElement(), addEventListener() {} }
+  });
+  const quickDates = read('public/quick-entry-settings.js');
+  vm.runInContext(quickDates.slice(quickDates.indexOf('function validDateValue('), quickDates.indexOf('function updateQuickEntryKeyboardHint(')), context);
+  vm.runInContext(adaptive.slice(adaptive.indexOf('function ensureDesktopUiDatePicker(input)'),
+    adaptive.indexOf('function refineDesktopUiHeaderIdentity()')), context);
+  context.ensureDesktopUiDatePicker(input);
+  context.ensureDesktopUiDatePicker(input);
+  assert.equal(roots.length, 1, 'a date field keeps one picker');
+  return { input, root: roots[0], context };
+}
+const { input: pickerDate, root: pickerRoot } = pickerFixture();
+const dateTrigger = pickerRoot.querySelector('.desktopUi-date-trigger');
+const dateContent = pickerRoot.querySelector('.desktopUi-date-content');
+const dateTitle = pickerRoot.querySelector('.desktopUi-date-title');
+const dateLabel = pickerRoot.querySelector('.desktopUi-date-label');
+let pickerChanges = 0;
+pickerDate.addEventListener('change', () => pickerChanges++);
+dateTrigger.click();
+const selectedDay = dateContent.querySelectorAll('.desktopUi-date-day')
+  .find(day => Object.values(day.attributes).includes('2026-10-21'));
+assert.ok(selectedDay, 'calendar offers a different date');
+dateContent.click(selectedDay);
+assert.equal(pickerDate.value, '2026-10-21', 'selecting a day updates the required canonical input instead of clearing it');
+assert.equal(dateLabel.textContent, '2026/10/21');
+assert.equal(pickerRoot.querySelector('.desktopUi-date-popover').hidden, true);
+assert.equal(pickerChanges, 1, 'lock state and other consumers receive one canonical change');
+let dateSaveRequest;
+const dateSaveElements = {
+  txDate: pickerDate, accountName: { value: 'TEST_ACCOUNT' }, categoryName: { value: 'TEST_SUBJECT' },
+  summary: { value: 'picker regression' }, amount: { value: '50', focus() {} },
+  monthFilter: { value: '' }, saveButton: { disabled: false }
+};
+const dateSaveContext = vm.createContext({ Number, String, Array, JSON, Error,
+  window: {}, els: dateSaveElements, state: { kind: 'expense' }, isLocked: () => false,
+  showMessage() {}, updateEntryLockState() {}, jsonHeaders: () => ({}),
+  loadTransactions: async () => {},
+  api: async (url, request) => { dateSaveRequest = { url, ...request, body: JSON.parse(request.body) }; }
+});
+vm.runInContext(appJs.slice(appJs.indexOf('function summaryCharacterUnits('),
+  appJs.indexOf('function mergePendingTransactionUpdates(')), dateSaveContext);
+vm.runInContext(appJs.slice(appJs.indexOf('async function saveTransaction(event)'),
+  appJs.indexOf('async function loadTransactions()')), dateSaveContext);
+await dateSaveContext.saveTransaction({ preventDefault() {} });
+assert.equal(dateSaveRequest.url, '/api/transactions');
+assert.equal(dateSaveRequest.body.txDate, '2026-10-21', 'canonical submit serializes the selected calendar date');
+assert.equal(dateSaveElements.monthFilter.value, '2026-10');
+dateTrigger.click();
+const dateNav = pickerRoot.querySelectorAll('[data-desktop-ui-date-nav]');
+dateNav[0].click();
+assert.equal(dateTitle.textContent, '2026年09月');
+dateNav[1].click();
+dateNav[1].click();
+assert.equal(dateTitle.textContent, '2026年11月');
+dateTitle.click();
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-month="12"]'));
+assert.equal(dateTitle.textContent, '2026年12月');
+dateNav[1].click();
+assert.equal(dateTitle.textContent, '2027年01月');
+dateTitle.click();
+dateTitle.click();
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-year="2028"]'));
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-month="2"]'));
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-value="2028-02-29"]'));
+assert.equal(pickerDate.value, '2028-02-29', 'year, month and leap day selection preserve the chosen date');
+assert.equal(dateLabel.textContent, '2028/02/29');
+pickerRoot.querySelector('.desktopUi-date-today-button').click();
+assert.ok(pickerDate.value && /^\d{4}\/\d{2}\/\d{2}$/.test(dateLabel.textContent));
+pickerDate.value = '2026-10-22';
+pickerDate.dispatchEvent(new Event('change'));
+assert.equal(dateLabel.textContent, '2026/10/22', 'canonical edit/clear and keyboard changes still update the desktop label');
 
 const layoutSource = adaptive.slice(adaptive.indexOf('function setupAdaptiveSplitWorkspace()'),
   adaptive.indexOf('const CY_ENTRY_UI_SUMMARY_UNITS'));
@@ -149,8 +268,8 @@ assert.match(markup, /class="card entry-card" aria-label="新增記帳"/);
 assert.match(markup, /class="card ledger-card" aria-label="記帳資料"/);
 assert.match(adaptiveCss, /Canonical shared ledger presentation/);
 assert.match(adaptiveCss, /\.ledger-card thead th:nth-child\(3\),[\s\S]*?display: none !important;/);
-assert.match(adaptiveCss, /ledger-row-income:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "\+"/);
-assert.match(adaptiveCss, /ledger-row-expense:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "−"/);
+assert.match(adaptiveCss, /ledger-row-income > \.ledger-amount::before\s*\{\s*content: "\+"/);
+assert.match(adaptiveCss, /ledger-row-expense > \.ledger-amount::before\s*\{\s*content: "−"/);
 assert.match(ledgerSource, /id="ledgerMonthLoading"/);
 assert.match(appJs, /loadingLabel\.hidden = !busy/);
 assert.match(adaptive, /function setupDesktopEntryQuickTools\(\)/);
@@ -161,14 +280,32 @@ assert.match(adaptiveCss, /#monthSummary[\s\S]*?grid-template-areas: "opening in
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.opening-modal\s*\{\s*width: min\(880px/);
 assert.match(appJs, /class="opening-account-column"/);
 assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
-assert.match(editCss, /\.inline-edit-date\s*\{\s*min-width: 0;/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
 assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster,\s*html\[data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster\s*\{[\s\S]*?height: 34px !important/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before,[\s\S]*?\{\s*content: var\(--account-role-open, "［"\) !important;/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after,[\s\S]*?\{\s*content: var\(--account-role-close, "］"\) !important;/);
 
-console.log('Desktop UI regression checks passed.');
+// Editable dates and the picker update the same required source field.
+const editable = pickerFixture(true);
+const textDate = editable.root.querySelector('.desktopUi-date-text');
+const typeDate = value => { textDate.value = value; textDate.dispatchEvent({ type: 'input' }); };
+typeDate('0924');
+assert.equal(editable.input.value, `${new Date().getFullYear()}-09-24`);
+typeDate('20260924'); assert.equal(editable.input.value, '2026-09-24');
+typeDate('2024/02/29'); assert.equal(editable.input.value, '2024-02-29');
+typeDate('2026/02/29'); assert.equal(editable.input.value, '', 'invalid days cannot leave a stale canonical date');
+typeDate('20261231');
+const pressDate = (key, ctrlKey = false) => textDate.dispatchEvent({ type: 'keydown', key, ctrlKey, preventDefault() {}, stopPropagation() {} });
+pressDate('ArrowUp', true); assert.equal(editable.input.value, '2027-01-01');
+pressDate('ArrowDown', true); assert.equal(editable.input.value, '2026-12-31');
+pressDate('Enter'); assert.equal(editable.context.summaryFocused, true);
+assert.equal(textDate.value, '2026/12/31');
+editable.root.querySelector('.desktopUi-date-trigger').click();
+editable.root.querySelector('.desktopUi-date-content').click(editable.root.querySelector('.desktopUi-date-content').querySelectorAll('.desktopUi-date-day').find(day => day.dataset.desktopUiDateValue === '2026-12-20'));
+assert.equal(editable.input.value, '2026-12-20'); assert.equal(textDate.value, '2026/12/20');
+assert.doesNotMatch(adaptive, /setupDesktopUiKeyboardBridge|desktopUiDateObserver|new KeyboardEvent/, 'date typing must not rely on an observer or a synthetic keyboard retry bridge');
+console.log('Desktop UI, editable date, four/eight digit dates and day-step regression checks passed.');
 
 const spanSource = ledgerSource.match(/function ledgerPresentationColumnSpan\(\) \{[\s\S]*?\n\}/)[0];
 for (const desktop of [true, false]) {
@@ -208,3 +345,61 @@ await lockContext.handleLedgerQuickLock();
 lockContext.els.monthFilter.value = '2026-08';
 await lockContext.handleLedgerQuickLock();
 assert.deepEqual(lockTargets, ['2026-09', '2026-07']);
+
+// View sorting never changes the chronological balances or shared source rows.
+let ledgerDesktop = true;
+const ledgerClicks = new Map();
+const ledgerHeader = { innerHTML: '', dataset: {}, querySelector(selector) {
+  const id = selector.slice(1);
+  return this.innerHTML.includes(`id="${id}"`) ? { addEventListener: (_, fn) => ledgerClicks.set(id, fn) } : null;
+} };
+const ledgerRows = { innerHTML: '' }, renderedRows = [];
+const ledgerTransactions = [
+  { id: 1, tx_date: '2026-10-01', account_name: 'A', kind: 'income', amount: 100, summary: 'match' },
+  { id: 2, tx_date: '2026-10-02', account_name: 'A', kind: 'expense', amount: 20, summary: 'other' },
+  { id: 3, tx_date: '2026-10-02', account_name: 'B', kind: 'income', amount: 30, summary: 'other' },
+  { id: 4, tx_date: '2026-10-03', account_name: 'B', kind: 'expense', amount: 10, summary: 'other' }
+];
+const ordering = vm.createContext({ Map, Set, Number, String, Boolean, Array, Intl,
+  state: { transactions: ledgerTransactions },
+  els: { transactionRows: ledgerRows, monthFilter: { value: '2026-10' }, monthSummary: { innerHTML: '' } },
+  document: { querySelector: selector => selector === '.ledger-card thead tr' ? ledgerHeader : null },
+  window: { cyIsDesktopInteractionWorkspace: () => ledgerDesktop },
+  money: n => `$${n}`, escapeHtml: value => String(value),
+  ledgerPresentationColumnSpan: () => ledgerDesktop ? 7 : 8,
+  ledgerAccountVisual: () => ({ slot: 1, background: '#fff', foreground: '#000' }),
+  renderLedgerMessage: message => { ledgerRows.innerHTML = message; },
+  writeLedgerRows: html => { ledgerRows.innerHTML = html; },
+  renderLedgerRow(tx, balance) { renderedRows.push({ id: tx.id, balance }); return `<tr data-test-id="${tx.id}">${balance}</tr>`; }
+});
+vm.runInContext("let cyLedgerGroupByAccount = false, cyLedgerDateDescending = false, cyLedgerSearch = ''; let cyLedgerOpeningData = { accounts: [{name:'A',amount:1000},{name:'B',amount:2000}] };", ordering);
+vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function renderDesktopLedger()'),
+  ledgerSource.indexOf('const LEDGER_ACCOUNT_LIGHT_PALETTE')), ordering);
+vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function updateLedgerHeader()'),
+  ledgerSource.indexOf('function ledgerPresentationColumnSpan()')), ordering);
+const renderOrder = action => { renderedRows.length = 0; action(); return renderedRows.map(row => row.id); };
+assert.deepEqual(renderOrder(() => ordering.renderDesktopLedger()), [1, 3, 2, 4]);
+assert.match(ledgerHeader.innerHTML, /aria-sort="ascending"/);
+const chronologicalBalances = new Map(renderedRows.map(row => [row.id, row.balance]));
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerDateHeader')()), [4, 3, 2, 1]);
+assert.match(ledgerHeader.innerHTML, /aria-sort="descending"/);
+for (const row of renderedRows) assert.equal(row.balance, chronologicalBalances.get(row.id));
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerAccountHeader')()), [2, 1, 4, 3]);
+assert.match(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+assert.deepEqual(renderedRows, [{ id: 2, balance: 1080 }, { id: 1, balance: 1100 }, { id: 4, balance: 2020 }, { id: 3, balance: 2030 }]);
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerDateHeader')()), [1, 2, 3, 4]);
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerAccountHeader')()), [1, 3, 2, 4]);
+assert.doesNotMatch(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+renderOrder(() => ledgerClicks.get('ledgerDateHeader')());
+ledgerDesktop = false;
+assert.deepEqual(renderOrder(() => ordering.syncLedgerPresentation()), [1, 3, 2, 4], 'touch returns to its existing chronological display');
+assert.doesNotMatch(ledgerHeader.innerHTML, /ledgerDateHeader|ledger-header-button/);
+renderOrder(() => ledgerClicks.get('ledgerAccountHeader')());
+assert.match(ledgerHeader.innerHTML, /帳戶 ▲/, 'touch grouping label is preserved');
+ledgerDesktop = true;
+assert.deepEqual(renderOrder(() => ordering.syncLedgerPresentation()), [2, 1, 4, 3]);
+assert.match(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+assert.deepEqual(ledgerTransactions.map(tx => tx.id), [1, 2, 3, 4], 'presentation sorting never mutates the transaction snapshot');
+vm.runInContext("cyLedgerGroupByAccount = false; cyLedgerSearch = 'match';", ordering);
+assert.deepEqual(renderOrder(() => ordering.renderDesktopLedger()), [1]);
+assert.equal(renderedRows[0].balance, chronologicalBalances.get(1), 'search retains balances from the complete month');

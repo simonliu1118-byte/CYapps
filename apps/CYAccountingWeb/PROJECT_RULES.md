@@ -97,7 +97,7 @@
 
 - Transaction state、month load、canonical transaction mutation／optimistic rollback orchestration：`public/app.js`。
 - Ledger transaction rows 的 canonical renderer、row-write lifecycle，以及 Ledger Toolbar structure/action owner：`public/ledger-tools.js`。`#transactionRows` 不得再出現第二 renderer；Toolbar 不得由 Adaptive/Mobile/Tablet 模組事後建立、搬移或改造。
-- Ledger inline edit：`public/ledger-inline-edit.js` 只負責 inline-edit presentation／interaction，資料提交必須委派 canonical transaction mutation path，不得自行形成第二 writer。
+- Transaction edit presentation／draft／cancel：`public/adaptive-ui.js` 的 `setupEntryTransactionEditing` 為跨裝置唯一 owner；共用原記帳表單，桌機從清單帶回左側編輯、觸控保留原 entry editor。資料提交一律委派 `public/app.js persistTransactionUpdate`；不得建立第二列內 renderer 或 writer。
 - Quick-entry：`public/quick-entry.js` 只負責快速輸入／建議相關 presentation 與 lifecycle consumption，不得成為第二 transaction-row renderer 或用 DOM observer 猜測 ledger render 完成。
 - Settings account/category UI 的單一 lifecycle／renderer/action surface：`public/adaptive-ui.js` 的 `window.cySettingsManager`；`public/quick-entry-settings.js`、`public/category-management.js` 提供其專責能力，不得以 injector／observer 再建立第二 Settings renderer/action owner。
 - Device adaptation／RWD presentation：`public/adaptive-ui.js`。它可以調整 layout、native picker、gesture 與 Mobile／Tablet／Desktop presentation，但不得複製 transaction/settings/identity/business owner。

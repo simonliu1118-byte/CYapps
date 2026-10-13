@@ -1,10 +1,16 @@
 # CYAccountingWeb 版本里程碑
 
-更新：2026/10/11。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
+更新：2026/10/14。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
+
+2026/10/13 維護：整理現況／驗收／未合併工作與 GitHub 產物，產品維持 V0.23.1 Build 2；清理執行結果見 WORK_HANDOFF。沒有建立新產品版本或 Stable Release。
 
 | 版本 | 狀態與變更 |
 | --- | --- |
-| V0.23.2 | CYACCweb 登入頁固定顯示「第一次使用 CY 系統？」導引，提供 CY Web 首次 Email 驗證的連結；正式 URL 從既有 CYID Production 設定讀回並注入，不在 Public source 硬編網域，也不在連結傳員工憑證。401 仍不洩漏帳號存在性，補足首次登入提示；真正的 5xx 保持中央服務異常分類。CYID Session／App Access／D1／帳務不變，CYACC `main` 自動部署維持。 |
+| V0.23.5 Build 0 | 首次登入引導（PR #435）：CYACCweb 登入頁加入 CY Web Email 驗證說明與可點擊入口；URL 從既有 CYID Production `ACCOUNT_PORTAL_URL` 唯讀取得，使用安全 HTTPS 根網址，不帶員工編號／密碼／Token。401 登入失敗提醒首次使用者先驗證，真正的 5xx 服務異常仍獨立分類。CYID Provider／Session／App Access／D1／帳務均不變；正式上線須先確認 CY Web 與 CYACC 連至同一套 CYID，合併後沿用原 `main` 自動部署。 |
+| V0.23.4 Build 0 | 桌機收支／問號同列、確認狀態靠右並移除十筆說明；成功存檔直接回摘要，移除金額焦點競爭與 timer。桌機清單編輯帶回左側共用表單，清空變取消，未儲存退出回復新增草稿；原筆 PUT／optimistic rollback 共用既有 writer，移除被取代的 inline editor。日期改文字＋日曆按鈕，四碼／八碼、Ctrl＋↑↓、Enter 與無效日期驗證；移除日期 observer／synthetic keyboard bridge，RWD teardown abort listeners。桌機單月統計移除括號路徑，右下新增回到頂端圓形按鈕；移轉排除、手機／平板版面及 schema 不變。 |
+| V0.23.3 Build 1 | 同一桌機確認清單驗收：移除 inherited grid gap、修正狀態符號 inline baseline 額外列高，十筆維持單行且更緊湊；存檔提示置中、日期倒序與帳戶分組已在正式瀏覽器確認，餘額不變。 |
+| V0.23.3 | 桌機存檔提示移至輸入確認標題列中央；確認改單行無卡片、最新十筆淘汰，保留完整內容與失敗原因。日期表頭切換新到舊／舊到新，分組顯示「帳戶 [分組]」；只改顯示順序，餘額仍按完整月份時間順序計算。既有 owner 使用明確 lifecycle，移除確認模組內部兩個 observer 與重複字級規則；手機／平板原呈現保留。 |
+| V0.23.2 | 獨立桌機日期 Bug 修復：HTML data attribute 全部改為小寫 kebab-case，正確對應 dataset；選取日／月／年不再清空真正日期欄位，儲存沿用所選日期，前後月份與跨年恢復。更新 Adaptive asset 語意 revision 及正式驗證；行為回歸涵蓋 required date、submit payload、閏日、今天、外部變更與單一初始化。手機／平板原生日期及帳務 writer 不變。 |
 | V0.23.1 Build 2 | 帳號載入隱藏規則移回實際載入的 Adaptive stylesheet，避免未載入的 auth.css 使規則失效；損益表縮減標題、控制列與表列留白，維持可讀字級並增加單頁容量。 |
 | V0.23.1 Build 1 | 線上報表驗收續修：單月損益視窗確實隱藏結束月份，修正 flex label 蓋過 hidden 的樣式衝突；月份標籤不斷行，報表金額與科目統一行高並微縮列高，增加一頁可讀容量。分頁仍沿用固定容量，完整科目與整月合計不變。 |
 | V0.23.1 | 統計介面調整：單月及多月共用圖表／統計頁籤，桌機統計共用頁面捲動，損益按鈕優先且單月視窗不再切換多月；圓餅圖直接標示名稱／金額／百分比，小區段引線排字，手機平板顯示名稱／百分比及完整圖例。損益表改左收入右支出、底部合計及淨利損、最下方另列移轉；超出可讀高度時分頁保留全部科目，不使用內部捲軸。統計合計、圓餅及分類科目亦排除指定移轉並顯示說明，看帳金額維持。Auth 為唯一帳號 renderer，移除 Adaptive identity 重畫與 role observer，資料完成前隱藏帳戶列。 |

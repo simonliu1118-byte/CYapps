@@ -6,10 +6,10 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.19 Build 0**（查無買方名稱可留空，並保留重複開立失敗修正；development Cloud0.9.2 已啟用 CYID，原機帳密進設定已由使用者确认；其餘驗收與折讓歷史缺欄位待完成，Release 暫停）。
-- Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
+- 目前工程基準：**Windows V2.6.19 Build 0 已發布；原 development Cloud 0.9.3／CYID_ENABLED=true／CYID_ONLY**。原 Windows CYID 帳密進設定已由使用者回報成功；其餘全角色／多裝置實機證據待補，折讓歷史缺欄位依使用者決定留待 V3.0 重做，不阻塞已接受的本批 Release。
+- V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
-- 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
+- 最新公開正式 Release：[**CYInvoice V2.6.19**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)（tag：`cyinvoice-v2.6.19`，包含 ZIP／SHA256）。本次文件整理不重新發版。
 - V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
@@ -99,7 +99,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- Source 為 Cloud 0.9.2／API 1／compatibility marker 8／storage 13（未部署）。2026-10-10 development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已驗證 Cloud 0.8.9／storage 12 與新能力；人工 A/B/C 行為仍待驗收。
+- Source 與原 development Worker 已為 **Cloud 0.9.3／API 1／compatibility marker 8／storage 13**；[2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 保留 CYID_ENABLED=true 與全部 bindings，另行批准的原 D1 CYID_ONLY 維護、私有備份／本機還原驗證及歷史／FK 核對完成。早期 Run #8 為歷史部署證據。接續 Recovery／V3 與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - CYID provider／gateway 與原降級已接線；actual development #42 已啟用並保留原 Workspace／Device／資料，使用者确认原機 CYID 帳密進設定成功。其餘角色／多裝置／刷新／斷線／撤銷驗收待完成；0-Device recovery 與跨機 Work Item 為後續項目。折讓人工歷史缺欄位已回報、尚未修正；詳見 [現行交接](docs/CLOUD_WORK_HANDOFF.md) 與 [TODO](docs/TODO.md)。
 
 ### 系統診斷（V2.6.3）

@@ -1,13 +1,19 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/08（日本時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/14（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 裝置與 UI 驗收
 
 - [ ] 真實 iPad／Android 完整交叉驗收：直向、橫向、分割視窗、原生 picker、觸控排序／捲動、螢幕鍵盤與外接鍵盤。
 - [ ] 真實平板登入、Session、登出、USER 唯讀及 Excel 分享／下載完整驗收。
 - [ ] **下一次公開 Stable Release 前**移除手機「測試用平板版」、preview「返回手機版」及其 session-scoped tablet preview bootstrap／測試專用 UI；正式平板本身的 inline identity 與直／橫式 presentation 保留。
-- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.31 Build 1 桌機返修的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收；優先檢查 32px 收支控制、月份清單遮罩／轉圈、快速輸入與備份完整顯示、同級資料管理區塊、Excel 模板填寫匯入及 Session 逾時導回登入，同時確保手機／平板版未受影響。
+- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.23.1 Build 2 統計返修與既有桌機調整的自動回歸及 production semantic verification 不等於所有真機情境已逐項驗收；優先檢查 32px 收支控制、月份清單遮罩／轉圈、快速輸入與備份完整顯示、同級資料管理區塊、Excel 模板填寫匯入及 Session 逾時導回登入，同時確保手機／平板版未受影響。
+
+## 統計與報表驗收
+
+- [ ] 手機、平板直／橫式真機確認統計入口、圖表／統計頁籤、原生月份及圓餅名稱／百分比／完整圖例。
+- [ ] 桌機不同視窗高度與長名稱／多科目月份驗收：引線標籤可讀、損益分頁無遺漏或重複、整月合計固定、無內部水平／垂直捲軸。
+- [ ] 以私人資料確認移轉指定符合業務需要；統計收支及損益排除移轉，看帳現金流保留，未分類與封存帳戶資料完整。
 
 ## 交易互動
 
@@ -16,7 +22,9 @@
 
 ## 帳務與 Identity
 
-- [ ] 使用者補齊帳務資料並提供自動計算起始年月後，再評估開帳基準調整與歷史保留；目前未修改正式資料。
+- [ ] PR #435 首次登入引導：依最新 main 重新基底及升版；合併前取得正式 CY Web portal 與 CYID authority 相同的 live binding 證據；目前保留未合併，不將 CI 成功當成此 gate 通過。
+
+- [ ] 開帳基準／首期期初的後續工作以私人檢查點及使用者當次指示為準；先確認已完成操作與待補資料，再評估調整及歷史保留，不以公開文件推定帳務狀態。
 - [ ] Password Recovery 真實 Email delivery／browser 完整驗收。
 - [ ] CYID post-cutover 穩定後，以獨立 forward migration 退休 `web_sessions` 實體表；現行 authority 已是 CYID，沒有舊表 fallback。
 
@@ -36,5 +44,3 @@
 - [ ] Identity authority、跨 App ownership／routing／shared Backup 底層調整先同步 CYWEB／CYID 最新決策，沿用 canonical consumer contract。
 
 下一個獨立開發項目應從目前 main 建新 branch，不延續未合併舊 branch。已完成項目不再堆在 TODO；請回 README／CHANGELOG 查已上線能力與版本歷史。
-
-- [ ] 授權歷史帳本替換：Google Drive 來源 2024～2026/03 待連線／讀取／核對；替換既有 2025/12～2026/03，保留 2026/04 之後。先備份、再原子替換並比對筆數／收支／後續資料。2024 首期期初由使用者後補，尚未執行正式資料變更。

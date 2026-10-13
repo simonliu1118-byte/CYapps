@@ -1,86 +1,110 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/11（台灣時間）。本文件描述工作現況；永久規則仍依正式三層規則。
+更新：2026/10/14（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
 
-## V0.23.2 — CY Web 首次登入引導
+## 正式基準及驗證
 
-- CYACCweb 依 CYID non-core consumer 規則，不接受一次性首次登入密碼、不替 CYID 建立 first-login ticket；登入頁固定加入明確說明與可點擊入口。
-- 部署時從既有 CYID Production Worker `ACCOUNT_PORTAL_URL` 唯讀取得登入根網址，經原有 CYACC Deploy Runner 注入 `CYWEB_PORTAL_URL`；無需新增 GitHub Variable。無帳密的 `GET /api/auth/account-portal` 提供公開連結，與登入 API/Session 不混合；憑證絕不跨站傳送或附在 URL。
-- URL 無法核對、不是 HTTPS、含帳密／查詢參數時 Production Deploy 在 Wrangler Render 前直接阻擋；未配置時只顯示首次登入說明，不顯示無效連結。正式 deployment 前仍應核對 CY Web 實際服務確實連至同一個 CYID Production authority。
-- 401 密碼錯誤訊息提醒可能的首次登入，但不聲稱已確認帳號存在或一次性密碼正確；真正 5xx 中央服務無法使用維持原分類。
-- GitHub `main` 自動正式部署依使用者決定保留；Source PR 測試不對正式 D1/Worker 執行變更。Employee 1999 的舊驗證狀態／Dev-Production 身分差異不由此改動自動修復。
-
-## 目前工作
-
-- V0.23.1 Build 2 統計返修：圖表／統計頁籤共用於單月與多月；圓餅圖直接標示，較小區段引線排字，手機平板少顯示金額但保留圖例清單。左右式損益表依實際視窗高度分頁，保留完整科目及整月合計；不使用內部捲軸。帳號重畫與 role observer 已移除，Auth 為唯一來源。
-- V0.23.0 新增統計；桌機 ≥1600px 三欄、較窄桌機統計置於看帳下方；手機第三頁籤、平板雙方向同一入口。原帳務 writer、native picker、Settings lifecycle 與 Identity owner 保留。
-- 移轉科目以 categories.id 儲存於既有 app_settings，隨既有備份保存；不猜測或自動標記正式科目。分類依現行主檔，未匹配歷史科目以未分類保留。
-- 報表不包含期初餘額；看帳收支包含移轉，統計合計／圖表／分類科目及損益均排除指定移轉科目，損益表最下方另列移轉。
-
-- 正式程式版本為 V0.23.1 Build 2；schema 8 已部署，穩定 Release 為 V0.22.15。
-- V0.22.32 指定期間替換與大型 Excel 解析修正已合併、通過 CI 並部署。25 組本地測試通過，公開文件只描述程式能力與建置狀態。
-- 實際帳務來源、交易內容、核對結果、鎖帳／期初現況、備份識別及執行紀錄由私人工作檢查點維護，不放 Public Git。接續資料操作前先讀取私人檢查點；不可從本文件推定是否已匯入或決定重跑。
-- 暫時診斷與清理 workflow 已移除；正式部署維持最小權限，沒有長期資料查詢或日誌清理入口。
-
-## V0.22.32 範圍與驗證
-
-- 沿用 `src/excel-import.js` 的 inspect／preview／commit。桌機 SUPER_ADMIN 可以指定起訖月份及理由；一般追加模式及其他裝置呈現保持既有行為。
-- 鎖帳月份不得匯入或替換。需由既有鎖帳設定解除，再重新預覽；匯入不修改鎖帳、人工期初或其 audit。
-- 來源內相同交易的多次發生逐筆保留；缺少的來源科目需明確勾選建立於「歷史科目」分類，既有科目不改名、不重分組。
-- 指定期間替換必須先完成 R2 與 GCS paired backup，兩份回讀驗證成功才進入寫入。
-- 以單一 snapshot 讀取完整交易、帳戶、分類、科目、期初與鎖帳。預覽 token 綁定來源與目標；D1 batch 內再以 snapshot guard 保護稽核、主檔建立、刪除與寫入，避免預覽／備份期間的競爭修改。
-- schema 8 的 `excel_import_runs` 是 append-only 稽核，記錄期間、理由、來源摘要、備份關聯、筆數、CYID actor 與時間；Backup package 同時保留此 audit。既有 Backup format 2 可帶 additive audit 欄位，不改寫舊備份。
-- 大型壓縮 XML 曾觸發 parser 的巢狀執行緒；inspect owner 改為有展開容量／entry 上限的同步解壓，再交同一 XLSX parser 解析，沒有第二套資料解析／寫入 authority。
-- 本地 25 組測試及大型 Excel canonical roundtrip 通過；新增回歸涵蓋角色、期間界線、鎖帳、備份失敗、D1 原子回滾、競爭修改、重複交易保留、期間外資料原樣保留與稽核備份。
-- 指定期間替換等待備份的 API deadline 延長；其他 API deadline 保留既有預設。
-
-## 現行 canonical owner
-
-### Backend / domain
-
-| Concern | Canonical owner |
+| 項目 | 已確認狀態 |
 | --- | --- |
-| CYID transport、Session/login/logout/recovery adapter | `src/identity-adapter.js` |
-| Worker route、accounting authorization、API orchestration | `src/app.js` |
-| 期初餘額 carry-forward / override snapshot | `src/opening-balances.js` |
-| 帳戶封存／解封／永久刪除規則 | `src/account-lifecycle.js` |
-| Backup package / topology | `src/backup-package.js` → `src/backup-service.js` → provider adapters |
-| Statistics snapshot / report settings | `src/statistics.js`；路由與角色檢查仍由 `src/app.js` |
-| Desktop SQLite migration | `src/desktop-migration-core.js` + `src/desktop-migration.js` |
+| 產品 | **本 PR 目標 V0.23.5 Build 0**（首次登入引導）；前一正式基準 V0.23.4（桌機記帳輸入、編輯及日期快捷），未合併前不宣稱 V0.23.5 已部署 |
+| 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
+| 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
+| 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
+| 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
+| 公開 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；不與正式網站版本混用 |
+| D1 | schema **8**，Excel 指定期間替換 audit 已納入備份 |
+| CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
+| 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-### Frontend
+本次為新的桌機輸入與編輯修正，Patch 升至 V0.23.4、Build 歸零；V0.23.3 Build 1 為前一版清單密度修正。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
 
-| Concern | Canonical owner |
+## V0.23.5 首次登入導引（PR #435，待合併）
+
+- 以 V0.23.4 正式基準整合原 V0.23.2 工作線；不覆蓋後續桌機輸入／編輯／日期及治理／部署更新。
+- CYACCweb 是 CYID non-core consumer，不接受首次登入密碼建立一般 Session、不接收 first-login ticket、不轉送員工密碼。登入頁固定顯示 CY Web Email 驗證與正式密碼設定說明，並提供可點擊入口。
+- 部署時沿用 CYID Production 既有 `ACCOUNT_PORTAL_URL` 唯讀設定，透過原部署 runner 注入 `CYWEB_PORTAL_URL`；無需新增 GitHub Variable。公開的 `GET /api/auth/account-portal` 只提供 HTTPS 根網址，不含任何員工識別、密碼或 Session；不讀取 D1。
+- 缺少或不安全的 Portal URL 在正式部署設定產生前即阻擋；前端連結無法取得時只顯示說明，不提供假連結。401 密碼失敗提示不揭露帳號存在性，真正 5xx 仍顯示服務問題。
+- **正式合併 gate**：必須先核對 CYID Production 的 Portal URL 所指 CY Web 與 CYACC 的 Service Binding 是同一套 CYID authority。PR CI／URL 格式檢查不能取代此核對；未確認前不合併、不觸發 `main` 自動部署。
+- CYID Provider／D1／Session／App Access／帳務／R2 與既有 `main` 自動部署流程均不變；員工 1999 舊驗證狀態不會由本 PR 自動修復。
+
+## V0.23.4 桌機記帳輸入、編輯及日期
+
+- 收支及問號同列，field width 讓出問號空間；唯一 `#saveMessage` 改在桌機確認標題列右側，原十筆說明只在桌機隱藏。十筆 retention 與排列不變。
+- 原存檔先 `amount.focus()`、ledger-rendered 的 timer 再 `summary.focus()`，形成兩個 post-save focus owner；移除 timer、pending focus flag 及 ledger result 猜測，改由 canonical successful-save lifecycle 呼叫 Quick Entry `cyAfterEntrySaved`，直接回摘要並刷新常用摘要。不能以 Linux／Chromium 驗證冒稱 Windows IME 模式通過；待使用者確認。
+- 既有 Adaptive entry-edit owner 改 semantic `setupEntryTransactionEditing`，涵蓋桌機並保持原手機／平板導航與提示。桌機帶回左側共用表單、維持原筆 kind，清空變取消；取消／Escape／換筆／切月份／開其他工作視窗／pagehide／裝置切換均不自動寫入並回復原新增草稿。儲存修改一律 `persistTransactionUpdate` PUT／optimistic／rollback；App 的既有 row action 直接呼叫 entry editor API；刪除被取代的 inline editor module、modal edit state／dialog、CSS、listener 及 asset probe。
+- Desktop date owner 直接建立可編輯文字＋日曆按鈕，兩者寫回原 `#txDate`；四碼月日採今年、八碼完整日期、YYYY/MM/DD、Ctrl＋↑↓ 跨月／年、Enter 到摘要、無效日期不得留下舊值。共用 Quick Entry parser／setter；移除 owned DOM observer／synthetic keyboard retry bridge。RWD picker teardown abort 舊 input／document listeners，touch native 日期保留。
+- 桌機單月統計只移除說明括號設定路徑，touch／report 說明及移轉排除計算不改。新增桌機右下角圓形回到頂端按鈕，向下捲動後出現；只捲動整頁，遵循 reduced-motion。
+- 本地及 PR CI 新增 `entry-workflow.mjs`，驗證取消不寫入、原草稿及歷史 options 復原、原筆 PUT／失敗 rollback、成功只 focus 摘要；日期回歸涵蓋手輸四／八碼、閏日、非法日期、Ctrl 跨年與日曆同步。共 28 組 application tests；正式部署及瀏覽器 gate 追蹤本次 PR／main Actions，不以舊版驗收代替新版。
+
+## V0.23.3 提示、確認清單與排序
+
+- 存檔提示仍由 `app.js showMessage` 寫入唯一 `#saveMessage`；既有 Adaptive placement owner 於 confirmation-ready／裝置切換，把同一 node 放到桌機確認標題列中央、手機／平板原位置，不複製第二個訊息或新增 observer。
+- Input Confirmation 改消費 `cyacc:entry-message` 明確 lifecycle，移除存檔訊息與自身 list 的兩個 MutationObserver；render 自行更新筆數及 drawer。每次 submit 收集一筆結果，最新在前，第十一筆淘汰最舊；資料仍只存在本次頁面記憶體。
+- 桌機改 23px 單行清單、11.5px 文字、成功／失敗標記，長內容可查看完整文字；取代 17 個舊 confirmation 字級／卡片樣式規則，集中為一個 Desktop presentation owner，不增加 override chain。
+- 日期表頭為 native button，切換 ascending／descending；日期比較只影響 displayed rows，相同日期及 balance calculation 沿用 chronological owner。分組同時遵守日期方向；桌機帳戶標籤改「帳戶 [分組]」，觸控保留原標籤。
+- 裝置呈現切換由既有 Adaptive lifecycle 呼叫 Ledger render owner，避免桌機倒序／表頭控件帶到手機和平板；transaction snapshot、每筆餘額、月合計、搜尋及 API 不改。
+- 行為回歸涵蓋最新十筆淘汰、成功／失敗、逃脫文字、唯一訊息節點 placement，及日期順序／同日收支／分組／搜尋下的正確餘額與裝置切換。正式驗收見 PR #442：唯一提示置中、最新十筆淘汰、日期倒序與分組／每筆餘額一致已回讀。Build 1 移除舊 grid gap 及符號 baseline 留白；密度驗收追蹤收尾 PR 與 main Actions。
+
+## V0.23.2 日期修復
+
+- 原 picker markup 的 `data-desktopUi-date-*` 經 HTML parser 全部轉小寫，dataset key 與 handler 不符；選日把 native `#txDate` 清空，label fallback 今天，造成必填驗證阻擋儲存，日／月／年導覽也讀不到數值。正式舊版已在瀏覽器重現此資料／畫面落差。
+- 在原 Adaptive date presentation owner 統一改為 lowercase kebab-case `data-desktop-ui-date-*`，不新增 renderer、writer、observer 或 fallback。既有 `change` lifecycle、lock 判斷及 submit 讀同一 input。
+- 行為回歸涵蓋選日後 canonical value／label、單次 change、儲存 payload、前後月與跨年、指定年月、閏日、今天、外部變更及重複初始化。舊 source 會使該測試失敗；修復後通過。
+- Adaptive script cache revision 改為 `desktop-date-dataset`，正式 semantic verification 使用同一 URL 並確認新的日期 attribute。本版部署與正式瀏覽器驗收證據追蹤 [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions，不把舊版重現當成新版通過。
+
+## 已交付內容與實際驗收界線
+
+- 統計以完整期間 snapshot 彙總，不受清單筆數限制；保留封存帳戶及歷史未匹配科目。移轉科目按 `categories.id` 保存於既有 settings，隨備份保存，不依名稱猜測。
+- 單月與多月共用「圖表／統計」頁籤。桌機統計共用整頁垂直捲動，寬視窗三欄、窄視窗接在看帳下方；手機第三頁籤、平板雙方向同一入口。
+- 圓餅直接標名稱／金額／百分比；小區段引線排列。手機／平板不在餅上放金額，完整圖例仍保留；不使用 tooltip。
+- 統計合計、圖表、分類／科目與損益皆排除指定移轉，單月區明示；看帳現金流包含移轉。期初不計入損益。
+- 損益表左右並排收入／支出，合計與淨利損在底部，移轉最後另列。依可讀高度必要時分頁，所有科目及整月合計保留；沒有報表內部捲軸。
+- 移除 Adaptive identity 重畫及 role observer；`public/auth.js` 為唯一帳號 renderer。等待資料時的隱藏規則已置於真正載入的 `adaptive-ui.css`，保留既有角色填色及對齊。
+- 26 組本地 application tests、PR CI／governance 及正式 deploy 通過。正式桌機瀏覽器 **1363×936** 已驗證：帳號由 pending hidden 到 ready visible、圖表／統計互斥、排除移轉說明、單月只顯示一個月份，抽查月份完整一頁且無水平／垂直捲軸。
+- 上述抽查不等於所有月份／視窗尺寸均一頁，也不等於手機／平板真機驗收。完整剩餘 gate 見 TODO。
+
+Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先完成 R2＋GCS paired backup 及回讀，再以 snapshot guard 執行原子 D1 batch，保留重複發生交易、期間外資料與 append-only audit。功能部署證據 [run 38062352888](https://github.com/simonliu1118-byte/CYapps/actions/runs/38062352888)不代表可以推定實際匯入狀態。
+
+## 未合併工作與下一步
+
+| 工作 | 現況及接續條件 |
 | --- | --- |
-| Transaction state、month load、canonical transaction mutation、optimistic rollback | `public/app.js` |
-| Ledger transaction rows、row lifecycle、Ledger Toolbar | `public/ledger-tools.js` |
-| Inline edit presentation | `public/ledger-inline-edit.js`，寫入仍委派 canonical mutation |
-| Quick-entry / frequent presentation | `public/quick-entry.js` |
-| Settings lifecycle / renderer / action surface | `public/adaptive-ui.js` 的 `window.cySettingsManager` |
-| RWD / native picker / gesture / device presentation | `public/adaptive-ui.js` |
-| Statistics charts / income statement | `public/statistics-ui.js`；頁籤與裝置 placement 仍由 Adaptive UI owner |
+| PR **#435** 首次登入引導 | **已整合到 V0.23.4 基底、升 V0.23.5，尚未合併**。CI 成功不代替正式 CY Web Portal 與 CYID authority 相同的 live binding gate；未完成核對前不合併或部署。 |
+| `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
+| 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
+| Backup／Restore／DR | 依正式 catalog 確認 Phase C，未取得最新 `x/14`；不依日期猜進度，Restore／DR 未完成 |
+| 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
+
+## GitHub 清理 — 2026/10/13
+
+- PR **#436** 已合併；[清理 run 38383025033](https://github.com/simonliu1118-byte/CYapps/actions/runs/38383025033) completed／success，作業回讀確認 **34 個過期 branch、16 個已退場流程的 22 筆 completed runs** 已清理。候選 branch／run／到期 Artifact 殘留均為 **0**；沒有需要處理的到期 Artifact，共 56 次刪除。
+- 舊文件 PR **#268、#291、#383** 已關閉，現行文件已涵蓋有效內容；PR 歷史保留。已完成分支清單與盤點 SHA 可由 #436 commit 追溯。
+- **#435 首次登入引導**與 **optimistic create** 未合併工作線保留；執行中 run、現行部署／Release 全部歷史及 Stable Release／tag／assets、其他 App／共通流程保留。
+- 一次性 maintenance workflow、script 及 manifest 已從本次收尾 source 移除；主線僅保留正式 `cyaccountingweb-deploy.yml` 與 `cyaccountingweb-release.yml`。本次清理的驗證／執行紀錄保留作維護證據，不留下長期清理權限入口。
+- 文件、Backup schema、平板現況與 TODO 已彙整；產品維持 **V0.23.1 Build 2／schema 8**。部署驗證不代表更動帳務資料，也不合併未完成的 #435。
+
+## Canonical owner
+
+| Concern | 正式 owner |
+| --- | --- |
+| Identity transport／Session | `src/identity-adapter.js`；前端帳號 render `public/auth.js` |
+| Worker route／帳務權限／API orchestration | `src/app.js` |
+| 期初 carry-forward／人工調整 | `src/opening-balances.js` |
+| 帳戶 lifecycle | `src/account-lifecycle.js` |
+| Backup package／topology／provider | `src/backup-package.js` → `src/backup-service.js` → provider adapters |
+| 統計 snapshot／report settings | `src/statistics.js` |
+| SQLite normalization／migration | `src/desktop-migration-core.js`／`src/desktop-migration.js` |
+| Transaction state／month load／mutation／rollback | `public/app.js` |
+| Ledger rows／row lifecycle／Toolbar | `public/ledger-tools.js` |
+| Entry edit presentation／draft／cancel | `public/adaptive-ui.js setupEntryTransactionEditing`，寫入委派既有 mutation |
+| Quick-entry presentation | `public/quick-entry.js` |
+| Settings lifecycle／render／action | `public/adaptive-ui.js` 的 `window.cySettingsManager` |
+| RWD／native picker／gesture | `public/adaptive-ui.js` |
+| Statistics render／report | `public/statistics-ui.js`；裝置 placement 仍由 Adaptive UI owner |
 | Input confirmation drawer | `public/input-confirmation.js` |
 
-目前沒有核准永久第二套 business/data owner。修 Bug 先找上述 owner；若開始需要第二 renderer、internal MutationObserver、retry bootstrap、DOM relocation、compatibility wrapper、duplicate device business component 或新的 override chain，套用 Architecture Review Trigger，不直接疊下一層。
+## 接續資料操作
 
+真實交易、金額、來源帳本、備份識別、token、正式 resource identifiers 及執行紀錄由私人檢查點保存，不放 Public Git／PR／CI Artifact。本交接只記錄程式能力與驗證，不能作為是否重跑匯入、調整期初、恢復鎖帳或重做備份的依據。
 
-## 接續執行
-
-1. 資料操作的完成狀態與待辦以私人檢查點及使用者當次指示為準，不從公開交接推定或重跑匯入。
-2. 後續期初設定仍使用 canonical opening-balance API 及 append-only audit；不建立未獲來源支持的猜測基準。
-3. 鎖帳狀態依當次使用者指示處理，不從舊交接自動恢復界線。
-4. 真實帳務、來源檔、token、正式 resource identifiers、執行日誌及私人備份不放 Git、PR 或 CI artifact。
-
-## 其他待辦
-
-待辦以 `TODO.md` 為目前清單；真機 RWD／鍵盤／原生 picker／分享驗收、optimistic create、Backup Restore／DR 與 CYID acceptance 仍依正式文件處理。不得把未合併工作線當成已部署基準。
-
-
-## CYID 共通部署參數已驗證 — 2026/10/12
-
-#413 source 8d3ed436／tree a14f00aa 七 CI 通過，使用者完成 development CYID_WORKER_NAME 共通 Secret，Invoice 唯讀 #29 通過後合併 main 4655460c。[CYACC main Validate and Deploy #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386) validate／deploy 通過；本 App 只改 Provider base-name input來源，原 production derive/verify resolver、Application／Workspace、帳務／Session runtime與產品 VERSION／BUILD 不變。Invoice仍Builtin，Provider Invoice scope未配置，不代表本App production尚未接入。原Variable暫留供未更新/retired deployment refs，退場盤點與條件由Invoice TODO追蹤。
-
-
-同一已驗證Secret入口已同步到Invoice／Provider active及retired部署refs（Provider #153／#154、Invoice #32通過，Invoice維持Builtin）；使用者已刪除同名舊 Variable 並保留 Secret；Invoice 刪除後唯讀 #34（38195315134）通過。此Doc更新不改本App帳務／Session/runtime，對應詳細events見Invoice現行交接。
-
-2026-10-12：中央 Provider development0.3.7／contract1.0.4（#416／actual#158）及 CY Web development0.7.23／consumer1.0.4（#146／actual#138）完成受控部署，新增中央 Super Admin 系統登記入口；本App production authority／scope／帳務／Session未因這批改變。Invoice仍待真人登記／專屬scope／原Workspace私有綁定與Windows驗收，不借本App的production scope。
+CYID 共通參數及舊 Variable 退場已於 2026/10/12 完成驗證；詳細共通 rollout 見 CYID canonical 文件及相關 App 現行交接。本 App production scope 不借給其他 App；中央 development 更新不自動改變本 App production authority。
