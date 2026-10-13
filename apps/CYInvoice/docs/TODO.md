@@ -182,6 +182,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 - [x] **設計與 source 核對：**區分可用舊裝置、有效加入碼、所有 Token 遺失及服務／資料毀損；確認 active 筆數不是可用 Token 數、現有 issuer Device FK 與 app-scoped Session 邊界。
 - [ ] **V3 CYWEB 管理接線：**核對實際 CYWEB source／core Session／CSRF owner；超管簽發／撤銷／狀態查核經專用 private capability 與當次 CYInvoice App authority，不轉用 core token、不要求舊 Device。
+  - [ ] **私有 RPC 原始碼已備齊，待部署與整合：**[CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的三個 POST gate（issue／status／revoke）與 [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 的 named WorkerEntrypoint、兩個 Workspace／Application 的即時 CYID 再授權、pending→Email 服務接受→sent 原子 Audit、同一操作只寄一次、狀態查回與明確撤銷均已實作／加入合成測試。**還缺正式 Service Binding 設定、完整寄送整合／Windows claim/UI、原 D1 新 migration 與實機 DR 驗收**，不能勾完成。
+
 - [ ] **V3 邀請與 Audit schema：**forward migration 擴充 issuer channel／RECOVERY purpose／nullable CYWEB Device issuer 與 constraint，保留歷史 actor；原子單次 claim／Audit、失敗及 delivery 不明安全收斂。
   - [ ] **2026-10-14 全數撤銷決議／交易核心：**復原與一般 JOIN 區分；新 Device 成功兌換時須同一筆 D1 交易讓原 Workspace 所有其他 active Device revoked、未使用 JOIN／RECOVERY 邀請及 Pairing 授權碼失效、逐裝置撤銷與成功 Audit 原子寫入；簽發時不得提前撤銷，失敗必須全數 rollback。Draft #440 已新增內部 `recovery-claim.ts`、Pairing `revoked_at`、transaction guard 與 synthetic SQLite 測試；**尚未接上 private issuer／對外 claim 入口／Windows Pending Token，也沒有套用真實 D1**。
   - [ ] 工程中：[CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已加入 canonical 0014／optional CYID_ONLY issuer maintenance 與 synthetic Built-in／CYID_ONLY／FK／Audit／唯一 operation ID 測試；**尚未合併或套用原 D1，也沒有私有簽發／claim**。與 [CYWEB Draft PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的超管 Auth/CSRF gate 同步收斂，不把 CI 等同 DR 實機完成。
