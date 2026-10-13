@@ -395,12 +395,23 @@ internal sealed class MainForm : Form
         }
         if (!repository.Employees.HasEmployees())
         {
-            var pending = repository.Settings.CloudPendingDeviceJoin(settings);
-            if (pending is null)
+            var pendingJoin = repository.Settings.CloudPendingDeviceJoin(settings);
+            var pendingRecovery = repository.Settings.CloudPendingRecovery(settings);
+            var recoverySelected = pendingRecovery is not null;
+            if (pendingJoin is null && pendingRecovery is null)
             {
                 using var choice = new FirstRunModeForm();
                 if (choice.ShowDialog(this) != DialogResult.OK) { Close(); return false; }
-                if (!choice.DirectCloud) return RunLocalInitialSetup();
+                recoverySelected = choice.RecoveryCloud;
+                if (!choice.DirectCloud && !recoverySelected) return RunLocalInitialSetup();
+            }
+            if (recoverySelected)
+            {
+                using var disasterRecovery = new CloudRecoveryForm(repository);
+                if (disasterRecovery.ShowDialog(this) == DialogResult.OK
+                    && disasterRecovery.IdentityCompleted) return true;
+                Close();
+                return false;
             }
             using var cloud = new CloudDirectJoinForm(repository);
             if (cloud.ShowDialog(this) == DialogResult.OK && cloud.IdentityCompleted) return true;
