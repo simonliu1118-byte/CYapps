@@ -84,6 +84,7 @@
 - V0.3.0 Build 10：`ChromePageText.Read`（System.Windows.Automation，`CacheRequest` 一次取 Name／Value／BoundingRectangle／ControlType，空結果重讀最多 3 次）；`MainForm.DiagnoseChromeTextAsync`。csproj 加 `UseWPF`（只為 UIAutomationClient）並補回 `System.IO`、`System.Net.Http` 全域 using。待使用者在各畫面實測 LOG；可行則下一步以網頁文字取代蝦皮全自動與訂單頁的 OCR（OCR 留作退路）。
 - V0.3.0 Build 11：網頁原文（UI Automation）取代 OCR。`ChromePageText.Read`（ComboBox／Spinner／Edit 取 Value、無名 Button 記為 `ShopeeBatchScreens.NamelessButton`、無 Document 重讀）、`PageBoxes`（去 TabItem／ToolBar／瀏覽器列、相對頁面區）。`ShopeeBatchRunner.ReadAsync` 先讀網頁原文（同時截圖供橘色與 × 像素判斷），無 Document 才 OCR；`Click` 只點可見範圍內；`ChooseAsync` 改 Home／End＋Enter；列印視窗下拉讀不到值（只有標籤名）即改 OCR。`ShopeeBatchScreens`：分開的「待處理」「(19)」、清單整列連結（`FirstOrderRow`，點狀態欄、列頂下 52 px）、整顆按鈕間距 7 px 的防護改為 3 px、「 列印出貨文件」前綴圖示。`ShopeePageScanner.ReadPageText`＋`TextImage`、`ShopeeScreenshotForm.TryPageTextAsync`（三段齊全才採用，`fromText` 不做補讀與 0／O 字寬）。以使用者診斷 LOG（本機）驗證清單、明細、寄件編號視窗、預覽列印、列印視窗與訂單頁解析。
 - V0.3.0 Build 12：`WaitAsync` 需 probe 成功＋與上一讀文字相同＋無 Loading／載入中（LOG 15:30 明細頁 `包裹1: Loadingshippingchannel`）；成功後 250 ms、否則 500 ms 再讀。
+- V0.3.0 Build 13：清單列文字可能被截斷（長訂單），`OpenOrderAsync` 只在讀到且不支援時停止；`ShipAsync` 以明細頁 `DetailCarrier` 決定 `order.Kind`（Other 即停，安排出貨之前）。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

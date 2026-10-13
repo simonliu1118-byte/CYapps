@@ -357,8 +357,10 @@ internal sealed class ShopeeBatchRunner
         if (Done.Contains(first.OrderSn))
             throw new ShopeeBatchStop($"訂單 {first.OrderSn} 已處理過，卻還在待處理清單上；為避免重複出貨，已停止。");
         _log.Info("shopee-batch", $"first order carrier={_log.Value(first.Carrier)}");
-        if (!ShopeeBatchScreens.SupportedCarrier(first.Carrier))
-            throw new ShopeeBatchStop($"訂單 {first.OrderSn} 的物流方式「{first.Carrier}」不是蝦皮店到店／店到宅／7-ELEVEN，請人工處理。");
+        // The list may not show it (user's PC, 2026-10-13: a long row's text came cut before the
+        // carrier); then the order page decides, before anything is shipped.
+        if (first.Carrier.Length > 0 && !ShopeeBatchScreens.SupportedCarrier(first.Carrier))
+            throw new ShopeeBatchStop($"訂單 {first.OrderSn} 的物流方式「{first.Carrier}」不是蝦皮店到店／店到宅／7-ELEVEN／全家，請人工處理。");
         var order = new ShopeeBatchOrder { OrderSn = first.OrderSn, Carrier = first.Carrier, Kind = ShopeeBatchScreens.CarrierKind(first.Carrier) };
         Click(screen, first.Status, "待出貨");
         // The order opens in a new tab of this window.
@@ -380,8 +382,14 @@ internal sealed class ShopeeBatchRunner
         using (detail)
         {
             var carrier = ShopeeBatchScreens.DetailCarrier(detail.Boxes);
-            if (carrier.Length > 0 && ShopeeBatchScreens.CarrierKind(carrier) != order.Kind)
-                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，與清單上的「{order.Carrier}」不同或不支援，請人工處理。");
+            var kind = ShopeeBatchScreens.CarrierKind(carrier);
+            _log.Info("shopee-batch", $"order page carrier={_log.Value(carrier)} kind={kind}");
+            if (kind == ShopeeBatchCarrier.Other)
+                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，不是蝦皮店到店／店到宅／7-ELEVEN／全家，請人工處理。");
+            if (order.Carrier.Length > 0 && kind != order.Kind)
+                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，與清單上的「{order.Carrier}」不同，請人工處理。");
+            order.Kind = kind;
+            if (order.Carrier.Length == 0) order.Carrier = carrier;
             if (!Orange(detail.Image, button))
                 throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「{button.Text.Trim()}」按鈕顏色不對，為避免按錯已停止。");
             Click(detail, button, button.Text.Trim());
