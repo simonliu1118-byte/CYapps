@@ -170,37 +170,17 @@ internal sealed class ShopeeBatchRunner
         var image = ScreenCapture.Capture(area);
         try
         {
-            var tokens = await _ocr.RecognizeAsync(image, _token, maxScale: 1.0);
-            return new Screen(image, area, tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList());
+            // Whole lines (user's PC, 2026-10-13: the word boxes failed inside the OCR library).
+            var tokens = await _ocr.RecognizeLinesAsync(image, _token);
+            var boxes = tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList();
+            _log.Info("shopee-batch", $"screen read lines={boxes.Count} list={ShopeeBatchScreens.IsOrderList(boxes)} detail={ShopeeBatchScreens.IsOrderDetail(boxes)} dialog={ShopeeBatchScreens.TrackingDialogTitle(boxes) is not null} awb={ShopeeBatchScreens.IsAwbPage(boxes)} print={ShopeeBatchScreens.IsPrintDialog(boxes)}");
+            return new Screen(image, area, boxes);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch
         {
-            // The OCR engine failed on the whole window (user's PC, 2026-10-13: an
-            // IndexOutOfRangeException inside it); the same pixels in two overlapping halves.
-            _log.Warn("shopee-batch", $"window OCR failed, reading it in halves: {ex}");
-            try { return new Screen(image, area, await ReadInHalvesAsync(image)); }
-            catch { image.Dispose(); throw; }
+            image.Dispose();
+            throw;
         }
-    }
-
-    /// <summary>The window read as a top and a bottom half overlapping by 80 px; each line is kept by the half holding its centre.</summary>
-    private async Task<List<OcrBox>> ReadInHalvesAsync(Bitmap image)
-    {
-        const int Overlap = 80;
-        var split = image.Height / 2;
-        var boxes = new List<OcrBox>();
-        foreach (var (top, bottom) in new[] { (0, Math.Min(image.Height, split + Overlap / 2)), (Math.Max(0, split - Overlap / 2), image.Height) })
-        {
-            using var part = image.Clone(Rectangle.FromLTRB(0, top, image.Width, bottom), image.PixelFormat);
-            var tokens = await _ocr.RecognizeAsync(part, _token, maxScale: 1.0);
-            foreach (var t in tokens)
-            {
-                var centre = top + t.Rect.Top + t.Rect.Height / 2;
-                if (top == 0 ? centre < split : centre >= split)
-                    boxes.Add(new OcrBox(t.Text, t.Rect.Left, top + t.Rect.Top, t.Rect.Width, t.Rect.Height));
-            }
-        }
-        return boxes;
     }
 
     /// <summary>Reads the window until <paramref name="probe"/> finds what it wants; stops the batch after <paramref name="seconds"/>.</summary>
@@ -418,7 +398,9 @@ internal sealed class ShopeeBatchRunner
             using var screen = await ReadAsync();
             if (ShopeeBatchScreens.TrackingDialogTitle(screen.Boxes) is { } title)
             {
-                var cross = CloseCross(screen.Image, title) ?? throw new ShopeeBatchStop("找不到「查看寄件編號」視窗右上角的 ×。", true);
+                var mark = ShopeeBatchScreens.DialogCloseMark(screen.Boxes, title);
+                var cross = (mark is not null ? new Point(mark.CenterX, mark.CenterY) : CloseCross(screen.Image, title))
+                    ?? throw new ShopeeBatchStop("找不到「查看寄件編號」視窗右上角的 ×。", true);
                 _log.Info("shopee-batch", $"click dialog close at {screen.Area.Left + cross.X},{screen.Area.Top + cross.Y}");
                 Front();
                 InputSender.Click(new Point(screen.Area.Left + cross.X, screen.Area.Top + cross.Y));

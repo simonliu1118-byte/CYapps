@@ -115,8 +115,41 @@ public sealed class ShopeeBatchScreensTests
         // The last character of a TW number may be a letter or a digit; the rest are digits.
         Assert.True(ShopeeBatchScreens.SameTracking("TW1 234 567 890 120", "TW1234567890120"));
         Assert.True(ShopeeBatchScreens.SameTracking("TWI23456789O120", "TW1234567890120"));
-        Assert.False(ShopeeBatchScreens.SameTracking("TW123456789012O", "TW1234567890120"));
+        // …O on one screen, …0 on the next: one number.
+        Assert.True(ShopeeBatchScreens.SameTracking("TW123456789012O", "TW1234567890120"));
+        Assert.False(ShopeeBatchScreens.SameTracking("TW123456789013O", "TW1234567890120"));
         Assert.False(ShopeeBatchScreens.SameTracking("", ""));
+    }
+
+    [Fact]
+    public void Reads_whole_lines_as_the_ocr_returns_them()
+    {
+        // Line boxes as read on the user's screens (made-up numbers): 内 for 內, 包里 for 包裹,
+        // and a 「在1天內確認」 tag that puts 待出貨 below the carrier.
+        var list = ListHeader("建議今天内出貨(28)").Concat(
+        [
+            B("buyer_one", 297, 657), B("訂單編號261011AB12CD34", 1581, 657),
+            B("2件9.9折", 261, 715), B("NT$208", 770, 704), B("在1天内確認", 965, 704), B("蝦皮店到店", 1283, 707), B("安排出貨", 1541, 708),
+            B("貨到付款", 772, 729), B("待出貨", 963, 732), B("為了避免延逗出貨，請在2026/10/13之前出貨", 964, 755),
+            B("buyer_two", 297, 872), B("訂單編號261011XY98ZW76", 1577, 873), B("在1天內確認", 965, 920), B("7-ELEVEN", 1284, 922), B("待出貨", 962, 945)
+        ]).ToList();
+        Assert.Equal(28, ShopeeBatchScreens.TodayCount(list));
+        list = list.Select(b => b.Text.StartsWith("待處理") ? b with { Text = "待虚理 (30)" } : b).ToList();
+        Assert.True(ShopeeBatchScreens.IsOrderList(list));
+        Assert.Equal(30, ShopeeBatchScreens.PendingCount(list));
+        Assert.Equal(597, ShopeeBatchScreens.TodayChip(list)!.Left);
+        var first = ShopeeBatchScreens.FirstOrder(list)!;
+        Assert.Equal("261011AB12CD34", first.OrderSn);
+        Assert.Equal(732, first.Status.Top);
+        Assert.Equal("蝦皮店到店", first.Carrier);
+
+        List<OcrBox> awb = [B("預覽列印", 13, 137), B("出貨文件已下載完成。已成功下載1個包里中的1個包里的出貨文件・0個包里下載失敗。", 28, 171), B("列印出货文件", 1783, 165)];
+        Assert.Equal(new ShopeeAwbDownload(1, 1, 0), ShopeeBatchScreens.AwbDownloaded(awb));
+        Assert.NotNull(ShopeeBatchScreens.PrintDocumentsButton(awb));
+
+        List<OcrBox> dialog = [B("查看寄件編號", 53, 47, 135, 25), B("X", 640, 52, 16, 16), B("列印寄件單", 546, 797)];
+        Assert.Equal(640, ShopeeBatchScreens.DialogCloseMark(dialog, dialog[0])!.Left);
+        Assert.Equal("蝦皮店到店-隔日到貨#TW1234567", ShopeeBatchScreens.DetailCarrier([B("包裹1：蝦皮店到店-隔日到貨", 305, 828), B("#TW1234567", 516, 827)]));
     }
 
     [Fact]

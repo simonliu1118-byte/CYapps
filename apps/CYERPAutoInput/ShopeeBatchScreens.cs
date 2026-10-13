@@ -25,8 +25,9 @@ internal static partial class ShopeeBatchScreens
 
     // ---- 我的銷售 › 待出貨 › 待處理 ----
 
+    // 待處理 is sometimes read 待虚理 (user's screenshots, 2026-10-13), so it does not decide.
     public static bool IsOrderList(IReadOnlyList<OcrBox> boxes) =>
-        Has(boxes, "我的銷售") && Has(boxes, "待處理") && Has(boxes, "建議出貨期限");
+        Has(boxes, "我的銷售") && Has(boxes, "建議出貨期限");
 
     /// <summary>The count of 「待處理 (n)」, when read.</summary>
     public static int? PendingCount(IReadOnlyList<OcrBox> boxes) => ChipCount(boxes, "待處理");
@@ -39,7 +40,7 @@ internal static partial class ShopeeBatchScreens
         foreach (var box in boxes)
         {
             var match = ChipCountPattern().Match(C(box));
-            if (match.Success && match.Groups[1].Value == label) return int.Parse(match.Groups[2].Value);
+            if (match.Success && match.Groups[1].Value.Replace('虚', '處') == label) return int.Parse(match.Groups[2].Value);
         }
         return null;
     }
@@ -82,10 +83,12 @@ internal static partial class ShopeeBatchScreens
         var carrier = string.Empty;
         if (carrierHeader is not null)
         {
+            // The order's row: from its 訂單編號 down to the next order's (the carrier sits at the
+            // row's top, beside the amount, above 待出貨 when a tag such as 在1天內確認 is shown).
             var right = actionHeader?.Left - 8 ?? int.MaxValue;
+            var next = boxes.Where(b => b.Top > number!.Bottom && C(b).Contains("訂單編號", StringComparison.Ordinal)).Select(b => b.Top).DefaultIfEmpty(int.MaxValue).Min();
             carrier = string.Concat(boxes
-                .Where(b => b.Left >= carrierHeader.Left - 24 && b.Left < right &&
-                            b.Top >= status.Top - status.Height && b.Top <= status.Bottom + status.Height * 2)
+                .Where(b => b.Left >= carrierHeader.Left - 24 && b.Left < right && b.Top > number!.Bottom && b.Top < next && b.Top <= status.Bottom + 80)
                 .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
         }
         return new ShopeeListOrder(orderSn, status, carrier);
@@ -145,6 +148,11 @@ internal static partial class ShopeeBatchScreens
     public static OcrBox? TrackingDialogTitle(IReadOnlyList<OcrBox> boxes) =>
         boxes.FirstOrDefault(b => C(b) == "查看寄件編號");
 
+    /// <summary>The dialog's × when the OCR reads it (an X on the title's row, right of it).</summary>
+    public static OcrBox? DialogCloseMark(IReadOnlyList<OcrBox> boxes, OcrBox title) =>
+        boxes.Where(b => C(b) is "X" or "×" or "x" && b.Left > title.Right && SameRow(b, title) && b.Width <= 30 && b.Height <= 30)
+            .OrderBy(b => b.Left).FirstOrDefault();
+
     public static bool TrackingRequested(IReadOnlyList<OcrBox> boxes) => Has(boxes, "寄件編號申請中");
 
     /// <summary>The TW number the dialog shows once assigned (spaces dropped).</summary>
@@ -193,7 +201,7 @@ internal static partial class ShopeeBatchScreens
     /// <summary>「已成功下載1個包裹中的1個包裹的出貨文件。0個包裹下載失敗」, when read.</summary>
     public static ShopeeAwbDownload? AwbDownloaded(IReadOnlyList<OcrBox> boxes)
     {
-        var text = string.Concat(boxes.Where(b => C(b).Contains("包裹", StringComparison.Ordinal)).OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+        var text = string.Concat(boxes.Where(b => C(b).Contains("個包", StringComparison.Ordinal)).OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
         if (!text.Contains("下載完成", StringComparison.Ordinal) && !Has(boxes, "下載完成")) return null;
         var done = AwbDonePattern().Match(text);
         var failed = AwbFailedPattern().Match(text);
@@ -264,14 +272,22 @@ internal static partial class ShopeeBatchScreens
         return match.Success ? ShopeeScreenshot.TrackingDigits(match.Value) : string.Empty;
     }
 
-    /// <summary>Two tracking numbers read from different screens, the same?</summary>
+    /// <summary>
+    /// Two readings of one tracking number, the same? A TW number's last character may be a
+    /// letter or a digit, and the OCR reads its O and 0 either way (user's screenshots,
+    /// 2026-10-13: 「…53O」 on one screen, 「…530」 on the next), so they count as one there.
+    /// </summary>
     public static bool SameTracking(string a, string b)
     {
-        static string N(string s) => ShopeeScreenshot.TrackingDigits(new string(s.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray()));
+        static string N(string s)
+        {
+            var t = ShopeeScreenshot.TrackingDigits(new string(s.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray()));
+            return t.StartsWith("TW", StringComparison.Ordinal) && t.Length > 2 && t[^1] == 'O' ? t[..^1] + "0" : t;
+        }
         return N(a).Length > 0 && N(a) == N(b);
     }
 
-    [GeneratedRegex(@"^(待處理|建議今天內出貨|建議明天內出貨)[\(（](\d+)[\)）]")]
+    [GeneratedRegex(@"^(待[處虚]理|建議今天內出貨|建議明天內出貨)[\(（](\d+)[\)）]")]
     private static partial Regex ChipCountPattern();
 
     [GeneratedRegex(@"(?<![0-9A-Z])[0-9OIL]{6}[0-9A-Z]{8}(?![0-9A-Z])")]
@@ -283,10 +299,11 @@ internal static partial class ShopeeBatchScreens
     [GeneratedRegex(@"^包\S\d*[:：]")]
     private static partial Regex PackagePattern();
 
-    [GeneratedRegex(@"(\d+)個包裹中的(\d+)個")]
+    // 包裹 is often read 包里 (user's screenshots, 2026-10-13).
+    [GeneratedRegex(@"(\d+)個包[裹里裏]中的(\d+)個")]
     private static partial Regex AwbDonePattern();
 
-    [GeneratedRegex(@"(\d+)個包裹下載失敗")]
+    [GeneratedRegex(@"(\d+)個包[裹里裏]下載失敗")]
     private static partial Regex AwbFailedPattern();
 
     [GeneratedRegex(@"^\d{2,3}$")]
