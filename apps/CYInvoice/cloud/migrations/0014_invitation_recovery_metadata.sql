@@ -1,5 +1,10 @@
 PRAGMA defer_foreign_keys = ON;
 
+-- Distinguish explicitly revoked pairing grants from successfully used codes.
+-- During a full recovery cutover any outstanding old pairing authorizations
+-- must also stop granting new Device tokens.
+ALTER TABLE device_pairing_codes ADD COLUMN revoked_at TEXT;
+
 -- V3 invitation metadata shared by independent Built-in and CYID-only storage.
 -- Pure additive fields keep every historical issuer Device/Employee FK intact.
 -- The optional CYID_ONLY issuer-device relaxation is a separate, reviewed
