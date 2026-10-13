@@ -608,3 +608,9 @@ SELECT purpose, COUNT(*) AS rows,
 此結果沒有將未執行的 Windows 全角色／多裝置實機矩陣宣告通過。DPAPI 備份依賴原 Windows 使用者與電腦；0-Device recovery、可攜式加密備份／金鑰保管及長期回復程序仍依唯一 [TODO §7.4](TODO.md) 接續。已退役 D1 不得僅關閉 CYID flag 回退 Built-in，也不得盲目重跑非冪等 DDL。
 
 **長期資料庫模式**：本公司 CYID deployment 可以是帶有 `CYID_ONLY` marker 的小型協同業務 D1；未來其他公司 Built-in deployment 則全新 D1 依 0001..0013 schema 建立帳戶權威。兩者共用 provider-neutral CYInvoice 程式，不共用員工列、密碼或原 Workspace。
+
+## 21. V3 多機協同的 CYWEB 裝置復原（2026-10-13 設計）
+
+使用者決定災難復原與 V3 多機協同一起做，由 CYID 超管在 CYWEB 簽發復原邀請碼，新 Device 接回原 CYInvoice Workspace；裝置／邀請／協同資料上 CYInvoice 業務 D1，不合併 CYID authority。具體情境、private issuer、App-scoped per-operation 授權、issuer FK／forward migration、Pending Token／結果不明、備份及驗收見 [V3 裝置復原設計](CLOUD_DISASTER_RECOVERY.md)，唯一待辦在 TODO §7.4／§7.5。
+
+這是待實作的產品設計，尚無 CYWEB 簽發入口或新版 D1 migration。既有有效加入碼仍沿用原流程；當所有 Token 與加入碼都不可用時，現行程式尚不能自助復原。CYWEB／CYID／業務服務故障先走維運回復，不能把 core entry access 當作永久可用性保證。

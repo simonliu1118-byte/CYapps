@@ -13,10 +13,10 @@
 | 順序 | 工作 | 範圍與依據 |
 | --- | --- | --- |
 | 已完成 | V2.6.19 Release、CYID 啟用、Cloud0.9.3 與原 D1 舊帳號退役 | 正式 CI／部署與本次私有維護 read-back；不再列為待切換 |
-| 接續 1 | 所有原 Device／Token 遺失的受控災難復原 | §7.4；先設計授權、原 Workspace continuity、異機備份及人工維運，Recovery Device flow 尚未實作 |
-| 接續 2 | V3 Work Item／revision／跨機 OrderID 防撞 | §7.5；跨機同時操作、防重及結果不明，不將 Cloud Lock 變成所有業務前置條件 |
-| 接續 3 | V3 折讓 API／不可覆寫逐筆歷史 | §1.1／§6／§7.5；依使用者決定整體重做，不回頭修 V2.6.19 |
-| 接續 4 | 業務 Audit／查看介面 | §7.4／§7.6；現有 Device audit 保留，新增業務事件與 actor provider |
+| V3 接續 1 | 多機 Device／邀請與 CYWEB 超管復原 | §7.4／§7.5；使用者決定災復併入 V3，由 CYWEB 簽短效一次性復原邀請，沿用原 Workspace；設計完成，功能尚未實作 |
+| V3 接續 2 | Work Item／revision／跨機 OrderID 防撞 | §7.5；與同一 Device／actor 模型接續，跨機原子性與結果不明，不將 Cloud Lock 變成所有業務前置條件 |
+| V3 接續 3 | V3 折讓 API／不可覆寫逐筆歷史 | §1.1／§6／§7.5；依使用者決定整體重做，不回頭修 V2.6.19 |
+| V3 接續 4 | 業務 Audit／查看介面 | §7.4／§7.6；現有 Device audit 保留，新增業務事件與 actor provider |
 | 待補證據 | 原裝置權限刷新、斷線／恢復、撤銷中斷與 UI／AMEGO 行為 | §1／§4／§7.2／§7.3；缺實測證據不等於未實作或已發現 defect |
 | 後續／延後 | 酷澎特殊樣本、自架手冊、多公司、營運摘要、高 DPI／cache 簽章 | §5／§8～§11；維持原延後與非本次阻塞決定 |
 
@@ -176,14 +176,22 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **維運權限核對：**既有 temporary Workers Admin 是否仍需保留；不能由本次 MCP read/write 成功或拒絕推斷全部管理權限已回收。
 - 初次切換前 Built-in continuity／staging／activation 條件留在交接歷史；本公司現為 CYID_ONLY，不能以關閉 flag 當回復指令。另一個 production promotion／Windows Release 仍屬獨立範圍。
 
-### 7.4 新裝置加入、災難復原與安全紀錄
+### 7.4 V3 多機裝置復原、備份與安全紀錄
 
-- [ ] 安全操作紀錄／稽核查看介面；業務事件摘要與 actor provider 在 §7.6。
-- [ ] **接續第一項：受控災難復原設計。**整合所有 Device Token 遺失但身分權威可驗證、所有裝置遺失且無有效邀請的情況；保留原 business Workspace，釐清 trusted authorization、Recovery Device flow、Token 與 Audit，遵守 CYID canonical standard，不另造員工權威。
-- [ ] **私有備份異機回復。**本次 DPAPI CurrentUser 備份在原 Windows 使用者／機器已解密、還原及逐筆核對；原帳戶或機器遺失不能視為可解密。另設計可攜加密備份、金鑰保管、復原工具與隔離驗證。
-- [ ] **人工維運程序。**所有 Device Token／recovery path 同時失效時，定義授權核對、原資料保留、維護後新資料處理及回復；不自動覆寫真實 D1、不重建 Workspace。LAST_ACTIVE_DEVICE 保護維持，Recovery Device flow 尚未實作。
+2026-10-13 使用者決定：**災難復原與 V3 多機協同一起做，從 CYWEB 由 CYID 超管簽發復原邀請碼**。裝置／邀請／協同資料上 CYInvoice 業務 D1，CYID 身分權威與其 D1 分離。詳細見 [V3 多機與復原設計](CLOUD_DISASTER_RECOVERY.md)；不再要求獨立災復功能先於 V3 完成。
+
+- [x] **設計與 source 核對：**區分可用舊裝置、有效加入碼、所有 Token 遺失及服務／資料毀損；確認 active 筆數不是可用 Token 數、現有 issuer Device FK 與 app-scoped Session 邊界。
+- [ ] **V3 CYWEB 管理接線：**核對實際 CYWEB source／core Session／CSRF owner；超管簽發／撤銷／狀態查核經專用 private capability 與當次 CYInvoice App authority，不轉用 core token、不要求舊 Device。
+- [ ] **V3 邀請與 Audit schema：**forward migration 擴充 issuer channel／RECOVERY purpose／nullable CYWEB Device issuer 與 constraint，保留歷史 actor；原子單次 claim／Audit、失敗及 delivery 不明安全收斂。
+- [ ] **V3 新裝置復原加入：**沿用 protected Pending Token owner，固定兩 Workspace／Application scope；同 Token retry／重啟／scope mismatch／revoked 不復活，成功加入原 Workspace 後才明確撤銷選定失聯舊 Device。LAST_ACTIVE_DEVICE 維持。
+- [ ] **私有備份異機回復工具與保管：**設計建議 age recipient encryption；仍待核准 recipient／獨立金鑰及備份位置、工具、RPO／RTO／retention 與真正異機 drill。現有 DPAPI 只證明原帳戶／機器本地回復。
+- [ ] **人工維運回復：**CYWEB／CYID／D1 故障先由各 owner 恢復服務；先保留目前 snapshot／新資料，核對 storage profile 與相容 Worker，遠端 restore 另以具體範圍批准。回復後舊 revoked Token／已用邀請不得倒退復活。
+- [ ] **RC AE／DR-01～DR-13：**本地／CI 與必要實機驗證；目前均未執行。業務 Audit／viewer 由 §7.6 共用追蹤。
+
 
 ### 7.5 跨機 Work Item / Sync
+
+災難復原不獨立先行，與 §7.4 的 CYWEB 邀請／Device registry／actor 共用 V3 設計。新機加入不代表未上雲的舊機 pending 已找回，也不觸發 AMEGO 自動重送。
 
 - [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
 - [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。

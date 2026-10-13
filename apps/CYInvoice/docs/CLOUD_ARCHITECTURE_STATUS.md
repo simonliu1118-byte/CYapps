@@ -224,6 +224,10 @@ CYID consumer 已在原 development 啟用，本公司 CYID_ONLY 維護完成；
 
 Windows inventory 僅顯示 active；Cloud API／DB 保留 revoked history。啟動 POST usage 以 Device Token 更新本 Device 的 client_version／last_seen_at，沒有新增 heartbeat owner。改名 POST rename 以中央 SUPER_ADMIN 執行時驗證，同 Workspace active Device，交易重查 actor／Workspace／credential 並保存 device_renamed audit。0012 擴充 audit vocabulary，不修改已套用 migrations。新增裝置由獨立 CloudAddDeviceForm 管理既有配對／邀請生命周期。
 
+## V3 接續：CYWEB 裝置復原與多機協同設計
+
+2026-10-13 使用者決定災難復原與 V3 多機協同一併實作，由 CYWEB 的 CYID 超管簽發一次性復原邀請。原業務 Workspace／D1、Device registry／Invitation／Audit 與 Work Item actor 共用模型；原 Device Token 可全部不可用，新機仍應能接回原 Workspace。設計已核對現有 source／issuer FK／Session Application 邊界，詳見 [CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md)。CYWEB source 接線、runtime／forward migration／UI 與 DR matrix 尚未實作；當前部署仍為上述0.9.3基準。
+
 ## CYID Consumer（V2.6.15 引入；本公司已啟用）
 
 IdentityProviderRuntime 增加第三個 provider，不新增第二個 desktop 選擇 owner。Worker app.ts 仍唯一 dispatch；cyid.ts 管理 private IDENTITY Session lifecycle，Device／onboarding 保留業務 mutation owner。新 authenticated discovery 確認 provider／Device／兩 Workspace／Application，Windows 整筆 DPAPI 保存；CYID 確認後不自動降回 Built-in／Local。

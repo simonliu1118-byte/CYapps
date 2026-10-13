@@ -4,14 +4,23 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：CYID_ONLY 維護完成；接續災難復原設計（2026-10-13）
+## 最新停點：災難復原併入 V3；CYWEB 超管復原邀請設計（2026-10-13）
+
+- **使用者方向**：災難復原與 V3 多機協同一起做；由 CYID 超管在 CYWEB 簽發短效一次性復原邀請，新機加入原 CYInvoice business Workspace，不靠遺失的舊 Token。
+- **設計已整理**：[CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md) 定義情境、CYWEB/core 與 CYInvoice App scoped 授權、private issuer、現有 invitation／Audit migration、protected Pending Token／scope／結果不明、舊 Device history、V3 Work Item 重整及服務故障備份邊界。未增加永久規則或 shared Identity authority。
+- **source 事實**：現行 issueInvitation／createPairing 要舊 Device；已有有效 code 可走 join，但沒有無碼復原入口。D1 active 數不是可用 Token 數；issuer Device FK 需 forward migration。CYID Session 綁原 Application，不能將 CYWEB core token 改 header 後當 CYInvoice Session。建議簽發時重新驗超管帳密，沿用現有 canonical Login／Resolve／finally Logout。
+- **當前未完成**：CYWEB 本輪實際 source／CSRF owner 尚未取得；跨專案接線、schema／runtime／UI、復原加入、DR-01～DR-13、本地／CI／實機與可攜備份工具／獨立保管／異機 drill 皆未實作或未執行。產品設計完成不代表服務已有復原能力。
+- **維運界線**：CYWEB／CYID／Invoice／D1 都需可用才可簽發兌換；邀請只恢復 Device 信任，不還原整庫或找回未上雲的舊機輸入。D1 restore 要先保留新資料／撤銷證據與 profile 相容性，再按當次具體範圍批准。
+- **原完成基準保留**：V2.6.19 Release、原 Worker0.9.3／CYID=true／CYID_ONLY 與私有 D1 維護證據維持。此批僅設計文件，未連線變更真實 D1／Worker／CYWEB／CYID，未新增 Release。唯一待辦在 TODO §7.4／§7.5。
+
+## 已完成基準：CYID_ONLY 維護（2026-10-13）
 
 - **實際維護已完成**：使用者獨立批准私有備份、原 Worker 相容部署及指定 D1 退役。Cloud0.9.3／API1／marker8／storage13 由 [Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 部署，保持 CYID=true／原全部 bindings；storage health 正常。
 - **原 D1 已清理**：四張 Built-in 員工／轉換表物理移除，CYID_ONLY marker 正確；invitation 歷史 actor 保留並移除舊員工 FK；Workspace／Device／Token／pairing／invitation／audit／migration history 逐筆符合預期；共用 pairing OTP 保留，舊帳號 purpose／recovery fields 已清。foreign_key_check 無違規、quick_check ok。Provider 未變，未操作 CYID D1、未建測試 Worker。
 - **私有回復證據**：直接唯讀取得完整應用程式邏輯備份，前後 bookmark 一致；DPAPI CurrentUser 加密、解密／SQLite 還原／完整資料核對與真實資料模擬通過後才執行維護。Cloudflare 內部系統表不在應用程式 dump；原始筆數、ID／hash、備份／Time Travel bookmark／本機路徑留在私有紀錄，未加密暫存已移除。DPAPI 依賴原 Windows 使用者／機器，異機災復尚未完成。
 - **執行路徑**：API MCP 的 export／Worker write 權限不可用，備份採唯讀 query，升級沿用原 GitHub workflow；原 D1 由已連線 Bindings MCP 一次 batch 清理，再由 API MCP 逐筆 read-back。沒有增加測試 handler 或自動清表 workflow。
 - **驗收界線**：Provider ready、舊 Built-in route／未授權 Device 拒絕已檢查，沒有真人帳密／多裝置全矩陣。保留本批本地／CI 驗收決定；V2.6.19 已發布，折讓歷史缺欄位仍留 V3.0。
-- **接續順序**：TODO §0／§7.4 的零裝置／Token recovery、可攜加密備份及人工維運設計 → §7.5 的 V3 Work Item／revision／OrderID 防撞 → 正式折讓／逐筆歷史 → 業務 Audit／viewer。Recovery Device flow 尚未實作，LAST_ACTIVE_DEVICE 保護維持。
+- **接續順序（已依後續使用者決定更新）**：TODO §7.4／§7.5 在 V3 同批整合 CYWEB 裝置復原邀請、Device／actor 模型、Work Item／revision／OrderID，再接正式折讓／逐筆歷史及業務 Audit／viewer；可攜備份與維運另依資料回復需要接續。Recovery Device flow 尚未實作，LAST_ACTIVE_DEVICE 保護維持。
 - **當前適用範圍**：本公司 CYID_ONLY；其他公司 Built-in／Self-hosted 使用自己的新 D1。本次成功不是關回 Built-in、重跑一次性 DDL或另一環境變更的授權。
 
 ## 歷史停點：source 已合併、原 D1 當時未清（2026-10-13，維護前）
