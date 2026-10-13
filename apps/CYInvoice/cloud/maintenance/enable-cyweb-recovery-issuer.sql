@@ -84,6 +84,13 @@ CREATE INDEX idx_device_invitations_workspace_created
 CREATE UNIQUE INDEX idx_device_invitations_recovery_operation
     ON device_invitations (workspace_id, recovery_operation_id)
     WHERE recovery_operation_id IS NOT NULL;
+-- At most one outstanding CYWEB recovery grant per business Workspace.
+-- An ambiguous pending email cannot be superseded by another operationId:
+-- explicit revocation is required before issuing a new invitation.
+CREATE UNIQUE INDEX idx_device_invitations_single_open_recovery
+    ON device_invitations (workspace_id)
+    WHERE issuer_channel = 'CYWEB' AND purpose = 'RECOVERY'
+      AND consumed_at IS NULL AND revoked_at IS NULL;
 
 INSERT INTO cyweb_recovery_storage_profile (profile, workspace_id)
 SELECT 'CYWEB_RECOVERY', workspace_id FROM workspaces WHERE status = 'active';
@@ -94,6 +101,11 @@ SELECT 'CYWEB_RECOVERY', workspace_id FROM workspaces WHERE status = 'active';
 -- An invalid invitation/profile/token aborts every write rather than leaving
 -- a partially joined Device or partially revoked fleet.
 CREATE TABLE cyweb_recovery_claim_guard (
+    passed INTEGER NOT NULL CHECK (passed = 1)
+);
+-- Similarly, a guarded sent-state transition + success audit must be atomic.
+-- A failed or stale authorization must never turn a pending code into claimable.
+CREATE TABLE cyweb_recovery_issuer_guard (
     passed INTEGER NOT NULL CHECK (passed = 1)
 );
 
