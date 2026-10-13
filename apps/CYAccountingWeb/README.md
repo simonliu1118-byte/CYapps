@@ -2,22 +2,23 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/13（台灣時間）。本文件是專案入口與現況摘要；永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+更新：2026/10/14（台灣時間）。本文件是專案入口與現況摘要；永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
 ## 正式基準
 
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 已合併產品版本 | **V0.23.1 Build 2**；不是尚未合併工作線的 V0.23.2 |
-| 部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
+| 產品版本 | **V0.23.2**（桌機日期修復）；V0.23.1 Build 2 為前一版統計返修 |
+| 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
+| 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
 | D1 schema | **8**；`0008_excel_import_runs.sql` 保存 append-only Excel 替換稽核 |
 | CYID consumer | 本 App `CYID_CONSUMER_VERSION` 為 1.0.1；同 repo 已發布 contract 1.0.4、minimum 1.0.0，仍在支援範圍內；不據此推定所有 Provider 環境皆已部署最新版 |
 | 治理 | Common Rules 2.8.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
 | 帳務與備份現況 | 依私人檢查點及正式 catalog 確認；公開文件不保存交易、來源檔、備份識別或資料操作紀錄 |
 
-正在進行的首次登入引導 PR **#435／V0.23.2** 尚未合併。它需要先核對正式 CY Web 入口與 CYID authority 相同，再部署；本次 GitHub 清理不代替該 gate。
+首次登入引導 PR **#435** 尚未合併；原工作線標示 V0.23.2，合併前需依最新 main 重新基底及升版，不能覆蓋本次日期修復的版本身分。它仍需先核對正式 CY Web 入口與 CYID authority 相同的 gate。
 
 ## 文件入口
 
@@ -77,4 +78,4 @@ npm run dev
 
 `.github/workflows/cyaccountingweb-deploy.yml` 為現行驗證／部署流程：PR 自動驗證、人工 dispatch 備援，main push 執行正式部署；包含 syntax、26 組 application regressions、D1 local migration、Worker dry-run、CYID contract、secure login 與 semantic assets 驗證。`.github/workflows/cyaccountingweb-release.yml` 只用於明確授權的 Stable Release，重新驗證、掃描公開 source package 及 SHA-256。
 
-本次只整理 GitHub 產物與文件，不改產品 VERSION／BUILD、帳務資料、裝置版面或正式 Release。GitHub 清理執行結果及未合併工作見 WORK_HANDOFF。
+V0.23.2 修復桌機日期日／月／年選擇未同步 canonical input 的 HTML data attribute 大小寫問題；選取日期不再清空必填值，儲存使用所選日期。沿用同一 picker 與 transaction writer，手機／平板原生日期不變。GitHub 清理及未合併工作見 WORK_HANDOFF。

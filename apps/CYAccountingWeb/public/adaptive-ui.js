@@ -1855,6 +1855,7 @@ function ensureDesktopUiDatePicker(input) {
   if (!input || input.dataset.desktopUiDatePicker === '1') return;
   input.dataset.desktopUiDatePicker = '1';
   input.classList.add('desktopUi-native-date-source');
+  // HTML attribute names must stay lowercase so dataset preserves word boundaries.
 
   const root = document.createElement('div');
   root.className = 'desktopUi-date-picker';
@@ -1864,9 +1865,9 @@ function ensureDesktopUiDatePicker(input) {
     </button>
     <div class="desktopUi-date-popover" role="dialog" aria-label="選擇日期" hidden>
       <div class="desktopUi-date-head">
-        <button type="button" data-desktopUi-date-nav="-1" aria-label="上一個">‹</button>
+        <button type="button" data-desktop-ui-date-nav="-1" aria-label="上一個">‹</button>
         <button type="button" class="desktopUi-date-title" aria-label="切換年月選擇"></button>
-        <button type="button" data-desktopUi-date-nav="1" aria-label="下一個">›</button>
+        <button type="button" data-desktop-ui-date-nav="1" aria-label="下一個">›</button>
       </div>
       <div class="desktopUi-date-content"></div>
       <div class="desktopUi-date-footer"><button type="button" class="desktopUi-date-today-button">今天</button></div>
@@ -1910,7 +1911,7 @@ function ensureDesktopUiDatePicker(input) {
       const active = y === selected.year && m === selected.month && d === selected.day;
       const current = y === today.year && m === today.month && d === today.day;
       const other = m !== displayMonth;
-      return `<button type="button" class="desktopUi-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-desktopUi-date-value="${value}">${d}</button>`;
+      return `<button type="button" class="desktopUi-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-desktop-ui-date-value="${value}">${d}</button>`;
     }).join('');
     content.innerHTML = `<div class="desktopUi-date-weekdays">${CY_DesktopUi_WEEKDAYS.map(day => `<span>${day}</span>`).join('')}</div><div class="desktopUi-date-days">${cells}</div>`;
   };
@@ -1920,7 +1921,7 @@ function ensureDesktopUiDatePicker(input) {
     content.innerHTML = `<div class="desktopUi-date-choice-grid">${CY_DesktopUi_MONTHS.map((name, index) => {
       const month = index + 1;
       const active = selected.year === displayYear && selected.month === month;
-      return `<button type="button" class="desktopUi-date-month-choice${active ? ' active' : ''}" data-desktopUi-date-month="${month}">${name}</button>`;
+      return `<button type="button" class="desktopUi-date-month-choice${active ? ' active' : ''}" data-desktop-ui-date-month="${month}">${name}</button>`;
     }).join('')}</div>`;
   };
 
@@ -1928,7 +1929,7 @@ function ensureDesktopUiDatePicker(input) {
     title.textContent = `${yearStart}–${yearStart + 11}`;
     content.innerHTML = `<div class="desktopUi-date-choice-grid">${Array.from({ length: 12 }, (_, index) => yearStart + index).map(year => {
       const active = selected.year === year;
-      return `<button type="button" class="desktopUi-date-year-choice${active ? ' active' : ''}" data-desktopUi-date-year="${year}">${year}</button>`;
+      return `<button type="button" class="desktopUi-date-year-choice${active ? ' active' : ''}" data-desktop-ui-date-year="${year}">${year}</button>`;
     }).join('')}</div>`;
   };
 
@@ -1954,7 +1955,7 @@ function ensureDesktopUiDatePicker(input) {
     if (popover.hidden) open(); else close(false);
   });
 
-  root.querySelectorAll('[data-desktopUi-date-nav]').forEach(button => button.addEventListener('click', () => {
+  root.querySelectorAll('[data-desktop-ui-date-nav]').forEach(button => button.addEventListener('click', () => {
     const delta = Number(button.dataset.desktopUiDateNav) || 0;
     if (view === 'days') {
       const next = new Date(displayYear, displayMonth - 1 + delta, 1);
@@ -1978,7 +1979,7 @@ function ensureDesktopUiDatePicker(input) {
   });
 
   content.addEventListener('click', event => {
-    const day = event.target.closest('[data-desktopUi-date-value]');
+    const day = event.target.closest('[data-desktop-ui-date-value]');
     if (day) {
       input.value = day.dataset.desktopUiDateValue;
       input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1986,14 +1987,14 @@ function ensureDesktopUiDatePicker(input) {
       close(true);
       return;
     }
-    const month = event.target.closest('[data-desktopUi-date-month]');
+    const month = event.target.closest('[data-desktop-ui-date-month]');
     if (month) {
       displayMonth = Number(month.dataset.desktopUiDateMonth) || displayMonth;
       view = 'days';
       render();
       return;
     }
-    const year = event.target.closest('[data-desktopUi-date-year]');
+    const year = event.target.closest('[data-desktop-ui-date-year]');
     if (year) {
       displayYear = Number(year.dataset.desktopUiDateYear) || displayYear;
       view = 'months';

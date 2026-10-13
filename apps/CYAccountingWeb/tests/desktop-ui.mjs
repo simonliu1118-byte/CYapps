@@ -35,9 +35,12 @@ const ledgerSource = read('public/ledger-tools.js');
 const editCss = read('public/ledger-inline-edit.css');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
+const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
+const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
+assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.23.1');
-assert.equal(build, '2');
+assert.equal(version, '0.23.2');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -82,6 +85,120 @@ for (const cls of ['desktopUi-date-picker', 'desktopUi-date-trigger', 'desktopUi
 }
 assert.doesNotMatch(adaptiveCss, /\.cy-native-date-source|\.cy-date-(?:picker|trigger|popover|day|head)/,
   'obsolete renamed date CSS must not remain');
+
+// Exercise the actual picker handlers with HTML-style attribute normalization.
+// HTML parsers lowercase attribute names; mixed-case data-* markup must not
+// silently pass because a fixture constructed dataset objects by hand.
+class PickerElement {
+  constructor() { this.attributes = {}; this.dataset = {}; this.listeners = {}; this.children = []; this.hidden = false; this.classList = { add() {} }; }
+  setAttribute(name, value) {
+    name = name.toLowerCase();
+    this.attributes[name] = String(value);
+    if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = String(value);
+    if (name === 'hidden') this.hidden = true;
+  }
+  set innerHTML(markup) {
+    this.children = [...markup.matchAll(/<[a-z][\w-]*\b([^>]*)>/gi)].map(tag => {
+      const child = new PickerElement();
+      for (const attr of tag[1].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) child.setAttribute(attr[1], attr[2] || '');
+      return child;
+    });
+  }
+  matches(selector) {
+    if (selector.startsWith('.')) return (this.attributes.class || '').split(/\s+/).includes(selector.slice(1));
+    const match = /^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(selector);
+    return Boolean(match && match[1].toLowerCase() in this.attributes &&
+      (match[2] === undefined || this.attributes[match[1].toLowerCase()] === match[2]));
+  }
+  querySelectorAll(selector) { return this.children.filter(child => child.matches(selector)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+  closest(selector) { return this.matches(selector) ? this : null; }
+  addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
+  dispatchEvent(event) { for (const listener of this.listeners[event.type] || []) listener(event); }
+  click(target = this) { this.dispatchEvent({ type: 'click', target, stopPropagation() {} }); }
+  focus() {}
+}
+function pickerFixture() {
+  const input = new PickerElement();
+  let value = '2026-10-13';
+  Object.defineProperty(input, 'value', {
+    get: () => value,
+    set: next => { value = /^\d{4}-\d{2}-\d{2}$/.test(String(next)) ? String(next) : ''; }
+  });
+  const roots = [];
+  input.insertAdjacentElement = (_, root) => roots.push(root);
+  const context = vm.createContext({ Date, Event, String, Number,
+    CY_DesktopUi_WEEKDAYS: ['日', '一', '二', '三', '四', '五', '六'],
+    CY_DesktopUi_MONTHS: Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
+    document: { createElement: () => new PickerElement(), addEventListener() {} }
+  });
+  vm.runInContext(adaptive.slice(adaptive.indexOf('function ensureDesktopUiDatePicker(input)'),
+    adaptive.indexOf('function refineDesktopUiHeaderIdentity()')), context);
+  context.ensureDesktopUiDatePicker(input);
+  context.ensureDesktopUiDatePicker(input);
+  assert.equal(roots.length, 1, 'a date field keeps one picker');
+  return { input, root: roots[0] };
+}
+const { input: pickerDate, root: pickerRoot } = pickerFixture();
+const dateTrigger = pickerRoot.querySelector('.desktopUi-date-trigger');
+const dateContent = pickerRoot.querySelector('.desktopUi-date-content');
+const dateTitle = pickerRoot.querySelector('.desktopUi-date-title');
+const dateLabel = pickerRoot.querySelector('.desktopUi-date-label');
+let pickerChanges = 0;
+pickerDate.addEventListener('change', () => pickerChanges++);
+dateTrigger.click();
+const selectedDay = dateContent.querySelectorAll('.desktopUi-date-day')
+  .find(day => Object.values(day.attributes).includes('2026-10-21'));
+assert.ok(selectedDay, 'calendar offers a different date');
+dateContent.click(selectedDay);
+assert.equal(pickerDate.value, '2026-10-21', 'selecting a day updates the required canonical input instead of clearing it');
+assert.equal(dateLabel.textContent, '2026/10/21');
+assert.equal(pickerRoot.querySelector('.desktopUi-date-popover').hidden, true);
+assert.equal(pickerChanges, 1, 'lock state and other consumers receive one canonical change');
+let dateSaveRequest;
+const dateSaveElements = {
+  txDate: pickerDate, accountName: { value: 'TEST_ACCOUNT' }, categoryName: { value: 'TEST_SUBJECT' },
+  summary: { value: 'picker regression' }, amount: { value: '50', focus() {} },
+  monthFilter: { value: '' }, saveButton: { disabled: false }
+};
+const dateSaveContext = vm.createContext({ Number, String, Array, JSON, Error,
+  els: dateSaveElements, state: { kind: 'expense' }, isLocked: () => false,
+  showMessage() {}, updateEntryLockState() {}, jsonHeaders: () => ({}),
+  loadTransactions: async () => {},
+  api: async (url, request) => { dateSaveRequest = { url, ...request, body: JSON.parse(request.body) }; }
+});
+vm.runInContext(appJs.slice(appJs.indexOf('function summaryCharacterUnits('),
+  appJs.indexOf('function mergePendingTransactionUpdates(')), dateSaveContext);
+vm.runInContext(appJs.slice(appJs.indexOf('async function saveTransaction(event)'),
+  appJs.indexOf('async function loadTransactions()')), dateSaveContext);
+await dateSaveContext.saveTransaction({ preventDefault() {} });
+assert.equal(dateSaveRequest.url, '/api/transactions');
+assert.equal(dateSaveRequest.body.txDate, '2026-10-21', 'canonical submit serializes the selected calendar date');
+assert.equal(dateSaveElements.monthFilter.value, '2026-10');
+dateTrigger.click();
+const dateNav = pickerRoot.querySelectorAll('[data-desktop-ui-date-nav]');
+dateNav[0].click();
+assert.equal(dateTitle.textContent, '2026年09月');
+dateNav[1].click();
+dateNav[1].click();
+assert.equal(dateTitle.textContent, '2026年11月');
+dateTitle.click();
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-month="12"]'));
+assert.equal(dateTitle.textContent, '2026年12月');
+dateNav[1].click();
+assert.equal(dateTitle.textContent, '2027年01月');
+dateTitle.click();
+dateTitle.click();
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-year="2028"]'));
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-month="2"]'));
+dateContent.click(dateContent.querySelector('[data-desktop-ui-date-value="2028-02-29"]'));
+assert.equal(pickerDate.value, '2028-02-29', 'year, month and leap day selection preserve the chosen date');
+assert.equal(dateLabel.textContent, '2028/02/29');
+pickerRoot.querySelector('.desktopUi-date-today-button').click();
+assert.ok(pickerDate.value && /^\d{4}\/\d{2}\/\d{2}$/.test(dateLabel.textContent));
+pickerDate.value = '2026-10-22';
+pickerDate.dispatchEvent(new Event('change'));
+assert.equal(dateLabel.textContent, '2026/10/22', 'canonical edit/clear and keyboard changes still update the desktop label');
 
 const layoutSource = adaptive.slice(adaptive.indexOf('function setupAdaptiveSplitWorkspace()'),
   adaptive.indexOf('const CY_ENTRY_UI_SUMMARY_UNITS'));

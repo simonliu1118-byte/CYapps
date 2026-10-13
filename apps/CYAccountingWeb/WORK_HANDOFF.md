@@ -1,12 +1,13 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/13（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+更新：2026/10/14（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
 
 ## 正式基準及驗證
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.23.1 Build 2**；VERSION `0.23.1`、BUILD `2` |
+| 產品 | **V0.23.2**；VERSION `0.23.2`、BUILD `0`，桌機日期修復 |
+| 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
@@ -15,7 +16,14 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次 GitHub 清理及文件整理不改產品 VERSION／BUILD、schema、帳務資料、Session、UI 或 Stable Release。main 後續其他 App 的合併不表示本 App 升版。
+本次為獨立桌機日期 Bug，Patch 升至 V0.23.2、Build 歸零。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+
+## V0.23.2 日期修復
+
+- 原 picker markup 的 `data-desktopUi-date-*` 經 HTML parser 全部轉小寫，dataset key 與 handler 不符；選日把 native `#txDate` 清空，label fallback 今天，造成必填驗證阻擋儲存，日／月／年導覽也讀不到數值。正式舊版已在瀏覽器重現此資料／畫面落差。
+- 在原 Adaptive date presentation owner 統一改為 lowercase kebab-case `data-desktop-ui-date-*`，不新增 renderer、writer、observer 或 fallback。既有 `change` lifecycle、lock 判斷及 submit 讀同一 input。
+- 行為回歸涵蓋選日後 canonical value／label、單次 change、儲存 payload、前後月與跨年、指定年月、閏日、今天、外部變更及重複初始化。舊 source 會使該測試失敗；修復後通過。
+- Adaptive script cache revision 改為 `desktop-date-dataset`，正式 semantic verification 使用同一 URL 並確認新的日期 attribute。本版部署與正式瀏覽器驗收證據追蹤 [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions，不把舊版重現當成新版通過。
 
 ## 已交付內容與實際驗收界線
 
@@ -34,7 +42,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 
 | 工作 | 現況及接續條件 |
 | --- | --- |
-| PR **#435**／V0.23.2 首次登入引導 | **保留、尚未合併**。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
+| PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
 | `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
 | Backup／Restore／DR | 依正式 catalog 確認 Phase C，未取得最新 `x/14`；不依日期猜進度，Restore／DR 未完成 |
