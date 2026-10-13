@@ -4,7 +4,15 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V3 災難復原採「新裝置接管時全數撤銷舊裝置」（2026-10-14）
+## 最新停點：V3 CYWEB↔CYInvoice 私有復原簽發／查詢／撤銷接線（Draft，2026-10-14）
+
+- [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已新增實作 `src/recovery-issuer.ts` 與從 `src/app.ts` export 的 **named private `CyInvoiceRecoveryEntrypoint`**：`issueRecoveryInvitation`、`getRecoveryInvitationStatus`、`revokeRecoveryInvitation`，不增加公開 HTTP 管理路由；CYWEB 必須使用對應 entrypoint 的私有 Service Binding 才能呼叫。每個 RPC 在 CYInvoice Application 上重新以 CYID SUPER_ADMIN＋當次密碼／Email 驗證，驗證固定 Identity 與 Business Workspace、CYID_ONLY/RECOVERY profile；不信任 CYWEB 轉來的 Role 或 core Session Token。
+- **簽發保護：**每 Workspace 最多一筆尚未 revoke/consume 的 RECOVERY invite，`recovery_operation_id` 同 Workspace 唯一。先寫 `pending` 及隨機復原碼 SHA256，只有第一次成功建立該操作才寄送原碼到 CYID 當下驗證的超管 Email（無原碼寫入 D1／log）。寄送服務回應成功後須再重新驗證權限並在 guard D1 batch 原子標成 `sent`＋Audit；逾時／回應不明保持不可兌換的 pending，**不重寄、不自動簽另一碼**。一次操作可透過受保護的 status 查回；明確撤銷同一 operation 可解開新簽發的單一未結案鎖，Audit 保留。
+- [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 現已接好對應 `/invitations`、`/invitations/status`、`/invitations/revoke` 三個超管 POST gate，復用 CYWEB core Session／Email／first-login 拒絕／Origin+CSRF／512B 嚴格 payload，再透過私有 named RPC 到 CYInvoice 獨立 app-scoped reauth。缺 binding 一律 503 fail closed；沒有任何將 CYWEB raw Session 傳至 CYInvoice 的路徑。
+- Synthetic Node／SQLite regression `recovery-issuer.test.mjs` 已納入 cloud npm test，涵蓋 operation idempotency、寄送不明、D1 sent-state rollback、角色版本失效、同時一個未結案邀請、撤銷後另行簽發與雜湊／稽核；兩邊 PR GitHub CI 為準。
+- **絕對不是已上線**：兩份 PR 均 Draft，named service binding 的正式部署設定尚未啟用；原 CYInvoice Worker／真實 D1 沒套 0014／optional recovery schema，Windows 新裝置專用兌換與 UI 尚未接線；DR-01～DR-13 未取得整合／實機證據。既有 CYID_ONLY 舊 Built-in 表退役已完成，禁止再清一次；不得建立／部署任何 Cloudflare 測試 Worker。
+
+## 歷史停點：V3 災難復原採「新裝置接管時全數撤銷舊裝置」（2026-10-14）
 
 - 使用者確認復原與一般新增裝置不同：CYWEB 超管簽發時必須明示全數撤銷後果，**寄送時不撤銷**。**成功兌換新 Device 的同一 D1 原子交易**，才將該 Workspace 所有其他 active Device 轉 revoked、舊未使用 JOIN／RECOVERY 邀請與配對碼撤銷、每台 Device 撤銷 Audit／新 Device 接管 Audit 寫入；保留所有 Workspace、發票與裝置歷史。失敗即回滾。DR-06／DR-09 已依此更新 `CLOUD_DISASTER_RECOVERY.md`。
 - [CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 新增內部 `src/recovery-claim.ts` 與雙 profile SQL guard 的 D1 batch 一次性全數撤銷、`0014` 的 Pairing revoked_at、optional maintenance 的 claim guard，並修一般 JOIN／PAIRING 漏洞：已 revoked Device、復原專用邀請、已 revoked 配對授權不能藉既有加入 API 繞過接管。`tests/recovery-cutover.test.mjs` 用 synthetic SQLite 驗證新舊 Token、rollback、競爭、稽核。
