@@ -52,7 +52,10 @@ assert.throws(() => checkSettings({ bindings: [...settings.bindings, { name: 'SE
 assert.throws(() => checkSettings({ bindings: settings.bindings.filter(b => b.name !== 'LOGIN') }, config), /RATE_LIMIT_BINDINGS_REQUIRED/);
 
 const migrations = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(4, '0')}_existing.sql`).concat('0013_cyid_invitation_actor.sql');
-assert.deepEqual(checkMigrations(migrations.slice(0, 12), migrations), ['0013_cyid_invitation_actor.sql']);
+assert.deepEqual(checkMigrations(migrations.slice(0, 12), migrations),
+  ['0013_cyid_invitation_actor.sql', '0014_invitation_recovery_metadata.sql']);
+assert.deepEqual(checkMigrations(migrations.slice(0, 13), migrations), ['0014_invitation_recovery_metadata.sql']);
+assert.throws(() => checkMigrations(migrations.slice(0, 13), migrations, true), /MIGRATION_NOT_COMPLETE/);
 assert.deepEqual(checkMigrations(migrations, migrations, true), []);
 assert.throws(() => checkMigrations(migrations.slice(0, 11), migrations), /UNREVIEWED_PENDING_MIGRATIONS/);
 assert.throws(() => checkMigrations([...migrations, '0014_unreviewed.sql'], migrations), /MIGRATION_HISTORY_NOT_CANONICAL_PREFIX/);
