@@ -71,13 +71,17 @@ DROP TABLE employee_transition_items;
 DROP TABLE device_employee_links;
 
 -- OTP is shared by CYID Device pairing; never drop the whole OTP table.
--- Retire only now-unused Built-in Employee/account-specific challenge entries.
-DELETE FROM email_otp_challenges WHERE purpose IN (
-    'employee_email_verification',
-    'employee_password_reset',
-    'employee_password_recovery',
-    'super_admin_transfer_authorization'
-);
+-- Retain valid or expired device_pairing_authorization history, including older
+-- scoped variants; retire legacy bootstrap, workspace recovery, Employee Email,
+-- password recovery, SUPER_ADMIN transfer and other account-only challenges.
+DELETE FROM email_otp_challenges
+ WHERE purpose <> 'device_pairing_authorization'
+   AND purpose NOT GLOB 'device_pairing_authorization:*';
+
+-- Workspace Recovery Email was for Built-in account recovery. CYID-mode device
+-- invitations now get current verified SUPER_ADMIN Email from CYID instead.
+UPDATE workspaces SET recovery_email = NULL, recovery_email_verified_at = NULL
+ WHERE status = 'active';
 
 DROP TABLE cloud_employees;
 
