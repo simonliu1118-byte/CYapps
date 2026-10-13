@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.38 — 2026/10/13
+
+- 使用者授權清理 CYAccountingWeb 無用 GitHub 產物；新增一次性 maintenance 流程，PR 僅唯讀盤點，main 才執行已檢視的 branch SHA 清單、已退場 workflow 的 completed runs 與本 App 到期 Artifact 清理。現行部署／Release、執行中 run、open PR 及指定未完成工作保留；不接入 Cloudflare 或讀取帳務。
+- 清理完成後移除一次性 workflow／script／manifest，保留正式流程及可追溯維護紀錄；不新增永久授權例外，不改產品 VERSION／BUILD。
+
 ## 2.3.37 — 2026/10/13
 
 - CYInvoice V2.6.19 首次正式 Release 將 Cloud client contract test 以 `--no-build` 執行，但 Cloud.Tests 不在 CYInvoice.sln 內，Windows runner 未產生 exe；修成測試專案自行建置，保留此額外 test gate，不繞過測試。
