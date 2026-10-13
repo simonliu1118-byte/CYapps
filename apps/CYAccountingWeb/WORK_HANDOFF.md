@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.23.2**；VERSION `0.23.2`、BUILD `0`，桌機日期修復 |
+| 產品 | **V0.23.3**；VERSION `0.23.3`、BUILD `0`，桌機確認清單及表頭排序 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -16,7 +16,16 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次為獨立桌機日期 Bug，Patch 升至 V0.23.2、Build 歸零。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+本次為獨立桌機 UI 修改，Patch 升至 V0.23.3、Build 歸零。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+
+## V0.23.3 提示、確認清單與排序
+
+- 存檔提示仍由 `app.js showMessage` 寫入唯一 `#saveMessage`；既有 Adaptive placement owner 於 confirmation-ready／裝置切換，把同一 node 放到桌機確認標題列中央、手機／平板原位置，不複製第二個訊息或新增 observer。
+- Input Confirmation 改消費 `cyacc:entry-message` 明確 lifecycle，移除存檔訊息與自身 list 的兩個 MutationObserver；render 自行更新筆數及 drawer。每次 submit 收集一筆結果，最新在前，第十一筆淘汰最舊；資料仍只存在本次頁面記憶體。
+- 桌機改 23px 單行清單、11.5px 文字、成功／失敗標記，長內容可查看完整文字；取代 17 個舊 confirmation 字級／卡片樣式規則，集中為一個 Desktop presentation owner，不增加 override chain。
+- 日期表頭為 native button，切換 ascending／descending；日期比較只影響 displayed rows，相同日期及 balance calculation 沿用 chronological owner。分組同時遵守日期方向；桌機帳戶標籤改「帳戶 [分組]」，觸控保留原標籤。
+- 裝置呈現切換由既有 Adaptive lifecycle 呼叫 Ledger render owner，避免桌機倒序／表頭控件帶到手機和平板；transaction snapshot、每筆餘額、月合計、搜尋及 API 不改。
+- 行為回歸涵蓋最新十筆淘汰、成功／失敗、逃脫文字、唯一訊息節點 placement，及日期順序／同日收支／分組／搜尋下的正確餘額與裝置切換。正式驗收追蹤本次 PR 與 main Actions。
 
 ## V0.23.2 日期修復
 
