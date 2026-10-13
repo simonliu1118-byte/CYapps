@@ -2,13 +2,15 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認。2026-10-13 使用者決定折讓人工歷史缺欄位不在 V2.6.19 修正，併入 V3.0 折讓流程重做；本批其餘項目准以本地／隔離測試及已通過的精確 source CI 作版本驗收，無須額外要求使用者逐項實機操作。此決定只調整本批驗收 gate，不代表尚未執行的實機或實際 Cloud 權限驗收已通過。前次本批 Release 要求仍有效；尚無新 tag／Release，最後核對正式版仍 cyinvoice-v2.4.2。
+更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認。2026-10-13 使用者決定折讓人工歷史缺欄位不在 V2.6.19 修正，併入 V3.0 折讓流程重做；本批其餘項目准以本地／隔離測試及已通過的精確 source CI 作版本驗收，無須額外要求使用者逐項實機操作。此決定只調整本批驗收 gate，不代表尚未執行的實機或實際 Cloud 權限驗收已通過。**本批正式 Release 已完成**：2026-10-13 [CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，Windows 正式 [GitHub Actions #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 27 steps success，由 main `95fa5deab097c262d55e67391f32693d68573954` 建置；Release 附正式 ZIP 與 SHA-256。原 #38336017123 因 Cloud.Tests 命令不當而失敗，已由治理 PR #429 修正並在成功 run 中通過測試；未產生重複 tag。折讓歷史缺陷留待 V3.0，沒有改 Cloudflare Worker／D1。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
 Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 已核對 CYID_ENABLED=true 與原 Workspace／Device Token hashes／history／FK 保留。單台原機設定驗證成功；其餘角色／裝置、60 秒刷新／斷線／撤銷的真實多裝置操作未做，交由既有自動化／本地替身作本批版本驗收，未取得的 live 證據仍如實保留供後續確認。**禁止為測試建立／上傳／部署任何 Cloudflare 測試 Worker／測試版本／handler；既有無法刪除的測試 Worker 不重試刪除、不增建替代物；不更動現有 Cloudflare Worker、D1 或真實裝置／帳號。** 舊版本段落為歷史證據，不能當現行旗標。
 
 ## 0. 接續優先順序
+
+- [x] **V2.6.19 正式發行已完成**：tag `cyinvoice-v2.6.19`、Windows/Cloud Client tests、PE/package/portable smoke、安全掃描、SHA-256 與 GitHub Release 均完成；[正式 Run](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968)。此項不再列為阻塞；未取得 live AA／AB／AC 證據維持其實際未驗狀態。
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
