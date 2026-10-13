@@ -1076,9 +1076,13 @@ internal sealed class ErpAutomationService
         if (string.IsNullOrWhiteSpace(value)) return geometry;
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, column, cancellationToken);
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        // A third, later try (user's PC, 2026-10-13: after 品號 + Enter the 數量 cell twice did
+        // not open while ERP was still busy with the item; the same order went through when run
+        // again), each retry waiting longer first.
+        for (var attempt = 1; attempt <= 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (attempt > 1) await Delay(500 * attempt, cancellationToken);
             if (!Win32Automation.PrepareForeground(root, _log))
                 throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
 
@@ -1118,7 +1122,7 @@ internal sealed class ErpAutomationService
             return geometry;
         }
 
-        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續兩次都沒有進入編輯模式。");
+        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續三次都沒有進入編輯模式。");
     }
 
     /// <summary>
