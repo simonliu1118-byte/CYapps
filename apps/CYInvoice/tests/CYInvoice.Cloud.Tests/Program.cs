@@ -13,6 +13,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
+    ("V3 recovery pending token survives restart and locks endpoint/scope", TestRecoveryPendingStateAsync),
+    ("V3 recovery preview and claim reuse the same token without old Device bearer", TestRecoveryTransportAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
@@ -164,6 +166,123 @@ static Task TestSettingsAsync()
     {
         Directory.Delete(directory, recursive: true);
     }
+}
+
+static Task TestRecoveryPendingStateAsync()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.Recovery.Tests", Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new SettingsStore(directory, new TestProtector());
+        var settings = store.LoadOrCreate();
+        const string token = "cydev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string inv = "inv_11111111-1111-4111-8111-111111111111";
+        True(store.CloudPendingRecovery(settings) is null, "no pending Recovery by default");
+        store.SetCloudPendingRecovery(settings, "https://cloud.example.test",
+            "business_workspace", "identity_workspace", inv, "Recovered PC",
+            token, DateTimeOffset.Parse("2026-10-14T00:00:00Z"));
+        True(settings.CloudPendingRecoveryTokenEncrypted != token,
+            "never persist plaintext recovery Device Token");
+        store.Save(settings);
+        var reopened = store.LoadOrCreate();
+        var pending = store.CloudPendingRecovery(reopened)
+            ?? throw new InvalidOperationException("Pending Recovery must survive restart.");
+        Equal(token, pending.DeviceToken, "pending Recovery token survives restart");
+        Equal("business_workspace", pending.WorkspaceId, "fixed business Workspace");
+        Equal("identity_workspace", pending.IdentityWorkspaceId, "fixed identity Workspace");
+        Equal("https://cloud.example.test/", pending.BaseUrl, "fixed HTTPS endpoint");
+        Equal(inv, pending.InvitationId, "fixed recovery invitation ID");
+        Throws<InvalidOperationException>(() => store.SetCloudPendingRecovery(reopened,
+            "https://different.example.test", "other_workspace", "identity_workspace",
+            inv, "Other PC", CloudDeviceJoinAttempt.Create().DeviceToken, DateTimeOffset.UtcNow));
+        Throws<InvalidOperationException>(() => store.SetCloudPendingDeviceJoin(reopened,
+            "https://cloud.example.test", "Other PC",
+            CloudDeviceJoinAttempt.Create().DeviceToken, DateTimeOffset.UtcNow));
+        reopened.CloudPendingRecoveryWorkspaceId = "different_workspace";
+        // Validation is structural; a user changing settings file cannot change
+        // client/server authorization, which always checks CYID and invitation.
+        store.Save(reopened);
+        reopened.CloudPendingRecoveryIdentityWorkspaceId = string.Empty;
+        Throws<InvalidDataException>(() => store.Save(reopened));
+        reopened.CloudPendingRecoveryIdentityWorkspaceId = "identity_workspace";
+        reopened.CloudPendingRecoveryWorkspaceId = "business_workspace";
+        store.ClearCloudPendingRecovery(reopened);
+        store.Save(reopened);
+        True(store.CloudPendingRecovery(store.LoadOrCreate()) is null,
+            "explicit clear forgets pending; no implicit token replacement");
+        return Task.CompletedTask;
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+static async Task TestRecoveryTransportAsync()
+{
+    const string code = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const string token = "cydev_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const string inv = "inv_11111111-1111-4111-8111-111111111111";
+    const string deviceId = "dev_22222222-2222-4222-8222-222222222222";
+    const string endpoint = "https://cloud.example.test/";
+    var responses = new QueueHandler();
+    responses.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "preview method");
+        Equal("/v1/device-recovery/preview", request.RequestUri?.AbsolutePath, "preview path");
+        True(request.Headers.Authorization is null, "no old Device Token on preview");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal(code, body.RootElement.GetProperty("code").GetString(), "preview code");
+        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString(), "preview CYID employee");
+        Equal("SyntheticPass12", body.RootElement.GetProperty("password").GetString(), "preview password");
+        True(!body.RootElement.TryGetProperty("deviceToken", out _), "preview never sends Device Token");
+        return JsonResponse(HttpStatusCode.OK,
+            """{"ok":true,"workspace":{"workspaceId":"business_workspace","displayName":"Synthetic Business"},"identity":{"identityWorkspaceId":"identity_workspace","applicationId":"CYINVOICE"},"invitation":{"invitationId":"inv_11111111-1111-4111-8111-111111111111","expiresAt":"2030-01-01T00:00:00Z"}}""");
+    });
+    responses.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "recovery claim method");
+        Equal("/v1/device-recovery/claim", request.RequestUri?.AbsolutePath, "recovery claim path");
+        True(request.Headers.Authorization is null, "no old Device Token on claim");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal(code, body.RootElement.GetProperty("code").GetString(), "claim code");
+        Equal(token, body.RootElement.GetProperty("deviceToken").GetString(), "same saved token");
+        Equal("Recovered PC", body.RootElement.GetProperty("deviceDisplayName").GetString(), "fixed pending name");
+        True(!body.RootElement.TryGetProperty("workspaceId", out _), "no browser-supplied workspace override");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"recovered":false,"workspace":{"workspaceId":"business_workspace"},"device":{"deviceId":"dev_22222222-2222-4222-8222-222222222222","displayName":"Recovered PC"}}""");
+    });
+    responses.Enqueue(request =>
+    {
+        Equal("/v1/device-recovery/claim", request.RequestUri?.AbsolutePath, "same token readback path");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal(token, body.RootElement.GetProperty("deviceToken").GetString(), "same token after result loss");
+        return JsonResponse(HttpStatusCode.OK,
+            """{"ok":true,"recovered":true,"workspace":{"workspaceId":"business_workspace"},"device":{"deviceId":"dev_22222222-2222-4222-8222-222222222222","displayName":"Recovered PC"}}""");
+    });
+    using var http = new HttpClient(responses);
+    var client = new CloudRecoveryClient(http, new Uri(endpoint));
+    var preview = await client.PreviewAsync(code, "0001", "SyntheticPass12");
+    Equal("CYINVOICE", preview.ApplicationId, "CYID application fixed");
+    Equal("business_workspace", preview.WorkspaceId, "preview scoped workspace");
+    var pending = new CloudPendingRecoveryState(endpoint, preview.WorkspaceId,
+        preview.IdentityWorkspaceId, inv, "Recovered PC", DateTimeOffset.UtcNow, token);
+    var claim = await client.ClaimAsync(preview, pending, code, "0001", "SyntheticPass12", "3.0.0");
+    Equal(deviceId, claim.DeviceId, "new recovery device ID");
+    Equal(token, claim.DeviceToken, "caller owns its token");
+    True(!claim.Recovered, "fresh claim");
+    var readback = await client.ClaimAsync(preview, pending, code, "0001", "SyntheticPass12", "3.0.0");
+    True(readback.Recovered, "ambiguous response readback");
+    Equal(token, readback.DeviceToken, "same saved token readback");
+    var wrong = pending with { IdentityWorkspaceId = "other_identity" };
+    await ThrowsAsync<InvalidOperationException>(() => client.ClaimAsync(
+        preview, wrong, code, "0001", "SyntheticPass12", "3.0.0"));
+    Throws<ArgumentException>(() => new CloudRecoveryClient(http, new Uri("http://cloud.example.test/")));
+}
+
+static async Task ThrowsAsync<TException>(Func<Task> action) where TException : Exception
+{
+    try { await action(); }
+    catch (TException) { return; }
+    throw new InvalidOperationException($"Expected {typeof(TException).Name}.");
 }
 
 static Task TestHttpsOnlyAsync()
