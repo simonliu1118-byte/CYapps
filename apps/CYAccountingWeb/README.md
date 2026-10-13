@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.23.3 Build 1**（桌機提示／確認清單／排序）；V0.23.2 為前一版日期修復 |
+| 產品版本 | **V0.23.4**（桌機記帳輸入／編輯／日期快捷）；V0.23.3 為前一版確認清單及排序 |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -80,4 +80,4 @@ npm run dev
 
 V0.23.2 修復桌機日期日／月／年選擇未同步 canonical input 的 HTML data attribute 大小寫問題；選取日期不再清空必填值，儲存使用所選日期。沿用同一 picker 與 transaction writer，手機／平板原生日期不變。GitHub 清理及未合併工作見 WORK_HANDOFF。
 
-V0.23.3：桌機存檔提示放在輸入確認標題列中央；確認改單行、無卡片且保留最新十筆，長內容及過去失敗原因可查看完整文字。日期表頭可切換新到舊／舊到新，帳戶分組顯示「帳戶 [分組]」。排序只改呈現，逐筆餘額仍以完整月份按時間計算；手機／平板原版面及原生日期保留。
+V0.23.4：桌機問號與收支同列，確認標題列右側顯示唯一存檔狀態，移除十筆說明；最新十筆及日期排序維持。桌機編輯從清單帶回左側原表單，「清空」切為「取消」，未儲存離開會復原原新增草稿。日期文字＋日曆按鈕共用原 canonical input，可輸入四碼月日／八碼日期及 Ctrl＋↑↓ ±1 天。儲存後直接焦點回摘要，移除金額／摘要焦點競爭；實際 Windows IME 模式仍待使用者確認。桌機單月統計移除括號路徑並新增右下回到頂端圓形按鈕；移轉排除計算及手機／平板原版面維持。

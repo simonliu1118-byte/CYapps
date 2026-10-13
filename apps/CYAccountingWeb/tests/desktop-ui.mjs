@@ -16,7 +16,6 @@ const css = [
   'quick-entry-settings.css',
   'category-management.css',
   'excel-export.css',
-  'ledger-inline-edit.css',
   'excel-import.css',
   'backup.css',
   'desktop-migration.css',
@@ -26,21 +25,19 @@ const appJs = read('public/app.js');
 const quick = read('public/quick-entry.js');
 const category = read('public/category-management.js');
 const exportUi = read('public/excel-export-ui.js');
-const inlineEdit = read('public/ledger-inline-edit.js');
 const adaptive = read('public/adaptive-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
 const confirmationJs = read('public/input-confirmation.js');
 const markup = read('public/index.html');
 const ledgerSource = read('public/ledger-tools.js');
-const editCss = read('public/ledger-inline-edit.css');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.23.3');
-assert.equal(build, '1');
+assert.equal(version, '0.23.4');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -57,7 +54,6 @@ assert.match(exportUi, /button\.textContent = '匯出中…'/);
 assert.match(exportUi, /aria-busy/);
 assert.match(exportUi, /navigator\.share/);
 assert.match(exportUi, /navigator\.canShare/);
-assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
 assert.match(adaptive, /renderSettingsCategoryManager/);
 assert.match(appJs, /const defaultButton = event\.target\.closest\('\[data-account-default\]'\)/, 'account default stays with the canonical account action owner');
@@ -90,7 +86,7 @@ assert.doesNotMatch(adaptiveCss, /\.cy-native-date-source|\.cy-date-(?:picker|tr
 // HTML parsers lowercase attribute names; mixed-case data-* markup must not
 // silently pass because a fixture constructed dataset objects by hand.
 class PickerElement {
-  constructor() { this.attributes = {}; this.dataset = {}; this.listeners = {}; this.children = []; this.hidden = false; this.classList = { add() {} }; }
+  constructor() { this.attributes = {}; this.dataset = {}; this.listeners = {}; this.children = []; this.hidden = false; this.classList = { add() {}, toggle() {} }; }
   setAttribute(name, value) {
     name = name.toLowerCase();
     this.attributes[name] = String(value);
@@ -118,8 +114,9 @@ class PickerElement {
   click(target = this) { this.dispatchEvent({ type: 'click', target, stopPropagation() {} }); }
   focus() {}
 }
-function pickerFixture() {
+function pickerFixture(entryDate = false) {
   const input = new PickerElement();
+  if (entryDate) input.id = 'txDate';
   let value = '2026-10-13';
   Object.defineProperty(input, 'value', {
     get: () => value,
@@ -127,17 +124,22 @@ function pickerFixture() {
   });
   const roots = [];
   input.insertAdjacentElement = (_, root) => roots.push(root);
-  const context = vm.createContext({ Date, Event, String, Number,
+  const context = vm.createContext({ Date, Event, String, Number, AbortController,
+    els: { txDate: input, summary: { focus() { context.summaryFocused = true; } } },
+    updateEntryLockState() {}, showMessage(message) { context.message = message; },
+    localDateString: date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'),
     CY_DesktopUi_WEEKDAYS: ['日', '一', '二', '三', '四', '五', '六'],
     CY_DesktopUi_MONTHS: Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
     document: { createElement: () => new PickerElement(), addEventListener() {} }
   });
+  const quickDates = read('public/quick-entry-settings.js');
+  vm.runInContext(quickDates.slice(quickDates.indexOf('function validDateValue('), quickDates.indexOf('function updateQuickEntryKeyboardHint(')), context);
   vm.runInContext(adaptive.slice(adaptive.indexOf('function ensureDesktopUiDatePicker(input)'),
     adaptive.indexOf('function refineDesktopUiHeaderIdentity()')), context);
   context.ensureDesktopUiDatePicker(input);
   context.ensureDesktopUiDatePicker(input);
   assert.equal(roots.length, 1, 'a date field keeps one picker');
-  return { input, root: roots[0] };
+  return { input, root: roots[0], context };
 }
 const { input: pickerDate, root: pickerRoot } = pickerFixture();
 const dateTrigger = pickerRoot.querySelector('.desktopUi-date-trigger');
@@ -162,7 +164,7 @@ const dateSaveElements = {
   monthFilter: { value: '' }, saveButton: { disabled: false }
 };
 const dateSaveContext = vm.createContext({ Number, String, Array, JSON, Error,
-  els: dateSaveElements, state: { kind: 'expense' }, isLocked: () => false,
+  window: {}, els: dateSaveElements, state: { kind: 'expense' }, isLocked: () => false,
   showMessage() {}, updateEntryLockState() {}, jsonHeaders: () => ({}),
   loadTransactions: async () => {},
   api: async (url, request) => { dateSaveRequest = { url, ...request, body: JSON.parse(request.body) }; }
@@ -266,8 +268,8 @@ assert.match(markup, /class="card entry-card" aria-label="新增記帳"/);
 assert.match(markup, /class="card ledger-card" aria-label="記帳資料"/);
 assert.match(adaptiveCss, /Canonical shared ledger presentation/);
 assert.match(adaptiveCss, /\.ledger-card thead th:nth-child\(3\),[\s\S]*?display: none !important;/);
-assert.match(adaptiveCss, /ledger-row-income:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "\+"/);
-assert.match(adaptiveCss, /ledger-row-expense:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "−"/);
+assert.match(adaptiveCss, /ledger-row-income > \.ledger-amount::before\s*\{\s*content: "\+"/);
+assert.match(adaptiveCss, /ledger-row-expense > \.ledger-amount::before\s*\{\s*content: "−"/);
 assert.match(ledgerSource, /id="ledgerMonthLoading"/);
 assert.match(appJs, /loadingLabel\.hidden = !busy/);
 assert.match(adaptive, /function setupDesktopEntryQuickTools\(\)/);
@@ -278,14 +280,32 @@ assert.match(adaptiveCss, /#monthSummary[\s\S]*?grid-template-areas: "opening in
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.opening-modal\s*\{\s*width: min\(880px/);
 assert.match(appJs, /class="opening-account-column"/);
 assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
-assert.match(editCss, /\.inline-edit-date\s*\{\s*min-width: 0;/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
 assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster,\s*html\[data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster\s*\{[\s\S]*?height: 34px !important/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before,[\s\S]*?\{\s*content: var\(--account-role-open, "［"\) !important;/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after,[\s\S]*?\{\s*content: var\(--account-role-close, "］"\) !important;/);
 
-console.log('Desktop UI regression checks passed.');
+// Editable dates and the picker update the same required source field.
+const editable = pickerFixture(true);
+const textDate = editable.root.querySelector('.desktopUi-date-text');
+const typeDate = value => { textDate.value = value; textDate.dispatchEvent({ type: 'input' }); };
+typeDate('0924');
+assert.equal(editable.input.value, `${new Date().getFullYear()}-09-24`);
+typeDate('20260924'); assert.equal(editable.input.value, '2026-09-24');
+typeDate('2024/02/29'); assert.equal(editable.input.value, '2024-02-29');
+typeDate('2026/02/29'); assert.equal(editable.input.value, '', 'invalid days cannot leave a stale canonical date');
+typeDate('20261231');
+const pressDate = (key, ctrlKey = false) => textDate.dispatchEvent({ type: 'keydown', key, ctrlKey, preventDefault() {}, stopPropagation() {} });
+pressDate('ArrowUp', true); assert.equal(editable.input.value, '2027-01-01');
+pressDate('ArrowDown', true); assert.equal(editable.input.value, '2026-12-31');
+pressDate('Enter'); assert.equal(editable.context.summaryFocused, true);
+assert.equal(textDate.value, '2026/12/31');
+editable.root.querySelector('.desktopUi-date-trigger').click();
+editable.root.querySelector('.desktopUi-date-content').click(editable.root.querySelector('.desktopUi-date-content').querySelectorAll('.desktopUi-date-day').find(day => day.dataset.desktopUiDateValue === '2026-12-20'));
+assert.equal(editable.input.value, '2026-12-20'); assert.equal(textDate.value, '2026/12/20');
+assert.doesNotMatch(adaptive, /setupDesktopUiKeyboardBridge|desktopUiDateObserver|new KeyboardEvent/, 'date typing must not rely on an observer or a synthetic keyboard retry bridge');
+console.log('Desktop UI, editable date, four/eight digit dates and day-step regression checks passed.');
 
 const spanSource = ledgerSource.match(/function ledgerPresentationColumnSpan\(\) \{[\s\S]*?\n\}/)[0];
 for (const desktop of [true, false]) {

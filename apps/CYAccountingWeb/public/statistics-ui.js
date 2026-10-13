@@ -30,7 +30,7 @@ export function renderStatistics(data, options = {}) {
   const tab = options.tab === 'totals' ? 'totals' : 'charts';
   const id = options.id || 'statistics';
   const groups = operatingGroups(data);
-  return `<p class="statistics-scope-note">收入、支出、淨利損及圖表均排除指定移轉科目（設定 → 統計／損益）。${data.transferCategoryIds.length ? '' : '目前尚未指定移轉科目。'}</p><div class="statistics-totals">${totalCell('收入', data.operating.income, 'income')}${totalCell('支出', data.operating.expense, 'expense')}${totalCell('淨利損', data.operating.net, data.operating.net < 0 ? 'expense' : 'income')}</div>
+  return `<p class="statistics-scope-note">收入、支出、淨利損及圖表均排除指定移轉科目${options.compactScope ? '' : '（設定 → 統計／損益）'}。${data.transferCategoryIds.length ? '' : '目前尚未指定移轉科目。'}</p><div class="statistics-totals">${totalCell('收入', data.operating.income, 'income')}${totalCell('支出', data.operating.expense, 'expense')}${totalCell('淨利損', data.operating.net, data.operating.net < 0 ? 'expense' : 'income')}</div>
     <div class="statistics-view-tabs" role="tablist" aria-label="統計內容">${[['charts', '圖表'], ['totals', '統計']].map(([value, label]) => `<button type="button" role="tab" id="${id}-${value}-tab" aria-controls="${id}-${value}" aria-selected="${tab === value}" tabindex="${tab === value ? 0 : -1}" data-statistics-tab="${value}">${label}</button>`).join('')}</div>
     <div id="${id}-charts" role="tabpanel" aria-labelledby="${id}-charts-tab" ${tab !== 'charts' ? 'hidden' : ''}>
     <div class="statistics-level"><label>圖表依據 <select data-statistics-level><option value="group" ${level === 'group' ? 'selected' : ''}>分類</option><option value="subject" ${level === 'subject' ? 'selected' : ''}>科目</option></select></label></div>
@@ -191,7 +191,7 @@ function paintIncome(host, data, page = 0, refit = false) {
 }
 function paint(host, data) {
   const previous = views.get(host) || { level: 'group', filters: {}, tab: 'charts' };
-  const view = { ...previous, data, id: host.id };
+  const view = { ...previous, data, id: host.id, compactScope: host.id !== 'statisticsDialogResults' && Boolean(window.cyIsDesktopInteractionWorkspace?.()) };
   views.set(host, view);
   host.innerHTML = (host.id === 'statisticsDialogResults' ? `<p class="statistics-range">${monthLabel(data.period.start)} ～ ${monthLabel(data.period.end)}</p>` : '') + renderStatistics(data, view);
   host.removeAttribute('aria-busy');

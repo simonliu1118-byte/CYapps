@@ -21,7 +21,6 @@ const features = [
   'quick-entry-settings.js',
   'category-management.js',
   'excel-export-ui.js',
-  'ledger-inline-edit.js',
   'excel-import-ui.js',
   'backup-ui.js',
   'desktop-migration-ui.js',

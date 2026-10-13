@@ -16,7 +16,6 @@ const ledgerTools = read('public/ledger-tools.js');
 const adaptiveUi = read('public/adaptive-ui.js');
 assert.doesNotMatch(adaptiveUi, /setupAdaptiveUserIdentity|setupEntryUiRoleMedal|syncEntryUiRoleMedal/, 'Auth owns identity rendering and role classes; Adaptive UI must not clear or rebuild them');
 const quickEntry = read('public/quick-entry.js');
-const inlineEdit = read('public/ledger-inline-edit.js');
 const inputConfirmation = read('public/input-confirmation.js');
 const backupUi = read('public/backup-ui.js');
 const excelExportUi = read('public/excel-export-ui.js');
@@ -36,7 +35,6 @@ const styles = [
   'quick-entry-settings.css',
   'category-management.css',
   'excel-export.css',
-  'ledger-inline-edit.css',
   'excel-import.css',
   'backup.css',
   'desktop-migration.css',
@@ -51,7 +49,6 @@ const scripts = [
   'quick-entry-settings.js',
   'category-management.js',
   'excel-export-ui.js',
-  'ledger-inline-edit.js',
   'excel-import-ui.js',
   'backup-ui.js',
   'desktop-migration-ui.js',
@@ -104,7 +101,14 @@ assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not t
 assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedgerMonthDisplay\)/, 'shared toolbar owns month presentation sync');
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
-assert.match(quickEntry, /addEventListener\('cyacc:ledger-rendered', handleFastEntryLedgerRendered\)/, 'quick entry must subscribe to the explicit ledger lifecycle');
+assert.match(quickEntry, /window\.cyAfterEntrySaved = handleFastEntrySaved/, 'post-save focus uses the explicit save lifecycle');
+assert.doesNotMatch(quickEntry, /cyFocusSummaryAfterSave|handleFastEntryLedgerRendered|setTimeout/, 'quick entry does not compete with post-save focus');
+assert.doesNotMatch(html, /ledger-inline-edit/, 'replaced inline editing is not loaded');
+assert.equal(files.includes('ledger-inline-edit.js'), false);
+assert.equal(files.includes('ledger-inline-edit.css'), false);
+assert.doesNotMatch(html, /id="editDialog"/, 'replaced modal editing is removed');
+assert.doesNotMatch(appJs, /editingTx|saveTransactionEdit/, 'transaction editor has one shared state and submit path');
+assert.match(appJs, /window\.cyBeginEntryTransactionEdit\?\.\(id\)/, 'canonical ledger action routes to shared editor');
 assert.match(appJs, /CY_MOBILE_ENTRY_MEDIA = '\(max-width: 767px\)'[\s\S]*?function initialEntryKind\(\)[\s\S]*?'income'/, 'mobile entry must default to income from the canonical app state owner');
 assert.match(appJs, /new CustomEvent\('cyacc:entry-kind-changed'/, 'entry kind changes must publish an explicit lifecycle');
 assert.match(quickEntry, /addEventListener\('cyacc:entry-kind-changed', handleQuickEntryKindChanged\)/, 'quick entry must consume the canonical entry-kind lifecycle');
@@ -117,11 +121,9 @@ assert.doesNotMatch(adaptiveUi, /setupMobileEntryDateDisplay|cySyncMobileEntryDa
 assert.doesNotMatch(adaptiveCss, /cy-mobile-entry-date-display|#txDate[\s\S]*?-webkit-text-fill-color:\s*transparent/, 'mobile native date value must remain visible and tappable');
 assert.match(html, /<input id="txDate" type="date" required>/, 'index.html must keep the native entry date control');
 assert.match(adaptiveUi, /function setupTouchWorkspaceEntrySecondaryAction\(\)/, 'touch workspace must own the entry secondary action');
-assert.match(adaptiveUi, /button\.textContent = cyTouchWorkspaceEdit \? '取消' : '清空'/, 'entry secondary action must switch between clear and cancel');
-assert.match(adaptiveUi, /function cancelTouchWorkspaceMobileEditAndReturn\(\)[\s\S]*?switchTouchWorkspaceMobilePage\('ledger'\)[\s\S]*?restoreTouchWorkspaceLedgerContext\(context, false\)/, 'mobile edit cancel must return to the prior ledger context');
+assert.match(adaptiveUi, /button\.textContent = cyEntryTransactionEdit \? '取消' : '清空'/, 'entry secondary action must switch between clear and cancel');
+assert.match(adaptiveUi, /function cancelEntryTransactionEditAndReturn\(\)[\s\S]*?switchTouchWorkspaceMobilePage\('ledger'\)[\s\S]*?restoreTouchWorkspaceLedgerContext\(context, false\)/, 'mobile edit cancel must return to the prior ledger context');
 assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 'quick entry must not infer lifecycle from transaction row DOM mutations');
-assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
-assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
 assert.match(ledgerTools, /function setupLedgerToolbar\(\)/, 'ledger-tools must own one shared toolbar structure');
 assert.match(ledgerTools, /function ledgerAccountVisual\(value\)/, 'canonical ledger renderer must resolve persisted account color slots');
 assert.match(ledgerTools, /account\?\.color_slot/, 'ledger account colors must come from persisted account lifecycle data');
@@ -150,7 +152,6 @@ assert.doesNotMatch(excelExportUi, /querySelector\('\.ledger-view-tools'\)|creat
 assert.match(excelImportUi, /querySelector\('#ledgerExcelImport'\)/, 'Excel import binds the settings-owned control directly');
 assert.doesNotMatch(excelImportUi, /querySelector\('\.ledger-view-tools'\)|createElement\('button'\)/, 'Excel import must not create a temporary ledger toolbar control');
 assert.match(adaptiveUi, /id="ledgerExcelImport"/, 'data settings directly owns the Excel import control');
-assert.match(inlineEdit, /querySelector\('#ledgerToolbar'\)/, 'inline edit observes the shared toolbar boundary');
 assert.doesNotMatch(adaptiveCss, /ledger-desktop-tools|ledger-period-tools|cy-toolbar-ready|mobileLedger(?:MoreButton|BalanceButton|ToolsSheet|ToolsBackdrop|MonthDisplay)/, 'toolbar CSS must consume the shared structure without historical desktop/mobile shells');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
@@ -162,7 +163,6 @@ assert.match(adaptiveUi, /let settingsManagerInitialized = false/, 'settings man
 assert.match(adaptiveUi, /document\.addEventListener\('DOMContentLoaded', setupSettingsManager, \{ once: true \}\)/, 'settings manager initializes once at DOM readiness');
 assert.doesNotMatch(adaptiveUi, /setTimeout\(setupSettingsManager|addEventListener\('load',[^\n]*setupSettingsManager/, 'settings manager must not use retry or load-time rebinding');
 assert.match(read('public/excel-export-ui.js'), /downloadMonthlyExcel/);
-assert.match(read('public/ledger-inline-edit.js'), /beginInlineLedgerEdit/);
 assert.match(read('public/excel-import-ui.js'), /setupExcelImport/);
 assert.match(read('public/backup-ui.js'), /setupBackupSettings/);
 
@@ -170,7 +170,6 @@ for (const name of [
   'quick-entry-settings.js',
   'category-management.js',
   'excel-export-ui.js',
-  'ledger-inline-edit.js',
   'excel-import-ui.js',
   'backup-ui.js'
 ]) {

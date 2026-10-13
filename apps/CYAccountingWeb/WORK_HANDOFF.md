@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.23.3 Build 1**；VERSION `0.23.3`、BUILD `1`，桌機確認清單及表頭排序 |
+| 產品 | **V0.23.4**；VERSION `0.23.4`、BUILD `0`，桌機記帳輸入、編輯及日期快捷 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -16,7 +16,16 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次為獨立桌機 UI 修改，Patch 升至 V0.23.3；目前 Build 1 為同一確認清單的密度返修。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+本次為新的桌機輸入與編輯修正，Patch 升至 V0.23.4、Build 歸零；V0.23.3 Build 1 為前一版清單密度修正。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+
+## V0.23.4 桌機記帳輸入、編輯及日期
+
+- 收支及問號同列，field width 讓出問號空間；唯一 `#saveMessage` 改在桌機確認標題列右側，原十筆說明只在桌機隱藏。十筆 retention 與排列不變。
+- 原存檔先 `amount.focus()`、ledger-rendered 的 timer 再 `summary.focus()`，形成兩個 post-save focus owner；移除 timer、pending focus flag 及 ledger result 猜測，改由 canonical successful-save lifecycle 呼叫 Quick Entry `cyAfterEntrySaved`，直接回摘要並刷新常用摘要。不能以 Linux／Chromium 驗證冒稱 Windows IME 模式通過；待使用者確認。
+- 既有 Adaptive entry-edit owner 改 semantic `setupEntryTransactionEditing`，涵蓋桌機並保持原手機／平板導航與提示。桌機帶回左側共用表單、維持原筆 kind，清空變取消；取消／Escape／換筆／切月份／開其他工作視窗／pagehide／裝置切換均不自動寫入並回復原新增草稿。儲存修改一律 `persistTransactionUpdate` PUT／optimistic／rollback；App 的既有 row action 直接呼叫 entry editor API；刪除被取代的 inline editor module、modal edit state／dialog、CSS、listener 及 asset probe。
+- Desktop date owner 直接建立可編輯文字＋日曆按鈕，兩者寫回原 `#txDate`；四碼月日採今年、八碼完整日期、YYYY/MM/DD、Ctrl＋↑↓ 跨月／年、Enter 到摘要、無效日期不得留下舊值。共用 Quick Entry parser／setter；移除 owned DOM observer／synthetic keyboard retry bridge。RWD picker teardown abort 舊 input／document listeners，touch native 日期保留。
+- 桌機單月統計只移除說明括號設定路徑，touch／report 說明及移轉排除計算不改。新增桌機右下角圓形回到頂端按鈕，向下捲動後出現；只捲動整頁，遵循 reduced-motion。
+- 本地及 PR CI 新增 `entry-workflow.mjs`，驗證取消不寫入、原草稿及歷史 options 復原、原筆 PUT／失敗 rollback、成功只 focus 摘要；日期回歸涵蓋手輸四／八碼、閏日、非法日期、Ctrl 跨年與日曆同步。共 28 組 application tests；正式部署及瀏覽器 gate 追蹤本次 PR／main Actions，不以舊版驗收代替新版。
 
 ## V0.23.3 提示、確認清單與排序
 
@@ -78,7 +87,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | SQLite normalization／migration | `src/desktop-migration-core.js`／`src/desktop-migration.js` |
 | Transaction state／month load／mutation／rollback | `public/app.js` |
 | Ledger rows／row lifecycle／Toolbar | `public/ledger-tools.js` |
-| Inline edit presentation | `public/ledger-inline-edit.js`，寫入委派既有 mutation |
+| Entry edit presentation／draft／cancel | `public/adaptive-ui.js setupEntryTransactionEditing`，寫入委派既有 mutation |
 | Quick-entry presentation | `public/quick-entry.js` |
 | Settings lifecycle／render／action | `public/adaptive-ui.js` 的 `window.cySettingsManager` |
 | RWD／native picker／gesture | `public/adaptive-ui.js` |

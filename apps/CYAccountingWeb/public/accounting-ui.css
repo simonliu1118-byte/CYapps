@@ -77,8 +77,7 @@ body[data-cyacc-read-only="true"] [data-mobile-ledger-action="opening"] {
 }
 
 body[data-cyacc-read-only="true"] #settingsDialog,
-body[data-cyacc-read-only="true"] #openingDialog,
-body[data-cyacc-read-only="true"] #editDialog {
+body[data-cyacc-read-only="true"] #openingDialog {
   display: none !important;
 }
 
