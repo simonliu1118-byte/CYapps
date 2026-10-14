@@ -70,8 +70,11 @@ public static class AmegoAllowanceErrorCodes
     public const int ExistingVoidedAllowanceNumber = 4040162;
     public const int IncorrectAllowanceType = 4040163;
 
-    public static bool IsExistingIssuedAllowanceNumber(int code) =>
-        code == ExistingIssuedAllowanceNumber;
+    // Both an issued and a subsequently voided allowance permanently occupy
+    // the same number. This only classifies a confirmed API rejection;
+    // it does NOT authorize a new submission after an ambiguous prior attempt.
+    public static bool IsAllowanceNumberOccupied(int code) =>
+        code is ExistingIssuedAllowanceNumber or ExistingVoidedAllowanceNumber;
 }
 
 public sealed class AllowanceProductItem
