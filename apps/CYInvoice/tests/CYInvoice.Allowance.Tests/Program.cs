@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
+    ("g0401 recognizes only official 4040161 as occupied number", TestG0401DuplicateNumberAsync),
     ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
@@ -117,6 +118,31 @@ static async Task TestG0401GatewayAsync()
     Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
     await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
     Equal(1, handler.Requests.Count);
+}
+
+static async Task TestG0401DuplicateNumberAsync()
+{
+    Equal(true, AmegoAllowanceErrorCodes.IsExistingIssuedAllowanceNumber(4040161));
+    foreach (var code in new[] { 0, 15, 71, 4040162, 4040163, 4040171, 4040173 })
+        Equal(false, AmegoAllowanceErrorCodes.IsExistingIssuedAllowanceNumber(code));
+
+    var handler = new RecordingHttpHandler((_, _, _) =>
+        JsonResponse("{\\"code\\":4040161,\\"msg\\":\\"specified allowance number already exists\\"}"));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    try
+    {
+        await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
+        throw new InvalidOperationException("expected AMEGO number collision");
+    }
+    catch (AmegoApiException error)
+    {
+        Equal(4040161, error.Code);
+    }
+
+    // Gateway never selects a different allowance number or blindly resends.
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
 }
 
 static async Task TestAllowanceQueryAndStatusAsync()
