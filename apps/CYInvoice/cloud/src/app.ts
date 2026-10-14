@@ -13,6 +13,7 @@ import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
 import { handleWebPasswordRecovery } from "./web-password-recovery";
 import { handleRuntimeSync } from "./runtime-sync";
+import { handleWorkItems } from "./work-items-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
@@ -82,6 +83,7 @@ export default {
       "/v1/devices/revoke", "/v1/devices/rename", "/v1/device-pairings/authorization-email",
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
+      "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -113,6 +115,9 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const deviceSelfStatusResponse = await handleDeviceSelfStatus(request, env);
     if (deviceSelfStatusResponse) return deviceSelfStatusResponse;
+
+    const workItemResponse = await handleWorkItems(request, env);
+    if (workItemResponse) return workItemResponse;
 
     const deviceLifecycleResponse = await handleDeviceLifecycle(request, env);
     if (deviceLifecycleResponse) return deviceLifecycleResponse;
