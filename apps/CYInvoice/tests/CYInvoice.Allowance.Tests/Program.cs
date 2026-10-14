@@ -77,7 +77,7 @@ static AllowanceIssueRequest ValidAllowanceRequest() => new()
 
 static async Task TestG0401GatewayAsync()
 {
-    var handler = new RecordingHttpHandler((request, _, _) => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\"}"));
+    var handler = new RecordingHttpHandler((request, _, _) => JsonResponse("{\"code\":0,\"msg\":\"\"}"));
     using var http = new HttpClient(handler);
     var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
     var response = await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
@@ -98,9 +98,9 @@ static async Task TestAllowanceQueryAndStatusAsync()
 {
     var handler = new RecordingHttpHandler((request, _, _) => request.RequestUri?.AbsolutePath switch
     {
-        "/json/allowance_query" => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\",\\"data\\":{\\"allowance_number\\":\\"0ABCDEFGHJKMNPQR\\",\\"invoice_type\\":\\"D0401\\",\\"invoice_status\\":99,\\"allowance_date\\":\\"20261015\\",\\"allowance_type\\":2,\\"tax_amount\\":5,\\"total_amount\\":100}}"),
-        "/json/allowance_status" => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\",\\"data\\":{\\"0ABCDEFGHJKMNPQR\\":{\\"type\\":\\"D0401\\",\\"status\\":99}}}"),
-        _ => JsonResponse("{\\"code\\":71,\\"msg\\":\\"not found\\"}"),
+        "/json/allowance_query" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"allowance_number\":\"0ABCDEFGHJKMNPQR\",\"invoice_type\":\"D0401\",\"invoice_status\":99,\"allowance_date\":\"20261015\",\"allowance_type\":2,\"tax_amount\":5,\"total_amount\":100}}"),
+        "/json/allowance_status" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"0ABCDEFGHJKMNPQR\":{\"type\":\"D0401\",\"status\":99}}}"),
+        _ => JsonResponse("{\"code\":71,\"msg\":\"not found\"}"),
     });
     using var http = new HttpClient(handler);
     var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
