@@ -195,17 +195,42 @@ public sealed class AmegoClient : IAmegoGateway
         var root = document.RootElement;
         var (code, message) = ReadEnvelope(root);
         ThrowResponseError(code, message);
-        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+        if (!root.TryGetProperty("data", out var data) ||
+            data.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
             throw new InvalidDataException("allowance_status returned success without data");
-        var result = new List<AllowanceStatusItem>();
-        foreach (var number in numbers)
+        var found = new Dictionary<string, AllowanceStatusItem>(StringComparer.Ordinal);
+        if (data.ValueKind == JsonValueKind.Object)
         {
-            if (!data.TryGetProperty(number, out var item) || item.ValueKind != JsonValueKind.Object)
-                throw new InvalidDataException("allowance_status omitted a requested allowance");
-            result.Add(new AllowanceStatusItem(number, Text(item, "type"),
-                FlexibleInt32(item, "status"), Scalar(item, "tax_amount"), Scalar(item, "total_amount")));
+            // The official classic wire format is keyed by requested number.
+            foreach (var number in numbers)
+            {
+                if (!data.TryGetProperty(number, out var item) || item.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("allowance_status omitted a requested allowance");
+                found.Add(number, new AllowanceStatusItem(number, Text(item, "type"),
+                    FlexibleInt32(item, "status"), Scalar(item, "tax_amount"), Scalar(item, "total_amount")));
+            }
         }
-        return new AllowanceStatusResponse(code, message, result);
+        else
+        {
+            // Some documented/current clients also send array-shaped status
+            // results. Accept them only if every entry belongs to this request.
+            var requested = new HashSet<string>(numbers, StringComparer.Ordinal);
+            foreach (var item in data.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("allowance_status array contains a non-object item");
+                var number = Text(item, "allowance_number");
+                if (!requested.Contains(number) || found.ContainsKey(number))
+                    throw new InvalidDataException("allowance_status returned an unknown or duplicate allowance number");
+                found.Add(number, new AllowanceStatusItem(
+                    number, FirstText(item, "type", "invoice_type"),
+                    item.TryGetProperty("status", out _) ? FlexibleInt32(item, "status") : FlexibleInt32(item, "invoice_status"),
+                    Scalar(item, "tax_amount"), Scalar(item, "total_amount")));
+            }
+        }
+        if (found.Count != numbers.Length)
+            throw new InvalidDataException("allowance_status omitted a requested allowance");
+        return new AllowanceStatusResponse(code, message, numbers.Select(number => found[number]).ToArray());
     }
 
     private static void ValidateAllowanceNumber(string value)
