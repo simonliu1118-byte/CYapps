@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-14（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-14（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；AutoInput **V2.6.20 Build 0** 僅在獨立 [PR #445](https://github.com/simonliu1118-byte/CYapps/pull/445) 有 CI 通過的工程測試包（[run 38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)，非正式 Release）。V3 原工作仍在 Draft #440／CYWEB #151，尚未部署。原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -180,7 +180,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 **2026-10-14 現行狀態：**[CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) + [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已完成相應 Source／CI；CYInvoice [Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)／[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)／Governance 成功，CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806)／Deployment contract／Governance 成功；**兩份 PR 未合併，正式服務未部署，實機 DR-01～DR-13 沒有驗收通過**。Windows UI 入口正式定案在**「直接加入雲端」內的「災難復原」按鈕**，首次啟動只有單機版／直接加入雲端兩選項。詳細單一最新停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 
-**下一輪工程待辦**（全部未勾，只有 source/CI 的部分進度）：
+**下一輪工程待辦**（V3 專用，不與 AutoInput 測試包混版）：
+- [ ] **第一優先，CYWEB #151 契約阻塞：**CYInvoice private `recovery-issuer.ts` 補 `revoked` 明確狀態及單一 operation 撤銷後 readback；不能將 consumed／expired／不存在回 revoked；補 revoke-vs-claim race、DB 回覆遺失、重複撤銷的 synthetic SQLite 測試。CYWEB 現已保存原 Operation ID，並將一般 failed 顯示 unavailable，不會誤認已撤銷。
 - [ ] 雙 Repo 最新 diff、正式契約／權限／race 安全審查，補強 in-flight 業務 mutation 的 fencing/epoch 及依操作邊界再驗證；防止被撤銷舊 Device 在新 Device 切換後仍提交舊工作。
 - [ ] CYWEB 操作 ID／寄送結果不明時的 UI 恢復體驗、超管保護與 Chrome／行動裝置人工驗收；任何時候不自動重寄、不產生另一有效邀請。
 - [ ] **唯讀**核對正式 Worker／original D1／CYID Service Binding／Email provider／已有 migration history；形成 migration 0014 + optional CYID_ONLY issuer maintenance 的受控部署／rollback／readback 計畫。未獲使用者獨立批准前不更動原 Worker/D1，禁止測試 Worker。

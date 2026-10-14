@@ -286,7 +286,7 @@ CYID canonical response 需嚴格驗證 Workspace／Employee identity、`SUPER_A
 
 - 共通治理：`/REPOSITORY_RULES.md` → `/REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
 - CYID：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`、`AUTH_CONTRACT.md`、`ROLE_AND_ACCESS_MODEL.md`、`ARCHITECTURE.md`，以及 consumer contract 版本檔／changelog。
-- CYInvoice：本文件 → `IDENTITY_PROVIDER_REFACTOR_PLAN.md` → `CLOUD_IDENTITY_LIFECYCLE.md` → `TODO.md`；再比對 `IdentityProvider.cs`、Desktop sensitive-operation call-sites、`cloud/src/app.ts`／`employee-authority.ts`／`web-auth.ts`。
+- CYInvoice：本文件 → `CLOUD_IDENTITY_LIFECYCLE.md` → `CLOUD_WORK_HANDOFF.md`／`TODO.md`；已完成的 Identity Provider 重構歷史依 Git PR／CHANGELOG／MIGRATION_HISTORY 查閱；再比對 `IdentityProvider.cs`、Desktop sensitive-operation call-sites、`cloud/src/app.ts`／`employee-authority.ts`／`web-auth.ts`。
 - CYID 與 CY Web／CYACCweb source parity 的 read-only 檢查已另由 CYID `cyid/docs-consumer-integration-readiness-20261010` branch 的 PR #378 提出；該 PR 仍待合併，不得把未合併紀錄當成正式 main 基準。
 
 ## 14. V2.6.15 Consumer 實作與切換邊界

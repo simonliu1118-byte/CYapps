@@ -7,7 +7,7 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- Windows 正式版本：V2.6.19 Build 0 已發布。
+- Windows 正式版本：V2.6.19 Build 0 已發布；V2.6.20 Build 0 僅為 AutoInput #445 工程測試包，不代表 V3 #440 已合併或 Cloud migration 0014 已執行。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
 - Cloud implementation source／原 development Worker：`0.9.3`，CYID_ENABLED=true，本公司原 D1 為 CYID_ONLY。

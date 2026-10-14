@@ -2,9 +2,9 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.19 Build 0**。
-- 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
+- main／已發布正式基準：**V2.6.19 Build 0**（tag：`cyinvoice-v2.6.19`）。
+- AutoInput 工程測試分支：**V2.6.20 Build 0**（PR #445，Windows CI #38554728718 通過，非正式 Release）；V3 復原另在 #440 Draft，尚未部署。
+- 下列既有一般 UI「已開立 OrderID 重送交光貿判重」語意只適用一般互動流程；AutoInput API 特別採較保守的本機既有成功／不明阻擋。詳細跨線狀態見 [現行交接](CLOUD_WORK_HANDOFF.md)。
 
 ## 1. 平台與基本開立
 
