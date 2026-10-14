@@ -60,6 +60,20 @@ public static class AllowanceNumberGenerator
     }
 }
 
+// Official AMEGO g0401 errors: https://invoice.amego.tw/info_detail?mid=71
+// The code identifies an existing allowance number, but retrying with a new
+// number is safe ONLY when the operation had no earlier ambiguous submission.
+// The workflow (not this classifier) must enforce that precondition.
+public static class AmegoAllowanceErrorCodes
+{
+    public const int ExistingIssuedAllowanceNumber = 4040161;
+    public const int ExistingVoidedAllowanceNumber = 4040162;
+    public const int IncorrectAllowanceType = 4040163;
+
+    public static bool IsExistingIssuedAllowanceNumber(int code) =>
+        code == ExistingIssuedAllowanceNumber;
+}
+
 public sealed class AllowanceProductItem
 {
     public string OriginalInvoiceNumber { get; init; } = string.Empty;
