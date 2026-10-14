@@ -12,8 +12,8 @@
 
 - [ ] **V3 僅保留 Local + CYID Cloud 兩種正式模式**：使用者確認沒有正式 Built-in 使用者，停止維護 Built-in Cloud／Self-hosted 做為可用產品；GitHub 第三方如需自行部署 Built-in，改自行 fork。不以其相容性作 V3 合併／驗收／Release 條件；歷史成功測試和已發布 V2.6.19 不被重新定義為已刪除。
 - [ ] **工程簡化清理（尚未動程式）**：清理 Built-in identity provider／Employee CRUD／OTP／忘記密碼／SUPER_ADMIN transfer、Cloud 初始導入及相關相容分支，評估刪除不再需要的 handlers／migrations／fixtures／CI 矩陣；保護仍被 CYID／Local 共用的 Device、Workspace、Window Core、D1 Work Items、錯誤處理與歷史 actor/audit 解讀。不可復活或重做已退役的原 D1 表，不把刪 source 當正式 DB 清理授權。
-- [ ] **統一公司設定卡片**：Local 保留本機加密憑證儲存與現有合理權限；CYID Cloud 由 SUPER_ADMIN 授權增改移除公司統編、AMEGO App Key、MO店+ 密碼的加密業務設定，ADMIN 可看統編／已設定狀態但不得讀明文。不再維護 Built-in 專用卡片／憑證路徑。
-- [ ] **Cloud D1 中斷但光貿正常的折讓配號**：使用者提議在離線期間查光貿 `allowance_list` 配號，回連後補寫 D1；**尚待授權／操作鎖／永久占號／結果不明合併設計與測試**，不能只靠 `4040161`／`4040162` 就假設離線的跨機核准一定安全。先完成雙模式與正式 `g0401` 的安全骨架再決定細節。
+- [ ] **統一公司設定卡片（含使用者批准的 Cloud DPAPI 快取）**：Local 保留本機 DPAPI 憑證儲存與合理權限；CYID Cloud 的**公司設定權威**在 CYInvoice 業務 D1，僅 SUPER_ADMIN 通過 Worker execution-time 權限驗證才能增改移除公司統編、加密 AMEGO App Key、MO店+ 密碼（加密金鑰不可與密文同存）；ADMIN 只能透過 UI 看統編／設定狀態，不能由設定查詢 API 讀取明文。CYID Windows Device 可保存已授權取得的公司憑證 **DPAPI 加密快取**，光貿正常但 D1 暫時無法連線時支持原本允許的正常開票；連線恢復後檢查版本、刷新／撤銷快取，已知拒絕 fail closed。離線無法即時套用新版本／撤銷，回歸應覆蓋此邊界，不新增 Cloud 斷線時繞過設定權限的寫入入口。
+- [ ] **CYID Cloud 斷線權限／覆核行為（使用者 2026-10-15 已核准）**：D1／Work Item 無法連線時，暫停雲端跨機折讓申請建立／覆核核准／正式開立及其他需要原子執行鎖的操作，不採原先 `allowance_list` 離線暫配號、連線後才回填 D1 的提案；避免不同電腦用不同單號重複執行**同一個申請**（4040161／4040162 不保證防此情況）。Local 單機折讓用 SQLite＋光貿正常可用。CYID Cloud 的既有一般開立／發票查詢在光貿正常且符合最後可信身分安全降級條件下**繼續可用**；已確定的身分／Device 拒絕不得降級。已送出折讓的光貿唯讀查回可繼續，結果不明禁止盲送。需新增斷線矩陣與恢復回歸。
 
 本決策取代本文舊章節中「Built-in 是正式支援模式」、「三版共用」及自架支援的**未來產品承諾**；舊的已完成工程與歷史遷移紀錄仍可供追溯，不能當成應繼續實作的待辦。
 
@@ -119,6 +119,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] **2026-10-15 折讓配號規則（已確認）**：`AyyyyMMddXXX`，固定 12 碼，當日 001～999；第 1000 筆起 A00、A01、…、A0A、…、AZZ、B00、…、ZZZ，上限 **34,695**。僅在管理員確認核准執行折讓時由原 Work Item 分配，申請／等待覆核／退回完全不占號。Cloud 於本公司的業務 D1 原子配號且永久保留所有號碼與 Audit；Local 單機不依賴 D1，需 SQLite 等價的 durable 保護。已分配號碼永不回收，包含取消、作廢、失敗、結果不明與光貿外部撞號。正式／測試環境隔離；兩臺 Cloud 裝置不得同號或重覆處理同一申請。
 - [ ] **光貿手動折讓撞號後的受限自動換號（官方錯誤碼已核對）**：光貿 [官方 API 錯誤碼](https://invoice.amego.tw/info_detail?mid=71) 明訂 `4040161`＝「指定折讓單號 已存在折讓開立」、`4040162`＝「指定折讓單號 已存在作廢折讓」，**兩者都表示號碼已經使用且不能回收，採相同撞號處置**；`4040163`＝「指定折讓單號 折讓類型錯誤」，不可換號重試。Core `AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied` 已分類 4040161／4040162，synthetic HTTP 測試涵蓋兩碼與 4040163 排除；Gateway 只傳遞錯誤碼，**尚未實作自動配號或重送**。待 Work Item/D1 原子配號及送出前 durable operation 完成後，只有**同一操作沒有任何先前不明送出、且這次已收到官方確切 4040161／4040162 拒絕**，才將原號永久標記 `occupied_external`、保留歷史 Audit，替同一 Work Item 原子分配新號並有限次重試；timeout／斷線／模糊結果以及可能是前次自身送出造成的 4040161／4040162，均必須查原號核對官方資料，不得直接換號。尚無 AMEGO live 驗收，不能宣稱流程已上線。
 - [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
+- [ ] **官方按發票號碼查折讓／作廢紀錄**：已核對光貿 [API 文件](https://invoice.amego.tw/api_doc/) `invoice_query`，`data.allowance[]` 包含折讓號碼／日期／類型 D0401（開立）／D0501（作廢）／狀態／未稅金額與稅額，同公司官方資料不限制從 CYInvoice 開立；`invoice_type`、`invoice_status`、`cancel_date`、`wait[]` 可顯示原發票目前作廢狀態與待處理異動。按折讓單號用 `allowance_query` 取得原發票 `product_item[].original_invoice_number`、`cancel_date`。**`invoice_query` 以發票日期計最多查 180 天，code 51 是查詢逾期，非無折讓**；不承諾 API 返回完整歷史 Audit。Core 已有 `QueryByInvoiceNumberAsync`／`ParseAllowances`，仍須真折讓／折讓作廢樣本回歸；歷史超限必要時受限使用 `allowance_list` 日期區間／明細原號對照，但不可推斷查不到就不存在。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
