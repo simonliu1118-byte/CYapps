@@ -883,6 +883,24 @@ internal sealed class ShopeeBatchRunner
         return $"裁切沒有成功（{cut.Info}），已改用 Chrome 第 {_print.FamilyPages} 頁 {_print.FamilyScale}% 列印。";
     }
 
+    /// <summary>
+    /// 測試蝦皮 7-11 列印 (user, 2026-10-14): the front Chrome window's 7-ELEVEN 交貨便服務單 tab
+    /// printed as in 全自動 — Ctrl+P, 頁面 全部, 縮放 7-11 %, 列印.
+    /// </summary>
+    public async Task<string> TestSevenPrintAsync()
+    {
+        _window = ChromeWindows().FirstOrDefault();
+        if (_window == 0) return "找不到 Chrome 視窗。";
+        Front();
+        await Task.Delay(500, _token);
+        Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+        await PrintDialogAsync(_print.SevenScale, pages: null);
+        var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
+        printed.Dispose();
+        _log.Info("shopee-batch", "seven print test printed");
+        return $"已用 Chrome 縮放 {_print.SevenScale}% 送出列印。";
+    }
+
     /// <summary>The cut slip read with OCR shows the 寄件編號.</summary>
     private async Task<bool> SlipShowsAsync(GrayImage slip, string tracking)
     {

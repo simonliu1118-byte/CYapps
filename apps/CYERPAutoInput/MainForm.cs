@@ -1135,6 +1135,109 @@ internal sealed class MainForm : Form
         MessageBox.Show(this, result, "測試全家裁切列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    /// <summary>測試蝦皮 7-11 列印 (user, 2026-10-14): the printing part of 全自動 on a 7-11 交貨便 tab opened by hand.</summary>
+    private async Task TestSevenPrintAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (MessageBox.Show(this,
+                "請先在 Chrome 打開蝦皮的 7-ELEVEN 交貨便服務單分頁，並讓那個 Chrome 視窗在最前面（本程式以外）。\n\n按「確定」後程式會照全自動的做法按 Ctrl+P、設定列印視窗（" +
+                _settings.ShopeeLabelPrinter + "、縮放 " + _settings.SevenLabelScale + "%）並按列印。會真的印出來。\n\n過程中請勿操作鍵盤滑鼠，按 Esc 可停止。",
+                "測試蝦皮 7-11 列印", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+        string result;
+        try
+        {
+            _log.Info("shopee-batch", "seven print test started");
+            result = await runner.TestSevenPrintAsync();
+        }
+        catch (Exception ex) when (ex is ShopeeBatchStop or OperationCanceledException or InvalidOperationException)
+        {
+            _log.Warn("shopee-batch", $"seven print test: {ex.Message}");
+            result = ex is OperationCanceledException ? "已停止。" : ex.Message;
+        }
+        finally
+        {
+            Session.Unpin();
+            Session.End();
+            _shopeeBatchRunning = false;
+        }
+        Activate();
+        MessageBox.Show(this, result, "測試蝦皮 7-11 列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>
+    /// 測試 MO店+ 寄件單裁切列印 (user, 2026-10-14): the 全家／7-11 寄件單 PDFs from MO店+ 批次出貨
+    /// (A4, four slips a page, password like the export) are cut slip by slip and printed on
+    /// the thermal printer, as MO店+ 全自動 will.
+    /// </summary>
+    private async Task TestMoSlipPdfAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        using var dialog = new OpenFileDialog { Title = "選擇 MO店+ 全家／7-11 寄件單 PDF（可多選）", Filter = "PDF (*.pdf)|*.pdf", Multiselect = true, CheckFileExists = true };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
+        if (printer is null)
+        {
+            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 平台匯入 › 蝦皮 › 寄件單印表機）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (MessageBox.Show(this, $"會把選的 {dialog.FileNames.Length} 個 PDF 每一頁切成一張張寄取貨單，直接送到「{printer}」列印。會真的印出來。\n\n要開始嗎？",
+                "測試 MO店+ 寄件單", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        var lines = new List<string>();
+        _shopeeBatchRunning = true;
+        UseWaitCursor = true;
+        try
+        {
+            var label = SlipPrinter.Label(printer, 100, 150);
+            foreach (var file in dialog.FileNames)
+            {
+                var name = Path.GetFileName(file);
+                try
+                {
+                    var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi * 2);
+                    var printed = 0;
+                    var notes = new List<string>();
+                    foreach (var (page, from) in pages)
+                    {
+                        var slips = await Task.Run(() => SlipImage.FindSlips(page));
+                        _log.Info("mo-slip", $"test {from}: picture {page.Width}x{page.Height}, slips={slips.Count}, printer dpi={label.Dpi}");
+                        foreach (var area in slips)
+                        {
+                            var plan = SlipImage.Plan(page, area, label.Width, label.Height);
+                            var mm = $"{plan.Width * 25.4 / label.Dpi:F0}×{plan.Height * 25.4 / label.Dpi:F0} mm";
+                            _log.Info("mo-slip", $"test slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
+                            if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
+                            var slip = await Task.Run(() => SlipImage.Render(page, plan));
+                            SlipPrinter.Print(printer, slip, "MO店+ 寄件單測試");
+                            printed++;
+                            notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");
+                        }
+                    }
+                    lines.Add($"{name}：{pages.Count} 頁，印出 {printed} 張" + (notes.Count > 0 ? "\n  " + string.Join("\n  ", notes) : string.Empty));
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _log.Warn("mo-slip", $"test {name}: {ex.GetType().Name}: {ex.Message}");
+                    lines.Add($"{name}：失敗（{ex.Message}）");
+                }
+            }
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            _shopeeBatchRunning = false;
+        }
+        MessageBox.Show(this, string.Join("\n\n", lines), "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private const string ShopeeBatchTitle = "全自動";
     private bool _shopeeBatchRunning;
 
@@ -1833,6 +1936,8 @@ internal sealed class MainForm : Form
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試全家裁切列印", null, async (_, _) => await TestFamilyCutAsync());
+            menu.Items.Add("測試蝦皮 7-11 列印", null, async (_, _) => await TestSevenPrintAsync());
+            menu.Items.Add("測試 MO店+ 寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")

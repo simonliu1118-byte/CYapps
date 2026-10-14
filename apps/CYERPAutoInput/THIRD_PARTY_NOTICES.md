@@ -20,6 +20,12 @@ CYERPAutoInput uses third-party components for local OCR inference.
 - Project: Microsoft ONNX Runtime
 - License: MIT License
 
+## PdfPig
+
+- Project: UglyToad/PdfPig (NuGet `PdfPig`)
+- License: Apache License 2.0
+- Used to open MO店+ shipping label PDFs (password protected) and take out their slip pictures for the thermal printer.
+
 ## OpenCvSharp
 
 - Project: OpenCvSharp

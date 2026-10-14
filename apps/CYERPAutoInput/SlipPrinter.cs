@@ -62,7 +62,7 @@ internal static partial class SlipPrinter
         }
     }
 
-    private static GrayImage? Load(byte[] bytes)
+    public static GrayImage? Load(byte[] bytes)
     {
         try
         {
