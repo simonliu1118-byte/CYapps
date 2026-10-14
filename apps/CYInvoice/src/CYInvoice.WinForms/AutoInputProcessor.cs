@@ -39,7 +39,7 @@ internal sealed class AutoInputProcessor(LocalRepository repository, InvoiceServ
                     token => service.IssueCoupangAsync(order, token, replaySafe: true, expectedEnvironment: environment))).ToArray(),
             _ => throw new InvalidDataException("不支援的 AutoInput 來源")
         };
-        if (imported.Count > AutoInputContract.MaxOrderCount ||
+        if (imported.Count is < 1 or > AutoInputContract.MaxOrderCount ||
             imported.Any(order => string.IsNullOrWhiteSpace(order.Id)) ||
             imported.GroupBy(order => order.Id, StringComparer.Ordinal).Any(group => group.Count() != 1))
             throw new InvalidDataException("匯入訂單過多、訂單編號空白或重複");
@@ -95,7 +95,8 @@ internal sealed class AutoInputProcessor(LocalRepository repository, InvoiceServ
                     results.Add(new(orderId, "unknown", Message: "開立回覆尚未完成嚴格確認，請在 CYInvoice 回查"));
                 else
                     results.Add(new(orderId, "issued", record.InvoiceNumber, record.InvoiceDate,
-                        record.BuyerIdentifier, record.BuyerName, record.Amount));
+                        record.BuyerIdentifier == "0000000000" ? string.Empty : record.BuyerIdentifier,
+                        record.BuyerName, record.Amount));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (UnknownInvoiceResultException)
