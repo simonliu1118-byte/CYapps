@@ -54,20 +54,32 @@ static void TestAllowanceNumberGenerator()
     var date = new DateOnly(2026, 10, 15);
     Equal("A20261015001", AllowanceNumberGenerator.Format(date, 1));
     Equal("A20261015999", AllowanceNumberGenerator.Format(date, 999));
+    Equal("A20261015A00", AllowanceNumberGenerator.Format(date, 1000));
+    Equal("A20261015A01", AllowanceNumberGenerator.Format(date, 1001));
+    Equal("A20261015A0A", AllowanceNumberGenerator.Format(date, 1010));
+    Equal("A20261015AZZ", AllowanceNumberGenerator.Format(date, 2295));
+    Equal("A20261015B00", AllowanceNumberGenerator.Format(date, 2296));
+    Equal("A20261015ZZZ", AllowanceNumberGenerator.Format(date, AllowanceNumberGenerator.DailyMaximum));
     Equal("A20261016001", AllowanceNumberGenerator.Format(date.AddDays(1), 1));
-    Equal(true, AllowanceNumberGenerator.TryReadSequence("A20261015001", date, out var first));
-    Equal(1, first);
-    Equal(true, AllowanceNumberGenerator.TryReadSequence("A20261015999", date, out var last));
-    Equal(999, last);
+    foreach (var sequence in new[] { 1, 999, 1000, 1001, 1010, 2295, 2296, AllowanceNumberGenerator.DailyMaximum })
+    {
+        var number = AllowanceNumberGenerator.Format(date, sequence);
+        Equal(12, number.Length);
+        Equal(true, AllowanceNumberGenerator.TryReadSequence(number, date, out var decoded));
+        Equal(sequence, decoded);
+    }
     Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261016001", date, out _));
     Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261015000", date, out _));
     Equal(false, AllowanceNumberGenerator.TryReadSequence("A202610151000", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261015a00", date, out _));
     Equal(false, AllowanceNumberGenerator.TryReadSequence("B20261015001", date, out _));
     Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 0));
-    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 1000));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, AllowanceNumberGenerator.DailyMaximum + 1));
     Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 1, '0'));
-    Equal(999, Enumerable.Range(1, 999).Select(sequence => AllowanceNumberGenerator.Format(date, sequence))
-        .Distinct(StringComparer.Ordinal).Count());
+    Equal(AllowanceNumberGenerator.DailyMaximum,
+        Enumerable.Range(1, AllowanceNumberGenerator.DailyMaximum)
+            .Select(sequence => AllowanceNumberGenerator.Format(date, sequence))
+            .Distinct(StringComparer.Ordinal).Count());
 }
 
 static AllowanceIssueRequest ValidAllowanceRequest() => new()
