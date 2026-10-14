@@ -32,11 +32,11 @@ internal sealed class AutoInputProcessor(LocalRepository repository, InvoiceServ
             "mo" => (await PlatformImportReader.ReadMoOrderExportAsync(
                 request.File, repository.Settings.MoPassword(settings), cancellationToken).ConfigureAwait(false))
                 .Select(order => new Order(order.OrderId, order.TotalAmount, order.BuyerBan,
-                    token => service.IssueMoAsync(order, token, replaySafe: true))).ToArray(),
+                    token => service.IssueMoAsync(order, token, replaySafe: true, expectedEnvironment: environment))).ToArray(),
             "coupang" => (await PlatformImportReader.ReadCoupangExportAsync(
                 request.File, cancellationToken).ConfigureAwait(false))
                 .Select(order => new Order(order.OrderId, order.TotalAmount, order.BuyerBan,
-                    token => service.IssueCoupangAsync(order, token, replaySafe: true))).ToArray(),
+                    token => service.IssueCoupangAsync(order, token, replaySafe: true, expectedEnvironment: environment))).ToArray(),
             _ => throw new InvalidDataException("不支援的 AutoInput 來源")
         };
         if (imported.Count > AutoInputContract.MaxOrderCount ||
