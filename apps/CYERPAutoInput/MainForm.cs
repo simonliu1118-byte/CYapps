@@ -995,11 +995,11 @@ internal sealed class MainForm : Form
         {
             _settings.ShopeeOrderType.Length == 0 ? "蝦皮銷貨單別" : null,
             _settings.ShopeeCustomerCode.Length == 0 ? "蝦皮客戶代號" : null,
-            _settings.ShopeeLabelPrinter.Length == 0 ? "寄件單印表機" : null
+            _settings.ShopeeLabelPrinter.Length == 0 ? "熱感紙印表機（印表機區勾選）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定 › 平台匯入 › 蝦皮」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定 › 平台匯入」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (MessageBox.Show(this,
@@ -1154,7 +1154,7 @@ internal sealed class MainForm : Form
         var printer = _settings.A4Printer.Length > 0 ? SlipPrinter.Installed(_settings.A4Printer) : null;
         if (printer is null)
         {
-            MessageBox.Show(this, "請先在「設定 › 平台匯入 › 印表機」選好 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "請先在「設定 › 平台匯入 › 印表機」勾選 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
@@ -1252,7 +1252,7 @@ internal sealed class MainForm : Form
         var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
         if (printer is null)
         {
-            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 平台匯入 › 蝦皮 › 寄件單印表機）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 平台匯入 › 印表機，勾選熱感紙）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (MessageBox.Show(this, $"會把選的 {dialog.FileNames.Length} 個 PDF 每一頁切成一張張寄取貨單，直接送到「{printer}」列印。會真的印出來。\n\n要開始嗎？",

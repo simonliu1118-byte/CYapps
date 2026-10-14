@@ -15,9 +15,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeOrderType = new();
     private readonly TextBox _shopeeCustomerCode = new();
     private readonly TextBox _shopeeNotePrefix = new();
-    // Printers are picked from the ones installed (user, 2026-10-14), or typed.
-    private readonly ComboBox _shopeeLabelPrinter = PrinterBox();
-    private readonly ComboBox _a4Printer = PrinterBox();
+    private PrinterPicker? _printers;
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
@@ -171,14 +169,6 @@ internal sealed class SettingsForm : Form
     }
 
     /// <summary>A section of label + input pairs, two pairs per line, aligned in columns.</summary>
-    private static ComboBox PrinterBox()
-    {
-        var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
-        try { foreach (string printer in System.Drawing.Printing.PrinterSettings.InstalledPrinters) box.Items.Add(printer); }
-        catch (System.ComponentModel.Win32Exception) { }
-        return box;
-    }
-
     private static GroupBox Section(string title, params (string Label, Control Box, string Value, int Width)[] fields)
     {
         var box = new GroupBox { Text = title, Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Margin = new Padding(0, 0, 0, 10) };
@@ -237,9 +227,8 @@ internal sealed class SettingsForm : Form
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
         // Printers on top (user, 2026-10-14).
-        page.Controls.Add(Section("印表機（所有平台共用）",
-            ("熱感標籤印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 168),
-            ("A4 印表機", _a4Printer, _settings.A4Printer, 168)));
+        _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
+        page.Controls.Add(_printers);
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -475,8 +464,8 @@ internal sealed class SettingsForm : Form
         _settings.SevenLabelScale = sevenScale;
         _settings.FamilyLabelScale = familyScale;
         _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();
-        _settings.ShopeeLabelPrinter = _shopeeLabelPrinter.Text.Trim();
-        _settings.A4Printer = _a4Printer.Text.Trim();
+        _settings.ShopeeLabelPrinter = _printers!.Thermal;
+        _settings.A4Printer = _printers.A4;
         _settings.ShopeeLabelScale = labelScale;
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();
         _settings.ShopeeCustomerCode = _shopeeCustomerCode.Text.Trim();
@@ -681,4 +670,64 @@ internal sealed class GiftRuleEditor : Panel
         var i = 1;
         foreach (var box in _cards.Controls.OfType<GroupBox>()) box.Text = $"贈送組合{i++}";
     }
+}
+
+/// <summary>
+/// 印表機 (user, 2026-10-14): the printers installed on this PC, read by the program, one row
+/// each with 熱感紙 and A4 boxes; one printer per column. A saved printer that is not installed
+/// shows as 未安裝 so the choice is not lost silently.
+/// </summary>
+internal sealed class PrinterPicker : GroupBox
+{
+    private readonly List<(string Name, CheckBox Thermal, CheckBox A4)> _rows = [];
+
+    public PrinterPicker(string thermal, string a4)
+    {
+        Text = "印表機（程式讀取這台電腦的印表機，勾選用途；每種只能一台）";
+        Dock = DockStyle.Top;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        Padding = new Padding(10, 6, 10, 8);
+        Margin = new Padding(0, 0, 0, 10);
+        var grid = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Location = new Point(10, 22), Margin = Padding.Empty };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        Label Head(string text) => new() { Text = text, AutoSize = true, ForeColor = CyVisualTheme.TextSecondary, Margin = new Padding(0, 2, 0, 2) };
+        grid.Controls.Add(Head("印表機"), 0, 0);
+        grid.Controls.Add(Head("熱感紙"), 1, 0);
+        grid.Controls.Add(Head("A4"), 2, 0);
+
+        var names = new List<string>();
+        try { foreach (string printer in System.Drawing.Printing.PrinterSettings.InstalledPrinters) names.Add(printer); }
+        catch (System.ComponentModel.Win32Exception) { }
+        // The saved ones match an installed printer the same way printing does (a shortened name works).
+        string? Match(string saved) => saved.Length == 0 ? null
+            : names.FirstOrDefault(n => string.Equals(n, saved, StringComparison.OrdinalIgnoreCase)) ?? names.FirstOrDefault(n => ShopeeBatchScreens.SamePrinter(n, saved));
+        var thermalName = Match(thermal);
+        var a4Name = Match(a4);
+        var missing = new[] { (thermal, thermalName), (a4, a4Name) }.Where(p => p.Item1.Length > 0 && p.Item2 is null).Select(p => p.Item1).Distinct().ToList();
+
+        foreach (var name in names.Concat(missing))
+        {
+            var installed = names.Contains(name);
+            var row = grid.RowCount++;
+            grid.Controls.Add(new Label { Text = installed ? name : name + "（未安裝）", AutoSize = true, Margin = new Padding(0, 6, 0, 0), ForeColor = installed ? CyVisualTheme.TextPrimary : CyVisualTheme.Danger }, 0, row);
+            var t = new CheckBox { AutoSize = true, Checked = name == (thermalName ?? (missing.Contains(thermal) ? thermal : null)), Margin = new Padding(16, 4, 0, 0) };
+            var f = new CheckBox { AutoSize = true, Checked = name == (a4Name ?? (missing.Contains(a4) ? a4 : null)), Margin = new Padding(8, 4, 0, 0) };
+            _rows.Add((name, t, f));
+            grid.Controls.Add(t, 1, row);
+            grid.Controls.Add(f, 2, row);
+        }
+        foreach (var (_, t, f) in _rows)
+        {
+            t.CheckedChanged += (_, _) => { if (t.Checked) foreach (var r in _rows) if (r.Thermal != t) r.Thermal.Checked = false; };
+            f.CheckedChanged += (_, _) => { if (f.Checked) foreach (var r in _rows) if (r.A4 != f) r.A4.Checked = false; };
+        }
+        if (_rows.Count == 0) grid.Controls.Add(new Label { Text = "這台電腦沒有安裝印表機。", AutoSize = true, Margin = new Padding(0, 6, 0, 0) }, 0, grid.RowCount++);
+        Controls.Add(grid);
+    }
+
+    public string Thermal => _rows.FirstOrDefault(r => r.Thermal.Checked).Name ?? string.Empty;
+    public string A4 => _rows.FirstOrDefault(r => r.A4.Checked).Name ?? string.Empty;
 }
