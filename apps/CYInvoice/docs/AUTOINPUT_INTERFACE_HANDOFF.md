@@ -10,7 +10,7 @@
 
 ## 本次已加入
 - `src/CYInvoice.Core/AutoInputContract.cs`：定義 `cyinvoice-autoinput-request/1`、`cyinvoice-autoinput-result/1` 名稱及基本 record；驗證 JSON 頂層、schema、GUID、來源、絕對輸入路徑、選擇性 orderIds（限制數量、重複和空白）。
-- `src/CYInvoice.Core/AutoInputCommandLine.cs`：驗證 `--autoinput-issue|--autoinput-query <request> --result <result>` 參數、絕對路徑及 request/result 不可相同。\n- `src/CYInvoice.Core/AutoInputResultFile.cs`：結果 envelope/status 驗證、暫存檔寫入後同目錄原子更名；拒絕覆蓋既存結果。\n- 尚未寫入 `Program.cs`，也尚未提供 IPC、開票或查詢。因此 **不可由 AutoInput 使用**。
+- `src/CYInvoice.Core/AutoInputCommandLine.cs`：驗證 `--autoinput-issue|--autoinput-query <request> --result <result>` 參數、絕對路徑及 request/result 不可相同。\n- `src/CYInvoice.Core/AutoInputResultFile.cs`：結果 envelope/status 驗證、暫存檔寫入後同目錄原子更名；拒絕覆蓋既存結果。\n- `Program.cs` 已加入 fail-closed CLI gate：合法但尚未實作的 AutoInput 命令以 exit code 3 結束、不開 GUI、不開立；格式不合法回 exit code 2。尚未提供 IPC、開票或查詢，因此 **不可由 AutoInput 使用**。
 - 本次工作尚無本地 Windows 編譯／CI 成功證據，不能標示測試通過。
 
 ## AutoInput 已定案的呼叫契約（待 CYInvoice 落地）
