@@ -98,6 +98,10 @@ public class MoBatchScreensTests
         var top = MoBatchScreens.LatestRecord(whole)!;
         Assert.Equal(("2026-10-14 19:05:58", "全家店到店", 1, "全部成功"), (top.Time, top.Method, top.Orders, top.Status));
         Assert.Equal(1646, top.PrintButton!.Left);
+        // A whole cell as the link: clicked on its text at the left.
+        var cell = MoBatchScreens.OnText(new OcrBox("列印文件", 1640, 338, 200, 38));
+        Assert.True(cell.CenterX < 1680);
+        Assert.Equal(56, MoBatchScreens.OnText(B("列印文件", 1646, 348, 56)).Width);
         Assert.True(MoBatchScreens.RecordMatches(top, MoShipKind.Family, 1, new DateTime(2026, 10, 14, 19, 5, 58)));
         Assert.False(MoBatchScreens.RecordMatches(top, MoShipKind.Family, 1, new DateTime(2026, 10, 14, 19, 10, 0)));
 

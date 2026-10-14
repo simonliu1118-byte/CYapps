@@ -160,7 +160,17 @@ internal static partial class MoBatchScreens
         var status = parts.FirstOrDefault(p => p.Contains("成功", StringComparison.Ordinal) || p.Contains("失敗", StringComparison.Ordinal) || p.Contains("處理", StringComparison.Ordinal)) ?? string.Empty;
         var print = row.Where(b => C(b) == "列印文件").OrderBy(b => b.Width).FirstOrDefault()
             ?? boxes.Where(b => C(b) == "列印文件" && Math.Abs(b.CenterY - first.CenterY) <= Math.Max(first.Height, b.Height)).OrderBy(b => b.Width).FirstOrDefault();
-        return new MoShipRecord(time, method, numbers.ElementAtOrDefault(0), numbers.ElementAtOrDefault(1), status, print);
+        return new MoShipRecord(time, method, numbers.ElementAtOrDefault(0), numbers.ElementAtOrDefault(1), status, print is null ? null : OnText(print));
+    }
+
+    /// <summary>
+    /// A link given as its whole table cell (user's LOG, 2026-10-14: 「列印文件」 was 200 px wide and
+    /// its centre missed the left-aligned link): the box cut to the text's own width, from the left.
+    /// </summary>
+    public static OcrBox OnText(OcrBox box)
+    {
+        var text = Math.Max(16, box.Text.Trim().Sum(c => c < 0x2E80 ? 8 : 14) + 6);
+        return box.Width <= text * 1.3 ? box : box with { Width = text };
     }
 
     /// <summary>The record's 出貨時間, or null when it is not readable.</summary>

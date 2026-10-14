@@ -2292,7 +2292,6 @@ internal sealed class MainForm : Form
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試：從批次出貨繼續（已開好的 MO 視窗）", null, async (_, _) => await RunMoBatchAsync(resume: true));
             menu.Items.Add("測試：從批次出貨記錄繼續（剛出貨的最上面一筆）", null, async (_, _) => await RunMoBatchAsync(resume: true, atRecord: true));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
