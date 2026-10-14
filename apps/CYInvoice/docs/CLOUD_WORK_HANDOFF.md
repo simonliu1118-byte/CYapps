@@ -34,6 +34,10 @@
 
 **Work Item 最小核心（本輪 Draft，非已上線）：**新**待審草案** `cloud/drafts/0015_work_items.sql` 一張表，`work-items.ts` 建立／open→review→closed CAS、同 D1 write-time Device fence，僅存雜湊識別，不觸發光貿操作；雙 profile 合成測試加入 Cloud CI。本輪已接最小受保護 API（create/get/transition），僅允許管理員操作；Windows `CloudWorkItemClient` 已接相同 HTTP 契約與嚴格回覆解析／不自動重送，待 Windows Core CI。**尚未接現有作廢／折讓按鈕**：先與使用者確認 D1 協同資料範圍，避免替代本機原有流程或寫入尚未部署的草案表；不把這版解讀為正式服務已上線。
 
+**2026-10-14 業務範圍已確認（本段只是需求／順序，尚未變更 D1）：**先將 `/json/g0401` 折讓開立升級給 **CYID／Built-in／單機版共用**；光貿規格要求呼叫端先提供唯一 `AllowanceNumber`，不是由光貿自動配發，驗收後才移除手填與多候選人工比對。**之後**才做折讓申請的跨機覆核。
+
+**D1 不存正常發票資料庫或最小索引**。只在發生紙本未收回作廢覆核、折讓／折讓作廢申請、退回，或現有「上傳問題」異常時，建立事件／審核單及 Audit。整個「上傳問題」頁面（也包括獨立顯示的「開立失敗」）都需讓其他電腦的管理員看得到；原電腦修復和光貿官方結果仍須分開。CYID_ONLY 公司卡片可存統編與加密 App Key／MO 密碼，僅 SUPER_ADMIN 修改、ADMIN 唯讀設定狀態。**此輪只更新開發需求，沒有啟用 0015 或修改正式 D1。**
+
 **後續按序：** 已先在既有 Device 撤銷 endpoint 加 D1 commit-time 的操作裝置 active + Built-in 管理員 credential guard，並加 synthetic late-revoke regression；這不是尚未建立的 Work Item／光貿跨服務 Side Effect 的完整 fencing。V3 Work Item／revision 的 execution-time Device fencing／epoch，正式 Cloudflare Binding／原 D1 schema／Email 設定的**唯讀**核對與 0014/maintenance rollback/readback 計畫，DR-01～DR-13 的跨服務、多機、Windows 及真 Email 驗收。V3 折讓人工歷史欄位缺漏留在 Work Item／Audit 正式重做，不當作舊 V2 已修復。
 
 ## 5. 禁止跨越的界線

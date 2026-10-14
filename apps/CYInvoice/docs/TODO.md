@@ -97,13 +97,17 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 折扣／負數調整樣本。
 - [ ] 取得樣本後補 parser、金額、防重與測試案例。
 
-## 6. 正式折讓 API（V3.0 雲端化階段）
+## 6. 正式折讓 API（V3.0，先完成 API 再做 D1 協同）
 
 目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。2026-10-13 使用者決定目前人工折讓歷史缺欄位不單獨修補，V3.0 隨正式折讓及 Cloud Work Item／Audit 重做；既有 V2 缺陷不因此視為修復。
 
+**2026-10-14 使用者確認開發順序：**優先把折讓申請 → 管理員至光貿網站人工折讓改為 CYInvoice 直接呼叫 `/json/g0401`；CYID、Built-in、單機版全部沿用同一 Core/Gateway，不要把 API 功能依賴在 D1。開立後直接以確定的折讓單號查官方狀態，通過驗收再取消手動填折讓單號與人工挑選多筆候選的操作 UI；結果不明仍保留安全回查，不自動重送。
+
+**官方 API 契約注意：**光貿 `/json/g0401` 要求呼叫端必填 `AllowanceNumber`（最長 16 字、不可重複）；公開成功回應只明列 `code`、`msg`，不能假定光貿會自動配號或回傳號碼。CYInvoice 必須自行產生、先保存同一唯一號碼，確保跨機不撞號；逾時只能用**原號**查 `/json/allowance_query`／`/json/allowance_status`。文件：https://invoice.amego.tw/api_doc/ 。
+
 - [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
-- [ ] `AllowanceNumber` 由 CYInvoice 自動產生，建立全域唯一編號與跨裝置防重機制。
+- [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
@@ -212,7 +216,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 災難復原不獨立先行，與 §7.4 的 CYWEB 邀請／Device registry／actor 共用 V3 設計。新機加入不代表未上雲的舊機 pending 已找回，也不觸發 AMEGO 自動重送。
 
 - [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
-- [ ] **決策待討論：**Work Item／發票資料哪些欄位需要進 D1 做多機協同、哪些保留本機；未確認前不加新欄位、不搬資料、不改原本光貿操作。\n- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
+- [x] **D1 範圍決議（2026-10-14）**：D1 不是發票資料庫，不建立一般發票最小索引。正常開立且未申請、未出現異常的發票**不進 D1**；有紙本未收回作廢覆核、折讓／折讓作廢申請、退回，或「上傳問題」異常才建立必要事件紀錄與不可覆寫 Audit。折讓協同在 §6 g0401 API 升級與驗收後接。
+- [ ] **整個現有「上傳問題」須跨機可見**：包含 `InvoiceSyncIssueStore` 記錄的 `invoice_list_failed`、`query_failed`、`remote_not_found`、`unknown_remote_not_found`、`reconciliation_failed`、`ambiguous_match`、`local_write_failed`，人工覆核事件，以及在相同 UI 顯示的「開立失敗」發票。D1 只存每次真正異常的事件摘要、Workspace／環境、必要發票／訂單識別、來源 Device、建立時間、處理人、狀態及 Audit；不存正常發票清單、完整品項、Excel、PDF、原始錯誤堆疊或光貿整份回應。
+  - 同一未結案事件防重複；管理員可在其他電腦查看、追蹤、註記處理。**本機資料寫入／SQLite 損壞須由來源電腦修復**，遠端不能直接標成修好；**官方開票／上傳狀態不明必須查光貿**，雲端 `closed`／管理員已讀不能假裝官方成功。恢復後留下處理歷史。
+- [ ] 作廢（未收回紙本）／折讓／折讓作廢申請以及退回／人工結案的跨機 Work Item／Audit；折讓待 §6 API 完成後再接。管理員用自己電腦接手，不需到申請人電腦。
+- [ ] CYID_ONLY 專屬公司設定卡片：統編 + 加密 AMEGO App Key + 加密 MO店+ Excel 密碼；僅 SUPER_ADMIN 可新增／修改／移除。一般 ADMIN 仍可開設定，但只能看到公司統編及「已設定」狀態，不能取得 Secrets 明文；解密金鑰不可跟密文同放 D1。Built-in／單機不強制搬既有 DPAPI。
   - Draft #440 已新增最小三個受保護 POST 操作（create/get/transition）：Device Token + 每次管理員重新驗證，Built-in 的 credential 在 SQL 寫入時再核對，CYID_ONLY 不查已退役表。SQL 0015 仍在 `drafts/` 未部署，故正式 Worker 不可用；未接 Windows UI/官方作廢或折讓。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
   - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
