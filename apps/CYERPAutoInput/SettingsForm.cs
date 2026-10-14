@@ -689,7 +689,7 @@ internal sealed class PrinterPicker : GroupBox
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(10, 6, 10, 8);
         Margin = new Padding(0, 0, 0, 10);
-        var grid = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Location = new Point(10, 22), Margin = Padding.Empty };
+        var grid = new TableLayoutPanel { ColumnCount = 3, RowCount = 1, AutoSize = true, Location = new Point(10, 22), Margin = Padding.Empty };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
