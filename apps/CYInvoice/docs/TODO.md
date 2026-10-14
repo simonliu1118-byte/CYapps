@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-13（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-14（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -178,6 +178,15 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.4 V3 多機裝置復原、備份與安全紀錄
 
+**2026-10-14 現行狀態：**[CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) + [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已完成相應 Source／CI；CYInvoice [Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)／[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)／Governance 成功，CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806)／Deployment contract／Governance 成功；**兩份 PR 未合併，正式服務未部署，實機 DR-01～DR-13 沒有驗收通過**。Windows UI 入口正式定案在**「直接加入雲端」內的「災難復原」按鈕**，首次啟動只有單機版／直接加入雲端兩選項。詳細單一最新停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+
+**下一輪工程待辦**（全部未勾，只有 source/CI 的部分進度）：
+- [ ] 雙 Repo 最新 diff、正式契約／權限／race 安全審查，補強 in-flight 業務 mutation 的 fencing/epoch 及依操作邊界再驗證；防止被撤銷舊 Device 在新 Device 切換後仍提交舊工作。
+- [ ] CYWEB 操作 ID／寄送結果不明時的 UI 恢復體驗、超管保護與 Chrome／行動裝置人工驗收；任何時候不自動重寄、不產生另一有效邀請。
+- [ ] **唯讀**核對正式 Worker／original D1／CYID Service Binding／Email provider／已有 migration history；形成 migration 0014 + optional CYID_ONLY issuer maintenance 的受控部署／rollback／readback 計畫。未獲使用者獨立批准前不更動原 Worker/D1，禁止測試 Worker。
+- [ ] 真實 DR-01～DR-13／多機切換／接管時全數撤銷／原一般 JOIN／Built-in fixture／遺失 response／DPAPI 復原／失敗 rollback；憑人工及實際 API／裝置證據逐一勾選，不用 mock 充當真人通過。
+
+
 2026-10-13 使用者決定：**災難復原與 V3 多機協同一起做，從 CYWEB 由 CYID 超管簽發復原邀請碼**。裝置／邀請／協同資料上 CYInvoice 業務 D1，CYID 身分權威與其 D1 分離。詳細見 [V3 多機與復原設計](CLOUD_DISASTER_RECOVERY.md)；不再要求獨立災復功能先於 V3 完成。
 
 - [x] **設計與 source 核對：**區分可用舊裝置、有效加入碼、所有 Token 遺失及服務／資料毀損；確認 active 筆數不是可用 Token 數、現有 issuer Device FK 與 app-scoped Session 邊界。
@@ -192,7 +201,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **2026-10-14 復原入口改位與 revoked Device 寫入競態：**首次啟動維持「使用單機版／直接加入雲端」兩選項，雲端加入頁提供「災難復原／繼續災難復原」按鈕，保持既有一般 JOIN 不變。舊 Device 已撤銷後，`createPairing`／`issueInvitation`／`claimInvitation` 均在 D1 寫入當下驗證 issuer active，阻止撤銷前已啟動、撤銷後才完成的授權請求。Synthetic SQLite 測試已加進 `recovery-cutover.test.mjs`；跨服務 in-flight 業務 mutation fencing 仍留在 V3 Work Item 範圍，須另驗收。
 - [ ] **私有備份異機回復工具與保管：**設計建議 age recipient encryption；仍待核准 recipient／獨立金鑰及備份位置、工具、RPO／RTO／retention 與真正異機 drill。現有 DPAPI 只證明原帳戶／機器本地回復。
 - [ ] **人工維運回復：**CYWEB／CYID／D1 故障先由各 owner 恢復服務；先保留目前 snapshot／新資料，核對 storage profile 與相容 Worker，遠端 restore 另以具體範圍批准。回復後舊 revoked Token／已用邀請不得倒退復活。
-- [ ] **RC AE／DR-01～DR-13：**本地／CI 與必要實機驗證；目前均未執行。業務 Audit／viewer 由 §7.6 共用追蹤。
+- [ ] **RC AE／DR-01～DR-13：**已完成多項 synthetic SQLite／Node／Windows 合約及 PR CI；**跨服務真 Email、受控真 Worker／D1、實際 Windows 裝置的 DR-01～DR-13 尚未執行／驗收**。業務 Audit／viewer 由 §7.6 共用追蹤。
 
 
 ### 7.5 跨機 Work Item / Sync

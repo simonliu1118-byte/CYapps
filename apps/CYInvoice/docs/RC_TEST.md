@@ -393,7 +393,14 @@
 - [ ] 寫入失敗／中斷不留下只有成功狀態而沒有人工紀錄的半成品，原發票／待辦／資料保留。
 - [ ] 舊紀錄只用可核對的本機 metadata／備份恢復；缺失明确顯示，不編造人員／時間／原因或依光貿猜補。
 
-## AE. V3 多機協同與 CYWEB 復原邀請（待實作／未驗）
+## AE. V3 多機協同與 CYWEB 復原邀請（Draft Source 已實作，實機未驗）
+
+**2026-10-14 驗收停點：**CYInvoice #440 的 Windows/Cloud CI 與 CYWEB #151 的 TypeScript／API／deployment-contract CI 已通過（精確跑次見 [交接](CLOUD_WORK_HANDOFF.md)）；仍未合併、部署、執行 original D1 migration 0014/optional maintenance、使用真 Email／多台 Device 做 DR-01～DR-13。不能勾選實機結果。
+
+Windows 人工入口固定為「首次啟動 → 直接加入雲端 → 災難復原」按鈕（Pending 時「繼續災難復原」），**沒有首次啟動第三選項**。超管要在 CYWEB「帳號與權限」內簽發／查詢／撤銷邀請；只有新機完成 claim 才全數撤銷舊 Device，一般配對加入不受影響。
+
+實際演練前先取得獨立部署與資料庫修改授權、驗證正式 CYID／CYWEB／CYInvoice Application Scope、原 D1 0014＋optional profile、Workspace/Device baseline/rollback、寄信安全與全數撤銷的不可逆影響；**不可拿既有正式公司 Device 做未核准的災復**，也不能為了測試新增 Cloudflare 測試 Worker／handler。
+
 
 使用者決定災難復原併入 V3，由 CYID 超管在 CYWEB 簽發短效一次性復原邀請；設計與 DR-01～DR-13 完整驗收矩陣見 [CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md#9-實作順序與驗收條件)。本節不新增第二份勾選清單，未完成項目只在 TODO §7.4／§7.5 追蹤。
 

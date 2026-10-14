@@ -1,10 +1,35 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-13（Asia/Taipei）
+更新日期：2026-10-14（Asia/Taipei）；本節為本對話關閉前交接版。
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V3 雲端加入內復原按鈕、CYWEB 超管 UI 與撤銷後競態防護（2026-10-14）
+## 最新交接摘要（2026-10-14，唯一應優先閱讀的現況）
+
+**工作分支／PR（均維持 Draft／未合併）：**
+- CYInvoice：[CYapps PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，`cyinvoice/v3-recovery-invitation-schema`；2026-10-14 最後文件彙整前的程式 head `9c668a4796de335275de9b1a637b5ab1bfe7bcba`。
+- CYWEB：[chihyuan-web PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)，`cyweb/feat-cyinvoice-recovery-auth-gate`；最後文件彙整前的程式 head `a0e5c06c0080ad4c8d26df6f1d110e2e3f2711a4`。
+- 最新程式碼 CI：CYInvoice [Cloud Check #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530) 的 validate／windows-client 成功、[Windows Build #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552) 成功、[Governance #38501668643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668643) 成功；CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806) Browser／Worker／source／build 成功、[Deploy contract #38501284789](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284789) 成功、[Governance #38501284984](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284984) 成功；兩 repo 的實際部署 job 均 skipped。以上是**更新本文件前的程式 head**，文件 commit 產生的新 CI 需另外檢查，不能拿舊跑次冒充新 head。
+
+**使用者最後 UI 決定（覆蓋下方較舊的歷史紀錄）：**Windows 首次啟動只保留「使用單機版／直接加入雲端」，**不增加第三個復原選項**。在「直接加入雲端」`CloudDirectJoinForm` 的一般 Pairing／Invitation 畫面增加**「災難復原」按鈕**，有舊 Pending Recovery 則顯示「繼續災難復原」；按鈕打開獨立 `CloudRecoveryForm`。CYWEB「帳號與權限」的 SUPER_ADMIN 管理區有簽發／查詢／撤銷邀請 UI。兩種「加入」互相區分，一般加入不會撤銷舊 Device。
+
+**已在 Draft source／合成測試覆蓋，未遠端實機：**
+1. 私有 `CyInvoiceRecoveryEntrypoint`：CYWEB Core Session+CSRF+SUPER_ADMIN gate 後，CYInvoice 以固定 `CYINVOICE` Application 再做 CYID Login／Resolve／Email／credentialVersion／employeeRevision／Workspace 與 storage profile 校驗；只有原業務 D1 的 CYID_ONLY + 明確核准的 CYWEB_RECOVERY profile 可簽發。
+2. `recovery-issuer.ts`：唯一 Operation ID、同 Workspace 單一未結案邀請、復原碼只保留 SHA256、Email 服務接受後 pending→sent 並 Audit；寄送／DB response 不明保留 pending，不自動重寄；同操作狀態查回及明確撤銷後才可另簽。
+3. Windows HTTPS 專用 `/v1/device-recovery/preview`／`/claim`，固定兩個 Workspace 與邀請來源、無舊 Device Bearer、CYID SUPER_ADMIN 再驗；DPAPI Pending Device Token 在 mutation 前保存，同 Token 重啟／結果不明 readback、最後驗證正式 Device 與 CYID Binding。
+4. **公司級災復只在新 Device 成功接管時**，由原子 D1 batch 插入新 Device、消耗 RECOVERY 邀請、撤銷同 Workspace 全部舊 active Device、使其他未使用的 JOIN／RECOVERY 邀請與 Pairing 碼失效、逐 Device 與接管 Audit；失敗整批 rollback。一般 JOIN／配對／邀請的寫入時 SQL guard 補上 issuer 必須仍 active、避免撤銷前 started／後才 commit 的舊授權跨過切換。
+5. CYWEB 的正式部署 config renderer **預設沒有 CYINVOICE_RECOVERY binding**，僅於受保護 deploy environment 明確提供 `CF_CYINVOICE_RECOVERY_SERVICE` 才加入 `entrypoint=CyInvoiceRecoveryEntrypoint` 的 Service Binding；驗證了 invalid target 失敗，沒有把正式資源名稱上 Git。
+
+**明確未完成／下一個對話工作順序：**
+1. 仔細審查兩個 Draft PR 最新 diff／基準，優先查高風險的並發與授權語意：CYWEB UI 在斷線／重開頁時 Operation ID 的保存／查回體驗、CYID session revalidation、Email 送達不確定、Windows Pending Token 故障復原、D1 原子交易與跨服務 race；必要時補整合回歸，不以全綠單測代替安全驗收。
+2. 對照原正式 Worker **實際** Service Binding、真實 D1 schema/profile、正式 Email provider 設定作**唯讀部署前審核**，準備 migration 0014、optional `enable-cyweb-recovery-issuer.sql` 的 rollback／fingerprint／readback／最低權限／相容版順序；**不得未經新一次使用者明確授權套用或部署**。
+3. 完成 DR-01～DR-13 真實跨服務／Windows 多裝置／收信／失敗競態驗收計畫；尤其撤銷後在途**業務 Work Item mutation** 仍需 epoch/fencing/執行時 revalidate，不能只把 Token 設 revoked 就宣稱已阻斷全部在途行為。
+4. CYWEB 管理 UI Desktop／Mobile 目視與操作、Windows 「加入雲端→災難復原」實機驗證、避免重發／明文洩漏、安全掃描／原 Built-in 自架 fixture；正式發布和部署另待獨立授權。真實備份異機回復／DR-12 亦未完成。
+5. **安全邊界：**兩 PR 都是 Draft／原始碼，**尚未合併、未部署／注入正式 Service Binding、未執行原 D1 migration 0014 或 optional recovery maintenance、未寄真 Email、未做真裝置全數撤銷、未發 Windows 新版**。嚴禁新增／上傳／部署任何 Cloudflare 測試 Worker／handler；原本 CYID_ONLY 舊 Built-in 帳戶表退役已完成、**不可重跑**。Local/Built-in 為其他公司正式保留功能，並非本公司 CYID 的 fallback。
+
+> 以下標為「歷史停點」的段落只保存當時的開發順序，其中「尚未實作」字句是**當時狀態，不是目前狀態**；以本節及 `TODO.md` 最新項目為準。
+
+## 歷史停點：V3 雲端加入內復原按鈕、CYWEB 超管 UI 與撤銷後競態防護（2026-10-14）
 
 - **入口依使用者當次指示修正：**CYInvoice 首次使用仍只有「使用單機版／直接加入雲端」兩選項；`CloudDirectJoinForm` 的一般配對／邀請輸入區新增「災難復原」按鈕，獨立開啟 `CloudRecoveryForm` 的 CYID 超管驗證、Workspace Preview、全數撤銷確認。已有 `CloudPendingRecovery` 時改標「繼續災難復原」，透過原 Cloud endpoint、Workspace、Invitation、DPAPI Device Token 查回；**沒有第三個首次啟動選項**。
 - **撤銷與 in-flight SQL fence：**`cloud/src/index.ts` 的一般 Pairing Code 發行、一般 Device Invitation 發行、邀請碼兌換，均加入 commit 當下 issuer Device 必須為 active 的 D1 SQL guard；成功 Audit 也依實際新授權結果，不以先前的 CYID/Device 驗證結果視為授權已完成。`recovery-cutover.test.mjs` 直接抽取 Worker SQL，以 Synthetic SQLite 模擬災難復原完成後舊 Device 嘗試晚到 Pairing/Invitation/JOIN，檢查沒有新 active Device。**跨服務已在執行的業務寫入／CYID Side Effect 無法用單一 D1 Transaction 撤銷，V3 Work Item 仍需 fencing/epoch/執行時驗證。**

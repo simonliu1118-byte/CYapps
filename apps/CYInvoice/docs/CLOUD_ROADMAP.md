@@ -1,10 +1,12 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-13。現行工程版本 V2.6.19 Build 0；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+更新日期：2026-10-14。現行工程版本 V2.6.19 Build 0；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
 
 本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
 目前定案的核心策略是：**V3.0 先解決志遠高雄單一公司的多機協同，不提前把尚未發生的多公司／SaaS需求做進產品；但底層不得把未來擴充路堵死。**
+
+**V3 復原最新實作：**Windows 的「災難復原」入口屬於「直接加入雲端」畫面的按鈕，並非首次啟動第三項；CYWEB 超管復原邀請 UI、私有 issuer、Windows preview/claim 及同 D1 transaction 全數舊 Device revoke 的 source 已在 [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440)／[CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 並通過 CI；目前不代表部署／真 D1 migration／實機驗收。**未完清單與本次交接以 [TODO](TODO.md)／[CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md) 為準。**
 
 Workspace／Device／Device Token／SUPER_ADMIN／Email Recovery 的完整定案生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`；本文件保留長期架構與實作順序。
 

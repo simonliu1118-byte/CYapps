@@ -1,8 +1,8 @@
 # CYInvoice V3 多機協同與 CYWEB 裝置復原設計
 
-更新日期：2026-10-13（Asia/Taipei）。
+更新日期：2026-10-14（Asia/Taipei）。
 
-**狀態：產品方向已依使用者要求併入 V3，以下為待實作設計。** 本文件描述 CYInvoice 的業務裝置信任與資料回復，不建立新的永久規則或 CYID shared contract。尚未增加 CYWEB 介面、private RPC、D1 migration、復原 API 或可攜備份工具，也未進行遠端復原。唯一未完成清單仍為 [TODO.md](TODO.md)。
+**狀態：V3 Source 已在兩個 Draft PR 逐步實作、CI 成功，但尚未部署或取得真實 DR 驗收。** [CYInvoice #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已有 forward migration 0014、獨立 optional maintenance、CYInvoice private RPC issuer／Email pending-sent／status-revoke、Windows 專用 preview／claim、DPAPI Pending Token、原子全數撤銷／Audit；[CYWEB #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已有超管管理 UI／route 和 optional named Service Binding renderer。兩邊仍 Draft／未合併；**原 Worker、原 D1 0014／issuer maintenance、真 Email／Device 尚未執行；DR-01～DR-13 全未做實機驗收。** 不建立新的永久規則或 CYID shared authority。唯一未完成清單見 [TODO.md](TODO.md)。
 
 ## 1. 本次決策與範圍
 
@@ -23,6 +23,12 @@ V3 的裝置管理與復原共用同一份 Device registry、邀請 lifecycle �
 | 現行 D1 maintenance 私有備份 | DPAPI 加密、原電腦解密／SQLite 還原及逐筆核對已驗證 | 不構成異機備份，不代表已完成 Cloudflare 遠端還原 |
 
 現有 `device_invitations.issued_by_device_id` 是 NOT NULL／Device FK；不能為 CYWEB 簽發偽造一台 issuer Device，也不能借用遺失或 revoked Device 當管理入口。現有 audit event-type CHECK 與 deployment snapshot 也需隨 forward migration 一併適配，不能只新增 handler。
+
+### 2026-10-14 入口及撤銷決議（覆蓋舊設計描述）
+
+Windows 第一次開啟只提供「使用單機版／直接加入雲端」。**「災難復原」放在「直接加入雲端」的 `CloudDirectJoinForm` 內作為獨立按鈕**，需要時顯示「繼續災難復原」，另開 `CloudRecoveryForm` 的超管重新驗證、Workspace Preview、撤銷全部舊 Device 二次確認；正常 JOIN 的配對或邀請沒有額外撤銷副作用。
+
+CYWEB 只對有效、已驗證 Email 的 CYID SUPER_ADMIN 顯示「帳號與權限 → CYInvoice 裝置災難復原」管理區，提供操作 ID 的**簽發／狀態查詢／明確撤銷**；Email 寄送成功也**不撤銷**。只有新 Device 完成復原兌換時，一筆 D1 transaction 才使同 Workspace 全部其他舊 active Device revoke、所有未用邀請／配對碼失效、Audit 原子寫入。**既有已開始且尚未 commit 的業務寫入另需 fencing/epoch**，不能用 Device token 失效推斷原先在途業務 mutation 全部自動取消。
 
 ## 3. 情境分流
 
@@ -147,7 +153,7 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
 | DR-13 | V3 新機 pending／revision／官方結果重整不自動重送 AMEGO；未上雲的原機資料遺失有明確界線 |
 
-以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+以上仍是後續真實驗收條件。**Draft 原始碼及多個 synthetic Node／SQLite／Windows/CI 測試已完成**，但 DR-01～DR-13 的跨服務／真實裝置／真 Email 實機驗收仍未完成，故未將任何 DR 項目勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 
 ## 10. 原始碼與 canonical 參考
 
