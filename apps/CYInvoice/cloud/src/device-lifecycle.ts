@@ -347,7 +347,8 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
         WHERE device_id = ?7
           AND workspace_id = ?8
           AND status = 'revoked'
-          AND revoked_at = ?6`
+          AND revoked_at = ?6
+          AND changes() = 1`
     ).bind(
       `evt_${crypto.randomUUID()}`,
       actorDevice.deviceId,
