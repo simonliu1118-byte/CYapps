@@ -108,6 +108,31 @@ public sealed class AllowanceIssueRequest
 // The response has no official AllowanceNumber; query by the originally persisted number.
 public sealed record AllowanceIssueResponse(int Code, string Message);
 
+// Official /json/allowance_list. Details are retained only for the
+// authorized account/environment; an allowance may reference multiple invoices.
+// This DTO does not constitute a CYInvoice-initiated operation or D1 Audit.
+public sealed record AllowanceListItem(
+    string AllowanceNumber,
+    string InvoiceType,
+    int InvoiceStatus,
+    string AllowanceDate,
+    int AllowanceType,
+    string BuyerIdentifier,
+    string BuyerName,
+    string TaxAmount,
+    string TotalAmount,
+    long CancelDate,
+    long CreateDate,
+    JsonElement ProductItems);
+
+public sealed record AllowanceListResponse(
+    int Code,
+    string Message,
+    int PageTotal,
+    int PageNow,
+    int DataTotal,
+    IReadOnlyList<AllowanceListItem> Data);
+
 public sealed record AllowanceStatusItem(
     string AllowanceNumber,
     string Type,
