@@ -2,6 +2,13 @@
 
 > **AutoInput 端可開始整合測試，但尚不可在正式 MO店+／ERP 全自動流程啟用開票。** CYInvoice 接口已實作、Windows CI 通過；尚未合併／正式發行，實機雙行程、Excel COM 與真實平台流程未驗收。本文件直接放在 AutoInput 的 V0.3.0 工作分支，供其主控接手。
 
+## 可下載的 CYInvoice 工程測試包（V2.6.20 Build 0）
+
+- **[下載 CYInvoice V2.6.20 Windows x64 測試包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718/artifacts/11889940554)**，GitHub Actions Artifact 名稱：`CYInvoice_V2.6.20_engineering-run336`。
+- [Windows CI 驗證紀錄](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)：build／core tests／portable smoke／public package scan 全數成功；來源 commit `84704db1a3eb561bb79e1fbfb50364783525da33`。
+- 解壓縮後指定 `CYInvoice.exe` 的完整路徑，搭配原有 `--autoinput-query`、`--autoinput-issue` 進行測試；**工程包不應直接覆蓋現有正式工作資料夾**，建議使用獨立的去識別化測試目錄。
+- Actions Artifact 依 CYapps 規則只保留 3 天；需要重新取得時需從同一 PR 再產生工程包，勿與正式 Release 混用。
+
 ## 交接來源及追蹤
 - AutoInput 提案：本專案 `docs/CYINVOICE_INTERFACE_HANDOFF.md`。
 - CYInvoice 實作 Draft PR [#445](https://github.com/simonliu1118-byte/CYapps/pull/445)，branch `cyinvoice/feat-autoinput-interface`。
