@@ -119,6 +119,9 @@ internal sealed class MoImportForm : Form
         return panel;
     }
 
+    /// <summary>The two exports MO店+ 全自動 downloaded, put in as if dropped.</summary>
+    public void Preload(IEnumerable<string> paths) => Add(paths);
+
     private void Pick()
     {
         using var dialog = new OpenFileDialog

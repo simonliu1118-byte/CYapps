@@ -52,7 +52,7 @@ internal sealed class ShopeeBatchOrder
 /// and F5 the list. Only 蝦皮店到店 (隔日到貨) and 蝦皮店到宅 for now. Every screen is read
 /// before anything is clicked; whatever does not look as expected stops the batch.
 /// </summary>
-internal sealed class ShopeeBatchRunner
+internal sealed partial class ShopeeBatchRunner
 {
     /// <summary>我的銷售 › 待出貨 › 待處理, sorted by the shipping deadline (the URL Shopee itself opens).</summary>
     public const string ListUrl = "https://seller.shopee.tw/portal/sale/order?type=toship&source=to_process&sort_by=ship_by_date_asc";
@@ -140,11 +140,13 @@ internal sealed class ShopeeBatchRunner
 
     // ---- the Chrome window ----
 
-    private async Task OpenWindowAsync()
+    private Task OpenWindowAsync() => OpenWindowAsync(ListUrl);
+
+    private async Task OpenWindowAsync(string url)
     {
         var chrome = ChromePath() ?? throw new ShopeeBatchStop("找不到 Chrome（chrome.exe）。全自動需要 Chrome。");
         var before = ChromeWindows().ToHashSet();
-        Process.Start(new ProcessStartInfo(chrome, $"--new-window \"{ListUrl}\"") { UseShellExecute = false })?.Dispose();
+        Process.Start(new ProcessStartInfo(chrome, $"--new-window \"{url}\"") { UseShellExecute = false })?.Dispose();
         var watch = Stopwatch.StartNew();
         while (watch.Elapsed < TimeSpan.FromSeconds(20))
         {
@@ -822,7 +824,8 @@ internal sealed class ShopeeBatchRunner
             var printer = SlipPrinter.Installed(_printer);
             if (printer is null) return (null, string.Empty, $"找不到名稱符合「{_printer}」的印表機");
             Directory.CreateDirectory(folder);
-            if (await SaveChromePageAsync(folder) is { } failed) return (null, printer, failed);
+            Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
+            if ((await SaveFromDialogAsync(folder, "Ctrl+S")).Error is { } failed) return (null, printer, failed);
             var saved = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => $"{Path.GetExtension(f)}:{new FileInfo(f).Length}").ToList();
             _log.Info("shopee-batch", $"family page saved files={saved.Count} [{string.Join(", ", saved.Take(12))}]");
             if (SlipPrinter.LargestPicture(folder) is not { } picture) return (null, printer, $"存下的網頁裡沒有寄取貨單圖片（{saved.Count} 個檔案）");
@@ -926,17 +929,16 @@ internal sealed class ShopeeBatchRunner
     }
 
     /// <summary>
-    /// Ctrl+S on the slip's tab and Chrome's 另存新檔 dialog: the 檔案名稱 box (the common
-    /// dialog's control 1001 in combo box 1148) is set to the same name in
-    /// <paramref name="folder"/>, read back, and 存檔 (IDOK) pressed; then the files are waited
-    /// for. Null when saved, else why not (the dialog closed).
+    /// Chrome's 另存新檔 dialog, opened by the caller (Ctrl+S, a download): waited for until its
+    /// name box holds Chrome's name, the folder changed through the address box (Alt+D) to
+    /// <paramref name="folder"/>, 存檔 pressed; the saved files are found (in the folder, or where
+    /// the dialog showed, then moved in). Error null with the files when saved.
     /// </summary>
-    private async Task<string?> SaveChromePageAsync(string folder)
+    private async Task<(string? Error, List<string> Files)> SaveFromDialogAsync(string folder, string after, int waitSeconds = 10)
     {
         NativeMethods.GetWindowThreadProcessId(_window, out var chrome);
-        Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
         nint dialog = 0;
-        for (var i = 0; i < 40 && dialog == 0; i++)
+        for (var i = 0; i < waitSeconds * 4 && dialog == 0; i++)
         {
             await Task.Delay(250, _token);
             NativeMethods.EnumWindows((hwnd, _) =>
@@ -950,8 +952,8 @@ internal sealed class ShopeeBatchRunner
                 return false;
             }, 0);
         }
-        if (dialog == 0) return "按 Ctrl+S 後沒有出現另存新檔視窗";
-        _log.Info("shopee-batch", $"family cut: save dialog title={NativeMethods.WindowText(dialog)}");
+        if (dialog == 0) return ($"按{after}後沒有出現另存新檔視窗", []);
+        _log.Info("shopee-batch", $"save dialog title={NativeMethods.WindowText(dialog)}");
         try
         {
             // The dialog shows before its controls are built and filled (user's LOG,
@@ -987,14 +989,14 @@ internal sealed class ShopeeBatchRunner
                 if (edit != 0 && save != 0 && (NativeMethods.ControlText(edit, 500) ?? string.Empty).Trim().Length > 0) break;
                 await Task.Delay(250, _token);
             }
-            _log.Info("shopee-batch", $"family cut: dialog edits [{string.Join(", ", candidates.Take(8))}] name_box={edit != 0} save={save != 0}");
-            if (edit == 0 || save == 0) return $"另存新檔視窗裡找不到{(edit == 0 ? "檔案名稱欄" : "存檔按鈕")}";
+            _log.Info("shopee-batch", $"save dialog edits [{string.Join(", ", candidates.Take(8))}] name_box={edit != 0} save={save != 0}");
+            if (edit == 0 || save == 0) return ($"另存新檔視窗裡找不到{(edit == 0 ? "檔案名稱欄" : "存檔按鈕")}", []);
             await Task.Delay(300, _token);
             // The dialog takes no path from a program, however typed (user, 2026-10-14): it is
             // left as Chrome filled it and the page saved where Chrome saves; the files are then
             // found there and moved into the temp folder (user: moved to TEMP, deleted after).
             var name = (NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"');
-            if (name.Length == 0) return "另存新檔視窗沒有預設檔名";
+            if (name.Length == 0) return ("另存新檔視窗沒有預設檔名", []);
             var stem = Path.GetFileNameWithoutExtension(name);
             // The folder is changed in the address box at the top (user, 2026-10-14: type the path
             // there): Alt+D, the temp folder, Enter. The folder the dialog then shows is read back
@@ -1024,8 +1026,8 @@ internal sealed class ShopeeBatchRunner
                 if (shownFolder is not null && string.Equals(Path.GetFullPath(shownFolder).TrimEnd('\\'), Path.GetFullPath(folder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) break;
             }
             var inTemp = shownFolder is not null && string.Equals(Path.GetFullPath(shownFolder).TrimEnd('\\'), Path.GetFullPath(folder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
-            _log.Info("shopee-batch", $"family cut: address box to temp {(inTemp ? "worked" : "did not take; saving where it shows")} (folder {(shownFolder is null ? "not read" : "read")})");
-            if (!NativeMethods.IsWindow(dialog) || !NativeMethods.IsWindowVisible(dialog)) return "在路徑欄輸入後另存新檔視窗關閉了";
+            _log.Info("shopee-batch", $"save dialog: address box to temp {(inTemp ? "worked" : "did not take; saving where it shows")} (folder {(shownFolder is null ? "not read" : "read")})");
+            if (!NativeMethods.IsWindow(dialog) || !NativeMethods.IsWindowVisible(dialog)) return ("在路徑欄輸入後另存新檔視窗關閉了", []);
             var started = DateTime.Now.AddSeconds(-3);
             _inputs++;
             NativeMethods.SetForegroundWindow(dialog);
@@ -1044,12 +1046,12 @@ internal sealed class ShopeeBatchRunner
                         if (NativeMethods.ClassName(hwnd) == "Button" && NativeMethods.GetDlgCtrlID(hwnd) == 6) { yes = hwnd; return false; }
                         return true;
                     }, 0);
-                    _log.Info("shopee-batch", $"family cut: confirm dialog title={NativeMethods.WindowText(confirm)} yes={yes != 0}");
+                    _log.Info("shopee-batch", $"save dialog: confirm title={NativeMethods.WindowText(confirm)} yes={yes != 0}");
                     if (yes != 0) NativeMethods.PostMessage(yes, 0x00F5 /* BM_CLICK */, 0, 0);
                     await Task.Delay(500, _token);
                 }
             }
-            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) return "按了存檔，另存新檔視窗沒有關閉";
+            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) return ("按了存檔，另存新檔視窗沒有關閉", []);
             dialog = 0;
 
             // Chrome writes .crdownload first; done when the page file stops changing.
@@ -1073,10 +1075,10 @@ internal sealed class ShopeeBatchRunner
                     if (File.Exists(entry)) File.Move(entry, to);
                     else MoveFolder(entry, to);
                 }
-                _log.Info("shopee-batch", $"family cut: saved page in temp (saved {(inTemp ? "there directly" : "elsewhere and moved")}) entries={found.Count}");
-                return null;
+                _log.Info("shopee-batch", $"saved in temp (saved {(inTemp ? "there directly" : "elsewhere and moved")}) entries={found.Count}");
+                return (null, found.Select(e => Path.Combine(folder, Path.GetFileName(e))).ToList());
             }
-            return $"存檔後 30 秒內在{string.Join("、", places.Select(Path.GetFileName))}找不到剛存的「{stem}」";
+            return ($"存檔後 30 秒內在{string.Join("、", places.Select(Path.GetFileName))}找不到剛存的「{stem}」", []);
         }
         finally
         {

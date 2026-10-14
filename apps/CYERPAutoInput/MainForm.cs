@@ -1136,6 +1136,60 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
+    /// A MO店+ 全家／7-11 標籤 PDF cut slip by slip onto the thermal printer (as 蝦皮 全家):
+    /// a page that is one picture is used as it is (MO 7-11: no sample yet, taken the same way,
+    /// user 2026-10-14).
+    /// </summary>
+    private async Task<(int Printed, List<string> Notes)> PrintMoSlipsAsync(string file, string printer, string password)
+    {
+        var label = SlipPrinter.Label(printer, 100, 150);
+        var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi * 2);
+        var printed = 0;
+        var notes = new List<string>();
+        foreach (var (page, from) in pages)
+        {
+            var slips = await Task.Run(() => SlipImage.FindSlips(page));
+            _log.Info("mo-slip", $"{from}: picture {page.Width}x{page.Height}, slips={slips.Count}, printer dpi={label.Dpi}");
+            foreach (var area in slips)
+            {
+                var plan = SlipImage.Plan(page, area, label.Width, label.Height);
+                var mm = $"{plan.Width * 25.4 / label.Dpi:F0}×{plan.Height * 25.4 / label.Dpi:F0} mm";
+                _log.Info("mo-slip", $"slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
+                if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
+                var slip = await Task.Run(() => SlipImage.Render(page, plan));
+                SlipPrinter.Print(printer, slip, "MO店+ 寄件單");
+                printed++;
+                notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");
+            }
+        }
+        return (printed, notes);
+    }
+
+    /// <summary>
+    /// A 新竹物流 寄件單 or 到廠取貨總表 PDF on the A4 printer, after the very large 「請在印表機放入…用紙」
+    /// and 好了 (user, 2026-10-14). The pages printed, or null when 取消 was pressed.
+    /// </summary>
+    private async Task<int?> PrintA4Async(string file, bool summary, string printer, string password)
+    {
+        var paper = summary ? "取貨總表用紙" : "寄件單用紙";
+        _log.Info("mo-a4", $"{(summary ? "pickup summary" : "label")} waits for paper");
+        Alarm(needsPerson: true);
+        using (var prompt = new PaperPromptForm(paper, printer))
+            if (prompt.ShowDialog(this) != DialogResult.OK) return null;
+        var pages = await MoSlipPdf.RenderPagesAsync(file, password, 300);
+        try
+        {
+            await Task.Run(() => SlipPrinter.PrintPages(printer, pages, (summary ? "到廠取貨總表 " : "新竹寄件單 ") + Path.GetFileName(file)));
+        }
+        finally
+        {
+            foreach (var page in pages) page.Dispose();
+        }
+        _log.Info("mo-a4", $"printed pages={pages.Count} {(summary ? "pickup summary" : "label")}");
+        return pages.Count;
+    }
+
+    /// <summary>
     /// 測試 MO店+ 新竹列印 (user, 2026-10-14): the 新竹物流 寄件單 (LogisticsLabel) and 到廠取貨總表
     /// (LogisticsData) PDFs in Temp\test1 printed as MO店+ 全自動 will, before ERP: each after a
     /// very large 「請在印表機放入…用紙」 and 好了, on the A4 printer.
@@ -1169,26 +1223,13 @@ internal sealed class MainForm : Form
             foreach (var (file, summary) in documents.OrderBy(d => d.Summary))
             {
                 var name = Path.GetFileName(file);
-                var paper = summary ? "取貨總表用紙" : "寄件單用紙";
-                _log.Info("mo-a4", $"test {(summary ? "pickup summary" : "label")} file waits for paper");
-                Alarm(needsPerson: true);
-                using (var prompt = new PaperPromptForm(paper, printer))
-                    if (prompt.ShowDialog(this) != DialogResult.OK)
-                    {
-                        lines.Add($"{name}：已取消，沒有列印。");
-                        break;
-                    }
-                var pages = await MoSlipPdf.RenderPagesAsync(file, password, 300);
-                try
+                var pages = await PrintA4Async(file, summary, printer, password);
+                if (pages is null)
                 {
-                    await Task.Run(() => SlipPrinter.PrintPages(printer, pages, (summary ? "到廠取貨總表 " : "新竹寄件單 ") + name));
+                    lines.Add($"{name}：已取消，沒有列印。");
+                    break;
                 }
-                finally
-                {
-                    foreach (var page in pages) page.Dispose();
-                }
-                _log.Info("mo-a4", $"test printed pages={pages.Count} {(summary ? "pickup summary" : "label")}");
-                lines.Add($"{name}：{(summary ? "到廠取貨總表" : "寄件單")} {pages.Count} 頁，已送到 {printer}。");
+                lines.Add($"{name}：{(summary ? "到廠取貨總表" : "寄件單")} {pages} 頁，已送到 {printer}。");
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1264,32 +1305,13 @@ internal sealed class MainForm : Form
         UseWaitCursor = true;
         try
         {
-            var label = SlipPrinter.Label(printer, 100, 150);
             foreach (var file in dialog.FileNames)
             {
                 var name = Path.GetFileName(file);
                 try
                 {
-                    var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi * 2);
-                    var printed = 0;
-                    var notes = new List<string>();
-                    foreach (var (page, from) in pages)
-                    {
-                        var slips = await Task.Run(() => SlipImage.FindSlips(page));
-                        _log.Info("mo-slip", $"test {from}: picture {page.Width}x{page.Height}, slips={slips.Count}, printer dpi={label.Dpi}");
-                        foreach (var area in slips)
-                        {
-                            var plan = SlipImage.Plan(page, area, label.Width, label.Height);
-                            var mm = $"{plan.Width * 25.4 / label.Dpi:F0}×{plan.Height * 25.4 / label.Dpi:F0} mm";
-                            _log.Info("mo-slip", $"test slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
-                            if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
-                            var slip = await Task.Run(() => SlipImage.Render(page, plan));
-                            SlipPrinter.Print(printer, slip, "MO店+ 寄件單測試");
-                            printed++;
-                            notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");
-                        }
-                    }
-                    lines.Add($"{name}：{pages.Count} 頁，印出 {printed} 張" + (notes.Count > 0 ? "\n  " + string.Join("\n  ", notes) : string.Empty));
+                    var (printed, notes) = await PrintMoSlipsAsync(file, printer, password);
+                    lines.Add($"{name}：印出 {printed} 張" + (notes.Count > 0 ? "\n  " + string.Join("\n  ", notes) : string.Empty));
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -1444,6 +1466,161 @@ internal sealed class MainForm : Form
             MessageBox.Show(this,
                 $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
                 "蝦皮訂單自動擷取輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    /// <summary>
+    /// MO店+ 全自動 (user, 2026-10-14): the MO店+ 後台 steps in a Chrome window of the program's own
+    /// (<see cref="ShopeeBatchRunner.RunMoAsync"/>), then — before ERP — the documents: 全家／7-11
+    /// 標籤 cut onto the thermal printer, 新竹 寄件單 and 到廠取貨總表 on the A4 printer after a
+    /// paper prompt each; then the two exports go into the MO店+ import (invoice details are filled
+    /// in the preview until CYInvoice can be called) and ERP. The Temp folder goes once every order
+    /// is saved in ERP.
+    /// </summary>
+    private async Task RunMoBatchAsync()
+    {
+        const string title = "MO店+ 全自動";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        var missing = new[]
+        {
+            _settings.MoOrderType.Length == 0 ? "MO店+ 銷貨單別" : null,
+            _settings.MoCustomerCode.Length == 0 ? "MO店+ 客戶代號" : null,
+            _settings.MoPasswordProtected.Length == 0 ? "MO店+ 匯出檔密碼" : null,
+            _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
+            _settings.ShopeeLabelPrinter.Length == 0 ? "熱感紙印表機" : null,
+            _settings.A4Printer.Length == 0 ? "A4 印表機" : null
+        }.Where(x => x is not null).ToList();
+        if (missing.Count > 0)
+        {
+            MessageBox.Show(this, $"請先在「設定 › 平台匯入」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var thermal = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
+        var a4 = SlipPrinter.Installed(_settings.A4Printer);
+        if (thermal is null || a4 is null)
+        {
+            MessageBox.Show(this, $"這台電腦找不到{(thermal is null ? "熱感紙" : "A4 ")}印表機「{(thermal is null ? _settings.ShopeeLabelPrinter : _settings.A4Printer)}」，請到「設定 › 平台匯入 › 印表機」重新勾選。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (MessageBox.Show(this,
+                "MO店+ 全自動會開一個新的 Chrome 視窗（MO店+ 後台需已登入），然後：\n\n" +
+                "1. 我的訂單 › 未出貨：匯出報表（開發票用）\n" +
+                "2. 批次出貨：新竹貨運、7-11店出、全家店出各自全選 → 批次出貨（併箱）→ 確認出貨，存下標籤（新竹另存出貨總表）\n" +
+                "3. 我的訂單 › 配送中：匯出報表（物流單號）\n" +
+                "4. 列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙\n" +
+                "5. 帶入兩個匯出檔 → 預覽（請填發票資料）→ 輸入 ERP\n\n" +
+                "其他配送方式（倉出、冷凍等）不處理，會列在結果裡。網頁操作期間請勿操作電腦，按 Esc 可停止。\n\n要開始嗎？",
+                title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        List<string[]> Read(string path)
+        {
+            using var stream = File.OpenRead(path);
+            return Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+                ? XlsxReader.ReadFirstSheet(stream)
+                : XlsReader.ReadFirstSheet(stream, password);
+        }
+        IReadOnlyCollection<string> ReadOrders(string path) =>
+            MoOrderImport.ReadTracking(Read(path))?.Keys.ToHashSet(StringComparer.Ordinal) ?? throw new ShopeeBatchStop("未出貨匯出檔讀不到訂單編號。");
+
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+        MoBatchResult? result = null;
+        string? stopped = null;
+        _log.Info("mo-batch", "started");
+        try
+        {
+            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus);
+        }
+        catch (ShopeeBatchStop stop)
+        {
+            _log.Warn("mo-batch", $"stopped: {stop.Message}");
+            stopped = stop.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            stopped = "已按 Esc 停止。";
+        }
+        finally
+        {
+            Session.Unpin();
+            Session.End();
+            _shopeeBatchRunning = false;
+        }
+        if (stopped is not null || result is null)
+        {
+            Alarm(needsPerson: true);
+            MessageBox.Show(this, $"MO店+ 全自動停止：{stopped}\n\n已存下的檔案在：{folder}\n已出貨的訂單請到 MO店+ 後台確認，再用「匯入訂單匯出檔」接續。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (result.Before is null)
+        {
+            TryDelete(folder);
+            MessageBox.Show(this, string.Join("\n", result.Notes.DefaultIfEmpty("沒有要處理的訂單。")), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // Documents before ERP (user, 2026-10-14).
+        var printed = new List<string>();
+        try
+        {
+            foreach (var (kind, file) in result.Labels.Where(l => l.Kind != MoShipKind.Hct))
+            {
+                SetStatus($"MO店+ 全自動：列印{(kind == MoShipKind.Family ? "全家" : "7-11")}標籤…");
+                var (count, _) = await PrintMoSlipsAsync(file, thermal, password);
+                printed.Add($"{(kind == MoShipKind.Family ? "全家" : "7-11")}標籤 {count} 張（{thermal}）");
+            }
+            foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
+            {
+                var pages = await PrintA4Async(file, summary: false, a4, password);
+                if (pages is null) throw new OperationCanceledException();
+                printed.Add($"新竹寄件單 {pages} 頁（{a4}）");
+            }
+            foreach (var file in result.Summaries)
+            {
+                var pages = await PrintA4Async(file, summary: true, a4, password);
+                if (pages is null) throw new OperationCanceledException();
+                printed.Add($"新竹到廠取貨總表 {pages} 頁（{a4}）");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Warn("mo-batch", $"printing stopped: {ex.GetType().Name}: {ex.Message}");
+            Alarm(needsPerson: true);
+            MessageBox.Show(this, $"列印停止（{(ex is OperationCanceledException ? "已取消" : ex.Message)}）。已出貨 {result.Shipped} 筆；檔案在：{folder}\n請手動列印後，用「匯入訂單匯出檔」接續打單。",
+                title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
+
+        // The two exports into the import, then the preview and ERP.
+        using var files = new MoImportForm(Read);
+        files.Preload([result.Before, .. result.After is null ? Array.Empty<string>() : [result.After]]);
+        var notes = new List<string>(result.Notes) { $"已出貨 {result.Shipped} 筆；已列印：{string.Join("、", printed.DefaultIfEmpty("無"))}" };
+        MessageBox.Show(this, string.Join("\n", notes) + "\n\n接著確認兩個匯出檔並按「下一步」，在預覽填好發票資料後輸入 ERP。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        if (files.ShowDialog(this) != DialogResult.OK) return;
+        var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
+        var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. files.Notes, .. result.Notes]);
+
+        // Temp goes once every order of the batch is saved (user, 2026-10-13).
+        var ledger = LoadLedger();
+        if (ledger is not null && files.Errors.Count == 0 && orders.Count > 0 && orders.All(o => ledger.Find(o.LedgerKey)?.Status == LedgerStatus.Saved))
+            TryDelete(folder);
+        else _log.Info("mo-batch", "temp folder kept: not every order is saved");
+    }
+
+    private void TryDelete(string folder)
+    {
+        try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("mo-batch", $"temp folder left: {ex.Message}"); }
     }
 
     private async Task ImportMoAsync()
@@ -2010,7 +2187,12 @@ internal sealed class MainForm : Form
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")
-            button.Click += async (_, _) => await ImportMoAsync();
+        {
+            var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
+            menu.Items.Add("全自動（匯出＋批次出貨＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
+            menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
+            button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        }
         else if (text == "酷澎商城")
             button.Click += async (_, _) => await ImportCoupangAsync();
         return button;
