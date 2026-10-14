@@ -13,6 +13,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
+    ("V3 Windows Work Item transport verifies request/revision/auth and never retries", CloudWorkItemClientTests.RunAsync),
     ("V3 recovery pending token survives restart and locks endpoint/scope", TestRecoveryPendingStateAsync),
     ("V3 recovery preview and claim reuse the same token without old Device bearer", TestRecoveryTransportAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
@@ -931,6 +932,8 @@ sealed class TestProtector : ISecretProtector
 sealed class QueueHandler : HttpMessageHandler
 {
     private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> responses = new();
+
+    public int PendingCount => responses.Count;
 
     public void Enqueue(Func<HttpRequestMessage, HttpResponseMessage> response) => responses.Enqueue(response);
 

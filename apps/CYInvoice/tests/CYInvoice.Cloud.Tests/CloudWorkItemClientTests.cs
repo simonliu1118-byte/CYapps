@@ -72,7 +72,7 @@ internal static class CloudWorkItemClientTests
         var moved = await client.TransitionAsync(created, "review", "0001", "synthetic-pass");
         Equal(2, moved.Revision, "transition revision");
         Equal("review", moved.Status, "transition result");
-        Throws<ArgumentException>(() => client.TransitionAsync(created, "closed", "0001", "synthetic-pass"));
+        await ThrowsAsync<ArgumentException>(async () => { await client.TransitionAsync(created, "closed", "0001", "synthetic-pass"); });
         Equal(0, handler.PendingCount, "all script requests consumed");
     }
 
