@@ -74,8 +74,10 @@ public sealed class AmegoClient : IAmegoGateway
         ArgumentNullException.ThrowIfNull(request);
         ValidateAllowanceNumber(request.AllowanceNumber);
         if (request.AllowanceType != 2) throw new ArgumentException("only seller-issued allowances are supported", nameof(request));
-        if (request.AllowanceDate.Length != 8 || !DateOnly.TryParseExact(request.AllowanceDate, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        if (request.AllowanceDate.Length != 8 || !DateOnly.TryParseExact(request.AllowanceDate, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var allowanceDate))
             throw new ArgumentException("AllowanceDate must be yyyyMMdd", nameof(request));
+        if (!AllowanceNumberGenerator.TryReadSequence(request.AllowanceNumber, allowanceDate, out _))
+            throw new ArgumentException("AllowanceNumber must follow AyyyyMMddNNN and match AllowanceDate", nameof(request));
         if (request.BuyerIdentifier.Trim().Length == 0 || request.BuyerName.Trim().Length == 0)
             throw new ArgumentException("BuyerIdentifier and BuyerName are required", nameof(request));
         if (request.ProductItem.Count is < 1 or > 9999)
