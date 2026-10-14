@@ -23,7 +23,9 @@ function fixture(cyidOnly) {
     INSERT INTO devices(device_id,workspace_id,display_name,status,employee_authority_state)
     VALUES (?,?,'Synthetic','active','cloud')`).run(d,ws);
   if(cyidOnly) db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
-  for (const name of migrations.filter(n=>n>="0014")) db.exec(readFileSync("migrations/"+name,"utf8"));\n  // New table is draft-only; do not alter the reviewed canonical migration set.\n  db.exec(readFileSync("drafts/0015_work_items.sql","utf8"));
+  for (const name of migrations.filter(n=>n>="0014")) db.exec(readFileSync("migrations/"+name,"utf8"));
+  // New table is draft-only; do not alter the reviewed canonical migration set.
+  db.exec(readFileSync("drafts/0015_work_items.sql","utf8"));
   if(cyidOnly) assert.equal(db.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE name='cloud_employees'").get().n,0);
   let beforeWrite;
