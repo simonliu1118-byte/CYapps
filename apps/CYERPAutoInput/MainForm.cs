@@ -1500,7 +1500,8 @@ internal sealed class MainForm : Form
         IReadOnlyCollection<string> ReadOrders(string path) =>
             MoOrderImport.ReadTracking(Read(path))?.Keys.ToHashSet(StringComparer.Ordinal) ?? throw new ShopeeBatchStop("未出貨匯出檔讀不到訂單編號。");
 
-        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        MoPrintedDocuments.Prune(_log);
+        var folder = Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
         _shopeeBatchRunning = true;
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
@@ -1542,51 +1543,81 @@ internal sealed class MainForm : Form
             return;
         }
 
-        // Documents before ERP (user, 2026-10-14).
+        // Documents before ERP (user, 2026-10-14), kept for 重新列印. A printer error does not
+        // stop the run (user, 2026-10-14): it is noted and the document can be reprinted; only
+        // 停止 on the paper prompt stops.
         var printed = new List<string>();
-        try
+        var documents = new List<MoPrintedDocument>();
+        async Task<bool> Print(string kind, string file, Func<Task<string?>> print)
         {
-            foreach (var (kind, file) in result.Labels.Where(l => l.Kind != MoShipKind.Hct))
+            try
             {
-                SetStatus($"MO店+ 全自動：列印{(kind == MoShipKind.Family ? "全家" : "7-11")}標籤…");
-                var (count, _) = await PrintMoSlipsAsync(file, thermal, password);
-                printed.Add($"{(kind == MoShipKind.Family ? "全家" : "7-11")}標籤 {count} 張（{thermal}）");
+                var detail = await print();
+                if (detail is null) return false;
+                printed.Add($"{kind} {detail}");
+                documents.Add(new MoPrintedDocument(kind, file, DateTime.Now, detail));
             }
-            foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
+            catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
             {
-                var pages = await PrintA4Async(file, summary: false, a4, password);
-                if (pages is null) throw new OperationCanceledException();
-                printed.Add($"新竹寄件單 {pages} 頁（{a4}）");
+                _log.Warn("mo-batch", $"print failed {kind}: {ex.GetType().Name}: {ex.Message}");
+                printed.Add($"{kind}列印失敗（{ex.Message}），請用「重新列印寄件單」");
+                documents.Add(new MoPrintedDocument(kind, file, DateTime.Now, "列印失敗"));
             }
-            // All of a sheet's orders printed before → not again; some → printed, the earlier
-            // sheet to be voided (user, 2026-10-14).
-            var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
-            foreach (var file in result.Summaries)
-            {
-                var numbers = MoPickupSummary.Read(file, password);
-                var (print, voided) = MoPickupSummary.Decide(numbers, sheets.AlreadyPrinted(numbers));
-                _log.Info("mo-batch", $"pickup summary orders={numbers.Count} print={print} void={voided.Count}");
-                if (!print)
-                {
-                    printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", numbers)} 的總表都已印過）");
-                    continue;
-                }
-                var pages = await PrintA4Async(file, summary: true, a4, password);
-                if (pages is null) throw new OperationCanceledException();
-                sheets.Record(numbers);
-                if (voided.Count > 0)
-                    result.Notes.Insert(0, $"【請作廢舊的到廠取貨總表】宅配單號 {string.Join("、", voided)} 先前印的總表已由這次的新總表取代（新總表含 {numbers.Count} 筆），舊的那張請作廢。");
-                printed.Add($"新竹到廠取貨總表 {pages} 頁（{a4}）");
-            }
+            return true;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        var go = true;
+        foreach (var (kind, file) in result.Labels.Where(l => l.Kind != MoShipKind.Hct))
         {
-            _log.Warn("mo-batch", $"printing stopped: {ex.GetType().Name}: {ex.Message}");
-            Alarm(needsPerson: true);
-            MessageBox.Show(this, $"列印停止（{(ex is OperationCanceledException ? "已取消" : ex.Message)}）。已出貨 {result.Shipped} 筆；檔案在：{folder}\n請手動列印後，用「匯入訂單匯出檔」接續打單。",
+            var name = kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven;
+            SetStatus($"MO店+ 全自動：列印{name}…");
+            await Print(name, file, async () => $"{(await PrintMoSlipsAsync(file, thermal, password)).Printed} 張");
+        }
+        foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
+        {
+            if (!go) break;
+            go = await Print(MoPrintedDocument.HctLabel, file, async () => await PrintA4Async(file, summary: false, a4, password) is { } pages ? $"{pages} 頁" : null);
+        }
+        // All of a sheet's orders printed before → not again; some → printed, the earlier
+        // sheet to be voided (user, 2026-10-14).
+        var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
+        foreach (var file in result.Summaries)
+        {
+            if (!go) break;
+            List<string> numbers;
+            try { numbers = MoPickupSummary.Read(file, password); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _log.Warn("mo-batch", $"pickup summary unread: {ex.Message}"); numbers = []; }
+            var (print, voided) = MoPickupSummary.Decide(numbers, sheets.AlreadyPrinted(numbers));
+            _log.Info("mo-batch", $"pickup summary orders={numbers.Count} print={print} void={voided.Count}");
+            if (!print)
+            {
+                printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", numbers)} 的總表都已印過）");
+                continue;
+            }
+            var ok = false;
+            go = await Print(MoPrintedDocument.Summary, file, async () =>
+            {
+                if (await PrintA4Async(file, summary: true, a4, password) is not { } pages) return null;
+                ok = true;
+                return $"{pages} 頁，{numbers.Count} 筆";
+            });
+            if (!ok) continue;
+            sheets.Record(numbers);
+            if (voided.Count > 0)
+                result.Notes.Insert(0, $"【請作廢舊的到廠取貨總表】宅配單號 {string.Join("、", voided)} 先前印的總表已由這次的新總表取代（新總表含 {numbers.Count} 筆），舊的那張請作廢。");
+        }
+        if (!go)
+        {
+            // What was not printed is listed for 重新列印 too.
+            foreach (var (kind, file) in result.Labels.Select(l => (l.Kind == MoShipKind.Hct ? MoPrintedDocument.HctLabel : l.Kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven, l.Path))
+                         .Concat(result.Summaries.Select(f => (MoPrintedDocument.Summary, f))))
+                if (!documents.Any(d => d.File == file)) documents.Add(new MoPrintedDocument(kind, file, DateTime.Now, "未印"));
+            MoPrintedDocuments.Save(folder, documents);
+            _log.Info("mo-batch", "stopped on the paper prompt");
+            MessageBox.Show(this, $"已在放紙提醒按停止。已出貨 {result.Shipped} 筆；檔案在：{folder}\n沒印的寄件單可用「重新列印寄件單」或到 MO店+ 後台列印，再用「匯入訂單匯出檔」接續打單。",
                 title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+        MoPrintedDocuments.Save(folder, documents);
         _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
 
         // The two exports into the import, then the preview and ERP.
@@ -1600,11 +1631,68 @@ internal sealed class MainForm : Form
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. files.Notes, .. result.Notes]);
 
-        // Temp goes once every order of the batch is saved (user, 2026-10-13).
+        // Once every order of the batch is saved the exports go (user, 2026-10-13); the printed
+        // documents stay 7 days for 重新列印 (user, 2026-10-14).
         var ledger = LoadLedger();
         if (ledger is not null && files.Errors.Count == 0 && orders.Count > 0 && orders.All(o => ledger.Find(o.LedgerKey)?.Status == LedgerStatus.Saved))
-            TryDelete(folder);
+        {
+            try { MoPrintedDocuments.KeepOnlyDocuments(folder); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { _log.Warn("mo-batch", $"exports left: {ex.Message}"); }
+        }
         else _log.Info("mo-batch", "temp folder kept: not every order is saved");
+    }
+
+    /// <summary>
+    /// 重新列印寄件單 (user, 2026-10-14): a printer that failed is noticed by a person; the
+    /// documents of the last 7 days are printed again — 全家／7-11 cut onto the thermal printer,
+    /// 新竹 on A4 after the paper prompt (a reprinted 總表 is not recorded again).
+    /// </summary>
+    private async Task ReprintMoAsync()
+    {
+        const string title = "MO店+ 重新列印";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        MoPrintedDocuments.Prune(_log);
+        using var form = new MoReprintForm(MoPrintedDocuments.All());
+        if (form.ShowDialog(this) != DialogResult.OK || form.Selected.Count == 0) return;
+        var thermal = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
+        var a4 = SlipPrinter.Installed(_settings.A4Printer);
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        var lines = new List<string>();
+        _shopeeBatchRunning = true;
+        try
+        {
+            foreach (var d in form.Selected)
+            {
+                var name = Path.GetFileName(d.File);
+                try
+                {
+                if (d.Kind is MoPrintedDocument.Family or MoPrintedDocument.Seven)
+                {
+                    if (thermal is null) { lines.Add($"{d.Kind}：找不到熱感紙印表機（設定 › 印表機）。"); continue; }
+                    var (count, _) = await PrintMoSlipsAsync(d.File, thermal, password);
+                    lines.Add($"{d.Kind} {count} 張已重印（{name}）");
+                }
+                else
+                {
+                    if (a4 is null) { lines.Add($"{d.Kind}：找不到 A4 印表機（設定 › 印表機）。"); continue; }
+                    var pages = await PrintA4Async(d.File, summary: d.Kind == MoPrintedDocument.Summary, a4, password);
+                    if (pages is null) { lines.Add($"{d.Kind}：已停止，沒有重印。"); break; }
+                    lines.Add($"{d.Kind} {pages} 頁已重印（{name}）");
+                }
+                _log.Info("mo-batch", $"reprinted {d.Kind}");
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _log.Warn("mo-batch", $"reprint {d.Kind}: {ex.GetType().Name}: {ex.Message}");
+                    lines.Add($"{d.Kind} 重印失敗（{ex.Message}）");
+                }
+            }
+        }
+        finally
+        {
+            _shopeeBatchRunning = false;
+        }
+        MessageBox.Show(this, string.Join("\n", lines), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void TryDelete(string folder)
@@ -2181,6 +2269,7 @@ internal sealed class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add("全自動（匯出＋批次出貨＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
+            menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
