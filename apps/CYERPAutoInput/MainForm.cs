@@ -1229,7 +1229,7 @@ internal sealed class MainForm : Form
         var printer = _settings.A4Printer.Length > 0 ? SlipPrinter.Installed(_settings.A4Printer) : null;
         if (printer is null)
         {
-            MessageBox.Show(this, "請先在「設定 › 平台匯入 › 印表機」勾選 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "請先在「設定 › 印表機」勾選 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
@@ -1314,7 +1314,7 @@ internal sealed class MainForm : Form
         var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
         if (printer is null)
         {
-            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 平台匯入 › 印表機，勾選熱感紙）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 印表機，勾選熱感紙）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (MessageBox.Show(this, $"會把選的 {dialog.FileNames.Length} 個 PDF 每一頁切成一張張寄取貨單，直接送到「{printer}」列印。會真的印出來。\n\n要開始嗎？",
@@ -1514,14 +1514,14 @@ internal sealed class MainForm : Form
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定 › 平台匯入」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var thermal = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
         var a4 = SlipPrinter.Installed(_settings.A4Printer);
         if (thermal is null || a4 is null)
         {
-            MessageBox.Show(this, $"這台電腦找不到{(thermal is null ? "熱感紙" : "A4 ")}印表機「{(thermal is null ? _settings.ShopeeLabelPrinter : _settings.A4Printer)}」，請到「設定 › 平台匯入 › 印表機」重新勾選。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"這台電腦找不到{(thermal is null ? "熱感紙" : "A4 ")}印表機「{(thermal is null ? _settings.ShopeeLabelPrinter : _settings.A4Printer)}」，請到「設定 › 印表機」重新勾選。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (MessageBox.Show(this,

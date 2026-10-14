@@ -94,6 +94,7 @@ internal sealed class SettingsForm : Form
         _tabs.Padding = new Point(14, 5);
         _tabs.TabPages.Add(GeneralPage());
         _tabs.TabPages.Add(ImportPage());
+        _tabs.TabPages.Add(PrinterPage());
         _tabs.TabPages.Add(MessagesPage());
         _tabs.TabPages.Add(GiftPage());
         _tabs.TabPages.Add(FreightPage());
@@ -192,6 +193,27 @@ internal sealed class SettingsForm : Form
         return box;
     }
 
+    /// <summary>
+    /// 印表機 (user, 2026-10-14: a tab of its own): the printers of this PC ticked for 熱感紙 and
+    /// A4, and the 蝦皮 Chrome print scales.
+    /// </summary>
+    private TabPage PrinterPage()
+    {
+        var page = Page("印表機");
+        page.AutoScroll = true;
+        page.Controls.Add(Section("蝦皮寄件單（Chrome 列印視窗的縮放）",
+            ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
+            ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
+        page.Controls.Add(_printers);
+        var sections = page.Controls.OfType<GroupBox>().ToList();
+        for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
+        return page;
+    }
+
     private TabPage ImportPage()
     {
         var page = Page("平台匯入");
@@ -220,15 +242,7 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
-            ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
-            ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
-        // Printers on top (user, 2026-10-14).
-        _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
-        page.Controls.Add(_printers);
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -409,14 +423,14 @@ internal sealed class SettingsForm : Form
             var problems = ChatRules.Problems(editor.Rules());
             if (problems.Count == 0) continue;
             MessageBox.Show(this, $"發送訊息 › {editor.Text}：\n\n" + string.Join("\n", problems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             return;
         }
         var giftProblems = GiftRules.Problems(_gifts!.Rules());
         if (giftProblems.Count > 0)
         {
             MessageBox.Show(this, "滿件贈送：\n\n" + string.Join("\n", giftProblems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 3;
+            _tabs.SelectedIndex = 4;
             return;
         }
         var warehouse = _firstRowWarehouseCode.Text.Trim();
@@ -429,14 +443,14 @@ internal sealed class SettingsForm : Form
         if (!int.TryParse(_shopeeLabelScale.Text.Trim(), out var labelScale) || labelScale is < 10 or > 200)
         {
             MessageBox.Show(this, "蝦皮寄件單縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 1;
+            _tabs.SelectedIndex = 2;
             _shopeeLabelScale.Focus();
             return;
         }
         if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
         {
             MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 1;
+            _tabs.SelectedIndex = 2;
             _sevenLabelScale.Focus();
             return;
         }
@@ -444,14 +458,14 @@ internal sealed class SettingsForm : Form
             !System.Text.RegularExpressions.Regex.IsMatch(_familyLabelPages.Text.Trim(), @"^\d+$"))
         {
             MessageBox.Show(this, "全家縮放請填 10–200 的數字，全家列印頁請填頁碼（例如 2）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 1;
+            _tabs.SelectedIndex = 2;
             _familyLabelScale.Focus();
             return;
         }
         if (!int.TryParse(_hctLabelScale.Text.Trim(), out var hctScale) || hctScale is < 10 or > 200)
         {
             MessageBox.Show(this, "新竹縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 1;
+            _tabs.SelectedIndex = 2;
             _hctLabelScale.Focus();
             return;
         }
