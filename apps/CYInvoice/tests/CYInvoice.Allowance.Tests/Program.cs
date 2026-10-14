@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
     ("g0401 recognizes 4040161 and 4040162 as occupied numbers only", TestG0401DuplicateNumberAsync),
     ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
+    ("Local allowance ledger reserves exactly once and never recycles a number", () => RunSync(TestLocalAllowanceLedger)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -83,6 +84,66 @@ static void TestAllowanceNumberGenerator()
         Enumerable.Range(1, AllowanceNumberGenerator.DailyMaximum)
             .Select(sequence => AllowanceNumberGenerator.Format(date, sequence))
             .Distinct(StringComparer.Ordinal).Count());
+}
+
+static void TestLocalAllowanceLedger()
+{
+    using var temporary = new TemporaryDirectory("local-allowance-ledger");
+    var repository = TestRepository.Open(temporary.Path, new TestProtector());
+    var seller = AmegoDefaults.TestInvoice;
+    const string environment = "production";
+    var date = new DateOnly(2026, 10, 15);
+    var original = ValidAllowanceRequest();
+    var unnumbered = new AllowanceIssueRequest
+    {
+        AllowanceDate = original.AllowanceDate,
+        AllowanceType = original.AllowanceType,
+        BuyerIdentifier = original.BuyerIdentifier,
+        BuyerName = original.BuyerName,
+        ProductItem = original.ProductItem,
+        TaxAmount = original.TaxAmount,
+        TotalAmount = original.TotalAmount,
+    };
+
+    var ledger = new LocalAllowanceNumberStore(repository.DataDirectory);
+    var first = ledger.Reserve(seller, environment, "work-1", date, unnumbered);
+    Equal("A20261015001", first.AllowanceNumber);
+    Equal("reserved", first.Status);
+    using (var document = JsonDocument.Parse(first.PayloadJson))
+        Equal(first.AllowanceNumber, document.RootElement.GetProperty("AllowanceNumber").GetString());
+    // Reopening and reusing a pending Work Item must not burn another number.
+    var reopened = new LocalAllowanceNumberStore(repository.DataDirectory);
+    Equal(first, reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    var second = reopened.Reserve(seller, environment, "work-2", date, unnumbered);
+    Equal("A20261015002", second.AllowanceNumber);
+    ledger.MarkSending(seller, environment, first);
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    Throws<InvalidOperationException>(() => ledger.MarkSending(seller, environment, first));
+    Throws<ArgumentException>(() => ledger.MarkExternalCollision(seller, environment, first, 4040163));
+    ledger.MarkExternalCollision(seller, environment, first, 4040161);
+    Throws<InvalidOperationException>(() => ledger.MarkExternalCollision(seller, environment, first, 4040162));
+    // A confirmed external collision is the only state that authorizes a fresh
+    // number for the SAME immutable Work Item payload.
+    var third = reopened.Reserve(seller, environment, "work-1", date, unnumbered);
+    Equal("A20261015003", third.AllowanceNumber);
+    Throws<InvalidOperationException>(() => reopened.Reserve(
+        seller, environment, "work-1", date.AddDays(1), unnumbered));
+    var changed = new AllowanceIssueRequest
+    {
+        AllowanceDate = unnumbered.AllowanceDate,
+        BuyerIdentifier = unnumbered.BuyerIdentifier,
+        BuyerName = "different",
+        ProductItem = unnumbered.ProductItem,
+        TaxAmount = unnumbered.TaxAmount,
+        TotalAmount = unnumbered.TotalAmount,
+    };
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, changed));
+    ledger.MarkSending(seller, environment, third);
+    ledger.MarkOfficiallyConfirmed(seller, environment, third);
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    // Company, environment and date scopes must stay independent.
+    Equal("A20261015001", reopened.Reserve("87654321", environment, "work-3", date, unnumbered).AllowanceNumber);
+    Equal("A20261015001", reopened.Reserve(seller, "test", "work-4", date, unnumbered).AllowanceNumber);
 }
 
 static AllowanceIssueRequest ValidAllowanceRequest() => new()
