@@ -105,7 +105,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 
 **官方 API 契約注意：**光貿 `/json/g0401` 要求呼叫端必填 `AllowanceNumber`（最長 16 字、不可重複）；公開成功回應只明列 `code`、`msg`，不能假定光貿會自動配號或回傳號碼。CYInvoice 必須自行產生、先保存同一唯一號碼，確保跨機不撞號；逾時只能用**原號**查 `/json/allowance_query`／`/json/allowance_status`。文件：https://invoice.amego.tw/api_doc/ 。
 
-- [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
+**2026-10-15 工程進度（Draft #440，尚未上線）：**已加入 Core 的 `AllowanceIssueRequest`／`AllowanceProductItem`、CSPRNG 80-bit／16 字 `AllowanceNumberGenerator`，與 `IAmegoGateway`／`AmegoClient` 的 `IssueAllowanceAsync`（g0401）／`QueryAllowanceAsync`（allowance_query）／`AllowanceStatusAsync`（allowance_status）及隔離 HTTP 測試。g0401 送出官方要求的 JSON 陣列；code 0 僅代表 API 接受，**不代表財政部上傳完成**。目前**沒有已接線的持久化 Pending Operation、跨機操作撞號防護、官方回查狀態機或 Windows 操作入口**，所以絕不能把下列功能勾完成，也不能直接啟用正式折讓。原人工流程與 g0501 完全未變動。CI 證據應對照本次精確 head；沒有 AMEGO live 驗收。下一步先實作送出前原號＋payload 本機 durable 存證、曾嘗試送出不可自動重送、按原號查回；再做部分／多次折讓金額核對、Work Item 協同及 UI 切換。\n\n- [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
 - [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
