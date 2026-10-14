@@ -126,8 +126,17 @@ static void TestLocalAllowanceLedger()
     // number for the SAME immutable Work Item payload.
     var third = reopened.Reserve(seller, environment, "work-1", date, unnumbered);
     Equal("A20261015003", third.AllowanceNumber);
+    var nextDayTemplate = new AllowanceIssueRequest
+    {
+        AllowanceDate = "20261016",
+        BuyerIdentifier = unnumbered.BuyerIdentifier,
+        BuyerName = unnumbered.BuyerName,
+        ProductItem = unnumbered.ProductItem,
+        TaxAmount = unnumbered.TaxAmount,
+        TotalAmount = unnumbered.TotalAmount,
+    };
     Throws<InvalidOperationException>(() => reopened.Reserve(
-        seller, environment, "work-1", date.AddDays(1), unnumbered));
+        seller, environment, "work-1", date.AddDays(1), nextDayTemplate));
     var changed = new AllowanceIssueRequest
     {
         AllowanceDate = unnumbered.AllowanceDate,
