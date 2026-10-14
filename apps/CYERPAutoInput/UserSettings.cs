@@ -25,6 +25,11 @@ internal sealed class UserSettings
     /// </summary>
     public string ShopeeLabelPrinter { get; set; } = "GG-D410 Printer";
     public int ShopeeLabelScale { get; set; } = 110;
+    /// <summary>
+    /// A4 印表機 (user, 2026-10-14: the Brother) for MO店+ 新竹物流 寄件單 and 到廠取貨總表, printed
+    /// after a prompt to load that paper. Blank = not set.
+    /// </summary>
+    public string A4Printer { get; set; } = string.Empty;
     /// <summary>7-ELEVEN 交貨便服務單 print at 100 % (user, 2026-10-13).</summary>
     public int SevenLabelScale { get; set; } = 100;
     /// <summary>全家 FamilyMart寄取貨單: 頁面 自訂 2, 縮放比例 165 % (user, 2026-10-13).</summary>

@@ -15,7 +15,9 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeOrderType = new();
     private readonly TextBox _shopeeCustomerCode = new();
     private readonly TextBox _shopeeNotePrefix = new();
-    private readonly TextBox _shopeeLabelPrinter = new();
+    // Printers are picked from the ones installed (user, 2026-10-14), or typed.
+    private readonly ComboBox _shopeeLabelPrinter = PrinterBox();
+    private readonly ComboBox _a4Printer = PrinterBox();
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
@@ -169,7 +171,15 @@ internal sealed class SettingsForm : Form
     }
 
     /// <summary>A section of label + input pairs, two pairs per line, aligned in columns.</summary>
-    private static GroupBox Section(string title, params (string Label, TextBox Box, string Value, int Width)[] fields)
+    private static ComboBox PrinterBox()
+    {
+        var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown };
+        try { foreach (string printer in System.Drawing.Printing.PrinterSettings.InstalledPrinters) box.Items.Add(printer); }
+        catch (System.ComponentModel.Win32Exception) { }
+        return box;
+    }
+
+    private static GroupBox Section(string title, params (string Label, Control Box, string Value, int Width)[] fields)
     {
         var box = new GroupBox { Text = title, Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Margin = new Padding(0, 0, 0, 10) };
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, AutoSize = true };
@@ -202,6 +212,9 @@ internal sealed class SettingsForm : Form
         _moPassword.PlaceholderText = _settings.MoPasswordProtected.Length > 0 ? "已設定，空白不變更" : string.Empty;
         // Docked to the top in reverse order: the last added sits highest; TabIndex follows
         // the screen order so Enter/Tab go 蝦皮 → MO店+ → 酷澎 → 共用.
+        page.Controls.Add(Section("印表機（所有平台共用）",
+            ("熱感標籤印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 168),
+            ("A4 印表機", _a4Printer, _settings.A4Printer, 168)));
         page.Controls.Add(Section("共用（所有平台）",
             ("折價券品號", _discountItem, _settings.DiscountItemCode, 120),
             ("運費品號", _shippingItem, _settings.ShippingItemCode, 120),
@@ -219,7 +232,6 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
-            ("寄件單印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 150),
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
@@ -260,7 +272,7 @@ internal sealed class SettingsForm : Form
 
         var fields = new List<Control>();
         for (Control? c = page; (c = page.GetNextControl(c, true)) is not null;)
-            if (c is TextBox or CheckBox && c.Visible && c.Enabled && c.TabStop) fields.Add(c);
+            if (c is TextBox or CheckBox or ComboBox && c.Visible && c.Enabled && c.TabStop) fields.Add(c);
         var focused = fields.FindIndex(f => f.ContainsFocus);
         if (focused < 0 || focused == fields.Count - 1) SaveAndClose();
         else fields[focused + 1].Focus();
@@ -462,6 +474,7 @@ internal sealed class SettingsForm : Form
         _settings.FamilyLabelScale = familyScale;
         _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();
         _settings.ShopeeLabelPrinter = _shopeeLabelPrinter.Text.Trim();
+        _settings.A4Printer = _a4Printer.Text.Trim();
         _settings.ShopeeLabelScale = labelScale;
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();
         _settings.ShopeeCustomerCode = _shopeeCustomerCode.Text.Trim();

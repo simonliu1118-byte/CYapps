@@ -1135,6 +1135,74 @@ internal sealed class MainForm : Form
         MessageBox.Show(this, result, "測試全家裁切列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    /// <summary>
+    /// 測試 MO店+ 新竹列印 (user, 2026-10-14): the 新竹物流 寄件單 (LogisticsLabel) and 到廠取貨總表
+    /// (LogisticsData) PDFs in Temp\test1 printed as MO店+ 全自動 will, before ERP: each after a
+    /// very large 「請在印表機放入…用紙」 and 好了, on the A4 printer.
+    /// </summary>
+    private async Task TestHctA4PrintAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        const string title = "測試 MO店+ 新竹列印";
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "test1");
+        var files = Directory.Exists(folder) ? Directory.GetFiles(folder, "*.pdf") : [];
+        if (files.Length == 0)
+        {
+            MessageBox.Show(this, $"請把新竹物流的寄件單與到廠取貨總表 PDF 放在：\n{folder}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var printer = _settings.A4Printer.Length > 0 ? SlipPrinter.Installed(_settings.A4Printer) : null;
+        if (printer is null)
+        {
+            MessageBox.Show(this, "請先在「設定 › 平台匯入 › 印表機」選好 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        _shopeeBatchRunning = true;
+        var lines = new List<string>();
+        try
+        {
+            var documents = new List<(string File, bool Summary)>();
+            foreach (var file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+                documents.Add((file, await Task.Run(() => MoSlipPdf.IsPickupSummary(file, password))));
+            // 寄件單 first, then 取貨總表.
+            foreach (var (file, summary) in documents.OrderBy(d => d.Summary))
+            {
+                var name = Path.GetFileName(file);
+                var paper = summary ? "取貨總表用紙" : "寄件單用紙";
+                _log.Info("mo-a4", $"test {(summary ? "pickup summary" : "label")} file waits for paper");
+                Alarm(needsPerson: true);
+                using (var prompt = new PaperPromptForm(paper, printer))
+                    if (prompt.ShowDialog(this) != DialogResult.OK)
+                    {
+                        lines.Add($"{name}：已取消，沒有列印。");
+                        break;
+                    }
+                var pages = await MoSlipPdf.RenderPagesAsync(file, password, 300);
+                try
+                {
+                    await Task.Run(() => SlipPrinter.PrintPages(printer, pages, (summary ? "到廠取貨總表 " : "新竹寄件單 ") + name));
+                }
+                finally
+                {
+                    foreach (var page in pages) page.Dispose();
+                }
+                _log.Info("mo-a4", $"test printed pages={pages.Count} {(summary ? "pickup summary" : "label")}");
+                lines.Add($"{name}：{(summary ? "到廠取貨總表" : "寄件單")} {pages.Count} 頁，已送到 {printer}。");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Warn("mo-a4", $"test: {ex.GetType().Name}: {ex.Message}");
+            lines.Add($"失敗：{ex.Message}");
+        }
+        finally
+        {
+            _shopeeBatchRunning = false;
+        }
+        MessageBox.Show(this, string.Join("\n", lines), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     /// <summary>測試蝦皮 7-11 列印 (user, 2026-10-14): the printing part of 全自動 on a 7-11 交貨便 tab opened by hand.</summary>
     private async Task TestSevenPrintAsync()
     {
@@ -1938,6 +2006,7 @@ internal sealed class MainForm : Form
             menu.Items.Add("測試全家裁切列印", null, async (_, _) => await TestFamilyCutAsync());
             menu.Items.Add("測試蝦皮 7-11 列印", null, async (_, _) => await TestSevenPrintAsync());
             menu.Items.Add("測試 MO店+ 寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
+            menu.Items.Add("測試 MO店+ 新竹寄件單／取貨總表列印（Temp\\test1）", null, async (_, _) => await TestHctA4PrintAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")

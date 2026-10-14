@@ -33,11 +33,40 @@ internal static class MoSlipPdf
         return pages;
     }
 
-    private static async Task<GrayImage?> RenderAsync(string path, string password, int index, int dpi)
+    /// <summary>What an A4 新竹物流 PDF is: 到廠取貨總表 (LogisticsData) or 寄件單 (LogisticsLabel), by its text.</summary>
+    public static bool IsPickupSummary(string path, string password)
+    {
+        using var document = PigDocument.Open(path, new PigOptions { Password = password });
+        return document.GetPages().Any(p => p.Text.Contains("到廠取貨總表", StringComparison.Ordinal));
+    }
+
+    /// <summary>Every page drawn by Windows at <paramref name="dpi"/>, for A4 printing.</summary>
+    public static async Task<List<Bitmap>> RenderPagesAsync(string path, string password, int dpi)
+    {
+        var pdf = await OpenAsync(path, password);
+        var pages = new List<Bitmap>();
+        for (uint i = 0; i < pdf.PageCount; i++)
+        {
+            using var page = pdf.GetPage(i);
+            var bytes = await DrawAsync(page, dpi);
+            using var stream = new MemoryStream(bytes);
+            using var loaded = new Bitmap(stream);
+            pages.Add(new Bitmap(loaded));
+        }
+        return pages;
+    }
+
+    /// <summary>Opened with the MO password; a file without one (already opened and saved) opens without.</summary>
+    private static async Task<PdfDocument> OpenAsync(string path, string password)
     {
         var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
-        var pdf = password.Length > 0 ? await PdfDocument.LoadFromFileAsync(file, password) : await PdfDocument.LoadFromFileAsync(file);
-        using var page = pdf.GetPage((uint)index);
+        if (password.Length == 0) return await PdfDocument.LoadFromFileAsync(file);
+        try { return await PdfDocument.LoadFromFileAsync(file, password); }
+        catch (Exception) { return await PdfDocument.LoadFromFileAsync(file); }
+    }
+
+    private static async Task<byte[]> DrawAsync(PdfPage page, int dpi)
+    {
         using var stream = new InMemoryRandomAccessStream();
         // Page size is in 1/96 inch.
         await page.RenderToStreamAsync(stream, new PdfPageRenderOptions { DestinationWidth = (uint)Math.Round(page.Size.Width / 96.0 * dpi) });
@@ -46,6 +75,13 @@ internal static class MoSlipPdf
         await reader.LoadAsync(length);
         var bytes = new byte[length];
         reader.ReadBytes(bytes);
-        return SlipPrinter.Load(bytes);
+        return bytes;
+    }
+
+    private static async Task<GrayImage?> RenderAsync(string path, string password, int index, int dpi)
+    {
+        var pdf = await OpenAsync(path, password);
+        using var page = pdf.GetPage((uint)index);
+        return SlipPrinter.Load(await DrawAsync(page, dpi));
     }
 }

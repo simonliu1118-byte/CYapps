@@ -147,6 +147,37 @@ internal static partial class SlipPrinter
     private static partial Regex MhtmlPicture();
 
     /// <summary>
+    /// A4 pages (drawn from a PDF) printed as one document, each fitted to the printable area and
+    /// centred, as Acrobat's 符合 does (user's screenshot, 2026-10-14: 96 %).
+    /// </summary>
+    public static void PrintPages(string printer, IReadOnlyList<Bitmap> pages, string documentName)
+    {
+        using var doc = new PrintDocument();
+        doc.PrinterSettings.PrinterName = printer;
+        if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
+        doc.DocumentName = documentName;
+        doc.PrintController = new StandardPrintController();
+        doc.OriginAtMargins = false;
+        var next = 0;
+        doc.PrintPage += (_, e) =>
+        {
+            var g = e.Graphics!;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            var page = pages[next];
+            var area = e.PageSettings.PrintableArea; // 1/100 inch, from the paper's corner
+            if (e.PageSettings.Landscape) area = new RectangleF(area.Y, area.X, area.Height, area.Width);
+            var scale = Math.Min(area.Width / page.Width, area.Height / page.Height);
+            var w = page.Width * scale;
+            var h = page.Height * scale;
+            // The graphics start at the printable area's corner.
+            g.DrawImage(page, (area.Width - w) / 2, (area.Height - h) / 2, w, h);
+            next++;
+            e.HasMorePages = next < pages.Count;
+        };
+        doc.Print();
+    }
+
+    /// <summary>
     /// Prints the slip as one page: each of its pixels one printer dot (GraphicsUnit.Pixel,
     /// nearest neighbour), centred on the page. No progress window.
     /// </summary>
