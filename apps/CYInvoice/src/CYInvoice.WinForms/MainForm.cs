@@ -88,7 +88,7 @@ internal sealed class MainForm : Form
         autoInputPipe = new AutoInputPipeServer(new AutoInputProcessor(repository, service), () =>
         {
             if (!IsDisposed && IsHandleCreated)
-                BeginInvoke((Action)(() => { if (!IsDisposed) recordsPage.Reload(); }));
+                BeginInvoke((Action)(() => { if (!IsDisposed) recordsPage?.Reload(); }));
         });
         var syncService = new InvoiceSyncService(repository);
         var automaticSyncService = new InvoiceAutomaticSyncService(repository, syncService);
