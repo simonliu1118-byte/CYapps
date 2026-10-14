@@ -500,9 +500,17 @@ internal sealed class ShopeeBatchRunner
             var labelSn = ShopeeBatchScreens.LabelOrderSn(awb.Boxes);
             var labelTracking = ShopeeBatchScreens.LabelTracking(awb.Boxes);
             // The PDF's own text can leave lines out or map a letter wrong (user's LOG,
-            // 2026-10-14: a 隔日到貨 label had no 蝦皮訂單編號 in its text at all): then the
-            // label as drawn is read with OCR, and both numbers are taken from what is seen.
-            if (labelSn != order.OrderSn || labelTracking.Length > 0 && !ShopeeBatchScreens.SameTracking(labelTracking, order.Tracking))
+            // 2026-10-14: a 隔日到貨 label had no 蝦皮訂單編號 in its text at all): when neither
+            // number settles it, the label as drawn is read with OCR.
+            // The 寄件編號 is the order's own (the order page's dialog gave it), so the label's text
+            // showing it is enough without the 訂單編號 (user, 2026-10-14: page text is fast, OCR slow).
+            var textTracks = labelTracking.Length > 0 && ShopeeBatchScreens.SameTracking(labelTracking, order.Tracking);
+            if (labelSn.Length == 0 && textTracks)
+            {
+                _log.Info("shopee-batch", "label text has no order number; its 寄件編號 matches the order's");
+                labelSn = order.OrderSn;
+            }
+            if (labelSn != order.OrderSn || labelTracking.Length > 0 && !textTracks)
             {
                 _log.Info("shopee-batch", $"label text order_found={labelSn.Length > 0} order_match={labelSn == order.OrderSn} tracking_found={labelTracking.Length > 0}; reading the label with OCR");
                 var seen = await ReadLabelAsync(awb);
