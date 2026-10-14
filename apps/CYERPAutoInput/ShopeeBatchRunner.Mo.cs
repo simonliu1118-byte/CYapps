@@ -95,7 +95,11 @@ internal sealed partial class ShopeeBatchRunner
             done.Add(kind);
             await SaveRecordDocumentsAsync(kind, top.Method, top.Orders, since: null, result);
         }
-        while (true)
+        // Back to 批次出貨 only while a 配送方式 read there is still to do; after the last one
+        // straight to 我的訂單 › 配送中 (user, 2026-10-14). The 測試 from the record does just
+        // that one.
+        List<MoShipMethod>? pending = atRecord ? [] : null;
+        while (pending is not { Count: 0 })
         {
             status($"MO店+ 全自動：批次出貨（已出貨 {result.Shipped} 筆）…");
             var methods = await OpenBatchShipAsync();
@@ -104,11 +108,13 @@ internal sealed partial class ShopeeBatchRunner
                 var note = $"配送方式「{other.Name}」有 {other.Count} 筆，程式不處理，請人工出貨。";
                 if (!result.Notes.Contains(note)) result.Notes.Add(note);
             }
-            var next = methods.Where(m => m.Kind != MoShipKind.Other).OrderBy(m => m.Kind).FirstOrDefault();
-            if (next is null) break;
+            var todo = methods.Where(m => m.Kind != MoShipKind.Other).OrderBy(m => m.Kind).ToList();
+            if (todo.Count == 0) break;
+            var next = todo[0];
             if (!done.Add(next.Kind))
                 throw new ShopeeBatchStop($"「{next.Name}」批次出貨之後還有 {next.Count} 筆未出貨，請人工確認。", true);
             await ShipMethodAsync(next, batchOrders, result);
+            pending = todo.Skip(1).ToList();
         }
 
         // 8. 配送中 export (user, 2026-10-14: from 配送中).
@@ -187,8 +193,8 @@ internal sealed partial class ShopeeBatchRunner
         }
         // The 配送方式 row is what matters here (user, 2026-10-14: read its counts, then go in).
         static bool IsBatchShip(Screen s) => MoBatchScreens.Text(s.Boxes, "配送方式") is not null && MoBatchScreens.Filter(s.Boxes, "處理提醒", "全部") is not null;
-        // From 批次出貨記錄 the left menu may do nothing (user LOG 2026-10-14: the record stayed):
-        // then another 批次出貨 (a tab) or 返回, the browser's back, a reload.
+        // From 批次出貨記錄 (the next 配送方式) the left menu may do nothing (LOG 2026-10-14: the
+        // record stayed): then another 批次出貨 (a tab) or 返回, the browser's back, a reload.
         for (var step = 0; step < 3; step++)
         {
             var (ready, _) = await WaitOrNullAsync(6, s => IsBatchShip(s) ? s : null);

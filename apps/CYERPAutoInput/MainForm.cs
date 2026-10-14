@@ -1493,7 +1493,7 @@ internal sealed class MainForm : Form
                 MessageBox.Show(this, "找不到之前存下的未出貨訂單匯出檔（Temp\\mo-…）。請先從頭跑一次 MO店+ 全自動。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「{(atRecord ? "批次出貨記錄最上面那一筆" : "批次出貨")}」接著做：{(atRecord ? "存標籤、其他配送方式批次出貨" : "逐一批次出貨、存標籤")}、配送中匯出、列印、帶入匯出檔、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
+            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「{(atRecord ? "批次出貨記錄最上面那一筆" : "批次出貨")}」接著做：{(atRecord ? "存這一筆的標籤（其他配送方式不做）" : "逐一批次出貨、存標籤")}、配送中匯出、帶入匯出檔預覽（填發票）、列印、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
                     title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
             resumeBefore = latest.File;
@@ -1504,8 +1504,9 @@ internal sealed class MainForm : Form
                 "1. 我的訂單 › 未出貨：匯出報表（開發票用）\n" +
                 "2. 批次出貨：新竹貨運、7-11店出、全家店出各自全選 → 批次出貨（併箱）→ 確認出貨，存下標籤（新竹另存出貨總表）\n" +
                 "3. 我的訂單 › 配送中：匯出報表（物流單號）\n" +
-                "4. 列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙\n" +
-                "5. 帶入兩個匯出檔 → 預覽（請填發票資料）→ 輸入 ERP\n\n" +
+                "4. 帶入兩個匯出檔 → 預覽（請填發票資料）\n" +
+                "5. 按開始後先列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙\n" +
+                "6. 輸入 ERP\n\n" +
                 "其他配送方式（倉出、冷凍等）不處理，會列在結果裡。網頁操作期間請勿操作電腦，按 Esc 可停止。\n\n要開始嗎？",
                 title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1564,7 +1565,8 @@ internal sealed class MainForm : Form
             return;
         }
 
-        // Documents before ERP (user, 2026-10-14), kept for 重新列印. A printer error does not
+        // Documents after the preview, before ERP (user, 2026-10-14: a paper invoice may be printed
+        // in the same step), kept for 重新列印. A printer error does not
         // stop the run (user, 2026-10-14): it is noted and the document can be reprinted; only
         // 停止 on the paper prompt stops.
         var printed = new List<string>();
@@ -1586,71 +1588,84 @@ internal sealed class MainForm : Form
             }
             return true;
         }
-        var go = true;
-        foreach (var (kind, file) in result.Labels.Where(l => l.Kind != MoShipKind.Hct))
+        var voidNotes = new List<string>();
+        async Task<bool> PrintAllAsync()
         {
-            var name = kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven;
-            SetStatus($"MO店+ 全自動：列印{name}…");
-            await Print(name, file, async () => $"{(await PrintMoSlipsAsync(file, thermal, password)).Printed} 張");
-        }
-        foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
-        {
-            if (!go) break;
-            go = await Print(MoPrintedDocument.HctLabel, file, async () => await PrintA4Async(file, summary: false, a4, password) is { } pages ? $"{pages} 頁" : null);
-        }
-        // All of a sheet's orders printed before → not again; some → printed, the earlier
-        // sheet to be voided (user, 2026-10-14).
-        var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
-        foreach (var file in result.Summaries)
-        {
-            if (!go) break;
-            List<string> numbers;
-            try { numbers = MoPickupSummary.Read(file, password); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { _log.Warn("mo-batch", $"pickup summary unread: {ex.Message}"); numbers = []; }
-            var (print, voided) = MoPickupSummary.Decide(numbers, sheets.AlreadyPrinted(numbers));
-            _log.Info("mo-batch", $"pickup summary orders={numbers.Count} print={print} void={voided.Count}");
-            if (!print)
+            var go = true;
+            foreach (var (kind, file) in result.Labels.Where(l => l.Kind != MoShipKind.Hct))
             {
-                printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", numbers)} 的總表都已印過）");
-                continue;
+                var name = kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven;
+                SetStatus($"MO店+ 全自動：列印{name}…");
+                await Print(name, file, async () => $"{(await PrintMoSlipsAsync(file, thermal, password)).Printed} 張");
             }
-            var ok = false;
-            go = await Print(MoPrintedDocument.Summary, file, async () =>
+            foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
             {
-                if (await PrintA4Async(file, summary: true, a4, password) is not { } pages) return null;
-                ok = true;
-                return $"{pages} 頁，{numbers.Count} 筆";
-            });
-            if (!ok) continue;
-            sheets.Record(numbers);
-            if (voided.Count > 0)
-                result.Notes.Insert(0, $"【請作廢舊的到廠取貨總表】宅配單號 {string.Join("、", voided)} 先前印的總表已由這次的新總表取代（新總表含 {numbers.Count} 筆），舊的那張請作廢。");
-        }
-        if (!go)
-        {
-            // What was not printed is listed for 重新列印 too.
-            foreach (var (kind, file) in result.Labels.Select(l => (l.Kind == MoShipKind.Hct ? MoPrintedDocument.HctLabel : l.Kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven, l.Path))
-                         .Concat(result.Summaries.Select(f => (MoPrintedDocument.Summary, f))))
-                if (!documents.Any(d => d.File == file)) documents.Add(new MoPrintedDocument(kind, file, DateTime.Now, "未印"));
+                if (!go) break;
+                go = await Print(MoPrintedDocument.HctLabel, file, async () => await PrintA4Async(file, summary: false, a4, password) is { } pages ? $"{pages} 頁" : null);
+            }
+            // All of a sheet's orders printed before → not again; some → printed, the earlier
+            // sheet to be voided (user, 2026-10-14).
+            var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
+            foreach (var file in result.Summaries)
+            {
+                if (!go) break;
+                List<string> numbers;
+                try { numbers = MoPickupSummary.Read(file, password); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _log.Warn("mo-batch", $"pickup summary unread: {ex.Message}"); numbers = []; }
+                var (print, voided) = MoPickupSummary.Decide(numbers, sheets.AlreadyPrinted(numbers));
+                _log.Info("mo-batch", $"pickup summary orders={numbers.Count} print={print} void={voided.Count}");
+                if (!print)
+                {
+                    printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", numbers)} 的總表都已印過）");
+                    continue;
+                }
+                var ok = false;
+                go = await Print(MoPrintedDocument.Summary, file, async () =>
+                {
+                    if (await PrintA4Async(file, summary: true, a4, password) is not { } pages) return null;
+                    ok = true;
+                    return $"{pages} 頁，{numbers.Count} 筆";
+                });
+                if (!ok) continue;
+                sheets.Record(numbers);
+                if (voided.Count > 0)
+                    voidNotes.Add($"【請作廢舊的到廠取貨總表】宅配單號 {string.Join("、", voided)} 先前印的總表已由這次的新總表取代（新總表含 {numbers.Count} 筆），舊的那張請作廢。");
+            }
+            if (!go)
+            {
+                // What was not printed is listed for 重新列印 too.
+                foreach (var (kind, file) in result.Labels.Select(l => (l.Kind == MoShipKind.Hct ? MoPrintedDocument.HctLabel : l.Kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven, l.Path))
+                             .Concat(result.Summaries.Select(f => (MoPrintedDocument.Summary, f))))
+                    if (!documents.Any(d => d.File == file)) documents.Add(new MoPrintedDocument(kind, file, DateTime.Now, "未印"));
+                MoPrintedDocuments.Save(folder, documents);
+                _log.Info("mo-batch", "stopped on the paper prompt");
+                MessageBox.Show(this, $"已在放紙提醒按停止。已出貨 {result.Shipped} 筆；檔案在：{folder}\n沒印的寄件單可用「重新列印寄件單」或到 MO店+ 後台列印，再用「匯入訂單匯出檔」接續打單。",
+                    title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
             MoPrintedDocuments.Save(folder, documents);
-            _log.Info("mo-batch", "stopped on the paper prompt");
-            MessageBox.Show(this, $"已在放紙提醒按停止。已出貨 {result.Shipped} 筆；檔案在：{folder}\n沒印的寄件單可用「重新列印寄件單」或到 MO店+ 後台列印，再用「匯入訂單匯出檔」接續打單。",
-                title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
+            if (voidNotes.Count > 0)
+                MessageBox.Show(this, string.Join("\n", voidNotes), title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return true;
         }
-        MoPrintedDocuments.Save(folder, documents);
-        _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
 
-        // The two exports into the import, then the preview and ERP.
+        // Listed for 重新列印 even when the preview is closed before anything is printed.
+        MoPrintedDocuments.Save(folder, [.. result.Labels.Select(l => new MoPrintedDocument(l.Kind == MoShipKind.Hct ? MoPrintedDocument.HctLabel : l.Kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven, l.Path, DateTime.Now, "未印")),
+            .. result.Summaries.Select(f => new MoPrintedDocument(MoPrintedDocument.Summary, f, DateTime.Now, "未印"))]);
+
+        // The two exports into the import, then the preview, the printing and ERP.
         using var files = new MoImportForm(Read);
         files.Preload([result.Before, .. result.After is null ? Array.Empty<string>() : [result.After]]);
-        var notes = new List<string>(result.Notes) { $"已出貨 {result.Shipped} 筆；已列印：{string.Join("、", printed.DefaultIfEmpty("無"))}" };
-        MessageBox.Show(this, string.Join("\n", notes) + "\n\n接著確認兩個匯出檔並按「下一步」，在預覽填好發票資料後輸入 ERP。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        var notes = new List<string>(result.Notes) { $"已出貨 {result.Shipped} 筆。" };
+        MessageBox.Show(this, string.Join("\n", notes) + "\n\n接著確認兩個匯出檔並按「下一步」，在預覽填好發票資料；開始輸入 ERP 前會先列印寄件單。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
         if (files.ShowDialog(this) != DialogResult.OK) return;
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. files.Notes, .. result.Notes]);
+        var printedOnce = false;
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. files.Notes, .. result.Notes],
+            async () => printedOnce || (printedOnce = await PrintAllAsync()));
 
         // Once every order of the batch is saved the exports go (user, 2026-10-13); the printed
         // documents stay 7 days for 重新列印 (user, 2026-10-14).
@@ -1804,8 +1819,9 @@ internal sealed class MainForm : Form
         return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }
 
+    /// <param name="beforeErp">Run once the preview is confirmed, before ERP (MO店+ 全自動: printing); false stops.</param>
     private async Task PreviewAndRunAsync(string source, string fileName, List<ImportedOrder> orders, IReadOnlyList<string> errors,
-        IReadOnlyList<string>? notes = null)
+        IReadOnlyList<string>? notes = null, Func<Task<bool>>? beforeErp = null)
     {
         var ledger = LoadLedger();
         if (ledger is null) return;
@@ -1816,6 +1832,7 @@ internal sealed class MainForm : Form
         // in (user, 2026-10-12: MO店+ and 酷澎 invoice details were lost).
         while (preview.ShowDialog(this) == DialogResult.OK)
         {
+            if (preview.Action is OrderImportAction.StartSelected or OrderImportAction.RunAll && beforeErp is not null && !await beforeErp()) return;
             if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
             {
                 LoadOrder(preview.SelectedOrder);
