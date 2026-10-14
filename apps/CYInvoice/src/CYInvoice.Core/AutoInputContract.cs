@@ -41,7 +41,7 @@ public static class AutoInputContract
         List<string>? ids = null;
         if (root.TryGetProperty("orderIds", out var orders))
         {
-            if (orders.ValueKind != JsonValueKind.Array || orders.GetArrayLength() > MaxOrderCount)
+            if (orders.ValueKind != JsonValueKind.Array || orders.GetArrayLength() is < 1 or > MaxOrderCount)
                 throw new InvalidDataException("Invalid AutoInput orderIds.");
             ids = new List<string>(orders.GetArrayLength());
             var seen = new HashSet<string>(StringComparer.Ordinal);
