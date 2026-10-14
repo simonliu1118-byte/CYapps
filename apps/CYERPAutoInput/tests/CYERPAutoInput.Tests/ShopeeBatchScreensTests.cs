@@ -320,4 +320,42 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.SameOrderSn("261014AB12CDO4", "261014AB12CD04"));
         Assert.False(ShopeeBatchScreens.SameOrderSn("261014AB12CD35", "261014AB12CD34"));
     }
+
+    [Fact]
+    public void Hct_pickup_dialog_checks_the_set_address_and_finds_confirm()
+    {
+        Assert.Equal(ShopeeBatchCarrier.Hct, ShopeeBatchScreens.CarrierKind("新竹物流"));
+        // Laid out like the user's 安排取件 dialog (2026-10-14); name, phone and address are made up.
+        var dialog = new List<OcrBox>
+        {
+            B("安排取件", 46, 50, 90, 26), B("買家取件物流", 46, 105, 100), B("新竹物流", 46, 135, 70),
+            B("最快取件日期", 46, 186, 100), B("14-10-2026", 60, 228, 80), B("註記", 46, 315, 40), B("Input", 60, 348, 40),
+            B("快遞向你取件的地址", 46, 410, 150), B("王小明 0900000000", 64, 460, 160), B("取件", 214, 460, 30), B("變更", 249, 460, 30),
+            B("100 臺北市中正區測試路1號", 64, 485, 200),
+            B("成功安排取件後，請列印寄件單，並將寄件單黏貼至包裹外箱上，否則快遞將無法成功取件。", 60, 560, 580),
+            B("取消", 484, 636, 78, 34), B("確認", 574, 636, 78, 34)
+        };
+        Assert.True(ShopeeBatchScreens.PickupAddressMatches(dialog, "100 臺北市中正區測試路1號"));
+        Assert.True(ShopeeBatchScreens.PickupAddressMatches(dialog, "100臺北市中正區測試路1號"));
+        Assert.False(ShopeeBatchScreens.PickupAddressMatches(dialog, "100 臺北市中正區測試路2號"));
+        Assert.False(ShopeeBatchScreens.PickupAddressMatches(dialog, ""));
+        Assert.Equal("確認", ShopeeBatchScreens.PickupConfirmButton(dialog)!.Text);
+        Assert.Equal("取消", ShopeeBatchScreens.PickupCancelButton(dialog)!.Text);
+        // The order page alone (its own 安排取件 button) is not the dialog.
+        Assert.Null(ShopeeBatchScreens.PickupConfirmButton([B("待出貨", 310, 120, 60), B("不成立訂單", 986, 226, 112, 34), B("安排取件", 1109, 226, 98, 34)]));
+
+        var details = new List<OcrBox> { B("快遞取件詳情", 54, 50, 130, 26), B("506 371 934 5", 324, 108, 130, 26), B("列印寄件單", 546, 782, 112, 34) };
+        Assert.NotNull(ShopeeBatchScreens.TrackingDialogTitle(details));
+        Assert.Equal("5063719345", ShopeeBatchScreens.DialogTracking(details));
+    }
+
+    [Fact]
+    public void Hct_label_prints_the_numbers_bare()
+    {
+        var label = new List<OcrBox> { B("宅配", 776, 305, 30), B("5063719345", 890, 302, 90), B("261013AB12CD34", 795, 452, 130), B("王小明", 795, 470, 50) };
+        Assert.Equal("", ShopeeBatchScreens.LabelOrderSn(label));
+        Assert.True(ShopeeBatchScreens.ShowsOrderSn(label, "261013AB12CD34"));
+        Assert.True(ShopeeBatchScreens.ShowsNumber(label, "5063719345"));
+        Assert.True(ShopeeBatchScreens.ShowsOrderSnLoosely([B("261013AB12CDO4", 0, 0, 130)], "261013AB12CD04"));
+    }
 }

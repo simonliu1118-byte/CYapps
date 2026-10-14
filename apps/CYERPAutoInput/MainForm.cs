@@ -1004,7 +1004,7 @@ internal sealed class MainForm : Form
         }
         if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流為「安排取件」，取件地址須與設定相同）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%、新竹 " + _settings.HctLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
                 "目前只處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN 與全家；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
@@ -1020,7 +1020,8 @@ internal sealed class MainForm : Form
         Session.Begin(AutomationSession.BatchTitle);
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
-            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages), token);
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), token);
         var outcome = AutomationOutcome.Stopped;
         string? problem = null;
         var shipped = false;

@@ -15,7 +15,8 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// last print's settings (user, 2026-10-13: after a 全家 label the next one would print page 2
 /// at 165 %), so every label sets them again.
 /// </summary>
-internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages);
+internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
+    int HctScale = 95, string HctPickupAddress = "");
 
 /// <summary>
 /// An order left for a person without stopping the batch (user, 2026-10-13: note it, go on,
@@ -440,12 +441,15 @@ internal sealed class ShopeeBatchRunner
             // before anything is shipped.
             if (kind == ShopeeBatchCarrier.Other)
                 throw new ShopeeBatchSkip($"未出貨：物流「{carrier}」程式還沒有出貨流程，請人工處理。");
+            if (kind == ShopeeBatchCarrier.Hct && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
+                throw new ShopeeBatchSkip("未出貨：新竹物流要先在「設定 › 平台匯入 › 蝦皮」填入「新竹取件地址」，請人工處理。");
             order.Kind = kind;
             order.Carrier = carrier;
             if (!Orange(detail.Image, button))
                 throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「{button.Text.Trim()}」按鈕顏色不對，為避免按錯已停止。");
             Click(detail, button, button.Text.Trim());
         }
+        if (order.Kind == ShopeeBatchCarrier.Hct) await ConfirmPickupAsync(order);
         order.Shipped = true;
         _shippedHint = true;
 
@@ -484,11 +488,30 @@ internal sealed class ShopeeBatchRunner
         await CloseTrackingDialogAsync();
     }
 
+    /// <summary>
+    /// 新竹物流 安排取件 (user, 2026-10-14): the dialog's 快遞向你取件的地址 must be the set address
+    /// before its 確認 is pressed; otherwise 取消 and the order is left for a person, unshipped.
+    /// </summary>
+    private async Task ConfirmPickupAsync(ShopeeBatchOrder order)
+    {
+        var (dialog, confirm) = await WaitAsync("「安排取件」視窗", 30, s => ShopeeBatchScreens.PickupConfirmButton(s.Boxes));
+        using (dialog)
+        {
+            if (!ShopeeBatchScreens.PickupAddressMatches(dialog.Boxes, _print.HctPickupAddress))
+            {
+                _log.Info("shopee-batch", "pickup address is not the set one; cancelled");
+                if (ShopeeBatchScreens.PickupCancelButton(dialog.Boxes) is { } cancel) Click(dialog, cancel, "取消（安排取件）");
+                await Task.Delay(800, _token);
+                throw new ShopeeBatchSkip("未出貨：「安排取件」視窗的取件地址與設定的「新竹取件地址」不同，已按取消，請人工處理。");
+            }
+            Click(dialog, confirm, "確認（安排取件）");
+        }
+        _log.Info("shopee-batch", $"pickup confirmed order={_log.Value(order.OrderSn)}");
+    }
+
     /// <summary>Shopee's 預覽列印 tab: 下載出貨文件中 → 下載完成 → checked → 列印出貨文件 → Chrome's print dialog.</summary>
     private async Task PrintShopeeLabelAsync(ShopeeBatchOrder order)
     {
-        // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
-        // 17 with the label's 訂單編號), so the label's order number is waited for too.
         // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
         // 17 with the label), so the label's page is waited for too.
         var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s =>
@@ -499,6 +522,9 @@ internal sealed class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"出貨文件下載結果不對（成功 {download.Done}/{download.Total}，失敗 {download.Failed}）。", true);
             var labelSn = ShopeeBatchScreens.LabelOrderSn(awb.Boxes);
             var labelTracking = ShopeeBatchScreens.LabelTracking(awb.Boxes);
+            // 新竹物流 labels print both numbers bare, without 訂單編號／寄件編號 (user, 2026-10-14).
+            if (labelSn.Length == 0 && ShopeeBatchScreens.ShowsOrderSn(awb.Boxes, order.OrderSn)) labelSn = order.OrderSn;
+            if (labelTracking.Length == 0 && ShopeeBatchScreens.ShowsNumber(awb.Boxes, order.Tracking)) labelTracking = order.Tracking;
             // The PDF's own text can leave lines out or map a letter wrong (user's LOG,
             // 2026-10-14: a 隔日到貨 label had no 蝦皮訂單編號 in its text at all): when neither
             // number settles it, the label as drawn is read with OCR.
@@ -515,7 +541,9 @@ internal sealed class ShopeeBatchRunner
                 _log.Info("shopee-batch", $"label text order_found={labelSn.Length > 0} order_match={labelSn == order.OrderSn} tracking_found={labelTracking.Length > 0}; reading the label with OCR");
                 var seen = await ReadLabelAsync(awb);
                 var seenSn = ShopeeBatchScreens.LabelOrderSn(seen);
+                if (seenSn.Length == 0 && ShopeeBatchScreens.ShowsOrderSnLoosely(seen, order.OrderSn)) seenSn = order.OrderSn;
                 var seenTracking = ShopeeBatchScreens.LabelTracking(seen);
+                if (seenTracking.Length == 0 && ShopeeBatchScreens.ShowsNumber(seen, order.Tracking)) seenTracking = order.Tracking;
                 _log.Info("shopee-batch", $"label OCR order_match={ShopeeBatchScreens.SameOrderSn(seenSn, order.OrderSn)} tracking_match={seenTracking.Length > 0 && ShopeeBatchScreens.SameTracking(seenTracking, order.Tracking)}");
                 if (ShopeeBatchScreens.SameOrderSn(seenSn, order.OrderSn)) labelSn = order.OrderSn;
                 else if (seenSn.Length > 0) labelSn = seenSn;
@@ -528,7 +556,7 @@ internal sealed class ShopeeBatchRunner
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
-        await PrintDialogAsync(_print.ShopeeScale, pages: null);
+        await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
     }
 
     /// <summary>The label as drawn (the PDF viewer's page, else the page under the header), read with OCR at twice the size.</summary>

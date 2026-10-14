@@ -20,6 +20,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _sevenLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
     private readonly TextBox _familyLabelPages = new();
+    private readonly TextBox _hctLabelScale = new();
+    private readonly TextBox _hctPickupAddress = new();
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -215,7 +217,9 @@ internal sealed class SettingsForm : Form
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60)));
+            ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
+            ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -377,6 +381,15 @@ internal sealed class SettingsForm : Form
             _familyLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_hctLabelScale.Text.Trim(), out var hctScale) || hctScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "新竹縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            _hctLabelScale.Focus();
+            return;
+        }
+        _settings.HctLabelScale = hctScale;
+        _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
         _settings.SevenLabelScale = sevenScale;
         _settings.FamilyLabelScale = familyScale;
         _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();

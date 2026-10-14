@@ -30,6 +30,13 @@ internal sealed class UserSettings
     /// <summary>全家 FamilyMart寄取貨單: 頁面 自訂 2, 縮放比例 165 % (user, 2026-10-13).</summary>
     public int FamilyLabelScale { get; set; } = 165;
     public string FamilyLabelPages { get; set; } = "2";
+    /// <summary>新竹物流 (安排取件) labels print at 95 % (user, 2026-10-14).</summary>
+    public int HctLabelScale { get; set; } = 95;
+    /// <summary>
+    /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
+    /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.
+    /// </summary>
+    public string HctPickupAddress { get; set; } = string.Empty;
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;

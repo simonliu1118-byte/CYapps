@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -138,6 +138,8 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("7ELEVEN", StringComparison.Ordinal) || text.Contains("711", StringComparison.Ordinal) || text.Contains("統一超商", StringComparison.Ordinal))
             return ShopeeBatchCarrier.SevenEleven;
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
+        // 新竹物流 is 安排取件 (user, 2026-10-14): a pickup at the set address, then Shopee's label.
+        if (text.Contains("新竹", StringComparison.Ordinal) || text.Contains("HCT", StringComparison.Ordinal)) return ShopeeBatchCarrier.Hct;
         return ShopeeBatchCarrier.Other;
     }
 
@@ -188,8 +190,47 @@ internal static partial class ShopeeBatchScreens
 
     // ---- 查看寄件編號 ----
 
+    /// <summary>The number's dialog: 查看寄件編號, or 快遞取件詳情 after a 新竹物流 pickup (user, 2026-10-14).</summary>
     public static OcrBox? TrackingDialogTitle(IReadOnlyList<OcrBox> boxes) =>
-        boxes.FirstOrDefault(b => C(b) == "查看寄件編號");
+        boxes.FirstOrDefault(b => C(b) is "查看寄件編號" or "快遞取件詳情");
+
+    // ---- 安排取件 (新竹物流, user 2026-10-14) ----
+
+    /// <summary>The 安排取件 dialog, loaded: its 快遞向你取件的地址 card is there.</summary>
+    public static OcrBox? PickupAddressLabel(IReadOnlyList<OcrBox> boxes) =>
+        boxes.FirstOrDefault(b => C(b) == "快遞向你取件的地址");
+
+    /// <summary>
+    /// Whether the dialog's pickup address is the one set (spaces ignored): the card under
+    /// 快遞向你取件的地址 must contain it.
+    /// </summary>
+    public static bool PickupAddressMatches(IReadOnlyList<OcrBox> boxes, string address)
+    {
+        var label = PickupAddressLabel(boxes);
+        var wanted = ShopeeScreenshot.Compact(address);
+        if (label is null || wanted.Length < 6) return false;
+        var card = string.Concat(boxes.Where(b => b.Top > label.Bottom - 2 && b.Top < label.Bottom + 140 && b.Left >= label.Left - 20)
+            .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+        return card.Contains(wanted, StringComparison.Ordinal);
+    }
+
+    /// <summary>The dialog's 確認: below the address, on the row of 取消 and right of it.</summary>
+    public static OcrBox? PickupConfirmButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var label = PickupAddressLabel(boxes);
+        if (label is null) return null;
+        var cancel = boxes.Where(b => C(b) == "取消" && b.Top > label.Bottom).OrderByDescending(b => b.Top).FirstOrDefault();
+        if (cancel is null) return null;
+        var confirm = boxes.Where(b => C(b) == "確認" && SameRow(b, cancel) && b.Left > cancel.Right).ToList();
+        return confirm.Count == 1 ? confirm[0] : null;
+    }
+
+    /// <summary>The dialog's 取消 (to leave it untouched when the address is not the set one).</summary>
+    public static OcrBox? PickupCancelButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var label = PickupAddressLabel(boxes);
+        return label is null ? null : boxes.Where(b => C(b) == "取消" && b.Top > label.Bottom).OrderByDescending(b => b.Top).FirstOrDefault();
+    }
 
     /// <summary>The dialog's × when the OCR reads it (an X on the title's row, right of it).</summary>
     public static OcrBox? DialogCloseMark(IReadOnlyList<OcrBox> boxes, OcrBox title) =>
@@ -279,10 +320,10 @@ internal static partial class ShopeeBatchScreens
     public static OcrBox? LabelPageBox(IReadOnlyList<OcrBox> boxes) =>
         boxes.Where(b => PageNumberPattern().IsMatch(C(b)) && b.Width >= 100 && b.Height >= 100).OrderBy(b => b.Top).FirstOrDefault();
 
-    /// <summary>Two readings of one order number; OCR may read the letters O, I, L for 0, 1, 1.</summary>
+    /// <summary>Two readings of one order number; OCR may read O／Q for 0 and I／L for 1.</summary>
     public static bool SameOrderSn(string a, string b)
     {
-        static string N(string s) => s.ToUpperInvariant().Replace('O', '0').Replace('I', '1').Replace('L', '1');
+        static string N(string s) => s.ToUpperInvariant().Replace('O', '0').Replace('Q', '0').Replace('I', '1').Replace('L', '1');
         return a.Length == 14 && N(a) == N(b);
     }
 
@@ -328,6 +369,10 @@ internal static partial class ShopeeBatchScreens
 
     public static bool IsFamilyLabelPage(IReadOnlyList<OcrBox> boxes) =>
         boxes.Any(b => C(b).ToUpperInvariant().Contains("FAMILYMART", StringComparison.Ordinal) || C(b).Contains("寄取貨單", StringComparison.Ordinal));
+
+    /// <summary>The order's number anywhere, read loosely (OCR's O／Q／0, I／L／1): 新竹物流 labels print it bare.</summary>
+    public static bool ShowsOrderSnLoosely(IReadOnlyList<OcrBox> boxes, string orderSn) =>
+        boxes.Any(b => SameOrderSn(OrderSnIn(C(b)), orderSn));
 
     /// <summary>The order's number anywhere on the page (全家 prints it on the line under 蝦皮訂單編號).</summary>
     public static bool ShowsOrderSn(IReadOnlyList<OcrBox> boxes, string orderSn) => boxes.Any(b => OrderSnIn(C(b)) == orderSn);
