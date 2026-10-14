@@ -20,7 +20,22 @@ public class MoPickupSummaryTests
     }
 
     [Fact]
-    public void A_sheet_with_an_order_printed_before_is_not_printed_again()
+    public void Prints_a_sheet_unless_all_of_it_was_printed()
+    {
+        var none = MoPickupSummary.Decide(["A", "B", "C"], []);
+        Assert.True(none.Print);
+        Assert.Empty(none.Void);
+        var all = MoPickupSummary.Decide(["A", "B", "C"], ["A", "B", "C"]);
+        Assert.False(all.Print);
+        Assert.Empty(all.Void);
+        // A printed before: B and C need the sheet; A's earlier sheet is to be voided.
+        var (print, voided) = MoPickupSummary.Decide(["A", "B", "C"], ["A"]);
+        Assert.True(print);
+        Assert.Equal(["A"], voided);
+    }
+
+    [Fact]
+    public void Remembers_printed_sheets()
     {
         var path = Path.Combine(Path.GetTempPath(), $"pickup-{Guid.NewGuid():N}.json");
         try

@@ -6,8 +6,9 @@ namespace CYERPAutoInput;
 /// <summary>
 /// 新竹物流 到廠取貨總表 (user, 2026-10-14): one sheet lists several orders, and a later 批次出貨
 /// gives a sheet with the earlier orders on it again. The sheet's rows (宅配單號, 出貨單號) are
-/// read from the PDF's words, and a sheet listing any order whose sheet was printed before is
-/// not printed again (A printed → the A+B+C sheet is not; B and C get their labels only).
+/// read from the PDF's words. Orders shipped together are on one sheet, so a sheet is usually
+/// all printed before or none: all → not printed again; none → printed. Some (A printed, B and
+/// C not) → printed, since B and C need it, and the earlier sheet with A is to be voided.
 /// </summary>
 internal static partial class MoPickupSummary
 {
@@ -19,6 +20,15 @@ internal static partial class MoPickupSummary
             if (Tracking().IsMatch(words[i].Trim()) && ShipmentNo().IsMatch(words[i + 1].Trim()) && !numbers.Contains(words[i].Trim()))
                 numbers.Add(words[i].Trim());
         return numbers;
+    }
+
+    /// <summary>Print the sheet or not, and the orders whose earlier sheet it replaces (to void).</summary>
+    public static (bool Print, List<string> Void) Decide(IReadOnlyList<string> numbers, IReadOnlyCollection<string> printedBefore)
+    {
+        if (numbers.Count == 0) return (true, []);
+        var before = numbers.Where(printedBefore.Contains).ToList();
+        if (before.Count == numbers.Count) return (false, []);
+        return (true, before);
     }
 
     public static List<string> Read(string path, string password)

@@ -1549,21 +1549,24 @@ internal sealed class MainForm : Form
                 if (pages is null) throw new OperationCanceledException();
                 printed.Add($"新竹寄件單 {pages} 頁（{a4}）");
             }
-            // A sheet listing an order whose sheet was printed before is not printed again (user, 2026-10-14).
+            // All of a sheet's orders printed before → not again; some → printed, the earlier
+            // sheet to be voided (user, 2026-10-14).
             var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
             foreach (var file in result.Summaries)
             {
                 var numbers = MoPickupSummary.Read(file, password);
-                var before = sheets.AlreadyPrinted(numbers);
-                _log.Info("mo-batch", $"pickup summary orders={numbers.Count} printed_before={before.Count}");
-                if (before.Count > 0)
+                var (print, voided) = MoPickupSummary.Decide(numbers, sheets.AlreadyPrinted(numbers));
+                _log.Info("mo-batch", $"pickup summary orders={numbers.Count} print={print} void={voided.Count}");
+                if (!print)
                 {
-                    printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", before)} 的總表已印過）");
+                    printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", numbers)} 的總表都已印過）");
                     continue;
                 }
                 var pages = await PrintA4Async(file, summary: true, a4, password);
                 if (pages is null) throw new OperationCanceledException();
                 sheets.Record(numbers);
+                if (voided.Count > 0)
+                    result.Notes.Insert(0, $"【請作廢舊的到廠取貨總表】宅配單號 {string.Join("、", voided)} 先前印的總表已由這次的新總表取代（新總表含 {numbers.Count} 筆），舊的那張請作廢。");
                 printed.Add($"新竹到廠取貨總表 {pages} 頁（{a4}）");
             }
         }
