@@ -282,7 +282,7 @@ internal sealed class SettingsForm : Form
             AutoSize = true,
             MaximumSize = new Size(560, 0),
             Margin = new Padding(0, 0, 0, 8),
-            Text = "買家備註出現關鍵字時，自動送出對應的訊息（訂單照常處理）。關鍵字用逗號分隔，同一個平台內一個關鍵字只能屬於一則訊息。"
+            Text = "買家備註出現關鍵字時，自動送出對應的訊息（訂單照常處理）。關鍵字輸入後按 Enter，同一個平台內一個關鍵字只能屬於一則訊息。"
         });
         _shopeeChat = new ChatRuleEditor("蝦皮（全自動：安排出貨前以聊聊送出）", _settings.ShopeeChatRules, locked: false);
         _moChat = new ChatRuleEditor("MO店+（尚未開放）", _settings.MoChatRules, locked: true);
@@ -536,11 +536,11 @@ internal sealed class ChatRuleEditor : GroupBox
     {
         var row = new TableLayoutPanel { ColumnCount = 3, RowCount = 2, AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 410));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 392));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         // 關鍵字 as pills (user, 2026-10-14).
-        var keywords = new PillBox(ChatRules.Words(rule.Keywords), "輸入關鍵字後按 Enter", 400) { Margin = new Padding(0, 4, 0, 4) };
-        var message = new TextBox { Width = 400, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, Text = rule.Message, Margin = new Padding(0, 2, 0, 2) };
+        var keywords = new PillBox(ChatRules.Words(rule.Keywords), "輸入關鍵字後按 Enter", 384) { Margin = new Padding(0, 4, 0, 4) };
+        var message = new TextBox { Width = 384, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, Text = rule.Message, Margin = new Padding(0, 2, 0, 2) };
         var remove = new CyButton { Text = "刪除此則", Width = 84, Height = 30, Enabled = !_locked };
         remove.Click += (_, _) => { _rows.Controls.Remove(row); row.Dispose(); Renumber(); };
         row.Controls.Add(new Label { AutoSize = true, Margin = new Padding(0, 8, 4, 0) }, 0, 0);

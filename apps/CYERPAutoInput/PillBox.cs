@@ -97,8 +97,8 @@ internal sealed class PillBox : UserControl
                 pill.Location = new Point(x, y);
                 x += pill.Width + 4;
             }
-            var inputWidth = Math.Max(110, right - x);
-            if (x > Padding.Left && x + 110 > right) { x = Padding.Left; y += line + 3; inputWidth = right - x; }
+            var inputWidth = Math.Max(80, right - x);
+            if (x > Padding.Left && x + 80 > right) { x = Padding.Left; y += line + 3; inputWidth = right - x; }
             _input.Location = new Point(x, y + (line - _input.PreferredHeight) / 2);
             _input.Width = inputWidth;
             Height = y + line + Padding.Bottom + (Height - ClientSize.Height);
