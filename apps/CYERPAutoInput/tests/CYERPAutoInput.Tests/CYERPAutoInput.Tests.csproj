@@ -31,6 +31,7 @@
     <Compile Include="..\..\GiftRules.cs" Link="Linked\GiftRules.cs" />
     <Compile Include="..\..\SlipImage.cs" Link="Linked\SlipImage.cs" />
     <Compile Include="..\..\MoBatchScreens.cs" Link="Linked\MoBatchScreens.cs" />
+    <Compile Include="..\..\MoPickupSummary.cs" Link="Linked\MoPickupSummary.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />

@@ -1210,61 +1210,6 @@ internal sealed class MainForm : Form
         return pages.Count;
     }
 
-    /// <summary>
-    /// 測試 MO店+ 新竹列印 (user, 2026-10-14): the 新竹物流 寄件單 (LogisticsLabel) and 到廠取貨總表
-    /// (LogisticsData) PDFs in Temp\test1 printed as MO店+ 全自動 will, before ERP: each after a
-    /// very large 「請在印表機放入…用紙」 and 好了, on the A4 printer.
-    /// </summary>
-    private async Task TestHctA4PrintAsync()
-    {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        const string title = "測試 MO店+ 新竹列印";
-        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "test1");
-        var files = Directory.Exists(folder) ? Directory.GetFiles(folder, "*.pdf") : [];
-        if (files.Length == 0)
-        {
-            MessageBox.Show(this, $"請把新竹物流的寄件單與到廠取貨總表 PDF 放在：\n{folder}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        var printer = _settings.A4Printer.Length > 0 ? SlipPrinter.Installed(_settings.A4Printer) : null;
-        if (printer is null)
-        {
-            MessageBox.Show(this, "請先在「設定 › 印表機」勾選 A4 印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
-        _shopeeBatchRunning = true;
-        var lines = new List<string>();
-        try
-        {
-            var documents = new List<(string File, bool Summary)>();
-            foreach (var file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
-                documents.Add((file, await Task.Run(() => MoSlipPdf.IsPickupSummary(file, password))));
-            // 寄件單 first, then 取貨總表.
-            foreach (var (file, summary) in documents.OrderBy(d => d.Summary))
-            {
-                var name = Path.GetFileName(file);
-                var pages = await PrintA4Async(file, summary, printer, password);
-                if (pages is null)
-                {
-                    lines.Add($"{name}：已取消，沒有列印。");
-                    break;
-                }
-                lines.Add($"{name}：{(summary ? "到廠取貨總表" : "寄件單")} {pages} 頁，已送到 {printer}。");
-            }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            _log.Warn("mo-a4", $"test: {ex.GetType().Name}: {ex.Message}");
-            lines.Add($"失敗：{ex.Message}");
-        }
-        finally
-        {
-            _shopeeBatchRunning = false;
-        }
-        MessageBox.Show(this, string.Join("\n", lines), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
     /// <summary>測試蝦皮 7-11 列印 (user, 2026-10-14): the printing part of 全自動 on a 7-11 交貨便 tab opened by hand.</summary>
     private async Task TestSevenPrintAsync()
     {
@@ -1604,10 +1549,21 @@ internal sealed class MainForm : Form
                 if (pages is null) throw new OperationCanceledException();
                 printed.Add($"新竹寄件單 {pages} 頁（{a4}）");
             }
+            // A sheet listing an order whose sheet was printed before is not printed again (user, 2026-10-14).
+            var sheets = new PickupSummaryLedger(PickupSummaryLedger.DefaultPath);
             foreach (var file in result.Summaries)
             {
+                var numbers = MoPickupSummary.Read(file, password);
+                var before = sheets.AlreadyPrinted(numbers);
+                _log.Info("mo-batch", $"pickup summary orders={numbers.Count} printed_before={before.Count}");
+                if (before.Count > 0)
+                {
+                    printed.Add($"新竹到廠取貨總表未重印（宅配單號 {string.Join("、", before)} 的總表已印過）");
+                    continue;
+                }
                 var pages = await PrintA4Async(file, summary: true, a4, password);
                 if (pages is null) throw new OperationCanceledException();
+                sheets.Record(numbers);
                 printed.Add($"新竹到廠取貨總表 {pages} 頁（{a4}）");
             }
         }
@@ -2215,7 +2171,6 @@ internal sealed class MainForm : Form
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
-            menu.Items.Add("測試新竹寄件單／取貨總表列印（Temp\\test1）", null, async (_, _) => await TestHctA4PrintAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")
