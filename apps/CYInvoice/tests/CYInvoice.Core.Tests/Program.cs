@@ -56,6 +56,40 @@ var tests = new (string Name, Action Run)[]
         Equal<AutoInputOrderResult?>(null, AutoInputRecordDecision.Classify(
             [record], InvoiceSources.Mo, "ORDER-Z", 725, "", Environments.Production));
     }),
+    ("autoinput serialized issue replay guard prevents duplicate AMEGO call", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        const string id = "MO-AUTOINPUT-SAFE";
+        var fake = new FakeGateway {
+            IssueResponse = new IssueResponse(0, "", "AB12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(TestApiOrderId(id), "AB12345678", 105, 0, 105, 1)
+        };
+        var (service, _) = TestService(temp.Path, fake);
+        MoOrder Order()
+        {
+            var order = new MoOrder { OrderId = id, TotalAmount = 105 };
+            order.Items.Add(new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 });
+            return order;
+        }
+        service.IssueMoAsync(Order(), replaySafe: true, expectedEnvironment: Environments.Test)
+            .GetAwaiter().GetResult();
+        Throws<InvalidOperationException>(() => service.IssueMoAsync(
+            Order(), replaySafe: true, expectedEnvironment: Environments.Test)
+            .GetAwaiter().GetResult());
+        Equal(1, fake.IssueCalls);
+    }),
+    ("autoinput refuses environment switch before issuing", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var fake = new FakeGateway();
+        var (service, _) = TestService(temp.Path, fake);
+        var order = new MoOrder { OrderId = "MO-ENV-BLOCK", TotalAmount = 105 };
+        order.Items.Add(new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 });
+        Throws<InvalidOperationException>(() => service.IssueMoAsync(
+            order, replaySafe: true, expectedEnvironment: Environments.Production)
+            .GetAwaiter().GetResult());
+        Equal(0, fake.IssueCalls);
+    }),
     ("autoinput result is atomic and cannot replace an existing file", () =>
     {
         using var temp = new TemporaryDirectory();
