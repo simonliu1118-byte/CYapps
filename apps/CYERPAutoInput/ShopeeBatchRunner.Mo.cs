@@ -186,7 +186,23 @@ internal sealed partial class ShopeeBatchRunner
             Click(page, menu, "批次出貨（左側選單）");
         }
         // The 配送方式 row is what matters here (user, 2026-10-14: read its counts, then go in).
-        var (list, _) = await WaitAsync("批次出貨頁", 30, s => MoBatchScreens.Text(s.Boxes, "配送方式") is not null && MoBatchScreens.Filter(s.Boxes, "處理提醒", "全部") is not null ? s : null, _shippedHint);
+        static bool IsBatchShip(Screen s) => MoBatchScreens.Text(s.Boxes, "配送方式") is not null && MoBatchScreens.Filter(s.Boxes, "處理提醒", "全部") is not null;
+        // From 批次出貨記錄 the left menu may do nothing (user LOG 2026-10-14: the record stayed):
+        // then another 批次出貨 (a tab) or 返回, the browser's back, a reload.
+        for (var step = 0; step < 3; step++)
+        {
+            var (ready, _) = await WaitOrNullAsync(6, s => IsBatchShip(s) ? s : null);
+            if (ready is not null) { ready.Dispose(); break; }
+            using var page = await ReadAsync();
+            var leftmost = page.Boxes.Where(b => b.Text.Trim() == "批次出貨").OrderBy(b => b.Left).FirstOrDefault();
+            _log.Info("mo-batch", $"批次出貨頁 not yet (step {step}); page: {string.Join(" | ", page.Boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 24).Take(60))}");
+            var other = page.Boxes.Where(b => b != leftmost && (b.Text.Trim() == "批次出貨" || b.Text.Trim() == "返回")).OrderBy(b => b.Top).FirstOrDefault();
+            if (step == 0 && other is not null) Click(page, other, $"{other.Text.Trim()}（頁面上）");
+            else if (step <= 1) Keys("Alt+Left（上一頁）", NativeMethods.VK_MENU, NativeMethods.VK_LEFT);
+            else Keys("F5", NativeMethods.VK_F5);
+            await Task.Delay(1500, _token);
+        }
+        var (list, _) = await WaitAsync("批次出貨頁", 30, s => IsBatchShip(s) ? s : null, _shippedHint);
         using (list)
             if (MoBatchScreens.Filter(list.Boxes, "處理提醒", "全部") is { } all) Click(list, all, "處理提醒 全部");
         await Task.Delay(800, _token);
