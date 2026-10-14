@@ -77,12 +77,10 @@ internal static class IdentityProviderFoundationTests
             settings.CloudMode = CloudModes.CloudPreferred;
             settingsStore.Save(settings);
 
-            Equal(IdentityProviderKind.BuiltInCloud, runtime.Current.Kind,
-                "runtime switches centrally to Built-in Cloud authority");
-            True(await runtime.Current.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "LocalPass2")) is null,
-                "Built-in Cloud authority must not fall back to Local credentials");
-            NotNull(await runtime.Current.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "CloudPass2")),
-                "Built-in Cloud authority must accept the Cloud credential after cutover");
+            // Legacy Built-in provider may still be parsed for historical fixtures,
+            // but it must no longer be selectable by the V3 application runtime.
+            Throws<InvalidOperationException>(() => _ = runtime.Current,
+                "V3 runtime must fail closed for a Built-in Cloud workspace");
             True(AppRoles.CanManageAccounts(AppRole.Admin), "ADMIN remains manager authority");
             True(AppRoles.CanManageAccounts(AppRole.SuperAdmin), "SUPER_ADMIN remains manager authority");
         }
