@@ -145,11 +145,15 @@
 - 管理員在光貿網站人工完成作廢後，可於待辦詳細視窗標記已完成；也可在尚未處理前取消退回。
 - 目前本版只把人工作業狀態保存在本機，不把「管理員-使用者-原因」寫回光貿；正式 `/json/g0501` 自動化留待後續版本。
 
-### 9.5 V3 調整決議（2026-10-14）
+### 9.5 V3 調整決議（2026-10-15；需求已確認、功能尚待實作）
 
 - `/json/g0401` 折讓 API **先於 D1 協同**，CYID／Built-in／單機共同升級；呼叫端必填且自行生成唯一 `AllowanceNumber`，結果不明以原號查回，不靠人工挑選多筆候選。光貿官方文件：https://invoice.amego.tw/api_doc/ 。
 - D1 不是一般發票資料庫；普通正常發票沒有申請或異常便不入 D1。只有實際作廢／折讓／折讓作廢申請及「上傳問題」異常建立跨機事件／覆核與 Audit；完整的開立失敗顯示也需要其他電腦管理員看得到。
 - D1 的管理員註記、結案不是光貿官方已成功，本機修復問題也不能遠端假裝已修好；保留事件來源 Device、必要識別與歷程，不複製完整發票。
+- **三種既有跨機管理員覆核**：紙本未收回作廢、一般使用者折讓、折讓作廢。所有「上傳問題」事件（含另外由本機 InvoiceRecords 提供的開立失敗）亦須跨機可見；只有申請／異常時才建立 D1 事件／不可抹除 Audit，一般正常發票不建最小索引。正常官方作廢等待仍在「處理中」，不額外持久化事件。
+- **開立重複 OrderID 的既有本機防護已完成，不得重做**：第一次成功紀錄保留在正常清單，第二次光貿拒絕以 Failed 留在上傳問題、清空 invoice_number；正常清單、RefreshAll、詳細回查及官方 list sync 排除這筆 Failed，Core／Sync 回歸已存在。V3 只新增跨機 Failed 事件與原刪除改封存，失敗的本機歷史可仍以 SQLite 保留。
+- **結果不明的管理員三種人工處置**：留光貿客服詢問回覆／時間／actor 的 Audit；光貿確有開立時補原本那筆本機紀錄的號碼及開立日期時間（不可新增第二筆成功）；光貿明確確認未開時核准使用同一原始 OrderID 重送一次。官方真實狀態仍須查光貿，本機儲存失敗由原 Device 修復。
+- **CYID 專屬公司卡片**：一般 ADMIN 可以開設定但不可新增／修改／讀取公司 Key／MO 密碼，SUPER_ADMIN 才能維護公司統編與加密密鑰；Cloud write guard 與金鑰分離不可僅靠 UI；Built-in／單機原設定不因此強制遷移。
 
 ## 10. PDF、預覽與列印
 
@@ -200,7 +204,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
+- 目前原 development Worker 為 Cloud 0.9.3／API 1／storage 13／CYID_ONLY（2026-10-13 另行核准升級及維護）；**V3 Draft #440 的 0014／optional issuer、0015 Work Item 草案均未上正式 D1**。最新分支／CI 與部署界線見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 - V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. 目前尚未完成

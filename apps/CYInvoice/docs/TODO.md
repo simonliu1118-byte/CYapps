@@ -112,7 +112,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
 - [ ] 自動折讓／折讓作廢時，確認 AMEGO 正式可保存且可依折讓單號查回的欄位，再決定如何保存 `管理員編號-使用者編號-原因`；若官方沒有合適欄位，不濫用未文件化欄位。
-- [ ] 雲端化完成後移除暫行人工折讓與人工折讓作廢路徑，收斂為正式 API 流程。
+- [ ] **先驗收 g0401** 的發送、相同折讓單號查回、結果不明與三種版本共用後，再移除「管理員至光貿網站人工折讓」、「手填折讓單號」、「從多筆候選人工挑單號」的正常操作 UI；歷史及不明結果追查保留。**g0501 折讓作廢屬另一個 API 驗收點，不可隨 g0401 一併宣告完工；D1 折讓協同在 g0401 後再接。**
 
 `/json/allowance_file` 折讓 PDF 已完成工程實作，後續只需實機驗證與雲端化時確認多裝置 Cache 行為。
 
@@ -182,7 +182,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.4 V3 多機裝置復原、備份與安全紀錄
 
-**2026-10-14 現行狀態：**[CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) + [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已完成相應 Source／CI；CYInvoice [Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)／[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)／Governance 成功，CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806)／Deployment contract／Governance 成功；**兩份 PR 未合併，正式服務未部署，實機 DR-01～DR-13 沒有驗收通過**。Windows UI 入口正式定案在**「直接加入雲端」內的「災難復原」按鈕**，首次啟動只有單機版／直接加入雲端兩選項。詳細單一最新停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+**2026-10-15 現行狀態：**[CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) + [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已完成相應 Source／CI；CYInvoice [Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)／[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)／Governance 成功，CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806)／Deployment contract／Governance 成功；**兩份 PR 未合併，正式服務未部署，實機 DR-01～DR-13 沒有驗收通過**。Windows UI 入口正式定案在**「直接加入雲端」內的「災難復原」按鈕**，首次啟動只有單機版／直接加入雲端兩選項。詳細單一最新停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 
 **下一輪工程待辦**（V3 專用，不與 AutoInput 測試包混版）：
 - [ ] **CYWEB #151 明確 revoked 契約雙端聯測：**CYInvoice #440 已在 Draft source 加 `revoked`（只根據 persisted `revoked_at`／成功原子撤銷）與 consumed／expired fail-closed，增加 SQL-time guard、重複撤銷、lost-response status readback、claim/revoke race synthetic regression；等 exact-head CI 通過及 CYWEB #151 消費者合約對照後才可標 source 整合完成。真 D1／Email／Device 仍未驗。
@@ -209,7 +209,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **RC AE／DR-01～DR-13：**已完成多項 synthetic SQLite／Node／Windows 合約及 PR CI；**跨服務真 Email、受控真 Worker／D1、實際 Windows 裝置的 DR-01～DR-13 尚未執行／驗收**。業務 Audit／viewer 由 §7.6 共用追蹤。
 
 
-- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；完整作廢／折讓作業尚未接 Work Item（內部 API 原型已存在），仍需討論哪些資料實際進 D1、唯一 Work Item owner、狀態轉移／revision、設備及 actor 執行時 revalidate、外部光貿結果不明處理，不能勾整體完成。
+- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；作廢／折讓還未接實際業務 Work Item（create/get/transition 原型及 Windows transport 已有 CI），**D1 事件／覆核資料範圍已定案，非尚待討論**。仍需最小業務狀態／Audit、Device/actor 執行當下 guard、光貿 side-effect 結果不明處理，不能勾整體完成。
 
 ### 7.5 跨機 Work Item / Sync
 
@@ -221,13 +221,13 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
   - 同一未結案事件防重複；管理員可在其他電腦查看、追蹤、註記處理。**本機資料寫入／SQLite 損壞須由來源電腦修復**，遠端不能直接標成修好；**官方開票／上傳狀態不明必須查光貿**，雲端 `closed`／管理員已讀不能假裝官方成功。恢復後留下處理歷史。
 - [ ] 作廢（未收回紙本）／折讓／折讓作廢申請以及退回／人工結案的跨機 Work Item／Audit；折讓待 §6 API 完成後再接。管理員用自己電腦接手，不需到申請人電腦。
 - [ ] CYID_ONLY 專屬公司設定卡片：統編 + 加密 AMEGO App Key + 加密 MO店+ Excel 密碼；僅 SUPER_ADMIN 可新增／修改／移除。一般 ADMIN 仍可開設定，但只能看到公司統編及「已設定」狀態，不能取得 Secrets 明文；解密金鑰不可跟密文同放 D1。Built-in／單機不強制搬既有 DPAPI。
-  - Draft #440 已新增最小三個受保護 POST 操作（create/get/transition）：Device Token + 每次管理員重新驗證，Built-in 的 credential 在 SQL 寫入時再核對，CYID_ONLY 不查已退役表。SQL 0015 仍在 `drafts/` 未部署，故正式 Worker 不可用；未接 Windows UI/官方作廢或折讓。
+  - Draft #440 已新增最小三個受保護 POST 操作（create/get/transition）：Device Token + 每次管理員重新驗證，Built-in 的 credential 在 SQL 寫入時再核對，CYID_ONLY 不查已退役表；**Windows Core 的 `CloudWorkItemClient` 已接同一 API 契約並有 CI 測試**。SQL 0015 仍在 `drafts/` 未部署，故正式 Worker 不可用；未接 Windows 業務按鈕／UI 或官方作廢／折讓。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
-  - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
+  - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API／Windows transport，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
 - [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
-- [x] **相同 OrderID 重複開立的既有防護（已實作；不重做）：**正式 MO店+／酷澎／鼎新 ERP 使用來源原始 `order.OrderId` 送光貿，官方負責擋相同 OrderID；測試環境沿用原本 `TestOrderIdPrefix`。**第一次成功開立的原紀錄持續存在正常發票清單**；再次以同 OrderID 送出而收到重複錯誤（含 `3040171`）時，第二次嘗試狀態改為 `Failed`、發票號碼清空，**只在「上傳問題 → 開立失敗：重複訂單編號」顯示，不進正常發票清單，也不參與重新整理時的官方查詢**。這是刻意保留失敗嘗試的行為，不代表產生第二張成功發票或缺少本機防重。已由 `TestWireDuplicateRejectionAsync`、`TestIssueOpensAndBlocksResendAsync`、`TestRecoveryOfExistingInvoiceAsync` 及 Windows `RecordsControl.Matches`、`InvoiceService.RefreshAllAsync` 現行測試／程式確認；**禁止再把第二筆失敗列當成待修復的「重複有效發票」**。
-- [ ] **V3 僅調整失敗事件的跨機呈現／保存方式**：沿用上述原本分流，將「上傳問題」的失敗事件同步 D1，含原始 OrderID、錯誤類型與必要 Audit，讓管理員跨機看見；原成功發票仍只存在本機正常發票清單，不因此上傳 D1。原本「清除失敗」改為**封存事件**，保留歷程；不改光貿 OrderID 判重、不改已正常運作的開立和重新整理路徑。真正由程式自行產生的手動 OrderID 唯一性，獨立依原 §7.5 討論，不必為此加整體 Cloud Lock。
+- [x] **相同 OrderID 重複開立的既有防護（已核對 Core＋Sync＋WinForms 程式／測試；不重做）：**正式 MO店+／酷澎／鼎新 ERP 使用來源原始 `order.OrderId` 送光貿，官方負責擋相同 OrderID；測試環境沿用原本 `TestOrderIdPrefix`。**第一次成功開立的原紀錄持續存在正常發票清單**；再次以同 OrderID 送出而收到重複錯誤（含 `3040171`）時，第二次嘗試狀態改為 `Failed`、發票號碼清空，**只在「上傳問題 → 開立失敗：重複訂單編號」顯示，不進正常發票清單，也不參與重新整理時的官方查詢**。這是刻意保留失敗嘗試的行為，不代表產生第二張成功發票或缺少本機防重。已由 `TestWireDuplicateRejectionAsync`、`TestIssueOpensAndBlocksResendAsync`、`TestRecoveryOfExistingInvoiceAsync` 及 Windows `RecordsControl.Matches`、`InvoiceService.RefreshAllAsync` 現行測試／程式確認；**禁止再把第二筆失敗列當成待修復的「重複有效發票」**。
+- [ ] **V3 僅調整失敗事件的跨機呈現／保存方式**（目前 D1／UI 尚未實作）：沿用上述原本分流，將「上傳問題」的失敗事件同步 D1，含原始 OrderID、錯誤類型與必要 Audit，讓管理員跨機看見；原成功發票仍只存在本機正常發票清單，不因此上傳 D1。原本「清除失敗」改為**封存事件**，保留歷程；不改光貿 OrderID 判重、不改已正常運作的開立和重新整理路徑。真正由程式自行產生的手動 OrderID 唯一性，獨立依原 §7.5 討論，不必為此加整體 Cloud Lock。
 - [ ] **結果不明管理員處置（需求已確認，尚未實作）：**① 管理員聯絡光貿，將詢問原因／回覆文字及操作人、時間登錄 D1 事件 Audit；② 管理員確認光貿實際已成功時，可憑官方證據手動補入發票號碼、開立日期與時間，將**原本那筆**本機紀錄更新成已開立（不得 Append 第二筆），保留完整人工補登 Audit；③ 管理員自行在光貿網站核對確實未開立後，明確批准以**同一原始 OrderID** 再送一次，紀錄確認、核准與重送歷程。前兩項不觸發光貿重送；第三項即使送出後結果不明，仍不能自動連續重試。
 - [ ] **開立失敗由清除改封存**：現有 `FailedInvoiceRecordStore.Delete` 會刪本機發票列及相關 `sync_issues`，未來事件／Audit 上 D1 後，對使用者改為封存、保留追蹤歷程與管理員身分；預設待辦清單可隱藏封存，但不可因此刪 Audit。光貿成功但本機保存失敗，也走管理員可見的事件／人工修復（從原設備完成本機紀錄回補），不誤認官方結果不明。
 - [ ] **處理中不搬成額外的永久事件：**光貿作廢已送出、仍在處理的正常進度留在既有「處理中」列表，完成後從該列表消失；只有變成例外事件或管理員必須介入時才建立 D1 異常待辦。

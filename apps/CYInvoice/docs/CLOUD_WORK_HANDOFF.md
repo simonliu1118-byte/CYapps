@@ -1,50 +1,75 @@
-# CYInvoice 現行工作交接（2026-10-14）
+# CYInvoice 現行工作交接／新對話入口（2026-10-15）
 
-> **單一現況入口。** 永久規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md`、`apps/CYInvoice/PROJECT_RULES.md` 為準；此處只記錄正在執行的工作、驗證與操作界線。未完成項目統一在 [TODO.md](TODO.md)；現場驗收使用 [RC_TEST.md](RC_TEST.md)；歷史版本由 [CHANGELOG](../CHANGELOG.md)／[MIGRATION_HISTORY](MIGRATION_HISTORY.md) 與 Git PR 保存，不再在交接文件重複所有歷史對話。
+> **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
+> 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
-## 1. 清楚區分三條程式線
+## 1. 三條分支，禁止混同
 
-| 線別 | 來源及版本 | 狀態／證據 |
-| --- | --- | --- |
-| 已公開正式 Windows | [V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，`main` | 2026-10-13 已發行；未被其他 Draft 改寫 |
-| AutoInput 工程測試 | [CYInvoice Draft #445](https://github.com/simonliu1118-byte/CYapps/pull/445)，`cyinvoice/feat-autoinput-interface`，**V2.6.20 Build 0** | [Windows Build #38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)／Governance／Cloud checks 成功；[工程測試包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718/artifacts/11889940554)，Actions Artifact 只保留 3 天；未合併、不等於正式 Release |
-| V3 災難復原／多機協同 | [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，`cyinvoice/v3-recovery-invitation-schema` | 從正式線獨立開發、Draft；原 D1 migration 0014 與 optional issuer maintenance **尚未實際套用**，Windows／真 Email／多機 DR 不得視為已驗收 |
+| 工作線 | 現況 |
+| --- | --- |
+| **正式已發行 Windows** | [CYInvoice V2.6.19 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，2026-10-13 發布；**V3 尚未正式發版**。 |
+| **AutoInput 工程介接** | [CYInvoice Draft #445](https://github.com/simonliu1118-byte/CYapps/pull/445)，`cyinvoice/feat-autoinput-interface`，V2.6.20 Build 0；與 [AutoInput PR #424](https://github.com/simonliu1118-byte/CYapps/pull/424) 另線整合，仍待真 EXE／雙行程 E2E，不能混進 V3 PR。 |
+| **V3 Device 災復＋多機工作單** | [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，`cyinvoice/v3-recovery-invitation-schema`；配套 [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)，兩個 PR 都未合併、**未部署**。 |
 
-對應 CYWEB 管理入口：[CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)，`cyweb/feat-cyinvoice-recovery-auth-gate`，head `c155baf4e0fda819d97fd950bff7cfeb55e1e0a5`。該邊已修 Operation ID 的 sessionStorage 定位、頁面恢復／查回、共用確認 Dialog、通用 failed 不冒充「已撤銷」，source CI 已通過，但**未部署**。跨 repo 交接：[CYWEB CYINVOICE_RECOVERY_HANDOFF](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md)。
+**最近一份已確認完整 CI 的 V3 程式／文件 HEAD：** `ea23098be56fb20e523862bcc05afeaedea56073`（後續純文件提交需要另外對照該次 checks）：
+[Cloud Check #38599397565](https://github.com/simonliu1118-byte/CYapps/actions/runs/38599397565)、
+[Windows Build #38599397577](https://github.com/simonliu1118-byte/CYapps/actions/runs/38599397577)、
+[Governance #38599397647](https://github.com/simonliu1118-byte/CYapps/actions/runs/38599397647) **success**；
+[Development validation #38599397575](https://github.com/simonliu1118-byte/CYapps/actions/runs/38599397575) validation **success，真正 deploy job skipped**。
+CI 不等於正式 D1、Cloudflare Worker、真 Email／Device 或 AMEGO 操作驗收。
 
-## 2. AutoInput 已交接，並非目前 V3 的阻塞
+## 2. V3 已有 source，不能當成已上線
 
-- **V2.6.20** 已實作 `--autoinput-query`／`--autoinput-issue`、同 Windows 使用者及 portable 目錄內具名管道、原 `InvoiceService`／MO 店+／酷澎匯入、安全防重送、result JSON 原子寫入；CI/封裝通過。沒有正式光貿開票、雙行程／Excel COM 真機、MO→ERP E2E 證據。
-- [AutoInput 端已收到專用交接文件](https://github.com/simonliu1118-byte/CYapps/blob/cyerp-auto-input/shopee-batch/apps/CYERPAutoInput/docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md)，位於 AutoInput [PR #424](https://github.com/simonliu1118-byte/CYapps/pull/424)。完整契約以 #445 的 `apps/CYInvoice/docs/AUTOINPUT_INTERFACE_HANDOFF.md` 為準。
-- 接口仍須由 AutoInput 用獨立測試目錄的實際 EXE 完成聯測；不可在正式 ERP 自動開票啟用前省略此 gate。AutoInput 的返修保持 **V2.6.20 Build N**，不可因此改動 #440 的 V3 Device／D1 schema 或回頭重做 CYID migration。
+- **CYWEB↔CYInvoice 全裝置復原**：CYID 已驗證 SUPER_ADMIN／CSRF gate，CYInvoice private named RPC 的簽發／狀態查回／明確撤銷；明確 `revoked` 只依 persisted `revoked_at`／D1 成功撤銷判定，consumed、expired／失敗不冒充撤銷。Windows 在「直接加入雲端」內提供「災難復原／繼續災難復原」，preview／claim／DPAPI Pending Token 已在 source；成功 claim 才同 D1 交易撤銷同 Workspace 舊 Device／邀請／配對並留 Audit。舊裝置 in-flight 業務寫入仍需依操作邊界 fencing，真跨服務 DR-01～DR-13 尚未驗收。CYWEB owner 交接：[CYINVOICE_RECOVERY_HANDOFF](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md)。
+- **Device revoke 執行當下保護**：`device-lifecycle.ts` 在 D1 寫入時確認原 Device＋Workspace active，Built-in 再核對管理員角色／憑證；CYID_ONLY 不查已退役的 Built-in 表；成功 Audit 與真正 SQL mutation 一致。已有 synthetic race／雙 profile 測試；**不代表所有 AMEGO 業務 side effect 已 fencing**。
+- **Work Item 最小技術原型**：`cloud/drafts/0015_work_items.sql` **只是一張待審草案表，不在正式 migration 清單**；`work-items.ts` 有 create/get/open→review→closed、unique reference／revision CAS／SQL-time Device fence。Worker `work-items-route.ts` 三個受保護 POST，Windows `CloudWorkItemClient.cs` 對齊契約，Built-in／CYID_ONLY 合成 SQLite＋Windows Cloud Client 測試已加入 CI。**尚未實際接上「上傳問題」或作廢／折讓按鈕，沒有正式 D1 表／API 可用**。`closed` 目前只是原型狀態，**不是**光貿官方成功。
+- **原 D1**：本公司開發環境 Cloud0.9.3／API1／storage13／CYID_ENABLED=true／CYID_ONLY；2026-10-13 經另行授權完成本公司舊 Built-in 帳號表退役、備份與 FK 驗證，**不可重做**。V3 的 canonical 0014／optional issuer maintenance 未套用正式 D1，0015 還只是 draft。其他公司 Built-in／Self-hosted 的原支持不可刪掉。
 
-## 3. V3 當前已寫入 Draft 原始碼（未部署）
+## 3. 此對話已確認的 V3 業務規則（下一輪不能再重問／改錯）
 
-1. CYWEB：CYID verified SUPER_ADMIN／CSRF／Core Session gate，再由 CYInvoice private named `CyInvoiceRecoveryEntrypoint` 以自己的 `CYINVOICE` Application 和兩種 Workspace 即時再授權；簽發、操作狀態查回、撤銷分開。
-2. CYInvoice Worker：`recovery-issuer.ts` 原 Operation ID、每 Workspace 單一進行中邀請、一次性雜湊碼、寄信接受後的 sent guard／Audit，送信或 D1 回覆不明維持 pending；不重寄、不自動新簽。
-3. Windows：**首次啟動只有「使用單機版／直接加入雲端」兩個選項。** 災難復原在 `CloudDirectJoinForm` 內的「災難復原／繼續災難復原」按鈕，不是首次啟動第三選項。獨立 `CloudRecoveryForm`、HTTPS preview／claim、DPAPI Pending Token、同一 Token readback；一般 JOIN 不撤銷裝置。
-4. **成功接管新裝置時**才在同一 D1 原子交易撤銷原 Workspace **全部舊 active Device**、使其餘邀請／Pairing 失效、逐項 Audit；失敗應整筆 rollback。原 Pairing／一般 JOIN 寫入時已有 Device active 的 D1 guard，不代表已攔住所有**跨服務、in-flight 業務 mutation**。
-5. schema：forward 0014 和 optional CYID_ONLY recovery issuer 只在 Draft。CYID_ONLY 舊 Built-in D1 四張帳號／轉換表已於 2026-10-13 完成核准的原環境退役及私有備份／資料保留驗證，**不可重跑**；其他公司的新 Built-in／Self-hosted D1 必須保持支援。
+### A. D1 不是發票資料庫
 
-設計參考：[CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)、[CLOUD_IDENTITY_LIFECYCLE](CLOUD_IDENTITY_LIFECYCLE.md)、[CY_ID_INTEGRATION](CY_ID_INTEGRATION.md)。本公司原 development Cloud 基準 **0.9.3／API1／storage13／CYID_ENABLED=true／CYID_ONLY**，不是 V3 Draft deployment。
+**只有真的提出申請或發生異常事件，才在業務 D1 建必要工作單、來源資訊和不可抹除的 Audit。**
+一般開立成功、未申請且無任何異常的發票，**完全不能在自己的 D1 建發票紀錄或最小索引**。不搬整張發票的品項、PDF、訂單 Excel、匯入記憶體資料或光貿原始 payload。官方發票真實狀態仍以光貿為準。
 
-## 4. 回到原本工作的下一個切入點
+需要跨機管理員覆核的**既有三種申請**：
+1. **紙本未收回的作廢申請**：一般使用者送審，管理員可在自己電腦核准／取消退回。
+2. **一般使用者的折讓申請**：先做正式折讓 API，之後才改成 D1 跨機覆核。
+3. **折讓作廢申請**：現有人工管理員待辦也需跨機；是否由 g0501 自動化，依獨立 API 驗收。
+核准、退回、重送審核、人工結案、申請者／覆核管理員／時間／原因，保留不可覆寫 Audit。未發生過申請的發票仍不留雲端紀錄；退回也不能清除歷史。
 
-**CYWEB→Invoice 第一阻塞已於 V3 Draft source 補齊（待 CI／雙端聯測）：**依 #151 的交接，`recovery-issuer.ts` 明確區分 `revoked`（只能由 `revoked_at` 或成功受 guarded D1 batch 撤銷證實）與 `failed`（consumed／expired／不存在等）；同操作重複 revoke 及失去 DB 回覆後的 status readback 可返回 `revoked`；revoke guard 同時比對 `consumed_at`／`expires_at`，防 claim 或過期競態。已加入 synthetic SQLite 測試：撤銷重讀、consumed、expired、D1 COMMIT 後回覆遺失、claim 與 revoke 競態；**尚未宣稱真 D1／Windows／CYWEB E2E 驗收完成**。CYWEB #151 需核對最新版契約。
+**「上傳問題」整個頁面的待辦也要跨機可見**，不只上述三種人工覆核：`InvoiceSyncIssueStore` 的 invoice_list_failed／query_failed／remote_not_found／unknown_remote_not_found／reconciliation_failed／ambiguous_match／local_write_failed 等，**以及另外來自本機 `InvoiceRecords` 的「開立失敗」**（這不是 `InvoiceSyncIssueStore` 的同一資料來源）。管理員在其他電腦看得到來源 Device、必要 OrderID／發票識別、清洗過的錯誤分類、處理紀錄與狀態；不能以遠端已讀或結案冒充光貿已成功或原機已修好。一般「處理中」的正常上傳等待／已送出且尚待光貿完成作廢，不要另建永久 D1 事件，完成後從處理中消失；若產生異常才建事件。
 
-**Work Item 最小核心（本輪 Draft，非已上線）：**新**待審草案** `cloud/drafts/0015_work_items.sql` 一張表，`work-items.ts` 建立／open→review→closed CAS、同 D1 write-time Device fence，僅存雜湊識別，不觸發光貿操作；雙 profile 合成測試加入 Cloud CI。本輪已接最小受保護 API（create/get/transition），僅允許管理員操作；Windows `CloudWorkItemClient` 已接相同 HTTP 契約與嚴格回覆解析／不自動重送，待 Windows Core CI。**尚未接現有作廢／折讓按鈕**：先與使用者確認 D1 協同資料範圍，避免替代本機原有流程或寫入尚未部署的草案表；不把這版解讀為正式服務已上線。
+**原本「清除／刪除開立失敗」要改為封存**，保留 D1 事件／Audit，不因此清掉既存失敗原因。事件不應每次重新整理就重複寫新單。同一 Workspace 管理員可追蹤異常；需來源裝置修復的本機 SQLite 寫入錯誤，不得由另一台電腦直接假裝已修復。不要引入第二套待辦框架。
 
-**2026-10-14 業務範圍已確認（本段只是需求／順序，尚未變更 D1）：**先將 `/json/g0401` 折讓開立升級給 **CYID／Built-in／單機版共用**；光貿規格要求呼叫端先提供唯一 `AllowanceNumber`，不是由光貿自動配發，驗收後才移除手填與多候選人工比對。**之後**才做折讓申請的跨機覆核。
+### B. 折讓 API「先」於折讓 D1 協同
 
-**2026-10-15 OrderID 更正（已核對程式與既有回歸，不重做防重功能）：**第一次正式開票成功的原 OrderID／發票存在正常清單；再次送相同原 OrderID 光貿拒絕時，CYInvoice 現行會把**第二次嘗試**留成 `Failed` 並清空發票號碼，呈現在「上傳問題 → 開立失敗」（例如重複訂單編號）。`RecordsControl.Matches` 會排除 Failed，`InvoiceService.RefreshAllAsync` 也略過 Failed，不會把它查成另一筆成功。Core 既有 duplicate regression 已明確驗證這件事。**之前 TODO 認定需要重做「防重導致清單卡住」是錯誤解讀，已取消。** V3 待做的只有把失敗事件／後續處理同步 D1，並將現有清除失敗改為封存以保留 Audit；不重新設計光貿 OrderID 判重、正常發票清單或全域 Cloud Lock。管理員對真正結果不明可記錄客服詢問、憑官方結果在原本紀錄補發票號碼／時間，或獨立確認未開後授權用原 OrderID 重送；所有人工動作留 Audit。本機成功但保存失敗走人工修復，正常作廢處理中仍留「處理中」不新增事件。**以上改造尚未實作，僅更新文件。**
+**下一輪第一個功能重點：先把一般管理員去光貿手動折讓，升級成 CYInvoice Core/Gateway 正式 `/json/g0401` API**，同時適用 **CYID／Built-in／單機**，不依賴 Cloud 啟用。光貿要求**呼叫端提供且先保存唯一 `AllowanceNumber`（16 字內）**，不是官方自動配發／回傳；收到成功或逾時後，以該號查官方狀態，結果不明不得新號盲目重送。API 及真正查回安全驗收後才能移除手動輸入折讓單號／人工挑多個候選折讓單號的正常 UI；歷史資料與結果不明安全回查仍保留。**`/json/g0501` 折讓作廢另做驗收，不因 g0401 完成就視為自動化完成。** 參考 [光貿官方 API 文件](https://invoice.amego.tw/api_doc/)。
 
-**D1 不存正常發票資料庫或最小索引**。只在發生紙本未收回作廢覆核、折讓／折讓作廢申請、退回，或現有「上傳問題」異常時，建立事件／審核單及 Audit。整個「上傳問題」頁面（也包括獨立顯示的「開立失敗」）都需讓其他電腦的管理員看得到；原電腦修復和光貿官方結果仍須分開。CYID_ONLY 公司卡片可存統編與加密 App Key／MO 密碼，僅 SUPER_ADMIN 修改、ADMIN 唯讀設定狀態。**此輪只更新開發需求，沒有啟用 0015 或修改正式 D1。**
+### C. 原 OrderID／既有防重完整，禁止重做
 
-**後續按序：** 已先在既有 Device 撤銷 endpoint 加 D1 commit-time 的操作裝置 active + Built-in 管理員 credential guard，並加 synthetic late-revoke regression；這不是尚未建立的 Work Item／光貿跨服務 Side Effect 的完整 fencing。V3 Work Item／revision 的 execution-time Device fencing／epoch，正式 Cloudflare Binding／原 D1 schema／Email 設定的**唯讀**核對與 0014/maintenance rollback/readback 計畫，DR-01～DR-13 的跨服務、多機、Windows 及真 Email 驗收。V3 折讓人工歷史欄位缺漏留在 Work Item／Audit 正式重做，不當作舊 V2 已修復。
+**已直接看過 source 及既有回歸**：
+- MO店+／酷澎／鼎新 ERP 等正式匯入沿用**原來源 OrderID** 送光貿（只有測試環境另用原有測試前綴）。正式開立相同 OrderID 防重以光貿為準，不新增 D1 全域 Cloud Lock。
+- **第一次成功開立**，正常發票清單已有同 OrderID 的**一張成功發票**；第二次以相同 OrderID 送出被光貿拒絕時，**第二次嘗試在本機 SQLite 仍有一筆 `Failed`，號碼清空，只顯示「上傳問題 → 開立失敗（例如訂單編號重複）」**；不是另一張成功發票，也不是要刪掉第一次。
+- `RecordsControl.Matches` 排除 Failed；`InvoiceService.RefreshAllAsync` 跳過 Failed；`InvoiceDetailRefreshService.RefreshAsync` 拒絕 Failed 詳查；`InvoiceSyncService.Match` 排除 Failed，不把遠端同 OrderID 轉成第二筆成功。已有 Core `TestWireDuplicateRejectionAsync`／`TestIssueOpensAndBlocksResendAsync`／`TestRecoveryOfExistingInvoiceAsync`，Sync `TestFailedDetailRefreshAsync`／`TestFailedOrderMatchAsync`／`TestTestEnvironmentSkipsFailedAsync` 及 WinForms smoke。**不要重新設計本機防重，僅讓 Failed 事件跨機可見及封存留 Audit。**
+- 真正「官方結果不明」是請求／回覆／回查都無法確認或成功無號碼等少見情況。管理員可：① 留光貿客服詢問原因／回覆與 actor／時間；② 憑官網已開立證據，**更新原本那筆紀錄**的發票號碼、日期、時間（不可 Append 第二筆成功），記人工補登 Audit；③ 官網明確確認沒開立後，由管理員明確核准以**同一原 OrderID** 重送一次並留 Audit。不得逾時自動重送。光貿確定開立但本機保存失敗走人工本機修復，不要混成官方結果不明。
 
-## 5. 禁止跨越的界線
+### D. CYID 專用公司卡片
 
-- #440／#151／#445 均是 Draft，不自行 merge、正式 Release、正式 API deploy、Cloudflare D1 寫入、寄真 Email 或真 Device 全數撤銷。
-- 不建立／上傳／部署新的 Cloudflare **測試 Worker**、version 或 handler，也不重試先前刪除失敗的測試 Worker；V3 可在 source／synthetic SQLite／Windows CI 上測試。
-- CYID 是中央人員身份權威，CYInvoice 業務 Workspace／Device／Work Item 留自己的 D1；不可把本公司舊 Built-in Account D1 恢復當 CYID 的 fallback。真實 Secret、Workspace ID、Token、備份、客戶資料不入 Public Git。
-- **每一份 CI 成功僅證明相應 commit 的自動驗證**，不得冒充既有 production Cloud、真 Email、多人多裝置或客戶資料已驗收。
+設定頁**目前 ADMIN／SUPER_ADMIN 都能開啟，也都可改本機統編／App Key／MO店+ 密碼**，這是已看過的既有 source，不要誤寫成只限超管。V3 新增「公司設定卡片」時，**只有 CYID SUPER_ADMIN 可新增／修改／移除統編＋AMEGO App Key＋MO店+ 密碼的公司綁定**；一般 ADMIN 可開設定，但只看公司統編與憑證是否設定，不應讀取明文；Worker 必須強制權限驗證，不能只隱藏 UI。敏感密鑰要加密（解密金鑰不可明文和 D1 密文同存），Audit 不留 Secrets。Built-in／單機既有 DPAPI 不因這功能被強制遷移。
+
+## 4. 下一個新對話按此順序開發，不過度設計
+
+1. **先作 /json/g0401 的現有 Gateway/Core API 升級**：盤點正式 request／response、先產生並保存 AllowanceNumber、結果查回與不盲重送；同一功能供 CYID、Built-in、單機，配相關回歸。尚未驗收前保留原人工流程，**不改動正常開立／OrderID 防重**。
+2. g0401 安全驗收後，**在同一套 Work Item／上傳問題架構**設計 D1 事件／申請 Audit 的最少欄位與必要狀態，涵蓋三種人工申請及開立失敗／技術異常，不建一般發票索引。既有 `0015` 只是驗證技術核心，不可直接當完整業務 schema 部署。
+3. 將 D1 的跨機申請／異常接現有 Windows「上傳問題」和管理員處理入口，將刪失敗改封存、追蹤結果不明的三種人工處置；保留來源 Device、本機權威、AMEGO 官方權威及 Audit。
+4. **CYID_ONLY 公司卡片**獨立做加密與 SUPER_ADMIN write guard；多機 DR／CYWEB #151 的 Cloudflare 配置、復原驗收依現有 TODO 繼續，與 g0401 不互相當阻塞。
+
+沒有必要為正常開票另建 D1 invoice table、event bus、第二套同步服務或全域 OrderID Lock。進入新對話前先看最新 PR #440 HEAD／diff，不要只信文件的舊 commit SHA。
+
+## 5. 部署、測試與其他不可跨越的界線
+
+- **這次對話僅整理文件**；無正式合併、Cloudflare Worker/D1 migration、測試 Worker、正式 Windows Release、真 Email、真 AMEGO 開立或真 Device 撤銷。任何上線請另取得明確核准。
+- 不能自行建立新的 Cloudflare 測試 Worker／handler。僅可於 source、synthetic SQLite、Windows CI 驗證；V3 schema 0014／optional issuer／draft 0015 不能誤當已套用原 D1。
+- CYID 是中央員工身分權威，CYInvoice 只管理自身 Device／業務 Workspace／業務 Audit，不復活本公司已核准退役的 Built-in 帳號表，不把工作單敏感資料或 Secrets 推到 public Git。
+- AutoInput #445 的工程測試與 Windows v2.6.19 正式版分開；最終量產及 DR、多機多人 E2E 要按 [RC_TEST](RC_TEST.md) 有實機證據。

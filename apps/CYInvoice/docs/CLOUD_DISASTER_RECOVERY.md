@@ -99,7 +99,7 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 若是疑似 Token 外洩而需**尚無新 Device 就全部撤銷**，仍屬另一個明確的緊急事件處理範圍；不能偷偷讓僅「簽發復原邀請」提前做全撤銷，也不能將尚未完成的復原標為成功。
 
-V3 Work Item、revision／原子狀態轉移、跨機 OrderID 防撞、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
+V3 Work Item、revision／原子狀態轉移、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。**正常開立發票不建 D1 索引**，僅申請／上傳異常留事件；正式匯入使用原始 OrderID，光貿判重且現有本機 Failed 隔離已完成，僅程式自行產生的手動 OrderID 需考慮多機唯一性，不新增全域 Cloud Lock。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
 
 ## 8. 備份與服務故障回復
 
