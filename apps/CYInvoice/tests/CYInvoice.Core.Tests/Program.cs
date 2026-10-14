@@ -90,6 +90,32 @@ var tests = new (string Name, Action Run)[]
             .GetAwaiter().GetResult());
         Equal(0, fake.IssueCalls);
     }),
+    ("autoinput query strictly reconciles unknown invoice without issuing", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        const string id = "MO-AI-QUERY";
+        var response = ConfirmedQuery(TestApiOrderId(id), "AB87654321", 105, 0, 105, 1);
+        var fake = new FakeGateway { QueryResponse = response with {
+            Data = response.Data with { InvoiceDate = "2026/10/14" }
+        } };
+        var (service, repository) = TestService(temp.Path, fake);
+        repository.Invoices.Append(new InvoiceRecord {
+            Id = "autoinput-query-test", Source = InvoiceSources.Mo,
+            OriginalOrderId = id, OrderId = id, ApiOrderId = TestApiOrderId(id),
+            Environment = Environments.Test, InvoiceState = InvoiceStates.Unknown,
+            Amount = 105, BuyerIdentifier = "0000000000",
+            Items = [new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 }],
+            DetailVat = 1
+        });
+        var updated = service.ReconcileForAutoInputAsync(
+            "autoinput-query-test", Environments.Test).GetAwaiter().GetResult();
+        Equal(InvoiceStates.Opened, updated.InvoiceState);
+        Equal("AB87654321", updated.InvoiceNumber);
+        Equal("existing", AutoInputRecordDecision.Classify(
+            [updated], InvoiceSources.Mo, id, 105, "", Environments.Test)!.Status);
+        Equal(0, fake.IssueCalls);
+        Equal(1, fake.QueryCalls);
+    }),
     ("autoinput result is atomic and cannot replace an existing file", () =>
     {
         using var temp = new TemporaryDirectory();
