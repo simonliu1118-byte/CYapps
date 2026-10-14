@@ -127,7 +127,7 @@ static async Task TestG0401DuplicateNumberAsync()
         Equal(false, AmegoAllowanceErrorCodes.IsExistingIssuedAllowanceNumber(code));
 
     var handler = new RecordingHttpHandler((_, _, _) =>
-        JsonResponse("{\\"code\\":4040161,\\"msg\\":\\"specified allowance number already exists\\"}"));
+        JsonResponse("""{"code":4040161,"msg":"specified allowance number already exists"}"""));
     using var http = new HttpClient(handler);
     var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
     try
