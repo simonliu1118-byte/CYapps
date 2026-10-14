@@ -214,6 +214,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
 - [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
+  - 2026-10-14 已在 Draft #440 加最小 `0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**尚未加公開 API/UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
 - [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
 - [ ] 解決多機離線自動 OrderID 撞號；正式多機上線前需 Device namespace／短碼或等效方案。
