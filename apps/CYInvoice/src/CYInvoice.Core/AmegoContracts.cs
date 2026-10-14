@@ -32,6 +32,10 @@ public interface IAmegoGateway
         Task.FromException<AllowanceQueryResponse>(new NotSupportedException("allowance query is not supported by this gateway"));
     Task<AllowanceStatusResponse> AllowanceStatusAsync(IEnumerable<string> allowanceNumbers, CancellationToken cancellationToken = default) =>
         Task.FromException<AllowanceStatusResponse>(new NotSupportedException("allowance status is not supported by this gateway"));
+    Task<AllowanceListResponse> ListAllowancesAsync(
+        DateOnly startDate, DateOnly endDate, int page = 1, int limit = 500, int dateSelect = 1,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<AllowanceListResponse>(new NotSupportedException("allowance_list is not supported by this gateway"));
     Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default);
     Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default);
     Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default);
