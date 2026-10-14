@@ -22,7 +22,7 @@ internal static class AutoInputPipe
     internal static string Name(string baseDirectory) => "CYInvoice-" + DirectoryKey(baseDirectory) + "-autoinput";
 
     internal static int ExitCode(AutoInputResult result) =>
-        result.Orders.All(order => order.Status is "issued" or "existing") ? 0 : 1;
+        result.Orders.Count != 0 && result.Orders.All(order => order.Status is "issued" or "existing") ? 0 : 1;
 
     internal static async Task<Reply> ForwardAsync(bool issue, string requestJson, CancellationToken token)
     {
