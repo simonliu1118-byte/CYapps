@@ -226,7 +226,12 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
   - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
 - [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
-- [ ] 解決多機離線自動 OrderID 撞號；正式多機上線前需 Device namespace／短碼或等效方案。
+- [ ] **原始 OrderID／本機去重（使用者 2026-10-15 確認）：**正式環境 MO店+、酷澎、鼎新 ERP 等有來源訂單編號的通路，送往光貿的 `order_id` **必須忠實沿用原來源訂單編號**，不可因重試、Device 或跨機協同任意改號／加前綴，讓光貿原本的相同 OrderID 防重生效。現有 `IssueMoWithLookupAsync`／`IssueCoupangWithLookupAsync`／`IssueDigiwinWithLookupAsync` 會帶 `order.OrderId` 進 `InvoiceDraft`，正式環境的 `BuildIssueRequest` 使用同一 API OrderID；**測試環境**現有 `TestOrderIdPrefix` 另有共用測試池命名規則，不拿來改正式訂單。
+  - **CYInvoice 的責任不是再做第二套光貿防重**，而是本機 `InvoiceStore.Append`／回查／重試的資料一致性：目前只檢查 `record_id`，每次開立嘗試都先 Append，因此同一來源 OrderID 遭光貿擋下後可能多留一筆 `Failed`，或產生同筆官方發票兩個本機結果造成清單／查詢異常。應依公司／環境／實際 API OrderID，讓**一張官方發票對應唯一有效本機發票紀錄**；重試、官方已有單及人工補登應復用或原子更新對應紀錄，不新增第二筆成功紀錄。原失敗嘗試轉事件／Audit（待 D1 上線後可封存），不要為去重而抹掉歷史。補 MO／酷澎／鼎新／手動、回查兩次、重試、API duplicate 與 SQLite load 的回歸測試。
+  - 真正**由程式自行生成**的手動訂單 OrderID 才需多機不撞號方案；不得影響有來源原始 OrderID 的匯入資料。無須以 D1 Cloud Lock 包住所有正常開票。
+- [ ] **結果不明管理員處置（需求已確認，尚未實作）：**① 管理員聯絡光貿，將詢問原因／回覆文字及操作人、時間登錄 D1 事件 Audit；② 管理員確認光貿實際已成功時，可憑官方證據手動補入發票號碼、開立日期與時間，將**原本那筆**本機紀錄更新成已開立（不得 Append 第二筆），保留完整人工補登 Audit；③ 管理員自行在光貿網站核對確實未開立後，明確批准以**同一原始 OrderID** 再送一次，紀錄確認、核准與重送歷程。前兩項不觸發光貿重送；第三項即使送出後結果不明，仍不能自動連續重試。
+- [ ] **開立失敗由清除改封存**：現有 `FailedInvoiceRecordStore.Delete` 會刪本機發票列及相關 `sync_issues`，未來事件／Audit 上 D1 後，對使用者改為封存、保留追蹤歷程與管理員身分；預設待辦清單可隱藏封存，但不可因此刪 Audit。光貿成功但本機保存失敗，也走管理員可見的事件／人工修復（從原設備完成本機紀錄回補），不誤認官方結果不明。
+- [ ] **處理中不搬成額外的永久事件：**光貿作廢已送出、仍在處理的正常進度留在既有「處理中」列表，完成後從該列表消失；只有變成例外事件或管理員必須介入時才建立 D1 異常待辦。
 
 ### 7.6 Cloud Audit
 

@@ -36,6 +36,8 @@
 
 **2026-10-14 業務範圍已確認（本段只是需求／順序，尚未變更 D1）：**先將 `/json/g0401` 折讓開立升級給 **CYID／Built-in／單機版共用**；光貿規格要求呼叫端先提供唯一 `AllowanceNumber`，不是由光貿自動配發，驗收後才移除手填與多候選人工比對。**之後**才做折讓申請的跨機覆核。
 
+**2026-10-15 OrderID 與例外處置補充：**光貿已對相同 OrderID 防重，正式 MO店+／酷澎／鼎新 ERP 等匯入的 API `order_id` 一律使用原始來源訂單編號，不加跨機前綴；多機唯一命名只針對程式自行產生的訂單編號。CYInvoice 必須處理的是 **SQLite 不因相同 OrderID 重試或回查寫入第二筆有效發票紀錄**：目前 `InvoiceStore.Append` 僅防 `record_id` 相同，需修正重複失敗紀錄／清單衝突，失敗歷史轉事件及 Audit。管理員對結果不明可留光貿客服詢問紀錄、憑官方證據補入原紀錄的發票號碼及開立時間、或確認確實未開後明確授權用同原 OrderID 重送；都須留 Audit。開立失敗由清除改為封存；光貿成功但本機保存失敗納入人工修復。正常作廢處理中仍只在「處理中」暫時顯示，完成後消失。上述為已確認需求，**尚未實作**。
+
 **D1 不存正常發票資料庫或最小索引**。只在發生紙本未收回作廢覆核、折讓／折讓作廢申請、退回，或現有「上傳問題」異常時，建立事件／審核單及 Audit。整個「上傳問題」頁面（也包括獨立顯示的「開立失敗」）都需讓其他電腦的管理員看得到；原電腦修復和光貿官方結果仍須分開。CYID_ONLY 公司卡片可存統編與加密 App Key／MO 密碼，僅 SUPER_ADMIN 修改、ADMIN 唯讀設定狀態。**此輪只更新開發需求，沒有啟用 0015 或修改正式 D1。**
 
 **後續按序：** 已先在既有 Device 撤銷 endpoint 加 D1 commit-time 的操作裝置 active + Built-in 管理員 credential guard，並加 synthetic late-revoke regression；這不是尚未建立的 Work Item／光貿跨服務 Side Effect 的完整 fencing。V3 Work Item／revision 的 execution-time Device fencing／epoch，正式 Cloudflare Binding／原 D1 schema／Email 設定的**唯讀**核對與 0014/maintenance rollback/readback 計畫，DR-01～DR-13 的跨服務、多機、Windows 及真 Email 驗收。V3 折讓人工歷史欄位缺漏留在 Work Item／Audit 正式重做，不當作舊 V2 已修復。
