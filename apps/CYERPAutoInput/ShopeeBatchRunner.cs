@@ -962,46 +962,115 @@ internal sealed class ShopeeBatchRunner
             _log.Info("shopee-batch", $"family cut: dialog edits [{string.Join(", ", candidates.Take(8))}] name_box={edit != 0} save={save != 0}");
             if (edit == 0 || save == 0) return $"另存新檔視窗裡找不到{(edit == 0 ? "檔案名稱欄" : "存檔按鈕")}";
             await Task.Delay(300, _token);
-            var name = Path.GetFileName((NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"'));
-            if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "slip";
-            var target = Path.Combine(folder, name);
-            // Typed, not set: the dialog saves what it saw typed (user, 2026-10-14: a name set
-            // with WM_SETTEXT showed in the box, yet the page went to the desktop under Chrome's
-            // name). Alt+N is the 檔案名稱(N) box.
+            // The dialog takes no path from a program, however typed (user, 2026-10-14): it is
+            // left as Chrome filled it and the page saved where Chrome saves; the files are then
+            // found there and moved into the temp folder (user: moved to TEMP, deleted after).
+            var name = (NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"');
+            if (name.Length == 0) return "另存新檔視窗沒有預設檔名";
+            var stem = Path.GetFileNameWithoutExtension(name);
+            // The folder the dialog shows (user, 2026-10-14: 「本機 › 桌面」 at the top): its
+            // address box (the edit in the ComboBoxEx32) holds the folder's path.
+            string? shownFolder = null;
+            NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+            {
+                if (NativeMethods.ClassName(hwnd) != "Edit" || NativeMethods.ClassName(NativeMethods.GetParent(NativeMethods.GetParent(hwnd))) != "ComboBoxEx32") return true;
+                var text = (NativeMethods.ControlText(hwnd, 500) ?? string.Empty).Trim();
+                if (Path.IsPathRooted(text) && Directory.Exists(text)) { shownFolder = text; return false; }
+                return true;
+            }, 0);
+            _log.Info("shopee-batch", $"family cut: dialog folder {(shownFolder is null ? "not read" : "read")}");
+            var started = DateTime.Now.AddSeconds(-3);
             _inputs++;
             NativeMethods.SetForegroundWindow(dialog);
             await Task.Delay(300, _token);
-            InputSender.Chord(NativeMethods.VK_MENU, 0x4E /* N */);
-            await Task.Delay(200, _token);
-            InputSender.Chord(NativeMethods.VK_CONTROL, 0x41 /* A */);
-            await Task.Delay(100, _token);
-            InputSender.UnicodeText(target);
-            await Task.Delay(400, _token);
-            var shown = NativeMethods.ControlText(edit, 1000) ?? string.Empty;
-            _log.Info("shopee-batch", $"family cut: file name typed={shown == target} ext={Path.GetExtension(name)}");
-            if (shown != target) return "另存新檔的檔名打不進去";
-            InputSender.Press(NativeMethods.VK_RETURN);
-            for (var i = 0; i < 20 && NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog); i++) await Task.Delay(250, _token);
+            NativeMethods.PostMessage(save, 0x00F5 /* BM_CLICK */, 0, 0);
+            for (var i = 0; i < 40 && NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog); i++)
+            {
+                await Task.Delay(250, _token);
+                // A page of the same name saved before: 「確認另存新檔…要取代嗎？」 → 是 (IDYES).
+                var confirm = ChromeDialogs().FirstOrDefault(h => h != dialog);
+                if (confirm != 0)
+                {
+                    nint yes = 0;
+                    NativeMethods.EnumChildWindows(confirm, (hwnd, _) =>
+                    {
+                        if (NativeMethods.ClassName(hwnd) == "Button" && NativeMethods.GetDlgCtrlID(hwnd) == 6) { yes = hwnd; return false; }
+                        return true;
+                    }, 0);
+                    _log.Info("shopee-batch", $"family cut: confirm dialog title={NativeMethods.WindowText(confirm)} yes={yes != 0}");
+                    if (yes != 0) NativeMethods.PostMessage(yes, 0x00F5 /* BM_CLICK */, 0, 0);
+                    await Task.Delay(500, _token);
+                }
+            }
             if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) return "按了存檔，另存新檔視窗沒有關閉";
             dialog = 0;
+
+            // Chrome writes .crdownload first; done when the page file stops changing.
+            var places = SavePlaces();
+            if (shownFolder is not null) { places.RemoveAll(d => string.Equals(d, shownFolder, StringComparison.OrdinalIgnoreCase)); places.Insert(0, shownFolder); }
+            List<string> found = [];
+            var last = string.Empty;
+            for (var i = 0; i < 60; i++)
+            {
+                await Task.Delay(500, _token);
+                found = places.SelectMany(d => Directory.EnumerateFileSystemEntries(d, stem + "*"))
+                    .Where(e => File.GetLastWriteTime(e) >= started).ToList();
+                var pageFile = found.FirstOrDefault(e => File.Exists(e) && !e.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) && !e.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase));
+                if (pageFile is null || found.Any(e => e.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase))) continue;
+                var now = string.Join("|", found.Select(e => e + ":" + (File.Exists(e) ? new FileInfo(e).Length : 0)));
+                if (now != last) { last = now; continue; }
+                foreach (var entry in found)
+                {
+                    var to = Path.Combine(folder, Path.GetFileName(entry));
+                    if (File.Exists(entry)) File.Move(entry, to);
+                    else MoveFolder(entry, to);
+                }
+                _log.Info("shopee-batch", $"family cut: saved page moved to temp from {Path.GetFileName(Path.GetDirectoryName(found[0]))} entries={found.Count}");
+                return null;
+            }
+            return $"存檔後 30 秒內在{string.Join("、", places.Select(Path.GetFileName))}找不到剛存的「{stem}」";
         }
         finally
         {
             if (dialog != 0 && NativeMethods.IsWindow(dialog)) NativeMethods.PostMessage(dialog, 0x0010 /* WM_CLOSE */, 0, 0);
         }
+    }
 
-        // Chrome writes .crdownload first; done when the files stop changing.
-        var last = string.Empty;
-        for (var i = 0; i < 60; i++)
+    /// <summary>Visible dialog windows (#32770) of any chrome process.</summary>
+    private static List<nint> ChromeDialogs()
+    {
+        var list = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
         {
-            await Task.Delay(500, _token);
-            var files = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).ToList();
-            if (files.Count == 0 || files.Any(f => f.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))) continue;
-            var now = string.Join("|", files.Select(f => f + ":" + new FileInfo(f).Length));
-            if (now == last) return null;
-            last = now;
+            if (!NativeMethods.IsWindowVisible(hwnd) || NativeMethods.ClassName(hwnd) != "#32770") return true;
+            NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+            if (IsChromeProcess(pid)) list.Add(hwnd);
+            return true;
+        }, 0);
+        return list;
+    }
+
+    /// <summary>Where Chrome's 另存新檔 lands: 桌面, 下載, 文件 (the ones that exist).</summary>
+    private static List<string> SavePlaces() =>
+        new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            SlipPrinter.DownloadsFolder(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+        }.Where(d => !string.IsNullOrEmpty(d) && Directory.Exists(d)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>A folder moved, also onto another drive (copy, then delete).</summary>
+    private static void MoveFolder(string from, string to)
+    {
+        if (string.Equals(Path.GetPathRoot(from), Path.GetPathRoot(to), StringComparison.OrdinalIgnoreCase)) { Directory.Move(from, to); return; }
+        Directory.CreateDirectory(to);
+        foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(to, Path.GetRelativePath(from, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
         }
-        return "存檔後 30 秒內 TEMP 資料夾沒有出現完整的檔案";
+        Directory.Delete(from, recursive: true);
     }
 
     /// <summary>

@@ -13,6 +13,17 @@ namespace CYERPAutoInput;
 /// </summary>
 internal static partial class SlipPrinter
 {
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid id, uint flags, nint token, out nint path);
+
+    /// <summary>The user's 下載 folder (it can be moved, so asked from Windows).</summary>
+    public static string DownloadsFolder()
+    {
+        if (SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0, 0, out var p) != 0) return string.Empty;
+        try { return Marshal.PtrToStringUni(p) ?? string.Empty; }
+        finally { Marshal.FreeCoTaskMem(p); }
+    }
+
     /// <summary>The installed printer whose name matches the set one (the set name may be shortened).</summary>
     public static string? Installed(string wanted) =>
         PrinterSettings.InstalledPrinters.Cast<string>().FirstOrDefault(p => string.Equals(p, wanted, StringComparison.OrdinalIgnoreCase))
