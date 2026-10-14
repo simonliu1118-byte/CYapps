@@ -65,8 +65,37 @@ internal sealed class AutoInputProcessor(LocalRepository repository, InvoiceServ
                 break;
             }
 
+            var records = repository.Invoices.LoadOrCreate();
             var existing = AutoInputRecordDecision.Classify(
-                repository.Invoices.LoadOrCreate(), source, order.Id, order.Amount, order.BuyerBan, environment);
+                records, source, order.Id, order.Amount, order.BuyerBan, environment);
+            if (!issue && existing?.Status == "unknown")
+            {
+                // Query-only repair of a single, source-verified local attempt.
+                // Never query an ambiguous/conflicting record or issue a second invoice.
+                var candidates = records.Where(item =>
+                    (item.Environment == environment || item.Environment.Length == 0) &&
+                    item.Source == source &&
+                    (item.OriginalOrderId == order.Id || item.OrderId == order.Id))
+                    .ToArray();
+                if (candidates.Length == 1 && candidates[0].Amount == order.Amount &&
+                    (order.BuyerBan.Length == 0 || order.BuyerBan == "0000000000" ||
+                     candidates[0].BuyerIdentifier == order.BuyerBan))
+                {
+                    try
+                    {
+                        var state = await repository.Connections.CheckAsync(cancellationToken).ConfigureAwait(false);
+                        if (state.AmegoAvailable && !state.BlockAll)
+                        {
+                            var reconciled = await service.ReconcileForAutoInputAsync(
+                                candidates[0].Id, environment, cancellationToken).ConfigureAwait(false);
+                            existing = AutoInputRecordDecision.Classify(
+                                [reconciled], source, order.Id, order.Amount, order.BuyerBan, environment);
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    catch (Exception) { /* Preserve unknown; never infer a safe reissue. */ }
+                }
+            }
             if (existing is not null)
             {
                 results.Add(!issue && existing.Status == "failed"
