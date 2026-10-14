@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.20 — 2026/10/14（CYERPAutoInput 本機接口，工程測試）
+
+- 新增 AutoInput 的 `--autoinput-query` 與 `--autoinput-issue` 命令列 JSON 契約；主程式已開啟時以同一 Windows 使用者的具名管道交由原行程處理，未開啟則取得原單一寫入者 Mutex 後無視窗執行。
+- 沿用 CYInvoice 原有 MO店+／酷澎匯入、`InvoiceService` 開票／官方回查，逐筆輸出發票號碼、日期、買方資料、金額及狀態；同一訂單與環境的再次開立在既有記錄判定與 service 序列化區段雙重保護。
+- 已開立紀錄只回原號，結果不明需回查或人工確認；查詢模式不開新發票，JSON 結果先寫暫存檔再原子更名，不覆蓋舊結果。
+- Windows CI 已驗證程式編譯、Core 回歸測試、啟動 smoke、portable 包與公開安全掃描；實際雙行程 IPC、Excel COM 及 AutoInput／MO店+／ERP 端到端尚待雙端工程驗收。
+- 這是下一個 Patch 工程測試包，不是正式 Release；保留 main V2.6.19 的正式發布與歷史。CYID／Cloud API／D1、雲端復原 PR 無變更。
+
 ## V2.6.19 — 2026/10/11（買方名稱查無資料可留空，工程測試）
 
 - 手動開立、MO／酷澎／鼎新匯入遇到光貿正常空結果／code 99，提示可人工輸入買方名稱；留空仍可開立，正式送出及本機紀錄以該張統編作為 BuyerName。API 技術／權限錯誤與未完成查詢仍擋下，不冒充查無資料。

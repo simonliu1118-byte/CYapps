@@ -1,6 +1,6 @@
 # CYInvoice ↔ CYERPAutoInput 接口實作／驗收交接（2026-10-14）
 
-> **目前是待驗收的 Draft PR #445，尚未合併或發布；AutoInput 不應在正式流程啟用自動開票。** 本文件如實區分「已寫入 source」與「CI、Windows 實機驗收通過」。
+> **V2.6.20 工程測試版，目前是待驗收的 Draft PR #445，尚未合併或發布；AutoInput 不應在正式流程啟用自動開票。** 本文件如實區分「已寫入 source」與「CI、Windows 實機驗收通過」。
 
 ## 來源與責任
 - AutoInput 需求母本：`apps/CYERPAutoInput/docs/CYINVOICE_INTERFACE_HANDOFF.md`，分支 `cyerp-auto-input/shopee-batch`（PR #424）。
@@ -46,7 +46,7 @@ CYInvoice.exe --autoinput-query <request.json> --result <result.json>
 {
   "schema": "cyinvoice-autoinput-result/1",
   "requestId": "0b6f4f4e-6c3e-4a51-9f0e-2f3c5d1a7e10",
-  "cyinvoiceVersion": "2.6.19+0",
+  "cyinvoiceVersion": "2.6.20+0",
   "environment": "test",
   "finishedAt": "2026-10-14T10:00:00+08:00",
   "orders": [
