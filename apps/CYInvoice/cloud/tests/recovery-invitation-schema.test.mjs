@@ -5,7 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 // Use real migrations and isolated SQLite, not any Cloudflare Worker, remote D1,
 // application secret, or historical live Identity/Device data.
 const migrations = readdirSync("migrations").filter(name => /^[0-9]{4}_.*[.]sql$/.test(name)).sort();
-assert.equal(migrations.at(-1), "0014_invitation_recovery_metadata.sql");
+assert.equal(migrations.at(-1), "0015_work_items.sql");
+assert.ok(migrations.includes("0014_invitation_recovery_metadata.sql"));
+// The recovery fixture deliberately tests the reviewed 0014 alone; 0015 is
+// a separate Draft Work Item schema and must not change recovery-issuer FKs.
 const optionalScript = readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8");
 const retireScript = readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8");
 

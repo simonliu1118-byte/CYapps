@@ -128,7 +128,13 @@ for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchem
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
-const canonical = fs.readdirSync('migrations').filter(n => n.endsWith('.sql')).sort();
+const sourceMigrations = fs.readdirSync('migrations').filter(n => n.endsWith('.sql')).sort();
+assert.equal(sourceMigrations.at(-1), '0015_work_items.sql');
+// 0015 is a new Draft-only feature. Test the historical approved deployment
+// contract through 0014; separately ensure the actual source 0015 cannot
+// be silently accepted for any original D1 until its own review/approval.
+const canonical = sourceMigrations.filter(n => n < '0015');
+assert.throws(() => checkMigrations(canonical, sourceMigrations), /UNREVIEWED_PENDING_MIGRATIONS/);
 for (const name of canonical.slice(0, 12)) db.exec(fs.readFileSync(`migrations/${name}`, 'utf8'));
 db.exec(`
   INSERT INTO workspaces (workspace_id, display_name) VALUES ('workspace_synthetic', 'Synthetic');
