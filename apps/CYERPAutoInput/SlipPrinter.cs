@@ -115,6 +115,13 @@ internal static partial class SlipPrinter
                     try { Consider(Load(Convert.FromBase64String(m.Groups[1].Value)), "data: in " + ext); }
                     catch (FormatException) { }
                 }
+                // A single-file page (.mhtml) keeps its pictures as base64 parts.
+                if (ext == ".mhtml")
+                    foreach (Match m in MhtmlPicture().Matches(text))
+                    {
+                        try { Consider(Load(Convert.FromBase64String(m.Groups[1].Value)), "part in .mhtml"); }
+                        catch (FormatException) { }
+                    }
             }
             else if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp" or ".tif" or ".tiff" or "")
                 Consider(Load(file), ext.Length > 0 ? ext : "(no extension)");
@@ -124,6 +131,9 @@ internal static partial class SlipPrinter
 
     [GeneratedRegex(@"data:image/(?:png|jpe?g|gif|bmp);base64,([A-Za-z0-9+/=\s]+)", RegexOptions.IgnoreCase)]
     private static partial Regex DataPicture();
+
+    [GeneratedRegex(@"Content-Type:\s*image/[^\r\n]*\r?\n(?:[^\r\n]+\r?\n)*?Content-Transfer-Encoding:\s*base64\r?\n(?:[^\r\n]+\r?\n)*?\r?\n([A-Za-z0-9+/=\r\n]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex MhtmlPicture();
 
     /// <summary>
     /// Prints the slip as one page: each of its pixels one printer dot (GraphicsUnit.Pixel,

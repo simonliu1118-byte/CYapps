@@ -848,6 +848,13 @@ internal sealed class ShopeeBatchRunner
         return ShopeeBatchScreens.ShowsNumber(boxes, tracking);
     }
 
+    private static bool IsChromeProcess(uint pid)
+    {
+        try { using var p = Process.GetProcessById((int)pid); return string.Equals(p.ProcessName, "chrome", StringComparison.OrdinalIgnoreCase); }
+        catch (ArgumentException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
     /// <summary>
     /// Ctrl+S on the slip's tab and Chrome's 另存新檔 dialog: the file name is set to the same
     /// name in <paramref name="folder"/> and 存檔 pressed; then the files are waited for. False
@@ -864,13 +871,16 @@ internal sealed class ShopeeBatchRunner
             NativeMethods.EnumWindows((hwnd, _) =>
             {
                 if (!NativeMethods.IsWindowVisible(hwnd) || NativeMethods.ClassName(hwnd) != "#32770") return true;
+                // Chrome opens its file dialogs from a utility process of its own (user's LOG,
+                // 2026-10-14: not found under the browser's process), so any chrome process.
                 NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
-                if (pid != chrome) return true;
+                if (pid != chrome && !IsChromeProcess(pid)) return true;
                 dialog = hwnd;
                 return false;
             }, 0);
         }
         if (dialog == 0) { _log.Info("shopee-batch", "family cut: no save dialog"); return false; }
+        _log.Info("shopee-batch", $"family cut: save dialog title={NativeMethods.WindowText(dialog)}");
         try
         {
             nint edit = 0, save = 0;
@@ -931,7 +941,9 @@ internal sealed class ShopeeBatchRunner
         opened.Dispose();
         var reuse = true;
         var ocrDialog = false;
-        var expanded = false;
+        var expands = 0;
+        var lastExpand = Stopwatch.StartNew();
+        var dumped = false;
         var actions = 0;
         var printerTries = 0;
         var watch = Stopwatch.StartNew();
@@ -971,10 +983,14 @@ internal sealed class ShopeeBatchRunner
 
             var scaleBox = ShopeeBatchScreens.PrintScaleBox(boxes);
             var scaleValue = ShopeeBatchScreens.PrintRowValue(boxes, "縮放比例");
-            if (scaleValue is null && !expanded && ShopeeBatchScreens.MoreSettings(boxes) is { } more)
+            // 「顯示更多設定」 reads 「顯示較少設定」 once open, so while it still says 更多 the
+            // settings are folded: a click made while the dialog was still loading may have done
+            // nothing (user's LOG, 2026-10-14), so it is clicked again, a little apart.
+            if (scaleValue is null && ShopeeBatchScreens.MoreSettings(boxes) is { } more && expands < 3 && (expands == 0 || lastExpand.ElapsedMilliseconds > 1500))
             {
                 Click(screen, more, "顯示更多設定");
-                expanded = true;
+                expands++;
+                lastExpand.Restart();
                 await Task.Delay(700, _token);
                 continue;
             }
@@ -998,7 +1014,19 @@ internal sealed class ShopeeBatchRunner
             }
 
             // 縮放比例
-            if (scaleValue is null) { last = "讀不到縮放比例"; await Task.Delay(600, _token); continue; }
+            if (scaleValue is null)
+            {
+                last = "讀不到縮放比例";
+                if (!dumped && watch.Elapsed > TimeSpan.FromSeconds(8))
+                {
+                    dumped = true;
+                    _log.Info("shopee-batch", $"print dialog without 縮放比例 ({(ocrDialog ? "OCR" : "page text")}): {string.Join(" | ", boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 20).Take(40))}");
+                }
+                // Page text may leave the folded rows out; the screen is read instead.
+                if (!ocrDialog && watch.Elapsed > TimeSpan.FromSeconds(10)) ocrDialog = true;
+                await Task.Delay(600, _token);
+                continue;
+            }
             if (ShopeeScreenshot.Compact(scaleValue.Text) != "自訂") { actions++; await ChooseAsync(screen, scaleValue, "自訂", panel); continue; }
             var scale = scaleBox is null ? (int?)null : int.Parse(ShopeeScreenshot.Compact(scaleBox.Text));
             if (scale != wanted)
