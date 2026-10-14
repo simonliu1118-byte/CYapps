@@ -133,6 +133,51 @@ await assert.rejects(() => run(db, { ...payload, deviceToken: "cydev_" + "e".rep
   /RECOVERY_INVITATION_UNAVAILABLE/);
 await assert.rejects(() => run(db, { ...payload, deviceToken: token1 }),
   /RECOVERY_TOKEN_CONFLICT/, "Previously revoked token cannot regain authority");
+
+// DR-09: a previously authorized issuer can race with recovery. Extract the
+// actual Worker SQL, not a weaker reimplementation: no pairing grant,
+// ordinary invitation grant or JOIN claim may commit after issuer revocation.
+const workerSource = readFileSync("src/index.ts", "utf8");
+function actualSql(body, marker) {
+  const start = body.indexOf("`" + marker);
+  assert.ok(start >= 0, "Expected Worker SQL marker: " + marker);
+  const end = body.indexOf("`", start + 1);
+  assert.ok(end > start, "Unterminated Worker SQL marker: " + marker);
+  return body.slice(start + 1, end);
+}
+const pairingIssueSql = actualSql(workerSource, "INSERT INTO device_pairing_codes (");
+const stalePair = db.prepare(pairingIssueSql).run(
+  "pair_stale", workspace, "old_device_1", "c".repeat(64),
+  "2030-01-01T00:00:00Z", "2026-10-14T00:00:00Z");
+assert.equal(stalePair.changes, 0, "revoked issuer must not create new pairing code");
+
+const inviteIssueSql = actualSql(workerSource, "INSERT INTO device_invitations (");
+const staleInvite = db.prepare(inviteIssueSql).run(
+  "inv_33333333-3333-4333-8333-333333333333",
+  workspace, "d".repeat(64), "old_device_1", null,
+  "2030-01-01T00:00:00Z", "2026-10-14T00:00:00Z",
+  actor.employeeId);
+assert.equal(staleInvite.changes, 0, "revoked issuer must not create pending invitation");
+
+// Simulate an invitation that a buggy old issuer managed to persist after
+// the fleet revoke. The receiving JOIN must independently fence the issuer
+// at the exact Device INSERT, not merely at preview or authentication.
+const syntheticInv = "inv_44444444-4444-4444-8444-444444444444";
+db.prepare(`INSERT INTO device_invitations (
+  invitation_id,workspace_id,code_hash,issued_by_device_id,
+  issued_by_cyid_employee_id,delivery_state,expires_at,created_at)
+  VALUES(?,?,?,'old_device_1',?,'sent','2030-01-01T00:00:00Z','2026-10-14T00:00:00Z')`)
+  .run(syntheticInv,workspace,"e".repeat(64),actor.employeeId);
+const claimFunctionSource = workerSource.slice(workerSource.indexOf("async function claimInvitation("));
+const joinClaimSql = actualSql(claimFunctionSource, "INSERT INTO devices (device_id, workspace_id, display_name, token_hash,");
+const staleJoin = db.prepare(joinClaimSql).run(
+  "dev_55555555-5555-4555-8555-555555555555",workspace,
+  "Unauthorized computer","f".repeat(64),"3.0.0",
+  syntheticInv, "2026-10-14T00:00:00Z");
+assert.equal(staleJoin.changes,0,"revoked issuer cannot authorize late JOIN");
+assert.equal(count(db,"devices","WHERE status='active'"),1,
+  "only recovery winner can be active after an old issuer's in-flight request");
+assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
 db.close();
 
 // A failed audit must roll back the new Device, old fleet revocation, and
