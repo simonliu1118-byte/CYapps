@@ -67,6 +67,93 @@ public sealed class AmegoClient : IAmegoGateway
         return new VoidResponse(code, message);
     }
 
+    // Call only after the caller has durably saved AllowanceNumber and payload.
+    // The response cannot be treated as an official upload completion.
+    public async Task<AllowanceIssueResponse> IssueAllowanceAsync(AllowanceIssueRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ValidateAllowanceNumber(request.AllowanceNumber);
+        if (request.AllowanceType != 2) throw new ArgumentException("only seller-issued allowances are supported", nameof(request));
+        if (request.AllowanceDate.Length != 8 || !DateOnly.TryParseExact(request.AllowanceDate, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            throw new ArgumentException("AllowanceDate must be yyyyMMdd", nameof(request));
+        if (request.BuyerIdentifier.Trim().Length == 0 || request.BuyerName.Trim().Length == 0)
+            throw new ArgumentException("BuyerIdentifier and BuyerName are required", nameof(request));
+        if (request.ProductItem.Count is < 1 or > 9999)
+            throw new ArgumentException("ProductItem count must be between 1 and 9999", nameof(request));
+        if (request.TotalAmount <= 0 || request.TaxAmount < 0)
+            throw new ArgumentException("allowance totals must be nonnegative with positive net amount", nameof(request));
+        foreach (var item in request.ProductItem)
+        {
+            if (item.OriginalInvoiceNumber.Trim().Length != 10 ||
+                item.OriginalDescription.Trim().Length is < 1 or > 256 ||
+                !DateOnly.TryParseExact(item.OriginalInvoiceDate.ToString(CultureInfo.InvariantCulture), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
+                item.Quantity <= 0 || item.UnitPrice < 0 || item.Amount <= 0 || item.Tax < 0 ||
+                item.TaxType is < 1 or > 3)
+                throw new ArgumentException("invalid allowance item", nameof(request));
+        }
+        using var document = await PostAsync("/json/g0401", new[] { request }, cancellationToken).ConfigureAwait(false);
+        var (code, message) = ReadEnvelope(document.RootElement);
+        ThrowResponseError(code, message);
+        return new AllowanceIssueResponse(code, message);
+    }
+
+    public async Task<AllowanceQueryResponse> QueryAllowanceAsync(string allowanceNumber, CancellationToken cancellationToken = default)
+    {
+        ValidateAllowanceNumber(allowanceNumber);
+        using var document = await PostAsync("/json/allowance_query", new Dictionary<string, string>
+        {
+            ["allowance_number"] = allowanceNumber,
+        }, cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("allowance_query returned success without object data");
+        var returnedNumber = Text(data, "allowance_number");
+        if (!string.Equals(returnedNumber, allowanceNumber, StringComparison.Ordinal))
+            throw new InvalidDataException("allowance_query returned a different allowance number");
+        var result = new AllowanceQueryItem(
+            returnedNumber, Text(data, "invoice_type"), FlexibleInt32(data, "invoice_status"),
+            Scalar(data, "allowance_date"), FlexibleInt32(data, "allowance_type"),
+            Text(data, "buyer_identifier"), Text(data, "buyer_name"),
+            Scalar(data, "tax_amount"), Scalar(data, "total_amount"),
+            Int64(data, "cancel_date"),
+            data.TryGetProperty("product_item", out var items) ? items.Clone() : default);
+        return new AllowanceQueryResponse(code, message, result);
+    }
+
+    public async Task<AllowanceStatusResponse> AllowanceStatusAsync(IEnumerable<string> allowanceNumbers, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(allowanceNumbers);
+        var numbers = allowanceNumbers.Select(value => (value ?? string.Empty).Trim()).ToArray();
+        if (numbers.Length == 0) throw new ArgumentException("at least one allowance number is required", nameof(allowanceNumbers));
+        foreach (var number in numbers) ValidateAllowanceNumber(number);
+        if (numbers.Distinct(StringComparer.Ordinal).Count() != numbers.Length)
+            throw new ArgumentException("duplicate allowance number", nameof(allowanceNumbers));
+        var payload = numbers.Select(number => new Dictionary<string, string> { ["AllowanceNumber"] = number }).ToArray();
+        using var document = await PostAsync("/json/allowance_status", payload, cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("allowance_status returned success without data");
+        var result = new List<AllowanceStatusItem>();
+        foreach (var number in numbers)
+        {
+            if (!data.TryGetProperty(number, out var item) || item.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("allowance_status omitted a requested allowance");
+            result.Add(new AllowanceStatusItem(number, Text(item, "type"),
+                FlexibleInt32(item, "status"), Scalar(item, "tax_amount"), Scalar(item, "total_amount")));
+        }
+        return new AllowanceStatusResponse(code, message, result);
+    }
+
+    private static void ValidateAllowanceNumber(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value != value.Trim() || value.EnumerateRunes().Count() > 16)
+            throw new ArgumentException("AllowanceNumber must contain 1 to 16 characters without surrounding whitespace");
+    }
+
     public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default) =>
         QueryAsync("order", orderId.Trim(), string.Empty, cancellationToken);
 
