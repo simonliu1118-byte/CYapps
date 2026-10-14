@@ -217,22 +217,23 @@ public sealed class InvoiceService
             lookup,
             cancellationToken);
 
-    public async Task<IssueResult> IssueMoAsync(MoOrder order, CancellationToken cancellationToken = default, bool replaySafe = false)
+    public async Task<IssueResult> IssueMoAsync(MoOrder order, CancellationToken cancellationToken = default, bool replaySafe = false, string expectedEnvironment = "")
     {
         if (IsMoCompany(order))
         {
             var lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
             if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
-            return await IssueMoWithLookupAsync(order, lookup, cancellationToken, replaySafe).ConfigureAwait(false);
+            return await IssueMoWithLookupAsync(order, lookup, cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
         }
-        return await IssueMoWithLookupAsync(order, new NameLookup(), cancellationToken, replaySafe).ConfigureAwait(false);
+        return await IssueMoWithLookupAsync(order, new NameLookup(), cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
     }
 
     public Task<IssueResult> IssueMoWithLookupAsync(
         MoOrder order,
         NameLookup lookup,
         CancellationToken cancellationToken = default,
-        bool replaySafe = false)
+        bool replaySafe = false,
+        string expectedEnvironment = "")
     {
         var company = IsMoCompany(order);
         ResolveImportedBuyerName(company, lookup, order.BuyerName, value => order.BuyerName = value);
@@ -287,12 +288,13 @@ public sealed class InvoiceService
                 NpoBan: order.NpoBan,
                 ApiBuyerName: testPrivacy ? "測試消費者" : string.Empty,
                 TestPrivacy: testPrivacy,
-                AutoInputReplaySafe: replaySafe),
+                AutoInputReplaySafe: replaySafe,
+                ExpectedEnvironment: expectedEnvironment),
             lookup,
             cancellationToken);
     }
 
-    public async Task<IssueResult> IssueCoupangAsync(CoupangOrder order, CancellationToken cancellationToken = default, bool replaySafe = false)
+    public async Task<IssueResult> IssueCoupangAsync(CoupangOrder order, CancellationToken cancellationToken = default, bool replaySafe = false, string expectedEnvironment = "")
     {
         var company = order.BuyerBan.Trim().Length != 0;
         var lookup = new NameLookup();
@@ -301,14 +303,15 @@ public sealed class InvoiceService
             lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
             if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
         }
-        return await IssueCoupangWithLookupAsync(order, lookup, cancellationToken, replaySafe).ConfigureAwait(false);
+        return await IssueCoupangWithLookupAsync(order, lookup, cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
     }
 
     public Task<IssueResult> IssueCoupangWithLookupAsync(
         CoupangOrder order,
         NameLookup lookup,
         CancellationToken cancellationToken = default,
-        bool replaySafe = false)
+        bool replaySafe = false,
+        string expectedEnvironment = "")
     {
         var company = order.BuyerBan.Trim().Length != 0;
         ResolveImportedBuyerName(company, lookup, order.BuyerName, value => order.BuyerName = value);
@@ -335,7 +338,8 @@ public sealed class InvoiceService
                 BuyerName: order.BuyerName,
                 ApiBuyerName: testPrivacy ? "測試消費者" : string.Empty,
                 TestPrivacy: testPrivacy,
-                AutoInputReplaySafe: replaySafe),
+                AutoInputReplaySafe: replaySafe,
+                ExpectedEnvironment: expectedEnvironment),
             lookup,
             cancellationToken);
     }
@@ -530,6 +534,8 @@ public sealed class InvoiceService
         };
 
         var (gateway, environment) = GetGateway();
+        if (options.AutoInputReplaySafe && options.ExpectedEnvironment != environment)
+            throw new InvalidOperationException("AutoInput 開立期間環境已切換，未送出");
         var createdAt = now();
         var apiOrderId = RequestOrderId(draft, options);
         if (environment == Environments.Test)
@@ -1221,7 +1227,8 @@ public sealed class InvoiceService
         string ApiOrderId = "",
         string ApiBuyerName = "",
         bool TestPrivacy = false,
-        bool AutoInputReplaySafe = false);
+        bool AutoInputReplaySafe = false,
+        string ExpectedEnvironment = "");
 }
 
 public sealed class UnknownInvoiceResultException(InvoiceRecord record, Exception? innerException = null)
