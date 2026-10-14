@@ -58,7 +58,7 @@ CI 不等於正式 D1、Cloudflare Worker、真 Email／Device 或 AMEGO 操作�
 
 設定頁**目前 ADMIN／SUPER_ADMIN 都能開啟，也都可改本機統編／App Key／MO店+ 密碼**，這是已看過的既有 source，不要誤寫成只限超管。V3 新增「公司設定卡片」時，**只有 CYID SUPER_ADMIN 可新增／修改／移除統編＋AMEGO App Key＋MO店+ 密碼的公司綁定**；一般 ADMIN 可開設定，但只看公司統編與憑證是否設定，不應讀取明文；Worker 必須強制權限驗證，不能只隱藏 UI。敏感密鑰要加密（解密金鑰不可明文和 D1 密文同存），Audit 不留 Secrets。Built-in／單機既有 DPAPI 不因這功能被強制遷移。
 
-## 4. 下一個新對話按此順序開發，不過度設計
+## 2026-10-15 接續實作增量（未驗收、未部署）\n\nV3 Draft #440 已開始補上正式折讓 API 的 **Core Gateway 底層能力**：新增 `AmegoAllowanceContracts.cs` 與 `AllowanceNumberGenerator`，在 `AmegoContracts.cs` 加入三個 optional gateway methods、`AmegoClient.cs` 實作 `/json/g0401`（整批陣列）、`/json/allowance_query`、`/json/allowance_status`，並在既有 Allowance.Tests 補隔離請求格式、查回及亂數單號測試。原 `EmployeeAllowanceWorkflowService`、WinForms 管理員人工折讓 UI、正式開立與 OrderID 路徑均未改。\n\n**不可誤認已完成：** 尚無送出前 SQLite durable operation＋payload／原號保存、跨機操作互斥或結果不明狀態機；這些要先於 UI 接線完成。不能單純靠隨機號碼聲稱 100% 不撞號；不得讓 API 結果不明自動更換號碼或再次發出 g0401。正式 Cloud D1、Worker、CYID、Release 未變更；真 AMEGO 尚未送出。\n\n## 4. 下一個新對話按此順序開發，不過度設計
 
 1. **先作 /json/g0401 的現有 Gateway/Core API 升級**：盤點正式 request／response、先產生並保存 AllowanceNumber、結果查回與不盲重送；同一功能供 CYID、Built-in、單機，配相關回歸。尚未驗收前保留原人工流程，**不改動正常開立／OrderID 防重**。
 2. g0401 安全驗收後，**在同一套 Work Item／上傳問題架構**設計 D1 事件／申請 Audit 的最少欄位與必要狀態，涵蓋三種人工申請及開立失敗／技術異常，不建一般發票索引。既有 `0015` 只是驗證技術核心，不可直接當完整業務 schema 部署。
