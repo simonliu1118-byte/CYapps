@@ -32,7 +32,7 @@
 
 **CYWEB→Invoice 第一阻塞已於 V3 Draft source 補齊（待 CI／雙端聯測）：**依 #151 的交接，`recovery-issuer.ts` 明確區分 `revoked`（只能由 `revoked_at` 或成功受 guarded D1 batch 撤銷證實）與 `failed`（consumed／expired／不存在等）；同操作重複 revoke 及失去 DB 回覆後的 status readback 可返回 `revoked`；revoke guard 同時比對 `consumed_at`／`expires_at`，防 claim 或過期競態。已加入 synthetic SQLite 測試：撤銷重讀、consumed、expired、D1 COMMIT 後回覆遺失、claim 與 revoke 競態；**尚未宣稱真 D1／Windows／CYWEB E2E 驗收完成**。CYWEB #151 需核對最新版契約。
 
-**Work Item 最小核心（本輪 Draft，非已上線）：**新 forward `0015_work_items.sql` 一張表，`work-items.ts` 建立／open→review→closed CAS、同 D1 write-time Device fence，僅存雜湊識別，不觸發光貿操作；雙 profile 合成測試加入 Cloud CI。下一步才接受控 API、Windows UI、正式權限與操作稽核；不把這版解讀為正式服務已上線。
+**Work Item 最小核心（本輪 Draft，非已上線）：**新**待審草案** `cloud/drafts/0015_work_items.sql` 一張表，`work-items.ts` 建立／open→review→closed CAS、同 D1 write-time Device fence，僅存雜湊識別，不觸發光貿操作；雙 profile 合成測試加入 Cloud CI。下一步才接受控 API、Windows UI、正式權限與操作稽核；不把這版解讀為正式服務已上線。
 
 **後續按序：** 已先在既有 Device 撤銷 endpoint 加 D1 commit-time 的操作裝置 active + Built-in 管理員 credential guard，並加 synthetic late-revoke regression；這不是尚未建立的 Work Item／光貿跨服務 Side Effect 的完整 fencing。V3 Work Item／revision 的 execution-time Device fencing／epoch，正式 Cloudflare Binding／原 D1 schema／Email 設定的**唯讀**核對與 0014/maintenance rollback/readback 計畫，DR-01～DR-13 的跨服務、多機、Windows 及真 Email 驗收。V3 折讓人工歷史欄位缺漏留在 Work Item／Audit 正式重做，不當作舊 V2 已修復。
 

@@ -1,5 +1,5 @@
 -- V3 Work Item metadata only: not an invoice ledger and not official AMEGO status.
--- Pending in Draft: never apply to the original D1 without separate approval.
+-- Pending in Draft: NOT in canonical migrations; do not apply to original D1.\n-- Move to migrations only after the specific Work Item D1 plan is approved.
 CREATE TABLE work_items (
     work_item_id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
