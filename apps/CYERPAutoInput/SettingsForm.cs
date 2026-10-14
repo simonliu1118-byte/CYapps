@@ -22,8 +22,9 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
     private readonly TextBox _hctPickupAddress = new();
-    private readonly TextBox _chatKeywords = new();
-    private readonly TextBox _chatMessage = new();
+    private ChatRuleEditor? _shopeeChat;
+    private ChatRuleEditor? _moChat;
+    private ChatRuleEditor? _coupangChat;
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -92,6 +93,7 @@ internal sealed class SettingsForm : Form
         _tabs.Padding = new Point(14, 5);
         _tabs.TabPages.Add(GeneralPage());
         _tabs.TabPages.Add(ImportPage());
+        _tabs.TabPages.Add(MessagesPage());
         _tabs.TabPages.Add(FreightPage());
         _tabs.TabPages.Add(DefaultsPage());
         root.Controls.Add(_tabs, 0, 1);
@@ -221,9 +223,7 @@ internal sealed class SettingsForm : Form
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300),
-            ("聊聊關鍵字", _chatKeywords, _settings.ShopeeChatKeywords, 300),
-            ("聊聊訊息", _chatMessage, _settings.ShopeeChatMessage, 300)));
+            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -260,6 +260,34 @@ internal sealed class SettingsForm : Form
         if (focused < 0 || focused == fields.Count - 1) SaveAndClose();
         else fields[focused + 1].Focus();
         return true;
+    }
+
+    /// <summary>
+    /// 發送訊息 (user, 2026-10-14): per platform, rules of words looked for in the buyer's note and
+    /// the message sent for them; a word may sit in one rule only. Only 蝦皮 is used for now
+    /// (全自動 sends through 聊聊); MO店+ and 酷澎 are shown locked.
+    /// </summary>
+    private TabPage MessagesPage()
+    {
+        var page = Page("發送訊息");
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var flow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        flow.Controls.Add(new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(560, 0),
+            Margin = new Padding(0, 0, 0, 8),
+            Text = "買家備註出現關鍵字時，自動送出對應的訊息（訂單照常處理）。關鍵字用逗號分隔，同一個平台內一個關鍵字只能屬於一則訊息。"
+        });
+        _shopeeChat = new ChatRuleEditor("蝦皮（全自動：安排出貨前以聊聊送出）", _settings.ShopeeChatRules, locked: false);
+        _moChat = new ChatRuleEditor("MO店+（尚未開放）", _settings.MoChatRules, locked: true);
+        _coupangChat = new ChatRuleEditor("酷澎（尚未開放）", _settings.CoupangChatRules, locked: true);
+        flow.Controls.Add(_shopeeChat);
+        flow.Controls.Add(_moChat);
+        flow.Controls.Add(_coupangChat);
+        scroll.Controls.Add(flow);
+        page.Controls.Add(scroll);
+        return page;
     }
 
     private TabPage FreightPage()
@@ -356,6 +384,14 @@ internal sealed class SettingsForm : Form
 
     private void SaveAndClose()
     {
+        foreach (var editor in new[] { _shopeeChat!, _moChat!, _coupangChat! })
+        {
+            var problems = ChatRules.Problems(editor.Rules());
+            if (problems.Count == 0) continue;
+            MessageBox.Show(this, $"發送訊息 › {editor.Text}：\n\n" + string.Join("\n", problems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 2;
+            return;
+        }
         var warehouse = _firstRowWarehouseCode.Text.Trim();
         if (_firstRowWarehouse.Checked && warehouse.Length == 0)
         {
@@ -394,8 +430,9 @@ internal sealed class SettingsForm : Form
         }
         _settings.HctLabelScale = hctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
-        _settings.ShopeeChatKeywords = _chatKeywords.Text.Trim();
-        _settings.ShopeeChatMessage = _chatMessage.Text.Trim();
+        _settings.ShopeeChatRules = ChatRules.Clean(_shopeeChat!.Rules());
+        _settings.MoChatRules = ChatRules.Clean(_moChat!.Rules());
+        _settings.CoupangChatRules = ChatRules.Clean(_coupangChat!.Rules());
         _settings.SevenLabelScale = sevenScale;
         _settings.FamilyLabelScale = familyScale;
         _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();
@@ -434,5 +471,67 @@ internal sealed class SettingsForm : Form
         }
         DialogResult = DialogResult.OK;
         Close();
+    }
+}
+
+/// <summary>A platform's 發送訊息 rules: one row per rule (關鍵字, 訊息, 刪除) and 新增 below.</summary>
+internal sealed class ChatRuleEditor : GroupBox
+{
+    private readonly FlowLayoutPanel _rows = new() { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
+    private readonly bool _locked;
+
+    public ChatRuleEditor(string title, IEnumerable<ChatRule> rules, bool locked)
+    {
+        _locked = locked;
+        Text = title;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        Padding = new Padding(10, 6, 10, 8);
+        Margin = new Padding(0, 0, 0, 10);
+        MinimumSize = new Size(570, 0);
+        var body = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        body.Controls.Add(_rows);
+        var add = new CyButton { Text = "新增", Width = 80, Height = 30, Enabled = !locked, Margin = new Padding(0, 4, 0, 0) };
+        add.Click += (_, _) => AddRow(new ChatRule());
+        body.Controls.Add(add);
+        Controls.Add(body);
+        foreach (var rule in rules) AddRow(rule);
+        if (_rows.Controls.Count == 0 && !locked) AddRow(new ChatRule { Keywords = "發票,收據,統編,統一編號,抬頭" });
+        Enabled = !locked;
+    }
+
+    public List<ChatRule> Rules() =>
+        _rows.Controls.OfType<TableLayoutPanel>().Select(r => new ChatRule
+        {
+            Keywords = ((TextBox)r.GetControlFromPosition(1, 0)!).Text,
+            Message = ((TextBox)r.GetControlFromPosition(1, 1)!).Text
+        }).ToList();
+
+    private void AddRow(ChatRule rule)
+    {
+        var row = new TableLayoutPanel { ColumnCount = 3, RowCount = 2, AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 410));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        var keywords = new TextBox { Width = 400, Text = rule.Keywords, PlaceholderText = "關鍵字，用逗號分隔，例如：發票,統編", Margin = new Padding(0, 4, 0, 4) };
+        var message = new TextBox { Width = 400, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, Text = rule.Message, Margin = new Padding(0, 2, 0, 2) };
+        var remove = new CyButton { Text = "刪除", Width = 64, Height = 30, Enabled = !_locked };
+        remove.Click += (_, _) => { _rows.Controls.Remove(row); row.Dispose(); Renumber(); };
+        row.Controls.Add(new Label { AutoSize = true, Margin = new Padding(0, 8, 4, 0) }, 0, 0);
+        row.Controls.Add(keywords, 1, 0);
+        row.Controls.Add(remove, 2, 0);
+        row.Controls.Add(new Label { Text = "訊息", AutoSize = true, Margin = new Padding(0, 6, 4, 0) }, 0, 1);
+        new ToolTip().SetToolTip(keywords, "關鍵字，用逗號分隔");
+        row.Controls.Add(message, 1, 1);
+        _rows.Controls.Add(row);
+        Renumber();
+    }
+
+    /// <summary>Rows are numbered (第 1 則, 第 2 則…) as the save check names them; the first row's label says it holds the words.</summary>
+    private void Renumber()
+    {
+        var i = 1;
+        foreach (var row in _rows.Controls.OfType<TableLayoutPanel>())
+            ((Label)row.GetControlFromPosition(0, 0)!).Text = $"第 {i++} 則";
     }
 }

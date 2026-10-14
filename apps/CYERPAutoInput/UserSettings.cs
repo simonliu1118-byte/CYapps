@@ -38,11 +38,28 @@ internal sealed class UserSettings
     /// </summary>
     public string HctPickupAddress { get; set; } = string.Empty;
     /// <summary>
-    /// 全自動: a 買家備註 with one of these words (comma separated) gets <see cref="ShopeeChatMessage"/>
-    /// through 聊聊 before the order is shipped as usual (user, 2026-10-14). Blank message = off.
+    /// 設定 › 發送訊息 (user, 2026-10-14): per platform, rules of words looked for in the buyer's
+    /// note and the message sent for them. 蝦皮 is used by 全自動 (聊聊, before the order is
+    /// shipped as usual); MO店+ and 酷澎 are kept for later.
     /// </summary>
-    public string ShopeeChatKeywords { get; set; } = "發票,收據,統編,統一編號,抬頭";
-    public string ShopeeChatMessage { get; set; } = string.Empty;
+    public List<ChatRule> ShopeeChatRules { get; set; } = [];
+    public List<ChatRule> MoChatRules { get; set; } = [];
+    public List<ChatRule> CoupangChatRules { get; set; } = [];
+
+    // Build 25 kept one 蝦皮 rule as two strings; read once and moved into ShopeeChatRules.
+    private string _legacyChatKeywords = "發票,收據,統編,統一編號,抬頭";
+    private string _legacyChatMessage = string.Empty;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShopeeChatKeywords { get => null; set { if (!string.IsNullOrWhiteSpace(value)) _legacyChatKeywords = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShopeeChatMessage { get => null; set { if (!string.IsNullOrWhiteSpace(value)) _legacyChatMessage = value; } }
+
+    internal void MigrateLegacyChat()
+    {
+        if (ShopeeChatRules.Count == 0 && _legacyChatMessage.Trim().Length > 0)
+            ShopeeChatRules.Add(new ChatRule { Keywords = _legacyChatKeywords, Message = _legacyChatMessage });
+        _legacyChatMessage = string.Empty;
+    }
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;
@@ -104,6 +121,10 @@ internal sealed class UserSettingsStore
             loaded.Defaults ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             loaded.Defaults = new Dictionary<string, string>(loaded.Defaults, StringComparer.OrdinalIgnoreCase);
             loaded.FreightTypes = new Dictionary<string, string>(loaded.FreightTypes ?? [], StringComparer.OrdinalIgnoreCase);
+            loaded.ShopeeChatRules ??= [];
+            loaded.MoChatRules ??= [];
+            loaded.CoupangChatRules ??= [];
+            loaded.MigrateLegacyChat();
             return loaded;
         }
         catch (Exception ex)

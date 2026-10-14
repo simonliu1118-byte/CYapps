@@ -19,15 +19,10 @@ internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int Sev
     int HctScale = 95, string HctPickupAddress = "");
 
 /// <summary>
-/// The 聊聊 reply for buyers asking about invoices (user, 2026-10-14): when the 買家備註 mentions
-/// one of <paramref name="Keywords"/>, <paramref name="Message"/> (kept in the settings, one
-/// line) is typed into the order's chat and sent. Blank = off.
+/// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
+/// message (one line) typed into the order's 聊聊 and sent. No rules = off.
 /// </summary>
-internal sealed record ShopeeBatchChat(string Keywords, string Message)
-{
-    public string Text => string.Join(" ", Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-    public bool On => Keywords.Trim().Length > 0 && ShopeeScreenshot.Compact(Text).Length >= 4;
-}
+internal sealed record ShopeeBatchChat(IReadOnlyList<ChatRule> Rules);
 
 /// <summary>
 /// An order left for a person without stopping the batch (user, 2026-10-13: note it, go on,
@@ -73,7 +68,7 @@ internal sealed class ShopeeBatchRunner
 
     public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, ShopeeBatchPrint print, CancellationToken token, ShopeeBatchChat? chat = null)
     {
-        _chat = chat ?? new ShopeeBatchChat(string.Empty, string.Empty);
+        _chat = chat ?? new ShopeeBatchChat([]);
         _print = print;
         _printer = print.Printer;
         _ocr = ocr;
@@ -449,14 +444,16 @@ internal sealed class ShopeeBatchRunner
     private async Task ShipAsync(ShopeeBatchOrder order)
     {
         var (detail, button) = await WaitAsync("「安排出貨」按鈕", 15, s => ShopeeBatchScreens.ShipButton(s.Boxes), reuseFirst: true);
-        // 買家備註 asking about invoices: the 聊聊 reply first, then the order as usual.
-        if (_chat.On && ShopeeBatchScreens.NoteMentions(ShopeeBatchScreens.BuyerNote(detail.Boxes), _chat.Keywords) is { } word)
+        // 買家備註 with a rule's words: its 聊聊 message first, then the order as usual.
+        var matches = ChatRules.Matches(ShopeeBatchScreens.BuyerNote(detail.Boxes), _chat.Rules);
+        if (matches.Count > 0)
         {
             detail.Dispose();
-            _log.Info("shopee-batch", $"buyer note mentions {word}; sending the 聊聊 reply");
-            var problem = await SendChatReplyAsync();
-            if (problem is null) Chats.Add(order.OrderSn);
-            else Notes.Add(new ShopeeBatchNote(order.OrderSn, $"買家備註提到「{word}」，聊聊訊息未送出（{problem}），請人工傳送。"));
+            var words = string.Join("、", matches.Select(m => m.Word));
+            _log.Info("shopee-batch", $"buyer note matches {matches.Count} message rule(s); sending through 聊聊");
+            var problem = await SendChatReplyAsync(matches.Select(m => ChatRules.OneLine(m.Rule.Message)).ToList());
+            if (problem is null) Chats.Add($"{order.OrderSn}（{words}）");
+            else Notes.Add(new ShopeeBatchNote(order.OrderSn, $"買家備註提到「{words}」，聊聊訊息未全部送出（{problem}），請人工傳送。"));
             await BackToOrderTopAsync();
             (detail, button) = await WaitAsync("「安排出貨」按鈕", 15, s => ShopeeBatchScreens.ShipButton(s.Boxes));
         }
@@ -524,7 +521,7 @@ internal sealed class ShopeeBatchRunner
     /// Enter; » folds the panel away. Null when sent, else what went wrong (the order goes on
     /// either way; the panel is folded, or left with Esc).
     /// </summary>
-    private async Task<string?> SendChatReplyAsync()
+    private async Task<string?> SendChatReplyAsync(IReadOnlyList<string> messages)
     {
         // The buyer card is below the fold: scrolled into view.
         OcrBox? chat = null;
@@ -550,20 +547,24 @@ internal sealed class ShopeeBatchRunner
             var (open, input) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.ChatInput(s.Boxes) is { } i && Visible(s, i) ? i : null);
             if (open is null || input is null) return "聊聊視窗沒有出現";
             using (open) Click(open, input, "聊聊輸入框");
-            await Task.Delay(300, _token);
-            _inputs++;
-            _log.Info("shopee-batch", $"type 聊聊 message length={_chat.Text.Length}");
-            InputSender.UnicodeText(_chat.Text);
+            for (var m = 0; m < messages.Count; m++)
+            {
+                var text = messages[m];
+                await Task.Delay(300, _token);
+                _inputs++;
+                _log.Info("shopee-batch", $"type 聊聊 message {m + 1}/{messages.Count} length={text.Length}");
+                InputSender.UnicodeText(text);
 
-            var (filled, _) = await WaitOrNullAsync(5, s => ShopeeBatchScreens.ChatInputHolds(s.Boxes, input, _chat.Text) ? s : null);
-            if (filled is null) { ClearChatInput(); return "訊息沒有出現在輸入框"; }
-            filled.Dispose();
-            Keys("Enter (送出聊聊)", NativeMethods.VK_RETURN);
-            var (empty, _) = await WaitOrNullAsync(8, s => ShopeeBatchScreens.ChatInput(s.Boxes) is not null ? s : null);
-            if (empty is null) return "按 Enter 後輸入框沒有清空，不確定是否已送出";
-            empty.Dispose();
-            sent = true;
-            _log.Info("shopee-batch", "聊聊 message sent");
+                var (filled, _) = await WaitOrNullAsync(5, s => ShopeeBatchScreens.ChatInputHolds(s.Boxes, input, text) ? s : null);
+                if (filled is null) { ClearChatInput(); return $"第 {m + 1} 則訊息沒有出現在輸入框"; }
+                filled.Dispose();
+                Keys("Enter (送出聊聊)", NativeMethods.VK_RETURN);
+                var (empty, _) = await WaitOrNullAsync(8, s => ShopeeBatchScreens.ChatInput(s.Boxes) is not null ? s : null);
+                if (empty is null) return $"第 {m + 1} 則按 Enter 後輸入框沒有清空，不確定是否已送出";
+                empty.Dispose();
+                sent = true;
+                _log.Info("shopee-batch", $"聊聊 message {m + 1} sent");
+            }
             return null;
         }
         finally

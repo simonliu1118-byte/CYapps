@@ -1022,7 +1022,7 @@ internal sealed class MainForm : Form
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
                 _settings.HctLabelScale, _settings.HctPickupAddress), token,
-            new ShopeeBatchChat(_settings.ShopeeChatKeywords, _settings.ShopeeChatMessage));
+            new ShopeeBatchChat(_settings.ShopeeChatRules));
         var outcome = AutomationOutcome.Stopped;
         string? problem = null;
         var shipped = false;
@@ -1088,7 +1088,7 @@ internal sealed class MainForm : Form
         if (outcome != AutomationOutcome.Done || runner.Notes.Count > 0) Alarm();
         using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
             [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
-             new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（買家備註提到發票／統編等）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
+             new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
             stopped);
         summary.ShowDialog(this);
     }

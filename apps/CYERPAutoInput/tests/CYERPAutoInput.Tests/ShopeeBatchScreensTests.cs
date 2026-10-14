@@ -386,8 +386,9 @@ public sealed class ShopeeBatchScreensTests
         var note = ShopeeBatchScreens.BuyerNote(page);
         Assert.Contains("12345678", note);
         Assert.DoesNotContain("進帳資訊", note);
-        Assert.Equal("統編", ShopeeBatchScreens.NoteMentions(note, "發票,收據,統編,統一編號,抬頭"));
-        Assert.Null(ShopeeBatchScreens.NoteMentions("請盡快出貨", "發票,收據,統編,統一編號,抬頭"));
+        var rules = new List<ChatRule> { new() { Keywords = "發票,收據,統編,統一編號,抬頭", Message = "測試訊息" } };
+        Assert.Equal("統編", Assert.Single(ChatRules.Matches(note, rules)).Word);
+        Assert.Empty(ChatRules.Matches("請盡快出貨", rules));
         Assert.Equal(946, ShopeeBatchScreens.ChatButton(page)!.Left);
         Assert.Equal("", ShopeeBatchScreens.BuyerNote([B("訂單編號", 112, 200, 70)]));
 

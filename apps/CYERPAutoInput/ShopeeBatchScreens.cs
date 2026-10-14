@@ -201,11 +201,6 @@ internal static partial class ShopeeBatchScreens
             .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
     }
 
-    /// <summary>The first of <paramref name="keywords"/> (comma separated) the note mentions, or null.</summary>
-    public static string? NoteMentions(string note, string keywords) =>
-        keywords.Split([',', '，', '、'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault(k => k.Length > 0 && note.Contains(ShopeeScreenshot.Compact(k), StringComparison.Ordinal));
-
     /// <summary>The buyer card's 聊聊 button: on the row of 關注, right of it.</summary>
     public static OcrBox? ChatButton(IReadOnlyList<OcrBox> boxes)
     {
