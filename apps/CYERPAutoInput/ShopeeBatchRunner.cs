@@ -479,15 +479,19 @@ internal sealed class ShopeeBatchRunner
         _shippedHint = true;
 
         // 寄件編號申請中… then the number. 全家 first shows 「申請寄件編號」 (user, 2026-10-13), and
-        // its own 申請寄件編號 dialog (寄件人真實姓名, 2026-10-14): each button pressed once, at most two.
-        var applied = new List<OcrBox>();
+        // its own 申請寄件編號 dialog (寄件人真實姓名, 2026-10-14). Each kind of button is pressed
+        // once only (user's LOG, 2026-10-14: the dialog's button was pressed twice, 13 px apart):
+        // the one in 查看寄件編號, then the one beside 取消.
+        var pressedAsk = false;
+        var pressedApply = false;
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
-            if (applied.Count < 2 && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply &&
-                !applied.Any(a => Math.Abs(a.Left - apply.Left) < 8 && Math.Abs(a.Top - apply.Top) < 8))
+            if (ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply)
             {
+                var inAsk = ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is not null && !ShopeeBatchScreens.ApplyBesideCancel(s.Boxes);
+                if (inAsk ? pressedAsk : pressedApply) return null;
                 Click(s, apply, "申請寄件編號");
-                applied.Add(apply);
+                if (inAsk) pressedAsk = true; else pressedApply = true;
                 return null;
             }
             if (ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null || ShopeeBatchScreens.TrackingRequested(s.Boxes)) return null;
@@ -728,10 +732,29 @@ internal sealed class ShopeeBatchRunner
     /// </summary>
     private async Task PrintFamilySlipAsync(ShopeeBatchOrder order)
     {
-        var (slip, _) = await WaitAsync("全家 FamilyMart寄取貨單", 60, s => ShopeeBatchScreens.IsFamilyLabelPage(s.Boxes) && !ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true);
+        // The slip may be a picture with no page text (user's LOG, 2026-10-14: one line of text
+        // for 18 s): then the screen is read with OCR.
+        var watch = Stopwatch.StartNew();
+        Screen? slip = null;
+        while (slip is null)
+        {
+            var screen = await ReadAsync();
+            if (ShopeeBatchScreens.IsFamilyLabelPage(screen.Boxes) && !ShopeeBatchScreens.IsPrintDialog(screen.Boxes)) { slip = screen; break; }
+            var pictureOnly = screen.Boxes.Count <= 3 && !ShopeeBatchScreens.IsOrderDetail(screen.Boxes);
+            screen.Dispose();
+            if (pictureOnly && watch.Elapsed.TotalSeconds >= 2)
+            {
+                var seen = await ReadAsync(ocr: true);
+                if (ShopeeBatchScreens.IsFamilyLabelPage(seen.Boxes)) { slip = seen; break; }
+                seen.Dispose();
+            }
+            if (watch.Elapsed.TotalSeconds > 60)
+                throw new ShopeeBatchStop("等不到全家 FamilyMart寄取貨單（60 秒）。", true);
+            await Task.Delay(500, _token);
+        }
         using (slip)
         {
-            if (!ShopeeBatchScreens.ShowsOrderSn(slip.Boxes, order.OrderSn))
+            if (!ShopeeBatchScreens.ShowsOrderSnLoosely(slip.Boxes, order.OrderSn))
                 throw new ShopeeBatchStop($"全家寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
             // The 寄件編號 (user, 2026-10-13: 11 digits, e.g. 「# 1635…」 on the order page) is the
             // slip's own 訂單編號.

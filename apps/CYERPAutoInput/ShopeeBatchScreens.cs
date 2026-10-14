@@ -308,12 +308,19 @@ internal static partial class ShopeeBatchScreens
     {
         var named = boxes.Where(b => C(b) == "申請寄件編號").ToList();
         // The 申請寄件編號 dialog (寄件人真實姓名): its button sits right of 取消.
-        var beside = named.Where(b => boxes.Any(c => C(c) == "取消" && SameRow(c, b) && c.Right <= b.Left)).ToList();
+        var beside = Beside(boxes, named);
         if (beside.Count == 1) return beside[0];
         // In 查看寄件編號 (2026-10-13 screenshot) the button is the only one so named, below the title.
         var title = TrackingDialogTitle(boxes);
         return beside.Count == 0 && title is not null && named.Count == 1 && named[0].Top > title.Bottom ? named[0] : null;
     }
+
+    /// <summary>The 申請寄件編號 dialog's own button (right of 取消) is shown.</summary>
+    public static bool ApplyBesideCancel(IReadOnlyList<OcrBox> boxes) =>
+        Beside(boxes, boxes.Where(b => C(b) == "申請寄件編號").ToList()).Count == 1;
+
+    private static List<OcrBox> Beside(IReadOnlyList<OcrBox> boxes, List<OcrBox> named) =>
+        named.Where(b => boxes.Any(c => C(c) == "取消" && SameRow(c, b) && c.Right <= b.Left)).ToList();
 
     public static OcrBox? PrintLabelButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "列印寄件單");
 
