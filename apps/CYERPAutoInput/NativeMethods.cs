@@ -220,6 +220,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern bool FlashWindowEx(ref FLASHWINFO info);
 
+    [DllImport("user32.dll")]
+    internal static extern int GetDlgCtrlID(nint hWnd);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     internal static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
 

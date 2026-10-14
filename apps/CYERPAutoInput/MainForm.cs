@@ -1094,6 +1094,50 @@ internal sealed class MainForm : Form
         summary.ShowDialog(this);
     }
 
+    /// <summary>
+    /// 測試全家裁切列印 (user, 2026-10-14): with a 全家寄取貨單 tab opened by hand in front, the
+    /// printing part of 全自動 runs on it — save, cut, a preview to approve, then print.
+    /// </summary>
+    private async Task TestFamilyCutAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (MessageBox.Show(this,
+                "請先在 Chrome 打開蝦皮的全家寄取貨單分頁，並讓那個 Chrome 視窗在最前面（本程式以外）。\n\n" +
+                "按「確定」後程式會切到 Chrome、按 Ctrl+S 把網頁存到暫存資料夾、切出寄取貨單，先顯示預覽，你確認後才送到「" + _settings.ShopeeLabelPrinter + "」列印。存下的網頁用完即刪除。\n\n過程中請勿操作鍵盤滑鼠。",
+                "測試全家裁切列印", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+        _shopeeBatchRunning = true;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), cts.Token);
+        string result;
+        try
+        {
+            _log.Info("shopee-batch", "family cut test started");
+            result = await runner.TestFamilyCutAsync((slip, info) =>
+            {
+                Invoke(() => { Activate(); BringToFront(); });
+                return (bool)Invoke(() =>
+                {
+                    using var preview = new SlipPreviewForm(slip, info, _settings.ShopeeLabelPrinter);
+                    return preview.ShowDialog(this) == DialogResult.OK;
+                });
+            });
+        }
+        catch (Exception ex) when (ex is ShopeeBatchStop or OperationCanceledException or InvalidOperationException)
+        {
+            _log.Warn("shopee-batch", $"family cut test: {ex.Message}");
+            result = ex is OperationCanceledException ? "逾時，已停止。" : ex.Message;
+        }
+        finally
+        {
+            _shopeeBatchRunning = false;
+        }
+        Activate();
+        MessageBox.Show(this, result, "測試全家裁切列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private const string ShopeeBatchTitle = "全自動";
     private bool _shopeeBatchRunning;
 
@@ -1790,6 +1834,8 @@ internal sealed class MainForm : Form
             menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試全家裁切列印", null, async (_, _) => await TestFamilyCutAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")

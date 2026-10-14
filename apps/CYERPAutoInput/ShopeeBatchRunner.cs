@@ -443,7 +443,12 @@ internal sealed class ShopeeBatchRunner
 
     private async Task ShipAsync(ShopeeBatchOrder order)
     {
-        var (detail, button) = await WaitAsync("「安排出貨」按鈕", 15, s => ShopeeBatchScreens.ShipButton(s.Boxes), reuseFirst: true);
+        // The page draws 安排出貨 before its 物流方式 (user's LOG, 2026-10-14: an order read at
+        // 39 lines had no carrier yet and was passed over as unsupported): the carrier is
+        // waited for too, a while, before the page is taken without it.
+        var loading = Stopwatch.StartNew();
+        var (detail, button) = await WaitAsync("「安排出貨」按鈕", 20, s =>
+            ShopeeBatchScreens.DetailCarrier(s.Boxes).Length > 0 || loading.Elapsed.TotalSeconds > 8 ? ShopeeBatchScreens.ShipButton(s.Boxes) : null, reuseFirst: true);
         // 買家備註 with a rule's words: its 聊聊 message first, then the order as usual.
         var matches = ChatRules.Matches(ShopeeBatchScreens.BuyerNote(detail.Boxes), _chat.Rules);
         if (matches.Count > 0)
@@ -776,50 +781,23 @@ internal sealed class ShopeeBatchRunner
     /// </summary>
     private async Task<bool> PrintFamilyCutAsync(ShopeeBatchOrder order)
     {
-        var folder = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
-        GrayImage slip;
-        string printer;
-        try
+        var cut = await CutFamilySlipAsync(order.Tracking);
+        if (cut.Slip is null)
         {
-            printer = SlipPrinter.Installed(_printer) ?? throw new InvalidOperationException($"no installed printer matches {_printer}");
-            Directory.CreateDirectory(folder);
-            if (!await SaveChromePageAsync(folder)) return false;
-            var saved = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => $"{Path.GetExtension(f)}:{new FileInfo(f).Length}").ToList();
-            _log.Info("shopee-batch", $"family page saved files={saved.Count} [{string.Join(", ", saved.Take(12))}]");
-            if (SlipPrinter.LargestPicture(folder) is not { } picture) { _log.Info("shopee-batch", "family cut: no picture in the saved page; printing through Chrome"); return false; }
-            var page = picture.Image;
-            var slips = SlipImage.FindSlips(page);
-            var label = SlipPrinter.Label(printer, 100, 150);
-            _log.Info("shopee-batch", $"family cut: picture {page.Width}x{page.Height} from {picture.From}, slips={slips.Count}, printer dpi={label.Dpi} label={label.Width}x{label.Height} paper={label.Paper}");
-            if (slips.Count != 1) { _log.Info("shopee-batch", "family cut: not exactly one slip; printing through Chrome"); return false; }
-            var plan = SlipImage.Plan(page, slips[0], label.Width, label.Height);
-            _log.Info("shopee-batch", $"family cut: area={slips[0]} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} dots");
-            var widthMm = plan.Width * 25.4 / label.Dpi;
-            if (plan.Module == 0 || plan.Width > label.Width || plan.Height > label.Height || widthMm < 50)
-            {
-                _log.Info("shopee-batch", $"family cut: no fitting plan (width {widthMm:F0} mm); printing through Chrome");
-                return false;
-            }
-            slip = SlipImage.Render(page, plan);
-            if (!await SlipShowsAsync(slip, order.Tracking))
-            {
-                _log.Info("shopee-batch", "family cut: the cut slip does not show the 寄件編號; printing through Chrome");
-                return false;
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException and not ShopeeBatchStop)
-        {
-            _log.Warn("shopee-batch", $"family cut failed before printing: {ex.GetType().Name}: {ex.Message}; printing through Chrome");
+            _log.Info("shopee-batch", $"family cut: {cut.Info}; printing through Chrome");
             return false;
         }
-        finally
-        {
-            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("shopee-batch", $"family cut: temp folder left: {ex.Message}"); }
-        }
+        PrintCutSlip(cut.Printer, cut.Slip, order.OrderSn);
+        Front();
+        return true;
+    }
+
+    /// <summary>The cut slip sent to the printer; an error there stops the batch (it may have printed).</summary>
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn)
+    {
         try
         {
-            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + order.OrderSn);
+            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + orderSn);
             _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi)");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -827,8 +805,72 @@ internal sealed class ShopeeBatchRunner
             _log.Warn("shopee-batch", $"family cut print failed: {ex.GetType().Name}: {ex.Message}");
             throw new ShopeeBatchStop($"全家寄取貨單送印表機 {printer} 時出錯（{ex.Message}），請確認是否已印出，未印出請手動列印。", true);
         }
+    }
+
+    /// <summary>
+    /// Saves the slip's tab (in front) into a temp folder of its own, cuts the slip and
+    /// deletes the folder (user, 2026-10-14: the saved page goes to TEMP and is deleted after).
+    /// Slip null with the reason in Info when it cannot be cut; the 寄件編號 is checked by OCR
+    /// when given.
+    /// </summary>
+    private async Task<(GrayImage? Slip, string Printer, string Info)> CutFamilySlipAsync(string? tracking)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        try
+        {
+            var printer = SlipPrinter.Installed(_printer);
+            if (printer is null) return (null, string.Empty, $"找不到名稱符合「{_printer}」的印表機");
+            Directory.CreateDirectory(folder);
+            if (await SaveChromePageAsync(folder) is { } failed) return (null, printer, failed);
+            var saved = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => $"{Path.GetExtension(f)}:{new FileInfo(f).Length}").ToList();
+            _log.Info("shopee-batch", $"family page saved files={saved.Count} [{string.Join(", ", saved.Take(12))}]");
+            if (SlipPrinter.LargestPicture(folder) is not { } picture) return (null, printer, $"存下的網頁裡沒有寄取貨單圖片（{saved.Count} 個檔案）");
+            var page = picture.Image;
+            var slips = SlipImage.FindSlips(page);
+            var label = SlipPrinter.Label(printer, 100, 150);
+            _log.Info("shopee-batch", $"family cut: picture {page.Width}x{page.Height} from {picture.From}, slips={slips.Count}, printer dpi={label.Dpi} label={label.Width}x{label.Height} paper={label.Paper}");
+            if (slips.Count != 1) return (null, printer, $"圖片 {page.Width}×{page.Height} 裡找到 {slips.Count} 張寄取貨單，不是 1 張");
+            var plan = SlipImage.Plan(page, slips[0], label.Width, label.Height);
+            var mm = $"{plan.Width * 25.4 / label.Dpi:F0}×{plan.Height * 25.4 / label.Dpi:F0} mm";
+            var info = $"原圖 {page.Width}×{page.Height}，寄取貨單 {slips[0].Width}×{slips[0].Height}，條碼最細線 {plan.Module} 點，" +
+                (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") +
+                $"，印出 {plan.Width}×{plan.Height} 點（{label.Dpi} dpi，約 {mm}）";
+            _log.Info("shopee-batch", $"family cut: area={slips[0]} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} dots ({mm})");
+            if (plan.Module == 0) return (null, printer, info + "；量不到條碼線寬");
+            if (plan.Width > label.Width || plan.Height > label.Height || plan.Width * 25.4 / label.Dpi < 50) return (null, printer, info + "；尺寸不合標籤");
+            var slip = SlipImage.Render(page, plan);
+            if (tracking is not null && !await SlipShowsAsync(slip, tracking)) return (null, printer, info + "；裁好的圖讀不到寄件編號");
+            return (slip, printer, info);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ShopeeBatchStop)
+        {
+            _log.Warn("shopee-batch", $"family cut failed before printing: {ex.GetType().Name}: {ex.Message}");
+            return (null, string.Empty, $"裁切時出錯：{ex.Message}");
+        }
+        finally
+        {
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("shopee-batch", $"family cut: temp folder left: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
+    /// 測試全家裁切列印 (user, 2026-10-14: run the printing part on a slip tab opened by hand):
+    /// the front Chrome window's tab is saved and cut; <paramref name="confirm"/> sees the cut
+    /// slip and decides whether it is printed. Returns what happened.
+    /// </summary>
+    public async Task<string> TestFamilyCutAsync(Func<GrayImage, string, bool> confirm)
+    {
+        _window = ChromeWindows().FirstOrDefault();
+        if (_window == 0) return "找不到 Chrome 視窗。";
         Front();
-        return true;
+        await Task.Delay(500, _token);
+        var cut = await CutFamilySlipAsync(tracking: null);
+        _log.Info("shopee-batch", $"family cut test: {(cut.Slip is null ? "failed" : "cut")}: {cut.Info}");
+        if (cut.Slip is null) return "沒有切成功：" + cut.Info;
+        if (!confirm(cut.Slip, cut.Info)) return "已取消，沒有列印。";
+        PrintCutSlip(cut.Printer, cut.Slip, "測試");
+        return $"已送到 {cut.Printer}。\n{cut.Info}";
     }
 
     /// <summary>The cut slip read with OCR shows the 寄件編號.</summary>
@@ -856,11 +898,12 @@ internal sealed class ShopeeBatchRunner
     }
 
     /// <summary>
-    /// Ctrl+S on the slip's tab and Chrome's 另存新檔 dialog: the file name is set to the same
-    /// name in <paramref name="folder"/> and 存檔 pressed; then the files are waited for. False
-    /// (the dialog closed) when the dialog or the files do not come.
+    /// Ctrl+S on the slip's tab and Chrome's 另存新檔 dialog: the 檔案名稱 box (the common
+    /// dialog's control 1001 in combo box 1148) is set to the same name in
+    /// <paramref name="folder"/>, read back, and 存檔 (IDOK) pressed; then the files are waited
+    /// for. Null when saved, else why not (the dialog closed).
     /// </summary>
-    private async Task<bool> SaveChromePageAsync(string folder)
+    private async Task<string?> SaveChromePageAsync(string folder)
     {
         NativeMethods.GetWindowThreadProcessId(_window, out var chrome);
         Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
@@ -879,7 +922,7 @@ internal sealed class ShopeeBatchRunner
                 return false;
             }, 0);
         }
-        if (dialog == 0) { _log.Info("shopee-batch", "family cut: no save dialog"); return false; }
+        if (dialog == 0) return "按 Ctrl+S 後沒有出現另存新檔視窗";
         _log.Info("shopee-batch", $"family cut: save dialog title={NativeMethods.WindowText(dialog)}");
         try
         {
@@ -887,23 +930,23 @@ internal sealed class ShopeeBatchRunner
             NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
             {
                 var cls = NativeMethods.ClassName(hwnd);
-                if (cls == "Edit" && edit == 0 && NativeMethods.IsWindowVisible(hwnd) && NativeMethods.ClassName(NativeMethods.GetParent(hwnd)) == "ComboBox") edit = hwnd;
-                if (cls == "Button" && save == 0)
-                {
-                    var text = NativeMethods.WindowText(hwnd);
-                    if (text.Contains("存檔", StringComparison.Ordinal) || text.Contains("儲存", StringComparison.Ordinal) || text.Contains("Save", StringComparison.OrdinalIgnoreCase)) save = hwnd;
-                }
+                var id = NativeMethods.GetDlgCtrlID(hwnd);
+                if (cls == "Edit" && id == 1001 && NativeMethods.GetDlgCtrlID(NativeMethods.GetParent(hwnd)) == 1148) edit = hwnd;
+                if (cls == "Button" && id == 1 && save == 0) save = hwnd;
                 return true;
             }, 0);
-            if (edit == 0 || save == 0) { _log.Info("shopee-batch", $"family cut: save dialog without name box or button (edit={edit != 0} save={save != 0})"); return false; }
+            if (edit == 0 || save == 0) return $"另存新檔視窗裡找不到{(edit == 0 ? "檔案名稱欄" : "存檔按鈕")}";
             var name = Path.GetFileName((NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"'));
             if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "slip";
-            _log.Info("shopee-batch", $"family cut: saving as {Path.GetExtension(name)}");
-            NativeMethods.SendMessage(edit, NativeMethods.WM_SETTEXT, 0, Path.Combine(folder, name));
+            var target = Path.Combine(folder, name);
+            NativeMethods.SendMessage(edit, NativeMethods.WM_SETTEXT, 0, target);
             await Task.Delay(200, _token);
+            var shown = NativeMethods.ControlText(edit, 1000) ?? string.Empty;
+            _log.Info("shopee-batch", $"family cut: file name set={shown == target} ext={Path.GetExtension(name)}");
+            if (shown != target) return "另存新檔的檔名填不進去";
             NativeMethods.PostMessage(save, 0x00F5 /* BM_CLICK */, 0, 0);
             for (var i = 0; i < 20 && NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog); i++) await Task.Delay(250, _token);
-            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) { _log.Info("shopee-batch", "family cut: save dialog did not close"); return false; }
+            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) return "按了存檔，另存新檔視窗沒有關閉";
             dialog = 0;
         }
         finally
@@ -919,11 +962,10 @@ internal sealed class ShopeeBatchRunner
             var files = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).ToList();
             if (files.Count == 0 || files.Any(f => f.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))) continue;
             var now = string.Join("|", files.Select(f => f + ":" + new FileInfo(f).Length));
-            if (now == last) return true;
+            if (now == last) return null;
             last = now;
         }
-        _log.Info("shopee-batch", "family cut: saved files did not settle");
-        return false;
+        return "存檔後 30 秒內 TEMP 資料夾沒有出現完整的檔案";
     }
 
     /// <summary>
