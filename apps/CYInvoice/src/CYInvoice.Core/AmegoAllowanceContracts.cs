@@ -1,33 +1,40 @@
-using System.Security.Cryptography;
+using System.Globalization;
 using System.Text.Json;
 
 namespace CYInvoice.Core.Amego;
 
-// The number is supplied by CYInvoice, not assigned by AMEGO. Generate it ONCE
-// and durably persist the pending operation BEFORE calling /json/g0401.
+// Approved format: A + yyyyMMdd + three-digit daily sequence, e.g. A20261015001.
+// The caller must allocate the sequence against the correct company's existing
+// official and locally pending numbers. Formatting does NOT reserve any number.
+// Only allocate at manager approval and persist the number before /json/g0401.
 public static class AllowanceNumberGenerator
 {
-    private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    public const char DefaultPrefix = 'A';
+    public const int DailyMaximum = 999;
 
-    public static string NewNumber()
+    public static string Format(DateOnly allowanceDate, int sequence, char prefix = DefaultPrefix)
     {
-        Span<byte> random = stackalloc byte[10]; // 80 random bits, 16 base32 characters.
-        RandomNumberGenerator.Fill(random);
-        Span<char> text = stackalloc char[16];
-        var accumulator = 0;
-        var bits = 0;
-        var index = 0;
-        foreach (var value in random)
-        {
-            accumulator = (accumulator << 8) | value;
-            bits += 8;
-            while (bits >= 5)
-            {
-                bits -= 5;
-                text[index++] = Alphabet[(accumulator >> bits) & 31];
-            }
-        }
-        return new string(text);
+        if (prefix is < 'A' or > 'Z')
+            throw new ArgumentOutOfRangeException(nameof(prefix), "prefix must be one uppercase ASCII letter");
+        if (sequence is < 1 or > DailyMaximum)
+            throw new ArgumentOutOfRangeException(nameof(sequence), "daily allowance sequence must be from 001 to 999");
+        return string.Concat(
+            prefix,
+            allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            sequence.ToString("D3", CultureInfo.InvariantCulture));
+    }
+
+    public static bool TryReadSequence(string? number, DateOnly allowanceDate, out int sequence, char prefix = DefaultPrefix)
+    {
+        sequence = 0;
+        if (prefix is < 'A' or > 'Z' || number is not { Length: 12 } || number[0] != prefix ||
+            !string.Equals(number.Substring(1, 8), allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+            return false;
+        if (!int.TryParse(number.AsSpan(9, 3), NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) ||
+            parsed is < 1 or > DailyMaximum)
+            return false;
+        sequence = parsed;
+        return true;
     }
 }
 
