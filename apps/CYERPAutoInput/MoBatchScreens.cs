@@ -67,9 +67,14 @@ internal static partial class MoBatchScreens
         var label = Text(boxes, "配送方式");
         var methods = new List<MoShipMethod>();
         if (label is null) return methods;
-        foreach (var box in boxes.Where(b => b.Left > label.Right && Math.Abs(b.CenterY - label.CenterY) <= label.Height * 3))
+        var row = boxes.Where(b => b.Left > label.Right && Math.Abs(b.CenterY - label.CenterY) <= label.Height * 3).OrderBy(b => b.Left).ToList();
+        foreach (var box in row)
         {
-            var m = CountPattern().Match(C(box));
+            var text = C(box);
+            // The count may be a piece of its own (「全家店出」「(1)」).
+            if (!CountPattern().IsMatch(text) && row.FirstOrDefault(b => b.Left >= box.Right - 2 && b.Left - box.Right < 12 && SameRow(b, box) && PiecePattern().IsMatch(C(b))) is { } piece)
+                text += C(piece);
+            var m = CountPattern().Match(text);
             if (!m.Success || m.Groups[1].Value.Length == 0) continue;
             var count = int.Parse(m.Groups[2].Value);
             if (count > 0) methods.Add(new MoShipMethod(m.Groups[1].Value, count, Kind(m.Groups[1].Value), box));
@@ -91,11 +96,15 @@ internal static partial class MoBatchScreens
     }
 
     /// <summary>「已選 n 個訂單」 above the list, with n.</summary>
+    /// <remarks>The page may give it in pieces (「已選」「0」「個訂單」, user's LOG 2026-10-14): the
+    /// pieces on its row are read together; the box returned is the first piece.</remarks>
     public static (OcrBox Box, int Count)? Selected(IReadOnlyList<OcrBox> boxes)
     {
-        foreach (var box in boxes)
+        foreach (var box in boxes.Where(b => C(b).StartsWith("已選", StringComparison.Ordinal)))
         {
-            var m = SelectedPattern().Match(C(box));
+            var row = C(box) + string.Concat(boxes.Where(b => b != box && SameRow(b, box) && b.Left >= box.Left && b.Left - box.Right < 80)
+                .OrderBy(b => b.Left).Take(3).Select(C));
+            var m = SelectedPattern().Match(row);
             if (m.Success) return (box, int.Parse(m.Groups[1].Value));
         }
         return null;
@@ -160,7 +169,10 @@ internal static partial class MoBatchScreens
     [GeneratedRegex(@"^(.*?)[(（](\d+)[)）]$")]
     private static partial Regex CountPattern();
 
-    [GeneratedRegex(@"^已選(\d+)個訂單$")]
+    [GeneratedRegex(@"^[(（]\d+[)）]$")]
+    private static partial Regex PiecePattern();
+
+    [GeneratedRegex(@"^已選(\d+)個訂單")]
     private static partial Regex SelectedPattern();
 
     [GeneratedRegex(@"^批次出貨[(（]共(\d+)筆訂單[)）]$")]

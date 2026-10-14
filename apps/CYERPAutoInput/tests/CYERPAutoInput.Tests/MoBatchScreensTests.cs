@@ -41,6 +41,9 @@ public class MoBatchScreensTests
         var methods = MoBatchScreens.ShipMethods(page);
         Assert.Equal(["第三方物流-新竹貨運", "全家店出", "全家冷凍店出"], methods.Select(m => m.Name));
         Assert.Equal([MoShipKind.Hct, MoShipKind.Family, MoShipKind.Other], methods.Select(m => m.Kind));
+        // The count as a piece of its own.
+        List<OcrBox> pieces = [B("配送方式", 258, 343), B("全家店出", 1166, 327, 60), B("(1)", 1228, 327, 20), B("全家倉出", 1272, 327, 60)];
+        Assert.Equal(["全家店出"], MoBatchScreens.ShipMethods(pieces).Select(m => m.Name));
         Assert.Equal(MoShipKind.Seven, MoBatchScreens.Kind("7-11店出"));
         Assert.Equal(MoShipKind.Other, MoBatchScreens.Kind("7-11倉出"));
     }
@@ -50,6 +53,10 @@ public class MoBatchScreensTests
     {
         List<OcrBox> list = [B("批次出貨", 60, 215), B("已選 1 個訂單", 305, 509), B("批次出貨", 400, 509), B("訂單編號: 66101400799232", 545, 614)];
         Assert.Equal(1, MoBatchScreens.Selected(list)!.Value.Count);
+        // In pieces (user's LOG, 2026-10-14).
+        List<OcrBox> pieces = [B("已選", 305, 640, 30), B("0", 337, 640, 10), B("個訂單", 349, 640, 44), B("批次出貨", 401, 640, 78)];
+        Assert.Equal(0, MoBatchScreens.Selected(pieces)!.Value.Count);
+        Assert.Equal(401, MoBatchScreens.ShipSelectedButton(pieces)!.Left);
         Assert.Equal(400, MoBatchScreens.ShipSelectedButton(list)!.Left);
 
         List<OcrBox> ship = [B("批次出貨(共1筆訂單)", 65, 231), B("訂單1: 66101400799232", 155, 273), B("併箱出貨", 512, 273), B("確認出貨", 863, 790)];

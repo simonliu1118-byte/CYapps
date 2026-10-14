@@ -30,31 +30,52 @@ internal sealed partial class ShopeeBatchRunner
     public const string MoUrl = "https://3p.momo.com.tw/FrameServlet.do";
 
     /// <param name="readOrders">The 訂單編號 of an export (it is password protected; the caller reads it).</param>
-    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status)
+    /// <param name="resumeBefore">
+    /// 測試：從批次出貨繼續 (user, 2026-10-14): the front Chrome window, already on MO店+, and this
+    /// 未出貨 export from an earlier run; the run starts at 批次出貨.
+    /// </param>
+    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status, string? resumeBefore = null)
     {
         var result = new MoBatchResult { Folder = folder };
         _pageTabs = true;
         Directory.CreateDirectory(folder);
-        status("MO店+ 全自動：開啟 Chrome…");
-        await OpenWindowAsync(MoUrl);
+        if (resumeBefore is null)
+        {
+            status("MO店+ 全自動：開啟 Chrome…");
+            await OpenWindowAsync(MoUrl);
+        }
+        else
+        {
+            _window = ChromeWindows().FirstOrDefault();
+            if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗。");
+            Front();
+        }
         var (first, _) = await WaitAsync("MO店+ 店+管理系統", 40, s => MoBatchScreens.SignedIn(s.Boxes) || s.Boxes.Any(b => b.Text.Contains("登入", StringComparison.Ordinal)) ? s : null);
         var signedIn = MoBatchScreens.SignedIn(first.Boxes);
         first.Dispose();
         if (!signedIn) throw new ShopeeBatchStop("MO店+ 後台還沒登入：請在這個 Chrome 視窗登入後再按一次 MO店+ 全自動。");
 
-        // 1–2. 未出貨 export.
-        status("MO店+ 全自動：匯出未出貨訂單…");
-        await OpenMyOrdersAsync("未出貨");
-        using (var orders = await ReadAsync())
+        if (resumeBefore is not null)
         {
-            if (MoBatchScreens.Tab(orders.Boxes, "未出貨") is { Count: 0 })
-            {
-                _log.Info("mo-batch", "no orders to ship");
-                result.Notes.Add("未出貨沒有訂單。");
-                return result;
-            }
+            result.Before = resumeBefore;
+            _log.Info("mo-batch", "resumed at 批次出貨 with an earlier 未出貨 export");
         }
-        result.Before = await ExportAsync(folder, "未出貨訂單");
+        else
+        {
+            // 1–2. 未出貨 export.
+            status("MO店+ 全自動：匯出未出貨訂單…");
+            await OpenMyOrdersAsync("未出貨");
+            using (var orders = await ReadAsync())
+            {
+                if (MoBatchScreens.Tab(orders.Boxes, "未出貨") is { Count: 0 })
+                {
+                    _log.Info("mo-batch", "no orders to ship");
+                    result.Notes.Add("未出貨沒有訂單。");
+                    return result;
+                }
+            }
+            result.Before = await ExportAsync(folder, "未出貨訂單");
+        }
         var batchOrders = readOrders(result.Before);
         _log.Info("mo-batch", $"before export orders={batchOrders.Count}");
 
@@ -150,7 +171,8 @@ internal sealed partial class ShopeeBatchRunner
                 ?? throw new ShopeeBatchStop("找不到左側的「批次出貨」。", _shippedHint);
             Click(page, menu, "批次出貨（左側選單）");
         }
-        var (list, _) = await WaitAsync("批次出貨頁", 30, s => MoBatchScreens.Selected(s.Boxes) is not null && MoBatchScreens.Text(s.Boxes, "配送方式") is not null ? s : null, _shippedHint);
+        // The 配送方式 row is what matters here (user, 2026-10-14: read its counts, then go in).
+        var (list, _) = await WaitAsync("批次出貨頁", 30, s => MoBatchScreens.Text(s.Boxes, "配送方式") is not null && MoBatchScreens.Filter(s.Boxes, "處理提醒", "全部") is not null ? s : null, _shippedHint);
         using (list)
             if (MoBatchScreens.Filter(list.Boxes, "處理提醒", "全部") is { } all) Click(list, all, "處理提醒 全部");
         await Task.Delay(800, _token);

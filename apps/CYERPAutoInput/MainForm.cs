@@ -1451,7 +1451,7 @@ internal sealed class MainForm : Form
     /// in the preview until CYInvoice can be called) and ERP. The Temp folder goes once every order
     /// is saved in ERP.
     /// </summary>
-    private async Task RunMoBatchAsync()
+    private async Task RunMoBatchAsync(bool resume = false)
     {
         const string title = "MO店+ 全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
@@ -1478,7 +1478,28 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, $"這台電腦找不到{(thermal is null ? "熱感紙" : "A4 ")}印表機「{(thermal is null ? _settings.ShopeeLabelPrinter : _settings.A4Printer)}」，請到「設定 › 印表機」重新勾選。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        if (MessageBox.Show(this,
+        // 測試：從批次出貨繼續 (user, 2026-10-14): the latest run's 未出貨 export and folder.
+        string? resumeBefore = null;
+        string? resumeFolder = null;
+        if (resume)
+        {
+            var latest = Directory.Exists(MoPrintedDocuments.TempRoot)
+                ? Directory.GetDirectories(MoPrintedDocuments.TempRoot, "mo-*").OrderByDescending(d => d)
+                    .Select(d => (Folder: d, File: Directory.GetFiles(d, "*.xls").OrderBy(f => File.GetLastWriteTime(f)).FirstOrDefault()))
+                    .FirstOrDefault(x => x.File is not null)
+                : default;
+            if (latest.File is null)
+            {
+                MessageBox.Show(this, "找不到之前存下的未出貨訂單匯出檔（Temp\\mo-…）。請先從頭跑一次 MO店+ 全自動。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「批次出貨」接著做：逐一批次出貨、存標籤、配送中匯出、列印、帶入匯出檔、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
+                    title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            resumeBefore = latest.File;
+            resumeFolder = latest.Folder;
+        }
+        else if (MessageBox.Show(this,
                 "MO店+ 全自動會開一個新的 Chrome 視窗（MO店+ 後台需已登入），然後：\n\n" +
                 "1. 我的訂單 › 未出貨：匯出報表（開發票用）\n" +
                 "2. 批次出貨：新竹貨運、7-11店出、全家店出各自全選 → 批次出貨（併箱）→ 確認出貨，存下標籤（新竹另存出貨總表）\n" +
@@ -1501,7 +1522,7 @@ internal sealed class MainForm : Form
             MoOrderImport.ReadTracking(Read(path))?.Keys.ToHashSet(StringComparer.Ordinal) ?? throw new ShopeeBatchStop("未出貨匯出檔讀不到訂單編號。");
 
         MoPrintedDocuments.Prune(_log);
-        var folder = Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        var folder = resumeFolder ?? Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
         _shopeeBatchRunning = true;
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
@@ -1513,7 +1534,7 @@ internal sealed class MainForm : Form
         _log.Info("mo-batch", "started");
         try
         {
-            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus);
+            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus, resumeBefore);
         }
         catch (ShopeeBatchStop stop)
         {
@@ -2270,6 +2291,8 @@ internal sealed class MainForm : Form
             menu.Items.Add("全自動（匯出＋批次出貨＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試：從批次出貨繼續（已開好的 MO 視窗）", null, async (_, _) => await RunMoBatchAsync(resume: true));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
