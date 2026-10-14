@@ -30,7 +30,7 @@
 
 ## 備份、復原與維運
 
-- [ ] 完成 Phase D 最後啟用確認並正式回讀：V0.24.0 已部署，Phase C 14／14 及正式 R2／GCS 副本隔離還原皆通過。啟用確認操作被中止，目前仍 Phase C。切換不得清除既有備份；啟用後觀察首次 R2-only／GCS 排程結果。
+- [ ] 觀察 Phase D 首次 R2-only 與 GCS 週三／週日雙副本排程結果：V0.24.0 已部署，Phase C 14／14、正式雙副本隔離還原及 Phase D 啟用回讀皆完成（2026/10/15）。目前 R2 每日 30 天／GCS 週三、週日 182 天；不可用啟用成功推定後續排程驗收完成。
 - [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9。
 - [ ] Restore：SUPER_ADMIN server gate、雙重確認、格式／schema／digest 驗證、受控 D1 寫入、對帳及操作者／結果 audit。
 - [ ] DR：R2 不可用時使用有效 GCS copy，以及從 GCS 重建新 D1 的完整演練。
