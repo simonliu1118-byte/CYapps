@@ -799,6 +799,24 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
+    /// Checked when an entry that ends in ERP input is chosen (user, 2026-10-14: at the entry,
+    /// not after the order is filled and 開始 pressed): exactly one COPI08 must be open. The
+    /// 新增／修改 question stays at the start.
+    /// </summary>
+    private bool ErpWindowReady()
+    {
+        RefreshErpState();
+        var state = _shownState;
+        if (state is not (ErpDocumentState.MultipleWindows or ErpDocumentState.NotFound)) return true;
+        MessageBox.Show(this, state == ErpDocumentState.MultipleWindows
+                ? "偵測到不只一個 COPI08（銷貨單建立作業）視窗。\n\n請只保留一個，關掉其他的之後再開始，避免輸入到錯誤的視窗。"
+                : "找不到 SMART ERP COPI08 視窗。\n\n請先開啟銷貨單建立作業再開始。",
+            "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        _log.Info("automation", $"entry refused: erp state {state}");
+        return false;
+    }
+
+    /// <summary>
     /// Safeguard (user, 2026-10-10): when ERP is already in 新增／修改, CY asks before
     /// starting; on confirmation it first abandons that document (ERP back to 檢視) and then
     /// runs the normal flow from 新增. Returns false when the user declines.
@@ -891,6 +909,7 @@ internal sealed class MainForm : Form
     private async Task ImportShopeeAsync()
     {
         if (_automationCts is not null) return;
+        if (!ErpWindowReady()) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
             MessageBox.Show(this, "請先在「設定」填入蝦皮匯入的銷貨單別與客戶代號。", "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -958,6 +977,7 @@ internal sealed class MainForm : Form
     private async Task ImportShopeeScreenshotsAsync(bool startScan = false)
     {
         if (_automationCts is not null) return;
+        if (!ErpWindowReady()) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
             MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單自動擷取輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -991,6 +1011,7 @@ internal sealed class MainForm : Form
     private async Task RunShopeeBatchAsync()
     {
         if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.ShopeeOrderType.Length == 0 ? "蝦皮銷貨單別" : null,
@@ -1480,6 +1501,7 @@ internal sealed class MainForm : Form
     {
         const string title = "MO店+ 全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.MoOrderType.Length == 0 ? "MO店+ 銷貨單別" : null,
@@ -1626,6 +1648,7 @@ internal sealed class MainForm : Form
     private async Task ImportMoAsync()
     {
         if (_automationCts is not null) return;
+        if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.MoOrderType.Length == 0 ? "銷貨單別" : null,
@@ -1661,6 +1684,7 @@ internal sealed class MainForm : Form
     private async Task ImportCoupangAsync()
     {
         if (_automationCts is not null) return;
+        if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.CoupangOrderType.Length == 0 ? "酷澎銷貨單別" : null,
@@ -2182,8 +2206,6 @@ internal sealed class MainForm : Form
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試全家裁切列印", null, async (_, _) => await TestFamilyCutAsync());
             menu.Items.Add("測試蝦皮 7-11 列印", null, async (_, _) => await TestSevenPrintAsync());
-            menu.Items.Add("測試 MO店+ 寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
-            menu.Items.Add("測試 MO店+ 新竹寄件單／取貨總表列印（Temp\\test1）", null, async (_, _) => await TestHctA4PrintAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")
@@ -2191,6 +2213,9 @@ internal sealed class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add("全自動（匯出＋批次出貨＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
+            menu.Items.Add("測試新竹寄件單／取貨總表列印（Temp\\test1）", null, async (_, _) => await TestHctA4PrintAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")
