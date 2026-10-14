@@ -3,7 +3,9 @@
   "name": "__CF_WORKER_NAME__",
   "main": "src/app.js",
   "compatibility_date": "2026-09-22",
+  "define": { "globalThis.WorkerGlobalScope": "undefined" },
   "workers_dev": true,
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

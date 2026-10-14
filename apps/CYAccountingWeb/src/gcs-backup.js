@@ -295,7 +295,7 @@ export async function validateBackupSetBytes(manifestBytes, dataBytes, expectedB
   }
 
   const actualCount = Object.values(data || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
-  if (actualCount !== Number(manifest.totalRowCount || -1)) {
+  if (actualCount !== Number(manifest.totalRowCount ?? -1)) {
     throw new BackupError('備份資料筆數驗證失敗。', 'BACKUP_COUNT_MISMATCH');
   }
 

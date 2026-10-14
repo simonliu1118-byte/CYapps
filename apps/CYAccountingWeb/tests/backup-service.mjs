@@ -3,7 +3,7 @@ import { createR2BackupStorageProvider, r2ConfigReady } from '../src/r2-backup-p
 import {
   backupPackageDigest,
   resolveTieredBackupTopology,
-  runParallelBackup,
+  runTieredBackup,
   summarizePhaseCAcceptance
 } from '../src/backup-service.js';
 
@@ -164,7 +164,7 @@ function memoryProvider(kind, { failPut = false } = {}) {
 const db = new MockDb();
 const r2Memory = memoryProvider('cloudflare_r2');
 const gcsMemory = memoryProvider('google_cloud_storage');
-const result = await runParallelBackup(
+const result = await runTieredBackup(
   { DB: db },
   'scheduled',
   {
@@ -198,7 +198,7 @@ assert(digestAgain === result.packageSha256, 'package digest must be reproducibl
 const failureDb = new MockDb();
 const goodR2 = memoryProvider('cloudflare_r2');
 const failingGcs = memoryProvider('google_cloud_storage', { failPut: true });
-const partial = await expectReject(() => runParallelBackup(
+const partial = await expectReject(() => runTieredBackup(
   { DB: failureDb },
   'manual',
   {

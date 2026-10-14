@@ -1,6 +1,6 @@
 import readExcelFile, { readSheet } from 'read-excel-file/universal';
 import { unzipSync, zipSync } from 'fflate';
-import { runParallelBackup } from './backup-service.js';
+import { runTieredBackup } from './backup-service.js';
 
 const MAX_XLSX_BYTES = 8 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 5000;
@@ -415,7 +415,7 @@ async function commitPeriodReplacement(body, env, session) {
   if (previous) return replacementError('這次期間替換已完成，請重新整理確認結果。', 409);
   let backup;
   try {
-    backup = await runParallelBackup(env, 'manual');
+    backup = await runTieredBackup(env, 'manual');
   } catch {
     return replacementError('替換前備份未完成雙 Provider 驗證，未修改任何帳目。', 503);
   }
