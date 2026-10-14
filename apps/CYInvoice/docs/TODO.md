@@ -121,6 +121,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
 - [ ] **官方按發票號碼查折讓／作廢紀錄**：已核對光貿 [API 文件](https://invoice.amego.tw/api_doc/) `invoice_query`，`data.allowance[]` 包含折讓號碼／日期／類型 D0401（開立）／D0501（作廢）／狀態／未稅金額與稅額，同公司官方資料不限制從 CYInvoice 開立；`invoice_type`、`invoice_status`、`cancel_date`、`wait[]` 可顯示原發票目前作廢狀態與待處理異動。按折讓單號用 `allowance_query` 取得原發票 `product_item[].original_invoice_number`、`cancel_date`。**`invoice_query` 以發票日期計最多查 180 天，code 51 是查詢逾期，非無折讓**；不承諾 API 返回完整歷史 Audit。Core 已有 `QueryByInvoiceNumberAsync`／`ParseAllowances`，仍須真折讓／折讓作廢樣本回歸；歷史超限必要時受限使用 `allowance_list` 日期區間／明細原號對照，但不可推斷查不到就不存在。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
+- [ ] **光貿 allowance_status 新舊回應格式兼容（核對 API 文件發現）**：官方文件現列新版 `data:[{allowance_number,type,status,tax_amount,total_amount}]` 與舊版 `data:{"單號":{type,status,...}}`；目前 Draft `AmegoClient.AllowanceStatusAsync` 只解析舊 object，須新增 array 解析、單號精確匹配／重複拒絕與兩種隔離回歸後才能視為正式查詢可靠。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
 - [ ] 自動折讓／折讓作廢時，確認 AMEGO 正式可保存且可依折讓單號查回的欄位，再決定如何保存 `管理員編號-使用者編號-原因`；若官方沒有合適欄位，不濫用未文件化欄位。
