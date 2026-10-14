@@ -124,6 +124,64 @@ public sealed class AmegoClient : IAmegoGateway
         return new AllowanceQueryResponse(code, message, result);
     }
 
+    public async Task<AllowanceListResponse> ListAllowancesAsync(
+        DateOnly startDate, DateOnly endDate, int page = 1, int limit = 500, int dateSelect = 1,
+        CancellationToken cancellationToken = default)
+    {
+        if (startDate > endDate)
+            throw new ArgumentOutOfRangeException(nameof(startDate), "start date cannot be later than end date");
+        if (page < 1)
+            throw new ArgumentOutOfRangeException(nameof(page), "page must be at least 1");
+        if (limit is < 20 or > 500)
+            throw new ArgumentOutOfRangeException(nameof(limit), "limit must be between 20 and 500");
+        if (dateSelect is not (1 or 2))
+            throw new ArgumentOutOfRangeException(nameof(dateSelect), "only allowance date or creation date is supported");
+        var request = new Dictionary<string, object>
+        {
+            ["date_select"] = dateSelect,
+            ["date_start"] = startDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["date_end"] = endDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["limit"] = limit,
+            ["page"] = page,
+        };
+        using var document = await PostAsync("/json/allowance_list", request, cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        var result = new List<AllowanceListItem>();
+        if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in data.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException("allowance_list data contains a non-object item");
+                var allowanceNumber = Text(item, "allowance_number");
+                if (allowanceNumber.Length == 0)
+                    throw new InvalidDataException("allowance_list item is missing allowance_number");
+                result.Add(new AllowanceListItem(
+                    allowanceNumber,
+                    Text(item, "invoice_type"),
+                    FlexibleInt32(item, "invoice_status"),
+                    Scalar(item, "allowance_date"),
+                    FlexibleInt32(item, "allowance_type"),
+                    Text(item, "buyer_identifier"),
+                    Text(item, "buyer_name"),
+                    Scalar(item, "tax_amount"),
+                    Scalar(item, "total_amount"),
+                    Int64(item, "cancel_date"),
+                    Int64(item, "create_date"),
+                    item.TryGetProperty("product_item", out var items) ? items.Clone() : default));
+            }
+        }
+        else if (data.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null))
+        {
+            throw new InvalidDataException("allowance_list data is not an array");
+        }
+        return new AllowanceListResponse(
+            code, message, Int32(root, "page_total"), Int32(root, "page_now"),
+            Int32(root, "data_total"), result);
+    }
+
     public async Task<AllowanceStatusResponse> AllowanceStatusAsync(IEnumerable<string> allowanceNumbers, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(allowanceNumbers);
