@@ -29,6 +29,12 @@
 
 **Audit 權威：**管理員因 D1 離線、光貿正常而直接在光貿網站人工作廢發票／開立折讓／作廢折讓，CYInvoice 回查後只更新**本機官方狀態**，標記光貿官方來源；**不可虛構 D1 的 CYInvoice 執行操作 Audit／操作者／覆核紀錄**。若已有 CYInvoice Work Item，原本的申請／覆核 Audit 保留，回連後可更新原工作單的官方核對狀態；沒申請的發票不因此進 D1。Local 同樣支援低呼叫量官方同步，不依賴 D1。完整 E2E 尚未驗收、未部署。
 
+## 2026-10-15 新增：管理員折讓申請覆核時即時顯示官方折讓
+
+使用者要求：管理員開啟**同意／退回折讓申請的覆核介面**，應當場向光貿查**這張原發票已存在的所有折讓／作廢折讓狀態**，讓管理員看過最新實際情況後才核准。**API 名稱要修正**：`/json/allowance_query` 只能用已知 **allowance_number** 查一張折讓；正確的入口是以原發票號碼呼叫**一次 `/json/invoice_query`**，呈現 `data.allowance[]`，必要時才針對個別折讓單號補 `allowance_query`，無須開窗時取整批 `allowance_list`。顯示：原發票與作廢狀態、折讓單號／日期／種類／官方上傳狀態／金額、本次申請與申請人、查詢時間；明確區分已開立有效、已作廢、待處理、錯誤。若需計算**這張原發票**剩餘可折讓額，應依該發票的品項／稅額核算：光貿單張折讓可含多張原發票，`allowance[]` 的折讓單總金額不一定全屬當前原發票，必要時按已知單號補查 `allowance_query.product_item[]`，不能直接總加。
+
+開窗查詢不可阻塞 Windows 主執行緒；等結果回來再允許核准。API 失敗、超過原發票日期 180 天查詢期限、已作廢／仍有不明狀態等無法安全核准的情況，顯示「官方資料無法確認／需處理」，**不開放正式核准送出**（退回仍可操作），不可把本機快取冒充最新結果。實際按下核准並呼叫 g0401 前，仍須按最新官方狀態、剩餘折讓額、當下 actor 權限、Work Item revision／D1 原子分配做 final preflight，避免兩臺裝置同時核准。同一 Cloud 管理員電腦不一定有申請人本機原發票 SQLite 紀錄，因此此查詢必須可用 Work Item 原發票號碼／授權公司設定直接取得 Gateway，不可硬性綁在 `InvoiceDetailRefreshService.RefreshAsync(local record)`。現有 `SyncIssuesForm.AllowanceDetailRows` 僅顯示本機已保存的 `InvoiceAllowanceMetadata`，**尚未在開窗時即時呼叫 API**，這項屬後續 V3 UI／Core 接線與驗收；不影響前述低頻背景雙 List 對帳方案，亦不為外部光貿操作新增 D1 Audit。
+
 ## 1. 三條分支，禁止混同
 
 | 工作線 | 現況 |
