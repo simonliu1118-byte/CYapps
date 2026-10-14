@@ -965,12 +965,22 @@ internal sealed class ShopeeBatchRunner
             var name = Path.GetFileName((NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"'));
             if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "slip";
             var target = Path.Combine(folder, name);
-            NativeMethods.SendMessage(edit, NativeMethods.WM_SETTEXT, 0, target);
+            // Typed, not set: the dialog saves what it saw typed (user, 2026-10-14: a name set
+            // with WM_SETTEXT showed in the box, yet the page went to the desktop under Chrome's
+            // name). Alt+N is the 檔案名稱(N) box.
+            _inputs++;
+            NativeMethods.SetForegroundWindow(dialog);
+            await Task.Delay(300, _token);
+            InputSender.Chord(NativeMethods.VK_MENU, 0x4E /* N */);
             await Task.Delay(200, _token);
+            InputSender.Chord(NativeMethods.VK_CONTROL, 0x41 /* A */);
+            await Task.Delay(100, _token);
+            InputSender.UnicodeText(target);
+            await Task.Delay(400, _token);
             var shown = NativeMethods.ControlText(edit, 1000) ?? string.Empty;
-            _log.Info("shopee-batch", $"family cut: file name set={shown == target} ext={Path.GetExtension(name)}");
-            if (shown != target) return "另存新檔的檔名填不進去";
-            NativeMethods.PostMessage(save, 0x00F5 /* BM_CLICK */, 0, 0);
+            _log.Info("shopee-batch", $"family cut: file name typed={shown == target} ext={Path.GetExtension(name)}");
+            if (shown != target) return "另存新檔的檔名打不進去";
+            InputSender.Press(NativeMethods.VK_RETURN);
             for (var i = 0; i < 20 && NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog); i++) await Task.Delay(250, _token);
             if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) return "按了存檔，另存新檔視窗沒有關閉";
             dialog = 0;
