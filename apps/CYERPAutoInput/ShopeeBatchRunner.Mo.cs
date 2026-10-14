@@ -33,6 +33,7 @@ internal sealed partial class ShopeeBatchRunner
     public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status)
     {
         var result = new MoBatchResult { Folder = folder };
+        _pageTabs = true;
         Directory.CreateDirectory(folder);
         status("MO店+ 全自動：開啟 Chrome…");
         await OpenWindowAsync(MoUrl);

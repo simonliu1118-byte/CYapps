@@ -70,12 +70,17 @@ internal static class ChromePageText
     /// their children's text (a list item, a whole row's link) when <paramref name="pieces"/>.
     /// Chrome's print dialog, which overlaps the toolbar, is kept.
     /// </summary>
-    public static List<OcrBox> PageBoxes(IEnumerable<PageText> texts, Rectangle page, bool pieces = false)
+    /// <param name="pageTabs">
+    /// Keep the page's own tabs (MO店+ 「未出貨(1)」 is a tab, user's LOG 2026-10-14); Chrome's
+    /// tabs are above the page and still left out.
+    /// </param>
+    public static List<OcrBox> PageBoxes(IEnumerable<PageText> texts, Rectangle page, bool pieces = false, bool pageTabs = false)
     {
         var boxes = new List<OcrBox>();
         foreach (var t in texts)
         {
-            if (t.Type is "TabItem" or "ToolBar" or "TitleBar" or "MenuBar" or "Separator" or "Document" or "Pane" or "Window") continue;
+            if (t.Type == "TabItem" && !(pageTabs && t.Rect.Top >= page.Top)) continue;
+            if (t.Type is "ToolBar" or "TitleBar" or "MenuBar" or "Separator" or "Document" or "Pane" or "Window") continue;
             if (t.Rect.Bottom <= page.Top + 2 && t.Type != "Text") continue;
             if (pieces && t.Type is "ListItem") continue;
             boxes.Add(new OcrBox(t.Text, t.Rect.Left - page.Left, t.Rect.Top - page.Top, t.Rect.Width, t.Rect.Height));

@@ -230,6 +230,9 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>Whether a stop from <see cref="Click"/> happens after 安排出貨 (for its message).</summary>
     private bool _shippedHint;
 
+    /// <summary>The page's own tabs are read too (MO店+).</summary>
+    private bool _pageTabs;
+
     /// <summary>OCR instead of page text (Chrome gave no page, or not what a step needs).</summary>
     private bool _ocrOnly;
 
@@ -251,7 +254,7 @@ internal sealed partial class ShopeeBatchRunner
             if (texts.Any(t => t.Type == "Document"))
             {
                 var pageImage = ScreenCapture.Capture(page);
-                var textBoxes = ChromePageText.PageBoxes(texts, page);
+                var textBoxes = ChromePageText.PageBoxes(texts, page, pageTabs: _pageTabs);
                 _log.Info("shopee-batch", $"page text lines={textBoxes.Count} list={ShopeeBatchScreens.IsOrderList(textBoxes)} detail={ShopeeBatchScreens.IsOrderDetail(textBoxes)} dialog={ShopeeBatchScreens.TrackingDialogTitle(textBoxes) is not null} awb={ShopeeBatchScreens.IsAwbPage(textBoxes)} print={ShopeeBatchScreens.IsPrintDialog(textBoxes)}");
                 _latest?.Image.Dispose();
                 _latest = ((Bitmap)pageImage.Clone(), page, textBoxes, _inputs, part);
@@ -324,6 +327,8 @@ internal sealed partial class ShopeeBatchRunner
             if (watch.Elapsed > TimeSpan.FromSeconds(seconds))
             {
                 _log.Warn("shopee-batch", $"timeout waiting for {what} found={value is not null} loading={loading}");
+                // What the page showed, to see why (short lines only).
+                _log.Info("shopee-batch", $"page at timeout: {string.Join(" | ", screen.Boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 24).Take(80))}");
                 throw new ShopeeBatchStop($"等不到{what}（{seconds} 秒）。", shipped);
             }
             await Task.Delay(value is not null ? 250 : 500, _token);
