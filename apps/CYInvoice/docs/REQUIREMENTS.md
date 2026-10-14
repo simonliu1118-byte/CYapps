@@ -6,6 +6,14 @@
 - AutoInput 工程測試分支：**V2.6.20 Build 0**（PR #445，Windows CI #38554728718 通過，非正式 Release）；V3 復原另在 #440 Draft，尚未部署。
 - 下列既有一般 UI「已開立 OrderID 重送交光貿判重」語意只適用一般互動流程；AutoInput API 特別採較保守的本機既有成功／不明阻擋。詳細跨線狀態見 [現行交接](CLOUD_WORK_HANDOFF.md)。
 
+## V3 最新產品範圍（2026-10-15，覆蓋舊版 Built-in 敘述）
+
+使用者正式取消 Built-in Cloud／Self-hosted 的 V3 產品支援與開發驗收：**僅維護 Local 單機版與 CYID 雲端版**。當前沒有正式 Built-in 使用者；公開 GitHub fork 的自架需求由 fork 方自行處理。文件後段提及 Built-in 支援、導入與帳號管理的是現存／歷史 V2 架構，不應視為 V3 的新增需求；V3 source 清理、遷移與 CI 尚未完成，不代表已將舊程式刪除。
+
+兩版共用一般開立與光貿折讓核心，Local Employee authority／SQLite 不依賴 Cloud；CYID Cloud 使用中央 Employee authority 與 CYInvoice 自有業務 D1／Device／Work Item。兩版都統一為「公司設定卡片」介面；Local 安全保存本機密鑰，CYID 版僅 SUPER_ADMIN 可以異動加密的統編／光貿 App Key／MO店+ 密碼，ADMIN 只看必要狀態。沒有將 CYID 帳密複製到 CYInvoice 業務 D1。
+
+D1 故障時光貿正常、以 `allowance_list` 臨時配號後再回填 D1 仍是**待驗證設計**，非已完成或已核准跳過 Work Item 原子性；離線執行仍須確認權限／鎖／原號存證與恢復時的同步衝突。
+
 ## 1. 平台與基本開立
 
 - Windows 10/11 x64 可攜式 GUI EXE，C#／.NET 10／WinForms，自 V2.0.0 起為唯一正式產品線。
