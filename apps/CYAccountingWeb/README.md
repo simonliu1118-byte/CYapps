@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.24.0**（Phase D 備份政策／隔離還原驗證） |
+| 產品版本 | **V0.24.1**（正式備份頁／日期快捷／損益標籤） |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -85,3 +85,5 @@ V0.23.4：桌機問號與收支同列，確認標題列右側顯示唯一存檔�
 V0.24.0 新增桌機備份頁隔離還原驗證及 Phase D 啟用：R2 每日保留 30 天、GCS 台灣時間週三／週日保留 26 週（182 天），手動及匯入前仍雙副本。啟用須先通過正式 14 次排程與雙副本真實 SQLite 還原驗證，不因部署自動切換、不在切換當下刪舊備份。隔離驗證完整比對帳務欄列，支援來源 schema 8／9；正式帳本 Restore／DR 尚未開放。詳見 BACKUP_ARCHITECTURE_HANDOFF。
 
 本次正式部署、雙副本隔離還原及 Phase D 啟用回讀均已完成（2026/10/15）：R2 每日保留 30 天；GCS 台灣時間週三／週日 03:30 備份、保留 182 天。首次新排程結果仍待觀察，實際證據見 WORK_HANDOFF。
+
+V0.24.1：Phase D 頁面退場 Phase C 驗收／測試用呈現；桌機在日期、摘要或金額按 Ctrl＋↑↓ 都能調整日期。統計、報表、看帳與 Excel 依正負顯示淨利／淨損，零元顯示損益。

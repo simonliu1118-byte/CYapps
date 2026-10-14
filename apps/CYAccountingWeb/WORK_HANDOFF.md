@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.24.0**；VERSION `0.24.0`、BUILD `0`，Phase D 分層備份與隔離還原驗證；[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
+| 產品 | **V0.24.1**；VERSION `0.24.1`、BUILD `0`，正式備份狀態、日期快捷與損益標籤；V0.24.0 功能部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -17,6 +17,13 @@
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
 本次新增完整分層備份政策及隔離還原驗證，Minor 升至 V0.24.0、Build 歸零。migration 只新增 backup metadata；不改帳務資料／Identity／手機平板版面，不建立 Stable Release。部署不自行啟用 Phase D，須經正式 UI 與 server gate。
+
+## V0.24.1 正式狀態與記帳快捷
+
+- Phase D 之後隱藏已完成的 Phase C 驗收進度與啟用控制，備份按鈕改為正式用詞；原 server gate／歷史紀錄保留，不把 UI 退場當成刪除稽核。
+- 日期 Ctrl＋↑↓ 改由既有 Quick Entry form keydown owner 統一處理。桌機日期文字、摘要、金額共用 canonical date setter、只發一次 change、保留原焦點；移除 Adaptive picker 內重複 Ctrl handler。IME／其他修飾鍵／非 entry 欄位不攔截，手機／平板原生日期快捷及原版面保留。
+- 單／多月統計、損益表、看帳及 Excel 按金額正負顯示淨利／淨損，零元損益；不改移轉排除或任何財務計算。
+- 本次三項使用者需求已記錄；正式帳本還原與隔離 D1 災難復原接續進行，尚未以這批 UI 修正宣告完成。
 
 ## V0.24.0 備份政策與隔離還原
 

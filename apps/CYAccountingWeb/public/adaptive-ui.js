@@ -2035,11 +2035,7 @@ function ensureDesktopUiDatePicker(input) {
     dateText.addEventListener('blur', () => commitText(true));
     dateText.addEventListener('keydown', event => {
       if (event.isComposing) return;
-      if (event.ctrlKey && !event.altKey && !event.metaKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (commitText(true)) stepEntryDate(event.key === 'ArrowUp' ? 1 : -1);
-      } else if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
         if (commitText(true)) els.summary.focus();

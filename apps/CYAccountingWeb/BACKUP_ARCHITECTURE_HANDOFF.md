@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/15（台灣時間）。正式程式版本 **V0.24.0**、D1 schema **9**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
+更新：2026/10/15（台灣時間）。正式程式版本 **V0.24.1**、D1 schema **9**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
@@ -78,3 +78,5 @@ Phase E shared Backup Service 尚未啟用。未來可共用 provider storage me
 自動驗證已有 inner v2、legacy outer v2 compatibility、export-once、copy digest parity、provider failure isolation、topology selection，以及 schema 7/account `colorSlot` 的現行 application regression。V0.22.11 main deploy #431 已成功套用 D1 migration 並部署 production source。
 
 V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 啟用已由正式備份頁回讀確認；尚未取得首次新排程執行結果。這些測試不等於正式帳本 Restore 或 DR 完成；後續工作見 [TODO.md](TODO.md)。
+
+V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成的啟用控制；底層 gate 及 append-only 驗收／policy 紀錄保留。正式還原及 DR 仍待後續實作與驗收。

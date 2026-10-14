@@ -14,15 +14,10 @@ function bindDateQuickEntry() {
   if (!els.txDate || els.txDate.dataset.quickDateBound === '1') return;
   els.txDate.dataset.quickDateBound = '1';
 
+  els.form?.addEventListener('keydown', handleEntryDateShortcut);
+
   els.txDate.addEventListener('keydown', event => {
     if (event.isComposing) return;
-
-    if (event.ctrlKey && !event.altKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      event.preventDefault();
-      cyDateDigitBuffer = '';
-      stepEntryDate(event.key === 'ArrowUp' ? 1 : -1);
-      return;
-    }
 
     if (/^\d$/.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
@@ -41,6 +36,23 @@ function bindDateQuickEntry() {
   });
 
   els.txDate.addEventListener('blur', () => { cyDateDigitBuffer = ''; });
+}
+
+function handleEntryDateShortcut(event) {
+  if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  const target = event.target;
+  const textDate = target?.id === 'desktopEntryDateText';
+  const nativeDate = target === els.txDate;
+  const desktopField = window.cyIsDesktopInteractionWorkspace?.() && (textDate || target === els.summary || target === els.amount);
+  if ((!nativeDate && !desktopField) || els.txDate.disabled || target?.disabled) return;
+  event.preventDefault();
+  cyDateDigitBuffer = '';
+  const current = parseEntryDateText(textDate ? target.value : els.txDate.value);
+  if (!current) {
+    showMessage('日期不正確，請先輸入有效日期。', true);
+    return;
+  }
+  stepEntryDate(event.key === 'ArrowUp' ? 1 : -1, current);
 }
 
 function applyBufferedDateIfComplete() {
@@ -79,8 +91,8 @@ function parseEntryDateText(text) {
   return match ? validDateValue(Number(match[1]), Number(match[2]), Number(match[3])) : '';
 }
 
-function stepEntryDate(delta) {
-  const current = /^\d{4}-\d{2}-\d{2}$/.test(els.txDate.value || '') ? els.txDate.value : localDateString(new Date());
+function stepEntryDate(delta, source = els.txDate.value) {
+  const current = /^\d{4}-\d{2}-\d{2}$/.test(source || '') ? source : localDateString(new Date());
   const [year, month, day] = current.split('-').map(Number);
   const date = new Date(year, month - 1, day + delta);
   setEntryDateValue(localDateString(date));

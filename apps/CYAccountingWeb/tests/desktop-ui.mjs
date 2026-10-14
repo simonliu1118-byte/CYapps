@@ -36,7 +36,7 @@ const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.24.0');
+assert.equal(version, '0.24.1');
 assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
@@ -92,6 +92,7 @@ class PickerElement {
     this.attributes[name] = String(value);
     if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = String(value);
     if (name === 'hidden') this.hidden = true;
+    if (name === 'id') this.id = String(value);
   }
   set innerHTML(markup) {
     this.children = [...markup.matchAll(/<[a-z][\w-]*\b([^>]*)>/gi)].map(tag => {
@@ -123,9 +124,12 @@ function pickerFixture(entryDate = false) {
     set: next => { value = /^\d{4}-\d{2}-\d{2}$/.test(String(next)) ? String(next) : ''; }
   });
   const roots = [];
+  const form = new PickerElement();
+  const summary = new PickerElement(); summary.focus = () => { context.summaryFocused = true; };
+  const amount = new PickerElement();
   input.insertAdjacentElement = (_, root) => roots.push(root);
   const context = vm.createContext({ Date, Event, String, Number, AbortController,
-    els: { txDate: input, summary: { focus() { context.summaryFocused = true; } } },
+    els: { txDate: input, form, summary, amount }, window: { cyIsDesktopInteractionWorkspace: () => true },
     updateEntryLockState() {}, showMessage(message) { context.message = message; },
     localDateString: date => [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'),
     CY_DesktopUi_WEEKDAYS: ['日', '一', '二', '三', '四', '五', '六'],
@@ -133,6 +137,8 @@ function pickerFixture(entryDate = false) {
     document: { createElement: () => new PickerElement(), addEventListener() {} }
   });
   const quickDates = read('public/quick-entry-settings.js');
+  vm.runInContext("let cyDateDigitBuffer = ''; let cyDateDigitAt = 0;\n" + quickDates.slice(quickDates.indexOf('function bindDateQuickEntry('), quickDates.indexOf('function applyBufferedDateIfComplete(')), context);
+  context.bindDateQuickEntry();
   vm.runInContext(quickDates.slice(quickDates.indexOf('function validDateValue('), quickDates.indexOf('function updateQuickEntryKeyboardHint(')), context);
   vm.runInContext(adaptive.slice(adaptive.indexOf('function ensureDesktopUiDatePicker(input)'),
     adaptive.indexOf('function refineDesktopUiHeaderIdentity()')), context);
@@ -296,7 +302,10 @@ typeDate('20260924'); assert.equal(editable.input.value, '2026-09-24');
 typeDate('2024/02/29'); assert.equal(editable.input.value, '2024-02-29');
 typeDate('2026/02/29'); assert.equal(editable.input.value, '', 'invalid days cannot leave a stale canonical date');
 typeDate('20261231');
-const pressDate = (key, ctrlKey = false) => textDate.dispatchEvent({ type: 'keydown', key, ctrlKey, preventDefault() {}, stopPropagation() {} });
+const pressDate = (key, ctrlKey = false) => {
+  const event = { type: 'keydown', target: textDate, key, ctrlKey, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } };
+  textDate.dispatchEvent(event); if (!event.stopped) editable.context.els.form.dispatchEvent(event);
+};
 pressDate('ArrowUp', true); assert.equal(editable.input.value, '2027-01-01');
 pressDate('ArrowDown', true); assert.equal(editable.input.value, '2026-12-31');
 pressDate('Enter'); assert.equal(editable.context.summaryFocused, true);
@@ -403,3 +412,19 @@ assert.deepEqual(ledgerTransactions.map(tx => tx.id), [1, 2, 3, 4], 'presentatio
 vm.runInContext("cyLedgerGroupByAccount = false; cyLedgerSearch = 'match';", ordering);
 assert.deepEqual(renderOrder(() => ordering.renderDesktopLedger()), [1]);
 assert.equal(renderedRows[0].balance, chronologicalBalances.get(1), 'search retains balances from the complete month');
+
+// The form owns one Ctrl-day shortcut, including summary and amount, without moving focus.
+for (const name of ['summary','amount','txDate']) {
+  const field=editable.context.els[name];
+  editable.input.value='2026-12-31'; let changes=0;
+  const listener=()=>changes++; editable.input.addEventListener('change',listener);
+  const key=(value,extra={})=>editable.context.els.form.dispatchEvent({type:'keydown',target:field,key:value,ctrlKey:true,preventDefault(){this.defaultPrevented=true;},...extra});
+  key('ArrowUp'); assert.equal(editable.input.value,'2027-01-01'); assert.equal(changes,1);
+  key('ArrowDown'); assert.equal(editable.input.value,'2026-12-31'); assert.equal(changes,2);
+  for(const extra of [{isComposing:true},{altKey:true},{metaKey:true},{shiftKey:true}]) key('ArrowUp',extra);
+  assert.equal(editable.input.value,'2026-12-31');
+}
+editable.context.window.cyIsDesktopInteractionWorkspace=()=>false;
+editable.input.value='2026-12-31';
+editable.context.els.form.dispatchEvent({type:'keydown',target:editable.context.els.summary,key:'ArrowUp',ctrlKey:true,preventDefault(){throw Error('touch summary unchanged');}});
+assert.equal(editable.input.value,'2026-12-31');

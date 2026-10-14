@@ -124,3 +124,10 @@ assert(JSON.stringify(templateRows[0]) === JSON.stringify(['日期', '帳戶', '
 assert(templateRows.slice(1).every(row => row.every(cell => cell == null || cell === '')), 'template has no example transactions that could accidentally import');
 const templateNotes = await readSheet(template, '填寫說明');
 assert(templateNotes.some(row => row.includes('現金')) && templateNotes.some(row => row.includes('一般支出')), 'template contains currently valid names');
+
+for(const [kind,label] of [['income','淨利'],['expense','淨損'],[null,'損益']]) {
+  const bytes=buildMonthlyWorkbook({month:'2026-01',accountNames:['TEST'],openingMap:new Map(),transactions:kind?[{id:1,tx_date:'2026-01-01',account_name:'TEST',kind,category_name:'TEST',summary:'TEST',amount:1}]:[]});
+  const xml=strFromU8(unzipSync(bytes)['xl/worksheets/sheet1.xml']);
+  assert(xml.includes('>'+label+'</t>'),'export uses the sign-specific result label');
+  assert(!xml.includes('淨利損'),'export has no ambiguous result label');
+}
