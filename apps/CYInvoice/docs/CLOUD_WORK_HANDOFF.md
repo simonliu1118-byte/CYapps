@@ -3,6 +3,14 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 最新產品決策（優先於本文內舊 Built-in 設計敘述）
+
+**使用者正式確認 V3 只支援兩種模式：單機 Local 與 CYID Cloud；停止提供／維護 Built-in Cloud／Self-hosted。** 現無正式 Built-in 使用者，GitHub 使用者如需獨立雲端版本自行 fork 修改，CYInvoice 不再為其投入產品開發、身分路由、D1 雙 storage-profile 相容測試、OTP／Employee CRUD／超管移交或對外自架文件。此前文件提到「Built-in 正式支援模式」、「三版共用」、「其他公司 Built-in 原 D1」、「需保留 Built-in migration」等皆是**舊版架構／歷史證據**，不再是 V3 完成條件。舊程式碼在清理、遷移與 CI 驗證前不能誤寫成已刪除。**不重做**本公司已完成的原 D1 帳號表退役維護。
+
+**V3 最小雙模式架構：**兩版共用光貿 `g0401`／`g0501`、發票、折讓、安全回查與 Windows 核心；單機帳號／資料／折讓配號使用本機 SQLite（無 CYID／D1）；CYID Cloud 由 CYID 負責 Employee／Credential／App Access，CYInvoice 自己的業務 D1 負責 Device、Work Item、Audit、折讓配號。兩版都使用「公司設定卡片」UI；Local 保存既有安全的本機設定，CYID 版公司憑證由 SUPER_ADMIN 授權寫入並加密存於其業務設定，不把金鑰暴露給 ADMIN；不因此讓單機依賴雲端，也不改現行角色權限而未經驗證。
+
+**Cloud D1 不可用但光貿正常時以光貿 `allowance_list` 暫配號並恢復後回填 D1** 為使用者提出的**待驗證設計**，不是已啟用承諾。仍需確認離線核准授權、同一 Work Item 的跨機執行鎖、未連線期間永久占號／結果不明保存、恢復後的不可覆寫合併；官方 `4040161`／`4040162` 可作明確撞號處理但無法單獨解決重複覆核與未知結果。
+
 ## 1. 三條分支，禁止混同
 
 | 工作線 | 現況 |
@@ -66,10 +74,10 @@ CI 不等於正式 D1、Cloudflare Worker、真 Email／Device 或 AMEGO 操作�
 
 ## 4. 下一個新對話按此順序開發，不過度設計
 
-1. **先作 /json/g0401 的現有 Gateway/Core API 升級**：盤點正式 request／response、先產生並保存 AllowanceNumber、結果查回與不盲重送；同一功能供 CYID、Built-in、單機，配相關回歸。尚未驗收前保留原人工流程，**不改動正常開立／OrderID 防重**。
+1. **先作 /json/g0401 的現有 Gateway/Core API 升級**：盤點正式 request／response、先產生並保存 AllowanceNumber、結果查回與不盲重送；同一功能供 CYID、單機，配相關回歸。尚未驗收前保留原人工流程，**不改動正常開立／OrderID 防重**。
 2. g0401 安全驗收後，**在同一套 Work Item／上傳問題架構**設計 D1 事件／申請 Audit 的最少欄位與必要狀態，涵蓋三種人工申請及開立失敗／技術異常，不建一般發票索引。既有 `0015` 只是驗證技術核心，不可直接當完整業務 schema 部署。
 3. 將 D1 的跨機申請／異常接現有 Windows「上傳問題」和管理員處理入口，將刪失敗改封存、追蹤結果不明的三種人工處置；保留來源 Device、本機權威、AMEGO 官方權威及 Audit。
-4. **CYID_ONLY 公司卡片**獨立做加密與 SUPER_ADMIN write guard；多機 DR／CYWEB #151 的 Cloudflare 配置、復原驗收依現有 TODO 繼續，與 g0401 不互相當阻塞。
+4. **兩模式公司設定卡片**：Local 延續本機安全設定，CYID Cloud 使用加密憑證與 SUPER_ADMIN write guard；多機 DR／CYWEB #151 的 Cloudflare 配置、復原驗收依現有 TODO 繼續，與 g0401 不互相當阻塞。
 
 沒有必要為正常開票另建 D1 invoice table、event bus、第二套同步服務或全域 OrderID Lock。進入新對話前先看最新 PR #440 HEAD／diff，不要只信文件的舊 commit SHA。
 
