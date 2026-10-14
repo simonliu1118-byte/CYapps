@@ -161,3 +161,7 @@ context.renderBackupRestoreState({policy:{phase:'phase_d'},phaseDReady:true});
 assert.equal(nodes.get('#backupRestoreTools').hidden,false);
 assert.equal(nodes.get('#backupActivatePhaseD').disabled,true);
 assert.equal(nodes.get('#backupActivatePhaseD').textContent,'Phase D 已啟用');
+
+assert.equal(context.window.phaseCAcceptanceUiModel({provider:'tiered',policy:{phase:'phase_d'}}).visible,false,'retired Phase C progress is absent after activation');
+assert.equal(nodes.get('#backupActivatePhaseD').hidden,true,'completed activation is not a permanent action');
+assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);

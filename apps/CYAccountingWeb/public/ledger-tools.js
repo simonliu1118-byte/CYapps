@@ -413,7 +413,7 @@ function renderDesktopLedger() {
   const openingTotal = [...openingMap.values()].reduce((sum, value) => sum + value, 0);
   const endingTotal = openingTotal + income - expense;
   const net = income - expense;
-  const netLabel = net > 0 ? '淨利' : net < 0 ? '淨損' : '淨利損';
+  const netLabel = net > 0 ? '淨利' : net < 0 ? '淨損' : '損益';
   const netClass = net > 0 ? 'profit' : net < 0 ? 'loss' : 'neutral';
 
   const query = cyLedgerSearch.toLocaleLowerCase('zh-Hant');

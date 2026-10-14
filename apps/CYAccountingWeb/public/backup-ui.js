@@ -175,13 +175,13 @@ function backupSettingsHtml() {
     <div id="backupAcceptance" class="backup-acceptance-strip" hidden></div>
 
     <div class="backup-actions-row">
-      <button id="backupRunNow" class="primary" type="button" disabled>立即執行測試備份</button>
+      <button id="backupRunNow" class="primary" type="button" disabled>立即備份</button>
       <span id="backupRetentionText" class="hint">讀取保留政策中…</span>
     </div>
 
     <div class="backup-security-note">
       <strong>安全設計</strong>
-      <span>D1 只 export 一次，同一份 immutable backup-set bytes 交給各 storage provider；每個 copy 上傳後都必須回讀並通過 SHA-256 / byte size / manifest 驗證才記為成功。</span>
+      <span>同一份資料備份至各儲存位置；每份副本寫入後都會回讀，確認內容、大小及完整性一致才記為成功。</span>
     </div>
 
     <div class="backup-history-block">
@@ -299,7 +299,7 @@ function renderBackupStatus(data) {
     if (lastDetail) {
       lastDetail.textContent = latest
         ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · Package SHA ${String(latest.packageSha256 || '').slice(0, 10)}…`
-        : (model.configured ? '可執行一次 paired backup 驗證 R2 + GCS' : '完成兩個 provider 設定後即可測試');
+        : (model.configured ? '可立即備份並驗證 R2 與 GCS' : '完成兩個 provider 設定後即可測試');
     }
     renderBackupProviderHealth(model, latest);
     renderTieredBackupHistory(model.logicalBackups);
@@ -309,7 +309,7 @@ function renderBackupStatus(data) {
     if (lastDetail) {
       lastDetail.textContent = latest
         ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · SHA ${String(latest.fileSha256 || '').slice(0, 10)}…`
-        : (model.configured ? '可先執行一次測試備份確認 GCS 權限與讀回驗證' : '完成 Cloudflare Secrets 後即可測試');
+        : (model.configured ? '可立即備份並確認 GCS 回讀結果' : '完成 Cloudflare Secrets 後即可測試');
     }
     renderLegacyProviderHealth(model);
     renderBackupHistory(model.recentRuns || []);
@@ -392,7 +392,7 @@ function renderTieredBackupHistory(backups) {
   if (!tbody) return;
   const items = Array.isArray(backups) ? backups.slice(0, 8) : [];
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">尚無 paired backup 執行紀錄。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">尚無備份執行紀錄。</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(item => {
@@ -437,6 +437,7 @@ function renderBackupRestoreState(data) {
   if (verify) verify.disabled = !data?.configured || !data?.logicalBackups?.length;
   const activate = document.querySelector('#backupActivatePhaseD');
   if (activate) {
+    activate.hidden = data?.policy?.phase === 'phase_d';
     activate.disabled = data?.policy?.phase === 'phase_d' || !data?.phaseDReady;
     activate.textContent = data?.policy?.phase === 'phase_d' ? 'Phase D 已啟用' : '啟用 Phase D';
   }
@@ -470,8 +471,8 @@ async function activateBackupPhaseD() {
 
 async function runBackupNow() {
   const tiered = backupTopology === 'parallel_dual_provider';
-  const target = tiered ? 'R2 + GCS paired backup' : 'Google Cloud Storage 測試備份';
-  if (!confirm(`現在立即執行一次 ${target}？\n正常每日備份仍會在排程時間自動執行。`)) return;
+  const target = tiered ? 'R2 + GCS paired backup' : 'Google Cloud Storage 備份';
+  if (!confirm(`現在立即備份到 ${target}？\n正常每日備份仍會在排程時間自動執行。`)) return;
   const button = document.querySelector('#backupRunNow');
   if (button) button.disabled = true;
   setBackupMessage(tiered
@@ -541,7 +542,7 @@ function derivePhaseCAcceptanceFromLogicalBackups(backups, required) {
 
 function phaseCAcceptanceUiModel(data) {
   const tiered = data?.topology === 'parallel_dual_provider' || data?.provider === 'tiered';
-  if (!tiered) return { visible: false, required: PHASE_C_REQUIRED, count: 0, remaining: PHASE_C_REQUIRED, completed: false };
+  if (!tiered || data?.policy?.phase === 'phase_d') return { visible: false, required: PHASE_C_REQUIRED, count: 0, remaining: PHASE_C_REQUIRED, completed: false };
   const server = data?.phaseCAcceptance || {};
   const required = Math.max(1, Number(server.requiredConsecutiveScheduled || PHASE_C_REQUIRED));
   const fallbackCount = derivePhaseCAcceptanceFromLogicalBackups(data?.logicalBackups, required);

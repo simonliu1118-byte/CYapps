@@ -6,6 +6,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.24.1 Build 0 | 備份／復原頁於 Phase D 生效後移除 Phase C 驗收進度及已完成的啟用按鈕，「立即備份」取代測試用文字。日期 Ctrl＋↑↓ 收斂由共用 entry form 處理，桌機日期、摘要、金額皆調整同一日期且保留焦點，移除 picker 的重複快捷 handler；觸控原操作維持。單／多月統計、損益表、看帳與 Excel 依正負顯示淨利／淨損，零元顯示損益；財務計算不變。正式還原／DR 接續工作仍列 TODO。 |
 | V0.24.0 Build 0 | 新增完整 Phase D 分層備份及隔離還原能力，升 Minor。R2 每日 30 天、GCS 台灣週三／週日 182 天；手動／匯入前維持雙副本，未排程不記失敗。SUPER_ADMIN server gate 檢查 14 次排程及同一份雙副本的有效隔離還原，append-only policy／驗證／操作者 audit，切換當下不清舊備份。以 canonical migrations／exporter 在全新記憶體 SQLite 完整匯入、逐欄逐列比對及 integrity／FK check，來源 schema 8／9，正式帳本 writer 未開放；新增真實 workerd WASM 測試。schema 9 僅維運 metadata；backup app version 改由 VERSION 產生並 CI 檢查，outer／inner format 2 不變。手機／平板不新增控件、不改版面。 |
 | V0.23.4 Build 0 | 桌機收支／問號同列、確認狀態靠右並移除十筆說明；成功存檔直接回摘要，移除金額焦點競爭與 timer。桌機清單編輯帶回左側共用表單，清空變取消，未儲存退出回復新增草稿；原筆 PUT／optimistic rollback 共用既有 writer，移除被取代的 inline editor。日期改文字＋日曆按鈕，四碼／八碼、Ctrl＋↑↓、Enter 與無效日期驗證；移除日期 observer／synthetic keyboard bridge，RWD teardown abort listeners。桌機單月統計移除括號路徑，右下新增回到頂端圓形按鈕；移轉排除、手機／平板版面及 schema 不變。 |
 | V0.23.3 Build 1 | 同一桌機確認清單驗收：移除 inherited grid gap、修正狀態符號 inline baseline 額外列高，十筆維持單行且更緊湊；存檔提示置中、日期倒序與帳戶分組已在正式瀏覽器確認，餘額不變。 |

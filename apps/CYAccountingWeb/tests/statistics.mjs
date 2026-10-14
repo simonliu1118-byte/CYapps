@@ -139,3 +139,13 @@ for (const page of ['entry','ledger','statistics']) {
 }
 assert.equal(refreshes,1); context.applyMobileWorkspacePage('statistics',false); assert.equal(shell.dataset.mobilePage,''); assert.ok(!entry.classList.contains('cy-mobile-page-hidden')); assert.ok(!ledger.classList.contains('cy-mobile-page-hidden'));
 console.log('Statistics SQL, authorization, transfer settings, backup, rendering and mobile navigation checks passed.');
+
+for(const [net,label] of [[1,'淨利'],[-1,'淨損'],[0,'損益']]) {
+  const data=structuredClone(classified);data.operating.net=net;
+  for(const options of [{id:'single',compactScope:true},{id:'period'}]) {
+    const html=ui.renderStatistics(data,options);
+    assert.match(html,new RegExp('<span>'+label+'</span>'));
+    assert.ok(!html.includes('淨利損'));
+  }
+  assert.match(ui.renderIncomeStatement(data),new RegExp('本月'+label));
+}
