@@ -205,6 +205,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **RC AE／DR-01～DR-13：**已完成多項 synthetic SQLite／Node／Windows 合約及 PR CI；**跨服務真 Email、受控真 Worker／D1、實際 Windows 裝置的 DR-01～DR-13 尚未執行／驗收**。業務 Audit／viewer 由 §7.6 共用追蹤。
 
 
+- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；完整作廢／折讓／Work Item API 目前尚未建置，仍需設計唯一 Work Item owner、狀態轉移／revision、設備及 actor 執行時 revalidate、外部光貿結果不明處理，不能勾整體完成。
+
 ### 7.5 跨機 Work Item / Sync
 
 災難復原不獨立先行，與 §7.4 的 CYWEB 邀請／Device registry／actor 共用 V3 設計。新機加入不代表未上雲的舊機 pending 已找回，也不觸發 AMEGO 自動重送。

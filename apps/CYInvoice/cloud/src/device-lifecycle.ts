@@ -205,6 +205,16 @@ async function listDevices(request: Request, env: Env, requestId: string): Promi
   });
 }
 
+async function deviceActorStillActive(env: Env, actor: DeviceIdentity): Promise<boolean> {
+  const row = await env.DB.prepare(`
+    SELECT 1 AS live FROM devices d
+    JOIN workspaces w ON w.workspace_id = d.workspace_id
+    WHERE d.device_id = ?1 AND d.workspace_id = ?2
+      AND d.status = 'active' AND w.status = 'active' LIMIT 1`)
+    .bind(actor.deviceId, actor.workspaceId).first<{ live: number }>();
+  return row?.live === 1;
+}
+
 async function revokeDevice(request: Request, env: Env, requestId: string): Promise<Response> {
   const actorDevice = await authenticateDevice(request, env);
   if (!actorDevice)
@@ -251,6 +261,11 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   }
 
   if (target.status === "revoked") {
+    // This read might happen after a fleet recovery cutover. A previously
+    // authenticated but now-revoked actor must not report success or write audit.
+    if (!await deviceActorStillActive(env, actorDevice))
+      return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
+        "Device authority changed during the request.");
     await recordSecurityEvent(env.DB, {
       workspaceId: actorDevice.workspaceId,
       type: "device_revoked",
@@ -269,16 +284,34 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
 
   const now = new Date().toISOString();
   const reasonCode = targetDeviceId === actorDevice.deviceId ? "SELF_RETIRE" : "SUPER_ADMIN_REVOKE";
+  // The actor must remain active when the mutation is committed, not just
+  // when its token and CYID/Built-in credentials were first authenticated.
+  // Recovery cutover and this batch serialize on the SAME business D1.
+  const sourceGuard = `EXISTS (
+    SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
+    WHERE a.device_id = ?4 AND a.workspace_id = ?3
+      AND a.status = 'active' AND w.status = 'active')`;
+  const activeRevokeSql = `UPDATE devices
+      SET status = 'revoked', revoked_at = ?1, updated_at = ?1
+    WHERE device_id = ?2 AND workspace_id = ?3 AND status = 'active'
+      AND (SELECT COUNT(*) FROM devices
+             WHERE workspace_id = ?3 AND status = 'active') > 1
+      AND ${sourceGuard}`;
+  // In Built-in mode, recheck the manager credential in the SQL write. CYID
+  // revalidation is scoped to its own service; the D1 actor fence is mandatory
+  // in either mode. Never reference retired Built-in tables in CYID_ONLY D1.
+  const revokeUpdate = usesCyId(env)
+    ? env.DB.prepare(activeRevokeSql)
+      .bind(now, targetDeviceId, actorDevice.workspaceId, actorDevice.deviceId)
+    : env.DB.prepare(`${activeRevokeSql}
+      AND EXISTS (SELECT 1 FROM cloud_employees
+        WHERE employee_id = ?5 AND workspace_id = ?3
+          AND role = 'SUPER_ADMIN' AND enabled = 1
+          AND credential_verifier = ?6)`)
+      .bind(now, targetDeviceId, actorDevice.workspaceId, actorDevice.deviceId,
+        superAdmin.employee_id, superAdmin.credential_verifier);
   const result = await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE devices
-          SET status = 'revoked', revoked_at = ?1, updated_at = ?1
-        WHERE device_id = ?2
-          AND workspace_id = ?3
-          AND status = 'active'
-          AND (SELECT COUNT(*) FROM devices
-                 WHERE workspace_id = ?3 AND status = 'active') > 1`
-    ).bind(now, targetDeviceId, actorDevice.workspaceId),
+    revokeUpdate,
     env.DB.prepare(
       `INSERT INTO security_audit_events (
          event_id, workspace_id, event_type, outcome, actor_device_id,
@@ -303,6 +336,11 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   ]);
 
   if (result[0].meta.changes !== 1) {
+    // A failed guard must not be reported as LAST_ACTIVE_DEVICE or as an
+    // idempotent success after this actor has lost authorization.
+    if (!await deviceActorStillActive(env, actorDevice))
+      return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
+        "Device authority changed during the request.");
     const latest = await env.DB.prepare(
       `SELECT device_id, display_name, status, client_version, paired_at,
               last_seen_at, created_at, revoked_at

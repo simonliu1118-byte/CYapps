@@ -87,6 +87,17 @@ const list = await call('');
 assert.equal(list.body.activeDeviceCount, 2);
 assert.equal(list.body.devices.length, 3); // retained history; desktop alone filters it
 assert.equal(list.body.devices.find(x => x.deviceId === ids[2]).status, 'revoked');
+// V3 DR: an old actor can pass initial authentication, then become revoked
+// before the D1 batch. Its pending revoke cannot touch the surviving Device.
+const revokeAuditBefore = db.prepare("SELECT COUNT(*) AS n FROM security_audit_events WHERE event_type='device_revoked' AND outcome='success'").get().n;
+beforeWrite = () => db.prepare("UPDATE devices SET status='revoked', revoked_at=? WHERE device_id=?")
+  .run(new Date().toISOString(), ids[0]);
+const lateRevoke = await call('/revoke', { targetDeviceId: ids[1], ...creds });
+assert.equal(lateRevoke.status, 409);
+assert.equal(lateRevoke.body.error.code, 'DEVICE_AUTHORITY_CHANGED');
+assert.equal(db.prepare('SELECT status FROM devices WHERE device_id=?').get(ids[1]).status, 'active');
+assert.equal(db.prepare("SELECT COUNT(*) AS n FROM security_audit_events WHERE event_type='device_revoked' AND outcome='success'").get().n, revokeAuditBefore);
+assert.equal((await call('/revoke', { targetDeviceId: ids[1], ...creds })).status, 401);
 db.prepare("UPDATE workspaces SET status='disabled' WHERE workspace_id='ws_test'").run();
 assert.equal((await call('/usage', { clientVersion: '2.6.14' })).status, 401);
 db.close();
