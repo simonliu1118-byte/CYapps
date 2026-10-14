@@ -48,7 +48,7 @@ internal sealed partial class CloudDirectJoinForm
                     WrongWorkspace = false,
                     CyId = scenario != "non-cyid",
                     WrongIdentityBinding = scenario == "cyid-mismatch",
-                    FailCyIdDiscoveryRemaining = scenario == "cyid-recover" ? 2 : 0,
+                    FailCyIdDiscoveryRemaining = scenario == "cyid-recover" ? 1 : 0,
                 };
                 var messages = new List<(string Message, MessageBoxIcon Icon)>();
                 using (var form = new CloudDirectJoinForm(repository, new HttpClient(new JoinSmokeHandler(server)),
