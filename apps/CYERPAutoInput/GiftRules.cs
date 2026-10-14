@@ -46,19 +46,19 @@ internal static class GiftRules
         {
             var rule = rules[i];
             var codes = Codes(rule.ItemCodes);
-            if (codes.Count == 0) { problems.Add($"第 {i + 1} 張沒有品號。"); continue; }
+            if (codes.Count == 0) { problems.Add($"贈送組合{i + 1} 沒有品號。"); continue; }
             var name = string.Join("、", codes);
-            if (rule.Every < 1) problems.Add($"第 {i + 1} 張（{name}）的「滿幾件」要是 1 以上的整數。");
-            if (rule.Gift < 1) problems.Add($"第 {i + 1} 張（{name}）的「送幾件」要是 1 以上的整數。");
-            if (rule.Platforms.Count == 0) problems.Add($"第 {i + 1} 張（{name}）沒有勾選適用平台。");
+            if (rule.Every < 1) problems.Add($"贈送組合{i + 1}（{name}）的「滿幾件」要是 1 以上的整數。");
+            if (rule.Gift < 1) problems.Add($"贈送組合{i + 1}（{name}）的「送幾件」要是 1 以上的整數。");
+            if (rule.Platforms.Count == 0) problems.Add($"贈送組合{i + 1}（{name}）沒有勾選適用平台。");
             var giftItem = rule.GiftItem.Trim();
             if (giftItem.Length > 0 && !codes.Contains(giftItem, StringComparer.OrdinalIgnoreCase))
-                problems.Add($"第 {i + 1} 張的贈送品號 {giftItem} 不在這張的品號裡。");
+                problems.Add($"贈送組合{i + 1} 的指定品號 {giftItem} 不在這個組合的品號裡。");
             foreach (var platform in rule.Platforms)
                 foreach (var code in codes)
                 {
                     if (owner.TryGetValue((code.ToUpperInvariant(), platform), out var other))
-                        problems.Add($"品號 {code} 在{platform}同時出現在第 {other + 1} 張和第 {i + 1} 張，同一平台的同一個品號只能有一個贈送規則。");
+                        problems.Add($"品號 {code} 在{platform}同時出現在贈送組合{other + 1} 和贈送組合{i + 1}，同一平台的同一個品號只能有一個贈送規則。");
                     else owner[(code.ToUpperInvariant(), platform)] = i;
                 }
         }

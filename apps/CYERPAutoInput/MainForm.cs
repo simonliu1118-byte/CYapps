@@ -1096,42 +1096,39 @@ internal sealed class MainForm : Form
 
     /// <summary>
     /// 測試全家裁切列印 (user, 2026-10-14): with a 全家寄取貨單 tab opened by hand in front, the
-    /// printing part of 全自動 runs on it — save, cut, a preview to approve, then print.
+    /// printing part of 全自動 runs on it to the end — cut and printed, or else printed through
+    /// Chrome at 第 2 頁 165 %.
     /// </summary>
     private async Task TestFamilyCutAsync()
     {
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (MessageBox.Show(this,
                 "請先在 Chrome 打開蝦皮的全家寄取貨單分頁，並讓那個 Chrome 視窗在最前面（本程式以外）。\n\n" +
-                "按「確定」後程式會切到 Chrome、按 Ctrl+S 把網頁存到暫存資料夾、切出寄取貨單，先顯示預覽，你確認後才送到「" + _settings.ShopeeLabelPrinter + "」列印。存下的網頁用完即刪除。\n\n過程中請勿操作鍵盤滑鼠。",
+                "按「確定」後程式會照全自動的做法列印這張單：存網頁到程式資料夾的 Temp、切出寄取貨單直接送「" + _settings.ShopeeLabelPrinter +
+                "」列印；切不出來就改用 Chrome 第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "% 列印。會真的印出來。\n\n過程中請勿操作鍵盤滑鼠，按 Esc 可停止。",
                 "測試全家裁切列印", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
             return;
         _shopeeBatchRunning = true;
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), cts.Token);
+                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
         string result;
         try
         {
-            _log.Info("shopee-batch", "family cut test started");
-            result = await runner.TestFamilyCutAsync((slip, info) =>
-            {
-                Invoke(() => { Activate(); BringToFront(); });
-                return (bool)Invoke(() =>
-                {
-                    using var preview = new SlipPreviewForm(slip, info, _settings.ShopeeLabelPrinter);
-                    return preview.ShowDialog(this) == DialogResult.OK;
-                });
-            });
+            _log.Info("shopee-batch", "family print test started");
+            result = await runner.TestFamilyPrintAsync();
         }
         catch (Exception ex) when (ex is ShopeeBatchStop or OperationCanceledException or InvalidOperationException)
         {
-            _log.Warn("shopee-batch", $"family cut test: {ex.Message}");
-            result = ex is OperationCanceledException ? "逾時，已停止。" : ex.Message;
+            _log.Warn("shopee-batch", $"family print test: {ex.Message}");
+            result = ex is OperationCanceledException ? "已停止。" : ex.Message;
         }
         finally
         {
+            Session.Unpin();
+            Session.End();
             _shopeeBatchRunning = false;
         }
         Activate();

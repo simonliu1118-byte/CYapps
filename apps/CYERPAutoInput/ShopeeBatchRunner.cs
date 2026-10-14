@@ -815,7 +815,8 @@ internal sealed class ShopeeBatchRunner
     /// </summary>
     private async Task<(GrayImage? Slip, string Printer, string Info)> CutFamilySlipAsync(string? tracking)
     {
-        var folder = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        // The program's own Temp folder beside the exe (user, 2026-10-14: not in AppData).
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
         try
         {
             var printer = SlipPrinter.Installed(_printer);
@@ -855,22 +856,31 @@ internal sealed class ShopeeBatchRunner
     }
 
     /// <summary>
-    /// 測試全家裁切列印 (user, 2026-10-14: run the printing part on a slip tab opened by hand):
-    /// the front Chrome window's tab is saved and cut; <paramref name="confirm"/> sees the cut
-    /// slip and decides whether it is printed. Returns what happened.
+    /// 測試全家裁切列印 (user, 2026-10-14: run the whole printing part on a slip tab opened by
+    /// hand, through to the print): the front Chrome window's tab is saved and cut and the slip
+    /// printed as in 全自動; when it cannot be cut, Chrome prints it (頁面, 縮放, 列印) as in
+    /// 全自動. The 寄件編號 is not known here, so it is not checked. Returns what happened.
     /// </summary>
-    public async Task<string> TestFamilyCutAsync(Func<GrayImage, string, bool> confirm)
+    public async Task<string> TestFamilyPrintAsync()
     {
         _window = ChromeWindows().FirstOrDefault();
         if (_window == 0) return "找不到 Chrome 視窗。";
         Front();
         await Task.Delay(500, _token);
         var cut = await CutFamilySlipAsync(tracking: null);
-        _log.Info("shopee-batch", $"family cut test: {(cut.Slip is null ? "failed" : "cut")}: {cut.Info}");
-        if (cut.Slip is null) return "沒有切成功：" + cut.Info;
-        if (!confirm(cut.Slip, cut.Info)) return "已取消，沒有列印。";
-        PrintCutSlip(cut.Printer, cut.Slip, "測試");
-        return $"已送到 {cut.Printer}。\n{cut.Info}";
+        _log.Info("shopee-batch", $"family print test: {(cut.Slip is null ? "not cut" : "cut")}: {cut.Info}");
+        if (cut.Slip is not null)
+        {
+            PrintCutSlip(cut.Printer, cut.Slip, "測試");
+            return $"裁切成功，已送到 {cut.Printer} 列印。\n{cut.Info}";
+        }
+        Front();
+        await Task.Delay(300, _token);
+        Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+        await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);
+        var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
+        printed.Dispose();
+        return $"裁切沒有成功（{cut.Info}），已改用 Chrome 第 {_print.FamilyPages} 頁 {_print.FamilyScale}% 列印。";
     }
 
     /// <summary>The cut slip read with OCR shows the 寄件編號.</summary>

@@ -52,8 +52,8 @@ public class GiftRulesTests
         Assert.Empty(GiftRules.Gifts("MO店+", [("X00330", "9")], perPlatform.Take(1).ToList()));
         Assert.Equal(1, GiftRules.Gifts("MO店+", [("X00330", "9")], perPlatform)[0]);
         Assert.Empty(GiftRules.Gifts("蝦皮", [("X00330", "9")], perPlatform));
-        Assert.Contains(GiftRules.Problems([R("X00330,X00331", 10, 1, "", "蝦皮"), R("x00331", 5, 1, "", "蝦皮", "酷澎")]), p => p.Contains("00331") && p.Contains("第 1 張和第 2 張"));
-        Assert.Contains("第 1 張沒有品號。", GiftRules.Problems([R(" ", 10, 1, "", "蝦皮")]));
+        Assert.Contains(GiftRules.Problems([R("X00330,X00331", 10, 1, "", "蝦皮"), R("x00331", 5, 1, "", "蝦皮", "酷澎")]), p => p.Contains("00331") && p.Contains("贈送組合1 和贈送組合2"));
+        Assert.Contains("贈送組合1 沒有品號。", GiftRules.Problems([R(" ", 10, 1, "", "蝦皮")]));
         Assert.Contains(GiftRules.Problems([R("X00330", 0, 1, "", "蝦皮")]), p => p.Contains("滿幾件"));
         Assert.Contains(GiftRules.Problems([R("X00330", 10, 0, "", "蝦皮")]), p => p.Contains("送幾件"));
         Assert.Contains(GiftRules.Problems([R("X00330", 10, 1, "")]), p => p.Contains("適用平台"));

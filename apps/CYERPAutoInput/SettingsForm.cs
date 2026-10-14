@@ -239,6 +239,9 @@ internal sealed class SettingsForm : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData != Keys.Enter || ActiveControl is Button) return base.ProcessCmdKey(ref msg, keyData);
+        // Enter in a pill box makes the typed text a pill (user, 2026-10-14); empty, it moves on.
+        for (Control? c = ActiveControl; c is not null; c = c is ContainerControl cc ? cc.ActiveControl : null)
+            if (c.Parent is PillBox pills && pills.Holds(c) && pills.Commit()) return true;
         var page = _tabs.SelectedTab;
         if (page is null) return base.ProcessCmdKey(ref msg, keyData);
 
@@ -525,7 +528,7 @@ internal sealed class ChatRuleEditor : GroupBox
     public List<ChatRule> Rules() =>
         _rows.Controls.OfType<TableLayoutPanel>().Select(r => new ChatRule
         {
-            Keywords = ((TextBox)r.GetControlFromPosition(1, 0)!).Text,
+            Keywords = string.Join(",", ((PillBox)r.GetControlFromPosition(1, 0)!).Values),
             Message = ((TextBox)r.GetControlFromPosition(1, 1)!).Text
         }).ToList();
 
@@ -534,16 +537,16 @@ internal sealed class ChatRuleEditor : GroupBox
         var row = new TableLayoutPanel { ColumnCount = 3, RowCount = 2, AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 410));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-        var keywords = new TextBox { Width = 400, Text = rule.Keywords, PlaceholderText = "關鍵字，用逗號分隔，例如：發票,統編", Margin = new Padding(0, 4, 0, 4) };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        // 關鍵字 as pills (user, 2026-10-14).
+        var keywords = new PillBox(ChatRules.Words(rule.Keywords), "輸入關鍵字後按 Enter", 400) { Margin = new Padding(0, 4, 0, 4) };
         var message = new TextBox { Width = 400, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, Text = rule.Message, Margin = new Padding(0, 2, 0, 2) };
-        var remove = new CyButton { Text = "刪除", Width = 64, Height = 30, Enabled = !_locked };
+        var remove = new CyButton { Text = "刪除此則", Width = 84, Height = 30, Enabled = !_locked };
         remove.Click += (_, _) => { _rows.Controls.Remove(row); row.Dispose(); Renumber(); };
         row.Controls.Add(new Label { AutoSize = true, Margin = new Padding(0, 8, 4, 0) }, 0, 0);
         row.Controls.Add(keywords, 1, 0);
         row.Controls.Add(remove, 2, 0);
         row.Controls.Add(new Label { Text = "訊息", AutoSize = true, Margin = new Padding(0, 6, 4, 0) }, 0, 1);
-        new ToolTip().SetToolTip(keywords, "關鍵字，用逗號分隔");
         row.Controls.Add(message, 1, 1);
         _rows.Controls.Add(row);
         Renumber();
@@ -558,10 +561,13 @@ internal sealed class ChatRuleEditor : GroupBox
     }
 }
 
-/// <summary>滿件贈送 cards (品號, 滿幾件, 送幾件, 送給誰, 適用平台, 刪除) with 新增 at the top.</summary>
+/// <summary>
+/// 滿件贈送 cards with 新增 at the top (user, 2026-10-14: three rows per card — 適用平台 with
+/// 刪除組合 on the right; 品號 as pills; 合計滿 n 件 送 m 件，贈送 件數最多的／指定品號).
+/// </summary>
 internal sealed class GiftRuleEditor : Panel
 {
-    private sealed record Card(TextBox Codes, NumericUpDown Every, NumericUpDown Gift, RadioButton Most, TextBox GiftItem, CheckBox[] Platforms);
+    private sealed record Card(PillBox Codes, TextBox Every, TextBox Gift, RadioButton Most, TextBox GiftItem, CheckBox[] Platforms);
 
     private readonly FlowLayoutPanel _cards = new() { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
 
@@ -575,7 +581,7 @@ internal sealed class GiftRuleEditor : Panel
             AutoSize = true,
             MaximumSize = new Size(440, 0),
             Margin = new Padding(0, 6, 12, 0),
-            Text = "匯入的訂單中，卡片上的品號（可多個，用逗號分隔）合計每滿幾件，就送幾件，填在指定品號或件數最多的那個品號第一列的「贈/備品量」（例如買 10 送 1：10 件填 1、20 件填 2）。"
+            Text = "匯入的訂單中，贈送組合裡的品號合計每滿幾件，就送幾件，填在指定品號或件數最多的那個品號第一列的「贈/備品量」（例如買 10 送 1：10 件填 1、20 件填 2）。品號輸入後按 Enter。"
         });
         var add = new CyButton { Text = "新增", Width = 80, Height = 30 };
         add.Click += (_, _) => AddCard(new GiftRule { Every = 10, Gift = 1, Platforms = [ShopeeOrderImport.Source] });
@@ -588,53 +594,76 @@ internal sealed class GiftRuleEditor : Panel
     public List<GiftRule> Rules() =>
         _cards.Controls.OfType<GroupBox>().Select(box => (Card)box.Tag!).Select(c => new GiftRule
         {
-            ItemCodes = c.Codes.Text,
-            Every = (int)c.Every.Value,
-            Gift = (int)c.Gift.Value,
+            ItemCodes = string.Join(",", c.Codes.Values),
+            Every = int.TryParse(c.Every.Text.Trim(), out var every) ? every : 0,
+            Gift = int.TryParse(c.Gift.Text.Trim(), out var gift) ? gift : 0,
             GiftItem = c.Most.Checked ? string.Empty : c.GiftItem.Text,
             Platforms = c.Platforms.Where(p => p.Checked).Select(p => p.Text).ToList()
         }).ToList();
 
     private void AddCard(GiftRule rule)
     {
-        var box = new GroupBox { Width = 560, Height = 136, Padding = new Padding(10, 6, 10, 6), Margin = new Padding(0, 0, 0, 8) };
-        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
+        const int inner = 536;
+        var box = new GroupBox { Width = 560, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10, 4, 10, 8), Margin = new Padding(0, 0, 0, 8) };
+        var table = new TableLayoutPanel { ColumnCount = 1, RowCount = 3, AutoSize = true, Location = new Point(10, 22), Width = inner, Margin = Padding.Empty };
         Label L(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 8, 4, 0) };
-        NumericUpDown N(int value) => new() { Minimum = 0, Maximum = 9999, Width = 64, Value = Math.Clamp(value, 0, 9999), Margin = new Padding(0, 4, 4, 4) };
-        var codes = new TextBox { Width = 300, Text = rule.ItemCodes, PlaceholderText = "品號，多個用逗號分隔", Margin = new Padding(0, 4, 12, 4) };
+        // Whole numbers only, no arrows (user, 2026-10-14).
+        TextBox N(int value)
+        {
+            var t = new TextBox { Width = 44, Text = value > 0 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty, MaxLength = 4, TextAlign = HorizontalAlignment.Right, Margin = new Padding(0, 4, 4, 4) };
+            t.KeyPress += (_, e) => { if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar)) e.Handled = true; };
+            return t;
+        }
+
+        // Row 1: 適用平台 … 刪除組合 (right).
+        var top = new TableLayoutPanel { ColumnCount = 2, RowCount = 1, Width = inner, Height = 36, Margin = Padding.Empty };
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var platformsFlow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        platformsFlow.Controls.Add(L("適用平台"));
+        var platforms = GiftRules.Platforms.Select(p => new CheckBox { Text = p, AutoSize = true, Checked = rule.Platforms.Contains(p), Margin = new Padding(0, 6, 12, 0) }).ToArray();
+        foreach (var p in platforms) platformsFlow.Controls.Add(p);
+        var remove = new CyButton { Text = "刪除組合", Width = 84, Height = 30, Margin = new Padding(0, 2, 0, 0), Anchor = AnchorStyles.Right };
+        remove.Click += (_, _) => { _cards.Controls.Remove(box); box.Dispose(); Renumber(); };
+        top.Controls.Add(platformsFlow, 0, 0);
+        top.Controls.Add(remove, 1, 0);
+
+        // Row 2: 品號 pills.
+        var codesRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 2) };
+        codesRow.Controls.Add(L("品號"));
+        var codes = new PillBox(GiftRules.Codes(rule.ItemCodes), "輸入品號後按 Enter", inner - 44) { Margin = new Padding(0, 4, 0, 4) };
+        codesRow.Controls.Add(codes);
+
+        // Row 3: 合計滿 n 件 送 m 件，贈送 件數最多的／指定品號.
+        var countRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         var every = N(rule.Every);
         var gift = N(rule.Gift);
-        var remove = new CyButton { Text = "刪除", Width = 64, Height = 30, Margin = new Padding(12, 2, 0, 0) };
-        remove.Click += (_, _) => { _cards.Controls.Remove(box); box.Dispose(); Renumber(); };
-        flow.Controls.Add(L("品號"));
-        flow.Controls.Add(codes);
-        flow.Controls.Add(remove);
-        flow.SetFlowBreak(remove, true);
-        flow.Controls.Add(L("合計滿"));
-        flow.Controls.Add(every);
-        flow.Controls.Add(L("件 送"));
-        flow.Controls.Add(gift);
-        flow.Controls.Add(L("件，送給"));
-        var most = new RadioButton { Text = "件數最多的", AutoSize = true, Checked = rule.GiftItem.Trim().Length == 0, Margin = new Padding(0, 6, 8, 0) };
-        var named = new RadioButton { Text = "指定品號", AutoSize = true, Checked = rule.GiftItem.Trim().Length > 0, Margin = new Padding(0, 6, 4, 0) };
-        var giftItem = new TextBox { Width = 100, Text = rule.GiftItem, Enabled = named.Checked, Margin = new Padding(0, 4, 0, 4) };
+        var most = new RadioButton { Text = "件數最多的", AutoSize = true, Checked = rule.GiftItem.Trim().Length == 0, Margin = new Padding(0, 6, 6, 0) };
+        var named = new RadioButton { Text = "指定品號", AutoSize = true, Checked = rule.GiftItem.Trim().Length > 0, Margin = new Padding(0, 6, 2, 0) };
+        var giftItem = new TextBox { Width = 96, Text = rule.GiftItem, Enabled = named.Checked, Margin = new Padding(0, 4, 0, 4) };
         named.CheckedChanged += (_, _) => giftItem.Enabled = named.Checked;
-        flow.Controls.Add(most);
-        flow.Controls.Add(named);
-        flow.Controls.Add(giftItem);
-        flow.SetFlowBreak(giftItem, true);
-        flow.Controls.Add(L("適用平台"));
-        var platforms = GiftRules.Platforms.Select(p => new CheckBox { Text = p, AutoSize = true, Checked = rule.Platforms.Contains(p), Margin = new Padding(0, 6, 12, 0) }).ToArray();
-        foreach (var p in platforms) flow.Controls.Add(p);
-        box.Controls.Add(flow);
+        countRow.Controls.Add(L("合計滿"));
+        countRow.Controls.Add(every);
+        countRow.Controls.Add(L("件 送"));
+        countRow.Controls.Add(gift);
+        countRow.Controls.Add(L("件，贈送"));
+        countRow.Controls.Add(most);
+        countRow.Controls.Add(named);
+        countRow.Controls.Add(giftItem);
+
+        table.Controls.Add(top, 0, 0);
+        table.Controls.Add(codesRow, 0, 1);
+        table.Controls.Add(countRow, 0, 2);
+        box.Controls.Add(table);
         box.Tag = new Card(codes, every, gift, most, giftItem, platforms);
         _cards.Controls.Add(box);
         Renumber();
     }
 
+    /// <summary>贈送組合1, 贈送組合2… as the save check names them (user, 2026-10-14).</summary>
     private void Renumber()
     {
         var i = 1;
-        foreach (var box in _cards.Controls.OfType<GroupBox>()) box.Text = $"第 {i++} 張";
+        foreach (var box in _cards.Controls.OfType<GroupBox>()) box.Text = $"贈送組合{i++}";
     }
 }
