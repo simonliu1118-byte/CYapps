@@ -26,7 +26,8 @@ public static class AutoInputRecordDecision
             record.InvoiceNumber.Trim().Length != 0 && record.ErrorMessage.Trim().Length == 0 &&
             record.InvoiceDate.Trim().Length != 0)
             return new(orderId, "existing", record.InvoiceNumber, record.InvoiceDate,
-                record.BuyerIdentifier, record.BuyerName, record.Amount);
+                record.BuyerIdentifier == "0000000000" ? string.Empty : record.BuyerIdentifier,
+                record.BuyerName, record.Amount);
 
         if (record.InvoiceState == InvoiceStates.Failed)
             return new(orderId, "failed", Message: "先前開立明確失敗，請在 CYInvoice 人工核對後處理");
