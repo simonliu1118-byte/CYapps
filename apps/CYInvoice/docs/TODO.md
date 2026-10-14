@@ -4,9 +4,18 @@
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
-- 本公司使用 CYID；其他公司 Built-in／Self-hosted 用自己的新 D1 與原 migrations。Built-in 是正式支援模式，不是 CYID 故障 fallback；不能復活本公司已退役的舊帳號表。
+- 本公司現使用 CYID；2026-10-15 使用者決定 V3 停止正式支援 Built-in／Self-hosted，僅保留 Local／CYID Cloud。此前其他公司自架的設計為歷史資料，不再是 V3 維護目標；不能復活本公司已退役的舊帳號表。
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
+
+## 2026-10-15 V3 產品範圍定案（覆蓋舊 Built-in 待辦）
+
+- [ ] **V3 僅保留 Local + CYID Cloud 兩種正式模式**：使用者確認沒有正式 Built-in 使用者，停止維護 Built-in Cloud／Self-hosted 做為可用產品；GitHub 第三方如需自行部署 Built-in，改自行 fork。不以其相容性作 V3 合併／驗收／Release 條件；歷史成功測試和已發布 V2.6.19 不被重新定義為已刪除。
+- [ ] **工程簡化清理（尚未動程式）**：清理 Built-in identity provider／Employee CRUD／OTP／忘記密碼／SUPER_ADMIN transfer、Cloud 初始導入及相關相容分支，評估刪除不再需要的 handlers／migrations／fixtures／CI 矩陣；保護仍被 CYID／Local 共用的 Device、Workspace、Window Core、D1 Work Items、錯誤處理與歷史 actor/audit 解讀。不可復活或重做已退役的原 D1 表，不把刪 source 當正式 DB 清理授權。
+- [ ] **統一公司設定卡片**：Local 保留本機加密憑證儲存與現有合理權限；CYID Cloud 由 SUPER_ADMIN 授權增改移除公司統編、AMEGO App Key、MO店+ 密碼的加密業務設定，ADMIN 可看統編／已設定狀態但不得讀明文。不再維護 Built-in 專用卡片／憑證路徑。
+- [ ] **Cloud D1 中斷但光貿正常的折讓配號**：使用者提議在離線期間查光貿 `allowance_list` 配號，回連後補寫 D1；**尚待授權／操作鎖／永久占號／結果不明合併設計與測試**，不能只靠 `4040161`／`4040162` 就假設離線的跨機核准一定安全。先完成雙模式與正式 `g0401` 的安全骨架再決定細節。
+
+本決策取代本文舊章節中「Built-in 是正式支援模式」、「三版共用」及自架支援的**未來產品承諾**；舊的已完成工程與歷史遷移紀錄仍可供追溯，不能當成應繼續實作的待辦。
 
 ## 0. 接續優先順序
 
@@ -18,7 +27,7 @@
 | V3 接續 3 | V3 折讓 API／不可覆寫逐筆歷史 | §1.1／§6／§7.5；依使用者決定整體重做，不回頭修 V2.6.19 |
 | V3 接續 4 | 業務 Audit／查看介面 | §7.4／§7.6；現有 Device audit 保留，新增業務事件與 actor provider |
 | 待補證據 | 原裝置權限刷新、斷線／恢復、撤銷中斷與 UI／AMEGO 行為 | §1／§4／§7.2／§7.3；缺實測證據不等於未實作或已發現 defect |
-| 後續／延後 | 酷澎特殊樣本、自架手冊、多公司、營運摘要、高 DPI／cache 簽章 | §5／§8～§11；維持原延後與非本次阻塞決定 |
+| 後續／延後 | 酷澎特殊樣本、多公司、營運摘要、高 DPI／cache 簽章 | §5／§8～§11；原 Built-in 自架手冊依 2026-10-15 決定取消 |
 
 - [x] V2.6.19 正式 tag／ZIP／SHA-256 與 Windows／Cloud Client／package／安全掃描已完成。
 - [x] PR #216／#379 head 已由 #380 合併；裝置管理、邀請、分流工程不重列為未實作。
@@ -101,7 +110,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 
 目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。2026-10-13 使用者決定目前人工折讓歷史缺欄位不單獨修補，V3.0 隨正式折讓及 Cloud Work Item／Audit 重做；既有 V2 缺陷不因此視為修復。
 
-**2026-10-14 使用者確認開發順序：**優先把折讓申請 → 管理員至光貿網站人工折讓改為 CYInvoice 直接呼叫 `/json/g0401`；CYID、Built-in、單機版全部沿用同一 Core/Gateway，不要把 API 功能依賴在 D1。開立後直接以確定的折讓單號查官方狀態，通過驗收再取消手動填折讓單號與人工挑選多筆候選的操作 UI；結果不明仍保留安全回查，不自動重送。
+**2026-10-14 使用者確認開發順序：**優先把折讓申請 → 管理員至光貿網站人工折讓改為 CYInvoice 直接呼叫 `/json/g0401`；CYID、單機版共用同一 Core/Gateway，不要把 API 功能依賴在 D1。開立後直接以確定的折讓單號查官方狀態，通過驗收再取消手動填折讓單號與人工挑選多筆候選的操作 UI；結果不明仍保留安全回查，不自動重送。
 
 **官方 API 契約注意：**光貿 `/json/g0401` 要求呼叫端必填 `AllowanceNumber`（最長 16 字、不可重複）；公開成功回應只明列 `code`、`msg`，不能假定光貿會自動配號或回傳號碼。CYInvoice 必須自行產生、先保存同一唯一號碼，確保跨機不撞號；逾時只能用**原號**查 `/json/allowance_query`／`/json/allowance_status`。文件：https://invoice.amego.tw/api_doc/ 。
 
@@ -114,7 +123,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
 - [ ] 自動折讓／折讓作廢時，確認 AMEGO 正式可保存且可依折讓單號查回的欄位，再決定如何保存 `管理員編號-使用者編號-原因`；若官方沒有合適欄位，不濫用未文件化欄位。
-- [ ] **先驗收 g0401** 的發送、相同折讓單號查回、結果不明與三種版本共用後，再移除「管理員至光貿網站人工折讓」、「手填折讓單號」、「從多筆候選人工挑單號」的正常操作 UI；歷史及不明結果追查保留。**g0501 折讓作廢屬另一個 API 驗收點，不可隨 g0401 一併宣告完工；D1 折讓協同在 g0401 後再接。**
+- [ ] **先驗收 g0401** 的發送、相同折讓單號查回、結果不明與 Local／CYID 兩種版本共用後，再移除「管理員至光貿網站人工折讓」、「手填折讓單號」、「從多筆候選人工挑單號」的正常操作 UI；歷史及不明結果追查保留。**g0501 折讓作廢屬另一個 API 驗收點，不可隨 g0401 一併宣告完工；D1 折讓協同在 g0401 後再接。**
 
 `/json/allowance_file` 折讓 PDF 已完成工程實作，後續只需實機驗證與雲端化時確認多裝置 Cache 行為。
 
@@ -128,13 +137,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.2 目前剩餘驗證／修正
 
+Built-in／Self-hosted 專屬 Employee identity／OTP／Email／超管移交矩陣共四項已依產品範圍定案移出 V3 待辦（取消，**不是通過驗收**）。既有 Device 與 CYID／Local 回歸仍按實際依賴保留。
+
 - [ ] **待補 A/B baseline 證據：**兩台既有 Device 保留原安裝升級現行 V2.6.19 後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
 - [ ] V2.6.12 邀請第一次加入與首次說明實機驗收（RC X）。10/09 舊包已取得「第一次錯誤、重開成功」證據，已定位 password.Clear → TextChanged → preview=null；修正版單次完成尚待使用者驗證。邀請撤銷／重寄與其他不明結果仍待實測。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
 - [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；雲端暫時不可用且光貿正常時沿用原降級可信 cache，恢復連線後 Online authority 重新覆蓋。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**Built-in Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**Built-in Cloud「忘記密碼」員編／已驗證 Email challenge、重寄倒數、OTP／新密碼 confirm 及 A/B 舊密碼失效實機驗收；工程已實作。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**SUPER_ADMIN transfer 的 execution-time re-auth／OTP／原子 X→ADMIN、Y→SUPER_ADMIN／Recovery Email 與 A/B authority 驗收。
 - [ ] **Cloud → Local 實機驗收：**優先用可拋棄的 Device C，在 A/B 仍保留 Workspace recovery path 的前提下測 current-device reset；確認 A/B、Workspace、中央 Employees 完整保留。
 - [ ] **Device revoke A/B/C 實機驗收：**新增可拋棄 Device C，從 A/B 遠端 revoke C，確認 C 舊 Token 立即失效、history 保留 revoked、重新加入產生新 Device identity。
 - [ ] **LAST_ACTIVE_DEVICE 實機驗收：**只在專用可拋棄 Workspace／環境驗證，不為測試而破壞目前 A/B 唯一 recovery topology。
@@ -253,7 +260,7 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 - **驗收限制：**identity ready、舊 Built-in route 拒絕與缺 Device 授權拒絕已檢查；真人帳密／多裝置矩陣仍依 §7.3／RC_TEST 保留未驗，不冒稱全矩陣通過。
 - [ ] **V3 actor ownership：**Work Item／Audit 區分 CYID 外部 actor 與 Built-in 歷史，不靠員編猜同人；合併追蹤 §7.5／§7.6。
 
-本次不取消其他公司的 Built-in handler／migrations，也不代表新 Windows Release 或另一環境的部署授權。
+**2026-10-15 後 V3 方向改為移除 Built-in 正式支援；此句原為當時歷史界線。**清理 source 仍須逐項驗證，不代表已刪或授權刪遠端 D1；更不代表 Windows Release 或部署授權。
 
 ## 8. 後續大版本：多公司 Workspace
 
@@ -263,14 +270,13 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 - [ ] V3 單公司 Workspace 升級時自動建立第一個 Company。
 - [ ] 視實際需求再做 Employee ↔ Company scope、Device 預設 Company、公司切換 UI、跨公司待辦／查詢／報表。
 
-## 9. 對外相容／自架準備
+## 9. 對外相容／自架準備（V3 取消）
 
-- [ ] Cloud API 穩定後撰寫 CYInvoice Self-hosted / Cloud Integration User Manual。
-- [ ] Guide 定義 Built-in Cloud 部署需求、endpoint、schema、Device auth、Employee authorization、錯誤碼、版本、idempotency／reconciliation 語意；不得要求 CY ID 才能完成基本部署。
+2026-10-15 使用者決定不再交付 Built-in／Self-hosted。原自架手冊與 Built-in 相容承諾從 V3 待辦移除；第三方自行 fork，團隊不負責這條產品線的部署與驗收。
 
 ## 10. 後續增強
 
-Built-in Cloud Email password recovery 工程已完成，實機驗收見 7.2。
+Built-in Cloud Email password recovery 屬歷史工程完成紀錄；V3 已取消該模式，不再安排專屬實機驗收。
 
 - [ ] MO 密碼安全 Cloud sync。
 - [ ] 小型營運摘要：今日／本月開票張數與金額、待處理工作數、同步異常數。
