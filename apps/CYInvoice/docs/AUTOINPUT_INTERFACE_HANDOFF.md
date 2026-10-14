@@ -76,7 +76,8 @@ CYInvoice.exe --autoinput-query <request.json> --result <result.json>
 6. 使用者要求免員工登入，不等於開放跨 Windows 使用者、跨資料夾或雲端 HTTP 未驗證入口；本接口僅接受本機同 Windows 使用者端。
 
 ## 驗收狀態與剩餘工作
-- 已提交程式及 Core regression，但**尚未確認最新 commit 的 Windows Build、CI、完整 Windows 雙行程 IPC／Excel COM 實機測試全部通過**。
+- **2026-10-14 CI 已通過**：Windows Build [run 38552466619](https://github.com/simonliu1118-byte/CYapps/actions/runs/38552466619)（編譯、Core parity／既有回歸測試、portable 封裝與 smoke）、[Governance run 38552466669](https://github.com/simonliu1118-byte/CYapps/actions/runs/38552466669)、[Cloud Check run 38552466568](https://github.com/simonliu1118-byte/CYapps/actions/runs/38552466568)。對應驗證 commit `57c9d8b2c2dca43c4416b07a0062a32638becb73`。
+- **仍未完成 Windows 實機端對端驗收**：雙行程 IPC／ACL 與 MO店+ Excel COM 使用真實 Windows 安裝環境尚待 AutoInput 端聯測，CI 不代表正式光貿開票已驗證。
 - 仍需使用**合成／去識別化**訂單檔驗證：CLI 主程式未開啟及已開啟、現有 SQLite 單 writer、IPC ACL、Excel COM、同筆重跑、query 回查、部分失敗、timeout、Cloud revoked／reset／環境切換、result.json 實際與 ERP 欄位比對。
 - 在上述驗收完成前，AutoInput **不得**移除 MO店+ 發票欄位手動補入的過渡操作，也不得啟用正式 `--autoinput-issue`；不得對真實光貿進行測試開票。
 - 完成驗收後，此文件補充 CI run／正式版號／發行 commit 與 AutoInput 端可使用版本，交回 AutoInput 主控。正式 Release／PR 合併須另外確認。
