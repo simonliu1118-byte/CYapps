@@ -8,6 +8,16 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3.0 正式交付工作順序（使用者明確批准）
+
+按順序執行：**(1) 清理 Built-in → (2) 完成折讓 API 與安全配號 → (3) 完成 D1 Work Item／跨機覆核 → (4) 官方 List 對帳 → (5) 公司設定卡片與整合驗收 → (6) 災難復原跨服務部署／完整 DR-01～DR-13 實機驗收 → (7) 文件與殘餘 Built-in 清理 → (8) V3.0 正式發行**。不得將任何階段「有文件／有底層 DTO／CI 綠燈」冒充端到端完成；**Cloud Worker／D1 正式遷移與 Windows V3.0 Release 必須在依規則完成真實驗證後才可執行**。
+
+**當次 Draft #440 新增 source 實際進度（非已發行）：**
+- [ ] Built-in 清理：V3 `IdentityProviderRuntime.Current` 現只允許 Local 與已完成 CYID 的 Cloud；Direct Join 缺 CYID binding 將 fail closed、不再拉 Built-in Employee snapshot；設定頁從空白 Cloud Device 改走 CYID Direct Join，舊 CloudSetup 建立／轉換入口受阻。Windows Direct Join smoke 換成 CYID-only、拒絕非 CYID 及原 Token 恢復案例。**其他 Built-in source、Cloud handler、相依測試與部署相容分支尚待審查清理**；不得直接刪正式歷史 migrations 或遠端 D1。
+- [ ] 折讓 API：V3 Core 已新增 `/json/allowance_list` 的 `ListAllowancesAsync` 分頁 DTO／官方原發票品項解析，與 `allowance_status` 舊 keyed object、新 array 格式的嚴格單號對應；新增隔離 HTTP 測試。**尚未接 Windows 正式 Sync 與管理員流程。**
+- [ ] Local 安全配號：已新增 `LocalAllowanceNumberStore`，在既有 SQLite 額外建立專用 allocation ledger，以公司／環境／日期原子增號、Work Item 重入返回同一 reserved 單號、先存完整固定 g0401 payload、`MarkSending` 後不允許重送、確切撞號才占號／重配、已用號不回收；新增重啟與碰撞測試。**未接實際折讓核准流程／沒有 Cloud D1 配號／真實 API 驗證。** 需要 CI readback 才能宣稱測試通過。
+- [ ] Windows CI 曾在中途提交的 CYID 模擬續接測試失敗（設定模擬的 discovery 故障次數過多）；已將 `cyid-recover` 的 fail-once 修正為一次，待最新 Windows build／startup smoke 通過後才結案。先前失敗不得默認為成功。
+
 ## 2026-10-15 V3 產品範圍定案（覆蓋舊 Built-in 待辦）
 
 - [ ] **V3 僅保留 Local + CYID Cloud 兩種正式模式**：使用者確認沒有正式 Built-in 使用者，停止維護 Built-in Cloud／Self-hosted 做為可用產品；GitHub 第三方如需自行部署 Built-in，改自行 fork。不以其相容性作 V3 合併／驗收／Release 條件；歷史成功測試和已發布 V2.6.19 不被重新定義為已刪除。
@@ -123,7 +133,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] **V3 官方異動回補（2026-10-15 最新低呼叫量方案）**：若 CYInvoice Cloud D1 中斷但光貿正常，管理員可直接在光貿網站人工**作廢發票／開立折讓／作廢折讓**。復原後 CYInvoice 以既有 `invoice_list.cancel_date` 和新增 `allowance_list` 的 `allowance_number`／`invoice_type`／`invoice_status`／`cancel_date`／`product_item[].original_invoice_number` 比對**本機 SQLite 現有發票與官方折讓快照**，補回官方事實；當完整列表欄位不足或對應衝突時才調 `invoice_query`／`allowance_query`，不要逐張掃所有發票。`f0501`／`g0501` 是實際作廢操作 API，**絕不能當查詢 API**。外部網站操作**不得新增 D1 的 CYInvoice 執行操作 Audit**，不能杜撰操作者／核准／原因；原有申請 Work Item／Audit 永久保留，恢復後可更新**原申請**官方核對狀態，不另建正常發票 D1 索引。Local 同樣共用，無 D1。
 - [ ] **列表導向、低 API 量的增量對帳**：保留目前 `InvoiceAutomaticSyncService` **每日首次當期＋前一期、其餘近 3 日**列表同步節奏，不再提議背景定期對每張發票打 `invoice_query`。發票作廢可直接從現有 `invoice_list.cancel_date` 得知（現有 `InvoiceSyncService.ApplyList` 已有處理），折讓不能從 invoice_list 判斷，須新增 `IAmegoGateway.ListAllowancesAsync`／`/json/allowance_list` 分頁（官方 limit 20–500）。同日頻繁重整只查必要的近期日期範圍，日首次較大範圍補當期＋前期；按公司／環境保存游標／成功時間，分批查完整 pages，網路失敗不清空前次快照、不自動重送任何發票／折讓。Cloud 的多臺裝置各自只取少量清單頁而非全發票逐筆詳查；暫不為此新增 D1 一般發票索引或中央 sync service。既有 pending、重複號／缺原發票品項、作廢折讓晚於其開立期別等例外，才用針對性唯讀查回。官方兩類 list 都沒有文件化的 last_modified 篩選，所以**不能只以新建立日期游標掃尾**來保證偵測舊折讓的事後作廢：需較寬區間定期回掃，以及針對本機已知舊折讓的 `allowance_status` 或明細回查策略；期限外未知舊資料的完整性另列限制。
 - [ ] **官方折讓快照變更檢出／PDF cache 回歸**：`allowance_list` 的 `product_item[].original_invoice_number` 可將一張或多張原發票對應到同一折讓單；以折讓單號＋官方類型／作廢時間／狀態更新原 `cyinvoice_official_allowances`，不能新增重複發票或同折讓號的重複項，不能將失敗發票反查變成功。`InvoiceAllowanceMetadata.ApplyQuery` 已可存官方折讓快照，但現行 `InvoiceSyncService.Fingerprint`／`InvoiceDetailRefreshService.OfficialFingerprint` 沒有納入折讓快照，需修正變更持久化與相關 PDF Cache 失效。回查不明、分頁未齊、缺原發票對應時，保留上次可信資料並限定補打 `invoice_query`／`allowance_query`。驗證首次折讓、多次部分折讓、外部作廢折讓、原發票作廢、跨重啟、跨裝置、近／舊期、180 天限制、漏頁錯誤與增量同步重入。
-- [ ] **官方按發票號碼查折讓／作廢紀錄**：光貿 [官方文件](https://invoice.amego.tw/api_doc/) 的 `invoice_list` 可查原發票 `cancel_date`，**沒有文件化的折讓摘要／修改標記**；`allowance_list` 可查折讓單號、D0401／D0501、上傳狀態、`cancel_date`、原發票 `product_item[].original_invoice_number`，適合整批增量對帳；`invoice_query` 的 `data.allowance[]` 可在開啟詳情或資料有疑義時針對單張查。超過 `invoice_query` 以發票日期計算 180 天限制（code 51）不得誤判無折讓。Core 現有 `QueryByInvoiceNumberAsync`／`ParseAllowances`，**尚無 allowance_list Gateway／本機合併與日常同步**，需實作並用真樣本核對 list 的選填欄位是否完整、作廢異動能否在相同折讓日期範圍被查出。
+- [ ] **官方按發票號碼查折讓／作廢紀錄**：光貿 [官方文件](https://invoice.amego.tw/api_doc/) 的 `invoice_list` 可查原發票 `cancel_date`，**沒有文件化的折讓摘要／修改標記**；`allowance_list` 可查折讓單號、D0401／D0501、上傳狀態、`cancel_date`、原發票 `product_item[].original_invoice_number`，適合整批增量對帳；`invoice_query` 的 `data.allowance[]` 可在開啟詳情或資料有疑義時針對單張查。超過 `invoice_query` 以發票日期計算 180 天限制（code 51）不得誤判無折讓。Core 現有 `QueryByInvoiceNumberAsync`／`ParseAllowances`，**allowance_list Gateway 已加入 Draft（待驗證），尚無本機合併與日常同步**，需實作並用真樣本核對 list 的選填欄位是否完整、作廢異動能否在相同折讓日期範圍被查出。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
 - [ ] **光貿 allowance_status 新舊回應格式兼容（核對 API 文件發現）**：官方文件現列新版 `data:[{allowance_number,type,status,tax_amount,total_amount}]` 與舊版 `data:{"單號":{type,status,...}}`；目前 Draft `AmegoClient.AllowanceStatusAsync` 只解析舊 object，須新增 array 解析、單號精確匹配／重複拒絕與兩種隔離回歸後才能視為正式查詢可靠。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
