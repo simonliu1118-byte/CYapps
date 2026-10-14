@@ -72,7 +72,7 @@ static void TestAllowanceNumberGenerator()
 
 static AllowanceIssueRequest ValidAllowanceRequest() => new()
 {
-    AllowanceNumber = "0ABCDEFGHJKMNPQR",
+    AllowanceNumber = "A20261015001",
     AllowanceDate = "20261015",
     AllowanceType = 2,
     BuyerIdentifier = "0000000000",
@@ -100,7 +100,7 @@ static async Task TestG0401GatewayAsync()
     using var data = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
     Equal(JsonValueKind.Array, data.RootElement.ValueKind);
     Equal(1, data.RootElement.GetArrayLength());
-    Equal("0ABCDEFGHJKMNPQR", data.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    Equal("A20261015001", data.RootElement[0].GetProperty("AllowanceNumber").GetString());
     Equal("AA12345678", data.RootElement[0].GetProperty("ProductItem")[0].GetProperty("OriginalInvoiceNumber").GetString());
     Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
     await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
@@ -111,15 +111,15 @@ static async Task TestAllowanceQueryAndStatusAsync()
 {
     var handler = new RecordingHttpHandler((request, _, _) => request.RequestUri?.AbsolutePath switch
     {
-        "/json/allowance_query" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"allowance_number\":\"0ABCDEFGHJKMNPQR\",\"invoice_type\":\"D0401\",\"invoice_status\":99,\"allowance_date\":\"20261015\",\"allowance_type\":2,\"tax_amount\":5,\"total_amount\":100}}"),
-        "/json/allowance_status" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"0ABCDEFGHJKMNPQR\":{\"type\":\"D0401\",\"status\":99}}}"),
+        "/json/allowance_query" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"allowance_number\":\"A20261015001\",\"invoice_type\":\"D0401\",\"invoice_status\":99,\"allowance_date\":\"20261015\",\"allowance_type\":2,\"tax_amount\":5,\"total_amount\":100}}"),
+        "/json/allowance_status" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"A20261015001\":{\"type\":\"D0401\",\"status\":99}}}"),
         _ => JsonResponse("{\"code\":71,\"msg\":\"not found\"}"),
     });
     using var http = new HttpClient(handler);
     var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
-    var query = await gateway.QueryAllowanceAsync("0ABCDEFGHJKMNPQR");
+    var query = await gateway.QueryAllowanceAsync("A20261015001");
     Equal("D0401", query.Data.InvoiceType);
-    var status = await gateway.AllowanceStatusAsync(["0ABCDEFGHJKMNPQR"]);
+    var status = await gateway.AllowanceStatusAsync(["A20261015001"]);
     Equal(99, status.Data.Single().Status);
     Equal("/json/allowance_query", handler.Requests[0].Uri.AbsolutePath);
     Equal("/json/allowance_status", handler.Requests[1].Uri.AbsolutePath);
