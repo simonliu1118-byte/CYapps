@@ -968,17 +968,36 @@ internal sealed class ShopeeBatchRunner
             var name = (NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"');
             if (name.Length == 0) return "另存新檔視窗沒有預設檔名";
             var stem = Path.GetFileNameWithoutExtension(name);
-            // The folder the dialog shows (user, 2026-10-14: 「本機 › 桌面」 at the top): its
-            // address box (the edit in the ComboBoxEx32) holds the folder's path.
+            // The folder is changed in the address box at the top (user, 2026-10-14: type the path
+            // there): Alt+D, the temp folder, Enter. The folder the dialog then shows is read back
+            // from that box (the edit in the ComboBoxEx32, which holds the path).
+            _inputs++;
+            NativeMethods.SetForegroundWindow(dialog);
+            await Task.Delay(300, _token);
+            InputSender.Chord(NativeMethods.VK_MENU, 0x44 /* D */);
+            await Task.Delay(300, _token);
+            InputSender.Chord(NativeMethods.VK_CONTROL, 0x41 /* A */);
+            await Task.Delay(100, _token);
+            InputSender.UnicodeText(folder);
+            await Task.Delay(200, _token);
+            InputSender.Press(NativeMethods.VK_RETURN);
             string? shownFolder = null;
-            NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+            for (var i = 0; i < 8; i++)
             {
-                if (NativeMethods.ClassName(hwnd) != "Edit" || NativeMethods.ClassName(NativeMethods.GetParent(NativeMethods.GetParent(hwnd))) != "ComboBoxEx32") return true;
-                var text = (NativeMethods.ControlText(hwnd, 500) ?? string.Empty).Trim();
-                if (Path.IsPathRooted(text) && Directory.Exists(text)) { shownFolder = text; return false; }
-                return true;
-            }, 0);
-            _log.Info("shopee-batch", $"family cut: dialog folder {(shownFolder is null ? "not read" : "read")}");
+                await Task.Delay(250, _token);
+                shownFolder = null;
+                NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+                {
+                    if (NativeMethods.ClassName(hwnd) != "Edit" || NativeMethods.ClassName(NativeMethods.GetParent(NativeMethods.GetParent(hwnd))) != "ComboBoxEx32") return true;
+                    var text = (NativeMethods.ControlText(hwnd, 500) ?? string.Empty).Trim();
+                    if (Path.IsPathRooted(text) && Directory.Exists(text)) { shownFolder = text; return false; }
+                    return true;
+                }, 0);
+                if (shownFolder is not null && string.Equals(Path.GetFullPath(shownFolder).TrimEnd('\\'), Path.GetFullPath(folder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) break;
+            }
+            var inTemp = shownFolder is not null && string.Equals(Path.GetFullPath(shownFolder).TrimEnd('\\'), Path.GetFullPath(folder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+            _log.Info("shopee-batch", $"family cut: address box to temp {(inTemp ? "worked" : "did not take; saving where it shows")} (folder {(shownFolder is null ? "not read" : "read")})");
+            if (!NativeMethods.IsWindow(dialog) || !NativeMethods.IsWindowVisible(dialog)) return "在路徑欄輸入後另存新檔視窗關閉了";
             var started = DateTime.Now.AddSeconds(-3);
             _inputs++;
             NativeMethods.SetForegroundWindow(dialog);
@@ -1007,7 +1026,8 @@ internal sealed class ShopeeBatchRunner
 
             // Chrome writes .crdownload first; done when the page file stops changing.
             var places = SavePlaces();
-            if (shownFolder is not null) { places.RemoveAll(d => string.Equals(d, shownFolder, StringComparison.OrdinalIgnoreCase)); places.Insert(0, shownFolder); }
+            if (shownFolder is not null && !inTemp) { places.RemoveAll(d => string.Equals(d, shownFolder, StringComparison.OrdinalIgnoreCase)); places.Insert(0, shownFolder); }
+            places.Insert(0, folder);
             List<string> found = [];
             var last = string.Empty;
             for (var i = 0; i < 60; i++)
@@ -1019,13 +1039,13 @@ internal sealed class ShopeeBatchRunner
                 if (pageFile is null || found.Any(e => e.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase))) continue;
                 var now = string.Join("|", found.Select(e => e + ":" + (File.Exists(e) ? new FileInfo(e).Length : 0)));
                 if (now != last) { last = now; continue; }
-                foreach (var entry in found)
+                foreach (var entry in found.Where(e => !string.Equals(Path.GetDirectoryName(e), folder, StringComparison.OrdinalIgnoreCase)))
                 {
                     var to = Path.Combine(folder, Path.GetFileName(entry));
                     if (File.Exists(entry)) File.Move(entry, to);
                     else MoveFolder(entry, to);
                 }
-                _log.Info("shopee-batch", $"family cut: saved page moved to temp from {Path.GetFileName(Path.GetDirectoryName(found[0]))} entries={found.Count}");
+                _log.Info("shopee-batch", $"family cut: saved page in temp (saved {(inTemp ? "there directly" : "elsewhere and moved")}) entries={found.Count}");
                 return null;
             }
             return $"存檔後 30 秒內在{string.Join("、", places.Select(Path.GetFileName))}找不到剛存的「{stem}」";
