@@ -29,6 +29,7 @@
     <Compile Include="..\..\ShopeeBatchScreens.cs" Link="Linked\ShopeeBatchScreens.cs" />
     <Compile Include="..\..\ChatRules.cs" Link="Linked\ChatRules.cs" />
     <Compile Include="..\..\GiftRules.cs" Link="Linked\GiftRules.cs" />
+    <Compile Include="..\..\SlipImage.cs" Link="Linked\SlipImage.cs" />
   </ItemGroup>
 
   <ItemGroup>

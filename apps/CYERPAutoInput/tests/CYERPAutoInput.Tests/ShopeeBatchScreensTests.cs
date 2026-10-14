@@ -268,6 +268,22 @@ public sealed class ShopeeBatchScreensTests
     }
 
     [Fact]
+    public void Finds_the_set_printer_in_the_destination_list()
+    {
+        List<OcrBox> list =
+        [
+            B("目的地", 972, 102), B("Brother HL-L2320D series", 1144, 102),
+            B("Brother HL-L2320D series", 1144, 140), B("GG-D410 Printer", 1144, 176),
+            B("Xprinter XP-420B", 1144, 212), B("另存為 PDF", 1144, 248), B("顯示更多...", 1144, 284)
+        ];
+        Assert.False(ShopeeBatchScreens.SamePrinter(ShopeeBatchScreens.PrintDestination(list.Take(2).ToList()), "GG-D410"));
+        Assert.Equal(176, ShopeeBatchScreens.PrinterOption(list, "GG-D410")!.Top);
+        // The closed list's own value is not an option.
+        Assert.Null(ShopeeBatchScreens.PrinterOption([B("目的地", 972, 102), B("GG-D410 Printer", 1144, 102)], "GG-D410 Printer"));
+        Assert.Null(ShopeeBatchScreens.PrinterOption(list, "Microsoft Print to PDF"));
+    }
+
+    [Fact]
     public void Finds_the_dialog_cross_right_of_the_title()
     {
         // A white dialog (x 100–600) on a dimmed page, the title at y 50 and a grey × around (560, 60).

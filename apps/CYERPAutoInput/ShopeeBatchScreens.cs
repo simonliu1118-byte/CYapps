@@ -507,6 +507,18 @@ internal static partial class ShopeeBatchScreens
         return string.Concat(boxes.Where(b => b.Left > label.Right && SameRow(b, label)).OrderBy(b => b.Left).Select(b => b.Text.Trim()));
     }
 
+    /// <summary>
+    /// In 目的地's opened list (user, 2026-10-14: Brother…, GG-D410 Printer, Xprinter…, 另存為 PDF,
+    /// 顯示更多…), the option naming the set printer: under the 目的地 row, not the row itself.
+    /// </summary>
+    public static OcrBox? PrinterOption(IReadOnlyList<OcrBox> boxes, string wanted)
+    {
+        var label = boxes.FirstOrDefault(b => C(b) == "目的地");
+        if (label is null) return null;
+        return boxes.Where(b => b.Top > label.Top && !SameRow(b, label) && SamePrinter(b.Text, wanted))
+            .OrderBy(b => b.Top).FirstOrDefault();
+    }
+
     /// <summary>The number under 縮放比例's 自訂 (null when the scale is not 自訂 or not read).</summary>
     public static int? PrintScale(IReadOnlyList<OcrBox> boxes) => PrintScaleBox(boxes) is { } number ? int.Parse(C(number)) : null;
 

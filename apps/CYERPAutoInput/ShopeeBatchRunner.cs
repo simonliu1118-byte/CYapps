@@ -761,13 +761,164 @@ internal sealed class ShopeeBatchRunner
             if (!ShopeeBatchScreens.ShowsNumber(slip.Boxes, order.Tracking))
                 throw new ShopeeBatchStop($"全家寄取貨單上讀不到寄件編號 {order.Tracking}，未列印。", true);
         }
+        if (await PrintFamilyCutAsync(order)) return;
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
         await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);
     }
 
     /// <summary>
+    /// 全家 cut to the label (user, 2026-10-14: page 2 at 165 % looked sharp but often did not
+    /// scan): the page's picture is saved with Ctrl+S, the slip cut out of it and printed dot for
+    /// dot (<see cref="SlipImage"/>). 蝦皮 and MO店+ slips need not look alike (user), so nothing
+    /// about the layout is assumed: one slip must be found, with a barcode, and the cut slip
+    /// must itself show the 寄件編號 (OCR). Anything short of that, before printing, returns
+    /// false and the slip is printed through Chrome as before.
+    /// </summary>
+    private async Task<bool> PrintFamilyCutAsync(ShopeeBatchOrder order)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        GrayImage slip;
+        string printer;
+        try
+        {
+            printer = SlipPrinter.Installed(_printer) ?? throw new InvalidOperationException($"no installed printer matches {_printer}");
+            Directory.CreateDirectory(folder);
+            if (!await SaveChromePageAsync(folder)) return false;
+            var saved = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Select(f => $"{Path.GetExtension(f)}:{new FileInfo(f).Length}").ToList();
+            _log.Info("shopee-batch", $"family page saved files={saved.Count} [{string.Join(", ", saved.Take(12))}]");
+            if (SlipPrinter.LargestPicture(folder) is not { } picture) { _log.Info("shopee-batch", "family cut: no picture in the saved page; printing through Chrome"); return false; }
+            var page = picture.Image;
+            var slips = SlipImage.FindSlips(page);
+            var label = SlipPrinter.Label(printer, 100, 150);
+            _log.Info("shopee-batch", $"family cut: picture {page.Width}x{page.Height} from {picture.From}, slips={slips.Count}, printer dpi={label.Dpi} label={label.Width}x{label.Height} paper={label.Paper}");
+            if (slips.Count != 1) { _log.Info("shopee-batch", "family cut: not exactly one slip; printing through Chrome"); return false; }
+            var plan = SlipImage.Plan(page, slips[0], label.Width, label.Height);
+            _log.Info("shopee-batch", $"family cut: area={slips[0]} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} dots");
+            var widthMm = plan.Width * 25.4 / label.Dpi;
+            if (plan.Module == 0 || plan.Width > label.Width || plan.Height > label.Height || widthMm < 50)
+            {
+                _log.Info("shopee-batch", $"family cut: no fitting plan (width {widthMm:F0} mm); printing through Chrome");
+                return false;
+            }
+            slip = SlipImage.Render(page, plan);
+            if (!await SlipShowsAsync(slip, order.Tracking))
+            {
+                _log.Info("shopee-batch", "family cut: the cut slip does not show the 寄件編號; printing through Chrome");
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ShopeeBatchStop)
+        {
+            _log.Warn("shopee-batch", $"family cut failed before printing: {ex.GetType().Name}: {ex.Message}; printing through Chrome");
+            return false;
+        }
+        finally
+        {
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("shopee-batch", $"family cut: temp folder left: {ex.Message}"); }
+        }
+        try
+        {
+            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + order.OrderSn);
+            _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi)");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.Warn("shopee-batch", $"family cut print failed: {ex.GetType().Name}: {ex.Message}");
+            throw new ShopeeBatchStop($"全家寄取貨單送印表機 {printer} 時出錯（{ex.Message}），請確認是否已印出，未印出請手動列印。", true);
+        }
+        Front();
+        return true;
+    }
+
+    /// <summary>The cut slip read with OCR shows the 寄件編號.</summary>
+    private async Task<bool> SlipShowsAsync(GrayImage slip, string tracking)
+    {
+        using var bmp = new Bitmap(slip.Width, slip.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        var data = bmp.LockBits(new Rectangle(0, 0, slip.Width, slip.Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        var row = new byte[data.Stride];
+        for (var y = 0; y < slip.Height; y++)
+        {
+            for (var x = 0; x < slip.Width; x++) row[x * 3] = row[x * 3 + 1] = row[x * 3 + 2] = slip[x, y];
+            System.Runtime.InteropServices.Marshal.Copy(row, 0, data.Scan0 + y * data.Stride, data.Stride);
+        }
+        bmp.UnlockBits(data);
+        var tokens = await _ocr.RecognizeLinesAsync(bmp, _token, maxScale: 2.0);
+        var boxes = tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList();
+        return ShopeeBatchScreens.ShowsNumber(boxes, tracking);
+    }
+
+    /// <summary>
+    /// Ctrl+S on the slip's tab and Chrome's 另存新檔 dialog: the file name is set to the same
+    /// name in <paramref name="folder"/> and 存檔 pressed; then the files are waited for. False
+    /// (the dialog closed) when the dialog or the files do not come.
+    /// </summary>
+    private async Task<bool> SaveChromePageAsync(string folder)
+    {
+        NativeMethods.GetWindowThreadProcessId(_window, out var chrome);
+        Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
+        nint dialog = 0;
+        for (var i = 0; i < 40 && dialog == 0; i++)
+        {
+            await Task.Delay(250, _token);
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (!NativeMethods.IsWindowVisible(hwnd) || NativeMethods.ClassName(hwnd) != "#32770") return true;
+                NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+                if (pid != chrome) return true;
+                dialog = hwnd;
+                return false;
+            }, 0);
+        }
+        if (dialog == 0) { _log.Info("shopee-batch", "family cut: no save dialog"); return false; }
+        try
+        {
+            nint edit = 0, save = 0;
+            NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+            {
+                var cls = NativeMethods.ClassName(hwnd);
+                if (cls == "Edit" && edit == 0 && NativeMethods.IsWindowVisible(hwnd) && NativeMethods.ClassName(NativeMethods.GetParent(hwnd)) == "ComboBox") edit = hwnd;
+                if (cls == "Button" && save == 0)
+                {
+                    var text = NativeMethods.WindowText(hwnd);
+                    if (text.Contains("存檔", StringComparison.Ordinal) || text.Contains("儲存", StringComparison.Ordinal) || text.Contains("Save", StringComparison.OrdinalIgnoreCase)) save = hwnd;
+                }
+                return true;
+            }, 0);
+            if (edit == 0 || save == 0) { _log.Info("shopee-batch", $"family cut: save dialog without name box or button (edit={edit != 0} save={save != 0})"); return false; }
+            var name = Path.GetFileName((NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"'));
+            if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "slip";
+            _log.Info("shopee-batch", $"family cut: saving as {Path.GetExtension(name)}");
+            NativeMethods.SendMessage(edit, NativeMethods.WM_SETTEXT, 0, Path.Combine(folder, name));
+            await Task.Delay(200, _token);
+            NativeMethods.PostMessage(save, 0x00F5 /* BM_CLICK */, 0, 0);
+            for (var i = 0; i < 20 && NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog); i++) await Task.Delay(250, _token);
+            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) { _log.Info("shopee-batch", "family cut: save dialog did not close"); return false; }
+            dialog = 0;
+        }
+        finally
+        {
+            if (dialog != 0 && NativeMethods.IsWindow(dialog)) NativeMethods.PostMessage(dialog, 0x0010 /* WM_CLOSE */, 0, 0);
+        }
+
+        // Chrome writes .crdownload first; done when the files stop changing.
+        var last = string.Empty;
+        for (var i = 0; i < 60; i++)
+        {
+            await Task.Delay(500, _token);
+            var files = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).ToList();
+            if (files.Count == 0 || files.Any(f => f.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))) continue;
+            var now = string.Join("|", files.Select(f => f + ":" + new FileInfo(f).Length));
+            if (now == last) return true;
+            last = now;
+        }
+        _log.Info("shopee-batch", "family cut: saved files did not settle");
+        return false;
+    }
+
+    /// <summary>
     /// Chrome's own print dialog (user, 2026-10-12/13). Chrome keeps the last print's settings,
-    /// so 頁面 (全部, or 自訂 with <paramref name="pages"/>) and 縮放比例 (自訂 <paramref name="wanted"/>)
+    /// so 目的地 (the set printer, picked from its list when another shows), 頁面 (全部, or 自訂 with <paramref name="pages"/>) and 縮放比例 (自訂 <paramref name="wanted"/>)
     /// are set every time, opening 顯示更多設定 when 縮放比例 is folded away; then everything is
     /// read back — the set printer, the scale, the pages and 「1 張紙」 — before 列印 is pressed.
     /// What does not come right stops the batch without printing.
@@ -782,6 +933,7 @@ internal sealed class ShopeeBatchRunner
         var ocrDialog = false;
         var expanded = false;
         var actions = 0;
+        var printerTries = 0;
         var watch = Stopwatch.StartNew();
         string last = string.Empty;
         while (true)
@@ -803,6 +955,19 @@ internal sealed class ShopeeBatchRunner
                 continue;
             }
             if (!ShopeeBatchScreens.IsPrintDialog(boxes)) { last = "列印視窗不見了"; await Task.Delay(600, _token); continue; }
+
+            // 目的地 first: another printer has its own settings (user, 2026-10-14: Chrome showed
+            // the Brother; the set printer is picked from 目的地's list).
+            var shownPrinter = ShopeeBatchScreens.PrintDestination(boxes);
+            if (shownPrinter.Length > 0 && !ShopeeBatchScreens.SamePrinter(shownPrinter, _printer))
+            {
+                if (printerTries >= 2)
+                    throw new ShopeeBatchStop($"Chrome 列印的目的地是「{shownPrinter}」，換不成設定的「{_printer}」，未列印。", true);
+                printerTries++;
+                actions++;
+                await ChoosePrinterAsync(screen, shownPrinter, panel);
+                continue;
+            }
 
             var scaleBox = ShopeeBatchScreens.PrintScaleBox(boxes);
             var scaleValue = ShopeeBatchScreens.PrintRowValue(boxes, "縮放比例");
@@ -856,6 +1021,30 @@ internal sealed class ShopeeBatchRunner
             Click(screen, printButton, "列印");
             return;
         }
+    }
+
+    /// <summary>
+    /// Opens 目的地's list and clicks the set printer in it (read from the screen: the list is
+    /// drawn over the dialog). A printer not in the short list (only under 顯示更多…) stops the
+    /// batch: choosing among all printers is left to a person.
+    /// </summary>
+    private async Task ChoosePrinterAsync(Screen screen, string shown, RectangleF part)
+    {
+        var value = ShopeeBatchScreens.PrintRowValue(screen.Boxes, "目的地") ?? throw new ShopeeBatchStop("讀不到 Chrome 列印的目的地。", true);
+        _log.Info("shopee-batch", $"print destination is {shown}; choosing {_printer}");
+        Click(screen, value, "目的地");
+        await Task.Delay(700, _token);
+        using var list = await ReadAsync(part: part, ocr: true);
+        if (ShopeeBatchScreens.PrinterOption(list.Boxes, _printer) is not { } option)
+        {
+            _inputs++;
+            InputSender.Press(NativeMethods.VK_ESCAPE);
+            await Task.Delay(400, _token);
+            throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有設定的「{_printer}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
+        }
+        Click(list, option, $"印表機 {option.Text.Trim()}");
+        // Chrome redraws the preview for the new printer.
+        await Task.Delay(1500, _token);
     }
 
     /// <summary>Distance from a setting's value to the box typed into under it (縮放比例 自訂 → its number), else 38 px.</summary>
