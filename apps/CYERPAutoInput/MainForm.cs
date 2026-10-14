@@ -1192,10 +1192,19 @@ internal sealed class MainForm : Form
     /// </summary>
     private async Task<int?> PrintA4Async(string file, bool summary, string printer, string password)
     {
-        var paper = summary ? "取貨總表用紙" : "寄件單用紙";
+        var paper = "取貨總表用紙";
+        string? detail = null;
+        if (!summary)
+        {
+            // One label fits half an A4 sheet; more need whole sheets (user, 2026-10-14).
+            var labels = MoPickupSummary.LabelCount(file, password);
+            paper = labels == 1 ? "半張 A4 的寄件單用紙" : "整張 A4 的寄件單用紙";
+            detail = labels > 1 ? $"共 {labels} 張標籤（一張紙 2 張）" : labels == 1 ? "只有 1 張標籤" : null;
+            _log.Info("mo-a4", $"label pdf labels={labels}");
+        }
         _log.Info("mo-a4", $"{(summary ? "pickup summary" : "label")} waits for paper");
         Alarm(needsPerson: true);
-        using (var prompt = new PaperPromptForm(paper, printer))
+        using (var prompt = new PaperPromptForm(paper, printer, detail))
             if (prompt.ShowDialog(this) != DialogResult.OK) return null;
         var pages = await MoSlipPdf.RenderPagesAsync(file, password, 300);
         try

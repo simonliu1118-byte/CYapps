@@ -17,10 +17,10 @@ internal sealed class PaperPromptForm : Form
     private readonly Font _titleFont = new("Microsoft JhengHei UI", 30F, FontStyle.Bold);
     private readonly Font _hintFont = new("Microsoft JhengHei UI", 12F);
 
-    public PaperPromptForm(string paper, string printer)
+    public PaperPromptForm(string paper, string printer, string? detail = null)
     {
         _title = $"請在印表機放入{paper}";
-        _hint = $"印表機：{printer}　　放好之後按「好了」繼續列印";
+        _hint = (detail is null ? string.Empty : detail + "　　") + $"印表機：{printer}　　放好之後按「好了」繼續列印";
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
@@ -31,7 +31,7 @@ internal sealed class PaperPromptForm : Form
         Opacity = 0.96;
         DoubleBuffered = true;
 
-        var width = Math.Max(TextRenderer.MeasureText(_title, _titleFont).Width + 140, 640);
+        var width = Math.Max(Math.Max(TextRenderer.MeasureText(_title, _titleFont).Width, TextRenderer.MeasureText(_hint, _hintFont).Width) + 140, 640);
         Size = new Size(width, 300);
         var screen = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1040);
         Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);

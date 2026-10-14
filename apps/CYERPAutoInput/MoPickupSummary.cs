@@ -37,6 +37,22 @@ internal static partial class MoPickupSummary
         return Numbers(document.GetPages().SelectMany(p => p.GetWords()).Select(w => w.Text).ToList());
     }
 
+    /// <summary>
+    /// The labels on a 新竹物流 寄件單 PDF (user, 2026-10-14: one label fits half an A4 sheet,
+    /// more need whole sheets): each label prints its 宅配單號 as 「D…D」 barcode text.
+    /// </summary>
+    public static int LabelCount(IReadOnlyList<string> words) =>
+        words.Select(w => LabelBarcode().Match(w.Trim())).Where(m => m.Success).Select(m => m.Groups[1].Value).Distinct().Count();
+
+    public static int LabelCount(string path, string password)
+    {
+        using var document = UglyToad.PdfPig.PdfDocument.Open(path, new UglyToad.PdfPig.ParsingOptions { Password = password });
+        return LabelCount(document.GetPages().SelectMany(p => p.GetWords()).Select(w => w.Text).ToList());
+    }
+
+    [GeneratedRegex(@"^D(\d{8,12})D$")]
+    private static partial Regex LabelBarcode();
+
     [GeneratedRegex(@"^\d{10}$")]
     private static partial Regex Tracking();
 

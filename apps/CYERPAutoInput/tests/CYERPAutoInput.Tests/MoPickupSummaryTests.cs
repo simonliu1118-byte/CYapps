@@ -35,6 +35,15 @@ public class MoPickupSummaryTests
     }
 
     [Fact]
+    public void Counts_the_labels_of_a_label_pdf()
+    {
+        // Each label prints its barcode text twice (words of a real one-label PDF, 2026-10-14).
+        Assert.Equal(1, MoPickupSummary.LabelCount(["D4969239660D", "D4969239660D", "寄件日/2026/10/14", "4969239660", "宅配單號"]));
+        Assert.Equal(2, MoPickupSummary.LabelCount(["D4969239660D", "D4969239660D", "D4969239671D", "D4969239671D"]));
+        Assert.Equal(0, MoPickupSummary.LabelCount(["宅配單號"]));
+    }
+
+    [Fact]
     public void Remembers_printed_sheets()
     {
         var path = Path.Combine(Path.GetTempPath(), $"pickup-{Guid.NewGuid():N}.json");
