@@ -45,6 +45,8 @@ internal sealed class UserSettings
     public List<ChatRule> ShopeeChatRules { get; set; } = [];
     public List<ChatRule> MoChatRules { get; set; } = [];
     public List<ChatRule> CoupangChatRules { get; set; } = [];
+    /// <summary>設定 › 滿件贈送 (user, 2026-10-14): free quantity into 贈/備品量 for imported orders.</summary>
+    public List<GiftRule> GiftRules { get; set; } = [];
 
     // Build 25 kept one 蝦皮 rule as two strings; read once and moved into ShopeeChatRules.
     private string _legacyChatKeywords = "發票,收據,統編,統一編號,抬頭";
@@ -124,6 +126,7 @@ internal sealed class UserSettingsStore
             loaded.ShopeeChatRules ??= [];
             loaded.MoChatRules ??= [];
             loaded.CoupangChatRules ??= [];
+            loaded.GiftRules ??= [];
             loaded.MigrateLegacyChat();
             return loaded;
         }

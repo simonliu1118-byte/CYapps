@@ -25,6 +25,7 @@ internal sealed class SettingsForm : Form
     private ChatRuleEditor? _shopeeChat;
     private ChatRuleEditor? _moChat;
     private ChatRuleEditor? _coupangChat;
+    private GiftRuleEditor? _gifts;
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -94,6 +95,7 @@ internal sealed class SettingsForm : Form
         _tabs.TabPages.Add(GeneralPage());
         _tabs.TabPages.Add(ImportPage());
         _tabs.TabPages.Add(MessagesPage());
+        _tabs.TabPages.Add(GiftPage());
         _tabs.TabPages.Add(FreightPage());
         _tabs.TabPages.Add(DefaultsPage());
         root.Controls.Add(_tabs, 0, 1);
@@ -290,6 +292,18 @@ internal sealed class SettingsForm : Form
         return page;
     }
 
+    /// <summary>
+    /// 滿件贈送 (user, 2026-10-14): cards of 品號, 滿幾件, 送幾件 and the platforms; an imported
+    /// order gets floor(件數 ÷ 滿幾件) × 送幾件 in that item's 贈/備品量.
+    /// </summary>
+    private TabPage GiftPage()
+    {
+        var page = Page("滿件贈送");
+        _gifts = new GiftRuleEditor(_settings.GiftRules);
+        page.Controls.Add(_gifts);
+        return page;
+    }
+
     private TabPage FreightPage()
     {
         var page = Page("貨運別");
@@ -392,6 +406,13 @@ internal sealed class SettingsForm : Form
             _tabs.SelectedIndex = 2;
             return;
         }
+        var giftProblems = GiftRules.Problems(_gifts!.Rules());
+        if (giftProblems.Count > 0)
+        {
+            MessageBox.Show(this, "滿件贈送：\n\n" + string.Join("\n", giftProblems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 3;
+            return;
+        }
         var warehouse = _firstRowWarehouseCode.Text.Trim();
         if (_firstRowWarehouse.Checked && warehouse.Length == 0)
         {
@@ -430,6 +451,7 @@ internal sealed class SettingsForm : Form
         }
         _settings.HctLabelScale = hctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
+        _settings.GiftRules = GiftRules.Clean(_gifts!.Rules());
         _settings.ShopeeChatRules = ChatRules.Clean(_shopeeChat!.Rules());
         _settings.MoChatRules = ChatRules.Clean(_moChat!.Rules());
         _settings.CoupangChatRules = ChatRules.Clean(_coupangChat!.Rules());
@@ -533,5 +555,80 @@ internal sealed class ChatRuleEditor : GroupBox
         var i = 1;
         foreach (var row in _rows.Controls.OfType<TableLayoutPanel>())
             ((Label)row.GetControlFromPosition(0, 0)!).Text = $"第 {i++} 則";
+    }
+}
+
+/// <summary>滿件贈送 cards (品號, 滿幾件, 送幾件, 適用平台, 刪除) with 新增 at the top.</summary>
+internal sealed class GiftRuleEditor : Panel
+{
+    private readonly FlowLayoutPanel _cards = new() { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+
+    public GiftRuleEditor(IEnumerable<GiftRule> rules)
+    {
+        Dock = DockStyle.Fill;
+        AutoScroll = true;
+        var head = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(0, 0, 0, 6) };
+        head.Controls.Add(new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(440, 0),
+            Margin = new Padding(0, 6, 12, 0),
+            Text = "匯入的訂單中，同一品號合計每滿幾件，就在該品號第一列的「贈/備品量」填入送幾件（例如買 10 送 1：10 件填 1、20 件填 2）。"
+        });
+        var add = new CyButton { Text = "新增", Width = 80, Height = 30 };
+        add.Click += (_, _) => AddCard(new GiftRule { Every = 10, Gift = 1, Platforms = [ShopeeOrderImport.Source] });
+        head.Controls.Add(add);
+        Controls.Add(_cards);
+        Controls.Add(head);
+        foreach (var rule in rules) AddCard(rule);
+    }
+
+    public List<GiftRule> Rules() =>
+        _cards.Controls.OfType<GroupBox>().Select(card =>
+        {
+            var c = card.Tag as (TextBox Code, NumericUpDown Every, NumericUpDown Gift, CheckBox[] Platforms)?;
+            var (code, every, gift, platforms) = c!.Value;
+            return new GiftRule
+            {
+                ItemCode = code.Text,
+                Every = (int)every.Value,
+                Gift = (int)gift.Value,
+                Platforms = platforms.Where(p => p.Checked).Select(p => p.Text).ToList()
+            };
+        }).ToList();
+
+    private void AddCard(GiftRule rule)
+    {
+        var card = new GroupBox { Width = 560, Height = 98, Padding = new Padding(10, 6, 10, 6), Margin = new Padding(0, 0, 0, 8) };
+        var grid = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true };
+        Label L(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 8, 4, 0) };
+        var code = new TextBox { Width = 120, Text = rule.ItemCode, Margin = new Padding(0, 4, 12, 4) };
+        NumericUpDown N(int value) => new() { Minimum = 0, Maximum = 9999, Width = 64, Value = Math.Clamp(value, 0, 9999), Margin = new Padding(0, 4, 4, 4) };
+        var every = N(rule.Every);
+        var gift = N(rule.Gift);
+        var remove = new CyButton { Text = "刪除", Width = 64, Height = 30, Margin = new Padding(12, 2, 0, 0) };
+        remove.Click += (_, _) => { _cards.Controls.Remove(card); card.Dispose(); Renumber(); };
+        grid.Controls.Add(L("品號"));
+        grid.Controls.Add(code);
+        grid.Controls.Add(L("滿"));
+        grid.Controls.Add(every);
+        grid.Controls.Add(L("件 送"));
+        grid.Controls.Add(gift);
+        grid.Controls.Add(L("件"));
+        grid.Controls.Add(remove);
+        grid.SetFlowBreak(remove, true);
+        grid.Controls.Add(L("適用平台"));
+        var platforms = GiftRules.Platforms.Select(p => new CheckBox { Text = p, AutoSize = true, Checked = rule.Platforms.Contains(p), Margin = new Padding(0, 6, 12, 0) }).ToArray();
+        foreach (var p in platforms) grid.Controls.Add(p);
+        card.Controls.Add(grid);
+        card.Tag = ((TextBox, NumericUpDown, NumericUpDown, CheckBox[])?)(code, every, gift, platforms);
+        _cards.Controls.Add(card);
+        Renumber();
+    }
+
+    private void Renumber()
+    {
+        var i = 1;
+        foreach (var card in _cards.Controls.OfType<GroupBox>()) card.Text = $"第 {i++} 張";
     }
 }

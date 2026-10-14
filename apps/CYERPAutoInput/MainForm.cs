@@ -1380,6 +1380,12 @@ internal sealed class MainForm : Form
             _details["BundleTotal", i].Value = items[i].BundleTotal;
             _details["BundleGap", i].Value = items[i].TakesBundleGap ? "1" : null;
         }
+        // 滿件贈送 (user, 2026-10-14): the free quantity per the settings' cards.
+        foreach (var (row, gift) in GiftRules.Gifts(order.Source, items.Select(i => (i.ItemCode, i.Quantity)).ToList(), _settings.GiftRules))
+        {
+            _details["GiftQuantity", row].Value = gift.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _log.Info("import", $"gift quantity row={row + 1} item={_log.Value(items[row].ItemCode)} gift={gift}");
+        }
         ApplyDefaultsToBlankFields();
         _loadedOrder = order;
     }
