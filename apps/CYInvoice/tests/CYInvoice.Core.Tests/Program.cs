@@ -1,4 +1,5 @@
 using CYInvoice.Core;
+using CYInvoice.Core.AutoInput;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Imports;
@@ -14,6 +15,61 @@ using System.Text.Json;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("autoinput request accepts subset and rejects duplicate orders", () =>
+    {
+        var requestId = Guid.NewGuid().ToString("D");
+        var file = Path.Combine(Path.GetTempPath(), "synthetic-orders.xls");
+        var valid = JsonSerializer.Serialize(new {
+            schema = AutoInputContract.RequestSchema, requestId, source = "mo", file,
+            orderIds = new[] { "ORDER-A", "ORDER-B" }
+        });
+        var parsed = AutoInputContract.ParseRequest(valid);
+        Equal("mo", parsed.Source);
+        Equal(2, parsed.OrderIds!.Count);
+        Throws<InvalidDataException>(() => AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+            schema = AutoInputContract.RequestSchema, requestId, source = "mo", file,
+            orderIds = new[] { "ORDER-A", "ORDER-A" }
+        })));
+        Throws<InvalidDataException>(() => AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+            schema = "cyinvoice-autoinput-request/999", requestId, source = "mo", file
+        })));
+    }),
+    ("autoinput blocks prior unresolved and mismatched invoice", () =>
+    {
+        var record = new InvoiceRecord {
+            Source = InvoiceSources.Mo, OriginalOrderId = "ORDER-A", OrderId = "ORDER-A",
+            Environment = Environments.Production, InvoiceState = InvoiceStates.Opened,
+            InvoiceNumber = "AA12345678", InvoiceDate = "2026/10/14", Amount = 725
+        };
+        Equal("existing", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 700, "", Environments.Production)!.Status);
+        record.InvoiceState = InvoiceStates.Unknown;
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        record.InvoiceState = InvoiceStates.Failed;
+        Equal("failed", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record, record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal<AutoInputOrderResult?>(null, AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-Z", 725, "", Environments.Production));
+    }),
+    ("autoinput result is atomic and cannot replace an existing file", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "result.json");
+        var envelope = new AutoInputResult(AutoInputContract.ResultSchema, Guid.NewGuid().ToString("D"),
+            "2.6.19+0", "test", "2026-10-14T10:00:00Z",
+            [new AutoInputOrderResult("ORDER-A", "unknown", Message: "synthetic")]);
+        AutoInputResultFile.WriteAtomicAsync(path, envelope).GetAwaiter().GetResult();
+        using var output = JsonDocument.Parse(File.ReadAllText(path));
+        Equal("unknown", output.RootElement.GetProperty("orders")[0].GetProperty("status").GetString());
+        Throws<IOException>(() => AutoInputResultFile.WriteAtomicAsync(path, envelope)
+            .GetAwaiter().GetResult());
+        Equal(0, Directory.GetFiles(temp.Path, "*.tmp").Length);
+    }),
     ("seven-place inclusive round trip", () =>
     {
         var inclusive = FixedDecimal.Parse("200");
