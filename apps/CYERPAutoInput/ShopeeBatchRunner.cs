@@ -489,34 +489,52 @@ internal sealed class ShopeeBatchRunner
     {
         // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
         // 17 with the label's 訂單編號), so the label's order number is waited for too.
-        var dumped = false;
+        // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
+        // 17 with the label), so the label's page is waited for too.
         var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s =>
-        {
-            if (!ShopeeBatchScreens.IsAwbPage(s.Boxes) || ShopeeBatchScreens.AwbDownloaded(s.Boxes) is not { } done) return null;
-            if (ShopeeBatchScreens.LabelOrderSn(s.Boxes).Length > 0) return done;
-            // Downloaded but the label's number not read: once, the page's text into the LOG
-            // (local only) so the label's layout can be seen.
-            if (!dumped && s.Boxes.Count >= 15)
-            {
-                dumped = true;
-                foreach (var b in s.Boxes) _log.Info("shopee-batch", $"  awb box x={b.Left} y={b.Top} w={b.Width} h={b.Height} text={b.Text}");
-            }
-            return null;
-        }, shipped: true);
+            ShopeeBatchScreens.IsAwbPage(s.Boxes) && ShopeeBatchScreens.LabelShown(s.Boxes) ? ShopeeBatchScreens.AwbDownloaded(s.Boxes) : null, shipped: true);
         using (awb)
         {
             if (download.Failed != 0 || download.Done != 1 || download.Total != 1)
                 throw new ShopeeBatchStop($"出貨文件下載結果不對（成功 {download.Done}/{download.Total}，失敗 {download.Failed}）。", true);
             var labelSn = ShopeeBatchScreens.LabelOrderSn(awb.Boxes);
+            var labelTracking = ShopeeBatchScreens.LabelTracking(awb.Boxes);
+            // The PDF's own text can leave lines out or map a letter wrong (user's LOG,
+            // 2026-10-14: a 隔日到貨 label had no 蝦皮訂單編號 in its text at all): then the
+            // label as drawn is read with OCR, and both numbers are taken from what is seen.
+            if (labelSn != order.OrderSn || labelTracking.Length > 0 && !ShopeeBatchScreens.SameTracking(labelTracking, order.Tracking))
+            {
+                _log.Info("shopee-batch", $"label text order_found={labelSn.Length > 0} order_match={labelSn == order.OrderSn} tracking_found={labelTracking.Length > 0}; reading the label with OCR");
+                var seen = await ReadLabelAsync(awb);
+                var seenSn = ShopeeBatchScreens.LabelOrderSn(seen);
+                var seenTracking = ShopeeBatchScreens.LabelTracking(seen);
+                _log.Info("shopee-batch", $"label OCR order_match={ShopeeBatchScreens.SameOrderSn(seenSn, order.OrderSn)} tracking_match={seenTracking.Length > 0 && ShopeeBatchScreens.SameTracking(seenTracking, order.Tracking)}");
+                if (ShopeeBatchScreens.SameOrderSn(seenSn, order.OrderSn)) labelSn = order.OrderSn;
+                else if (seenSn.Length > 0) labelSn = seenSn;
+                if (seenTracking.Length > 0) labelTracking = seenTracking;
+            }
             if (labelSn != order.OrderSn)
                 throw new ShopeeBatchStop($"寄件單上的訂單編號（{(labelSn.Length > 0 ? labelSn : "讀不到")}）不是 {order.OrderSn}，未列印。", true);
-            var labelTracking = ShopeeBatchScreens.LabelTracking(awb.Boxes);
             if (labelTracking.Length > 0 && !ShopeeBatchScreens.SameTracking(labelTracking, order.Tracking))
                 throw new ShopeeBatchStop($"寄件單上的寄件編號 {labelTracking} 與視窗顯示的 {order.Tracking} 不同，未列印。", true);
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
         await PrintDialogAsync(_print.ShopeeScale, pages: null);
+    }
+
+    /// <summary>The label as drawn (the PDF viewer's page, else the page under the header), read with OCR at twice the size.</summary>
+    private async Task<List<OcrBox>> ReadLabelAsync(Screen awb)
+    {
+        var page = ShopeeBatchScreens.LabelPageBox(awb.Boxes);
+        var rect = page is { } p
+            ? new Rectangle(p.Left, p.Top, p.Width, p.Height)
+            : new Rectangle(0, 100, awb.Image.Width, awb.Image.Height - 100);
+        rect.Intersect(new Rectangle(0, 0, awb.Image.Width, awb.Image.Height));
+        if (rect.Width < 20 || rect.Height < 20) return [];
+        using var crop = awb.Image.Clone(rect, awb.Image.PixelFormat);
+        var tokens = await _ocr.RecognizeLinesAsync(crop, _token, maxScale: 2.0);
+        return tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList();
     }
 
     /// <summary>

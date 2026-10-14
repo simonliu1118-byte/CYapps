@@ -269,6 +269,24 @@ internal static partial class ShopeeBatchScreens
         boxes.FirstOrDefault(b => C(b).EndsWith("列印出貨文件", StringComparison.Ordinal) && C(b).Length <= 8);
 
     /// <summary>
+    /// The label is drawn: Chrome's PDF viewer shows its page (「第 1 頁」) or the label's own
+    /// words are there (寄件編號／訂單編號).
+    /// </summary>
+    public static bool LabelShown(IReadOnlyList<OcrBox> boxes) =>
+        LabelPageBox(boxes) is not null || boxes.Any(b => C(b).Contains("寄件編號", StringComparison.Ordinal) || C(b).Contains("訂單編號", StringComparison.Ordinal));
+
+    /// <summary>The PDF viewer's page (「第 1 頁」), the label's area on screen.</summary>
+    public static OcrBox? LabelPageBox(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Where(b => PageNumberPattern().IsMatch(C(b)) && b.Width >= 100 && b.Height >= 100).OrderBy(b => b.Top).FirstOrDefault();
+
+    /// <summary>Two readings of one order number; OCR may read the letters O, I, L for 0, 1, 1.</summary>
+    public static bool SameOrderSn(string a, string b)
+    {
+        static string N(string s) => s.ToUpperInvariant().Replace('O', '0').Replace('I', '1').Replace('L', '1');
+        return a.Length == 14 && N(a) == N(b);
+    }
+
+    /// <summary>
     /// The 蝦皮訂單編號 printed on the label. The number may be its own piece of text after the
     /// label or on the next line (user's LOG, 2026-10-14: 隔日到貨 labels were never read with
     /// the label and number taken as one piece), so the label's row and the row under it count.
@@ -455,6 +473,9 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"^[\(（](\d+)[\)）]$")]
     private static partial Regex CountPattern();
+
+    [GeneratedRegex(@"^第\d+頁$")]
+    private static partial Regex PageNumberPattern();
 
     [GeneratedRegex(@"(\d+)張[紙纸]")]
     private static partial Regex SheetPattern();

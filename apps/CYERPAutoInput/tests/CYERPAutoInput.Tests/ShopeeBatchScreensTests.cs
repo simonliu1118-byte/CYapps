@@ -298,4 +298,26 @@ public sealed class ShopeeBatchScreensTests
         Assert.Equal("261014AB12CD34", ShopeeBatchScreens.LabelOrderSn(oneBlock));
         Assert.Equal("TW260000000001H", ShopeeBatchScreens.LabelTracking(oneBlock));
     }
+
+    [Fact]
+    public void Next_day_label_page_without_the_order_number_in_its_text()
+    {
+        // Laid out like the user's LOG (2026-10-14): the PDF's text has no 蝦皮訂單編號 line.
+        var page = new List<OcrBox>
+        {
+            B("預覽列印", 17, 17, 71, 22),
+            B("出貨文件已下載完成。已成功下載1個包裹中的1個包裹的出貨文件。0個包裹下載失敗。", 32, 49, 1700, 24),
+            B(" 列印出貨文件", 1746, 39, 157, 36),
+            B("第 1 頁", 741, 116, 436, 615),
+            B("寄件編號: TW260000000001Z", 753, 310, 174, 14),
+            B("門市交寄  隔日到貨", 754, 128, 206, 145)
+        };
+        Assert.True(ShopeeBatchScreens.IsAwbPage(page));
+        Assert.True(ShopeeBatchScreens.LabelShown(page));
+        Assert.Equal(new OcrBox("第 1 頁", 741, 116, 436, 615), ShopeeBatchScreens.LabelPageBox(page));
+        Assert.Equal("", ShopeeBatchScreens.LabelOrderSn(page)); // so the label is read with OCR
+        Assert.False(ShopeeBatchScreens.LabelShown([B("預覽列印", 17, 17, 71, 22)]));
+        Assert.True(ShopeeBatchScreens.SameOrderSn("261014AB12CDO4", "261014AB12CD04"));
+        Assert.False(ShopeeBatchScreens.SameOrderSn("261014AB12CD35", "261014AB12CD34"));
+    }
 }
