@@ -1,6 +1,6 @@
 # CYInvoice → CYERPAutoInput 介接工作交接（2026-10-14）
 
-狀態：**尚未交付可用開票接口**；本分支只完成第一個 request wire-contract parser。不得將本文件解讀為 AutoInput 現在可以呼叫 CYInvoice 開立發票。
+狀態：**尚未交付可用開票接口**；本分支目前完成 request wire-contract parser、CLI arguments parser 與原子結果檔 writer（均屬底層元件，尚未接入執行入口）。不得將本文件解讀為 AutoInput 現在可以呼叫 CYInvoice 開立發票。
 
 ## 來源與範圍
 - 需求母本：`apps/CYERPAutoInput/docs/CYINVOICE_INTERFACE_HANDOFF.md`（AutoInput `cyerp-auto-input/shopee-batch` 分支）。
@@ -10,7 +10,7 @@
 
 ## 本次已加入
 - `src/CYInvoice.Core/AutoInputContract.cs`：定義 `cyinvoice-autoinput-request/1`、`cyinvoice-autoinput-result/1` 名稱及基本 record；驗證 JSON 頂層、schema、GUID、來源、絕對輸入路徑、選擇性 orderIds（限制數量、重複和空白）。
-- 尚未寫入 `Program.cs`，也尚未提供 IPC、開票、查詢或 result 檔。因此 **不可由 AutoInput 使用**。
+- `src/CYInvoice.Core/AutoInputCommandLine.cs`：驗證 `--autoinput-issue|--autoinput-query <request> --result <result>` 參數、絕對路徑及 request/result 不可相同。\n- `src/CYInvoice.Core/AutoInputResultFile.cs`：結果 envelope/status 驗證、暫存檔寫入後同目錄原子更名；拒絕覆蓋既存結果。\n- 尚未寫入 `Program.cs`，也尚未提供 IPC、開票或查詢。因此 **不可由 AutoInput 使用**。
 - 本次工作尚無本地 Windows 編譯／CI 成功證據，不能標示測試通過。
 
 ## AutoInput 已定案的呼叫契約（待 CYInvoice 落地）
