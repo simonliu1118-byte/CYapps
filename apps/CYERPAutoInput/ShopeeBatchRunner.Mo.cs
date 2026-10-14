@@ -215,7 +215,10 @@ internal sealed partial class ShopeeBatchRunner
         {
             var orders = MoBatchScreens.ShipPageOrders(ship.Boxes);
             if ((int)total != method.Count || orders.Count != method.Count)
+            {
+                _log.Info("mo-batch", $"ship page: {string.Join(" | ", ship.Boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 24).Take(60))}");
                 throw new ShopeeBatchStop($"批次出貨頁是 {total} 筆（讀到 {orders.Count} 個訂單編號），不是「{method.Name}」的 {method.Count} 筆，未出貨。", _shippedHint);
+            }
             var unknown = orders.Where(o => !batchOrders.Contains(o)).ToList();
             if (unknown.Count > 0)
                 throw new ShopeeBatchStop($"批次出貨頁的訂單 {string.Join("、", unknown)} 不在剛匯出的未出貨訂單檔裡，未出貨。", _shippedHint);

@@ -129,8 +129,10 @@ internal static partial class MoBatchScreens
     }
 
     /// <summary>The order numbers listed on the 批次出貨 page (「訂單1: 66101400799232」).</summary>
+    /// <remarks>「訂單1:」 and the number may be pieces (user's LOG, 2026-10-14): every 14-digit
+    /// number on the page is taken (the page shows nothing else that long).</remarks>
     public static List<string> ShipPageOrders(IReadOnlyList<OcrBox> boxes) =>
-        boxes.Select(b => ShipOrderPattern().Match(C(b))).Where(m => m.Success).Select(m => m.Groups[1].Value).Distinct().ToList();
+        boxes.SelectMany(b => OrderNumber().Matches(C(b)).Select(m => m.Value)).Distinct().ToList();
 
     /// <summary>「批次出貨中」, the dialog after 確認出貨, with its 關閉.</summary>
     public static OcrBox? ShippingDialogClose(IReadOnlyList<OcrBox> boxes) =>
@@ -178,8 +180,8 @@ internal static partial class MoBatchScreens
     [GeneratedRegex(@"^批次出貨[(（]共(\d+)筆訂單[)）]$")]
     private static partial Regex ShipPagePattern();
 
-    [GeneratedRegex(@"^訂單\d+[:：](\d{14})$")]
-    private static partial Regex ShipOrderPattern();
+    [GeneratedRegex(@"(?<!\d)\d{14}(?!\d)")]
+    private static partial Regex OrderNumber();
 
     [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}\d{2}:\d{2}:\d{2}$")]
     private static partial Regex TimePattern();

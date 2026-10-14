@@ -62,6 +62,7 @@ public class MoBatchScreensTests
         List<OcrBox> ship = [B("批次出貨(共1筆訂單)", 65, 231), B("訂單1: 66101400799232", 155, 273), B("併箱出貨", 512, 273), B("確認出貨", 863, 790)];
         Assert.Equal(1, MoBatchScreens.ShipPageCount(ship));
         Assert.Equal(["66101400799232"], MoBatchScreens.ShipPageOrders(ship));
+        Assert.Equal(["66101400797534"], MoBatchScreens.ShipPageOrders([B("訂單1:", 163, 402, 50), B("66101400797534", 215, 402, 105), B("共 2 件未出貨商品", 348, 402)]));
         Assert.Null(MoBatchScreens.ShipPageCount(list));
         Assert.NotNull(MoBatchScreens.ShippingDialogClose([B("批次出貨中", 728, 77), B("關閉", 990, 214), B("查看批次出貨記錄", 1062, 214)]));
     }
