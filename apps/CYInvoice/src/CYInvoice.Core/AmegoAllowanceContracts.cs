@@ -3,25 +3,37 @@ using System.Text.Json;
 
 namespace CYInvoice.Core.Amego;
 
-// Approved format: A + yyyyMMdd + three-digit daily sequence, e.g. A20261015001.
-// The caller must allocate the sequence against the correct company's existing
-// official and locally pending numbers. Formatting does NOT reserve any number.
-// Only allocate at manager approval and persist the number before /json/g0401.
+// A + yyyyMMdd + XXX. 001..999 are decimal; 1000..34695 map to A00..ZZZ.
+// Number assignment is NOT performed here: the approving manager's operation
+// must allocate and durably persist exactly one number via the authoritative
+// company/environment store before invoking /json/g0401.
+// Allocated numbers are never recycled, even after rejection or cancellation.
 public static class AllowanceNumberGenerator
 {
     public const char DefaultPrefix = 'A';
-    public const int DailyMaximum = 999;
+    public const int DailyMaximum = 999 + 26 * 36 * 36;
+    private const string Digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     public static string Format(DateOnly allowanceDate, int sequence, char prefix = DefaultPrefix)
     {
         if (prefix is < 'A' or > 'Z')
             throw new ArgumentOutOfRangeException(nameof(prefix), "prefix must be one uppercase ASCII letter");
         if (sequence is < 1 or > DailyMaximum)
-            throw new ArgumentOutOfRangeException(nameof(sequence), "daily allowance sequence must be from 001 to 999");
-        return string.Concat(
-            prefix,
-            allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
-            sequence.ToString("D3", CultureInfo.InvariantCulture));
+            throw new ArgumentOutOfRangeException(nameof(sequence), "daily allowance sequence out of range");
+        string suffix;
+        if (sequence <= 999)
+        {
+            suffix = sequence.ToString("D3", CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            var index = sequence - 1000;
+            suffix = string.Concat(
+                (char)('A' + index / (36 * 36)),
+                Digits[(index / 36) % 36],
+                Digits[index % 36]);
+        }
+        return string.Concat(prefix, allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture), suffix);
     }
 
     public static bool TryReadSequence(string? number, DateOnly allowanceDate, out int sequence, char prefix = DefaultPrefix)
@@ -30,10 +42,20 @@ public static class AllowanceNumberGenerator
         if (prefix is < 'A' or > 'Z' || number is not { Length: 12 } || number[0] != prefix ||
             !string.Equals(number.Substring(1, 8), allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture), StringComparison.Ordinal))
             return false;
-        if (!int.TryParse(number.AsSpan(9, 3), NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) ||
-            parsed is < 1 or > DailyMaximum)
-            return false;
-        sequence = parsed;
+
+        var suffix = number.AsSpan(9, 3);
+        if (int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out var decimalSequence))
+        {
+            if (decimalSequence is < 1 or > 999) return false;
+            sequence = decimalSequence;
+            return true;
+        }
+
+        if (suffix[0] is < 'A' or > 'Z') return false;
+        var second = Digits.IndexOf(suffix[1]);
+        var third = Digits.IndexOf(suffix[2]);
+        if (second < 0 || third < 0) return false;
+        sequence = 1000 + (suffix[0] - 'A') * (36 * 36) + second * 36 + third;
         return true;
     }
 }
