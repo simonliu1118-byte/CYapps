@@ -88,6 +88,19 @@ public class MoBatchScreensTests
         Assert.True(MoBatchScreens.RecordMatches(record with { Method = "全家店到店" }, MoShipKind.Family, 1));
         Assert.True(MoBatchScreens.RecordMatches(record with { Method = "7-11店到店" }, MoShipKind.Seven, 1));
 
+        // The row as one text, with the button beside it.
+        List<OcrBox> whole =
+        [
+            B("出貨時間", 268, 301),
+            new("2026-10-14 19:05:58 全家店到店 1 1 - - 全部成功 列印文件", 252, 338, 1600, 38), B("列印文件", 1646, 348),
+            new("2026-10-14 16:42:39 第三方物流-新竹貨運 1 1 - - 全部成功 列印文件", 252, 376, 1600, 38)
+        ];
+        var top = MoBatchScreens.LatestRecord(whole)!;
+        Assert.Equal(("2026-10-14 19:05:58", "全家店到店", 1, "全部成功"), (top.Time, top.Method, top.Orders, top.Status));
+        Assert.Equal(1646, top.PrintButton!.Left);
+        Assert.True(MoBatchScreens.RecordMatches(top, MoShipKind.Family, 1, new DateTime(2026, 10, 14, 19, 5, 58)));
+        Assert.False(MoBatchScreens.RecordMatches(top, MoShipKind.Family, 1, new DateTime(2026, 10, 14, 19, 10, 0)));
+
         List<OcrBox> dialog = [B("注意", 646, 87), B("列印標籤", 663, 232), B("列印明細", 769, 232), B("列印出貨總表", 875, 232)];
         Assert.Equal(875, MoBatchScreens.PrintDocumentButton(dialog, "列印出貨總表")!.Left);
         Assert.True(MoBatchScreens.ExportDone([B("匯出提醒", 222, 68), B("1~2筆，狀態：已完成", 240, 254), B("關閉", 790, 330)]));

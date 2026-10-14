@@ -1451,7 +1451,7 @@ internal sealed class MainForm : Form
     /// in the preview until CYInvoice can be called) and ERP. The Temp folder goes once every order
     /// is saved in ERP.
     /// </summary>
-    private async Task RunMoBatchAsync(bool resume = false)
+    private async Task RunMoBatchAsync(bool resume = false, bool atRecord = false)
     {
         const string title = "MO店+ 全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
@@ -1493,7 +1493,7 @@ internal sealed class MainForm : Form
                 MessageBox.Show(this, "找不到之前存下的未出貨訂單匯出檔（Temp\\mo-…）。請先從頭跑一次 MO店+ 全自動。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「批次出貨」接著做：逐一批次出貨、存標籤、配送中匯出、列印、帶入匯出檔、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
+            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「{(atRecord ? "批次出貨記錄最上面那一筆" : "批次出貨")}」接著做：{(atRecord ? "存標籤、其他配送方式批次出貨" : "逐一批次出貨、存標籤")}、配送中匯出、列印、帶入匯出檔、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
                     title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
             resumeBefore = latest.File;
@@ -1534,7 +1534,7 @@ internal sealed class MainForm : Form
         _log.Info("mo-batch", "started");
         try
         {
-            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus, resumeBefore);
+            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus, resumeBefore, atRecord);
         }
         catch (ShopeeBatchStop stop)
         {
@@ -2293,6 +2293,7 @@ internal sealed class MainForm : Form
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試：從批次出貨繼續（已開好的 MO 視窗）", null, async (_, _) => await RunMoBatchAsync(resume: true));
+            menu.Items.Add("測試：從批次出貨記錄繼續（剛出貨的最上面一筆）", null, async (_, _) => await RunMoBatchAsync(resume: true, atRecord: true));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));

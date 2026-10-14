@@ -34,7 +34,8 @@ internal sealed partial class ShopeeBatchRunner
     /// 測試：從批次出貨繼續 (user, 2026-10-14): the front Chrome window, already on MO店+, and this
     /// 未出貨 export from an earlier run; the run starts at 批次出貨.
     /// </param>
-    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status, string? resumeBefore = null)
+    /// <param name="atRecord">測試：從批次出貨記錄繼續 — the top record is the shipment just made by hand.</param>
+    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status, string? resumeBefore = null, bool atRecord = false)
     {
         var result = new MoBatchResult { Folder = folder };
         _pageTabs = true;
@@ -81,6 +82,19 @@ internal sealed partial class ShopeeBatchRunner
 
         // 4–6. 批次出貨, method by method.
         var done = new HashSet<MoShipKind>();
+        if (atRecord)
+        {
+            MoShipRecord? top;
+            using (var page = await ReadAsync()) top = MoBatchScreens.LatestRecord(page.Boxes);
+            if (top is null || MoBatchScreens.Kind(top.Method) == MoShipKind.Other)
+                throw new ShopeeBatchStop($"批次出貨記錄讀不到最上面那一筆（{top?.Time} {top?.Method}）。");
+            var kind = MoBatchScreens.Kind(top.Method);
+            _log.Info("mo-batch", $"resumed at the record {top.Time} {kind} orders={top.Orders}");
+            _shippedHint = true;
+            result.Shipped += top.Orders;
+            done.Add(kind);
+            await SaveRecordDocumentsAsync(kind, top.Method, top.Orders, since: null, result);
+        }
         while (true)
         {
             status($"MO店+ 全自動：批次出貨（已出貨 {result.Shipped} 筆）…");
@@ -240,6 +254,7 @@ internal sealed partial class ShopeeBatchRunner
             }
         }
         if (confirm is null || bottom is null) { bottom?.Dispose(); throw new ShopeeBatchStop("找不到「確認出貨」，未出貨。", _shippedHint); }
+        var shippedAt = DateTime.Now;
         using (bottom) Click(bottom, confirm, "確認出貨");
         _shippedHint = true;
         result.Shipped += method.Count;
@@ -257,25 +272,41 @@ internal sealed partial class ShopeeBatchRunner
             if (MoBatchScreens.Text(page.Boxes, "出貨時間") is null && MoBatchScreens.Text(page.Boxes, "批次出貨記錄") is { } link)
                 Click(page, link, "批次出貨記錄");
 
-        // The newest record: this method, every order shipped.
+        await SaveRecordDocumentsAsync(method.Kind, method.Name, method.Count, shippedAt, result);
+    }
+
+    /// <summary>
+    /// 批次出貨記錄: the top row must be the shipment just made — this method, the count, and an
+    /// 出貨時間 not before <paramref name="since"/> (user, 2026-10-14: no order numbers here; the
+    /// newest is on top, told by its time) — all 全部成功; then 列印文件 › 列印標籤 (新竹 also
+    /// 列印出貨總表), each saved. <paramref name="since"/> null takes the top row as it is (測試).
+    /// </summary>
+    private async Task SaveRecordDocumentsAsync(MoShipKind kind, string name, int count, DateTime? since, MoBatchResult result)
+    {
         MoShipRecord? record = null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
+        var logged = false;
         while (true)
         {
             using var page = await ReadAsync();
             record = MoBatchScreens.LatestRecord(page.Boxes);
-            if (record is not null && MoBatchScreens.RecordMatches(record, method.Kind, method.Count))
+            if (record is not null && MoBatchScreens.RecordMatches(record, kind, count, since))
             {
                 if (record.Status.Contains("全部成功", StringComparison.Ordinal) && record.PrintButton is not null) break;
                 if (record.Status.Contains("失敗", StringComparison.Ordinal) || record.Status.Contains("部分", StringComparison.Ordinal))
                     throw new ShopeeBatchStop($"批次出貨記錄「{record.Method}」{record.Time} 的狀態是「{record.Status}」，請人工處理（未列印、未打單）。", true);
             }
+            if (!logged)
+            {
+                logged = true;
+                _log.Info("mo-batch", $"record not yet: {(record is null ? "no row read" : $"{record.Time} {record.Method} {record.Orders} {record.Status} print={record.PrintButton is not null}")}; page: {string.Join(" | ", page.Boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 40).Take(40))}");
+            }
             if (watch.Elapsed > TimeSpan.FromSeconds(120))
-                throw new ShopeeBatchStop($"批次出貨記錄等不到「{method.Name}」{method.Count} 筆全部成功（最新一筆：{record?.Method} {record?.Status}）。", true);
+                throw new ShopeeBatchStop($"批次出貨記錄等不到「{name}」{count} 筆全部成功（最新一筆：{record?.Time} {record?.Method} {record?.Status}）。", true);
             if (MoBatchScreens.Text(page.Boxes, "刷新") is { } refresh && watch.Elapsed > TimeSpan.FromSeconds(3)) Click(page, refresh, "刷新");
             await Task.Delay(3000, _token);
         }
-        _log.Info("mo-batch", $"record {record.Method} {record.Status} orders={record.Orders}");
+        _log.Info("mo-batch", $"record {record.Time} {record.Method} {record.Status} orders={record.Orders}");
 
         // 列印文件 → 列印標籤 (新竹 also 列印出貨總表), each saved.
         using (var page = await ReadAsync())
@@ -283,16 +314,16 @@ internal sealed partial class ShopeeBatchRunner
             var print = MoBatchScreens.LatestRecord(page.Boxes)?.PrintButton ?? throw new ShopeeBatchStop("找不到最新一筆的「列印文件」。", true);
             Click(page, print, "列印文件");
         }
-        foreach (var name in method.Kind == MoShipKind.Hct ? new[] { "列印標籤", "列印出貨總表" } : ["列印標籤"])
+        foreach (var doc in kind == MoShipKind.Hct ? new[] { "列印標籤", "列印出貨總表" } : ["列印標籤"])
         {
-            var (docs, button) = await WaitAsync($"「{name}」", 20, s => MoBatchScreens.PrintDocumentButton(s.Boxes, name), true);
-            using (docs) Click(docs, button, name);
-            var (error, files) = await SaveFromDialogAsync(result.Folder, name, 60);
+            var (docs, button) = await WaitAsync($"「{doc}」", 20, s => MoBatchScreens.PrintDocumentButton(s.Boxes, doc), true);
+            using (docs) Click(docs, button, doc);
+            var (error, files) = await SaveFromDialogAsync(result.Folder, doc, 60);
             var pdf = files.FirstOrDefault(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
-            if (error is not null || pdf is null) throw new ShopeeBatchStop($"「{method.Name}」的{name} PDF 存不下來：{error ?? "找不到 PDF"}。", true);
-            if (name == "列印出貨總表") result.Summaries.Add(pdf);
-            else result.Labels.Add((method.Kind, pdf));
-            _log.Info("mo-batch", $"{method.Kind} {name} saved");
+            if (error is not null || pdf is null) throw new ShopeeBatchStop($"「{name}」的{doc} PDF 存不下來：{error ?? "找不到 PDF"}。", true);
+            if (doc == "列印出貨總表") result.Summaries.Add(pdf);
+            else result.Labels.Add((kind, pdf));
+            _log.Info("mo-batch", $"{kind} {doc} saved");
         }
         // Close the 注意 dialog.
         _inputs++;

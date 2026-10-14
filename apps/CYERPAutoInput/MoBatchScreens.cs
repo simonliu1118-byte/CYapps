@@ -138,25 +138,43 @@ internal static partial class MoBatchScreens
     public static OcrBox? ShippingDialogClose(IReadOnlyList<OcrBox> boxes) =>
         Has(boxes, "批次出貨中") ? boxes.Where(b => C(b) == "關閉").OrderByDescending(b => b.Top).FirstOrDefault() : null;
 
-    /// <summary>The newest row of 批次出貨記錄 (the first under the header 出貨時間).</summary>
+    /// <summary>
+    /// The newest row of 批次出貨記錄: the topmost text holding an 出貨時間 (user, 2026-10-14: no
+    /// order numbers here; the row just made is the top one, told by its time). The row may come
+    /// as cells or as one text (user's LOG, 2026-10-14: the cells were not read); both are read.
+    /// </summary>
     public static MoShipRecord? LatestRecord(IReadOnlyList<OcrBox> boxes)
     {
-        var header = Text(boxes, "出貨時間");
-        if (header is null) return null;
-        var first = boxes.Where(b => b.Top > header.Bottom && TimePattern().IsMatch(C(b))).OrderBy(b => b.Top).FirstOrDefault();
-        if (first is null) return null;
-        var row = boxes.Where(b => SameRow(b, first) && b.Left > first.Left + first.Width / 2).OrderBy(b => b.Left).ToList();
-        var cells = row.Select(C).ToList();
-        int Number(int i) => i < cells.Count && int.TryParse(cells[i], out var n) ? n : 0;
-        var method = cells.FirstOrDefault() ?? string.Empty;
-        var status = cells.FirstOrDefault(c => c.Contains("成功", StringComparison.Ordinal) || c.Contains("失敗", StringComparison.Ordinal) || c.Contains("處理", StringComparison.Ordinal)) ?? string.Empty;
-        var print = row.FirstOrDefault(b => C(b) == "列印文件");
-        return new MoShipRecord(first.Text.Trim(), method, Number(1), Number(2), status, print);
+        var timed = boxes.Where(b => TimeInText().IsMatch(b.Text)).ToList();
+        if (timed.Count == 0) return null;
+        var top = timed.Min(b => b.Top);
+        // On the top row, the shortest text with the time is its cell.
+        var first = timed.Where(b => b.Top <= top + 4).OrderBy(b => b.Text.Length).First();
+        var row = boxes.Where(b => b != first && SameRow(b, first) && b.Height <= first.Height * 2).OrderBy(b => b.Left).ToList();
+        var text = string.Join(" ", new[] { first }.Concat(row.Where(b => b.Left > first.Left)).Select(b => b.Text.Trim()));
+        var time = TimeInText().Match(first.Text).Value;
+        var rest = text[(text.IndexOf(time, StringComparison.Ordinal) + time.Length)..];
+        var parts = rest.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var method = parts.FirstOrDefault(p => Kind(p) != MoShipKind.Other || p.Contains("物流", StringComparison.Ordinal) || p.Contains("店到店", StringComparison.Ordinal)) ?? parts.FirstOrDefault() ?? string.Empty;
+        var numbers = parts.SkipWhile(p => p != method).Skip(1).Where(p => int.TryParse(p, out _)).Select(int.Parse).ToList();
+        var status = parts.FirstOrDefault(p => p.Contains("成功", StringComparison.Ordinal) || p.Contains("失敗", StringComparison.Ordinal) || p.Contains("處理", StringComparison.Ordinal)) ?? string.Empty;
+        var print = row.Where(b => C(b) == "列印文件").OrderBy(b => b.Width).FirstOrDefault()
+            ?? boxes.Where(b => C(b) == "列印文件" && Math.Abs(b.CenterY - first.CenterY) <= Math.Max(first.Height, b.Height)).OrderBy(b => b.Width).FirstOrDefault();
+        return new MoShipRecord(time, method, numbers.ElementAtOrDefault(0), numbers.ElementAtOrDefault(1), status, print);
     }
 
-    /// <summary>The record is the one just made: its 配送方式 is the one shipped and the counts match.</summary>
-    public static bool RecordMatches(MoShipRecord record, MoShipKind kind, int orders) =>
-        Kind(record.Method) == kind && record.Orders == orders;
+    /// <summary>The record's 出貨時間, or null when it is not readable.</summary>
+    public static DateTime? RecordTime(MoShipRecord record) =>
+        DateTime.TryParseExact(record.Time.Replace(" ", string.Empty, StringComparison.Ordinal), "yyyy-MM-ddHH:mm:ss",
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? t : null;
+
+    /// <summary>
+    /// The record is the one just made: this method, the same count, and (when given) shipped at
+    /// or after <paramref name="since"/> (a minute's leeway for the clocks).
+    /// </summary>
+    public static bool RecordMatches(MoShipRecord record, MoShipKind kind, int orders, DateTime? since = null) =>
+        Kind(record.Method) == kind && record.Orders == orders &&
+        (since is null || RecordTime(record) is { } t && t >= since.Value.AddMinutes(-1));
 
     /// <summary>The 注意 dialog of 列印文件: its 列印標籤 / 列印出貨總表 buttons.</summary>
     public static OcrBox? PrintDocumentButton(IReadOnlyList<OcrBox> boxes, string name) =>
@@ -183,6 +201,6 @@ internal static partial class MoBatchScreens
     [GeneratedRegex(@"(?<!\d)\d{14}(?!\d)")]
     private static partial Regex OrderNumber();
 
-    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}\d{2}:\d{2}:\d{2}$")]
-    private static partial Regex TimePattern();
+    [GeneratedRegex(@"\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}:\d{2}")]
+    private static partial Regex TimeInText();
 }
