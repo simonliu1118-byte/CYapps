@@ -4,7 +4,14 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V3 Windows 災難復原端到端 Draft 接線（2026-10-14）
+## 最新停點：V3 雲端加入內復原按鈕、CYWEB 超管 UI 與撤銷後競態防護（2026-10-14）
+
+- **入口依使用者當次指示修正：**CYInvoice 首次使用仍只有「使用單機版／直接加入雲端」兩選項；`CloudDirectJoinForm` 的一般配對／邀請輸入區新增「災難復原」按鈕，獨立開啟 `CloudRecoveryForm` 的 CYID 超管驗證、Workspace Preview、全數撤銷確認。已有 `CloudPendingRecovery` 時改標「繼續災難復原」，透過原 Cloud endpoint、Workspace、Invitation、DPAPI Device Token 查回；**沒有第三個首次啟動選項**。
+- **撤銷與 in-flight SQL fence：**`cloud/src/index.ts` 的一般 Pairing Code 發行、一般 Device Invitation 發行、邀請碼兌換，均加入 commit 當下 issuer Device 必須為 active 的 D1 SQL guard；成功 Audit 也依實際新授權結果，不以先前的 CYID/Device 驗證結果視為授權已完成。`recovery-cutover.test.mjs` 直接抽取 Worker SQL，以 Synthetic SQLite 模擬災難復原完成後舊 Device 嘗試晚到 Pairing/Invitation/JOIN，檢查沒有新 active Device。**跨服務已在執行的業務寫入／CYID Side Effect 無法用單一 D1 Transaction 撤銷，V3 Work Item 仍需 fencing/epoch/執行時驗證。**
+- [CYWEB Draft PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已把 `CyInvoiceRecoveryAdminPanel` 掛在「帳號與權限」SUPER_ADMIN 區塊，提供一次性簽發、同一 Operation ID 查詢、明確撤銷；不在瀏覽器儲存復原碼／CYID 密碼，未明確確認不寄信。CYWEB `render-deploy-config.mjs` 改為**只在 deploy environment 提供 `CF_CYINVOICE_RECOVERY_SERVICE` 時**注入 `CYINVOICE_RECOVERY` Service Binding，`entrypoint=CyInvoiceRecoveryEntrypoint`，預設不啟用、錯誤設定拒絕；絕不把正式 Worker 名稱寫進 Public source。
+- **目前仍為兩份 Draft 原始碼與 GitHub CI；沒有合併、部署、正式 Binding 注入、執行 CYInvoice D1 0014/optional maintenance、真 Email／真 Device 驗收或正式 Windows Release。** 禁止部署任何額外 Cloudflare 測試 Worker；DR-01～DR-13 未取得實機證據。後續仍需逐項進行正式服務連結安全部署前查核與 user 授權，不能僅因 mock 測試通過便切換正式公司 Device。
+
+## 歷史停點：V3 Windows 災難復原端到端 Draft 接線（2026-10-14）
 
 - 已延續 [CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 完成 **CYInvoice 公開但極受限的 Windows 專用 `POST /v1/device-recovery/preview` 與 `POST /v1/device-recovery/claim`**。這不是 CYWEB 的私有超管簽發 RPC，也不是一般 Device Auth bypass：兩個路由每次都必須在固定 `CYINVOICE` Application／兩個 Workspace scope 下以 CYID 正式 Employee No＋密碼重新登入，Live SUPER_ADMIN／Email Verified／Role／CredentialVersion／EmployeeRevision 比對；來源 Invite 必須是 CYWEB issuer、RECOVERY、sent、未過期／未消耗／未撤銷。Preview 僅回 Workspace 名稱與固定 scope，不回復原碼；Claim 透過原子 cutover 一次使所有舊 active Device revoked、其餘未使用邀請與配對碼失效並寫 Audit。現有 Built-in 模式對復原路由 fail-closed。
 - **Windows 端新增** `CloudRecoveryClient.cs`（HTTPS／不送舊 Device Bearer／預覽固定 Identity+Business Workspace／claim 與同 Token readback）、`SettingsModels.cs`／`SettingsStore.cs` 的獨立 `CloudPendingRecoveryState`（DPAPI 保護 Token、網址／兩個 Workspace／Invitation ID／Device Name 鎖定、與既有 Pending Join/Bootstrap 互斥）。`CloudRecoveryForm.cs` 提供首次啟動第三選項「公司級災難復原」，先預覽再明確確認**新裝置接管成功後全數撤銷舊 Device**；網路 mutation 前先寫入且儲存 Pending Token，回應不明不可默默改用新 Token。成功回覆後再經原 token `GetCurrentDeviceAsync`、CYID discovery Scope 驗證，才寫入正式設定。
