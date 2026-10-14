@@ -489,8 +489,20 @@ internal sealed class ShopeeBatchRunner
     {
         // 下載完成 shows before the label itself is drawn (user's LOG, 2026-10-13: 11 lines, then
         // 17 with the label's 訂單編號), so the label's order number is waited for too.
-        var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s => ShopeeBatchScreens.IsAwbPage(s.Boxes) &&
-            ShopeeBatchScreens.LabelOrderSn(s.Boxes).Length > 0 ? ShopeeBatchScreens.AwbDownloaded(s.Boxes) : null, shipped: true);
+        var dumped = false;
+        var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s =>
+        {
+            if (!ShopeeBatchScreens.IsAwbPage(s.Boxes) || ShopeeBatchScreens.AwbDownloaded(s.Boxes) is not { } done) return null;
+            if (ShopeeBatchScreens.LabelOrderSn(s.Boxes).Length > 0) return done;
+            // Downloaded but the label's number not read: once, the page's text into the LOG
+            // (local only) so the label's layout can be seen.
+            if (!dumped && s.Boxes.Count >= 15)
+            {
+                dumped = true;
+                foreach (var b in s.Boxes) _log.Info("shopee-batch", $"  awb box x={b.Left} y={b.Top} w={b.Width} h={b.Height} text={b.Text}");
+            }
+            return null;
+        }, shipped: true);
         using (awb)
         {
             if (download.Failed != 0 || download.Done != 1 || download.Total != 1)

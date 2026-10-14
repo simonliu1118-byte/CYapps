@@ -268,13 +268,33 @@ internal static partial class ShopeeBatchScreens
     public static OcrBox? PrintDocumentsButton(IReadOnlyList<OcrBox> boxes) =>
         boxes.FirstOrDefault(b => C(b).EndsWith("列印出貨文件", StringComparison.Ordinal) && C(b).Length <= 8);
 
-    /// <summary>The 蝦皮訂單編號 printed on the label.</summary>
+    /// <summary>
+    /// The 蝦皮訂單編號 printed on the label. The number may be its own piece of text after the
+    /// label or on the next line (user's LOG, 2026-10-14: 隔日到貨 labels were never read with
+    /// the label and number taken as one piece), so the label's row and the row under it count.
+    /// </summary>
     public static string LabelOrderSn(IReadOnlyList<OcrBox> boxes) =>
-        boxes.Where(b => C(b).Contains("訂單編號", StringComparison.Ordinal)).Select(b => OrderSnIn(C(b))).FirstOrDefault(s => s.Length > 0) ?? string.Empty;
+        LabelValue(boxes, "訂單編號", OrderSnIn);
 
-    /// <summary>The 寄件編號 printed on the label.</summary>
+    /// <summary>The 寄件編號 printed on the label (same reading as <see cref="LabelOrderSn"/>).</summary>
     public static string LabelTracking(IReadOnlyList<OcrBox> boxes) =>
-        boxes.Where(b => C(b).Contains("寄件編號", StringComparison.Ordinal)).Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0) ?? string.Empty;
+        LabelValue(boxes, "寄件編號", t => TrackingIn(t.ToUpperInvariant()));
+
+    private static string LabelValue(IReadOnlyList<OcrBox> boxes, string label, Func<string, string> parse)
+    {
+        foreach (var box in boxes.Where(b => C(b).Contains(label, StringComparison.Ordinal)))
+        {
+            var own = parse(C(box)[C(box).IndexOf(label, StringComparison.Ordinal)..]);
+            if (own.Length > 0) return own;
+            var row = string.Concat(boxes.Where(b => b == box || (b.Left >= box.Left && SameRow(b, box))).OrderBy(b => b.Left).Select(C));
+            var inRow = parse(row[Math.Max(0, row.IndexOf(label, StringComparison.Ordinal))..]);
+            if (inRow.Length > 0) return inRow;
+            var below = boxes.Where(b => b.Top >= box.Bottom - 2 && b.Top - box.Bottom < box.Height * 2 && b.Right > box.Left && b.Left < box.Right + box.Width)
+                .OrderBy(b => b.Top).ThenBy(b => b.Left).FirstOrDefault();
+            if (below is not null && parse(C(below)) is { Length: > 0 } next) return next;
+        }
+        return string.Empty;
+    }
 
     // ---- 7-ELEVEN 交貨便服務單 (epayment.7-11.com.tw) ----
 

@@ -282,4 +282,20 @@ public sealed class ShopeeBatchScreensTests
         Assert.InRange(cross.X, 557, 563);
         Assert.InRange(cross.Y, 57, 63);
     }
+
+    [Fact]
+    public void Label_numbers_in_their_own_text_on_the_row_or_below()
+    {
+        // 隔日到貨 labels (user's LOG, 2026-10-14): the label and the number need not be one piece.
+        var sameRow = new List<OcrBox> { B("蝦皮訂單編號:", 10, 300, 90), B("261014AB12CD34", 104, 300, 120), B("寄件編號:", 10, 322, 70), B("TW260000000001H", 84, 322, 130) };
+        Assert.Equal("261014AB12CD34", ShopeeBatchScreens.LabelOrderSn(sameRow));
+        Assert.Equal("TW260000000001H", ShopeeBatchScreens.LabelTracking(sameRow));
+
+        var below = new List<OcrBox> { B("蝦皮訂單編號", 10, 300, 90), B("261014AB12CD34", 10, 322, 120) };
+        Assert.Equal("261014AB12CD34", ShopeeBatchScreens.LabelOrderSn(below));
+
+        var oneBlock = new List<OcrBox> { B("2026-10-14 11:25:11 門市交寄 蝦皮訂單編號: 261014AB12CD34 寄件編號: TW260000000001H", 10, 300, 300, 80) };
+        Assert.Equal("261014AB12CD34", ShopeeBatchScreens.LabelOrderSn(oneBlock));
+        Assert.Equal("TW260000000001H", ShopeeBatchScreens.LabelTracking(oneBlock));
+    }
 }
