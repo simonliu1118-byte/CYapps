@@ -26,7 +26,7 @@ binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`
 | 項目 | 現況 |
 | --- | --- |
 | Cron | `30 19 * * *`，每日台灣時間 03:30 |
-| 正式 topology | R2＋GCS `parallel_dual_provider`；目前仍 Phase C。policy 由 append-only `backup_policy_events` 決定，不因部署自動切換 |
+| 正式 topology | R2＋GCS `parallel_dual_provider`；2026/10/15 已正式回讀 Phase D 生效。policy 由 append-only `backup_policy_events` 決定，不因部署自動切換 |
 | Phase C | R2 每日 30 天；GCS 每日 14 天 |
 | Phase D | R2 每日 30 天；GCS 台灣時間週三、週日 03:30，26 週／182 天 |
 | 手動／匯入前 | 各 phase 均雙 provider；沿用該 phase retention |
@@ -35,7 +35,7 @@ binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`
 
 啟用只新增 policy event 與操作者／驗證證據，**切換當下不清除既有物件**。未排 GCS 的日期不建立假失敗 copy，UI 顯示「本日未排程」。後續僅由既有 provider cleanup 處理超期 managed objects，失敗仍維持兩 provider 隔離；保留期限依 provider object 建立時間計算。原 Phase C 驗收證據不會被 Phase D 的 R2-only 日清除。
 
-正式操作：桌機設定 → 備份／復原 →「驗證隔離還原」→ 兩 provider 通過 →「啟用 Phase D」。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。最後啟用確認操作被中止，備份頁仍顯示 Phase C，尚未切換；不把 source 或部署完成當成 policy 啟用。
+正式操作：桌機設定 → 備份／復原 →「驗證隔離還原」→ 兩 provider 通過 →「啟用 Phase D」。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，確認「Phase D 已啟用」、R2 30 天／GCS 182 天及週三／週日 03:30 排程。首次新排程結果仍待觀察；不把啟用成功當成排程或 DR 已驗收。
 
 provider lifecycle 如啟用，期限須長於 application policy，避免提前刪除 replication／rollback 來源；本次不擴大 provider IAM 或修改 bucket lifecycle，外部 lifecycle 與 budget 檢查仍列 TODO。
 
@@ -77,4 +77,4 @@ Phase E shared Backup Service 尚未啟用。未來可共用 provider storage me
 
 自動驗證已有 inner v2、legacy outer v2 compatibility、export-once、copy digest parity、provider failure isolation、topology selection，以及 schema 7/account `colorSlot` 的現行 application regression。V0.22.11 main deploy #431 已成功套用 D1 migration 並部署 production source。
 
-V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 尚未啟用，需完成最後確認並回讀。這些測試不等於正式帳本 Restore 或 DR 完成；後續工作見 [TODO.md](TODO.md)。
+V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 啟用已由正式備份頁回讀確認；尚未取得首次新排程執行結果。這些測試不等於正式帳本 Restore 或 DR 完成；後續工作見 [TODO.md](TODO.md)。
