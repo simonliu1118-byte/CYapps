@@ -1020,7 +1020,7 @@ internal sealed class MainForm : Form
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定 › 平台匯入」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (MessageBox.Show(this,
