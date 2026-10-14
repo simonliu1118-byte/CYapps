@@ -513,16 +513,30 @@ async function createPairing(request: Request, env: Env, requestId: string): Pro
   const now = new Date();
   const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS).toISOString();
   const pairingId = `pair_${crypto.randomUUID()}`;
-  await env.DB.batch([
+  const pairingWrites = await env.DB.batch([
+    // A recovery may revoke this issuer after earlier Device/CYID checks.
+    // Only an active issuer can commit a new pairing grant.
     env.DB.prepare(
       `INSERT INTO device_pairing_codes (
         pairing_id, workspace_id, created_by_device_id, code_hash, expires_at, created_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+      )
+      SELECT ?1, ?2, ?3, ?4, ?5, ?6 FROM devices d
+      JOIN workspaces w ON w.workspace_id = d.workspace_id AND w.status = 'active'
+      WHERE d.device_id = ?3 AND d.workspace_id = ?2 AND d.status = 'active'`
     ).bind(pairingId, device.workspaceId, device.deviceId, codeHash, expiresAt, now.toISOString()),
-    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "pairing_issued",
-      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
-      pairingId, requestId }),
+    env.DB.prepare(`INSERT INTO security_audit_events
+      (event_id, workspace_id, event_type, outcome, actor_device_id, actor_employee_id,
+       pairing_id, request_id, occurred_at)
+      SELECT ?1, ?2, 'pairing_issued', 'success', ?3, ?4, ?5, ?6, ?7
+      FROM device_pairing_codes p WHERE p.pairing_id = ?5
+        AND p.workspace_id = ?2 AND p.created_by_device_id = ?3
+        AND EXISTS (SELECT 1 FROM devices d WHERE d.device_id = ?3 AND d.status = 'active')`)
+      .bind(`evt_${crypto.randomUUID()}`, device.workspaceId, device.deviceId,
+        owner.employee_id, pairingId, requestId, now.toISOString()),
   ]);
+  if (pairingWrites.some(result => result.meta.changes !== 1))
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "The issuing Device is no longer active.");
   return json(env, requestId, 201, { pairing: { pairingId, code, expiresAt } });
 }
 
@@ -638,11 +652,18 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
   const invitationId = `inv_${crypto.randomUUID()}`;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS).toISOString();
-  await env.DB.prepare(`INSERT INTO device_invitations (
+  const issued = await env.DB.prepare(`INSERT INTO device_invitations (
     invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id, issued_by_cyid_employee_id,
-    delivery_state, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?8, 'pending', ?6, ?7)`)
+    delivery_state, expires_at, created_at)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?8, 'pending', ?6, ?7 FROM devices d
+    JOIN workspaces w ON w.workspace_id = d.workspace_id AND w.status = 'active'
+    WHERE d.device_id = ?4 AND d.workspace_id = ?2 AND d.status = 'active'`)
     .bind(invitationId, device.workspaceId, await sha256Hex(code), device.deviceId,
-      usesCyId(env) ? null : owner.employee_id, expiresAt, now.toISOString(), usesCyId(env) ? owner.employee_id : null).run();
+      usesCyId(env) ? null : owner.employee_id, expiresAt, now.toISOString(),
+      usesCyId(env) ? owner.employee_id : null).run();
+  if (issued.meta.changes !== 1)
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "The issuing Device is no longer active.");
   try {
     await sender.send({ to: owner.email_normalized, subject: "CYInvoice 新裝置邀請",
       text: `CYInvoice 新裝置連線設定\nCloud API 網址：${new URL(request.url).origin}\n開通碼：${code}\n有效至：${expiresAt}\n僅限使用一次。若非本人操作，請通知管理員撤銷邀請。`,
@@ -673,14 +694,31 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
       .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
         requestId, sentAt, row.invitation_id),
   ]);
-  await env.DB.batch([
+  const sentWrites = await env.DB.batch([
     ...superseded,
-    env.DB.prepare("UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1 WHERE invitation_id = ?2")
+    env.DB.prepare(`UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1
+      WHERE invitation_id = ?2 AND delivery_state = 'pending' AND revoked_at IS NULL
+        AND consumed_at IS NULL AND expires_at > ?1
+        AND EXISTS (SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
+          WHERE d.device_id = issued_by_device_id AND d.workspace_id = device_invitations.workspace_id
+            AND d.status = 'active' AND w.status = 'active')`)
       .bind(sentAt, invitationId),
-    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "invitation_issued",
-      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
-      invitationId, requestId }),
+    env.DB.prepare(`INSERT INTO security_audit_events
+      (event_id, workspace_id, event_type, outcome, actor_device_id, actor_employee_id,
+       invitation_id, request_id, occurred_at)
+      SELECT ?1, i.workspace_id, 'invitation_issued', 'success', ?2, ?3,
+        i.invitation_id, ?4, ?5
+      FROM device_invitations i
+      JOIN devices d ON d.device_id = i.issued_by_device_id AND d.workspace_id = i.workspace_id
+      WHERE i.invitation_id = ?6 AND i.delivery_state = 'sent' AND i.sent_at = ?5
+        AND i.revoked_at IS NULL AND d.status = 'active'`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, sentAt, invitationId),
   ]);
+  const sentResult = sentWrites.slice(-2);
+  if (sentResult.some(result => result.meta.changes !== 1))
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "Invitation could not be enabled because the issuing Device is no longer active.");
   return json(env, requestId, 201, { invitation: { invitationId, expiresAt, deliveryState: "sent" } });
 }
 
@@ -754,8 +792,13 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
         client_version, status, invitation_id, employee_authority_state,
         employee_transition_completed_at, paired_at, created_at, updated_at)
         SELECT ?1, ?2, ?3, ?4, ?5, 'active', ?6, 'cloud', ?7, ?7, ?7, ?7
-        FROM device_invitations WHERE invitation_id = ?6 AND delivery_state = 'sent'
-          AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?7`)
+        FROM device_invitations i
+        JOIN devices issuer ON issuer.device_id = i.issued_by_device_id
+          AND issuer.workspace_id = i.workspace_id AND issuer.status = 'active'
+        JOIN workspaces w ON w.workspace_id = i.workspace_id AND w.status = 'active'
+        WHERE i.invitation_id = ?6 AND i.delivery_state = 'sent'
+          AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'
+          AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?7`)
         .bind(deviceId, invitation.workspace_id, body.deviceDisplayName.trim(), tokenHash,
           body.clientVersion.trim(), invitation.invitation_id, now),
       env.DB.prepare(`UPDATE device_invitations SET consumed_at = ?1, consumed_by_device_id = ?2
@@ -792,8 +835,10 @@ async function revokeInvitation(request: Request, env: Env, requestId: string): 
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
       WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL
-        AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'`)
-      .bind(now, invitationId, device.workspaceId),
+        AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'
+        AND EXISTS (SELECT 1 FROM devices issuer WHERE issuer.device_id = ?4
+          AND issuer.workspace_id = device_invitations.workspace_id AND issuer.status = 'active')`)
+      .bind(now, invitationId, device.workspaceId, device.deviceId),
     env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
       outcome, actor_device_id, actor_employee_id, invitation_id, request_id, occurred_at)
       SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3,
