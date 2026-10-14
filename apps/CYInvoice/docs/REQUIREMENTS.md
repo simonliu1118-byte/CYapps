@@ -12,7 +12,11 @@
 
 兩版共用一般開立與光貿折讓核心，Local Employee authority／SQLite 不依賴 Cloud；CYID Cloud 使用中央 Employee authority 與 CYInvoice 自有業務 D1／Device／Work Item。兩版都統一為「公司設定卡片」介面；Local 安全保存本機密鑰，CYID 版僅 SUPER_ADMIN 可以異動加密的統編／光貿 App Key／MO店+ 密碼，ADMIN 只看必要狀態。沒有將 CYID 帳密複製到 CYInvoice 業務 D1。
 
-D1 故障時光貿正常、以 `allowance_list` 臨時配號後再回填 D1 仍是**待驗證設計**，非已完成或已核准跳過 Work Item 原子性；離線執行仍須確認權限／鎖／原號存證與恢復時的同步衝突。
+**2026-10-15 使用者批准的 Cloud D1 故障行為：**CYID Cloud 在業務 D1／Work Item 服務不可用時，跨機折讓申請建立、核准及需要交易鎖的正式折讓開立一律暫停，**不再使用原先 `allowance_list` 暫配號、恢復才回填 D1 的提議**。既有一般開立／發票查詢在光貿可用且滿足最後可信身分降級條件時保持可操作，已知拒絕 fail closed。Local 不依賴 D1；已送出的折讓可唯讀官方查回，不明結果不自動重送。
+
+**CYID 公司設定快取：**以業務 D1 為公司設定唯一權威，由 CYID SUPER_ADMIN 在 Worker 進行 execution-time authorization 後變更公司統編、AMEGO App Key、MO店+ 密碼；金鑰加密保存，D1 密文與解密金鑰分開。Windows 依 Device 綁定使用 DPAPI 保存**已授權**的最後可信公司憑證快取，允許 D1 暫時不可達而光貿正常時繼續安全執行既有一般開立；恢復連線後核對版本並刷新／撤銷，已知拒絕不可降級。離線無法即時獲知雲端憑證撤銷，是明確限制。
+
+**官方發票／折讓查詢：**光貿 `/json/invoice_query` 用發票號碼查 `data.allowance[]`（2024-10-24 起含折讓開立／折讓作廢類型、日期、狀態及金額；包括可回查的光貿網站人工折讓）。同一次發票回應的 `invoice_type`／`invoice_status`／`cancel_date`／`wait[]` 可供原發票作廢狀態、排程辨識；指定折讓單號的明細／原發票號碼與折讓作廢時間用 `/json/allowance_query`。官方 `invoice_query` 只保證原發票日期起算 180 天內可查，code 51 代表超過時限，不能當無折讓；官方資料不含 CYInvoice 申請人／管理員歷次操作 Audit。
 
 ## 1. 平台與基本開立
 
