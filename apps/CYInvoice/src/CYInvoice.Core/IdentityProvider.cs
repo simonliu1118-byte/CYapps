@@ -238,11 +238,16 @@ public sealed class IdentityProviderRuntime(
         get
         {
             var current = settings.LoadOrCreate();
-            if (current.CloudMode is CloudModes.LocalOnly or CloudModes.CloudTransition) return local;
-            if (current.CloudIdentityProvider == "CYID")
-                return cyId ?? throw new InvalidOperationException("CYID Provider 尚未設定。");
-            return current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady
-                ? builtInCloud : throw new InvalidOperationException("雲端帳號切換狀態不完整，不能自動改用單機帳號。");
+            if (current.CloudMode == CloudModes.LocalOnly) return local;
+            // V3 has exactly one supported Cloud identity authority: CYID.
+            // Legacy Built-in or incomplete local-to-cloud transition must not
+            // silently fall back to Local credentials or create a second authority.
+            if (current.CloudMode != CloudModes.CloudPreferred ||
+                current.CloudIdentityProvider != "CYID" ||
+                !current.CloudEmployeeAuthorityReady)
+                throw new InvalidOperationException(
+                    "CYInvoice V3 雲端模式只支援已完成綁定的 CYID。舊 Built-in Cloud／帳號轉換狀態不能登入，請使用正式 CYID 加入流程。");
+            return cyId ?? throw new InvalidOperationException("CYID Provider 尚未設定。");
         }
     }
 }
