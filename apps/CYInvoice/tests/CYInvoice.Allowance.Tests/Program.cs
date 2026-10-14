@@ -11,6 +11,8 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
+    ("allowance_list pages and maps original invoice numbers", TestAllowanceListAsync),
+    ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
     ("g0401 recognizes 4040161 and 4040162 as occupied numbers only", TestG0401DuplicateNumberAsync),
     ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
@@ -171,6 +173,87 @@ static async Task TestAllowanceQueryAndStatusAsync()
     Equal("/json/allowance_status", handler.Requests[1].Uri.AbsolutePath);
     await ThrowsAsync<ArgumentException>(() => gateway.AllowanceStatusAsync(["x", "x"]));
     Equal(2, handler.Requests.Count);
+}
+
+static async Task TestAllowanceListAsync()
+{
+    var date = new DateOnly(2026, 10, 15);
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/allowance_list"
+            ? JsonResponse("""
+                {"code":0,"msg":"","page_total":2,"page_now":1,"data_total":501,"data":[
+                  {"allowance_number":"A20261015001","invoice_type":"D0401","invoice_status":99,
+                   "allowance_date":20261015,"allowance_type":2,"tax_amount":5,"total_amount":100,
+                   "cancel_date":0,"create_date":1792000000,
+                   "product_item":[
+                     {"original_invoice_number":"AA12345678","tax":5,"amount":100},
+                     {"original_invoice_number":"AB12345679","tax":0,"amount":0}]}
+                ]}
+                """)
+            : JsonResponse("""{"code":71,"msg":"not found"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.ListAllowancesAsync(date, date, page: 1, limit: 500);
+    Equal(2, response.PageTotal);
+    Equal(1, response.PageNow);
+    Equal(501, response.DataTotal);
+    Equal(1, response.Data.Count);
+    Equal("A20261015001", response.Data.Single().AllowanceNumber);
+    Equal("D0401", response.Data.Single().InvoiceType);
+    Equal(99, response.Data.Single().InvoiceStatus);
+    Equal("AA12345678",
+        response.Data.Single().ProductItems[0].GetProperty("original_invoice_number").GetString());
+    Equal("AB12345679",
+        response.Data.Single().ProductItems[1].GetProperty("original_invoice_number").GetString());
+
+    Equal(1, handler.Requests.Count);
+    Equal("/json/allowance_list", handler.Requests[0].Uri.AbsolutePath);
+    using var payload = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+    Equal(1, payload.RootElement.GetProperty("date_select").GetInt32());
+    Equal("20261015", payload.RootElement.GetProperty("date_start").GetString());
+    Equal("20261015", payload.RootElement.GetProperty("date_end").GetString());
+    Equal(500, payload.RootElement.GetProperty("limit").GetInt32());
+    Equal(1, payload.RootElement.GetProperty("page").GetInt32());
+
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date.AddDays(1), date));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, page: 0));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, limit: 19));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, dateSelect: 3));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestAllowanceStatusArrayAsync()
+{
+    const string number = "A20261015001";
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/allowance_status"
+        ? JsonResponse("""
+            {"code":0,"msg":"","data":[
+              {"allowance_number":"A20261015001","invoice_type":"D0501","invoice_status":99,
+               "tax_amount":5,"total_amount":100}]}
+            """)
+        : JsonResponse("""{"code":71,"msg":"not found"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var status = await gateway.AllowanceStatusAsync([number]);
+    Equal(number, status.Data.Single().AllowanceNumber);
+    Equal("D0501", status.Data.Single().Type);
+    Equal(99, status.Data.Single().Status);
+    Equal(1, handler.Requests.Count);
+
+    foreach (var body in new[]
+    {
+        """{"code":0,"msg":"","data":[]}""",
+        """{"code":0,"msg":"","data":[{"allowance_number":"OTHER","status":99}]}""",
+        """{"code":0,"msg":"","data":[{"allowance_number":"A20261015001"},{"allowance_number":"A20261015001"}]}""",
+    })
+    {
+        var malformed = new RecordingHttpHandler((_, _, _) => JsonResponse(body));
+        using var badHttp = new HttpClient(malformed);
+        var badGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, badHttp);
+        await ThrowsAsync<InvalidDataException>(() => badGateway.AllowanceStatusAsync([number]));
+        Equal(1, malformed.Requests.Count);
+    }
 }
 
 static void TestOfficialStyles()
