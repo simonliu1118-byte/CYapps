@@ -205,17 +205,17 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **RC AE／DR-01～DR-13：**已完成多項 synthetic SQLite／Node／Windows 合約及 PR CI；**跨服務真 Email、受控真 Worker／D1、實際 Windows 裝置的 DR-01～DR-13 尚未執行／驗收**。業務 Audit／viewer 由 §7.6 共用追蹤。
 
 
-- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；完整作廢／折讓／Work Item API 目前尚未建置，仍需設計唯一 Work Item owner、狀態轉移／revision、設備及 actor 執行時 revalidate、外部光貿結果不明處理，不能勾整體完成。
+- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；完整作廢／折讓作業尚未接 Work Item（內部 API 原型已存在），仍需討論哪些資料實際進 D1、唯一 Work Item owner、狀態轉移／revision、設備及 actor 執行時 revalidate、外部光貿結果不明處理，不能勾整體完成。
 
 ### 7.5 跨機 Work Item / Sync
 
 災難復原不獨立先行，與 §7.4 的 CYWEB 邀請／Device registry／actor 共用 V3 設計。新機加入不代表未上雲的舊機 pending 已找回，也不觸發 AMEGO 自動重送。
 
 - [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
-- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
+- [ ] **決策待討論：**Work Item／發票資料哪些欄位需要進 D1 做多機協同、哪些保留本機；未確認前不加新欄位、不搬資料、不改原本光貿操作。\n- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
   - Draft #440 已新增最小三個受保護 POST 操作（create/get/transition）：Device Token + 每次管理員重新驗證，Built-in 的 credential 在 SQL 寫入時再核對，CYID_ONLY 不查已退役表。SQL 0015 仍在 `drafts/` 未部署，故正式 Worker 不可用；未接 Windows UI/官方作廢或折讓。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
-  - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**尚未加公開 API/UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
+  - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
 - [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
 - [ ] 解決多機離線自動 OrderID 撞號；正式多機上線前需 Device namespace／短碼或等效方案。
