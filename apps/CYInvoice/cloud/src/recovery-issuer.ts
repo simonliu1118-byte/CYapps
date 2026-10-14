@@ -22,7 +22,7 @@ export interface RecoveryIssuerEnv extends CyIdEnv {
 }
 
 export interface RecoveryIssueResult {
-  status: "sent" | "pending" | "failed";
+  status: "sent" | "pending" | "revoked" | "failed";
   invitationId?: string;
   expiresAt?: string;
 }
@@ -78,8 +78,11 @@ function sameIssuer(row: RecoveryRow, actor: CyWebRecoveryAuthority): void {
     throw new CyIdError(409, "RECOVERY_OPERATION_CONFLICT");
 }
 function publicState(row: RecoveryRow): RecoveryIssueResult {
-  if (row.revoked_at || row.consumed_at || row.expires_at <= new Date().toISOString()
-      || row.delivery_state === "failed")
+  // A consumed invitation is not an administrative revocation. Only a
+  // persisted revoked_at is proof that CYWEB may report "revoked".
+  if (row.consumed_at) return { status: "failed" };
+  if (row.revoked_at) return { status: "revoked" };
+  if (row.expires_at <= new Date().toISOString() || row.delivery_state === "failed")
     return { status: "failed" };
   if (row.delivery_state === "sent")
     return { status: "sent", invitationId: row.invitation_id, expiresAt: row.expires_at };
@@ -249,9 +252,14 @@ export async function revokeRecoveryInvitation(
     if (row.workspace_id !== actor.workspaceId ||
         row.issuer_channel !== "CYWEB" || row.purpose !== "RECOVERY")
       throw new CyIdError(409, "RECOVERY_OPERATION_CONFLICT");
-    if (row.revoked_at || row.consumed_at) return { status: "failed" };
+    if (row.consumed_at) return { status: "failed" };
+    // Repeated explicit revoke and lost-response readback are idempotent.
+    if (row.revoked_at) return { status: "revoked" };
     const fresh = await recheckActor(verifyNow, actor);
     const now = new Date().toISOString();
+    // Expired invitations are not renamed "revoked" merely to unlock another
+    // operation. A fresh status lookup must preserve their distinct meaning.
+    if (row.expires_at <= now) return { status: "failed" };
     try {
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO cyweb_recovery_issuer_guard(passed)
@@ -263,13 +271,15 @@ export async function revokeRecoveryInvitation(
             WHERE i.invitation_id=?1 AND i.workspace_id=?2 AND i.recovery_operation_id=?3
               AND i.issuer_channel='CYWEB' AND i.purpose='RECOVERY'
               AND i.revoked_at IS NULL AND i.consumed_at IS NULL
+              AND i.expires_at > ?4
           ) THEN 1 ELSE 0 END`)
-          .bind(row.invitation_id, actor.workspaceId, actor.operationId),
+          .bind(row.invitation_id, actor.workspaceId, actor.operationId, now),
         env.DB.prepare(`UPDATE device_invitations SET revoked_at=?1
           WHERE invitation_id=?2 AND workspace_id=?3
             AND issuer_channel='CYWEB' AND purpose='RECOVERY'
-            AND consumed_at IS NULL AND revoked_at IS NULL`)
-          .bind(now, row.invitation_id, fresh.workspaceId),
+            AND consumed_at IS NULL AND revoked_at IS NULL
+            AND expires_at > ?4`)
+          .bind(now, row.invitation_id, fresh.workspaceId, now),
         env.DB.prepare(`INSERT INTO security_audit_events (
             event_id,workspace_id,event_type,outcome,actor_employee_id,
             invitation_id,reason_code,request_id,occurred_at,
@@ -285,7 +295,7 @@ export async function revokeRecoveryInvitation(
       // through the authenticated status operation, never retry blindly.
       throw new CyIdError(503, "RECOVERY_RESULT_UNKNOWN");
     }
-    return { status: "failed" };
+    return { status: "revoked" };
   });
 }
 

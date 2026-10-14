@@ -30,7 +30,7 @@
 
 ## 4. 回到原本工作的下一個切入點
 
-**第一優先：修 CYInvoice↔CYWEB 復原邀請明確結果契約。** CYWEB #151 指出目前 CYInvoice `RecoveryIssueResult.status` 的 `failed` 同時指 revoked／consumed／expired／not-found，無法讓超管安全判斷「已撤銷可重簽」。應在 **CYInvoice #440** 加 `revoked` 明確證據：已成功撤銷與同操作狀態查回回 revoked；consumed／expired／不存在不得假裝 revoked；revoke 結果遺失只能查回，不能自動重送或重新簽發。補 synthetic SQLite／D1 測試：成功撤銷、同一操作重複撤銷、consumed 與 revoke 競態、失去 DB response 後 readback，並核對 CYWEB #151 的 allowlist。
+**CYWEB→Invoice 第一阻塞已於 V3 Draft source 補齊（待 CI／雙端聯測）：**依 #151 的交接，`recovery-issuer.ts` 明確區分 `revoked`（只能由 `revoked_at` 或成功受 guarded D1 batch 撤銷證實）與 `failed`（consumed／expired／不存在等）；同操作重複 revoke 及失去 DB 回覆後的 status readback 可返回 `revoked`；revoke guard 同時比對 `consumed_at`／`expires_at`，防 claim 或過期競態。已加入 synthetic SQLite 測試：撤銷重讀、consumed、expired、D1 COMMIT 後回覆遺失、claim 與 revoke 競態；**尚未宣稱真 D1／Windows／CYWEB E2E 驗收完成**。CYWEB #151 需核對最新版契約。
 
 **後續按序：** V3 Work Item／revision 的 execution-time Device fencing／epoch，正式 Cloudflare Binding／原 D1 schema／Email 設定的**唯讀**核對與 0014/maintenance rollback/readback 計畫，DR-01～DR-13 的跨服務、多機、Windows 及真 Email 驗收。V3 折讓人工歷史欄位缺漏留在 Work Item／Audit 正式重做，不當作舊 V2 已修復。
 

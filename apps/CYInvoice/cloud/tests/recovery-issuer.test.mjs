@@ -167,12 +167,12 @@ assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
 // Explicit current SUPER_ADMIN cancellation frees the single-open-grant slot,
 // without revoking any device. It is separate from successful Device recovery.
 const cancelled=await revokeRecoveryInvitation(one.env,input);
-assert.deepEqual(cancelled,{status:"failed"});
+assert.deepEqual(cancelled,{status:"revoked"});
 assert.equal(row(db).revoked_at !== null,true);
 assert.equal(count(db,"security_audit_events"),2);
 assert.equal(count(db,"devices"),1);
-assert.deepEqual(await recoveryInvitationStatus(one.env,input),{status:"failed"});
-assert.deepEqual(await revokeRecoveryInvitation(one.env,input),{status:"failed"});
+assert.deepEqual(await recoveryInvitationStatus(one.env,input),{status:"revoked"});
+assert.deepEqual(await revokeRecoveryInvitation(one.env,input),{status:"revoked"});
 assert.equal(count(db,"security_audit_events"),2,"idempotent cancellation no double audit");
 const secondOperation={...input,operationId:"22222222-2222-4222-8222-222222222222"};
 assert.equal((await issueCyWebRecoveryInvitation(one.env,secondOperation,mailbox.sender)).status,"sent");
@@ -192,11 +192,69 @@ assert.deepEqual(await issueCyWebRecoveryInvitation(uncertain.env,input,brokenMa
 assert.deepEqual(await recoveryInvitationStatus(uncertain.env,input),first);
 assert.equal(brokenMail.sent.length,1);
 assert.equal(count(uncertainDb,"security_audit_events"),0);
-assert.deepEqual(await revokeRecoveryInvitation(uncertain.env,input),{status:"failed"});
+assert.deepEqual(await revokeRecoveryInvitation(uncertain.env,input),{status:"revoked"});
 assert.equal(row(uncertainDb).revoked_at !== null,true);
 assert.equal(count(uncertainDb,"security_audit_events"),1);
 assert.equal(uncertain.sessions().logins,uncertain.sessions().logouts);
 uncertainDb.close();
+
+// Consumed and expired are NOT administrative revocation and must never
+// unlock CYWEB's operation checkpoint by reporting explicit "revoked".
+const consumedDb=fixture();
+const consumed=envFor(consumedDb);
+assert.equal((await issueCyWebRecoveryInvitation(consumed.env,input,senderHarness().sender)).status,"sent");
+consumedDb.prepare("UPDATE device_invitations SET consumed_at=? WHERE recovery_operation_id=?")
+  .run(new Date().toISOString(),operationId);
+assert.deepEqual(await recoveryInvitationStatus(consumed.env,input),{status:"failed"});
+assert.deepEqual(await revokeRecoveryInvitation(consumed.env,input),{status:"failed"});
+assert.equal(row(consumedDb).revoked_at,null);
+assert.equal(count(consumedDb,"security_audit_events"),1);
+consumedDb.close();
+
+const expiredDb=fixture();
+const expired=envFor(expiredDb);
+assert.equal((await issueCyWebRecoveryInvitation(expired.env,input,senderHarness().sender)).status,"sent");
+expiredDb.prepare("UPDATE device_invitations SET expires_at=? WHERE recovery_operation_id=?")
+  .run("2026-01-01T00:00:00.000Z",operationId);
+assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"failed"});
+assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"failed"});
+assert.equal(row(expiredDb).revoked_at,null);
+assert.equal(count(expiredDb,"security_audit_events"),1);
+expiredDb.close();
+
+// D1 can COMMIT the revoke and then lose the response. Caller must keep
+// the original operation ID and use read-only status, not revoke/reissue.
+const lostDb=fixture();
+const lost=envFor(lostDb);
+assert.equal((await issueCyWebRecoveryInvitation(lost.env,input,senderHarness().sender)).status,"sent");
+const realLostBatch=lost.env.DB.batch.bind(lost.env.DB);
+lost.env.DB.batch=async statements=>{
+  await realLostBatch(statements);
+  throw new Error("synthetic lost response after D1 COMMIT");
+};
+await assert.rejects(()=>revokeRecoveryInvitation(lost.env,input),/RECOVERY_RESULT_UNKNOWN/);
+assert.deepEqual(await recoveryInvitationStatus(lost.env,input),{status:"revoked"});
+assert.deepEqual(await revokeRecoveryInvitation(lost.env,input),{status:"revoked"});
+assert.equal(count(lostDb,"security_audit_events"),2);
+assert.equal(count(lostDb,"devices"),1);
+lostDb.close();
+
+// Claim may consume the invitation between the initial read and revoke's
+// transaction. SQL-time guard must roll back revoke/Audit as one batch.
+const racedDb=fixture();
+const raced=envFor(racedDb);
+assert.equal((await issueCyWebRecoveryInvitation(raced.env,input,senderHarness().sender)).status,"sent");
+const realRaceBatch=raced.env.DB.batch.bind(raced.env.DB);
+raced.env.DB.batch=async statements=>{
+  racedDb.prepare("UPDATE device_invitations SET consumed_at=? WHERE recovery_operation_id=?")
+    .run(new Date().toISOString(),operationId);
+  return realRaceBatch(statements);
+};
+await assert.rejects(()=>revokeRecoveryInvitation(raced.env,input),/RECOVERY_RESULT_UNKNOWN/);
+assert.deepEqual(await recoveryInvitationStatus(raced.env,input),{status:"failed"});
+assert.equal(row(racedDb).revoked_at,null);
+assert.equal(count(racedDb,"security_audit_events"),1);
+racedDb.close();
 
 // Identity credential/role changes after email request means fail closed.
 // A delivered code cannot be accepted unless its D1 state becomes "sent".
@@ -243,4 +301,4 @@ await assert.rejects(() => issueCyWebRecoveryInvitation({
   ...absent.env,CYID_ENABLED:"false"},input,noSend.sender),/IDENTITY_PROVIDER_MISMATCH/);
 profileDb.close();
 
-console.log("CYInvoice private recovery issuer: scoped CYID login, first-write-only email, hashed code, single open grant, sent-state atomic Audit, unknown delivery and lost-state fail closed");
+console.log("CYInvoice private recovery issuer: scoped CYID login, first-write-only email, hashed code, single open grant, sent-state atomic Audit, explicit revoked readback, consumed/expired isolation, claim/revoke race and lost-response fail closed");

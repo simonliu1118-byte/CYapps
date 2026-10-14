@@ -4,6 +4,8 @@
 
 **狀態：V3 Source 已在兩個 Draft PR 逐步實作、CI 成功，但尚未部署或取得真實 DR 驗收。** [CYInvoice #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已有 forward migration 0014、獨立 optional maintenance、CYInvoice private RPC issuer／Email pending-sent／status-revoke、Windows 專用 preview／claim、DPAPI Pending Token、原子全數撤銷／Audit；[CYWEB #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已有超管管理 UI／route 和 optional named Service Binding renderer。兩邊仍 Draft／未合併；**原 Worker、原 D1 0014／issuer maintenance、真 Email／Device 尚未執行；DR-01～DR-13 全未做實機驗收。** 不建立新的永久規則或 CYID shared authority。唯一未完成清單見 [TODO.md](TODO.md)。
 
+**2026-10-14 CYWEB 交接補正：**#151 指出 private issuer 應提供明確 `revoked` 狀態，不能以通用 `failed` 冒充已撤銷。本 V3 Draft #440 已在 source 加入 `revoked_at` 唯一證據、成功撤銷及同操作重讀回 `revoked`、consumed／expired 不回 `revoked`，並在 D1 batch 寫入時再次驗證 invitation 未消耗／未過期；synthetic SQLite 競態測試需按 exact-head CI 判定，真遠端／多裝置仍未驗。
+
 ## 1. 本次決策與範圍
 
 使用者要求災難復原與 V3 多機協同一起做，並由 CYID 超級管理員從 CYWEB 簽發復原邀請碼。CYWEB 是中央管理入口；CYID 驗證身分、Workspace Role 與 Application Access；CYInvoice Worker／業務 D1 負責原業務 Workspace、Device、邀請、Work Item／revision 及業務 Audit。
