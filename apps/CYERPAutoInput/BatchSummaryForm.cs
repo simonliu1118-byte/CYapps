@@ -16,6 +16,8 @@ internal sealed class BatchSummaryForm : Form
         var clean = stoppedAt is null && parts.All(p => p.Heading.StartsWith("已", StringComparison.Ordinal));
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
+        // Opens over Chrome／ERP, which the batch left in front.
+        TopMost = true;
         Size = new Size(760, clean ? 300 : 520);
         MinimumSize = new Size(480, 240);
         MinimizeBox = false;

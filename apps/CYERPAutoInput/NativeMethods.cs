@@ -204,6 +204,22 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern short GetAsyncKeyState(int vKey);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FLASHWINFO
+    {
+        public uint cbSize;
+        public nint hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    /// <summary>FLASHW_ALL | FLASHW_TIMERNOFG: caption and taskbar button flash until the window comes to the front.</summary>
+    internal const uint FLASHW_UNTIL_FRONT = 0x3 | 0xC;
+
+    [DllImport("user32.dll")]
+    internal static extern bool FlashWindowEx(ref FLASHWINFO info);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     internal static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
 

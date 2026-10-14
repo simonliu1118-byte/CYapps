@@ -1085,7 +1085,8 @@ internal sealed class MainForm : Form
         SetStatus(outcome == AutomationOutcome.Done
             ? $"全自動完成：{runner.Done.Count} 筆，需人工處理 {runner.Notes.Count} 筆"
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
-        if (outcome != AutomationOutcome.Done || runner.Notes.Count > 0) Alarm();
+        // Esc is the person's own stop: no sound for it.
+        if (outcome != AutomationOutcome.Cancelled) Alarm(needsPerson: outcome != AutomationOutcome.Done || runner.Notes.Count > 0);
         using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
             [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
              new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
@@ -1176,13 +1177,27 @@ internal sealed class MainForm : Form
         }
     }
 
-    /// <summary>The batch stopped and needs a person (user, 2026-10-12: with a sound).</summary>
-    private static void Alarm()
+    /// <summary>
+    /// The batch's end (user, 2026-10-12: with a sound). The work PCs have no speakers, only
+    /// the board's buzzer (user, 2026-10-14), and since Windows 7 a program's beep goes to the
+    /// sound card, never the buzzer — so the beep stays for PCs with speakers, and the window
+    /// also flashes on the taskbar until it is brought to the front (the summary itself opens
+    /// on top). Logged.
+    /// </summary>
+    private void Alarm(bool needsPerson)
     {
-        System.Media.SystemSounds.Hand.Play();
+        var info = new NativeMethods.FLASHWINFO
+        {
+            cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.FLASHWINFO>(),
+            hwnd = Handle,
+            dwFlags = NativeMethods.FLASHW_UNTIL_FRONT
+        };
+        NativeMethods.FlashWindowEx(ref info);
+        _log.Info("sound", $"end alert {(needsPerson ? "needs-person" : "done")}: beep and taskbar flash");
+        if (needsPerson) System.Media.SystemSounds.Hand.Play();
         _ = Task.Run(() =>
         {
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < (needsPerson ? 3 : 1); i++)
             {
                 try { Console.Beep(1200, 350); } catch (PlatformNotSupportedException) { } catch (InvalidOperationException) { }
                 Thread.Sleep(150);
