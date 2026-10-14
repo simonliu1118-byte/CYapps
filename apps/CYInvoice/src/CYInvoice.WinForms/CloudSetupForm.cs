@@ -45,6 +45,9 @@ internal sealed class CloudSetupForm : Form
         baseUrl.PlaceholderText = "https://cloud.example.com/";
 
         BuildLayout();
+        // This dialog remains a connection inspector for existing CYID devices.
+        // Cloud onboarding is exclusively through CloudDirectJoinForm.
+        initialize.Visible = false;
         LoadValues();
         baseUrl.TextChanged += (_, _) =>
         {
@@ -198,61 +201,10 @@ internal sealed class CloudSetupForm : Form
 
     private async Task InitializeOrJoinWorkspaceAsync()
     {
-        await RunBusyAsync(async () =>
-        {
-            var normalized = NormalizeBaseUrl(baseUrl.Text);
-            if (!SameEndpoint(confirmedBaseUrl, normalized) || SelectedOnboardingStatus is null)
-            {
-                var result = await CheckConnectionCoreAsync();
-                normalized = result.BaseUrl;
-                confirmedBaseUrl = result.BaseUrl;
-                SelectedOnboardingStatus = result.Onboarding;
-                confirmedSummary = ConnectionSummary(result.Onboarding);
-            }
-
-            if (HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, normalized))
-            {
-                if (settings.CloudMode == CloudModes.CloudTransition)
-                {
-                    OpenEmployeeTransition(normalized);
-                    return;
-                }
-                throw new InvalidOperationException("這台電腦已經有有效的 Cloud Device identity，不需要再次建立或加入 Workspace。");
-            }
-
-            if (SelectedOnboardingStatus is { WorkspaceInitialized: false })
-            {
-                using var form = new CloudFirstWorkspaceForm(repository, settings, normalized);
-                if (form.ShowDialog(this) != DialogResult.OK || !form.IdentityCompleted) return;
-
-                IdentityCompleted = true;
-                SelectedBaseUrl = normalized;
-                SelectedOnboardingStatus = new CloudOnboardingStatus(true, "initialized");
-                confirmedSummary = "連線正常｜已建立雲端空間";
-                UpdateState(
-                    confirmedSummary,
-                    details: "第一個 Workspace 與 Device identity 已完成建立及驗證。現在進入 Local → Cloud 帳號轉換；在全部帳號整理完成前，本機既有帳號仍是權限主資料。第一位超管 Email 已於 Workspace 建立時驗證，後續建立中央 X 時直接沿用該驗證結果。");
-                OpenEmployeeTransition(normalized);
-                return;
-            }
-
-            if (SelectedOnboardingStatus is { WorkspaceInitialized: true })
-            {
-                using var form = new CloudJoinWorkspaceForm(repository, settings, normalized);
-                if (form.ShowDialog(this) != DialogResult.OK || !form.IdentityCompleted) return;
-
-                IdentityCompleted = true;
-                SelectedBaseUrl = normalized;
-                confirmedSummary = "連線正常｜此電腦已加入雲端空間";
-                UpdateState(
-                    confirmedSummary,
-                    details: "既有 Workspace 保持不變；本機已取得並驗證自己的獨立 Device identity。現在進入 Local → Cloud 帳號轉換，完成全部既有帳號比對與必要 Email 驗證後，才會正式改以 Cloud Employee 為唯一帳號主資料。");
-                OpenEmployeeTransition(normalized);
-                return;
-            }
-
-            throw new InvalidOperationException("Cloud onboarding 狀態無法判斷，請重新測試連線。");
-        });
+        // Retained as a safe no-op during staged V3 removal: no new Built-in
+        // Workspace, Employee authority or Local-to-Cloud transition is allowed.
+        await RunBusyAsync(() => throw new InvalidOperationException(
+            "CYInvoice V3 已取消 Built-in Cloud 建立／加入與帳號轉換。請使用「直接加入雲端」連接已綁定 CYID 的 Workspace。"));
     }
 
     private void OpenEmployeeTransition(string normalized)
