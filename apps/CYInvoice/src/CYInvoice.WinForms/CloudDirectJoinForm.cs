@@ -513,28 +513,12 @@ internal sealed partial class CloudDirectJoinForm : Form
             return;
         }
 
-        var authorityClient = new CloudEmployeeAuthorityClient(http, new Uri(endpoint), token);
-        var authority = await authorityClient.GetStatusAsync(lifetime.Token);
-        if (authority.State != "cloud" || authority.WorkspaceId != workspaceId || authority.DeviceId != deviceId)
-            throw new InvalidDataException("中央帳號尚未準備好直接加入。");
-
-        var snapshot = await authorityClient.GetSnapshotAsync(lifetime.Token);
-        if (snapshot.WorkspaceId != workspaceId)
-            throw new InvalidDataException("中央帳號 Workspace 不一致。");
-
-        repository.CloudEmployees.ReplaceSnapshot(workspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
-        settings.CloudBaseUrl = endpoint;
-        settings.CloudWorkspaceId = workspaceId;
-        settings.CloudDeviceId = deviceId;
-        repository.Settings.SetCloudDeviceToken(settings, token);
-        repository.Settings.ClearCloudPendingDeviceJoin(settings);
-        repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
-        repository.Settings.Save(settings);
-
-        IdentityCompleted = true;
-        showMessage("裝置已加入，雲端員工帳號已同步。", "加入完成", MessageBoxIcon.Information);
-        DialogResult = DialogResult.OK;
-        Close();
+        // CYInvoice V3 supports only Local and CYID Cloud. A missing CYID binding
+        // must fail closed: do not bootstrap another Employee authority or cache.
+        // The original protected pending Device Token is deliberately retained so
+        // a lost-response claim can be reconciled without issuing a new identity.
+        throw new InvalidOperationException(
+            "此雲端沒有有效的 CYID 綁定。CYInvoice V3 不再支援 Built-in Cloud，請確認 CYID 與 CYInvoice Workspace 設定。");
     }
 
     // The recovery button belongs to the Cloud Join choice, but opens a
