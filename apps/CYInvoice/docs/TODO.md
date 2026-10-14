@@ -107,7 +107,9 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 
 **2026-10-15 工程進度（Draft #440，尚未上線）：**已加入 Core 的 `AllowanceIssueRequest`／`AllowanceProductItem`、依使用者 2026-10-15 核准的 `AyyyyMMddNNN`（12 字、每公司／環境每日 001–999）`AllowanceNumberGenerator.Format` 與 `TryReadSequence`，與 `IAmegoGateway`／`AmegoClient` 的 `IssueAllowanceAsync`（g0401）／`QueryAllowanceAsync`（allowance_query）／`AllowanceStatusAsync`（allowance_status）及隔離 HTTP 測試。g0401 送出官方要求的 JSON 陣列；code 0 僅代表 API 接受，**不代表財政部上傳完成**。目前**沒有已接線的持久化 Pending Operation、跨機操作撞號防護、官方回查狀態機或 Windows 操作入口**，所以絕不能把下列功能勾完成，也不能直接啟用正式折讓。原人工流程與 g0501 完全未變動。CI 證據應對照本次精確 head；沒有 AMEGO live 驗收。下一步先實作送出前原號＋payload 本機 durable 存證、曾嘗試送出不可自動重送、按原號查回；再做部分／多次折讓金額核對、Work Item 協同及 UI 切換。\n\n- [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
-- [ ] **已確認配號規則（2026-10-15）**：一字母（目前採 `A`）＋折讓日期 `yyyyMMdd`＋三位當日流水號，例 `A20261015001`；僅於**管理員覆核確認要送出時**分配，申請建立時不占號。必須取同公司／環境當日光貿 `allowance_list` 已使用編號，加上本機／Cloud 中尚未完成或結果不明的已分配編號作為防重依據；不能只以單臺電腦的本機最大號碼當作全公司最大號碼。Cloud 跨機分配需交易性唯一性；Local 不依賴 D1，遇號碼衝突應安全停止並重查，不可結果不明時改新號再送。單日用滿 999 筆要拒絕並顯示明確原因，不應迴繞或改變格式。\n- [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
+- [ ] **2026-10-15 折讓配號規則（已確認）**：`AyyyyMMddXXX`，固定 12 碼，當日 001～999；第 1000 筆起 A00、A01、…、A0A、…、AZZ、B00、…、ZZZ，上限 **34,695**。僅在管理員確認核准執行折讓時由原 Work Item 分配，申請／等待覆核／退回完全不占號。Cloud 於本公司的業務 D1 原子配號且永久保留所有號碼與 Audit；Local 單機不依賴 D1，需 SQLite 等價的 durable 保護。已分配號碼永不回收，包含取消、作廢、失敗、結果不明與光貿外部撞號。正式／測試環境隔離；兩臺 Cloud 裝置不得同號或重覆處理同一申請。
+- [ ] **光貿手動折讓撞號後的受限自動換號**：官方 g0401 確認 `AllowanceNumber` 不可重複，但**還沒有取得 g0401 專用「編號重複」錯誤碼與確定拒絕、不會開立的實測證據**，不能把所有非零 code 或文字近似當成撞號。只有官方明確、可信、沒有接受這次折讓的「號碼已占用」拒絕，且同一操作沒有先前結果不明的送出，才能將舊號永久記為 `occupied_external`，從 D1 原子配下一號並有限次送出；逾時、斷線、回覆不明或同號可能是本操作先前成功時，一律查原號、不換號不自動重送。等待官方錯誤碼測試後才接入自動重試。
+- [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
