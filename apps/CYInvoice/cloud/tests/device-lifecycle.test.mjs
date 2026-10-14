@@ -114,4 +114,67 @@ assert.equal((await call('/revoke', { targetDeviceId: ids[1], ...creds })).statu
 db.prepare("UPDATE workspaces SET status='disabled' WHERE workspace_id='ws_test'").run();
 assert.equal((await call('/usage', { clientVersion: '2.6.14' })).status, 401);
 db.close();
+
+// CYID_ONLY uses the same Device fence, without looking up the physically
+// retired Built-in cloud_employees table. Work against the actual full schema.
+const cyDb = new DatabaseSync(':memory:');
+for (const name of migrations.filter(name => name < '0014'))
+  cyDb.exec(readFileSync(`migrations/${name}`, 'utf8'));
+cyDb.prepare("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_cyid', 'Synthetic CYID Workspace')").run();
+cyDb.prepare(`INSERT INTO cloud_employees
+  (employee_id, workspace_id, employee_no, name, email_normalized, role, enabled)
+  VALUES ('old_local_owner', 'ws_cyid', '0001', 'Legacy owner', 'old@example.test', 'SUPER_ADMIN', 1)`).run();
+for (let i=0; i<3; i++) cyDb.prepare(`INSERT INTO devices
+  (device_id, workspace_id, display_name, token_hash, status, employee_authority_state)
+  VALUES (?, 'ws_cyid', ?, ?, 'active', 'cloud')`).run(
+    ids[i], 'Synthetic CYID Device '+i, createHash('sha256').update(tokens[i]).digest('hex'));
+cyDb.exec(readFileSync('maintenance/retire-built-in-for-cyid-only.sql', 'utf8'));
+for (const name of migrations.filter(name => name >= '0014'))
+  cyDb.exec(readFileSync(`migrations/${name}`, 'utf8'));
+assert.equal(cyDb.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name='cloud_employees'").get().n, 0);
+class CyStatement {
+  constructor(sql) { this.sql=sql; this.args=[]; }
+  bind(...args) { this.args=args; return this; }
+  async first() { return cyDb.prepare(this.sql).get(...this.args) ?? null; }
+  async run() { return { meta: { changes: cyDb.prepare(this.sql).run(...this.args).changes } }; }
+}
+let cyBeforeBatch;
+const cyEnv = {
+  APP_ENV:'test', API_VERSION:'1', SCHEMA_VERSION:'14', CYID_ENABLED:'true',
+  IDENTITY_APPLICATION_ID:'CYINVOICE', IDENTITY_WORKSPACE_ID:'identity_ws',
+  IDENTITY_CYINVOICE_WORKSPACE_ID:'ws_cyid', IDENTITY:{fetch:async()=>Response.json({})},
+  cyIdContext:{revalidate:async()=>({workspaceRole:'SUPER_ADMIN', employeeId:'synthetic_cyid_admin'})},
+  DB:{
+    prepare:sql=>new CyStatement(sql),
+    async batch(statements) {
+      if (cyBeforeBatch) { const action=cyBeforeBatch; cyBeforeBatch=null; action(); }
+      cyDb.exec('BEGIN');
+      try {
+        const values=[];
+        for (const statement of statements) values.push(await statement.run());
+        cyDb.exec('COMMIT');
+        return values;
+      } catch(error) { cyDb.exec('ROLLBACK'); throw error; }
+    },
+  },
+};
+async function cyRevoke(targetId) {
+  const reply=await handleDeviceLifecycle(new Request('https://cloud.example.test/v1/devices/revoke',{
+    method:'POST', headers:{Authorization:'Bearer '+tokens[0],'Content-Type':'application/json'},
+    body:JSON.stringify({targetDeviceId:targetId}),
+  }),cyEnv);
+  return {status:reply.status,body:await reply.json()};
+}
+assert.equal((await cyRevoke(ids[2])).status, 200,
+  'CYID_ONLY must revoke a Device without querying retired Built-in tables');
+cyBeforeBatch=()=>cyDb.prepare("UPDATE devices SET status='revoked', revoked_at=? WHERE device_id=?")
+  .run(new Date().toISOString(),ids[0]);
+const cyLate=await cyRevoke(ids[1]);
+assert.equal(cyLate.status,409,'revoked CYID Device cannot finish old in-flight revoke');
+assert.equal(cyLate.body.error.code,'DEVICE_AUTHORITY_CHANGED');
+assert.equal(cyDb.prepare('SELECT status FROM devices WHERE device_id=?').get(ids[1]).status,'active');
+assert.equal(cyDb.prepare("SELECT COUNT(*) AS n FROM security_audit_events WHERE event_type='device_revoked' AND outcome='success'").get().n,1);
+assert.deepEqual(cyDb.prepare('PRAGMA foreign_key_check').all(),[]);
+cyDb.close();
+
 console.log('Device usage, rename, auth/race checks, history and atomic audit regression checks passed.');
