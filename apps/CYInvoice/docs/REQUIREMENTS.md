@@ -18,11 +18,13 @@
 
 **官方發票／折讓查詢：**光貿 `/json/invoice_query` 用發票號碼查 `data.allowance[]`（2024-10-24 起含折讓開立／折讓作廢類型、日期、狀態及金額；包括可回查的光貿網站人工折讓）。同一次發票回應的 `invoice_type`／`invoice_status`／`cancel_date`／`wait[]` 可供原發票作廢狀態、排程辨識；指定折讓單號的明細／原發票號碼與折讓作廢時間用 `/json/allowance_query`。官方 `invoice_query` 只保證原發票日期起算 180 天內可查，code 51 代表超過時限，不能當無折讓；官方資料不含 CYInvoice 申請人／管理員歷次操作 Audit。
 
-## V3 光貿網站外部作廢／折讓回補（2026-10-15 需求已確認，功能待實作）
+## V3 光貿網站外部作廢／折讓回補：雙 List、低呼叫量（2026-10-15 最新定案方向，功能待實作）
 
-管理員可能因 CYInvoice 業務 D1 暫時不可用，而改由光貿網站直接人工作廢原發票、開立折讓或作廢折讓。CYInvoice 不能因為操作不經 Windows 就永久缺少官方紀錄：應在**正常日常同步的限速分批完整查詢、開啟發票詳情、與可安全重新進行官方唯讀回查時**，使用 `/json/invoice_query` 查指定發票，把 `cancel_date`、官方狀態及 `allowance[]` 補進**原有本機 SQLite 發票紀錄**；要能檢出折讓清單的獨立改變，而不是只看發票列表摘要；不替同一發票 Append 另一筆成功，也不讓既有 Failed 嘗試自動回填成第二張開立成功。同步錯誤不清掉最後可信快照，並在需要時通知無法確認；光貿超過 180 天查詢限制不能誤認未曾折讓。
+在 Cloud 業務 D1 暫時不可用但光貿正常的情況，管理員可以去光貿網站人工作廢發票／開立折讓／作廢折讓。CYInvoice 必須回查以更新**現有本機 SQLite 的官方狀態**，而且不要因此對每張發票定期額外發出 `invoice_query`（三臺裝置／兩期發票會放大 API 量）。
 
-**Audit 邊界：**此類由光貿網站人工執行的外部行為**不是 CYInvoice 操作**，不得因此新增 D1 的「CYInvoice 管理員作廢／折讓」Audit、杜撰 CYInvoice 操作者／核准／原因，亦不為無申請的正常發票創建 D1 Work Item 或 D1 Invoice Index。已存在的 CYInvoice 申請與覆核 Audit 仍原樣保留；有既有 Work Item 的，後續連上 D1 可以根據官方查回更新該工作單的**官方結果／對帳狀態**，並明確註明官方來源，但不把網站外部行為冒充 CYInvoice 管理員執行的操作。單機版亦使用相同官方回補 Core，本地保存、不用 D1。其他 Cloud 裝置各自從官方同步最新發票紀錄，而非依賴 D1 發票明細副本。
+**主要背景對帳以兩種清單為來源**：既有 `POST /json/invoice_list` 返回原發票 `cancel_date`，可判斷發票作廢；此列表**沒有**折讓摘要／折讓變更標記。增設 `POST /json/allowance_list`（兩 API 都可分頁，官方 limit 20–500）：用折讓單號、`invoice_type`、`invoice_status`、`cancel_date`、`allowance_date`、`product_item[].original_invoice_number` 對應到原發票、偵測新增／作廢／狀態變化並更新本機折讓快照；選填欄位缺漏、狀態衝突、資料需詳查時才有條件地對單張 `invoice_query`／`allowance_query` 唯讀補查。不可把 `/json/f0501`（作廢發票）或 `/json/g0501`（作廢折讓）當成查詢 API。保留既有自動同步每天首次較寬範圍、後續近三天的節奏；另對較早建立、但今日可能被作廢的折讓安排低頻寬範圍回掃或針對已知舊折讓的 `allowance_status` 查回。官方 `allowance_list` 沒有 last_modified／cancel_date 日期過濾條件，不可單靠建立日 cursor 認定後續永遠不會變。避免每 15 秒連線探測打業務 API，避免漏頁、錯誤回應時刪除可信舊快照或創造第二筆成功發票。需補完現有 Sync 的 allowance fingerprint／PDF cache invalidation。
+
+**Audit 與 Cloud 範圍不變**：網站外部操作不是 CYInvoice 操作，不新增 D1 CYInvoice 發起的作廢／折讓 Audit，不杜撰操作者／原因／覆核。已存在 CYInvoice 申請／覆核的原 Work Item／Audit 不改寫，連回 D1 後可以在原工作單附帶官方核對狀態；普通未申請、未異常的發票完全不建 D1 發票表或最小索引。多裝置各自在原同步週期查少量清單頁，暫不引入雲端同步中繼服務。Local 也使用相同官方對帳 Core。
 
 ## 1. 平台與基本開立
 
