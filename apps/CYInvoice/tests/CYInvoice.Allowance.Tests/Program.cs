@@ -11,7 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
-    ("g0401 recognizes only official 4040161 as occupied number", TestG0401DuplicateNumberAsync),
+    ("g0401 recognizes 4040161 and 4040162 as occupied numbers only", TestG0401DuplicateNumberAsync),
     ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
@@ -122,27 +122,35 @@ static async Task TestG0401GatewayAsync()
 
 static async Task TestG0401DuplicateNumberAsync()
 {
-    Equal(true, AmegoAllowanceErrorCodes.IsExistingIssuedAllowanceNumber(4040161));
-    foreach (var code in new[] { 0, 15, 71, 4040162, 4040163, 4040171, 4040173 })
-        Equal(false, AmegoAllowanceErrorCodes.IsExistingIssuedAllowanceNumber(code));
+    foreach (var code in new[] { 4040161, 4040162 })
+        Equal(true, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(code));
 
-    var handler = new RecordingHttpHandler((_, _, _) =>
-        JsonResponse("""{"code":4040161,"msg":"specified allowance number already exists"}"""));
-    using var http = new HttpClient(handler);
-    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
-    try
-    {
-        await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
-        throw new InvalidOperationException("expected AMEGO number collision");
-    }
-    catch (AmegoApiException error)
-    {
-        Equal(4040161, error.Code);
-    }
+    foreach (var code in new[] { 0, 15, 71, 4040163, 4040171, 4040173 })
+        Equal(false, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(code));
 
-    // Gateway never selects a different allowance number or blindly resends.
-    Equal(1, handler.Requests.Count);
-    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    foreach (var code in new[] { 4040161, 4040162 })
+    {
+        var handler = new RecordingHttpHandler((_, _, _) =>
+            JsonResponse(JsonSerializer.Serialize(new { code, msg = "allowance number occupied" })));
+        using var http = new HttpClient(handler);
+        var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+        try
+        {
+            await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
+            throw new InvalidOperationException("expected AMEGO allowance number collision");
+        }
+        catch (AmegoApiException error)
+        {
+            Equal(code, error.Code);
+            Equal(true, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code));
+        }
+
+        // Gateway must never choose a replacement number or silently resend.
+        Equal(1, handler.Requests.Count);
+        Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+        using var request = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+        Equal("A20261015001", request.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    }
 }
 
 static async Task TestAllowanceQueryAndStatusAsync()
