@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-13（V0.3.0 Build 23 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
+> 更新：2026-10-13（V0.3.0 Build 24 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -18,7 +18,7 @@
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - `main`：`V0.2.9`（2026-10-12 由 PR #423 squash merge），正式 Release `cyerp-auto-input-v0.2.9`。`CYERPAutoInput Release` workflow：只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。舊 Release `cyerp-auto-input-v0.2.7` 依使用者要求以 `CYERPAutoInput Release Cleanup` workflow（只從 main、只接受本專案 tag）刪除。之前的合併：PR #421（V0.2.5–V0.2.7）、PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
-- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 23（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入、預覽勾選與共用結果清單）。使用者交代的下一輪項目已在 Build 19 完成，2026-10-14 實單測試後再決定合併與發布；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
+- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 24（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入、預覽勾選與共用結果清單）。使用者交代的下一輪項目已在 Build 19 完成，2026-10-14 實單測試後再決定合併與發布；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。正式版：GitHub Release（`CYERPAutoInput_VX.Y.Z.zip`＋SHA-256）。
@@ -61,7 +61,7 @@
 
 - V0.2.4–V0.2.9：已實測通過並隨 Release V0.2.9 發布；逐版內容見 `CHANGELOG.md`。0／O 字寬判斷（V0.2.5）尚未遇到實例，日後有 `order number 0/O` LOG 再核對。
 
-V0.3.0（Build 0–23，未發布）現況：
+V0.3.0（Build 0–24，未發布）現況：
 
 - 實機已確認（使用者 2026-10-13 LOG）：網頁原文讀取（清單、明細、寄件編號視窗、出貨文件頁、列印視窗）；蝦皮店到店連續 3 筆完成（每筆約 1 分鐘，16:06–16:09），第 4 筆 ERP 儲存列印後停止（原因未查）；MO店+ 匯入視窗以兩份真實匯出檔帶入 2 筆物流單號。
 - 未實機確認：7-11 與全家寄件單流程（列印視窗頁面／縮放下拉的實際值）、捲動找下一筆、萊爾富跳過與結束清單、Build 15 起的計時提示、Build 1 明細欄位順序學習（另一台電腦欄位排法）、Build 18 兩項修正、MO 匯入的全家／7-11 單號帶入、Build 19 預覽勾選與結果清單。
@@ -73,6 +73,7 @@ V0.3.0（Build 0–23，未發布）現況：
   - ERP 端：`PrimeDetailGridAsync` 以表頭「品號」定位第一列並學欄位順序，列高 22 px；`SetDetailCellAsync` 3 次重試；開始前多個 COPI08 或找不到即提示不開始（Build 18）。
   - MO店+：`MoImportForm` 依內容分類（過半訂單有物流單號＝出貨後），`MoOrderImport.FillTracking` 只填單一號碼、其餘列在預覽下方；寄件單 PDF 路線試過後移除（全家寄件單是圖片且沒有 14 碼訂單編號）。說明視窗共用 `HelpForm`。
 - 設定：`ShopeeLabelPrinter`、`ShopeeLabelScale` 110、`SevenLabelScale` 100、`FamilyLabelScale` 165、`FamilyLabelPages` "2"、`HctLabelScale` 95、`HctPickupAddress`（只存本機）；Chrome 網頁文字診斷在「設定 › 一般」。
+- V0.3.0 Build 24：`ApplyTrackingButton` 只取「取消」右側同列者（或查看寄件編號視窗內標題下方唯一一顆）；`ShipAsync` 每顆申請按鈕按一次、最多兩次（2026-10-14 LOG：點到標題 714,440）。`CarrierKind`「店到家」→ Shopee（店到家宅配）。
 - V0.3.0 Build 23：新竹物流。`ShopeeBatchCarrier.Hct`（新竹／HCT）；`ShipAsync` 按安排取件後 `ConfirmPickupAsync`：`PickupConfirmButton`（取消右側的確認）、`PickupAddressMatches`（「快遞向你取件的地址」下方卡片含設定 `HctPickupAddress`，空白不計）；不符按取消並 `ShopeeBatchSkip`。`TrackingDialogTitle` 加「快遞取件詳情」（號碼由標題下方 `OtherTrackingPattern` 讀）。寄件單沿用 `PrintShopeeLabelAsync`，號碼無標籤時 `ShowsOrderSn`／`ShowsNumber`（OCR 用 `ShowsOrderSnLoosely`，O／Q／0），縮放 `HctLabelScale` 95。未實機測試：安排取件視窗的網頁文字、快遞取件詳情的號碼、寄件單 PDF 文字。
 - V0.3.0 Build 22：Build 21 的 `awb box` LOG：隔日到貨標籤的 PDF 文字層沒有「蝦皮訂單編號」（只有寄件編號、日期、「門市交寄 隔日到貨」、「第 1 頁」頁框、「這份 PDF 無法存取…」）。`PrintShopeeLabelAsync` 等待條件改為 `LabelShown`（「第 N 頁」頁框或標籤字）＋下載完成；文字沒有訂單編號但寄件編號與 `order.Tracking` 相符即通過（使用者：文字快、OCR 慢）；兩者都無法確認時才 `ReadLabelAsync`（頁框裁切、`RecognizeLinesAsync` maxScale 2）以 OCR 取兩個號碼，`SameOrderSn`（O/I/L 對 0/1）。本機以使用者截圖＋PP-OCRv5 mobile 驗證兩號正確。移除 Build 21 的 awb box 傾印。
 - V0.3.0 Build 21：`ShopeeBatchScreens.LabelValue`（標籤所在文字自標籤起、同列向右合併、下一行）供 `LabelOrderSn`／`LabelTracking`；`PrintShopeeLabelAsync` 下載完成但讀不到訂單編號時，第一次把 awb 頁 box 寫進 LOG（`awb box`）。原因：2026-10-14 LOG 隔日到貨標籤 18 行仍讀不到（Build 18 的修正對一般店到店有效）；實際版面待下一份 LOG 確認。

@@ -358,4 +358,18 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.ShowsNumber(label, "5063719345"));
         Assert.True(ShopeeBatchScreens.ShowsOrderSnLoosely([B("261013AB12CDO4", 0, 0, 130)], "261013AB12CD04"));
     }
+
+    [Fact]
+    public void Family_apply_button_is_not_the_dialog_title()
+    {
+        // Laid out like the user's 申請寄件編號 dialog (2026-10-14).
+        var dialog = new List<OcrBox>
+        {
+            B("申請寄件編號", 650, 308, 130, 24), B("寄件人真實姓名", 650, 370, 110), B("王小明", 664, 404, 60),
+            B("取消", 1035, 580, 78, 34), B("申請寄件編號", 1127, 580, 128, 34)
+        };
+        Assert.Equal(1127, ShopeeBatchScreens.ApplyTrackingButton(dialog)!.Left);
+        Assert.Null(ShopeeBatchScreens.ApplyTrackingButton([B("申請寄件編號", 650, 308, 130, 24)]));
+        Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("店到家宅配"));
+    }
 }

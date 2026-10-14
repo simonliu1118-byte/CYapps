@@ -134,7 +134,9 @@ internal static partial class ShopeeBatchScreens
     public static ShopeeBatchCarrier CarrierKind(string carrier)
     {
         var text = ShopeeScreenshot.Compact(carrier).ToUpperInvariant().Replace("-", string.Empty, StringComparison.Ordinal);
-        if (text.Contains("蝦皮店到店", StringComparison.Ordinal) || text.Contains("蝦皮店到宅", StringComparison.Ordinal)) return ShopeeBatchCarrier.Shopee;
+        // 店到家宅配 (user's LOG, 2026-10-14) is Shopee's own home delivery: TW number, Shopee's label.
+        if (text.Contains("蝦皮店到店", StringComparison.Ordinal) || text.Contains("蝦皮店到宅", StringComparison.Ordinal) ||
+            text.Contains("店到家", StringComparison.Ordinal)) return ShopeeBatchCarrier.Shopee;
         if (text.Contains("7ELEVEN", StringComparison.Ordinal) || text.Contains("711", StringComparison.Ordinal) || text.Contains("統一超商", StringComparison.Ordinal))
             return ShopeeBatchCarrier.SevenEleven;
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
@@ -252,8 +254,21 @@ internal static partial class ShopeeBatchScreens
             .FirstOrDefault(t => OtherTrackingPattern().IsMatch(t) && t.Count(char.IsAsciiDigit) >= 8) ?? string.Empty;
     }
 
-    /// <summary>全家 asks first (user, 2026-10-13): 「申請寄件編號」 at the dialog's bottom right.</summary>
-    public static OcrBox? ApplyTrackingButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "申請寄件編號");
+    /// <summary>
+    /// 全家 asks first (user, 2026-10-13): 「申請寄件編號」 at the dialog's bottom right. The dialog's
+    /// title says the same (user's LOG, 2026-10-14: the title was clicked), so only the one on
+    /// the row of 取消, right of it, is the button.
+    /// </summary>
+    public static OcrBox? ApplyTrackingButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var named = boxes.Where(b => C(b) == "申請寄件編號").ToList();
+        // The 申請寄件編號 dialog (寄件人真實姓名): its button sits right of 取消.
+        var beside = named.Where(b => boxes.Any(c => C(c) == "取消" && SameRow(c, b) && c.Right <= b.Left)).ToList();
+        if (beside.Count == 1) return beside[0];
+        // In 查看寄件編號 (2026-10-13 screenshot) the button is the only one so named, below the title.
+        var title = TrackingDialogTitle(boxes);
+        return beside.Count == 0 && title is not null && named.Count == 1 && named[0].Top > title.Bottom ? named[0] : null;
+    }
 
     public static OcrBox? PrintLabelButton(IReadOnlyList<OcrBox> boxes) => boxes.FirstOrDefault(b => C(b) == "列印寄件單");
 

@@ -453,14 +453,16 @@ internal sealed class ShopeeBatchRunner
         order.Shipped = true;
         _shippedHint = true;
 
-        // 寄件編號申請中… then the number. 全家 first shows 「申請寄件編號」 (user, 2026-10-13), pressed once.
-        var applied = false;
+        // 寄件編號申請中… then the number. 全家 first shows 「申請寄件編號」 (user, 2026-10-13), and
+        // its own 申請寄件編號 dialog (寄件人真實姓名, 2026-10-14): each button pressed once, at most two.
+        var applied = new List<OcrBox>();
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
-            if (!applied && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply)
+            if (applied.Count < 2 && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply &&
+                !applied.Any(a => Math.Abs(a.Left - apply.Left) < 8 && Math.Abs(a.Top - apply.Top) < 8))
             {
                 Click(s, apply, "申請寄件編號");
-                applied = true;
+                applied.Add(apply);
                 return null;
             }
             if (ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null || ShopeeBatchScreens.TrackingRequested(s.Boxes)) return null;
