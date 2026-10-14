@@ -19,11 +19,15 @@
 - **統一公司設定卡片**：Local 繼續用本機 DPAPI 安全保存 App Key／MO 密碼；CYID Cloud 的**公司設定權威**為 CYInvoice 業務 D1，由 CYID SUPER_ADMIN 在 Worker 實際執行時驗證，才能新增／修改／移除公司統編、AMEGO App Key、MO店+ 密碼；ADMIN 可看統編及是否已設定，UI 不回傳 Secrets。Server-side 加密金鑰與 D1 密文分離，Audit 不寫 Secrets。Windows 可保存**已授權取得、綁定 Device 的本機 DPAPI 加密快取**，供 D1 暫時無法連線、光貿正常時執行原本允許的發票業務；恢復連線後更新設定版本，撤銷或替換舊快取，已知撤銷必須 fail closed。離線時無法承諾立即套用 D1 新的公司設定與秘密撤銷，須明示此限制並測試。
 - **光貿官方發票→折讓關聯查詢**：`POST /json/invoice_query` 以 `{"type":"invoice","invoice_number":"EC00000001"}` 查詢；`data.allowance[]` 含對應折讓單號、日期、類型（開立 D0401／作廢 D0501）、上傳狀態、稅與未稅總額。光貿網站手動建立的同統編／授權範圍折讓亦可回查，並非只能看到 CYInvoice 自己送出的折讓。發票主體 `invoice_type`／`invoice_status`／`cancel_date`／`wait[]` 可判別發票作廢狀態與待處理異動，但**不是完整不可抹除的人員／操作 Audit**。官方 `invoice_query` 依發票日期限查 **180 天**，超過可回 `code=51`，不能判為無折讓；需要時依指定折讓單號查 `allowance_query`（含明細原發票號碼／作廢時間），或設計 `allowance_list` 日期範圍＋原發票號碼篩選之受限歷史探索，不把 API 無資料冒充確定不存在。官方來源：https://invoice.amego.tw/api_doc/ 。現有 `AmegoClient.QueryByInvoiceNumberAsync` 與 `ParseAllowances` 已有這個解析邊界；實際完整折讓／作廢樣本仍需驗收，不把 mock 當正式真資料。
 
-## 2026-10-15 光貿網站外部操作之官方回補（使用者確認）
+## 2026-10-15 光貿網站外部操作之官方回補：最新低 API 量方案
 
-**使用者新規則：**若 CYID 雲端 D1 服務暫時不能使用、但光貿網站仍可用，管理員可以在光貿網站直接人工作廢發票／開立折讓／作廢折讓；CYInvoice 應於後續既有同步時機／開啟發票詳情時，從光貿 `/json/invoice_query` 的原發票作廢資訊及 `data.allowance[]` 同步最新官方事實到**既有本機 SQLite 紀錄／官方折讓快照**，以「光貿官方同步」辨識資料來源。**不是 CYInvoice 發出的操作，不得新增 D1『CYInvoice 管理員開立折讓／作廢』Audit，也不得憑 API 倒推操作者、原因或批准紀錄。** 有原 Work Item 時保留原本 CYInvoice 申請／覆核歷史；日後復原雲端連線可將查回狀態關聯至既有工作單，不為光貿網站的操作杜撰 Audit；沒有申請則不因此在 D1 建 Work Item／一般發票索引。單機版亦可共用官方回補，不依賴 D1。
+**最新確認：不再背景逐張查 `invoice_query`。** 使用者指出三臺 Windows 各掃兩期發票，逐張 API 呼叫量過高。官方 [API 文件](https://invoice.amego.tw/api_doc/) 的 `invoice_list` 有 `cancel_date` 可發現原發票作廢，**但沒有折讓欄位／折讓異動旗標**；`allowance_list` 有 `allowance_number`、`invoice_type`（如 D0401／D0501）、`invoice_status`、`allowance_date`、`cancel_date`、`create_date` 與 `product_item[].original_invoice_number`，可直接把官方折讓關聯回本機發票（同折讓單可能有多個原發票號）。`invoice_query`／`allowance_query` 只在發票詳情被打開、列表無足夠資料、對應不明或待處理狀態需查明時精準使用。**絕不能把實際作廢 API `f0501`／`g0501` 當成查詢 API。**
 
-**現存的真實缺口（已讀 source）：**`InvoiceAutomaticSyncService` 每日首次同步兩個期別、其餘三日清單；`InvoiceSyncService.SyncListedAsync` 只有新發票、發票列表摘要改變、品項缺失、某些待處理錯誤才會完整 `invoice_query`，光貿網站手動折讓可能**不會修改 invoice_list 摘要**而漏查。`InvoiceDetailRefreshService.RefreshAsync` 開啟詳情時會查，但不代表背景掃到。`InvoiceAllowanceMetadata.ApplyQuery` 已保存 `cyinvoice_official_allowances`，但 `InvoiceSyncService.Fingerprint`／`InvoiceDetailRefreshService.OfficialFingerprint` 沒包含折讓快照，容易漏寫背景變更／漏失效相關 PDF Cache。V3 須先補齊**限速、分批、可持續輪巡**的完整發票回查，優先既有 pending／近期、逐步涵蓋有效範圍，後續不再對完全未變動的資料重寫；查詢失敗保留最後可信資料及例外提示。官方 invoice_query 最多查發票日期 180 天，舊資料不可將期限錯誤當作無折讓。不要在每 15 秒連線狀態探測裡做完整業務同步。
+沿用現有 `InvoiceAutomaticSyncService` 每日首次當期＋前一期、當日其後近三日的同步節奏；一次先取**兩種分頁 List**（官方上限 500 筆／頁），對照原本地 SQLite 快照：原發票 `cancel_date` 變化與折讓號碼、作廢時間／類型／狀態變化；僅保存真的改變的既有紀錄，失敗／漏頁保留最後可信結果，新增折讓的官方資料仍只存在本機（不新增業務 D1 發票索引）。三臺 Device 各打少量列表頁，先不新增雲端共用同步服務／D1 折讓總表來減少額外架構與 token 成本。現有 `InvoiceSyncService.ApplyList` 已可反映原發票作廢；**`IAmegoGateway.ListAllowancesAsync`／`allowance_list` 分頁及合併尚未實作**。`InvoiceAllowanceMetadata.ApplyQuery` 已能保存官方折讓資料，但 `InvoiceSyncService.Fingerprint`／`InvoiceDetailRefreshService.OfficialFingerprint` 缺折讓快照，需修正儲存與 PDF Cache invalidation。
+
+**日期／延後作廢限制：**官方 `allowance_list.date_select` 只有 1 折讓日期、2 建立日期，**沒有 documented last_modified 或作廢日期篩選**。每日較寬範圍回掃＋針對已知舊折讓之 `allowance_status` 批次／精確回查是必要補救，不能永遠只列近三日就保證較早開立的折讓今日被作廢也能發現。`invoice_query` 原發票日期 180 天限制不得推論為「無折讓」。晚於本機 retention 的發票如何查閱仍屬有限範圍限制，不用 D1 存所有發票解決。
+
+**Audit 權威：**管理員因 D1 離線、光貿正常而直接在光貿網站人工作廢發票／開立折讓／作廢折讓，CYInvoice 回查後只更新**本機官方狀態**，標記光貿官方來源；**不可虛構 D1 的 CYInvoice 執行操作 Audit／操作者／覆核紀錄**。若已有 CYInvoice Work Item，原本的申請／覆核 Audit 保留，回連後可更新原工作單的官方核對狀態；沒申請的發票不因此進 D1。Local 同樣支援低呼叫量官方同步，不依賴 D1。完整 E2E 尚未驗收、未部署。
 
 ## 1. 三條分支，禁止混同
 
