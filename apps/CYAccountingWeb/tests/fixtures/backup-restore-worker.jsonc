@@ -1,0 +1,7 @@
+{
+  "name": "backup-restore-local-test",
+  "main": "backup-restore-worker.js",
+  "compatibility_date": "2026-09-22",
+  "define": { "globalThis.WorkerGlobalScope": "undefined" },
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }]
+}

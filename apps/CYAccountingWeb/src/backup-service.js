@@ -1,4 +1,4 @@
-import { handleGcsBackupApi, runScheduledGcsBackup as runLegacyScheduledBackup, buildBackupSet, storeBackupSet } from './gcs-backup.js';
+import { handleGcsBackupApi, runScheduledGcsBackup as runLegacyScheduledBackup, buildBackupSet, storeBackupSet, validateBackupSetBytes } from './gcs-backup.js';
 import { createGcsBackupStorageProvider, gcsConfigReady } from './gcs-backup-provider.js';
 import { createR2BackupStorageProvider, r2ConfigReady } from './r2-backup-provider.js';
 
@@ -10,6 +10,8 @@ const GCS_PROVIDER = 'google_cloud_storage';
 const R2_RETENTION_DAYS = 30;
 const GCS_PHASE_C_RETENTION_DAYS = 14;
 const PHASE_C_REQUIRED_SCHEDULED_BACKUPS = 14;
+const GCS_PHASE_D_RETENTION_DAYS = 182;
+const MAX_RESTORE_BYTES = 8 * 1024 * 1024;
 
 export function resolveTieredBackupTopology(env) {
   const value = String(env?.BACKUP_TOPOLOGY || '').trim();
@@ -18,7 +20,7 @@ export function resolveTieredBackupTopology(env) {
   throw new TieredBackupError('不支援的備份拓撲設定。', 'BACKUP_TOPOLOGY_UNSUPPORTED');
 }
 
-export async function handleBackupApi(request, env, session) {
+export async function handleBackupApi(request, env, session, options = {}) {
   const topology = resolveTieredBackupTopology(env);
   if (topology === LEGACY_GCS) return handleGcsBackupApi(request, env, session);
 
@@ -30,9 +32,22 @@ export async function handleBackupApi(request, env, session) {
   if (url.pathname === '/api/backup/status' && request.method === 'GET') {
     return parallelBackupStatus(env);
   }
+  if (request.method === 'POST' && ['/api/backup/verify-restore', '/api/backup/phase-d/activate'].includes(url.pathname)) {
+    try {
+      const body = await request.json();
+      if (url.pathname === '/api/backup/verify-restore') {
+        const checks = await verifyStoredBackup(env, session, String(body.backupId || ''), options);
+        return json({ ok: checks.every(check => check.status === 'success'), checks });
+      }
+      if (body.confirm !== 'phase_d') throw new TieredBackupError('請明確確認啟用 Phase D。', 'PHASE_D_CONFIRM_REQUIRED');
+      return json({ ok: true, policy: await activatePhaseD(env, session) });
+    } catch (error) {
+      return json({ ok: false, error: safeMessage(error), code: safeCode(error) }, 409);
+    }
+  }
   if (url.pathname === '/api/backup/run' && request.method === 'POST') {
     try {
-      const result = await runParallelBackup(env, 'manual');
+      const result = await runTieredBackup(env, 'manual');
       return json({ ok: true, backup: result });
     } catch (error) {
       return json({
@@ -50,17 +65,17 @@ export async function runScheduledBackup(env) {
   try {
     const topology = resolveTieredBackupTopology(env);
     if (topology === LEGACY_GCS) return runLegacyScheduledBackup(env);
-    if (!env?.DB || !gcsConfigReady(env) || !r2ConfigReady(env)) {
+    if (!env?.DB) {
       return { skipped: true, reason: 'not_configured' };
     }
-    return await runParallelBackup(env, 'scheduled');
+    return await runTieredBackup(env, 'scheduled');
   } catch (error) {
     console.error('cyaccounting_tiered_backup_failed', safeCode(error));
     return { ok: false, error: safeCode(error) };
   }
 }
 
-export async function runParallelBackup(env, triggerKind = 'scheduled', options = {}) {
+export async function runTieredBackup(env, triggerKind = 'scheduled', options = {}) {
   if (!['scheduled', 'manual'].includes(triggerKind)) {
     throw new TieredBackupError('備份觸發類型錯誤。', 'INVALID_TRIGGER');
   }
@@ -70,9 +85,11 @@ export async function runParallelBackup(env, triggerKind = 'scheduled', options 
   }
 
   const now = options.now instanceof Date ? options.now : new Date();
+  const policy = await readBackupPolicy(env.DB);
+  const plan = backupExecutionPlan(policy.phase, triggerKind, now);
   const backupSet = await buildBackupSet(env.DB, now);
   const packageSha256 = await backupPackageDigest(backupSet);
-  await insertLogicalBackup(env.DB, backupSet, triggerKind, packageSha256);
+  await insertLogicalBackup(env.DB, backupSet, triggerKind, packageSha256, plan);
 
   const specs = [
     {
@@ -82,10 +99,10 @@ export async function runParallelBackup(env, triggerKind = 'scheduled', options 
     },
     {
       provider: GCS_PROVIDER,
-      retentionDays: GCS_PHASE_C_RETENTION_DAYS,
+      retentionDays: plan.gcsRetentionDays,
       create: () => options.gcsProvider || createGcsBackupStorageProvider(env, options.gcsProviderOptions)
     }
-  ];
+  ].filter(spec => spec.provider === R2_PROVIDER || plan.gcsExpected);
 
   const copies = [];
   for (const spec of specs) {
@@ -93,12 +110,13 @@ export async function runParallelBackup(env, triggerKind = 'scheduled', options 
   }
 
   const gcsCopy = copies.find(copy => copy.provider === GCS_PROVIDER);
-  await writeLegacyGcsRun(env.DB, backupSet, triggerKind, now, gcsCopy);
+  if (plan.gcsExpected) await writeLegacyGcsRun(env.DB, backupSet, triggerKind, now, gcsCopy);
 
   const completedAt = new Date().toISOString();
   const result = {
     ok: copies.every(copy => copy.status === 'success'),
     backupId: backupSet.backupId,
+    policyPhase: plan.phase, gcsExpected: plan.gcsExpected,
     completedAt,
     dataSha256: backupSet.dataSha256,
     manifestSha256: backupSet.manifestSha256,
@@ -156,13 +174,13 @@ async function executeProviderCopy(db, backupSet, spec, now) {
   }
 }
 
-async function insertLogicalBackup(db, backupSet, triggerKind, packageSha256) {
+async function insertLogicalBackup(db, backupSet, triggerKind, packageSha256, plan) {
   await db.prepare(`
     INSERT INTO backup_sets(
       backup_id, app_id, created_at, app_version, schema_version, format, format_version,
       data_sha256, manifest_sha256, package_sha256, data_byte_length,
-      manifest_byte_length, total_byte_length, record_count, trigger_kind
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      manifest_byte_length, total_byte_length, record_count, trigger_kind, policy_phase, gcs_expected
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     backupSet.backupId,
     APP_ID,
@@ -178,7 +196,7 @@ async function insertLogicalBackup(db, backupSet, triggerKind, packageSha256) {
     backupSet.manifestBytes.byteLength,
     backupSet.totalByteSize,
     backupSet.totalRowCount,
-    triggerKind
+    triggerKind, plan.phase, Number(plan.gcsExpected)
   ).run();
 }
 
@@ -208,10 +226,11 @@ async function writeLegacyGcsRun(db, backupSet, triggerKind, now, copy) {
 
 export async function parallelBackupStatus(env) {
   const configured = gcsConfigReady(env) && r2ConfigReady(env);
+  const policy = await readBackupPolicy(env.DB);
   const result = await env.DB.prepare(`
     SELECT backup_id, created_at, app_version, schema_version, format, format_version,
            data_sha256, manifest_sha256, package_sha256, total_byte_length,
-           record_count, trigger_kind
+           record_count, trigger_kind, policy_phase, gcs_expected
     FROM backup_sets
     ORDER BY created_at DESC
     LIMIT 8
@@ -240,36 +259,28 @@ export async function parallelBackupStatus(env) {
       byteSize: Number(row.total_byte_length || 0),
       rowCount: Number(row.record_count || 0),
       trigger: String(row.trigger_kind || ''),
-      status: copies.length >= 2 && copies.every(copy => copy.status === 'success') ? 'success' : 'failed',
+      policyPhase: row.policy_phase || 'phase_c', gcsExpected: Number(row.gcs_expected ?? 1) === 1,
+      status: requiredCopiesSuccessful(copies, Number(row.gcs_expected ?? 1) === 1) ? 'success' : 'failed',
       copies
     });
   }
 
-  const acceptanceResult = await env.DB.prepare(`
-    SELECT bs.backup_id, bs.created_at, bs.package_sha256,
-           MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' THEN 1 ELSE 0 END) AS r2_success,
-           MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' THEN 1 ELSE 0 END) AS gcs_success
-    FROM backup_sets bs
-    LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id
-    WHERE bs.trigger_kind = 'scheduled'
-    GROUP BY bs.backup_id, bs.created_at, bs.package_sha256
-    ORDER BY bs.created_at DESC
-    LIMIT 14
-  `).bind(R2_PROVIDER, GCS_PROVIDER).all();
-  const phaseCAcceptance = summarizePhaseCAcceptance(acceptanceResult.results || []);
-
+  const phaseCAcceptance = await readPhaseCAcceptance(env.DB);
+  const restoreChecks = await recentRestoreChecks(env.DB);
   const latestSuccess = logicalBackups.find(item => item.status === 'success') || null;
   return json({
     ok: true,
     provider: 'tiered',
     topology: PARALLEL_DUAL_PROVIDER,
+    policy, restoreChecks,
+    phaseDReady: configured && phaseCAcceptance.completed && restorationPairReady(restoreChecks),
     configured,
     providers: {
       [R2_PROVIDER]: { configured: r2ConfigReady(env), retentionDays: R2_RETENTION_DAYS, role: 'operational' },
-      [GCS_PROVIDER]: { configured: gcsConfigReady(env), retentionDays: GCS_PHASE_C_RETENTION_DAYS, role: 'cross_cloud_validation' }
+      [GCS_PROVIDER]: { configured: gcsConfigReady(env), retentionDays: policy.gcsRetentionDays, role: policy.phase === 'phase_d' ? 'cross_cloud_long_term' : 'cross_cloud_validation' }
     },
-    schedule: { cron: '30 19 * * *', localTime: '每日 03:30（台灣時間）' },
-    retentionDays: GCS_PHASE_C_RETENTION_DAYS,
+    schedule: { cron: '30 19 * * *', localTime: policy.phase === 'phase_d' ? 'R2 每日；GCS 週三、週日 03:30（台灣時間）' : '每日 03:30（台灣時間）' },
+    retentionDays: policy.gcsRetentionDays,
     phaseCAcceptance,
     latestSuccess: latestSuccess ? logicalToLegacyRun(latestSuccess) : null,
     recentRuns: logicalBackups.map(logicalToLegacyRun),
@@ -277,6 +288,109 @@ export async function parallelBackupStatus(env) {
     restoreAvailable: false
   });
 }
+
+export function backupExecutionPlan(phase, triggerKind, now) {
+  const localDay = new Date(now.getTime() + 8 * 60 * 60 * 1000).getUTCDay();
+  const phaseD = phase === 'phase_d';
+  return { phase: phaseD ? 'phase_d' : 'phase_c',
+    gcsExpected: !phaseD || triggerKind === 'manual' || [0, 3].includes(localDay),
+    gcsRetentionDays: phaseD ? GCS_PHASE_D_RETENTION_DAYS : GCS_PHASE_C_RETENTION_DAYS };
+}
+
+export async function readBackupPolicy(db) {
+  const event = await db.prepare('SELECT target_phase, created_at FROM backup_policy_events ORDER BY id DESC LIMIT 1').first();
+  const phase = event?.target_phase === 'phase_d' ? 'phase_d' : 'phase_c';
+  return { phase, activatedAt: event?.created_at || null, r2RetentionDays: R2_RETENTION_DAYS,
+    gcsRetentionDays: phase === 'phase_d' ? GCS_PHASE_D_RETENTION_DAYS : GCS_PHASE_C_RETENTION_DAYS,
+    gcsDaysTaipei: phase === 'phase_d' ? [0, 3] : [0, 1, 2, 3, 4, 5, 6] };
+}
+
+export async function readPhaseCAcceptance(db) {
+  const result = await db.prepare(`
+    SELECT bs.backup_id, bs.created_at, bs.package_sha256,
+      MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' AND bc.verified_at IS NOT NULL THEN 1 ELSE 0 END) AS r2_success,
+      MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' AND bc.verified_at IS NOT NULL THEN 1 ELSE 0 END) AS gcs_success
+    FROM backup_sets bs LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id
+    WHERE bs.trigger_kind = 'scheduled' AND bs.policy_phase = 'phase_c'
+    GROUP BY bs.backup_id, bs.created_at, bs.package_sha256
+    ORDER BY bs.created_at DESC LIMIT 14
+  `).bind(R2_PROVIDER, GCS_PROVIDER).all();
+  return summarizePhaseCAcceptance(result.results || []);
+}
+
+function requiredCopiesSuccessful(copies, gcsExpected) {
+  return [R2_PROVIDER, ...(gcsExpected ? [GCS_PROVIDER] : [])].every(provider => copies.some(copy => copy.provider === provider && copy.status === 'success'));
+}
+
+export async function verifyStoredBackup(env, session, backupId = '', options = {}) {
+  assertSuperAdmin(session);
+  if (backupId && !/^\d{8}T\d{6}Z$/.test(backupId)) throw new TieredBackupError('備份 ID 不正確。', 'BACKUP_ID_INVALID');
+  const source = await env.DB.prepare(`SELECT bs.* FROM backup_sets bs
+    WHERE ((? = '' AND bs.gcs_expected = 1) OR bs.backup_id = ?) AND EXISTS (
+      SELECT 1 FROM backup_copies bc WHERE bc.backup_id = bs.backup_id AND bc.status = 'success')
+    ORDER BY bs.created_at DESC LIMIT 1`).bind(backupId, backupId).first();
+  if (!source) throw new TieredBackupError('尚無可驗證的備份。', 'BACKUP_SOURCE_MISSING');
+  const verify = options.verifyRestore || (await import('./backup-restore-runtime.js')).verifyRestoreInMemory;
+  const checks = [];
+  const attemptId = crypto.randomUUID();
+  for (const providerName of [R2_PROVIDER, GCS_PROVIDER]) {
+    const id = crypto.randomUUID(), createdAt = new Date().toISOString();
+    let result, status = 'failed';
+    try {
+      const provider = providerName === R2_PROVIDER ? options.r2Provider || createR2BackupStorageProvider(env)
+        : options.gcsProvider || createGcsBackupStorageProvider(env, options.gcsProviderOptions);
+      const prefix = `CYAccountingWeb/${source.backup_id}/`;
+      const [manifestBytes, dataBytes] = await Promise.all([provider.getObject(prefix + 'manifest.json'), provider.getObject(prefix + 'data.json')]);
+      if (!(manifestBytes instanceof Uint8Array) || !(dataBytes instanceof Uint8Array) || dataBytes.byteLength > MAX_RESTORE_BYTES) throw new TieredBackupError('備份超出隔離驗證大小上限或副本不存在。', 'RESTORE_SIZE_OR_SOURCE');
+      const validated = await validateBackupSetBytes(manifestBytes, dataBytes, source.backup_id);
+      const packageSha256 = await backupPackageDigest({ manifestBytes, dataBytes });
+      if (packageSha256 !== source.package_sha256 || validated.dataSha256 !== source.data_sha256 || validated.manifestSha256 !== source.manifest_sha256) throw new TieredBackupError('副本與備份紀錄不符。', 'RESTORE_CATALOG_MISMATCH');
+      result = await verify(validated);
+      status = 'success';
+    } catch (error) { result = { code: safeCode(error), isolated: true, liveAccountingModified: false }; }
+    await env.DB.prepare(`INSERT INTO backup_restore_checks(id, attempt_id, backup_id, provider, package_sha256,
+      source_schema_version, target_schema_version, status, result_json, actor_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, attemptId, source.backup_id, providerName, source.package_sha256, Number(source.schema_version), Number(result.targetSchemaVersion || 0),
+        status, JSON.stringify(result), JSON.stringify(backupActor(session)), createdAt).run();
+    checks.push({ id, attemptId, backupId: source.backup_id, provider: providerName, packageSha256: source.package_sha256, status, result, createdAt });
+  }
+  return checks;
+}
+
+async function recentRestoreChecks(db) {
+  const result = await db.prepare('SELECT id, attempt_id, backup_id, provider, package_sha256, status, result_json, created_at FROM backup_restore_checks ORDER BY sequence DESC LIMIT 16').all();
+  return (result.results || []).map(row => ({ id: row.id, attemptId: row.attempt_id, backupId: row.backup_id, provider: row.provider,
+    packageSha256: row.package_sha256, status: row.status, result: JSON.parse(row.result_json), createdAt: row.created_at }));
+}
+function restorationPair(checks, now = Date.now()) {
+  const backupId = checks[0]?.backupId;
+  const r2 = checks.find(check => check.backupId === backupId && check.provider === R2_PROVIDER);
+  const gcs = checks.find(check => check.backupId === backupId && check.provider === GCS_PROVIDER);
+  if (!r2 || !gcs || r2.attemptId !== gcs.attemptId || r2.packageSha256 !== gcs.packageSha256) return null;
+  return [r2, gcs].every(check => check.status === 'success' && check.result.fullRowRoundtrip && check.result.integrityCheck && check.result.foreignKeyCheck && now - Date.parse(check.createdAt) <= 86400000 && now >= Date.parse(check.createdAt)) ? [r2, gcs] : null;
+}
+function restorationPairReady(checks) { return Boolean(restorationPair(checks)); }
+
+export async function activatePhaseD(env, session) {
+  assertSuperAdmin(session);
+  if (resolveTieredBackupTopology(env) !== PARALLEL_DUAL_PROVIDER || !gcsConfigReady(env) || !r2ConfigReady(env)) throw new TieredBackupError('兩個備份 provider 尚未設定完整。', 'PHASE_D_PROVIDER_REQUIRED');
+  const policy = await readBackupPolicy(env.DB);
+  if (policy.phase === 'phase_d') return policy;
+  const acceptance = await readPhaseCAcceptance(env.DB);
+  if (!acceptance.completed) throw new TieredBackupError('需先完成 14 次連續雙副本排程驗收。', 'PHASE_C_INCOMPLETE');
+  const pair = restorationPair(await recentRestoreChecks(env.DB));
+  if (!pair) throw new TieredBackupError('需先完成同一備份 R2 與 GCS 的隔離還原驗證。', 'RESTORE_PAIR_REQUIRED');
+  await env.DB.prepare(`INSERT INTO backup_policy_events(target_phase, r2_check_id, gcs_check_id, acceptance_json, actor_json, created_at)
+    SELECT 'phase_d', ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM backup_policy_events)
+    AND (SELECT backup_id FROM backup_sets WHERE trigger_kind = 'scheduled' AND policy_phase = 'phase_c' ORDER BY created_at DESC LIMIT 1) = ?`)
+    .bind(pair[0].id, pair[1].id, JSON.stringify(acceptance), JSON.stringify(backupActor(session)), new Date().toISOString(), acceptance.latestScheduledBackupId).run();
+  const updated = await readBackupPolicy(env.DB);
+  if (updated.phase !== 'phase_d') throw new TieredBackupError('排程紀錄已更新，請重新驗證後再切換。', 'BACKUP_POLICY_CONFLICT');
+  return updated;
+}
+function assertSuperAdmin(session) { if (session?.role !== 'SUPER_ADMIN') throw new TieredBackupError('只有超級管理員可以管理備份。', 'SUPER_ADMIN_REQUIRED'); }
+function backupActor(session) { return { employeeId: String(session.employee_id || ''), employeeNo: String(session.employee_no || ''), name: String(session.employee_name || ''), role: session.role }; }
 
 export function summarizePhaseCAcceptance(rows, required = PHASE_C_REQUIRED_SCHEDULED_BACKUPS) {
   const requiredCount = Math.max(1, Number(required) || PHASE_C_REQUIRED_SCHEDULED_BACKUPS);

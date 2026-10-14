@@ -6,17 +6,26 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.23.4**；VERSION `0.23.4`、BUILD `0`，桌機記帳輸入、編輯及日期快捷 |
+| 產品 | **V0.24.0**；VERSION `0.24.0`、BUILD `0`，Phase D 分層備份與隔離還原驗證；本次 PR／main Actions 及正式回讀為部署依據 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
 | 公開 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；不與正式網站版本混用 |
-| D1 | schema **8**，Excel 指定期間替換 audit 已納入備份 |
+| D1 | schema **9**，新增 append-only 隔離驗證及 policy audit；既有帳務 payload 不變 |
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次為新的桌機輸入與編輯修正，Patch 升至 V0.23.4、Build 歸零；V0.23.3 Build 1 為前一版清單密度修正。沒有 schema、帳務資料、Session、手機／平板 UI 或 Stable Release 變更。main 其他 App 的合併不表示本 App 升版。
+本次新增完整分層備份政策及隔離還原驗證，Minor 升至 V0.24.0、Build 歸零。migration 只新增 backup metadata；不改帳務資料／Identity／手機平板版面，不建立 Stable Release。部署不自行啟用 Phase D，須經正式 UI 與 server gate。
+
+## V0.24.0 備份政策與隔離還原
+
+- 正式舊版備份頁已回讀 Phase C **14／14**；不再依日期推測。新增 Phase D R2 每日 30 天、GCS 台灣時間週三／週日 03:30 保留 182 天；手動及 Excel 匯入前仍雙副本，GCS 未排程日不記失敗。
+- `backup-service.js` 沿用唯一 orchestration，`backup_policy_events` 是生效 policy authority 與 append-only 操作者稽核。啟用前重新檢查 14 次、同一備份雙 provider 隔離還原且證據未逾 24 小時；切換不清物件，後續 cleanup 採新 retention。保留原 topology 與 credentials／bindings，不另建 workflow 或擴張 IAM。
+- 隔離 SQLite 使用實際 canonical migrations 與 exporter，驗證所有帳務欄列、重複交易、封存帳戶、設定、期初及匯入 audit，檢查 integrity／FK。支援來源 schema 8／9；結果 metadata append-only、來源為 server principal。正式帳本沒有 restore writer，完整 DR／legacy normalization 仍待辦。
+- 版本 stamp 改由 VERSION／migrations 產生 `src/build-metadata.json` 並在 CI check，修正舊新備份固定寫 0.22.2；不回寫歷史備份。server WASM 固定 sql.js 1.14.2，真實 workerd 重複請求確認每次新 DB。
+- 本地 **32 項檢查**（30 application suites、CYID contract 與 build metadata）通過；CI 另含 syntax、D1 migration、bundle 及正式 semantic probes。正式副本隔離驗證／啟用需部署後由本次 PR 與備份頁回讀，不能以合成 fixture 或 dry-run 代替。
+- 新增操作只在桌機備份頁；手機／平板維持既有版面與只讀備份資訊，狀態文字反映實際保留政策。
 
 ## V0.23.4 桌機記帳輸入、編輯及日期
 
@@ -63,7 +72,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
 | `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
-| Backup／Restore／DR | 依正式 catalog 確認 Phase C，未取得最新 `x/14`；不依日期猜進度，Restore／DR 未完成 |
+| Backup／Restore／DR | Phase C 正式 14／14 已確認；Phase D／隔離驗證依本次部署後 UI 回讀。正式帳本 Restore／DR 與舊 schema normalization 未完成 |
 | 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
 
 ## GitHub 清理 — 2026/10/13
@@ -82,7 +91,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | Worker route／帳務權限／API orchestration | `src/app.js` |
 | 期初 carry-forward／人工調整 | `src/opening-balances.js` |
 | 帳戶 lifecycle | `src/account-lifecycle.js` |
-| Backup package／topology／provider | `src/backup-package.js` → `src/backup-service.js` → provider adapters |
+| Backup package／topology／provider | `src/backup-package.js` → `src/backup-service.js` → provider adapters；隔離 SQLite domain `src/backup-restore.js`、WASM host `src/backup-restore-runtime.js` |
 | 統計 snapshot／report settings | `src/statistics.js` |
 | SQLite normalization／migration | `src/desktop-migration-core.js`／`src/desktop-migration.js` |
 | Transaction state／month load／mutation／rollback | `public/app.js` |

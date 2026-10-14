@@ -63,6 +63,8 @@ jobs:
           node --check src/backup-package.js
           node --check src/gcs-backup.js
           node --check src/backup-service.js
+          node --check src/backup-restore.js
+          node --check src/backup-restore-runtime.js
           node --check src/desktop-migration-core.js
           node --check src/desktop-migration.js
           node --check scripts/render-wrangler.mjs
@@ -95,6 +97,9 @@ jobs:
           node tests/gcs-backup.mjs
           node tests/backup-compatibility.mjs
           node tests/backup-service.mjs
+          node tests/backup-phase-d.mjs
+          node tests/backup-restore.mjs
+          node tests/backup-restore-worker.mjs
           node tests/backup-ui.mjs
           node tests/desktop-migration.mjs
           node tests/desktop-migration-d1.mjs
@@ -114,6 +119,7 @@ jobs:
           node tests/cyid-provider-contract.mjs
           node tests/cyid-production-runtime.mjs
           node scripts/validate-cyid-consumer-version.mjs
+          node scripts/update-build-metadata.mjs --check
 
       - name: Prepare pinned browser SQLite runtime
         run: node scripts/prepare-sqljs.mjs
@@ -303,8 +309,9 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#mobileEntrySecondaryButton'
           verify_asset "$base/quick-entry-settings.js?rev=editable-date-shortcuts" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
-          verify_asset "$base/backup-ui.js?rev=desktop-readable-backup" 'setupBackupSettings'
-          verify_asset "$base/backup-ui.js?rev=desktop-readable-backup" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
+          verify_asset "$base/backup-ui.js?rev=backup-phase-d-verification" 'setupBackupSettings'
+          verify_asset "$base/backup-ui.js?rev=backup-phase-d-verification" 'backupActivatePhaseD'
+          verify_asset "$base/backup-ui.js?rev=backup-phase-d-verification" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=ledger-date-order" 'class="ledger-message-row"'
           verify_asset "$base/app.js?rev=entry-save-focus" "await api('/api/opening-balance-overrides'"

@@ -30,8 +30,8 @@
 
 ## 備份、復原與維運
 
-- [ ] Phase C：讀正式 catalog／UI 確認連續排程雙副本 `x/14`；只計 scheduled、同 backupId、有效 digest 且兩 provider 成功。**尚未取得最新進度，不按日期推算。**
-- [ ] Phase D：僅在 Phase C gate 通過後，評估 R2 每日／GCS 每週三與週日、GCS 26 週 retention；現行仍為 R2 30 天、GCS 每日 14 天。
+- [ ] Phase D 部署後正式回讀：Phase C 14／14 已確認；由桌機備份頁驗證真實 R2／GCS 副本隔離還原後啟用，並觀察首次 R2-only／GCS 排程結果。切換不得清除既有備份。
+- [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9。
 - [ ] Restore：SUPER_ADMIN server gate、雙重確認、格式／schema／digest 驗證、受控 D1 寫入、對帳及操作者／結果 audit。
 - [ ] DR：R2 不可用時使用有效 GCS copy，以及從 GCS 重建新 D1 的完整演練。
 - [ ] Google Cloud 每月低額 budget 警示（目標 NT$100）；provider lifecycle 若啟用，需長於 application retention。

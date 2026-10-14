@@ -38,6 +38,8 @@ async function setupBackupSettings() {
   });
   pane.querySelector('#backupRunNow')?.addEventListener('click', runBackupNow);
   pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatus);
+  pane.querySelector('#backupVerifyRestore')?.addEventListener('click', verifyBackupRestore);
+  pane.querySelector('#backupActivatePhaseD')?.addEventListener('click', activateBackupPhaseD);
 }
 
 async function sharedSessionUser() {
@@ -112,7 +114,7 @@ function mobileBackupInfoHtml(data) {
     const copies = Array.isArray(latest?.copies) ? latest.copies : [];
     providerHtml = [
       providerHealthCard('Cloudflare R2', 'Operational backup', model.r2, copies.find(copy => copy.provider === 'cloudflare_r2')),
-      providerHealthCard('Google Cloud Storage', 'Cross-cloud validation', model.gcs, copies.find(copy => copy.provider === 'google_cloud_storage'))
+      providerHealthCard('Google Cloud Storage', model.gcs.role === 'cross_cloud_long_term' ? '跨雲長期備份' : 'Cross-cloud validation', model.gcs, copies.find(copy => copy.provider === 'google_cloud_storage') || model.logicalBackups.flatMap(item => item.copies || []).find(copy => copy.provider === 'google_cloud_storage'))
     ].join('');
   } else {
     providerHtml = providerHealthCard(
@@ -192,9 +194,13 @@ function backupSettingsHtml() {
       </div>
     </div>
 
+    <div id="backupRestoreTools" class="backup-restore-tools" hidden>
+      <div class="backup-actions-row"><button id="backupVerifyRestore" class="secondary" type="button" disabled>驗證隔離還原</button><button id="backupActivatePhaseD" class="secondary" type="button" disabled>啟用 Phase D</button></div>
+      <p id="backupRestoreStatus" class="hint">尚未執行隔離還原驗證。</p>
+    </div>
     <div class="backup-restore-note">
       <strong>復原</strong>
-      <span>復原功能尚未開放；後續只允許 <code>SUPER_ADMIN</code> 使用，採雙重確認並在覆蓋 D1 前再次驗證備份格式、版本與完整性。</span>
+      <span>隔離驗證只在記憶體 SQLite 還原並比對完整資料，不更動正式帳本。正式帳本復原尚未開放。</span>
     </div>`;
 }
 
@@ -227,12 +233,12 @@ function backupUiModel(data) {
       topology: 'parallel_dual_provider',
       configured: Boolean(data?.configured),
       heading: 'R2 + GCS 分層自動備份',
-      hint: 'Cloudflare D1 是正式資料來源；R2 作日常 operational backup，GCS 在 Phase C 同步驗證 cross-cloud copy。',
+      hint: data?.policy?.phase === 'phase_d' ? 'R2 保存每日備份，GCS 保存跨雲長期備份。' : 'R2 與 GCS 每日備份並驗證相同內容。',
       primaryLabel: '備份拓撲',
       state: data?.configured ? '雙 Provider 已啟用' : 'Provider 尚未完整設定',
       account: data?.configured ? 'R2 + GCS 均已完成設定' : '請檢查 R2 binding 與 GCS Secrets',
       schedule: data?.schedule?.localTime || '每日 03:30（台灣時間）',
-      retention: `R2 ${Number(r2.retentionDays || 30)} 天｜GCS ${Number(gcs.retentionDays || 14)} 天（Phase C）`,
+      retention: `R2 ${Number(r2.retentionDays || 30)} 天｜GCS ${Number(gcs.retentionDays || 14)} 天（${data?.policy?.phase === 'phase_d' ? 'Phase D' : 'Phase C'}）`,
       latest: latestLogical,
       r2: {
         configured: Boolean(r2.configured),
@@ -320,6 +326,7 @@ function renderBackupStatus(data) {
 
   if (run) run.disabled = !model.configured;
   renderPhaseCAcceptance(data);
+  renderBackupRestoreState(data);
 }
 
 function renderBackupProviderHealth(model, latest) {
@@ -327,11 +334,11 @@ function renderBackupProviderHealth(model, latest) {
   if (!container) return;
   const copies = Array.isArray(latest?.copies) ? latest.copies : [];
   const r2Copy = copies.find(copy => copy.provider === 'cloudflare_r2');
-  const gcsCopy = copies.find(copy => copy.provider === 'google_cloud_storage');
+  const gcsCopy = copies.find(copy => copy.provider === 'google_cloud_storage') || model.logicalBackups.flatMap(item => item.copies || []).find(copy => copy.provider === 'google_cloud_storage');
 
   container.innerHTML = [
     providerHealthCard('Cloudflare R2', 'Operational backup', model.r2, r2Copy),
-    providerHealthCard('Google Cloud Storage', 'Cross-cloud validation', model.gcs, gcsCopy)
+    providerHealthCard('Google Cloud Storage', model.gcs.role === 'cross_cloud_long_term' ? '跨雲長期備份' : '跨雲雙副本驗證', model.gcs, gcsCopy)
   ].join('');
 }
 
@@ -400,7 +407,7 @@ function renderTieredBackupHistory(backups) {
       <td>${item.trigger === 'scheduled' ? '自動' : '手動'}</td>
       <td class="backup-run-detail" title="${escapeBackupHtml(title)}">${escapeBackupHtml(item.backupId || '—')}</td>
       <td class="backup-copy-cell">${backupCopyBadgeBase(r2)}</td>
-      <td class="backup-copy-cell">${backupCopyBadgeBase(gcs)}</td>
+      <td class="backup-copy-cell">${item.gcsExpected === false && !gcs ? '<span class="backup-run-badge neutral">本日未排程</span>' : backupCopyBadgeBase(gcs)}</td>
       <td class="backup-data-summary">${Number(item.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(item.byteSize || 0)}</td>
     </tr>`;
   }).join('');
@@ -413,6 +420,52 @@ function backupCopyBadgeBase(copy) {
   const label = success ? '成功' : failed ? '失敗' : '處理中';
   const cls = success ? 'success' : failed ? 'failed' : 'neutral';
   return `<span class="backup-run-badge ${cls}" title="${escapeBackupHtml(copy.lastError || '')}">${label}</span>`;
+}
+
+function renderBackupRestoreState(data) {
+  const tools = document.querySelector('#backupRestoreTools');
+  if (!tools) return;
+  tools.hidden = !window.cyIsDesktopInteractionWorkspace?.() || !data?.policy;
+  const checks = Array.isArray(data?.restoreChecks) ? data.restoreChecks : [];
+  const latestId = checks[0]?.backupId;
+  const pair = ['cloudflare_r2', 'google_cloud_storage'].map(provider => checks.find(check => check.backupId === latestId && check.provider === provider)).filter(Boolean);
+  const successful = pair.length === 2 && pair[0].attemptId === pair[1].attemptId && pair.every(check => check.status === 'success');
+  const label = document.querySelector('#backupRestoreStatus');
+  if (label) label.textContent = successful ? 'R2／GCS 隔離還原、完整資料比對與資料庫檢查通過。'
+    : pair.length ? '隔離驗證未完整通過：' + pair.filter(check => check.status !== 'success').map(check => check.result?.code || '驗證失敗').join('、') : '先驗證備份能完整還原，再啟用 Phase D。';
+  const verify = document.querySelector('#backupVerifyRestore');
+  if (verify) verify.disabled = !data?.configured || !data?.logicalBackups?.length;
+  const activate = document.querySelector('#backupActivatePhaseD');
+  if (activate) {
+    activate.disabled = data?.policy?.phase === 'phase_d' || !data?.phaseDReady;
+    activate.textContent = data?.policy?.phase === 'phase_d' ? 'Phase D 已啟用' : '啟用 Phase D';
+  }
+}
+
+async function verifyBackupRestore() {
+  const button = document.querySelector('#backupVerifyRestore');
+  if (button) button.disabled = true;
+  setBackupMessage('正在回讀 R2／GCS 並於隔離 SQLite 驗證完整還原…');
+  try {
+    const data = await api('/api/backup/verify-restore', { method: 'POST', headers: jsonHeaders(), body: '{}' }, 120_000);
+    if (!data.ok) throw new Error('隔離還原未完整通過，請查看驗證結果。');
+    await loadBackupStatus();
+    setBackupMessage('隔離還原驗證通過，正式帳本未更動。');
+  } catch (error) {
+    await loadBackupStatus();
+    setBackupMessage(error.message || '隔離還原驗證失敗。', true);
+  }
+}
+
+async function activateBackupPhaseD() {
+  if (!confirm('啟用 Phase D？\nR2 每日保留 30 天；GCS 每週三、週日備份，保留 182 天。\n現有 GCS 備份會沿用較長保留時間，不會在切換時大量清除。')) return;
+  const button = document.querySelector('#backupActivatePhaseD');
+  if (button) button.disabled = true;
+  try {
+    await api('/api/backup/phase-d/activate', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ confirm: 'phase_d' }) });
+    await loadBackupStatus();
+    setBackupMessage('Phase D 已啟用。');
+  } catch (error) { await loadBackupStatus(); setBackupMessage(error.message || '切換失敗。', true); }
 }
 
 async function runBackupNow() {
