@@ -205,6 +205,7 @@ internal sealed class SettingsForm : Form
     private TabPage ImportPage()
     {
         var page = Page("平台匯入");
+        page.AutoScroll = true;
         _shopeeOrderType.MaxLength = 4;
         _moOrderType.MaxLength = 4;
         _coupangOrderType.MaxLength = 4;
@@ -212,9 +213,6 @@ internal sealed class SettingsForm : Form
         _moPassword.PlaceholderText = _settings.MoPasswordProtected.Length > 0 ? "已設定，空白不變更" : string.Empty;
         // Docked to the top in reverse order: the last added sits highest; TabIndex follows
         // the screen order so Enter/Tab go 蝦皮 → MO店+ → 酷澎 → 共用.
-        page.Controls.Add(Section("印表機（所有平台共用）",
-            ("熱感標籤印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 168),
-            ("A4 印表機", _a4Printer, _settings.A4Printer, 168)));
         page.Controls.Add(Section("共用（所有平台）",
             ("折價券品號", _discountItem, _settings.DiscountItemCode, 120),
             ("運費品號", _shippingItem, _settings.ShippingItemCode, 120),
@@ -238,6 +236,10 @@ internal sealed class SettingsForm : Form
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
+        // Printers on top (user, 2026-10-14).
+        page.Controls.Add(Section("印表機（所有平台共用）",
+            ("熱感標籤印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 168),
+            ("A4 印表機", _a4Printer, _settings.A4Printer, 168)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
