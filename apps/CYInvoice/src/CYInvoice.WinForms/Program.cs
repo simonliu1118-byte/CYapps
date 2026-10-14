@@ -1,4 +1,5 @@
 using CYInvoice.Core.Storage;
+using CYInvoice.Core.AutoInput;
 
 namespace CYInvoice.WinForms;
 
@@ -36,6 +37,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Explicitly reject external automation while the dispatch/IPC/reconciliation
+        // implementation is incomplete. Never fall through to the interactive UI.
+        if (AutoInputCommandLine.IsAutoInputInvocation(args))
+        {
+            try { _ = AutoInputCommandLine.Parse(args); }
+            catch (Exception error) when (error is InvalidDataException or ArgumentException or NotSupportedException)
+            {
+                Environment.ExitCode = 2;
+                return;
+            }
+            Environment.ExitCode = 3;
+            return;
+        }
         var smokeTest = args.Contains("--startup-smoke-test", StringComparer.Ordinal);
         try
         {
