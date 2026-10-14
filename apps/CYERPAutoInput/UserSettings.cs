@@ -37,6 +37,12 @@ internal sealed class UserSettings
     /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.
     /// </summary>
     public string HctPickupAddress { get; set; } = string.Empty;
+    /// <summary>
+    /// 全自動: a 買家備註 with one of these words (comma separated) gets <see cref="ShopeeChatMessage"/>
+    /// through 聊聊 before the order is shipped as usual (user, 2026-10-14). Blank message = off.
+    /// </summary>
+    public string ShopeeChatKeywords { get; set; } = "發票,收據,統編,統一編號,抬頭";
+    public string ShopeeChatMessage { get; set; } = string.Empty;
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;

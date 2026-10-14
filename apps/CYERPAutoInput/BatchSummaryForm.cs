@@ -13,7 +13,7 @@ internal sealed class BatchSummaryForm : Form
     public BatchSummaryForm(string title, string headline, IEnumerable<BatchSummarySection> sections, string? stoppedAt = null)
     {
         var parts = sections.Where(s => s.Items.Count > 0).ToList();
-        var clean = stoppedAt is null && parts.All(p => p.Heading.StartsWith("已完成", StringComparison.Ordinal));
+        var clean = stoppedAt is null && parts.All(p => p.Heading.StartsWith("已", StringComparison.Ordinal));
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(760, clean ? 300 : 520);

@@ -190,6 +190,56 @@ internal static partial class ShopeeBatchScreens
         return button;
     }
 
+    // ---- 買家備註 and 聊聊 (user, 2026-10-14) ----
+
+    /// <summary>The 買家備註 card's text (empty when the order has none).</summary>
+    public static string BuyerNote(IReadOnlyList<OcrBox> boxes)
+    {
+        var title = boxes.FirstOrDefault(b => C(b) == "買家備註");
+        if (title is null) return string.Empty;
+        return string.Concat(boxes.Where(b => b != title && b.Top >= title.Bottom - 2 && b.Top < title.Bottom + 80 && b.Left >= title.Left - 40)
+            .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+    }
+
+    /// <summary>The first of <paramref name="keywords"/> (comma separated) the note mentions, or null.</summary>
+    public static string? NoteMentions(string note, string keywords) =>
+        keywords.Split([',', '，', '、'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(k => k.Length > 0 && note.Contains(ShopeeScreenshot.Compact(k), StringComparison.Ordinal));
+
+    /// <summary>The buyer card's 聊聊 button: on the row of 關注, right of it.</summary>
+    public static OcrBox? ChatButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var follow = boxes.FirstOrDefault(b => C(b) == "關注");
+        if (follow is null) return null;
+        return boxes.Where(b => C(b).EndsWith("聊聊", StringComparison.Ordinal) && C(b).Length <= 4 && b.Left > follow.Right && SameRow(b, follow))
+            .OrderBy(b => b.Left).FirstOrDefault();
+    }
+
+    /// <summary>The chat's empty input (its 輸入文字 placeholder).</summary>
+    public static OcrBox? ChatInput(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Where(b => C(b) == "輸入文字").OrderByDescending(b => b.Top).FirstOrDefault();
+
+    /// <summary>
+    /// The message is in the input: a piece of text at the input's place (it grows upward as the
+    /// text wraps) that starts with the message's first characters.
+    /// </summary>
+    public static bool ChatInputHolds(IReadOnlyList<OcrBox> boxes, OcrBox input, string message)
+    {
+        var compact = ShopeeScreenshot.Compact(message);
+        var wanted = compact[..Math.Min(12, compact.Length)];
+        return wanted.Length > 0 && boxes.Any(b => C(b).StartsWith(wanted, StringComparison.Ordinal) &&
+            b.Top < input.Bottom + 10 && b.Bottom > input.Top - 120 && Math.Abs(b.Left - input.Left) < 60);
+    }
+
+    /// <summary>The side panel's collapse (») button: right of 網頁版聊聊 on its row.</summary>
+    public static OcrBox? ChatCollapseButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var web = boxes.FirstOrDefault(b => C(b).EndsWith("網頁版聊聊", StringComparison.Ordinal));
+        if (web is null) return null;
+        return boxes.Where(b => b.Left > web.Right && SameRow(b, web) && b.Width <= 48 && b.Height <= 48)
+            .OrderBy(b => b.Left).FirstOrDefault();
+    }
+
     // ---- 查看寄件編號 ----
 
     /// <summary>The number's dialog: 查看寄件編號, or 快遞取件詳情 after a 新竹物流 pickup (user, 2026-10-14).</summary>

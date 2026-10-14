@@ -19,6 +19,17 @@ internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int Sev
     int HctScale = 95, string HctPickupAddress = "");
 
 /// <summary>
+/// The 聊聊 reply for buyers asking about invoices (user, 2026-10-14): when the 買家備註 mentions
+/// one of <paramref name="Keywords"/>, <paramref name="Message"/> (kept in the settings, one
+/// line) is typed into the order's chat and sent. Blank = off.
+/// </summary>
+internal sealed record ShopeeBatchChat(string Keywords, string Message)
+{
+    public string Text => string.Join(" ", Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    public bool On => Keywords.Trim().Length > 0 && ShopeeScreenshot.Compact(Text).Length >= 4;
+}
+
+/// <summary>
 /// An order left for a person without stopping the batch (user, 2026-10-13: note it, go on,
 /// list everything at the end): nothing was done in Shopee for it (a carrier with no flow yet),
 /// so it stays in 待處理 and is passed over.
@@ -58,8 +69,11 @@ internal sealed class ShopeeBatchRunner
     private readonly CancellationToken _token;
     private nint _window;
 
-    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, ShopeeBatchPrint print, CancellationToken token)
+    private readonly ShopeeBatchChat _chat;
+
+    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, ShopeeBatchPrint print, CancellationToken token, ShopeeBatchChat? chat = null)
     {
+        _chat = chat ?? new ShopeeBatchChat(string.Empty, string.Empty);
         _print = print;
         _printer = print.Printer;
         _ocr = ocr;
@@ -80,6 +94,9 @@ internal sealed class ShopeeBatchRunner
 
     /// <summary>Everything a person has to look at, in order (user, 2026-10-13: listed at the end).</summary>
     public List<ShopeeBatchNote> Notes { get; } = [];
+
+    /// <summary>Orders whose buyer got the 聊聊 reply (for the closing list).</summary>
+    public List<string> Chats { get; } = [];
 
     /// <param name="enterErp">
     /// The page scan and ERP for the order on screen: null when clean, a note to list when it
@@ -432,6 +449,17 @@ internal sealed class ShopeeBatchRunner
     private async Task ShipAsync(ShopeeBatchOrder order)
     {
         var (detail, button) = await WaitAsync("「安排出貨」按鈕", 15, s => ShopeeBatchScreens.ShipButton(s.Boxes), reuseFirst: true);
+        // 買家備註 asking about invoices: the 聊聊 reply first, then the order as usual.
+        if (_chat.On && ShopeeBatchScreens.NoteMentions(ShopeeBatchScreens.BuyerNote(detail.Boxes), _chat.Keywords) is { } word)
+        {
+            detail.Dispose();
+            _log.Info("shopee-batch", $"buyer note mentions {word}; sending the 聊聊 reply");
+            var problem = await SendChatReplyAsync();
+            if (problem is null) Chats.Add(order.OrderSn);
+            else Notes.Add(new ShopeeBatchNote(order.OrderSn, $"買家備註提到「{word}」，聊聊訊息未送出（{problem}），請人工傳送。"));
+            await BackToOrderTopAsync();
+            (detail, button) = await WaitAsync("「安排出貨」按鈕", 15, s => ShopeeBatchScreens.ShipButton(s.Boxes));
+        }
         using (detail)
         {
             var carrier = ShopeeBatchScreens.DetailCarrier(detail.Boxes);
@@ -488,6 +516,103 @@ internal sealed class ShopeeBatchRunner
         Keys("Ctrl+W (寄件單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
         await Task.Delay(500, _token);
         await CloseTrackingDialogAsync();
+    }
+
+    /// <summary>
+    /// 聊聊 (user, 2026-10-14): the buyer card's 聊聊 opens the side panel and the order's chat;
+    /// the message from the settings is typed into the input and, once seen there, sent with
+    /// Enter; » folds the panel away. Null when sent, else what went wrong (the order goes on
+    /// either way; the panel is folded, or left with Esc).
+    /// </summary>
+    private async Task<string?> SendChatReplyAsync()
+    {
+        // The buyer card is below the fold: scrolled into view.
+        OcrBox? chat = null;
+        Screen? screen = null;
+        for (var attempt = 0; attempt < 8 && chat is null; attempt++)
+        {
+            screen?.Dispose();
+            screen = await ReadAsync(reuse: attempt == 0);
+            if (ShopeeBatchScreens.ChatButton(screen.Boxes) is { } b && Visible(screen, b)) chat = b;
+            else
+            {
+                _inputs++;
+                Wheel(new Point(screen.Area.Left + screen.Area.Width / 3, screen.Area.Top + screen.Area.Height / 2), -3);
+                await Task.Delay(400, _token);
+            }
+        }
+        if (chat is null || screen is null) { screen?.Dispose(); return "找不到「聊聊」按鈕"; }
+        using (screen) Click(screen, chat, "聊聊");
+
+        var sent = false;
+        try
+        {
+            var (open, input) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.ChatInput(s.Boxes) is { } i && Visible(s, i) ? i : null);
+            if (open is null || input is null) return "聊聊視窗沒有出現";
+            using (open) Click(open, input, "聊聊輸入框");
+            await Task.Delay(300, _token);
+            _inputs++;
+            _log.Info("shopee-batch", $"type 聊聊 message length={_chat.Text.Length}");
+            InputSender.UnicodeText(_chat.Text);
+
+            var (filled, _) = await WaitOrNullAsync(5, s => ShopeeBatchScreens.ChatInputHolds(s.Boxes, input, _chat.Text) ? s : null);
+            if (filled is null) { ClearChatInput(); return "訊息沒有出現在輸入框"; }
+            filled.Dispose();
+            Keys("Enter (送出聊聊)", NativeMethods.VK_RETURN);
+            var (empty, _) = await WaitOrNullAsync(8, s => ShopeeBatchScreens.ChatInput(s.Boxes) is not null ? s : null);
+            if (empty is null) return "按 Enter 後輸入框沒有清空，不確定是否已送出";
+            empty.Dispose();
+            sent = true;
+            _log.Info("shopee-batch", "聊聊 message sent");
+            return null;
+        }
+        finally
+        {
+            await FoldChatAsync(sent);
+        }
+    }
+
+    /// <summary>What was typed is removed, so nothing half-written is left in the chat.</summary>
+    private void ClearChatInput()
+    {
+        Keys("Ctrl+A (聊聊輸入框)", NativeMethods.VK_CONTROL, 0x41 /* A */);
+        Keys("Delete", 0x2E /* VK_DELETE */);
+    }
+
+    /// <summary>» folds the 聊聊 side panel (user, 2026-10-14); Esc when it is not found.</summary>
+    private async Task FoldChatAsync(bool sent)
+    {
+        using var screen = await ReadAsync();
+        if (ShopeeBatchScreens.ChatCollapseButton(screen.Boxes) is { } fold && Visible(screen, fold)) Click(screen, fold, "收起聊聊");
+        else Keys("Esc (聊聊)", 0x1B /* VK_ESCAPE */);
+        await Task.Delay(800, _token);
+        _log.Info("shopee-batch", $"聊聊 folded sent={sent}");
+    }
+
+    /// <summary>The order page back at its top (left margin clicked for focus, then Home).</summary>
+    private async Task BackToOrderTopAsync()
+    {
+        using var screen = await ReadAsync();
+        _inputs++;
+        Front();
+        InputSender.Click(new Point(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2));
+        await Task.Delay(150, _token);
+        InputSender.Press(NativeMethods.VK_HOME);
+        await Task.Delay(700, _token);
+    }
+
+    /// <summary>Like <see cref="WaitAsync"/>, but null instead of stopping the batch when it does not come.</summary>
+    private async Task<(Screen? Screen, T? Value)> WaitOrNullAsync<T>(int seconds, Func<Screen, T?> probe) where T : class
+    {
+        var watch = Stopwatch.StartNew();
+        while (watch.Elapsed.TotalSeconds < seconds)
+        {
+            var screen = await ReadAsync();
+            if (probe(screen) is { } value) return (screen, value);
+            screen.Dispose();
+            await Task.Delay(400, _token);
+        }
+        return (null, null);
     }
 
     /// <summary>

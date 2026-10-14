@@ -22,6 +22,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
     private readonly TextBox _hctPickupAddress = new();
+    private readonly TextBox _chatKeywords = new();
+    private readonly TextBox _chatMessage = new();
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -219,7 +221,9 @@ internal sealed class SettingsForm : Form
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
-            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
+            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300),
+            ("聊聊關鍵字", _chatKeywords, _settings.ShopeeChatKeywords, 300),
+            ("聊聊訊息", _chatMessage, _settings.ShopeeChatMessage, 300)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -390,6 +394,8 @@ internal sealed class SettingsForm : Form
         }
         _settings.HctLabelScale = hctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
+        _settings.ShopeeChatKeywords = _chatKeywords.Text.Trim();
+        _settings.ShopeeChatMessage = _chatMessage.Text.Trim();
         _settings.SevenLabelScale = sevenScale;
         _settings.FamilyLabelScale = familyScale;
         _settings.FamilyLabelPages = _familyLabelPages.Text.Trim();

@@ -372,4 +372,36 @@ public sealed class ShopeeBatchScreensTests
         Assert.Null(ShopeeBatchScreens.ApplyTrackingButton([B("申請寄件編號", 650, 308, 130, 24)]));
         Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("店到家宅配"));
     }
+
+    [Fact]
+    public void Buyer_note_and_chat_controls()
+    {
+        // Laid out like the user's order page and 聊聊 (2026-10-14); names and numbers made up.
+        var page = new List<OcrBox>
+        {
+            B("買家測試", 136, 506, 80), B("關注", 830, 499, 98, 36), B(" 聊聊", 946, 499, 90, 36),
+            B("買家備註", 112, 614, 70), B("希望可以幫我打統編 12345678 測試股份有限公司 感謝", 112, 652, 400),
+            B("進帳資訊", 112, 742, 70)
+        };
+        var note = ShopeeBatchScreens.BuyerNote(page);
+        Assert.Contains("12345678", note);
+        Assert.DoesNotContain("進帳資訊", note);
+        Assert.Equal("統編", ShopeeBatchScreens.NoteMentions(note, "發票,收據,統編,統一編號,抬頭"));
+        Assert.Null(ShopeeBatchScreens.NoteMentions("請盡快出貨", "發票,收據,統編,統一編號,抬頭"));
+        Assert.Equal(946, ShopeeBatchScreens.ChatButton(page)!.Left);
+        Assert.Equal("", ShopeeBatchScreens.BuyerNote([B("訂單編號", 112, 200, 70)]));
+
+        var chat = new List<OcrBox>
+        {
+            B("網頁版聊聊", 1694, 92, 96), B("[button]", 1812, 92, 24, 24),
+            B("在收到商品後，您可以從下方網址填寫【訂單編號】及【訂單金額】查詢發票資訊", 1086, 658, 330, 120),
+            B("輸入文字", 990, 826, 80)
+        };
+        var input = ShopeeBatchScreens.ChatInput(chat)!;
+        Assert.Equal(1812, ShopeeBatchScreens.ChatCollapseButton(chat)!.Left);
+        // The sent message higher in the conversation is not the input's text.
+        Assert.False(ShopeeBatchScreens.ChatInputHolds(chat, input, "在收到商品後，您可以從下方網址填寫"));
+        var typed = new List<OcrBox> { B("在收到商品後，您可以從下方網址填寫【訂單編號】", 990, 790, 420, 60) };
+        Assert.True(ShopeeBatchScreens.ChatInputHolds(typed, input, "在收到商品後，您可以從下方網址填寫"));
+    }
 }
