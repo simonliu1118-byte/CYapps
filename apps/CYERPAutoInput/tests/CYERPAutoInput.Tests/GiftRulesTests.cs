@@ -34,16 +34,19 @@ public class GiftRulesTests
         Assert.Equal(1, GiftRules.Gifts("蝦皮", order, [R("X00330,X00331,X00332", 10, 1, "X00330", "蝦皮")])[1]);
         // Ties go to the card's order.
         Assert.Equal(1, GiftRules.Gifts("蝦皮", [("X00331", "5"), ("X00330", "5")], [R("X00330,X00331", 10, 1, "", "蝦皮")]).Keys.Single());
-        // The named code is not in the order: nothing written, and said.
+        // The named code is not in the order: the one with the most gets it, and it is said.
         var missing = new List<string>();
-        Assert.Empty(GiftRules.Gifts("蝦皮", [("X00331", "10")], [R("X00330,X00331", 10, 1, "X00330", "蝦皮")], missing));
-        Assert.Contains("X00330", Assert.Single(missing));
+        var instead = GiftRules.Gifts("蝦皮", [("X00332", "4"), ("X00331", "6")], [R("X00330,X00331,X00332", 10, 1, "X00330", "蝦皮")], missing);
+        Assert.Equal(1, instead[1]);
+        Assert.Contains("X00331", Assert.Single(missing));
     }
 
     [Fact]
     public void Cards_are_checked_before_saving()
     {
-        Assert.Empty(GiftRules.Problems([R("X00330,X00331", 10, 1, "X00330", "蝦皮"), R("X00330", 5, 1, "", "MO店+")]));
+        Assert.Empty(GiftRules.Problems([R("X00330,X00331", 10, 1, "X00330", "蝦皮"), R("X00340", 5, 1, "", "MO店+")]));
+        // One code, one card, even for different platforms.
+        Assert.Contains(GiftRules.Problems([R("X00330", 10, 1, "", "蝦皮"), R("X00330", 5, 1, "", "MO店+")]), p => p.Contains("只能有一個贈送規則"));
         Assert.Contains(GiftRules.Problems([R("X00330,X00331", 10, 1, "", "蝦皮"), R("x00331", 5, 1, "", "蝦皮", "酷澎")]), p => p.Contains("00331") && p.Contains("第 1 張和第 2 張"));
         Assert.Contains("第 1 張沒有品號。", GiftRules.Problems([R(" ", 10, 1, "", "蝦皮")]));
         Assert.Contains(GiftRules.Problems([R("X00330", 0, 1, "", "蝦皮")]), p => p.Contains("滿幾件"));

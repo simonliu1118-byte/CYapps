@@ -13,7 +13,7 @@ internal sealed class GiftRule
     public string ItemCodes { get; set; } = string.Empty;
     public int Every { get; set; }
     public int Gift { get; set; }
-    /// <summary>The code that gets the free quantity; blank = the one with the most in the order.</summary>
+    /// <summary>The code that gets the free quantity; blank, or not in the order, = the one with the most in the order.</summary>
     public string GiftItem { get; set; } = string.Empty;
     /// <summary>Import sources (蝦皮, MO店+, 酷澎) the card applies to.</summary>
     public List<string> Platforms { get; set; } = [];
@@ -38,7 +38,9 @@ internal static class GiftRules
     public static List<string> Problems(IReadOnlyList<GiftRule> rules)
     {
         var problems = new List<string>();
-        var owner = new Dictionary<(string, string), int>();
+        // A code belongs to one card only, whatever the platforms (user, 2026-10-14: two rules
+        // for one code cannot be told apart).
+        var owner = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < rules.Count; i++)
         {
             var rule = rules[i];
@@ -51,13 +53,12 @@ internal static class GiftRules
             var giftItem = rule.GiftItem.Trim();
             if (giftItem.Length > 0 && !codes.Contains(giftItem, StringComparer.OrdinalIgnoreCase))
                 problems.Add($"第 {i + 1} 張的贈送品號 {giftItem} 不在這張的品號裡。");
-            foreach (var platform in rule.Platforms)
-                foreach (var code in codes)
-                {
-                    if (owner.TryGetValue((code.ToUpperInvariant(), platform), out var other))
-                        problems.Add($"品號 {code} 在{platform}同時出現在第 {other + 1} 張和第 {i + 1} 張，請只留在一張。");
-                    else owner[(code.ToUpperInvariant(), platform)] = i;
-                }
+            foreach (var code in codes)
+            {
+                if (owner.TryGetValue(code, out var other))
+                    problems.Add($"品號 {code} 同時出現在第 {other + 1} 張和第 {i + 1} 張，同一個品號只能有一個贈送規則。");
+                else owner[code] = i;
+            }
         }
         return problems;
     }
@@ -66,7 +67,8 @@ internal static class GiftRules
     /// The free quantity per row index for an order from <paramref name="source"/>:
     /// floor(total of the card's codes ÷ 滿幾件) × 送幾件 on the gift code's first row. Rows whose
     /// quantity is not a whole number are left out of the count. A named gift code the order
-    /// does not have is listed in <paramref name="missing"/> (no row to put it on).
+    /// does not have gives way to the one with the most (user, 2026-10-14), noted in
+    /// <paramref name="missing"/>.
     /// </summary>
     public static Dictionary<int, int> Gifts(string source, IReadOnlyList<(string ItemCode, string Quantity)> rows, IReadOnlyList<GiftRule> rules,
         List<string>? missing = null)
@@ -89,17 +91,14 @@ internal static class GiftRules
             var gift = totals.Values.Sum() / rule.Every * rule.Gift;
             if (gift <= 0) continue;
             var giftItem = rule.GiftItem.Trim();
-            string? target;
+            var most = codes.Where(totals.ContainsKey).OrderByDescending(c => totals[c]).First();
+            var target = most;
             if (giftItem.Length > 0)
             {
-                target = codes.FirstOrDefault(c => string.Equals(c, giftItem, StringComparison.OrdinalIgnoreCase));
-                if (target is null || !first.ContainsKey(target))
-                {
-                    missing?.Add($"滿件贈送：{string.Join("、", codes)} 合計已滿，應送 {giftItem} {gift} 件，但訂單裡沒有 {giftItem}，請人工加列。");
-                    continue;
-                }
+                var named = codes.FirstOrDefault(c => string.Equals(c, giftItem, StringComparison.OrdinalIgnoreCase));
+                if (named is not null && first.ContainsKey(named)) target = named;
+                else missing?.Add($"滿件贈送：訂單裡沒有指定的 {giftItem}，改送件數最多的 {most} {gift} 件。");
             }
-            else target = codes.Where(totals.ContainsKey).OrderByDescending(c => totals[c]).First();
             var row = first[target];
             result[row] = result.GetValueOrDefault(row) + gift;
         }
