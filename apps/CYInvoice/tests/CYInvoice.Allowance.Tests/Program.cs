@@ -11,7 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
-    ("allowance number random generator produces bounded unique identifiers", () => RunSync(TestAllowanceNumberGenerator)),
+    ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -51,10 +51,23 @@ static Task RunSync(Action action)
 
 static void TestAllowanceNumberGenerator()
 {
-    var values = Enumerable.Range(0, 2000).Select(_ => AllowanceNumberGenerator.NewNumber()).ToArray();
-    Equal(2000, values.Distinct(StringComparer.Ordinal).Count());
-    if (values.Any(v => v.Length != 16 || v.Any(c => !"0123456789ABCDEFGHJKMNPQRSTVWXYZ".Contains(c))))
-        throw new InvalidOperationException("invalid generated allowance number");
+    var date = new DateOnly(2026, 10, 15);
+    Equal("A20261015001", AllowanceNumberGenerator.Format(date, 1));
+    Equal("A20261015999", AllowanceNumberGenerator.Format(date, 999));
+    Equal("A20261016001", AllowanceNumberGenerator.Format(date.AddDays(1), 1));
+    Equal(true, AllowanceNumberGenerator.TryReadSequence("A20261015001", date, out var first));
+    Equal(1, first);
+    Equal(true, AllowanceNumberGenerator.TryReadSequence("A20261015999", date, out var last));
+    Equal(999, last);
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261016001", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261015000", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A202610151000", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("B20261015001", date, out _));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 0));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 1000));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 1, '0'));
+    Equal(999, Enumerable.Range(1, 999).Select(sequence => AllowanceNumberGenerator.Format(date, sequence))
+        .Distinct(StringComparer.Ordinal).Count());
 }
 
 static AllowanceIssueRequest ValidAllowanceRequest() => new()
