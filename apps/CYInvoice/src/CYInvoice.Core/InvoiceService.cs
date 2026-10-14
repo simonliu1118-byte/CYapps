@@ -376,6 +376,42 @@ public sealed class InvoiceService
             cancellationToken);
     }
 
+    // Query-only reconciliation for external automation. Never submits IssueAsync.
+    // It uses the same strict remote comparison and serialized local status save
+    // as the interactive refresh path; a missing/ambiguous response is not permission to reissue.
+    public async Task<InvoiceRecord> ReconcileForAutoInputAsync(
+        string recordId, string expectedEnvironment, CancellationToken cancellationToken = default)
+    {
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
+        await issueGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var record = repository.Invoices.LoadOrCreate()
+                .Single(item => item.Id == recordId);
+            if (!SameEnvironment(record.Environment, expectedEnvironment))
+                throw new InvalidOperationException("AutoInput 歷史紀錄環境不符");
+            if (record.InvoiceState is not (InvoiceStates.Unknown or InvoiceStates.Changing or InvoiceStates.Opened))
+                return record;
+            if (record.InvoiceState == InvoiceStates.Opened && record.InvoiceNumber.Trim().Length != 0 &&
+                record.ErrorMessage.Trim().Length == 0 && record.InvoiceDate.Trim().Length != 0)
+                return record;
+
+            var (gateway, environment) = GetGateway();
+            if (environment != expectedEnvironment)
+                throw new InvalidOperationException("AutoInput 查詢期間環境已切換");
+            using var queryTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            queryTimeout.CancelAfter(RecoveryQueryTimeout);
+            var query = record.InvoiceNumber.Trim().Length != 0
+                ? await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, queryTimeout.Token).ConfigureAwait(false)
+                : await gateway.QueryByOrderIdAsync(EffectiveRecordOrderId(record), queryTimeout.Token).ConfigureAwait(false);
+            VerifyStoredQueryResult(record, query.Data);
+            ApplyQueryResult(record, query.Data, record.UploadStatus, record.UploadStatusText);
+            SaveStatus(record.Id, CreateStatusUpdate(record));
+            return record;
+        }
+        finally { issueGate.Release(); }
+    }
+
     public async Task<IReadOnlyList<InvoiceRecord>> RefreshAllAsync(
         CancellationToken cancellationToken = default)
     {
