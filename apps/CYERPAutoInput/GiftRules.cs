@@ -38,9 +38,10 @@ internal static class GiftRules
     public static List<string> Problems(IReadOnlyList<GiftRule> rules)
     {
         var problems = new List<string>();
-        // A code belongs to one card only, whatever the platforms (user, 2026-10-14: two rules
-        // for one code cannot be told apart).
-        var owner = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // On one platform a code belongs to one card only (two rules for it could not be told
+        // apart); other platforms may have their own card for it, e.g. 蝦皮 10送1, MO店+ 8送1
+        // (user, 2026-10-14).
+        var owner = new Dictionary<(string, string), int>();
         for (var i = 0; i < rules.Count; i++)
         {
             var rule = rules[i];
@@ -53,12 +54,13 @@ internal static class GiftRules
             var giftItem = rule.GiftItem.Trim();
             if (giftItem.Length > 0 && !codes.Contains(giftItem, StringComparer.OrdinalIgnoreCase))
                 problems.Add($"第 {i + 1} 張的贈送品號 {giftItem} 不在這張的品號裡。");
-            foreach (var code in codes)
-            {
-                if (owner.TryGetValue(code, out var other))
-                    problems.Add($"品號 {code} 同時出現在第 {other + 1} 張和第 {i + 1} 張，同一個品號只能有一個贈送規則。");
-                else owner[code] = i;
-            }
+            foreach (var platform in rule.Platforms)
+                foreach (var code in codes)
+                {
+                    if (owner.TryGetValue((code.ToUpperInvariant(), platform), out var other))
+                        problems.Add($"品號 {code} 在{platform}同時出現在第 {other + 1} 張和第 {i + 1} 張，同一平台的同一個品號只能有一個贈送規則。");
+                    else owner[(code.ToUpperInvariant(), platform)] = i;
+                }
         }
         return problems;
     }

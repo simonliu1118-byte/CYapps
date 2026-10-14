@@ -45,8 +45,13 @@ public class GiftRulesTests
     public void Cards_are_checked_before_saving()
     {
         Assert.Empty(GiftRules.Problems([R("X00330,X00331", 10, 1, "X00330", "蝦皮"), R("X00340", 5, 1, "", "MO店+")]));
-        // One code, one card, even for different platforms.
-        Assert.Contains(GiftRules.Problems([R("X00330", 10, 1, "", "蝦皮"), R("X00330", 5, 1, "", "MO店+")]), p => p.Contains("只能有一個贈送規則"));
+        // One code may have a card per platform (蝦皮 10送1, MO店+ 8送1), not two on one platform.
+        Assert.Empty(GiftRules.Problems([R("X00330", 10, 1, "", "蝦皮"), R("X00330", 8, 1, "", "MO店+")]));
+        Assert.Contains(GiftRules.Problems([R("X00330", 10, 1, "", "蝦皮"), R("X00330", 8, 1, "", "MO店+", "蝦皮")]), p => p.Contains("只能有一個贈送規則"));
+        var perPlatform = new List<GiftRule> { R("X00330", 10, 1, "", "蝦皮"), R("X00330", 8, 1, "", "MO店+") };
+        Assert.Empty(GiftRules.Gifts("MO店+", [("X00330", "9")], perPlatform.Take(1).ToList()));
+        Assert.Equal(1, GiftRules.Gifts("MO店+", [("X00330", "9")], perPlatform)[0]);
+        Assert.Empty(GiftRules.Gifts("蝦皮", [("X00330", "9")], perPlatform));
         Assert.Contains(GiftRules.Problems([R("X00330,X00331", 10, 1, "", "蝦皮"), R("x00331", 5, 1, "", "蝦皮", "酷澎")]), p => p.Contains("00331") && p.Contains("第 1 張和第 2 張"));
         Assert.Contains("第 1 張沒有品號。", GiftRules.Problems([R(" ", 10, 1, "", "蝦皮")]));
         Assert.Contains(GiftRules.Problems([R("X00330", 0, 1, "", "蝦皮")]), p => p.Contains("滿幾件"));
