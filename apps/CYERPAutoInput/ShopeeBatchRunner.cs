@@ -926,16 +926,42 @@ internal sealed class ShopeeBatchRunner
         _log.Info("shopee-batch", $"family cut: save dialog title={NativeMethods.WindowText(dialog)}");
         try
         {
+            // The dialog shows before its controls are built and filled (user's LOG,
+            // 2026-10-14: searched 1 ms after it showed, no name box; earlier a name set too soon
+            // was overwritten by Chrome's): waited for until the name box holds Chrome's name.
             nint edit = 0, save = 0;
-            NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+            var candidates = new List<string>();
+            for (var i = 0; i < 40; i++)
             {
-                var cls = NativeMethods.ClassName(hwnd);
-                var id = NativeMethods.GetDlgCtrlID(hwnd);
-                if (cls == "Edit" && id == 1001 && NativeMethods.GetDlgCtrlID(NativeMethods.GetParent(hwnd)) == 1148) edit = hwnd;
-                if (cls == "Button" && id == 1 && save == 0) save = hwnd;
-                return true;
-            }, 0);
+                edit = 0;
+                save = 0;
+                candidates.Clear();
+                nint fallback = 0;
+                NativeMethods.EnumChildWindows(dialog, (hwnd, _) =>
+                {
+                    var cls = NativeMethods.ClassName(hwnd);
+                    var id = NativeMethods.GetDlgCtrlID(hwnd);
+                    if (cls == "Edit")
+                    {
+                        var parent = NativeMethods.GetParent(hwnd);
+                        var parentClass = NativeMethods.ClassName(parent);
+                        var grand = NativeMethods.ClassName(NativeMethods.GetParent(parent));
+                        var visible = NativeMethods.IsWindowVisible(hwnd);
+                        candidates.Add($"{id}/{parentClass}:{NativeMethods.GetDlgCtrlID(parent)}/{grand}/{(visible ? "v" : "h")}");
+                        if (id == 1001 && NativeMethods.GetDlgCtrlID(parent) == 1148) edit = hwnd;
+                        // The address bar's edit sits in a ComboBoxEx32; the name box's does not.
+                        else if (fallback == 0 && visible && parentClass == "ComboBox" && grand != "ComboBoxEx32") fallback = hwnd;
+                    }
+                    if (cls == "Button" && id == 1 && save == 0) save = hwnd;
+                    return true;
+                }, 0);
+                if (edit == 0) edit = fallback;
+                if (edit != 0 && save != 0 && (NativeMethods.ControlText(edit, 500) ?? string.Empty).Trim().Length > 0) break;
+                await Task.Delay(250, _token);
+            }
+            _log.Info("shopee-batch", $"family cut: dialog edits [{string.Join(", ", candidates.Take(8))}] name_box={edit != 0} save={save != 0}");
             if (edit == 0 || save == 0) return $"另存新檔視窗裡找不到{(edit == 0 ? "檔案名稱欄" : "存檔按鈕")}";
+            await Task.Delay(300, _token);
             var name = Path.GetFileName((NativeMethods.ControlText(edit, 1000) ?? string.Empty).Trim().Trim('"'));
             if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "slip";
             var target = Path.Combine(folder, name);
