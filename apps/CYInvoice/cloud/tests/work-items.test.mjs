@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { pbkdf2Sync, createHash } from "node:crypto";
 import { build } from "esbuild";
 
 // Execute real D1 SQL against SQLite, for both Built-in and CYID_ONLY.
@@ -78,3 +79,73 @@ for(const cyidOnly of [false,true]){
   db.close();
 }
 console.log("V3 Work Item storage: Built-in/CYID_ONLY, source de-dup, CAS revision and revoked Device fencing passed");
+
+const routeBundle=await build({entryPoints:["src/work-items-route.ts"],bundle:true,
+  write:false,format:"esm",platform:"node",target:"node24"});
+const {handleWorkItems}=await import(
+  "data:text/javascript;base64,"+Buffer.from(routeBundle.outputFiles[0].text).toString("base64"));
+const token="cydev_"+"a".repeat(64);
+const tokenHash=createHash("sha256").update(token).digest("hex");
+const salt="11".repeat(16);
+const password="synthetic-password";
+const verifier="pbkdf2-sha256$100000$"+salt+"$"+
+  pbkdf2Sync(password,Buffer.from(salt,"hex"),100000,32,"sha256").toString("hex");
+for (const cyidOnly of [false,true]) {
+  const fx=fixture(cyidOnly);
+  const {db,env,race}=fx;
+  db.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(tokenHash,devA);
+  const principal={employeeId:"synthetic_manager",workspaceRole:"ADMIN"};
+  let permission=true;
+  const authorized = cyidOnly ? {
+    ...env, DB:env, CYID_ENABLED:"true", IDENTITY:{fetch:async()=>Response.json({})},
+    IDENTITY_APPLICATION_ID:"CYINVOICE", IDENTITY_WORKSPACE_ID:"synthetic_identity",
+    IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
+    cyIdContext:{revalidate:async()=>permission?principal:{...principal,workspaceRole:"USER"}},
+  } : { ...env, DB:env, CYID_ENABLED:"false" };
+  if (!cyidOnly) {
+    db.prepare(`INSERT INTO cloud_employees
+      (employee_id,workspace_id,employee_no,name,email_normalized,
+       role,enabled,credential_verifier,credential_algorithm)
+      VALUES ('synthetic_manager',?,'9001','Manager','admin@example.test',
+              'ADMIN',1,?,'pbkdf2-sha256')`).run(ws,verifier);
+  }
+  const credentials=cyidOnly?{}:{employeeNo:"9001",password};
+  async function call(action, body, bearer=token) {
+    const response=await handleWorkItems(new Request(
+      "https://cyinvoice.synthetic/v1/work-items/"+action,{
+        method:"POST",headers:{"authorization":"Bearer "+bearer,
+          "content-type":"application/json"},
+        body:JSON.stringify({...credentials,...body}),
+      }),authorized);
+    return {status:response.status,body:await response.json()};
+  }
+  const first={itemId:"wi_endpoint_first",kind:"VOID",environment:"test",referenceHash:hash};
+  assert.equal((await call("create",first,"wrong")).status,401);
+  const created=await call("create",first);
+  assert.equal(created.status,200,JSON.stringify(created));
+  assert.equal(created.body.item.status,"open");
+  assert.equal(created.body.item.revision,1);
+  assert.equal((await call("create",first)).status,409);
+  const seen=await call("get",{itemId:first.itemId});
+  assert.equal(seen.status,200);
+  assert.equal(seen.body.item.environment,"test");
+  const change={itemId:first.itemId,expectedRevision:1,from:"open",to:"review"};
+  assert.equal((await call("transition",change)).status,200);
+  assert.equal((await call("transition",change)).status,409);
+  assert.equal((await call("transition",{...change,expectedRevision:2,from:"review",to:"open"})).status,400);
+  if (cyidOnly) permission=false;
+  else db.prepare("UPDATE cloud_employees SET enabled=0 WHERE employee_id='synthetic_manager'").run();
+  assert.equal((await call("transition",{...change,expectedRevision:2,
+    from:"review",to:"closed"})).status,403);
+  if (cyidOnly) permission=true;
+  else db.prepare("UPDATE cloud_employees SET enabled=1 WHERE employee_id='synthetic_manager'").run();
+  race(()=>db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devA));
+  assert.equal((await call("transition",{...change,expectedRevision:2,
+    from:"review",to:"closed"})).status,409);
+  assert.equal(db.prepare("SELECT status FROM work_items WHERE work_item_id=?")
+    .get(first.itemId).status,"review");
+  assert.equal((await call("get",{itemId:first.itemId})).status,401);
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+  db.close();
+}
+console.log("V3 Work Item authenticated routes: Built-in/CYID_ONLY, manager role, CAS, revocation and privacy passed");
