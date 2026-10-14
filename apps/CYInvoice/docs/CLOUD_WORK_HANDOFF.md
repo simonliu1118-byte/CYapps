@@ -9,7 +9,15 @@
 
 **V3 最小雙模式架構：**兩版共用光貿 `g0401`／`g0501`、發票、折讓、安全回查與 Windows 核心；單機帳號／資料／折讓配號使用本機 SQLite（無 CYID／D1）；CYID Cloud 由 CYID 負責 Employee／Credential／App Access，CYInvoice 自己的業務 D1 負責 Device、Work Item、Audit、折讓配號。兩版都使用「公司設定卡片」UI；Local 保存既有安全的本機設定，CYID 版公司憑證由 SUPER_ADMIN 授權寫入並加密存於其業務設定，不把金鑰暴露給 ADMIN；不因此讓單機依賴雲端，也不改現行角色權限而未經驗證。
 
-**Cloud D1 不可用但光貿正常時以光貿 `allowance_list` 暫配號並恢復後回填 D1** 為使用者提出的**待驗證設計**，不是已啟用承諾。仍需確認離線核准授權、同一 Work Item 的跨機執行鎖、未連線期間永久占號／結果不明保存、恢復後的不可覆寫合併；官方 `4040161`／`4040162` 可作明確撞號處理但無法單獨解決重複覆核與未知結果。
+**此先前離線光貿列表暫配號提案已由上方更新決議取代**：Cloud D1／Work Item 不可用時暫停跨機折讓核准；單機繼續使用 SQLite。
+
+## 2026-10-15 雲端故障及公司憑證決議（使用者已批准）
+
+**已確認，不再作為待討論問題：**
+- CYID Cloud 在 CYInvoice 業務 D1／Work Item 服務無法連線時，**暫停新增／核准／執行跨機折讓申請與其他必須先取得 Work Item 原子鎖的操作**；不因光貿 `allowance_list` 可查詢或 `4040161`／`4040162` 防撞就改用本機離線核准、先送出再補寫 D1。恢復服務後才依原 Work Item 流程處理。已送出之光貿**唯讀官方查回**可在不寫 D1 的前提下繼續，結果不明不盲重送。Local 單機折讓仍按本機 SQLite durable 與光貿執行，不受 Cloud/D1 影響。
+- **普通開票、發票查詢、其他現行被允許的光貿業務**維持既有 Cloud 暫時故障的最後可信身分與權限降級矩陣；絕不因新增折讓配號依賴 D1 而整體封鎖正常開票。已知身分／權限／Device 拒絕不可走快取 fallback。
+- **統一公司設定卡片**：Local 繼續用本機 DPAPI 安全保存 App Key／MO 密碼；CYID Cloud 的**公司設定權威**為 CYInvoice 業務 D1，由 CYID SUPER_ADMIN 在 Worker 實際執行時驗證，才能新增／修改／移除公司統編、AMEGO App Key、MO店+ 密碼；ADMIN 可看統編及是否已設定，UI 不回傳 Secrets。Server-side 加密金鑰與 D1 密文分離，Audit 不寫 Secrets。Windows 可保存**已授權取得、綁定 Device 的本機 DPAPI 加密快取**，供 D1 暫時無法連線、光貿正常時執行原本允許的發票業務；恢復連線後更新設定版本，撤銷或替換舊快取，已知撤銷必須 fail closed。離線時無法承諾立即套用 D1 新的公司設定與秘密撤銷，須明示此限制並測試。
+- **光貿官方發票→折讓關聯查詢**：`POST /json/invoice_query` 以 `{"type":"invoice","invoice_number":"EC00000001"}` 查詢；`data.allowance[]` 含對應折讓單號、日期、類型（開立 D0401／作廢 D0501）、上傳狀態、稅與未稅總額。光貿網站手動建立的同統編／授權範圍折讓亦可回查，並非只能看到 CYInvoice 自己送出的折讓。發票主體 `invoice_type`／`invoice_status`／`cancel_date`／`wait[]` 可判別發票作廢狀態與待處理異動，但**不是完整不可抹除的人員／操作 Audit**。官方 `invoice_query` 依發票日期限查 **180 天**，超過可回 `code=51`，不能判為無折讓；需要時依指定折讓單號查 `allowance_query`（含明細原發票號碼／作廢時間），或設計 `allowance_list` 日期範圍＋原發票號碼篩選之受限歷史探索，不把 API 無資料冒充確定不存在。官方來源：https://invoice.amego.tw/api_doc/ 。現有 `AmegoClient.QueryByInvoiceNumberAsync` 與 `ParseAllowances` 已有這個解析邊界；實際完整折讓／作廢樣本仍需驗收，不把 mock 當正式真資料。
 
 ## 1. 三條分支，禁止混同
 
