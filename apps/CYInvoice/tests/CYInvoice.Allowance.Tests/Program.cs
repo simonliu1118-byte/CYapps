@@ -9,6 +9,9 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
+    ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
+    ("allowance number random generator produces bounded unique identifiers", () => RunSync(TestAllowanceNumberGenerator)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -44,6 +47,71 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static void TestAllowanceNumberGenerator()
+{
+    var values = Enumerable.Range(0, 2000).Select(_ => AllowanceNumberGenerator.NewNumber()).ToArray();
+    Equal(2000, values.Distinct(StringComparer.Ordinal).Count());
+    if (values.Any(v => v.Length != 16 || v.Any(c => !"0123456789ABCDEFGHJKMNPQRSTVWXYZ".Contains(c))))
+        throw new InvalidOperationException("invalid generated allowance number");
+}
+
+static AllowanceIssueRequest ValidAllowanceRequest() => new()
+{
+    AllowanceNumber = "0ABCDEFGHJKMNPQR",
+    AllowanceDate = "20261015",
+    AllowanceType = 2,
+    BuyerIdentifier = "0000000000",
+    BuyerName = "Test Buyer",
+    TaxAmount = 5,
+    TotalAmount = 100,
+    ProductItem = [new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Sample",
+        Quantity = 1, UnitPrice = 100, Amount = 100, Tax = 5, TaxType = 1,
+    }],
+};
+
+static async Task TestG0401GatewayAsync()
+{
+    var handler = new RecordingHttpHandler((request, _, _) => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\"}"));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
+    Equal(0, response.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    using var data = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+    Equal(JsonValueKind.Array, data.RootElement.ValueKind);
+    Equal(1, data.RootElement.GetArrayLength());
+    Equal("0ABCDEFGHJKMNPQR", data.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    Equal("AA12345678", data.RootElement[0].GetProperty("ProductItem")[0].GetProperty("OriginalInvoiceNumber").GetString());
+    Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
+    await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestAllowanceQueryAndStatusAsync()
+{
+    var handler = new RecordingHttpHandler((request, _, _) => request.RequestUri?.AbsolutePath switch
+    {
+        "/json/allowance_query" => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\",\\"data\\":{\\"allowance_number\\":\\"0ABCDEFGHJKMNPQR\\",\\"invoice_type\\":\\"D0401\\",\\"invoice_status\\":99,\\"allowance_date\\":\\"20261015\\",\\"allowance_type\\":2,\\"tax_amount\\":5,\\"total_amount\\":100}}"),
+        "/json/allowance_status" => JsonResponse("{\\"code\\":0,\\"msg\\":\\"\\",\\"data\\":{\\"0ABCDEFGHJKMNPQR\\":{\\"type\\":\\"D0401\\",\\"status\\":99}}}"),
+        _ => JsonResponse("{\\"code\\":71,\\"msg\\":\\"not found\\"}"),
+    });
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var query = await gateway.QueryAllowanceAsync("0ABCDEFGHJKMNPQR");
+    Equal("D0401", query.Data.InvoiceType);
+    var status = await gateway.AllowanceStatusAsync(["0ABCDEFGHJKMNPQR"]);
+    Equal(99, status.Data.Single().Status);
+    Equal("/json/allowance_query", handler.Requests[0].Uri.AbsolutePath);
+    Equal("/json/allowance_status", handler.Requests[1].Uri.AbsolutePath);
+    await ThrowsAsync<ArgumentException>(() => gateway.AllowanceStatusAsync(["x", "x"]));
+    Equal(2, handler.Requests.Count);
 }
 
 static void TestOfficialStyles()
