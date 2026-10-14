@@ -215,6 +215,24 @@ async function deviceActorStillActive(env: Env, actor: DeviceIdentity): Promise<
   return row?.live === 1;
 }
 
+async function deviceRevokeManagerStillAuthorized(
+  env: Env, actor: DeviceIdentity, manager: SuperAdminRow,
+): Promise<boolean> {
+  if (usesCyId(env)) {
+    const principal = await env.cyIdContext?.revalidate();
+    return principal?.workspaceRole === "SUPER_ADMIN" &&
+      principal.employeeId === manager.employee_id;
+  }
+  const row = await env.DB.prepare(`
+    SELECT 1 AS valid FROM cloud_employees
+    WHERE workspace_id = ?1 AND employee_id = ?2
+      AND role = 'SUPER_ADMIN' AND enabled = 1
+      AND credential_verifier = ?3 LIMIT 1`)
+    .bind(actor.workspaceId, manager.employee_id, manager.credential_verifier)
+    .first<{ valid: number }>();
+  return row?.valid === 1;
+}
+
 async function revokeDevice(request: Request, env: Env, requestId: string): Promise<Response> {
   const actorDevice = await authenticateDevice(request, env);
   if (!actorDevice)
@@ -282,6 +300,12 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
     });
   }
 
+  // External CYID authority cannot participate in the D1 transaction; recheck
+  // as late as practical, then independently require the old Device's active
+  // status INSIDE the D1 write. Built-in credential is also fenced in that SQL.
+  if (!await deviceRevokeManagerStillAuthorized(env, actorDevice, superAdmin))
+    return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
+      "Super administrator authority changed during the request.");
   const now = new Date().toISOString();
   const reasonCode = targetDeviceId === actorDevice.deviceId ? "SELF_RETIRE" : "SUPER_ADMIN_REVOKE";
   // The actor must remain active when the mutation is committed, not just
@@ -338,9 +362,10 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   if (result[0].meta.changes !== 1) {
     // A failed guard must not be reported as LAST_ACTIVE_DEVICE or as an
     // idempotent success after this actor has lost authorization.
-    if (!await deviceActorStillActive(env, actorDevice))
+    if (!await deviceActorStillActive(env, actorDevice) ||
+        !await deviceRevokeManagerStillAuthorized(env, actorDevice, superAdmin))
       return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
-        "Device authority changed during the request.");
+        "Device or super administrator authority changed during the request.");
     const latest = await env.DB.prepare(
       `SELECT device_id, display_name, status, client_version, paired_at,
               last_seen_at, created_at, revoked_at
