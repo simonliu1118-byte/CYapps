@@ -1,6 +1,6 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/14（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/15（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 裝置與 UI 驗收
 
@@ -30,7 +30,7 @@
 
 ## 備份、復原與維運
 
-- [ ] Phase D 部署後正式回讀：Phase C 14／14 已確認；由桌機備份頁驗證真實 R2／GCS 副本隔離還原後啟用，並觀察首次 R2-only／GCS 排程結果。切換不得清除既有備份。
+- [ ] 完成 Phase D 最後啟用確認並正式回讀：V0.24.0 已部署，Phase C 14／14 及正式 R2／GCS 副本隔離還原皆通過。啟用確認操作被中止，目前仍 Phase C。切換不得清除既有備份；啟用後觀察首次 R2-only／GCS 排程結果。
 - [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9。
 - [ ] Restore：SUPER_ADMIN server gate、雙重確認、格式／schema／digest 驗證、受控 D1 寫入、對帳及操作者／結果 audit。
 - [ ] DR：R2 不可用時使用有效 GCS copy，以及從 GCS 重建新 D1 的完整演練。
