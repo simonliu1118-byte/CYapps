@@ -80,8 +80,9 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
     if (path === "/v1/work-items/create") {
       // Allowances require a server-frozen exceptional application. The generic
       // manager endpoint must never accept a client-chosen allowance hash.
-      if (body.kind === "ALLOWANCE")
-        return response(409,{error:{code:"ALLOWANCE_APPLICATION_REQUIRED"}});
+      if (body.kind === "ALLOWANCE" || body.kind === "ALLOWANCE_VOID")
+        return response(409,{error:{code:body.kind === "ALLOWANCE"
+          ? "ALLOWANCE_APPLICATION_REQUIRED" : "ALLOWANCE_VOID_APPLICATION_REQUIRED"}});
       if (typeof body.referenceHash !== "string" || !/^[a-f0-9]{64}$/.test(body.referenceHash) ||
           (body.kind !== "VOID" && body.kind !== "ALLOWANCE" && body.kind !== "ALLOWANCE_VOID") ||
           (body.environment !== "production" && body.environment !== "test"))

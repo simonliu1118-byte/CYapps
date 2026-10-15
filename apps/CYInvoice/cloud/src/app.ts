@@ -5,6 +5,7 @@ import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleWorkItems } from "./work-items-route";
 import { handleAllowanceApplications } from "./allowance-applications-route";
+import { handleAllowanceVoidApplications } from "./allowance-void-applications-route";
 import { handleCompanySettings } from "./company-settings-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
@@ -90,6 +91,9 @@ export default {
       "/v1/allowance-applications/approve",
       "/v1/allowance-applications/reserve", "/v1/allowance-applications/number-status",
       "/v1/allowance-applications/send-once",
+      "/v1/allowance-void-applications/create",
+      "/v1/allowance-void-applications/get",
+      "/v1/allowance-void-applications/list",
       "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);
     try {
@@ -119,6 +123,9 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const companySettingsResponse = await handleCompanySettings(request, env);
     if (companySettingsResponse) return companySettingsResponse;
+
+    const allowanceVoidApplicationResponse = await handleAllowanceVoidApplications(request, env);
+    if (allowanceVoidApplicationResponse) return allowanceVoidApplicationResponse;
 
     const allowanceApplicationResponse = await handleAllowanceApplications(request, env);
     if (allowanceApplicationResponse) return allowanceApplicationResponse;

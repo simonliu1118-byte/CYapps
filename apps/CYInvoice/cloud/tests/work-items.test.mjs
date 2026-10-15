@@ -120,6 +120,10 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
     kind:"ALLOWANCE",referenceHash:"f".repeat(64)});
   assert.equal(fakeAllowance.status,409);
   assert.equal(fakeAllowance.body.error.code,"ALLOWANCE_APPLICATION_REQUIRED");
+  const fakeVoid=await call("create",{...first,itemId:"wi_fake_allowance_void",
+    kind:"ALLOWANCE_VOID",referenceHash:"e".repeat(64)});
+  assert.equal(fakeVoid.status,409);
+  assert.equal(fakeVoid.body.error.code,"ALLOWANCE_VOID_APPLICATION_REQUIRED");
   assert.equal(db.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   const created=await call("create",first);
   assert.equal(created.status,200,JSON.stringify(created));
