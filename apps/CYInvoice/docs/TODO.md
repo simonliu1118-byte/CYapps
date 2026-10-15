@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 接續：折讓稅額算式及原單號官方唯讀查回（Draft）
+
+- [x] **品項核對加嚴**：原發票每列及申請每列均以 `FixedDecimal` 對應的 BigInt ×10^7 計算 `Quantity × UnitPrice` 與 `Amount`，要求原發票淨額+稅額等於官方總額，應稅 `TaxType=1` 以固定 5%／整數元四捨五入比對明細與整筆稅額，不允許不合理的稅額數字單憑「尚未超過原稅額」通過。舊版過度寬鬆的合成測試已改成真實七位小數、合法 5% 稅額案例，新增錯單價、錯行金額、錯稅額、拆列重複等失敗案例。這仍只涵蓋**資料明確的未稅模式**，若官方四捨五入或歷史分攤不明，保留人工確認。
+- [x] **原始折讓號碼唯讀查回**：`amego-allowance-query.ts` 使用光貿簽章、`allowance_query`、8 秒 timeout、256 KB 上限與精確單號／原發票／日期／狀態驗證；官方未找到（例如 code 51）、查詢逾時或非確定成功，**不允許自動換號或重送**。處理同單號被其他系統占用及跨原發票折讓的情形，單號相符也不能當作「本次確定開立」。
+- [x] **CYID 管理員查回 API 與 Windows Core**：`/v1/allowance-applications/number-readback` 只能從原 D1 ledger 取出確實保存的 `sending`／`confirmed` 折讓號碼，由服務端公司設定解密 App Key；要求同 CYID manager／有效裝置、公司版次、Workspace／環境與 frozen request 一致。只回傳最小狀態證據、原發票一致與含稅總額比對；**`safeToAutoResend=false`、`safeToAutoConfirm=false`、`requiresManualReconciliation=true`**，不修改 D1 status，不呼叫 g0401。Windows `ReadbackNumberForManagerAsync` 拒絕虛假的自動送出／完成旗標。增加 Cloud SQLite 與 Windows 合成測試。
+- [ ] **未完成**：真正可使用的管理員核准與 g0401／g0501 執行、歷史 allowance_query 逐項扣除及跨原發票餘額分攤、含稅 `detail_vat=1`、WinForms 操作介面、正式 migrations、公司憑證輪替／跨機同步、雙 List 官方對帳、DR-01～DR-13 實機及 V3 Release。以上均未部署；當次已存在的 `sending` 必須以原號查回，不能重送。只完成合成測試不得宣稱正式發票業務完成。
+
 ## 2026-10-15 V3 續作：原品項七位小數保守核對（Draft）
 
 - [x] `cloud/src/allowance-item-validation.ts` + Cloud Synthetic Test：比對同原發票日期、品名、課稅別、未稅單價、原品項數量與小計，申請 `Amount`／`Tax`、淨額 `TotalAmount`、`TaxAmount`、申請含稅總額，以 BigInt ×10^7 避免浮點誤差；重複請求品項累加數量與金額，拒絕超出原始數量／金額及重複而沒有穩定行 ID 的官方原明細。

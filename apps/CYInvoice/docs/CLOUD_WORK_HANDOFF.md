@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 V3 接續：稅額安全核對與原號查回（Draft Source）
+
+`allowance-item-validation.ts` 改依 `FixedDecimal` 規則嚴格比對申請／官方行內 `數量 × 單價 = 小計`，稅額 5% 的整數元四捨五入及原發票稅額/淨額/總額相互一致；避免明細錯價／錯稅額在單純不超額判斷下誤為符合。新增獨立官方 `/json/allowance_query` 的唯讀模組，從 D1 ledger **原號**透過服務端 CYID 公司設定查詢，不接受瀏覽器更改折讓號碼。新增 `number-readback` CYID Manager 入口及 Windows `ReadbackNumberForManagerAsync`；真實 API timeout、缺單、外部碰撞或跨原發票資料都不會自動換號／重送／核准／確認。回覆固定 `safeToAutoResend=false`、`safeToAutoConfirm=false`，Ledger 不變。
+
+上述只為 V3 #440 的 Draft Source + Node SQLite／Windows 模擬測試；仍沒完成含稅換算、歷史折讓餘額、最後 preflight、Manager Grant 寫入、g0401/g0501 實際串接、正式 D1 migrations、雲端部署與 WinForms UI。所有開票作廢相關正式驗收必須額外完成；詳見唯一 TODO 及最新 PR CI。
+
 ## 2026-10-15 V3 續作：官方品項與折讓申請保守比對（Source Draft）
 
 新的 `allowance-item-validation.ts` 為單張原發票／尚無已存在折讓／官方明確 `detail_vat=0` 的保守核對器：BigInt ×10^7 比對原日期、品項、課稅別、未稅單價、數量與小計、申請稅額及總額，重複折讓請求行會累加防超量。正式 `invoice_query` 的 `wait[]` 只要有尚未處理異動（包含 D0401、C0501）即標 `officialPendingMutation`，阻止核對通過。受 CYID 保護的 `/v1/allowance-applications/official-inspection` 及 Windows Core 客戶端只讀取／顯示 `itemCheck` 安全原因代碼，不傳原發票全部明細與公司密鑰。
