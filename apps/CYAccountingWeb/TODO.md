@@ -32,8 +32,6 @@
 
 - [ ] 觀察 Phase D 首次 GCS 週三／週日排程：2026/10/15 已回讀首次 R2-only 自動備份成功、GCS 本日未排程；新政策後的 GCS 排程仍待實際驗收，不以手動雙副本成功代替。
 - [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9／10。
-- [ ] Restore：SUPER_ADMIN server gate、雙重確認、格式／schema／digest 驗證、受控 D1 寫入、對帳及操作者／結果 audit。
-- [ ] DR：R2 不可用時使用有效 GCS copy，以及從 GCS 重建新 D1 的完整演練。
 - [ ] Google Cloud 每月低額 budget 警示（目標 NT$100）；provider lifecycle 若啟用，需長於 application retention。
 - [ ] Phase E／shared Backup Service 與 CYWEB 主控協調；尚未啟用，不共用廣權限憑證或取消 App dataset 隔離。
 - [ ] 未來若要停用 `workers.dev` 備援，另做明確切換決策與驗收；目前保留。

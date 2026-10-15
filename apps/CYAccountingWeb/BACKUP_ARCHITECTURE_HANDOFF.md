@@ -69,7 +69,7 @@ logical catalog 使用 `backup_sets`／`backup_copies`，一個 backupId 列一�
 
 WASM 固定 `sql.js@1.14.2` 的 browser JS／WASM 配對。Wrangler compile-time define 停用 library 的 WebWorker location loader，透過靜態 module 與 `instantiateWasm` 使用 Workers 支援的 precompiled WASM；不修改 runtime globals、不 eval、不 fetch 執行碼。共用 pinned engine，每次新建／關閉 DB；正式資料不落檔、不進 log。
 
-V0.25.0 提供獨立 D1 受控復原與 GCS 重建入口；本批正式部署及演練證據見 WORK_HANDOFF。正式流量 promotion 不屬 HTTP 還原動作，需依下方維運手冊明確切換；不以演練自動覆寫當前帳本。
+V0.25.0 提供獨立 D1 受控復原與 GCS 重建入口；本批正式部署及 GCS → 獨立 D1 完整還原驗收通過，證據見 WORK_HANDOFF。正式流量 promotion 不屬 HTTP 還原動作，需依下方維運手冊明確切換；不以演練自動覆寫當前帳本。
 
 Phase E shared Backup Service 尚未啟用。未來可共用 provider storage mechanics，但不接管 CYACC accounting restore；每 App dataset／authorization／restore 仍隔離，caller 由 server-side mapping 識別，不只信任傳入 appId，不共享廣權限憑證。
 
@@ -77,7 +77,7 @@ Phase E shared Backup Service 尚未啟用。未來可共用 provider storage me
 
 自動驗證已有 inner v2、legacy outer v2 compatibility、export-once、copy digest parity、provider failure isolation、topology selection，以及 schema 7/account `colorSlot` 的現行 application regression。V0.22.11 main deploy #431 已成功套用 D1 migration 並部署 production source。
 
-V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 啟用已由正式備份頁回讀確認；尚未取得首次新排程執行結果。這些測試不等於正式帳本 Restore 或 DR 完成；後續工作見 [TODO.md](TODO.md)。
+V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 啟用已由正式備份頁回讀確認；首次 R2-only 新排程已回讀成功；新政策下的 GCS 週期排程仍待觀察。V0.25.0 已完成正式 GCS → 獨立 D1 重建驗收，production promotion 不在本次演練範圍；後續工作見 [TODO.md](TODO.md)。
 
 V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成的啟用控制；底層 gate 及 append-only 驗收／policy 紀錄保留。正式還原及 DR 仍待後續實作與驗收。
 
@@ -107,3 +107,5 @@ V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成�
 5. 如驗證失敗，部署環境切回保留的原 DB；不自動刪除任何 DB 或 audit。需要新一次演練時，另行準備新空白工作區，不在已還原目標上覆寫。
 
 目前實作／本地測試與正式 GCS 演練的證據分別列於 WORK_HANDOFF；不得以本地測試宣稱正式流量切換通過。
+
+正式驗收（2026/10/15）：V0.25.0 Build 1、PR #450／#451、main runs 38671076691／38671618879 全成功。真實新備份雙副本回讀及 GCS 獨立 D1 重建通過，主站回讀 verified 且已禁止重用目標；原正式帳本／月份合計維持。原 D1 不可用與 R2 缺席由本地實際 workerd／D1／API 測試驗證，正式環境不以停用服務模擬故障。資料／稽核／政策完整比對及資料庫檢查成功不等於 production traffic promotion 已執行。

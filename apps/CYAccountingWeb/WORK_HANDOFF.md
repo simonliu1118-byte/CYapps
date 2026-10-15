@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.0 Build 1**；VERSION `0.25.0`、BUILD `1`，獨立 D1 受控還原；前版 V0.24.0 部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
+| 產品 | **V0.25.0 Build 1**；VERSION `0.25.0`、BUILD `1`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -16,7 +16,7 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS 演練結果接續記錄。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
 
 ## V0.25.0 受控復原
 
@@ -25,6 +25,14 @@
 - 空白工作區原子 claim／種子快照 guard／完整寫入；失敗 rollback。還原後逐欄逐列及 context 比對、D1 quick_check／FK；來源 SQLite 仍 integrity_check。目標帶 recovery_hold，不自動成為正式帳本。
 - 部署以既有 protected job 準備獨立 D1、注入 RECOVERY_DB；原 DB 不清空。GCS 復原入口及預覽不依賴原 D1，可處理原帳本中斷；傳統 schema 8／9 沒有 context 時仍需原 D1。
 - 資料庫正式 promotion 需要維運依 BACKUP_ARCHITECTURE_HANDOFF 的切換步驟進行。本次僅授權演練，保留原帳本與所有 audit，不執行流量切換。
+
+### 2026/10/15 正式驗收
+
+- PR #450 main run 38671076691、返修 PR #451 main run 38671618879 的 validate／deploy／migration／semantic probes 全成功，正式主站回讀 V0.25.0 Build 1。
+- 真實 schema 10 paired backup 已回讀 R2／GCS 雙成功；以該份 GCS 備份經獨立入口預覽、勾選及文字確認，成功重建已 provision 的獨立 D1。正式結果確認完整欄列、稽核、備份政策及資料庫檢查通過，目標 append-only verified audit 已由主站備份頁回讀。
+- 原主站仍可登入／讀月帳，演練前後原月份合計一致；沒有切換正式 binding 或修改財務列。還原後目標不可再預覽／覆寫，Phase C 完成進度及啟用控制仍隱藏。
+- 原 D1 關閉／僅 GCS、約束失敗 rollback、實際 workerd／全新 D1 及重建後帳戶／交易讀取屬本地驗收。正式環境沒有故意停用 R2／原 D1，也沒有進行 production traffic promotion；不能將本次演練寫成正式切換已驗證。
+- 本地 77 項 syntax／application 檢查與 CYID／build metadata 檢查通過，返修相關回歸及 PR／main CI 亦通過。未建立 Release、未修改其他 App；實際帳務、備份識別／digest、resource metadata 不進 Public Git。
 
 ## V0.24.1 正式狀態與記帳快捷
 
@@ -37,9 +45,9 @@
 
 - 正式舊版備份頁已回讀 Phase C **14／14**；不再依日期推測。新增 Phase D R2 每日 30 天、GCS 台灣時間週三／週日 03:30 保留 182 天；手動及 Excel 匯入前仍雙副本，GCS 未排程日不記失敗。
 - `backup-service.js` 沿用唯一 orchestration，`backup_policy_events` 是生效 policy authority 與 append-only 操作者稽核。啟用前重新檢查 14 次、同一備份雙 provider 隔離還原且證據未逾 24 小時；切換不清物件，後續 cleanup 採新 retention。保留原 topology 與 credentials／bindings，不另建 workflow 或擴張 IAM。
-- 隔離 SQLite 使用實際 canonical migrations 與 exporter，驗證所有帳務欄列、重複交易、封存帳戶、設定、期初及匯入 audit，檢查 integrity／FK。支援來源 schema 8／9；結果 metadata append-only、來源為 server principal。正式帳本沒有 restore writer，完整 DR／legacy normalization 仍待辦。
+- 隔離 SQLite 使用實際 canonical migrations 與 exporter，驗證所有帳務欄列、重複交易、封存帳戶、設定、期初及匯入 audit，檢查 integrity／FK。V0.24.0 當時支援來源 schema 8／9；結果 metadata append-only、來源為 server principal。V0.25.0 新增獨立 D1 writer 及 schema 10，現況見上節；legacy normalization 仍待辦。
 - 版本 stamp 改由 VERSION／migrations 產生 `src/build-metadata.json` 並在 CI check，修正舊新備份固定寫 0.22.2；不回寫歷史備份。server WASM 固定 sql.js 1.14.2，真實 workerd 重複請求確認每次新 DB。
-- 本地 **32 項檢查**（30 application suites、CYID contract 與 build metadata）通過；CI 另含 syntax、D1 migration、bundle 及正式 semantic probes。正式 R2／GCS 副本已分別完成隔離還原，備份頁顯示完整資料比對與資料庫檢查通過、正式帳本未更動；啟用按鈕由 server gate 開放。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，回讀 **Phase D 已啟用**：R2 每日 30 天；GCS 台灣時間週三／週日 03:30、182 天。啟用結果由 server policy 回讀確認，不以口頭回報或部署狀態推定。首次新排程結果仍待觀察。
+- 本地 **32 項檢查**（30 application suites、CYID contract 與 build metadata）通過；CI 另含 syntax、D1 migration、bundle 及正式 semantic probes。正式 R2／GCS 副本已分別完成隔離還原，備份頁顯示完整資料比對與資料庫檢查通過、正式帳本未更動；啟用按鈕由 server gate 開放。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，回讀 **Phase D 已啟用**：R2 每日 30 天；GCS 台灣時間週三／週日 03:30、182 天。啟用結果由 server policy 回讀確認，不以口頭回報或部署狀態推定。首次 R2-only 新排程已於下方記錄；GCS 新政策週期排程仍待觀察。
 - 新增操作只在桌機備份頁；手機／平板維持既有版面與只讀備份資訊，狀態文字反映實際保留政策。
 
 ## V0.23.4 桌機記帳輸入、編輯及日期
@@ -87,7 +95,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
 | `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
-| Backup／Restore／DR | Phase C 正式 14／14 已確認；正式雙副本隔離還原及 Phase D 啟用回讀均完成；待觀察首次新排程。正式帳本 Restore／DR 與舊 schema normalization 未完成 |
+| Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。GCS 新政策週期排程、schema 6／7 normalization 與 budget／lifecycle 仍待辦 |
 | 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
 
 ## GitHub 清理 — 2026/10/13
@@ -126,4 +134,4 @@ CYID 共通參數及舊 Variable 退場已於 2026/10/12 完成驗證；詳細�
 
 2026/10/15 正式備份頁已回讀 Phase D 首次 R2-only 自動排程成功，GCS 正確顯示本日未排程；GCS 在 Phase D 後的首次週三／週日排程仍待實際觀察。V0.25.0 真實手動 paired backup 已回讀 R2／GCS 雙成功，新備份含 schema 10 recoveryContext。實際識別、筆數與 digest 不放 Public Git。
 
-V0.25.0 正式 native 復原表單因 no-referrer 產生空 Origin 而被既有 guard 拒絕，未進入預覽／寫入；Build 1 將頁面 referrer-policy 改為 same-origin，保留同來源 guard 與 CSP，補自動測試。待部署後重跑 GCS 演練。
+V0.25.0 正式 native 復原表單因 no-referrer 產生空 Origin 而被既有 guard 拒絕，未進入預覽／寫入；Build 1 將頁面 referrer-policy 改為 same-origin，保留同來源 guard 與 CSP，補自動測試。Build 1 main run 38671618879 完整成功後，正式 native 表單 preview／雙重確認／commit 已實際通過。
