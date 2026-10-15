@@ -5,6 +5,7 @@ import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleWorkItems } from "./work-items-route";
 import { handleAllowanceApplications } from "./allowance-applications-route";
+import { handleCompanySettings } from "./company-settings-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
@@ -83,6 +84,7 @@ export default {
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
       "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
       "/v1/allowance-applications/create", "/v1/allowance-applications/get",
+      "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -108,6 +110,9 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const deviceSelfStatusResponse = await handleDeviceSelfStatus(request, env);
     if (deviceSelfStatusResponse) return deviceSelfStatusResponse;
+
+    const companySettingsResponse = await handleCompanySettings(request, env);
+    if (companySettingsResponse) return companySettingsResponse;
 
     const allowanceApplicationResponse = await handleAllowanceApplications(request, env);
     if (allowanceApplicationResponse) return allowanceApplicationResponse;

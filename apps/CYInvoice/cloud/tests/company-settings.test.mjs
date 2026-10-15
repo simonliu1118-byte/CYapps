@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
 import {build} from "esbuild";
+import {createHash} from "node:crypto";
 // Synthetic D1 schema and cryptographic tests. No external Cloudflare or
 // AMEGO actions, real company identifiers or credentials.
 const output=await build({entryPoints:["src/company-settings.ts"],bundle:true,write:false,
@@ -18,7 +19,7 @@ function fixture(){
   sql.exec("PRAGMA foreign_keys=ON; "+
     "CREATE TABLE workspaces(workspace_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'active'); "+
     "CREATE TABLE devices(device_id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),"+
-    "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud');");
+    "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud',token_hash TEXT);");
   sql.prepare("INSERT INTO workspaces(workspace_id) VALUES(?),(?)").run(ws,other);
   sql.prepare("INSERT INTO devices(device_id,workspace_id) VALUES(?,?)").run(dev,ws);
   sql.exec(readFileSync("drafts/0017_company_settings.sql","utf8"));
@@ -110,4 +111,65 @@ await assert.rejects(()=>change(f.db,{...input,expectedRevision:2},authority,key
 assert.equal(f.sql.prepare("SELECT revision FROM company_settings").get().revision,2);
 assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 f.sql.close();
-console.log("Draft company settings: encrypted, revision CAS, actor/device/role guard, audit without secrets passed");
+// HTTP contract is CYID-only and returns no App Key, MO password, envelope, or
+// arbitrary client-supplied workspace. Identity Workspace != business Workspace.
+const g=fixture();
+const rb=await build({entryPoints:["src/company-settings-route.ts"],bundle:true,
+  write:false,platform:"node",format:"esm",target:"node24"});
+const {handleCompanySettings:route}=await import("data:text/javascript;base64,"+
+  Buffer.from(rb.outputFiles[0].text).toString("base64"));
+const token="cydev_"+"a".repeat(64);
+g.sql.prepare("UPDATE devices SET token_hash=?").run(createHash("sha256").update(token).digest("hex"));
+let actor={workspaceId:"identity_synthetic",employeeId:"super_admin",workspaceRole:"SUPER_ADMIN",
+  isWorkspaceSuperAdmin:true,emailVerified:true};
+const env={DB:g.db,CYID_ENABLED:"true",IDENTITY:{fetch:async()=>Response.json({})},
+  IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",
+  IDENTITY_CYINVOICE_WORKSPACE_ID:ws,COMPANY_SETTINGS_KEY_HEX:key,
+  cyIdContext:{revalidate:async()=>actor}};
+async function call(action,payload={},envOverride=env,bearer=token){
+  const response=await route(new Request("https://cyinvoice.synthetic/v1/company-settings/"+action,{
+    method:"POST",headers:{authorization:"Bearer "+bearer,
+      "content-type":"application/json"},body:JSON.stringify(payload)
+  }),envOverride);
+  return {status:response.status,data:await response.json()};
+}
+const credentials={employeeNo:"1234",password:"SYNTHETIC_PASSWORD"};
+assert.equal((await call("get",credentials,{...env,cyIdContext:undefined})).status,401);
+assert.equal((await call("update",{...credentials,...input,workspaceId:ws})).status,400,
+  "Caller must never supply a D1 business Workspace");
+assert.equal((await call("get",credentials)).status,200);
+assert.equal((await call("get",credentials)).data.company,null);
+const req={...credentials,expectedRevision:0,sellerInvoice:"12345678",
+  amegoAppKey:{action:"replace",value:"SYNTHETIC_ONLY_KEY"},
+  moExcelPassword:{action:"replace",value:"SYNTHETIC_ONLY_MO"}};
+const created=await call("update",req);
+assert.equal(created.status,200,JSON.stringify(created));
+assert.deepEqual(created.data.company,{sellerInvoice:"12345678",revision:1,
+  hasAmegoAppKey:true,hasMoExcelPassword:true});
+const read=await call("get",credentials);
+assert.equal(read.status,200);
+for (const result of [created,read]){
+  const serialized=JSON.stringify(result);
+  for(const secret of ["SYNTHETIC_ONLY_KEY","SYNTHETIC_ONLY_MO","v1:"])
+    assert.equal(serialized.includes(secret),false);
+}
+actor={...actor,workspaceRole:"ADMIN",isWorkspaceSuperAdmin:false};
+assert.equal((await call("get",credentials)).status,200);
+assert.equal((await call("update",{...req,expectedRevision:1})).status,403);
+actor={...actor,workspaceRole:"USER"};
+assert.equal((await call("get",credentials)).status,403);
+actor={...actor,workspaceRole:"SUPER_ADMIN",isWorkspaceSuperAdmin:true};
+assert.equal((await call("update",{...req,expectedRevision:0})).status,409);
+assert.equal((await call("update",{...req,expectedRevision:1,
+  amegoAppKey:{action:"keep"},moExcelPassword:{action:"clear"}})).status,200);
+assert.equal(g.sql.prepare("SELECT revision FROM company_settings").get().revision,2);
+assert.equal(g.sql.prepare("SELECT COUNT(*) n FROM company_settings_audit_events").get().n,2);
+actor={...actor,workspaceId:"other_identity_workspace"};
+assert.equal((await call("get",credentials)).status,403);
+actor={...actor,workspaceId:"identity_synthetic"};
+assert.equal((await call("get",credentials,env,"wrong")).status,401);
+g.sql.prepare("UPDATE devices SET status='revoked'").run();
+assert.equal((await call("get",credentials)).status,401);
+assert.deepEqual(g.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+g.sql.close();
+console.log("Draft company settings: AES-GCM, atomic audit, exact CYID scope, role-separated HTTP transport passed");
