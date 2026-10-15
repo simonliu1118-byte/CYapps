@@ -525,7 +525,8 @@ internal sealed class PendingAllowanceVoidRequestStore
     }
     public void Remember(string itemId)
     {
-        if(!System.Text.RegularExpressions.Regex.IsMatch(itemId??"",
+        ArgumentNullException.ThrowIfNull(itemId);
+        if(!System.Text.RegularExpressions.Regex.IsMatch(itemId,
             @"^[A-Za-z0-9_-]{10,100}$"))
             throw new ArgumentException("Invalid pending Work Item ID.",nameof(itemId));
         if(Peek() is not null)
