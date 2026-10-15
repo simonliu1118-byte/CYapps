@@ -3,6 +3,17 @@
 // AMEGO invoice query detail_vat=1 prices are gross, while g0401 amounts
 // are net. Never compare those directly or imply an approval on that path.
 const SCALE=10000000n;
+// Mirrors CYInvoice.Core.FixedDecimal.Multiply and RoundInt64: half away
+// from zero. Only positive monetary source/claim values are accepted here.
+function roundedDividePositive(numerator:bigint,denominator:bigint):bigint {
+  return (numerator+denominator/2n)/denominator;
+}
+function lineAmount(quantity:bigint,unitPrice:bigint):bigint {
+  return roundedDividePositive(quantity*unitPrice,SCALE);
+}
+function vatInWholeTwd(taxableNet:bigint):bigint {
+  return roundedDividePositive(taxableNet*5n,100n*SCALE)*SCALE;
+}
 type Data=Record<string,unknown>;
 function object(value:unknown):Data|null {
   return value!==null && typeof value==="object" && !Array.isArray(value)
@@ -81,6 +92,7 @@ export function validateAllowanceOriginalItems(
   if(netClaim===null||taxClaim===null||invoiceTax===null||originalGross===null)
     return failed("TOTALS_MISSING");
   const originals=new Map<string,{quantity:bigint;amount:bigint}>();
+  let originalNet=0n;
   for(const raw of evidence.officialItems){
     const line=object(raw);
     if(!line)return failed("OFFICIAL_ITEM_INCOMPLETE");
@@ -91,14 +103,20 @@ export function validateAllowanceOriginalItems(
         quantity===null||quantity===0n||unitPrice===null||
         amount===null||amount===0n)
       return failed("OFFICIAL_ITEM_INCOMPLETE");
+    if(lineAmount(quantity,unitPrice)!==amount)
+      return failed("OFFICIAL_LINE_ARITHMETIC_MISMATCH");
+    originalNet+=amount;
     const key=JSON.stringify([name,taxType,String(unitPrice)]);
     // Identical official rows lack a stable line ID: ambiguous partial
     // allocation cannot authorize a later refund.
     if(originals.has(key))return failed("OFFICIAL_DUPLICATE_ITEM");
     originals.set(key,{quantity,amount});
   }
+  // An inconsistent official invoice is not proof of remaining balance.
+  if(originalNet+invoiceTax!==originalGross)
+    return failed("OFFICIAL_TOTAL_ARITHMETIC_MISMATCH");
   const claimed=new Map<string,{quantity:bigint;amount:bigint}>();
-  let net=0n,tax=0n;
+  let net=0n,tax=0n,taxableNet=0n;
   for(const raw of draft.ProductItem){
     const line=object(raw);
     if(!line)return failed("REQUEST_ITEM_INCOMPLETE");
@@ -112,6 +130,15 @@ export function validateAllowanceOriginalItems(
         quantity===0n||unitPrice===null||amount===null||amount===0n||
         itemTax===null||(taxType!==1&&itemTax!==0n))
       return failed("REQUEST_ITEM_INCOMPLETE");
+    if(lineAmount(quantity,unitPrice)!==amount)
+      return failed("REQUEST_LINE_ARITHMETIC_MISMATCH");
+    // For the narrow automatic match use only explicit standard 5% VAT
+    // with whole-TWD, half-away-from-zero rounding. Unsupported rounding
+    // rules must stay manual rather than look like a positive proof.
+    if(itemTax%SCALE!==0n || (taxType===1 &&
+       itemTax!==vatInWholeTwd(amount)))
+      return failed("REQUEST_TAX_ARITHMETIC_UNVERIFIED");
+    if(taxType===1)taxableNet+=amount;
     const key=JSON.stringify([name,taxType,String(unitPrice)]);
     const official=originals.get(key);
     if(!official)return failed("REQUEST_ITEM_NOT_IN_ORIGINAL");
@@ -122,6 +149,8 @@ export function validateAllowanceOriginalItems(
     claimed.set(key,{quantity:newQty,amount:newAmt});
     net+=amount;tax+=itemTax;
   }
+  if(tax!==vatInWholeTwd(taxableNet))
+    return failed("REQUEST_TAX_ARITHMETIC_UNVERIFIED");
   if(net!==netClaim||tax!==taxClaim||net+tax!==BigInt(requestedGross)*SCALE)
     return failed("REQUEST_TOTALS_MISMATCH");
   if(tax>invoiceTax||BigInt(requestedGross)*SCALE>originalGross)
