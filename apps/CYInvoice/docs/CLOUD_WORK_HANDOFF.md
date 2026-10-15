@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 本輪接續：公司設定權威與不可變折讓申請（Draft Source）
+
+CYInvoice V3 Draft #440 新增 `0017_company_settings.sql`、`company-settings.ts`（加密公司卡、CYID 超管重驗、Device/Workspace SQL 柵欄、revision CAS、append-only Audit、ADMIN 不讀秘密）與 `0018_allowance_applications.sql`、`allowance-applications.ts`（USER 可建立內部 frozen ALLOWANCE Work Item、加密完整未編號模板、Server SHA256／申請人、公司版本與原發票綁定、不可修改／刪除）。AMA/AMEGO 專用內部讀取只取得 App Key，**不連帶解密 MO Excel 密碼**。通用 Work Item create 已拒絕 ALLOWANCE 的 client-provided hash，未正式啟用新 route。
+
+這兩項仍**只有內部模組與合成 SQLite CI**，未接光貿官方餘額驗證、Cloud protected API、Windows UI、DPAPI Device Cache、失聯公司設定版次回收、D1 migration／實際部署或真實 API。原工作單 Draft 0015、approval／ledger 0016 仍沒有正式可操作路徑；不得視為跨機折讓已上線。詳細待辦見唯一 TODO 開頭；精確 head/CI 應以 [PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440/checks) 的最新執行查核。
+
 ## 2026-10-15 CYWEB 災難復原 Source blocker 已交回；V3 D1 折讓配號 Draft 新進度
 
 [CYWEB #151 原交接](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md) 在 10/14 指出 CYInvoice `revoked` 不明確；截至 10/15 **CYInvoice recovery-issuer.ts 已修復，並由 recovery-issuer.test.mjs 覆蓋真 SQLite 明確撤銷、已 consumed／expired、重複查回、D1 回覆遺失與 claim/revoke race**。已在 CYWEB Draft #151 留交回留言、更新該檔及其根 TODO。原問題已可標 Source complete，**不要刪交接文件或宣稱正式部署 DR 完成**；DR 全矩陣仍由此 V3 順序最後集中驗收。

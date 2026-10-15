@@ -8,6 +8,12 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 折讓申請不可變來源（Draft-only）
+
+- [x] 新增 `cloud/drafts/0018_allowance_applications.sql`、`src/allowance-applications.ts` 與隔離測試：只在 CYID 業務 D1 的**例外折讓申請**建立資料，沒有一般發票總表。由 CYID USER／ADMIN／SUPER_ADMIN 當次身分確認後，使用**原 Work Item ID** 執行 `D1.batch` 原子建立 Work Item＋申請；賣方統編／設定版次來自服務端公司卡、environment 由可信 Worker runtime 注入；原發票號碼、原因、正整數金額、申請 actor 與時間持久化，未編號 g0401 模板使用 Workspace＋Work Item AES-GCM AAD 加密儲存，雜湊由服務端依固定欄位建立，不信任前端 referenceHash。
+- [x] 讀取待覆核內容必須比對 Work Item `review`／revision、申請 reference hash、公司設定版次與原來統編、解密後模板 SHA256，任何不符 fail closed；申請資料有 D1 UPDATE／DELETE 禁止 trigger。通用 `/v1/work-items/create` 拒絕 ALLOWANCE 人工雜湊建立；正式申請專用 route 尚未開放。測試涵蓋 USER 建立、錯誤模板、重複申請、Device 撤銷、D1 批次 rollback、公司設定變動與不可變約束。
+- [ ] **尚未完成**：申請正式 UI／CYID 專用 API、管理員官方 live 查核及真實餘額分攤、Windows 管理員核准、持久化申請與 `approveAllowanceAfterOfficialReview` 的受保護整合、g0401 安全首次送出及事後唯讀 reconciliation。0015～0018 都是 Draft，禁止部署到原 D1 或開放寫入。D1 batch 回覆不明時必須依原 Work Item ID 查回、不可用新單號盲重送。
+
 ## 2026-10-15 V3 公司設定權威 Draft（尚未接 Windows／正式 Worker）
 
 - [x] 新增 `cloud/drafts/0017_company_settings.sql`、`src/company-settings.ts`：只供內部 Worker 使用的 CYID 公司設定權威草案。SUPER_ADMIN＋當前超管 marker／Email 驗證前後重新驗權；Workspace＋Device active 寫入 SQL 柵欄；revision CAS；AES-256-GCM 隨機 nonce＋Workspace／欄位 AAD；密鑰由部署時私有設定注入，絕不放 D1；原設定以明確 keep／replace／clear 避免空白覆蓋；Audit 同一 D1 batch 保存異動欄位／員編／裝置，不記秘密。ADMIN 唯讀統編＋設定狀態，無解密接口；服務內部可經金鑰解密供未來 Gateway。
