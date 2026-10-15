@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.25.0 Build 1**（獨立 D1 受控復原；部署及正式演練驗收追蹤 WORK_HANDOFF） |
+| 產品版本 | **V0.25.0 Build 1**（獨立 D1 受控復原；正式 GCS 重建演練通過） |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -42,7 +42,7 @@
 - Desktop SQLite 在瀏覽器本機解析，原始 `.db` 不上傳；SUPER_ADMIN 預覽及確認後寫入。
 - CYID 共用登入、Session、App Access、Password Recovery；USER 唯讀並可匯出 Excel。Session 逾時／401 沿用共用登入導頁。
 - 單月分類／科目合計及收支圓餅圖、多月期間統計、單月左右式損益表。
-- D1 匯出一次，R2／GCS 保存及驗證同一 logical backup；受控還原至獨立 D1，正式部署及 GCS 演練見 WORK_HANDOFF；不自動切換正式帳本。
+- D1 匯出一次，R2／GCS 保存及驗證同一 logical backup；受控還原至獨立 D1，正式 GCS 重建及完整對帳已通過；原正式帳本保留、promotion 另循維運手冊。
 
 帳戶名稱最多八個 Unicode 字元；手動摘要最多 40 weighted units（20 個全形／40 個 ASCII），金額 1～9,999,999。SUPER_ADMIN 刪除條件為已封存、無交易、最新有效期初為零；早期非零基準及稽核保留。
 
