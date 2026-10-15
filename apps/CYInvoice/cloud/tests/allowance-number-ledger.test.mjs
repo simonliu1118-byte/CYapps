@@ -276,6 +276,17 @@ concurrent.db.close();
   assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?").get(id).n,2);
   assert.equal(db.prepare("SELECT approved_by_employee_id actor FROM allowance_execution_approvals WHERE approval_id=?")
     .get(first.approvalId).actor,"manager_A");
+  // Once the first official grant exists, a new approving device cannot
+  // quietly change the frozen seller / environment / day for the same Work Item.
+  request.sellerInvoice="87654321";
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/CONFLICT_OR_REVOKED/);
+  request.sellerInvoice=base.sellerInvoice;
+  request.allowanceDay="20261016";
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/CONFLICT_OR_REVOKED/);
+  request.allowanceDay=base.allowanceDay;
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?")
+    .get(id).n,2);
+
 
   const reserved=await reserve(dbApi,reserveTarget);
   assert.equal(await markSending(dbApi,reserveTarget,reserved),true);
