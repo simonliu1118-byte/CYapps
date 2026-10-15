@@ -2,6 +2,9 @@ name: SMARTCOPIConverter Stable Release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'release/smartcopiconverter-v*'
 
 permissions:
   contents: write
@@ -12,7 +15,7 @@ concurrency:
 
 jobs:
   release-windows-x64:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.created == true)
     runs-on: windows-latest
     defaults:
       run:
@@ -32,7 +35,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:GITHUB_REF_NAME -cne 'main') { throw 'Formal release must run from main.' }
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            if ($env:GITHUB_REF_NAME -cne 'main') { throw 'Formal manual release must run from main.' }
+          } elseif ($env:GITHUB_EVENT_NAME -ne 'push') {
+            throw "Unexpected release event: $env:GITHUB_EVENT_NAME"
+          }
           $head = (& git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $head -cne $env:GITHUB_SHA) { throw 'Checkout SHA mismatch.' }
           $remote = & git ls-remote origin refs/heads/main
@@ -44,6 +51,9 @@ jobs:
           if ($build -cne '0') { throw "Formal Release requires BUILD=0, got $build" }
           if (-not (Test-Path "./V$version.txt")) { throw 'Missing matching release notes.' }
           $tag = "smartcopiconverter-v$version"
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_NAME -cne "release/smartcopiconverter-v$version") {
+            throw "Unexpected release branch: $env:GITHUB_REF_NAME"
+          }
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = "application/vnd.github+json"
