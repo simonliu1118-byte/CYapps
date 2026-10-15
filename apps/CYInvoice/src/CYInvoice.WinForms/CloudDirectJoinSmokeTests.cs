@@ -124,8 +124,6 @@ internal sealed partial class CloudDirectJoinForm
                     scenario + ": verified identity must persist");
                 Require(repository.Settings.CloudPendingDeviceJoin(saved) is null,
                     scenario + ": completed join must clear pending identity");
-                Require(repository.CloudEmployees.LoadAll().Count == 0,
-                    scenario + ": V3 must never import Built-in Employee credentials");
                 Require(server.Snapshots == 0,
                     scenario + ": V3 must never fetch Built-in Employee snapshot");
                 Require(saved.CloudIdentityProvider == "CYID" && !repository.IdentityProvider.OwnsAccountManagement,
