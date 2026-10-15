@@ -99,6 +99,23 @@ public sealed class AmegoClient : IAmegoGateway
         return new AllowanceIssueResponse(code, message);
     }
 
+    // g0501 does not allocate or return a new number. The caller must have
+    // durably saved the approved cancellation operation before invoking this
+    // method; HTTP timeouts or other ambiguous results must be queried, never
+    // blindly retried with another mutating request.
+    public async Task<AllowanceVoidResponse> VoidAllowanceAsync(
+        string allowanceNumber, CancellationToken cancellationToken = default)
+    {
+        ValidateAllowanceNumber(allowanceNumber);
+        using var document = await PostAsync("/json/g0501", new[]
+        {
+            new Dictionary<string, string> { ["CancelAllowanceNumber"] = allowanceNumber },
+        }, cancellationToken).ConfigureAwait(false);
+        var (code, message) = ReadEnvelope(document.RootElement);
+        ThrowResponseError(code, message);
+        return new AllowanceVoidResponse(code, message);
+    }
+
     public async Task<AllowanceQueryResponse> QueryAllowanceAsync(string allowanceNumber, CancellationToken cancellationToken = default)
     {
         ValidateAllowanceNumber(allowanceNumber);
