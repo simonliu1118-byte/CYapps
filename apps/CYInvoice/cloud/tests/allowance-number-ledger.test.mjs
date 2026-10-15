@@ -16,6 +16,12 @@ const {
 }=await import("data:text/javascript;base64,"+
   Buffer.from(built.outputFiles[0].text).toString("base64"));
 
+const approvalBuild=await build({entryPoints:["src/allowance-review-approval.ts"],
+  bundle:true,write:false,platform:"node",format:"esm",target:"node24"});
+const {approveAllowanceAfterOfficialReview:approveOfficial}=
+  await import("data:text/javascript;base64,"+
+    Buffer.from(approvalBuild.outputFiles[0].text).toString("base64"));
+
 const ws="synthetic_ws";
 const devA="dev_11111111-1111-4111-8111-111111111111";
 const devB="dev_22222222-2222-4222-8222-222222222222";
@@ -209,5 +215,96 @@ const afterRace=await reserve(concurrent.dbApi,{...base,workItemId:"wi_allowance
 assert.equal(afterRace.allowanceNumber,"A20261015002");
 assert.equal(concurrent.db.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,2);
 concurrent.db.close();
+
+// Internal approval writer: official evidence and two current CYID checks are
+// mandatory before an append-only grant can unlock the first reservation.
+{
+  const fx=fixture();
+  const {db,dbApi,addWork,race}=fx;
+  const id="wi_official_review";
+  addWork(id,"ALLOWANCE","review",2,"test",false);
+  const target={workspaceId:ws,workItemId:id,deviceId:devA,expectedRevision:2};
+  const request={originalInvoiceNumber:"AB12345678",sellerInvoice:base.sellerInvoice,
+    environment:"test",allowanceDay:base.allowanceDay,
+    templateSha256:base.requestSha256,requestedGrossAmount:50};
+  let actor={workspaceId:ws,employeeId:"manager_A",role:"ADMIN"};
+  let official={originalInvoiceNumber:request.originalInvoiceNumber,
+    checkedAtUtc:new Date().toISOString(),officialSnapshotSha256:"c".repeat(64),
+    invoiceUploadStatus:99,invoiceCancelled:false,
+    allowanceSummaryPresent:true,existingAllowanceCount:0,
+    originalInvoiceGrossAmount:100,originalItemsAndRequestFullyVerified:true};
+  let managerCalls=0, officialCalls=0;
+  const authority={
+    async revalidateManager(){managerCalls++;return actor;},
+    async loadFrozenApplication(){return request;},
+    async queryAndVerifyOfficialInvoice(invoiceNumber) {
+      officialCalls++;
+      assert.equal(invoiceNumber,request.originalInvoiceNumber);
+      return official;
+    }
+  };
+  const reserveTarget={...base,workItemId:id};
+  await assert.rejects(()=>reserve(dbApi,reserveTarget),/AUTHORITY_OR_REVISION_CHANGED/);
+  actor={...actor,role:"USER"};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/MANAGER_AUTH_REQUIRED/);
+  actor={...actor,role:"ADMIN"};
+  official={...official,allowanceSummaryPresent:false};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
+  official={...official,allowanceSummaryPresent:true,existingAllowanceCount:1};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
+  official={...official,existingAllowanceCount:0,
+    originalItemsAndRequestFullyVerified:false};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
+  official={...official,originalItemsAndRequestFullyVerified:true,
+    checkedAtUtc:"2020-01-01T00:00:00.000Z"};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
+  official={...official,checkedAtUtc:new Date().toISOString()};
+  const first=await approveOfficial(dbApi,target,authority);
+  assert.equal(first.approvedByEmployeeId,"manager_A");
+  assert.equal(first.templateSha256,base.requestSha256);
+  assert.equal(managerCalls>=2,true);
+  assert.equal(officialCalls>=1,true);
+  let row=db.prepare("SELECT * FROM allowance_execution_approvals WHERE approval_id=?")
+    .get(first.approvalId);
+  assert.equal(row.approved_by_employee_id,"manager_A");
+  assert.equal(row.official_snapshot_sha256,"c".repeat(64));
+  assert.equal(await reserve(dbApi,reserveTarget).then(x=>x.allowanceNumber),"A20261015001");
+  // Another manager's repeated official review is appended, never destructive.
+  actor={...actor,employeeId:"manager_B"};
+  const next=await approveOfficial(dbApi,target,authority);
+  assert.notEqual(first.approvalId,next.approvalId);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+  assert.equal(db.prepare("SELECT approved_by_employee_id actor FROM allowance_execution_approvals WHERE approval_id=?")
+    .get(first.approvalId).actor,"manager_A");
+
+  const reserved=await reserve(dbApi,reserveTarget);
+  assert.equal(await markSending(dbApi,reserveTarget,reserved),true);
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),
+    /CONFLICT_OR_REVOKED/);
+  assert.equal(await markConfirmed(dbApi,reserveTarget,reserved),true);
+
+  // New revision / revoked device / role change during official call are
+  // independently rejected without any new approval row.
+  addWork("wi_official_stale","ALLOWANCE","review",2,"test",false);
+  const stale={...target,workItemId:"wi_official_stale"};
+  actor={...actor,role:"USER"};
+  await assert.rejects(()=>approveOfficial(dbApi,stale,authority),
+    /MANAGER_AUTH_REQUIRED/);
+  actor={...actor,role:"ADMIN"};
+  race(()=>db.prepare("UPDATE work_items SET revision=revision+1 WHERE work_item_id=?")
+    .run("wi_official_stale"));
+  await assert.rejects(()=>approveOfficial(dbApi,stale,authority),
+    /CONFLICT_OR_REVOKED/);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+
+  addWork("wi_official_revoked","ALLOWANCE","review",2,"test",false);
+  race(()=>db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devA));
+  await assert.rejects(()=>approveOfficial(dbApi,
+    {...target,workItemId:"wi_official_revoked"},authority),
+    /CONFLICT_OR_REVOKED/);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+  db.close();
+}
 
 console.log("CYID D1 allowance number ledger: durable Work Item scoping, collision-only rollover, active Device/revision fencing, no D1 raw payload, A00/ZZZ limits passed");
