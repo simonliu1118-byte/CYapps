@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance g0501 cancels existing number exactly once and never reallocates", TestG0501GatewayAsync),
+    ("manager review fetches exact official invoice allowances once", TestAllowanceReviewInspectionAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
     ("allowance_list pages and maps original invoice numbers", TestAllowanceListAsync),
     ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
@@ -52,6 +53,94 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static async Task TestAllowanceReviewInspectionAsync()
+{
+    var checkedAt = new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.FromHours(8));
+    var official = Query([], "20261015");
+    var fake = new FakeGateway
+    {
+        QueryResponse = official with
+        {
+            Data = official.Data with { AllowanceSummaryPresent = true },
+        },
+    };
+    var review = new AllowanceReviewInspectionService(fake, () => checkedAt);
+    var result = await review.InspectAsync("AA12345678");
+    Equal("AA12345678", result.InvoiceNumber);
+    Equal(true, result.AllowanceSummaryPresent);
+    Equal(false, result.RequiresManualVerification);
+    Equal(checkedAt.ToUniversalTime(), result.CheckedAtUtc);
+    Equal(1, fake.QueryCalls);
+    Equal(0, fake.OtherCalls);
+
+    var existing = Query([Allowance(UploadStatuses.Complete)], "20261015");
+    fake.QueryResponse = existing with
+    {
+        Data = existing.Data with { AllowanceSummaryPresent = true },
+    };
+    result = await review.InspectAsync("AA12345678");
+    Equal(1, result.ExistingAllowances.Count);
+    Equal(true, result.NeedsPerInvoiceAmountDetail);
+    Equal(true, result.RequiresManualVerification);
+    Equal(2, fake.QueryCalls); // one per dialog opening, not per allowance
+    Equal(0, fake.OtherCalls);
+
+    // A missing allowance[] is NOT authoritative evidence of zero allowances.
+    fake.QueryResponse = official;
+    result = await review.InspectAsync("AA12345678");
+    Equal(false, result.AllowanceSummaryPresent);
+    Equal(true, result.RequiresManualVerification);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            AllowanceSummaryPresent = true,
+            CancelDate = 1,
+        },
+    };
+    result = await review.InspectAsync("AA12345678");
+    Equal(true, result.InvoiceAlreadyVoided);
+    Equal(true, result.RequiresManualVerification);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            AllowanceSummaryPresent = true,
+            VoidPending = true,
+        },
+    };
+    Equal(true, (await review.InspectAsync("AA12345678")).HasUnsettledOfficialState);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            InvoiceNumber = "AB12345678",
+            AllowanceSummaryPresent = true,
+        },
+    };
+    await ThrowsAsync<InvalidDataException>(() => review.InspectAsync("AA12345678"));
+    var calls = fake.QueryCalls;
+    await ThrowsAsync<ArgumentException>(() => review.InspectAsync("INVALID"));
+    Equal(calls, fake.QueryCalls); // never call official API for malformed IDs
+
+    // Verify the actual AMEGO parser distinguishes explicit [] from absent.
+    var handler = new RecordingHttpHandler((_, _, count) =>
+        JsonResponse(count == 1
+            ? """{"code":0,"msg":"","data":{"invoice_number":"AA12345678","order_id":"ORD-1","invoice_status":99,"allowance":[]}}"""
+            : """{"code":0,"msg":"","data":{"invoice_number":"AA12345678","order_id":"ORD-1","invoice_status":99}}"""));
+    using var http = new HttpClient(handler);
+    var realGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var yes = await realGateway.QueryByInvoiceNumberAsync("AA12345678");
+    var no = await realGateway.QueryByInvoiceNumberAsync("AA12345678");
+    Equal(true, yes.Data.AllowanceSummaryPresent);
+    Equal(false, no.Data.AllowanceSummaryPresent);
+    Equal(2, handler.Requests.Count);
+    Equal("/json/invoice_query", handler.Requests[0].Uri.AbsolutePath);
 }
 
 static void TestAllowanceNumberGenerator()
