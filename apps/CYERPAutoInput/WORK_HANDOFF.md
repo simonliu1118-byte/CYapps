@@ -9,25 +9,23 @@
 工作方式（使用者指定，沿用）：
 - 一律正體中文。使用者實機測試、每輪傳 LOG（`logs/CYERPAutoInput_日期.log`）與截圖；修好就推到 PR #424 的 branch `cyerp-auto-input/shopee-batch`，等 CI 成功，把 Windows 測試包 Artifact 連結貼成 PR 留言（結尾加 Claude Code 簽名）並回覆使用者。Artifact 保留 3 天。
 - 使用者說「先不要發，湊多一點項目」時只推 `cyerp-auto-input/next-wip`（沒有 PR、不跑 CI）。未交付的修正不加 Build（目前仍是 Build 26）。
-- 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就在 `docs/` 寫交接檔（使用者轉給 CYInvoice session，對方做完會出工程測試包）。
+- 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就暫時在 `docs/` 寫交接檔（使用者轉給 CYInvoice session，對方做完會出工程測試包）；完成後依共通文件分工彙整回 README（功能／介面）、本文件（狀態）、CHANGELOG（變更），刪掉交接檔（使用者 2026-10-15）。
 - Commit 身分依 REPOSITORY_RULES：`simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。2026-10-14～15 有數個 Build 26 commit 誤用 `Claude <noreply@anthropic.com>`，未改寫歷史（PR 以 squash merge 合併時只留一個提交）；之後一律用規定身分。
-- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（284 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
+- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（286 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
 
-**A. MO店+ 全自動（主線，使用者實機逐步測試中）**
-- 已實機通過（2026-10-14 LOG）：自己的 Chrome 視窗登入判斷 → 訂單 › 訂單管理 › E001訂單管理 › 我的訂單「未出貨」→ 處理提醒／配送方式「全部」→ 匯出報表（另存新檔 Alt+D 切到 `Temp\mo-日期時間`）→ 左側批次出貨 → 讀配送方式 (n) → 全家店出(1) 全選 → 批次出貨 → 併箱出貨 → 確認出貨（真的出貨 1 筆）→ 批次出貨中「查看批次出貨記錄」→ 依出貨時間讀最上面一筆（`MoBatchScreens.LatestRecord`）→ 點「列印文件」（點在連結文字上 `OnText`）→「列印標籤」存 PDF 成功。
-- 2026-10-15 依使用者更正的流程（待實測）：最後一個配送方式出貨完**直接**左側「我的訂單」→「配送中」→ 匯出報表；只有還有其他配送方式時才回批次出貨頁（左側選單沒反應時備援：頁面上的「批次出貨」／返回、Alt+←、F5）。之後：Temp 的兩個匯出檔帶入 `MoImportForm` → 預覽（手動補發票，或 CYInvoice 帶入）→ 按開始後**才列印**所有文件（全家／7-11 熱感、新竹 A4 放紙提醒、紙本發票）→ ERP 打單。
-- 尚未實機跑過：存完標籤後的「注意」視窗關閉、配送中匯出、帶入預覽、列印、ERP；新竹／7-11 的批次出貨與 PDF 存檔；多種配送方式同批。
-- 測試入口：MO店+ 選單只剩「測試：發票」；「從批次出貨記錄繼續」「寄件單裁切列印」與蝦皮的兩個列印測試已通過、2026-10-15 移除。
-- 7-11 標籤（2026-10-15 使用者提供解密實檔）：A4 頁面左上一張實線外框交貨便、旁邊短虛線；`SlipImage.FindFramedSlips` 依外框切，以印表機 dpi 繪出原尺寸列印（實檔 83×122 mm）。熱感紙實印未確認；多張同頁的排法無實檔（以模擬圖測）。全家照舊 `FindSlips`（虛線四格）。
+**A. MO店+ 全自動（主線）**
+- 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：只能一個 COPI08、ERP 不能開著其他視窗）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice（設定勾選時，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
+- 已實機通過：到「列印標籤」存 PDF（2026-10-14）；存標籤後關「注意」、配送中匯出、帶入兩檔（2026-10-15，停在當時的提示，該提示已拿掉）。
+- 待實測：整條全自動（含 CYInvoice、不開預覽、列印、批次 ERP、表格完成清單）；新竹／7-11 的批次出貨與 PDF；多種配送方式同批；7-11 熱感實印（`SlipImage.FindFramedSlips`，實檔外框 83×122 mm，原尺寸）。
+- 選單：全自動／匯入訂單匯出檔、重新列印寄件單／測試：發票。
 
-**B. CYInvoice 發票整合（雙程式協同測試待開始）**
-- 契約：`docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md`（query／issue）、`docs/CYINVOICE_PDF_HANDOFF.md`（`--autoinput-pdf` 與 §4 CYInvoice 完成回報，**以此為最新**）、`docs/CYINVOICE_INTERFACE_HANDOFF.md`（最早的需求母本）。CYInvoice Draft PR #445，V2.6.21 Build 0 工程包（commit `283e9f26`，Artifact 於 2026-10-18 過期，過期請 CYInvoice 端重出）。
-- AUTO 端：`CyInvoiceLink.cs`（純：request／result、`Mismatch` 核對號碼／日期／金額／統編、`PaperInvoiceLedger`，有測試）、`MainForm.Invoice.cs`（子行程、query → 使用者確認 → issue 只送 skipped → unknown 再 query 一次；`QueuePaperInvoices` 背景每 20 秒 `--autoinput-pdf`、最多 30 分鐘，`PaperMayPrompt`＝沒有輸入 ERP（`_paperHold`）／沒有跑 Chrome 才請人放 A4 白紙；PDF 再核對號碼與金額）。環境由 AUTO 從結果 `environment` 判斷：全自動只收 production；測試入口兩者皆可但測試環境不進 ERP。轉人工訂單不送 CYInvoice（依交接；使用者尚未表示要改）。
-- 測試入口：MO店+ ›「測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）」。測試前 CYInvoice 要在設定頁切測試環境並**儲存**（CLI 用最後儲存的環境），建議獨立 portable 目錄。request／result 在 `Temp\invoice-日期時間`。
-- 設定：`CyInvoicePath`（檔案選擇器）、`MoAutoInvoice`（預設關；正式發行並經使用者同意前不開）、`PaperInvoiceStyle`。
-- 使用者規則：一般消費者 → 會員載具不印；有統編抬頭 → 紙本要印（A4 印表機、放紙確認）；紙本 PDF 不可中斷全自動。
+**B. CYInvoice 發票整合**（功能與呼叫介面見 README「MO店+ 發票（CYInvoice）」；原本三份 docs/CYINVOICE_*_HANDOFF.md 已於 2026-10-15 依使用者要求彙整回 README／本文件／CHANGELOG 並刪除，原文在 Git 歷史 commit `d5244bad` 以前）
+- CYInvoice：V2.6.21 Build 0（Draft PR #445，branch `cyinvoice/feat-autoinput-interface`，commit `283e9f26`），工程測試版、未合併發行；工程包 Artifact 2026-10-18 過期（過期請 CYInvoice 端重出，不可換用正式 V2.6.19）。契約要改時在本專案寫需求交 CYInvoice（PR #445），對方做完出工程包；不在 AUTO 另寫開票。
+- CYInvoice 已確認（2026-10-15）：有統編→紙本、無統編→會員載具（pdf 對 B2C 回 skipped）；`orderId` 永遠是 MO 原始編號；`totalAmount` 為 MO 應開發票整單金額；CLI 用最後儲存的環境、request 不能切換；PDF 經其 PDF Cache 驗證後原子複製、不呼叫開立、單次約 55 秒內回應。
+- 使用者實測（2026-10-15，CYInvoice 測試環境）：「測試：發票」選兩個訂單檔 → 開立 → 帶回預覽 → 開始輸入 ERP 全部正確。使用者決定：全自動直接開立不詢問、最後列完成清單。
+- 待實測：全自動整條串 CYInvoice、紙本 PDF → A4 列印；正式環境在 CYInvoice 正式發行後使用。測試前 CYInvoice 要切測試環境並儲存，建議獨立 portable 資料夾。
 
-**未發布的修正（只在 `cyerp-auto-input/next-wip`，使用者 2026-10-15：等發票與 MO店+ 全自動測完一起改完再發）**：蝦皮全自動聊聊「重新啟用對話」與聊聊視窗確實收起；設定 CYInvoice 移到「一般」、F8 與蝦皮自動擷取拿掉開關；MO店+ 全自動網頁做完直接進下一步；MO店+ 全自動串 CYInvoice（不詢問、全部乾淨就不開預覽直接列印＋批次 ERP，測試環境不進 ERP）。使用者已實測「測試：發票」到 ERP 輸入正確。
+**完成清單**：所有批次（蝦皮全自動、MO店+／酷澎／蝦皮匯入）共用 `BatchSummaryForm`，2026-10-15 起為「狀態／訂單編號／說明」表格（`BatchSummary` 純邏輯，有測試），需人工的列在前、橘色；複製為 Tab 分欄。
 
 **C. 其他待辦**：蝦皮全自動的 7-11／全家實測、黑貓 A4（§6）、無人值守（Roadmap 5）。合併與正式發布都要使用者同意。
 
@@ -142,9 +140,7 @@ V0.3.0（Build 0–26，未發布）現況：
    防重複（使用者 2026-10-10）：以蝦皮／MO店+ 訂單編號為準；CY 已儲存→擋下（批次略過）；未開自動儲存的單與只打單頭轉人工的單也記錄，但只提醒不擋。待辦：實機驗證。
    MO店+／酷澎全自動（使用者 2026-10-13 規劃，未開始；酷澎等有訂單再做）：AutoInput 一次完成 1 未出貨匯出 → 2 批次出貨取寄件單 PDF → 3 配送中匯出 → 4 呼叫 CYInvoice 開立 → 5 取回發票號碼／日期 → 6 兩檔帶入（已完成）→ 7 ERP → 8 列印寄件單 → 9 清除。決定：
    - 下載檔一律放 AutoInput 自建的暫存資料夾，全部成功後連資料夾刪除；有要人工處理的訂單就保留。
-   - CYInvoice 接口已由 CYInvoice 主控實作（Draft PR #445，見 `docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md`）。使用者 2026-10-14 決定：等 MO店+ 全自動跑順之後再接；設定裡的 CYInvoice.exe 位置用檔案選擇器選（不用手填）；接上前發票資料仍在預覽手動填。
-   - 2026-10-15 呼叫端已寫好（`CyInvoiceLink`（純，有測試）、`MainForm.Invoice.cs`），尚未實機聯測：MO店+ ›「測試：發票」用真實訂單檔、CYInvoice 測試環境（使用者：測試環境的送出資料 CYInvoice 自己有處理，不必擔心外洩），停在預覽。環境由 AUTO 從查詢結果判斷（全自動只收 production）；全自動開立預設關（設定勾選）。紙本發票：有統編才印，開立後在背景以提案的 `--autoinput-pdf` 每 20 秒取官方 PDF（光貿完成才有；格式在 設定 › 印表機 選；不中斷全自動），拿到後在沒有輸入 ERP 時請人放紙、印在 A4 印表機；CYInvoice 已於 2026-10-15 以 V2.6.21 Build 0 工程包實作 `--autoinput-pdf` 並確認四項（`docs/CYINVOICE_PDF_HANDOFF.md` §4 完成回報）；待雙程式實機協同測試。CYInvoice CLI 未開啟時用其設定頁最後儲存的環境，測試前要在 CYInvoice 切到測試環境並儲存。轉人工訂單不送 CYInvoice（依交接）。
-   - 發票只由 CYInvoice 開立、不需登入；介面規格見 `docs/CYINVOICE_INTERFACE_HANDOFF.md`，交 CYInvoice 主控實作（命令列＋結果檔，開立／查詢兩種模式）。
+   - CYInvoice：已接上（現況見 `README「MO店+ 發票（CYInvoice）」`）；CYInvoice.exe 位置用檔案選擇器選（使用者 2026-10-14）。
    - 寄件單：某張訂單失敗仍整份列印（出貨一定要印）。全家／7-11 是 A4 切四格，要轉成熱感紙一張一格（解密 PDF → 轉圖 → 切四格去空白 → 逐張列印）；新竹印單前暫停提示人工放紙，按「繼續」才印（暫停不是中止）。印表機細節等下次實單跑一次再定。
    - 網頁端 1–3 步比照蝦皮全自動（自己的 Chrome 視窗、讀網頁原文），待使用者實單帶一次流程。
    MO店+ 網頁操作步驟（使用者 2026-10-14 實機帶；Build 26 已實作為「MO店+ › 全自動」：`ShopeeBatchRunner.Mo.cs`（`RunMoAsync`，與蝦皮共用 Chrome 讀取／點擊／另存新檔 `SaveFromDialogAsync`）、`MoBatchScreens`（純判讀，有測試）、`MainForm.RunMoBatchAsync`（`MoImportForm.Preload`→預覽填發票→按開始後列印（`PreviewAndRunAsync` 的 `beforeErp`，只印一次；使用者 2026-10-14：紙本發票也在這步印）→ERP）；尚未實機跑過，網頁文字的判讀依截圖寫成，待 LOG 校正。使用者 2026-10-14 決定：轉人工的訂單照樣出貨列印、只跳過 ERP；明細不印；批次出貨記錄非全部成功即停止；未登入停下請人登入）：

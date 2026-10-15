@@ -21,7 +21,7 @@ internal sealed class MoInvoiceOutcome
 }
 
 /// <summary>
-/// MO店+ 發票 through CYInvoice (user, 2026-10-15; contract in docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md).
+/// MO店+ 發票 through CYInvoice (user, 2026-10-15; contract in README「MO店+ 發票（CYInvoice）」).
 /// CYInvoice is asked first (query, never issues), which also tells its environment: 全自動
 /// takes production only, so a test CYInvoice is found out before anything is issued. Only the
 /// orders it has no invoice for are then issued, after the user says so; every answer is checked

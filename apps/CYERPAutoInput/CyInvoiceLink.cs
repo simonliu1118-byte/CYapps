@@ -23,7 +23,7 @@ internal sealed record CyInvoiceResult(string RequestId, string Version, string 
 }
 
 /// <summary>
-/// The CYInvoice AutoInput contract (CYInvoice PR #445, docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md):
+/// The CYInvoice AutoInput contract (CYInvoice PR #445, README「MO店+ 發票（CYInvoice）」):
 /// request.json out, result.json in, and what of it may reach ERP. CYInvoice parses the MO店+
 /// export itself and owns 光貿; this side only asks, checks every order and fills the preview.
 /// Pure: no process or UI, unit tested.
@@ -62,7 +62,7 @@ internal static class CyInvoiceLink
 
     /// <summary>
     /// request.json. <paramref name="pdf"/> only for <c>--autoinput-pdf</c> (proposal in
-    /// docs/CYINVOICE_INTERFACE_HANDOFF.md §紙本發票): the folder for the official PDFs and the style.
+    /// README「MO店+ 發票（CYInvoice）」): the folder for the official PDFs and the style.
     /// </summary>
     public static string Request(string requestId, string file, IReadOnlyCollection<string> orderIds, (string Folder, int Style)? pdf = null)
     {

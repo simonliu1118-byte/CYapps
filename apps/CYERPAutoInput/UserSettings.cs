@@ -25,7 +25,7 @@ internal sealed class UserSettings
     public string A4Printer { get; set; } = string.Empty;
     /// <summary>
     /// CYInvoice.exe, chosen with a file picker (user, 2026-10-14: never typed); blank = not set.
-    /// MO店+ 發票 goes through its AutoInput interface (docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md).
+    /// MO店+ 發票 goes through its AutoInput interface (README「MO店+ 發票（CYInvoice）」).
     /// </summary>
     public string CyInvoicePath { get; set; } = string.Empty;
     /// <summary>
