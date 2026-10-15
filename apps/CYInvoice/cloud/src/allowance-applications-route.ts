@@ -9,7 +9,8 @@ interface Env extends CyIdEnv {
   COMPANY_SETTINGS_KEY_HEX?:string; // secret, not public Wrangler vars
   ALLOWANCE_OPERATION_ENVIRONMENT?:string; // 'test' or 'production' from deploy gate
 }
-const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applications/get"]);
+const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applications/get",
+  "/v1/allowance-applications/list"]);
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -20,17 +21,25 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-function validBody(body:unknown,action:"create"|"get"):body is Record<string,unknown>{
+type Action = "create"|"get"|"list";
+function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
   const allowed=action==="create"
     ? new Set(["employeeNo","password","itemId","originalInvoiceNumber","allowanceDay",
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
-    : new Set(["employeeNo","password","itemId"]);
-  return Object.keys(val).every(k=>allowed.has(k))&&
-    typeof val.itemId==="string"&&itemPattern.test(val.itemId);
+    : action==="get" ? new Set(["employeeNo","password","itemId"])
+    : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
+  if(!Object.keys(val).every(k=>allowed.has(k)))return false;
+  if(action==="list"){
+    const hasCreated=val.cursorCreatedAt!==undefined,hasId=val.cursorItemId!==undefined;
+    return hasCreated===hasId && (!hasCreated ||
+      (typeof val.cursorCreatedAt==="string" && !Number.isNaN(Date.parse(val.cursorCreatedAt)) &&
+        typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
+  }
+  return typeof val.itemId==="string"&&itemPattern.test(val.itemId);
 }
-async function body(request:Request,action:"create"|"get"){
+async function body(request:Request,action:Action){
   if(Number(request.headers.get("content-length")||"0")>45000)return null;
   const text=await request.text();
   if(text.length>45000)return null;
@@ -67,7 +76,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
   if(request.method!=="POST")return response(405,{error:{code:"METHOD_NOT_ALLOWED"}});
   // Defense in depth; direct dispatch without withCyIdSession cannot enter.
   if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
-  const action=path.endsWith("/create")?"create":"get";
+  const action=path.endsWith("/create")?"create":path.endsWith("/list")?"list":"get";
   const input=await body(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -76,6 +85,48 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       return response(401,{error:{code:"DEVICE_INVALID"}});
     const actor=await authority(env).revalidate();
     if(!actor)return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
+    if(action==="list"){
+      if(actor.workspaceRole==="USER")return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(env.ALLOWANCE_OPERATION_ENVIRONMENT!=="test" &&
+         env.ALLOWANCE_OPERATION_ENVIRONMENT!=="production")
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      const limit=input.limit===undefined?20:Number(input.limit);
+      if(!Number.isSafeInteger(limit)||limit<1||limit>50)
+        return response(400,{error:{code:"INVALID_PAGINATION"}});
+      const cursorCreated=input.cursorCreatedAt===undefined?null:input.cursorCreatedAt as string;
+      const cursorId=input.cursorItemId===undefined?null:input.cursorItemId as string;
+      // Stable cursor: creation UTC timestamp + ID, not offset. No enumeration
+      // outside the bound business Workspace and runtime environment.
+      const page=await env.DB.prepare(
+        "SELECT a.work_item_id,a.workspace_id,a.environment,a.original_invoice_number,"+
+        "a.allowance_day,a.requested_gross_amount,a.application_reason,"+
+        "a.applicant_employee_id,a.seller_invoice,a.created_at,"+
+        "wi.status AS work_status,wi.revision AS work_revision "+
+        "FROM allowance_applications a JOIN work_items wi "+
+        "ON wi.work_item_id=a.work_item_id AND wi.workspace_id=a.workspace_id "+
+        "WHERE a.workspace_id=?1 AND a.environment=?2 AND wi.kind='ALLOWANCE' "+
+        "AND wi.status IN ('open','review') AND wi.reference_hash=a.reference_hash "+
+        "AND (?3 IS NULL OR wi.created_at<?3 OR (wi.created_at=?3 AND wi.work_item_id<?4)) "+
+        "ORDER BY wi.created_at DESC, wi.work_item_id DESC LIMIT ?5")
+        .bind(d.workspace_id,env.ALLOWANCE_OPERATION_ENVIRONMENT,cursorCreated,cursorId,limit+1)
+        .all<Metadata>();
+      const again=await authority(env).revalidate();
+      if(!again||again.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(again.workspaceRole))
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      const items=page.results??[];
+      const visible=items.slice(0,limit);
+      const last=visible.at(-1);
+      return response(200,{applications:visible.map(item=>({
+        itemId:item.work_item_id,environment:item.environment,status:item.work_status,
+        revision:item.work_revision,originalInvoiceNumber:item.original_invoice_number,
+        allowanceDay:item.allowance_day,requestedGrossAmount:item.requested_gross_amount,
+        reason:item.application_reason,applicantEmployeeId:item.applicant_employee_id,
+        sellerInvoice:item.seller_invoice,createdAt:item.created_at
+      })),nextCursor:items.length>limit&&last ? {
+        cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id
+      }:null});
+    }
     if(action==="get"){
       const row=await env.DB.prepare(
         "SELECT a.work_item_id,a.workspace_id,a.environment,a.original_invoice_number,"+

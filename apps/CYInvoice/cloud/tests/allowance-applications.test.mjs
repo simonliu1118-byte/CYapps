@@ -27,6 +27,7 @@ function fixture(){
     constructor(q){this.q=q;this.args=[];}
     bind(...args){this.args=args;return this;}
     async first(){return sql.prepare(this.q).get(...this.args)??null;}
+    async all(){return {results:sql.prepare(this.q).all(...this.args)};}
     async run(){return {meta:{changes:sql.prepare(this.q).run(...this.args).changes}};}
   }
   return {sql,db:{prepare:q=>new Statement(q),async batch(items){
@@ -137,6 +138,20 @@ who={...who,employeeId:"other_cyid_employee"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,404);
 who={...who,workspaceRole:"ADMIN"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,200);
+const page1=await call("list",{limit:1});
+assert.equal(page1.status,200,JSON.stringify(page1));
+assert.equal(page1.data.applications.length,1);
+assert.notEqual(page1.data.nextCursor,null);
+const page2=await call("list",{limit:1,...page1.data.nextCursor});
+assert.equal(page2.status,200);
+assert.equal(page2.data.applications.length,1);
+assert.equal(page2.data.nextCursor,null);
+assert.notEqual(page1.data.applications[0].itemId,page2.data.applications[0].itemId);
+assert.equal((await call("list",{limit:51})).status,400);
+assert.equal((await call("list",{limit:10,workspaceId:"ws_other"})).status,400);
+who={...who,workspaceRole:"USER"};
+assert.equal((await call("list",{limit:1})).status,403);
+who={...who,workspaceRole:"ADMIN"};
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
 assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,2);
