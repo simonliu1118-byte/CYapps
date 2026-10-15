@@ -359,7 +359,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         "AND wi.status IN ('review','closed') AND wi.reference_hash=a.reference_hash "+
         "ORDER BY l.attempt DESC LIMIT 1"
       ).bind(d.workspace_id,itemId,expectedRevision).first<{
-        allowance_number:string,status:string,environment:string,
+        ledger_id:string,allowance_number:string,status:string,environment:string,
         seller_invoice:string,allowance_day:string,request_sha256:string,
         original_invoice_number:string,requested_gross_amount:number,
         company_settings_revision:number,template_sha256:string,
