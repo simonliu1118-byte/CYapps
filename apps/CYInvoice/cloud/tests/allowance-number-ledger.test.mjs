@@ -46,15 +46,29 @@ function fixture(){
       return {meta:{changes:db.prepare(this.sql).run(...this.args).changes}};
     }
   }
-  const addWork=(id, kind="ALLOWANCE",status="review",revision=2,environment="test")=>
+  const approve=(id,revision=2,environment="test",deviceId=devA)=>{
+    const now=new Date();
+    db.prepare(`INSERT INTO allowance_execution_approvals
+      (workspace_id,work_item_id,approved_revision,seller_invoice,environment,
+       allowance_day,template_sha256,official_snapshot_sha256,official_checked_at,
+       approved_by_employee_id,approved_by_device_id,approved_at,valid_until_utc)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(ws,id,revision,base.sellerInvoice,environment,base.allowanceDay,
+        base.requestSha256,"b".repeat(64),now.toISOString(),
+        "cyid_manager",deviceId,now.toISOString(),
+        new Date(now.getTime()+15*60_000).toISOString());
+  };
+  const addWork=(id, kind="ALLOWANCE",status="review",revision=2,environment="test",granted=true)=>{
     db.prepare(`INSERT INTO work_items(work_item_id,workspace_id,opened_by_device_id,
       updated_by_device_id,environment,kind,reference_hash,status,revision,
       actor_id,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id,ws,devA,devA,environment,kind,createHash("sha256").update(id).digest("hex"),status,
         revision,id,"2026-10-15","2026-10-15");
+    if(granted && kind==="ALLOWANCE" && status==="review")approve(id,revision,environment);
+  };
   addWork(base.workItemId);
-  return {db,dbApi:{prepare:sql=>new Statement(sql)},addWork,race:fn=>{race=fn;}};
+  return {db,dbApi:{prepare:sql=>new Statement(sql)},addWork,approve,race:fn=>{race=fn;}};
 }
 function status(db,ledgerId) {
   return db.prepare("SELECT status FROM allowance_number_ledger WHERE ledger_id=?")
@@ -126,6 +140,27 @@ race(()=>db.prepare("UPDATE work_items SET revision=revision+1 WHERE work_item_i
 await assert.rejects(()=>reserve(dbApi,{...base,deviceId:devB,
   workItemId:"wi_allowance_late"}),/AUTHORITY_OR_REVISION_CHANGED/);
 assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,4);
+// review is NOT approval: the exact manager-authorized official snapshot
+// grant must exist and match revision, company, environment and payload digest.
+addWork("wi_no_approval","ALLOWANCE","review",2,"test",false);
+await assert.rejects(()=>reserve(dbApi,{...base,deviceId:devB,
+  workItemId:"wi_no_approval"}),/AUTHORITY_OR_REVISION_CHANGED/);
+const approvedBefore=db.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n;
+assert.equal(approvedBefore,4);
+approve("wi_no_approval",2,"test",devB);
+const granted=await reserve(dbApi,{...base,deviceId:devB,workItemId:"wi_no_approval"});
+assert.equal(granted.allowanceNumber,"A20261015005");
+db.prepare("UPDATE allowance_execution_approvals SET valid_until_utc='2020-01-01' WHERE work_item_id=?")
+  .run("wi_no_approval");
+assert.equal(await markSending(dbApi,{...base,deviceId:devB,
+  workItemId:"wi_no_approval"},granted),false,
+  "Expired official review approval must not permit sending");
+db.prepare("UPDATE allowance_execution_approvals SET valid_until_utc='2099-01-01' WHERE work_item_id=?")
+  .run("wi_no_approval");
+assert.equal(await markSending(dbApi,{...base,deviceId:devB,
+  workItemId:"wi_no_approval"},granted),true);
+assert.equal(await markSending(dbApi,{...base,deviceId:devB,
+  workItemId:"wi_no_approval"},granted),false);
 assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
 db.close();
 
