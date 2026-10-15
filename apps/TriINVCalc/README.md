@@ -2,7 +2,11 @@
 
 **三聯式發票開立計算機**是一個 Windows x64 單機小工具，用於將含稅商品資料換算為三聯式發票所需的未稅單價、未稅金額、銷售額與 5% 營業稅，並以三聯式發票版面即時預覽。
 
-目前正式發行版本：`V1.5.5`；本次視覺調整開發版本：`V1.5.6`（尚未正式發布）。
+**目前正式版本：`V1.5.6`，已完成驗收與 GitHub Release。**
+
+[正式 Release（Windows x64）](https://github.com/simonliu1118-byte/CYapps/releases/tag/TriINVCalc-v1.5.6) · [Portable ZIP](https://github.com/simonliu1118-byte/CYapps/releases/download/TriINVCalc-v1.5.6/TriINVCalc_V1.5.6.zip) · [獨立 EXE](https://github.com/simonliu1118-byte/CYapps/releases/download/TriINVCalc-v1.5.6/TriINVCalc.exe)
+
+專案功能與視覺調整已結案，後續僅視需要進行維護；正式原始碼以 `main` 為準。前版 `V1.5.5` GitHub Release 已依使用者指示移除，其版本說明留在 Git 中作歷史紀錄。
 
 ## 主要功能
 
@@ -43,6 +47,13 @@
 4. 以 Windows GUI subsystem 建置 `TriINVCalc.exe`。
 5. 從 `VERSION` 與 `BUILD` 注入使用者可見版本身分。
 6. 在 `dist/` 產生 portable ZIP。
+
+## 驗收與正式發行
+
+- V1.5.6 已通過 Windows x64 GitHub Actions 的建置、Go 測試、公開封裝安全掃描與 EXE／ZIP SHA-256 產生檢查。
+- 已以 AITeam 原始資產 SHA-256 驗證 `CAL.ico`；不自行重新繪製圖示。
+- 使用者已確認本次介面與 Icon 更新方向；`125%`／`150%` DPI 與 Windows Explorer／工作列圖示的個別環境顯示仍屬視覺規範中的實機驗收項目，不宣稱已全面測試。
+- 正式發行走 [TriINVCalc Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/tri-inv-calc-release.yml) 的 `main` 手動工作流程；未經使用者新一輪核准，不自動建立下一個正式 Release。
 
 ## 資料與隱私
 
