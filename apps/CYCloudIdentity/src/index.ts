@@ -31,6 +31,7 @@ import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot, handleRegis
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
 export { ConsumerAuthoritySync } from "./consumer-authority";
+export { ConsumerNotifications } from "./consumer-notifications-entrypoint";
 
 function decodedSegment(value: string): string | null {
   try {
