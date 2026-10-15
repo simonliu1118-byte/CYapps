@@ -40,7 +40,7 @@ cd apps/SMARTCOPIConverter
 
 - 版本唯一來源：`VERSION` 與 `BUILD`。
 - PR 測試包：`.github/workflows/smartcopiconverter-build.yml`，Windows x64 建置、Go 測試及公開發行安全掃描；Artifact 保留 3 天。
-- 正式版：`.github/workflows/smartcopiconverter-release.yml`，經使用者同意後由 `main` 手動觸發，重新 Build/Test、公開安全掃描並提供 ZIP、EXE 與 SHA-256。
+- 正式版：`.github/workflows/smartcopiconverter-release.yml`，經使用者同意後從 `main` 手動觸發，或建立與當前 `main` 同一 commit 的 `release/smartcopiconverter-vX.Y.Z` 分支一次性觸發，重新 Build/Test、公開安全掃描並提供 ZIP、EXE 與 SHA-256。
 - ZIP 請解壓至可寫入的 Windows 資料夾再啟動。因 `settings.json` 與 log 會寫入 EXE 目錄，請勿直接在壓縮檔或唯讀路徑執行。
 
 ## CVT 視覺與正式圖示
@@ -55,3 +55,11 @@ cd apps/SMARTCOPIConverter
 - `V1.0.1` 的發行說明為 `V1.0.1.txt`；歷史變更見 `CHANGELOG.md`。
 - 正式 EXE/ZIP 只保存於 GitHub Releases，不提交 binary 至 Git 原始碼庫。
 - 本機 POS 輸出資料夾只透過首次啟動或「設定」按鈕指定，不把公司共享路徑寫入原始碼或正式發行包。
+
+## V1.0.1 收尾及驗證紀錄
+
+- 正式版：[`smartcopiconverter-v1.0.1`](https://github.com/simonliu1118-byte/CYapps/releases/tag/smartcopiconverter-v1.0.1)；含 portable ZIP、獨立 EXE、`SHA256SUMS.txt`，不可用短期 Actions Artifact 取代。
+- 正式來源：`main`；以使用者授權的一次性發行分支觸發 [Windows 正式發行檢查](https://github.com/simonliu1118-byte/CYapps/actions/runs/38775298216)，已成功完成 Go Test、Windows Build、公開套件安全掃描及 SHA-256。
+- 正式 CI 保留兩個 Workflow：`smartcopiconverter-build.yml`（PR / 測試包）及 `smartcopiconverter-release.yml`（授權發行）；不另外維護舊匯入版或暫時驗證 Workflow。
+- 工作文件以本 README（安裝、操作、建置）、`CHANGELOG.md`（歷史變更）、`V1.0.1.txt`（本版發行說明）分工；永久規則仍只在唯一 `PROJECT_RULES.md`，上層規範來自根目錄與 AITeam，不建立平行規則。
+- 尚需使用者於實際 Windows 主機確認 Explorer／工作列圖示及 125%/150% DPI、真正 ERP 檔與 SMART POS 的端對端匯入；這些不能僅憑 CI 宣稱完成。
