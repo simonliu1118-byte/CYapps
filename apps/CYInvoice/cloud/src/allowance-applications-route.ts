@@ -3,6 +3,8 @@
 // Worker app.ts must wrap these endpoints in app-scoped withCyIdSession.
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
 import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication} from "./allowance-applications";
+import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 
 interface Env extends CyIdEnv {
   DB:D1Database;
@@ -10,7 +12,8 @@ interface Env extends CyIdEnv {
   ALLOWANCE_OPERATION_ENVIRONMENT?:string; // 'test' or 'production' from deploy gate
 }
 const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applications/get",
-  "/v1/allowance-applications/list","/v1/allowance-applications/review-preview"]);
+  "/v1/allowance-applications/list","/v1/allowance-applications/review-preview",
+  "/v1/allowance-applications/official-inspection"]);
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -21,7 +24,7 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-type Action = "create"|"get"|"list"|"review-preview";
+type Action = "create"|"get"|"list"|"review-preview"|"official-inspection";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -29,7 +32,8 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
     ? new Set(["employeeNo","password","itemId","originalInvoiceNumber","allowanceDay",
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
     : action==="get" ? new Set(["employeeNo","password","itemId"])
-    : action==="review-preview" ? new Set(["employeeNo","password","itemId","expectedRevision"])
+    : (action==="review-preview"||action==="official-inspection")
+      ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
   if(!Object.keys(val).every(k=>allowed.has(k)))return false;
   if(action==="list"){
@@ -39,7 +43,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (action!=="review-preview" ||
+    (!["review-preview","official-inspection"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -80,7 +84,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
   // Defense in depth; direct dispatch without withCyIdSession cannot enter.
   if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
   const action=path.endsWith("/create")?"create":path.endsWith("/list")?"list":
-    path.endsWith("/review-preview")?"review-preview":"get";
+    path.endsWith("/review-preview")?"review-preview":
+    path.endsWith("/official-inspection")?"official-inspection":"get";
   const input=await body(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -130,6 +135,67 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       })),nextCursor:items.length>limit&&last ? {
         cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id
       }:null});
+    }
+    if(action==="official-inspection"){
+      if(actor.workspaceRole==="USER")
+        return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(env.ALLOWANCE_OPERATION_ENVIRONMENT!=="test" &&
+         env.ALLOWANCE_OPERATION_ENVIRONMENT!=="production")
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      if(!/^[a-f0-9]{64}$/i.test(env.COMPANY_SETTINGS_KEY_HEX??""))
+        return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+      const itemId=input.itemId as string;
+      const rev=input.expectedRevision as number;
+      // This is only a LIVE READ-ONLY status inspection. The official response
+      // is NOT an approval grant, and no g0401 is sent from this route.
+      const frozen=await loadFrozenAllowanceApplication(env.DB,d.workspace_id,itemId,
+        rev,env.COMPANY_SETTINGS_KEY_HEX!);
+      if(frozen.environment!==env.ALLOWANCE_OPERATION_ENVIRONMENT)
+        return response(409,{error:{code:"ALLOWANCE_ENVIRONMENT_CHANGED"}});
+      const company=await loadAmegoCompanySettingsForGateway(env.DB,
+        d.workspace_id,env.COMPANY_SETTINGS_KEY_HEX!);
+      if(company.sellerInvoice!==frozen.sellerInvoice ||
+          company.revision!==frozen.companySettingsRevision)
+        return response(409,{error:{code:"ALLOWANCE_COMPANY_CHANGED"}});
+      // Revalidate before transferring the request to AMEGO; never contact
+      // the provider after a manager has lost authority.
+      const beforeRemote=await authority(env).revalidate();
+      if(!beforeRemote||beforeRemote.employeeId!==actor.employeeId||
+          !["ADMIN","SUPER_ADMIN"].includes(beforeRemote.workspaceRole))
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      const snapshot=await queryOfficialInvoiceReadOnly({
+        sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+        originalInvoiceNumber:frozen.originalInvoiceNumber
+      });
+      const after=await authority(env).revalidate();
+      const liveDevice=await dev(request,env);
+      if(!after||after.employeeId!==actor.employeeId||
+          !["ADMIN","SUPER_ADMIN"].includes(after.workspaceRole) ||
+          liveDevice?.device_id!==d.device_id)
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      // Minimal status only: no key, buyer PII or raw official line items.
+      const flags={
+        uploadComplete:snapshot.uploadStatus===99,
+        notCancelled:snapshot.cancelDate===0 && !snapshot.voidPending,
+        allowanceSummaryExplicit:snapshot.allowanceSummaryPresent,
+        zeroExistingAllowances:snapshot.allowanceSummaryPresent &&
+          snapshot.existingAllowanceCount===0,
+        invoiceGrossEnough:snapshot.totalAmount>=frozen.requestedGrossAmount,
+        officialProductsPresent:snapshot.productItemsPresent
+      };
+      return response(200,{inspection:{
+        itemId,revision:rev,originalInvoiceNumber:frozen.originalInvoiceNumber,
+        checkedAtUtc:snapshot.checkedAtUtc,
+        officialSnapshotSha256:snapshot.snapshotSha256,
+        officialUploadStatus:snapshot.uploadStatus,
+        cancelled:snapshot.cancelDate!==0||snapshot.voidPending,
+        officialInvoiceGross:snapshot.totalAmount,
+        requestedGrossAmount:frozen.requestedGrossAmount,
+        existingAllowanceCount:snapshot.existingAllowanceCount,
+        ...flags,
+        requiresPerItemVerification:true,canApprove:false,
+        status:"OFFICIAL_READ_ONLY_NOT_APPROVED"
+      }});
     }
     if(action==="review-preview"){
       if(actor.workspaceRole==="USER")
@@ -243,6 +309,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
       if(/ALLOWANCE_(APPLICATION_NOT_REVIEWABLE|APPLICATION_COMPANY_CHANGED|APPLICATION_REFERENCE_TAMPERED|APPLICATION_TEMPLATE_TAMPERED)/.test(error.message))
         return response(409,{error:{code:"ALLOWANCE_REVIEW_REQUIRES_REFRESH"}});
+      if(/^OFFICIAL_QUERY_/.test(error.message))
+        return response(503,{error:{code:"OFFICIAL_QUERY_UNCONFIRMED"}});
       if(/ALLOWANCE_(COMPANY_NOT_CONFIGURED)/.test(error.message)||
          /no such table: (allowance_applications|company_settings|work_items)/i.test(error.message))
         return response(503,{error:{code:"ALLOWANCE_NOT_READY"}});

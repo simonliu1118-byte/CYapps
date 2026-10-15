@@ -85,6 +85,7 @@ export default {
       "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
       "/v1/allowance-applications/create", "/v1/allowance-applications/get",
       "/v1/allowance-applications/list", "/v1/allowance-applications/review-preview",
+      "/v1/allowance-applications/official-inspection",
       "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);
     try {

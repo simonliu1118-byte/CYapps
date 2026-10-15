@@ -174,6 +174,58 @@ assert.equal((await call("list",{limit:1})).status,403);
 assert.equal((await call("review-preview",{itemId:createBody.itemId,
   expectedRevision:2})).status,403);
 who={...who,workspaceRole:"ADMIN"};
+// Official READ-ONLY query: the company key must be loaded from D1 instead of
+// applicant inputs; no g0401, no implicit approval, and manager revocation
+// must stop queries before reaching the provider.
+const companyBundle=await build({entryPoints:["src/company-settings.ts"],
+  bundle:true,format:"esm",platform:"node",target:"node24",write:false});
+const {encryptCompanyBusinessData:encryptSecret}=await import(
+  "data:text/javascript;base64,"+
+  Buffer.from(companyBundle.outputFiles[0].text).toString("base64"));
+const officialTestKey="SYNTHETIC_OFFICIAL_KEY_DO_NOT_USE";
+const secret=await encryptSecret(key,ws,"amego",officialTestKey);
+fx.sql.prepare("UPDATE company_settings SET amego_app_key_ciphertext=?")
+  .run(secret);
+let officialCalls=0;
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async (url,opts)=>{
+  officialCalls++;
+  assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
+  const form=new URLSearchParams(opts.body);
+  assert.equal(form.get("invoice"),"12345678");
+  assert.equal(JSON.parse(form.get("data")).invoice_number,"AB12345678");
+  assert.equal(form.get("sign"),createHash("md5").update(
+    form.get("data")+form.get("time")+officialTestKey).digest("hex"));
+  return Response.json({code:0,msg:"",data:[{
+    invoice_number:"AB12345678",status:99,cancel_date:0,
+    total_amount:"100",allowance:[],product_item:[{description:"Synthetic"}]
+  }]});
+};
+try {
+  const firstInspection=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(firstInspection.status,200,JSON.stringify(firstInspection));
+  assert.equal(firstInspection.data.inspection.canApprove,false);
+  assert.equal(firstInspection.data.inspection.status,"OFFICIAL_READ_ONLY_NOT_APPROVED");
+  assert.equal(firstInspection.data.inspection.requiresPerItemVerification,true);
+  assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
+  assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
+  assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
+  assert.equal(officialCalls,1);
+  assert.equal(JSON.stringify(firstInspection.data).includes(officialTestKey),false);
+  assert.equal((await call("official-inspection",{itemId:createBody.itemId,
+    expectedRevision:1})).status,409);
+  assert.equal(officialCalls,1,"stale revision does not contact AMEGO");
+  assert.equal((await call("official-inspection",{itemId:createBody.itemId,
+    expectedRevision:2,canApprove:true})).status,400);
+  assert.equal(officialCalls,1,"client-supplied approval flags are rejected");
+  who={...who,workspaceRole:"USER"};
+  assert.equal((await call("official-inspection",{itemId:createBody.itemId,
+    expectedRevision:2})).status,403);
+  assert.equal(officialCalls,1);
+  who={...who,workspaceRole:"ADMIN"};
+}finally{globalThis.fetch=originalFetch;}
+
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
 assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,2);
