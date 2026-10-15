@@ -138,6 +138,26 @@ who={...who,employeeId:"other_cyid_employee"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,404);
 who={...who,workspaceRole:"ADMIN"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,200);
+// Review is a read-only preview of the tamper-checked frozen Work Item.
+// It must never be mistaken for approval or a verified official invoice.
+assert.equal((await call("review-preview",{itemId:createBody.itemId,
+  expectedRevision:1})).status,409);
+fx.sql.prepare("UPDATE work_items SET status='review',revision=2 WHERE work_item_id=?")
+  .run(createBody.itemId);
+const review=await call("review-preview",{itemId:createBody.itemId,expectedRevision:2});
+assert.equal(review.status,200,JSON.stringify(review));
+assert.equal(review.data.review.canApprove,false);
+assert.equal(review.data.review.officialVerification,"NOT_PERFORMED");
+assert.equal(review.data.review.items.length,1);
+assert.equal(review.data.review.items[0].description,"Synthetic item");
+assert.equal(review.data.review.applicantEmployeeId,"cyid_employee");
+for(const forbidden of ["SYNTHETIC_APP_KEY","SYNTHETIC_MO","v1:","BuyerEmailAddress",
+  "unnumberedTemplateJson","templateJson"])
+  assert.equal(JSON.stringify(review.data).includes(forbidden),false);
+assert.equal((await call("review-preview",{itemId:createBody.itemId,
+  expectedRevision:1})).status,409);
+assert.equal((await call("review-preview",{itemId:createBody.itemId,
+  expectedRevision:2,officialApproved:true})).status,400);
 const page1=await call("list",{limit:1});
 assert.equal(page1.status,200,JSON.stringify(page1));
 assert.equal(page1.data.applications.length,1);
@@ -151,6 +171,8 @@ assert.equal((await call("list",{limit:51})).status,400);
 assert.equal((await call("list",{limit:10,workspaceId:"ws_other"})).status,400);
 who={...who,workspaceRole:"USER"};
 assert.equal((await call("list",{limit:1})).status,403);
+assert.equal((await call("review-preview",{itemId:createBody.itemId,
+  expectedRevision:2})).status,403);
 who={...who,workspaceRole:"ADMIN"};
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);

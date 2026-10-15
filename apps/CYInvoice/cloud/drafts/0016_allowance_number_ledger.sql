@@ -58,3 +58,24 @@ CREATE INDEX idx_allowance_ledger_work_item
   ON allowance_number_ledger(workspace_id, work_item_id, attempt DESC);
 -- Status changes must not delete a numbered attempt. The next attempted number
 -- is allowed only after a definite g0401 4040161/4040162 rejection.
+
+-- Draft-only guard: closing an in-flight allowance would strand the original
+-- number and make the official result impossible to reconcile safely.
+-- "confirmed" may close normally; reserved/sending must first be resolved.
+CREATE TRIGGER allowance_work_item_no_unsafe_close
+BEFORE UPDATE OF status ON work_items
+WHEN OLD.kind='ALLOWANCE' AND NEW.status='closed'
+  AND EXISTS (SELECT 1 FROM allowance_number_ledger a
+    WHERE a.workspace_id=OLD.workspace_id AND a.work_item_id=OLD.work_item_id
+      AND a.status IN ('reserved','sending'))
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_IN_FLIGHT_NOT_CLOSABLE'); END;
+
+-- Number assignments are permanent even if an attempted AMEGO request fails.
+CREATE TRIGGER allowance_number_ledger_no_delete
+BEFORE DELETE ON allowance_number_ledger
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_NUMBER_PERMANENT'); END;
+CREATE TRIGGER allowance_number_ledger_no_renumber
+BEFORE UPDATE OF workspace_id,work_item_id,seller_invoice,environment,
+  allowance_day,sequence,allowance_number,attempt,request_sha256,
+  created_by_device_id,created_at ON allowance_number_ledger
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_NUMBER_PERMANENT'); END;

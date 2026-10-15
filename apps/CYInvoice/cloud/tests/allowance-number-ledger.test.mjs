@@ -105,6 +105,12 @@ await assert.rejects(()=>reserve(dbApi,{...base,allowanceDay:"20260230"}),
   /ALLOWANCE_DATE_INVALID/);
 assert.equal(await markSending(dbApi,base,first),true);
 assert.equal(await markSending(dbApi,base,first),false,"No second live send");
+assert.throws(()=>db.prepare("UPDATE work_items SET status='closed' WHERE work_item_id=?")
+  .run(base.workItemId),/ALLOWANCE_IN_FLIGHT_NOT_CLOSABLE/);
+assert.throws(()=>db.prepare("DELETE FROM allowance_number_ledger WHERE ledger_id=?")
+  .run(first.ledgerId),/ALLOWANCE_NUMBER_PERMANENT/);
+assert.throws(()=>db.prepare("UPDATE allowance_number_ledger SET sequence=5 WHERE ledger_id=?")
+  .run(first.ledgerId),/ALLOWANCE_NUMBER_PERMANENT/);
 await assert.rejects(()=>reserve(dbApi,base),/REQUIRES_RECONCILIATION/);
 await assert.rejects(()=>markCollision(dbApi,base,first,4040163),
   /COLLISION_NOT_CONFIRMED/);
@@ -118,6 +124,8 @@ assert.equal(status(db,first.ledgerId),"occupied_external");
 assert.equal(await markSending(dbApi,base,third),true);
 assert.equal(await markConfirmed(dbApi,base,third),true);
 assert.equal(await markConfirmed(dbApi,base,third),false);
+assert.equal(db.prepare("UPDATE work_items SET status='closed' WHERE work_item_id=?")
+  .run(base.workItemId).changes,1,"A confirmed allowance can close the work item");
 await assert.rejects(()=>reserve(dbApi,base),/REQUIRES_RECONCILIATION/);
 assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,3,
   "No allocated number is recycled/deleted");
