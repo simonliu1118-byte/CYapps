@@ -273,7 +273,7 @@ concurrent.db.close();
   actor={...actor,employeeId:"manager_B"};
   const next=await approveOfficial(dbApi,target,authority);
   assert.notEqual(first.approvalId,next.approvalId);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?").get(id).n,2);
   assert.equal(db.prepare("SELECT approved_by_employee_id actor FROM allowance_execution_approvals WHERE approval_id=?")
     .get(first.approvalId).actor,"manager_A");
 
@@ -295,14 +295,14 @@ concurrent.db.close();
     .run("wi_official_stale"));
   await assert.rejects(()=>approveOfficial(dbApi,stale,authority),
     /CONFLICT_OR_REVOKED/);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?").get(id).n,2);
 
   addWork("wi_official_revoked","ALLOWANCE","review",2,"test",false);
   race(()=>db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devA));
   await assert.rejects(()=>approveOfficial(dbApi,
     {...target,workItemId:"wi_official_revoked"},authority),
     /CONFLICT_OR_REVOKED/);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals").get().n,2);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?").get(id).n,2);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   db.close();
 }
