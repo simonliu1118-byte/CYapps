@@ -170,7 +170,8 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 - 設定 › 一般：CYInvoice.exe（只能按「選擇…」）、「MO店+ 全自動呼叫 CYInvoice 開立發票」。設定 › 印表機：紙本發票 PDF 格式（A4 整張、A4（地址＋A5）、A4（A5 內容）、A5、QRcode A4）與 A4 印表機。
 - 全自動：配送中匯出後先查詢（同時得知 CYInvoice 是測試或正式環境），只對查無發票的訂單開立，不詢問；結果不明的再查一次，仍不明就轉人工，絕不重送開立。轉人工的訂單（店家備註等）不送 CYInvoice。每筆都核對發票號碼格式、日期、金額＝訂單開立發票金額、統編相同才帶入；其他留空並列出原因。
 - 正式環境的發票才輸入 ERP；測試環境照常開立、帶入與列印，但不輸入 ERP。「MO店+ › 測試：發票」選訂單檔、開立前會問、停在預覽；測試入口按開始一律輸入 ERP，不論 CYInvoice 的環境（使用者自己切）。
-- 紙本發票：紙本或載具由 CYInvoice 依開立入口決定（MO店+ 入口：一般消費者開會員載具不印，有統編抬頭開紙本要印；酷澎入口一律紙本，之後做酷澎時一併處理）。光貿開立完成後才有 PDF，所以開立後在背景每 20 秒向 CYInvoice 要一次（最多 30 分鐘），不影響全自動與打單；拿到後在沒有輸入 ERP 的時候跳出放「A4 白紙」確認再印。印過的發票號碼記在 `Data\paper_invoices.json`（60 天），重跑不重印；取不到或按停止的會列出請在 CYInvoice 列印。
+- 紙本發票：紙本或載具由 CYInvoice 依開立入口決定（MO店+ 入口：一般消費者開會員載具不印，有統編抬頭開紙本要印；酷澎入口一律紙本，見下方酷澎）。光貿開立完成後才有 PDF，所以開立後在背景每 20 秒向 CYInvoice 要一次（最多 30 分鐘），不影響全自動與打單；拿到後在沒有輸入 ERP 的時候跳出放「A4 白紙」確認再印。印過的發票號碼記在 `Data\paper_invoices.json`（60 天），重跑不重印；取不到或按停止的會列出請在 CYInvoice 列印。
+- 酷澎：CYInvoice 酷澎入口一律開紙本，每張都取 PDF；有統編依設定的版型，沒有統編一律 A4 整張且**雙面（長邊）**列印（A4 印表機必須支援雙面，否則列出請在 CYInvoice 列印）。CYInvoice 讀酷澎檔需要「訂單編號」「應開立予買家之發票金額」「顯示產品名稱」「數量」「訂購人姓名」「應開立予酷澎之發票金額」「統一編號」七欄。
 - 每次呼叫的請求與結果留在 `Temp\invoice-日期時間\`，有問題時一起提供。
 
 呼叫介面（CYInvoice PR #445 提供；程式在 `CyInvoiceLink.cs`、`MainForm.Invoice.cs`）：
@@ -181,7 +182,7 @@ CYInvoice.exe --autoinput-issue <request.json> --result <result.json>   開立�
 CYInvoice.exe --autoinput-pdf   <request.json> --result <result.json>   只取官方 PDF，絕不開立
 ```
 
-- request `cyinvoice-autoinput-request/1`：`requestId`（每次新的 GUID）、`source`（`mo`；`coupang` 預留）、`file`（未出貨原始匯出檔的絕對路徑）、`orderIds`；pdf 另有 `pdfFolder`、`pdfStyle`（0／1／2／3／5）。結果檔每次用新路徑，不覆寫。
+- request `cyinvoice-autoinput-request/1`：`requestId`（每次新的 GUID）、`source`（`mo`／`coupang`）、`file`（未出貨原始匯出檔的絕對路徑）、`orderIds`；pdf 另有 `pdfFolder`、`pdfStyle`（0／1／2／3／5）。結果檔每次用新路徑，不覆寫。
 - result `cyinvoice-autoinput-result/1`：`environment`（`production`／`test`）與每筆 `orderId`（MO 原始訂單編號，測試環境也一樣）、`status`、`invoiceNumber`、`invoiceDate`（yyyy/MM/dd）、`buyerBan`（一般消費者空白）、`buyerName`、`totalAmount`、`message`，pdf 另有 `pdfFile`。
 - status：`issued`／`existing` 核對後帶入；`failed`、`unknown` 轉人工；`skipped` 是查無發票（查詢時才拿去開立）；pdf 的 `ready` 再核對號碼與金額才印、`pending` 是光貿尚未完成。
 - 結束碼 0 全部成功、1 部分待人工、2 請求或檔案有問題、3 目前無法安全處理；2／3 或逾時（每筆 60 秒＋60 秒）可能沒有結果檔，不可當作沒開，之後以查詢核對。

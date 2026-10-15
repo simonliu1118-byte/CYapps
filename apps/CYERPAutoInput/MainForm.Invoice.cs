@@ -361,7 +361,10 @@ internal sealed partial class MainForm
             try
             {
                 var pages = await MoSlipPdf.RenderPagesAsync(j.Pdf!, string.Empty, 300);
-                try { await Task.Run(() => SlipPrinter.PrintPages(printer, pages, $"發票 {r.InvoiceNumber}")); }
+                // A consumer's paper invoice (酷澎) goes on both sides, long edge (CYInvoice 2026-10-15).
+                var duplex = j.Outcome.Source == CyInvoiceLink.Coupang && r.BuyerBan.Length == 0;
+                _log.Info("cyinvoice", $"paper invoice pdf pages={pages.Count} duplex={duplex}");
+                try { await Task.Run(() => SlipPrinter.PrintPages(printer, pages, $"發票 {r.InvoiceNumber}", duplex)); }
                 finally { foreach (var page in pages) page.Dispose(); }
                 ledger.Record(j.Outcome.Environment, r.InvoiceNumber);
                 printed?.Add($"紙本發票 {r.InvoiceNumber}");

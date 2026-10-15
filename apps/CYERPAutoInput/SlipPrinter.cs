@@ -150,11 +150,17 @@ internal static partial class SlipPrinter
     /// A4 pages (drawn from a PDF) printed as one document, each fitted to the printable area and
     /// centred, as Acrobat's 符合 does (user's screenshot, 2026-10-14: 96 %).
     /// </summary>
-    public static void PrintPages(string printer, IReadOnlyList<Bitmap> pages, string documentName)
+    /// <param name="duplex">Both sides, flipped on the long edge (酷澎 一般消費者紙本發票, CYInvoice 2026-10-15); a printer without duplex is an error.</param>
+    public static void PrintPages(string printer, IReadOnlyList<Bitmap> pages, string documentName, bool duplex = false)
     {
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
         if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
+        if (duplex)
+        {
+            if (!doc.PrinterSettings.CanDuplex) throw new InvalidOperationException($"印表機 {printer} 不支援雙面列印");
+            doc.PrinterSettings.Duplex = Duplex.Vertical; // long edge for a portrait page
+        }
         doc.DocumentName = documentName;
         doc.PrintController = new StandardPrintController();
         doc.OriginAtMargins = false;
