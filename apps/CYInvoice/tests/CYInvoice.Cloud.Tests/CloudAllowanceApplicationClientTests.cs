@@ -12,12 +12,12 @@ internal static class CloudAllowanceApplicationClientTests
     private const string Endpoint = "https://cloud.example.test/";
     public static async Task RunAsync()
     {
-        using (var http = new HttpClient(new QueueHandler()))
+        using (var probeHttp = new HttpClient(new QueueHandler()))
         {
             Reject<ArgumentException>(() => new CloudAllowanceApplicationClient(
-                http, new Uri("http://cloud.example.test/"), Token));
+                probeHttp, new Uri("http://cloud.example.test/"), Token));
             Reject<ArgumentException>(() => new CloudAllowanceApplicationClient(
-                http, new Uri(Endpoint+"?token=raw"), Token));
+                probeHttp, new Uri(Endpoint+"?token=raw"), Token));
         }
         var request = new AllowanceIssueRequest {
             AllowanceNumber="",AllowanceDate="20261015",
