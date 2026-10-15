@@ -182,7 +182,7 @@ function backupSettingsHtml() {
 
     <div id="backupAcceptance" class="backup-acceptance-strip" hidden></div>
 
-    <div class="backup-actions-row">
+    <div class="backup-actions-row backup-policy-row">
       <span id="backupRetentionText" class="hint">讀取保留政策中…</span>
     </div>
 
@@ -198,7 +198,7 @@ function backupSettingsHtml() {
 
     <div id="backupRestoreTools" class="backup-restore-tools" hidden>
       <div class="backup-actions-row"><button id="backupVerifyRestore" class="secondary" type="button" disabled>檢查備份可還原性</button><button id="backupActivatePhaseD" class="secondary" type="button" disabled>啟用 Phase D</button></div>
-      <p class="hint backup-verification-explanation">在臨時資料庫試還原並核對內容，不會寫入任何帳本。</p>
+      <p class="hint backup-verification-explanation">試還原並核對資料，不會寫入帳本。</p>
       <p id="backupRestoreStatus" class="hint">尚未執行隔離還原驗證。</p>
     </div>
     <section id="backupRecoveryTools" class="backup-recovery-launcher" hidden>
@@ -390,7 +390,7 @@ function renderBackupStatus(data) {
     const historyTitle = document.querySelector('.backup-history-title strong');
     const historyHint = document.querySelector('.backup-history-title .hint');
     if (historyTitle) historyTitle.textContent = '最近備份紀錄';
-    if (historyHint) historyHint.textContent = '每筆備份分別顯示 R2 與 GCS 的驗證結果';
+    if (historyHint) historyHint.hidden = true;
   }
 
   if (run) run.disabled = !model.configured;
@@ -501,7 +501,7 @@ function renderBackupRestoreState(data) {
   const pair = ['cloudflare_r2', 'google_cloud_storage'].map(provider => checks.find(check => check.backupId === latestId && check.provider === provider)).filter(Boolean);
   const successful = pair.length === 2 && pair[0].attemptId === pair[1].attemptId && pair.every(check => check.status === 'success');
   const label = document.querySelector('#backupRestoreStatus');
-  if (label) label.textContent = successful ? 'R2／GCS 隔離還原、完整資料比對與資料庫檢查通過。'
+  if (label) label.textContent = successful ? '最近檢查：R2／GCS 皆通過。'
     : pair.length ? '隔離驗證未完整通過：' + pair.filter(check => check.status !== 'success').map(check => check.result?.code || '驗證失敗').join('、') : data?.policy?.phase === 'phase_d' ? '可隨時檢查最近備份是否能完整還原。' : '先驗證備份能完整還原，再啟用 Phase D。';
   const verify = document.querySelector('#backupVerifyRestore');
   if (verify) verify.disabled = !data?.configured || !data?.logicalBackups?.length;
@@ -689,7 +689,7 @@ async function previewBackupRecovery() {
     const data=await api('/api/backup/recovery/preview',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({backupId:document.querySelector('#backupRecoverySource').value,provider:document.querySelector('#backupRecoveryProvider').value,reason:document.querySelector('#backupRecoveryReason').value})},120000);
     if (generation !== backupRecoveryGeneration || !document.querySelector('#backupRecoveryDialog')?.open) return;
     backupRecoveryPreview=data.preview;
-    document.querySelector('#backupRecoveryStatus').textContent=`備份驗證通過，將還原 ${Number(data.preview.counts.transactions||0).toLocaleString()} 筆記帳至獨立工作區。請完成下方兩項確認；預覽有效 10 分鐘。`;
+    document.querySelector('#backupRecoveryStatus').textContent=`${data.preview.normalization ? '舊版格式轉換及驗證通過，' : '備份驗證通過，'}將還原 ${Number(data.preview.counts.transactions||0).toLocaleString()} 筆記帳至獨立工作區。請完成下方兩項確認；預覽有效 10 分鐘。`;
     document.querySelector('#backupRecoveryConfirm').hidden=false;
     setBackupRecoveryMessage('還原預覽完成，目前帳本未更動。');
   } catch(error) {setBackupRecoveryMessage(error.message,true);} finally {if(button)button.disabled=false;}

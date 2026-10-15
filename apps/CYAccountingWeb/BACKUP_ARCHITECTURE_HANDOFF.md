@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/15（台灣時間）。正式程式版本 **V0.25.0**、D1 schema **10**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
+更新：2026/10/15（台灣時間）。正式程式版本 **V0.25.2**、D1 schema **10**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
@@ -65,7 +65,7 @@ logical catalog 使用 `backup_sets`／`backup_copies`，一個 backupId 列一�
 
 現行 Backup 管理由 server 判斷 SUPER_ADMIN；ADMIN／USER 不得管理。CYID 是唯一 Session authority，UI 隱藏不代替 API authorization。
 
-本次新增隔離還原驗證：從 R2／GCS 各回讀 manifest／data，核對 byte size、SHA-256 與 logical catalog，再於全新記憶體 SQLite 套用正式 migrations，匯入帳戶（含封存）、分類／科目、交易（保留重複發生筆）、期初基準與 audit、設定及 Excel import audit。SQLite integrity／foreign-key check 及 canonical exporter 全欄全列回讀比對均通過才成功；驗證結果／操作者寫入 append-only metadata，不向 client 回傳帳務內容，V0.25.0 另由受控 recovery domain 寫入獨立空白 D1，不覆寫正式 DB。讀入 data 上限 8 MiB，支援來源 schema **8／9／10**；6／7 的舊資料 normalization 尚未實作，reader 相容不等於可還原。
+本次新增隔離還原驗證：從 R2／GCS 各回讀 manifest／data，核對 byte size、SHA-256 與 logical catalog，再於全新記憶體 SQLite 套用正式 migrations，匯入帳戶（含封存）、分類／科目、交易（保留重複發生筆）、期初基準與 audit、設定及 Excel import audit。SQLite integrity／foreign-key check 及 canonical exporter 全欄全列回讀比對均通過才成功；驗證結果／操作者寫入 append-only metadata，不向 client 回傳帳務內容，V0.25.0 另由受控 recovery domain 寫入獨立空白 D1，不覆寫正式 DB。讀入 data 上限 8 MiB，支援來源 schema **6～10**；6／7 依 canonical migration 明確 normalization 後完整比對。
 
 WASM 固定 `sql.js@1.14.2` 的 browser JS／WASM 配對。Wrangler compile-time define 停用 library 的 WebWorker location loader，透過靜態 module 與 `instantiateWasm` 使用 Workers 支援的 precompiled WASM；不修改 runtime globals、不 eval、不 fetch 執行碼。共用 pinned engine，每次新建／關閉 DB；正式資料不落檔、不進 log。
 
@@ -92,7 +92,7 @@ V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成�
 3. 原子 D1 batch 再次確認目標為已 provision、未 claim、完全符合初始種子快照。僅替換目標種子 master rows，寫入全部帳務及 context，新增 epoch 與 recovery_hold。禁止清空正式 DB、刪除任何歷史 audit 或重用已還原工作區。
 4. 回讀全部欄列、政策／catalog／proof；來源 SQLite 使用 integrity_check，實際 D1 使用 quick_check 與 foreign_key_check。結果 append-only。成功也不自動改正式 binding，原 D1 保留。
 
-資料及 manifest 各限 8 MiB；400 列一組、最多 40 statements 的原子 batch。超出限制須維運另行評估，不進行部分寫入。來源 schema 8／9／10 支援，8／9 若無 recoveryContext 需原 DB 可用；6／7 normalization 仍待辦。新復原事件保存在目標，原 DB 可用時另寫完成證據；保留原 DB 的歷史不能解讀為備份已含所有物理表。
+資料及 manifest 各限 8 MiB；400 列一組、最多 40 statements 的原子 batch。超出限制須維運另行評估，不進行部分寫入。來源 schema 6～10 支援；6～9 若無 recoveryContext 需原 DB 可用。新復原事件保存在目標，原 DB 可用時另寫完成證據；保留原 DB 的歷史不能解讀為備份已含所有物理表。
 
 ### 部署與正式切換手冊
 
@@ -109,3 +109,5 @@ V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成�
 目前實作／本地測試與正式 GCS 演練的證據分別列於 WORK_HANDOFF；不得以本地測試宣稱正式流量切換通過。
 
 正式驗收（2026/10/15）：V0.25.0 Build 1、PR #450／#451、main runs 38671076691／38671618879 全成功。真實新備份雙副本回讀及 GCS 獨立 D1 重建通過，主站回讀 verified 且已禁止重用目標；原正式帳本／月份合計維持。原 D1 不可用與 R2 缺席由本地實際 workerd／D1／API 測試驗證，正式環境不以停用服務模擬故障。資料／稽核／政策完整比對及資料庫檢查成功不等於 production traffic promotion 已執行。
+
+V0.25.2 normalization：schema 6 僅補 migration 0007 定義的帳戶色碼，排序依 created_at／id；6／7 缺 excelImportRuns 時補空陣列。交易、期初與既有 audit 全部原樣保留，未改寫來源 bytes／manifest／hash。驗證與目標 writer 共用同一 normalized accounting payload 並回報 normalization；新 schema 缺稽核仍拒絕。真實 workerd WASM 與 SQLite／D1 合成資料回歸涵蓋 6／7／10，不據此宣稱真實歷史備份已逐份驗收。

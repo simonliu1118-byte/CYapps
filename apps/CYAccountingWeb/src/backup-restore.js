@@ -15,14 +15,37 @@ export const ACCOUNTING_RESTORE_TABLES = [
   ['excelImportRuns', 'excel_import_runs', ['id','start_date','end_exclusive','reason','source_sha256','backup_id','deleted_count','inserted_count','actor_json','created_at'], ['id','startDate','endExclusive','reason','sourceSha256','backupId','deletedCount','insertedCount','actor','createdAt']]
 ];
 
+// Portable schema compatibility is applied only after the immutable source bytes
+// have passed the existing manifest/digest validator. Historical objects are not rewritten.
+export function normalizeAccountingRestoreData(backup) {
+  const schema = Number(backup.manifest?.schemaVersion);
+  if (![6, 7, 8, 9, 10].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
+  const original = backup.data;
+  if (!original || Object.keys(original).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
+  const data = { ...original };
+  if (schema < 8 && !('excelImportRuns' in data)) data.excelImportRuns = [];
+  for (const [key] of ACCOUNTING_RESTORE_TABLES) if (!Array.isArray(data[key])) throw restoreError('RESTORE_DATA_SHAPE');
+  if (schema < 8 && data.excelImportRuns.length) throw restoreError('RESTORE_LEGACY_IMPORT_AUDIT_CONFLICT');
+  if (schema === 6) {
+    // Canonical migration 0007 assigns ROW_NUMBER() OVER(ORDER BY created_at,id).
+    // Reproduce that contract explicitly instead of relying on insertion order.
+    if (data.accounts.some(row => !row || !Number.isSafeInteger(row.id) || typeof row.createdAt !== 'string' || row.colorSlot != null)) throw restoreError('RESTORE_LEGACY_ACCOUNT_SHAPE');
+    const ranked = [...data.accounts].sort((a, b) => a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id - b.id);
+    const slots = new Map(ranked.map((row, index) => [row.id, index + 1]));
+    data.accounts = data.accounts.map(row => ({ ...row, colorSlot: slots.get(row.id) }));
+  }
+  return { data, normalization: schema < 8 ? {
+    sourceSchemaVersion: schema,
+    accountColorSlotsAssigned: schema === 6,
+    emptyImportAuditAdded: !('excelImportRuns' in original)
+  } : null };
+}
+
 export async function verifyRestoreIntoEmptySqlite(db, schemas, backup) {
   const existing = db.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'");
   if (existing[0]?.values?.length) throw restoreError('SANDBOX_NOT_EMPTY');
   const schema = Number(backup.manifest?.schemaVersion);
-  if (![8, 9, 10].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
-  const data = backup.data;
-  if (!data || Object.keys(data).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
-  for (const [key] of ACCOUNTING_RESTORE_TABLES) if (!Array.isArray(data[key])) throw restoreError('RESTORE_DATA_SHAPE');
+  const { data, normalization } = normalizeAccountingRestoreData(backup);
 
   for (const sql of schemas) db.exec(sql);
   const actualSchema = db.exec("SELECT value FROM meta WHERE key='schema_version'")[0]?.values[0]?.[0];
@@ -59,7 +82,7 @@ export async function verifyRestoreIntoEmptySqlite(db, schemas, backup) {
   if (source !== result) throw restoreError('RESTORE_ROUNDTRIP_MISMATCH');
   return {
     engine: 'SQLite sql.js 1.14.2', isolated: true, liveAccountingModified: false,
-    sourceSchemaVersion: schema, targetSchemaVersion: buildMetadata.schemaVersion,
+    sourceSchemaVersion: schema, normalization, targetSchemaVersion: buildMetadata.schemaVersion,
     counts: restored.manifest.counts, rowCount: restored.totalRowCount,
     integrityCheck: true, foreignKeyCheck: true, fullRowRoundtrip: true,
     restoredDataSha256: restored.dataSha256

@@ -5,6 +5,7 @@ import { runTieredBackup, verifyStoredBackup, activatePhaseD, handleBackupApi, r
 import { restoreIntoRecoveryD1, RECOVERY_SEED_SNAPSHOT_SQL, RECOVERY_CONFIRMATION } from '../src/backup-recovery.js';
 import { validateBackupSetBytes } from '../src/gcs-backup.js';
 import { buildBackupPackage } from '../src/backup-package.js';
+import { normalizeAccountingRestoreData } from '../src/backup-restore.js';
 import { recoveryPage } from '../src/backup-recovery-page.js';
 import { buildRecoveryContext } from '../src/backup-recovery-context.js';
 const provision=async()=>{
@@ -52,6 +53,21 @@ assert.ok(target.db.prepare("SELECT value FROM meta WHERE key='accounting_epoch'
 assert.equal((await call('commit',{previewId:preview.id,reviewed:true,confirmation:RECOVERY_CONFIRMATION})).status,409,'never overwrite an already restored target');
 assert.throws(()=>target.db.exec('DELETE FROM opening_balance_audit'),/append-only/);
 assert.throws(()=>target.db.exec('DELETE FROM backup_recovery_runs'),/append-only/);
+// Legacy packages use the original D1 context, the same normalization and writer.
+const currentContext=await buildRecoveryContext(source);
+for(const version of [6,7]) {
+  const legacy=structuredClone((await validateBackupSetBytes(await gcs.getObject(`CYAccountingWeb/${last.backupId}/manifest.json`),await gcs.getObject(`CYAccountingWeb/${last.backupId}/data.json`),last.backupId)));
+  legacy.manifest.schemaVersion=version;delete legacy.manifest.recoveryContext;delete legacy.data.excelImportRuns;
+  if(version===6)legacy.data.accounts.forEach(row=>{delete row.colorSlot;});
+  const untouched=JSON.stringify(legacy);
+  const legacyTarget=await provision();
+  const workspaceId=legacyTarget.db.prepare("SELECT value FROM meta WHERE key='recovery_workspace_id'").get().value;
+  await verify({...legacy,manifest:{...legacy.manifest,recoveryContext:currentContext}});
+  const proof=await restoreIntoRecoveryD1(legacyTarget,legacy,currentContext,{id:'TEST_LEGACY_'+version,backupId:last.backupId,provider:'google_cloud_storage',packageSha256:last.packageSha256,workspaceId,reason:'TEST_LEGACY_NORMALIZATION'},session);
+  assert.equal(proof.normalization.sourceSchemaVersion,version);
+  assert.deepEqual((await buildBackupPackage(legacyTarget)).data,normalizeAccountingRestoreData(legacy).data);
+  assert.equal(JSON.stringify(legacy),untouched);legacyTarget.close();
+}
 // The GCS backup contains the entire recovery context, even if the old D1 and R2 are gone.
 const prefix=`CYAccountingWeb/${last.backupId}/`;
 const offlineBackup=await validateBackupSetBytes(await gcs.getObject(prefix+'manifest.json'),await gcs.getObject(prefix+'data.json'),last.backupId);

@@ -1,4 +1,4 @@
-import { ACCOUNTING_RESTORE_TABLES, stableJson } from './backup-restore.js';
+import { ACCOUNTING_RESTORE_TABLES, stableJson, normalizeAccountingRestoreData } from './backup-restore.js';
 import { buildBackupPackage } from './backup-package.js';
 import { RECOVERY_TABLES, assertRecoveryContext, buildRecoveryContext, recoveryDigest, recoveryError } from './backup-recovery-context.js';
 import metadata from './build-metadata.json' with {type:'json'};
@@ -22,6 +22,7 @@ export async function recoveryWorkspace(db) {
 // binding changes are a separate deployment action, never an HTTP side effect.
 export async function restoreIntoRecoveryD1(target, backup, context, preview, actor) {
   assertRecoveryContext(context);
+  const { data: accountingData, normalization } = normalizeAccountingRestoreData(backup);
   const workspace=await recoveryWorkspace(target);
   if(!workspace.ready||workspace.workspaceId!==preview.workspaceId||workspace.schemaVersion!==metadata.schemaVersion) throw recoveryError('RECOVERY_TARGET_NOT_EMPTY');
   const runId=crypto.randomUUID(), now=new Date().toISOString();
@@ -37,7 +38,7 @@ export async function restoreIntoRecoveryD1(target, backup, context, preview, ac
   const guard='EXISTS(SELECT 1 FROM backup_recovery_runs WHERE id=?)';
   for(const table of ['categories','category_groups','accounts']) statements.push(target.prepare(`DELETE FROM ${table} WHERE ${guard}`).bind(runId));
   for(const [key,table,columns,fields] of ACCOUNTING_RESTORE_TABLES) {
-    const rows=backup.data[key].map(row=>fields.map(field=>field==='actor'?JSON.stringify(row[field]):row[field]));
+    const rows=accountingData[key].map(row=>fields.map(field=>field==='actor'?JSON.stringify(row[field]):row[field]));
     appendRows(statements,target,table,columns,rows,guard,runId);
   }
   for(const [table,columns] of Object.entries(RECOVERY_TABLES)) appendRows(statements,target,table,columns,context.tables[table],guard,runId);
@@ -49,13 +50,13 @@ export async function restoreIntoRecoveryD1(target, backup, context, preview, ac
   if(!claimed) throw recoveryError('RECOVERY_TARGET_CHANGED');
   try {
     const restored=await buildBackupPackage(target);
-    if(stableJson(restored.data)!==stableJson(backup.data)) throw recoveryError('RECOVERY_ROUNDTRIP_MISMATCH');
+    if(stableJson(restored.data)!==stableJson(accountingData)) throw recoveryError('RECOVERY_ROUNDTRIP_MISMATCH');
     const restoredContext=await buildRecoveryContext(target);
     if(stableJson(restoredContext)!==stableJson(context)) throw recoveryError('RECOVERY_POLICY_MISMATCH');
     const fk=await target.prepare('PRAGMA foreign_key_check').all();
     const integrity=await target.prepare('PRAGMA quick_check').all();
     if(fk.results?.length||integrity.results?.length!==1||Object.values(integrity.results[0])[0]!=='ok') throw recoveryError('RECOVERY_INTEGRITY_FAILED');
-    const evidence={runId,liveAccountingModified:false,isolated:true,target:'recovery_d1',fullRowRoundtrip:true,integrityCheck:true,databaseCheck:'quick_check',foreignKeyCheck:true,operationalContext:true,counts:restored.manifest.counts,restoredDataSha256:await recoveryDigest(stableJson(restored.data)),targetSchemaVersion:metadata.schemaVersion,promoted:false};
+    const evidence={runId,liveAccountingModified:false,isolated:true,target:'recovery_d1',fullRowRoundtrip:true,integrityCheck:true,databaseCheck:'quick_check',foreignKeyCheck:true,operationalContext:true,normalization,counts:restored.manifest.counts,restoredDataSha256:await recoveryDigest(stableJson(restored.data)),targetSchemaVersion:metadata.schemaVersion,promoted:false};
     await recoveryEvent(target,runId,'verified',evidence,actor);
     return evidence;
   } catch(error) {

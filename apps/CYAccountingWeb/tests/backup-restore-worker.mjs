@@ -12,13 +12,22 @@ const worker = await unstable_dev('tests/fixtures/backup-restore-worker.js', {
   experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false }
 });
 try {
-  for (let i = 0; i < 2; i++) {
-    const response = await worker.fetch('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(validated) });
+  const cases=[validated,validated];
+  for(const schemaVersion of [6,7]) {
+    const old=structuredClone(validated);old.manifest.schemaVersion=schemaVersion;
+    delete old.manifest.recoveryContext;delete old.data.excelImportRuns;
+    if(schemaVersion===6)old.data.accounts.forEach(row=>{delete row.colorSlot;});
+    cases.push(old);
+  }
+  for (const input of cases) {
+    const response = await worker.fetch('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
     const text = await response.text();
     assert.equal(response.status, 200, text);
     const report = JSON.parse(text);
     assert.equal(report.fullRowRoundtrip, true); assert.equal(report.isolated, true); assert.equal(report.liveAccountingModified, false);
     assert.equal(report.counts.transactions, 3, 'repeated requests each restore a fresh SQLite database');
+    assert.equal(report.sourceSchemaVersion,input.manifest.schemaVersion);
+    if(input.manifest.schemaVersion<8)assert.equal(report.normalization.sourceSchemaVersion,input.manifest.schemaVersion);
   }
 } finally { await worker.stop(); }
 console.log('Actual Workers/workerd runtime restores and validates a fresh isolated SQLite database using static WASM.');

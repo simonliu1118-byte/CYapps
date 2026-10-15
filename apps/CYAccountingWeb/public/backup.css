@@ -404,3 +404,5 @@
 .backup-recovery-review input { width: auto; }
 .backup-recovery-footer { padding: 12px 20px; border-top: 1px solid #dce2e8; text-align: right; }
 #backupRecoveryConfirm { margin-top: 14px; padding-top: 4px; border-top: 1px solid #dce2e8; }
+
+html[data-viewport="desktop"] #settingsDialog .backup-policy-row { display: none; }
