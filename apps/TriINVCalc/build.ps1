@@ -19,16 +19,12 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 New-Item $packageDir -ItemType Directory -Force | Out-Null
 
 $assetsDir = Join-Path $projectDir 'assets'
-$iconB64Path = Join-Path $assetsDir 'icon.ico.b64'
-if (-not (Test-Path $iconB64Path)) { throw 'Icon base64 source not found.' }
-$iconPath = Join-Path $assetsDir 'icon.ico'
+$iconPath = Join-Path $assetsDir 'CAL.ico'
+if (-not (Test-Path $iconPath)) { throw 'Canonical CAL.ico source not found.' }
 $resourcePath = Join-Path $projectDir 'rsrc.syso'
 $manifestPath = Join-Path $assetsDir 'app.manifest'
 
-$iconBase64 = (Get-Content $iconB64Path -Raw) -replace '\s', ''
-[IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64))
-
-$expectedIconSha256 = '67DAC30F3ECD2ED2E29E27A8EB73F5FC82A0B5BC2C23FE3224D03F209F335E39'
+$expectedIconSha256 = 'B53FC8DFB1110FE73B35471AE6F49792D7F59D954B8168EBBD59390A642CF71E'
 $actualIconSha256 = (Get-FileHash $iconPath -Algorithm SHA256).Hash.ToUpperInvariant()
 if ($actualIconSha256 -ne $expectedIconSha256) {
     throw "Icon checksum mismatch. Expected $expectedIconSha256, got $actualIconSha256"
