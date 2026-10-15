@@ -12,6 +12,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - `apps/CYEnvelope`：CY 信封列印工具
 - `apps/CYInvoice`：CY 電子發票工具
 - `apps/TriINVCalc`：三聯式發票開立計算機
+- `apps/SMARTCOPIConverter`：SMART 銷貨單格式轉換工具
 
 ## 需求探索原型
 
