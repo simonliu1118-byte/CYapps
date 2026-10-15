@@ -134,13 +134,11 @@ export async function reserveCloudAllowanceNumber(
             AND d.status='active' AND w.status='active')
         AND EXISTS (
           SELECT 1 FROM allowance_execution_approvals ap
-          JOIN devices approver ON approver.device_id=ap.approved_by_device_id
-             AND approver.workspace_id=ap.workspace_id
           WHERE ap.workspace_id=?2 AND ap.work_item_id=?3
             AND ap.approved_revision=?13 AND ap.seller_invoice=?4
             AND ap.environment=?5 AND ap.allowance_day=?6
             AND ap.template_sha256=?10 AND ap.valid_until_utc > ?12
-            AND approver.status='active')
+            )
       `).bind(ledgerId,input.workspaceId,input.workItemId,input.sellerInvoice,
       input.environment,input.allowanceDay,next,number,attempt,
       input.requestSha256,input.deviceId,when,input.expectedRevision).run();
@@ -178,12 +176,10 @@ async function changeStatus(
       AND (
         ?1 <> 'sending' OR EXISTS (
           SELECT 1 FROM allowance_execution_approvals ap
-          JOIN devices approver ON approver.device_id=ap.approved_by_device_id
-             AND approver.workspace_id=ap.workspace_id
           WHERE ap.workspace_id=?5 AND ap.work_item_id=?4
             AND ap.approved_revision=?11 AND ap.template_sha256=?7
             AND ap.environment=?10 AND ap.valid_until_utc > ?2
-            AND approver.status='active'))
+            ))
     `).bind(to,new Date().toISOString(),reservation.ledgerId,input.workItemId,
       input.workspaceId,reservation.allowanceNumber,input.requestSha256,from,
       input.deviceId,input.environment,input.expectedRevision).run();
