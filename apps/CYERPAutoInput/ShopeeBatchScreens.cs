@@ -226,14 +226,30 @@ internal static partial class ShopeeBatchScreens
             b.Top < input.Bottom + 10 && b.Bottom > input.Top - 120 && Math.Abs(b.Left - input.Left) < 60);
     }
 
-    /// <summary>The side panel's collapse (») button: right of 網頁版聊聊 on its row.</summary>
+    /// <summary>
+    /// The side panel's collapse (») button: right of 網頁版聊聊 on its row. The button has no name
+    /// and is not always in the page text (user LOG 2026-10-15); then its place is taken from the
+    /// first sample (2026-10-14: 22 px right of 網頁版聊聊, 24 px wide).
+    /// </summary>
     public static OcrBox? ChatCollapseButton(IReadOnlyList<OcrBox> boxes)
     {
         var web = boxes.FirstOrDefault(b => C(b).EndsWith("網頁版聊聊", StringComparison.Ordinal));
         if (web is null) return null;
         return boxes.Where(b => b.Left > web.Right && SameRow(b, web) && b.Width <= 48 && b.Height <= 48)
-            .OrderBy(b => b.Left).FirstOrDefault();
+                   .OrderBy(b => b.Left).FirstOrDefault()
+               ?? new OcrBox("»", web.Right + 22, web.Top + web.Height / 2 - 12, 24, 24);
     }
+
+    /// <summary>The 聊聊 side panel is open (its header, or the order it is about).</summary>
+    public static bool ChatPanelOpen(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Any(b => C(b).EndsWith("網頁版聊聊", StringComparison.Ordinal) || C(b) is "您目前正與買家聊聊此訂單" or "您正在聊聊此訂單");
+
+    /// <summary>
+    /// A conversation 蝦皮 closed by itself has no input, only 「重新啟用對話」 under 「對話已自動關閉…」
+    /// (user LOG 2026-10-15); pressed, the input comes back.
+    /// </summary>
+    public static OcrBox? ChatReopenButton(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Where(b => C(b) == "重新啟用對話").OrderByDescending(b => b.Top).FirstOrDefault();
 
     // ---- 查看寄件編號 ----
 

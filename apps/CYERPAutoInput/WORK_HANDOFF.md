@@ -11,7 +11,7 @@
 - 使用者說「先不要發，湊多一點項目」時只推 `cyerp-auto-input/next-wip`（沒有 PR、不跑 CI）。未交付的修正不加 Build（目前仍是 Build 26）。
 - 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就在 `docs/` 寫交接檔（使用者轉給 CYInvoice session，對方做完會出工程測試包）。
 - Commit 身分依 REPOSITORY_RULES：`simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。2026-10-14～15 有數個 Build 26 commit 誤用 `Claude <noreply@anthropic.com>`，未改寫歷史（PR 以 squash merge 合併時只留一個提交）；之後一律用規定身分。
-- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（283 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
+- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（284 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
 
 **A. MO店+ 全自動（主線，使用者實機逐步測試中）**
 - 已實機通過（2026-10-14 LOG）：自己的 Chrome 視窗登入判斷 → 訂單 › 訂單管理 › E001訂單管理 › 我的訂單「未出貨」→ 處理提醒／配送方式「全部」→ 匯出報表（另存新檔 Alt+D 切到 `Temp\mo-日期時間`）→ 左側批次出貨 → 讀配送方式 (n) → 全家店出(1) 全選 → 批次出貨 → 併箱出貨 → 確認出貨（真的出貨 1 筆）→ 批次出貨中「查看批次出貨記錄」→ 依出貨時間讀最上面一筆（`MoBatchScreens.LatestRecord`）→ 點「列印文件」（點在連結文字上 `OnText`）→「列印標籤」存 PDF 成功。
@@ -26,6 +26,8 @@
 - 測試入口：MO店+ ›「測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）」。測試前 CYInvoice 要在設定頁切測試環境並**儲存**（CLI 用最後儲存的環境），建議獨立 portable 目錄。request／result 在 `Temp\invoice-日期時間`。
 - 設定：`CyInvoicePath`（檔案選擇器）、`MoAutoInvoice`（預設關；正式發行並經使用者同意前不開）、`PaperInvoiceStyle`。
 - 使用者規則：一般消費者 → 會員載具不印；有統編抬頭 → 紙本要印（A4 印表機、放紙確認）；紙本 PDF 不可中斷全自動。
+
+**未發布的修正（只在 `cyerp-auto-input/next-wip`，使用者 2026-10-15：等發票與 MO店+ 全自動測完一起改完再發）**：蝦皮全自動聊聊「重新啟用對話」與聊聊視窗確實收起（見 CHANGELOG）。
 
 **C. 其他待辦**：蝦皮全自動的 7-11／全家實測、黑貓 A4（§6）、無人值守（Roadmap 5）。合併與正式發布都要使用者同意。
 

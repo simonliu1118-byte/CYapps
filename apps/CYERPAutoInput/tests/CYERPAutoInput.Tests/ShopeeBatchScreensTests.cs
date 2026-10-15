@@ -421,4 +421,25 @@ public sealed class ShopeeBatchScreensTests
         var typed = new List<OcrBox> { B("在收到商品後，您可以從下方網址填寫【訂單編號】", 990, 790, 420, 60) };
         Assert.True(ShopeeBatchScreens.ChatInputHolds(typed, input, "在收到商品後，您可以從下方網址填寫"));
     }
+
+    [Fact]
+    public void Closed_chat_is_reopened_and_the_panel_is_known_open()
+    {
+        // Laid out like the user's 聊聊 (LOG 2026-10-15): 蝦皮 closed the conversation, no input, the
+        // collapse button not in the page text; another order of the buyer in the panel.
+        var chat = new List<OcrBox>
+        {
+            B("與買家聊聊", 1547, 84, 95), B("網頁版聊聊", 1713, 85, 78),
+            B("您目前正與買家聊聊此訂單", 1011, 669, 186), B("260502AB12CDEF", 1276, 620, 107),
+            B("對話已自動關閉，買家現在的新對話將由AI 賣場客服或問答小幫手接待。", 997, 826, 426),
+            B("重新啟用對話", 1170, 853, 80)
+        };
+        Assert.Null(ShopeeBatchScreens.ChatInput(chat));
+        Assert.Equal(1170, ShopeeBatchScreens.ChatReopenButton(chat)!.Left);
+        Assert.True(ShopeeBatchScreens.ChatPanelOpen(chat));
+        var fold = ShopeeBatchScreens.ChatCollapseButton(chat)!;
+        Assert.Equal(1713 + 78 + 22, fold.Left);
+        Assert.InRange(fold.Top + fold.Height / 2, 85, 105);
+        Assert.False(ShopeeBatchScreens.ChatPanelOpen([B("關注", 830, 991, 98, 36), B("聊聊", 1027, 991, 90, 36)]));
+    }
 }

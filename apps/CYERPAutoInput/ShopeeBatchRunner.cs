@@ -560,8 +560,18 @@ internal sealed partial class ShopeeBatchRunner
         var sent = false;
         try
         {
-            var (open, input) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.ChatInput(s.Boxes) is { } i && Visible(s, i) ? i : null);
+            OcrBox? Ready(Screen s) =>
+                ShopeeBatchScreens.ChatInput(s.Boxes) is { } i && Visible(s, i) ? i
+                : ShopeeBatchScreens.ChatReopenButton(s.Boxes) is { } r && Visible(s, r) ? r : null;
+            var (open, input) = await WaitOrNullAsync(10, Ready);
             if (open is null || input is null) return "聊聊視窗沒有出現";
+            if (input.Text.Trim() == "重新啟用對話")
+            {
+                // The conversation was closed by 蝦皮 (user LOG 2026-10-15): opened again first.
+                using (open) Click(open, input, "重新啟用對話");
+                (open, input) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.ChatInput(s.Boxes) is { } i && Visible(s, i) ? i : null);
+                if (open is null || input is null) return "按「重新啟用對話」後聊聊輸入框沒有出現";
+            }
             using (open) Click(open, input, "聊聊輸入框");
             for (var m = 0; m < messages.Count; m++)
             {
@@ -596,14 +606,34 @@ internal sealed partial class ShopeeBatchRunner
         Keys("Delete", 0x2E /* VK_DELETE */);
     }
 
-    /// <summary>» folds the 聊聊 side panel (user, 2026-10-14); Esc when it is not found.</summary>
+    /// <summary>
+    /// » folds the 聊聊 side panel (user, 2026-10-14); Esc when it is not found. The panel must be
+    /// gone afterwards: left open, its text (another order's number, user LOG 2026-10-15) mixes
+    /// into the order page that is read next. Still open → the page is reloaded (F5); still open
+    /// after that → stop.
+    /// </summary>
     private async Task FoldChatAsync(bool sent)
     {
-        using var screen = await ReadAsync();
-        if (ShopeeBatchScreens.ChatCollapseButton(screen.Boxes) is { } fold && Visible(screen, fold)) Click(screen, fold, "收起聊聊");
-        else Keys("Esc (聊聊)", 0x1B /* VK_ESCAPE */);
-        await Task.Delay(800, _token);
-        _log.Info("shopee-batch", $"聊聊 folded sent={sent}");
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            using (var screen = await ReadAsync())
+            {
+                if (!ShopeeBatchScreens.ChatPanelOpen(screen.Boxes))
+                {
+                    _log.Info("shopee-batch", $"聊聊 folded sent={sent} attempts={attempt}");
+                    return;
+                }
+                if (attempt == 2) Keys("F5（收不起聊聊，重新整理）", NativeMethods.VK_F5);
+                else if (ShopeeBatchScreens.ChatCollapseButton(screen.Boxes) is { } fold && Visible(screen, fold)) Click(screen, fold, "收起聊聊");
+                else Keys("Esc (聊聊)", 0x1B /* VK_ESCAPE */);
+            }
+            await Task.Delay(attempt == 2 ? 3000 : 800, _token);
+        }
+        var (closed, _) = await WaitOrNullAsync(15, s => !ShopeeBatchScreens.ChatPanelOpen(s.Boxes) && ShopeeBatchScreens.IsOrderDetail(s.Boxes) ? s : null);
+        if (closed is null)
+            throw new ShopeeBatchStop($"聊聊視窗收不起來（{(sent ? "訊息已送出" : "訊息沒有送出")}），為避免讀錯訂單已停止，請關掉聊聊後再開始。");
+        closed.Dispose();
+        _log.Info("shopee-batch", $"聊聊 folded by reload sent={sent}");
     }
 
     /// <summary>The order page back at its top (left margin clicked for focus, then Home).</summary>
