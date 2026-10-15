@@ -1,3 +1,19 @@
+## 2026-10-15 插隊完成的新增實作：AutoInput 紙本 PDF（工程待驗收）
+
+**版號：V2.6.21 Build 0，PR #445（Draft，尚未合併／正式發行）**。本節對應 AutoInput PR #424 的 `apps/CYERPAutoInput/docs/CYINVOICE_PDF_HANDOFF.md`；原文 V2.6.20 的 issue/query 紀錄繼續有效，版本已往前推進。
+
+- 新增 `--autoinput-pdf <request.json> --result <result.json>`：原 `cyinvoice-autoinput-request/1` 加 `orderIds` **必填**、絕對路徑且事先建立的 `pdfFolder`、有效 `pdfStyle` 0／1／2／3／5（不另起 schema）。壞參數與未知 `--autoinput-*` 模式回 exit 2，不會開 UI。IPC 多 `Pdf` 位元但沿用同使用者管道／原 portable Mutex，主程式開著時只由原行程存取 SQLite。
+- `AutoInputPdfExport` 用本機唯一的正式 `InvoiceRecord`，驗證來源／原 14 碼 OrderID／環境、公司 8 碼統編、紙本 `DeliveryPaper`、有效發票號與日期、原發票狀態 `Opened`、`UploadStatus=99` 後，呼叫**原有 `InvoiceService.GetInvoicePdfAsync`**（同版型與 PDF Cache，最多 20 MiB）。`--autoinput-pdf` **絕不呼叫 IssueMo／IssueCoupang／AMEGO 開立 API**。
+- `pdfFile` 為 `pdfFolder\<invoiceNumber>_styleN.pdf`；先下載官方 PDF 到舊 cache，再獨立暫存檔複製／原子 move，不覆寫已有的 PDF；重複取得時核對既存檔 SHA256 完全等於 cache，若內容衝突回 `unknown` 不更動舊檔。
+- 公司戶且官方 PDF 可取得 → `ready`；已有正式發票、光貿狀態未完成／PDF 尚不可得 → `pending`；一般消費者／根本無原發票 → `skipped`；環境、來源、狀態、檔案或結果不明 → `unknown`；逐筆成功皆 ready 才 exit 0，其餘 1。PDF 查詢單次限約 55 秒，不做 CYInvoice 內部輪詢，AutoInput 每 20 秒外部重查。
+- 既有 issue/query 的 `orderId` 是傳入的**原始 MO 訂單號碼**，測試環境送給光貿的 API OrderID 若加 namespace 也不會輸出成 `orderId`。金額使用 CYInvoice MO 匯出檔的 `TotalAmount` 並與已開立本機紀錄核對。
+- 既有 `IssueMoWithLookupAsync`：**B2C → 會員載具**，有 8 碼公司統編 → **紙本**（若另明確捐贈為例外，優先走捐贈）。`--autoinput-pdf` 只處理公司統編＋紙本交付，防止意外列印消費者載具。
+- CYInvoice CLI 沒開主視窗時**讀取該 portable 目錄最後儲存的 `settings.Environment`**；不會由 AutoInput request 強迫切換 test/prod。AutoInput 測試前先在 CYInvoice GUI 設定「測試環境」並儲存，或用獨立測試 portable 目錄；所有回覆提供實際 `environment` 供再次核對。
+
+新增 Core 測試涵蓋 PDF 參數、未知 CLI、公司戶／一般消費者、成功／pending／skipped、重複下載、PDF 檔案衝突不得覆寫、`pdfFile` JSON、零開立呼叫；Windows build／startup smoke 仍以**最新 exact PR commit CI**為準。**尚未驗證**：真實 Windows IPC／ACL、加密 MO XLS 的 Excel COM、光貿不同完成時間、AutoInput ERP 實機 A4 列印。直到雙端驗收前不啟用正式自動開立／自動列印。
+
+---
+
 # CYInvoice ↔ CYERPAutoInput 接口實作／驗收交接（2026-10-14）
 
 > **V2.6.20 工程測試版，目前是待驗收的 Draft PR #445，尚未合併或發布；AutoInput 不應在正式流程啟用自動開票。** 本文件如實區分「已寫入 source」與「CI、Windows 實機驗收通過」。
