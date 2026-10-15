@@ -23,7 +23,9 @@
 
 **步驟 4 小提交 1：** `87412384` 新增兩日期有限官方 List 掃描，Cloud Validate 與 Governance 通過、Windows 驗證見 exact SHA checks；無任何生產環境變更。
 
-**步驟 4 小提交 2（本輪）：** 不建新系統、資料表或 Cron，只在既有 CYID Manager `allowance-void-applications/reconcile` 增手動對帳。由原 Work Item、原永久 g0501 Claim、D1 公司權威提供查詢範圍及號碼；只有清單命中，才走現有 `status-readback` 查回及 `allowance_void_official_checks` append-only Audit。查無不代表未送達，回傳不自動重送、不自動結案；需再次通過授權與版本比對。整合測試涵蓋無 Claim、權限拒絕、偽造欄位、命中詳查／稽核與查無保守處理。**此提交驗證以最新 exact-head CI 為準。** Windows UI、g0401 跨機對帳、排程與正式 D1／官方實測仍待完成。
+**步驟 4 小提交 3（本輪）：** g0401 於既有 CYID `allowance-applications` 管理員路由增加 `reconcile`，僅在 D1 原 Ledger `sending/confirmed`、公司版本／Workspace／Device／revision 符合時，先做 14 日雙日期有界 List 掃描，命中才沿用 `number-readback` 官方原號 `allowance_query`；未命中回待人工處理。保持 `safeToAutoResend=false`、`safeToAutoConfirm=false`，不寫入 Ledger、不改號、不重送。已擴充現有 synthetic route tests；仍缺 g0401 持久 Audit、WinForms 按鈕、排程與正式驗證。**CI 需用本次 exact HEAD 判斷。**
+
+**步驟 4 小提交 2：** 不建新系統、資料表或 Cron，只在既有 CYID Manager `allowance-void-applications/reconcile` 增手動對帳。由原 Work Item、原永久 g0501 Claim、D1 公司權威提供查詢範圍及號碼；只有清單命中，才走現有 `status-readback` 查回及 `allowance_void_official_checks` append-only Audit。查無不代表未送達，回傳不自動重送、不自動結案；需再次通過授權與版本比對。整合測試涵蓋無 Claim、權限拒絕、偽造欄位、命中詳查／稽核與查無保守處理。**此提交驗證以最新 exact-head CI 為準。** Windows UI、g0401 跨機對帳、排程與正式 D1／官方實測仍待完成。
 
 完成後依序做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
 

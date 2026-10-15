@@ -6,6 +6,7 @@ import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication} from ".
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
+import {scanAllowanceExceptionPages} from "./amego-allowance-list";
 import {approveAllowanceAfterOfficialReview} from "./allowance-review-approval";
 import {reserveCloudAllowanceNumber} from "./allowance-number-ledger";
 import {executeApprovedAllowanceOnce} from "./allowance-execute-once";
@@ -20,6 +21,7 @@ const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applicat
   "/v1/allowance-applications/list","/v1/allowance-applications/review-preview",
   "/v1/allowance-applications/official-inspection",
   "/v1/allowance-applications/number-readback",
+  "/v1/allowance-applications/reconcile",
   "/v1/allowance-applications/approve",
   "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status",
   "/v1/allowance-applications/send-once"]);
@@ -33,7 +35,7 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"approve"|"reserve"|"number-status"|"send-once";
+type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"reconcile"|"approve"|"reserve"|"number-status"|"send-once";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -42,7 +44,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
     : action==="get" ? new Set(["employeeNo","password","itemId"])
     : (action==="review-preview"||action==="official-inspection"||
-       action==="number-readback"||action==="approve"||
+       action==="number-readback"||action==="reconcile"||action==="approve"||
        action==="reserve"||action==="number-status"||action==="send-once")
       ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
@@ -54,7 +56,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (!["review-preview","official-inspection","number-readback","approve","reserve","number-status","send-once"].includes(action) ||
+    (!["review-preview","official-inspection","number-readback","reconcile","approve","reserve","number-status","send-once"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -98,6 +100,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
     path.endsWith("/review-preview")?"review-preview":
     path.endsWith("/official-inspection")?"official-inspection":
     path.endsWith("/number-readback")?"number-readback":
+    path.endsWith("/reconcile")?"reconcile":
     path.endsWith("/approve")?"approve":
     path.endsWith("/reserve")?"reserve":
     path.endsWith("/number-status")?"number-status":
@@ -329,7 +332,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         canIssueNow:false,requiresFinalPreflight:true
       }});
     }
-    if(action==="number-readback"){
+    if(action==="number-readback"||action==="reconcile"){
       if(actor.workspaceRole==="USER")
         return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
       if(env.ALLOWANCE_OPERATION_ENVIRONMENT!=="test"&&
@@ -378,6 +381,42 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       if(!before||before.employeeId!==actor.employeeId||
         !["ADMIN","SUPER_ADMIN"].includes(before.workspaceRole))
         return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      // Reconciliation only adds a bounded list check to the trusted D1
+      // original-number readback. It cannot change the ledger or resend g0401.
+      let listHint:{reason:string;observedTypes:string[];
+        needsSelectiveQuery:boolean}|null=null;
+      if(action==="reconcile"){
+        const end=new Date(),start=new Date(end.getTime()-13*86400000);
+        const compact=(v:Date)=>v.toISOString().slice(0,10).replace(/-/g,"");
+        const scan=await scanAllowanceExceptionPages({
+          sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+          dateStart:compact(start),dateEnd:compact(end)
+        },[{workItemId:itemId,allowanceNumber:ledger.allowance_number}]);
+        listHint=scan.hints[0];
+        const again=await authority(env).revalidate();
+        const active=await dev(request,env);
+        if(!again||again.employeeId!==actor.employeeId||
+          !["ADMIN","SUPER_ADMIN"].includes(again.workspaceRole)||
+          active?.device_id!==d.device_id)
+          return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+        const latest=await env.DB.prepare(
+          "SELECT l.status,l.allowance_number,wi.revision FROM allowance_number_ledger l "+
+          "JOIN work_items wi ON wi.work_item_id=l.work_item_id AND wi.workspace_id=l.workspace_id "+
+          "WHERE l.workspace_id=?1 AND l.work_item_id=?2 ORDER BY l.attempt DESC LIMIT 1"
+        ).bind(d.workspace_id,itemId).first<{
+          status:string;allowance_number:string;revision:number
+        }>();
+        if(!latest||latest.status!==ledger.status||
+          latest.allowance_number!==ledger.allowance_number||
+          latest.revision!==expectedRevision)
+          return response(409,{error:{code:"NUMBER_SOURCE_CHANGED"}});
+        if(!listHint.needsSelectiveQuery)
+          return response(200,{reconciliation:{
+            itemId,expectedRevision,allowanceNumber:ledger.allowance_number,
+            listReason:listHint.reason,requiresManualReconciliation:true,
+            safeToAutoResend:false,safeToAutoConfirm:false
+          }});
+      }
       const official=await queryOfficialAllowanceReadOnly({
         sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
         allowanceNumber:ledger.allowance_number,
@@ -407,7 +446,12 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         possibleMatch:official.possibleMatch&&grossMatches,
         safeToAutoResend:false,safeToAutoConfirm:false,
         requiresManualReconciliation:true
-      }});
+      },...(listHint?{reconciliation:{
+        itemId,expectedRevision,allowanceNumber:ledger.allowance_number,
+        listReason:listHint.reason,observedTypes:listHint.observedTypes,
+        requiresManualReconciliation:true,
+        safeToAutoResend:false,safeToAutoConfirm:false
+      }}:{})});
     }
     if(action==="official-inspection"){
       if(actor.workspaceRole==="USER")

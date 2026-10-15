@@ -88,6 +88,7 @@ export default {
       "/v1/allowance-applications/list", "/v1/allowance-applications/review-preview",
       "/v1/allowance-applications/official-inspection",
       "/v1/allowance-applications/number-readback",
+      "/v1/allowance-applications/reconcile",
       "/v1/allowance-applications/approve",
       "/v1/allowance-applications/reserve", "/v1/allowance-applications/number-status",
       "/v1/allowance-applications/send-once",

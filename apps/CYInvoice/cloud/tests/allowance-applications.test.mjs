@@ -240,8 +240,19 @@ fx.sql.prepare("INSERT INTO allowance_number_ledger("+
   fx.sql.prepare("SELECT template_sha256 FROM allowance_applications WHERE work_item_id=?")
     .get(createBody.itemId).template_sha256,"sending",dev,
   "2026-10-15T00:00:00Z","2026-10-15T00:00:00Z");
-let readbackCalls=0;
+let readbackCalls=0,listCalls=0,listPresent=true;
 globalThis.fetch=async (url,opts)=>{
+  if(url==="https://invoice-api.amego.tw/json/allowance_list"){
+    listCalls++;
+    const payload=JSON.parse(new URLSearchParams(opts.body).get("data"));
+    assert.ok(payload.date_select===1||payload.date_select===2);
+    assert.equal(payload.limit,20);
+    assert.equal(payload.page,1);
+    return Response.json({code:0,page_now:1,page_total:listPresent?1:0,
+      data_total:listPresent?1:0,data:listPresent?[{
+        allowance_number:"A20261015001",invoice_type:"D0401",
+        invoice_status:99,allowance_date:20261015}]:[]});
+  }
   readbackCalls++;
   assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
   const p=new URLSearchParams(opts.body);
@@ -269,6 +280,37 @@ try{
   assert.equal((await call("number-readback",{itemId:createBody.itemId,
     expectedRevision:2,allowanceNumber:"A20261015002"})).status,400);
   assert.equal(readbackCalls,1,"Invalid client number cannot be used in queries");
+  who={...who,workspaceRole:"USER"};
+  assert.equal((await call("reconcile",{
+    itemId:createBody.itemId,expectedRevision:2})).status,403);
+  who={...who,workspaceRole:"ADMIN"};
+  assert.equal((await call("reconcile",{
+    itemId:createBody.itemId,expectedRevision:2,sellerInvoice:"87654321"})).status,400);
+  assert.equal(listCalls,0,"Forged seller cannot reach official API");
+  assert.equal((await call("reconcile",{
+    itemId:createBody.itemId,expectedRevision:1})).status,404);
+  assert.equal(listCalls,0);
+  const matched=await call("reconcile",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(matched.status,200,JSON.stringify(matched));
+  assert.equal(matched.data.reconciliation.listReason,
+    "OFFICIAL_STATUS_CHANGED_OR_PENDING");
+  assert.equal(matched.data.readback.allowanceNumber,"A20261015001");
+  assert.equal(matched.data.readback.safeToAutoResend,false);
+  assert.equal(matched.data.readback.safeToAutoConfirm,false);
+  assert.equal(listCalls,2);
+  assert.equal(readbackCalls,2,"Only D1 original number can be queried");
+  listPresent=false;
+  const notSeen=await call("reconcile",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(notSeen.status,200,JSON.stringify(notSeen));
+  assert.equal(notSeen.data.reconciliation.listReason,"NOT_SEEN_NOT_PROOF");
+  assert.equal(notSeen.data.readback,undefined);
+  assert.equal(notSeen.data.reconciliation.safeToAutoResend,false);
+  assert.equal(readbackCalls,2,"List absence never triggers an extra query");
+  assert.equal(fx.sql.prepare("SELECT status FROM allowance_number_ledger")
+    .get().status,"sending","Reconciliation cannot mutate ledger");
+  listPresent=true;
   who={...who,workspaceRole:"USER"};
   assert.equal((await call("number-readback",{itemId:createBody.itemId,
     expectedRevision:2})).status,403);
