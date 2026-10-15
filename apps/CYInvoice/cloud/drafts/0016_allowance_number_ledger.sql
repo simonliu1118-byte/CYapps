@@ -85,3 +85,31 @@ BEFORE UPDATE OF workspace_id,work_item_id,seller_invoice,environment,
   allowance_day,sequence,allowance_number,attempt,request_sha256,
   created_by_device_id,created_at ON allowance_number_ledger
 BEGIN SELECT RAISE(ABORT,'ALLOWANCE_NUMBER_PERMANENT'); END;
+
+
+-- V3 Draft: append-only evidence for manually requested g0401 original-number
+-- reconciliation. Never store normal invoices, raw AMEGO JSON or credentials.
+-- Applies only in the existing 0016 draft, not a new production migration.
+CREATE TABLE allowance_reconciliation_checks (
+  check_id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
+  ledger_id TEXT NOT NULL REFERENCES allowance_number_ledger(ledger_id) ON DELETE RESTRICT,
+  work_item_id TEXT NOT NULL REFERENCES work_items(work_item_id) ON DELETE RESTRICT,
+  allowance_number TEXT NOT NULL CHECK(length(allowance_number)=12),
+  official_type TEXT NOT NULL CHECK(length(official_type) BETWEEN 1 AND 16),
+  official_upload_status INTEGER NOT NULL CHECK(official_upload_status>=0),
+  official_snapshot_sha256 TEXT NOT NULL CHECK(length(official_snapshot_sha256)=64
+    AND official_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'),
+  checked_at TEXT NOT NULL,
+  checked_by_employee_id TEXT NOT NULL CHECK(length(checked_by_employee_id) BETWEEN 1 AND 100),
+  checked_by_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE RESTRICT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_allowance_reconciliation_work_item
+  ON allowance_reconciliation_checks(workspace_id,work_item_id,created_at DESC);
+CREATE TRIGGER allowance_reconciliation_checks_no_update
+BEFORE UPDATE ON allowance_reconciliation_checks
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_RECONCILIATION_APPEND_ONLY'); END;
+CREATE TRIGGER allowance_reconciliation_checks_no_delete
+BEFORE DELETE ON allowance_reconciliation_checks
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_RECONCILIATION_APPEND_ONLY'); END;

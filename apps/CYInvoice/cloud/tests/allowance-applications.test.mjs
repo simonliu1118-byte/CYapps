@@ -275,6 +275,8 @@ try{
   assert.equal(r.data.readback.safeToAutoResend,false);
   assert.equal(fx.sql.prepare("SELECT status FROM allowance_number_ledger").get().status,"sending");
   assert.equal(readbackCalls,1);
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0,
+    "An ordinary number readback is not a manual reconciliation Audit");
   assert.equal((await call("number-readback",{itemId:createBody.itemId,
     expectedRevision:1})).status,404);
   assert.equal((await call("number-readback",{itemId:createBody.itemId,
@@ -300,6 +302,19 @@ try{
   assert.equal(matched.data.readback.safeToAutoConfirm,false);
   assert.equal(listCalls,2);
   assert.equal(readbackCalls,2,"Only D1 original number can be queried");
+  const audit=fx.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get();
+  assert.equal(audit.work_item_id,createBody.itemId);
+  assert.equal(audit.allowance_number,"A20261015001");
+  assert.equal(audit.checked_by_employee_id,"cyid_employee");
+  assert.equal(audit.checked_by_device_id,dev);
+  assert.match(audit.official_snapshot_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
+  assert.throws(()=>fx.sql.prepare(
+    "UPDATE allowance_reconciliation_checks SET official_upload_status=0").run(),
+    /ALLOWANCE_RECONCILIATION_APPEND_ONLY/);
+  assert.throws(()=>fx.sql.prepare(
+    "DELETE FROM allowance_reconciliation_checks").run(),
+    /ALLOWANCE_RECONCILIATION_APPEND_ONLY/);
   listPresent=false;
   const notSeen=await call("reconcile",{
     itemId:createBody.itemId,expectedRevision:2});
@@ -308,6 +323,8 @@ try{
   assert.equal(notSeen.data.readback,undefined);
   assert.equal(notSeen.data.reconciliation.safeToAutoResend,false);
   assert.equal(readbackCalls,2,"List absence never triggers an extra query");
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1,
+    "List absence must never forge an official result");
   assert.equal(fx.sql.prepare("SELECT status FROM allowance_number_ledger")
     .get().status,"sending","Reconciliation cannot mutate ledger");
   listPresent=true;

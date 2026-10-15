@@ -434,6 +434,41 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       };
       const grossMatches=scaled(official.totalAmount)+scaled(official.taxAmount)===
         BigInt(ledger.requested_gross_amount)*10000000n;
+      if(action==="reconcile"){
+        // Only persist an actual official original-number lookup, never an
+        // absent list entry. SELECT guards D1 source and active authority at
+        // write-time after the remote call; a failed Audit fails the request.
+        const written=await env.DB.prepare(
+          "INSERT INTO allowance_reconciliation_checks("+
+          "check_id,workspace_id,ledger_id,work_item_id,allowance_number,"+
+          "official_type,official_upload_status,official_snapshot_sha256,"+
+          "checked_at,checked_by_employee_id,checked_by_device_id,created_at) "+
+          "SELECT ?1,l.workspace_id,l.ledger_id,l.work_item_id,l.allowance_number,"+
+          "?2,?3,?4,?5,?6,d.device_id,?7 "+
+          "FROM allowance_number_ledger l "+
+          "JOIN work_items wi ON wi.work_item_id=l.work_item_id AND wi.workspace_id=l.workspace_id "+
+          "JOIN allowance_applications a ON a.work_item_id=l.work_item_id AND a.workspace_id=l.workspace_id "+
+          "JOIN company_settings c ON c.workspace_id=l.workspace_id "+
+          "JOIN devices d ON d.device_id=?8 AND d.workspace_id=l.workspace_id "+
+          "JOIN workspaces w ON w.workspace_id=l.workspace_id "+
+          "WHERE l.ledger_id=?9 AND l.workspace_id=?10 AND l.work_item_id=?11 "+
+          "AND l.allowance_number=?12 AND l.status=?13 "+
+          "AND l.status IN ('sending','confirmed') AND l.request_sha256=?14 "+
+          "AND a.template_sha256=l.request_sha256 AND wi.reference_hash=a.reference_hash "+
+          "AND wi.kind='ALLOWANCE' AND wi.status IN ('review','closed') "+
+          "AND wi.revision=?15 AND wi.environment=l.environment "+
+          "AND a.company_settings_revision=c.revision AND a.seller_invoice=c.seller_invoice "+
+          "AND c.seller_invoice=l.seller_invoice "+
+          "AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active'"
+        ).bind("arc_"+crypto.randomUUID(),official.invoiceType,
+          official.uploadStatus,official.officialSnapshotSha256,
+          official.checkedAtUtc,actor.employeeId,new Date().toISOString(),
+          d.device_id,ledger.ledger_id,d.workspace_id,itemId,
+          ledger.allowance_number,ledger.status,ledger.request_sha256,
+          expectedRevision).run();
+        if(written.meta.changes!==1)
+          return response(409,{error:{code:"RECONCILIATION_AUDIT_CONFLICT"}});
+      }
       return response(200,{readback:{
         itemId,expectedRevision,allowanceNumber:ledger.allowance_number,
         ledgerStatus:ledger.status,checkedAtUtc:official.checkedAtUtc,

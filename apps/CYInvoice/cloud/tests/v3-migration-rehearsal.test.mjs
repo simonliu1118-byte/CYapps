@@ -13,7 +13,7 @@ const drafts = ['0015_work_items.sql', '0016_allowance_number_ledger.sql',
 assert.deepEqual(readdirSync('drafts').filter(x => /^\d{4}_.*\.sql$/.test(x)).sort(), drafts);
 const sql = drafts.map(x => readFileSync('drafts/' + x, 'utf8'));
 const tables = sql.flatMap(x => [...x.matchAll(/CREATE TABLE\s+([a-z_][a-z_0-9]*)\s*\(/gi)].map(m => m[1]));
-assert.equal(new Set(tables).size, 10);
+assert.equal(new Set(tables).size, 11);
 assert.equal(tables.some(x => /^(invoices?|issued_invoices|invoice_records)$/i.test(x)), false);
 
 const schema = db => db.prepare("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();
