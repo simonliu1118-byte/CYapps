@@ -535,7 +535,12 @@ public sealed class AmegoClient : IAmegoGateway
             Text(value, "npoban"), Int64(value, "cancel_date"), order, Int64(value, "create_date"),
             value.TryGetProperty("product_item", out var products) ? products.Clone() : default,
             detailPresent ? detail.GetInt32() : 0, detailPresent, HasPendingVoid(value));
-        results.Add(query with { Allowances = ParseAllowances(value) });
+        results.Add(query with
+        {
+            Allowances = ParseAllowances(value),
+            AllowanceSummaryPresent = value.TryGetProperty("allowance", out var summary) &&
+                                      summary.ValueKind == JsonValueKind.Array,
+        });
     }
 
     private static IReadOnlyList<InvoiceAllowanceResult> ParseAllowances(JsonElement value)
