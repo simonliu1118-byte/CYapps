@@ -669,6 +669,14 @@ static async Task TestInvitationManagementAsync()
     await client.RevokeInvitationAsync(invitationId, "0001", "test-password");
 }
 
+static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)
+{
+    return new HttpResponseMessage(statusCode)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+    };
+}
+
 static void Equal<T>(T expected, T actual, string description)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
