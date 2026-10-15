@@ -1,4 +1,4 @@
-# CYInvoice 現行工作交接／新對話入口（2026-10-15）
+# CYInvoice 現行工作交接／新對話入口（2026-10-16）
 
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
@@ -19,7 +19,7 @@
 
 **步驟 2（Windows g0501 WinForms）已完成 Draft Source。** 介面 Commit `275ec1c652c629aa9ff6eb95877148ff2ce70daa`、耐久原 ID 保護 Commit `e7efd90b1a7b25ab862d24efb3bd3daa7214c7a6`、Nullable CI 修正 Commit `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b`。新版 `CloudAllowanceVoidManagerForm.cs` 透過 `SyncIssuesForm` CYID「處理中」頁開啟，提供員工申請／原工作單查回、管理員 open→review、核准、首次送出、官方 status-readback、官方再次核對後結案；使用既有 `CloudAllowanceVoidClient` 與 `CloudWorkItemClient`，任何官方操作仍由 Cloud CYID Worker 授權，Windows 不持有公司 AppKey 或自選 g0501 號碼。畫面提醒並要求確認，對同一 Work Item 禁止於同一視窗再次送出；Cloud D1 仍有永久唯一 Claim，不能靠重開程式解除。建立前將 Work Item ID 寫入依 Workspace+Cloud URL 隔離的本機小型記錄，不存帳密／憑證／發票內容；逾時或應用程式重啟仍能以原 ID 查回，確認後才清除。Windows startup smoke 在**完全離線**條件驗證畫面及本機 ID 的重啟保存／跨 Workspace 隔離。最後功能 SHA `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b` 的 Cloud Validate ×2、Windows Client、Windows x64、Governance **均通過**；Cloud deploy skipped。這只代表 source CI 和合成 UI smoke，**不是**正式 D1 或真人作廢驗收。
 
-**下一項只有步驟 3（D1 0015～0019 隔離 Migration 演練）**：驗證從既有正式 schema 版本升級五個 V3 Draft 表組的相依順序、SQLite／隔離升級／失敗回復與備份程序，檢查不會存正常成功發票到 D1；在得到新的正式批准前禁止執行正式 D1 Migration，不增加測試 Worker，不碰光貿實際開立／作廢。做完單獨提交和 CI，更新唯一 TODO，再結束下一輪。
+**步驟 3（D1 0015～0019 隔離 Migration 演練）已加入 Draft Source／待本 HEAD CI 驗證。** `cloud/tests/v3-migration-rehearsal.test.mjs` 從合成 0013→CYID_ONLY 維護→0014 基準建立未升級備份，五個草案 0015→0019 分階段升級、各階段故障後交易回復，檢查歷史 Device／Invitation／Audit、FK／SQLite integrity、正常發票不落 D1，以及從原始備份完整還原。僅隔離 Node SQLite，本批沒有接 Cloudflare、光貿或正式 D1。**下一步是步驟 4：雙日期 List／例外對帳與 Audit**；若 CI 失敗，先完成本步修正，不可往後推進。
 
 完成後依序做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
 

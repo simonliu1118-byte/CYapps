@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-15（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；AutoInput **V2.6.20 Build 0** 僅在獨立 [PR #445](https://github.com/simonliu1118-byte/CYapps/pull/445) 有 CI 通過的工程測試包（[run 38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)，非正式 Release）。V3 原工作仍在 Draft #440／CYWEB #151，尚未部署。原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-16（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；AutoInput **V2.6.20 Build 0** 僅在獨立 [PR #445](https://github.com/simonliu1118-byte/CYapps/pull/445) 有 CI 通過的工程測試包（[run 38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)，非正式 Release）。V3 原工作仍在 Draft #440／CYWEB #151，尚未部署。原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -8,7 +8,7 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-## 2026-10-15 V3 逐項交付索引（最新權威快照）
+## 2026-10-16 V3 逐項交付索引（最新權威快照）
 
 > **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，最新已驗證**功能** HEAD `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
@@ -24,7 +24,7 @@
 
 - [x] **步驟 1 — Windows g0501 Core 客戶端已完成**：`214063e1810d55746d77d22c483de42135f4f907` 新增 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs` 並登錄到 `tests/CYInvoice.Cloud.Tests/Program.cs`；與 Cloud CYID create/get/list/approve/send-once/status-readback/close 契約對齊。測試涵蓋 HTTPS／Device bearer、來源欄位不可信任、版本比對、歷史折讓號碼、錯誤結果拒絕、自動重送禁止、網路逾時不額外重試。該**功能提交** Cloud Validate ×2、Windows Client、Windows x64、Governance 全數 CI 通過，Cloud deploy skipped。**只有 Core／合成測試，不是 WinForms 操作或正式開立**。
 - [x] **步驟 2 — Windows g0501 WinForms 操作入口與流程已完成（Draft Source）**：`275ec1c652c629aa9ff6eb95877148ff2ce70daa` 新增 `CloudAllowanceVoidManagerForm.cs` 並在 `SyncIssuesForm` 的 CYID「處理中」頁接入「CYID 折讓作廢」，包含一般使用者建立申請／原 ID 查回、管理員清單、`open→review`、官方驗證後核准、明確二次確認的唯一 g0501 送出、`allowance_status` 原號查回、官方完成後二次查驗並結案。建立前會顯示原 Work Item ID、禁止同一視窗重送；`e7efd90b1a7b25ab862d24efb3bd3daa7214c7a6` 加上依 Workspace+Cloud URL 隔離的**本機原 Work Item ID 耐久保存**，網路未回覆／重啟後仍禁止換號重複申請，只能原號查回；`1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b` 修正 C# Nullable 保護。Windows `--startup-smoke-test` 驗證畫面、申請窗、離線原 ID 保存／重啟／跨 Workspace 隔離與確認後清除。此最後**功能** SHA 的 Cloud Validate ×2、Windows Client、Windows x64、Governance **全綠**，Worker deploy skipped。**這不代表真人 WinForms 驗收或 V3 已上線。**
-- [ ] **步驟 3（下一項）— D1 0015～0019 Migration 演練與安全盤點**：先在隔離 SQLite／非正式資源驗證 schema、升級與回復腳本、既有資料相容；確認備份及批准前**不得對正式 D1 執行 migration**，也不建立測試 Worker。
+- [x] **步驟 3 — D1 0015～0019 隔離 Migration 演練（Draft Source）**：新增 `cloud/tests/v3-migration-rehearsal.test.mjs` 並納入 Cloud `npm test`；以現有 0013→CYID_ONLY 退役→0014 歷史合成資料先建立 SQLite 備份，再依 0015→0019 的順序逐項交易升級。針對五個草案逐一注入 SQL 故障，驗證全交易回復、原 Workspace／Device／Invitation／Audit 不變、FK／integrity 正常、僅新增十張例外／公司設定表且一般成功發票不可存入 Work Item；從未升級快照進行本機還原。**測試程式已提交，是否通過以本次 exact-HEAD CI 為準**；不代表正式 D1 備份、遠端 migration 或 DR 實機驗收。
 - [ ] **步驟 4 — 官方清單與跨機例外對帳**：雙日期分頁、增量／排程、例外 Work Item 選擇性詳查、官方未知狀態的保守處理及永久稽核；不因清單查無就自動重送、換號或結案。
 - [ ] **步驟 5 — 複雜折讓與其他整合缺口**：已存在折讓的逐品項剩餘額、跨原發票分攤、含稅 `detail_vat=1`、稅額 round 規則、公司設定／憑證安全治理、其餘上傳問題跨機處理、雙版本 QA；沒有充分官方證據時一律不可自動核准。
 - [ ] **步驟 6 — DR／實機／正式 Release**：DR-01～DR-13、跨裝置權限與斷線、Windows 套件驗收、正式資料備份及遷移計畫、V3.0 發布。未全數驗收前保留 Draft，不合併、不對真實發票進行未批准操作。
