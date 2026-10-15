@@ -19,6 +19,16 @@ public sealed record CloudAllowanceApplicationSummary(
     string OriginalInvoiceNumber, string AllowanceDay, int RequestedGrossAmount,
     string Reason, string ApplicantEmployeeId, string SellerInvoice, DateTimeOffset CreatedAt);
 
+public sealed record CloudAllowanceReviewItem(
+    string Description, decimal? Quantity, decimal? UnitPrice, decimal? Amount,
+    decimal? Tax, int? TaxType);
+public sealed record CloudAllowanceReviewPreview(
+    string ItemId, int Revision, string OriginalInvoiceNumber, string AllowanceDay,
+    string SellerInvoice, string Environment, int RequestedGrossAmount,
+    string Reason, string ApplicantEmployeeId, string TemplateSha256,
+    IReadOnlyList<CloudAllowanceReviewItem> Items, string OfficialVerification,
+    bool CanApprove);
+
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
     IReadOnlyList<CloudAllowanceApplicationSummary> Applications,
@@ -97,6 +107,81 @@ public sealed class CloudAllowanceApplicationClient
         {
             return null;
         }
+    }
+
+    // Read-only frozen Work Item preview. This DOES NOT query AMEGO, create
+    // an approval grant, reserve a number, or submit a g0401 request.
+    public async Task<CloudAllowanceReviewPreview> PreviewForManagerAsync(
+        string itemId, int expectedRevision, string employeeNo, string password,
+        CancellationToken cancellationToken = default)
+    {
+        VerifyId(itemId);
+        if (expectedRevision < 1)
+            throw new ArgumentOutOfRangeException(nameof(expectedRevision));
+        Credentials(employeeNo, password);
+        using var result = await SendAsync("review-preview", new {
+            itemId, expectedRevision, employeeNo, password
+        }, cancellationToken).ConfigureAwait(false);
+        var root = result.RootElement;
+        if (!root.TryGetProperty("review", out var preview) ||
+            preview.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Missing manager review preview.");
+        var id = Required(preview, "itemId");
+        var invoice = Required(preview, "originalInvoiceNumber");
+        var day = Required(preview, "allowanceDay");
+        var seller = Required(preview, "sellerInvoice");
+        var env = Required(preview, "environment");
+        var reason = Required(preview, "reason");
+        var applicant = Required(preview, "applicantEmployeeId");
+        var template = Required(preview, "templateSha256");
+        var verification = Required(preview, "officialVerification");
+        if (id != itemId || !ValidInvoice(invoice) || !Regex.IsMatch(day, @"^[0-9]{8}$") ||
+            !Regex.IsMatch(seller, @"^[0-9]{8}$") || env is not ("production" or "test") ||
+            reason.Length is < 1 or > 500 || applicant.Length is < 1 or > 100 ||
+            !Regex.IsMatch(template, @"^[0-9a-f]{64}$") ||
+            verification != "NOT_PERFORMED" ||
+            !preview.TryGetProperty("canApprove", out var canApprove) ||
+            canApprove.ValueKind != JsonValueKind.False ||
+            !preview.TryGetProperty("revision", out var revision) ||
+            revision.ValueKind != JsonValueKind.Number ||
+            !revision.TryGetInt32(out var ver) || ver != expectedRevision ||
+            !preview.TryGetProperty("requestedGrossAmount", out var gross) ||
+            gross.ValueKind != JsonValueKind.Number ||
+            !gross.TryGetInt32(out var amount) || amount <= 0 ||
+            !preview.TryGetProperty("items", out var products) ||
+            products.ValueKind != JsonValueKind.Array ||
+            products.GetArrayLength() is < 1 or > 50)
+            throw new InvalidDataException("Manager review preview is unsafe or inconsistent.");
+        var items = products.EnumerateArray().Select(item => {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("description", out var description) ||
+                description.ValueKind != JsonValueKind.String ||
+                (description.GetString()?.Length ?? 0) > 300)
+                throw new InvalidDataException("Invalid manager review item.");
+            return new CloudAllowanceReviewItem(description.GetString()!,
+                PreviewAmount(item,"quantity"),PreviewAmount(item,"unitPrice"),
+                PreviewAmount(item,"amount"),PreviewAmount(item,"tax"),
+                item.TryGetProperty("taxType", out var type) &&
+                type.ValueKind == JsonValueKind.Number && type.TryGetInt32(out var n)
+                  ? n : null);
+        }).ToArray();
+        return new CloudAllowanceReviewPreview(id,ver,invoice,day,seller,env,amount,
+            reason,applicant,template,items,verification,false);
+    }
+
+    private static decimal? PreviewAmount(JsonElement item,string property)
+    {
+        if (!item.TryGetProperty(property,out var value) || value.ValueKind==JsonValueKind.Null)
+            return null;
+        if (value.ValueKind==JsonValueKind.Number && value.TryGetDecimal(out var number))
+            return number;
+        if (value.ValueKind==JsonValueKind.String &&
+            decimal.TryParse(value.GetString(),
+                System.Globalization.NumberStyles.AllowLeadingSign |
+                System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture,out var parsed))
+            return parsed;
+        throw new InvalidDataException("Invalid numeric field in manager review preview.");
     }
 
     public async Task<CloudAllowanceApplicationPage> ListForManagerAsync(

@@ -56,6 +56,28 @@ internal static class CloudAllowanceApplicationClientTests
             True(!body.RootElement.TryGetProperty("workspaceId",out _),"list scoped to CYID authority");
             return Json(HttpStatusCode.OK,new{ok=true,applications=new[]{Summary()},nextCursor=(object?)null});
         });
+        handler.Enqueue(req =>
+        {
+            Check(req,"review-preview");
+            using var body=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(Id,body.RootElement.GetProperty("itemId").GetString(),"review item scope");
+            Equal(2,body.RootElement.GetProperty("expectedRevision").GetInt32(),"review revision");
+            True(!body.RootElement.TryGetProperty("officialApproved",out _),
+                "client cannot supply official approval");
+            return Json(HttpStatusCode.OK,new{ok=true,review=ReviewPreview()});
+        });
+        handler.Enqueue(req =>
+        {
+            Check(req,"review-preview");
+            return Json(HttpStatusCode.OK,new{ok=true,review=new {
+                itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
+                allowanceDay="20261015",sellerInvoice="12345678",environment="test",
+                requestedGrossAmount=50,reason="Synthetic allowance",applicantEmployeeId="cyid_user",
+                templateSha256=new string('a',64),officialVerification="NOT_PERFORMED",
+                canApprove=true,items=new[]{new{description="Synthetic",quantity=1,
+                    unitPrice=50,amount=50,tax=0,taxType=1}}
+            }});
+        });
         handler.Enqueue(req => {Check(req,"create"); return Json(HttpStatusCode.Conflict,new {
             ok=false,error=new{code="APPLICATION_RESULT_UNKNOWN_READBACK_REQUIRED"}});});
         handler.Enqueue(req => {Check(req,"get"); return Json(HttpStatusCode.OK,new {
@@ -70,6 +92,13 @@ internal static class CloudAllowanceApplicationClientTests
         var list=await client.ListForManagerAsync(1,null,"0001","SyntheticPass12");
         Equal(1,list.Applications.Count,"list page");
         True(list.NextCursor is null,"last page");
+        var preview=await client.PreviewForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal(false,preview.CanApprove,"preview never implies official approval");
+        Equal("NOT_PERFORMED",preview.OfficialVerification,"official data is not yet verified");
+        Equal(1,preview.Items.Count,"verified frozen item count");
+        Equal("Synthetic",preview.Items[0].Description,"allowance line description");
+        await RejectAsync<InvalidDataException>(() =>
+            client.PreviewForManagerAsync(Id,2,"0001","SyntheticPass12"));
         try {
             await client.CreateAsync(draft,"0001","SyntheticPass12");
             throw new InvalidOperationException("Expected ambiguous create result");
@@ -86,6 +115,14 @@ internal static class CloudAllowanceApplicationClientTests
         True(CloudAllowanceApplicationClient.CreateItemId().StartsWith("wi_",StringComparison.Ordinal),
             "caller can prepare and durably persist an opaque request ID");
     }
+    private static object ReviewPreview() => new {
+        itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
+        allowanceDay="20261015",sellerInvoice="12345678",environment="test",
+        requestedGrossAmount=50,reason="Synthetic allowance",applicantEmployeeId="cyid_user",
+        templateSha256=new string('a',64),officialVerification="NOT_PERFORMED",
+        canApprove=false,items=new[]{new{description="Synthetic",quantity=1,
+            unitPrice=50,amount=50,tax=0,taxType=1}}
+    };
     private static object Summary() => new {
         itemId=Id,environment="test",status="review",revision=2,
         originalInvoiceNumber="AB12345678",allowanceDay="20261015",
