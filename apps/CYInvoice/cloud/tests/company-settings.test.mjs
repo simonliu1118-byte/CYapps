@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
+import {readFileSync} from "node:fs";
 import {build} from "esbuild";
 // Synthetic D1 schema and cryptographic tests. No external Cloudflare or
 // AMEGO actions, real company identifiers or credentials.
@@ -20,7 +21,7 @@ function fixture(){
     "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud');");
   sql.prepare("INSERT INTO workspaces(workspace_id) VALUES(?),(?)").run(ws,other);
   sql.prepare("INSERT INTO devices(device_id,workspace_id) VALUES(?,?)").run(dev,ws);
-  sql.exec((await import("node:fs")).readFileSync("drafts/0017_company_settings.sql","utf8"));
+  sql.exec(readFileSync("drafts/0017_company_settings.sql","utf8"));
   class Statement {
     constructor(q){this.q=q;this.args=[];}
     bind(...args){this.args=args;return this;}

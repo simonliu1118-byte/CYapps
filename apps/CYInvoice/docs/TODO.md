@@ -8,6 +8,11 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 公司設定權威 Draft（尚未接 Windows／正式 Worker）
+
+- [x] 新增 `cloud/drafts/0017_company_settings.sql`、`src/company-settings.ts`：只供內部 Worker 使用的 CYID 公司設定權威草案。SUPER_ADMIN＋當前超管 marker／Email 驗證前後重新驗權；Workspace＋Device active 寫入 SQL 柵欄；revision CAS；AES-256-GCM 隨機 nonce＋Workspace／欄位 AAD；密鑰由部署時私有設定注入，絕不放 D1；原設定以明確 keep／replace／clear 避免空白覆蓋；Audit 同一 D1 batch 保存異動欄位／員編／裝置，不記秘密。ADMIN 唯讀統編＋設定狀態，無解密接口；服務內部可經金鑰解密供未來 Gateway。
+- [ ] 尚未建立正式公司卡片 UI／CYID auth route／DPAPI Device Cache，亦未處理憑證輪替後舊 Device 收斂；0017 只是 Draft，禁止套入原 D1 或對外啟用。要使用於折讓覆核，仍需服務端 frozen application 與官方 Gateway final preflight；先完成完整測試與授權整合。
+
 ## 2026-10-15 V3 接續：管理員官方覆核 Grant 寫入者（Draft-only）
 
 - [x] **內部 approval writer 已新增**：`cloud/src/allowance-review-approval.ts` 的 `approveAllowanceAfterOfficialReview` 只接受 Worker 內部**可信任**三項 callback（CYID manager 重新驗證、從服務端讀取 frozen application、由光貿 Gateway 查詢及完整驗證單張原發票）。核准前後重新驗證同一管理員、Workspace；官方查詢資料必須在 60 秒內、具明確 allowance 陣列、發票上傳狀態 99、未作廢，原發票金額與申請品項分攤均被服務端確認。**暫時遇到任何已存在的官方折讓，都 fail closed**，留待品項分攤／剩餘額正式核對，絕不把多原發票折讓單的總額直接視為此張可折。
