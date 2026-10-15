@@ -8,6 +8,11 @@ export interface OfficialInvoiceSnapshot {
   voidPending: boolean;
   cancelDate: number;
   totalAmount: number;
+  // Internal-only evidence for strict g0401 comparison. Never forward raw items.
+  invoiceDate: unknown;
+  detailVat: unknown;
+  invoiceTaxAmount: unknown;
+  originalProductItems: unknown;
   allowanceSummaryPresent: boolean;
   existingAllowanceCount: number;
   productItemsPresent: boolean;
@@ -158,7 +163,12 @@ export async function queryOfficialInvoiceReadOnly(
   const snapshotSha256=Array.from(new Uint8Array(digest),
     n=>n.toString(16).padStart(2,"0")).join("");
   return {invoiceNumber,uploadStatus:status,voidPending,cancelDate:cancel,
-    totalAmount:gross,allowanceSummaryPresent,
+    totalAmount:gross,
+    invoiceDate:record.date??record.invoice_date??null,
+    detailVat:record.detail_vat??null,
+    invoiceTaxAmount:record.tax_amount??null,
+    originalProductItems:record.product_item??null,
+    allowanceSummaryPresent,
     existingAllowanceCount:allowanceSummaryPresent?(record.allowance as unknown[]).length:0,
     productItemsPresent,checkedAtUtc:clock.toISOString(),snapshotSha256,
     originalItemsAndRequestFullyVerified:false,canApprove:false};

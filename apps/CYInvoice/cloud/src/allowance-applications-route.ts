@@ -5,6 +5,7 @@ import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipa
 import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication} from "./allowance-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
+import {validateAllowanceOriginalItems} from "./allowance-item-validation";
 
 interface Env extends CyIdEnv {
   DB:D1Database;
@@ -173,6 +174,19 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
           !["ADMIN","SUPER_ADMIN"].includes(after.workspaceRole) ||
           liveDevice?.device_id!==d.device_id)
         return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      // Verify with exact 7-decimal arithmetic. Even a matched line item
+      // does NOT authorize g0401: a new final preflight and approval grant
+      // are still required after complete official historical reconciliation.
+      const itemCheck=validateAllowanceOriginalItems(
+        frozen.templateJson,{
+          invoiceNumber:snapshot.invoiceNumber,invoiceDate:snapshot.invoiceDate,
+          detailVat:snapshot.detailVat,invoiceTaxAmount:snapshot.invoiceTaxAmount,
+          invoiceGross:snapshot.totalAmount,status:snapshot.uploadStatus,
+          cancelled:snapshot.cancelDate!==0||snapshot.voidPending,
+          allowanceSummaryPresent:snapshot.allowanceSummaryPresent,
+          existingAllowanceCount:snapshot.existingAllowanceCount,
+          officialItems:snapshot.originalProductItems
+        },frozen.originalInvoiceNumber,frozen.requestedGrossAmount);
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,
@@ -192,6 +206,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         officialInvoiceGross:snapshot.totalAmount,
         requestedGrossAmount:frozen.requestedGrossAmount,
         existingAllowanceCount:snapshot.existingAllowanceCount,
+        itemCheck,
         ...flags,
         requiresPerItemVerification:true,canApprove:false,
         status:"OFFICIAL_READ_ONLY_NOT_APPROVED"

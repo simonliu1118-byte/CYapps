@@ -211,6 +211,8 @@ try {
   assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
+  assert.equal(firstInspection.data.inspection.itemCheck.fullyMatched,false);
+  assert.equal(firstInspection.data.inspection.itemCheck.reason,"ORIGINAL_TAX_BASIS_NOT_VERIFIED");
   assert.equal(officialCalls,1);
   assert.equal(JSON.stringify(firstInspection.data).includes(officialTestKey),false);
   assert.equal((await call("official-inspection",{itemId:createBody.itemId,
