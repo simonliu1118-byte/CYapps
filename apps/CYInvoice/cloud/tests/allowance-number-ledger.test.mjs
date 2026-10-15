@@ -49,11 +49,11 @@ function fixture(){
   const approve=(id,revision=2,environment="test",deviceId=devA)=>{
     const now=new Date();
     db.prepare(`INSERT INTO allowance_execution_approvals
-      (workspace_id,work_item_id,approved_revision,seller_invoice,environment,
+      (approval_id,workspace_id,work_item_id,approved_revision,seller_invoice,environment,
        allowance_day,template_sha256,official_snapshot_sha256,official_checked_at,
        approved_by_employee_id,approved_by_device_id,approved_at,valid_until_utc)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(ws,id,revision,base.sellerInvoice,environment,base.allowanceDay,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run("apr_"+crypto.randomUUID(),ws,id,revision,base.sellerInvoice,environment,base.allowanceDay,
         base.requestSha256,"b".repeat(64),now.toISOString(),
         "cyid_manager",deviceId,now.toISOString(),
         new Date(now.getTime()+15*60_000).toISOString());
