@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { pbkdf2Sync, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import { build } from "esbuild";
 
-// Execute real D1 SQL against SQLite, for both Built-in and CYID_ONLY.
+// Execute the V3 CYID-only Work Item D1 SQL against isolated SQLite.
 const built = await build({ entryPoints:["src/work-items.ts"], bundle:true,
   write:false, format:"esm", platform:"node", target:"node24" });
 const {createWorkItem,transitionWorkItem,getWorkItem}=await import(
@@ -14,7 +14,7 @@ const devA="dev_11111111-1111-4111-8111-111111111111";
 const devB="dev_22222222-2222-4222-8222-222222222222";
 const itemId="wi_synthetic_first";
 const hash="a".repeat(64);
-function fixture(cyidOnly) {
+function fixture() {
   const db=new DatabaseSync(":memory:");
   const migrations=readdirSync("migrations").filter(n=>/^[0-9]{4}_.*\.sql$/.test(n)).sort();
   for (const name of migrations.filter(n=>n<"0014")) db.exec(readFileSync("migrations/"+name,"utf8"));
@@ -23,11 +23,11 @@ function fixture(cyidOnly) {
   for (const d of [devA,devB]) db.prepare(`
     INSERT INTO devices(device_id,workspace_id,display_name,status,employee_authority_state)
     VALUES (?,?,'Synthetic','active','cloud')`).run(d,ws);
-  if(cyidOnly) db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
+  db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
   for (const name of migrations.filter(n=>n>="0014")) db.exec(readFileSync("migrations/"+name,"utf8"));
   // New table is draft-only; do not alter the reviewed canonical migration set.
   db.exec(readFileSync("drafts/0015_work_items.sql","utf8"));
-  if(cyidOnly) assert.equal(db.prepare(
+  assert.equal(db.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE name='cloud_employees'").get().n,0);
   let beforeWrite;
   class Statement {
@@ -41,8 +41,8 @@ function fixture(cyidOnly) {
   }
   return {db,env:{prepare:sql=>new Statement(sql)},race(fn){beforeWrite=fn;}};
 }
-for(const cyidOnly of [false,true]){
-  const {db,env,race}=fixture(cyidOnly);
+{
+  const {db,env,race}=fixture();
   const fresh={itemId,workspaceId:ws,deviceId:devA,actorId:"synthetic_actor",
     environment:"test",kind:"VOID",referenceHash:hash};
   assert.equal(await createWorkItem(env,fresh),true);
@@ -78,7 +78,7 @@ for(const cyidOnly of [false,true]){
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   db.close();
 }
-console.log("V3 Work Item storage: Built-in/CYID_ONLY, source de-dup, CAS revision and revoked Device fencing passed");
+console.log("V3 Work Item storage: CYID_ONLY, source de-dup, CAS revision and revoked Device fencing passed");
 
 const routeBundle=await build({entryPoints:["src/work-items-route.ts"],bundle:true,
   write:false,format:"esm",platform:"node",target:"node24"});
@@ -86,30 +86,19 @@ const {handleWorkItems}=await import(
   "data:text/javascript;base64,"+Buffer.from(routeBundle.outputFiles[0].text).toString("base64"));
 const token="cydev_"+"a".repeat(64);
 const tokenHash=createHash("sha256").update(token).digest("hex");
-const salt="11".repeat(16);
-const password="synthetic-password";
-const verifier="pbkdf2-sha256$100000$"+salt+"$"+
-  pbkdf2Sync(password,Buffer.from(salt,"hex"),100000,32,"sha256").toString("hex");
-for (const cyidOnly of [false,true]) {
-  const fx=fixture(cyidOnly);
+{
+  const fx=fixture();
   const {db,env,race}=fx;
   db.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(tokenHash,devA);
   const principal={employeeId:"synthetic_manager",workspaceRole:"ADMIN"};
   let permission=true;
-  const authorized = cyidOnly ? {
+  const authorized = {
     ...env, DB:env, CYID_ENABLED:"true", IDENTITY:{fetch:async()=>Response.json({})},
     IDENTITY_APPLICATION_ID:"CYINVOICE", IDENTITY_WORKSPACE_ID:"synthetic_identity",
     IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
     cyIdContext:{revalidate:async()=>permission?principal:{...principal,workspaceRole:"USER"}},
-  } : { ...env, DB:env, CYID_ENABLED:"false" };
-  if (!cyidOnly) {
-    db.prepare(`INSERT INTO cloud_employees
-      (employee_id,workspace_id,employee_no,name,email_normalized,
-       role,enabled,credential_verifier,credential_algorithm)
-      VALUES ('synthetic_manager',?,'9001','Manager','admin@example.test',
-              'ADMIN',1,?,'pbkdf2-sha256')`).run(ws,verifier);
-  }
-  const credentials=cyidOnly?{}:{employeeNo:"9001",password};
+  };
+  const credentials={};
   async function call(action, body, bearer=token) {
     const response=await handleWorkItems(new Request(
       "https://cyinvoice.synthetic/v1/work-items/"+action,{
@@ -119,6 +108,12 @@ for (const cyidOnly of [false,true]) {
       }),authorized);
     return {status:response.status,body:await response.json()};
   }
+  const legacy=await handleWorkItems(new Request("https://cyinvoice.synthetic/v1/work-items/create",{
+    method:"POST",headers:{"authorization":"Bearer "+token,"content-type":"application/json"},
+    body:JSON.stringify({itemId:"wi_legacy_disabled",kind:"VOID",environment:"test",referenceHash:hash}),
+  }),{...authorized,CYID_ENABLED:"false"});
+  assert.equal(legacy.status,409);
+  assert.equal((await legacy.json()).error.code,"CYID_REQUIRED");
   const first={itemId:"wi_endpoint_first",kind:"VOID",environment:"test",referenceHash:hash};
   assert.equal((await call("create",first,"wrong")).status,401);
   const created=await call("create",first);
@@ -133,12 +128,10 @@ for (const cyidOnly of [false,true]) {
   assert.equal((await call("transition",change)).status,200);
   assert.equal((await call("transition",change)).status,409);
   assert.equal((await call("transition",{...change,expectedRevision:2,from:"review",to:"open"})).status,400);
-  if (cyidOnly) permission=false;
-  else db.prepare("UPDATE cloud_employees SET enabled=0 WHERE employee_id='synthetic_manager'").run();
+  permission=false;
   assert.equal((await call("transition",{...change,expectedRevision:2,
     from:"review",to:"closed"})).status,403);
-  if (cyidOnly) permission=true;
-  else db.prepare("UPDATE cloud_employees SET enabled=1 WHERE employee_id='synthetic_manager'").run();
+  permission=true;
   race(()=>db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devA));
   assert.equal((await call("transition",{...change,expectedRevision:2,
     from:"review",to:"closed"})).status,409);
@@ -148,4 +141,4 @@ for (const cyidOnly of [false,true]) {
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   db.close();
 }
-console.log("V3 Work Item authenticated routes: Built-in/CYID_ONLY, manager role, CAS, revocation and privacy passed");
+console.log("V3 Work Item authenticated routes: CYID_ONLY, manager role, CAS, revocation and privacy passed");
