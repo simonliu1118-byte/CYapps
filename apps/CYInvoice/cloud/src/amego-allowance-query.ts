@@ -3,6 +3,7 @@
 // A matching number is not sufficient proof that OUR g0401 was accepted:
 // an external system may already have occupied that same number.
 import {signOfficialInvoiceQuery} from "./amego-invoice-query";
+import {validOfficialAllowanceNumber} from "./amego-allowance-void";
 const url="https://invoice-api.amego.tw/json/allowance_query";
 const te=new TextEncoder();
 const numberPattern=/^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$/;
@@ -67,7 +68,7 @@ export async function queryOfficialAllowanceReadOnly(
   transport:typeof fetch=fetch,now:()=>Date=()=>new Date()
 ):Promise<OfficialAllowanceReadback>{
   if(!/^[0-9]{8}$/.test(input.sellerInvoice)||
-     !numberPattern.test(input.allowanceNumber)||
+     !validOfficialAllowanceNumber(input.allowanceNumber)||
      !/^[A-Z]{2}[0-9]{8}$/.test(input.originalInvoiceNumber)||
      typeof input.appKey!=="string"||input.appKey.length<8||input.appKey.length>256)
     throw new Error("ALLOWANCE_QUERY_INPUT_INVALID");
@@ -104,8 +105,11 @@ export async function queryOfficialAllowanceReadOnly(
   const totalAmount=amount(row.total_amount);
   const taxAmount=amount(row.tax_amount);
   if(!/^[0-9]{8}$/.test(allowanceDay)||
-     allowanceDay!==input.allowanceNumber.slice(1,9))
+     (numberPattern.test(input.allowanceNumber) &&
+      allowanceDay!==input.allowanceNumber.slice(1,9)))
     throw new Error("ALLOWANCE_QUERY_DATE_MISMATCH");
+  // The historic AMEGO allowance numbers used by the website don't encode
+  // YYYYMMDD. Verify their date against the official field, not the ID.
   if(!Array.isArray(row.product_item)||row.product_item.length===0||
     row.product_item.length>1000)
     throw new Error("ALLOWANCE_QUERY_ITEMS_UNCONFIRMED");

@@ -151,6 +151,12 @@ BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_AUDIT_APPEND_ONLY'); END;
 CREATE TRIGGER allowance_void_no_unsupported_close BEFORE UPDATE OF status ON work_items
 WHEN OLD.kind='ALLOWANCE_VOID' AND NEW.status='closed'
 BEGIN
+  -- This automatic workflow is not the "manager completed on AMEGO website"
+  -- workflow; it may close only after the persisted single-attempt claim.
+  SELECT CASE WHEN NOT EXISTS(
+    SELECT 1 FROM allowance_void_send_claims c
+    WHERE c.work_item_id=OLD.work_item_id AND c.workspace_id=OLD.workspace_id
+  ) THEN RAISE(ABORT,'ALLOWANCE_VOID_SEND_CLAIM_REQUIRED') END;
   SELECT CASE WHEN NOT EXISTS(
     SELECT 1 FROM allowance_void_official_checks c
     JOIN allowance_void_requests r ON r.work_item_id=c.work_item_id

@@ -52,6 +52,15 @@ for(const [response,expected] of [
  [{code:0,data:{...official.data,tax_amount:"oops"}},/AMOUNT_INVALID/],
  [{code:0,data:{...official.data,allowance_date:"20261014"}},/DATE_MISMATCH/],
  ])await assert.rejects(()=>query(input,transport(response),()=>date),expected);
+const historicInput={...input,allowanceNumber:"3821061800001"};
+const historic=await query(historicInput,async(url,opts)=>{
+  requests++;
+  assert.equal(JSON.parse(new URLSearchParams(opts.body).get("data")).allowance_number,
+    historicInput.allowanceNumber);
+  return Response.json({code:0,data:{...official.data,allowance_number:"3821061800001"}});
+},()=>date);
+assert.equal(historic.possibleMatch,true,
+ "Old official allowance numbers have no encoded date and must remain queryable");
 const before=requests;
 await assert.rejects(()=>query({...input,appKey:""},transport(),()=>date),/INPUT_INVALID/);
 assert.equal(before,requests);

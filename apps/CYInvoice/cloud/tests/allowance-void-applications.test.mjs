@@ -102,6 +102,91 @@ assert.equal(page2.status,200,JSON.stringify(page2));
 assert.equal(page2.data.applications.length,1);
 assert.equal(page2.data.nextCursor,null);
 assert.notEqual(page1.data.applications[0].itemId,page2.data.applications[0].itemId);
+// End-to-end synthetic CYID manager review + irreversible g0501 send CAS.
+const companyBundle=await build({entryPoints:["src/company-settings.ts"],
+  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {encryptCompanyBusinessData:encryptSecret}=await import(
+ "data:text/javascript;base64,"+
+ Buffer.from(companyBundle.outputFiles[0].text).toString("base64"));
+const privateKey="aa".repeat(32);
+const amegoKey="SYNTHETIC_OFFICIAL_G0501_KEY";
+const secret=await encryptSecret(privateKey,ws,"amego",amegoKey);
+sql.prepare("UPDATE company_settings SET amego_app_key_ciphertext=?").run(secret);
+env.COMPANY_SETTINGS_KEY_HEX=privateKey;
+sql.prepare("UPDATE work_items SET status='review',revision=2 WHERE work_item_id=?")
+ .run(input.itemId);
+let remoteQueries=0,remoteSends=0,remoteStates=0,officialType="D0401";
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async(url,opts)=>{
+ const form=new URLSearchParams(opts.body);
+ const payload=JSON.parse(form.get("data"));
+ assert.equal(form.get("invoice"),"12345678");
+ assert.equal(form.get("sign"),createHash("md5").update(
+   form.get("data")+form.get("time")+amegoKey).digest("hex"));
+ if(url.endsWith("/allowance_query")){
+   remoteQueries++;
+   assert.deepEqual(payload,{allowance_number:input.allowanceNumber});
+   return Response.json({code:0,data:{
+     allowance_number:input.allowanceNumber,invoice_type:"D0401",
+     invoice_status:99,allowance_type:2,cancel_date:0,
+     allowance_date:"20261015",total_amount:"50",tax_amount:"3",
+     product_item:[{original_invoice_number:input.originalInvoiceNumber}]
+   }});
+ }
+ if(url.endsWith("/g0501")){
+   remoteSends++;
+   assert.deepEqual(payload,[{CancelAllowanceNumber:input.allowanceNumber}]);
+   officialType="D0501";
+   return Response.json({code:0,msg:""});
+ }
+ if(url.endsWith("/allowance_status")){
+   remoteStates++;
+   assert.deepEqual(payload,[{AllowanceNumber:input.allowanceNumber}]);
+   return Response.json({code:0,data:{
+     [input.allowanceNumber]:{type:officialType,status:99}
+   }});
+ }
+ throw new Error("Unknown synthetic AMEGO endpoint");
+};
+const revision={employeeNo:"0001",password:"SYNTHETIC_PASS",
+ itemId:input.itemId,expectedRevision:2};
+try{
+ actor={...actor,workspaceRole:"USER"};
+ assert.equal((await call("approve",revision)).status,403);
+ assert.equal(remoteQueries,0);
+ actor={...actor,workspaceRole:"ADMIN"};
+ assert.equal((await call("approve",{...revision,officialApproved:true})).status,400);
+ assert.equal(remoteQueries,0);
+ const grant=await call("approve",revision);
+ assert.equal(grant.status,201,JSON.stringify(grant));
+ assert.equal(grant.data.canIssueNow,false);
+ assert.equal(remoteQueries,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
+ const attempt=await call("send-once",revision);
+ assert.equal(attempt.status,202,JSON.stringify(attempt));
+ assert.equal(attempt.data.outcome,"accepted_unconfirmed");
+ assert.equal(attempt.data.canAutoRetry,false);
+ assert.equal(attempt.data.canAutoClose,false);
+ assert.equal(remoteSends,1);
+ assert.equal(remoteQueries,2,"Send must repeat official preflight");
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
+ assert.equal((await call("send-once",revision)).status,409);
+ assert.equal(remoteSends,1,"No second g0501 on repeated click or timeout");
+ const inspected=await call("status-readback",revision);
+ assert.equal(inspected.status,200,JSON.stringify(inspected));
+ assert.equal(inspected.data.readback.officialCancelled,true);
+ assert.equal(inspected.data.readback.canAutoClose,false);
+ assert.equal(remoteStates,1);
+ const closed=await call("close",revision);
+ assert.equal(closed.status,200,JSON.stringify(closed));
+ assert.equal(closed.data.status,"closed");
+ assert.equal(remoteStates,2);
+ assert.equal(sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
+   .get(input.itemId).status,"closed");
+ assert.equal((await call("close",revision)).status,409);
+ assert.equal(remoteStates,2,"Closed Work Item never starts another official request");
+}finally{globalThis.fetch=originalFetch;}
 assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
-console.log("CYID allowance void route: frozen source, atomic create, readback, manager list and scope fences passed");
+console.log("CYID allowance void: source, approval, one-shot g0501, official readback and verified close passed");
 sql.close();

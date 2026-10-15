@@ -4,6 +4,7 @@
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,
   type CyIdEnv,type CyIdPrincipal} from "./cyid";
 import {validOfficialAllowanceNumber} from "./amego-allowance-void";
+import {managerAllowanceVoidAction,type VoidManagerAction} from "./allowance-void-manager";
 
 interface Env extends CyIdEnv {
   DB:D1Database;
@@ -14,7 +15,11 @@ type Actor={workspaceId:string;employeeId:string;workspaceRole:"SUPER_ADMIN"|"AD
 const paths=new Set([
  "/v1/allowance-void-applications/create",
  "/v1/allowance-void-applications/get",
- "/v1/allowance-void-applications/list"
+ "/v1/allowance-void-applications/list",
+ "/v1/allowance-void-applications/approve",
+ "/v1/allowance-void-applications/send-once",
+ "/v1/allowance-void-applications/status-readback",
+ "/v1/allowance-void-applications/close"
 ]);
 const idPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const invoicePattern=/^[A-Z]{2}\d{8}$/;
@@ -93,7 +98,8 @@ export async function handleAllowanceVoidApplications(
   const allowed=action==="create"?
     ["employeeNo","password","itemId","allowanceNumber","originalInvoiceNumber","reason"]:
     action==="get"?["employeeNo","password","itemId"]:
-    ["employeeNo","password","limit","cursorCreatedAt","cursorItemId"];
+    action==="list"?["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]:
+    ["employeeNo","password","itemId","expectedRevision"];
   if(!Object.keys(input).every(k=>allowed.includes(k)))
     return response(400,{error:{code:"INVALID_REQUEST"}});
   const environment=env.ALLOWANCE_OPERATION_ENVIRONMENT;
@@ -106,6 +112,28 @@ export async function handleAllowanceVoidApplications(
       return response(401,{error:{code:"DEVICE_INVALID"}});
     const a=await activeActor(env);
     if(!a)return response(403,{error:{code:"AUTHORITY_REQUIRED"}});
+    if(["approve","send-once","status-readback","close"].includes(action)){
+      if(!manager(a))return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(typeof input.itemId!=="string"||!idPattern.test(input.itemId)||
+         !Number.isSafeInteger(input.expectedRevision)||
+         Number(input.expectedRevision)<1)
+        return response(400,{error:{code:"INVALID_REQUEST"}});
+      if(!/^[0-9a-fA-F]{64}$/.test(
+        (env as Env & {COMPANY_SETTINGS_KEY_HEX?:string}).COMPANY_SETTINGS_KEY_HEX??""))
+        return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+      const authority={revalidate:async()=>{
+        const latest=await activeActor(env);
+        return latest?{workspaceId:latest.workspaceId,employeeId:latest.employeeId,
+          role:latest.workspaceRole}:null;
+      }};
+      const result=await managerAllowanceVoidAction(action as VoidManagerAction,
+        env.DB,{workspaceId:binding.workspaceId,workItemId:input.itemId,
+          deviceId:d.device_id,expectedRevision:Number(input.expectedRevision),
+          environment,encryptionKeyHex:(env as Env & {
+            COMPANY_SETTINGS_KEY_HEX?:string}).COMPANY_SETTINGS_KEY_HEX!,
+          employeeId:a.employeeId},authority);
+      return response(action==="approve"?201:action==="send-once"?202:200,result);
+    }
     if(action==="create"){
       if(typeof input.itemId!=="string"||!idPattern.test(input.itemId)||
          !validOfficialAllowanceNumber(input.allowanceNumber)||
@@ -203,6 +231,8 @@ export async function handleAllowanceVoidApplications(
         {cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id}:null});
   }catch(e){
     if(e instanceof CyIdError)return response(e.status,{error:{code:e.code}});
+    if(e instanceof Error&&/^ALLOWANCE_VOID_/.test(e.message))
+      return response(409,{error:{code:"ALLOWANCE_VOID_REQUIRES_RECHECK"}});
     if(e instanceof Error&&/UNIQUE constraint failed|ALLOWANCE_VOID_SOURCE_MISMATCH/i.test(e.message))
       return response(409,{error:{code:"DUPLICATE_OR_SOURCE_CHANGED"}});
     if(e instanceof Error&&/no such table: (work_items|company_settings|allowance_void_requests)/i.test(e.message))
