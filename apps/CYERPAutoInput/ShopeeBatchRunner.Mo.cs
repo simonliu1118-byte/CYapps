@@ -30,75 +30,39 @@ internal sealed partial class ShopeeBatchRunner
     public const string MoUrl = "https://3p.momo.com.tw/FrameServlet.do";
 
     /// <param name="readOrders">The 訂單編號 of an export (it is password protected; the caller reads it).</param>
-    /// <param name="resumeBefore">
-    /// 測試：從批次出貨繼續 (user, 2026-10-14): the front Chrome window, already on MO店+, and this
-    /// 未出貨 export from an earlier run; the run starts at 批次出貨.
-    /// </param>
-    /// <param name="atRecord">測試：從批次出貨記錄繼續 — the top record is the shipment just made by hand.</param>
-    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status, string? resumeBefore = null, bool atRecord = false)
+    public async Task<MoBatchResult> RunMoAsync(string folder, Func<string, IReadOnlyCollection<string>> readOrders, Action<string> status)
     {
         var result = new MoBatchResult { Folder = folder };
         _pageTabs = true;
         Directory.CreateDirectory(folder);
-        if (resumeBefore is null)
-        {
-            status("MO店+ 全自動：開啟 Chrome…");
-            await OpenWindowAsync(MoUrl);
-        }
-        else
-        {
-            _window = ChromeWindows().FirstOrDefault();
-            if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗。");
-            Front();
-        }
+        status("MO店+ 全自動：開啟 Chrome…");
+        await OpenWindowAsync(MoUrl);
         var (first, _) = await WaitAsync("MO店+ 店+管理系統", 40, s => MoBatchScreens.SignedIn(s.Boxes) || s.Boxes.Any(b => b.Text.Contains("登入", StringComparison.Ordinal)) ? s : null);
         var signedIn = MoBatchScreens.SignedIn(first.Boxes);
         first.Dispose();
         if (!signedIn) throw new ShopeeBatchStop("MO店+ 後台還沒登入：請在這個 Chrome 視窗登入後再按一次 MO店+ 全自動。");
 
-        if (resumeBefore is not null)
+        // 1–2. 未出貨 export.
+        status("MO店+ 全自動：匯出未出貨訂單…");
+        await OpenMyOrdersAsync("未出貨");
+        using (var orders = await ReadAsync())
         {
-            result.Before = resumeBefore;
-            _log.Info("mo-batch", "resumed at 批次出貨 with an earlier 未出貨 export");
-        }
-        else
-        {
-            // 1–2. 未出貨 export.
-            status("MO店+ 全自動：匯出未出貨訂單…");
-            await OpenMyOrdersAsync("未出貨");
-            using (var orders = await ReadAsync())
+            if (MoBatchScreens.Tab(orders.Boxes, "未出貨") is { Count: 0 })
             {
-                if (MoBatchScreens.Tab(orders.Boxes, "未出貨") is { Count: 0 })
-                {
-                    _log.Info("mo-batch", "no orders to ship");
-                    result.Notes.Add("未出貨沒有訂單。");
-                    return result;
-                }
+                _log.Info("mo-batch", "no orders to ship");
+                result.Notes.Add("未出貨沒有訂單。");
+                return result;
             }
-            result.Before = await ExportAsync(folder, "未出貨訂單");
         }
+        result.Before = await ExportAsync(folder, "未出貨訂單");
         var batchOrders = readOrders(result.Before);
         _log.Info("mo-batch", $"before export orders={batchOrders.Count}");
 
         // 4–6. 批次出貨, method by method.
         var done = new HashSet<MoShipKind>();
-        if (atRecord)
-        {
-            MoShipRecord? top;
-            using (var page = await ReadAsync()) top = MoBatchScreens.LatestRecord(page.Boxes);
-            if (top is null || MoBatchScreens.Kind(top.Method) == MoShipKind.Other)
-                throw new ShopeeBatchStop($"批次出貨記錄讀不到最上面那一筆（{top?.Time} {top?.Method}）。");
-            var kind = MoBatchScreens.Kind(top.Method);
-            _log.Info("mo-batch", $"resumed at the record {top.Time} {kind} orders={top.Orders}");
-            _shippedHint = true;
-            result.Shipped += top.Orders;
-            done.Add(kind);
-            await SaveRecordDocumentsAsync(kind, top.Method, top.Orders, since: null, result);
-        }
         // Back to 批次出貨 only while a 配送方式 read there is still to do; after the last one
-        // straight to 我的訂單 › 配送中 (user, 2026-10-14). The 測試 from the record does just
-        // that one.
-        List<MoShipMethod>? pending = atRecord ? [] : null;
+        // straight to 我的訂單 › 配送中 (user, 2026-10-14).
+        List<MoShipMethod>? pending = null;
         while (pending is not { Count: 0 })
         {
             status($"MO店+ 全自動：批次出貨（已出貨 {result.Shipped} 筆）…");

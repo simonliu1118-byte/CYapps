@@ -799,15 +799,26 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// Checked when an entry that ends in ERP input is chosen (user, 2026-10-14: at the entry,
-    /// not after the order is filled and 開始 pressed): exactly one COPI08 must be open. The
-    /// 新增／修改 question stays at the start.
+    /// The one ERP check of every entry that ends in ERP input (蝦皮／MO店+／酷澎 全自動, 自動擷取,
+    /// 匯入; user, 2026-10-14／15: at the entry, before any web step, not after the order is
+    /// filled): exactly one COPI08, and no other ERP window open over it (a query or message
+    /// window stops F5 新增 later). The 新增／修改 question stays at the start of ERP input.
     /// </summary>
     private bool ErpWindowReady()
     {
         RefreshErpState();
         var state = _shownState;
-        if (state is not (ErpDocumentState.MultipleWindows or ErpDocumentState.NotFound)) return true;
+        if (state is not (ErpDocumentState.MultipleWindows or ErpDocumentState.NotFound))
+        {
+            var copi = Win32Automation.FindCopi08Windows();
+            var others = copi.Count == 1 ? Win32Automation.FindVisibleProcessPeerWindows(copi[0]) : [];
+            if (others.Count == 0) return true;
+            var names = others.Select(NativeMethods.WindowText).Where(t => t.Trim().Length > 0).Distinct().ToList();
+            _log.Info("automation", $"entry refused: erp has {others.Count} other window(s)");
+            MessageBox.Show(this, "ERP 目前有其他視窗開著" + (names.Count > 0 ? $"（{string.Join("、", names)}）" : string.Empty) +
+                    "。\n\n請先關閉，只留銷貨單建立作業（COPI08），再開始。", "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
         MessageBox.Show(this, state == ErpDocumentState.MultipleWindows
                 ? "偵測到不只一個 COPI08（銷貨單建立作業）視窗。\n\n請只保留一個，關掉其他的之後再開始，避免輸入到錯誤的視窗。"
                 : "找不到 SMART ERP COPI08 視窗。\n\n請先開啟銷貨單建立作業再開始。",
@@ -1108,47 +1119,6 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 測試全家裁切列印 (user, 2026-10-14): with a 全家寄取貨單 tab opened by hand in front, the
-    /// printing part of 全自動 runs on it to the end — cut and printed, or else printed through
-    /// Chrome at 第 2 頁 165 %.
-    /// </summary>
-    private async Task TestFamilyCutAsync()
-    {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        if (MessageBox.Show(this,
-                "請先在 Chrome 打開蝦皮的全家寄取貨單分頁，並讓那個 Chrome 視窗在最前面（本程式以外）。\n\n" +
-                "按「確定」後程式會照全自動的做法列印這張單：存網頁到程式資料夾的 Temp、切出寄取貨單直接送「" + _settings.ShopeeLabelPrinter +
-                "」列印；切不出來就改用 Chrome 第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "% 列印。會真的印出來。\n\n過程中請勿操作鍵盤滑鼠，按 Esc 可停止。",
-                "測試全家裁切列印", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
-        _shopeeBatchRunning = true;
-        Session.Pin(AutomationSession.BatchTitle);
-        Session.Begin(AutomationSession.BatchTitle);
-        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
-            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
-        string result;
-        try
-        {
-            _log.Info("shopee-batch", "family print test started");
-            result = await runner.TestFamilyPrintAsync();
-        }
-        catch (Exception ex) when (ex is ShopeeBatchStop or OperationCanceledException or InvalidOperationException)
-        {
-            _log.Warn("shopee-batch", $"family print test: {ex.Message}");
-            result = ex is OperationCanceledException ? "已停止。" : ex.Message;
-        }
-        finally
-        {
-            Session.Unpin();
-            Session.End();
-            _shopeeBatchRunning = false;
-        }
-        Activate();
-        MessageBox.Show(this, result, "測試全家裁切列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    /// <summary>
     /// A MO店+ 全家／7-11 標籤 PDF cut slip by slip onto the thermal printer (as 蝦皮 全家):
     /// a page that is one picture is used as it is (MO 7-11: no sample yet, taken the same way,
     /// user 2026-10-14).
@@ -1214,90 +1184,6 @@ internal sealed partial class MainForm : Form
         }
         _log.Info("mo-a4", $"printed pages={pages.Count} {(summary ? "pickup summary" : "label")}");
         return pages.Count;
-    }
-
-    /// <summary>測試蝦皮 7-11 列印 (user, 2026-10-14): the printing part of 全自動 on a 7-11 交貨便 tab opened by hand.</summary>
-    private async Task TestSevenPrintAsync()
-    {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        if (MessageBox.Show(this,
-                "請先在 Chrome 打開蝦皮的 7-ELEVEN 交貨便服務單分頁，並讓那個 Chrome 視窗在最前面（本程式以外）。\n\n按「確定」後程式會照全自動的做法按 Ctrl+P、設定列印視窗（" +
-                _settings.ShopeeLabelPrinter + "、縮放 " + _settings.SevenLabelScale + "%）並按列印。會真的印出來。\n\n過程中請勿操作鍵盤滑鼠，按 Esc 可停止。",
-                "測試蝦皮 7-11 列印", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
-        _shopeeBatchRunning = true;
-        Session.Pin(AutomationSession.BatchTitle);
-        Session.Begin(AutomationSession.BatchTitle);
-        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
-            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
-        string result;
-        try
-        {
-            _log.Info("shopee-batch", "seven print test started");
-            result = await runner.TestSevenPrintAsync();
-        }
-        catch (Exception ex) when (ex is ShopeeBatchStop or OperationCanceledException or InvalidOperationException)
-        {
-            _log.Warn("shopee-batch", $"seven print test: {ex.Message}");
-            result = ex is OperationCanceledException ? "已停止。" : ex.Message;
-        }
-        finally
-        {
-            Session.Unpin();
-            Session.End();
-            _shopeeBatchRunning = false;
-        }
-        Activate();
-        MessageBox.Show(this, result, "測試蝦皮 7-11 列印", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    /// <summary>
-    /// 測試 MO店+ 寄件單裁切列印 (user, 2026-10-14): the 全家／7-11 寄件單 PDFs from MO店+ 批次出貨
-    /// (A4, four slips a page, password like the export) are cut slip by slip and printed on
-    /// the thermal printer, as MO店+ 全自動 will.
-    /// </summary>
-    private async Task TestMoSlipPdfAsync()
-    {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        using var dialog = new OpenFileDialog { Title = "選擇 MO店+ 全家／7-11 寄件單 PDF（可多選）", Filter = "PDF (*.pdf)|*.pdf", Multiselect = true, CheckFileExists = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
-        if (printer is null)
-        {
-            MessageBox.Show(this, $"找不到名稱符合「{_settings.ShopeeLabelPrinter}」的印表機（設定 › 印表機，勾選熱感紙）。", "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (MessageBox.Show(this, $"會把選的 {dialog.FileNames.Length} 個 PDF 每一頁切成一張張寄取貨單，直接送到「{printer}」列印。會真的印出來。\n\n要開始嗎？",
-                "測試 MO店+ 寄件單", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
-        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
-        var lines = new List<string>();
-        _shopeeBatchRunning = true;
-        UseWaitCursor = true;
-        try
-        {
-            foreach (var file in dialog.FileNames)
-            {
-                var name = Path.GetFileName(file);
-                try
-                {
-                    var (printed, notes) = await PrintMoSlipsAsync(file, printer, password);
-                    lines.Add($"{name}：印出 {printed} 張" + (notes.Count > 0 ? "\n  " + string.Join("\n  ", notes) : string.Empty));
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    _log.Warn("mo-slip", $"test {name}: {ex.GetType().Name}: {ex.Message}");
-                    lines.Add($"{name}：失敗（{ex.Message}）");
-                }
-            }
-        }
-        finally
-        {
-            UseWaitCursor = false;
-            _shopeeBatchRunning = false;
-        }
-        MessageBox.Show(this, string.Join("\n\n", lines), "測試 MO店+ 寄件單", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private const string ShopeeBatchTitle = "全自動";
@@ -1439,7 +1325,7 @@ internal sealed partial class MainForm : Form
     /// in the preview until CYInvoice can be called) and ERP. The Temp folder goes once every order
     /// is saved in ERP.
     /// </summary>
-    private async Task RunMoBatchAsync(bool resume = false, bool atRecord = false)
+    private async Task RunMoBatchAsync()
     {
         const string title = "MO店+ 全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
@@ -1467,34 +1353,13 @@ internal sealed partial class MainForm : Form
             MessageBox.Show(this, $"這台電腦找不到{(thermal is null ? "熱感紙" : "A4 ")}印表機「{(thermal is null ? _settings.ShopeeLabelPrinter : _settings.A4Printer)}」，請到「設定 › 印表機」重新勾選。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        // 測試：從批次出貨繼續 (user, 2026-10-14): the latest run's 未出貨 export and folder.
-        string? resumeBefore = null;
-        string? resumeFolder = null;
-        if (resume)
-        {
-            var latest = Directory.Exists(MoPrintedDocuments.TempRoot)
-                ? Directory.GetDirectories(MoPrintedDocuments.TempRoot, "mo-*").OrderByDescending(d => d)
-                    .Select(d => (Folder: d, File: Directory.GetFiles(d, "*.xls").OrderBy(f => File.GetLastWriteTime(f)).FirstOrDefault()))
-                    .FirstOrDefault(x => x.File is not null)
-                : default;
-            if (latest.File is null)
-            {
-                MessageBox.Show(this, "找不到之前存下的未出貨訂單匯出檔（Temp\\mo-…）。請先從頭跑一次 MO店+ 全自動。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (MessageBox.Show(this, $"請讓已登入 MO店+ 後台的 Chrome 視窗在最前面（本程式以外）。\n\n程式會從「{(atRecord ? "批次出貨記錄最上面那一筆" : "批次出貨")}」接著做：{(atRecord ? "存這一筆的標籤（其他配送方式不做）" : "逐一批次出貨、存標籤")}、配送中匯出、帶入匯出檔預覽（填發票）、列印、輸入 ERP。\n開發票用的未出貨訂單檔使用：{Path.GetFileName(latest.Folder)}\\{Path.GetFileName(latest.File)}\n\n要開始嗎？",
-                    title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-                return;
-            resumeBefore = latest.File;
-            resumeFolder = latest.Folder;
-        }
-        else if (MessageBox.Show(this,
+        if (MessageBox.Show(this,
                 "MO店+ 全自動會開一個新的 Chrome 視窗（MO店+ 後台需已登入），然後：\n\n" +
                 "1. 我的訂單 › 未出貨：匯出報表（開發票用）\n" +
                 "2. 批次出貨：新竹貨運、7-11店出、全家店出各自全選 → 批次出貨（併箱）→ 確認出貨，存下標籤（新竹另存出貨總表）\n" +
                 "3. 我的訂單 › 配送中：匯出報表（物流單號）\n" +
-                "4. 帶入兩個匯出檔 → 預覽（請填發票資料）\n" +
-                "5. 按開始後先列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙\n" +
+                (_settings.MoAutoInvoice ? "4. CYInvoice 開立發票並帶入（全部沒問題就不開預覽）\n" : "4. 帶入兩個匯出檔 → 預覽（請填發票資料）\n") +
+                "5. 列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙；紙本發票拿到 PDF 後另外請你放 A4 白紙\n" +
                 "6. 輸入 ERP\n\n" +
                 "其他配送方式（倉出、冷凍等）不處理，會列在結果裡。網頁操作期間請勿操作電腦，按 Esc 可停止。\n\n要開始嗎？",
                 title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
@@ -1512,7 +1377,7 @@ internal sealed partial class MainForm : Form
             MoOrderImport.ReadTracking(Read(path))?.Keys.ToHashSet(StringComparer.Ordinal) ?? throw new ShopeeBatchStop("未出貨匯出檔讀不到訂單編號。");
 
         MoPrintedDocuments.Prune(_log);
-        var folder = resumeFolder ?? Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        var folder = Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
         _shopeeBatchRunning = true;
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
@@ -1524,7 +1389,7 @@ internal sealed partial class MainForm : Form
         _log.Info("mo-batch", "started");
         try
         {
-            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus, resumeBefore, atRecord);
+            result = await runner.RunMoAsync(folder, ReadOrders, SetStatus);
         }
         catch (ShopeeBatchStop stop)
         {
@@ -2339,25 +2204,23 @@ internal sealed partial class MainForm : Form
         {
             // Screenshots (OCR) are the main way for now; the official export stays available.
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            // 全自動 / 自動擷取＋匯入 (user, 2026-10-15; both 蝦皮 tests passed and were removed).
             menu.Items.Add("全自動（安排出貨＋寄件單＋ERP）", null, async (_, _) => await RunShopeeBatchAsync());
-            menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試全家裁切列印", null, async (_, _) => await TestFamilyCutAsync());
-            menu.Items.Add("測試蝦皮 7-11 列印", null, async (_, _) => await TestSevenPrintAsync());
+            menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")
         {
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("全自動（匯出＋批次出貨＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
+            // 全自動 / 匯入＋重印 / 測試 (user, 2026-10-15).
+            menu.Items.Add("全自動（匯出＋批次出貨＋發票＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試：從批次出貨記錄繼續（剛出貨的最上面一筆）", null, async (_, _) => await RunMoBatchAsync(resume: true, atRecord: true));
             menu.Items.Add("測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）", null, async (_, _) => await TestMoInvoiceAsync());
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")
