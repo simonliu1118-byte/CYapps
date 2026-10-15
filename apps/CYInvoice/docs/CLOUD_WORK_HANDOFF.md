@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 V3 續作：官方品項與折讓申請保守比對（Source Draft）
+
+新的 `allowance-item-validation.ts` 為單張原發票／尚無已存在折讓／官方明確 `detail_vat=0` 的保守核對器：BigInt ×10^7 比對原日期、品項、課稅別、未稅單價、數量與小計、申請稅額及總額，重複折讓請求行會累加防超量。正式 `invoice_query` 的 `wait[]` 只要有尚未處理異動（包含 D0401、C0501）即標 `officialPendingMutation`，阻止核對通過。受 CYID 保護的 `/v1/allowance-applications/official-inspection` 及 Windows Core 客戶端只讀取／顯示 `itemCheck` 安全原因代碼，不傳原發票全部明細與公司密鑰。
+
+**不得將 matched 當作 approval**：已有折讓跨多原發票的精確餘額分攤、B2C 含稅 `detail_vat=1`、稅額/四捨五入、動態最終查核仍未完成；回傳依舊是 `canApprove=false`、`requiresPerItemVerification=true`，尚未啟用任何核准 Grant、g0401、正式 D1 migration、Cloud Worker、WinForms UI 或 Release。實際光貿未被呼叫；測試使用攔截的合成網路回覆。後續驗收依唯一 `docs/TODO.md`。
+
 ## 2026-10-15 官方唯讀 invoice_query 介接（Draft Source）
 
 CYInvoice V3 #440 的 `amego-invoice-query.ts` 已採光貿官方規定的簽章／表單編碼與唯讀 `invoice_query`，限一次 POST、timeout 與回覆長度，並以原發票號碼、明確 `allowance[]`、作廢及 C0501 待處理旗標判斷官方狀態（超過 180 天、官方缺欄／拒絕不可冒充無折讓）。受保護的 `/v1/allowance-applications/official-inspection` 必須由現行 CYID Manager、有效 Cloud Device、服務端公司密鑰及不可變 Work Item 才能觸發，回覆為狀態摘要與 SHA256；Windows `InspectOfficialForManagerAsync` 只接收未核准唯讀狀態。Cloud 合成測試會攔截所有網路請求，用假的光貿回覆驗證簽章，**沒有使用真實公司憑證、沒有連正式光貿、更沒有官方折讓開立**。

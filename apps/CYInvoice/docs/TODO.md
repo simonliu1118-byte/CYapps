@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 續作：原品項七位小數保守核對（Draft）
+
+- [x] `cloud/src/allowance-item-validation.ts` + Cloud Synthetic Test：比對同原發票日期、品名、課稅別、未稅單價、原品項數量與小計，申請 `Amount`／`Tax`、淨額 `TotalAmount`、`TaxAmount`、申請含稅總額，以 BigInt ×10^7 避免浮點誤差；重複請求品項累加數量與金額，拒絕超出原始數量／金額及重複而沒有穩定行 ID 的官方原明細。
+- [x] CYID 管理員 `official-inspection` 回傳最小必要 `itemCheck`（`fullyMatched`、原因代碼、合格行數），不回傳原始明細或公司密鑰；`wait[]` 任何未處理異動（含 D0401／C0501）都標 `officialPendingMutation` 並阻止安全剩餘額判斷。Windows `CloudAllowanceApplicationClient` 也會拒絕格式錯誤、待處理仍宣稱 matched 或假冒核准的回覆。
+- [ ] `fullyMatched=true` **僅表示官方 `detail_vat=0` 未稅原品項與此單的數量、價額保守符合上界，不等於官方授權或法定稅額確認**；任何已有折讓、`detail_vat=1` 含稅來源、官方缺欄或 Pending mutation 都 fail closed。需要補含稅換算與 rounding、B2C 零稅額差異、跨原發票的歷史折讓剩餘額、逐項稅額審核與最終官方 preflight。仍固定 `requiresPerItemVerification=true`、`canApprove=false`，沒有管理員 Grant、配號或 g0401。
+- [ ] 本輪只改 PR #440 Draft Source／合成測試，0015～0018 尚未套入既有 D1；不得開正式折讓、部署 Worker 或 Release，實機 DR 未驗收。最新 CI 以 [PR #440 checks](https://github.com/simonliu1118-byte/CYapps/pull/440/checks) 為準。
+
 ## 2026-10-15 V3 新增：光貿官方 invoice_query 唯讀查驗（Draft，尚未批准折讓）
 
 - [x] `cloud/src/amego-invoice-query.ts` 新增官方 **`POST /json/invoice_query` 唯讀查詢**：固定官方 HTTPS host，依光貿規格將 `{type:"invoice",invoice_number}` JSON 字串與 Unix 秒數及 App Key 做 MD5 wire 簽章，採 `application/x-www-form-urlencoded`，只呼叫一次、8 秒 timeout、限制 256 KB、嚴格核對原發票號碼／狀態／金額、保留 allowance[] 是否明確存在、計算回應 SHA256；`wait[]` 有 C0501 待處理時不得視為未作廢。僅於**服務端**讀取加密公司設定，**不經用戶端傳入憑證**。官方規範查詢僅涵蓋約 180 天內發票，舊發票 code 51／缺欄位皆不可當成無折讓；參考 https://invoice.amego.tw/api_doc/ 。
