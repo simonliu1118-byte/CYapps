@@ -315,7 +315,7 @@ try{
   assert.equal((await call("number-readback",{itemId:createBody.itemId,
     expectedRevision:2})).status,403);
   who={...who,workspaceRole:"ADMIN"};
-  assert.equal(readbackCalls,1);
+  assert.equal(readbackCalls,2,"Unauthorized requests must not trigger extra official I/O");
 }finally{globalThis.fetch=originalFetch;}
 
 // A strict zero-prior, net-price test case may write an append-only
