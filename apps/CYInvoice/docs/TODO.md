@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 進度：管理員唯讀覆核預覽與折讓 D1 不可竄改閘門（Draft）
+
+- [x] 新增受 CYID 管理員驗證的 `POST /v1/allowance-applications/review-preview`：從已進 `review` 的原 Work Item 及服務端已加密不可變折讓申請讀取明細，核對 revision、公司設定版本、環境、SHA256，僅傳回管理員必要品項與摘要；回覆固定 `officialVerification=NOT_PERFORMED`、`canApprove=false`，**不呼叫光貿、不核准、不配號、不產生折讓**。一般使用者、錯 Workspace、過期 revision 都拒絕；附 Cloud 合成測試。
+- [x] Windows `CloudAllowanceApplicationClient.PreviewForManagerAsync` 新增唯讀 preview 契約及回覆驗證：如回傳誤稱可批准／非 NOT_PERFORMED，客戶端 fail closed。合成測試已加入原 Windows Cloud suite；無 WinForms UI。
+- [x] D1 Draft 0016 新增保障：`allowance_execution_approvals` 不可 UPDATE/DELETE；`allowance_number_ledger` 不可 DELETE 或改號；同工作單尚有 `reserved`／`sending` 配號時不得直接關閉，但 `confirmed` 可正常結案。原 approval TTL 測試改用合成時間流逝驗證，不修改已核准歷史。對應 SQLite 合成測試保留。
+- [ ] **仍未接通**：官方 invoice_query／品項與剩餘折讓額真正驗證、能記錄核准 Grant 的受保護管理員 API、g0401 官方安全送出、官方結果不明查回、WinForms 申請與覆核操作 UI、正式 D1 migration、跨裝置實機及全套 DR。只有上述唯讀預覽與 SQL 防護通過原始碼測試，不代表已可正式覆核或開折讓。
+
 ## 2026-10-15 V3 接續：CYID protected routes／Windows 公司卡 Client／跨機覆核清單（Draft）
 
 - [x] **CYID 保護的折讓例外申請入口**：Worker `app.ts` 經 CYID 應用範圍登入和每次的 Device Token 驗證後，提供 `POST /v1/allowance-applications/create|get|list`。僅由服務端 binding 決定 business Workspace／公司統編／正式或測試環境；不接受客戶端自訂 authority 或雜湊。USER 可以原 ID 提出申請並唯讀查自己的結果；ADMIN／SUPER_ADMIN 可在別台 Device 查看例外工作單（依建立時間+ID 游標分頁，每頁最多 50），沒有一般發票清單／所有使用者全表。返回最小必要摘要，不含密碼、金鑰、加密模板。

@@ -29,6 +29,12 @@ CREATE TABLE allowance_execution_approvals (
 );
 -- Append-only decisions: a fresh official check can renew an expired grant
 -- without erasing the prior approving employee or the original timestamp.
+CREATE TRIGGER allowance_execution_approvals_no_update
+BEFORE UPDATE ON allowance_execution_approvals
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_APPROVAL_APPEND_ONLY'); END;
+CREATE TRIGGER allowance_execution_approvals_no_delete
+BEFORE DELETE ON allowance_execution_approvals
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_APPROVAL_APPEND_ONLY'); END;
 CREATE INDEX idx_allowance_approvals_work_item
   ON allowance_execution_approvals(workspace_id,work_item_id,approved_revision,valid_until_utc DESC);
 CREATE TABLE allowance_number_ledger (

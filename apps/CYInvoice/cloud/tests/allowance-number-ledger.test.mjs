@@ -164,13 +164,26 @@ assert.equal(approvedBefore,4);
 approve("wi_no_approval",2,"test",devB);
 const granted=await reserve(dbApi,{...base,deviceId:devB,workItemId:"wi_no_approval"});
 assert.equal(granted.allowanceNumber,"A20261015005");
-db.prepare("UPDATE allowance_execution_approvals SET approved_at='2020-01-01', valid_until_utc='2020-01-02' WHERE work_item_id=?")
-  .run("wi_no_approval");
-assert.equal(await markSending(dbApi,{...base,deviceId:devB,
-  workItemId:"wi_no_approval"},granted),false,
-  "Expired official review approval must not permit sending");
-db.prepare("UPDATE allowance_execution_approvals SET valid_until_utc='2099-01-01' WHERE work_item_id=?")
-  .run("wi_no_approval");
+assert.throws(()=>db.prepare("UPDATE allowance_execution_approvals SET valid_until_utc='2099-01-01' WHERE work_item_id=?")
+  .run("wi_no_approval"),/ALLOWANCE_APPROVAL_APPEND_ONLY/,
+  "A caller must never extend a grant by mutating the past approval");
+assert.throws(()=>db.prepare("DELETE FROM allowance_execution_approvals WHERE work_item_id=?")
+  .run("wi_no_approval"),/ALLOWANCE_APPROVAL_APPEND_ONLY/,
+  "A former approving manager must remain in the D1 audit history");
+// Advance only synthetic test time; the stored approval stays immutable.
+// This proves the approval TTL fence rather than faking a modified grant.
+const RealDate=globalThis.Date;
+globalThis.Date=class extends RealDate {
+  constructor(...args){super(...(args.length?args:["2099-01-01T00:00:00.000Z"]));}
+  static now(){return RealDate.parse("2099-01-01T00:00:00.000Z");}
+};
+try {
+  assert.equal(await markSending(dbApi,{...base,deviceId:devB,
+    workItemId:"wi_no_approval"},granted),false,
+    "Expired official review approval must not permit sending");
+} finally {
+  globalThis.Date=RealDate;
+}
 assert.equal(await markSending(dbApi,{...base,deviceId:devB,
   workItemId:"wi_no_approval"},granted),true);
 assert.equal(await markSending(dbApi,{...base,deviceId:devB,

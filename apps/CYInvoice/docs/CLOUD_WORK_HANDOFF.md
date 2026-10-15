@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 V3 續開：折讓管理員預覽與永久 Audit 防護（Draft Source）
+
+已在 CYInvoice V3 #440 加入 `/v1/allowance-applications/review-preview` 與 Windows Core 的 `PreviewForManagerAsync`，以 CYID Manager + 已凍結 Work Item 的 D1 revision、公司版本、環境與 AES-GCM/SHA256 驗證取得白名單品項（非原始私密 JSON）；預覽明確標示 `officialVerification=NOT_PERFORMED` 及 `canApprove=false`。無官方 Gateway 查驗也無 g0401 權限，請勿將預覽視為「已覆核」。
+
+Draft 0016 補 Work Item 未送畢的 `reserved/sending` 關閉柵欄、折讓號碼永不刪改、核准 Audit INSERT-only trigger；expired grant 合成測試改為模擬時間前進，不更改前筆核准歷史。0015～0018 仍在 Draft、**未跑原 D1 migration／Worker deploy／正式光貿送出／Release**。其餘下一步見唯一 TODO；所有成功／失敗以精確 PR head 的 Cloud/Windows/Governance 檢查確認。
+
 ## 2026-10-15 最新接續：CYID Protected APIs／Windows 公司卡傳輸（Source Draft）
 
 在原 V3 #440 延伸原 SQL 0017／0018、加密與 Work Item 模組：`cloud/src/allowance-applications-route.ts` 加入受保護的 create/get/list，USER 只能查看自己的例外申請，ADMIN／SUPER_ADMIN 可分頁檢視 Workspace 內待審折讓；`cloud/src/company-settings-route.ts` 僅允許 CYID 超管變更公司卡、一般 ADMIN 唯讀設定狀態。兩者均由 `app.ts` app-scoped `withCyIdSession` 及 Device authorization 接入；CYID Identity Workspace 和 CYInvoice Business D1 Workspace 僅以 server binding 對應，不採 browser 欄位。加上 SQL 0018 插入 trigger，杜絕 Work Item／申請 batch 的半筆落盤；Windows 新增 `CloudCompanySettingsClient`／測試，舊 Work Item 客戶端拒絕不帶 frozen source 的折讓建立。
