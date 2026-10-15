@@ -36,8 +36,8 @@ const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.25.2');
-assert.equal(build, '1');
+assert.equal(version, '0.25.3');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);

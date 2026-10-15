@@ -18,6 +18,13 @@
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
 
+## V0.25.3 首次登入引導（草稿，未合併／部署）
+
+- 原 PR #435 有效功能依 V0.25.2 Build 1 整合，保留目前備份、復原、設定及 schema 10；不帶回舊版 source。
+- 共用登入頁固定說明 Email 驗證及正式密碼設定；只讀 metadata endpoint 沿 identity-adapter 輸出已驗證的 HTTPS CY Web root，沒有員工號、密碼、Session、first-login ticket 或第二登入 authority。
+- 真正 provider 5xx 維持服務錯誤，401 引導不列舉帳號 lifecycle。production deploy 強制 --require-account-portal；正式 AUTHORITY 不一致未解決前不得合併／部署。
+- 本地 79 項 workflow checks 通過；CI 通過也不取代上述 live authority gate。
+
 ## V0.25.2 舊備份相容與首次登入前置
 
 - portable schema 6～10 沿同一 `backup-restore.js normalizeAccountingRestoreData`；只在原始 bytes／digest 驗證後轉換，舊物件不回寫。schema 6 色碼依 migration 0007 的 created_at／id 排序補入；6／7 沒有的 Excel import audit 初始化空陣列，矛盾的非空稽核拒絕，不放寬 schema 8+ 缺欄位檢查。

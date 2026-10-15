@@ -7,6 +7,19 @@ const MIN_IDENTITY_TIMEOUT_MS = 100;
 const MAX_IDENTITY_TIMEOUT_MS = 15_000;
 const resolutionCache = new WeakMap();
 
+/** Public navigation metadata only. CYID still owns all authentication. */
+export function cyWebPortalUrl(env) {
+  const configured = String(env?.CYWEB_PORTAL_URL || '').trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash) return null;
+    return url.origin + '/';
+  } catch {
+    return null;
+  }
+}
+
 export function identityRuntimeConfig(env) {
   const workspaceId = String(env?.CYID_WORKSPACE_ID || '').trim();
   const applicationId = String(env?.CYID_APPLICATION_ID || '').trim().toUpperCase();

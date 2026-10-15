@@ -140,6 +140,7 @@ jobs:
           CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
           CF_CYID_APPLICATION_ID: CYACC_CI
           CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
+          CF_CYWEB_PORTAL_URL: https://portal.example.test/
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
@@ -196,7 +197,7 @@ jobs:
         run: node scripts/prepare-sqljs.mjs
 
       - name: Resolve CYID production consumer runtime
-        run: node scripts/resolve-cyid-production-runtime.mjs
+        run: node scripts/resolve-cyid-production-runtime.mjs --require-account-portal
 
       - name: Prepare isolated recovery D1
         run: node scripts/provision-recovery-d1.mjs
