@@ -50,6 +50,7 @@ export async function resolveCyidProductionRuntime({
   accountId,
   apiToken,
   developmentService,
+  requirePortal = false,
   fetchImpl = fetch
 }) {
   const account = String(accountId || '').trim();
@@ -67,8 +68,14 @@ export async function resolveCyidProductionRuntime({
   }
 
   const runtime = parseCyidProductionSettings(payload, service);
-  const portalUrl = await verifyCyWebProductionPortal({ account, token, runtime, provider: payload, fetchImpl });
-  return { ...runtime, portalUrl };
+  try {
+    const portalUrl = await verifyCyWebProductionPortal({ account, token, runtime, provider: payload, fetchImpl });
+    return { ...runtime, portalUrl, portalReady: true };
+  } catch (error) {
+    if (requirePortal) throw error;
+    const code = /^(CYWEB_[A-Z_]+|PRODUCTION_CORE_CONSUMER_NOT_READY)$/.test(error.message) ? error.message : 'CYWEB_PRODUCTION_PREFLIGHT_FAILED';
+    return { ...runtime, portalReady: false, portalFailure: code };
+  }
 }
 
 // Read-only deployment prerequisite. Resolve the configured portal to its actual
@@ -101,7 +108,19 @@ export async function verifyCyWebProductionPortal({ account, token, runtime, pro
   const response = await fetchImpl(new URL('/api/health', portal).href, { redirect: 'error' });
   if (!response.ok) throw new Error('CYWEB_PRODUCTION_HEALTH_UNAVAILABLE');
   const health = await response.json().catch(() => ({}));
-  requireProductionCoreConsumer({ settings: core, health, providerName: runtime.service, applicationId: coreApplicationId, consumerVersion: version });
+  try {
+    requireProductionCoreConsumer({ settings: core, health, providerName: runtime.service, applicationId: coreApplicationId, consumerVersion: version });
+  } catch {
+    // Diagnostic labels only; the canonical CYID guard above remains the decision owner.
+    const identity = core.result.bindings.find(binding => binding.name === 'IDENTITY' && binding.type === 'service');
+    const failed = [];
+    if (identity?.service !== runtime.service) failed.push('AUTHORITY');
+    if (![undefined, 'production'].includes(identity?.environment)) failed.push('ENVIRONMENT');
+    if (plain('IDENTITY_APPLICATION_ID') !== coreApplicationId) failed.push('APPLICATION');
+    if (health.data?.identityConsumerVersion !== version) failed.push('VERSION');
+    if (health.ok !== true || health.data?.service !== 'cyweb' || health.data?.database !== 'ok') failed.push('HEALTH');
+    throw new Error('CYWEB_PRODUCTION_' + (failed.join('_') || 'CONSUMER') + '_MISMATCH');
+  }
   return portal.href;
 }
 
@@ -110,10 +129,11 @@ async function cli() {
     const runtime = await resolveCyidProductionRuntime({
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       apiToken: process.env.CLOUDFLARE_API_TOKEN,
-      developmentService: process.env.CYID_WORKER_NAME
+      developmentService: process.env.CYID_WORKER_NAME,
+      requirePortal: process.argv.includes('--require-account-portal')
     });
 
-    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId, runtime.portalUrl]) {
+    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId, runtime.portalUrl].filter(Boolean)) {
       console.log(`::add-mask::${value}`);
     }
 
@@ -121,12 +141,14 @@ async function cli() {
     if (!githubEnv) throw new Error('GITHUB_ENV is unavailable.');
     fs.appendFileSync(
       githubEnv,
-      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\nCF_CYWEB_PORTAL_URL=${runtime.portalUrl}\n`,
+      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\n${runtime.portalUrl ? `CF_CYWEB_PORTAL_URL=${runtime.portalUrl}\n` : ''}`,
       { encoding: 'utf8' }
     );
 
     console.log('CYID production consumer runtime verified and injected for this deployment.');
-    console.log('CY Web production portal domain, CYID authority/workspace and consumer health verified.');
+    console.log(runtime.portalReady
+      ? 'CY Web production portal domain, CYID authority/workspace and consumer health verified.'
+      : `CY Web portal preflight is not ready: ${runtime.portalFailure}. First-login navigation must remain disabled.`);
   } catch (error) {
     console.error(`CYID production runtime verification failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     process.exitCode = 1;
