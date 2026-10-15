@@ -10,7 +10,7 @@
 
 ## 2026-10-15 V3 逐項交付索引（最新權威快照）
 
-> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，已驗證 HEAD `b55751f0156784ba4548bffac49e61b9b25af86a`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
+> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，最新已驗證**功能** HEAD `214063e1810d55746d77d22c483de42135f4f907`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
 ### 已合入此 Draft 分支的功能（尚未上線）
 
@@ -22,8 +22,8 @@
 
 ### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
 
-- [ ] **步驟 1（下一項）— Windows g0501 Core 客戶端**：提交 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs` 與 `tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs`；確認測試入口／HTTP 契約一致並跑 exact-HEAD Windows + Cloud CI。先前產生的內容尚未出現在 `b55751f` 分支，**不能標示為已提交**。此步不涉及 WinForms 或任何真實 API。
-- [ ] **步驟 2 — Windows g0501 WinForms 操作入口與流程**：接上 CYID 管理員作廢清單／核准／單次送出／原號查回／官方確認後結案，保留個別確認與逾時禁止重送；CI + 合成 UI 測試。與步驟 1 分開提交。
+- [x] **步驟 1 — Windows g0501 Core 客戶端已完成**：`214063e1810d55746d77d22c483de42135f4f907` 新增 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs` 並登錄到 `tests/CYInvoice.Cloud.Tests/Program.cs`；與 Cloud CYID create/get/list/approve/send-once/status-readback/close 契約對齊。測試涵蓋 HTTPS／Device bearer、來源欄位不可信任、版本比對、歷史折讓號碼、錯誤結果拒絕、自動重送禁止、網路逾時不額外重試。該**功能提交** Cloud Validate ×2、Windows Client、Windows x64、Governance 全數 CI 通過，Cloud deploy skipped。**只有 Core／合成測試，不是 WinForms 操作或正式開立**。
+- [ ] **步驟 2（下一項）— Windows g0501 WinForms 操作入口與流程**：接上 CYID 管理員作廢清單／核准／單次送出／原號查回／官方確認後結案，保留個別確認與逾時禁止重送；CI + 合成 UI 測試。與步驟 1 分開提交。
 - [ ] **步驟 3 — D1 0015～0019 Migration 演練與安全盤點**：先在隔離 SQLite／非正式資源驗證 schema、升級與回復腳本、既有資料相容；確認備份及批准前**不得對正式 D1 執行 migration**，也不建立測試 Worker。
 - [ ] **步驟 4 — 官方清單與跨機例外對帳**：雙日期分頁、增量／排程、例外 Work Item 選擇性詳查、官方未知狀態的保守處理及永久稽核；不因清單查無就自動重送、換號或結案。
 - [ ] **步驟 5 — 複雜折讓與其他整合缺口**：已存在折讓的逐品項剩餘額、跨原發票分攤、含稅 `detail_vat=1`、稅額 round 規則、公司設定／憑證安全治理、其餘上傳問題跨機處理、雙版本 QA；沒有充分官方證據時一律不可自動核准。
