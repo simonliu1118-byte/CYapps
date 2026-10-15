@@ -35,6 +35,17 @@
 
 開窗查詢不可阻塞 Windows 主執行緒；等結果回來再允許核准。API 失敗、超過原發票日期 180 天查詢期限、已作廢／仍有不明狀態等無法安全核准的情況，顯示「官方資料無法確認／需處理」，**不開放正式核准送出**（退回仍可操作），不可把本機快取冒充最新結果。實際按下核准並呼叫 g0401 前，仍須按最新官方狀態、剩餘折讓額、當下 actor 權限、Work Item revision／D1 原子分配做 final preflight，避免兩臺裝置同時核准。同一 Cloud 管理員電腦不一定有申請人本機原發票 SQLite 紀錄，因此此查詢必須可用 Work Item 原發票號碼／授權公司設定直接取得 Gateway，不可硬性綁在 `InvoiceDetailRefreshService.RefreshAsync(local record)`。現有 `SyncIssuesForm.AllowanceDetailRows` 僅顯示本機已保存的 `InvoiceAllowanceMetadata`，**尚未在開窗時即時呼叫 API**，這項屬後續 V3 UI／Core 接線與驗收；不影響前述低頻背景雙 List 對帳方案，亦不為外部光貿操作新增 D1 Audit。
 
+## 2026-10-15 V3 當次程式接續：Built-in active path 收斂＋g0501 Gateway
+
+**最新 Source 方向／尚未部署：**
+- `cloud/src/app.ts` 的 Worker entrypoint 現只允許 `CYID_ENABLED=true` 且具有效 CYID Binding；非 CYID mode 409 `CYID_REQUIRED`，原 Built-in Employee CRUD、密碼、WEB Auth、Local→Cloud transition handler 不再由 V3 dispatch。舊路由回 409 `IDENTITY_PROVIDER_MISMATCH`，不能將 404 誤當安全回絕。CYID Device join、正常 Device 管理、Work Items、Recovery 等共用路由保留。
+- `cloud/src/work-items.ts`／`work-items-route.ts`：刪 Built-in `cloud_employees` verifier SQL／PBKDF account fallback，CYID manager 身分操作前後重新驗證、D1 寫入時仍檢 active Device／Workspace。仍只有 Draft 三端點與未套用 `drafts/0015_work_items.sql`；工作單明細／申請者權限／g0401 execution lease／配號未接，不可稱跨機正式覆核完成。V3 Cloud test `cyid.test.mjs` 與 `work-items.test.mjs` 已改驗證 CYID-only 與 Built-in fail-closed。舊 migration 仍是歷史，絕不自行操作原 D1。
+- `src/CYInvoice.Core/IdentityProvider.cs`／`LocalRepository.cs`：runtime constructor 只接受 Local／CYID；Windows 不再實例化 Built-in provider，不會下載舊 Cloud Employee 快取作為登入 authority；首次加入只用 CYID Direct Join。歷史 `BuiltInCloudIdentityProvider` type、Cloud Setup 舊建置 code 與特定測試 source 尚在等待最後殘餘清理，不能直接刪掉 ServiceConnectivity／Local Reset／Device 等仍被 CYID 用的類別。
+- `AmegoClient.VoidAllowanceAsync` 新增正式 `/json/g0501` 單張折讓作廢 API，一次只送 `[{"CancelAllowanceNumber":"已知折讓單號"}]`，不得新增折讓號碼、不得在 timeout／未知結果盲重送；既有網站折讓號亦可查／作廢。已新增 synthetic HTTP payload／驗證／拒絕測試，僅 Gateway 完成，沒有 WinForms 按鈕的正式 API 接線或 live 真實光貿成功證據。
+- 過去 source 新增 `ListAllowancesAsync`、`LocalAllowanceNumberStore`、`allowance_status` array 兼容及 allowance fingerprint；皆是底層階段成果。**未做 D1 原子配號與 Work Item 交易執行，未做官方兩份 List 完整同步，未做公司卡片、DR 真實全項驗收或 V3.0 Release。**
+
+**規劃順序仍以 TODO「V3.0 正式交付工作順序」為準。** Worker／D1 遠端未改、Windows Release 仍 V2.6.19；CI 以精確 GitHub PR head 查詢，不把已取消／較早 CI 當成最新通過。
+
 ## 1. 三條分支，禁止混同
 
 | 工作線 | 現況 |
