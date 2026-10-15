@@ -6,7 +6,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
-| V0.25.2 Build 1 | 收斂首次登入入口前置檢查的部署範圍：入口尚未啟用時只作唯讀盤點並回報無識別值的差異；首次登入版本以 --require-account-portal 強制同 authority／Workspace／health gate，不通過不能部署。既有 CYID runtime guard 始終強制，不改登入 authority 或權限。 |
+| V0.25.2 Build 1 | 收斂首次登入入口前置檢查的部署範圍：入口尚未啟用時只作唯讀盤點並回報無識別值的差異；首次登入版本以 --require-account-portal 強制同 authority／Workspace／health gate，不通過不能部署。既有 CYID runtime guard 始終強制，不改登入 authority 或權限。PR #455／main run 38675354003 成功、正式版本已回讀；portal 預檢指出 AUTHORITY 不一致，首次登入入口仍不啟用。 |
 | V0.25.2 Build 0 | 舊 schema 6／7 portable 備份明確 normalization：依 canonical migration 補帳戶色碼及空匯入稽核結構，保留全部既有財務／稽核欄列與原始備份；記憶體驗證與 D1 writer 共用同一 normalizer，支援 6～10。補真實 workerd／SQLite 及 D1 roundtrip 測試。部署 resolver 唯讀核對 CY Web 實際 domain、CYID authority／Workspace／core consumer health，沿用 CYID canonical guard，為首次登入引導提供正式前置證據；未在此版開放新登入流程。桌機再精簡重複保留政策／表格說明。 |
 | V0.25.1 Build 0 | 桌機備份立即備份／重新整理同列、卡片文字垂直置中，GCS 未排程欄留白；可還原性檢查改清楚名稱與說明。還原表單由底部按鈕開啟唯一獨立 dialog，關閉取消預覽／確認、忽略晚到回應，送出期間鎖住表單避免重複；緊急復原入口改圖示卡片。設定一般置頂、資料管理倒數第二、月份鎖帳直接顯示目前已鎖年月；共用 settings lifecycle 同步原 picker 並移除舊 header timer。手機／平板原名稱／順序及資訊頁保留，資料與 API 不變。 |
 | V0.25.0 Build 1 | 正式 GCS 演練發現復原頁 no-referrer 使 native POST 送出空 Origin，原同來源 guard 正確拒絕；政策改為 same-origin，保留 server Origin 檢查及 CSP，補回歸。修正後正式 native preview／commit 與 GCS → 獨立 D1 全欄列／政策／稽核還原及對帳通過，主站原帳本維持、目標禁止覆寫；未執行 production promotion。 |
