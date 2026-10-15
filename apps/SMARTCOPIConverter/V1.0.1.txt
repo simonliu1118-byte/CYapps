@@ -1,0 +1,16 @@
+SMARTCOPIConverter V1.0.1｜SMART 銷貨單格式轉換工具
+2026/10/16 · Windows x64 portable
+
+本版更新：
+- 換用 AITeam 已定稿的 CVT 七尺寸正式圖示與 CY 桌面杏橘配色。
+- 主要操作按鈕強化辨識，清單及文字以可讀性優先，維持 Windows 高對比與原生焦點行為。
+- 首次啟動選擇 POS 輸出資料夾，之後可點「設定」修改；路徑僅保存在本機 settings.json。
+- ERP COPI08 Excel 轉換核心、批次處理及匯出格式維持不變。
+- 從 main 重新建置並測試 Windows x64，執行公開安全掃描與 SHA-256 檢查。
+
+下載與安裝：
+請下載 SMARTCOPIConverter_V1.0.1_Windows_x64.zip，解壓到有寫入權限的 Windows 資料夾，執行 SMARTCOPIConverter.exe。亦提供單獨 EXE 與 SHA256SUMS.txt。
+
+Windows 實機 Explorer、工作列圖示快取及 125%/150% DPI 尚未人工驗收。
+
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
