@@ -60,20 +60,20 @@
   </script>
   <link rel="stylesheet" href="/app.css?rev=app-shell">
   <link rel="stylesheet" href="/accounting-ui.css?rev=ledger-header-controls">
-  <link rel="stylesheet" href="/quick-entry-settings.css?rev=entry-date-shortcuts">
+  <link rel="stylesheet" href="/quick-entry-settings.css?rev=settings-general">
   <link rel="stylesheet" href="/category-management.css?rev=category-management">
   <link rel="stylesheet" href="/excel-export.css?rev=excel-export">
   <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
-  <link rel="stylesheet" href="/backup.css?rev=backup-controlled-recovery">
+  <link rel="stylesheet" href="/backup.css?rev=backup-recovery-dialog">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-entry-controls">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=backup-card-alignment">
   <link rel="stylesheet" href="/statistics.css?rev=statistics-net-label">
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.25.0 Build 1</span></p>
+      <p>CYAccounting Web <span class="version">V0.25.1</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -198,17 +198,17 @@
   </dialog>
 
   <script src="/auth.js?rev=session-expiry-navigation" defer></script>
-  <script src="/app.js?rev=accounting-book-epoch" defer></script>
+  <script src="/app.js?rev=settings-lifecycle" defer></script>
   <script src="/quick-entry.js?rev=entry-saved-focus" defer></script>
   <script src="/ledger-tools.js?rev=ledger-net-label" defer></script>
   <script src="/input-confirmation.js?rev=confirmation-save-events" defer></script>
-  <script src="/quick-entry-settings.js?rev=entry-date-shortcuts" defer></script>
+  <script src="/quick-entry-settings.js?rev=settings-general" defer></script>
   <script src="/category-management.js?rev=category-management" defer></script>
   <script src="/excel-export-ui.js?rev=export-device-label" defer></script>
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
-  <script src="/backup-ui.js?rev=backup-controlled-recovery" defer></script>
+  <script src="/backup-ui.js?rev=backup-recovery-dialog" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=managed-backup-confirm" defer></script>
+  <script src="/adaptive-ui.js?rev=backup-owner-layout" defer></script>
   <script src="/statistics-ui.js?rev=statistics-net-label" type="module"></script>
 </body>
 </html>

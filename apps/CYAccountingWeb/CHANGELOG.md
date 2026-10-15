@@ -6,6 +6,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.25.1 Build 0 | 桌機備份立即備份／重新整理同列、卡片文字垂直置中，GCS 未排程欄留白；可還原性檢查改清楚名稱與說明。還原表單由底部按鈕開啟唯一獨立 dialog，關閉取消預覽／確認、忽略晚到回應，送出期間鎖住表單避免重複；緊急復原入口改圖示卡片。設定一般置頂、資料管理倒數第二、月份鎖帳直接顯示目前已鎖年月；共用 settings lifecycle 同步原 picker 並移除舊 header timer。手機／平板原名稱／順序及資訊頁保留，資料與 API 不變。 |
 | V0.25.0 Build 1 | 正式 GCS 演練發現復原頁 no-referrer 使 native POST 送出空 Origin，原同來源 guard 正確拒絕；政策改為 same-origin，保留 server Origin 檢查及 CSP，補回歸。修正後正式 native preview／commit 與 GCS → 獨立 D1 全欄列／政策／稽核還原及對帳通過，主站原帳本維持、目標禁止覆寫；未執行 production promotion。 |
 | V0.25.0 Build 0 | 新增 SUPER_ADMIN 獨立 D1 受控復原：真實備份驗證、10 分鐘且綁定操作者的預覽、勾選及文字確認、原子寫入空白工作區、完整帳務／政策／稽核回讀與資料庫檢查。schema 10 僅新增 append-only 復原 metadata；格式 2 manifest 新增維運 context，GCS 可在原 D1／R2 不可用時獨立重建。沿用原 Backup API／CYID 權限，新增不依賴原帳本的 server-rendered 復原入口。部署以現有受保護權限準備獨立 D1；不自動切換或覆寫正式帳本，目標保持 hold。加入帳本 epoch 防止未來切換後舊頁誤寫；備份確認收斂到既有 in-page dialog，移除重複 capture 攔截。手機／平板既有版面維持。 |
 | V0.24.1 Build 0 | 備份／復原頁於 Phase D 生效後移除 Phase C 驗收進度及已完成的啟用按鈕，「立即備份」取代測試用文字。日期 Ctrl＋↑↓ 收斂由共用 entry form 處理，桌機日期、摘要、金額皆調整同一日期且保留焦點，移除 picker 的重複快捷 handler；觸控原操作維持。單／多月統計、損益表、看帳與 Excel 依正負顯示淨利／淨損，零元顯示損益；財務計算不變。正式還原／DR 接續工作仍列 TODO。 |

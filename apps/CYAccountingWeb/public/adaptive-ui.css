@@ -6174,9 +6174,6 @@
   .settings-pane > .hint,
   .settings-pane .pane-heading .hint,
   .quick-settings-explain,
-  #backupHeadingHint,
-  .backup-security-note,
-  .backup-restore-note,
   .migration-privacy,
   .cy-data-section > p {
     display: none !important;
@@ -11829,6 +11826,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) .settings-content {
     padding: 12px 14px;
   }
+  html[data-viewport="desktop"] #settingsDialog .general-summary-heading { display: block; margin: 14px 0 0; font-size: 13px; }
+  html[data-viewport="desktop"] #settingsDialog .lock-step-copy span { display: none; }
   html[data-viewport="desktop"] #settingsDialog .backup-heading,
   html[data-viewport="desktop"] #settingsDialog .backup-heading > div {
     min-height: 0;
@@ -11857,11 +11856,23 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog .backup-status-card {
     grid-template-columns: 92px minmax(0, 1fr);
     align-items: center;
+    align-content: center;
     gap: 4px 8px;
-    padding: 8px 10px;
+    padding: 10px;
+    min-height: 66px;
+    box-sizing: border-box;
   }
   html[data-viewport="desktop"] #settingsDialog .backup-card-label { grid-row: 1 / 3; }
-  html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint { grid-column: 2; }
+  html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint { grid-column: 2; margin: 0; }
+  html[data-viewport="desktop"] #settingsDialog .backup-provider-card { align-content: center; }
+  html[data-viewport="desktop"] #settingsDialog .backup-provider-card-head { align-items: center; }
+  html[data-viewport="desktop"] #settingsDialog .backup-restore-tools .hint,
+  html[data-viewport="desktop"] #settingsDialog .backup-recovery-launcher .hint { margin: 6px 0; }
+  html[data-viewport="desktop"] #settingsDialog .backup-heading-actions { display: flex; flex-shrink: 0; gap: 8px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-heading-actions button { min-height: 32px; padding: 5px 10px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-actions-row { padding: 6px 0; }
+  html[data-viewport="desktop"] #settingsDialog .backup-actions-row .hint { margin: 0; }
+
   html[data-viewport="desktop"] #settingsDialog .backup-status-card strong,
   html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint,
   html[data-viewport="desktop"] #settingsDialog .backup-provider-card-detail,

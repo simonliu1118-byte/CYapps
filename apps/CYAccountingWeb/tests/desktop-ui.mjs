@@ -36,8 +36,8 @@ const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.25.0');
-assert.equal(build, '1');
+assert.equal(version, '0.25.1');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -428,3 +428,21 @@ editable.context.window.cyIsDesktopInteractionWorkspace=()=>false;
 editable.input.value='2026-12-31';
 editable.context.els.form.dispatchEvent({type:'keydown',target:editable.context.els.summary,key:'ArrowUp',ctrlKey:true,preventDefault(){throw Error('touch summary unchanged');}});
 assert.equal(editable.input.value,'2026-12-31');
+
+// The settings render updates the canonical month and its existing picker listener.
+let lockChangeEvents=0, settingsDesktop=true;
+const lockRenderNodes={lockedThrough:{value:'',dispatchEvent(event){assert.equal(event.type,'change');lockChangeEvents++;}},lockStatusText:{}};
+const settingsRenderContext=vm.createContext({state:{lockedThrough:'2026-04'},els:lockRenderNodes,formatMonth:value=>value,Event:class{constructor(type){this.type=type;}},window:{cyIsDesktopInteractionWorkspace:()=>settingsDesktop}});
+vm.runInContext(appJs.slice(appJs.indexOf('function renderSettings()'),appJs.indexOf('async function handleAccountAction')),settingsRenderContext);
+settingsRenderContext.renderSettings();assert.equal(lockRenderNodes.lockedThrough.value,'2026-04');assert.equal(lockRenderNodes.lockStatusText.hidden,true);assert.equal(lockChangeEvents,1);
+settingsRenderContext.state.lockedThrough=null;settingsRenderContext.renderSettings();assert.equal(lockRenderNodes.lockedThrough.value,'');assert.equal(lockRenderNodes.lockStatusText.hidden,false);
+settingsDesktop=false;settingsRenderContext.state.lockedThrough='2026-04';settingsRenderContext.renderSettings();assert.equal(lockRenderNodes.lockStatusText.hidden,false,'touch keeps existing lock status');
+// The canonical navigation lifecycle keeps DOM/keyboard order aligned with presentation.
+const settingsNavButtons=new Map(['accounts','categories','statistics','data','quick','lock','backup'].map(name=>[name,{name,textContent:''}]));
+const settingsNav={children:[...settingsNavButtons.values()],querySelector(selector){return settingsNavButtons.get(/="([^"]+)"/.exec(selector)?.[1]);},append(...nodes){this.children=this.children.filter(node=>!nodes.includes(node)).concat(nodes);}};
+let navDesktop=true;const quickSettingsTitle={};
+const navContext=vm.createContext({isDesktopInteractionWorkspace:()=>navDesktop,document:{querySelector(selector){if(selector==='.settings-nav')return settingsNav;if(selector.endsWith(' h3'))return quickSettingsTitle;return settingsNav.querySelector(selector);}}});
+vm.runInContext(adaptive.slice(adaptive.indexOf('function syncSettingsNavigation()'),adaptive.indexOf('function prepareSettingsPresentation(')),navContext);
+navContext.syncSettingsNavigation();assert.deepEqual(settingsNav.children.map(node=>node.name),['accounts','categories','quick','statistics','lock','data','backup']);assert.equal(settingsNavButtons.get('quick').textContent,'一般');assert.equal(settingsNavButtons.get('lock').textContent,'月份鎖帳');
+navDesktop=false;navContext.syncSettingsNavigation();assert.deepEqual(settingsNav.children.map(node=>node.name),['accounts','categories','statistics','data','quick','lock','backup']);assert.equal(settingsNavButtons.get('quick').textContent,'快速輸入');
+console.log('Settings navigation order/touch restoration and current locked month lifecycle passed.');
