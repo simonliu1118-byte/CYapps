@@ -13,7 +13,6 @@ internal sealed class CloudSetupForm : Form
     private readonly Label status = UiControls.Label(string.Empty);
     private readonly ToolTip toolTip = new();
     private readonly Button check = UiControls.StandardButton("測試連線");
-    private readonly Button initialize = UiControls.StandardButton("建立／加入雲端空間");
     private readonly Button save = UiControls.StandardButton("儲存");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private readonly string initialBaseUrl;
@@ -45,9 +44,9 @@ internal sealed class CloudSetupForm : Form
         baseUrl.PlaceholderText = "https://cloud.example.com/";
 
         BuildLayout();
-        // This dialog remains a connection inspector for existing CYID devices.
-        // Cloud onboarding is exclusively through CloudDirectJoinForm.
-        initialize.Visible = false;
+        // CYID Device enrollment and disaster recovery use CloudDirectJoinForm.
+        // An enrolled Device may inspect but must not edit its bound endpoint.
+        baseUrl.ReadOnly = HasCloudIdentity(settings);
         LoadValues();
         baseUrl.TextChanged += (_, _) =>
         {
@@ -101,10 +100,8 @@ internal sealed class CloudSetupForm : Form
         cloudGroup.Controls.Add(cloud);
 
         cancel.DialogResult = DialogResult.Cancel;
-        initialize.Width = 150;
         save.Width = 100;
         cancel.Width = 100;
-        initialize.Click += async (_, _) => await InitializeOrJoinWorkspaceAsync();
         save.Click += async (_, _) => await SaveAsync();
         var actions = new BufferedFlowLayoutPanel
         {
@@ -116,7 +113,6 @@ internal sealed class CloudSetupForm : Form
         };
         actions.Controls.Add(cancel);
         actions.Controls.Add(save);
-        actions.Controls.Add(initialize);
 
         root.Controls.Add(cloudGroup, 0, 0);
         root.Controls.Add(actions, 0, 1);
@@ -133,39 +129,15 @@ internal sealed class CloudSetupForm : Form
     private void UpdateState(string? message = null, bool error = false, string details = "")
     {
         stateError = error;
-        var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
-        var transitionHere = registeredHere && settings.CloudMode == CloudModes.CloudTransition;
-
+        var enrolled = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
         status.Text = message ?? (baseUrl.Text.Trim().Length == 0
-            ? "請輸入相容的 HTTPS API 網址。"
-            : registeredHere
-                ? transitionHere ? "API 已設定｜裝置已註冊｜帳號轉換中" : "API 已設定｜裝置已註冊"
-                : "API 已設定｜等待連線測試");
+            ? "請由 CYID「直接加入雲端」綁定 Workspace。"
+            : enrolled ? "CYID Device 已註冊｜可以測試連線" : "等待 CYID 連線檢查");
         status.ForeColor = error
             ? Color.FromArgb(180, 0, 0)
-            : registeredHere ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
+            : enrolled ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
         status.AccessibleDescription = details;
         toolTip.SetToolTip(status, details);
-        UpdateInitializeState();
-    }
-
-    private void UpdateInitializeState()
-    {
-        var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
-        var transitionHere = registeredHere && settings.CloudMode == CloudModes.CloudTransition;
-        var endpointConfirmed = SameEndpoint(confirmedBaseUrl, baseUrl.Text);
-
-        initialize.Text = transitionHere
-            ? "繼續帳號轉換"
-            : SelectedOnboardingStatus switch
-            {
-                { WorkspaceInitialized: true } => "加入雲端空間",
-                { WorkspaceInitialized: false } => "建立雲端空間",
-                _ => "建立／加入雲端空間"
-            };
-        initialize.Enabled = !busy
-            && endpointConfirmed
-            && (transitionHere || (!registeredHere && SelectedOnboardingStatus is not null));
     }
 
     private async Task CheckHealthAsync()
@@ -178,11 +150,7 @@ internal sealed class CloudSetupForm : Form
             confirmedSummary = ConnectionSummary(result.Onboarding);
             var details = ConnectionDetails(result.Health, result.Onboarding);
             if (HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, result.BaseUrl))
-            {
-                details += settings.CloudMode == CloudModes.CloudTransition
-                    ? "\nCloud Device identity 已確認；本機仍在 Local → Cloud 帳號轉換階段，尚未切換中央帳號主資料。"
-                    : "\nCloud Device identity 已確認。";
-            }
+                details += "\nCYID Device 已註冊；若要遷移到其他 Workspace，需重新完成 CYID Device 加入。";
             UpdateState(confirmedSummary, details: details);
         });
     }
@@ -197,29 +165,6 @@ internal sealed class CloudSetupForm : Form
 
         var onboarding = await client.GetOnboardingStatusAsync(lifetime.Token);
         return (normalized, health, onboarding);
-    }
-
-    private async Task InitializeOrJoinWorkspaceAsync()
-    {
-        // Retained as a safe no-op during staged V3 removal: no new Built-in
-        // Workspace, Employee authority or Local-to-Cloud transition is allowed.
-        await RunBusyAsync(() => throw new InvalidOperationException(
-            "CYInvoice V3 已取消 Built-in Cloud 建立／加入與帳號轉換。請使用「直接加入雲端」連接已綁定 CYID 的 Workspace。"));
-    }
-
-    private void OpenEmployeeTransition(string normalized)
-    {
-        if (settings.CloudMode != CloudModes.CloudTransition) return;
-        using var transition = new CloudEmployeeTransitionForm(repository, settings);
-        transition.ShowDialog(this);
-        if (!transition.AuthorityReady) return;
-
-        IdentityCompleted = true;
-        SelectedBaseUrl = normalized;
-        confirmedSummary = "連線正常｜雲端帳號切換完成";
-        UpdateState(
-            confirmedSummary,
-            details: "Cloud Employee 已成為這台電腦唯一的帳號主資料；暫時斷網時會使用最後一次成功同步的安全離線快取。帳號全域異動仍需在線執行。");
     }
 
     private async Task SaveAsync()
@@ -249,7 +194,6 @@ internal sealed class CloudSetupForm : Form
         UseWaitCursor = true;
         save.Enabled = false;
         check.Enabled = false;
-        initialize.Enabled = false;
         baseUrl.Enabled = false;
         UpdateState("處理中…");
         try
@@ -300,8 +244,8 @@ internal sealed class CloudSetupForm : Form
     private static string ConnectionDetails(CloudHealthResult health, CloudOnboardingStatus onboarding)
     {
         var workspace = onboarding.WorkspaceInitialized
-            ? "Cloud backend 已有 Workspace；若本機沒有有效 Device identity，可用已授權的短效配對碼加入，既有 Workspace 不會重建。"
-            : "Cloud backend 尚未初始化；可由本機既有 SUPER_ADMIN 驗證 Email OTP 後建立第一個 Workspace。";
+            ? "CYInvoice Workspace 已啟用；新裝置請透過 CYID 邀請或授權配對加入。"
+            : "CYID Workspace 尚未啟用，請檢查管理員的 CYID 與 CYInvoice Cloud 設定。";
         return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}";
     }
 
@@ -342,9 +286,8 @@ internal sealed class CloudSetupForm : Form
     {
         if (Text != "雲端連線設定" || ShowIcon || AcceptButton is not null)
             throw new InvalidOperationException("雲端連線設定視窗基本屬性不正確");
-        if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線" ||
-            initialize.Text is not ("建立／加入雲端空間" or "建立雲端空間" or "加入雲端空間" or "繼續帳號轉換"))
-            throw new InvalidOperationException("雲端連線設定動作按鈕不正確");
+        if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線")
+            throw new InvalidOperationException("CYID 雲端連線設定動作按鈕不正確");
         if (initialBaseUrl.Length == 0 && baseUrl.Text.Length != 0)
             throw new InvalidOperationException("Public client 不得內建任何 Cloud API endpoint");
         if (baseUrl.PlaceholderText.Contains("workers.dev", StringComparison.OrdinalIgnoreCase))
