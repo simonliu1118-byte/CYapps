@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.2**；VERSION `0.25.2`、BUILD `0`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
+| 產品 | **V0.25.2 Build 1**；VERSION `0.25.2`、BUILD `1`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -149,3 +149,5 @@ CYID 共通參數及舊 Variable 退場已於 2026/10/12 完成驗證；詳細�
 2026/10/15 正式備份頁已回讀 Phase D 首次 R2-only 自動排程成功，GCS 正確顯示本日未排程；GCS 在 Phase D 後的首次週三／週日排程仍待實際觀察。V0.25.0 真實手動 paired backup 已回讀 R2／GCS 雙成功，新備份含 schema 10 recoveryContext。實際識別、筆數與 digest 不放 Public Git。
 
 V0.25.0 正式 native 復原表單因 no-referrer 產生空 Origin 而被既有 guard 拒絕，未進入預覽／寫入；Build 1 將頁面 referrer-policy 改為 same-origin，保留同來源 guard 與 CSP，補自動測試。Build 1 main run 38671618879 完整成功後，正式 native 表單 preview／雙重確認／commit 已實際通過。
+
+V0.25.2 初次 main run 38674853444 validate 成功，deploy 在唯讀 portal gate 回報 PRODUCTION_CORE_CONSUMER_NOT_READY，尚未 migration／Worker deploy，線上保持 V0.25.1。Build 1 將尚未啟用的 navigation metadata 僅作預檢；真正 first-login feature deploy 必須帶 --require-account-portal，失敗維持 fail closed。provider 原 runtime guard 永遠強制。新增診斷只列 AUTHORITY／ENVIRONMENT／APPLICATION／VERSION／HEALTH 差異標籤，不輸出實際值。

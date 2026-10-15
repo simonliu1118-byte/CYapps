@@ -75,10 +75,10 @@ const verifyPortal=overrides=>verifyCyWebProductionPortal({account:'account-ci',
   if(String(url).includes('/workers/domains?')&&overrides.domains)return Response.json(overrides.domains);
   return mockFetch(url,init);
 }});
-await assert.rejects(verifyPortal({core:{success:true,result:{bindings:coreSettings.result.bindings.map(binding=>binding.name==='IDENTITY'?{...binding,service:'other-production'}:binding)}}}),/PRODUCTION_CORE_CONSUMER_NOT_READY/);
+await assert.rejects(verifyPortal({core:{success:true,result:{bindings:coreSettings.result.bindings.map(binding=>binding.name==='IDENTITY'?{...binding,service:'other-production'}:binding)}}}),/AUTHORITY_MISMATCH/);
 await assert.rejects(verifyPortal({core:{success:true,result:{bindings:coreSettings.result.bindings.map(binding=>binding.name==='IDENTITY_WORKSPACE_ID'?{...binding,text:'other-workspace'}:binding)}}}),/WORKSPACE_MISMATCH/);
 await assert.rejects(verifyPortal({domains:{success:true,result:[]}}),/DOMAIN_UNVERIFIED/);
-await assert.rejects(verifyPortal({health:{ok:false}}),/PRODUCTION_CORE_CONSUMER_NOT_READY/);
+await assert.rejects(verifyPortal({health:{ok:false}}),/VERSION_HEALTH_MISMATCH/);
 
 await assert.rejects(
   resolveCyidProductionRuntime({
@@ -91,3 +91,8 @@ await assert.rejects(
 );
 
 console.log('CYID production runtime bridge tests passed.');
+
+const unavailablePortal=async(url,init)=>String(url).includes('/workers/domains?')?Response.json({success:false},{status:403}):mockFetch(url,init);
+const optionalPortal=await resolveCyidProductionRuntime({accountId:'account-ci',apiToken:'token-ci',developmentService,fetchImpl:unavailablePortal});
+assert.equal(optionalPortal.portalReady,false);assert.equal(optionalPortal.service,service,'optional navigation preflight never changes the active identity runtime');
+await assert.rejects(resolveCyidProductionRuntime({accountId:'account-ci',apiToken:'token-ci',developmentService,requirePortal:true,fetchImpl:unavailablePortal}),/SETTINGS_UNAVAILABLE/,'first-login-enabled deployment must fail closed');
