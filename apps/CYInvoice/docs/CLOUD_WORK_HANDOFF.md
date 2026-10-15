@@ -17,9 +17,11 @@
 
 **步驟 1（Windows g0501 Core Client）已完成。** 功能 Commit `214063e1810d55746d77d22c483de42135f4f907`：已提交 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs`，在 `tests/CYInvoice.Cloud.Tests/Program.cs` 登錄回歸測試；CYID Core 支援 create/get/list/approve/send-once/status-readback/close，拒絕後端可自動重試、偽造官方作廢、異常工作單及非 HTTPS 端點；Cloud Validate ×2、Windows Client、Windows x64、Governance **全部通過**，Worker deploy **skipped**。此提交未操作正式 D1／光貿，亦未接 WinForms。後面的文件提交是純文件異動，不能假裝增加了功能測試結果。
 
-**下一項只有步驟 2（Windows g0501 WinForms）**：將上述 Core Client 接至 CYID 跨機作廢清單，明確區分首次送出與官方查回／結案；每項管理員操作須個別確認，禁止逾時自動重送。獨立提交，完成後再回報 CI。暫不處理正式 D1 Migration、光貿真實送出或其他 V3 模組。
+**步驟 2（Windows g0501 WinForms）已完成 Draft Source。** 介面 Commit `275ec1c652c629aa9ff6eb95877148ff2ce70daa`、耐久原 ID 保護 Commit `e7efd90b1a7b25ab862d24efb3bd3daa7214c7a6`、Nullable CI 修正 Commit `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b`。新版 `CloudAllowanceVoidManagerForm.cs` 透過 `SyncIssuesForm` CYID「處理中」頁開啟，提供員工申請／原工作單查回、管理員 open→review、核准、首次送出、官方 status-readback、官方再次核對後結案；使用既有 `CloudAllowanceVoidClient` 與 `CloudWorkItemClient`，任何官方操作仍由 Cloud CYID Worker 授權，Windows 不持有公司 AppKey 或自選 g0501 號碼。畫面提醒並要求確認，對同一 Work Item 禁止於同一視窗再次送出；Cloud D1 仍有永久唯一 Claim，不能靠重開程式解除。建立前將 Work Item ID 寫入依 Workspace+Cloud URL 隔離的本機小型記錄，不存帳密／憑證／發票內容；逾時或應用程式重啟仍能以原 ID 查回，確認後才清除。Windows startup smoke 在**完全離線**條件驗證畫面及本機 ID 的重啟保存／跨 Workspace 隔離。最後功能 SHA `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b` 的 Cloud Validate ×2、Windows Client、Windows x64、Governance **均通過**；Cloud deploy skipped。這只代表 source CI 和合成 UI smoke，**不是**正式 D1 或真人作廢驗收。
 
-完成後下一小步才是 **Windows WinForms g0501 管理介面**，再分別做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
+**下一項只有步驟 3（D1 0015～0019 隔離 Migration 演練）**：驗證從既有正式 schema 版本升級五個 V3 Draft 表組的相依順序、SQLite／隔離升級／失敗回復與備份程序，檢查不會存正常成功發票到 D1；在得到新的正式批准前禁止執行正式 D1 Migration，不增加測試 Worker，不碰光貿實際開立／作廢。做完單獨提交和 CI，更新唯一 TODO，再結束下一輪。
+
+完成後依序做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
 
 ### 不可跨越的界線
 
