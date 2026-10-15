@@ -1,6 +1,5 @@
-import { usesCyId, cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
+import { cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
 import { recordSecurityEvent } from "./security-audit";
-import { verifyPassword } from "./web-auth";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
@@ -28,11 +27,7 @@ type DeviceRow = {
   revoked_at: string | null;
 };
 
-type SuperAdminRow = {
-  employee_id: string;
-  credential_verifier: string | null;
-  credential_algorithm: string | null;
-};
+type SuperAdminRow = { employee_id: string };
 
 const SERVICE_NAME = "cyinvoice-cloud";
 const CLOUD_VERSION = "0.8.9";
@@ -87,7 +82,7 @@ function bearerToken(request: Request): string | null {
 }
 
 async function authenticateDevice(request: Request, env: Env): Promise<DeviceIdentity | null> {
-  if (usesCyId(env)) await cyIdDevice(request, env);
+  await cyIdDevice(request, env);
   const token = bearerToken(request);
   if (!token) return null;
   const tokenHash = await sha256Hex(token);
@@ -122,16 +117,6 @@ async function readJsonObject(request: Request): Promise<Record<string, unknown>
   }
 }
 
-function normalizedEmployeeNo(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  return /^\d{4}$/.test(normalized) ? normalized : null;
-}
-
-function normalizedPassword(value: unknown): string | null {
-  return typeof value === "string" && value.length >= 1 && value.length <= 200 ? value : null;
-}
-
 function normalizedDeviceId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
@@ -140,34 +125,13 @@ function normalizedDeviceId(value: unknown): string | null {
     : null;
 }
 
-async function authenticateSuperAdmin(
-  env: Env,
-  device: DeviceIdentity,
-  body: Record<string, unknown> | null,
-): Promise<SuperAdminRow | null> {
-  if (usesCyId(env)) {
-    if (!env.cyIdContext) throw new CyIdError(401, "AUTH_REQUIRED");
-    const principal = await env.cyIdContext.revalidate();
-    if (principal.workspaceRole !== "SUPER_ADMIN") return null;
-    return { employee_id: principal.employeeId, credential_algorithm: null, credential_verifier: null };
-  }
-  if (device.employeeAuthorityState !== "cloud") return null;
-  const employeeNo = normalizedEmployeeNo(body?.employeeNo);
-  const password = normalizedPassword(body?.password);
-  if (!employeeNo || !password) return null;
-
-  const employee = await env.DB.prepare(
-    `SELECT employee_id, credential_verifier, credential_algorithm
-       FROM cloud_employees
-      WHERE workspace_id = ?1
-        AND employee_no = ?2
-        AND role = 'SUPER_ADMIN'
-        AND enabled = 1
-      LIMIT 1`
-  ).bind(device.workspaceId, employeeNo).first<SuperAdminRow>();
-  if (!employee || employee.credential_algorithm !== "pbkdf2-sha256" || !employee.credential_verifier)
-    return null;
-  return await verifyPassword(password, employee.credential_verifier) ? employee : null;
+async function authenticateSuperAdmin(env: Env): Promise<SuperAdminRow | null> {
+  // V3 has only CYID Cloud; never fetch or compare a Built-in employee
+  // password from CYInvoice's business D1.
+  if (!env.cyIdContext) throw new CyIdError(401, "AUTH_REQUIRED");
+  const principal = await env.cyIdContext.revalidate();
+  return principal.workspaceRole === "SUPER_ADMIN"
+    ? { employee_id: principal.employeeId } : null;
 }
 
 function deviceJson(row: DeviceRow, currentDeviceId: string): Record<string, JsonValue> {
@@ -216,21 +180,11 @@ async function deviceActorStillActive(env: Env, actor: DeviceIdentity): Promise<
 }
 
 async function deviceRevokeManagerStillAuthorized(
-  env: Env, actor: DeviceIdentity, manager: SuperAdminRow,
+  env: Env, manager: SuperAdminRow,
 ): Promise<boolean> {
-  if (usesCyId(env)) {
-    const principal = await env.cyIdContext?.revalidate();
-    return principal?.workspaceRole === "SUPER_ADMIN" &&
-      principal.employeeId === manager.employee_id;
-  }
-  const row = await env.DB.prepare(`
-    SELECT 1 AS valid FROM cloud_employees
-    WHERE workspace_id = ?1 AND employee_id = ?2
-      AND role = 'SUPER_ADMIN' AND enabled = 1
-      AND credential_verifier = ?3 LIMIT 1`)
-    .bind(actor.workspaceId, manager.employee_id, manager.credential_verifier)
-    .first<{ valid: number }>();
-  return row?.valid === 1;
+  const principal = await env.cyIdContext?.revalidate();
+  return principal?.workspaceRole === "SUPER_ADMIN" &&
+    principal.employeeId === manager.employee_id;
 }
 
 async function revokeDevice(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -243,7 +197,7 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   if (!targetDeviceId)
     return errorResponse(env, requestId, 400, "INVALID_DEVICE", "Target Device ID is invalid.");
 
-  const superAdmin = await authenticateSuperAdmin(env, actorDevice, body);
+  const superAdmin = await authenticateSuperAdmin(env);
   if (!superAdmin) {
     await recordSecurityEvent(env.DB, {
       workspaceId: actorDevice.workspaceId,
@@ -301,15 +255,14 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   }
 
   // External CYID authority cannot participate in the D1 transaction; recheck
-  // as late as practical, then independently require the old Device's active
-  // status INSIDE the D1 write. Built-in credential is also fenced in that SQL.
-  if (!await deviceRevokeManagerStillAuthorized(env, actorDevice, superAdmin))
+  // as late as practical, then independently fence the Device at D1 write.
+  if (!await deviceRevokeManagerStillAuthorized(env, superAdmin))
     return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
       "Super administrator authority changed during the request.");
   const now = new Date().toISOString();
   const reasonCode = targetDeviceId === actorDevice.deviceId ? "SELF_RETIRE" : "SUPER_ADMIN_REVOKE";
   // The actor must remain active when the mutation is committed, not just
-  // when its token and CYID/Built-in credentials were first authenticated.
+  // when its token and CYID authority were first authenticated.
   // Recovery cutover and this batch serialize on the SAME business D1.
   const sourceGuard = `EXISTS (
     SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
@@ -321,19 +274,8 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
       AND (SELECT COUNT(*) FROM devices
              WHERE workspace_id = ?3 AND status = 'active') > 1
       AND ${sourceGuard}`;
-  // In Built-in mode, recheck the manager credential in the SQL write. CYID
-  // revalidation is scoped to its own service; the D1 actor fence is mandatory
-  // in either mode. Never reference retired Built-in tables in CYID_ONLY D1.
-  const revokeUpdate = usesCyId(env)
-    ? env.DB.prepare(activeRevokeSql)
-      .bind(now, targetDeviceId, actorDevice.workspaceId, actorDevice.deviceId)
-    : env.DB.prepare(`${activeRevokeSql}
-      AND EXISTS (SELECT 1 FROM cloud_employees
-        WHERE employee_id = ?5 AND workspace_id = ?3
-          AND role = 'SUPER_ADMIN' AND enabled = 1
-          AND credential_verifier = ?6)`)
-      .bind(now, targetDeviceId, actorDevice.workspaceId, actorDevice.deviceId,
-        superAdmin.employee_id, superAdmin.credential_verifier);
+  const revokeUpdate = env.DB.prepare(activeRevokeSql)
+    .bind(now, targetDeviceId, actorDevice.workspaceId, actorDevice.deviceId);
   const result = await env.DB.batch([
     revokeUpdate,
     env.DB.prepare(
@@ -364,7 +306,7 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
     // A failed guard must not be reported as LAST_ACTIVE_DEVICE or as an
     // idempotent success after this actor has lost authorization.
     if (!await deviceActorStillActive(env, actorDevice) ||
-        !await deviceRevokeManagerStillAuthorized(env, actorDevice, superAdmin))
+        !await deviceRevokeManagerStillAuthorized(env, superAdmin))
       return errorResponse(env, requestId, 409, "DEVICE_AUTHORITY_CHANGED",
         "Device or super administrator authority changed during the request.");
     const latest = await env.DB.prepare(
@@ -468,7 +410,7 @@ async function renameDevice(request: Request, env: Env, requestId: string): Prom
     return errorResponse(env, requestId, 400, "INVALID_DEVICE", "Target Device ID is invalid.");
   if (!displayName || displayName.length > 120 || /[\u0000-\u001f\u007f-\u009f]/u.test(displayName))
     return errorResponse(env, requestId, 400, "INVALID_DEVICE_NAME", "Device display name is invalid.");
-  const owner = await authenticateSuperAdmin(env, actor, body);
+  const owner = await authenticateSuperAdmin(env);
   if (!owner) {
     await recordSecurityEvent(env.DB, {
       workspaceId: actor.workspaceId, type: "device_renamed", outcome: "denied",
@@ -477,20 +419,14 @@ async function renameDevice(request: Request, env: Env, requestId: string): Prom
     return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
   }
   const now = new Date().toISOString();
-  // CYID-only D1 installations may have physically retired cloud_employees.
-  // Keep separate prepared statements: SQLite resolves table names even when
-  // a SQL OR branch would appear to skip a legacy table.
-  const activeDeviceSql = `UPDATE devices SET display_name = ?1, updated_at = ?2
+  const renameUpdate = env.DB.prepare(`
+    UPDATE devices SET display_name = ?1, updated_at = ?2
     WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
-      AND EXISTS (SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
-                  WHERE a.device_id = ?5 AND a.workspace_id = ?4 AND a.status = 'active' AND w.status = 'active')`;
-  const renameUpdate = usesCyId(env)
-    ? env.DB.prepare(activeDeviceSql).bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId)
-    : env.DB.prepare(`${activeDeviceSql}
-        AND EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
-                    AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7)`)
-      .bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId,
-        owner.employee_id, owner.credential_verifier);
+      AND EXISTS (
+        SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
+        WHERE a.device_id = ?5 AND a.workspace_id = ?4
+          AND a.status = 'active' AND w.status = 'active')`)
+    .bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId);
   const results = await env.DB.batch([
     renameUpdate,
     env.DB.prepare(
