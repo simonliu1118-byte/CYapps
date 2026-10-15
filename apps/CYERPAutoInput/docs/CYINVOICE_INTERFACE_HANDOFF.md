@@ -180,7 +180,7 @@ result（`cyinvoice-autoinput-result/1`，每筆多一個 `pdfFile`）：
 | status | 意義 | AutoInput 的做法 |
 |---|---|---|
 | `ready` | 已取得官方 PDF，`pdfFile` 為 `pdfFolder` 內的絕對路徑 | 核對 `invoiceNumber` 與先前開立結果相同才列印 |
-| `pending` | 光貿尚未開立完成、還沒有 PDF | 每 20 秒再呼叫一次，5 分鐘後問使用者要不要再等 |
+| `pending` | 光貿尚未開立完成、還沒有 PDF | 在背景每 20 秒再呼叫一次（不中斷全自動與打單），最多 30 分鐘 |
 | `failed`／`unknown`／`skipped` | 無法取得（附 `message`） | 不印，結果清單註明請在 CYInvoice 列印 |
 
 - 只取 PDF、**絕不開立**；沒有發票的訂單回 `skipped`。

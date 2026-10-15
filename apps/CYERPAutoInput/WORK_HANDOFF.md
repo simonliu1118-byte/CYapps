@@ -116,7 +116,7 @@ V0.3.0（Build 0–26，未發布）現況：
    MO店+／酷澎全自動（使用者 2026-10-13 規劃，未開始；酷澎等有訂單再做）：AutoInput 一次完成 1 未出貨匯出 → 2 批次出貨取寄件單 PDF → 3 配送中匯出 → 4 呼叫 CYInvoice 開立 → 5 取回發票號碼／日期 → 6 兩檔帶入（已完成）→ 7 ERP → 8 列印寄件單 → 9 清除。決定：
    - 下載檔一律放 AutoInput 自建的暫存資料夾，全部成功後連資料夾刪除；有要人工處理的訂單就保留。
    - CYInvoice 接口已由 CYInvoice 主控實作（Draft PR #445，見 `docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md`）。使用者 2026-10-14 決定：等 MO店+ 全自動跑順之後再接；設定裡的 CYInvoice.exe 位置用檔案選擇器選（不用手填）；接上前發票資料仍在預覽手動填。
-   - 2026-10-15 呼叫端已寫好（`CyInvoiceLink`（純，有測試）、`MainForm.Invoice.cs`），尚未實機聯測：MO店+ ›「測試：發票」用真實訂單檔、CYInvoice 測試環境（使用者：測試環境的送出資料 CYInvoice 自己有處理，不必擔心外洩），停在預覽。環境由 AUTO 從查詢結果判斷（全自動只收 production）；全自動開立預設關（設定勾選）。紙本發票：有統編才印，列印時才以提案的 `--autoinput-pdf` 取官方 PDF（光貿完成才有；格式在 設定 › 印表機 選），A4 印表機、放紙確認；CYInvoice 端尚未實作此模式，需交 CYInvoice 主控（`docs/CYINVOICE_PDF_HANDOFF.md`，含 orderId／金額／紙本規則確認；使用者：那邊做完直接出工程測試包供協同測試）。轉人工訂單不送 CYInvoice（依交接）。
+   - 2026-10-15 呼叫端已寫好（`CyInvoiceLink`（純，有測試）、`MainForm.Invoice.cs`），尚未實機聯測：MO店+ ›「測試：發票」用真實訂單檔、CYInvoice 測試環境（使用者：測試環境的送出資料 CYInvoice 自己有處理，不必擔心外洩），停在預覽。環境由 AUTO 從查詢結果判斷（全自動只收 production）；全自動開立預設關（設定勾選）。紙本發票：有統編才印，開立後在背景以提案的 `--autoinput-pdf` 每 20 秒取官方 PDF（光貿完成才有；格式在 設定 › 印表機 選；不中斷全自動），拿到後在沒有輸入 ERP 時請人放紙、印在 A4 印表機；CYInvoice 端尚未實作此模式，需交 CYInvoice 主控（`docs/CYINVOICE_PDF_HANDOFF.md`，含 orderId／金額／紙本規則確認；使用者：那邊做完直接出工程測試包供協同測試）。轉人工訂單不送 CYInvoice（依交接）。
    - 發票只由 CYInvoice 開立、不需登入；介面規格見 `docs/CYINVOICE_INTERFACE_HANDOFF.md`，交 CYInvoice 主控實作（命令列＋結果檔，開立／查詢兩種模式）。
    - 寄件單：某張訂單失敗仍整份列印（出貨一定要印）。全家／7-11 是 A4 切四格，要轉成熱感紙一張一格（解密 PDF → 轉圖 → 切四格去空白 → 逐張列印）；新竹印單前暫停提示人工放紙，按「繼續」才印（暫停不是中止）。印表機細節等下次實單跑一次再定。
    - 網頁端 1–3 步比照蝦皮全自動（自己的 Chrome 視窗、讀網頁原文），待使用者實單帶一次流程。

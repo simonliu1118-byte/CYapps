@@ -1164,7 +1164,9 @@ internal sealed partial class MainForm : Form
     private async Task<(int Printed, List<string> Notes)> PrintMoSlipsAsync(string file, string printer, string password, MoShipKind? kind = null)
     {
         var label = SlipPrinter.Label(printer, 100, 150);
-        var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi * 2);
+        // A drawn page (7-11) at the printer's own resolution, printed 1:1 — its true size (user
+        // 2026-10-15 sample: the slip is 83×122 mm on A4; 「請勿調整尺寸」). 全家 is a picture, used as is.
+        var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi);
         var printed = 0;
         var notes = new List<string>();
         foreach (var (page, from) in pages)
