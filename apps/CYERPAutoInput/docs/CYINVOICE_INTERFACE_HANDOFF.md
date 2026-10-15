@@ -1,5 +1,8 @@
 # CYInvoice ↔ CYERPAutoInput 呼叫介面交接
 
+> **2026-10-15 交接狀態更新：**本文件保留 10/13 原始需求母本；`--autoinput-query`、`--autoinput-issue` 已於 CYInvoice PR #445 的 V2.6.20 Draft 實作；10/15 新增 `--autoinput-pdf` 已於 **V2.6.21 Build 0 Draft** 完成，Windows 工程測試包已產出並回交。**最新資訊與下載連結見 [CYINVOICE_PDF_HANDOFF.md](./CYINVOICE_PDF_HANDOFF.md)**；尚未雙端真實 E2E／正式發行，不可在 production 全自動開票。
+
+
 > 狀態：提案，CYInvoice 端尚未實作。2026-10-13 由 CYERPAutoInput 主控對話整理，交給 CYInvoice 主控對話實作接口。  
 > 本文件是需求與介面設計，不是永久規則；CYInvoice 端仍以 `/REPOSITORY_RULES.md`、`/REPO_POLICY.md`、`apps/CYInvoice/PROJECT_RULES.md` 為準，修改走 CYInvoice 自己的 branch／PR。
 
