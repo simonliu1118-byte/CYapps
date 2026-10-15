@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
 import {build} from "esbuild";
+import {createHash} from "node:crypto";
 const built=await build({entryPoints:["src/allowance-applications.ts"],bundle:true,
   platform:"node",format:"esm",target:"node24",write:false});
 const {createFrozenAllowanceApplication:create,loadFrozenAllowanceApplication:load}=
@@ -14,7 +15,7 @@ function fixture(){
   sql.exec("PRAGMA foreign_keys=ON;"+
     "CREATE TABLE workspaces(workspace_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'active');"+
     "CREATE TABLE devices(device_id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),"+
-    "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud');");
+    "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud',token_hash TEXT);");
   sql.prepare("INSERT INTO workspaces(workspace_id) VALUES(?)").run(ws);
   sql.prepare("INSERT INTO devices(device_id,workspace_id) VALUES(?,?)").run(dev,ws);
   for(const file of ["0015_work_items.sql","0017_company_settings.sql","0018_allowance_applications.sql"])
@@ -83,5 +84,62 @@ await assert.rejects(()=>load(fx.db,ws,input.workItemId,2,key),/COMPANY_CHANGED/
 assert.throws(()=>fx.sql.prepare("DELETE FROM allowance_applications").run(),/IMMUTABLE/);
 assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM work_items").get().n,1);
 assert.deepEqual(fx.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+// Protected route: the CYID identity Workspace must be explicitly converted
+// to the Business Workspace binding; client scope and seller fields are refused.
+fx.sql.prepare("UPDATE company_settings SET revision=1").run();
+const bundle=await build({entryPoints:["src/allowance-applications-route.ts"],
+  bundle:true,format:"esm",platform:"node",target:"node24",write:false});
+const {handleAllowanceApplications:route}=await import("data:text/javascript;base64,"+
+  Buffer.from(bundle.outputFiles[0].text).toString("base64"));
+const token="cydev_"+"a".repeat(64);
+fx.sql.prepare("UPDATE devices SET token_hash=?").run(createHash("sha256").update(token).digest("hex"));
+let who={workspaceId:"identity_synthetic",employeeId:"cyid_employee",
+  workspaceRole:"USER",emailVerified:true};
+const env={
+  DB:fx.db,CYID_ENABLED:"true",
+  IDENTITY:{fetch:async()=>Response.json({})},
+  IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",
+  IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
+  ALLOWANCE_OPERATION_ENVIRONMENT:"test",
+  COMPANY_SETTINGS_KEY_HEX:key,
+  cyIdContext:{revalidate:async()=>who}
+};
+const createBody={
+  employeeNo:"1234",password:"SYNTHETIC_PASS",itemId:"wi_allowance_route_1",
+  originalInvoiceNumber:input.originalInvoiceNumber,allowanceDay:input.allowanceDay,
+  requestedGrossAmount:input.requestedGrossAmount,reason:input.reason,
+  unnumberedTemplateJson:input.unnumberedTemplateJson
+};
+async function call(action,body,config=env,bearer=token){
+  const r=await route(new Request("https://cyinvoice.synthetic/v1/allowance-applications/"+action,{
+    method:"POST",headers:{"authorization":"Bearer "+bearer,
+      "content-type":"application/json"},body:JSON.stringify(body)
+  }),config);
+  return {status:r.status,data:await r.json()};
+}
+assert.equal((await call("create",createBody,{...env,cyIdContext:undefined})).status,401);
+assert.equal((await call("create",{...createBody,workspaceId:"ws_attacker"})).status,400);
+assert.equal((await call("create",{...createBody,environment:"production"})).status,400);
+assert.equal((await call("create",createBody,{...env,ALLOWANCE_OPERATION_ENVIRONMENT:undefined})).status,503);
+const created=await call("create",createBody);
+assert.equal(created.status,201,JSON.stringify(created));
+assert.deepEqual(Object.keys(created.data).sort(),["itemId","ok","revision","status"]);
+const view=await call("get",{itemId:createBody.itemId});
+assert.equal(view.status,200,JSON.stringify(view));
+assert.equal(view.data.application.originalInvoiceNumber,input.originalInvoiceNumber);
+assert.equal(view.data.application.applicantEmployeeId,"cyid_employee");
+assert.equal(JSON.stringify(view).includes("Synthetic item"),false);
+assert.equal(JSON.stringify(view).includes("synthetic_envelope"),false);
+assert.equal((await call("create",createBody)).status,409);
+assert.equal((await call("get",{itemId:createBody.itemId})).status,200,
+  "Lost create response must be reconciled by the same Work Item ID");
+who={...who,employeeId:"other_cyid_employee"};
+assert.equal((await call("get",{itemId:createBody.itemId})).status,404);
+who={...who,workspaceRole:"ADMIN"};
+assert.equal((await call("get",{itemId:createBody.itemId})).status,200);
+who={...who,workspaceId:"attacker_identity_workspace"};
+assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
+assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,2);
+assert.deepEqual(fx.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 fx.sql.close();
-console.log("Draft allowance applications: immutable encrypted template, USER identity, D1 atomic create, company revision guard passed");
+console.log("Draft allowance applications: immutable encrypted template, atomic SQL, scoped CYID protected routes and readback passed");
