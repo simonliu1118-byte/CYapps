@@ -156,4 +156,23 @@ last.addWork("wi_allowance_overflow");
 await assert.rejects(()=>reserve(last.dbApi,{...base,workItemId:"wi_allowance_overflow"}),
   /SEQUENCE_INVALID/);
 last.db.close();
+// Two managers may read the same next sequence. A concurrent D1 insert
+// must make the second SQL-time MAX guard refuse, not double-allocate.
+const concurrent=fixture();
+concurrent.addWork("wi_allowance_race");
+concurrent.addWork("wi_allowance_competitor");
+concurrent.race(()=>concurrent.db.prepare(`INSERT INTO allowance_number_ledger
+  (ledger_id,workspace_id,work_item_id,seller_invoice,environment,allowance_day,
+   sequence,allowance_number,attempt,request_sha256,status,
+   created_by_device_id,created_at,updated_at)
+  VALUES ('al_competitor',?,?,?,?,?,?,?,?,?,'reserved',?,'2026-10-15','2026-10-15')`)
+  .run(ws,"wi_allowance_competitor",base.sellerInvoice,"test",base.allowanceDay,
+    1,"A20261015001",1,base.requestSha256,devA));
+await assert.rejects(()=>reserve(concurrent.dbApi,{...base,
+  workItemId:"wi_allowance_race"}),/AUTHORITY_OR_REVISION_CHANGED/);
+const afterRace=await reserve(concurrent.dbApi,{...base,workItemId:"wi_allowance_race"});
+assert.equal(afterRace.allowanceNumber,"A20261015002");
+assert.equal(concurrent.db.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,2);
+concurrent.db.close();
+
 console.log("CYID D1 allowance number ledger: durable Work Item scoping, collision-only rollover, active Device/revision fencing, no D1 raw payload, A00/ZZZ limits passed");
