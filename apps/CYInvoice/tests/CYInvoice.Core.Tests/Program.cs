@@ -34,6 +34,35 @@ var tests = new (string Name, Action Run)[]
             schema = "cyinvoice-autoinput-request/999", requestId, source = "mo", file
         })));
     }),
+    ("autoinput PDF request validates style, folder and required order IDs", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var request = new {
+            schema = AutoInputContract.RequestSchema, requestId = Guid.NewGuid().ToString("D"),
+            source = "mo", file = Path.Combine(temp.Path, "before.xls"),
+            orderIds = new[] { "90000000000001" }, pdfFolder = temp.Path, pdfStyle = 5
+        };
+        var parsed = AutoInputContract.ParseRequest(JsonSerializer.Serialize(request));
+        parsed.ValidatePdf();
+        Equal(5, parsed.PdfStyle);
+        Equal(temp.Path, parsed.PdfFolder);
+        Throws<InvalidDataException>(() =>
+            (parsed with { OrderIds = null }).ValidatePdf());
+        Throws<InvalidDataException>(() =>
+            (parsed with { PdfStyle = 4 }).ValidatePdf());
+        Throws<InvalidDataException>(() =>
+            AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+                request.schema, request.requestId, request.source, request.file,
+                request.orderIds, request.pdfFolder, pdfStyle = 4 })));
+        Equal(true, AutoInputCommandLine.IsAutoInputInvocation(["--autoinput-pdf"]));
+        Equal(true, AutoInputCommandLine.IsAutoInputInvocation(["--autoinput-unsupported"]));
+        Equal(true, AutoInputCommandLine.Parse([
+            "--autoinput-pdf", request.file, "--result", Path.Combine(temp.Path,"out.json")]).Pdf);
+        Throws<InvalidDataException>(() => AutoInputCommandLine.Parse([
+            "--autoinput-invalid", request.file, "--result", Path.Combine(temp.Path,"out.json")]));
+    }),
+    ("autoinput PDF never issues and safely returns ready, pending or skipped", () =>
+        TestAutoInputPdfAsync().GetAwaiter().GetResult()),
     ("autoinput blocks prior unresolved and mismatched invoice", () =>
     {
         var record = new InvoiceRecord {
@@ -1475,6 +1504,68 @@ static async Task TestImportedLookupBlockAsync()
     order.Items.Add(new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 });
     await ThrowsAsync<InvalidOperationException>(() => service.IssueCoupangWithLookupAsync(order, new NameLookup()));
     Equal(0, fake.IssueCalls);
+}
+
+static async Task TestAutoInputPdfAsync()
+{
+    using var temp = new TemporaryDirectory();
+    var fake = new FakeGateway { PdfBytes = TestPdfBytes() };
+    var (service, repository) = TestService(temp.Path, fake);
+    const string orderId = "90000000000001";
+    var record = PdfReadyRecord("AX12345678");
+    record.Source = InvoiceSources.Mo;
+    record.OriginalOrderId = orderId;
+    record.OrderId = orderId;
+    record.InvoiceDate = "2026/10/15";
+    record.BuyerIdentifier = "12345675";
+    record.BuyerName = "範例股份有限公司";
+    repository.Invoices.Append(record);
+    var folder = Path.Combine(temp.Path,"paper");
+    Directory.CreateDirectory(folder);
+    var exporter = new AutoInputPdfExport(repository,service);
+    var ready = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("ready",ready.Status);
+    Equal(record.InvoiceNumber,ready.InvoiceNumber);
+    Equal(record.Amount,ready.TotalAmount);
+    Equal(record.BuyerIdentifier,ready.BuyerBan);
+    Equal(Path.Combine(folder,"AX12345678_style5.pdf"),ready.PdfFile);
+    Equal(true,File.Exists(ready.PdfFile));
+    Equal(1,fake.PdfCalls);
+    Equal(0,fake.IssueCalls);
+    var second = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("ready",second.Status);
+    Equal(1,fake.PdfCalls);
+    File.WriteAllText(ready.PdfFile,"conflicting file");
+    var clash = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("unknown",clash.Status);
+    Equal("conflicting file",File.ReadAllText(ready.PdfFile));
+    Equal(0,fake.IssueCalls);
+    Equal("unknown",(await exporter.ExportAsync(orderId,InvoiceSources.Coupang,
+        Environments.Test,folder,5)).Status);
+    Equal("skipped",(await exporter.ExportAsync("NOT-IN-LOCAL",InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+
+    record = repository.Invoices.LoadOrCreate().Single();
+    record.UploadStatus = UploadStatuses.Pending;
+    repository.Invoices.Replace(record);
+    Equal("pending",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+    Equal(1,fake.PdfCalls);
+
+    record.UploadStatus = UploadStatuses.Complete;
+    record.BuyerIdentifier = "0000000000";
+    repository.Invoices.Replace(record);
+    Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+
+    var output = Path.Combine(temp.Path,"result.json");
+    var envelope = new AutoInputResult(AutoInputContract.ResultSchema,Guid.NewGuid().ToString("D"),
+        "2.6.21+0","test",DateTimeOffset.UtcNow.ToString("O"),[ready]);
+    await AutoInputResultFile.WriteAtomicAsync(output,envelope);
+    using var document = JsonDocument.Parse(File.ReadAllText(output));
+    Equal("ready",document.RootElement.GetProperty("orders")[0].GetProperty("status").GetString());
+    Equal(ready.PdfFile,document.RootElement.GetProperty("orders")[0].GetProperty("pdfFile").GetString());
+    await ThrowsAsync<IOException>(() => AutoInputResultFile.WriteAtomicAsync(output,envelope));
 }
 
 static async Task TestConsumerPdfCacheAsync()
