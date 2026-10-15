@@ -28,6 +28,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button reserve=UiControls.StandardButton("配號");
     private readonly Button issue=UiControls.StandardButton("首次送出");
     private readonly Button readback=UiControls.StandardButton("查回原號");
+    private readonly Button reconcile=UiControls.StandardButton("官方對帳");
     private bool busy;
 
     public CloudAllowanceManagerForm(LocalRepository repository,string endpoint,string token)
@@ -62,14 +63,14 @@ internal sealed class CloudAllowanceManagerForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         root.Controls.Add(hint,0,0);
         root.Controls.Add(queue,0,1);
         var buttons=new FlowLayoutPanel{
             Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,
             WrapContents=true
         };
-        foreach(var button in new[]{refresh,preview,inspect,approve,reserve,issue,readback})
+        foreach(var button in new[]{refresh,preview,inspect,approve,reserve,issue,readback,reconcile})
         {
             button.Margin=new Padding(2,4,3,4);
             buttons.Controls.Add(button);
@@ -160,6 +161,31 @@ internal sealed class CloudAllowanceManagerForm : Form
                 $"原發票與金額比對：{(result.GrossMatchesFrozenRequest?"相符":"未確認")}\n\n"+
                 "查回僅為唯讀參考，不得自行視為已結案或重送。",
                 "光貿原號查回",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+        reconcile.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            // Unlike direct original-number readback, this action first scans
+            // both official date filters and records verified query evidence.
+            var result=await client.ReconcileForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            if(result.Readback is null)
+            {
+                MessageBox.Show(this,
+                    $"折讓單號：{result.AllowanceNumber}\n"+
+                    "近十四日官方清單未查到此號；這不代表未送達。\n"+
+                    "請維持原工作單，必要時使用「查回原號」人工核實。\n\n"+
+                    "不得改號、重送或自動結案。",
+                    "官方對帳－待人工確認",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                return;
+            }
+            var readback=result.Readback;
+            MessageBox.Show(this,
+                $"折讓單號：{result.AllowanceNumber}\n"+
+                $"雙日期清單：{(result.ListReason=="CONFLICTING_LIST_RESULTS"?"紀錄衝突":"找到對應紀錄")}\n"+
+                $"官方單號查回：{(readback.PossibleMatch?"可能相符":"仍未確認")}\n"+
+                $"官方類型／狀態：{readback.OfficialInvoiceType}／{readback.OfficialUploadStatus}\n\n"+
+                "已由服務端記錄原號官方查驗稽核。\n"+
+                "結果仍須人工確認，不得自動重送或結案。",
+                "官方對帳－原號查回",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         });
     }
 

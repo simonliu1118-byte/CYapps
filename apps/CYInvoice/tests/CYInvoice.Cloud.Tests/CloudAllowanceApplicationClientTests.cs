@@ -107,6 +107,45 @@ internal static class CloudAllowanceApplicationClientTests
             return Json(HttpStatusCode.OK,new{ok=true,readback=NumberReadback(true)});
         });
         handler.Enqueue(req => {
+            Check(req,"reconcile");
+            using var body=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(Id,body.RootElement.GetProperty("itemId").GetString(),"reconcile original Work Item");
+            Equal(2,body.RootElement.GetProperty("expectedRevision").GetInt32(),"reconcile revision");
+            True(!body.RootElement.TryGetProperty("allowanceNumber",out _),"Windows never chooses allowance number");
+            True(!body.RootElement.TryGetProperty("sellerInvoice",out _),"Windows never chooses company");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                reconciliation=Reconciliation("OFFICIAL_STATUS_CHANGED_OR_PENDING"),
+                readback=NumberReadback(false)});
+        });
+        handler.Enqueue(req => {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                reconciliation=Reconciliation("NOT_SEEN_NOT_PROOF")});
+        });
+        handler.Enqueue(req => {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                reconciliation=new {
+                    itemId=Id,expectedRevision=2,allowanceNumber="A20261015001",
+                    listReason="NOT_SEEN_NOT_PROOF",requiresManualReconciliation=true,
+                    safeToAutoResend=true,safeToAutoConfirm=false
+                }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                reconciliation=Reconciliation("OFFICIAL_STATUS_CHANGED_OR_PENDING"),
+                readback=new {
+                    itemId=Id,expectedRevision=2,allowanceNumber="A20261015002",
+                    ledgerStatus="sending",checkedAtUtc="2026-10-15T02:00:00Z",
+                    officialSnapshotSha256=new string('b',64),officialInvoiceType="D0401",
+                    officialUploadStatus=99,officialCancelled=false,
+                    exactOriginalInvoiceMatch=true,grossMatchesFrozenRequest=true,
+                    possibleMatch=true,requiresManualReconciliation=true,
+                    safeToAutoResend=false,safeToAutoConfirm=false
+                }});
+        });
+        handler.Enqueue(req => {
             Check(req,"approve");
             return Json(HttpStatusCode.Created,new {ok=true,approval=new {
                 approvalId="apr_synthetic_approved",itemId=Id,revision=2,
@@ -187,6 +226,21 @@ internal static class CloudAllowanceApplicationClientTests
         Equal("A20261015001",readback.AllowanceNumber,"original reserved number only");
         await RejectAsync<InvalidDataException>(() =>
             client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        var reconciled=await client.ReconcileForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal("A20261015001",reconciled.AllowanceNumber,"same D1 allowance number");
+        Equal("OFFICIAL_STATUS_CHANGED_OR_PENDING",reconciled.ListReason,"official list hint");
+        True(reconciled.Readback is not null,"list hit selectively reads original number");
+        Equal(false,reconciled.Readback!.SafeToAutoResend,"no repeat issue after match");
+        Equal(false,reconciled.Readback.SafeToAutoConfirm,"no silent confirmation");
+        var missing=await client.ReconcileForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal("NOT_SEEN_NOT_PROOF",missing.ListReason,"absence is not proof");
+        True(missing.Readback is null,"absence must not invent a readback");
+        await RejectAsync<InvalidDataException>(()=>
+            client.ReconcileForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        await RejectAsync<InvalidDataException>(()=>
+            client.ReconcileForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        await RejectAsync<ArgumentOutOfRangeException>(()=>
+            client.ReconcileForManagerAsync(Id,0,"0001","SyntheticPass12"));
         var approval=await client.ApproveForManagerAsync(Id,2,"0001","SyntheticPass12");
         Equal(false,approval.CanIssueNow,"Approval grant is not issue permission");
         Equal(true,approval.RequiresFinalPreflight,"Preflight always required");
@@ -220,6 +274,11 @@ internal static class CloudAllowanceApplicationClientTests
         True(CloudAllowanceApplicationClient.CreateItemId().StartsWith("wi_",StringComparison.Ordinal),
             "caller can prepare and durably persist an opaque request ID");
     }
+    private static object Reconciliation(string reason) => new {
+        itemId=Id,expectedRevision=2,allowanceNumber="A20261015001",
+        listReason=reason,requiresManualReconciliation=true,
+        safeToAutoResend=false,safeToAutoConfirm=false
+    };
     private static object NumberReadback(bool forgedResend) => new {
         itemId=Id,expectedRevision=2,allowanceNumber="A20261015001",
         ledgerStatus="sending",checkedAtUtc="2026-10-15T02:00:00.000Z",

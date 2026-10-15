@@ -49,6 +49,11 @@ public sealed record CloudAllowanceNumberReadback(
     bool PossibleMatch, bool RequiresManualReconciliation,
     bool SafeToAutoResend, bool SafeToAutoConfirm);
 
+// On-demand comparison is advisory; absence and matches never authorize resend.
+public sealed record CloudAllowanceReconciliation(
+    string ItemId, int Revision, string AllowanceNumber, string ListReason,
+    CloudAllowanceNumberReadback? Readback);
+
 public sealed record CloudAllowanceManagerApproval(
     string ApprovalId,string ItemId,int Revision,string ApprovedByEmployeeId,
     DateTimeOffset ApprovedAt,DateTimeOffset ValidUntilUtc,
@@ -303,19 +308,52 @@ public sealed class CloudAllowanceApplicationClient
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount));
     }
 
-    // Read-only reconciliation after an ambiguous g0401. The number is read
-    // from D1 by the Worker; no caller may submit an alternate number.
+    // The Worker owns the original D1 allowance number; callers cannot
+    // supply another number. Neither endpoint authorizes any AMEGO mutation.
     public async Task<CloudAllowanceNumberReadback> ReadbackNumberForManagerAsync(
         string itemId,int expectedRevision,string employeeNo,string password,
         CancellationToken cancellationToken=default)
     {
-        VerifyId(itemId);
-        if(expectedRevision<1)throw new ArgumentOutOfRangeException(nameof(expectedRevision));
-        Credentials(employeeNo,password);
-        using var result=await SendAsync("number-readback",new{
-            itemId,expectedRevision,employeeNo,password
-        },cancellationToken).ConfigureAwait(false);
+        using var result=await ManagerActionAsync("number-readback",itemId,
+            expectedRevision,employeeNo,password,cancellationToken).ConfigureAwait(false);
+        return ParseNumberReadback(result.RootElement,itemId,expectedRevision);
+    }
+
+    public async Task<CloudAllowanceReconciliation> ReconcileForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        using var result=await ManagerActionAsync("reconcile",itemId,
+            expectedRevision,employeeNo,password,cancellationToken).ConfigureAwait(false);
         var root=result.RootElement;
+        var record=RequiredObject(root,"reconciliation");
+        var actualId=Required(record,"itemId");
+        var number=Required(record,"allowanceNumber");
+        var reason=Required(record,"listReason");
+        if(actualId!=itemId || Int(record,"expectedRevision")!=expectedRevision ||
+            !ValidAllowanceNumber(number) ||
+            reason is not ("NOT_SEEN_NOT_PROOF" or
+                "OFFICIAL_STATUS_CHANGED_OR_PENDING" or "CONFLICTING_LIST_RESULTS") ||
+            !Flag(record,"requiresManualReconciliation") ||
+            Flag(record,"safeToAutoResend") || Flag(record,"safeToAutoConfirm"))
+            throw new InvalidDataException("Reconciliation cannot authorize an automatic action.");
+        if(!root.TryGetProperty("readback",out var evidence))
+        {
+            if(reason!="NOT_SEEN_NOT_PROOF")
+                throw new InvalidDataException("Official list hit has no original-number readback.");
+            return new CloudAllowanceReconciliation(itemId,expectedRevision,number,reason,null);
+        }
+        if(reason=="NOT_SEEN_NOT_PROOF" || evidence.ValueKind!=JsonValueKind.Object)
+            throw new InvalidDataException("Official readback contradicts list evidence.");
+        var readback=ParseNumberReadback(root,itemId,expectedRevision);
+        if(readback.AllowanceNumber!=number)
+            throw new InvalidDataException("Reconciliation changed the D1 original number.");
+        return new CloudAllowanceReconciliation(itemId,expectedRevision,number,reason,readback);
+    }
+
+    private static CloudAllowanceNumberReadback ParseNumberReadback(
+        JsonElement root,string itemId,int expectedRevision)
+    {
         if(!root.TryGetProperty("readback",out var value) ||
            value.ValueKind!=JsonValueKind.Object)
             throw new InvalidDataException("Missing original-number readback.");

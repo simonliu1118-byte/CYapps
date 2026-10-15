@@ -23,7 +23,9 @@
 
 **步驟 4 小提交 1：** `87412384` 新增兩日期有限官方 List 掃描，Cloud Validate 與 Governance 通過、Windows 驗證見 exact SHA checks；無任何生產環境變更。
 
-**步驟 4 小提交 4（本輪）：** 沿用既有 `reconcile`/原號 `allowance_query`，只在確實查到官方原號時寫入新加至 **Draft 0016** 的最小 `allowance_reconciliation_checks` append-only D1 Audit。寫入時再次檢查 Ledger、公司版次、Work Item revision、有效 Device 與 Workspace；只存號碼／類型／狀態／官方 snapshot SHA256／CYID 查詢人／時間，不存正常成功發票或官方原始回覆。任何不一致或失敗不會回傳成功，清單查無不能寫虛假官方 Audit；所有情況不得改 Ledger／重送。隔離遷移與回歸測試納入 CI，總草案表為 11 張，不改正規 migration、不部署。Windows UI、實機及最終 Release 留後續。本輪 exact-head CI 待驗。
+**步驟 4 小提交 5（本輪）：** g0401 Windows 既有 `CloudAllowanceManagerForm` 直接增加「官方對帳」，不建立平行視窗；`CloudAllowanceApplicationClient.ReconcileForManagerAsync` 只送原 ID／revision、當次 CYID 憑證，依官方 List 查無／命中原號兩種回應 fail-closed，拒絕假冒可重送與原號不符。原「查回原號」仍保留供較早資料人工核實。Windows Core 合成測試補查無／命中／偽造結果。仍不自動改號、再送或結案，正式環境不變；待本次 exact-head CI。
+
+**步驟 4 小提交 4：** 沿用既有 `reconcile`/原號 `allowance_query`，只在確實查到官方原號時寫入新加至 **Draft 0016** 的最小 `allowance_reconciliation_checks` append-only D1 Audit。寫入時再次檢查 Ledger、公司版次、Work Item revision、有效 Device 與 Workspace；只存號碼／類型／狀態／官方 snapshot SHA256／CYID 查詢人／時間，不存正常成功發票或官方原始回覆。任何不一致或失敗不會回傳成功，清單查無不能寫虛假官方 Audit；所有情況不得改 Ledger／重送。隔離遷移與回歸測試納入 CI，總草案表為 11 張，不改正規 migration、不部署。Windows UI、實機及最終 Release 留後續。本輪 exact-head CI 待驗。
 
 **步驟 4 小提交 3：** g0401 於既有 CYID `allowance-applications` 管理員路由增加 `reconcile`，僅在 D1 原 Ledger `sending/confirmed`、公司版本／Workspace／Device／revision 符合時，先做 14 日雙日期有界 List 掃描，命中才沿用 `number-readback` 官方原號 `allowance_query`；未命中回待人工處理。保持 `safeToAutoResend=false`、`safeToAutoConfirm=false`，不寫入 Ledger、不改號、不重送。已擴充現有 synthetic route tests；仍缺 g0401 持久 Audit、WinForms 按鈕、排程與正式驗證。**CI 需用本次 exact HEAD 判斷。**
 
