@@ -2,7 +2,7 @@
 
 **三聯式發票開立計算機**是一個 Windows x64 單機小工具，用於將含稅商品資料換算為三聯式發票所需的未稅單價、未稅金額、銷售額與 5% 營業稅，並以三聯式發票版面即時預覽。
 
-目前正式基準：`V1.5.5`
+目前正式發行版本：`V1.5.5`；本次視覺調整開發版本：`V1.5.6`（尚未正式發布）。
 
 ## 主要功能
 
@@ -16,6 +16,10 @@
 - Enter／Tab 依序移動輸入欄位。
 - 計算異常另寫 ERROR log；一般 Trace log 採循環上限。
 - Windows PE resource 內嵌多尺寸 Icon 與 manifest。
+
+## 視覺資產
+
+本程式使用 AITeam `shared/cy-visual/icon-family/apps/tri-invoice-calc/` 的正式 `CAL.svg` 與七尺寸 `CAL.ico`，圖示不重新設計。介面依 CY Desktop Visual Guide 使用中性色作為主體，珊瑚紅作為少量強調，錯誤與成功維持獨立語意色。
 
 ## 建置
 
@@ -33,7 +37,7 @@
 
 建置腳本會：
 
-1. 從 `assets/icon.ico.b64` 重建 `icon.ico`。
+1. 核對 AITeam 正式 `assets/CAL.ico` 的 SHA-256 並內嵌 Windows PE resource。
 2. 使用 `akavel/rsrc` 產生 Windows icon/manifest resource。
 3. 執行 `go test ./...`。
 4. 以 Windows GUI subsystem 建置 `TriINVCalc.exe`。
