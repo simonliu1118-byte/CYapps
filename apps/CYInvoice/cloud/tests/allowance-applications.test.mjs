@@ -276,9 +276,57 @@ try{
   assert.equal(readbackCalls,1);
 }finally{globalThis.fetch=originalFetch;}
 
+// A strict zero-prior, net-price test case may write an append-only
+// manager grant ONLY after fresh official read-only verification.
+const approvedId="wi_approved_strict_01";
+const strictBody={...createBody,itemId:approvedId,requestedGrossAmount:53,
+  reason:"SYNTHETIC_VERIFY_AND_APPROVE",
+  unnumberedTemplateJson:JSON.stringify({
+    AllowanceNumber:"",AllowanceDate:"20261015",AllowanceType:2,
+    ProductItem:[{OriginalInvoiceNumber:"AB12345678",OriginalInvoiceDate:20261015,
+      OriginalDescription:"Service",Quantity:1,UnitPrice:50,Amount:50,Tax:3,TaxType:1}],
+    TotalAmount:50,TaxAmount:3
+  })};
+assert.equal((await call("create",strictBody)).status,201);
+fx.sql.prepare("UPDATE work_items SET status='review',revision=2 WHERE work_item_id=?")
+  .run(approvedId);
+let approvedOfficialCalls=0;
+globalThis.fetch=async (url,opts)=>{
+  approvedOfficialCalls++;
+  assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
+  const form=new URLSearchParams(opts.body);
+  assert.equal(form.get("invoice"),"12345678");
+  return Response.json({code:0,data:[{
+    invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:105,
+    invoice_date:20261015,detail_vat:0,tax_amount:5,allowance:[],wait:[],
+    product_item:[{description:"Service",quantity:2,unit_price:50,
+      amount:100,tax_type:1}]
+  }]});
+};
+try{
+  const authorized=await call("approve",{itemId:approvedId,expectedRevision:2});
+  assert.equal(authorized.status,201,JSON.stringify(authorized));
+  assert.equal(authorized.data.approval.canIssueNow,false);
+  assert.equal(authorized.data.approval.requiresFinalPreflight,true);
+  assert.equal(approvedOfficialCalls,1);
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?")
+    .get(approvedId).n,1);
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger WHERE work_item_id=?")
+    .get(approvedId).n,0,"Approval must not allocate or issue");
+  assert.equal((await call("approve",{itemId:approvedId,expectedRevision:1})).status,409);
+  assert.equal(approvedOfficialCalls,1,"stale Work Item cannot query AMEGO");
+  assert.equal((await call("approve",{itemId:approvedId,expectedRevision:2,
+    officialApproved:true})).status,400);
+  assert.equal(approvedOfficialCalls,1);
+  who={...who,workspaceRole:"USER"};
+  assert.equal((await call("approve",{itemId:approvedId,expectedRevision:2})).status,403);
+  assert.equal(approvedOfficialCalls,1);
+  who={...who,workspaceRole:"ADMIN"};
+}finally{globalThis.fetch=originalFetch;}
+
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
-assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,2);
+assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,3);
 assert.deepEqual(fx.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 fx.sql.close();
 console.log("Draft allowance applications: immutable encrypted template, atomic SQL, scoped CYID protected routes and readback passed");
