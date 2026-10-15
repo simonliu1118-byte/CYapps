@@ -169,6 +169,37 @@ internal sealed class SyncIssuesForm : Form
                     }
                 };
                 failedActions.Controls.Add(cloudQueue);
+                // V3 g0501 is a separate queue from g0401. A regular CYID
+                // employee can create/read back an application; manager-only
+                // actions are authorized again on the Cloud Worker.
+                var allowanceVoidQueue=UiControls.StandardButton("CYID 折讓作廢");
+                allowanceVoidQueue.Click+=(_,_)=>
+                {
+                    try
+                    {
+                        var current=repository.Settings.LoadOrCreate();
+                        if(current.CloudMode!=CloudModes.CloudPreferred||
+                           current.CloudIdentityProvider!="CYID"||
+                           !current.CloudEmployeeAuthorityReady||
+                           string.IsNullOrWhiteSpace(current.CloudWorkspaceId))
+                        {
+                            MessageBox.Show(this,"CYID 裝置尚未就緒，無法開啟跨機折讓作廢。",
+                                "CYID 作廢",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                            return;
+                        }
+                        var token=repository.Settings.CloudDeviceToken(current);
+                        using var manager=new CloudAllowanceVoidManagerForm(
+                            repository,current.CloudBaseUrl,token,current.CloudWorkspaceId);
+                        manager.ShowDialog(this);
+                        ReloadAll();
+                    }
+                    catch(Exception error)
+                    {
+                        MessageBox.Show(this,"無法開啟 CYID 折讓作廢："+error.Message,
+                            "雲端作廢",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                    }
+                };
+                failedActions.Controls.Add(allowanceVoidQueue);
             }
         }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;

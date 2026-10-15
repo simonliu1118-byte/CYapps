@@ -278,6 +278,12 @@ internal static class Program
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
             management.PerformLayout();
             management.VerifySmokeLayout();
+            // No network or CYID login is triggered by this static layout
+            // validation: g0501 form must be usable in a fresh Windows build.
+            using var allowanceVoid = new CloudAllowanceVoidManagerForm(
+                repository, "https://cloud.example.test/", token, "ws_synthetic");
+            allowanceVoid.PerformLayout();
+            allowanceVoid.VerifySmokeLayout();
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
             addDevice.CreateControl();
             addDevice.PerformLayout();
