@@ -55,3 +55,38 @@ jobs:
               echo "Already absent or not deletable: $branch"
             fi
           done
+
+  # One-time cleanup for the merged 2026 TriINVCalc import and governance PRs.
+  # This temporary job will be removed in a second cleanup PR after it runs.
+  cleanup-completed-triinvcalc:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete only verified historical TriINVCalc branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rows=(
+            "triinvcalc/initial-import 701ac9ba88ceaccd11c3d863efc5cd08509394cc 7"
+            "governance/add-triinvcalc b7351d5a8e2d13e619372e091ed18d7852d1b001 6"
+          )
+          for row in "${rows[@]}"; do
+            read -r branch expected_sha pr <<< "$row"
+            ref="repos/$GITHUB_REPOSITORY/git/ref/heads/$branch"
+            current_sha=$(gh api "$ref" --jq '.object.sha' 2>/dev/null) || {
+              echo "Already absent: $branch"
+              continue
+            }
+            if [ "$current_sha" != "$expected_sha" ]; then
+              echo "::error::Branch $branch moved after closeout inspection; refuse deletion."
+              exit 1
+            fi
+            merged_at=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '.merged_at')
+            if [ -z "$merged_at" ] || [ "$merged_at" = "null" ]; then
+              echo "::error::PR #$pr is not merged; refuse deletion."
+              exit 1
+            fi
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch" --silent
+            echo "Deleted merged historical branch $branch (PR #$pr)."
+          done
