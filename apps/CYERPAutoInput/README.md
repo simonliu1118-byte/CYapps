@@ -189,7 +189,7 @@ CYInvoice.exe --autoinput-pdf   <request.json> --result <result.json>   只取�
 
 ### 酷澎
 
-「酷澎商城」按鈕選單：「匯入訂單匯出檔（.xlsx）」／「測試：配送指示下載 Excel → 發票 → 列印 → ERP」（自己先在 Chrome 打開酷澎 Wing 的配送指示頁；程式按「下載Excel」存到 Temp，交 CYInvoice 酷澎入口開立——酷澎一律紙本——再列印與輸入 ERP，不論 CYInvoice 是測試或正式環境）。
+「酷澎商城」按鈕選單：「匯入訂單匯出檔（.xlsx）」／「測試：正在配送全選下載 Excel → 發票 → 列印 → ERP」（自己先在 Chrome 打開酷澎 Wing 的配送指示頁；程式按「下載Excel」存到 Temp，交 CYInvoice 酷澎入口開立——酷澎一律紙本——再列印與輸入 ERP，不論 CYInvoice 是測試或正式環境）。
 
 讀取酷澎後台下載的 DeliveryList（`.xlsx`）。目前只看過一列一張訂單的範本（使用者 2026-10-11）；同一訂單編號的多列會合併為同一張單，多品項的實際格式待有訂單後確認，金額對不上的訂單不匯入。
 

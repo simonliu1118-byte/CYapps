@@ -56,6 +56,7 @@ internal static class ChromePageText
                 // dialog: 目的地 → the printer, 頁面 → 全部).
                 var text = type is "ComboBox" or "Spinner" or "Edit" && value.Length > 0 ? value : name.Length > 0 ? name : value;
                 if (text.Length == 0 && type == "Button") text = ShopeeBatchScreens.NamelessButton;
+                if (text.Length == 0 && type == "CheckBox") text = ShopeeBatchScreens.NamelessCheckBox;
                 if (text.Length == 0) continue;
                 result.Add(new PageText(type, text, new Rectangle((int)r.Left, (int)r.Top, (int)r.Width, (int)r.Height)));
             }

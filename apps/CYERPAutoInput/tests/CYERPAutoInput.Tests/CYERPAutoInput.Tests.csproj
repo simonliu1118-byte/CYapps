@@ -34,6 +34,7 @@
     <Compile Include="..\..\MoPickupSummary.cs" Link="Linked\MoPickupSummary.cs" />
     <Compile Include="..\..\CyInvoiceLink.cs" Link="Linked\CyInvoiceLink.cs" />
     <Compile Include="..\..\BatchSummary.cs" Link="Linked\BatchSummary.cs" />
+    <Compile Include="..\..\CoupangScreens.cs" Link="Linked\CoupangScreens.cs" />
   </ItemGroup>
 
   <ItemGroup>

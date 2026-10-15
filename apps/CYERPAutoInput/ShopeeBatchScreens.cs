@@ -21,6 +21,8 @@ internal static partial class ShopeeBatchScreens
 {
     /// <summary>A button the page gives no text (a dialog's ×), as page text reports it.</summary>
     public const string NamelessButton = "[button]";
+    /// <summary>A check box without a name (酷澎's select-all, user 2026-10-15).</summary>
+    public const string NamelessCheckBox = "[checkbox]";
 
     private static string C(OcrBox box) => ShopeeScreenshot.Compact(box.Text);
 

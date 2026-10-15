@@ -465,8 +465,8 @@ internal sealed partial class MainForm
             return;
         }
         if (MessageBox.Show(this,
-                "請先在 Chrome 打開酷澎「我的訂單 › 配送指示」頁面，並讓它在最前面（本程式以外）。\n\n" +
-                "1. 按頁面上的「下載Excel」，存到程式的 Temp 資料夾\n" +
+                "請先在 Chrome 打開酷澎「我的訂單 › 正在配送」頁面，並讓它在最前面（本程式以外）。\n\n" +
+                "1. 勾選全選、確認已選＝共幾筆，按「下載Excel」存到程式的 Temp 資料夾\n" +
                 "2. CYInvoice 開立發票（酷澎一律紙本；不論 CYInvoice 是測試或正式環境）並帶入\n" +
                 "3. 紙本發票拿到 PDF 後請你放 A4 白紙列印（不必等，打單照常進行）\n" +
                 "4. 全部沒問題就直接輸入 ERP，否則開預覽\n\n網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
