@@ -57,4 +57,4 @@ jobs:
         with:
           name: SMARTCOPIConverter-${{ steps.version.outputs.display }}-win-x64
           path: apps/SMARTCOPIConverter/SMARTCOPIConverter.exe
-          retention-days: 14
+          retention-days: 3
