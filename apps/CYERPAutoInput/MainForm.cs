@@ -1650,33 +1650,68 @@ internal sealed partial class MainForm : Form
         // The two exports into the import, then the preview, the printing and ERP.
         using var files = new MoImportForm(Read);
         files.Preload([result.Before, .. result.After is null ? Array.Empty<string>() : [result.After]]);
-        // Straight to the preview (user, 2026-10-15); the import window only when the two
-        // exports do not fit together.
-        result.Notes.Insert(0, $"已出貨 {result.Shipped} 筆；在預覽補好發票資料後按開始，會先列印寄件單再輸入 ERP。");
-        SetStatus("MO店+ 全自動：請在預覽補發票資料");
-        Alarm(needsPerson: true);
+        // Straight on (user, 2026-10-15); the import window only when the two exports do not fit
+        // together.
         if (!files.Accept())
         {
             _log.Info("mo-batch", "exports do not fit together; import window shown");
+            Alarm(needsPerson: true);
             if (files.ShowDialog(this) != DialogResult.OK) return;
         }
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        // 發票 through CYInvoice when set (production only), else filled by hand in the preview.
+        // 發票 through CYInvoice when set, else filled by hand in the preview.
         if (_settings.MoAutoInvoice)
         {
             invoice = await InvoiceMoAsync(title, files.BatchPath ?? result.Before, files.Orders, orders, fullAuto: true);
             QueuePaperInvoices(invoice);
         }
         var printedOnce = false;
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice?.Notes ?? [], .. files.Notes, .. result.Notes],
-            async () => printedOnce || (printedOnce = await PrintAllAsync()));
+        async Task<bool> BeforeErp()
+        {
+            if (!(printedOnce || (printedOnce = await PrintAllAsync()))) return false;
+            // A test CYInvoice's invoices never go into ERP; the labels are printed by now.
+            if (invoice is { IsProduction: false, Environment.Length: > 0 })
+            {
+                MessageBox.Show(this, "CYInvoice 是測試環境：寄件單已列印，發票不輸入 ERP（測試到此為止）。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
+            }
+            return true;
+        }
+
+        // The complete chain (user, 2026-10-15): every order with its invoice, nothing to check,
+        // never entered before, 自動儲存 on → no preview: printing, then ERP for all. Anything
+        // else (or a batch check that stops) → the preview as before.
+        var ledger = LoadLedger();
+        if (ledger is null) return;
+        var clean = invoice is not null && _settings.AutoSave && orders.Count > 0 && files.Errors.Count == 0 &&
+                    orders.All(o => o.HandoffReason.Length == 0 && o.InvoiceNo.Trim().Length > 0 && o.ValidationError().Length == 0 &&
+                                    !o.MissingInvoiceName && ledger.Find(o.LedgerKey) is null);
+        var entered = false;
+        if (clean)
+        {
+            _log.Info("mo-batch", $"all {orders.Count} orders ready; no preview");
+            SetStatus("MO店+ 全自動：列印並輸入 ERP…");
+            if (!await BeforeErp()) entered = true;
+            else
+            {
+                _paperHold++;
+                try { entered = await RunImportBatchAsync(MoOrderImport.Source, orders, ledger); }
+                finally { _paperHold--; }
+            }
+        }
+        if (!entered)
+        {
+            result.Notes.Insert(0, $"已出貨 {result.Shipped} 筆；" + (invoice is null ? "在預覽補好發票資料後按開始，" : "在預覽確認後按開始，") + "會先列印寄件單再輸入 ERP。");
+            SetStatus("MO店+ 全自動：請在預覽確認");
+            Alarm(needsPerson: true);
+            await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice?.Notes ?? [], .. files.Notes, .. result.Notes], BeforeErp);
+        }
 
         // Once every order of the batch is saved the exports go (user, 2026-10-13); the printed
         // documents stay 7 days for 重新列印 (user, 2026-10-14).
-        var ledger = LoadLedger();
-        if (ledger is not null && files.Errors.Count == 0 && orders.Count > 0 && orders.All(o => ledger.Find(o.LedgerKey)?.Status == LedgerStatus.Saved))
+        if (files.Errors.Count == 0 && orders.Count > 0 && orders.All(o => ledger.Find(o.LedgerKey)?.Status == LedgerStatus.Saved))
         {
             try { MoPrintedDocuments.KeepOnlyDocuments(folder); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { _log.Warn("mo-batch", $"exports left: {ex.Message}"); }

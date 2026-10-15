@@ -68,11 +68,10 @@ internal sealed partial class MainForm
             outcome.Notes.Add($"CYInvoice 回傳{query.EnvironmentName}，不使用它的結果；發票請手動填。");
             return outcome;
         }
+        // 全自動 issues in either environment (user, 2026-10-15: the whole chain, tested first on
+        // CYInvoice's test environment); a test environment's invoices never go into ERP.
         if (fullAuto && !query.IsProduction)
-        {
-            outcome.Notes.Add($"CYInvoice 目前是{query.EnvironmentName}，全自動只接受正式環境，沒有開立；發票請手動填。");
-            return outcome;
-        }
+            outcome.Notes.Add($"CYInvoice 是{query.EnvironmentName}：發票照常開立帶入預覽，寄件單照常列印，但不會輸入 ERP。");
 
         var results = query.Orders.GroupBy(o => o.OrderId).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
         var toIssue = targets.Where(id => results.TryGetValue(id, out var r) && r.Status == "skipped").ToList();
@@ -83,7 +82,10 @@ internal sealed partial class MainForm
                       $"查詢 {targets.Count} 筆：先前已開立 {existing} 筆、查無發票 {toIssue.Count} 筆、需人工 {targets.Count - existing - toIssue.Count} 筆。\n\n" +
                       $"要對查無發票的 {toIssue.Count} 筆開立發票嗎？" +
                       (query.IsProduction ? "\n\n【正式環境】會真的向光貿開立發票。" : string.Empty);
-            if (MessageBox.Show(this, ask, title, MessageBoxButtons.YesNo, query.IsProduction ? MessageBoxIcon.Warning : MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            // 全自動 asks nobody (user, 2026-10-15: the complete chain; ticking 「全自動呼叫 CYInvoice
+            // 開立發票」 is the consent); the 測試 entry still asks.
+            if (fullAuto) _log.Info("cyinvoice", $"full auto issues orders={toIssue.Count} environment={query.Environment}");
+            if (!fullAuto && MessageBox.Show(this, ask, title, MessageBoxButtons.YesNo, query.IsProduction ? MessageBoxIcon.Warning : MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             {
                 _log.Info("cyinvoice", $"issue declined orders={toIssue.Count}");
                 outcome.Notes.Add($"沒有開立：查無發票的 {toIssue.Count} 筆請手動處理。");

@@ -289,7 +289,7 @@ internal sealed class SettingsForm : Form
         grid.Controls.Add(_cyInvoicePath, 1, 0);
         grid.Controls.Add(pick, 2, 0);
         grid.Controls.Add(clear, 3, 0);
-        _moAutoInvoice.Text = "MO店+ 全自動呼叫 CYInvoice 開立發票（只接受正式環境；未勾選時在預覽手動填發票）";
+        _moAutoInvoice.Text = "MO店+ 全自動呼叫 CYInvoice 開立發票（不再詢問；測試環境的發票不輸入 ERP；未勾選時在預覽手動填發票）";
         _moAutoInvoice.Checked = _settings.MoAutoInvoice;
         _moAutoInvoice.Margin = new Padding(0, 6, 0, 0);
         grid.Controls.Add(_moAutoInvoice, 0, 1);
