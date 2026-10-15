@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.0.6 — 2026-10-15
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional private `ConsumerNotifications.notifySuperAdmin` RPC (§20) for fixed generic backup-health alerts. Current Super Admin recipient resolution, Email transport and budgets stay provider-owned; backup/incident state stays app-owned. No public route, arbitrary recipient/body, Session, permission grant or business-data storage is added. Provider 0.3.10 introduces a bounded delivery slot migration; existing consumers and minimum 1.0.0 remain supported.
+
 ## 1.0.5 — 2026-10-15
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional admin snapshot testing-account deletion capability and temporary core Super Admin deletion of verified non-self/non-Super-Admin Employees through the existing DELETE route (§17.2). Create/delete lifecycle audit is temporarily suppressed as explicitly requested; other audit and existing history remain. Existing pending-only consumers and all login/resolve/logout contracts remain supported; minimum stays 1.0.0. Provider source 0.3.9 includes the existing 0.3.8 clickable Email template and correct serviceVersion declaration. Actual deployment/Email acceptance and restoration before first business release are tracked in project TODO.

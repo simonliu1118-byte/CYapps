@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 
 const directory = mkdtempSync(join(tmpdir(), "cyid-authority-test-"));
-let worker, testing;
+let worker, testing, notifySuperAdmin;
 try {
   for (const file of readdirSync(new URL("../src/", import.meta.url)).filter(file => file.endsWith(".ts"))) {
     const source = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
@@ -18,6 +18,7 @@ try {
   const require = createRequire(join(directory, "test.cjs"));
   worker = require("./index.js").default;
   testing = require("./account-lifecycle-testing.js").ACCOUNT_LIFECYCLE_TESTING;
+  notifySuperAdmin = require("./consumer-notifications.js").notifySuperAdmin;
 } finally { rmSync(directory, { recursive: true, force: true }); }
 
 const token = `cyid_${"b".repeat(64)}`;
@@ -62,4 +63,4 @@ function fixture(options = {}) {
   return { db, env };
 }
 
-export { worker, fixture, token, testing };
+export { worker, fixture, token, testing, notifySuperAdmin };

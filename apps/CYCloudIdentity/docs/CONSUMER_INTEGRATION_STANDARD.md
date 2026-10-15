@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.5`
+> **Contract version:** `1.0.6`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -487,3 +487,13 @@ Consumer-specific handoffs contain only migration/app differences and may never 
 - Initial Email verification re-send uses `/v1/admin/identity/employees/{employeeId}/email-verification/resend-initial`; activated-account re-verification retains `/email-verification/resend`. Initial delivery results use `emailVerificationDelivery`; the old `activationDelivery` alias and `/activation/resend` route are retired.
 - Consumer Impact: **CONSUMER_UPDATE_REQUIRED** for consumers of these obsolete fields/routes. CY Web adopts 1.0.2 and must deploy before provider retirement reaches production. CYACC direct-principal/session integration does not use these fields/routes and remains compatible with its declared 1.0.1. Minimum compatible remains 1.0.0; it is not raised across unaffected consumers.
 - Daily production deployment requires the deployed core consumer to report adopted contract 1.0.2 and does not import development authority.
+
+## 20. Private operational notification capability
+
+Contract 1.0.6 optionally exports the named private RPC entrypoint `ConsumerNotifications`. A trusted server consumer may bind it to the same canonical Identity provider as its `IDENTITY` Fetcher, with an app-local binding name such as `BACKUP_NOTIFICATIONS`. There is no public HTTP route. Existing consumers and minimum 1.0.0 remain supported.
+
+`notifySuperAdmin({workspaceId, applicationId, type: "backup_health_failed", eventId})` accepts only a deployment-derived scope and an opaque UUID incident ID. The consumer owns backup checks, incident state and local business authorization; it must not expose a browser-callable relay or allow browser-selected scope. No recipient, subject, message, finance data, backup contents, resource identifiers or Session is accepted.
+
+The provider revalidates active Workspace, registered/enabled Application and the current protected Super Admin pointer with an enabled Employee and verified Email. It sends fixed generic text using the canonical Email adapter and shared global/Workspace budget. No Email address is returned or copied into app storage. A bounded delivery slot per Workspace/Application/type coalesces concurrent requests; successful incident IDs are idempotent while current, and new incidents are rate-limited to one delivery per hour. Return status is `delivered`, `already_delivered` or `deferred`; failures expose stable codes only. Consumer retries deferred/failed delivery with the same active incident ID, and keeps its login warning until its checks recover. An ambiguous transport failure can cause a repeated alert; it cannot authorize any account or business action.
+
+This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.
