@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 接續：管理員官方覆核 Grant 寫入者（Draft-only）
+
+- [x] **內部 approval writer 已新增**：`cloud/src/allowance-review-approval.ts` 的 `approveAllowanceAfterOfficialReview` 只接受 Worker 內部**可信任**三項 callback（CYID manager 重新驗證、從服務端讀取 frozen application、由光貿 Gateway 查詢及完整驗證單張原發票）。核准前後重新驗證同一管理員、Workspace；官方查詢資料必須在 60 秒內、具明確 allowance 陣列、發票上傳狀態 99、未作廢，原發票金額與申請品項分攤均被服務端確認。**暫時遇到任何已存在的官方折讓，都 fail closed**，留待品項分攤／剩餘額正式核對，絕不把多原發票折讓單的總額直接視為此張可折。
+- [x] **D1 簽核證據改成 append-only**：`cloud/drafts/0016_allowance_number_ledger.sql` 的 `allowance_execution_approvals` 增 `approval_id` 與索引；核准時間到期後重新查官方可新增簽核，而非覆寫前筆 actor／時間。寫入採單條 INSERT SELECT 檢查當下 Work Item `review` 與 revision、CYID Cloud Device／Workspace active，且此前號碼不可處於 `sending`／`confirmed`；同 revision 已簽過的公司、環境、日期、固定 template SHA256 不可偷改。核准本身**不會配號或開折讓**，配號／首次送出還有有效 grant fence。隔離 D1 SQLite 測試涵蓋缺官方折讓欄位、已有折讓、品項不明、過期官方快照、權限撤銷、競態、逐次 audit、核准後資料不變。
+- [ ] **仍為 Draft／不可對外呼叫**：三個 trusted callbacks 目前尚未接上實際公司設定卡片、持久化的含申請人/原因/明細之完整 frozen Work Item、真實光貿 Gateway 或 CYID session／route。沒有 Windows 管理員核准畫面與可操作 `g0401` 的安全執行路由，也未驗證已存在折讓的精確品項分攤。此進度不可當「折讓覆核功能已完成」；0015／0016 依舊**沒有套用正式 D1**。有任何官方狀態不明／無法判定餘額，禁止核准自動開立。下階段先完成可信 company settings 與 frozen request source，再接 route。
+- [ ] **已送出後 reconciliation 的獨立追蹤**：目前 D1 ledger 仍以 Device active／Work Item `review` revision 限制 `sending→confirmed`；若外部成功後 Work Item 被其他管理員關閉／Device 撤銷，需另設具核對證據的唯讀查回及 audit 寫入路徑，不能為了失去本機 Device 狀態而盲送 g0401 或重配號。
+
 ## 2026-10-15 插隊 AutoInput 後接續 V3：官方覆核先於配號（Draft Source）
 
 - [x] **V3 Cloud 草案配號加上 explicit approval fence**：`drafts/0016_allowance_number_ledger.sql` 新增 `allowance_execution_approvals`，以 Workspace／Work Item revision／公司統編／環境／日期／未編號的固定 g0401 template SHA256／官方狀態快照 SHA256／CYID 核准人及核准時間／有效期限記錄最小覆核證據；`allowance-number-ledger.ts` 的占號 SQL 與 `reserved→sending` SQL 均要求 approval grant 存在、內容一致且未逾期。後續官方確定拒絕的撞號與查回結果入帳不受時間過期妨礙，避免處理中的舊操作永遠無法記錄。新裝置可以在原 Device 撤銷後接手仍有效的工作單，但每次業務寫入仍須檢查**執行者自己**的 Device active、Workspace 與 Work Item revision。新增無核准／核准過期／重新核准／雙裝置安全測試。
