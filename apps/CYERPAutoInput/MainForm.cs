@@ -7,7 +7,23 @@ internal sealed partial class MainForm : Form
     private readonly AppLogger _log;
     private AutomationSession? _automationSession;
     /// <summary>Mouse lock and on-screen notice while CY works on its own (user, 2026-10-12).</summary>
-    private AutomationSession Session => _automationSession ??= new AutomationSession(_log);
+    private AutomationSession Session
+    {
+        get
+        {
+            if (_automationSession is null)
+            {
+                _automationSession = new AutomationSession(_log);
+                // Esc stops the background paper invoices too (user LOG 2026-10-15: after Esc and
+                // the stop list, the paper prompt still came).
+                _automationSession.Escaped += () => CancelPaperInvoices("已按 Esc 停止");
+            }
+            return _automationSession;
+        }
+    }
+
+    /// <summary>Esc was pressed during this run (until the next run starts).</summary>
+    private bool EscPressed => _automationSession?.EscapeToken.IsCancellationRequested == true;
     private readonly ErpAutomationService _automation;
     private readonly UserSettingsStore _settingsStore;
     private readonly UserSettings _settings;
@@ -1234,6 +1250,8 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private void Alarm(bool needsPerson)
     {
+        // A person is needed: the mouse is theirs again (the run may have kept it locked).
+        if (needsPerson) _automationSession?.End();
         var info = new NativeMethods.FLASHWINFO
         {
             cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.FLASHWINFO>(),
@@ -1358,8 +1376,10 @@ internal sealed partial class MainForm : Form
         }
         finally
         {
+            // The run goes straight on to CYInvoice and ERP: no pause in between (user LOG
+            // 2026-10-15: a 「已暫停」 notice flashed and the run went on); stopped → ended.
             Session.Unpin();
-            Session.End();
+            if (stopped is not null || result is null) Session.End(AutomationOutcome.Stopped);
             _shopeeBatchRunning = false;
         }
         if (stopped is not null || result is null)
@@ -1370,6 +1390,7 @@ internal sealed partial class MainForm : Form
         }
         if (result.Before is null)
         {
+            Session.End(AutomationOutcome.Done);
             TryDelete(folder);
             MessageBox.Show(this, string.Join("\n", result.Notes.DefaultIfEmpty("沒有要處理的訂單。")), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -1506,6 +1527,12 @@ internal sealed partial class MainForm : Form
         // else (or a batch check that stops) → the preview as before.
         var ledger = LoadLedger();
         if (ledger is null) return;
+        if (EscPressed)
+        {
+            CancelPaperInvoices("已按 Esc 停止");
+            MessageBox.Show(this, $"已按 Esc 停止：已出貨 {result.Shipped} 筆，尚未列印、尚未輸入 ERP。檔案在：{folder}\n請用「匯入訂單匯出檔」接續。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         var clean = invoice is not null && _settings.AutoSave && orders.Count > 0 && files.Errors.Count == 0 &&
                     orders.All(o => o.HandoffReason.Length == 0 && o.InvoiceNo.Trim().Length > 0 && o.ValidationError().Length == 0 &&
                                     !o.MissingInvoiceName && ledger.Find(o.LedgerKey) is null);
@@ -1724,6 +1751,7 @@ internal sealed partial class MainForm : Form
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             _log.Error("ledger", ex);
+            _automationSession?.End();
             MessageBox.Show(this, $"無法讀取防重複紀錄（{OrderLedger.DefaultPath}）：{ex.Message}\n為避免重複打單，暫不匯入。",
                 "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;

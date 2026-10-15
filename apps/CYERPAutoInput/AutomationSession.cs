@@ -60,6 +60,9 @@ internal sealed class AutomationSession : IDisposable
 
     public AutomationSession(AppLogger log) => _log = log;
 
+    /// <summary>Esc was pressed (raised on the UI thread): everything of the run stops, background work too.</summary>
+    public event Action? Escaped;
+
     public bool Active => _mouseLock is not null;
 
     /// <summary>Locks the mouse and shows the notice; when already running, only the title follows.</summary>
@@ -107,7 +110,7 @@ internal sealed class AutomationSession : IDisposable
     {
         _log.Info("automation", "Esc pressed: stopping");
         try { _escape.Cancel(); } catch (ObjectDisposedException) { }
-        _ui?.Post(_ => End(AutomationOutcome.Cancelled), null);
+        _ui?.Post(_ => { End(AutomationOutcome.Cancelled); Escaped?.Invoke(); }, null);
     }
 
     public void Dispose()

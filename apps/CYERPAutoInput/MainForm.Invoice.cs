@@ -321,6 +321,12 @@ internal sealed partial class MainForm
         _log.Info("cyinvoice", $"paper pdfs ready={_paperJobs.Count(j => j.Pdf is not null)} waiting={_paperJobs.Count(j => j.Pdf is null)}");
     }
 
+    /// <summary>Every queued paper invoice dropped (Esc): listed for CYInvoice, never printed later.</summary>
+    private void CancelPaperInvoices(string why)
+    {
+        foreach (var job in _paperJobs.ToList()) Drop(job, $"{why}，沒有印");
+    }
+
     private void Drop(PaperJob job, string why)
     {
         _paperJobs.Remove(job);
@@ -488,8 +494,9 @@ internal sealed partial class MainForm
         catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
         finally
         {
+            // Straight on to CYInvoice and ERP (user LOG 2026-10-15: no 「已暫停」 in between).
             Session.Unpin();
-            Session.End();
+            if (stopped is not null || file is null) Session.End(AutomationOutcome.Stopped);
             _shopeeBatchRunning = false;
         }
         if (stopped is not null || file is null)
@@ -509,12 +516,14 @@ internal sealed partial class MainForm
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
         {
             _log.Warn("coupang-batch", $"export read failed: {ex.GetType().Name}");
+            Alarm(needsPerson: true);
             MessageBox.Show(this, $"下載的 Excel 讀不到：{ex.Message}\n檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         _log.Info("coupang-batch", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
         if (parsed.Orders.Count == 0 && parsed.Errors.Count == 0)
         {
+            Session.End(AutomationOutcome.Done);
             MessageBox.Show(this, "下載的 Excel 沒有訂單。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -526,7 +535,13 @@ internal sealed partial class MainForm
         QueuePaperInvoices(invoice);
 
         var ledger = LoadLedger();
-        if (ledger is null) return;
+        if (ledger is null) { Session.End(AutomationOutcome.Stopped); return; }
+        if (EscPressed)
+        {
+            CancelPaperInvoices("已按 Esc 停止");
+            MessageBox.Show(this, $"已按 Esc 停止：發票已處理，尚未輸入 ERP。檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         var notes = new List<string>(invoice.Notes);
         var clean = _settings.AutoSave && orders.Count > 0 && parsed.Errors.Count == 0 &&
                     orders.All(o => o.HandoffReason.Length == 0 && o.InvoiceNo.Trim().Length > 0 && o.ValidationError().Length == 0 &&
