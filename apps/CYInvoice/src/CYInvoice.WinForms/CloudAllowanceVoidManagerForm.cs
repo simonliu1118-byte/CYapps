@@ -31,6 +31,7 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
     private readonly Button readback = UiControls.StandardButton("官方查回");
     private readonly Button closeVerified = UiControls.StandardButton("確認結案");
     private readonly List<Button> controls = [];
+    private readonly PendingAllowanceVoidRequestStore pendingRequests;
     private string? uncertainCreateId;
     private bool busy;
 
@@ -42,6 +43,9 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
             throw new ArgumentException("CYID Cloud URL 必須使用 HTTPS。",nameof(endpoint));
         client=new CloudAllowanceVoidClient(http,url,deviceToken);
         workItems=new CloudWorkItemClient(http,url,deviceToken,workspaceId);
+        pendingRequests=new PendingAllowanceVoidRequestStore(repository.DataDirectory,
+            workspaceId+"|"+url.AbsoluteUri);
+        uncertainCreateId=pendingRequests.Peek();
         Text="CYID 跨裝置折讓作廢";
         Font=new Font("Microsoft JhengHei UI",10F);
         BackColor=Color.White;
@@ -50,6 +54,9 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
         MinimumSize=new Size(940,490);
         ShowIcon=false;
         BuildLayout();
+        if(uncertainCreateId is not null)
+            notice.Text="上一筆作廢申請尚未確認，原 Work Item ID："+uncertainCreateId+
+                "｜只能查回，不得用新 ID 重複提出。";
         // A normal employee may create/get their own Work Item. Do NOT
         // automatically request a manager-only list when this form opens.
     }
@@ -305,7 +312,11 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
                     "請由管理員確認 D1 及官方狀態。");
                 return;
             }
-            if(uncertainCreateId==result.ItemId)uncertainCreateId=null;
+            if(uncertainCreateId==result.ItemId){
+                pendingRequests.Confirm(result.ItemId);
+                uncertainCreateId=null;
+                notice.Text="原工作單已查回；管理員可從清單開始覆核。";
+            }
             MessageBox.Show(this,
                 $"Work Item：{result.ItemId}\n原發票：{result.OriginalInvoiceNumber}\n"+
                 $"折讓單號：{result.AllowanceNumber}\n目前狀態：{result.Status}\n"+
@@ -338,10 +349,16 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
             "請記住原工作單 ID，逾時時只能原號查回。"))return;
         // Preserve the original ID BEFORE the network request. A lost HTTP
         // response cannot be resolved by generating a different Work Item.
+        try{pendingRequests.Remember(draft.ItemId);}
+        catch(Exception error){
+            Warn("無法先將 Work Item ID 永久保存到本機，取消本次申請："+error.Message);
+            return;
+        }
         uncertainCreateId=draft.ItemId;
         SetBusy(true);
         try{
             await client.CreateAsync(draft,employee,password,lifetime.Token);
+            pendingRequests.Confirm(draft.ItemId);
             uncertainCreateId=null;
             MessageBox.Show(this,
                 $"申請已保存。\nWork Item：{draft.ItemId}\n"+
@@ -478,5 +495,60 @@ internal sealed class WorkItemIdPrompt : Form
         cancel.Click+=(_,_)=>{DialogResult=DialogResult.Cancel;Close();};
         Controls.Add(query);Controls.Add(cancel);
         AcceptButton=query;CancelButton=cancel;
+    }
+}
+
+
+// No invoices, passwords or API keys are written to this marker: only the
+// original Work Item ID needed to recover an ambiguous create after restart.
+// A scope hash prevents different CYID Workspace/Cloud URLs from sharing it.
+internal sealed class PendingAllowanceVoidRequestStore
+{
+    private readonly string marker;
+    public PendingAllowanceVoidRequestStore(string directory,string scope)
+    {
+        if(string.IsNullOrWhiteSpace(directory)||string.IsNullOrWhiteSpace(scope))
+            throw new ArgumentException("Invalid pending allowance void scope.");
+        var digest=System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(scope));
+        var key=Convert.ToHexString(digest).ToLowerInvariant()[..20];
+        marker=Path.Combine(directory,"cyinvoice-pending-allowance-void-"+key+".txt");
+    }
+    public string? Peek()
+    {
+        if(!File.Exists(marker))return null;
+        var content=File.ReadAllText(marker,System.Text.Encoding.UTF8).Trim();
+        if(!System.Text.RegularExpressions.Regex.IsMatch(content,
+            @"^[A-Za-z0-9_-]{10,100}$"))
+            throw new InvalidDataException("待查折讓工作單記錄損壞，禁止產生新單。");
+        return content;
+    }
+    public void Remember(string itemId)
+    {
+        if(!System.Text.RegularExpressions.Regex.IsMatch(itemId??"",
+            @"^[A-Za-z0-9_-]{10,100}$"))
+            throw new ArgumentException("Invalid pending Work Item ID.",nameof(itemId));
+        if(Peek() is not null)
+            throw new InvalidOperationException("A previous allowance void request remains unresolved.");
+        var folder=Path.GetDirectoryName(marker)!;
+        Directory.CreateDirectory(folder);
+        var temp=marker+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try{
+            var bytes=System.Text.Encoding.UTF8.GetBytes(itemId);
+            using(var stream=new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None)){
+                stream.Write(bytes);
+                stream.Flush(flushToDisk:true);
+            }
+            // Fail rather than replacing another outstanding Work Item.
+            File.Move(temp,marker,overwrite:false);
+        }finally{
+            if(File.Exists(temp))File.Delete(temp);
+        }
+    }
+    public void Confirm(string itemId)
+    {
+        if(Peek()!=itemId)
+            throw new InvalidOperationException("Original Work Item identity changed.");
+        File.Delete(marker);
     }
 }

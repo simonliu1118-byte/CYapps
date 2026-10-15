@@ -284,6 +284,25 @@ internal static class Program
                 repository, "https://cloud.example.test/", token, "ws_synthetic");
             allowanceVoid.PerformLayout();
             allowanceVoid.VerifySmokeLayout();
+            // Simulate abrupt closure after send: the exact original Work
+            // Item must survive a new form/process and remain Workspace scoped.
+            const string pendingId = "wi_smoke_00000000000000000001";
+            var persistent = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_smoke|https://cloud.example.test/");
+            if(persistent.Peek() is not null)
+                throw new InvalidOperationException("Unexpected previous smoke Work Item.");
+            persistent.Remember(pendingId);
+            var recovered = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_smoke|https://cloud.example.test/");
+            if(recovered.Peek()!=pendingId)
+                throw new InvalidOperationException("Original g0501 Work Item was lost after restart.");
+            var differentWorkspace = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_other|https://cloud.example.test/");
+            if(differentWorkspace.Peek() is not null)
+                throw new InvalidOperationException("Pending g0501 ID leaked across Workspaces.");
+            recovered.Confirm(pendingId);
+            if(persistent.Peek() is not null)
+                throw new InvalidOperationException("Confirmed g0501 Work Item remains pending.");
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
             addDevice.CreateControl();
             addDevice.PerformLayout();
