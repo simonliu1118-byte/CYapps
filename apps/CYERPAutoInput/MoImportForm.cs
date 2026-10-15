@@ -212,6 +212,20 @@ internal sealed class MoImportForm : Form
         _next.Enabled = _batch.Parsed is not null;
     }
 
+    /// <summary>
+    /// MO店+ 全自動 (user, 2026-10-15: straight to the preview): the preloaded exports taken
+    /// without showing the window, when ① parses and ② has some of its orders. False → the
+    /// window is shown as usual.
+    /// </summary>
+    public bool Accept()
+    {
+        if (_batch.Parsed is not { Orders.Count: > 0 } batch || _shipped.Tracking is not { } shipped || !batch.Orders.Any(o => shipped.ContainsKey(o.OrderSn)))
+            return false;
+        (Orders, Notes) = MoOrderImport.FillTracking(batch.Orders, shipped);
+        Errors = batch.Errors;
+        return true;
+    }
+
     private void Next()
     {
         if (_batch.Parsed is not { } batch) return;

@@ -1650,9 +1650,16 @@ internal sealed partial class MainForm : Form
         // The two exports into the import, then the preview, the printing and ERP.
         using var files = new MoImportForm(Read);
         files.Preload([result.Before, .. result.After is null ? Array.Empty<string>() : [result.After]]);
-        var notes = new List<string>(result.Notes) { $"已出貨 {result.Shipped} 筆。" };
-        MessageBox.Show(this, string.Join("\n", notes) + "\n\n接著確認兩個匯出檔並按「下一步」，在預覽填好發票資料；開始輸入 ERP 前會先列印寄件單。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-        if (files.ShowDialog(this) != DialogResult.OK) return;
+        // Straight to the preview (user, 2026-10-15); the import window only when the two
+        // exports do not fit together.
+        result.Notes.Insert(0, $"已出貨 {result.Shipped} 筆；在預覽補好發票資料後按開始，會先列印寄件單再輸入 ERP。");
+        SetStatus("MO店+ 全自動：請在預覽補發票資料");
+        Alarm(needsPerson: true);
+        if (!files.Accept())
+        {
+            _log.Info("mo-batch", "exports do not fit together; import window shown");
+            if (files.ShowDialog(this) != DialogResult.OK) return;
+        }
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
