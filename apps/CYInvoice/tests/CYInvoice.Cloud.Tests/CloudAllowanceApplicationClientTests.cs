@@ -93,6 +93,19 @@ internal static class CloudAllowanceApplicationClientTests
             Check(req,"official-inspection");
             return Json(HttpStatusCode.OK,new{ok=true,inspection=OfficialStatus(true)});
         });
+        handler.Enqueue(req => {
+            Check(req,"number-readback");
+            using var data=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(Id,data.RootElement.GetProperty("itemId").GetString(),"readback frozen id");
+            Equal(2,data.RootElement.GetProperty("expectedRevision").GetInt32(),"readback revision");
+            True(!data.RootElement.TryGetProperty("allowanceNumber",out _),
+                "client must never choose the official allowance number");
+            return Json(HttpStatusCode.OK,new{ok=true,readback=NumberReadback(false)});
+        });
+        handler.Enqueue(req => {
+            Check(req,"number-readback");
+            return Json(HttpStatusCode.OK,new{ok=true,readback=NumberReadback(true)});
+        });
         handler.Enqueue(req => {Check(req,"create"); return Json(HttpStatusCode.Conflict,new {
             ok=false,error=new{code="APPLICATION_RESULT_UNKNOWN_READBACK_REQUIRED"}});});
         handler.Enqueue(req => {Check(req,"get"); return Json(HttpStatusCode.OK,new {
@@ -122,6 +135,13 @@ internal static class CloudAllowanceApplicationClientTests
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        var readback=await client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal(false,readback.SafeToAutoResend,"never auto-resend an ambiguous request");
+        Equal(false,readback.SafeToAutoConfirm,"never auto-confirm from a number match");
+        Equal(true,readback.RequiresManualReconciliation,"manager must reconcile");
+        Equal("A20261015001",readback.AllowanceNumber,"original reserved number only");
+        await RejectAsync<InvalidDataException>(() =>
+            client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12"));
         try {
             await client.CreateAsync(draft,"0001","SyntheticPass12");
             throw new InvalidOperationException("Expected ambiguous create result");
@@ -138,6 +158,15 @@ internal static class CloudAllowanceApplicationClientTests
         True(CloudAllowanceApplicationClient.CreateItemId().StartsWith("wi_",StringComparison.Ordinal),
             "caller can prepare and durably persist an opaque request ID");
     }
+    private static object NumberReadback(bool forgedResend) => new {
+        itemId=Id,expectedRevision=2,allowanceNumber="A20261015001",
+        ledgerStatus="sending",checkedAtUtc="2026-10-15T02:00:00.000Z",
+        officialSnapshotSha256=new string('b',64),
+        officialInvoiceType="D0401",officialUploadStatus=99,officialCancelled=false,
+        exactOriginalInvoiceMatch=true,grossMatchesFrozenRequest=true,
+        possibleMatch=true,requiresManualReconciliation=true,
+        safeToAutoResend=forgedResend,safeToAutoConfirm=false
+    };
     private static object OfficialStatus(bool forgedApproval) => new {
         itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
         checkedAtUtc="2026-10-15T02:00:00.000Z",

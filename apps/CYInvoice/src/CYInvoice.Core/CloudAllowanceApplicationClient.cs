@@ -41,6 +41,14 @@ public sealed record CloudOfficialAllowanceInspection(
     bool RequiresPerItemVerification, bool CanApprove, string Status,
     bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck);
 
+public sealed record CloudAllowanceNumberReadback(
+    string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
+    DateTimeOffset CheckedAtUtc, string OfficialSnapshotSha256,
+    string OfficialInvoiceType, int OfficialUploadStatus, bool OfficialCancelled,
+    bool ExactOriginalInvoiceMatch, bool GrossMatchesFrozenRequest,
+    bool PossibleMatch, bool RequiresManualReconciliation,
+    bool SafeToAutoResend, bool SafeToAutoConfirm);
+
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
     IReadOnlyList<CloudAllowanceApplicationSummary> Applications,
@@ -279,6 +287,62 @@ public sealed class CloudAllowanceApplicationClient
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount));
+    }
+
+    // Read-only reconciliation after an ambiguous g0401. The number is read
+    // from D1 by the Worker; no caller may submit an alternate number.
+    public async Task<CloudAllowanceNumberReadback> ReadbackNumberForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        VerifyId(itemId);
+        if(expectedRevision<1)throw new ArgumentOutOfRangeException(nameof(expectedRevision));
+        Credentials(employeeNo,password);
+        using var result=await SendAsync("number-readback",new{
+            itemId,expectedRevision,employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=result.RootElement;
+        if(!root.TryGetProperty("readback",out var value) ||
+           value.ValueKind!=JsonValueKind.Object)
+            throw new InvalidDataException("Missing original-number readback.");
+        var id=Required(value,"itemId");
+        var number=Required(value,"allowanceNumber");
+        var status=Required(value,"ledgerStatus");
+        var date=Required(value,"checkedAtUtc");
+        var digest=Required(value,"officialSnapshotSha256");
+        var invoiceType=Required(value,"officialInvoiceType");
+        if(id!=itemId ||
+           !Regex.IsMatch(number,@"^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$")||
+           status is not ("sending" or "confirmed")||
+           !DateTimeOffset.TryParse(date,out var checkedAt)||
+           !Regex.IsMatch(digest,@"^[0-9a-f]{64}$")||
+           invoiceType.Length is < 1 or > 10 ||
+           !value.TryGetProperty("expectedRevision",out var rev)||
+           rev.ValueKind!=JsonValueKind.Number||
+           !rev.TryGetInt32(out var actualRev)||actualRev!=expectedRevision||
+           !value.TryGetProperty("officialUploadStatus",out var upload)||
+           upload.ValueKind!=JsonValueKind.Number ||
+           !upload.TryGetInt32(out var uploadStatus)||uploadStatus<0)
+            throw new InvalidDataException("Original-number readback has invalid identifiers.");
+        static bool Flag(JsonElement element,string name){
+            if(!element.TryGetProperty(name,out var v)||
+               v.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new InvalidDataException("Readback boolean invalid: "+name);
+            return v.GetBoolean();
+        }
+        var cancelled=Flag(value,"officialCancelled");
+        var original=Flag(value,"exactOriginalInvoiceMatch");
+        var gross=Flag(value,"grossMatchesFrozenRequest");
+        var possible=Flag(value,"possibleMatch");
+        var manual=Flag(value,"requiresManualReconciliation");
+        var resend=Flag(value,"safeToAutoResend");
+        var confirm=Flag(value,"safeToAutoConfirm");
+        if(resend||confirm||!manual||
+           (possible&&(!original||!gross||cancelled||uploadStatus!=99)))
+            throw new InvalidDataException("Readback cannot authorize an automatic AMEGO action.");
+        return new CloudAllowanceNumberReadback(
+            id,actualRev,number,status,checkedAt,digest,invoiceType,uploadStatus,
+            cancelled,original,gross,possible,manual,false,false);
     }
 
     public async Task<CloudAllowanceApplicationPage> ListForManagerAsync(
