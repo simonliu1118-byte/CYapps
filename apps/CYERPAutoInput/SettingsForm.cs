@@ -8,8 +8,6 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _autoSave = new();
     private readonly CheckBox _autoPrint = new();
     private readonly CheckBox _clearAfterSave = new();
-    private readonly CheckBox _browserHotkey = new();
-    private readonly CheckBox _shopeeFullAuto = new();
     private readonly CheckBox _firstRowWarehouse = new();
     private readonly TextBox _firstRowWarehouseCode = new();
     private readonly TextBox _shopeeOrderType = new();
@@ -143,8 +141,7 @@ internal sealed class SettingsForm : Form
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
-        flow.Controls.Add(Option(_browserHotkey, $"在瀏覽器按 {CYERPAutoInput.BrowserHotkey.KeyName} 開啟蝦皮自動擷取輸入並開始擷取（程式開著即可）", _settings.BrowserHotkey));
-        flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮自動擷取：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
+        // F8 and 蝦皮自動擷取 end to end are stable and always on (user, 2026-10-15: no switches).
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         Option(_firstRowWarehouse, "商品明細第一列庫別預設填入：", _settings.FirstRowWarehouseEnabled);
@@ -158,6 +155,12 @@ internal sealed class SettingsForm : Form
         warehouseRow.Controls.Add(_firstRowWarehouse);
         warehouseRow.Controls.Add(_firstRowWarehouseCode);
         flow.Controls.Add(warehouseRow);
+        // CYInvoice (user, 2026-10-15: under 一般).
+        var invoice = CyInvoiceSection();
+        invoice.Dock = DockStyle.None;
+        invoice.Width = 640;
+        invoice.Margin = new Padding(0, 14, 0, 0);
+        flow.Controls.Add(invoice);
 
         // Diagnostic (user, 2026-10-13: kept out of the 蝦皮 menu, here in 設定).
         var diagnose = new CyButton { Text = "讀取 Chrome 網頁文字（診斷）", AutoSize = true, Height = 34, Margin = new Padding(0, 14, 0, 0) };
@@ -246,7 +249,6 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _coupangOrderType, _settings.CoupangOrderType, 80),
             ("客戶代號", _coupangCustomerCode, _settings.CoupangCustomerCode, 120),
             ("備註前綴", _coupangNotePrefix, _settings.CoupangNotePrefix, 150)));
-        page.Controls.Add(CyInvoiceSection());
         page.Controls.Add(Section("MO店+",
             ("銷貨單別", _moOrderType, _settings.MoOrderType, 80),
             ("客戶代號", _moCustomerCode, _settings.MoCustomerCode, 120),
@@ -553,8 +555,6 @@ internal sealed class SettingsForm : Form
         _settings.AutoSave = _autoSave.Checked;
         _settings.AutoPrint = _autoPrint.Checked;
         _settings.ClearAfterSave = _clearAfterSave.Checked;
-        _settings.BrowserHotkey = _browserHotkey.Checked;
-        _settings.ShopeeFullAuto = _shopeeFullAuto.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
         {
             if (row.Tag is not string key) continue;

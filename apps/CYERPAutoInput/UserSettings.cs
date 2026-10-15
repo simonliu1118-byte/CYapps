@@ -12,13 +12,6 @@ internal sealed class UserSettings
     public bool AutoPrint { get; set; }
     /// <summary>A document CY saved clears the form for the next order (user, 2026-10-12).</summary>
     public bool ClearAfterSave { get; set; } = true;
-    /// <summary>F8 in the browser opens Shopee 光學辨識 and starts the scan (user, 2026-10-12).</summary>
-    public bool BrowserHotkey { get; set; } = true;
-    /// <summary>
-    /// Shopee screenshots end to end (user, 2026-10-11): after 開始, scan, bring back, enter
-    /// into ERP, save and print. Shopee only: MO店+ and Coupang need invoice details first.
-    /// </summary>
-    public bool ShopeeFullAuto { get; set; }
     /// <summary>
     /// 蝦皮全自動 (batch, user 2026-10-12): Chrome's print dialog must show this printer and
     /// scale before the label is printed; otherwise the batch stops.

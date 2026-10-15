@@ -944,17 +944,11 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private BrowserHotkey? _browserHotkey;
 
-    /// <summary>F8 in the browser starts Shopee 光學辨識 while CY runs (setting, on by default).</summary>
+    /// <summary>F8 in the browser starts Shopee 光學辨識 while CY runs (always on since 2026-10-15).</summary>
     private void ApplyBrowserHotkey()
     {
-        if (UiSnapshot.Active) return;
-        if (_settings.BrowserHotkey && _browserHotkey is null)
-            _browserHotkey = BrowserHotkey.Start(_log, () => BeginInvoke(OnBrowserHotkey));
-        else if (!_settings.BrowserHotkey && _browserHotkey is not null)
-        {
-            _browserHotkey.Dispose();
-            _browserHotkey = null;
-        }
+        if (UiSnapshot.Active || _browserHotkey is not null) return;
+        _browserHotkey = BrowserHotkey.Start(_log, () => BeginInvoke(OnBrowserHotkey));
     }
 
     private async void OnBrowserHotkey()
@@ -969,12 +963,11 @@ internal sealed partial class MainForm : Form
         _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
         // A minimized CY would keep its dialog hidden too.
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-        try { await ImportShopeeScreenshotsAsync(startScan: true); }
+        try { await ImportShopeeScreenshotsAsync(); }
         catch (Exception ex) { _log.Error("hotkey", ex); }
     }
 
-    /// <param name="startScan">From the browser hotkey: the page scan starts at once, full auto or not.</param>
-    private async Task ImportShopeeScreenshotsAsync(bool startScan = false)
+    private async Task ImportShopeeScreenshotsAsync()
     {
         if (_automationCts is not null) return;
         if (!ErpWindowReady()) return;
@@ -990,8 +983,7 @@ internal sealed partial class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
         try
         {
-            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto || startScan,
-                session: _settings.ShopeeFullAuto ? Session : null);
+            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: true, session: Session);
             if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
             await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
         }
@@ -1427,25 +1419,16 @@ internal sealed partial class MainForm : Form
         if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
         SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
         _log.Info("shopee-shot", $"order loaded items={order.Items.Count} notes={notes.Count}");
-        // Full auto (user, 2026-10-11): a clean order goes straight on to ERP, save and print;
-        // with notes the user decides, defaulting to stop.
-        if (_settings.ShopeeFullAuto)
-        {
-            if (notes.Count > 0) _automationSession?.End();
-            if (notes.Count > 0 && MessageBox.Show(this,
-                    $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
-                    "\n\n仍要繼續自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
-                    "蝦皮自動擷取", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-                return;
-            _log.Info("shopee-shot", $"full auto continues to ERP order_notes={notes.Count}");
-            await StartAutomationAsync(fullAuto: true);
+        // Full auto (user, 2026-10-11; always since 2026-10-15): a clean order goes straight on to
+        // ERP, save and print; with notes the user decides, defaulting to stop.
+        if (notes.Count > 0) _automationSession?.End();
+        if (notes.Count > 0 && MessageBox.Show(this,
+                $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
+                "\n\n仍要繼續自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
+                "蝦皮自動擷取", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        }
-        // A clean order only gets the status line (user, 2026-10-11); notes still need a look.
-        if (notes.Count > 0)
-            MessageBox.Show(this,
-                $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
-                "蝦皮訂單自動擷取輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        _log.Info("shopee-shot", $"full auto continues to ERP order_notes={notes.Count}");
+        await StartAutomationAsync(fullAuto: true);
     }
 
     /// <summary>
