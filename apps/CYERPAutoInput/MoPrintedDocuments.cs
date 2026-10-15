@@ -64,11 +64,15 @@ internal static class MoPrintedDocuments
         foreach (var dir in Directory.GetDirectories(folder)) Directory.Delete(dir, recursive: true);
     }
 
-    /// <summary>Runs older than <see cref="KeepDays"/> days go.</summary>
+    /// <summary>
+    /// Temp folders older than <see cref="KeepDays"/> days go: MO店+ runs (mo-*), CYInvoice
+    /// requests／results and paper PDFs (invoice-*), and 全家 slip pages left by a stopped run
+    /// (slip-*). Run when the program starts and when MO店+ 全自動 starts.
+    /// </summary>
     public static void Prune(AppLogger log)
     {
         if (!Directory.Exists(TempRoot)) return;
-        foreach (var folder in Directory.GetDirectories(TempRoot, "mo-*"))
+        foreach (var folder in new[] { "mo-*", "invoice-*", "slip-*" }.SelectMany(p => Directory.GetDirectories(TempRoot, p)))
         {
             if (Directory.GetCreationTime(folder) > DateTime.Now.AddDays(-KeepDays)) continue;
             try { Directory.Delete(folder, recursive: true); log.Info("mo-batch", "old run folder removed"); }

@@ -71,6 +71,8 @@ internal sealed partial class MainForm : Form
         DpiChanged += (_, _) => UpdateDpiHint();
         FormClosing += (_, _) => { _statePoll.Stop(); _browserHotkey?.Dispose(); _browserHotkey = null; };
         Shown += (_, _) => ApplyBrowserHotkey();
+        // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
+        Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
     }
 
     protected override void WndProc(ref Message m)
