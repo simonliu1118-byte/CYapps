@@ -66,6 +66,13 @@ export default {
     if (cyIdResponse) return cyIdResponse;
 
     const path = new URL(request.url).pathname;
+    // Explicitly reject retired API contracts rather than silently routing
+    // them into the generic Worker (which would return an ambiguous 404).
+    if (path.startsWith("/v1/employees") || path.startsWith("/v1/employee-")
+        || path.startsWith("/v1/web-auth") || path.startsWith("/v1/web-password")
+        || path.startsWith("/v1/super-admin") || path.startsWith("/v1/onboarding/bootstrap")
+        || path === "/v1/bootstrap")
+      return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
     const recoveryRoute = request.method === "POST"
       && (path === "/v1/device-recovery/preview" || path === "/v1/device-recovery/claim");
     const needsEmployee = request.method === "POST" && [
