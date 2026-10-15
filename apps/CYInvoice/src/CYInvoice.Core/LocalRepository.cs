@@ -13,7 +13,6 @@ public sealed class LocalRepository
         InvoiceStore invoices,
         BuyerNameStore buyerNames,
         EmployeeStore employees,
-        CloudEmployeeCacheStore cloudEmployees,
         IdentityProviderRuntime identityRuntime,
         ServiceConnectivity connections)
     {
@@ -25,7 +24,6 @@ public sealed class LocalRepository
         Invoices = invoices;
         BuyerNames = buyerNames;
         Employees = employees;
-        CloudEmployees = cloudEmployees;
         this.identityRuntime = identityRuntime;
         Connections = connections;
     }
@@ -38,7 +36,6 @@ public sealed class LocalRepository
     public InvoiceStore Invoices { get; }
     public BuyerNameStore BuyerNames { get; }
     public EmployeeStore Employees { get; }
-    public CloudEmployeeCacheStore CloudEmployees { get; }
     public IIdentityProvider IdentityProvider => identityRuntime.Current;
     public ServiceConnectivity Connections { get; }
 
@@ -80,12 +77,9 @@ public sealed class LocalRepository
         var invoices = new InvoiceStore(data, currentSettings.ProductionInvoice);
         var buyerNames = new BuyerNameStore(data);
         var employees = new EmployeeStore(data);
-        var cloudEmployees = new CloudEmployeeCacheStore(data, protector);
         var cyIdOffline = new CyIdOfflineCache(data, protector);
-        var connections = new ServiceConnectivity(settings, serviceHttp, () => {
-            cloudEmployees.Clear();
-            cyIdOffline.Forget();
-        }, cyIdOffline, baseDirectory);
+        var connections = new ServiceConnectivity(settings, serviceHttp,
+            cyIdOffline.Forget, cyIdOffline, baseDirectory);
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
@@ -102,7 +96,6 @@ public sealed class LocalRepository
             invoices,
             buyerNames,
             employees,
-            cloudEmployees,
             identityRuntime,
             connections);
     }
