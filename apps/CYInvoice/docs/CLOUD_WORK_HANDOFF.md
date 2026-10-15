@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 最新接續：CYID Protected APIs／Windows 公司卡傳輸（Source Draft）
+
+在原 V3 #440 延伸原 SQL 0017／0018、加密與 Work Item 模組：`cloud/src/allowance-applications-route.ts` 加入受保護的 create/get/list，USER 只能查看自己的例外申請，ADMIN／SUPER_ADMIN 可分頁檢視 Workspace 內待審折讓；`cloud/src/company-settings-route.ts` 僅允許 CYID 超管變更公司卡、一般 ADMIN 唯讀設定狀態。兩者均由 `app.ts` app-scoped `withCyIdSession` 及 Device authorization 接入；CYID Identity Workspace 和 CYInvoice Business D1 Workspace 僅以 server binding 對應，不採 browser 欄位。加上 SQL 0018 插入 trigger，杜絕 Work Item／申請 batch 的半筆落盤；Windows 新增 `CloudCompanySettingsClient`／測試，舊 Work Item 客戶端拒絕不帶 frozen source 的折讓建立。
+
+**工程與正式環境界線：**前述 endpoints 仍為 Draft（依 0015～0018 draft schemas 與未注入的私有加密金鑰，正式 Worker 不可用）。真 CYID/AMEGO live、WinForms card／申請／覆核、金鑰版本同步、官方 per-item verification、管理員核准執行及 g0401 皆未接通。即使 GitHub source CI 通過，也不得宣稱跨裝置折讓可正式使用；無 schema 變更、Worker deployment、光貿 mutation 或 Windows Release。依根規則和唯一 TODO 記錄未完成 gate。
+
 ## 2026-10-15 本輪接續：公司設定權威與不可變折讓申請（Draft Source）
 
 CYInvoice V3 Draft #440 新增 `0017_company_settings.sql`、`company-settings.ts`（加密公司卡、CYID 超管重驗、Device/Workspace SQL 柵欄、revision CAS、append-only Audit、ADMIN 不讀秘密）與 `0018_allowance_applications.sql`、`allowance-applications.ts`（USER 可建立內部 frozen ALLOWANCE Work Item、加密完整未編號模板、Server SHA256／申請人、公司版本與原發票綁定、不可修改／刪除）。AMA/AMEGO 專用內部讀取只取得 App Key，**不連帶解密 MO Excel 密碼**。通用 Work Item create 已拒絕 ALLOWANCE 的 client-provided hash，未正式啟用新 route。

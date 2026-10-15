@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 接續：CYID protected routes／Windows 公司卡 Client／跨機覆核清單（Draft）
+
+- [x] **CYID 保護的折讓例外申請入口**：Worker `app.ts` 經 CYID 應用範圍登入和每次的 Device Token 驗證後，提供 `POST /v1/allowance-applications/create|get|list`。僅由服務端 binding 決定 business Workspace／公司統編／正式或測試環境；不接受客戶端自訂 authority 或雜湊。USER 可以原 ID 提出申請並唯讀查自己的結果；ADMIN／SUPER_ADMIN 可在別台 Device 查看例外工作單（依建立時間+ID 游標分頁，每頁最多 50），沒有一般發票清單／所有使用者全表。返回最小必要摘要，不含密碼、金鑰、加密模板。
+- [x] **SQL batch 的第二段寫入保護**：`0018_allowance_applications.sql` 新增 BEFORE INSERT source guard，確認同一 Work Item、首次建立時間、申請 actor、Device、environment、reference SHA256、公司設定 revision 及有效狀態；不能以既有不同工作單或被撤銷裝置形成半筆申請。結果不明時 GET 原 Work Item ID，不能另建新單／自動重送。Cloud synthetic regression 覆蓋兩 Workspace mapping、角色、錯誤 scope／環境、分頁、沒有 secrets 的回覆與 batch rollback。
+- [x] **公司卡受保護 API 與 Windows 傳輸**：`POST /v1/company-settings/get|update` 同樣以 CYID revalidate、business Workspace binding、Cloud Device、SUPER_ADMIN 當次 marker／Email 確認；ADMIN 唯讀不含 Secrets 的設定狀態。Windows `CloudCompanySettingsClient` 提供 HTTPS／Bearer／CYID 當次帳密／預期 revision、明確 keep/replace/clear、無自動重送與安全 JSON 回覆驗證；工程合成測試已加入 Windows suite。通用 Windows `CloudWorkItemClient` 不再接受 ALLOWANCE 偽建立。
+- [ ] **仍未完成：**WinForms 公司設定與折讓申請／覆核 UI、現行本機 DPAPI 快取版本同步、服務端光貿官方完整 item／餘額驗證、manager approval route、g0401／g0501 的真正安全送出與查回、其他作廢和失敗事件跨機、背景雙 List 官方對帳、DR-01～DR-13。雲端公司卡與折讓的受保護入口是 **Draft，0015～0018 尚未正式套用**，不授權立即供日常使用。最新 CI 與工程包以 #440 exact-head 為準；不自動 deploy／Release。
+
 ## 2026-10-15 V3 折讓申請不可變來源（Draft-only）
 
 - [x] 新增 `cloud/drafts/0018_allowance_applications.sql`、`src/allowance-applications.ts` 與隔離測試：只在 CYID 業務 D1 的**例外折讓申請**建立資料，沒有一般發票總表。由 CYID USER／ADMIN／SUPER_ADMIN 當次身分確認後，使用**原 Work Item ID** 執行 `D1.batch` 原子建立 Work Item＋申請；賣方統編／設定版次來自服務端公司卡、environment 由可信 Worker runtime 注入；原發票號碼、原因、正整數金額、申請 actor 與時間持久化，未編號 g0401 模板使用 Workspace＋Work Item AES-GCM AAD 加密儲存，雜湊由服務端依固定欄位建立，不信任前端 referenceHash。
