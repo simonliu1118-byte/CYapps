@@ -2,9 +2,7 @@ name: SMARTCOPIConverter Stable Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 'release/smartcopiconverter-v*'
+  create:
 
 permissions:
   contents: write
@@ -15,7 +13,7 @@ concurrency:
 
 jobs:
   release-windows-x64:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.created == true)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'create' && github.event.ref_type == 'branch')
     runs-on: windows-latest
     defaults:
       run:
@@ -37,7 +35,7 @@ jobs:
         run: |
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             if ($env:GITHUB_REF_NAME -cne 'main') { throw 'Formal manual release must run from main.' }
-          } elseif ($env:GITHUB_EVENT_NAME -ne 'push') {
+          } elseif ($env:GITHUB_EVENT_NAME -ne 'create') {
             throw "Unexpected release event: $env:GITHUB_EVENT_NAME"
           }
           $head = (& git rev-parse HEAD).Trim()
@@ -51,7 +49,7 @@ jobs:
           if ($build -cne '0') { throw "Formal Release requires BUILD=0, got $build" }
           if (-not (Test-Path "./V$version.txt")) { throw 'Missing matching release notes.' }
           $tag = "smartcopiconverter-v$version"
-          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_NAME -cne "release/smartcopiconverter-v$version") {
+          if ($env:GITHUB_EVENT_NAME -eq 'create' -and $env:GITHUB_REF_NAME -cne "release/smartcopiconverter-v$version") {
             throw "Unexpected release branch: $env:GITHUB_REF_NAME"
           }
           $headers = @{
