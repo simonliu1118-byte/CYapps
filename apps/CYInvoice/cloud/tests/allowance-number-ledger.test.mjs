@@ -240,10 +240,13 @@ concurrent.db.close();
       return {...request,
         referenceHash:createHash("sha256").update(reviewTarget.workItemId).digest("hex")};
     },
-    async queryAndVerifyOfficialInvoice(invoiceNumber) {
+    async queryAndVerifyOfficialInvoice(frozenRequest) {
       officialCalls++;
-      assert.equal(invoiceNumber,request.originalInvoiceNumber);
-      return official;
+      assert.equal(frozenRequest.originalInvoiceNumber,request.originalInvoiceNumber);
+      assert.equal(frozenRequest.sellerInvoice,request.sellerInvoice);
+      assert.equal(frozenRequest.environment,request.environment);
+      return {...official,sellerInvoice:frozenRequest.sellerInvoice,
+        environment:frozenRequest.environment};
     }
   };
   const reserveTarget={...base,workItemId:id};
@@ -262,6 +265,18 @@ concurrent.db.close();
     checkedAtUtc:"2020-01-01T00:00:00.000Z"};
   await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
   official={...official,checkedAtUtc:new Date().toISOString()};
+  // A valid invoice number from a DIFFERENT seller/environment must never
+  // authorize allocation against the selected company's frozen Work Item.
+  const wrongSeller={...authority,queryAndVerifyOfficialInvoice:async()=>
+    ({...official,sellerInvoice:"87654321",environment:request.environment})};
+  await assert.rejects(()=>approveOfficial(dbApi,target,wrongSeller),
+    /REVIEW_NOT_AUTHORITATIVE/);
+  const wrongEnvironment={...authority,queryAndVerifyOfficialInvoice:async()=>
+    ({...official,sellerInvoice:request.sellerInvoice,environment:"production"})};
+  await assert.rejects(()=>approveOfficial(dbApi,target,wrongEnvironment),
+    /REVIEW_NOT_AUTHORITATIVE/);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?")
+    .get(id).n,0);
   // Grant must be linked to the exact persisted Work Item source, not just
   // a matching seller or a client-supplied official result.
   const different={...authority,

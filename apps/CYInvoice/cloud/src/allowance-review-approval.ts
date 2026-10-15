@@ -20,6 +20,9 @@ export interface ServerFrozenAllowanceRequest {
 }
 export interface VerifiedOfficialAllowanceReview {
   originalInvoiceNumber: string;
+  // Verified gateway context, not browser-provided fields.
+  sellerInvoice: string;
+  environment: "production" | "test";
   checkedAtUtc: string;
   officialSnapshotSha256: string;
   invoiceUploadStatus: number;
@@ -36,7 +39,7 @@ export interface AllowanceReviewAuthority {
     workspaceId: string; employeeId: string; role: "SUPER_ADMIN"|"ADMIN"|"USER";
   } | null>;
   loadFrozenApplication(target: Readonly<AllowanceApprovalTarget>): Promise<ServerFrozenAllowanceRequest>;
-  queryAndVerifyOfficialInvoice(originalInvoiceNumber: string):
+  queryAndVerifyOfficialInvoice(frozen: Readonly<ServerFrozenAllowanceRequest>):
     Promise<VerifiedOfficialAllowanceReview>;
 }
 export interface ApprovedAllowanceGrant {
@@ -77,6 +80,8 @@ function assertOfficial(f: ServerFrozenAllowanceRequest, evidence: VerifiedOffic
   checkedAt: number): void {
   const officialAt=Date.parse(evidence.checkedAtUtc);
   if (evidence.originalInvoiceNumber!==f.originalInvoiceNumber ||
+      evidence.sellerInvoice!==f.sellerInvoice ||
+      evidence.environment!==f.environment ||
       !/^[0-9a-f]{64}$/.test(evidence.officialSnapshotSha256) ||
       !Number.isFinite(officialAt) || officialAt > checkedAt + 1000 ||
       checkedAt - officialAt > 60_000 ||
@@ -106,7 +111,8 @@ export async function approveAllowanceAfterOfficialReview(
     throw new Error("ALLOWANCE_MANAGER_AUTH_REQUIRED");
   const frozen=await authority.loadFrozenApplication(target);
   assertFrozen(frozen);
-  const snapshot=await authority.queryAndVerifyOfficialInvoice(frozen.originalInvoiceNumber);
+  // Bind the official query to the same approved company and AMEGO environment.
+  const snapshot=await authority.queryAndVerifyOfficialInvoice(frozen);
   const time=Date.now();
   assertOfficial(frozen,snapshot,time);
   const second=await authority.revalidateManager();
