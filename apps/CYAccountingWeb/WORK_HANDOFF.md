@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.2 Build 1**；VERSION `0.25.2`、BUILD `1`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
+| 產品 | **V0.25.2 Build 1**；[PR #454](https://github.com/simonliu1118-byte/CYapps/pull/454)、[PR #455](https://github.com/simonliu1118-byte/CYapps/pull/455) 已合併；[main run 38675354003](https://github.com/simonliu1118-byte/CYapps/actions/runs/38675354003) validate／deploy 成功，正式瀏覽器已回讀版本 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -18,7 +18,7 @@
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
 
-## V0.25.2 舊備份相容與首次登入前置（本批待部署驗收）
+## V0.25.2 舊備份相容與首次登入前置
 
 - portable schema 6～10 沿同一 `backup-restore.js normalizeAccountingRestoreData`；只在原始 bytes／digest 驗證後轉換，舊物件不回寫。schema 6 色碼依 migration 0007 的 created_at／id 排序補入；6／7 沒有的 Excel import audit 初始化空陣列，矛盾的非空稽核拒絕，不放寬 schema 8+ 缺欄位檢查。
 - 記憶體 SQLite verifier 與獨立 D1 writer 都比對相同 normalized payload，保留交易、期初與全部既有稽核／設定；回報 normalization metadata，preview 明示已轉換。來源 schema 6～9 缺 context 時仍需原 D1，不宣稱已具離線災難復原 context。
@@ -151,3 +151,10 @@ CYID 共通參數及舊 Variable 退場已於 2026/10/12 完成驗證；詳細�
 V0.25.0 正式 native 復原表單因 no-referrer 產生空 Origin 而被既有 guard 拒絕，未進入預覽／寫入；Build 1 將頁面 referrer-policy 改為 same-origin，保留同來源 guard 與 CSP，補自動測試。Build 1 main run 38671618879 完整成功後，正式 native 表單 preview／雙重確認／commit 已實際通過。
 
 V0.25.2 初次 main run 38674853444 validate 成功，deploy 在唯讀 portal gate 回報 PRODUCTION_CORE_CONSUMER_NOT_READY，尚未 migration／Worker deploy，線上保持 V0.25.1。Build 1 將尚未啟用的 navigation metadata 僅作預檢；真正 first-login feature deploy 必須帶 --require-account-portal，失敗維持 fail closed。provider 原 runtime guard 永遠強制。新增診斷只列 AUTHORITY／ENVIRONMENT／APPLICATION／VERSION／HEALTH 差異標籤，不輸出實際值。
+
+## 本批結案與外部待辦
+
+- V0.25.2 Build 1 已正式部署；schema 6／7 normalization 的本地 SQLite、workerd、D1 roundtrip 及其餘 79 項 workflow checks 通過。沒有為驗收而覆寫正式帳本或已用過的復原目標。
+- 首次登入 PR #435 仍不合併。最新 protected deploy 唯讀預檢回報 CYWEB_PRODUCTION_AUTHORITY_MISMATCH：CY Web 的 IDENTITY service target 與本 App 使用的 canonical production provider 不一致；Workspace／application／health 沒有回報差異。由 CY Web／CYID 正式部署維護者核對並修正其既有環境設定後，重新執行 --require-account-portal gate；不可在 CYACC 放寬或另建 authority。
+- Google Cloud 預算尚未建立：操作瀏覽器受限，使用者自己的 Console 正常，已提供手動步驟。每月指定 TWD 100（先確認帳單幣別）、只涵蓋備份專案全部服務、取消 Promotions 抵用以觀察試用後費用、實際支出 50／90／100% 與帳單管理員／專案擁有者 Email 通知；只設 alerts，不宣稱自動硬上限。待使用者儲存後核對，不記為已完成。
+- GCS 新政策首次週期排程及 bucket lifecycle 仍待確認；不新增無必要 workflow，不擴張 IAM，不建立 Release。
