@@ -58,6 +58,11 @@ export async function handleCompanySettings(request:Request,env:Env):Promise<Res
     const b=cyIdBinding(env);
     const d=await cyIdDevice(request,env);
     if(d.workspace_id!==b.workspaceId)return response(401,{error:{code:"DEVICE_INVALID"}});
+    const proof=await env.DB.prepare(
+      "SELECT employee_authority_state FROM devices WHERE device_id=?1 AND workspace_id=?2 AND status='active'"
+    ).bind(d.device_id,d.workspace_id).first<{employee_authority_state:string}>();
+    if(proof?.employee_authority_state!=="cloud")
+      return response(401,{error:{code:"DEVICE_INVALID"}});
     const actor=await auth(env).revalidate();
     if(!actor)return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
     if(action==="get"){
