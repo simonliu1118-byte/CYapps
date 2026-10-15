@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 CYWEB 災難復原 Source blocker 已交回；V3 D1 折讓配號 Draft 新進度
+
+[CYWEB #151 原交接](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md) 在 10/14 指出 CYInvoice `revoked` 不明確；截至 10/15 **CYInvoice recovery-issuer.ts 已修復，並由 recovery-issuer.test.mjs 覆蓋真 SQLite 明確撤銷、已 consumed／expired、重複查回、D1 回覆遺失與 claim/revoke race**。已在 CYWEB Draft #151 留交回留言、更新該檔及其根 TODO。原問題已可標 Source complete，**不要刪交接文件或宣稱正式部署 DR 完成**；DR 全矩陣仍由此 V3 順序最後集中驗收。
+
+CYID Cloud 折讓配號下一步已新增只在本 Draft 的 `cloud/drafts/0016_allowance_number_ledger.sql`／`src/allowance-number-ledger.ts`、synthetic SQLite test。其 D1 草案 ledger 記錄 exceptional ALLOWANCE 工作單 per-attempt 號碼／request SHA256／狀態／執行 Device／不可回收序號，而不存一般 invoice rows、原始 g0401 payload、公司密鑰。工作單目前 `review` revision 與 active Device/Workspace 只作**底層 SQL execution-time fencing**；申請資料完整核對、CYID manager online revalidation、真正批准狀態與 g0401 API 執行尚未接入，不可把 `review` 當批准信號；也未正式套用 migrations 0015／0016 或觸發 AMEGO。Local 已有獨立 SQLite Ledger；兩版需在最終共同 API 覆核狀態機上整合。CI 依此處修改後的**最新 PR head**證據為準。
+
 ## 2026-10-15 最新產品決策（優先於本文內舊 Built-in 設計敘述）
 
 **使用者正式確認 V3 只支援兩種模式：單機 Local 與 CYID Cloud；停止提供／維護 Built-in Cloud／Self-hosted。** 現無正式 Built-in 使用者，GitHub 使用者如需獨立雲端版本自行 fork 修改，CYInvoice 不再為其投入產品開發、身分路由、D1 雙 storage-profile 相容測試、OTP／Employee CRUD／超管移交或對外自架文件。此前文件提到「Built-in 正式支援模式」、「三版共用」、「其他公司 Built-in 原 D1」、「需保留 Built-in migration」等皆是**舊版架構／歷史證據**，不再是 V3 完成條件。舊程式碼在清理、遷移與 CI 驗證前不能誤寫成已刪除。**不重做**本公司已完成的原 D1 帳號表退役維護。
