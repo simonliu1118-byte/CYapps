@@ -1548,9 +1548,17 @@ static async Task TestAutoInputPdfAsync()
     record = repository.Invoices.LoadOrCreate().Single();
     record.UploadStatus = UploadStatuses.Pending;
     repository.Invoices.Save([record]);
+    fake.PdfException = new AmegoApiException(99, "PDF 尚未產生");
     Equal("pending",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
-        Environments.Test,folder,5)).Status);
-    Equal(1,fake.PdfCalls);
+        Environments.Test,folder,0)).Status);
+    Equal(2,fake.PdfCalls);
+    // Once the real official PDF becomes available it must work even before
+    // the local upload status has been refreshed by the GUI timer.
+    fake.PdfException = null;
+    Equal("ready",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,0)).Status);
+    Equal(3,fake.PdfCalls);
+    Equal(0,fake.IssueCalls);
 
     record.UploadStatus = UploadStatuses.Complete;
     record.BuyerIdentifier = "0000000000";
