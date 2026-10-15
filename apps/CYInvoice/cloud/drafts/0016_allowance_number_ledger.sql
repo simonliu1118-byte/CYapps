@@ -8,6 +8,7 @@
 -- No public approval writer exists in this Draft: an unapproved Work Item
 -- must never be able to allocate or send a number merely because it is review.
 CREATE TABLE allowance_execution_approvals (
+  approval_id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
   work_item_id TEXT NOT NULL REFERENCES work_items(work_item_id) ON DELETE RESTRICT,
   approved_revision INTEGER NOT NULL CHECK(approved_revision > 0),
@@ -24,9 +25,12 @@ CREATE TABLE allowance_execution_approvals (
   approved_by_employee_id TEXT NOT NULL CHECK(length(approved_by_employee_id) BETWEEN 1 AND 100),
   approved_by_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE RESTRICT,
   approved_at TEXT NOT NULL,
-  valid_until_utc TEXT NOT NULL CHECK(valid_until_utc > approved_at),
-  PRIMARY KEY(workspace_id,work_item_id,approved_revision)
+  valid_until_utc TEXT NOT NULL CHECK(valid_until_utc > approved_at)
 );
+-- Append-only decisions: a fresh official check can renew an expired grant
+-- without erasing the prior approving employee or the original timestamp.
+CREATE INDEX idx_allowance_approvals_work_item
+  ON allowance_execution_approvals(workspace_id,work_item_id,approved_revision,valid_until_utc DESC);
 CREATE TABLE allowance_number_ledger (
   ledger_id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
