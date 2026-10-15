@@ -1,3 +1,4 @@
+import { buildRecoveryContext } from './backup-recovery-context.js';
 import { buildBackupPackage } from './backup-package.js';
 import { assertBackupStorageProvider } from './backup-storage-provider.js';
 import { createGcsBackupStorageProvider, gcsConfigReady, GcsProviderError } from './gcs-backup-provider.js';
@@ -225,7 +226,9 @@ export async function buildBackupSet(db, now = new Date()) {
   const counts = Object.fromEntries(Object.entries(base.data).map(([key, rows]) => [key, Array.isArray(rows) ? rows.length : 0]));
   const totalRowCount = Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
 
+  const recoveryContext = Number(base.manifest.schemaVersion) >= 10 ? await buildRecoveryContext(db) : null;
   const manifest = {
+    ...(recoveryContext ? { recoveryContext } : {}),
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
     app: 'CYAccountingWeb',

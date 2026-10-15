@@ -6,24 +6,32 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.24.1**；VERSION `0.24.1`、BUILD `0`，正式備份狀態、日期快捷與損益標籤；V0.24.0 功能部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
+| 產品 | **V0.25.0**；VERSION `0.25.0`、BUILD `0`，正式備份狀態、日期快捷與損益標籤；V0.24.0 功能部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
 | 公開 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；不與正式網站版本混用 |
-| D1 | schema **9**，新增 append-only 隔離驗證及 policy audit；既有帳務 payload 不變 |
+| D1 | schema **10**，新增 append-only 受控復原預覽／執行／結果 audit；既有帳務 payload 不變 |
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次新增完整分層備份政策及隔離還原驗證，Minor 升至 V0.24.0、Build 歸零。migration 只新增 backup metadata；不改帳務資料／Identity／手機平板版面，不建立 Stable Release。部署不自行啟用 Phase D，須經正式 UI 與 server gate。
+本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；正式部署與 GCS 演練尚待本批 CI／live acceptance。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+
+## V0.25.0 受控復原（本批待部署驗收）
+
+- Backup service 仍是唯一 HTTP／orchestration owner；`backup-recovery.js` 是空白目標 writer，沿用 `backup-restore.js` 的 accounting mapping，`backup-recovery-context.js` 集中維運表 allowlist。復原頁只有 presentation，呼叫相同 API、採相同 CYID SUPER_ADMIN guard。
+- schema 10 新備份的 manifest 內含 catalog、copies、restore checks、policy events 與舊 backup runs；保留完整帳務及期初／匯入 audit。排除 Session／OAuth／機密及復原工作區自身的新預覽／執行紀錄，不宣稱是所有 D1 表的物理複製。
+- 空白工作區原子 claim／種子快照 guard／完整寫入；失敗 rollback。還原後逐欄逐列及 context 比對、D1 quick_check／FK；來源 SQLite 仍 integrity_check。目標帶 recovery_hold，不自動成為正式帳本。
+- 部署以既有 protected job 準備獨立 D1、注入 RECOVERY_DB；原 DB 不清空。GCS 復原入口及預覽不依賴原 D1，可處理原帳本中斷；傳統 schema 8／9 沒有 context 時仍需原 D1。
+- 資料庫正式 promotion 需要維運依 BACKUP_ARCHITECTURE_HANDOFF 的切換步驟進行。本次僅授權演練，保留原帳本與所有 audit，不執行流量切換。
 
 ## V0.24.1 正式狀態與記帳快捷
 
 - Phase D 之後隱藏已完成的 Phase C 驗收進度與啟用控制，備份按鈕改為正式用詞；原 server gate／歷史紀錄保留，不把 UI 退場當成刪除稽核。
 - 日期 Ctrl＋↑↓ 改由既有 Quick Entry form keydown owner 統一處理。桌機日期文字、摘要、金額共用 canonical date setter、只發一次 change、保留原焦點；移除 Adaptive picker 內重複 Ctrl handler。IME／其他修飾鍵／非 entry 欄位不攔截，手機／平板原生日期快捷及原版面保留。
 - 單／多月統計、損益表、看帳及 Excel 按金額正負顯示淨利／淨損，零元損益；不改移轉排除或任何財務計算。
-- 本次三項使用者需求已記錄；正式帳本還原與隔離 D1 災難復原接續進行，尚未以這批 UI 修正宣告完成。
+- 三項修正已由 PR #449 合併，main run 38613728651 成功；正式 V0.24.1 已確認 Phase C UI 退場、摘要 Ctrl＋↑／金額 Ctrl＋↓ 改日期且保留焦點、零元「損益」。完整正負零規則有行為測試。未儲存測試資料。
 
 ## V0.24.0 備份政策與隔離還原
 

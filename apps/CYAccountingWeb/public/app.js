@@ -203,6 +203,9 @@ async function initialize() {
 
 async function refreshBootstrap() {
   const bootstrap = await api('/api/bootstrap');
+  const epoch=String(bootstrap.accountingEpoch||'');
+  if(window.cyaccBookEpoch!==undefined&&window.cyaccBookEpoch!==epoch) { window.location.reload();throw new Error('帳本已切換，正在重新整理。'); }
+  window.cyaccBookEpoch=epoch;
   const accountValue = els.accountName.value;
   const categoryValue = els.categoryName.value;
   state.accounts = bootstrap.accounts || [];
@@ -875,12 +878,14 @@ async function api(path, options = {}, timeoutMs = 12_000) {
   const request = Promise.resolve().then(async () => {
     const response = await fetch(path, {
       ...options,
+      headers:{...options.headers,'x-cyacc-book-epoch':window.cyaccBookEpoch||''},
       credentials: 'include',
       cache: 'no-store',
       signal: controller.signal
     });
     const data = await response.json().catch(() => ({}));
     if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
+    if(data.code==='ACCOUNTING_BOOK_CHANGED') window.location.reload();
     if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
   });

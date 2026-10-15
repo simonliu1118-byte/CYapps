@@ -6,7 +6,7 @@ import { handleAccountLifecycleApi } from './account-lifecycle.js';
 import { handleOpeningBalanceApi } from './opening-balances.js';
 import { handleExcelExportApi } from './excel-export.js';
 import { handleExcelImportApi } from './excel-import.js';
-import { handleBackupApi, runScheduledBackup } from './backup-service.js';
+import { handleBackupApi, runScheduledBackup, recoveryLanding } from './backup-service.js';
 import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
@@ -69,6 +69,11 @@ export default {
         return handleNavigationLogin(request, env);
       }
 
+      if(url.pathname==='/recovery'&&request.method==='GET') {
+        const resolved=await resolveIdentitySession(request,env);
+        if(!resolved.ok)return redirect('/login');
+        return recoveryLanding(env,resolved.session);
+      }
       if ((url.pathname === '/' || url.pathname === '/index.html') && request.method === 'GET') {
         const resolved = await resolveIdentitySession(request, env);
         if (!resolved.ok) {
@@ -118,6 +123,15 @@ export default {
         }, 403);
       }
 
+      if(url.pathname.startsWith('/api/backup/recovery/')) {
+        return await handleBackupApi(request,env,resolved.session)||json({ok:false,error:'找不到復原操作。'},404);
+      }
+      const recoveryHold=await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
+      if(recoveryHold?.value==='1') return json({ok:false,error:'此帳本仍為還原驗證工作區，尚未核准切換。',code:'RECOVERY_WORKSPACE_HOLD'},503);
+      if(!['GET','HEAD'].includes(request.method)) {
+        const epoch=await env.DB.prepare("SELECT value FROM meta WHERE key='accounting_epoch'").first();
+        if(epoch?.value&&request.headers.get('x-cyacc-book-epoch')!==epoch.value) return json({ok:false,error:'帳本已完成還原切換，請重新整理後再操作。',code:'ACCOUNTING_BOOK_CHANGED'},409);
+      }
       const mutationValidation = await validateMutationRequest(request, url);
       if (mutationValidation) return mutationValidation;
 

@@ -5,6 +5,7 @@ window.addEventListener('load', () => {
 });
 
 let backupTopology = 'legacy_gcs';
+let backupRecoveryPreview = null;
 
 async function setupBackupSettings() {
   const user = await sharedSessionUser();
@@ -40,6 +41,10 @@ async function setupBackupSettings() {
   pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatus);
   pane.querySelector('#backupVerifyRestore')?.addEventListener('click', verifyBackupRestore);
   pane.querySelector('#backupActivatePhaseD')?.addEventListener('click', activateBackupPhaseD);
+  pane.querySelector('#backupRecoveryPreview')?.addEventListener('click', previewBackupRecovery);
+  pane.querySelector('#backupRecoveryCommit')?.addEventListener('click', commitBackupRecovery);
+  for(const id of ['backupRecoverySource','backupRecoveryProvider','backupRecoveryReason']) pane.querySelector('#'+id)?.addEventListener('input',cancelBackupRecoveryPreview);
+  for(const id of ['backupRecoveryReviewed','backupRecoveryConfirmation']) pane.querySelector('#'+id)?.addEventListener('input',syncBackupRecoveryConfirmation);
 }
 
 async function sharedSessionUser() {
@@ -198,9 +203,24 @@ function backupSettingsHtml() {
       <div class="backup-actions-row"><button id="backupVerifyRestore" class="secondary" type="button" disabled>驗證隔離還原</button><button id="backupActivatePhaseD" class="secondary" type="button" disabled>啟用 Phase D</button></div>
       <p id="backupRestoreStatus" class="hint">尚未執行隔離還原驗證。</p>
     </div>
+    <section id="backupRecoveryTools" class="backup-recovery-tools" hidden>
+      <h4>還原帳本</h4>
+      <a href="/recovery" target="_blank" rel="noopener">正式帳本無法開啟時的復原入口</a>
+      <p class="hint">先還原至獨立工作區並核對資料，保留目前帳本與稽核歷史。完成後由維運人員另行切換正式帳本。</p>
+      <label>備份<select id="backupRecoverySource"></select></label>
+      <label>讀取來源<select id="backupRecoveryProvider"><option value="auto">R2 優先，無法讀取時使用 GCS</option><option value="google_cloud_storage">Google Cloud Storage（災難復原）</option><option value="cloudflare_r2">Cloudflare R2</option></select></label>
+      <label>還原理由<input id="backupRecoveryReason" type="text" maxlength="200" autocomplete="off"></label>
+      <button id="backupRecoveryPreview" class="secondary" type="button" disabled>預覽還原</button>
+      <p id="backupRecoveryStatus" class="hint" role="status">正在讀取還原工作區狀態…</p>
+      <div id="backupRecoveryConfirm" hidden>
+        <label class="backup-recovery-review"><input id="backupRecoveryReviewed" type="checkbox">我已核對備份來源，確認還原至獨立工作區</label>
+        <label>輸入「重建獨立帳本」確認<input id="backupRecoveryConfirmation" type="text" autocomplete="off"></label>
+        <button id="backupRecoveryCommit" class="primary" type="button" disabled>還原至獨立工作區</button>
+      </div>
+    </section>
     <div class="backup-restore-note">
       <strong>復原</strong>
-      <span>隔離驗證只在記憶體 SQLite 還原並比對完整資料，不更動正式帳本。正式帳本復原尚未開放。</span>
+      <span>隔離驗證只在記憶體 SQLite 還原並比對完整資料，不更動正式帳本。還原先寫入獨立工作區，驗證通過後再由維運人員切換正式帳本。</span>
     </div>`;
 }
 
@@ -327,6 +347,7 @@ function renderBackupStatus(data) {
   if (run) run.disabled = !model.configured;
   renderPhaseCAcceptance(data);
   renderBackupRestoreState(data);
+  renderBackupRecoveryState(data);
 }
 
 function renderBackupProviderHealth(model, latest) {
@@ -459,7 +480,7 @@ async function verifyBackupRestore() {
 }
 
 async function activateBackupPhaseD() {
-  if (!confirm('啟用 Phase D？\nR2 每日保留 30 天；GCS 每週三、週日備份，保留 182 天。\n現有 GCS 備份會沿用較長保留時間，不會在切換時大量清除。')) return;
+  if (!await window.cyConfirm({title:'啟用分層備份',message:'R2 每日保留 30 天；GCS 每週三、週日備份，保留 182 天。現有備份不會在切換時清除。',confirmText:'啟用'})) return;
   const button = document.querySelector('#backupActivatePhaseD');
   if (button) button.disabled = true;
   try {
@@ -472,7 +493,7 @@ async function activateBackupPhaseD() {
 async function runBackupNow() {
   const tiered = backupTopology === 'parallel_dual_provider';
   const target = tiered ? 'R2 + GCS paired backup' : 'Google Cloud Storage 備份';
-  if (!confirm(`現在立即備份到 ${target}？\n正常每日備份仍會在排程時間自動執行。`)) return;
+  if (!await window.cyConfirm({title:'立即備份',message:`現在立即備份到 ${target}？正常每日備份仍會在排程時間自動執行。`,confirmText:'立即備份'})) return;
   const button = document.querySelector('#backupRunNow');
   if (button) button.disabled = true;
   setBackupMessage(tiered
@@ -579,3 +600,51 @@ function renderPhaseCAcceptance(data) {
 
 window.phaseCAcceptanceUiModel = phaseCAcceptanceUiModel;
 window.mobileBackupInfoHtml = mobileBackupInfoHtml;
+
+
+function renderBackupRecoveryState(data) {
+  const panel=document.querySelector('#backupRecoveryTools');
+  if(!panel) return;
+  panel.hidden=!window.cyIsDesktopInteractionWorkspace?.()||!data?.policy;
+  const source=document.querySelector('#backupRecoverySource');
+  const previous=source?.value;
+  if(source) { source.innerHTML=(data.logicalBackups||[]).map(row=>`<option value="${escapeBackupHtml(row.backupId)}">${escapeBackupHtml(backupLocalDateTime(row.createdAt))} · ${Number(row.rowCount||0).toLocaleString()} 筆</option>`).join('');if(previous&&[...source.options].some(option=>option.value===previous))source.value=previous; }
+  const workspace=data.recoveryWorkspace||{};
+  const button=document.querySelector('#backupRecoveryPreview');
+  if(button)button.disabled=!workspace.ready||!data.logicalBackups?.length;
+  const status=document.querySelector('#backupRecoveryStatus');
+  if(status)status.textContent=data.recoveryLatest?.status==='verified'?'獨立帳本已還原，完整資料、稽核及備份政策核對通過；目前正式帳本未切換。':!workspace.configured?'還原工作區尚未準備完成。':!workspace.ready?'還原工作區已有資料，不可覆寫；請由維運人員處理。':'請選擇備份、填寫理由並預覽還原。';
+  if(!workspace.ready)cancelBackupRecoveryPreview();
+}
+function cancelBackupRecoveryPreview() {
+  backupRecoveryPreview=null;
+  const panel=document.querySelector('#backupRecoveryConfirm');if(panel)panel.hidden=true;
+  const reviewed=document.querySelector('#backupRecoveryReviewed');if(reviewed)reviewed.checked=false;
+  const text=document.querySelector('#backupRecoveryConfirmation');if(text)text.value='';
+  syncBackupRecoveryConfirmation();
+}
+function syncBackupRecoveryConfirmation() {
+  const button=document.querySelector('#backupRecoveryCommit');
+  if(button)button.disabled=!backupRecoveryPreview||!document.querySelector('#backupRecoveryReviewed')?.checked||document.querySelector('#backupRecoveryConfirmation')?.value!=='重建獨立帳本';
+}
+async function previewBackupRecovery() {
+  cancelBackupRecoveryPreview();
+  const button=document.querySelector('#backupRecoveryPreview');if(button)button.disabled=true;
+  setBackupMessage('正在驗證備份與獨立工作區…');
+  try {
+    const data=await api('/api/backup/recovery/preview',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({backupId:document.querySelector('#backupRecoverySource').value,provider:document.querySelector('#backupRecoveryProvider').value,reason:document.querySelector('#backupRecoveryReason').value})},120000);
+    backupRecoveryPreview=data.preview;
+    document.querySelector('#backupRecoveryStatus').textContent=`備份驗證通過，將還原 ${Number(data.preview.counts.transactions||0).toLocaleString()} 筆記帳至獨立工作區。請完成下方兩項確認；預覽有效 10 分鐘。`;
+    document.querySelector('#backupRecoveryConfirm').hidden=false;
+    setBackupMessage('還原預覽完成，目前帳本未更動。');
+  } catch(error) {setBackupMessage(error.message,true);} finally {if(button)button.disabled=false;}
+}
+async function commitBackupRecovery() {
+  if(!backupRecoveryPreview)return;
+  const button=document.querySelector('#backupRecoveryCommit');if(button)button.disabled=true;
+  setBackupMessage('正在還原至獨立工作區並核對完整資料…');
+  try {
+    await api('/api/backup/recovery/commit',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({previewId:backupRecoveryPreview.id,reviewed:document.querySelector('#backupRecoveryReviewed').checked,confirmation:document.querySelector('#backupRecoveryConfirmation').value})},120000);
+    cancelBackupRecoveryPreview();await loadBackupStatus();setBackupMessage('獨立帳本還原及核對完成，目前正式帳本未切換。');
+  } catch(error) {cancelBackupRecoveryPreview();await loadBackupStatus();setBackupMessage(error.message,true);}
+}

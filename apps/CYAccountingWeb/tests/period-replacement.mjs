@@ -86,7 +86,7 @@ assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM excel_import_runs').get().
 assert.throws(()=>db.db.prepare('DELETE FROM excel_import_runs').run(),/append-only/);
 assert.throws(()=>db.db.prepare("UPDATE excel_import_runs SET reason='x'").run(),/append-only/);
 const backup = await buildBackupPackage(db);
-assert.equal(backup.manifest.schemaVersion,9);
+assert.equal(backup.manifest.schemaVersion,10);
 assert.equal(backup.data.excelImportRuns.length,1,'backup includes replacement audit');
 assert.equal(backup.data.excelImportRuns[0].actor.employeeNo,'TEST');
 const large = { ...replacement, plan: { ...p.replacement, previewToken:'large-test', insertCount:5000 }, analysis:{_readyRows:Array.from({length:5000},()=>tx('2026-03-15'))} };

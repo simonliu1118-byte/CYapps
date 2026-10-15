@@ -43,7 +43,7 @@ try {
   assert.equal(rendered.vars.BACKUP_TOPOLOGY, 'legacy_gcs');
   assert.equal(rendered.vars.CYID_APPLICATION_ID, env.CF_CYID_APPLICATION_ID);
   assert.equal(rendered.vars.CYID_WORKSPACE_ID, env.CF_CYID_WORKSPACE_ID);
-  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/', '/index.html', '/login', '/login.html']);
+  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/recovery', '/', '/index.html', '/login', '/login.html']);
   assert.equal(rendered.triggers.crons[0], '30 19 * * *');
   assert.equal(/__CF_[A-Z0-9_]+__/.test(renderedText), false);
 
@@ -86,6 +86,10 @@ try {
     templatePath: CYID_DEV_TEMPLATE,
     outputPath: devOutput
   }), /Missing required deployment variable/);
+
+  renderWrangler({env:{...env,CF_RECOVERY_D1_DATABASE_NAME:'test-recovery',CF_RECOVERY_D1_DATABASE_ID:'22222222-2222-4222-8222-222222222222'},templatePath:TEMPLATE,outputPath:output});
+  assert.equal(JSON.parse(fs.readFileSync(output,'utf8')).d1_databases[1].binding,'RECOVERY_DB');
+  assert.throws(()=>renderWrangler({env:{...env,CF_RECOVERY_D1_DATABASE_NAME:'test-recovery',CF_RECOVERY_D1_DATABASE_ID:env.CF_D1_DATABASE_ID},templatePath:TEMPLATE,outputPath:output}),/must differ/);
 
   const template = fs.readFileSync(TEMPLATE, 'utf8');
   const devTemplate = fs.readFileSync(CYID_DEV_TEMPLATE, 'utf8');

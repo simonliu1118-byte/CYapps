@@ -63,6 +63,10 @@ jobs:
           node --check src/backup-package.js
           node --check src/gcs-backup.js
           node --check src/backup-service.js
+          node --check src/backup-recovery-page.js
+          node --check src/backup-recovery.js
+          node --check src/backup-recovery-context.js
+          node --check scripts/provision-recovery-d1.mjs
           node --check src/backup-restore.js
           node --check src/backup-restore-runtime.js
           node --check src/desktop-migration-core.js
@@ -98,6 +102,10 @@ jobs:
           node tests/backup-compatibility.mjs
           node tests/backup-service.mjs
           node tests/backup-phase-d.mjs
+          node tests/backup-recovery.mjs
+          node tests/backup-recovery-worker.mjs
+          node tests/recovery-provision.mjs
+          node tests/recovery-book-epoch.mjs
           node tests/backup-restore.mjs
           node tests/backup-restore-worker.mjs
           node tests/backup-ui.mjs
@@ -190,6 +198,9 @@ jobs:
       - name: Resolve CYID production consumer runtime
         run: node scripts/resolve-cyid-production-runtime.mjs
 
+      - name: Prepare isolated recovery D1
+        run: node scripts/provision-recovery-d1.mjs
+
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
 
@@ -274,61 +285,63 @@ jobs:
           }
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Canonical shared ledger presentation'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupDesktopEntryQuickTools'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'data-desktop-ui-date-value'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function setupDesktopEntryQuickTools'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'data-desktop-ui-date-value'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'id="ledgerMonthLoading"'
-          verify_asset "$base/app.js?rev=entry-save-focus" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
+          verify_asset "$base/app.js?rev=accounting-book-epoch" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
           verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'startSettingsCategoryPointerDrag'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'data-settings-group-move'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'startSettingsCategoryPointerDrag'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=session-expiry-navigation" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=session-expiry-navigation" 'Promise.race([request, timeout])'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" "new CustomEvent('cyacc:ledger-rendered'"
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'id="ledgerMoreButton"'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'id="ledgerBalanceButton"'
           verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'window.cyAfterEntrySaved = handleFastEntrySaved'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'function initialEntryKind'
-          verify_asset "$base/app.js?rev=entry-save-focus" "new CustomEvent('cyacc:entry-kind-changed'"
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'function initialEntryKind'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" "new CustomEvent('cyacc:entry-kind-changed'"
           verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
           verify_asset "$base/quick-entry.js?rev=entry-saved-focus" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" "addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual)"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" "new CustomEvent('cyacc:confirmation-ready')"
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" 'confirmationMessageSlot'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'cyacc:entry-message'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'cyacc:entry-message'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'compareLedgerDisplayOrder'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "addEventListener('cyacc:confirmation-ready', sync)"
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" "addEventListener('cyacc:confirmation-ready', sync)"
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.desktopUi-native-date-source'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupTouchWorkspaceEntrySecondaryAction'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'desktopEntryDateText'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'window.cyBeginEntryTransactionEdit = beginEntryTransactionEdit'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function setupTouchWorkspaceEntrySecondaryAction'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'desktopEntryDateText'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'window.cyBeginEntryTransactionEdit = beginEntryTransactionEdit'
           verify_asset "$base/quick-entry-settings.js?rev=entry-date-shortcuts" 'function parseEntryDateText'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function cancelEntryTransactionEditAndReturn'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function cancelEntryTransactionEditAndReturn'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.ledger-card tbody > tr.ledger-message-row > td.empty'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#mobileEntrySecondaryButton'
           verify_asset "$base/quick-entry-settings.js?rev=entry-date-shortcuts" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
-          verify_asset "$base/backup-ui.js?rev=backup-production-status" 'setupBackupSettings'
-          verify_asset "$base/backup-ui.js?rev=backup-production-status" 'backupActivatePhaseD'
-          verify_asset "$base/backup-ui.js?rev=backup-production-status" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
+          verify_asset "$base/backup-ui.js?rev=backup-controlled-recovery" 'setupBackupSettings'
+          verify_asset "$base/backup-ui.js?rev=backup-controlled-recovery" '/api/backup/recovery/preview'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'x-cyacc-book-epoch'
+          verify_asset "$base/backup-ui.js?rev=backup-controlled-recovery" 'backupActivatePhaseD'
+          verify_asset "$base/backup-ui.js?rev=backup-controlled-recovery" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'class="ledger-message-row"'
-          verify_asset "$base/app.js?rev=entry-save-focus" "await api('/api/opening-balance-overrides'"
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'setupArchivedAccountDialog'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function settingsActionIcon'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '帳戶名稱最多八字'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'function openingAccountRowHtml'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'setupArchivedAccountDialog'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function settingsActionIcon'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" '帳戶名稱最多八字'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'function openingAccountRowHtml'
           verify_asset "$base/app.css?rev=app-shell" '.opening-source'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" 'data-settings-kind-choice'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" '.ledger-account-color::before'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'const groupName = category.group_name'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'const groupName = category.group_name'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '--settings-kind-canvas'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'function mergePendingTransactionUpdates'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'function mergePendingTransactionUpdates'
           verify_asset "$base/quick-entry.js?rev=entry-saved-focus" 'await mutateSettings'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function setupTabletWorkspace'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function setupTabletWorkspace'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'data-tablet-layout="portrait"'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'class="tablet-entry-handle"'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'class="tablet-entry-handle"'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.tablet-entry-handle-label'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#tabletPreviewReturnButton:not([hidden])'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-rows: repeat(3, 40px)'
@@ -336,15 +349,15 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#ledgerQuickLockButton.is-locked'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet portrait touch parity'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'function handleLedgerQuickLock'
-          verify_asset "$base/app.js?rev=entry-save-focus" 'window.cyaccSaveLock = saveLock'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'syncTabletPickerOwnership'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'setupLedgerBalancePopover'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'showMigrationComplete'
+          verify_asset "$base/app.js?rev=accounting-book-epoch" 'window.cyaccSaveLock = saveLock'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'syncTabletPickerOwnership'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'setupLedgerBalancePopover'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'showMigrationComplete'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'function setupLedgerToolbar'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'function ledgerAccountVisual'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'LEDGER_ACCOUNT_LIGHT_PALETTE'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'const cycle = (slot - 1) % 40'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function isDesktopInteractionWorkspace'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function isDesktopInteractionWorkspace'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'function syncLedgerMonthDisplay'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'Tablet landscape picker convergence: reuse the same touch controls as phone'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '.cy-mobile-main-nav'
@@ -363,19 +376,19 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'th.action-col'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-columns: 46px minmax(0, 1fr)'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'grid-template-rows: repeat(2, minmax(0, 1fr))'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '展開新增'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" '收合隱藏'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" '展開新增'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" '收合隱藏'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#ledgerMonthDisplay::after'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'font-size: 16px !important'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'syncLedgerToolbarPlacement'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'syncLedgerToolbarPlacement'
           verify_asset "$base/ledger-tools.js?rev=ledger-net-label" 'aria-label="編輯"'
           verify_asset "$base/excel-export-ui.js?rev=export-device-label" 'Boolean(document.documentElement.dataset.tabletLayout)'
           verify_asset "$base/excel-import-ui.js?rev=excel-import-template" 'button.dataset.excelImportBound'
           verify_asset "$base/input-confirmation.js?rev=confirmation-save-events" 'function setupConfirmationDrawer'
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" 'window.cyDesktopMigrationConfirmationModel'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" 'function startAdaptiveUi'
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "controls.parentElement !== rail"
-          verify_asset "$base/adaptive-ui.js?rev=entry-editor-date-input" "!isDesktopInteractionWorkspace()) return;"
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" 'function startAdaptiveUi'
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" "controls.parentElement !== rail"
+          verify_asset "$base/adaptive-ui.js?rev=managed-backup-confirm" "!isDesktopInteractionWorkspace()) return;"
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" 'width: min(640px, calc(100vw - 48px))'
           verify_asset "$base/adaptive-ui.css?rev=desktop-entry-controls" '#backupRefreshStatus'
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" "!window.cyIsDesktopInteractionWorkspace()) return;"

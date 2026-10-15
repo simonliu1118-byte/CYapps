@@ -28,17 +28,10 @@
 - [ ] Password Recovery 真實 Email delivery／browser 完整驗收。
 - [ ] CYID post-cutover 穩定後，以獨立 forward migration 退休 `web_sessions` 實體表；現行 authority 已是 CYID，沒有舊表 fallback。
 
-## 本次已授權工作（2026/10/15）
-
-- [x] 備份／復原頁改為正式 Phase D 狀態，移除已完成的 Phase C 驗收及測試用呈現（V0.24.1 source；正式回讀追蹤本批部署）。
-- [x] 桌機 Ctrl＋↑↓ 在日期、摘要、金額皆可調整同一日期，不改焦點或手機／平板操作（V0.24.1 source／行為測試）。
-- [x] 看帳、單月／多月統計、損益表及 Excel 依正負顯示「淨利／淨損」，零元顯示「損益」（V0.24.1 source／正負零測試）。
-- [ ] 上述修正後接續正式還原及隔離 D1 災難復原；不為測試覆寫正式帳本。
-
 ## 備份、復原與維運
 
 - [ ] 觀察 Phase D 首次 R2-only 與 GCS 週三／週日雙副本排程結果：V0.24.0 已部署，Phase C 14／14、正式雙副本隔離還原及 Phase D 啟用回讀皆完成（2026/10/15）。目前 R2 每日 30 天／GCS 週三、週日 182 天；不可用啟用成功推定後續排程驗收完成。
-- [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9。
+- [ ] 舊 schema 6／7 備份到現行 schema 的明確 normalization 與隔離還原；現階段驗證支援來源 8／9／10。
 - [ ] Restore：SUPER_ADMIN server gate、雙重確認、格式／schema／digest 驗證、受控 D1 寫入、對帳及操作者／結果 audit。
 - [ ] DR：R2 不可用時使用有效 GCS copy，以及從 GCS 重建新 D1 的完整演練。
 - [ ] Google Cloud 每月低額 budget 警示（目標 NT$100）；provider lifecycle 若啟用，需長於 application retention。
