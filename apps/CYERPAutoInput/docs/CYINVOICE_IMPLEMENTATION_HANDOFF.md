@@ -1,5 +1,8 @@
 # CYInvoice 接口實作完成交接 → CYERPAutoInput（2026-10-14）
 
+> **2026-10-15 新交接優先資訊：**CYInvoice Draft #445 已升為 **V2.6.21 Build 0**，加入 `--autoinput-pdf`；[下載已驗證 Windows 工程測試包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38682406918/artifacts/11948538865)（3 天）、精確 commit `283e9f269d74cdea6771962ba2544e5894fa0346`，Windows x64／Windows Client／Cloud／Governance 全通過。PDF 規格、四項確認及未驗收的實機事項以本工作分支 [CYINVOICE_PDF_HANDOFF.md](./CYINVOICE_PDF_HANDOFF.md) 的「完成回報」為準。**以下 V2.6.20／10-14 工程包是舊版參考，請優先使用 V2.6.21 工程包聯測；不代表已正式發行。**
+
+
 > **AutoInput 端可開始整合測試，但尚不可在正式 MO店+／ERP 全自動流程啟用開票。** CYInvoice 接口已實作、Windows CI 通過；尚未合併／正式發行，實機雙行程、Excel COM 與真實平台流程未驗收。本文件直接放在 AutoInput 的 V0.3.0 工作分支，供其主控接手。
 
 ## 可下載的 CYInvoice 工程測試包（V2.6.20 Build 0）
