@@ -85,7 +85,7 @@ public sealed class LocalRepository
         var connections = new ServiceConnectivity(settings, serviceHttp, () => {
             cloudEmployees.Clear();
             cyIdOffline.Forget();
-        }, cyIdOffline, cloudEmployees, baseDirectory);
+        }, cyIdOffline, baseDirectory);
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
