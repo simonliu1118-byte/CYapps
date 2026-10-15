@@ -8,6 +8,15 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 最新續作：跨機折讓作廢與雙日期 List 對帳基礎（Draft）
+
+- [x] **g0501 單次送出傳輸**：既有 Windows `AmegoClient.VoidAllowanceAsync` 已具備光貿 `g0501`，Cloud 新增 `amego-allowance-void.ts`：只發一次官方 `[{CancelAllowanceNumber}]`，沿用官方 form-urlencoded 簽章與 8 秒逾時；支援 1～16 字元的既有官方單號（不強迫 `AyyyyMMddXXX`）。回傳 `accepted_unconfirmed / definite_rejection_manual / unknown_result`，**任何結果不得自動重送或視為已作廢**。新增合成簽章／逾時／拒絕／無重送測試。
+- [x] **官方作廢狀態唯讀查回**：`amego-allowance-status.ts` 支援光貿 `allowance_status` keyed object／array 兩種回覆及精確號碼比對，只有 `D0501/B0501/B0201/B0202` 且上傳狀態 99 才標 `officialCancelled`。回覆固定 `safeToAutoResend=false`／`safeToAutoClose=false`，**沒有寫入 D1**；待處理／NOT_FOUND／狀態不明一律不作完成認定。
+- [x] **D1 0019 Draft 與 SQLite 合成防重試**：`cloud/drafts/0019_allowance_void_workflow.sql` 新增僅限真正例外的 `ALLOWANCE_VOID` 申請（原因、原單號、申請人）、不可變管理員核准稽核、**唯一的首次送出 Claim**、官方狀態檢查及結案前的官方完成證據柵欄。SQL Trigger 檢查 Work Item kind/revision、Workspace、Device active、公司設定版次；核准到期不得修改原紀錄延長，send claim 一經取得不能刪除／重建。合成 SQLite 測試驗證重複申請、跨裝置、逾期核准、二次送出與早期結案拒絕。
+- [x] **官方 List 異常定位器**：`amego-allowance-list.ts` 僅以官方 `allowance_list` 的折讓日／建立日（`date_select=1/2`）分頁讀取，回傳必要單號／類型／上傳狀態，不傳買受人資料；`selectAllowanceExceptionHints` 僅對原 D1 例外工作單比對，查到異動才建議進行單號 `allowance_query`／`allowance_status` 詳查，**清單查無不是「發生失敗」的證據，不能解除 sending／重送／自動結案**。
+- [ ] **尚未接通、不可冒稱完成：** 0019 正式環境 Migration、完整 CYID 保護的 ALLOWANCE_VOID create/manager approval/send-once/status-readback/close routes、Windows 跨機折讓作廢 UI、官方雙 List 定期排程和全量分頁比對、例外 Work Item 查核的正式 Audit 寫入、已有折讓含稅／跨原發票餘額核對、公司設定安全同步、其他上傳異常跨機、全部 DR-01～DR-13 實機、V3 合併／正式發布。現行 0015～0019 **全部仍是 Draft SQL**，不得套用到正式 D1；新增 Cloud API 模組目前**不是已上線操作端點**。原始碼測試完全合成且沒有真實光貿或 Worker mutation。
+- [ ] 安全 Gate：完整管理員操作必須先在 D1 原子取得唯一 `allowance_void_send_claims`，確認原工作單版本／有效核准／公司綁定，再呼叫**恰好一次** g0501；掉線後只能用原單號查回，官方 99 + D0501 也須經可信 Audit 確認才允許 Work Item 關閉。任何其他情況不得重送。
+
 ## 2026-10-15 V3 接續：折讓稅額算式及原單號官方唯讀查回（Draft）
 
 - [x] **品項核對加嚴**：原發票每列及申請每列均以 `FixedDecimal` 對應的 BigInt ×10^7 計算 `Quantity × UnitPrice` 與 `Amount`，要求原發票淨額+稅額等於官方總額，應稅 `TaxType=1` 以固定 5%／整數元四捨五入比對明細與整筆稅額，不允許不合理的稅額數字單憑「尚未超過原稅額」通過。舊版過度寬鬆的合成測試已改成真實七位小數、合法 5% 稅額案例，新增錯單價、錯行金額、錯稅額、拆列重複等失敗案例。這仍只涵蓋**資料明確的未稅模式**，若官方四捨五入或歷史分攤不明，保留人工確認。

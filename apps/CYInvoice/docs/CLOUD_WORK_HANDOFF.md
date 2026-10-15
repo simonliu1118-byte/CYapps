@@ -3,6 +3,14 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 V3 最新工程交接：折讓作廢 D1 草案與官方 List 對帳（Draft）
+
+接續 PR #440，Cloud 新增 `amego-allowance-void.ts`（g0501 單次請求，絕不自動重送）、`amego-allowance-status.ts`（僅唯讀查回官方類型/99 成功狀態）、`amego-allowance-list.ts`（折讓日/建立日分頁，只產生既有例外 Work Item 的選擇性詳查提示）。三者均受限於 **Draft Source**，尚未透過正式 CYID Manager route 暴露操作，也沒有連結正式 Cloud D1 或光貿。
+
+`drafts/0019_allowance_void_workflow.sql` 的申請、核准、送出 Claim、官方查回稽核全為原子來源比對及 INSERT-only／不可竄改紀錄；唯一 send claim 不能刪除，阻止 Worker timeout 後第二次 g0501。官方結果可疑／查無資料只回「待查」，不代表可以改號、重送或結案。草案 CI 使用 Node SQLite 和攔截的合成 HTTP，**尚沒有 Work Item 對外路由、Windows g0501 UI、正式 Migration、官方定期雙 List 實作或真人多機驗收**。
+
+下一階段實作次序：CYID protected ALLOWANCE_VOID create → 管理員官方確認與 append-only approval → D1 single send claim＋g0501 一次性呼叫 → 原號 `allowance_status`/query 和觀測 Audit → Windows 結案操作；同時完成 V3 0015～0019 schema 升級演練、公司卡安全憑證治理、所有 DR 腳本與 Windows 操作驗收。切勿依舊段落日期較早的「尚未有 g0401」紀錄判定此刻功能；**目前 V3 仍非正式可使用版本，無任何正式發票操作**。
+
 ## 2026-10-15 V3 接續：稅額安全核對與原號查回（Draft Source）
 
 `allowance-item-validation.ts` 改依 `FixedDecimal` 規則嚴格比對申請／官方行內 `數量 × 單價 = 小計`，稅額 5% 的整數元四捨五入及原發票稅額/淨額/總額相互一致；避免明細錯價／錯稅額在單純不超額判斷下誤為符合。新增獨立官方 `/json/allowance_query` 的唯讀模組，從 D1 ledger **原號**透過服務端 CYID 公司設定查詢，不接受瀏覽器更改折讓號碼。新增 `number-readback` CYID Manager 入口及 Windows `ReadbackNumberForManagerAsync`；真實 API timeout、缺單、外部碰撞或跨原發票資料都不會自動換號／重送／核准／確認。回覆固定 `safeToAutoResend=false`、`safeToAutoConfirm=false`，Ledger 不變。
