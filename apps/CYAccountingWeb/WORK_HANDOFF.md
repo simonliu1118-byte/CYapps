@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.1**；VERSION `0.25.1`、BUILD `0`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
+| 產品 | **V0.25.2**；VERSION `0.25.2`、BUILD `0`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -18,13 +18,19 @@
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
 
-## V0.25.1 桌機設定及備份介面（本批待部署驗收）
+## V0.25.2 舊備份相容與首次登入前置（本批待部署驗收）
+
+- portable schema 6～10 沿同一 `backup-restore.js normalizeAccountingRestoreData`；只在原始 bytes／digest 驗證後轉換，舊物件不回寫。schema 6 色碼依 migration 0007 的 created_at／id 排序補入；6／7 沒有的 Excel import audit 初始化空陣列，矛盾的非空稽核拒絕，不放寬 schema 8+ 缺欄位檢查。
+- 記憶體 SQLite verifier 與獨立 D1 writer 都比對相同 normalized payload，保留交易、期初與全部既有稽核／設定；回報 normalization metadata，preview 明示已轉換。來源 schema 6～9 缺 context 時仍需原 D1，不宣稱已具離線災難復原 context。
+- 既有 production resolver 在 protected deploy 唯讀核對 provider ACCOUNT_PORTAL_URL → Cloudflare managed domain → 實際 CY Web Worker binding／Workspace／core consumer health。重用 CYID 的 requireProductionCoreConsumer，不新增 Identity authority、Secret、workflow 或廣權限；只回報 generic 成敗、不輸出實際資源。首次登入 PR #435 要等此 live gate 通過才合併。
+
+## V0.25.1 桌機設定及備份介面
 
 - 一般／統計損益／月份鎖帳／資料管理／備份復原。Settings manager 以明確 registration／open／viewport lifecycle 同步 owned nav 的 DOM／鍵盤順序與名稱；Quick Entry constructor 呼叫同一 hook，touch 回復原名稱及順序。移除 header 的第二 click／timer，openSettings 直接委派既有 settings manager prepare，quick tab 由 canonical setSettingsTab 載入設定。
 - renderSettings 對原 lockedThrough input 發 change，同步既有桌機 month picker label；不新增 observer／第二月份狀態。桌機已鎖狀態以 picker 呈現，保留未鎖與實際操作結果。精簡重複說明、保留必要風險及驗證提示。
 - Backup UI 同一 module 是唯一 dialog/form／preview/action owner；settings 只保留底部 launcher 與緊急復原入口。表單只建一次，close／Escape 清 preview／typed confirm 並作廢晚到結果；commit 高風險期間禁用欄位與關閉／重複操作，server 原 gate／writer 不變。
 - 立即備份與重新整理同列；桌機卡片 hint 移除不對稱外距並垂直置中；GCS 未排程不畫 badge；驗證按鈕改「檢查備份可還原性」。移除被取代的 settings 內還原表單、backup copy cleanup selectors 及死樣式，沒有第二 API、writer、observer 或 wrapper。
-- 本地 79 項 syntax／application／contract 檢查通過；另補 nav／touch 復原、鎖帳 change、dialog 確認／取消／晚到回應回歸。正式版面及 dialog 驗收追蹤本批 PR／main，不重跑財務還原。
+- 本地 79 項 syntax／application／contract 檢查及新增回歸通過；PR #453 已合併，main run 38673907858 validate／deploy 完整成功。正式桌機已回讀選單正確順序、鎖帳 picker 顯示實際年月、置中卡片、頂部立即備份、GCS 空欄與單一獨立還原 dialog；Escape 關閉及重新開啟清空已確認，未送出還原或鎖帳。
 
 ## V0.25.0 受控復原
 
@@ -53,7 +59,7 @@
 
 - 正式舊版備份頁已回讀 Phase C **14／14**；不再依日期推測。新增 Phase D R2 每日 30 天、GCS 台灣時間週三／週日 03:30 保留 182 天；手動及 Excel 匯入前仍雙副本，GCS 未排程日不記失敗。
 - `backup-service.js` 沿用唯一 orchestration，`backup_policy_events` 是生效 policy authority 與 append-only 操作者稽核。啟用前重新檢查 14 次、同一備份雙 provider 隔離還原且證據未逾 24 小時；切換不清物件，後續 cleanup 採新 retention。保留原 topology 與 credentials／bindings，不另建 workflow 或擴張 IAM。
-- 隔離 SQLite 使用實際 canonical migrations 與 exporter，驗證所有帳務欄列、重複交易、封存帳戶、設定、期初及匯入 audit，檢查 integrity／FK。V0.24.0 當時支援來源 schema 8／9；結果 metadata append-only、來源為 server principal。V0.25.0 新增獨立 D1 writer 及 schema 10，現況見上節；legacy normalization 仍待辦。
+- 隔離 SQLite 使用實際 canonical migrations 與 exporter，驗證所有帳務欄列、重複交易、封存帳戶、設定、期初及匯入 audit，檢查 integrity／FK。V0.24.0 當時支援來源 schema 8／9；結果 metadata append-only、來源為 server principal。V0.25.0 新增獨立 D1 writer 及 schema 10，現況見上節；V0.25.2 已補 portable schema 6／7 normalization。
 - 版本 stamp 改由 VERSION／migrations 產生 `src/build-metadata.json` 並在 CI check，修正舊新備份固定寫 0.22.2；不回寫歷史備份。server WASM 固定 sql.js 1.14.2，真實 workerd 重複請求確認每次新 DB。
 - 本地 **32 項檢查**（30 application suites、CYID contract 與 build metadata）通過；CI 另含 syntax、D1 migration、bundle 及正式 semantic probes。正式 R2／GCS 副本已分別完成隔離還原，備份頁顯示完整資料比對與資料庫檢查通過、正式帳本未更動；啟用按鈕由 server gate 開放。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，回讀 **Phase D 已啟用**：R2 每日 30 天；GCS 台灣時間週三／週日 03:30、182 天。啟用結果由 server policy 回讀確認，不以口頭回報或部署狀態推定。首次 R2-only 新排程已於下方記錄；GCS 新政策週期排程仍待觀察。
 - 新增操作只在桌機備份頁；手機／平板維持既有版面與只讀備份資訊，狀態文字反映實際保留政策。
@@ -103,7 +109,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
 | `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
-| Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。GCS 新政策週期排程、schema 6／7 normalization 與 budget／lifecycle 仍待辦 |
+| Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。schema 6／7 normalization 已補；GCS 新政策週期排程與 budget／lifecycle 仍待辦 |
 | 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
 
 ## GitHub 清理 — 2026/10/13

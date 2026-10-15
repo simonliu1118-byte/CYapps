@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.25.1**（獨立 D1 受控復原；正式 GCS 重建演練通過） |
+| 產品版本 | **V0.25.2**（獨立 D1 受控復原；正式 GCS 重建演練通過） |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -82,7 +82,7 @@ V0.23.2 修復桌機日期日／月／年選擇未同步 canonical input 的 HTM
 
 V0.23.4：桌機問號與收支同列，確認標題列右側顯示唯一存檔狀態，移除十筆說明；最新十筆及日期排序維持。桌機編輯從清單帶回左側原表單，「清空」切為「取消」，未儲存離開會復原原新增草稿。日期文字＋日曆按鈕共用原 canonical input，可輸入四碼月日／八碼日期及 Ctrl＋↑↓ ±1 天。儲存後直接焦點回摘要，移除金額／摘要焦點競爭；實際 Windows IME 模式仍待使用者確認。桌機單月統計移除括號路徑並新增右下回到頂端圓形按鈕；移轉排除計算及手機／平板原版面維持。
 
-V0.24.0 新增桌機備份頁隔離還原驗證及 Phase D 啟用：R2 每日保留 30 天、GCS 台灣時間週三／週日保留 26 週（182 天），手動及匯入前仍雙副本。啟用須先通過正式 14 次排程與雙副本真實 SQLite 還原驗證，不因部署自動切換、不在切換當下刪舊備份。隔離驗證完整比對帳務欄列，支援來源 schema 8／9／10。V0.25.0 延伸為獨立 D1 受控還原，schema 10 新備份包含維運 context，可在原 D1 中斷時從 GCS 重建；原正式帳本保留，promotion 依維運手冊另行進行。詳見 BACKUP_ARCHITECTURE_HANDOFF。
+V0.24.0 新增桌機備份頁隔離還原驗證及 Phase D 啟用：R2 每日保留 30 天、GCS 台灣時間週三／週日保留 26 週（182 天），手動及匯入前仍雙副本。啟用須先通過正式 14 次排程與雙副本真實 SQLite 還原驗證，不因部署自動切換、不在切換當下刪舊備份。隔離驗證完整比對帳務欄列，支援來源 schema 6～10。V0.25.0 延伸為獨立 D1 受控還原，schema 10 新備份包含維運 context，可在原 D1 中斷時從 GCS 重建；原正式帳本保留，promotion 依維運手冊另行進行。詳見 BACKUP_ARCHITECTURE_HANDOFF。
 
 本次正式部署、雙副本隔離還原及 Phase D 啟用回讀均已完成（2026/10/15）：R2 每日保留 30 天；GCS 台灣時間週三／週日 03:30 備份、保留 182 天。首次新排程結果仍待觀察，實際證據見 WORK_HANDOFF。
 

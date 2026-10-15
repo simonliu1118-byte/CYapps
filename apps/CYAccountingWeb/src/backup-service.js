@@ -539,7 +539,7 @@ async function handleRecoveryAction(path,body,env,session,options) {
     const contextSha256=await recoveryDigest(context);
     await env.RECOVERY_DB.prepare(`INSERT INTO backup_recovery_previews(id,backup_id,provider,package_sha256,context_sha256,workspace_id,reason,actor_json,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
       .bind(id,body.backupId,source.provider,source.packageSha256,contextSha256,workspace.workspaceId,reason,JSON.stringify(actor),expiresAt,new Date().toISOString()).run();
-    return {preview:{id,backupId:body.backupId,provider:source.provider,expiresAt,counts:verification.counts,target:'獨立空白 D1',productionModified:false,confirmation:RECOVERY_CONFIRMATION,reason}};
+    return {preview:{id,backupId:body.backupId,provider:source.provider,expiresAt,counts:verification.counts,normalization:verification.normalization||null,target:'獨立空白 D1',productionModified:false,confirmation:RECOVERY_CONFIRMATION,reason}};
   }
   if(path!=='/api/backup/recovery/commit') throw new TieredBackupError('找不到此還原操作。','RECOVERY_ROUTE_NOT_FOUND');
   if(body.reviewed!==true||body.confirmation!==RECOVERY_CONFIRMATION) throw new TieredBackupError('請勾選來源確認並輸入指定確認文字。','RECOVERY_CONFIRM_REQUIRED');

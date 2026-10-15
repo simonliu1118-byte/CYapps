@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { requireProductionCoreConsumer } from '../../CYCloudIdentity/scripts/render-production-config.mjs';
 
 const WORKER_NAME = /^[a-z0-9][a-z0-9._-]{1,62}$/i;
 const APPLICATION_ID = /^[A-Z0-9][A-Z0-9_-]{1,63}$/;
@@ -65,7 +66,43 @@ export async function resolveCyidProductionRuntime({
     throw new Error('Unable to verify the configured CYID production provider runtime.');
   }
 
-  return parseCyidProductionSettings(payload, service);
+  const runtime = parseCyidProductionSettings(payload, service);
+  const portalUrl = await verifyCyWebProductionPortal({ account, token, runtime, provider: payload, fetchImpl });
+  return { ...runtime, portalUrl };
+}
+
+// Read-only deployment prerequisite. Resolve the configured portal to its actual
+// Worker and use CYID's canonical production-consumer guard; URL format alone
+// cannot prove that first-login credentials reach the same authority/workspace.
+export async function verifyCyWebProductionPortal({ account, token, runtime, provider, fetchImpl = fetch }) {
+  const bindings = provider?.result?.bindings || provider?.bindings || [];
+  const text = name => String(bindings.find(binding => binding.name === name && binding.type === 'plain_text')?.text || '').trim();
+  let portal;
+  try {
+    portal = new URL(text('ACCOUNT_PORTAL_URL'));
+    if (portal.protocol !== 'https:' || portal.username || portal.password || portal.search || portal.hash || portal.pathname !== '/') throw new Error('unsafe');
+  } catch { throw new Error('CYWEB_PRODUCTION_PORTAL_INVALID'); }
+  const coreApplicationId = text('CORE_ACCOUNT_APPLICATION_ID');
+  if (!APPLICATION_ID.test(coreApplicationId)) throw new Error('CYWEB_PRODUCTION_APPLICATION_INVALID');
+  const api = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}`;
+  const readSettings = async url => {
+    const response = await fetchImpl(url, { headers: { authorization: `Bearer ${token}` }, redirect: 'error' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.success !== true) throw new Error('CYWEB_PRODUCTION_SETTINGS_UNAVAILABLE');
+    return result;
+  };
+  const domains = await readSettings(`${api}/workers/domains?hostname=${encodeURIComponent(portal.hostname)}`);
+  const matches = (domains.result || []).filter(row => row.hostname === portal.hostname && row.enabled !== false && [undefined, 'production'].includes(row.environment));
+  if (matches.length !== 1 || !WORKER_NAME.test(matches[0].service || '')) throw new Error('CYWEB_PRODUCTION_DOMAIN_UNVERIFIED');
+  const core = await readSettings(`${api}/workers/scripts/${encodeURIComponent(matches[0].service)}/settings`);
+  const plain = name => core.result?.bindings?.find(binding => binding.name === name && binding.type === 'plain_text')?.text;
+  const version = String(plain('IDENTITY_CONSUMER_VERSION') || '');
+  if (plain('IDENTITY_WORKSPACE_ID') !== runtime.workspaceId || !/^\d+\.\d+\.\d+$/.test(version)) throw new Error('CYWEB_PRODUCTION_WORKSPACE_MISMATCH');
+  const response = await fetchImpl(new URL('/api/health', portal).href, { redirect: 'error' });
+  if (!response.ok) throw new Error('CYWEB_PRODUCTION_HEALTH_UNAVAILABLE');
+  const health = await response.json().catch(() => ({}));
+  requireProductionCoreConsumer({ settings: core, health, providerName: runtime.service, applicationId: coreApplicationId, consumerVersion: version });
+  return portal.href;
 }
 
 async function cli() {
@@ -76,7 +113,7 @@ async function cli() {
       developmentService: process.env.CYID_WORKER_NAME
     });
 
-    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId]) {
+    for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId, runtime.portalUrl]) {
       console.log(`::add-mask::${value}`);
     }
 
@@ -84,11 +121,12 @@ async function cli() {
     if (!githubEnv) throw new Error('GITHUB_ENV is unavailable.');
     fs.appendFileSync(
       githubEnv,
-      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\n`,
+      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\nCF_CYWEB_PORTAL_URL=${runtime.portalUrl}\n`,
       { encoding: 'utf8' }
     );
 
     console.log('CYID production consumer runtime verified and injected for this deployment.');
+    console.log('CY Web production portal domain, CYID authority/workspace and consumer health verified.');
   } catch (error) {
     console.error(`CYID production runtime verification failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     process.exitCode = 1;
