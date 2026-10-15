@@ -14,7 +14,7 @@
 - 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（286 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
 
 **A. MO店+ 全自動（主線）**
-- 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：只能一個 COPI08、ERP 不能開著其他視窗）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice（設定勾選時，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
+- 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：只能一個 COPI08、ERP 不能開著其他視窗）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice 開發票（一律，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
 - 已實機通過：到「列印標籤」存 PDF（2026-10-14）；存標籤後關「注意」、配送中匯出、帶入兩檔（2026-10-15，停在當時的提示，該提示已拿掉）。
 - 待實測：整條全自動（含 CYInvoice、不開預覽、列印、批次 ERP、表格完成清單）；新竹／7-11 的批次出貨與 PDF；多種配送方式同批；7-11 熱感實印（`SlipImage.FindFramedSlips`，實檔外框 83×122 mm，原尺寸）。
 - 選單：全自動／匯入訂單匯出檔、重新列印寄件單／測試：發票。

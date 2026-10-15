@@ -604,16 +604,10 @@ internal sealed partial class MainForm : Form
         FitAllFieldRows();
     }
 
-    private async void OpenSettings()
+    private void OpenSettings()
     {
         using var form = new SettingsForm(_settings);
         var answer = form.ShowDialog(this);
-        // The diagnostic lives in 設定 (user, 2026-10-13); it runs once the window is closed.
-        if (form.DiagnoseChromeText)
-        {
-            await DiagnoseChromeTextAsync();
-            return;
-        }
         if (answer != DialogResult.OK) return;
         try
         {
@@ -1232,46 +1226,6 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// Diagnostic (user, 2026-10-13): what Chrome tells UI Automation about the page in front —
-    /// every piece of text with its position — written to the local log, nothing clicked. To
-    /// see whether the batch and the order scan can read the page text instead of OCR.
-    /// </summary>
-    private async Task DiagnoseChromeTextAsync()
-    {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        if (MessageBox.Show(this,
-                "按「確定」後 5 秒，讀取最前面的 Chrome 視窗的網頁文字，寫入本機 LOG（不會點任何東西）。\n\n" +
-                "請在 5 秒內切到 Chrome 要讀的畫面：蝦皮清單、訂單明細、查看寄件編號視窗、寄件單分頁、Chrome 列印視窗（可先打開下拉選單）。",
-                "讀取 Chrome 網頁文字", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
-        SetStatus("5 秒後讀取 Chrome 網頁文字…");
-        await Task.Delay(5000);
-        var foreground = NativeMethods.GetForegroundWindow();
-        var window = NativeMethods.ClassName(foreground) == "Chrome_WidgetWin_1" ? foreground : ShopeePageScanner.FindBrowser();
-        if (window == 0)
-        {
-            MessageBox.Show(this, "找不到 Chrome 視窗。", "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        _log.Info("page-text", $"diagnostic read window class={NativeMethods.ClassName(window)} title={_log.Value(NativeMethods.WindowText(window))}");
-        try
-        {
-            var (items, ms) = await Task.Run(() => (ChromePageText.Read(window, _log, out var elapsed), elapsed));
-            foreach (var item in items)
-                _log.Info("page-text", $"  {item.Type} x={item.Rect.Left} y={item.Rect.Top} w={item.Rect.Width} h={item.Rect.Height} text={_log.Value(item.Text)}");
-            SetStatus($"Chrome 網頁文字：{items.Count} 段，{ms} ms，已寫入 LOG");
-            var sample = string.Join("\n", items.Where(i => i.Text.Length <= 40).Take(12).Select(i => "・" + i.Text));
-            MessageBox.Show(this, $"讀到 {items.Count} 段文字，用了 {ms} 毫秒，已寫入本機 LOG（page-text）。\n\n前幾段：\n{sample}",
-                "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            _log.Error("page-text", ex);
-            MessageBox.Show(this, $"讀取失敗：{ex.Message}", "讀取 Chrome 網頁文字", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
-    /// <summary>
     /// The batch's end (user, 2026-10-12: with a sound). The work PCs have no speakers, only
     /// the board's buzzer (user, 2026-10-14), and since Windows 7 a program's beep goes to the
     /// sound card, never the buzzer — so the beep stays for PCs with speakers, and the window
@@ -1341,7 +1295,7 @@ internal sealed partial class MainForm : Form
             _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
             _settings.ShopeeLabelPrinter.Length == 0 ? "熱感紙印表機" : null,
             _settings.A4Printer.Length == 0 ? "A4 印表機" : null,
-            _settings.MoAutoInvoice && (_settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath)) ? "CYInvoice.exe（或取消勾選全自動開立發票）" : null
+            _settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath) ? "CYInvoice.exe（設定 › 一般）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
@@ -1360,7 +1314,7 @@ internal sealed partial class MainForm : Form
                 "1. 我的訂單 › 未出貨：匯出報表（開發票用）\n" +
                 "2. 批次出貨：新竹貨運、7-11店出、全家店出各自全選 → 批次出貨（併箱）→ 確認出貨，存下標籤（新竹另存出貨總表）\n" +
                 "3. 我的訂單 › 配送中：匯出報表（物流單號）\n" +
-                (_settings.MoAutoInvoice ? "4. CYInvoice 開立發票並帶入（全部沒問題就不開預覽）\n" : "4. 帶入兩個匯出檔 → 預覽（請填發票資料）\n") +
+                "4. CYInvoice 開立發票並帶入（全部沒問題就不開預覽）\n" +
                 "5. 列印：全家／7-11 標籤印在「" + thermal + "」；新竹寄件單與取貨總表印在「" + a4 + "」，印之前會請你放紙；紙本發票拿到 PDF 後另外請你放 A4 白紙\n" +
                 "6. 輸入 ERP\n\n" +
                 "其他配送方式（倉出、冷凍等）不處理，會列在結果裡。網頁操作期間請勿操作電腦，按 Esc 可停止。\n\n要開始嗎？",
@@ -1529,7 +1483,7 @@ internal sealed partial class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
         // 發票 through CYInvoice when set, else filled by hand in the preview.
-        if (_settings.MoAutoInvoice)
+        // 全自動 always invoices through CYInvoice (user, 2026-10-15).
         {
             invoice = await InvoiceMoAsync(title, files.BatchPath ?? result.Before, files.Orders, orders, fullAuto: true);
             QueuePaperInvoices(invoice);

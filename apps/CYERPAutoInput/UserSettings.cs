@@ -28,11 +28,6 @@ internal sealed class UserSettings
     /// MO店+ 發票 goes through its AutoInput interface (README「MO店+ 發票（CYInvoice）」).
     /// </summary>
     public string CyInvoicePath { get; set; } = string.Empty;
-    /// <summary>
-    /// MO店+ 全自動 asks CYInvoice to issue the invoices (production only). Off until CYInvoice's
-    /// interface is released and accepted (handoff): the preview is filled by hand meanwhile.
-    /// </summary>
-    public bool MoAutoInvoice { get; set; }
     /// <summary>紙本發票 PDF style (CYInvoice's company styles; user, 2026-10-15: chosen beforehand), printed on the A4 printer.</summary>
     public int PaperInvoiceStyle { get; set; }
     /// <summary>7-ELEVEN 交貨便服務單 print at 100 % (user, 2026-10-13).</summary>

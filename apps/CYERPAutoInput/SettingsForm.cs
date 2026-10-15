@@ -29,7 +29,6 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _moNotePrefix = new();
     private readonly TextBox _moPassword = new();
     private readonly TextBox _cyInvoicePath = new() { ReadOnly = true, TabStop = false };
-    private readonly CheckBox _moAutoInvoice = new() { AutoSize = true };
     private readonly ComboBox _paperInvoiceStyle = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox _coupangOrderType = new();
     private readonly TextBox _coupangCustomerCode = new();
@@ -48,7 +47,6 @@ internal sealed class SettingsForm : Form
     ];
 
     /// <summary>「讀取 Chrome 網頁文字（診斷）」 was pressed: the window closed for it to run.</summary>
-    public bool DiagnoseChromeText { get; private set; }
 
     public SettingsForm(UserSettings settings)
     {
@@ -158,14 +156,10 @@ internal sealed class SettingsForm : Form
         // CYInvoice (user, 2026-10-15: under 一般).
         var invoice = CyInvoiceSection();
         invoice.Dock = DockStyle.None;
-        invoice.Width = 640;
+        invoice.Width = 560;
         invoice.Margin = new Padding(0, 14, 0, 0);
         flow.Controls.Add(invoice);
 
-        // Diagnostic (user, 2026-10-13: kept out of the 蝦皮 menu, here in 設定).
-        var diagnose = new CyButton { Text = "讀取 Chrome 網頁文字（診斷）", AutoSize = true, Height = 34, Margin = new Padding(0, 14, 0, 0) };
-        diagnose.Click += (_, _) => { DiagnoseChromeText = true; DialogResult = DialogResult.Cancel; Close(); };
-        flow.Controls.Add(diagnose);
 
         // Advanced mode is hidden for now (user, 2026-10-09); the setting is kept.
         _advanced.Checked = _settings.AdvancedMode;
@@ -271,29 +265,27 @@ internal sealed class SettingsForm : Form
     /// </summary>
     private GroupBox CyInvoiceSection()
     {
-        var box = new GroupBox { Text = "CYInvoice（MO店+ 發票）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 104 };
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, AutoSize = true };
+        // Shared by MO店+ and 酷澎 (user, 2026-10-15): the exe only; 全自動 always invoices.
+        var box = new GroupBox { Text = "CYInvoice", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 66 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _cyInvoicePath.Text = _settings.CyInvoicePath;
-        _cyInvoicePath.Width = 380;
+        _cyInvoicePath.Dock = DockStyle.Fill;
         _cyInvoicePath.Margin = new Padding(0, 4, 6, 4);
         var pick = new Button { Text = "選擇…", AutoSize = true, Margin = new Padding(0, 2, 6, 2) };
         pick.Click += (_, _) =>
         {
-            using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice.exe|CYInvoice.exe|程式 (*.exe)|*.exe", CheckFileExists = true };
+            using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice 程式 (CYInvoice.exe)|CYInvoice.exe|所有程式 (*.exe)|*.exe", CheckFileExists = true };
             if (_cyInvoicePath.Text.Length > 0 && Directory.Exists(Path.GetDirectoryName(_cyInvoicePath.Text))) dialog.InitialDirectory = Path.GetDirectoryName(_cyInvoicePath.Text);
             if (dialog.ShowDialog(this) == DialogResult.OK) _cyInvoicePath.Text = dialog.FileName;
         };
         var clear = new Button { Text = "清除", AutoSize = true, Margin = new Padding(0, 2, 0, 2) };
         clear.Click += (_, _) => _cyInvoicePath.Text = string.Empty;
-        grid.Controls.Add(new Label { Text = "CYInvoice.exe", AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, 0, 0);
-        grid.Controls.Add(_cyInvoicePath, 1, 0);
-        grid.Controls.Add(pick, 2, 0);
-        grid.Controls.Add(clear, 3, 0);
-        _moAutoInvoice.Text = "MO店+ 全自動呼叫 CYInvoice 開立發票（不再詢問；測試環境的發票不輸入 ERP；未勾選時在預覽手動填發票）";
-        _moAutoInvoice.Checked = _settings.MoAutoInvoice;
-        _moAutoInvoice.Margin = new Padding(0, 6, 0, 0);
-        grid.Controls.Add(_moAutoInvoice, 0, 1);
-        grid.SetColumnSpan(_moAutoInvoice, 4);
+        grid.Controls.Add(_cyInvoicePath, 0, 0);
+        grid.Controls.Add(pick, 1, 0);
+        grid.Controls.Add(clear, 2, 0);
         box.Controls.Add(grid);
         return box;
     }
@@ -547,7 +539,6 @@ internal sealed class SettingsForm : Form
             .ToDictionary(p => p.Key, p => p.Value.Text.Trim(), StringComparer.OrdinalIgnoreCase);
         if (_moPassword.Text.Length > 0) _settings.MoPasswordProtected = LocalSecret.Protect(_moPassword.Text);
         _settings.CyInvoicePath = _cyInvoicePath.Text.Trim();
-        _settings.MoAutoInvoice = _moAutoInvoice.Checked;
         _settings.PaperInvoiceStyle = (_paperInvoiceStyle.SelectedItem as PaperStyleItem)?.Code ?? 0;
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;

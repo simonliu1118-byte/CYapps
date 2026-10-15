@@ -401,7 +401,7 @@ internal sealed partial class MainForm
         }
         if (_settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath))
         {
-            using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice.exe|CYInvoice.exe|程式 (*.exe)|*.exe", CheckFileExists = true };
+            using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice 程式 (CYInvoice.exe)|CYInvoice.exe|所有程式 (*.exe)|*.exe", CheckFileExists = true };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
             _settings.CyInvoicePath = dialog.FileName;
             _settingsStore.Save(_settings);
