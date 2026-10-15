@@ -40,7 +40,7 @@ let allowed = true;
 const env = {
   APP_ENV: "test", API_VERSION: "1", SCHEMA_VERSION: "14", CYID_ENABLED: "true",
   IDENTITY_APPLICATION_ID: "CYINVOICE", IDENTITY_WORKSPACE_ID: "identity_ws",
-  IDENTITY_CYINVOICE_WORKSPACE_ID: "ws_cyid",
+  IDENTITY_CYINVOICE_WORKSPACE_ID: "ws_cyid", IDENTITY: { fetch: async () => Response.json({}) },
   cyIdContext: { revalidate: async () => ({
     workspaceRole: allowed ? "SUPER_ADMIN" : "USER", employeeId: "cyid_admin",
   }) },
