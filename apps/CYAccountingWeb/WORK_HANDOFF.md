@@ -6,17 +6,25 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.3**；本批新增記帳即時顯示與失敗回復。上一正式基準 V0.25.2 Build 1（PR #454／#455、main run 38675354003）已成功部署及瀏覽器回讀；本批 CI／部署驗收見對應 PR |
+| 產品 | **V0.25.4**；首次登入說明及安全 CY Web 入口沿 PR #435。上一正式 V0.25.3（PR #457、main run 38678168558）已完成部署及瀏覽器回讀；本版嚴格 gate／部署驗收追蹤 PR #435 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
 | 公開 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；不與正式網站版本混用 |
 | D1 | schema **10**，新增 append-only 受控復原預覽／執行／結果 audit；既有帳務 payload 不變 |
-| CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
+| CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.5**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+
+## V0.25.4 首次登入引導
+
+- PR #435 依最新主線重新整合，不帶回舊記帳／備份 source；共用登入頁說明先於 CY Web 驗證 Email、設定正式密碼後再登入。只讀 /api/auth/account-portal 沿 identity-adapter 輸出安全 HTTPS root，不查帳務或建立 Session。
+- 入口連結不附員工編號、密碼、Session 或 first-login ticket；新分頁採 noopener noreferrer。非列舉式帳密錯誤可提示首次登入步驟，FIRST_LOGIN_REQUIRED 明確引導；真正 provider 5xx 保留服務錯誤分類，不建立第二啟用流程。
+- CY Web PR #154／正式 run 38712562070 已修正 authority；後續 run 38717773511（2026/10/15 18:07 台灣時間）回讀 canonical production、Workspace、core App、consumer 1.0.5／health 一致、productionPortalReady=true。帳務 D1 未切換，歷史 development environment 名稱不是 authority 判斷依據。
+- CYACC 自己的既有正式部署 run 38678168558 attempt 2 已於 2026/10/15 20:36 通過完整 portal／CYID authority／Workspace／consumer health 檢查；未變更 VERSION／BUILD。首次登入版本 production deploy 再強制 --require-account-portal，完整 gate 通過才注入 metadata。既有 provider runtime guard 始終強制，不把 URL 或單純 CI 綠燈當正式 readiness。
+- 使用者真 Email／一次性密碼／正式密碼／重新登入的完整鏈仍待受控真人驗收，不自行新增帳號、寄信或改密碼。手機／平板共用原登入 shell、native form／Session／recovery；只增加此功能必要說明與入口。
 
 ## V0.25.3 新增記帳即時顯示與失敗回復
 
@@ -164,6 +172,6 @@ V0.25.2 初次 main run 38674853444 validate 成功，deploy 在唯讀 portal ga
 ## 本批結案與外部待辦
 
 - V0.25.2 Build 1 已正式部署；schema 6／7 normalization 的本地 SQLite、workerd、D1 roundtrip 及其餘 79 項 workflow checks 通過。沒有為驗收而覆寫正式帳本或已用過的復原目標。
-- 首次登入 PR #435 仍不合併。最新 protected deploy 唯讀預檢回報 CYWEB_PRODUCTION_AUTHORITY_MISMATCH：CY Web 的 IDENTITY service target 與本 App 使用的 canonical production provider 不一致；Workspace／application／health 沒有回報差異。由 CY Web／CYID 正式部署維護者核對並修正其既有環境設定後，重新執行 --require-account-portal gate；不可在 CYACC 放寬或另建 authority。
+- 首次登入阻擋已由 CY Web 修正，證據見 V0.25.4 小節；本 App 仍沿同一 canonical guard 強制驗證，不採 development Identity 或放寬 guard。
 - Google Cloud 每月低額預算已由使用者在 Console 建立，清單截圖確認帳單帳戶範圍、指定金額及實際支出 50／90／100% 門檻；依使用者決定包含優惠，追蹤折抵後支出。截圖未標明幣別／Email 收件者，不推定為 TWD 或已驗收寄信。不是自動硬上限。
 - GCS 新政策首次週期排程及 bucket lifecycle 仍待確認；不新增無必要 workflow，不擴張 IAM，不建立 Release。

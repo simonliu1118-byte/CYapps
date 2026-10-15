@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import {
   appUserFromPrincipal,
   canWriteAccounting,
   loginWithCyid,
+  cyWebPortalUrl,
   passwordWithinCyidBounds,
   resolveIdentitySession,
   startPasswordRecovery
@@ -62,6 +64,18 @@ const env = {
     }
   }
 };
+
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/start' }), 'https://portal.example.test/');
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'http://portal.example.test/' }), null);
+assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/?token=secret' }), null);
+const portalResponse = await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {
+  CYWEB_PORTAL_URL: 'https://portal.example.test/',
+  IDENTITY: { fetch() { throw new Error('Portal metadata must not contact CYID'); } },
+  DB: { prepare() { throw new Error('Portal metadata must not query accounting'); } }
+});
+assert.equal(portalResponse.status, 200);
+assert.deepEqual(await portalResponse.json(), { ok: true, url: 'https://portal.example.test/' });
+assert.equal((await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {})).status, 503);
 
 assert.equal(passwordWithinCyidBounds('12345678'), true);
 assert.equal(passwordWithinCyidBounds('1234567'), false);
@@ -269,6 +283,41 @@ const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
 assert.match(loginHtml, /id="loginForm"/);
+assert.match(loginHtml, /id="firstLoginHelp"/);
+assert.match(loginHtml, /id="firstLoginCyWebLink"/);
+const loginJs = fs.readFileSync(path.join(ROOT, 'public/login.js'), 'utf8');
+assert.match(loginJs, /\/api\/auth\/account-portal/);
+// Exercise the actual shared discovery function: no employee/password/ticket
+// reaches the portal link, and unsafe metadata never reveals a usable link.
+const discoverPortal = loginJs.slice(loginJs.indexOf('  async function loadFirstLoginPortal()'), loginJs.indexOf('  async function handleLoginSubmit('));
+for (const portal of ['https://portal.example.test/', 'http://portal.example.test/', 'https://user:pass@portal.example.test/', 'https://portal.example.test/?employee=0123', 'https://portal.example.test/#ticket', 'https://portal.example.test/path']) {
+  const link = { hidden: true, href: '#' };
+  const ctx = vm.createContext({ firstLoginLink: link, URL, fetch: async (url, options) => {
+    assert.equal(url, '/api/auth/account-portal'); assert.equal(options.method, 'GET');
+    assert.equal(options.body, undefined); assert.equal(options.credentials, 'same-origin');
+    return Response.json({ ok: true, url: portal });
+  } });
+  vm.runInContext(discoverPortal, ctx); await ctx.loadFirstLoginPortal();
+  assert.equal(link.hidden, portal !== 'https://portal.example.test/');
+  assert.equal(link.href, portal === 'https://portal.example.test/' ? portal : '#');
+}
+for (const [status, payload, expected, phrase] of [
+  [200, { firstLogin: { ticket: 'never-forward-ci-ticket' } }, 403, '完成 Email 驗證與正式密碼設定'],
+  [401, { error: { code: 'INVALID_CREDENTIALS' } }, 401, '如為首次登入'],
+  [503, { error: { code: 'PROVIDER_UNAVAILABLE' } }, 503, '中央帳號服務目前無法使用']
+]) {
+  const failureEnv = { ...env, IDENTITY: { fetch: async () => Response.json(payload, { status }) } };
+  const response = await app.fetch(new Request('https://acc.example.test/api/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
+  }), failureEnv);
+  assert.equal(response.status, expected); assert.equal(response.headers.get('set-cookie'), null);
+  const result = await response.text(); assert.ok(result.includes(phrase));
+  assert.ok(!result.includes('never-forward-ci-ticket'), 'non-core never returns a first-login ticket');
+}
+assert.match(loginJs, /firstLoginLink\.href = url\.href/);
+assert.match(loginJs, /failed: '員工編號或密碼不正確。如為首次登入/);
+assert.match(loginJs, /service: '中央帳號服務目前無法使用/);
 assert.match(workerApp, /url\.pathname === '\/api\/auth\/login'/);
 assert.match(loginHtml, /window\.location\.protocol === 'http:'/);
 assert.match(loginHtml, /window\.location\.replace/);
