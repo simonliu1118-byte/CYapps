@@ -124,7 +124,7 @@ function setupQuickEntrySettingsPane() {
   pane.className = 'settings-pane';
   pane.dataset.settingsPane = 'quick';
   pane.innerHTML = `
-    <h3>快速輸入設定</h3>
+    <h3>快速輸入設定</h3><h4 class="general-summary-heading">常用摘要</h4>
     <p class="hint">調整「常用摘要」的統計方式。常用摘要仍依帳戶、收入／支出與科目分開計算，最多顯示 10 個。</p>
     <div class="quick-settings-grid">
       <label><span>統計依據</span><select id="frequentSummaryBasis"><option value="tx_date">帳務日期最近</option><option value="created_at">近期輸入最近</option></select></label>
@@ -144,10 +144,8 @@ function setupQuickEntrySettingsPane() {
   els.settingsTabs?.push(tab);
   els.settingsPanes?.push(pane);
 
-  tab.addEventListener('click', async () => {
-    setSettingsTab('quick');
-    await loadQuickEntrySettings(true);
-  });
+  tab.addEventListener('click', () => setSettingsTab('quick'));
+  window.cySettingsManager?.syncNavigation?.();
   pane.querySelector('#saveQuickEntrySettings')?.addEventListener('click', saveQuickEntrySettings);
 }
 

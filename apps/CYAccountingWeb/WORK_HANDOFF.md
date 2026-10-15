@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.0 Build 1**；VERSION `0.25.0`、BUILD `1`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
+| 產品 | **V0.25.1**；VERSION `0.25.1`、BUILD `0`，獨立 D1 受控還原；[PR #450](https://github.com/simonliu1118-byte/CYapps/pull/450)、[main run 38671076691](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671076691) 完整成功；Build 1 [PR #451](https://github.com/simonliu1118-byte/CYapps/pull/451)／[main run 38671618879](https://github.com/simonliu1118-byte/CYapps/actions/runs/38671618879) 成功，正式頁面已回讀 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -17,6 +17,14 @@
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+
+## V0.25.1 桌機設定及備份介面（本批待部署驗收）
+
+- 一般／統計損益／月份鎖帳／資料管理／備份復原。Settings manager 以明確 registration／open／viewport lifecycle 同步 owned nav 的 DOM／鍵盤順序與名稱；Quick Entry constructor 呼叫同一 hook，touch 回復原名稱及順序。移除 header 的第二 click／timer，openSettings 直接委派既有 settings manager prepare，quick tab 由 canonical setSettingsTab 載入設定。
+- renderSettings 對原 lockedThrough input 發 change，同步既有桌機 month picker label；不新增 observer／第二月份狀態。桌機已鎖狀態以 picker 呈現，保留未鎖與實際操作結果。精簡重複說明、保留必要風險及驗證提示。
+- Backup UI 同一 module 是唯一 dialog/form／preview/action owner；settings 只保留底部 launcher 與緊急復原入口。表單只建一次，close／Escape 清 preview／typed confirm 並作廢晚到結果；commit 高風險期間禁用欄位與關閉／重複操作，server 原 gate／writer 不變。
+- 立即備份與重新整理同列；桌機卡片 hint 移除不對稱外距並垂直置中；GCS 未排程不畫 badge；驗證按鈕改「檢查備份可還原性」。移除被取代的 settings 內還原表單、backup copy cleanup selectors 及死樣式，沒有第二 API、writer、observer 或 wrapper。
+- 本地 79 項 syntax／application／contract 檢查通過；另補 nav／touch 復原、鎖帳 change、dialog 確認／取消／晚到回應回歸。正式版面及 dialog 驗收追蹤本批 PR／main，不重跑財務還原。
 
 ## V0.25.0 受控復原
 

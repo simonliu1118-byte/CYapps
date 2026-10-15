@@ -420,8 +420,9 @@ async function deleteTransaction(id) {
   }
 }
 
-function openSettings() {
+function openSettings(initialTab) {
   setDialogMessage(els.settingsMessage, '');
+  window.cySettingsManager?.prepareSettings?.(typeof initialTab === 'string' ? initialTab : null);
   renderSettings();
   els.settingsDialog.showModal();
 }
@@ -432,6 +433,7 @@ function setSettingsTab(tab) {
   els.settingsPanes.forEach(pane => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
   setDialogMessage(els.settingsMessage, '');
   if (tab === 'statistics') window.cyStatistics?.loadSettings();
+  if (tab === 'quick' && typeof loadQuickEntrySettings === 'function') loadQuickEntrySettings(true);
 }
 
 function renderSettings() {
@@ -440,6 +442,8 @@ function renderSettings() {
   els.lockedThrough.value = state.lockedThrough || '';
   els.lockStatusText.textContent = state.lockedThrough ? `目前已鎖帳至 ${formatMonth(state.lockedThrough)}，更早月份也一併鎖定。` : '目前未鎖帳。';
   window.cySyncMobileLockMonthControls?.();
+  els.lockStatusText.hidden = Boolean(window.cyIsDesktopInteractionWorkspace?.() && state.lockedThrough);
+  els.lockedThrough.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 async function handleAccountAction(event) {

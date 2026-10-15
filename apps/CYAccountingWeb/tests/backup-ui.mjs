@@ -152,7 +152,8 @@ assert.match(phaseD.schedule,/週三、週日/);
 const nodes = new Map([['#backupHistoryRows',{}],['#backupRestoreTools',{}],['#backupRestoreStatus',{}],['#backupVerifyRestore',{}],['#backupActivatePhaseD',{}]]);
 context.document.querySelector = selector => nodes.get(selector) || null;
 context.renderTieredBackupHistory([{gcsExpected:false,copies:[{provider:'cloudflare_r2',status:'success'}],status:'success'}]);
-assert.match(nodes.get('#backupHistoryRows').innerHTML,/本日未排程/);
+assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML,/本日未排程/);
+assert.match(nodes.get('#backupHistoryRows').innerHTML, /<td class="backup-copy-cell"><\/td>/, 'unscheduled GCS stays an empty cell');
 context.window.cyIsDesktopInteractionWorkspace=()=>false;
 context.renderBackupRestoreState({policy:{phase:'phase_d'}});
 assert.equal(nodes.get('#backupRestoreTools').hidden,true,'no new touch controls');
@@ -165,3 +166,29 @@ assert.equal(nodes.get('#backupActivatePhaseD').textContent,'Phase D 已啟用')
 assert.equal(context.window.phaseCAcceptanceUiModel({provider:'tiered',policy:{phase:'phase_d'}}).visible,false,'retired Phase C progress is absent after activation');
 assert.equal(nodes.get('#backupActivatePhaseD').hidden,true,'completed activation is not a permanent action');
 assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);
+
+// Only the launcher remains in settings; the single restore form is dialog-owned.
+assert.ok(renderedHtml.indexOf('id="backupRunNow"') < renderedHtml.indexOf('id="backupMessage"'));
+assert.equal((renderedHtml.match(/id="backupRunNow"/g)||[]).length,1);
+assert.ok(renderedHtml.includes('id="backupOpenRecovery"'));
+assert.ok(!renderedHtml.includes('id="backupRecoverySource"'));
+assert.ok(renderedHtml.includes('backup-emergency-link'));
+const confirmPanel={hidden:false}, reviewed={checked:true}, text={value:'重建獨立帳本'}, commit={disabled:false};
+nodes.set('#backupRecoveryConfirm',confirmPanel);nodes.set('#backupRecoveryReviewed',reviewed);nodes.set('#backupRecoveryConfirmation',text);nodes.set('#backupRecoveryCommit',commit);
+vm.runInContext('backupRecoveryPreview={id:"TEST_PREVIEW"}',context);
+context.cancelBackupRecoveryPreview();
+assert.equal(confirmPanel.hidden,true);assert.equal(reviewed.checked,false);assert.equal(text.value,'');assert.equal(commit.disabled,true);
+vm.runInContext('backupRecoveryPreview={id:"TEST_PREVIEW"}',context);
+reviewed.checked=true;text.value='wrong';context.syncBackupRecoveryConfirmation();assert.equal(commit.disabled,true);
+text.value='重建獨立帳本';context.syncBackupRecoveryConfirmation();assert.equal(commit.disabled,false);
+// A completed asynchronous preview cannot revive a closed/cancelled dialog.
+const previewButton={disabled:false}, recoveryDialog={open:true};
+nodes.set('#backupRecoveryPreview',previewButton);nodes.set('#backupRecoveryDialog',recoveryDialog);
+for(const [id,value] of [['Source','TEST_BACKUP'],['Provider','google_cloud_storage'],['Reason','TEST_REASON']])nodes.set('#backupRecovery'+id,{value});
+let resolvePreview;context.api=()=>new Promise(resolve=>{resolvePreview=resolve;});
+context.jsonHeaders=()=>({'content-type':'application/json'});
+const pendingPreview=context.previewBackupRecovery();
+recoveryDialog.open=false;context.cancelBackupRecoveryPreview();
+resolvePreview({preview:{id:'TEST_LATE',counts:{transactions:1}}});await pendingPreview;
+assert.equal(confirmPanel.hidden,true);assert.equal(commit.disabled,true);
+console.log('Backup launcher/dialog boundary, cancellation, typed confirmation and late-preview discard passed.');

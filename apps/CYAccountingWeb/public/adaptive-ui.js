@@ -48,6 +48,7 @@ function setupAdaptiveViewportState() {
   const sync = () => {
     const width = window.innerWidth;
     document.documentElement.dataset.viewport = width < 768 ? 'mobile' : isTabletWorkspace() ? 'tablet' : 'desktop';
+    syncSettingsNavigation();
   };
   sync();
   window.addEventListener('resize', sync, { passive: true });
@@ -225,9 +226,6 @@ function cleanupAdaptiveInterfaceCopy() {
       '#settingsDialog [data-settings-pane="lock"] > .hint',
       '#settingsDialog [data-settings-pane="data"] .hint',
       '#settingsDialog [data-settings-pane="data"] .cy-data-section > p',
-      '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
-      '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
-      '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
       '#settingsDialog [data-settings-pane="migration"] .migration-privacy',
       '#openingDialog .opening-dialog-heading > .hint'
     ];
@@ -1336,22 +1334,6 @@ function setupDesktopManagementHeaderManagement() {
     categoriesButton.addEventListener('click', () => openDesktopManagementManagement('categories', '科目管理'));
   }
 
-  if (settings.dataset.desktopManagementBound !== '1') {
-    settings.dataset.desktopManagementBound = '1';
-    settings.addEventListener('click', () => {
-      setTimeout(() => {
-        dialog.classList.remove('cy-management-mode');
-        delete dialog.dataset.managementPane;
-        title.textContent = '設定';
-        const current = typeof state === 'object' ? String(state.activeSettingsTab || '') : '';
-        if (current === 'accounts' || current === 'categories' || !current) {
-          const preferred = ['quick', 'data', 'lock', 'backup', 'migration']
-            .find(name => document.querySelector(`[data-settings-tab="${name}"]`));
-          if (preferred && typeof setSettingsTab === 'function') setSettingsTab(preferred);
-        }
-      }, 0);
-    });
-  }
 
   const syncDesktop = () => {
     const enabled = isDesktopInteractionWorkspace();
@@ -1377,7 +1359,7 @@ function openDesktopManagementManagement(tab, label) {
   if (!dialog || !title) return;
 
   if (!dialog.open) {
-    if (typeof openSettings === 'function') openSettings();
+    if (typeof openSettings === 'function') openSettings(tab);
     else dialog.showModal();
   } else if (typeof renderSettings === 'function') {
     renderSettings();
@@ -2075,12 +2057,46 @@ let settingsManagerPointer = null;
 let settingsManagerSaving = false;
 
 window.cySettingsManager = {
+  syncNavigation: syncSettingsNavigation,
+  prepareSettings: prepareSettingsPresentation,
   renderAccountManager: renderSettingsAccountManager,
   renderCategoryManager: renderSettingsCategoryManager,
   openAddGroupDialog: openSettingsAddGroupDialog,
   openAddCategoryDialog: openSettingsAddCategoryDialog,
   openRenameDialog: openSettingsRenameDialog
 };
+
+function syncSettingsNavigation() {
+  const desktop = isDesktopInteractionWorkspace();
+  const quick = document.querySelector('[data-settings-tab="quick"]');
+  const lock = document.querySelector('[data-settings-tab="lock"]');
+  const quickTitle = document.querySelector('[data-settings-pane="quick"] h3');
+  if (quick) quick.textContent = desktop ? '一般' : '快速輸入';
+  if (lock) lock.textContent = desktop ? '月份鎖帳' : '鎖帳';
+  if (quickTitle) quickTitle.textContent = desktop ? '一般設定' : '快速輸入設定';
+  const nav = document.querySelector('.settings-nav');
+  if (!nav) return;
+  const order = desktop
+    ? ['accounts', 'categories', 'quick', 'statistics', 'lock', 'data', 'backup', 'migration']
+    : ['accounts', 'categories', 'statistics', 'data', 'quick', 'lock', 'backup', 'migration'];
+  const buttons = order.map(name => nav.querySelector(`[data-settings-tab="${name}"]`)).filter(Boolean);
+  if (buttons.some((button, index) => nav.children[index] !== button)) nav.append(...buttons);
+
+}
+
+function prepareSettingsPresentation(initialTab) {
+  syncSettingsNavigation();
+  if (!isDesktopInteractionWorkspace()) return;
+  const dialog = document.querySelector('#settingsDialog');
+  if (!dialog) return;
+  dialog.classList.remove('cy-management-mode');
+  delete dialog.dataset.managementPane;
+  const title = dialog.querySelector('.modal-header h2');
+  if (title) title.textContent = '設定';
+  const current = state.activeSettingsTab;
+  const tab = initialTab || (current && !['accounts', 'categories'].includes(current) ? current : 'quick');
+  if (typeof setSettingsTab === 'function') setSettingsTab(tab);
+}
 
 let settingsManagerInitialized = false;
 
