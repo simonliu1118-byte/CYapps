@@ -7,12 +7,11 @@ export type WorkItemStatus = "open" | "review" | "closed";
 export interface NewWorkItem {
   itemId: string; workspaceId: string; deviceId: string;
   environment: "production" | "test"; kind: WorkItemKind;
-  referenceHash: string; actorId: string; builtInVerifier?: string;
+  referenceHash: string; actorId: string;
 }
 export interface WorkItemTransition {
   itemId: string; workspaceId: string; deviceId: string; actorId: string;
   expectedRevision: number; from: "open" | "review"; to: "review" | "closed";
-  builtInVerifier?: string;
 }
 
 function validId(value: string): boolean {
@@ -41,14 +40,9 @@ export async function createWorkItem(db: D1Database, input: NewWorkItem): Promis
       SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
       WHERE d.device_id = ?3 AND d.workspace_id = ?2
         AND d.status = 'active' AND w.status = 'active')
-    ${input.builtInVerifier === undefined ? "" : `
-    AND EXISTS (SELECT 1 FROM cloud_employees e
-      WHERE e.employee_id = ?7 AND e.workspace_id = ?2
-        AND e.enabled = 1 AND e.role IN ('ADMIN','SUPER_ADMIN')
-        AND e.credential_verifier = ?9)`}`
+    `
   ).bind(input.itemId, input.workspaceId, input.deviceId, input.environment,
-         input.kind, input.referenceHash, input.actorId, now,
-         ...(input.builtInVerifier === undefined ? [] : [input.builtInVerifier])).run();
+         input.kind, input.referenceHash, input.actorId, now).run();
   return result.meta.changes === 1;
 }
 
@@ -69,14 +63,9 @@ export async function transitionWorkItem(db: D1Database, input: WorkItemTransiti
         SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
         WHERE d.device_id = ?2 AND d.workspace_id = ?6
           AND d.status = 'active' AND w.status = 'active')
-      ${input.builtInVerifier === undefined ? "" : `
-      AND EXISTS (SELECT 1 FROM cloud_employees e
-        WHERE e.employee_id = ?3 AND e.workspace_id = ?6
-          AND e.enabled = 1 AND e.role IN ('ADMIN','SUPER_ADMIN')
-          AND e.credential_verifier = ?9)`}`
+      `
   ).bind(input.to, input.deviceId, input.actorId, now, input.itemId,
-         input.workspaceId, input.from, input.expectedRevision,
-         ...(input.builtInVerifier === undefined ? [] : [input.builtInVerifier])).run();
+         input.workspaceId, input.from, input.expectedRevision).run();
   return result.meta.changes === 1;
 }
 
