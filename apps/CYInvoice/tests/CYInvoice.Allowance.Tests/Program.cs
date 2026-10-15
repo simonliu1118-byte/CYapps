@@ -10,6 +10,7 @@ using CYInvoice.Core.Storage;
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
+    ("allowance g0501 cancels existing number exactly once and never reallocates", TestG0501GatewayAsync),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
     ("allowance_list pages and maps original invoice numbers", TestAllowanceListAsync),
     ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
@@ -190,6 +191,51 @@ static async Task TestG0401GatewayAsync()
     Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
     await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
     Equal(1, handler.Requests.Count);
+}
+
+static async Task TestG0501GatewayAsync()
+{
+    // An external AMEGO website allowance number need not match our V3 daily
+    // number generator. The official g0501 requires only that known number.
+    const string websiteNumber = "3821061800001";
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/g0501"
+            ? JsonResponse("""{"code":0,"msg":""}""")
+            : JsonResponse("""{"code":71,"msg":"unexpected endpoint"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.VoidAllowanceAsync(websiteNumber);
+    Equal(0, response.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0501", handler.Requests[0].Uri.AbsolutePath);
+    using (var request = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]))
+    {
+        Equal(JsonValueKind.Array, request.RootElement.ValueKind);
+        Equal(1, request.RootElement.GetArrayLength());
+        Equal(websiteNumber,
+            request.RootElement[0].GetProperty("CancelAllowanceNumber").GetString());
+        Equal(1, request.RootElement[0].EnumerateObject().Count());
+    }
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(""));
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(" " + websiteNumber));
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(new string('A', 17)));
+    Equal(1, handler.Requests.Count);
+
+    var rejected = new RecordingHttpHandler((_, _, _) =>
+        JsonResponse("""{"code":4050134,"msg":"allowance does not exist"}"""));
+    using var errorHttp = new HttpClient(rejected);
+    var rejectGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, errorHttp);
+    try
+    {
+        await rejectGateway.VoidAllowanceAsync(websiteNumber);
+        throw new InvalidOperationException("g0501 must propagate AMEGO rejection");
+    }
+    catch (AmegoApiException error)
+    {
+        Equal(4050134, error.Code);
+    }
+    // No new allowance number and no mutation retry are performed by Gateway.
+    Equal(1, rejected.Requests.Count);
 }
 
 static async Task TestG0401DuplicateNumberAsync()
