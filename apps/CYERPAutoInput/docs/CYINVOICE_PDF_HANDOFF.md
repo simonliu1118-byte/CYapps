@@ -95,10 +95,27 @@ CYInvoice.exe --autoinput-pdf <request.json> --result <result.json>
 - `MainForm.Invoice.cs`：子行程呼叫（`ProcessStartInfo.ArgumentList`、逾時＝每筆 60 秒＋60 秒，只停止等待不殺行程）、query→issue→unknown 再 query 一次、環境判斷、紙本 PDF 輪詢與 A4 列印、測試入口。
 - 每次的 request／result 留在 `<AutoInput>\Temp\invoice-日期時間\`。
 
-## 4. 完成回報（CYInvoice 主控填寫）
+## 4. 完成回報（CYInvoice 主控，2026-10-15）
 
-- PR／commit：
-- CYInvoice 版本：
-- Windows 工程測試包下載連結（Actions Artifact，保留 3 天）：
-- 第 2 節四項確認結果：
-- 已知限制：
+**CYInvoice 端已實作、Windows CI 已通過，已提供 Windows 工程測試包；真實雙程式／ERP／光貿及 Excel COM E2E 尚未驗收。** 交接以 source／CI 證據為準，不代表可在正式環境無人值守開票或列印。
+
+- **PR／commit：**[CYInvoice Draft #445](https://github.com/simonliu1118-byte/CYapps/pull/445)，branch `cyinvoice/feat-autoinput-interface`，精確已驗證 commit `283e9f269d74cdea6771962ba2544e5894fa0346`。
+- **CYInvoice 版本：**`V2.6.21 Build 0`（工程測試版，並未合併／正式發布）。
+- **Windows 工程測試包下載（GitHub Actions Artifact，保留 3 天）：**[CYInvoice_V2.6.21_engineering-run512](https://github.com/simonliu1118-byte/CYapps/actions/runs/38682406918/artifacts/11948538865)，約 81.1 MB。對應 [Windows x64 CI Run 38682406918](https://github.com/simonliu1118-byte/CYapps/actions/runs/38682406918)。GitHub Actions 通過 Windows 建置、Core 回歸、WinForms 啟動 Smoke、PE／portable 檢驗、public safety scan；同 commit 的 Windows Client、Cloud validate、Governance 皆 success。下載需 GitHub Artifact 存取權限；過期後由 CYInvoice PR 重新產工程包，**不可換用正式 V2.6.19 Release**。
+- **已實作接口：**`--autoinput-query`、`--autoinput-issue`、新增 `--autoinput-pdf`。PDF 使用相同 `cyinvoice-autoinput-request/1` schema，要求 `orderIds`、絕對路徑且已存在的 `pdfFolder`、`pdfStyle` 0／1／2／3／5；result 有 `orders[].pdfFile` 及 ready／pending／unknown／skipped。只有全部 ready 才 exit 0。CLI 用原 portable Mutex；主程式開啟時用同 Windows 使用者的 IPC；舊 result 不覆寫。官方 PDF 經原 `InvoiceService.GetInvoicePdfAsync` 20 MiB cache 驗證後原子複製，重複時比較 SHA256、不覆蓋不同檔案；**不呼叫 AMEGO 開立**。查不到 PDF 回 pending 而非重開，最多約 55 秒後本輪回應，20 秒輪詢仍由 AutoInput 自己負責。
+
+### 第 2 節四項確認結果
+
+1. **紙本／會員載具 — 已確認：**`InvoiceService.IssueMoWithLookupAsync` 公司統編訂單先清除載具並設 `DeliveryPaper`；無統編 B2C 設 `MoCarriers.Member` 會員載具。`--autoinput-pdf` 僅會把有合法公司統編且本機紀錄為紙本的已開立發票輸出，B2C 回 `skipped`；捐贈發票按原 CYInvoice 規則另行處理，不當成紙本。
+2. **測試／正式訂單號碼 — 已確認：**回傳 `orders[].orderId` 是 Excel 匯入的**原始 MO 14 碼訂單號碼**；測試環境若另將 OrderID namespace 傳給光貿，只作用在 API 層，不改寫 AutoInput 結果的訂單號碼。既有 `issue`、`query` 與新 `pdf` 皆一致。
+3. **totalAmount — 已確認：**`AutoInputProcessor` 使用 CYInvoice `PlatformImportReader.ReadMoOrderExportAsync` 的 `MoOrder.TotalAmount`（來源為 MO 應開發票整單金額）；開立仍由同一套 `InvoiceService` 處理；回傳的已開立金額為本機已確認的 `InvoiceRecord.Amount`，與匯入金額不一致不得當成功。PDF 另回傳同張發票的本機 `Amount`，AutoInput 仍應與先前結果再次核對。
+4. **CLI 測試環境設定 — 已確認：**主程式未開啟時從該 CYInvoice portable 資料夾原先**最後儲存的**`settings.Environment` 讀取，不會彈出 UI，也不允許 request 自行切換 test／production；請測試前先在 CYInvoice 設定頁切換並儲存**測試環境**，建議使用隔離測試 portable 目錄。結果 `environment` 必須逐筆跟 AutoInput 原查詢／開立結果核對，正式 ERP 一律拒絕 test。
+
+### 已知限制與下一步 AutoInput 聯測
+
+- 目前沒有真實 Windows 同一帳號「CYInvoice 已開／未開」IPC + Excel COM 加密 MO XLS 的雙程式 E2E；沒有正式光貿開立或實際 A4 紙本列印驗收。**不得以 CI Success 宣稱 production issue、發票紙本列印已完成。**
+- 需在隔離測試環境和去識別化資料驗證：query→issue→PDF pending→ready、重複取用不覆寫、test/prod 隔離、原始 OrderID／金額一致、不同 portable 目錄與 Windows 使用者的 IPC 邊界；正式環境請仍維持人工核准流程。
+- AutoInput 若收 `pending` 可依自己的 20 秒／30 分鐘界限再查（不重送 issue）；`unknown`、`failed`、`skipped` 必須留待人工，不自動列印。工程包和實機測試資料不可覆寫既有正式 CYInvoice Data。
+- 若 AutoInput 使用工程包發現契約差異，回報 [CYInvoice #445](https://github.com/simonliu1118-byte/CYapps/pull/445)，不要自行另寫光貿 API／金鑰／開票邏輯。
+
+**交接狀態：CYInvoice PDF interface source ＋ Windows CI ＋ 工程包已交回 AutoInput；實機協同驗收仍開放。**
