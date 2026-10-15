@@ -342,20 +342,6 @@ internal sealed class MainForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (repository.UsesCloudEmployeeAuthority())
-        {
-            try
-            {
-                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
-                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
-            }
-            catch (Exception problem)
-            {
-                MessageBox.Show(this, problem.Message, "無法復原密碼",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            return;
-        }
         if (!repository.Employees.HasEmployees())
         {
             MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", "無法復原密碼",
