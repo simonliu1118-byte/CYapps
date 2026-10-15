@@ -49,6 +49,20 @@ public sealed record CloudAllowanceNumberReadback(
     bool PossibleMatch, bool RequiresManualReconciliation,
     bool SafeToAutoResend, bool SafeToAutoConfirm);
 
+public sealed record CloudAllowanceManagerApproval(
+    string ApprovalId,string ItemId,int Revision,string ApprovedByEmployeeId,
+    DateTimeOffset ApprovedAt,DateTimeOffset ValidUntilUtc,
+    bool CanIssueNow,bool RequiresFinalPreflight);
+public sealed record CloudAllowanceReservedNumber(
+    string ItemId,int Revision,string AllowanceNumber,int Attempt,string Status,
+    bool CanAutoIssue,bool RequiresFinalPreflight);
+public sealed record CloudAllowanceNumberStatus(
+    string ItemId,int Revision,string AllowanceNumber,int Attempt,string Status,
+    bool MustReadbackBeforeAnyNewAttempt,bool CanAutoIssue);
+public sealed record CloudAllowanceOneShotAttempt(
+    string ItemId,int Revision,string AllowanceNumber,string Result,int? OfficialCode,
+    bool SafeToAutoResend,bool SafeToAutoConfirm,bool MustReadbackByOriginalNumber);
+
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
     IReadOnlyList<CloudAllowanceApplicationSummary> Applications,
@@ -344,6 +358,122 @@ public sealed class CloudAllowanceApplicationClient
             id,actualRev,number,status,checkedAt,digest,invoiceType,uploadStatus,
             cancelled,original,gross,possible,manual,false,false);
     }
+
+    public async Task<CloudAllowanceManagerApproval> ApproveForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        using var root=await ManagerActionAsync("approve",itemId,expectedRevision,employeeNo,
+            password,cancellationToken).ConfigureAwait(false);
+        var grant=RequiredObject(root.RootElement,"approval");
+        if(Required(grant,"itemId")!=itemId||Int(grant,"revision")!=expectedRevision||
+           Flag(grant,"canIssueNow")||!Flag(grant,"requiresFinalPreflight"))
+            throw new InvalidDataException("CYID manager approval must not imply issuance.");
+        var approvalId=Required(grant,"approvalId");
+        var employee=Required(grant,"approvedByEmployeeId");
+        if(!approvalId.StartsWith("apr_",StringComparison.Ordinal)||
+           employee.Length>100||
+           !DateTimeOffset.TryParse(Required(grant,"approvedAt"),out var approved)||
+           !DateTimeOffset.TryParse(Required(grant,"validUntilUtc"),out var expires)||
+           expires<=approved)
+            throw new InvalidDataException("Manager approval receipt is inconsistent.");
+        return new CloudAllowanceManagerApproval(
+            approvalId,itemId,expectedRevision,employee,approved,expires,false,true);
+    }
+
+    public async Task<CloudAllowanceReservedNumber> ReserveForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        using var root=await ManagerActionAsync("reserve",itemId,expectedRevision,employeeNo,
+            password,cancellationToken).ConfigureAwait(false);
+        var number=RequiredObject(root.RootElement,"number");
+        var reserved=Required(number,"allowanceNumber");
+        if(Required(number,"itemId")!=itemId||
+           Int(number,"revision")!=expectedRevision||
+           !ValidAllowanceNumber(reserved)||Int(number,"attempt")<1||
+           Required(number,"status")!="reserved"||
+           Flag(number,"canAutoIssue")||!Flag(number,"requiresFinalPreflight"))
+            throw new InvalidDataException("Cloud numbering receipt is not safe.");
+        return new CloudAllowanceReservedNumber(itemId,expectedRevision,reserved,
+            Int(number,"attempt"),"reserved",false,true);
+    }
+
+    public async Task<CloudAllowanceNumberStatus> GetNumberStatusForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        using var root=await ManagerActionAsync("number-status",itemId,expectedRevision,
+            employeeNo,password,cancellationToken).ConfigureAwait(false);
+        var number=RequiredObject(root.RootElement,"number");
+        var status=Required(number,"status");
+        var allowance=Required(number,"allowanceNumber");
+        var ambiguous=Flag(number,"mustReadbackBeforeAnyNewAttempt");
+        if(Required(number,"itemId")!=itemId||Int(number,"revision")!=expectedRevision||
+           !ValidAllowanceNumber(allowance)||Int(number,"attempt")<1||
+           status is not ("reserved" or "sending" or "confirmed" or "occupied_external")||
+           Flag(number,"canAutoIssue")||ambiguous!=(status=="sending"))
+            throw new InvalidDataException("Cloud number status cannot enable automatic resend.");
+        return new CloudAllowanceNumberStatus(itemId,expectedRevision,allowance,
+            Int(number,"attempt"),status,ambiguous,false);
+    }
+
+    // Mutating and strictly ONE attempt. Caller must request explicit human
+    // confirmation and must never retry after timeout or ambiguous response.
+    public async Task<CloudAllowanceOneShotAttempt> SendOnceForManagerAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        using var root=await ManagerActionAsync("send-once",itemId,expectedRevision,employeeNo,
+            password,cancellationToken).ConfigureAwait(false);
+        var attempt=RequiredObject(root.RootElement,"attempt");
+        var kind=Required(attempt,"result");
+        var allowance=Required(attempt,"allowanceNumber");
+        var code=attempt.TryGetProperty("officialCode",out var prop)&&
+            prop.ValueKind==JsonValueKind.Number&&prop.TryGetInt32(out var n)?n:(int?)null;
+        if(Required(attempt,"itemId")!=itemId||Int(attempt,"revision")!=expectedRevision||
+           !ValidAllowanceNumber(allowance)||
+           kind is not ("ACCEPTED_PENDING_OFFICIAL" or "DEFINITE_NUMBER_COLLISION" or
+             "DEFINITE_REJECTION_MANUAL" or "UNKNOWN_REQUIRES_ORIGINAL_NUMBER_READBACK")||
+           Flag(attempt,"safeToAutoResend")||Flag(attempt,"safeToAutoConfirm")||
+           !Flag(attempt,"mustReadbackByOriginalNumber"))
+            throw new InvalidDataException("Cloud first-send reply is inconsistent.");
+        return new CloudAllowanceOneShotAttempt(itemId,expectedRevision,allowance,kind,
+            code,false,false,true);
+    }
+
+    private async Task<JsonDocument> ManagerActionAsync(string action,string itemId,
+        int revision,string employeeNo,string password,CancellationToken cancellationToken)
+    {
+        VerifyId(itemId);
+        if(revision<1)throw new ArgumentOutOfRangeException(nameof(revision));
+        Credentials(employeeNo,password);
+        return await SendAsync(action,new{itemId,expectedRevision=revision,
+            employeeNo,password},cancellationToken).ConfigureAwait(false);
+    }
+    private static JsonElement RequiredObject(JsonElement root,string name)
+    {
+        if(!root.TryGetProperty(name,out var x)||x.ValueKind!=JsonValueKind.Object)
+            throw new InvalidDataException("Missing Cloud manager result: "+name);
+        return x;
+    }
+    private static int Int(JsonElement root,string name)
+    {
+        if(!root.TryGetProperty(name,out var x)||x.ValueKind!=JsonValueKind.Number||
+           !x.TryGetInt32(out var n)||n<0)
+            throw new InvalidDataException("Cloud manager result integer invalid: "+name);
+        return n;
+    }
+    private static bool Flag(JsonElement root,string name)
+    {
+        if(!root.TryGetProperty(name,out var x)||
+           x.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidDataException("Cloud manager result flag invalid: "+name);
+        return x.GetBoolean();
+    }
+    private static bool ValidAllowanceNumber(string value) =>
+        Regex.IsMatch(value,@"^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$",
+            RegexOptions.CultureInvariant);
 
     public async Task<CloudAllowanceApplicationPage> ListForManagerAsync(
         int limit, CloudAllowanceApplicationCursor? cursor,

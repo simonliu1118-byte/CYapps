@@ -106,6 +106,51 @@ internal static class CloudAllowanceApplicationClientTests
             Check(req,"number-readback");
             return Json(HttpStatusCode.OK,new{ok=true,readback=NumberReadback(true)});
         });
+        handler.Enqueue(req => {
+            Check(req,"approve");
+            return Json(HttpStatusCode.Created,new {ok=true,approval=new {
+                approvalId="apr_synthetic_approved",itemId=Id,revision=2,
+                approvedByEmployeeId="cyid_manager",
+                approvedAt="2026-10-15T02:00:00Z",
+                validUntilUtc="2026-10-15T02:15:00Z",
+                canIssueNow=false,requiresFinalPreflight=true
+            }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"reserve");
+            return Json(HttpStatusCode.Created,new {ok=true,number=new{
+                itemId=Id,revision=2,allowanceNumber="A20261015001",attempt=1,
+                status="reserved",canAutoIssue=false,requiresFinalPreflight=true
+            }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"number-status");
+            return Json(HttpStatusCode.OK,new {ok=true,number=new{
+                itemId=Id,revision=2,allowanceNumber="A20261015001",attempt=1,
+                status="reserved",mustReadbackBeforeAnyNewAttempt=false,canAutoIssue=false
+            }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"send-once");
+            using var body=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            True(!body.RootElement.TryGetProperty("allowanceNumber",out _),
+                "Windows may not supply arbitrary allowance number");
+            return Json(HttpStatusCode.Accepted,new {ok=true,attempt=new{
+                itemId=Id,revision=2,allowanceNumber="A20261015001",
+                result="ACCEPTED_PENDING_OFFICIAL",officialCode=0,
+                safeToAutoResend=false,safeToAutoConfirm=false,
+                mustReadbackByOriginalNumber=true
+            }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"send-once");
+            return Json(HttpStatusCode.Accepted,new {ok=true,attempt=new{
+                itemId=Id,revision=2,allowanceNumber="A20261015001",
+                result="ACCEPTED_PENDING_OFFICIAL",officialCode=0,
+                safeToAutoResend=true,safeToAutoConfirm=false,
+                mustReadbackByOriginalNumber=true
+            }});
+        });
         handler.Enqueue(req => {Check(req,"create"); return Json(HttpStatusCode.Conflict,new {
             ok=false,error=new{code="APPLICATION_RESULT_UNKNOWN_READBACK_REQUIRED"}});});
         handler.Enqueue(req => {Check(req,"get"); return Json(HttpStatusCode.OK,new {
@@ -142,6 +187,23 @@ internal static class CloudAllowanceApplicationClientTests
         Equal("A20261015001",readback.AllowanceNumber,"original reserved number only");
         await RejectAsync<InvalidDataException>(() =>
             client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        var approval=await client.ApproveForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal(false,approval.CanIssueNow,"Approval grant is not issue permission");
+        Equal(true,approval.RequiresFinalPreflight,"Preflight always required");
+        var reserved=await client.ReserveForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal("A20261015001",reserved.AllowanceNumber,"server-allocated number");
+        Equal(false,reserved.CanAutoIssue,"reservation does not trigger issue");
+        var status=await client.GetNumberStatusForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal("reserved",status.Status,"no send yet");
+        var sent=await client.SendOnceForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal("ACCEPTED_PENDING_OFFICIAL",sent.Result,"accepted is not confirmed");
+        Equal(false,sent.SafeToAutoResend,"ambiguous or accepted cannot retry");
+        Equal(false,sent.SafeToAutoConfirm,"never confirm on transport alone");
+        await RejectAsync<InvalidDataException>(() =>
+            client.SendOnceForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        // An invalid revision is rejected without reaching the provider.
+        await RejectAsync<ArgumentOutOfRangeException>(() =>
+            client.SendOnceForManagerAsync(Id,0,"0001","SyntheticPass12"));
         try {
             await client.CreateAsync(draft,"0001","SyntheticPass12");
             throw new InvalidOperationException("Expected ambiguous create result");
