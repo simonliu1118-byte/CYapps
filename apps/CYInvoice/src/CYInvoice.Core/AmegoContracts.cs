@@ -133,6 +133,10 @@ public sealed record QueryResult(
     bool VoidPending = false)
 {
     public IReadOnlyList<InvoiceAllowanceResult> Allowances { get; init; } = [];
+    // Missing/null allowance[] is not proof of zero prior allowances.
+    // Review screens must distinguish an explicit empty array from a missing
+    // summary; ordinary invoice queries keep the original permissive parsing.
+    public bool AllowanceSummaryPresent { get; init; }
 }
 
 public sealed record QueryResponse(int Code, string Message, QueryResult Data);
