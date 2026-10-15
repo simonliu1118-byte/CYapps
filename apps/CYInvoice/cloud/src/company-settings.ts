@@ -177,13 +177,13 @@ export async function changeCompanySettings(db: D1Database,
     hasAmegoAppKey:!!appKey,hasMoExcelPassword:!!moPassword};
 }
 // INTERNAL trusted Worker gateway only, never a browser-facing response.
-export async function loadCompanySettingsForGateway(db: D1Database,workspaceId: string,
+export async function loadAmegoCompanySettingsForGateway(db: D1Database,workspaceId: string,
   encryptionKeyHex: string) {
   const row=await state(db,workspaceId);
   if (!row || !row.amego_app_key_ciphertext) throw new Error("COMPANY_AMEGO_NOT_CONFIGURED");
   const key=await keyFromSecret(encryptionKeyHex);
+  // Least privilege: the AMEGO caller must NOT receive the MO Excel password.
+  // A future Windows DPAPI credential transfer needs its own protected contract.
   return {sellerInvoice:row.seller_invoice,revision:row.revision,
-    amegoAppKey:await open(key,workspaceId,"amego",row.amego_app_key_ciphertext),
-    moExcelPassword:row.mo_excel_password_ciphertext
-      ? await open(key,workspaceId,"mo",row.mo_excel_password_ciphertext) : null};
+    amegoAppKey:await open(key,workspaceId,"amego",row.amego_app_key_ciphertext)};
 }

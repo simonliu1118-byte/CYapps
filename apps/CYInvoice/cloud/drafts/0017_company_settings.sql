@@ -23,3 +23,11 @@ CREATE TABLE company_settings_audit_events (
   created_at TEXT NOT NULL,
   UNIQUE(workspace_id, revision)
 );
+
+-- Audit history must not be silently changed by a later runtime path.
+CREATE TRIGGER company_settings_audit_no_update
+BEFORE UPDATE ON company_settings_audit_events
+BEGIN SELECT RAISE(ABORT, 'COMPANY_AUDIT_APPEND_ONLY'); END;
+CREATE TRIGGER company_settings_audit_no_delete
+BEFORE DELETE ON company_settings_audit_events
+BEGIN SELECT RAISE(ABORT, 'COMPANY_AUDIT_APPEND_ONLY'); END;

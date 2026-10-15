@@ -7,7 +7,7 @@ import {build} from "esbuild";
 const output=await build({entryPoints:["src/company-settings.ts"],bundle:true,write:false,
   platform:"node",format:"esm",target:"node24"});
 const {changeCompanySettings:change,getCompanySettingsStatus:getStatus,
-  loadCompanySettingsForGateway:loadGateway}=await import("data:text/javascript;base64,"+
+  loadAmegoCompanySettingsForGateway:loadGateway}=await import("data:text/javascript;base64,"+
     Buffer.from(output.outputFiles[0].text).toString("base64"));
 const ws="ws_synthetic";
 const other="ws_other";
@@ -50,7 +50,10 @@ assert.equal(row.seller_invoice,"12345678");
 assert.equal(row.amego_app_key_ciphertext.includes("SYNTHETIC"),false);
 assert.equal(row.mo_excel_password_ciphertext.includes("SYNTHETIC"),false);
 assert.equal(row.amego_app_key_ciphertext.startsWith("v1:"),true);
-assert.equal((await loadGateway(f.db,ws,key)).amegoAppKey,input.amegoAppKey.value);
+const amegoOnly=await loadGateway(f.db,ws,key);
+assert.equal(amegoOnly.amegoAppKey,input.amegoAppKey.value);
+assert.equal(Object.hasOwn(amegoOnly,"moExcelPassword"),false,
+  "AMEGO gateway must not receive unrelated MO password");
 await assert.rejects(()=>loadGateway(f.db,ws,wrongKey),/CIPHERTEXT_AUTH_FAILED/);
 // Copying ciphertext between secret fields is not sufficient to decrypt:
 // AAD includes its slot and Workspace, preventing cross-slot substitution.
@@ -94,6 +97,10 @@ principal={...principal,workspaceRole:"SUPER_ADMIN",isWorkspaceSuperAdmin:true};
 f.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(dev);
 await assert.rejects(()=>change(f.db,{...input,expectedRevision:2},authority,key),/CONFLICT_OR_DEVICE_REVOKED/);
 assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM company_settings_audit_events").get().n,2);
+assert.throws(()=>f.sql.prepare("DELETE FROM company_settings_audit_events WHERE revision=1").run(),
+  /COMPANY_AUDIT_APPEND_ONLY/);
+assert.throws(()=>f.sql.prepare("UPDATE company_settings_audit_events SET actor_employee_id='altered' WHERE revision=1").run(),
+  /COMPANY_AUDIT_APPEND_ONLY/);
 // An Audit uniqueness failure must roll back the configuration mutation.
 f.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(dev);
 f.sql.prepare("INSERT INTO company_settings_audit_events(event_id,workspace_id,revision,actor_employee_id,actor_device_id,changed_fields,created_at) VALUES(?,?,?,?,?,?,?)")
