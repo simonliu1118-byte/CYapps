@@ -7,6 +7,7 @@ import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
 import {approveAllowanceAfterOfficialReview} from "./allowance-review-approval";
+import {reserveCloudAllowanceNumber} from "./allowance-number-ledger";
 import {validateAllowanceOriginalItems} from "./allowance-item-validation";
 
 interface Env extends CyIdEnv {
@@ -18,7 +19,8 @@ const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applicat
   "/v1/allowance-applications/list","/v1/allowance-applications/review-preview",
   "/v1/allowance-applications/official-inspection",
   "/v1/allowance-applications/number-readback",
-  "/v1/allowance-applications/approve"]);
+  "/v1/allowance-applications/approve",
+  "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status"]);
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -29,7 +31,7 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"approve";
+type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"approve"|"reserve"|"number-status";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -38,7 +40,8 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
     : action==="get" ? new Set(["employeeNo","password","itemId"])
     : (action==="review-preview"||action==="official-inspection"||
-       action==="number-readback"||action==="approve")
+       action==="number-readback"||action==="approve"||
+       action==="reserve"||action==="number-status")
       ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
   if(!Object.keys(val).every(k=>allowed.has(k)))return false;
@@ -49,7 +52,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (!["review-preview","official-inspection","number-readback","approve"].includes(action) ||
+    (!["review-preview","official-inspection","number-readback","approve","reserve","number-status"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -93,7 +96,9 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
     path.endsWith("/review-preview")?"review-preview":
     path.endsWith("/official-inspection")?"official-inspection":
     path.endsWith("/number-readback")?"number-readback":
-    path.endsWith("/approve")?"approve":"get";
+    path.endsWith("/approve")?"approve":
+    path.endsWith("/reserve")?"reserve":
+    path.endsWith("/number-status")?"number-status":"get";
   const input=await body(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -143,6 +148,81 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       })),nextCursor:items.length>limit&&last ? {
         cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id
       }:null});
+    }
+    if(action==="number-status"){
+      if(!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole))
+        return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      const result=await env.DB.prepare(
+        "SELECT l.allowance_number,l.status,l.attempt,l.request_sha256,"+
+        "a.template_sha256,a.seller_invoice,a.environment,"+
+        "wi.revision,wi.status AS work_status "+
+        "FROM allowance_number_ledger l "+
+        "JOIN allowance_applications a ON a.work_item_id=l.work_item_id "+
+        "AND a.workspace_id=l.workspace_id "+
+        "JOIN work_items wi ON wi.work_item_id=a.work_item_id AND wi.workspace_id=a.workspace_id "+
+        "WHERE l.workspace_id=?1 AND l.work_item_id=?2 AND wi.revision=?3 "+
+        "AND wi.kind='ALLOWANCE' AND wi.reference_hash=a.reference_hash "+
+        "ORDER BY l.attempt DESC LIMIT 1"
+      ).bind(d.workspace_id,input.itemId,input.expectedRevision).first<{
+        allowance_number:string;status:string;attempt:number;
+        request_sha256:string;template_sha256:string;seller_invoice:string;
+        environment:string;revision:number;work_status:string
+      }>();
+      if(!result)return response(404,{error:{code:"NUMBER_NOT_FOUND"}});
+      if(result.request_sha256!==result.template_sha256 ||
+         result.environment!==env.ALLOWANCE_OPERATION_ENVIRONMENT ||
+         !["review","closed"].includes(result.work_status))
+        return response(409,{error:{code:"NUMBER_SOURCE_CHANGED"}});
+      const again=await authority(env).revalidate();
+      if(!again||again.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(again.workspaceRole))
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      return response(200,{number:{
+        itemId:input.itemId,revision:result.revision,
+        allowanceNumber:result.allowance_number,attempt:result.attempt,
+        status:result.status,
+        // "sending" is ambiguous, even if the local HTTP response was lost.
+        mustReadbackBeforeAnyNewAttempt:result.status==="sending",
+        canAutoIssue:false
+      }});
+    }
+    if(action==="reserve"){
+      if(!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole))
+        return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(!["test","production"].includes(env.ALLOWANCE_OPERATION_ENVIRONMENT??""))
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      if(!/^[a-f0-9]{64}$/i.test(env.COMPANY_SETTINGS_KEY_HEX??""))
+        return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+      const itemId=input.itemId as string, rev=input.expectedRevision as number;
+      const frozen=await loadFrozenAllowanceApplication(env.DB,d.workspace_id,
+        itemId,rev,env.COMPANY_SETTINGS_KEY_HEX!);
+      const company=await loadAmegoCompanySettingsForGateway(env.DB,
+        d.workspace_id,env.COMPANY_SETTINGS_KEY_HEX!);
+      if(frozen.environment!==env.ALLOWANCE_OPERATION_ENVIRONMENT||
+         frozen.sellerInvoice!==company.sellerInvoice||
+         frozen.companySettingsRevision!==company.revision)
+        return response(409,{error:{code:"ALLOWANCE_COMPANY_CHANGED"}});
+      const again=await authority(env).revalidate();
+      if(!again||again.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(again.workspaceRole))
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      // SQL fences a fresh, append-only approval for the same frozen request,
+      // active manager Device, Work Item revision and Workspace.
+      const allocated=await reserveCloudAllowanceNumber(env.DB,{
+        workspaceId:d.workspace_id,workItemId:itemId,
+        deviceId:d.device_id,expectedRevision:rev,
+        sellerInvoice:frozen.sellerInvoice,environment:frozen.environment,
+        allowanceDay:frozen.allowanceDay,requestSha256:frozen.templateSha256
+      });
+      const after=await authority(env).revalidate();
+      if(!after||after.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(after.workspaceRole))
+        return response(409,{error:{code:"NUMBER_RESULT_UNKNOWN_READBACK_REQUIRED"}});
+      return response(201,{number:{
+        itemId,revision:rev,allowanceNumber:allocated.allowanceNumber,
+        attempt:allocated.attempt,status:allocated.status,
+        canAutoIssue:false,requiresFinalPreflight:true
+      }});
     }
     if(action==="approve"){
       if(!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole))
@@ -490,6 +570,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
       if(/ALLOWANCE_(APPLICATION_NOT_REVIEWABLE|APPLICATION_COMPANY_CHANGED|APPLICATION_REFERENCE_TAMPERED|APPLICATION_TEMPLATE_TAMPERED)/.test(error.message))
         return response(409,{error:{code:"ALLOWANCE_REVIEW_REQUIRES_REFRESH"}});
+      if(/^ALLOWANCE_(NUMBER_|SEQUENCE_|ALLOCATION_|DATE_|RESERVATION_|WORK_ITEM_|PRIOR_SEND_)/.test(error.message))
+        return response(409,{error:{code:"NUMBER_RESULT_UNKNOWN_READBACK_REQUIRED"}});
       if(/^ALLOWANCE_APPROVAL_/.test(error.message))
         return response(409,{error:{code:"ALLOWANCE_APPROVAL_NOT_AUTHORIZED"}});
       if(/^ALLOWANCE_QUERY_/.test(error.message))

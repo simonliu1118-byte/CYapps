@@ -88,6 +88,7 @@ export default {
       "/v1/allowance-applications/official-inspection",
       "/v1/allowance-applications/number-readback",
       "/v1/allowance-applications/approve",
+      "/v1/allowance-applications/reserve", "/v1/allowance-applications/number-status",
       "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);
     try {

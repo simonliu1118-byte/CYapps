@@ -313,6 +313,26 @@ try{
     .get(approvedId).n,1);
   assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger WHERE work_item_id=?")
     .get(approvedId).n,0,"Approval must not allocate or issue");
+  // Reservation is permitted only after that exact grant. No AMEGO mutation
+  // occurs and a repeated reservation returns exactly the original number.
+  const reserved=await call("reserve",{itemId:approvedId,expectedRevision:2});
+  assert.equal(reserved.status,201,JSON.stringify(reserved));
+  assert.equal(reserved.data.number.status,"reserved");
+  assert.equal(reserved.data.number.allowanceNumber,"A20261015002");
+  assert.equal(reserved.data.number.canAutoIssue,false);
+  const status=await call("number-status",{itemId:approvedId,expectedRevision:2});
+  assert.equal(status.status,200,JSON.stringify(status));
+  assert.equal(status.data.number.allowanceNumber,"A20261015002");
+  assert.equal(status.data.number.mustReadbackBeforeAnyNewAttempt,false);
+  const again=await call("reserve",{itemId:approvedId,expectedRevision:2});
+  assert.equal(again.status,201);
+  assert.equal(again.data.number.allowanceNumber,"A20261015002");
+  assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger WHERE work_item_id=?")
+    .get(approvedId).n,1,"No new attempt for same reserved number");
+  assert.equal(approvedOfficialCalls,1,"Reserve may not silently re-query or g0401");
+  assert.equal((await call("reserve",{itemId:approvedId,expectedRevision:2,
+    allowanceNumber:"A20261015999"})).status,400);
+
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:1})).status,409);
   assert.equal(approvedOfficialCalls,1,"stale Work Item cannot query AMEGO");
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:2,
