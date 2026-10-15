@@ -1161,7 +1161,7 @@ internal sealed partial class MainForm : Form
     /// a page that is one picture is used as it is (MO 7-11: no sample yet, taken the same way,
     /// user 2026-10-14).
     /// </summary>
-    private async Task<(int Printed, List<string> Notes)> PrintMoSlipsAsync(string file, string printer, string password)
+    private async Task<(int Printed, List<string> Notes)> PrintMoSlipsAsync(string file, string printer, string password, MoShipKind? kind = null)
     {
         var label = SlipPrinter.Label(printer, 100, 150);
         var pages = await MoSlipPdf.PagesAsync(file, password, label.Dpi * 2);
@@ -1169,7 +1169,10 @@ internal sealed partial class MainForm : Form
         var notes = new List<string>();
         foreach (var (page, from) in pages)
         {
-            var slips = await Task.Run(() => SlipImage.FindSlips(page));
+            // 7-11: each slip in its solid frame on an A4 page (user, 2026-10-15); 全家: one picture
+            // of four cells between dashed lines. A file of unknown kind (測試) goes by that.
+            var seven = kind is null ? !from.Contains("原圖", StringComparison.Ordinal) : kind == MoShipKind.Seven;
+            var slips = await Task.Run(() => seven && SlipImage.FindFramedSlips(page) is { Count: > 0 } framed ? framed : SlipImage.FindSlips(page));
             _log.Info("mo-slip", $"{from}: picture {page.Width}x{page.Height}, slips={slips.Count}, printer dpi={label.Dpi}");
             foreach (var area in slips)
             {
@@ -1598,7 +1601,7 @@ internal sealed partial class MainForm : Form
             {
                 var name = kind == MoShipKind.Family ? MoPrintedDocument.Family : MoPrintedDocument.Seven;
                 SetStatus($"MO店+ 全自動：列印{name}…");
-                await Print(name, file, async () => $"{(await PrintMoSlipsAsync(file, thermal, password)).Printed} 張");
+                await Print(name, file, async () => $"{(await PrintMoSlipsAsync(file, thermal, password, kind)).Printed} 張");
             }
             foreach (var (_, file) in result.Labels.Where(l => l.Kind == MoShipKind.Hct))
             {
@@ -1645,17 +1648,11 @@ internal sealed partial class MainForm : Form
                     title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
-            // Paper invoices last (user, 2026-10-14: in the same printing step).
-            if (invoice is not null && !await PrintPaperInvoicesAsync(invoice, a4, printed))
-            {
-                MoPrintedDocuments.Save(folder, documents);
-                MessageBox.Show(this, $"已在紙本發票的放紙提醒按停止。寄件單已印完；發票請在 CYInvoice 列印，再用「匯入訂單匯出檔」接續打單。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
+            // Paper invoices whose PDF is already there go in the same printing step; the rest
+            // come in the background when ready, never holding up ERP (user, 2026-10-15).
+            await PrintReadyPaperAsync(printed);
             MoPrintedDocuments.Save(folder, documents);
             _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
-            var printFailures = printed.Where(p => p.Contains("請在 CYInvoice", StringComparison.Ordinal)).ToList();
-            if (printFailures.Count > 0) voidNotes.AddRange(printFailures);
             if (voidNotes.Count > 0)
                 MessageBox.Show(this, string.Join("\n", voidNotes), title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return true;
@@ -1675,7 +1672,11 @@ internal sealed partial class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
         // 發票 through CYInvoice when set (production only), else filled by hand in the preview.
-        if (_settings.MoAutoInvoice) invoice = await InvoiceMoAsync(title, files.BatchPath ?? result.Before, files.Orders, orders, fullAuto: true);
+        if (_settings.MoAutoInvoice)
+        {
+            invoice = await InvoiceMoAsync(title, files.BatchPath ?? result.Before, files.Orders, orders, fullAuto: true);
+            QueuePaperInvoices(invoice);
+        }
         var printedOnce = false;
         await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice?.Notes ?? [], .. files.Notes, .. result.Notes],
             async () => printedOnce || (printedOnce = await PrintAllAsync()));
@@ -1718,7 +1719,7 @@ internal sealed partial class MainForm : Form
                 if (d.Kind is MoPrintedDocument.Family or MoPrintedDocument.Seven)
                 {
                     if (thermal is null) { lines.Add($"{d.Kind}：找不到熱感紙印表機（設定 › 印表機）。"); continue; }
-                    var (count, _) = await PrintMoSlipsAsync(d.File, thermal, password);
+                    var (count, _) = await PrintMoSlipsAsync(d.File, thermal, password, d.Kind == MoPrintedDocument.Seven ? MoShipKind.Seven : MoShipKind.Family);
                     lines.Add($"{d.Kind} {count} 張已重印（{name}）");
                 }
                 else
@@ -1850,11 +1851,15 @@ internal sealed partial class MainForm : Form
             {
                 LoadOrder(preview.SelectedOrder);
                 SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
-                if (await StartAutomationAsync()) return;
+                _paperHold++;
+                try { if (await StartAutomationAsync()) return; }
+                finally { _paperHold--; }
             }
             else if (preview.Action == OrderImportAction.RunAll)
             {
-                if (await RunImportBatchAsync(source, preview.SelectedOrders, ledger)) return;
+                _paperHold++;
+                try { if (await RunImportBatchAsync(source, preview.SelectedOrders, ledger)) return; }
+                finally { _paperHold--; }
             }
             else return;
             _log.Info("import", "start stopped by a check; back to the preview");

@@ -27,9 +27,9 @@ internal sealed class MoInvoiceOutcome
 /// orders it has no invoice for are then issued, after the user says so; every answer is checked
 /// (number, date, amount, 統編) before it goes on the preview, and anything else stays for a
 /// person. A paper invoice (a buyer with 統編; a consumer's goes to the member carrier) is printed
-/// on the A4 printer from CYInvoice's official PDF, asked for only when printing: 光貿 finishes an
-/// invoice in its own time and the PDF exists only then (user, 2026-10-15), in the style chosen in
-/// 設定 › 印表機.
+/// on the A4 printer from CYInvoice's official PDF: 光貿 finishes an invoice in its own time and
+/// the PDF exists only then, so it is fetched in the background without holding the run up, and
+/// the paper prompt comes when nobody is typing into ERP (user, 2026-10-15); style from 設定 › 印表機.
 /// </summary>
 internal sealed partial class MainForm
 {
@@ -205,90 +205,163 @@ internal sealed partial class MainForm
         }
     }
 
-    /// <summary>
-    /// The paper invoices on the A4 printer: their official PDFs fetched from CYInvoice first
-    /// (<c>--autoinput-pdf</c>, the style from 設定 › 印表機), asked again while 光貿 has not
-    /// finished; then a prompt for plain A4 paper, then printing. One printed before (same
-    /// environment and number) is not printed again. False only for 停止 on the prompt; a missing
-    /// PDF or a printer error is listed and the run goes on.
-    /// </summary>
-    private async Task<bool> PrintPaperInvoicesAsync(MoInvoiceOutcome outcome, string printer, List<string> printed)
-    {
-        if (outcome.Paper.Count == 0) return true;
-        var ledger = new PaperInvoiceLedger(PaperInvoiceLedger.DefaultPath);
-        var wanted = new List<CyInvoiceOrder>();
-        foreach (var r in outcome.Paper)
-            if (ledger.Printed(outcome.Environment, r.InvoiceNumber)) printed.Add($"紙本發票 {r.InvoiceNumber} 先前已印過，未重印");
-            else wanted.Add(r);
-        if (wanted.Count == 0) return true;
+    // ---- 紙本發票: fetched in the background, printed when a person can load paper ----
 
-        var style = _settings.PaperInvoiceStyle;
-        var styleName = CyInvoiceLink.PaperStyles.FirstOrDefault(p => p.Code == style).Name ?? style.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var pdfFolder = Path.Combine(outcome.Folder, "paper");
-        Directory.CreateDirectory(pdfFolder);
-        var ready = new List<(CyInvoiceOrder Invoice, string Pdf)>();
-        var pending = wanted.ToList();
-        var watch = Stopwatch.StartNew();
-        var limit = TimeSpan.FromMinutes(5);
-        while (pending.Count > 0)
+    /// <summary>One paper invoice waiting for its PDF (光貿 finishes in its own time) or for printing.</summary>
+    private sealed class PaperJob(MoInvoiceOutcome outcome, CyInvoiceOrder invoice)
+    {
+        public MoInvoiceOutcome Outcome { get; } = outcome;
+        public CyInvoiceOrder Invoice { get; } = invoice;
+        public DateTime Since { get; } = DateTime.Now;
+        public string? Pdf { get; set; }
+    }
+
+    private readonly List<PaperJob> _paperJobs = [];
+    private readonly List<string> _paperNotes = [];
+    private System.Windows.Forms.Timer? _paperTimer;
+    private DateTime _paperNextAsk = DateTime.MinValue;
+    private bool _paperBusy;
+    /// <summary>While ERP is being typed into: no paper prompt then.</summary>
+    private int _paperHold;
+    private static readonly TimeSpan PaperAskEvery = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan PaperGiveUp = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// The paper invoices of <paramref name="outcome"/> to the background queue (user, 2026-10-15:
+    /// never holding up 全自動). Their PDFs are asked for every 20 seconds (<c>--autoinput-pdf</c>,
+    /// the style from 設定 › 印表機) while the run goes on; once some are ready, the paper prompt
+    /// comes at the next moment nobody is typing into ERP. One printed before is not queued.
+    /// </summary>
+    private void QueuePaperInvoices(MoInvoiceOutcome outcome)
+    {
+        if (outcome.Paper.Count == 0) return;
+        var ledger = new PaperInvoiceLedger(PaperInvoiceLedger.DefaultPath);
+        foreach (var r in outcome.Paper)
         {
-            SetStatus($"取得紙本發票 PDF（{pending.Count} 張，{styleName}）…");
-            var (answer, error) = await RunCyInvoiceAsync(outcome.Exe, "pdf", outcome.Folder, outcome.File, pending.Select(p => p.OrderId).ToList(), (pdfFolder, style));
+            if (ledger.Printed(outcome.Environment, r.InvoiceNumber)) { _log.Info("cyinvoice", "paper invoice printed before; not queued"); continue; }
+            if (_paperJobs.Any(j => j.Invoice.InvoiceNumber == r.InvoiceNumber && j.Outcome.Environment == outcome.Environment)) continue;
+            _paperJobs.Add(new PaperJob(outcome, r));
+        }
+        _log.Info("cyinvoice", $"paper invoices queued={_paperJobs.Count}");
+        _paperNextAsk = DateTime.MinValue;
+        if (_paperTimer is null)
+        {
+            _paperTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+            _paperTimer.Tick += async (_, _) => await PaperTickAsync();
+        }
+        _paperTimer.Start();
+    }
+
+    /// <summary>Nobody is typing into ERP or driving Chrome: a paper prompt may come now.</summary>
+    private bool PaperMayPrompt => _paperHold == 0 && _automationCts is null && !_shopeeBatchRunning;
+
+    private async Task PaperTickAsync()
+    {
+        if (_paperBusy) return;
+        _paperBusy = true;
+        try
+        {
+            if (DateTime.Now >= _paperNextAsk && _paperJobs.Any(j => j.Pdf is null)) await AskPaperPdfsAsync();
+            if (PaperMayPrompt) await PrintReadyPaperAsync(null);
+            if (PaperMayPrompt && _paperNotes.Count > 0 && _paperJobs.Count == 0)
+            {
+                var notes = string.Join("\n", _paperNotes);
+                _paperNotes.Clear();
+                MessageBox.Show(Form.ActiveForm ?? this, notes, "紙本發票", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        finally
+        {
+            _paperBusy = false;
+            if (_paperJobs.Count == 0 && _paperNotes.Count == 0) _paperTimer?.Stop();
+        }
+    }
+
+    /// <summary>One round of <c>--autoinput-pdf</c> for the jobs without a PDF, per run.</summary>
+    private async Task AskPaperPdfsAsync()
+    {
+        _paperNextAsk = DateTime.Now + PaperAskEvery;
+        var style = _settings.PaperInvoiceStyle;
+        foreach (var group in _paperJobs.Where(j => j.Pdf is null).GroupBy(j => j.Outcome).ToList())
+        {
+            var outcome = group.Key;
+            var jobs = group.ToList();
+            var pdfFolder = Path.Combine(outcome.Folder, "paper");
+            Directory.CreateDirectory(pdfFolder);
+            var (answer, error) = await RunCyInvoiceAsync(outcome.Exe, "pdf", outcome.Folder, outcome.File, jobs.Select(j => j.Invoice.OrderId).ToList(), (pdfFolder, style));
             if (answer is null || answer.Environment != outcome.Environment)
             {
                 var why = answer is null ? error : $"CYInvoice 變成{answer.EnvironmentName}";
-                foreach (var r in pending) printed.Add($"紙本發票 {r.InvoiceNumber}（訂單 {r.OrderId}）沒有拿到 PDF（{why}），請在 CYInvoice 列印");
-                break;
+                foreach (var j in jobs) Drop(j, $"沒有拿到 PDF（{why}）");
+                continue;
             }
             var byId = answer.Orders.GroupBy(o => o.OrderId).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
-            var still = new List<CyInvoiceOrder>();
-            foreach (var r in pending)
+            foreach (var j in jobs)
             {
-                byId.TryGetValue(r.OrderId, out var a);
-                if (a is { Status: "ready" } && a.InvoiceNumber == r.InvoiceNumber && a.PdfFile.Length > 0 && File.Exists(a.PdfFile)) ready.Add((r, a.PdfFile));
-                else if (a is { Status: "pending" }) still.Add(r);
-                else printed.Add($"紙本發票 {r.InvoiceNumber}（訂單 {r.OrderId}）沒有拿到 PDF（{(a is null ? "結果沒有這筆" : $"{CyInvoiceLink.StatusName(a.Status)} {a.Message}".Trim())}），請在 CYInvoice 列印");
-            }
-            pending = still;
-            if (pending.Count == 0) break;
-            if (watch.Elapsed > limit)
-            {
-                if (MessageBox.Show(this, $"還有 {pending.Count} 張發票光貿尚未開立完成，拿不到 PDF（已等 {watch.Elapsed.TotalMinutes:0} 分鐘）。\n\n要再等 5 分鐘嗎？按「否」會先印已拿到的，其餘請之後在 CYInvoice 列印。",
-                        "紙本發票", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                byId.TryGetValue(j.Invoice.OrderId, out var a);
+                if (a is { Status: "ready" } && a.InvoiceNumber == j.Invoice.InvoiceNumber && a.PdfFile.Length > 0 && File.Exists(a.PdfFile)) j.Pdf = a.PdfFile;
+                else if (a is { Status: "pending" })
                 {
-                    foreach (var r in pending) printed.Add($"紙本發票 {r.InvoiceNumber}（訂單 {r.OrderId}）光貿尚未完成、沒有拿到 PDF，請之後在 CYInvoice 列印");
-                    break;
+                    if (DateTime.Now - j.Since > PaperGiveUp) Drop(j, $"光貿 {PaperGiveUp.TotalMinutes:0} 分鐘還沒開立完成，沒有拿到 PDF");
                 }
-                watch.Restart();
+                else Drop(j, $"沒有拿到 PDF（{(a is null ? "結果沒有這筆" : $"{CyInvoiceLink.StatusName(a.Status)} {a.Message}".Trim())}）");
             }
-            SetStatus($"等待光貿開立完成（{pending.Count} 張），稍後再取 PDF…");
-            await Task.Delay(TimeSpan.FromSeconds(20));
         }
-        if (ready.Count == 0) return true;
+        _log.Info("cyinvoice", $"paper pdfs ready={_paperJobs.Count(j => j.Pdf is not null)} waiting={_paperJobs.Count(j => j.Pdf is null)}");
+    }
 
-        _log.Info("cyinvoice", $"paper invoices wait for paper count={ready.Count} style={style}");
+    private void Drop(PaperJob job, string why)
+    {
+        _paperJobs.Remove(job);
+        _paperNotes.Add($"紙本發票 {job.Invoice.InvoiceNumber}（訂單 {job.Invoice.OrderId}）{why}，請在 CYInvoice 列印。");
+        _log.Warn("cyinvoice", $"paper invoice dropped: {why}");
+    }
+
+    /// <summary>
+    /// The paper invoices whose PDF is ready: the prompt for plain A4 paper, then the A4 printer.
+    /// 停止 leaves them for CYInvoice; a printer error is listed (no stop). <paramref name="printed"/>
+    /// takes the lines for a run's result when given, else they go to the later notice.
+    /// </summary>
+    private async Task PrintReadyPaperAsync(List<string>? printed)
+    {
+        var ready = _paperJobs.Where(j => j.Pdf is not null).ToList();
+        if (ready.Count == 0) return;
+        var report = printed ?? _paperNotes;
+        var printer = SlipPrinter.Installed(_settings.A4Printer);
+        if (printer is null)
+        {
+            foreach (var j in ready) Drop(j, "沒有印：找不到 A4 印表機（設定 › 印表機）");
+            return;
+        }
+        var styleName = CyInvoiceLink.PaperStyles.FirstOrDefault(p => p.Code == _settings.PaperInvoiceStyle).Name ?? string.Empty;
+        _log.Info("cyinvoice", $"paper invoices wait for paper count={ready.Count}");
         Alarm(needsPerson: true);
         using (var prompt = new PaperPromptForm("A4 白紙（紙本發票）", printer, $"共 {ready.Count} 張發票（有統編抬頭的訂單，{styleName}）"))
-            if (prompt.ShowDialog(this) != DialogResult.OK) return false;
-        foreach (var (r, pdf) in ready)
+            if (prompt.ShowDialog(Form.ActiveForm ?? this) != DialogResult.OK)
+            {
+                foreach (var j in ready) Drop(j, "在放紙提醒按了停止，沒有印");
+                return;
+            }
+        var ledger = new PaperInvoiceLedger(PaperInvoiceLedger.DefaultPath);
+        foreach (var j in ready)
         {
-            SetStatus($"列印紙本發票 {r.InvoiceNumber}…");
+            _paperJobs.Remove(j);
+            var r = j.Invoice;
             try
             {
-                var pages = await MoSlipPdf.RenderPagesAsync(pdf, string.Empty, 300);
+                var pages = await MoSlipPdf.RenderPagesAsync(j.Pdf!, string.Empty, 300);
                 try { await Task.Run(() => SlipPrinter.PrintPages(printer, pages, $"發票 {r.InvoiceNumber}")); }
                 finally { foreach (var page in pages) page.Dispose(); }
-                ledger.Record(outcome.Environment, r.InvoiceNumber);
-                printed.Add($"紙本發票 {r.InvoiceNumber}");
+                ledger.Record(j.Outcome.Environment, r.InvoiceNumber);
+                printed?.Add($"紙本發票 {r.InvoiceNumber}");
                 _log.Info("cyinvoice", $"paper invoice printed pages={pages.Count}");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
             {
                 _log.Warn("cyinvoice", $"paper invoice print failed: {ex.GetType().Name}: {ex.Message}");
-                printed.Add($"紙本發票 {r.InvoiceNumber} 列印失敗（{ex.Message}），請在 CYInvoice 重印");
+                report.Add($"紙本發票 {r.InvoiceNumber} 列印失敗（{ex.Message}），請在 CYInvoice 重印。");
             }
         }
-        return true;
     }
 
     /// <summary>
@@ -323,7 +396,7 @@ internal sealed partial class MainForm
                 "請先開好 CYInvoice 的測試環境。\n\n" +
                 "1. 放入 MO店+ 訂單匯出檔（出貨前那份；出貨後那份可省略）\n" +
                 "2. 程式呼叫 CYInvoice 先查詢，再對查無發票的訂單開立（開立前會再問一次，並顯示 CYInvoice 的環境）\n" +
-                "3. 有統編抬頭的訂單印紙本發票（A4 印表機，印前會請你放紙）；一般消費者是會員載具，不印\n" +
+                "3. 有統編抬頭的訂單印紙本發票：光貿開立完成、拿到 PDF 後才會請你放紙（A4 印表機，不必等，可以先看預覽）；一般消費者是會員載具，不印\n" +
                 "4. 停在預覽畫面，發票資料已帶入；測試環境的發票不會輸入 ERP\n\n" +
                 $"CYInvoice：{_settings.CyInvoicePath}\n\n要開始嗎？",
                 title, MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
@@ -345,15 +418,10 @@ internal sealed partial class MainForm
         _log.Info("cyinvoice", $"test orders={orders.Count}");
 
         var invoice = await InvoiceMoAsync(title, files.BatchPath, files.Orders, orders, fullAuto: false);
-        var printed = new List<string>();
-        if (invoice.Paper.Count > 0)
-        {
-            var a4 = SlipPrinter.Installed(_settings.A4Printer);
-            if (a4 is null) printed.Add("沒有設定或找不到 A4 印表機（設定 › 印表機），紙本發票沒有印");
-            else if (!await PrintPaperInvoicesAsync(invoice, a4, printed)) printed.Add("已在放紙提醒按停止，紙本發票沒有印");
-        }
+        // In the background: the paper prompt comes once 光貿 has the PDFs, over the preview.
+        QueuePaperInvoices(invoice);
         SetStatus(string.Empty);
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. printed, .. files.Notes],
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. files.Notes],
             () =>
             {
                 if (invoice.IsProduction) return Task.FromResult(true);

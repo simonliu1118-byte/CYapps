@@ -85,4 +85,46 @@ public class SlipImageTests
         var big = SlipImage.Render(page, up);
         Assert.Equal(8, SlipImage.BarcodeModule(big, new Rectangle(0, 0, big.Width, big.Height)));
     }
+
+    /// <summary>A 7-11 交貨便 slip: a solid frame with two boxes inside, short dashed cut marks to its right and below.</summary>
+    private static void SevenSlip(byte[] p, int w, int left, int top)
+    {
+        Fill(p, w, left, top, 300, 3);
+        Fill(p, w, left, top + 417, 300, 3);
+        Fill(p, w, left, top, 3, 420);
+        Fill(p, w, left + 297, top, 3, 420);
+        Fill(p, w, left + 10, top + 200, 280, 2);
+        Fill(p, w, left + 10, top + 300, 280, 2);
+        Fill(p, w, left + 10, top + 200, 2, 100);
+        Fill(p, w, left + 288, top + 200, 2, 100);
+        for (var x = left + 40; x < left + 120; x += 8) Fill(p, w, x, top + 40, 4, 100);
+        for (var y = top - 10; y < top + 440; y += 10) Fill(p, w, left + 312, y, 2, 5);
+        for (var x = left - 10; x < left + 320; x += 10) Fill(p, w, x, top + 432, 5, 2);
+    }
+
+    [Fact]
+    public void Seven_slip_is_its_solid_frame_without_the_cut_marks()
+    {
+        const int w = 900, h = 1270;
+        var p = GrayImage.Blank(w, h).Pixels;
+        SevenSlip(p, w, 60, 60);
+        var slip = Assert.Single(SlipImage.FindFramedSlips(new GrayImage(w, h, p)));
+        var pad = Math.Max(4, w / 200);
+        Assert.Equal(new Rectangle(60 - pad, 60 - pad, 300 + 2 * pad, 420 + 2 * pad), slip);
+    }
+
+    [Fact]
+    public void Several_seven_slips_on_a_page_come_in_reading_order()
+    {
+        const int w = 900, h = 1270;
+        var p = GrayImage.Blank(w, h).Pixels;
+        SevenSlip(p, w, 60, 60);
+        SevenSlip(p, w, 480, 60);
+        SevenSlip(p, w, 60, 600);
+        var slips = SlipImage.FindFramedSlips(new GrayImage(w, h, p));
+        Assert.Equal(3, slips.Count);
+        Assert.True(slips[0].Left < 100 && slips[0].Top < 100);
+        Assert.True(slips[1].Left > 400 && slips[1].Top < 100);
+        Assert.True(slips[2].Left < 100 && slips[2].Top > 500);
+    }
 }

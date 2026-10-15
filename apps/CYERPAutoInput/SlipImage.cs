@@ -86,6 +86,55 @@ internal static class SlipImage
     }
 
     /// <summary>
+    /// MO店+ 7-11 交貨便 (user, 2026-10-15: an A4 page with the 10×14 cm slip in a solid frame at
+    /// the top left, short dashed cut marks beside it; more slips sit on the same page): each slip
+    /// is a large connected frame of ink. The dashes are small pieces and the boxes inside a
+    /// frame are inside it, so neither counts. In reading order, top to bottom, left to right.
+    /// </summary>
+    public static List<Rectangle> FindFramedSlips(GrayImage page)
+    {
+        var w = page.Width;
+        var h = page.Height;
+        var seen = new bool[w * h];
+        var stack = new Stack<int>();
+        var frames = new List<Rectangle>();
+        for (var start = 0; start < seen.Length; start++)
+        {
+            if (seen[start] || page.Pixels[start] >= Dark) continue;
+            int left = start % w, right = left, top = start / w, bottom = top;
+            seen[start] = true;
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                var i = stack.Pop();
+                int x = i % w, y = i / w;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+                for (var dy = -1; dy <= 1; dy++)
+                    for (var dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        var n = ny * w + nx;
+                        if (seen[n] || page.Pixels[n] >= Dark) continue;
+                        seen[n] = true;
+                        stack.Push(n);
+                    }
+            }
+            if (right - left + 1 >= w / 6 && bottom - top + 1 >= h / 8) frames.Add(Rectangle.FromLTRB(left, top, right + 1, bottom + 1));
+        }
+        // A thin margin only: the frame is the slip's edge (the slip is as wide as the label paper).
+        var pad = Math.Max(4, w / 200);
+        return frames
+            .Where(f => !frames.Any(o => o != f && o.Contains(f)))
+            .Select(f => Rectangle.Intersect(Rectangle.Inflate(f, pad, pad), new Rectangle(0, 0, w, h)))
+            .OrderBy(f => f.Top / Math.Max(1, h / 10)).ThenBy(f => f.Left)
+            .ToList();
+    }
+
+    /// <summary>
     /// Positions of dashed lines: across most of the page (from the first ink to the last over
     /// 80 % of it), a quarter or more inked, broken into many dashes, and thin. A slip's own
     /// dotted divider is only as long as the slip and is not taken.
