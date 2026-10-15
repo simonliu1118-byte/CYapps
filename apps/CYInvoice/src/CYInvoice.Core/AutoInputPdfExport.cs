@@ -26,9 +26,12 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
         var record = records[0];
         if (record.Source != source || record.Environment != environment)
             return new(orderId, "unknown", Message: "來源或環境不符，禁止輸出紙本");
-        if (record.BuyerIdentifier.Trim() is "" or "0000000000")
-            return new(orderId, "skipped", Message: "一般消費者為會員載具，不列印紙本");
-        if (record.BuyerIdentifier.Length != 8 || !record.BuyerIdentifier.All(char.IsAsciiDigit))
+        // Delivery is authoritative: Coupang B2C is paper even without BAN,
+        // whereas MO consumer carrier/donation must never be sent to print.
+        // Do not infer paper delivery from whether a buyer has a company BAN.
+        var buyerBan = record.BuyerIdentifier.Trim();
+        var consumerPaper = buyerBan is "" or "0000000000";
+        if (!consumerPaper && (buyerBan.Length != 8 || !buyerBan.All(char.IsAsciiDigit)))
             return new(orderId, "unknown", Message: "公司統編格式無法核實");
         if (record.InvoiceState != InvoiceStates.Opened ||
             !System.Text.RegularExpressions.Regex.IsMatch(record.InvoiceNumber, "^[A-Z]{2}[0-9]{8}$") ||
@@ -36,9 +39,15 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
             record.ErrorMessage.Trim().Length != 0)
             return new(orderId, "unknown", Message: "發票開立資料不完整或已變更，不得輸出紙本");
         if (record.Delivery != InvoiceService.DeliveryPaper)
-            return new(orderId, "unknown", Message: "這筆公司戶發票並非紙本交付，需人工核對");
+            return new(orderId, "skipped", Message: "此發票為載具／捐贈或非紙本交付，不輸出 PDF");
+        // Consumer paper has only A4 style 0. Keep the caller-selected style
+        // for company paper, but record the actual style in name and message.
+        var effectiveStyle = consumerPaper ? InvoicePdfStyles.A4.Code : style;
+        var styleMessage = consumerPaper
+            ? "一般消費者紙本發票：實際使用 A4 整張（pdfStyle=0）；請依官方 PDF 頁面確認並使用雙面列印"
+            : string.Empty;
         var info = new AutoInputOrderResult(orderId, "pending", record.InvoiceNumber, record.InvoiceDate,
-            record.BuyerIdentifier, record.BuyerName, record.Amount, "等待光貿完成發票上傳");
+            consumerPaper ? string.Empty : buyerBan, record.BuyerName, record.Amount, "等待光貿完成發票上傳");
         // Local upload status can lag AMEGO's eventual completion. Even when
         // the cached status is still uploading, attempt exactly one official
         // PDF lookup; AMEGO code 99 means pending. Otherwise a headless CLI
@@ -51,7 +60,7 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
         InvoicePdfDocument pdf;
         try
         {
-            pdf = await service.GetInvoicePdfAsync(record, style, cancellationToken).ConfigureAwait(false);
+            pdf = await service.GetInvoicePdfAsync(record, effectiveStyle, cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException error) when (
             error.Message.Contains("尚未提供這張發票的官方 PDF", StringComparison.Ordinal))
@@ -67,7 +76,7 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
         }
         if (pdf.InvoiceNumber != record.InvoiceNumber)
             return info with { Status = "unknown", Message = "官方 PDF 與原發票號碼不一致" };
-        var destination = Path.Combine(pdfFolder, record.InvoiceNumber + "_style" + style + ".pdf");
+        var destination = Path.Combine(pdfFolder, record.InvoiceNumber + "_style" + effectiveStyle + ".pdf");
         try
         {
             var src = new FileInfo(pdf.Path);
@@ -98,7 +107,7 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
                 }
                 finally { if (File.Exists(temp)) File.Delete(temp); }
             }
-            return info with { Status = "ready", Message = "", PdfFile = destination };
+            return info with { Status = "ready", Message = styleMessage, PdfFile = destination };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception)

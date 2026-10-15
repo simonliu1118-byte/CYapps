@@ -1563,8 +1563,54 @@ static async Task TestAutoInputPdfAsync()
     record.UploadStatus = UploadStatuses.Complete;
     record.BuyerIdentifier = "0000000000";
     repository.Invoices.Save([record]);
+    var paperConsumer = await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5);
+    Equal("ready",paperConsumer.Status);
+    Equal(string.Empty,paperConsumer.BuyerBan);
+    Equal(Path.Combine(folder,"AX12345678_style0.pdf"),paperConsumer.PdfFile);
+    Equal(true,paperConsumer.Message.Contains("pdfStyle=0",StringComparison.Ordinal));
+    Equal(0,fake.LastPdfStyle);
+    Equal(0,fake.IssueCalls);
+
+    record.Delivery = "會員載具";
+    repository.Invoices.Save([record]);
     Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
         Environments.Test,folder,5)).Status);
+    record.Delivery = "捐贈";
+    repository.Invoices.Save([record]);
+    Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+
+    // Coupang B2C has no company BAN but MUST be paper and downloadable.
+    var coupangRecord = PdfReadyRecord("AY12345678");
+    coupangRecord.Source = InvoiceSources.Coupang;
+    coupangRecord.OriginalOrderId = "COUPANG-ORDER-01";
+    coupangRecord.OrderId = "COUPANG-ORDER-01";
+    coupangRecord.BuyerIdentifier = string.Empty;
+    coupangRecord.BuyerName = "消費者";
+    repository.Invoices.Save([record,coupangRecord]);
+    var coupangPaper = await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,3);
+    Equal("ready",coupangPaper.Status);
+    Equal("COUPANG-ORDER-01",coupangPaper.OrderId);
+    Equal(coupangRecord.Amount,coupangPaper.TotalAmount);
+    Equal(string.Empty,coupangPaper.BuyerBan);
+    Equal(Path.Combine(folder,"AY12345678_style0.pdf"),coupangPaper.PdfFile);
+    Equal(true,coupangPaper.Message.Contains("A4",StringComparison.Ordinal));
+    Equal(0,fake.LastPdfStyle);
+    Equal(0,fake.IssueCalls);
+    // A replay reads the original safe PDF without calling Issue or replacing it.
+    var coupangAgain = await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,5);
+    Equal("ready",coupangAgain.Status);
+    Equal(coupangPaper.PdfFile,coupangAgain.PdfFile);
+    Equal(0,fake.IssueCalls);
+    var collision = coupangRecord;
+    collision.BuyerIdentifier = "12AB5678";
+    repository.Invoices.Save([record,collision]);
+    Equal("unknown",(await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,5)).Status);
+    Equal(0,fake.IssueCalls);
 
     var output = Path.Combine(temp.Path,"result.json");
     var envelope = new AutoInputResult(AutoInputContract.ResultSchema,Guid.NewGuid().ToString("D"),
