@@ -9,7 +9,9 @@
 - 新增（含首次寄信結果）／刪除 Audit 暫停，既有Audit與其他事件保留。新employeeId不繼承舊帳號或App/Module Access。
 - 本輪一併帶上既有0.3.8 HTML／text可點擊CYWEB驗證入口；使用者提供的舊信確實只有「請前往CY Web」文字而無URL。修正serviceVersion原本落後VERSION的宣告，正式部署後才算寄信程式已更新；不自動重寄真人Email。
 - [x] Local TypeScript／95項Node回歸與實際本機Worker/D1新增→拒絕一般ADMIN刪已驗證→SA刪除→舊Session/密碼拒絕→同編號/Email重建→無繼承App Access／FK檢查通過；新增/刪除Audit為零、其他Audit保留，HTML/text初寄與重寄實際adapter pipeline通過（Email transport為stub）。
-- [ ] exact-head CI／正式既有provider部署；不重播authority、不建test Worker。
+- [x] [PR #458](https://github.com/simonliu1118-byte/CYapps/pull/458) exact head c8ce0428ac33c012f3c38fff04214c10e23fb5ac、tree7e25b3dde327df8562376fc74fab583729aa7a56：Governance38716400450／Identity Check38716400448／development validate38716400428／production validate38716400387／Invoice Cloud38716400363／Invoice Windows38716400411全部通過，PR deploy skipped；merge bf9381ae250ee9dc9e89c018dc9998ed450b5c75。
+- [x] Web governance#157／feature#156已合併，實際部署38717773511保留原Worker／business D1，0.7.27／consumer1.0.5雙入口D1與exact source health、invalid Session/cookie清除及原strict portal guard通過。此批准不代表清除business資料或真人Email驗收。
+- [x] [正式部署38718039836](https://github.com/simonliu1118-byte/CYapps/actions/runs/38718039836)，source bf9381ae／同已驗tree，既有production Worker／獨立D1／vars／ratelimit／Secrets保留；原canonical portal authority/Workspace/core App/current consumer1.0.5 gate、dry-run、無新migration、source-only部署、production health serviceVersion0.3.9與invalid Session/D1拒絕全部通過。未建立Session、未重播authority／bootstrap、未新建Worker、未改帳務／Invoice或真人帳號。
 - [ ] 受控真人新增→實際收信連結→驗證→新密碼登入→刪除→同編號／Email重建驗收；未操作真人帳號。
 - [ ] **第一版業務上線前恢復**：`src/account-lifecycle-testing.ts` 的 allowVerifiedDeletion=false、recordCreateDeleteAudit=true，更新consumer契約／Web mirror並部署，驗收已驗證帳號不可刪、pending刪除及新增／刪除Audit正常；完成後收斂本暫時例外。
 
@@ -17,15 +19,15 @@
 
 - [x] CYID source 0.3.8: use existing runtime `ACCOUNT_PORTAL_URL` to include the CY Web root login address in both HTML-clickable and plaintext new-Employee / resend-initial Email; clarify that initial passwords cannot log into CYACCweb, that permanent password setting happens in CY Web, and that fresh login is required.
 - [x] Validate URL before writing or rotating an initial credential; production URL must be HTTPS, without embedded credentials/query/fragment. No URL with password, token or employee data is sent.
-- [ ] After PR CI and a **separately authorized** CYID deployment, read back the actual Provider `ACCOUNT_PORTAL_URL` and CY Web Service Binding to verify both address the same CYID authority; do not expose real IDs or credentials in Public logs.
+- [x] 2026-10-15正式0.3.9部署已包含新版信件；原canonical guard實際核對provider ACCOUNT_PORTAL_URL→managed domain→Web Worker→同正式Identity／Workspace／core App及consumer1.0.5 health。新寄／重寄才套用新版，舊信不會變更；未自行重寄真人Email。
 - [ ] Controlled real Email/browser acceptance (new Employee + resend): received email HTML/text link, click-through, initial login, permanent password, confirmation read-back, fresh login, CYACC app access and error classification. Do not reissue actual employee credentials during this source-only change.
 - **CYID Consumer Impact: NONE**; API/Session/Role/App Access/CYID consumer contract 1.0.4 unchanged. Existing CYACC automatic deployment and Cloudflare workers are not touched by this CYID-only PR.
 
-## Current checkpoint — 2026-10-12
+## Current checkpoint — 2026-10-15
 
-- Current source **CYCloudIdentity 0.3.7 Build 0／contract 1.0.4** 已由 #416 合併，八項 final-head CI 通過；development actual #158（38197480766）同已測 tree 升級成功，保留原 authority／history／settings／Secrets／七 migrations／FK。Production未部署此批；不自動登記App或授予員工權限。
+- Current source **CYCloudIdentity 0.3.9 Build0／contract1.0.5／minimum1.0.0**；本輪CI、Web採用、正式provider執行與待驗收見上方唯一進度區。原0.3.7 development#158與更早版本依Git history追溯，不代表目前formal runtime。
 - CYInvoice 原 development 已經 #420 exact-head CI／actual activate-cyid #42（38206372325）啟用 CYID；原 Invoice Workspace／Device Token hashes／資料／history／FK 保留，Provider 不變。原 Windows 已由使用者回報 Built-in continuity；live CYID 員工帳密、其餘 App Access／Role／private transport／AA／AB／AC 仍待驗收，詳見 Invoice 現行交接／TODO。不代表 production 或 Release。
-- CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
+- CYWEB目前已部署0.7.27／consumer1.0.5，實際正式provider binding／同Workspace／core App及D1 health已核對；原業務資料保留，乾淨business-data首版仍另行處理。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
   - 只允許 CY Web core account application；
@@ -47,7 +49,7 @@
 - **CYID production provisioning 已獲批准並完成**：`deploy/cycloudidentity-production` at `0e9dc3342cd581bf41090012aae0759bce026329`，Production Provisioning run #12 成功，包含獨立 Worker/D1、durable authority continuity、CYACC registry/Workspace enablement、runtime binding 與 Session resolve/logout/revoke probe；不是 development provider。該 deployment workflow 尚未整合到 main，source VERSION/BUILD 未變。
 - Production probe 使用短效合成 Session，並非真實密碼/Email/browser 驗收；這些 acceptance 與 backup/restore 尚未因此通過。CYACC 自己的正式部署/驗收由 CYACC 工作線追蹤。
 - **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
-- **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment path 已建立於 `cycloudidentity-production-deploy.yml`：只接受 main 手動觸發，讀既有正式 bindings，consumer readiness 與 dry-run 通過後只做 forward migration/source deploy，不重播 authority。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
+- **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment沿用 `cycloudidentity-production-deploy.yml`：main手動或已驗source的專用 `deploy/cycloudidentity-production-release` 訊號，讀既有正式bindings，以原canonical managed-domain／Worker／binding／Workspace／core App guard與current consumer health驗證後，僅forward migration/source deploy，不重播authority；舊一次性provisioning ref仍退休。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
 - Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
 
 ## Development upgrade preparation
@@ -155,9 +157,9 @@
 - Formal CYID source `cca89e30eec2e7df6938bb37736c520af9db8197`; deployment commit `26ae3424df2ee2c57a9877682c4bb51dd593db58` uses the exact formal-main tree while preserving the old development branch history. It does not merge old one-time provisioning code into runtime.
 - [Development Deploy run 36821423383](https://github.com/simonliu1118-byte/CYapps/actions/runs/36821423383) passed migrations, bundle/source deployment, existing secret configuration, actual development Worker/D1 binding isolation, health serviceVersion 0.3.5 and unregistered Session rejection. No account/Session was created by the verification.
 - CY Web 0.7.0 / consumer 1.0.2 deployed through [run 36821410198](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/36821410198), with actual canonical/workers.dev D1 health/version/consumer readback and provider Session rejection.
-- Routine production release additionally requires protected `CYID_PRODUCTION_CORE_CONSUMER_WORKER_NAME` and actual core Worker `IDENTITY` binding to the production provider plus the production core Application ID and consumer declaration. A development health marker cannot satisfy this target check. The prerequisite is not provisioned by this work.
+- Routine production gate現由canonical managed-domain解析actual core Worker，核對正式IDENTITY／Workspace／core App／declared consumer／D1 health及當前consumer版本，不另依賴重複protected Worker變數；development health不能滿足此gate。
 - TypeScript and 44 Node tests pass after the production-binding readiness guard was added; regression cases reject a healthy development binding, wrong Application/consumer declaration and unhealthy D1.
-- Production source release remains unexecuted. Real Email/browser/device acceptance, backup/restore and CY Web production business-data rollout remain pending.
+- 歷史0.3.5 checkpoint未執行formal source release；當前provider release以本文件頂端2026-10-15證據為準。Real Email/browser/device、backup/restore及乾淨business-data首版仍未完成。
 
 ## CY Web real browser checkpoint — 2026-10-01
 
@@ -176,6 +178,6 @@ The user explicitly deferred real Email acceptance and asked that the checklist 
 - [ ] Protected Super Admin transfer with credential/OTP/user confirmation.
 - [ ] USER/normal ADMIN/Identity Admin real-browser capability matrix; role/App Access/Session expiry and revocation. Current real-browser evidence is SUPER_ADMIN login/reload only.
 - [ ] Backup/restore acceptance specific to CYID authority data; CY Web business-backup rehearsal does not back up CYID credentials or prove provider recovery.
-- [ ] Production source release readiness and explicit authorization; existing provisioning success does not close Email/browser/restore gates.
+- [ ] 目前正式版本的真人Email/browser／跨角色與復原驗收；本輪source部署批准與provisioning成功皆不能關閉這些gate。
 
 Prerequisites for later Email tests: user-designated controlled inbox, explicit recipient/account-creation authority, secure login/OTP collection and user handoff for new permanent credential entry. No credentials or real recipient addresses belong in Public documents. CY Web's business backup target remains R2 + GCS under its own approved architecture; independent App/scope/credentials must be preserved.

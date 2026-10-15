@@ -47,7 +47,7 @@ At minimum:
 
 `重寄驗證 Email` creates a new initial password and expiry and invalidates the old one. Editing the pending Email does the same for the new address.
 
-If delivery fails, keep the Employee and show an actionable resend state. Only never-completed first-verification Employees may be deleted.
+If delivery fails, keep the Employee and show an actionable resend state. The normal baseline permits deletion only before first verification. The explicitly approved testing-period exception is defined in consumer standard §17.2; the optional snapshot capability gates the core Super Admin control.
 
 ## 5. Normal ADMIN surface
 
