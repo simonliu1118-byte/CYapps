@@ -1547,14 +1547,14 @@ static async Task TestAutoInputPdfAsync()
 
     record = repository.Invoices.LoadOrCreate().Single();
     record.UploadStatus = UploadStatuses.Pending;
-    repository.Invoices.Replace(record);
+    repository.Invoices.Save([record]);
     Equal("pending",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
         Environments.Test,folder,5)).Status);
     Equal(1,fake.PdfCalls);
 
     record.UploadStatus = UploadStatuses.Complete;
     record.BuyerIdentifier = "0000000000";
-    repository.Invoices.Replace(record);
+    repository.Invoices.Save([record]);
     Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
         Environments.Test,folder,5)).Status);
 
