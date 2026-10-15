@@ -2,6 +2,12 @@ name: TriINVCalc Release
 
 on:
   workflow_dispatch:
+  # An explicitly approved version request triggers one release from main.
+  # Normal source pushes and PRs do not publish.
+  push:
+    branches: [main]
+    paths:
+      - 'apps/TriINVCalc/RELEASE_REQUEST'
 
 permissions:
   contents: write
@@ -45,11 +51,34 @@ jobs:
           $tag = "TriINVCalc-v$version"
           $zipName = "TriINVCalc_V$version.zip"
           if (-not (Test-Path "./V$version.txt")) { throw "Missing release notes for V$version" }
-          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Release already exists: $tag" }
-          git ls-remote --exit-code --tags origin "refs/tags/$tag" *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Tag already exists: $tag" }
-          if ($LASTEXITCODE -ne 2) { throw "Unable to verify remote tag nonexistence." }
+          if ($env:GITHUB_EVENT_NAME -eq 'push') {
+            $request = (Get-Content ./RELEASE_REQUEST -Raw).Trim()
+            if ($request -ne $version) { throw "Release request $request does not match VERSION $version." }
+          }
+
+          # A missing release (404) is expected for a new version.
+          # Do not use a failing native CLI call for existence detection:
+          # PowerShell may terminate before the exit code can be inspected.
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $api = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY"
+          $existingRelease = $null
+          try {
+            $existingRelease = Invoke-RestMethod -Method Get -Headers $headers -Uri "$api/releases/tags/$tag"
+          } catch {
+            $status = [int]$_.Exception.Response.StatusCode
+            if ($status -ne 404) { throw }
+          }
+          if ($null -ne $existingRelease) { throw "Release already exists: $tag" }
+
+          $matchingTags = @(Invoke-RestMethod -Method Get -Headers $headers -Uri "$api/git/matching-refs/tags/$tag")
+          if (@($matchingTags | Where-Object { $_.ref -eq "refs/tags/$tag" }).Count -gt 0) {
+            throw "Tag already exists: $tag"
+          }
+          Write-Host "Validated version $version; no matching release or tag exists."
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
           "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           "RELEASE_ZIP=$zipName" >> $env:GITHUB_ENV
@@ -94,7 +123,7 @@ jobs:
           - 金額計算、折扣、尾差分配及 Enter／Tab 工作流程維持不變。
           - 通過 Windows Build/Test 及公開發行檔案安全掃描。
 
-          原始碼與完整變更紀錄請參閱本版 commit 及 `V$version.txt`。
+          原始碼與完整變更紀錄請參閱本版 commit 及 V$version.txt。
 
           Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
           "@
@@ -109,3 +138,27 @@ jobs:
             --title "TriINVCalc V$version｜三聯式發票開立計算機" `
             --notes-file $notesFile `
             --latest
+
+      - name: Remove superseded TriINVCalc V1.5.5 release after verified publication
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $api = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY"
+          $release = Invoke-RestMethod -Method Get -Headers $headers -Uri "$api/releases/tags/$env:RELEASE_TAG"
+          if ($release.draft -or $release.prerelease) { throw "New formal release is not public/stable." }
+          $actualAssets = @($release.assets | ForEach-Object { $_.name })
+          $requiredAssets = @($env:RELEASE_ZIP, 'TriINVCalc.exe', 'SHA256SUMS.txt')
+          foreach ($name in $requiredAssets) {
+            if ($name -notin $actualAssets) { throw "Missing new release asset: $name" }
+          }
+          $oldTag = 'TriINVCalc-v1.5.5'
+          if ($env:RELEASE_TAG -eq $oldTag) { throw "Refusing to delete the active release." }
+          gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --yes
+          if ($LASTEXITCODE -ne 0) { throw "Failed to remove previous TriINVCalc release $oldTag." }
+          Write-Host "Removed only the superseded $oldTag GitHub Release; git tag and history retained."
