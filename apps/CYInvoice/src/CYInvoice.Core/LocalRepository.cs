@@ -43,19 +43,13 @@ public sealed class LocalRepository
     public ServiceConnectivity Connections { get; }
 
     public bool UsesCloudEmployeeAuthority() =>
-        IdentityProvider.Kind is IdentityProviderKind.BuiltInCloud or IdentityProviderKind.CyId;
+        IdentityProvider.Kind == IdentityProviderKind.CyId;
 
     public bool HasAuthorityEmployees() =>
-        IdentityProvider.Kind == IdentityProviderKind.CyId ? true :
-        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
-            ? CloudEmployees.LoadAll().Count != 0
-            : Employees.HasEmployees();
+        IdentityProvider.Kind == IdentityProviderKind.CyId || Employees.HasEmployees();
 
     public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
-        IdentityProvider.Kind == IdentityProviderKind.CyId ? [] :
-        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
-            ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
-            : Employees.LoadAll();
+        IdentityProvider.Kind == IdentityProviderKind.CyId ? [] : Employees.LoadAll();
 
     public AppPrincipal? AuthenticatePrincipal(string employeeNo, string password) =>
         IdentityProvider
@@ -68,15 +62,6 @@ public sealed class LocalRepository
         var principal = AuthenticatePrincipal(employeeNo, password);
         return principal?.ToEmployeeAccount();
     }
-
-    private static EmployeeAccount ToEmployeeAccount(CloudEmployeeCachedAccount account) => new(
-        account.EmployeeNo,
-        account.Name,
-        account.Email,
-        account.Role,
-        account.Enabled,
-        account.SyncedUtc,
-        account.SyncedUtc);
 
     public static LocalRepository Open(string baseDirectory, ISecretProtector protector, HttpClient? serviceHttp = null)
     {
@@ -104,9 +89,6 @@ public sealed class LocalRepository
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
-            new BuiltInCloudIdentityProvider(
-                cloudEmployees,
-                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings), connections.RequireAmegoAsync),
             new CyIdIdentityProvider(settings, cyIdOffline, requireAmegoForFallback: connections.RequireAmegoAsync));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
