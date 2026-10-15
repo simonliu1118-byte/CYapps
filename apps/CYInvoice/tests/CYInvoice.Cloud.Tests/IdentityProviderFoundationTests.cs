@@ -64,7 +64,9 @@ internal static class IdentityProviderFoundationTests
             True(!disabledPrincipal!.Enabled, "refreshed disabled authority must stay disabled");
 
             var settingsStore = new SettingsStore(directory, protector);
-            var runtime = new IdentityProviderRuntime(settingsStore, local, cloud);
+            var runtime = new IdentityProviderRuntime(
+                settingsStore, local,
+                new CyIdIdentityProvider(settingsStore, new CyIdOfflineCache(directory, protector)));
             Equal(IdentityProviderKind.Local, runtime.Current.Kind, "runtime starts with Local authority");
 
             var settings = settingsStore.LoadOrCreate();
