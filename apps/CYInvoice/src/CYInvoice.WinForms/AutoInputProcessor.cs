@@ -15,6 +15,55 @@ internal sealed class AutoInputProcessor(LocalRepository repository, InvoiceServ
         string Id, long Amount, string BuyerBan,
         Func<CancellationToken, Task<IssueResult>> Issue);
 
+    public async Task<AutoInputResult> ExecutePdfAsync(
+        AutoInputRequest request, CancellationToken cancellationToken = default)
+    {
+        request.ValidatePdf();
+        if (!File.Exists(request.File))
+            throw new InvalidDataException("AutoInput original order file not found.");
+        if (LocalResetCoordinator.HasPendingReset(AppContext.BaseDirectory) ||
+            LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            throw new InvalidOperationException("裝置正在重設，不提供 AutoInput PDF");
+
+        var environment = repository.Settings.LoadOrCreate().Environment;
+        if (environment is not (Environments.Production or Environments.Test))
+            throw new InvalidOperationException("CYInvoice environment invalid");
+        var selected = request.OrderIds!;
+        var source = request.Source == "mo" ? InvoiceSources.Mo : InvoiceSources.Coupang;
+        var exporter = new AutoInputPdfExport(repository, service);
+        var results = new List<AutoInputOrderResult>(selected.Count);
+        // PDF requests should be short-lived. AutoInput owns the 20-second
+        // poll cadence; no background task here can issue an invoice.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(55));
+        foreach (var orderId in selected)
+        {
+            if (repository.Settings.LoadOrCreate().Environment != environment ||
+                LocalResetCoordinator.HasPendingReset(AppContext.BaseDirectory) ||
+                LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            {
+                results.Add(new(orderId, "unknown", Message: "環境或裝置狀態已變更，禁止輸出 PDF"));
+                break;
+            }
+            try
+            {
+                results.Add(await exporter.ExportAsync(orderId, source, environment,
+                    request.PdfFolder!, request.PdfStyle!.Value, deadline.Token).ConfigureAwait(false));
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                results.Add(new(orderId, "pending", Message: "本次 PDF 查詢逾時，稍後再查"));
+                break;
+            }
+        }
+        foreach (var remaining in selected.Skip(results.Count))
+            results.Add(new(remaining, "pending", Message: "本次查詢時間已滿，稍後再查"));
+        return new AutoInputResult(AutoInputContract.ResultSchema, request.RequestId,
+            ApplicationVersion.Read() + "+0",
+            environment == Environments.Production ? "production" : "test",
+            DateTimeOffset.Now.ToString("O"), results);
+    }
+
     public async Task<AutoInputResult> ExecuteAsync(
         AutoInputRequest request, bool issue, CancellationToken cancellationToken = default)
     {
