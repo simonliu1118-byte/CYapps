@@ -13,6 +13,7 @@ internal static class CloudWorkItemClientTests
     public static async Task RunAsync()
     {
         RejectInvalidTransport();
+        await RejectUnfrozenAllowanceAsync();
         await CreateReadAndTransitionAsync();
         await MissingAndConflictingWorkAsync();
         await RejectUntrustedResponseAsync();
@@ -27,6 +28,17 @@ internal static class CloudWorkItemClientTests
             http, new Uri("https://cloud.example.test/?token=secret"), Token, Workspace));
         Throws<ArgumentException>(() => new CloudWorkItemClient(
             http, new Uri("https://cloud.example.test/"), "bad-token", Workspace));
+    }
+
+    private static async Task RejectUnfrozenAllowanceAsync()
+    {
+        var handler = new QueueHandler();
+        using var http = new HttpClient(handler);
+        var client = new CloudWorkItemClient(http, new Uri("https://cloud.example.test/"), Token, Workspace);
+        await ThrowsAsync<ArgumentException>(() => client.CreateAsync(
+            new CloudWorkItemDraft(ItemId, "test", "ALLOWANCE", ReferenceHash),
+            "0001", "SyntheticPass12"));
+        Equal(0, handler.PendingCount, "unfrozen ALLOWANCE must use dedicated application API");
     }
 
     private static async Task CreateReadAndTransitionAsync()

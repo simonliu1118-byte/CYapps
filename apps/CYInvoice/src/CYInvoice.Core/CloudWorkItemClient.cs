@@ -172,7 +172,7 @@ public sealed class CloudWorkItemClient
     {
         ValidateId(draft.ItemId);
         if (draft.Environment is not ("production" or "test") ||
-            draft.Kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID") ||
+            draft.Kind is not ("VOID" or "ALLOWANCE_VOID") ||
             draft.ReferenceHash is null ||
             !Regex.IsMatch(draft.ReferenceHash, @"^[a-f0-9]{64}$", RegexOptions.CultureInvariant))
             throw new ArgumentException("Work Item draft is invalid.", nameof(draft));
