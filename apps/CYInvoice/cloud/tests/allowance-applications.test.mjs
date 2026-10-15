@@ -18,7 +18,8 @@ function fixture(){
     "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud',token_hash TEXT);");
   sql.prepare("INSERT INTO workspaces(workspace_id) VALUES(?)").run(ws);
   sql.prepare("INSERT INTO devices(device_id,workspace_id) VALUES(?,?)").run(dev,ws);
-  for(const file of ["0015_work_items.sql","0017_company_settings.sql","0018_allowance_applications.sql"])
+  for(const file of ["0015_work_items.sql","0016_allowance_number_ledger.sql",
+    "0017_company_settings.sql","0018_allowance_applications.sql"])
     sql.exec(readFileSync("drafts/"+file,"utf8"));
   sql.prepare("INSERT INTO company_settings(workspace_id,seller_invoice,amego_app_key_ciphertext,"+
     "revision,changed_by_employee_id,changed_by_device_id,changed_at) VALUES(?,?,'synthetic_envelope',1,?,?,?)")
@@ -227,6 +228,52 @@ try {
     expectedRevision:2})).status,403);
   assert.equal(officialCalls,1);
   who={...who,workspaceRole:"ADMIN"};
+}finally{globalThis.fetch=originalFetch;}
+
+// Ambiguous g0401 recovery: only the originally D1-reserved number may be
+// queried; a plausible official match never silently marks it confirmed.
+fx.sql.prepare("INSERT INTO allowance_number_ledger("+
+  "ledger_id,workspace_id,work_item_id,seller_invoice,environment,allowance_day,"+
+  "sequence,allowance_number,attempt,request_sha256,status,created_by_device_id,created_at,updated_at) "+
+  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run("al_synthetic_readback",ws,
+  createBody.itemId,"12345678","test","20261015",1,"A20261015001",1,
+  fx.sql.prepare("SELECT template_sha256 FROM allowance_applications WHERE work_item_id=?")
+    .get(createBody.itemId).template_sha256,"sending",dev,
+  "2026-10-15T00:00:00Z","2026-10-15T00:00:00Z");
+let readbackCalls=0;
+globalThis.fetch=async (url,opts)=>{
+  readbackCalls++;
+  assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
+  const p=new URLSearchParams(opts.body);
+  assert.deepEqual(JSON.parse(p.get("data")),{allowance_number:"A20261015001"});
+  assert.equal(p.get("sign"),createHash("md5").update(
+    p.get("data")+p.get("time")+officialTestKey).digest("hex"));
+  return Response.json({code:0,data:{
+    allowance_number:"A20261015001",invoice_type:"D0401",invoice_status:99,
+    allowance_date:"20261015",allowance_type:2,cancel_date:0,
+    total_amount:"50",tax_amount:"0",
+    product_item:[{original_invoice_number:"AB12345678"}]
+  }});
+};
+try{
+  const r=await call("number-readback",{itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(r.status,200,JSON.stringify(r));
+  assert.equal(r.data.readback.allowanceNumber,"A20261015001");
+  assert.equal(r.data.readback.possibleMatch,true);
+  assert.equal(r.data.readback.safeToAutoConfirm,false);
+  assert.equal(r.data.readback.safeToAutoResend,false);
+  assert.equal(fx.sql.prepare("SELECT status FROM allowance_number_ledger").get().status,"sending");
+  assert.equal(readbackCalls,1);
+  assert.equal((await call("number-readback",{itemId:createBody.itemId,
+    expectedRevision:1})).status,404);
+  assert.equal((await call("number-readback",{itemId:createBody.itemId,
+    expectedRevision:2,allowanceNumber:"A20261015002"})).status,400);
+  assert.equal(readbackCalls,1,"Invalid client number cannot be used in queries");
+  who={...who,workspaceRole:"USER"};
+  assert.equal((await call("number-readback",{itemId:createBody.itemId,
+    expectedRevision:2})).status,403);
+  who={...who,workspaceRole:"ADMIN"};
+  assert.equal(readbackCalls,1);
 }finally{globalThis.fetch=originalFetch;}
 
 who={...who,workspaceId:"attacker_identity_workspace"};

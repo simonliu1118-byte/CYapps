@@ -5,6 +5,7 @@ import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipa
 import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication} from "./allowance-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
+import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
 import {validateAllowanceOriginalItems} from "./allowance-item-validation";
 
 interface Env extends CyIdEnv {
@@ -14,7 +15,8 @@ interface Env extends CyIdEnv {
 }
 const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applications/get",
   "/v1/allowance-applications/list","/v1/allowance-applications/review-preview",
-  "/v1/allowance-applications/official-inspection"]);
+  "/v1/allowance-applications/official-inspection",
+  "/v1/allowance-applications/number-readback"]);
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -25,7 +27,7 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-type Action = "create"|"get"|"list"|"review-preview"|"official-inspection";
+type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -33,7 +35,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
     ? new Set(["employeeNo","password","itemId","originalInvoiceNumber","allowanceDay",
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
     : action==="get" ? new Set(["employeeNo","password","itemId"])
-    : (action==="review-preview"||action==="official-inspection")
+    : (action==="review-preview"||action==="official-inspection"||action==="number-readback")
       ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
   if(!Object.keys(val).every(k=>allowed.has(k)))return false;
@@ -44,7 +46,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (!["review-preview","official-inspection"].includes(action) ||
+    (!["review-preview","official-inspection","number-readback"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -86,7 +88,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
   if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
   const action=path.endsWith("/create")?"create":path.endsWith("/list")?"list":
     path.endsWith("/review-preview")?"review-preview":
-    path.endsWith("/official-inspection")?"official-inspection":"get";
+    path.endsWith("/official-inspection")?"official-inspection":
+    path.endsWith("/number-readback")?"number-readback":"get";
   const input=await body(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -136,6 +139,86 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       })),nextCursor:items.length>limit&&last ? {
         cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id
       }:null});
+    }
+    if(action==="number-readback"){
+      if(actor.workspaceRole==="USER")
+        return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(env.ALLOWANCE_OPERATION_ENVIRONMENT!=="test"&&
+         env.ALLOWANCE_OPERATION_ENVIRONMENT!=="production")
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      if(!/^[a-f0-9]{64}$/i.test(env.COMPANY_SETTINGS_KEY_HEX??""))
+        return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+      const itemId=input.itemId as string;
+      const expectedRevision=input.expectedRevision as number;
+      // The number MUST originate from D1, never from caller JSON. This also
+      // supports a closed, already-confirmed Work Item without reopening it.
+      const ledger=await env.DB.prepare(
+        "SELECT l.ledger_id,l.allowance_number,l.status,l.environment,"+
+        "l.seller_invoice,l.allowance_day,l.request_sha256,"+
+        "a.original_invoice_number,a.requested_gross_amount,"+
+        "a.company_settings_revision,a.template_sha256,"+
+        "wi.revision AS work_revision,wi.environment AS work_environment "+
+        "FROM allowance_number_ledger l "+
+        "JOIN work_items wi ON wi.work_item_id=l.work_item_id AND wi.workspace_id=l.workspace_id "+
+        "JOIN allowance_applications a ON a.work_item_id=wi.work_item_id "+
+        "AND a.workspace_id=wi.workspace_id "+
+        "WHERE l.workspace_id=?1 AND l.work_item_id=?2 "+
+        "AND wi.kind='ALLOWANCE' AND wi.revision=?3 "+
+        "AND wi.status IN ('review','closed') AND wi.reference_hash=a.reference_hash "+
+        "ORDER BY l.attempt DESC LIMIT 1"
+      ).bind(d.workspace_id,itemId,expectedRevision).first<{
+        allowance_number:string,status:string,environment:string,
+        seller_invoice:string,allowance_day:string,request_sha256:string,
+        original_invoice_number:string,requested_gross_amount:number,
+        company_settings_revision:number,template_sha256:string,
+        work_revision:number,work_environment:string
+      }>();
+      if(!ledger)return response(404,{error:{code:"NUMBER_NOT_FOUND"}});
+      if(!["sending","confirmed"].includes(ledger.status))
+        return response(409,{error:{code:"NUMBER_NOT_SUBMITTED_READBACK_UNAVAILABLE"}});
+      if(ledger.request_sha256!==ledger.template_sha256 ||
+          ledger.environment!==ledger.work_environment||
+          ledger.environment!==env.ALLOWANCE_OPERATION_ENVIRONMENT)
+        return response(409,{error:{code:"NUMBER_SOURCE_CHANGED"}});
+      const company=await loadAmegoCompanySettingsForGateway(env.DB,
+        d.workspace_id,env.COMPANY_SETTINGS_KEY_HEX!);
+      if(company.sellerInvoice!==ledger.seller_invoice ||
+         company.revision!==ledger.company_settings_revision)
+        return response(409,{error:{code:"NUMBER_COMPANY_CHANGED"}});
+      const before=await authority(env).revalidate();
+      if(!before||before.employeeId!==actor.employeeId||
+        !["ADMIN","SUPER_ADMIN"].includes(before.workspaceRole))
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      const official=await queryOfficialAllowanceReadOnly({
+        sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+        allowanceNumber:ledger.allowance_number,
+        originalInvoiceNumber:ledger.original_invoice_number
+      });
+      const after=await authority(env).revalidate();
+      const currentDevice=await dev(request,env);
+      if(!after||after.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(after.workspaceRole) ||
+         currentDevice?.device_id!==d.device_id)
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      const scaled=(value:string)=>{
+        const [a,b=""]=value.split(".");
+        return BigInt(a)*10000000n+BigInt(b.padEnd(7,"0")||"0");
+      };
+      const grossMatches=scaled(official.totalAmount)+scaled(official.taxAmount)===
+        BigInt(ledger.requested_gross_amount)*10000000n;
+      return response(200,{readback:{
+        itemId,expectedRevision,allowanceNumber:ledger.allowance_number,
+        ledgerStatus:ledger.status,checkedAtUtc:official.checkedAtUtc,
+        officialSnapshotSha256:official.officialSnapshotSha256,
+        officialInvoiceType:official.invoiceType,
+        officialUploadStatus:official.uploadStatus,
+        officialCancelled:official.cancelDate!==0,
+        exactOriginalInvoiceMatch:official.possibleMatch,
+        grossMatchesFrozenRequest:grossMatches,
+        possibleMatch:official.possibleMatch&&grossMatches,
+        safeToAutoResend:false,safeToAutoConfirm:false,
+        requiresManualReconciliation:true
+      }});
     }
     if(action==="official-inspection"){
       if(actor.workspaceRole==="USER")
@@ -326,6 +409,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
       if(/ALLOWANCE_(APPLICATION_NOT_REVIEWABLE|APPLICATION_COMPANY_CHANGED|APPLICATION_REFERENCE_TAMPERED|APPLICATION_TEMPLATE_TAMPERED)/.test(error.message))
         return response(409,{error:{code:"ALLOWANCE_REVIEW_REQUIRES_REFRESH"}});
+      if(/^ALLOWANCE_QUERY_/.test(error.message))
+        return response(503,{error:{code:"ALLOWANCE_READBACK_UNCONFIRMED"}});
       if(/^OFFICIAL_QUERY_/.test(error.message))
         return response(503,{error:{code:"OFFICIAL_QUERY_UNCONFIRMED"}});
       if(/ALLOWANCE_(COMPANY_NOT_CONFIGURED)/.test(error.message)||
