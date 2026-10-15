@@ -74,7 +74,9 @@ await assert.rejects(()=>create(fx.db,{...input,workItemId:"wi_no_user_credentia
 actor={...actor,employeeId:"cyid_employee"};
 fx.sql.prepare("UPDATE devices SET status='revoked'").run();
 await assert.rejects(()=>create(fx.db,{...input,workItemId:"wi_revoked_device"},
-  authority,runtime),/REVOKED_OR_CONFLICT/);
+  authority,runtime),/UNKNOWN_READBACK_REQUIRED/);
+assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,1,
+  "A rejected Device cannot leave a half-created application");
 fx.sql.prepare("UPDATE devices SET status='active'").run();
 fx.sql.prepare("UPDATE company_settings SET revision=2").run();
 await assert.rejects(()=>load(fx.db,ws,input.workItemId,2,key),/COMPANY_CHANGED/);
