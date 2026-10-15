@@ -1,7 +1,7 @@
 // V3 DRAFT: protected CYID allowance application transport.
 // No official AMEGO call, approval, allowance numbering or execution route.
 // Worker app.ts must wrap these endpoints in app-scoped withCyIdSession.
-import {cyIdBinding,cyIdDevice,usesCyId,type CyIdEnv,type CyIdPrincipal} from "./cyid";
+import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
 import {createFrozenAllowanceApplication} from "./allowance-applications";
 
 interface Env extends CyIdEnv {
@@ -126,6 +126,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
     // Return no full invoice content, company key, password, ciphertext or payload.
     return response(201,{itemId:created.workItemId,status:"open",revision:1});
   } catch(error) {
+    if(error instanceof CyIdError)
+      return response(error.status,{error:{code:error.code}});
     if(error instanceof Error){
       if(/^ALLOWANCE_(APPLICATION_INVALID|APPLICATION_DATE_INVALID|APPLICATION_SCOPE_INVALID|TEMPLATE_INVALID|TEMPLATE_MISMATCH)$/.test(error.message))
         return response(400,{error:{code:"INVALID_APPLICATION"}});
