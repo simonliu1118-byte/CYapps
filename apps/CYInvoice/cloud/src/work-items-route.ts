@@ -1,9 +1,8 @@
 import { cyIdDevice, usesCyId, type CyIdEnv, CyIdError } from "./cyid";
-import { verifyPassword } from "./web-auth";
 import { createWorkItem, getWorkItem, transitionWorkItem } from "./work-items";
 
 interface Env extends CyIdEnv { DB: D1Database }
-type Manager = { id: string; verifier?: string };
+type Manager = { id: string };
 const paths = new Set([
   "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
 ]);
@@ -25,36 +24,20 @@ async function device(request: Request, env: Env) {
     LIMIT 1`).bind(digest).first<{
       device_id: string; workspace_id: string; employee_authority_state: string;
     }>();
-  if (row && usesCyId(env)) {
+  if (row) {
     const verified = await cyIdDevice(request, env);
     if (verified.device_id !== row.device_id || verified.workspace_id !== row.workspace_id)
       throw new CyIdError(409,"IDENTITY_WORKSPACE_MISMATCH");
   }
   return row;
 }
-async function manager(env: Env, workspaceId: string, authorityState: string,
-                       body: Record<string, unknown>): Promise<Manager | null> {
-  if (authorityState !== "cloud") return null;
-  if (usesCyId(env)) {
-    const p = await env.cyIdContext?.revalidate();
-    return p && (p.workspaceRole === "SUPER_ADMIN" || p.workspaceRole === "ADMIN")
-      ? { id: p.employeeId } : null;
-  }
-  const employeeNo = body.employeeNo;
-  const password = body.password;
-  if (typeof employeeNo !== "string" || !/^\d{4}$/.test(employeeNo) ||
-      typeof password !== "string" || password.length < 1 || password.length > 200)
-    return null;
-  const row = await env.DB.prepare(`
-    SELECT employee_id, credential_verifier, credential_algorithm
-    FROM cloud_employees WHERE workspace_id = ?1 AND employee_no = ?2
-      AND enabled=1 AND role IN ('SUPER_ADMIN','ADMIN') LIMIT 1`)
-    .bind(workspaceId, employeeNo).first<{
-      employee_id: string; credential_verifier: string | null; credential_algorithm: string;
-    }>();
-  if (!row || row.credential_algorithm !== "pbkdf2-sha256" || !row.credential_verifier ||
-      !await verifyPassword(password,row.credential_verifier)) return null;
-  return { id: row.employee_id, verifier: row.credential_verifier };
+async function manager(env: Env, authorityState: string): Promise<Manager | null> {
+  if (authorityState !== "cloud" || !usesCyId(env)) return null;
+  // Only the current CYID authority grants manager permissions. There is no
+  // fallback to a local password or a retired Built-in employee table.
+  const principal = await env.cyIdContext?.revalidate();
+  return principal && (principal.workspaceRole === "SUPER_ADMIN" || principal.workspaceRole === "ADMIN")
+    ? { id: principal.employeeId } : null;
 }
 async function jsonBody(request: Request): Promise<Record<string, unknown> | null> {
   if ((Number(request.headers.get("content-length") || "0")) > 8192) return null;
@@ -72,12 +55,13 @@ async function jsonBody(request: Request): Promise<Record<string, unknown> | nul
 export async function handleWorkItems(request: Request, env: Env): Promise<Response | null> {
   const path = new URL(request.url).pathname;
   if (!paths.has(path)) return null;
+  if (!usesCyId(env)) return response(409,{error:{code:"CYID_REQUIRED"}});
   if (request.method !== "POST") return response(405,{error:{code:"METHOD_NOT_ALLOWED"}});
   const d = await device(request,env);
   if (!d) return response(401,{error:{code:"DEVICE_INVALID"}});
   const body = await jsonBody(request);
   if (!body) return response(400,{error:{code:"INVALID_REQUEST"}});
-  const m = await manager(env,d.workspace_id,d.employee_authority_state,body);
+  const m = await manager(env,d.employee_authority_state);
   if (!m) return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
   const itemId = body.itemId;
   if (typeof itemId !== "string" || !/^[a-zA-Z0-9_-]{10,100}$/.test(itemId))
@@ -88,8 +72,8 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
       return item ? response(200,{item}) : response(404,{error:{code:"NOT_FOUND"}});
     }
     // Revalidation is as late as practical; the SQL guards additionally
-    // check Device/Workspace and, for Built-in, the manager credential.
-    const latest = await manager(env,d.workspace_id,d.employee_authority_state,body);
+    // check Device/Workspace; CYID identity was revalidated immediately above.
+    const latest = await manager(env,d.employee_authority_state);
     if (!latest || latest.id !== m.id)
       return response(409,{error:{code:"AUTHORITY_CHANGED"}});
     let changed: boolean;
@@ -101,7 +85,7 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
       changed = await createWorkItem(env.DB,{
         itemId,workspaceId:d.workspace_id,deviceId:d.device_id,
         environment:body.environment,kind:body.kind,referenceHash:body.referenceHash,
-        actorId:latest.id,builtInVerifier:latest.verifier,
+        actorId:latest.id,
       });
     } else {
       if (!Number.isSafeInteger(body.expectedRevision) ||
@@ -112,7 +96,6 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
         itemId,workspaceId:d.workspace_id,deviceId:d.device_id,actorId:latest.id,
         expectedRevision:body.expectedRevision as number,
         from:body.from as "open"|"review",to:body.to as "review"|"closed",
-        builtInVerifier:latest.verifier,
       });
     }
     // A failed CAS or missing auth fence returns conflict, never an automatic retry.
