@@ -3,6 +3,26 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 V3 新對話接續點：一步一提交（以此節覆蓋下方過時進度）
+
+**這次僅更新交接與唯一 TODO，不改功能、不部署。** GitHub：`simonliu1118-byte/CYapps`，V3 Draft [PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`。文件整理前最新**功能** HEAD `b55751f0156784ba4548bffac49e61b9b25af86a`：Cloud Validate ×2、Windows Client、Windows x64、Governance 均成功；Worker deploy skipped。**後續文檔 commit 不改功能，但新開發 commit 需要重新確認其 own exact-HEAD CI。**
+
+### 已實作於 Draft 分支的安全流程（非正式上線）
+
+- **g0401**：CYID Manager + Frozen Work Item + 官方 `invoice_query` 嚴格未稅品項及稅額核對 → append-only Grant → D1 一次性配號及 send CAS → 單次送光貿 → `allowance_query` 原號查回。已存在折讓／含稅或官方資料不完整不得自動核准，HTTP 接受不代表稅務已完成。
+- **g0501**：Cloud 官方 `allowance_query`、`allowance_status`、`g0501` 單次呼叫；`drafts/0019_allowance_void_workflow.sql` 不可變申請／核准、唯一 Claim、官方作廢證據後結案；`allowance-void-applications-route.ts`、`allowance-void-manager.ts` 已建立 CYID 受保護的 create/get/list/approve/send-once/status-readback/close 服務端路徑。**先前下方寫「尚沒有對外路由」是當時的歷史狀態，不是最新現況。**
+- **清單對帳**：`amego-allowance-list.ts` 僅完成兩種日期分頁與例外 Work Item 異常定位器，**不是**定期自動對帳服務；必須選擇性官方詳查，不得從「清單找不到」推定允許重送。
+
+### 下一輪只做一個工作
+
+**下一項：Windows g0501 Core Client。** 先核對並提交 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs` 及 `tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs`，接入現有測試入口，確認 Cloud 路由回傳契約與嚴格 fail-closed 解析一致，單獨跑 exact-HEAD CI。這兩個檔案在最後驗證的功能 HEAD `b55751f` **尚未存在於分支**；先前建立過未提交的 Blob，不能視為程式已完成。此輪**不要**同時做 WinForms UI、正式 D1 Migration 或 g0501 真實送出。
+
+完成後下一小步才是 **Windows WinForms g0501 管理介面**，再分別做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
+
+### 不可跨越的界線
+
+V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
+
 ## 2026-10-15 V3 最新工程交接：折讓作廢 D1 草案與官方 List 對帳（Draft）
 
 接續 PR #440，Cloud 新增 `amego-allowance-void.ts`（g0501 單次請求，絕不自動重送）、`amego-allowance-status.ts`（僅唯讀查回官方類型/99 成功狀態）、`amego-allowance-list.ts`（折讓日/建立日分頁，只產生既有例外 Work Item 的選擇性詳查提示）。三者均受限於 **Draft Source**，尚未透過正式 CYID Manager route 暴露操作，也沒有連結正式 Cloud D1 或光貿。
