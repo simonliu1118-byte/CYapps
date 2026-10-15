@@ -74,7 +74,7 @@ function status(db,ledgerId) {
   return db.prepare("SELECT status FROM allowance_number_ledger WHERE ledger_id=?")
     .get(ledgerId)?.status;
 }
-const {db,dbApi,addWork,race}=fixture();
+const {db,dbApi,addWork,approve,race}=fixture();
 const first=await reserve(dbApi,base);
 assert.equal(first.allowanceNumber,"A20261015001");
 assert.equal(first.sequence,1);
