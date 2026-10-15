@@ -407,3 +407,11 @@
 .mobile-backup-error {
   color: #a54b45 !important;
 }
+
+/* Recovery controls share the canonical backup settings pane. */
+.backup-recovery-tools { border-top: 1px solid var(--border, #dce2e8); padding-top: 12px; margin-top: 12px; }
+.backup-recovery-tools h4 { margin: 0 0 8px; }
+.backup-recovery-tools label { display: grid; gap: 5px; margin: 9px 0; }
+.backup-recovery-tools .backup-recovery-review { display: flex; align-items: center; gap: 8px; }
+.backup-recovery-review input { width: auto; }
+.backup-recovery-tools select, .backup-recovery-tools input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; }

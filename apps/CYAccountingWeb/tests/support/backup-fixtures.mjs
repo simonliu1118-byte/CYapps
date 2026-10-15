@@ -13,6 +13,11 @@ export class FixtureD1 {
     statement.run = async () => ({ success: true, meta: this.db.prepare(sql).run(...statement.args) });
     return statement;
   }
+  async batch(statements) {
+    this.db.exec('BEGIN');
+    try { const results=[];for(const statement of statements)results.push(await statement.run());this.db.exec('COMMIT');return results; }
+    catch(error) {this.db.exec('ROLLBACK');throw error;}
+  }
   close() { this.db.close(); }
 }
 export function accountingFixture() {

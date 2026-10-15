@@ -1,9 +1,10 @@
 import { buildBackupPackage } from './backup-package.js';
+import { assertRecoveryContext, RECOVERY_TABLES } from './backup-recovery-context.js';
 import buildMetadata from './build-metadata.json' with { type: 'json' };
 
 // Only a newly created, empty SQLite database is accepted. This capability has
 // no production D1 writer or provider mutation and returns evidence, never rows.
-const TABLES = [
+export const ACCOUNTING_RESTORE_TABLES = [
   ['accounts', 'accounts', ['id','name','sort_order','is_default','color_slot','created_at','archived_at'], ['id','name','sortOrder','isDefault','colorSlot','createdAt','archivedAt']],
   ['categoryGroups', 'category_groups', ['id','kind','name','sort_order','created_at'], ['id','kind','name','sortOrder','createdAt']],
   ['categories', 'categories', ['id','kind','group_id','name','sort_order','is_favorite','created_at'], ['id','kind','groupId','name','sortOrder','isFavorite','createdAt']],
@@ -18,17 +19,19 @@ export async function verifyRestoreIntoEmptySqlite(db, schemas, backup) {
   const existing = db.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'");
   if (existing[0]?.values?.length) throw restoreError('SANDBOX_NOT_EMPTY');
   const schema = Number(backup.manifest?.schemaVersion);
-  if (![8, 9].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
+  if (![8, 9, 10].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
   const data = backup.data;
-  if (!data || Object.keys(data).some(key => !TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
-  for (const [key] of TABLES) if (!Array.isArray(data[key])) throw restoreError('RESTORE_DATA_SHAPE');
+  if (!data || Object.keys(data).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
+  for (const [key] of ACCOUNTING_RESTORE_TABLES) if (!Array.isArray(data[key])) throw restoreError('RESTORE_DATA_SHAPE');
 
   for (const sql of schemas) db.exec(sql);
+  const actualSchema = db.exec("SELECT value FROM meta WHERE key='schema_version'")[0]?.values[0]?.[0];
+  if(Number(actualSchema)!==buildMetadata.schemaVersion) throw restoreError('RESTORE_TARGET_SCHEMA_MISMATCH');
   // Initial migration seeds are empty-sandbox defaults, not restored data.
   for (const table of ['categories', 'category_groups', 'accounts']) db.exec(`DELETE FROM ${table}`);
   db.exec('BEGIN TRANSACTION');
   try {
-    for (const [key, table, columns, fields] of TABLES) {
+    for (const [key, table, columns, fields] of ACCOUNTING_RESTORE_TABLES) {
       const statement = db.prepare(`INSERT INTO ${table}(${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`);
       try {
         for (const row of data[key]) {
@@ -38,6 +41,13 @@ export async function verifyRestoreIntoEmptySqlite(db, schemas, backup) {
           statement.run(values);
         }
       } finally { statement.free(); }
+    }
+    if (backup.manifest.recoveryContext) {
+      assertRecoveryContext(backup.manifest.recoveryContext);
+      for(const [table,columns] of Object.entries(RECOVERY_TABLES)) {
+        const statement=db.prepare(`INSERT INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`);
+        try { for(const row of backup.manifest.recoveryContext.tables[table]) statement.run(row); } finally { statement.free(); }
+      }
     }
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error?.code ? error : restoreError('RESTORE_CONSTRAINT_FAILED'); }
@@ -56,7 +66,7 @@ export async function verifyRestoreIntoEmptySqlite(db, schemas, backup) {
   };
 }
 
-function stableJson(value) {
+export function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
   if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
   return JSON.stringify(value);

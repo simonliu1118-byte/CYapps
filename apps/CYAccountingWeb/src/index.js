@@ -86,12 +86,14 @@ async function handleBootstrap(db) {
     `),
     db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'")
   ]);
+  const bookEpoch=await db.prepare("SELECT value FROM meta WHERE key='accounting_epoch'").first();
   const lockedValue = String(lockSetting.results?.[0]?.value || '').trim();
   const lockedThrough = isMonth(lockedValue) ? lockedValue : null;
   return json({
     ok: true,
     accounts: accounts.results || [],
     archivedAccounts: archivedAccounts.results || [],
+    accountingEpoch:String(bookEpoch?.value||''),
     groups: groups.results || [],
     categories: categories.results || [],
     lockedThrough

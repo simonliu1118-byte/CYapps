@@ -1722,7 +1722,6 @@ function installDesktopUiConfirmInterceptors() {
       '[data-category-delete]',
       '[data-group-delete]',
       '#excelImportCommitButton',
-      '#backupRunNow',
       '#desktopMigrationCommit'
     ].join(','));
     if (!target || cyDesktopUiConfirmBypass.has(target)) return;
@@ -1801,15 +1800,6 @@ function desktopUiConfirmSpec(target) {
       message: `確定匯入 ${ready.toLocaleString()} 筆資料？`,
       detail: duplicates ? `另有 ${duplicates.toLocaleString()} 筆重複資料會自動略過。` : '',
       confirmText: '匯入'
-    };
-  }
-  if (target.id === 'backupRunNow') {
-    const tiered = typeof backupTopology !== 'undefined' && backupTopology === 'parallel_dual_provider';
-    return {
-      title: '立即執行備份',
-      message: tiered ? '現在立即執行一次 R2 + GCS paired backup？' : '現在立即執行一次 Google Cloud Storage 測試備份？',
-      detail: '正常每日備份仍會在排程時間自動執行。',
-      confirmText: '開始備份'
     };
   }
   if (target.id === 'desktopMigrationCommit') {

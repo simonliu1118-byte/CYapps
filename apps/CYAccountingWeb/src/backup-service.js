@@ -1,3 +1,6 @@
+import { recoveryPage } from './backup-recovery-page.js';
+import { buildRecoveryContext, assertRecoveryContext, recoveryDigest } from './backup-recovery-context.js';
+import { recoveryWorkspace, restoreIntoRecoveryD1, recoveryEvent, RECOVERY_CONFIRMATION } from './backup-recovery.js';
 import { handleGcsBackupApi, runScheduledGcsBackup as runLegacyScheduledBackup, buildBackupSet, storeBackupSet, validateBackupSetBytes } from './gcs-backup.js';
 import { createGcsBackupStorageProvider, gcsConfigReady } from './gcs-backup-provider.js';
 import { createR2BackupStorageProvider, r2ConfigReady } from './r2-backup-provider.js';
@@ -28,6 +31,16 @@ export async function handleBackupApi(request, env, session, options = {}) {
   if (!url.pathname.startsWith('/api/backup/')) return null;
   if (String(session?.role || '') !== 'SUPER_ADMIN') {
     return json({ ok: false, error: '只有超級管理員可以管理備份與復原。', code: 'SUPER_ADMIN_REQUIRED' }, 403);
+  }
+  if (url.pathname.startsWith('/api/backup/recovery/') && request.method === 'POST') {
+    try {
+      if(request.headers.get('origin')&&request.headers.get('origin')!==url.origin) throw new TieredBackupError('來源網站不符。','RECOVERY_ORIGIN_INVALID');
+      const html=request.headers.get('accept')?.includes('text/html');
+      const body=request.headers.get('content-type')?.includes('application/x-www-form-urlencoded')?Object.fromEntries(await request.formData()):await request.json();
+      if(html)body.reviewed=body.reviewed==='on';
+      const result=await handleRecoveryAction(url.pathname,body,env,session,options);
+      return html?recoveryPage(result):json({ok:true,...result});
+    } catch(error) { return request.headers.get('accept')?.includes('text/html')?recoveryPage({error:safeMessage(error),code:safeCode(error)},409):json({ok:false,error:safeMessage(error),code:safeCode(error)},409); }
   }
   if (url.pathname === '/api/backup/status' && request.method === 'GET') {
     return parallelBackupStatus(env);
@@ -268,11 +281,15 @@ export async function parallelBackupStatus(env) {
   const phaseCAcceptance = await readPhaseCAcceptance(env.DB);
   const restoreChecks = await recentRestoreChecks(env.DB);
   const latestSuccess = logicalBackups.find(item => item.status === 'success') || null;
+  const workspace = await recoveryWorkspace(env.RECOVERY_DB);
   return json({
     ok: true,
     provider: 'tiered',
     topology: PARALLEL_DUAL_PROVIDER,
     policy, restoreChecks,
+    recoveryWorkspace: workspace,
+    recoveryAvailable: workspace.configured,
+    recoveryLatest: await latestRecoveryEvent(env.RECOVERY_DB),
     phaseDReady: configured && phaseCAcceptance.completed && restorationPairReady(restoreChecks),
     configured,
     providers: {
@@ -483,4 +500,74 @@ function json(data, status = 200) {
       'x-content-type-options': 'nosniff'
     }
   });
+}
+
+
+async function readRecoverySource(env,backupId,preferred,options={}) {
+  if(!/^\d{8}T\d{6}Z$/.test(backupId)||!['auto',R2_PROVIDER,GCS_PROVIDER].includes(preferred)) throw new TieredBackupError('請選擇正確的備份與來源。','RECOVERY_SOURCE_INVALID');
+  let catalog=null;
+  try { catalog=await env.DB.prepare('SELECT * FROM backup_sets WHERE backup_id=?').bind(backupId).first(); } catch { /* Old D1 may be unavailable in a disaster. GCS context is independently verified. */ }
+  for(const provider of preferred==='auto'?[R2_PROVIDER,GCS_PROVIDER]:[preferred]) {
+    try {
+      const adapter=provider===R2_PROVIDER?options.r2Provider||createR2BackupStorageProvider(env):options.gcsProvider||createGcsBackupStorageProvider(env);
+      const prefix=`CYAccountingWeb/${backupId}/`;
+      const [manifestBytes,dataBytes]=await Promise.all([adapter.getObject(prefix+'manifest.json'),adapter.getObject(prefix+'data.json')]);
+      if(dataBytes.byteLength>MAX_RESTORE_BYTES||manifestBytes.byteLength>MAX_RESTORE_BYTES) throw new Error('size');
+      const backup=await validateBackupSetBytes(manifestBytes,dataBytes,backupId);
+      const packageSha256=await backupPackageDigest({manifestBytes,dataBytes});
+      if(catalog&&(packageSha256!==catalog.package_sha256||backup.dataSha256!==catalog.data_sha256||backup.manifestSha256!==catalog.manifest_sha256)) throw new Error('catalog');
+      if(!catalog&&!backup.manifest.recoveryContext) throw new Error('offline_context_required');
+      return {backup,provider,packageSha256};
+    } catch { if(preferred!=='auto'||provider===GCS_PROVIDER) throw new TieredBackupError('備份回讀或完整性驗證失敗，未更動任何帳本。','RECOVERY_SOURCE_VERIFY_FAILED'); }
+  }
+}
+async function handleRecoveryAction(path,body,env,session,options) {
+  assertSuperAdmin(session);
+  if(!env.RECOVERY_DB||env.RECOVERY_DB===env.DB) throw new TieredBackupError('獨立還原工作區尚未設定。','RECOVERY_TARGET_UNAVAILABLE');
+  const actor=backupActor(session);
+  const verify=options.verifyRestore||(await import('./backup-restore-runtime.js')).verifyRestoreInMemory;
+  if(path==='/api/backup/recovery/preview') {
+    const reason=String(body.reason||'').trim();
+    if(!reason||reason.length>200) throw new TieredBackupError('請填寫還原理由，最多 200 字。','RECOVERY_REASON_REQUIRED');
+    const workspace=await recoveryWorkspace(env.RECOVERY_DB);
+    if(!workspace.ready) throw new TieredBackupError('獨立還原工作區不是空白，請先由維運人員處理。','RECOVERY_TARGET_NOT_EMPTY');
+    const source=await readRecoverySource(env,String(body.backupId||''),String(body.provider||'auto'),options);
+    const context=source.backup.manifest.recoveryContext||await buildRecoveryContext(env.DB);
+    assertRecoveryContext(context);
+    const verification=await verify({...source.backup,manifest:{...source.backup.manifest,recoveryContext:context}});
+    const id=crypto.randomUUID(),expiresAt=Math.floor(Date.now()/1000)+600;
+    const contextSha256=await recoveryDigest(context);
+    await env.RECOVERY_DB.prepare(`INSERT INTO backup_recovery_previews(id,backup_id,provider,package_sha256,context_sha256,workspace_id,reason,actor_json,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .bind(id,body.backupId,source.provider,source.packageSha256,contextSha256,workspace.workspaceId,reason,JSON.stringify(actor),expiresAt,new Date().toISOString()).run();
+    return {preview:{id,backupId:body.backupId,provider:source.provider,expiresAt,counts:verification.counts,target:'獨立空白 D1',productionModified:false,confirmation:RECOVERY_CONFIRMATION,reason}};
+  }
+  if(path!=='/api/backup/recovery/commit') throw new TieredBackupError('找不到此還原操作。','RECOVERY_ROUTE_NOT_FOUND');
+  if(body.reviewed!==true||body.confirmation!==RECOVERY_CONFIRMATION) throw new TieredBackupError('請勾選來源確認並輸入指定確認文字。','RECOVERY_CONFIRM_REQUIRED');
+  const row=await env.RECOVERY_DB.prepare('SELECT * FROM backup_recovery_previews WHERE id=?').bind(String(body.previewId||'')).first();
+  if(!row||row.expires_at<Math.floor(Date.now()/1000)||row.actor_json!==JSON.stringify(actor)) throw new TieredBackupError('還原預覽已失效，請重新預覽。','RECOVERY_PREVIEW_EXPIRED');
+  const source=await readRecoverySource(env,row.backup_id,row.provider,options);
+  const context=source.backup.manifest.recoveryContext||await buildRecoveryContext(env.DB);
+  if(source.packageSha256!==row.package_sha256||await recoveryDigest(context)!==row.context_sha256) throw new TieredBackupError('來源或維運狀態已更新，請重新預覽。','RECOVERY_SOURCE_CHANGED');
+  await verify({...source.backup,manifest:{...source.backup.manifest,recoveryContext:context}});
+  const preview={id:row.id,backupId:row.backup_id,provider:row.provider,packageSha256:row.package_sha256,workspaceId:row.workspace_id,reason:row.reason};
+  const report=await restoreIntoRecoveryD1(env.RECOVERY_DB,source.backup,context,preview,actor);
+  try { await recoveryEvent(env.DB,report.runId,'verified',report,actor); } catch { /* The authoritative completed recovery audit is already append-only in the target D1. */ }
+  return {recovery:report};
+}
+
+async function latestRecoveryEvent(db) {
+  if(!db) return null;
+  const row=await db.prepare("SELECT status,result_json,created_at FROM backup_recovery_events ORDER BY sequence DESC LIMIT 1").first();
+  return row?{status:row.status,result:JSON.parse(row.result_json),createdAt:row.created_at}:null;
+}
+
+
+export async function recoveryLanding(env,session,options={}) {
+  if(session?.role!=='SUPER_ADMIN')return recoveryPage({error:'只有超級管理員可以使用帳本復原。'},403);
+  try {
+    const provider=options.gcsProvider||createGcsBackupStorageProvider(env);
+    const objects=await provider.listObjects('CYAccountingWeb/');
+    const ids=[...new Set(objects.map(object=>/^CYAccountingWeb\/(\d{8}T\d{6}Z)\/manifest\.json$/.exec(object.key)?.[1]).filter(Boolean))].sort().reverse().slice(0,30);
+    return recoveryPage({sources:ids,workspace:await recoveryWorkspace(env.RECOVERY_DB)});
+  } catch {return recoveryPage({error:'無法讀取復原來源或獨立工作區，請由維運人員確認設定。'},503);}
 }
