@@ -8,6 +8,7 @@ import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
 import {approveAllowanceAfterOfficialReview} from "./allowance-review-approval";
 import {reserveCloudAllowanceNumber} from "./allowance-number-ledger";
+import {executeApprovedAllowanceOnce} from "./allowance-execute-once";
 import {validateAllowanceOriginalItems} from "./allowance-item-validation";
 
 interface Env extends CyIdEnv {
@@ -20,7 +21,8 @@ const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applicat
   "/v1/allowance-applications/official-inspection",
   "/v1/allowance-applications/number-readback",
   "/v1/allowance-applications/approve",
-  "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status"]);
+  "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status",
+  "/v1/allowance-applications/send-once"]);
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -31,7 +33,7 @@ type Metadata={
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
  application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
 };
-type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"approve"|"reserve"|"number-status";
+type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"approve"|"reserve"|"number-status"|"send-once";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -41,7 +43,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
     : action==="get" ? new Set(["employeeNo","password","itemId"])
     : (action==="review-preview"||action==="official-inspection"||
        action==="number-readback"||action==="approve"||
-       action==="reserve"||action==="number-status")
+       action==="reserve"||action==="number-status"||action==="send-once")
       ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : new Set(["employeeNo","password","limit","cursorCreatedAt","cursorItemId"]);
   if(!Object.keys(val).every(k=>allowed.has(k)))return false;
@@ -52,7 +54,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (!["review-preview","official-inspection","number-readback","approve","reserve","number-status"].includes(action) ||
+    (!["review-preview","official-inspection","number-readback","approve","reserve","number-status","send-once"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -98,7 +100,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
     path.endsWith("/number-readback")?"number-readback":
     path.endsWith("/approve")?"approve":
     path.endsWith("/reserve")?"reserve":
-    path.endsWith("/number-status")?"number-status":"get";
+    path.endsWith("/number-status")?"number-status":
+    path.endsWith("/send-once")?"send-once":"get";
   const input=await body(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -148,6 +151,31 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
       })),nextCursor:items.length>limit&&last ? {
         cursorCreatedAt:last.created_at,cursorItemId:last.work_item_id
       }:null});
+    }
+    if(action==="send-once"){
+      if(!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole))
+        return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+      if(!["test","production"].includes(env.ALLOWANCE_OPERATION_ENVIRONMENT??""))
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      if(!/^[a-f0-9]{64}$/i.test(env.COMPANY_SETTINGS_KEY_HEX??""))
+        return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+      const result=await executeApprovedAllowanceOnce(env.DB,{
+        workspaceId:d.workspace_id,workItemId:input.itemId as string,
+        deviceId:d.device_id,expectedRevision:input.expectedRevision as number,
+        environment:env.ALLOWANCE_OPERATION_ENVIRONMENT as "test"|"production",
+        encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX!
+      },{revalidate:async()=>{
+        const p=await authority(env).revalidate();
+        return p?{workspaceId:p.workspaceId,employeeId:p.employeeId,
+          role:p.workspaceRole}:null;
+      }});
+      return response(202,{attempt:{
+        itemId:input.itemId,revision:input.expectedRevision,
+        allowanceNumber:result.allowanceNumber,result:result.result,
+        ...(result.officialCode===undefined?{}:{officialCode:result.officialCode}),
+        safeToAutoResend:false,safeToAutoConfirm:false,
+        mustReadbackByOriginalNumber:true
+      }});
     }
     if(action==="number-status"){
       if(!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole))
@@ -570,6 +598,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
       if(/ALLOWANCE_(APPLICATION_NOT_REVIEWABLE|APPLICATION_COMPANY_CHANGED|APPLICATION_REFERENCE_TAMPERED|APPLICATION_TEMPLATE_TAMPERED)/.test(error.message))
         return response(409,{error:{code:"ALLOWANCE_REVIEW_REQUIRES_REFRESH"}});
+      if(/^G0401_/.test(error.message))
+        return response(409,{error:{code:"G0401_UNSAFE_OR_RESULT_UNKNOWN_READBACK_REQUIRED"}});
       if(/^ALLOWANCE_(NUMBER_|SEQUENCE_|ALLOCATION_|DATE_|RESERVATION_|WORK_ITEM_|PRIOR_SEND_)/.test(error.message))
         return response(409,{error:{code:"NUMBER_RESULT_UNKNOWN_READBACK_REQUIRED"}});
       if(/^ALLOWANCE_APPROVAL_/.test(error.message))

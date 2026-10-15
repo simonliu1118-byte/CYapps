@@ -283,6 +283,7 @@ const strictBody={...createBody,itemId:approvedId,requestedGrossAmount:53,
   reason:"SYNTHETIC_VERIFY_AND_APPROVE",
   unnumberedTemplateJson:JSON.stringify({
     AllowanceNumber:"",AllowanceDate:"20261015",AllowanceType:2,
+    BuyerIdentifier:"0000000000",BuyerName:"Synthetic consumer",
     ProductItem:[{OriginalInvoiceNumber:"AB12345678",OriginalInvoiceDate:20261015,
       OriginalDescription:"Service",Quantity:1,UnitPrice:50,Amount:50,Tax:3,TaxType:1}],
     TotalAmount:50,TaxAmount:3
@@ -332,6 +333,44 @@ try{
   assert.equal(approvedOfficialCalls,1,"Reserve may not silently re-query or g0401");
   assert.equal((await call("reserve",{itemId:approvedId,expectedRevision:2,
     allowanceNumber:"A20261015999"})).status,400);
+  const earlierOfficial=globalThis.fetch;
+  let signedMutations=0,finalQueries=0;
+  globalThis.fetch=async(url,opts)=>{
+    if(url==="https://invoice-api.amego.tw/json/invoice_query"){
+      finalQueries++;
+      return earlierOfficial(url,opts);
+    }
+    if(url==="https://invoice-api.amego.tw/json/g0401"){
+      signedMutations++;
+      const post=new URLSearchParams(opts.body);
+      const payload=JSON.parse(post.get("data"));
+      assert.equal(payload.length,1);
+      assert.equal(payload[0].AllowanceNumber,"A20261015002");
+      assert.equal(payload[0].AllowanceType,2);
+      assert.equal(post.get("sign"),createHash("md5").update(
+        post.get("data")+post.get("time")+officialTestKey).digest("hex"));
+      return Response.json({code:0,msg:""});
+    }
+    throw Error("Unexpected AMEGO endpoint in synthetic test");
+  };
+  try{
+    const issued=await call("send-once",{itemId:approvedId,expectedRevision:2});
+    assert.equal(issued.status,202,JSON.stringify(issued));
+    assert.equal(issued.data.attempt.result,"ACCEPTED_PENDING_OFFICIAL");
+    assert.equal(issued.data.attempt.safeToAutoConfirm,false);
+    assert.equal(issued.data.attempt.mustReadbackByOriginalNumber,true);
+    assert.equal(signedMutations,1);
+    assert.equal(finalQueries,1);
+    assert.equal(fx.sql.prepare("SELECT status FROM allowance_number_ledger WHERE work_item_id=?")
+      .get(approvedId).status,"sending");
+    const noSecond=await call("send-once",{itemId:approvedId,expectedRevision:2});
+    assert.equal(noSecond.status,409);
+    assert.equal(signedMutations,1,"Never resend an already claimed first attempt");
+    assert.equal(finalQueries,1,"No extra official check after sending");
+    const saved=await call("number-status",{itemId:approvedId,expectedRevision:2});
+    assert.equal(saved.status,200);
+    assert.equal(saved.data.number.mustReadbackBeforeAnyNewAttempt,true);
+  }finally{globalThis.fetch=earlierOfficial;}
 
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:1})).status,409);
   assert.equal(approvedOfficialCalls,1,"stale Work Item cannot query AMEGO");
