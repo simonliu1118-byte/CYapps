@@ -138,6 +138,68 @@ export async function fetchOfficialAllowancePage(
     checkedAtUtc:clock.toISOString(),snapshotSha256,canAutoConfirm:false};
 }
 
+// A bounded, explicit scan for KNOWN exception Work Items, not a background
+// invoice mirror. One page is one official request; no retries or mutations.
+// The caller obtains watches/credentials from trusted D1 server-side state.
+export interface AllowanceExceptionScan {
+  pages: OfficialAllowanceListPage[];
+  hints: AllowanceListHint[];
+  canAutoConfirm: false;
+  canAutoResend: false;
+}
+export async function scanAllowanceExceptionPages(
+  source: Omit<AllowanceListPageInput,"dateSelect"|"page"|"limit">,
+  watches: ExceptionWatch[],
+  transport: typeof fetch=fetch,
+  now:()=>Date=()=>new Date()
+): Promise<AllowanceExceptionScan> {
+  if(!Array.isArray(watches)||watches.length>50)
+    throw new Error("ALLOWANCE_WATCH_INVALID");
+  // Validate the known exception set BEFORE sending an official request.
+  selectAllowanceExceptionHints(watches,[]);
+  if(watches.length===0)
+    return {pages:[],hints:[],canAutoConfirm:false,canAutoResend:false};
+  if(!validDate(source.dateStart)||!validDate(source.dateEnd)||
+     source.dateStart>source.dateEnd)
+    throw new Error("ALLOWANCE_LIST_INPUT_INVALID");
+  const ms=(s:string)=>Date.UTC(Number(s.slice(0,4)),
+    Number(s.slice(4,6))-1,Number(s.slice(6,8)));
+  if(ms(source.dateEnd)-ms(source.dateStart)>14*86400000)
+    throw new Error("ALLOWANCE_LIST_WINDOW_TOO_LARGE");
+  const pages:OfficialAllowanceListPage[]=[];
+  const pageLimit=20,maxPages=4; // At most eight HTTP calls for both date dimensions.
+  for(const dateSelect of [1,2] as const){
+    let total:number|null=null,expectedPages:number|null=null,seen=0;
+    const numbers=new Set<string>();
+    for(let index=1;index<=maxPages;index++){
+      const p=await fetchOfficialAllowancePage({
+        ...source,dateSelect,page:index,limit:pageLimit
+      },transport,now);
+      if(expectedPages===null){
+        if(p.pageTotal>maxPages||p.dataTotal>pageLimit*maxPages||
+           (p.pageTotal===0)!==(p.dataTotal===0))
+          throw new Error("ALLOWANCE_LIST_WINDOW_TOO_LARGE");
+        expectedPages=p.pageTotal;
+        total=p.dataTotal;
+      } else if(p.pageTotal!==expectedPages||p.dataTotal!==total){
+        throw new Error("ALLOWANCE_LIST_PAGINATION_CHANGED");
+      }
+      for(const row of p.items){
+        if(numbers.has(row.number))
+          throw new Error("ALLOWANCE_LIST_DUPLICATE_OR_BAD_NUMBER");
+        numbers.add(row.number);
+      }
+      pages.push(p);
+      seen+=p.items.length;
+      if(index>=Math.max(1,expectedPages))break;
+    }
+    if(seen!==total)
+      throw new Error("ALLOWANCE_LIST_PAGINATION_INCOMPLETE");
+  }
+  return {pages,hints:selectAllowanceExceptionHints(watches,pages),
+    canAutoConfirm:false,canAutoResend:false};
+}
+
 export interface ExceptionWatch {
   allowanceNumber:string;
   workItemId:string;

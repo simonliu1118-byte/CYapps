@@ -21,6 +21,8 @@
 
 **步驟 3（D1 0015～0019 隔離 Migration 演練）已加入 Draft Source／待本 HEAD CI 驗證。** `cloud/tests/v3-migration-rehearsal.test.mjs` 從合成 0013→CYID_ONLY 維護→0014 基準建立未升級備份，五個草案 0015→0019 分階段升級、各階段故障後交易回復，檢查歷史 Device／Invitation／Audit、FK／SQLite integrity、正常發票不落 D1，以及從原始備份完整還原。僅隔離 Node SQLite，本批沒有接 Cloudflare、光貿或正式 D1。**下一步是步驟 4：雙日期 List／例外對帳與 Audit**；若 CI 失敗，先完成本步修正，不可往後推進。
 
+**步驟 4 第一個小提交（source 草案）**：延伸原本 `amego-allowance-list.ts` 的單頁查詢，新增 `scanAllowanceExceptionPages`。只執行已知例外號碼的明確雙日期有限掃描（各 4 頁／20 筆、14 日內），不足頁數、重複、狀態衝突都保守拒絕，沒有例外就不查官方；不建立新 schema／Cron／Worker、沒有任何重送或自動完成。測試已加入既有 `amego-allowance-list.test.mjs`。**步驟 4 仍待** CYID server-side D1 work-item 綁定、選擇性官方查回及永久 Audit，再考慮是否需要排程；不可把此掃描當作官方已核准或對帳完成。
+
 完成後依序做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
 
 ### 不可跨越的界線
