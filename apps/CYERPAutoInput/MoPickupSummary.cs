@@ -60,7 +60,7 @@ internal static partial class MoPickupSummary
     private static partial Regex ShipmentNo();
 }
 
-/// <summary>The 宅配單號 whose 到廠取貨總表 was printed, kept 30 days (Data/pickup_summaries.json).</summary>
+/// <summary>The 宅配單號 whose 到廠取貨總表 was printed, kept 7 days (Data/pickup_summaries.json; user, 2026-10-15).</summary>
 internal sealed class PickupSummaryLedger
 {
     private readonly string _path;
@@ -72,7 +72,7 @@ internal sealed class PickupSummaryLedger
         _printed = File.Exists(path)
             ? JsonSerializer.Deserialize<Dictionary<string, DateTime>>(File.ReadAllText(path)) ?? []
             : [];
-        foreach (var old in _printed.Where(p => p.Value < DateTime.Now.AddDays(-30)).Select(p => p.Key).ToList()) _printed.Remove(old);
+        foreach (var old in _printed.Where(p => p.Value < DateTime.Now.AddDays(-7)).Select(p => p.Key).ToList()) _printed.Remove(old);
     }
 
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "Data", "pickup_summaries.json");

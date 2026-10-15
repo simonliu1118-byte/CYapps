@@ -142,7 +142,7 @@ internal static class CyInvoiceLink
 }
 
 /// <summary>
-/// 紙本發票 printed (Data\paper_invoices.json, per environment and number, kept 180 days): a
+/// 紙本發票 printed (Data\paper_invoices.json, per environment and number, kept 60 days; user, 2026-10-15): a
 /// rerun that gets <c>existing</c> back does not print the same invoice again.
 /// </summary>
 internal sealed class PaperInvoiceLedger
@@ -156,7 +156,7 @@ internal sealed class PaperInvoiceLedger
         _printed = File.Exists(path)
             ? JsonSerializer.Deserialize<Dictionary<string, DateTime>>(File.ReadAllText(path)) ?? []
             : [];
-        foreach (var old in _printed.Where(p => p.Value < DateTime.Now.AddDays(-180)).Select(p => p.Key).ToList()) _printed.Remove(old);
+        foreach (var old in _printed.Where(p => p.Value < DateTime.Now.AddDays(-60)).Select(p => p.Key).ToList()) _printed.Remove(old);
     }
 
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "Data", "paper_invoices.json");
