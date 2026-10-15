@@ -299,7 +299,10 @@ internal sealed partial class MainForm
             foreach (var j in jobs)
             {
                 byId.TryGetValue(j.Invoice.OrderId, out var a);
-                if (a is { Status: "ready" } && a.InvoiceNumber == j.Invoice.InvoiceNumber && a.PdfFile.Length > 0 && File.Exists(a.PdfFile)) j.Pdf = a.PdfFile;
+                // The same invoice as issued: number and amount checked again (CYInvoice V2.6.21 handoff).
+                if (a is { Status: "ready" } && a.InvoiceNumber == j.Invoice.InvoiceNumber && a.TotalAmount == j.Invoice.TotalAmount &&
+                    a.PdfFile.Length > 0 && File.Exists(a.PdfFile)) j.Pdf = a.PdfFile;
+                else if (a is { Status: "ready" }) Drop(j, $"PDF 的發票（{a.InvoiceNumber}，{a.TotalAmount} 元）與開立結果不同，沒有印");
                 else if (a is { Status: "pending" })
                 {
                     if (DateTime.Now - j.Since > PaperGiveUp) Drop(j, $"光貿 {PaperGiveUp.TotalMinutes:0} 分鐘還沒開立完成，沒有拿到 PDF");
