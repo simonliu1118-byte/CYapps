@@ -1,0 +1,10 @@
+TriINVCalc V1.5.6
+三聯式發票開立計算機
+
+- 導入 AITeam 正式 CAL.ico 與 CAL.svg，取代舊圖示。
+- Windows PE resource 建置改由正式七尺寸 ICO 來源輸入並驗證 SHA-256。
+- 介面改採中性色為主、Coral 暖紅作低比例強調，發票格線改為低彩度暖灰紅。
+- 金額計算與鍵盤操作未修改。
+- Windows 實機標題列／工作列圖示與 125%／150% DPI 尚待手動驗收。
+
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
