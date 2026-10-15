@@ -14,6 +14,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("V3 Windows Work Item transport verifies request/revision/auth and never retries", CloudWorkItemClientTests.RunAsync),
+    ("V3 CYID company settings transport protects secrets and never retries writes", CloudCompanySettingsClientTests.RunAsync),
     ("V3 recovery pending token survives restart and locks endpoint/scope", TestRecoveryPendingStateAsync),
     ("V3 recovery preview and claim reuse the same token without old Device bearer", TestRecoveryTransportAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
