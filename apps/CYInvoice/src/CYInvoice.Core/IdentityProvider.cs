@@ -226,12 +226,11 @@ public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 public sealed class IdentityProviderRuntime(
     SettingsStore settings,
     IIdentityProvider local,
-    IIdentityProvider builtInCloud,
-    IIdentityProvider? cyId = null)
+    IIdentityProvider cyId)
 {
     private readonly SettingsStore settings = settings ?? throw new ArgumentNullException(nameof(settings));
     private readonly IIdentityProvider local = local ?? throw new ArgumentNullException(nameof(local));
-    private readonly IIdentityProvider builtInCloud = builtInCloud ?? throw new ArgumentNullException(nameof(builtInCloud));
+    private readonly IIdentityProvider cyId = cyId ?? throw new ArgumentNullException(nameof(cyId));
 
     public IIdentityProvider Current
     {
