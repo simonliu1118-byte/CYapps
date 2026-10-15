@@ -10,7 +10,7 @@
 
 ## 2026-10-15 V3 逐項交付索引（最新權威快照）
 
-> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，最新已驗證**功能** HEAD `214063e1810d55746d77d22c483de42135f4f907`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
+> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，最新已驗證**功能** HEAD `1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
 ### 已合入此 Draft 分支的功能（尚未上線）
 
@@ -23,8 +23,8 @@
 ### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
 
 - [x] **步驟 1 — Windows g0501 Core 客戶端已完成**：`214063e1810d55746d77d22c483de42135f4f907` 新增 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs` 並登錄到 `tests/CYInvoice.Cloud.Tests/Program.cs`；與 Cloud CYID create/get/list/approve/send-once/status-readback/close 契約對齊。測試涵蓋 HTTPS／Device bearer、來源欄位不可信任、版本比對、歷史折讓號碼、錯誤結果拒絕、自動重送禁止、網路逾時不額外重試。該**功能提交** Cloud Validate ×2、Windows Client、Windows x64、Governance 全數 CI 通過，Cloud deploy skipped。**只有 Core／合成測試，不是 WinForms 操作或正式開立**。
-- [ ] **步驟 2（下一項）— Windows g0501 WinForms 操作入口與流程**：接上 CYID 管理員作廢清單／核准／單次送出／原號查回／官方確認後結案，保留個別確認與逾時禁止重送；CI + 合成 UI 測試。與步驟 1 分開提交。
-- [ ] **步驟 3 — D1 0015～0019 Migration 演練與安全盤點**：先在隔離 SQLite／非正式資源驗證 schema、升級與回復腳本、既有資料相容；確認備份及批准前**不得對正式 D1 執行 migration**，也不建立測試 Worker。
+- [x] **步驟 2 — Windows g0501 WinForms 操作入口與流程已完成（Draft Source）**：`275ec1c652c629aa9ff6eb95877148ff2ce70daa` 新增 `CloudAllowanceVoidManagerForm.cs` 並在 `SyncIssuesForm` 的 CYID「處理中」頁接入「CYID 折讓作廢」，包含一般使用者建立申請／原 ID 查回、管理員清單、`open→review`、官方驗證後核准、明確二次確認的唯一 g0501 送出、`allowance_status` 原號查回、官方完成後二次查驗並結案。建立前會顯示原 Work Item ID、禁止同一視窗重送；`e7efd90b1a7b25ab862d24efb3bd3daa7214c7a6` 加上依 Workspace+Cloud URL 隔離的**本機原 Work Item ID 耐久保存**，網路未回覆／重啟後仍禁止換號重複申請，只能原號查回；`1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b` 修正 C# Nullable 保護。Windows `--startup-smoke-test` 驗證畫面、申請窗、離線原 ID 保存／重啟／跨 Workspace 隔離與確認後清除。此最後**功能** SHA 的 Cloud Validate ×2、Windows Client、Windows x64、Governance **全綠**，Worker deploy skipped。**這不代表真人 WinForms 驗收或 V3 已上線。**
+- [ ] **步驟 3（下一項）— D1 0015～0019 Migration 演練與安全盤點**：先在隔離 SQLite／非正式資源驗證 schema、升級與回復腳本、既有資料相容；確認備份及批准前**不得對正式 D1 執行 migration**，也不建立測試 Worker。
 - [ ] **步驟 4 — 官方清單與跨機例外對帳**：雙日期分頁、增量／排程、例外 Work Item 選擇性詳查、官方未知狀態的保守處理及永久稽核；不因清單查無就自動重送、換號或結案。
 - [ ] **步驟 5 — 複雜折讓與其他整合缺口**：已存在折讓的逐品項剩餘額、跨原發票分攤、含稅 `detail_vat=1`、稅額 round 規則、公司設定／憑證安全治理、其餘上傳問題跨機處理、雙版本 QA；沒有充分官方證據時一律不可自動核准。
 - [ ] **步驟 6 — DR／實機／正式 Release**：DR-01～DR-13、跨裝置權限與斷線、Windows 套件驗收、正式資料備份及遷移計畫、V3.0 發布。未全數驗收前保留 Draft，不合併、不對真實發票進行未批准操作。
