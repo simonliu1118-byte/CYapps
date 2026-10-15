@@ -105,6 +105,7 @@ internal static class Program
                 return 2;
             requestJson = await File.ReadAllTextAsync(command.RequestPath).ConfigureAwait(false);
             request = AutoInputContract.ParseRequest(requestJson);
+            if (command.Pdf) request.ValidatePdf();
         }
         catch (Exception error) when (error is InvalidDataException or IOException or
             UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
@@ -129,12 +130,14 @@ internal static class Program
             {
                 var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
                 var processor = new AutoInputProcessor(repository, new CYInvoice.Core.Invoicing.InvoiceService(repository));
-                result = await processor.ExecuteAsync(request, command.Issue).ConfigureAwait(false);
+                result = command.Pdf
+                    ? await processor.ExecutePdfAsync(request).ConfigureAwait(false)
+                    : await processor.ExecuteAsync(request, command.Issue).ConfigureAwait(false);
             }
             else
             {
                 // Secondary process does not open SQLite; only the primary instance issues.
-                var reply = await AutoInputPipe.ForwardAsync(command.Issue, requestJson, CancellationToken.None)
+                var reply = await AutoInputPipe.ForwardAsync(command.Issue, requestJson, CancellationToken.None, command.Pdf)
                     .ConfigureAwait(false);
                 if (reply.Result is null) return reply.ExitCode == 2 ? 2 : 3;
                 result = reply.Result;
