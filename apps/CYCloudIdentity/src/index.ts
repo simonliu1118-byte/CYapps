@@ -15,7 +15,7 @@ import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { handleStartCurrentEmailVerification } from "./current-email-verification";
 import {
   handleUpdateEmployee,
-  handleDeletePendingEmployee,
+  handleDeleteEmployee,
   handleForceEmployeeEmailRecovery,
   handleResendActivatedEmailVerification,
   handleSetEmployeeIdentityAdmin,
@@ -123,7 +123,7 @@ export default {
           return await handleUpdateEmployee(request, env, requestId, employeeId);
         }
         if (employeeId && request.method === "DELETE") {
-          return await handleDeletePendingEmployee(request, env, requestId, employeeId);
+          return await handleDeleteEmployee(request, env, requestId, employeeId);
         }
       }
 

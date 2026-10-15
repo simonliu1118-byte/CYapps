@@ -7,6 +7,8 @@ on:
       - "apps/CYCloudIdentity/**"
       - ".github/workflows/cycloudidentity-production-deploy.yml"
   workflow_dispatch:
+  push:
+    branches: [deploy/cycloudidentity-production-release]
 
 permissions:
   contents: read
@@ -36,7 +38,7 @@ jobs:
         run: bash scripts/accept_auth_local.sh && bash scripts/accept_first_login_local.sh
 
   deploy-production:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-production-release')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -50,7 +52,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DEV_CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
       DEV_CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
-      PROD_CORE_CONSUMER_WORKER_NAME: ${{ vars.CYID_PRODUCTION_CORE_CONSUMER_WORKER_NAME }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -61,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME DEV_CYID_D1_DATABASE_ID PROD_CORE_CONSUMER_WORKER_NAME; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME DEV_CYID_D1_DATABASE_ID; do
             [[ -n "${!name:-}" ]] || { echo "Missing protected production prerequisite." >&2; exit 1; }
           done
           PROD_CYID_WORKER_NAME="$(node --input-type=module -e 'import {productionWorkerName} from "./scripts/render-production-config.mjs"; process.stdout.write(productionWorkerName(process.env.DEV_CYID_WORKER_NAME))')"
@@ -74,22 +75,8 @@ jobs:
           echo "::add-mask::$PROD_DB_ID"
           curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/d1/database/$PROD_DB_ID" > "$RUNNER_TEMP/cyid-prod-database.json"
           node scripts/render-production-config.mjs "$RUNNER_TEMP/cyid-prod-settings.json" "$RUNNER_TEMP/cyid-prod-database.json" wrangler.production.generated.jsonc
-      - name: Require deployed consumer retirement readiness
-        run: |
-          set -euo pipefail
-          [[ "$PROD_CORE_CONSUMER_WORKER_NAME" =~ ^[a-z0-9][a-z0-9-]{1,62}$ ]] || { echo "Invalid protected core consumer Worker target." >&2; exit 1; }
-          echo "::add-mask::$PROD_CORE_CONSUMER_WORKER_NAME"
-          curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_CORE_CONSUMER_WORKER_NAME/settings" > "$RUNNER_TEMP/cyid-core-settings.json"
-          curl --fail --silent --show-error --max-time 20 "$CYID_CORE_HEALTH_URL" > "$RUNNER_TEMP/cyid-core-health.json"
-          node --input-type=module -e '
-            import fs from "node:fs";
-            import { requireProductionCoreConsumer } from "./scripts/render-production-config.mjs";
-            const h=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-core-health.json","utf8"));
-            const version=fs.readFileSync("CONSUMER_CONTRACT_VERSION","utf8").trim();
-            const config=JSON.parse(fs.readFileSync("wrangler.production.generated.jsonc","utf8"));
-            const core=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-core-settings.json","utf8"));
-            requireProductionCoreConsumer({settings:core,health:h,providerName:process.env.PROD_CYID_WORKER_NAME,applicationId:config.vars.CORE_ACCOUNT_APPLICATION_ID,consumerVersion:version});
-          '
+      - name: Require deployed canonical production core consumer
+        run: node scripts/verify-production-core.mjs
       - name: Validate bundle before remote mutation
         run: npx wrangler deploy --dry-run --config wrangler.production.generated.jsonc --outdir "$RUNNER_TEMP/cyid-prod-bundle"
       - name: Apply forward schema only
