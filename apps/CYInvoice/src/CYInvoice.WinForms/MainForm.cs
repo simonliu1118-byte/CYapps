@@ -329,8 +329,7 @@ internal sealed class MainForm : Form
         }
         else
         {
-            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
-                login.AuthenticatedPassword, cloudHealthHttpClient);
+            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee);
             selfForm.ShowDialog(this);
         }
     }
