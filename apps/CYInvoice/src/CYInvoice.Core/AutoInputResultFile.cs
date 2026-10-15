@@ -21,7 +21,7 @@ public static class AutoInputResultFile
         if (result.Environment is not ("production" or "test" or "unknown"))
             throw new InvalidDataException("Invalid AutoInput environment.");
         if (result.Orders is null || result.Orders.Count > AutoInputContract.MaxOrderCount ||
-            result.Orders.Any(item => item.Status is not ("issued" or "existing" or "failed" or "unknown" or "skipped")))
+            result.Orders.Any(item => item.Status is not ("issued" or "existing" or "failed" or "unknown" or "skipped" or "ready" or "pending")))
             throw new InvalidDataException("Invalid AutoInput order status.");
         var parent = Path.GetDirectoryName(destination);
         if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
