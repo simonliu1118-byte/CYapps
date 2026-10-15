@@ -116,6 +116,11 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal((await legacy.json()).error.code,"CYID_REQUIRED");
   const first={itemId:"wi_endpoint_first",kind:"VOID",environment:"test",referenceHash:hash};
   assert.equal((await call("create",first,"wrong")).status,401);
+  const fakeAllowance=await call("create",{...first,itemId:"wi_fake_allowance",
+    kind:"ALLOWANCE",referenceHash:"f".repeat(64)});
+  assert.equal(fakeAllowance.status,409);
+  assert.equal(fakeAllowance.body.error.code,"ALLOWANCE_APPLICATION_REQUIRED");
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   const created=await call("create",first);
   assert.equal(created.status,200,JSON.stringify(created));
   assert.equal(created.body.item.status,"open");
