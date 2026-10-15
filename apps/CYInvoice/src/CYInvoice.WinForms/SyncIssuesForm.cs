@@ -137,6 +137,40 @@ internal sealed class SyncIssuesForm : Form
             failedActions.Controls.Add(deleteFailed);
             failedActions.Controls.Add(clearFailed);
         }
+        else
+        {
+            // V3: a dedicated CYID / multi-device queue. Local manual review
+            // remains independent and unchanged; no Built-in Cloud fallback.
+            var cfg = repository.Settings.LoadOrCreate();
+            if (cfg.CloudMode == CloudModes.CloudPreferred
+                && cfg.CloudIdentityProvider == "CYID"
+                && cfg.CloudEmployeeAuthorityReady
+                && cfg.CloudWorkspaceId.Length != 0
+                && cfg.CloudDeviceId.Length != 0
+                && !string.IsNullOrWhiteSpace(cfg.CloudBaseUrl)
+                && !string.IsNullOrWhiteSpace(repository.Settings.CloudDeviceToken(cfg)))
+            {
+                var cloudQueue = UiControls.StandardButton("CYID 跨機折讓");
+                cloudQueue.Click += (_, _) =>
+                {
+                    try
+                    {
+                        var current = repository.Settings.LoadOrCreate();
+                        var token = repository.Settings.CloudDeviceToken(current);
+                        using var manager = new CloudAllowanceManagerForm(
+                            repository, current.CloudBaseUrl, token);
+                        manager.ShowDialog(this);
+                        ReloadAll();
+                    }
+                    catch (Exception error)
+                    {
+                        MessageBox.Show(this, "無法開啟 CYID 跨機折讓：" + error.Message,
+                            "雲端覆核", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                };
+                failedActions.Controls.Add(cloudQueue);
+            }
+        }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         close.Margin = new Padding(0, 4, 0, 0);
         bottom.Controls.Add(failedActions, 0, 0);

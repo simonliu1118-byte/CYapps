@@ -1,0 +1,258 @@
+using CYInvoice.Core.Cloud;
+using CYInvoice.Core.Storage;
+
+namespace CYInvoice.WinForms;
+
+// V3 CYID Cloud manager workflow. Every protected operation collects fresh
+// CYID credentials; the Cloud backend owns all roles, company keys and fences.
+// No client-generated allowance number or blind HTTP retry is ever performed.
+internal sealed class CloudAllowanceManagerForm : Form
+{
+    private readonly LocalRepository repository;
+    private readonly HttpClient http = new();
+    private readonly CloudAllowanceApplicationClient client;
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly ListView queue = new() {
+        Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,
+        GridLines=true,MultiSelect=false,HideSelection=false
+    };
+    private readonly Label hint = new() {
+        Dock=DockStyle.Fill,AutoEllipsis=true,TextAlign=ContentAlignment.MiddleLeft,
+        Text="CYID 雲端折讓｜核准、配號與首次送出為獨立作業；結果不明只能按原號查回。"
+    };
+    private readonly List<Button> operations = [];
+    private readonly Button refresh=UiControls.StandardButton("重新整理");
+    private readonly Button preview=UiControls.StandardButton("申請明細");
+    private readonly Button inspect=UiControls.StandardButton("官方查驗");
+    private readonly Button approve=UiControls.StandardButton("核准");
+    private readonly Button reserve=UiControls.StandardButton("配號");
+    private readonly Button issue=UiControls.StandardButton("首次送出");
+    private readonly Button readback=UiControls.StandardButton("查回原號");
+    private bool busy;
+
+    public CloudAllowanceManagerForm(LocalRepository repository,string endpoint,string token)
+    {
+        this.repository=repository??throw new ArgumentNullException(nameof(repository));
+        if(!Uri.TryCreate(endpoint,UriKind.Absolute,out var url) || url.Scheme!="https")
+            throw new ArgumentException("CYID Cloud URL must be HTTPS.",nameof(endpoint));
+        client=new CloudAllowanceApplicationClient(http,url,token);
+        Text="CYID 跨裝置折讓覆核";
+        Font=new Font("Microsoft JhengHei UI",10F);
+        BackColor=Color.White;
+        StartPosition=FormStartPosition.CenterParent;
+        ClientSize=new Size(1030,560);
+        MinimumSize=new Size(940,480);
+        ShowIcon=false;
+        Build();
+        Shown+=async (_,_)=>await ReloadAsync();
+    }
+
+    private void Build()
+    {
+        queue.Columns.Add("原發票號碼",135);
+        queue.Columns.Add("折讓日",105);
+        queue.Columns.Add("含稅金額",100);
+        queue.Columns.Add("狀態",95);
+        queue.Columns.Add("申請人",130);
+        queue.Columns.Add("申請原因",280);
+        queue.Columns.Add("Work Item",170);
+        var root=new TableLayoutPanel {
+            Dock=DockStyle.Fill,RowCount=3,ColumnCount=1,
+            Padding=new Padding(12)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,56));
+        root.Controls.Add(hint,0,0);
+        root.Controls.Add(queue,0,1);
+        var buttons=new FlowLayoutPanel{
+            Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,
+            WrapContents=true
+        };
+        foreach(var button in new[]{refresh,preview,inspect,approve,reserve,issue,readback})
+        {
+            button.Margin=new Padding(2,4,3,4);
+            buttons.Controls.Add(button);
+            operations.Add(button);
+        }
+        root.Controls.Add(buttons,0,2);
+        Controls.Add(root);
+        refresh.Click+=async (_,_)=>await ReloadAsync();
+        preview.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            var p=await client.PreviewForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            var text=string.Join(Environment.NewLine,p.Items.Select(x=>
+                $"{x.Description}｜數量 {x.Quantity}｜未稅小計 {x.Amount}｜稅額 {x.Tax}"));
+            MessageBox.Show(this,
+                $"原發票：{p.OriginalInvoiceNumber}\n申請理由：{p.Reason}\n"+
+                $"申請含稅金額：{p.RequestedGrossAmount:N0}\n\n"+
+                $"{text}\n\n尚未完成官方核對；此畫面不能直接視為核准。",
+                "凍結申請明細（唯讀）",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+        inspect.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            var v=await client.InspectOfficialForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,
+                $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
+                $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
+                $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
+                $"品項比對：{v.ItemCheck.Reason}\n"+
+                $"官方查核時間：{v.CheckedAtUtc:yyyy/MM/dd HH:mm:ss}\n\n"+
+                "這是唯讀查驗，不是核准，也沒有送出折讓。",
+                "光貿原發票查驗",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+        approve.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            if(!Confirm($"確認核准折讓申請？\n原發票：{entry.OriginalInvoiceNumber}\n"+
+                $"申請含稅金額：{entry.RequestedGrossAmount:N0}\n\n"+
+                "系統將再次查核光貿並永久記錄核准人；不會在這一步送出折讓。"))return;
+            var v=await client.ApproveForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,
+                $"已留下核准紀錄，至 {v.ValidUntilUtc:yyyy/MM/dd HH:mm} (UTC) 有效。\n"+
+                "尚未配號，也尚未送出光貿。","核准完成",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+        reserve.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            if(!Confirm($"要為原發票 {entry.OriginalInvoiceNumber} 的核准申請配號？\n"+
+                "配出的號碼永久保存，不能刪除、回收或自動重用。"))return;
+            var v=await client.ReserveForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,$"已配號：{v.AllowanceNumber}\n尚未向光貿開立。",
+                "折讓配號完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+        issue.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            var current=await client.GetNumberStatusForManagerAsync(entry.ItemId,
+                entry.Revision,user,pwd,lifetime.Token);
+            if(current.Status!="reserved")
+            {
+                MessageBox.Show(this,$"目前單號 {current.AllowanceNumber} 狀態為 "+
+                    $"{current.Status}，不能再次送出。\n請使用「查回原號」核對官方結果。",
+                    "不可重送",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                return;
+            }
+            if(!Confirm($"確認首次送出光貿 g0401？\n\n"+
+                $"原發票：{entry.OriginalInvoiceNumber}\n"+
+                $"折讓單號：{current.AllowanceNumber}\n"+
+                $"申請含稅金額：{entry.RequestedGrossAmount:N0}\n\n"+
+                "本次操作不能自動重送。若網路逾時或結果不明，"+
+                "必須以原折讓號碼查回，不能直接再按一次。"))return;
+            var result=await client.SendOnceForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,$"折讓單號：{result.AllowanceNumber}\n"+
+                $"送出結果：{result.Result}\n\n"+
+                "不論光貿目前是否接受，都不等於財政部完成。\n"+
+                "請使用「查回原號」核對；系統不會自動重新送出。",
+                "首次送出結果",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        });
+        readback.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            var status=await client.GetNumberStatusForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            if(status.Status=="reserved")
+            {
+                MessageBox.Show(this,$"原號 {status.AllowanceNumber} 尚未送出。",
+                    "配號狀態",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            var result=await client.ReadbackNumberForManagerAsync(entry.ItemId,entry.Revision,
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,$"原折讓單號：{result.AllowanceNumber}\n"+
+                $"官方可能對應本申請：{(result.PossibleMatch?"是":"未確認")}\n"+
+                $"原發票與金額比對：{(result.GrossMatchesFrozenRequest?"相符":"未確認")}\n\n"+
+                "查回僅為唯讀參考，不得自行視為已結案或重送。",
+                "光貿原號查回",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+    }
+
+    private CloudAllowanceApplicationSummary? Selected() =>
+        queue.SelectedItems.Count==1?
+          queue.SelectedItems[0].Tag as CloudAllowanceApplicationSummary:null;
+
+    private bool GetCredentials(string label,out string employeeNo,out string password)
+    {
+        employeeNo=string.Empty;password=string.Empty;
+        using var login=new EmployeeAdminLoginForm(repository,label,
+            administratorRequired:true,collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return false;
+        employeeNo=login.EnteredEmployeeNo;
+        password=login.AuthenticatedPassword;
+        return true;
+    }
+    private bool Confirm(string message) =>
+        MessageBox.Show(this,message,"請再次確認",
+            MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2)==DialogResult.Yes;
+
+    private async Task RunForSelectedAsync(Func<CloudAllowanceApplicationSummary,
+        string,string,Task> action)
+    {
+        if(busy)return;
+        var selected=Selected();
+        if(selected is null)
+        {
+            MessageBox.Show(this,"請先選擇一筆待覆核折讓。","尚未選擇",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        if(!GetCredentials("跨機折讓－CYID 管理員當次驗證",
+            out var employeeNo,out var password))return;
+        SetBusy(true);
+        try{await action(selected,employeeNo,password);}
+        catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+        catch(Exception error){
+            MessageBox.Show(this,"此次操作未獲確認："+error.Message+
+                "\n請先查回原工作單／折讓號碼，不要重新送出。",
+                "作業待確認",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+        finally{if(!IsDisposed)SetBusy(false);}
+    }
+    private async Task ReloadAsync()
+    {
+        if(busy)return;
+        if(!GetCredentials("跨機折讓清單－CYID 管理員驗證",
+            out var employeeNo,out var password))return;
+        SetBusy(true);
+        try{
+            var results=new List<CloudAllowanceApplicationSummary>();
+            CloudAllowanceApplicationCursor? cursor=null;
+            for(var pages=0;pages<10;pages++)
+            {
+                var page=await client.ListForManagerAsync(50,cursor,
+                    employeeNo,password,lifetime.Token);
+                results.AddRange(page.Applications);
+                cursor=page.NextCursor;
+                if(cursor is null)break;
+            }
+            queue.BeginUpdate();
+            try{
+                queue.Items.Clear();
+                foreach(var item in results){
+                    var row=new ListViewItem(item.OriginalInvoiceNumber){Tag=item};
+                    row.SubItems.Add(item.AllowanceDay);
+                    row.SubItems.Add(item.RequestedGrossAmount.ToString("N0"));
+                    row.SubItems.Add(item.Status);
+                    row.SubItems.Add(item.ApplicantEmployeeId);
+                    row.SubItems.Add(item.Reason);
+                    row.SubItems.Add(item.ItemId);
+                    queue.Items.Add(row);
+                }
+            }finally{queue.EndUpdate();}
+            hint.Text=$"CYID 跨機折讓：{results.Count} 筆（最多顯示 500 筆）｜"+
+                "異常回覆不得重送，請用原號查回。";
+        }
+        catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+        catch(Exception error){
+            MessageBox.Show(this,"無法讀取管理員待覆核清單："+error.Message,
+                "CYID 雲端查詢失敗",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+        finally{if(!IsDisposed)SetBusy(false);}
+    }
+    private void SetBusy(bool value){
+        busy=value;
+        foreach(var b in operations)b.Enabled=!value;
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if(disposing){lifetime.Cancel();lifetime.Dispose();http.Dispose();}
+        base.Dispose(disposing);
+    }
+}
