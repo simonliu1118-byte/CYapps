@@ -73,7 +73,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.25.2 Build 1</span></p>
+      <p>CYAccounting Web <span class="version">V0.25.3</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -198,17 +198,17 @@
   </dialog>
 
   <script src="/auth.js?rev=session-expiry-navigation" defer></script>
-  <script src="/app.js?rev=settings-lifecycle" defer></script>
-  <script src="/quick-entry.js?rev=entry-saved-focus" defer></script>
-  <script src="/ledger-tools.js?rev=ledger-net-label" defer></script>
-  <script src="/input-confirmation.js?rev=confirmation-save-events" defer></script>
+  <script src="/app.js?rev=optimistic-create" defer></script>
+  <script src="/quick-entry.js?rev=entry-submit-focus" defer></script>
+  <script src="/ledger-tools.js?rev=pending-create-rows" defer></script>
+  <script src="/input-confirmation.js?rev=identified-entry-results" defer></script>
   <script src="/quick-entry-settings.js?rev=settings-general" defer></script>
   <script src="/category-management.js?rev=category-management" defer></script>
   <script src="/excel-export-ui.js?rev=export-device-label" defer></script>
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
   <script src="/backup-ui.js?rev=backup-portable-normalization" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=backup-owner-layout" defer></script>
+  <script src="/adaptive-ui.js?rev=entry-draft-lifecycle" defer></script>
   <script src="/statistics-ui.js?rev=statistics-net-label" type="module"></script>
 </body>
 </html>

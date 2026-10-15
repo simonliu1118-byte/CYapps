@@ -3,7 +3,10 @@
 let cyFastSummaryRequest = 0;
 
 window.cyPrepareQuickEntryUi = prepareQuickEntryUi;
-window.cyAfterEntrySaved = handleFastEntrySaved;
+window.addEventListener('cyacc:entry-submitted', handleFastEntrySubmitted);
+window.addEventListener('cyacc:entry-result', event => {
+  if (event.detail?.ok) void loadFrequentSummaries();
+});
 window.addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged);
 
 window.addEventListener('load', () => {
@@ -43,7 +46,7 @@ function bindQuickTools() {
     const name = button.dataset.quickCategory;
     if (![...els.categoryName.options].some(option => option.value === name)) return;
     els.categoryName.value = name;
-    loadFrequentSummaries();
+    els.categoryName.dispatchEvent(new Event('change', { bubbles: true }));
     els.summary.focus();
   });
 
@@ -51,6 +54,7 @@ function bindQuickTools() {
     const button = event.target.closest('[data-summary-suggestion]');
     if (!button) return;
     els.summary.value = button.dataset.summarySuggestion || '';
+    els.summary.dispatchEvent(new Event('input', { bubbles: true }));
     els.amount.focus();
   });
 }
@@ -73,9 +77,8 @@ function handleQuickEntryKindChanged() {
   void loadFrequentSummaries();
 }
 
-function handleFastEntrySaved() {
+function handleFastEntrySubmitted() {
   els.summary.focus();
-  void loadFrequentSummaries();
 }
 
 async function prepareQuickEntryUi() {

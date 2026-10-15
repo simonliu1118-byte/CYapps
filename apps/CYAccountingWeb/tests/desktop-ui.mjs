@@ -36,8 +36,8 @@ const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.25.2');
-assert.equal(build, '1');
+assert.equal(version, '0.25.3');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -167,16 +167,18 @@ let dateSaveRequest;
 const dateSaveElements = {
   txDate: pickerDate, accountName: { value: 'TEST_ACCOUNT' }, categoryName: { value: 'TEST_SUBJECT' },
   summary: { value: 'picker regression' }, amount: { value: '50', focus() {} },
-  monthFilter: { value: '' }, saveButton: { disabled: false }
+  monthFilter: { value: '', dispatchEvent() {} }, saveButton: { disabled: false }
 };
-const dateSaveContext = vm.createContext({ Number, String, Array, JSON, Error,
-  window: {}, els: dateSaveElements, state: { kind: 'expense' }, isLocked: () => false,
+const dateSaveContext = vm.createContext({ Number, String, Array, JSON, Error, Date, Map, Promise, Event,
+  CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
+  window: { dispatchEvent() {} }, els: dateSaveElements, state: { kind: 'expense', transactions: [] }, isLocked: () => false,
   showMessage() {}, updateEntryLockState() {}, jsonHeaders: () => ({}),
   loadTransactions: async () => {},
-  api: async (url, request) => { dateSaveRequest = { url, ...request, body: JSON.parse(request.body) }; }
+  api: async (url, request) => { dateSaveRequest = { url, ...request, body: JSON.parse(request.body) }; return { transaction: { id: 99, tx_date: dateSaveRequest.body.txDate } }; }
 });
 vm.runInContext(appJs.slice(appJs.indexOf('function summaryCharacterUnits('),
   appJs.indexOf('function mergePendingTransactionUpdates(')), dateSaveContext);
+vm.runInContext('const cyPendingTransactionCreates = new Map(); let cyTransactionCreateId = 0; let cyEntryDraftRevision = 0; let cyTransactionMutationRevision = 0;', dateSaveContext);
 vm.runInContext(appJs.slice(appJs.indexOf('async function saveTransaction(event)'),
   appJs.indexOf('async function loadTransactions()')), dateSaveContext);
 await dateSaveContext.saveTransaction({ preventDefault() {} });

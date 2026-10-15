@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.25.2 Build 1**（獨立 D1 受控復原；正式 GCS 重建演練通過） |
+| 產品版本 | **V0.25.3**（新增記帳即時顯示及失敗回復；D1 schema 10） |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -18,7 +18,7 @@
 | 治理 | Common Rules 2.8.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
 | 帳務與備份現況 | 依私人檢查點及正式 catalog 確認；公開文件不保存交易、來源檔、備份識別或資料操作紀錄 |
 
-首次登入引導 PR **#435** 尚未合併；原工作線標示 V0.23.2，合併前需依最新 main 重新基底及升版，不能覆蓋正式版本身分。它仍需先核對正式 CY Web 入口與 CYID authority 相同的 gate。
+首次登入引導 PR **#435** 已依 V0.25.2 Build 1 整合為草稿，CI 通過但正式 authority gate 未通過；CY Web 對話已取得交接，修正後仍須依最新 main 再整合及升版，不能覆蓋本版記帳修正。
 
 ## 文件入口
 

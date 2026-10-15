@@ -101,7 +101,8 @@ assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not t
 assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedgerMonthDisplay\)/, 'shared toolbar owns month presentation sync');
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
-assert.match(quickEntry, /window\.cyAfterEntrySaved = handleFastEntrySaved/, 'post-save focus uses the explicit save lifecycle');
+assert.match(quickEntry, /addEventListener\('cyacc:entry-submitted', handleFastEntrySubmitted\)/, 'entry focus uses the explicit submit lifecycle');
+assert.doesNotMatch(inputConfirmation, /cyPendingConfirmation|addEventListener\('submit'/, 'concurrent confirmation results belong to identified create events');
 assert.doesNotMatch(quickEntry, /cyFocusSummaryAfterSave|handleFastEntryLedgerRendered|setTimeout/, 'quick entry does not compete with post-save focus');
 assert.doesNotMatch(html, /ledger-inline-edit/, 'replaced inline editing is not loaded');
 assert.equal(files.includes('ledger-inline-edit.js'), false);

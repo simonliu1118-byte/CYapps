@@ -130,7 +130,12 @@ async function handleCreateTransaction(request, db) {
     INSERT INTO transactions(tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(values.txDate, values.accountName, values.kind, values.categoryName, values.summary, values.amount, now, now).run();
-  return json({ ok: true, id: result.meta?.last_row_id ?? null }, 201);
+  const id = Number(result.meta?.last_row_id);
+  return json({ ok: true, id, transaction: {
+    id, tx_date: values.txDate, account_name: values.accountName, kind: values.kind,
+    category_name: values.categoryName, summary: values.summary, amount: values.amount,
+    created_at: now, updated_at: now
+  } }, 201);
 }
 
 async function handleUpdateTransaction(id, request, db) {

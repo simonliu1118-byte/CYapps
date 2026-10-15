@@ -19,11 +19,9 @@ const classList = () => {
 };
 const list = { innerHTML: '' }, badge = { textContent: '', classList: classList() };
 const events = new Map();
-let submit;
 const message = { textContent: '', classList: classList() };
 const els = {
   saveMessage: message,
-  form: { addEventListener(type, listener, capture) { assert.equal(type, 'submit'); assert.equal(capture, true); submit = listener; } },
   txDate: { value: '2026-10-01' }, accountName: { value: 'TEST_ACCOUNT' },
   categoryName: { value: 'TEST_SUBJECT' }, summary: { value: '' }, amount: { value: '100' }
 };
@@ -46,25 +44,28 @@ vm.runInContext(app.slice(app.indexOf('function escapeHtml(')), context);
 context.bindInputConfirmation();
 context.showMessage('startup failure', true);
 assert.equal(list.innerHTML, '', 'unrelated messages do not create attempted transactions');
-for (let i = 1; i <= 11; i++) {
-  els.summary.value = `item-${String(i).padStart(2, '0')}`;
-  submit();
-  context.showMessage('');
-  context.showMessage('存檔成功');
-}
+const entry = summary => ({ txDate: '2026-10-01', accountName: 'TEST_ACCOUNT', kind: 'income', categoryName: 'TEST_SUBJECT', summary, amount: '100' });
+const emit = (type, detail) => context.window.dispatchEvent(new context.CustomEvent('cyacc:' + type, { detail }));
+for (let i = 1; i <= 11; i++) emit('entry-submitted', { id: -i, entry: entry(`item-${String(i).padStart(2, '0')}`) });
+assert.match(list.innerHTML, /class="confirmation-item pending"/);
 assert.equal(badge.textContent, '10');
 assert.equal([...list.innerHTML.matchAll(/class="confirmation-item /g)].length, 10);
 assert.ok(list.innerHTML.indexOf('item-11') < list.innerHTML.indexOf('item-10'));
 assert.doesNotMatch(list.innerHTML, /item-01/, 'eleventh entry evicts the oldest');
-els.summary.value = '<script> & "quoted"';
-submit();
-context.showMessage('金額必須為 1～9,999,999。', true);
+emit('entry-result', { id: -10, ok: true, message: '存檔成功' });
+emit('entry-result', { id: -11, ok: false, message: 'TEST_FAILURE' });
+assert.match(list.innerHTML, /item-11[^]*?TEST_FAILURE/);
+assert.match(list.innerHTML, /item-10[^]*?存檔成功/);
+const beforeEvictedResponse = list.innerHTML;
+emit('entry-result', { id: -1, ok: true, message: '存檔成功' });
+assert.equal(list.innerHTML, beforeEvictedResponse, 'late responses never reinsert evicted attempts');
+emit('entry-result', { entry: entry('<script> & "quoted"'), ok: false, message: '金額必須為 1～9,999,999。' });
 assert.match(list.innerHTML, /class="confirmation-item error"/);
 assert.match(list.innerHTML, /&lt;script&gt; &amp; &quot;quoted&quot;/);
 assert.match(list.innerHTML, /aria-label="金額必須為 1～9,999,999。"/);
 const rendered = list.innerHTML;
 context.showMessage('金額必須為 1～9,999,999。', true);
-assert.equal(list.innerHTML, rendered, 'one submission creates one result');
+assert.equal(list.innerHTML, rendered, 'generic messages never create transaction results');
 assert.equal(badge.textContent, '10');
 
 // The existing Adaptive UI placement owner moves one message node. The message

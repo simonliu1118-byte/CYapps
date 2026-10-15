@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/15（台灣時間）。正式程式版本 **V0.25.2**、D1 schema **10**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
+更新：2026/10/15（台灣時間）。程式版本 **V0.25.3**、D1 schema **10**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
@@ -33,11 +33,11 @@ binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`
 | 排程 gate | 本次已從正式備份頁確認 **14／14**；只計 scheduled、同 logical backupId、有效 package digest、兩 provider 成功且已回讀驗證 |
 | 切換 gate | SUPER_ADMIN、provider 設定完整、14 次 gate，加上同一份備份的 R2／GCS 隔離還原皆成功且驗證時間在 24 小時內 |
 
-啟用只新增 policy event 與操作者／驗證證據，**切換當下不清除既有物件**。未排 GCS 的日期不建立假失敗 copy，UI 顯示「本日未排程」。後續僅由既有 provider cleanup 處理超期 managed objects，失敗仍維持兩 provider 隔離；保留期限依 provider object 建立時間計算。原 Phase C 驗收證據不會被 Phase D 的 R2-only 日清除。
+啟用只新增 policy event 與操作者／驗證證據，**切換當下不清除既有物件**。未排 GCS 的日期不建立假失敗 copy，桌機 UI 留白，觸控資訊保留未排程狀態。後續僅由既有 provider cleanup 處理超期 managed objects，失敗仍維持兩 provider 隔離；保留期限依 provider object 建立時間計算。原 Phase C 驗收證據不會被 Phase D 的 R2-only 日清除。
 
-正式操作：桌機設定 → 備份／復原 →「驗證隔離還原」→ 兩 provider 通過 →「啟用 Phase D」。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，確認「Phase D 已啟用」、R2 30 天／GCS 182 天及週三／週日 03:30 排程。首次新排程結果仍待觀察；不把啟用成功當成排程或 DR 已驗收。
+Phase D 啟用時原流程：桌機設定 → 備份／復原 → 兩 provider 隔離驗證通過 → 啟用。現已啟用，測試進度／啟用控制退場；現行檢查按鈕為「檢查備份可還原性」，真正重建由底部「還原操作…」開啟獨立 dialog。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，確認「Phase D 已啟用」、R2 30 天／GCS 182 天及週三／週日 03:30 排程。首次新排程結果仍待觀察；不把啟用成功當成排程或 DR 已驗收。
 
-provider lifecycle 如啟用，期限須長於 application policy，避免提前刪除 replication／rollback 來源；本次不擴大 provider IAM 或修改 bucket lifecycle，外部 lifecycle 與 budget 檢查仍列 TODO。
+provider lifecycle 如啟用，期限須長於 application policy，避免提前刪除 replication／rollback 來源；本次不擴大 provider IAM 或修改 bucket lifecycle，外部 lifecycle 仍列 TODO。每月低額預算已由使用者建立於帳單帳戶範圍，依其決定包含優惠，實際支出門檻 50／90／100%；幣別與 Email 送達未由清單驗收，不宣稱自動支出硬上限。
 
 ## 格式、schema 與 catalog
 
@@ -57,7 +57,7 @@ provider lifecycle 如啟用，期限須長於 application policy，避免提前
 - schema 6 payload 沒有 `colorSlot`；
 - 更早合法物件可能仍使用舊 `openingBalances` 表示。
 
-既有物件不重寫。reader／validator 的資料格式相容不得被誤當成 application runtime 版本殼。未來真正 Restore 舊備份到目前 schema 仍需明確且驗證過的 migration/normalization 流程，不能只依欄位存在與否猜測。
+既有物件不重寫。reader／validator 的資料格式相容不得被誤當成 application runtime 版本殼。V0.25.2 已於 canonical normalizer 明確支援 schema 6～10；舊格式轉換與限制見文末，不只依欄位存在與否猜測。
 
 logical catalog 使用 `backup_sets`／`backup_copies`，一個 backupId 列一次，provider 健康狀態分開。舊 `backup_runs` 保留歷史證據，不作另一套 routing authority。
 
@@ -79,7 +79,7 @@ Phase E shared Backup Service 尚未啟用。未來可共用 provider storage me
 
 V0.24.0 新增真實 SQLite 逐欄回讀、實際 workerd 靜態 WASM 重複請求隔離、台灣時區排程、30／182 天 retention、14 次 gate、失敗／過期／竄改證據拒絕、append-only 稽核與權限測試。正式 Phase C 14／14 已回讀；真實 R2／GCS 副本隔離驗證亦已於部署後通過；Phase D 啟用已由正式備份頁回讀確認；首次 R2-only 新排程已回讀成功；新政策下的 GCS 週期排程仍待觀察。V0.25.0 已完成正式 GCS → 獨立 D1 重建驗收，production promotion 不在本次演練範圍；後續工作見 [TODO.md](TODO.md)。
 
-V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成的啟用控制；底層 gate 及 append-only 驗收／policy 紀錄保留。正式還原及 DR 仍待後續實作與驗收。
+V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成的啟用控制；底層 gate 及 append-only 驗收／policy 紀錄保留。後續 V0.25.0 的正式獨立 D1 還原演練已完成，見下節；production promotion 仍屬另行維運操作。
 
 ## 受控獨立 D1 復原與災難復原（V0.25.0）
 

@@ -153,7 +153,7 @@ for (const scenario of ['read-before-write', 'read-during-write', 'failed-write'
       return { transactions: [stored] };
     }
   });
-  vm.runInContext('let cyTransactionRequestId = 0; let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' +
+  vm.runInContext('let cyTransactionRequestId = 0; let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map(); const cyPendingTransactionCreates = new Map();\n' +
     piece(app, 'async function loadTransactions(', 'function setLedgerLoadingState(') +
     piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
   let read;
