@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.0**；VERSION `0.25.0`、BUILD `0`，正式備份狀態、日期快捷與損益標籤；V0.24.0 功能部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
+| 產品 | **V0.25.0 Build 1**；VERSION `0.25.0`、BUILD `1`，獨立 D1 受控還原；前版 V0.24.0 部署證據：[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 已合併；[main run 38608683533](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) validate／deploy 成功，正式頁面回讀 V0.24.0 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -16,9 +16,9 @@
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.4**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
-本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；正式部署與 GCS 演練尚待本批 CI／live acceptance。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS 演練結果接續記錄。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
 
-## V0.25.0 受控復原（本批待部署驗收）
+## V0.25.0 受控復原
 
 - Backup service 仍是唯一 HTTP／orchestration owner；`backup-recovery.js` 是空白目標 writer，沿用 `backup-restore.js` 的 accounting mapping，`backup-recovery-context.js` 集中維運表 allowlist。復原頁只有 presentation，呼叫相同 API、採相同 CYID SUPER_ADMIN guard。
 - schema 10 新備份的 manifest 內含 catalog、copies、restore checks、policy events 與舊 backup runs；保留完整帳務及期初／匯入 audit。排除 Session／OAuth／機密及復原工作區自身的新預覽／執行紀錄，不宣稱是所有 D1 表的物理複製。
@@ -123,3 +123,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 真實交易、金額、來源帳本、備份識別、token、正式 resource identifiers 及執行紀錄由私人檢查點保存，不放 Public Git／PR／CI Artifact。本交接只記錄程式能力與驗證，不能作為是否重跑匯入、調整期初、恢復鎖帳或重做備份的依據。
 
 CYID 共通參數及舊 Variable 退場已於 2026/10/12 完成驗證；詳細共通 rollout 見 CYID canonical 文件及相關 App 現行交接。本 App production scope 不借給其他 App；中央 development 更新不自動改變本 App production authority。
+
+2026/10/15 正式備份頁已回讀 Phase D 首次 R2-only 自動排程成功，GCS 正確顯示本日未排程；GCS 在 Phase D 後的首次週三／週日排程仍待實際觀察。V0.25.0 真實手動 paired backup 已回讀 R2／GCS 雙成功，新備份含 schema 10 recoveryContext。實際識別、筆數與 digest 不放 Public Git。
+
+V0.25.0 正式 native 復原表單因 no-referrer 產生空 Origin 而被既有 guard 拒絕，未進入預覽／寫入；Build 1 將頁面 referrer-policy 改為 same-origin，保留同來源 guard 與 CSP，補自動測試。待部署後重跑 GCS 演練。
