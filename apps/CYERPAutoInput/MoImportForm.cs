@@ -29,6 +29,8 @@ internal sealed class MoImportForm : Form
     public IReadOnlyList<string> Errors { get; private set; } = [];
     public List<string> Notes { get; private set; } = [];
     public string FileName => System.IO.Path.GetFileName(_batch.Path ?? string.Empty);
+    /// <summary>The 出貨前 export itself (CYInvoice parses that file; user, 2026-10-15).</summary>
+    public string? BatchPath => _batch.Path;
 
     /// <param name="read">Reads an export's first sheet (the password is the caller's).</param>
     public MoImportForm(Func<string, List<string[]>> read)

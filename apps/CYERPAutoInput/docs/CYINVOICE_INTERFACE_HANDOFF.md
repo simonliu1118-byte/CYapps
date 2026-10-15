@@ -142,3 +142,48 @@ AutoInput 在自己的設定裡讓使用者指定 `CYInvoice.exe` 路徑（porta
 4. 「上傳問題」「開立失敗」等既有分類對應到 `failed`／`unknown` 的方式。
 5. 酷澎的訂單編號欄位與現有 `CoupangImporter` 是否足以支援同一介面。
 6. 測試方式：建議先在 CYInvoice 測試環境以去識別化訂單檔驗證 `issue`、重跑得到 `existing`、`query` 不開立。
+
+## 8. 追加需求：紙本發票 PDF（`--autoinput-pdf`，2026-10-15）
+
+> 狀態：提案，CYInvoice 端尚未實作。AutoInput V0.3.0 Build 26 已依本節寫好呼叫端；CYInvoice 不支援時，AutoInput 只在結果清單註明「請在 CYInvoice 列印」。
+
+使用者 2026-10-15：
+- MO店+ 一般消費者開**會員載具**發票，不印紙本；客人有填**統編抬頭**的開**紙本**發票，要印出。
+- 光貿開立完成的時間不一定，**開立完成後才拿得到發票 PDF**；PDF 有 5 種格式（CYInvoice `InvoicePdfStyles`），由使用者先在 AutoInput 設定選好。
+- 列印走 AutoInput 的 A4 印表機，印前跳出放紙確認（與新竹寄件單相同）。紙本發票與寄件單在同一個列印步驟（預覽填好發票、按開始後、輸入 ERP 前）。
+
+因此 AutoInput 不在 `issue` 時要 PDF，而是**列印時**另外呼叫：
+
+```text
+CYInvoice.exe --autoinput-pdf <request.json> --result <result.json>
+```
+
+request（同 `cyinvoice-autoinput-request/1`，多兩個欄位；`orderIds` 必填，只放有統編、已 `issued`／`existing` 的訂單）：
+
+```json
+{
+  "schema": "cyinvoice-autoinput-request/1",
+  "requestId": "7d1c2a9e-0000-4000-8000-000000000001",
+  "source": "mo",
+  "file": "C:\\Example\\Temp\\synthetic-orders.xls",
+  "orderIds": ["90000000000001"],
+  "pdfFolder": "C:\\Example\\Temp\\invoice-20261015-101500\\paper",
+  "pdfStyle": 0
+}
+```
+
+- `pdfStyle`：`InvoicePdfStyles.Company` 的代碼（0 A4 整張、1 A4（地址＋A5）、2 A4（A5 內容）、3 A5、5 QRcode A4）。
+- `pdfFolder`：AutoInput 建好的絕對路徑；CYInvoice 把官方 PDF（光貿下載，沿用 PDF Cache）存進去。
+
+result（`cyinvoice-autoinput-result/1`，每筆多一個 `pdfFile`）：
+
+| status | 意義 | AutoInput 的做法 |
+|---|---|---|
+| `ready` | 已取得官方 PDF，`pdfFile` 為 `pdfFolder` 內的絕對路徑 | 核對 `invoiceNumber` 與先前開立結果相同才列印 |
+| `pending` | 光貿尚未開立完成、還沒有 PDF | 每 20 秒再呼叫一次，5 分鐘後問使用者要不要再等 |
+| `failed`／`unknown`／`skipped` | 無法取得（附 `message`） | 不印，結果清單註明請在 CYInvoice 列印 |
+
+- 只取 PDF、**絕不開立**；沒有發票的訂單回 `skipped`。
+- `environment` 必須與先前 query／issue 相同，不同時 AutoInput 不印。
+- 一般消費者（無統編）的訂單 AutoInput 不會送來；若送來請回 `skipped`。
+- 同一張發票重複要 PDF 不應有副作用（AutoInput 自己記錄印過的發票號碼，`Data\paper_invoices.json`，不會重印）。

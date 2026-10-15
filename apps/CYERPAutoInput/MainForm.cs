@@ -1,6 +1,6 @@
 namespace CYERPAutoInput;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private static readonly Size StandardWindowSize = new(1160, 720);
 
@@ -1464,7 +1464,8 @@ internal sealed class MainForm : Form
             _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
             _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
             _settings.ShopeeLabelPrinter.Length == 0 ? "熱感紙印表機" : null,
-            _settings.A4Printer.Length == 0 ? "A4 印表機" : null
+            _settings.A4Printer.Length == 0 ? "A4 印表機" : null,
+            _settings.MoAutoInvoice && (_settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath)) ? "CYInvoice.exe（或取消勾選全自動開立發票）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
@@ -1589,6 +1590,7 @@ internal sealed class MainForm : Form
             return true;
         }
         var voidNotes = new List<string>();
+        MoInvoiceOutcome? invoice = null;
         async Task<bool> PrintAllAsync()
         {
             var go = true;
@@ -1643,8 +1645,17 @@ internal sealed class MainForm : Form
                     title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
+            // Paper invoices last (user, 2026-10-14: in the same printing step).
+            if (invoice is not null && !await PrintPaperInvoicesAsync(invoice, a4, printed))
+            {
+                MoPrintedDocuments.Save(folder, documents);
+                MessageBox.Show(this, $"已在紙本發票的放紙提醒按停止。寄件單已印完；發票請在 CYInvoice 列印，再用「匯入訂單匯出檔」接續打單。", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
             MoPrintedDocuments.Save(folder, documents);
             _log.Info("mo-batch", $"printed {string.Join("; ", printed)}");
+            var printFailures = printed.Where(p => p.Contains("請在 CYInvoice", StringComparison.Ordinal)).ToList();
+            if (printFailures.Count > 0) voidNotes.AddRange(printFailures);
             if (voidNotes.Count > 0)
                 MessageBox.Show(this, string.Join("\n", voidNotes), title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return true;
@@ -1663,8 +1674,10 @@ internal sealed class MainForm : Form
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
+        // 發票 through CYInvoice when set (production only), else filled by hand in the preview.
+        if (_settings.MoAutoInvoice) invoice = await InvoiceMoAsync(title, files.BatchPath ?? result.Before, files.Orders, orders, fullAuto: true);
         var printedOnce = false;
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. files.Notes, .. result.Notes],
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice?.Notes ?? [], .. files.Notes, .. result.Notes],
             async () => printedOnce || (printedOnce = await PrintAllAsync()));
 
         // Once every order of the batch is saved the exports go (user, 2026-10-13); the printed
@@ -2310,6 +2323,7 @@ internal sealed class MainForm : Form
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試：從批次出貨記錄繼續（剛出貨的最上面一筆）", null, async (_, _) => await RunMoBatchAsync(resume: true, atRecord: true));
+            menu.Items.Add("測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）", null, async (_, _) => await TestMoInvoiceAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("測試寄件單裁切列印（全家／7-11 PDF）", null, async (_, _) => await TestMoSlipPdfAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));

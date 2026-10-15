@@ -30,6 +30,9 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
     private readonly TextBox _moPassword = new();
+    private readonly TextBox _cyInvoicePath = new() { ReadOnly = true, TabStop = false };
+    private readonly CheckBox _moAutoInvoice = new() { AutoSize = true };
+    private readonly ComboBox _paperInvoiceStyle = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox _coupangOrderType = new();
     private readonly TextBox _coupangCustomerCode = new();
     private readonly TextBox _coupangNotePrefix = new();
@@ -207,6 +210,16 @@ internal sealed class SettingsForm : Form
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
+        var invoiceBox = new GroupBox { Text = "MO店+ 紙本發票（有統編抬頭的訂單，印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
+        var invoiceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        foreach (var (code, name) in CyInvoiceLink.PaperStyles) _paperInvoiceStyle.Items.Add(new PaperStyleItem(code, name));
+        _paperInvoiceStyle.SelectedItem = _paperInvoiceStyle.Items.Cast<PaperStyleItem>().FirstOrDefault(i => i.Code == _settings.PaperInvoiceStyle) ?? _paperInvoiceStyle.Items[0];
+        _paperInvoiceStyle.Width = 180;
+        invoiceRow.Controls.Add(new Label { Text = "發票 PDF 格式", AutoSize = true, Margin = new Padding(0, 8, 6, 0) });
+        invoiceRow.Controls.Add(_paperInvoiceStyle);
+        invoiceBox.Controls.Add(invoiceRow);
+        page.Controls.Add(invoiceBox);
         _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
         page.Controls.Add(_printers);
         var sections = page.Controls.OfType<GroupBox>().ToList();
@@ -233,6 +246,7 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _coupangOrderType, _settings.CoupangOrderType, 80),
             ("客戶代號", _coupangCustomerCode, _settings.CoupangCustomerCode, 120),
             ("備註前綴", _coupangNotePrefix, _settings.CoupangNotePrefix, 150)));
+        page.Controls.Add(CyInvoiceSection());
         page.Controls.Add(Section("MO店+",
             ("銷貨單別", _moOrderType, _settings.MoOrderType, 80),
             ("客戶代號", _moCustomerCode, _settings.MoCustomerCode, 120),
@@ -247,6 +261,39 @@ internal sealed class SettingsForm : Form
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
         return page;
+    }
+
+    /// <summary>
+    /// CYInvoice (MO店+ 發票): the exe picked with a file dialog only (user, 2026-10-14), and
+    /// whether 全自動 issues through it.
+    /// </summary>
+    private GroupBox CyInvoiceSection()
+    {
+        var box = new GroupBox { Text = "CYInvoice（MO店+ 發票）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 104 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, AutoSize = true };
+        _cyInvoicePath.Text = _settings.CyInvoicePath;
+        _cyInvoicePath.Width = 380;
+        _cyInvoicePath.Margin = new Padding(0, 4, 6, 4);
+        var pick = new Button { Text = "選擇…", AutoSize = true, Margin = new Padding(0, 2, 6, 2) };
+        pick.Click += (_, _) =>
+        {
+            using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice.exe|CYInvoice.exe|程式 (*.exe)|*.exe", CheckFileExists = true };
+            if (_cyInvoicePath.Text.Length > 0 && Directory.Exists(Path.GetDirectoryName(_cyInvoicePath.Text))) dialog.InitialDirectory = Path.GetDirectoryName(_cyInvoicePath.Text);
+            if (dialog.ShowDialog(this) == DialogResult.OK) _cyInvoicePath.Text = dialog.FileName;
+        };
+        var clear = new Button { Text = "清除", AutoSize = true, Margin = new Padding(0, 2, 0, 2) };
+        clear.Click += (_, _) => _cyInvoicePath.Text = string.Empty;
+        grid.Controls.Add(new Label { Text = "CYInvoice.exe", AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, 0, 0);
+        grid.Controls.Add(_cyInvoicePath, 1, 0);
+        grid.Controls.Add(pick, 2, 0);
+        grid.Controls.Add(clear, 3, 0);
+        _moAutoInvoice.Text = "MO店+ 全自動呼叫 CYInvoice 開立發票（只接受正式環境；未勾選時在預覽手動填發票）";
+        _moAutoInvoice.Checked = _settings.MoAutoInvoice;
+        _moAutoInvoice.Margin = new Padding(0, 6, 0, 0);
+        grid.Controls.Add(_moAutoInvoice, 0, 1);
+        grid.SetColumnSpan(_moAutoInvoice, 4);
+        box.Controls.Add(grid);
+        return box;
     }
 
     /// <summary>
@@ -497,6 +544,9 @@ internal sealed class SettingsForm : Form
             .Where(p => p.Value.Text.Trim().Length > 0)
             .ToDictionary(p => p.Key, p => p.Value.Text.Trim(), StringComparer.OrdinalIgnoreCase);
         if (_moPassword.Text.Length > 0) _settings.MoPasswordProtected = LocalSecret.Protect(_moPassword.Text);
+        _settings.CyInvoicePath = _cyInvoicePath.Text.Trim();
+        _settings.MoAutoInvoice = _moAutoInvoice.Checked;
+        _settings.PaperInvoiceStyle = (_paperInvoiceStyle.SelectedItem as PaperStyleItem)?.Code ?? 0;
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;
         _settings.AdvancedMode = _advanced.Checked;
@@ -744,4 +794,10 @@ internal sealed class PrinterPicker : GroupBox
 
     public string Thermal => _rows.FirstOrDefault(r => r.Thermal.Checked).Name ?? string.Empty;
     public string A4 => _rows.FirstOrDefault(r => r.A4.Checked).Name ?? string.Empty;
+}
+
+/// <summary>One CYInvoice PDF style in the 紙本發票 drop-down.</summary>
+internal sealed record PaperStyleItem(int Code, string Name)
+{
+    public override string ToString() => Name;
 }
