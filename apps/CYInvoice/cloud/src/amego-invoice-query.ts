@@ -6,6 +6,7 @@ export interface OfficialInvoiceSnapshot {
   invoiceNumber: string;
   uploadStatus: number;
   voidPending: boolean;
+  hasUnsettledMutation: boolean;
   cancelDate: number;
   totalAmount: number;
   // Internal-only evidence for strict g0401 comparison. Never forward raw items.
@@ -153,6 +154,11 @@ export async function queryOfficialInvoiceReadOnly(
   const voidPending=pendingFromWait||
     record.void_pending===true||record.void_pending===1||
     record.void_pending==="1";
+  // An unresolved D0401 or any other pending mutation also blocks
+  // safe remaining-balance inference, even when allowance[] is empty.
+  const hasUnsettledMutation=Array.isArray(record.wait)
+    ? record.wait.length>0
+    : record.wait!==undefined && record.wait!==null;
   const allowanceSummaryPresent=Array.isArray(record.allowance);
   if(status===null||cancel===null||gross===null ||
      (!allowanceSummaryPresent && record.allowance!==undefined && record.allowance!==null))
@@ -162,7 +168,7 @@ export async function queryOfficialInvoiceReadOnly(
     new Uint8Array(encoder.encode(JSON.stringify(record))));
   const snapshotSha256=Array.from(new Uint8Array(digest),
     n=>n.toString(16).padStart(2,"0")).join("");
-  return {invoiceNumber,uploadStatus:status,voidPending,cancelDate:cancel,
+  return {invoiceNumber,uploadStatus:status,voidPending,hasUnsettledMutation,cancelDate:cancel,
     totalAmount:gross,
     invoiceDate:record.date??record.invoice_date??null,
     detailVat:record.detail_vat??null,

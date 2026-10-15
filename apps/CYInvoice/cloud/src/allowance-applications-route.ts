@@ -182,7 +182,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
           invoiceNumber:snapshot.invoiceNumber,invoiceDate:snapshot.invoiceDate,
           detailVat:snapshot.detailVat,invoiceTaxAmount:snapshot.invoiceTaxAmount,
           invoiceGross:snapshot.totalAmount,status:snapshot.uploadStatus,
-          cancelled:snapshot.cancelDate!==0||snapshot.voidPending,
+          cancelled:snapshot.cancelDate!==0||snapshot.voidPending||
+            snapshot.hasUnsettledMutation,
           allowanceSummaryPresent:snapshot.allowanceSummaryPresent,
           existingAllowanceCount:snapshot.existingAllowanceCount,
           officialItems:snapshot.originalProductItems
@@ -206,6 +207,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         officialInvoiceGross:snapshot.totalAmount,
         requestedGrossAmount:frozen.requestedGrossAmount,
         existingAllowanceCount:snapshot.existingAllowanceCount,
+        officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
         ...flags,
         requiresPerItemVerification:true,canApprove:false,
