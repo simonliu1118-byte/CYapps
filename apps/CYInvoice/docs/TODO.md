@@ -8,6 +8,12 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 插隊 AutoInput 後接續 V3：官方覆核先於配號（Draft Source）
+
+- [x] **V3 Cloud 草案配號加上 explicit approval fence**：`drafts/0016_allowance_number_ledger.sql` 新增 `allowance_execution_approvals`，以 Workspace／Work Item revision／公司統編／環境／日期／未編號的固定 g0401 template SHA256／官方狀態快照 SHA256／CYID 核准人及核准時間／有效期限記錄最小覆核證據；`allowance-number-ledger.ts` 的占號 SQL 與 `reserved→sending` SQL 均要求 approval grant 存在、內容一致且未逾期。後續官方確定拒絕的撞號與查回結果入帳不受時間過期妨礙，避免處理中的舊操作永遠無法記錄。新裝置可以在原 Device 撤銷後接手仍有效的工作單，但每次業務寫入仍須檢查**執行者自己**的 Device active、Workspace 與 Work Item revision。新增無核准／核准過期／重新核准／雙裝置安全測試。
+- [ ] **上述 Draft 尚缺官方覆核核准寫入者及安全開立執行路由**：目前沒有 API 能把 client 宣稱的「已查光貿」直接寫成 approval，將來必須由 CYID manager 線上 revalidate、Cloud server 信任的公司設定與唯讀官方發票／折讓餘額查詢證據建立 grant；申請人與覆核者身分／申請內容須在 D1 真正可驗證，最終 g0401 前須核對 Work Item revision + grant 未逾期、完整固定 payload 與已占號一致。**不可將 `review` 當 `approved`，也不准先送光貿再補配號。** 0015／0016 仍僅在 Draft，未部署原 D1。
+- [x] **AutoInput 插隊交接已處理，與 V3 互不混用**：獨立 PR #445 V2.6.21 Build 0 `--autoinput-pdf`／工程包／Windows CI 完成；已將 Artifact 與四項確認寫回 AutoInput PR #424 的 `CYINVOICE_PDF_HANDOFF.md`。主 V3 不 cherry-pick 該支 V2 功能，後續版本整合另按正式 main 基準處理。
+
 ## 2026-10-15 CYWEB 交回確認與 CYID Cloud D1 配號草案（待整合）
 
 - [x] **CYWEB Recovery handoff 原阻塞解除並回報**：已核對 [CYWEB #151 的 `CYINVOICE_RECOVERY_HANDOFF.md`](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md)，其中「CYInvoice 還缺 explicit revoked」為 10/14 舊快照。CYInvoice `recovery-issuer.ts` 與 `recovery-issuer.test.mjs` 已有 `revoked_at` 明確成功、consumed／expired 不冒充撤銷、lost D1 response 查回與 claim/revoke 競態 SQL rollback。已更新 CYWEB 該 handoff、CYWEB 根 TODO、PR #151 留言，並取得兩 repo source CI 正向結果。**只結案原 Source blocker，不勾 DR-01～DR-13；交接文件暫留作驗收依據**，後續依正式 V3 順序完成。
