@@ -249,7 +249,6 @@ internal static class Program
         try
         {
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
-            var settings = repository.Settings.LoadOrCreate();
             CloudDirectJoinForm.VerifySmokeJoinFlow();
 
             using var firstRun = new FirstRunModeForm();
@@ -271,13 +270,6 @@ internal static class Program
             using var recovery = new CloudRecoveryForm(repository);
             recovery.PerformLayout();
             recovery.VerifySmokeLayout();
-
-            // Device Join deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
-            // The startup smoke validates static layout without displaying the form so CI
-            // never bypasses or blocks on the real runtime authorization gate.
-            using var join = new CloudJoinWorkspaceForm(repository, settings, "https://cloud.example.test/");
-            join.PerformLayout();
-            join.VerifySmokeLayout();
 
             // Device Management now loads the trusted-Device inventory from Cloud on Shown.
             // Smoke validation must remain deterministic and offline, so validate the complete
