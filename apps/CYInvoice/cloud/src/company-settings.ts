@@ -187,3 +187,14 @@ export async function loadAmegoCompanySettingsForGateway(db: D1Database,workspac
   return {sellerInvoice:row.seller_invoice,revision:row.revision,
     amegoAppKey:await open(key,workspaceId,"amego",row.amego_app_key_ciphertext)};
 }
+
+// INTERNAL reusable crypto owner for an exceptional Work Item's full template.
+// Uses the same injected KEK but distinct AAD for each Work Item and field.
+export async function encryptCompanyBusinessData(keyHex: string, workspaceId: string,
+  dataType: string, value: string): Promise<string> {
+  return seal(await keyFromSecret(keyHex),workspaceId,dataType,value);
+}
+export async function decryptCompanyBusinessData(keyHex: string, workspaceId: string,
+  dataType: string, envelope: string): Promise<string> {
+  return open(await keyFromSecret(keyHex),workspaceId,dataType,envelope);
+}
