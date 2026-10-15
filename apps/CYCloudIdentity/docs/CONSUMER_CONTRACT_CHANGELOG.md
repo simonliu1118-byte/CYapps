@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.0.5 — 2026-10-15
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional admin snapshot testing-account deletion capability and temporary core Super Admin deletion of verified non-self/non-Super-Admin Employees through the existing DELETE route (§17.2). Create/delete lifecycle audit is temporarily suppressed as explicitly requested; other audit and existing history remain. Existing pending-only consumers and all login/resolve/logout contracts remain supported; minimum stays 1.0.0. Provider source 0.3.9 includes the existing 0.3.8 clickable Email template and correct serviceVersion declaration. Actual deployment/Email acceptance and restoration before first business release are tracked in project TODO.
+
 ## 1.0.4 — 2026-10-12
 
 Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional core-portal Super Admin application registration/enablement (§17.1). The current authenticated Workspace is retained; catalog collisions/global disablement/core application changes fail closed. Transactional current-authority checks and audit cover registration, with no automatic Employee grants, new Workspace, business-data mutation or bootstrap replay. Provider source is 0.3.7 Build 0; minimum remains 1.0.0. Existing Fetcher/RPC consumers need no changes. CY Web must synchronize canonical mirrors and adopt 1.0.4 before exposing the new operation; actual development registration, consumer bindings and production approval remain separate gates.

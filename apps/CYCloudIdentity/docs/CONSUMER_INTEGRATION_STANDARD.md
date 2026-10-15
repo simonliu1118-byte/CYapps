@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.4`
+> **Contract version:** `1.0.5`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -396,6 +396,33 @@ the existing application-access snapshot. Ordinary consumers continue to use the
 existing login/resolve/logout and App Access contracts. Registering an application
 does not configure service bindings, enable a consumer's CYID flag, merge identity
 and business Workspaces, or authorize a production rollout.
+
+### 17.2 Temporary testing account deletion — 2026-10-15
+
+Contract 1.0.5 adds optional `testingAccountDeletionAllowed: boolean` to the admin
+snapshot. An absent/false field retains the pending-only delete UI. During the
+explicitly approved testing period the existing `DELETE
+/v1/admin/identity/employees/{employeeId}` also accepts previously verified
+accounts, but only for the current Super Admin's core account application Session.
+Self-deletion, the protected Super Admin and foreign-Workspace targets remain
+forbidden. Normal ADMIN/Identity Admin retain only their existing pending-account
+management permissions. The server rechecks target revision and live core Super
+Admin Session/authority transactionally before deleting a verified account.
+
+Deletion removes the Employee and its provider-owned credentials, first-login
+material, Sessions and direct App Access by existing FK cascades; scoped Email
+verification/password-reset challenges are removed in the same transaction.
+Consumer-owned business history/member projections are retained and must never
+be rebound by employee number or email. Recreating the same number/email receives
+a fresh employeeId, no inherited Session or App/Module Access.
+
+For this testing exception only, new-account creation (including its initial
+Email delivery result) and account deletion do not append Identity audit events.
+Existing audit history and other events, including password/verification, resend,
+role/access changes and application registration, remain intact. The source-owned
+`ACCOUNT_LIFECYCLE_TESTING` defaults must be restored to verified deletion=false
+and create/delete audit=true before the first business release. Root project TODO
+tracks restoration and actual acceptance; this is not a permanent rules change.
 
 ## 18. Consumer adoption and update procedure
 

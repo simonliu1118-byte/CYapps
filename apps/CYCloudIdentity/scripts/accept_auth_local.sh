@@ -120,6 +120,7 @@ npx wrangler dev \
   --local \
   --config "$CONFIG" \
   --persist-to "$STATE_DIR" \
+  --ip 127.0.0.1 --inspector-port 0 \
   --port "$PORT" >"$WORKER_LOG" 2>&1 &
 WORKER_PID="$!"
 
@@ -365,6 +366,39 @@ REVOKED_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   -H "authorization: Bearer ${USER_TOKEN}" \
   -H 'x-identity-application: APP_TEST_LOGIN')"
 [[ "$REVOKED_STATUS" == "401" ]]
+
+# Temporary verified-account deletion is tested only against this local D1 fixture.
+DELETE_DENIED="$(curl --silent --output /dev/null --write-out '%{http_code}' -X DELETE   "http://127.0.0.1:${PORT}/v1/admin/identity/employees/employee-test-user"   -H "authorization: Bearer ${ADMIN_TOKEN}" -H 'x-identity-application: APP_TEST_LOGIN')"
+[[ "$DELETE_DENIED" == "409" ]]
+curl --silent --show-error --fail-with-body -X DELETE   "http://127.0.0.1:${PORT}/v1/admin/identity/employees/employee-test-user"   -H "authorization: Bearer ${SUPER_TOKEN}" -H 'x-identity-application: APP_TEST_LOGIN' >/dev/null
+EXTRA_TOKEN="$(token_from "$EXTRA_RESPONSE")"
+DELETED_SESSION_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST   "http://127.0.0.1:${PORT}/v1/identity/session/resolve"   -H "authorization: Bearer ${EXTRA_TOKEN}" -H 'x-identity-application: APP_TEST_EXTRA')"
+[[ "$DELETED_SESSION_STATUS" == "401" ]]
+DELETED_LOGIN_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST   "http://127.0.0.1:${PORT}/v1/identity/login" -H 'content-type: application/json'   --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0002","password":"test-pass-123"}')"
+[[ "$DELETED_LOGIN_STATUS" == "401" ]]
+RECREATE_RESPONSE="$(curl --silent --show-error --fail-with-body -X POST   "http://127.0.0.1:${PORT}/v1/admin/identity/employees"   -H "authorization: Bearer ${SUPER_TOKEN}" -H 'x-identity-application: APP_TEST_LOGIN' -H 'content-type: application/json'   --data '{"employeeNo":"0002","displayName":"Synthetic Recreated","email":"user@example.test"}')"
+RECREATE_RESPONSE="$RECREATE_RESPONSE" STATE_DIR="$STATE_DIR" python3 - <<'PYTEST'
+import json,os,pathlib,sqlite3
+p=json.loads(os.environ['RECREATE_RESPONSE'])
+assert p['employee']['employeeId'] != 'employee-test-user'
+assert p['employee']['emailVerified'] is False
+assert p['employee']['activated'] is False
+found=False
+for path in pathlib.Path(os.environ['STATE_DIR']).rglob('*.sqlite'):
+    db=sqlite3.connect(f'file:{path}?mode=ro',uri=True)
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='employees'").fetchone():
+        db.close();continue
+    found=True
+    for table in ['employees','employee_credentials','employee_initial_credentials','identity_sessions','employee_application_access']:
+        assert db.execute(f"SELECT count(*) FROM {table} WHERE employee_id='employee-test-user'").fetchone()[0]==0,table
+    assert db.execute("SELECT count(*) FROM employee_application_access WHERE employee_id=?",(p['employee']['employeeId'],)).fetchone()[0]==0
+    assert db.execute("SELECT count(*) FROM identity_audit_events WHERE event_type IN ('employee_created_pending_activation','employee_pending_activation_deleted','employee_activation_email_sent','employee_activation_email_failed')").fetchone()[0]==0
+    assert db.execute('SELECT count(*) FROM identity_audit_events').fetchone()[0]>0
+    assert not db.execute('PRAGMA foreign_key_check').fetchall()
+    db.close()
+assert found
+PYTEST
+echo 'PASS verified-account deletion, credential/Session invalidation, fresh re-create, scoped audit suppression and foreign keys'
 
 echo 'PASS Workspace USER/ADMIN/SUPER_ADMIN principal projection'
 echo 'PASS Identity Admin capability projection'

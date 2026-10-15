@@ -103,7 +103,7 @@ SQL
 
 npx wrangler d1 execute DB --local --config "$CONFIG" --persist-to "$STATE_DIR" --command "$SEED_SQL" >/dev/null
 
-npx wrangler dev --local --config "$CONFIG" --persist-to "$STATE_DIR" --port "$PORT" >"$WORKER_LOG" 2>&1 &
+npx wrangler dev --local --config "$CONFIG" --persist-to "$STATE_DIR" --ip 127.0.0.1 --inspector-port 0 --port "$PORT" >"$WORKER_LOG" 2>&1 &
 WORKER_PID="$!"
 
 READY=0
