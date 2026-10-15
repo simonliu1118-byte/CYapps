@@ -150,7 +150,7 @@ assert.equal(approvedBefore,4);
 approve("wi_no_approval",2,"test",devB);
 const granted=await reserve(dbApi,{...base,deviceId:devB,workItemId:"wi_no_approval"});
 assert.equal(granted.allowanceNumber,"A20261015005");
-db.prepare("UPDATE allowance_execution_approvals SET valid_until_utc='2020-01-01' WHERE work_item_id=?")
+db.prepare("UPDATE allowance_execution_approvals SET approved_at='2020-01-01', valid_until_utc='2020-01-02' WHERE work_item_id=?")
   .run("wi_no_approval");
 assert.equal(await markSending(dbApi,{...base,deviceId:devB,
   workItemId:"wi_no_approval"},granted),false,
