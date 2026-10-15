@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-15 官方唯讀 invoice_query 介接（Draft Source）
+
+CYInvoice V3 #440 的 `amego-invoice-query.ts` 已採光貿官方規定的簽章／表單編碼與唯讀 `invoice_query`，限一次 POST、timeout 與回覆長度，並以原發票號碼、明確 `allowance[]`、作廢及 C0501 待處理旗標判斷官方狀態（超過 180 天、官方缺欄／拒絕不可冒充無折讓）。受保護的 `/v1/allowance-applications/official-inspection` 必須由現行 CYID Manager、有效 Cloud Device、服務端公司密鑰及不可變 Work Item 才能觸發，回覆為狀態摘要與 SHA256；Windows `InspectOfficialForManagerAsync` 只接收未核准唯讀狀態。Cloud 合成測試會攔截所有網路請求，用假的光貿回覆驗證簽章，**沒有使用真實公司憑證、沒有連正式光貿、更沒有官方折讓開立**。
+
+**Critical gate**：目前 `canApprove=false` 且 `requiresPerItemVerification=true`，即使官方上傳為 99、未作廢、allowance 為空亦然。不可將現有只查總額及摘要視為品項／稅額／剩餘折讓額驗證完成；真正管理員 approval writer 和 g0401 執行尚未串接，0015～0018 Draft 無正式 D1 migration。詳細未完成清單回寫唯一 TODO。
+
 ## 2026-10-15 V3 續開：折讓管理員預覽與永久 Audit 防護（Draft Source）
 
 已在 CYInvoice V3 #440 加入 `/v1/allowance-applications/review-preview` 與 Windows Core 的 `PreviewForManagerAsync`，以 CYID Manager + 已凍結 Work Item 的 D1 revision、公司版本、環境與 AES-GCM/SHA256 驗證取得白名單品項（非原始私密 JSON）；預覽明確標示 `officialVerification=NOT_PERFORMED` 及 `canApprove=false`。無官方 Gateway 查驗也無 g0401 權限，請勿將預覽視為「已覆核」。

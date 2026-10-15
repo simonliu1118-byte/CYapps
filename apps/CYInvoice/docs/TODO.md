@@ -8,6 +8,13 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 新增：光貿官方 invoice_query 唯讀查驗（Draft，尚未批准折讓）
+
+- [x] `cloud/src/amego-invoice-query.ts` 新增官方 **`POST /json/invoice_query` 唯讀查詢**：固定官方 HTTPS host，依光貿規格將 `{type:"invoice",invoice_number}` JSON 字串與 Unix 秒數及 App Key 做 MD5 wire 簽章，採 `application/x-www-form-urlencoded`，只呼叫一次、8 秒 timeout、限制 256 KB、嚴格核對原發票號碼／狀態／金額、保留 allowance[] 是否明確存在、計算回應 SHA256；`wait[]` 有 C0501 待處理時不得視為未作廢。僅於**服務端**讀取加密公司設定，**不經用戶端傳入憑證**。官方規範查詢僅涵蓋約 180 天內發票，舊發票 code 51／缺欄位皆不可當成無折讓；參考 https://invoice.amego.tw/api_doc/ 。
+- [x] 新增 `POST /v1/allowance-applications/official-inspection`（CYID ADMIN／SUPER_ADMIN、Device active、frozen Work Item 正確 revision／公司設定版次／environment 驗證）。API **只顯示**官方上傳、作廢／待作廢、折讓摘要是否明確、已存在折讓筆數、原始總額、查詢時間及雜湊；固定 `requiresPerItemVerification=true`、`canApprove=false`、`status=OFFICIAL_READ_ONLY_NOT_APPROVED`。不會寫入 Approval、配號或觸發 g0401／g0501。
+- [x] Windows Core `CloudAllowanceApplicationClient.InspectOfficialForManagerAsync` 新增同一個唯讀契約，強制拒絕宣稱 `canApprove=true`、狀態不一致或不合格式的回覆；Cloud synthetic 用 Node Crypto 驗證簽章與隔離官方回覆、錯號、漏 allowance[]、重複結果、不完整資料、已存在折讓、無權限不發 API 及無自動重試。
+- [ ] **仍須完成**：官方品項及稅額核對、曾有折讓的同原發票剩餘額分攤、金額四捨五入規則、動態公司憑證版本／環境治理、即時核准寫入與其最終 preflight、Windows WinForms 覆核 UI、g0401 執行與結果不明查回、正式 migration／DR 實機。以上皆是**未部署的 Source Draft**，此次未向光貿傳送任何真實 API 請求。
+
 ## 2026-10-15 V3 進度：管理員唯讀覆核預覽與折讓 D1 不可竄改閘門（Draft）
 
 - [x] 新增受 CYID 管理員驗證的 `POST /v1/allowance-applications/review-preview`：從已進 `review` 的原 Work Item 及服務端已加密不可變折讓申請讀取明細，核對 revision、公司設定版本、環境、SHA256，僅傳回管理員必要品項與摘要；回覆固定 `officialVerification=NOT_PERFORMED`、`canApprove=false`，**不呼叫光貿、不核准、不配號、不產生折讓**。一般使用者、錯 Workspace、過期 revision 都拒絕；附 Cloud 合成測試。

@@ -51,6 +51,12 @@ const noAllowance=await query(request,transport({code:0,data:[{
 }]}),()=>dt);
 assert.equal(noAllowance.allowanceSummaryPresent,false,
  "Missing allowance[] must not silently become proof of no prior allowance");
+const pending=await query(request,transport({code:0,data:[{
+ invoice_number:"AB12345678",invoice_status:99,cancel_date:0,total_amount:100,
+ allowance:[],wait:[{invoice_type:"C0501",invoice_status:1}]
+}]}),()=>dt);
+assert.equal(pending.voidPending,true,"Official C0501 wait[] is a pending void");
+assert.equal(pending.canApprove,false);
 const existing=await query(request,transport({code:0,data:[{
  invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:100,
  allowance:[{allowance_number:"A20261015001"}]}]}),()=>dt);

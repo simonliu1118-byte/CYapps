@@ -101,7 +101,7 @@ async function limitedText(res:Response):Promise<string>{
 export async function queryOfficialInvoiceReadOnly(
   input:OfficialInvoiceQueryInput,
   transport:typeof fetch=fetch,
-  now:()=>Date=new DateProvider().now,
+  now:()=>Date=()=>new Date(),
 ):Promise<OfficialInvoiceSnapshot>{
   if(!digits.test(input.sellerInvoice)||!invoicePattern.test(input.originalInvoiceNumber)||
      typeof input.appKey!=="string"||input.appKey.length<8||input.appKey.length>256)
@@ -137,7 +137,16 @@ export async function queryOfficialInvoiceReadOnly(
   const status=number(record.status??record.invoice_status);
   const cancel=number(record.cancel_date);
   const gross=number(record.total_amount);
-  const voidPending=record.void_pending===true||record.void_pending===1||
+  // AMEGO's invoice_query may expose pending cancellation under wait[].
+  // A pending C0501 is NOT proof the invoice remains usable.
+  const pendingFromWait=Array.isArray(record.wait)&&record.wait.some(value=>{
+    if(!value||typeof value!=="object"||Array.isArray(value))return true;
+    const item=value as Record<string,unknown>;
+    const kind=str(item.invoice_type??item.type);
+    return !kind || kind.toUpperCase()==="C0501";
+  });
+  const voidPending=pendingFromWait||
+    record.void_pending===true||record.void_pending===1||
     record.void_pending==="1";
   const allowanceSummaryPresent=Array.isArray(record.allowance);
   if(status===null||cancel===null||gross===null ||
@@ -154,5 +163,3 @@ export async function queryOfficialInvoiceReadOnly(
     productItemsPresent,checkedAtUtc:clock.toISOString(),snapshotSha256,
     originalItemsAndRequestFullyVerified:false,canApprove:false};
 }
-// A named helper keeps default time injection independent of request content.
-class DateProvider {now=()=>new Date();}
