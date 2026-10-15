@@ -1,7 +1,7 @@
 // V3 CYID Cloud allowance number reservations. DRAFT: no public endpoint.
 // This module cannot approve a request or send AMEGO g0401. The caller MUST
 // revalidate CYID manager authority, official remaining allowance balance
-// and frozen request SHA256 before invoking reserve + markSending.
+// and frozen unnumbered template SHA256 before invoking reserve + markSending.
 // Do not store invoice listings, raw AMEGO payload or API keys in business D1.
 
 export type AllowanceEnvironment = "production" | "test";
@@ -14,7 +14,7 @@ export interface AllowanceReservationRequest {
   sellerInvoice: string; // derive server-side from protected company settings
   environment: AllowanceEnvironment;
   allowanceDay: string; // yyyyMMdd from approved immutable request
-  requestSha256: string; // digest of frozen g0401 request, not raw payload
+  requestSha256: string; // SHA256 of immutable unnumbered g0401 template, not raw payload
 }
 export interface AllowanceNumberReservation {
   ledgerId: string;
@@ -132,6 +132,15 @@ export async function reserveCloudAllowanceNumber(
             AND wi.kind='ALLOWANCE' AND wi.status='review'
             AND wi.revision=?13 AND wi.environment=?5
             AND d.status='active' AND w.status='active')
+        AND EXISTS (
+          SELECT 1 FROM allowance_execution_approvals ap
+          JOIN devices approver ON approver.device_id=ap.approved_by_device_id
+             AND approver.workspace_id=ap.workspace_id
+          WHERE ap.workspace_id=?2 AND ap.work_item_id=?3
+            AND ap.approved_revision=?13 AND ap.seller_invoice=?4
+            AND ap.environment=?5 AND ap.allowance_day=?6
+            AND ap.template_sha256=?10 AND ap.valid_until_utc > ?12
+            AND approver.status='active')
       `).bind(ledgerId,input.workspaceId,input.workItemId,input.sellerInvoice,
       input.environment,input.allowanceDay,next,number,attempt,
       input.requestSha256,input.deviceId,when,input.expectedRevision).run();
@@ -166,6 +175,15 @@ async function changeStatus(
         WHERE wi.work_item_id=?4 AND wi.workspace_id=?5
           AND wi.kind='ALLOWANCE' AND wi.status='review' AND wi.environment=?10
           AND wi.revision=?11 AND d.status='active' AND w.status='active')
+      AND (
+        ?1 <> 'sending' OR EXISTS (
+          SELECT 1 FROM allowance_execution_approvals ap
+          JOIN devices approver ON approver.device_id=ap.approved_by_device_id
+             AND approver.workspace_id=ap.workspace_id
+          WHERE ap.workspace_id=?5 AND ap.work_item_id=?4
+            AND ap.approved_revision=?11 AND ap.template_sha256=?7
+            AND ap.environment=?10 AND ap.valid_until_utc > ?2
+            AND approver.status='active'))
     `).bind(to,new Date().toISOString(),reservation.ledgerId,input.workItemId,
       input.workspaceId,reservation.allowanceNumber,input.requestSha256,from,
       input.deviceId,input.environment,input.expectedRevision).run();
