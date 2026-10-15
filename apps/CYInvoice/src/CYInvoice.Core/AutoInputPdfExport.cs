@@ -39,12 +39,12 @@ public sealed class AutoInputPdfExport(LocalRepository repository, InvoiceServic
             return new(orderId, "unknown", Message: "這筆公司戶發票並非紙本交付，需人工核對");
         var info = new AutoInputOrderResult(orderId, "pending", record.InvoiceNumber, record.InvoiceDate,
             record.BuyerIdentifier, record.BuyerName, record.Amount, "等待光貿完成發票上傳");
-        if (record.UploadStatus != UploadStatuses.Complete)
-        {
-            if (record.UploadStatus == UploadStatuses.Error)
-                return info with { Status = "unknown", Message = "光貿回報上傳錯誤，請至 CYInvoice 核對" };
-            return info;
-        }
+        // Local upload status can lag AMEGO's eventual completion. Even when
+        // the cached status is still uploading, attempt exactly one official
+        // PDF lookup; AMEGO code 99 means pending. Otherwise a headless CLI
+        // without the periodic UI sync would stay pending forever.
+        if (record.UploadStatus == UploadStatuses.Error)
+            return info with { Status = "unknown", Message = "光貿回報上傳錯誤，請至 CYInvoice 核對" };
         if (repository.Settings.LoadOrCreate().Environment != environment)
             return info with { Status = "unknown", Message = "目前環境與發票環境不同" };
 
