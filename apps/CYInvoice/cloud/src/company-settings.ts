@@ -39,12 +39,14 @@ interface CompanyRow {
 
 const te = new TextEncoder();
 const td = new TextDecoder();
+// BufferSource expects ArrayBuffer-backed views in the Workers TS DOM types.
+const utf8 = (s: string): Uint8Array<ArrayBuffer> => new Uint8Array(te.encode(s));
 const hex = (b: Uint8Array): string =>
   Array.from(b, c => c.toString(16).padStart(2, "0")).join("");
-function bytes(value: string): Uint8Array {
+function bytes(value: string): Uint8Array<ArrayBuffer> {
   if (value.length % 2 || !/^[0-9a-f]+$/i.test(value))
     throw new Error("COMPANY_CRYPTO_FORMAT_INVALID");
-  const out = new Uint8Array(value.length / 2);
+  const out = new Uint8Array(new ArrayBuffer(value.length / 2));
   for (let i = 0; i < out.length; i++) out[i] = parseInt(value.slice(i*2,i*2+2),16);
   return out;
 }
@@ -54,15 +56,15 @@ async function keyFromSecret(keyHex: string): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", bytes(keyHex), {name:"AES-GCM"}, false,
     ["encrypt","decrypt"]);
 }
-function context(workspaceId: string, field: string): Uint8Array {
+function context(workspaceId: string, field: string): Uint8Array<ArrayBuffer> {
   // Prevent ciphertext copying across workspace and across secret slots.
-  return te.encode("CYInvoice/company-settings/v1/"+workspaceId+"/"+field);
+  return utf8("CYInvoice/company-settings/v1/"+workspaceId+"/"+field);
 }
 async function seal(key: CryptoKey, scope: string, field: string, plaintext: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)));
   const result = await crypto.subtle.encrypt({
     name:"AES-GCM",iv,additionalData:context(scope,field),tagLength:128
-  },key,te.encode(plaintext));
+  },key,utf8(plaintext));
   return "v1:"+hex(iv)+":"+hex(new Uint8Array(result));
 }
 async function open(key: CryptoKey, scope: string, field: string, payload: string): Promise<string> {
