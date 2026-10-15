@@ -305,7 +305,8 @@ try{
   const audit=fx.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get();
   assert.equal(audit.work_item_id,createBody.itemId);
   assert.equal(audit.allowance_number,"A20261015001");
-  assert.equal(audit.checked_by_employee_id,"cyid_employee");
+  assert.equal(audit.checked_by_employee_id,who.employeeId,
+    "The audit must name the current verified CYID manager");
   assert.equal(audit.checked_by_device_id,dev);
   assert.match(audit.official_snapshot_sha256,/^[a-f0-9]{64}$/);
   assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
