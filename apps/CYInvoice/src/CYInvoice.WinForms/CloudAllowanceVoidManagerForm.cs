@@ -29,6 +29,7 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
     private readonly Button approve = UiControls.StandardButton("核准作廢");
     private readonly Button send = UiControls.StandardButton("首次送出 g0501");
     private readonly Button readback = UiControls.StandardButton("官方查回");
+    private readonly Button reconcile = UiControls.StandardButton("官方對帳");
     private readonly Button closeVerified = UiControls.StandardButton("確認結案");
     private readonly List<Button> controls = [];
     private readonly PendingAllowanceVoidRequestStore pendingRequests;
@@ -83,7 +84,7 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
             FlowDirection=FlowDirection.LeftToRight,AutoScroll=true
         };
         foreach(var button in new[]{
-            create,lookup,refresh,review,approve,send,readback,closeVerified
+            create,lookup,refresh,review,approve,send,readback,reconcile,closeVerified
         }){
             button.Margin=new Padding(3,4,3,3);
             actions.Controls.Add(button);
@@ -162,6 +163,29 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
                 "查回為唯讀；不能視為本工作單自動結案，也不能解除禁止重送。",
                 "光貿折讓作廢查回",MessageBoxButtons.OK,
                 status.OfficialCancelled?MessageBoxIcon.Information:MessageBoxIcon.Warning);
+        });
+        reconcile.Click+=async (_,_)=>await SelectedManagerActionAsync(async (item,user,pwd)=>{
+            if(!Reviewable(item))return;
+            var result=await client.ReconcileAsync(item.ItemId,item.Revision,
+                user,pwd,lifetime.Token);
+            if(result.Readback is null)
+            {
+                Warn($"折讓單號：{result.AllowanceNumber}\n"+
+                    "近十四日官方清單沒有查到；不代表未送達。\n"+
+                    "請保留原工作單，必要時使用「官方查回」查詢較早紀錄。\n\n"+
+                    "不可因此重送、改號或自行結案。");
+                return;
+            }
+            var official=result.Readback;
+            MessageBox.Show(this,
+                $"折讓單號：{result.AllowanceNumber}\n"+
+                $"官方清單：{(result.ListReason=="CONFLICTING_LIST_RESULTS"?"不同日期結果有差異":"找到相關紀錄")}\n"+
+                $"官方類型：{official.OfficialType}／上傳狀態：{official.OfficialUploadStatus}\n"+
+                $"已作廢：{(official.OfficialCancelled?"官方顯示已作廢":"尚未確認")}\n"+
+                $"查驗時間：{official.CheckedAtUtc:yyyy/MM/dd HH:mm:ss}（UTC）\n\n"+
+                "官方原號查驗已由服務端寫入稽核。\n"+
+                "此操作只供人工判斷，不會重送或自動結案。",
+                "官方對帳",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         });
         closeVerified.Click+=async (_,_)=>await SelectedManagerActionAsync(async(item,user,pwd)=>{
             if(!Reviewable(item))return;
@@ -377,10 +401,11 @@ internal sealed class CloudAllowanceVoidManagerForm : Form
     // connecting a CYID Device or showing a credential prompt.
     internal void VerifySmokeLayout()
     {
-        if(queue.Columns.Count!=7||controls.Count!=8||
+        if(queue.Columns.Count!=7||controls.Count!=9||
            controls.Any(x=>x.Parent is null)||
            !controls.Select(x=>x.Text).Contains("首次送出 g0501")||
            !controls.Select(x=>x.Text).Contains("官方查回")||
+           !controls.Select(x=>x.Text).Contains("官方對帳")||
            !controls.Select(x=>x.Text).Contains("確認結案")||
            !controls.Select(x=>x.Text).Contains("開始覆核"))
             throw new InvalidOperationException("CYID allowance void controls are incomplete.");

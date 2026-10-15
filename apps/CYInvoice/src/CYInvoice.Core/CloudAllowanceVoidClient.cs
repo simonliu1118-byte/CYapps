@@ -33,6 +33,11 @@ public sealed record CloudAllowanceVoidClosure(
     string ItemId, int PreviousRevision, int Revision, string AllowanceNumber,
     bool OfficialConfirmed);
 
+// The list is an anomaly locator, not permission to resend or close.
+public sealed record CloudAllowanceVoidReconciliation(
+    string ItemId, int Revision, string AllowanceNumber, string ListReason,
+    CloudAllowanceVoidOfficialReadback? Readback);
+
 public sealed class CloudAllowanceVoidClient
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(20);
@@ -188,7 +193,45 @@ public sealed class CloudAllowanceVoidClient
     {
         using var doc = await ActionAsync("status-readback", itemId, revision, employeeNo,
             password, cancellationToken).ConfigureAwait(false);
-        var r = Object(doc.RootElement, "readback");
+        return ParseReadback(doc.RootElement,itemId,revision);
+    }
+
+    // Only explicitly requested, signed-in CYID manager action. A missing
+    // official list row never proves a first g0501 attempt did not happen.
+    public async Task<CloudAllowanceVoidReconciliation> ReconcileAsync(string itemId,
+        int revision, string employeeNo, string password,
+        CancellationToken cancellationToken = default)
+    {
+        using var doc = await ActionAsync("reconcile",itemId,revision,employeeNo,
+            password,cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        var number=Required(root,"allowanceNumber");
+        var reason=Required(root,"listReason");
+        if(Required(root,"itemId")!=itemId||Int(root,"revision")!=revision||
+           !ValidAllowanceNumber(number)||
+           reason is not ("NOT_SEEN_NOT_PROOF" or
+               "OFFICIAL_STATUS_CHANGED_OR_PENDING" or "CONFLICTING_LIST_RESULTS")||
+           !Flag(root,"requiresManualReconciliation")||
+           Flag(root,"canAutoRetry")||Flag(root,"canAutoClose"))
+            throw new InvalidDataException("Reconciliation cannot authorize an automatic action.");
+        if(!root.TryGetProperty("readback",out var observed))
+        {
+            if(reason!="NOT_SEEN_NOT_PROOF")
+                throw new InvalidDataException("List match requires original-number readback.");
+            return new CloudAllowanceVoidReconciliation(itemId,revision,number,reason,null);
+        }
+        if(reason=="NOT_SEEN_NOT_PROOF"||observed.ValueKind!=JsonValueKind.Object)
+            throw new InvalidDataException("Official evidence contradicts the list.");
+        var readback=ParseReadback(root,itemId,revision);
+        if(readback.AllowanceNumber!=number)
+            throw new InvalidDataException("Reconciliation changed the original allowance number.");
+        return new CloudAllowanceVoidReconciliation(itemId,revision,number,reason,readback);
+    }
+
+    private static CloudAllowanceVoidOfficialReadback ParseReadback(
+        JsonElement root,string itemId,int revision)
+    {
+        var r = Object(root, "readback");
         var number = Required(r, "allowanceNumber");
         var type = Required(r, "officialType");
         var hash = Required(r, "evidenceSha256");

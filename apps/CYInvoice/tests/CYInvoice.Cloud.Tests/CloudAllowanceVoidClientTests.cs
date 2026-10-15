@@ -87,6 +87,51 @@ internal static class CloudAllowanceVoidClientTests
         });
         handler.Enqueue(req =>
         {
+            Check(req,"reconcile");
+            using var body=ReadBody(req);
+            Equal(ItemId,body.RootElement.GetProperty("itemId").GetString(),"original Work Item");
+            Equal(2,body.RootElement.GetProperty("expectedRevision").GetInt32(),"original revision");
+            True(!body.RootElement.TryGetProperty("allowanceNumber",out _),"no caller-picked number");
+            True(!body.RootElement.TryGetProperty("sellerInvoice",out _),"company source is D1");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                itemId=ItemId,revision=2,allowanceNumber=AllowanceNumber,
+                listReason="OFFICIAL_STATUS_CHANGED_OR_PENDING",
+                requiresManualReconciliation=true,canAutoRetry=false,canAutoClose=false,
+                readback=ValidReadback()});
+        });
+        handler.Enqueue(req =>
+        {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                itemId=ItemId,revision=2,allowanceNumber=AllowanceNumber,
+                listReason="NOT_SEEN_NOT_PROOF",
+                requiresManualReconciliation=true,canAutoRetry=false,canAutoClose=false});
+        });
+        handler.Enqueue(req =>
+        {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                itemId=ItemId,revision=2,allowanceNumber=AllowanceNumber,
+                listReason="NOT_SEEN_NOT_PROOF",
+                requiresManualReconciliation=true,canAutoRetry=true,canAutoClose=false});
+        });
+        handler.Enqueue(req =>
+        {
+            Check(req,"reconcile");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                itemId=ItemId,revision=2,allowanceNumber=AllowanceNumber,
+                listReason="OFFICIAL_STATUS_CHANGED_OR_PENDING",
+                requiresManualReconciliation=true,canAutoRetry=false,canAutoClose=false,
+                readback=new{
+                    itemId=ItemId,revision=2,allowanceNumber="wrong_original_number",
+                    officialType="D0501",officialUploadStatus=99,
+                    officialCancelled=true,definitiveOpen=false,
+                    checkedAtUtc="2026-10-15T02:20:00Z",evidenceSha256=new string('a',64),
+                    canAutoRetry=false,canAutoClose=false
+                }});
+        });
+        handler.Enqueue(req =>
+        {
             Check(req,"close");
             return Json(HttpStatusCode.OK,new{ok=true,itemId=ItemId,
                 previousRevision=2,revision=3,status="closed",
@@ -138,6 +183,19 @@ internal static class CloudAllowanceVoidClientTests
         var official=await client.ReadbackAsync(ItemId,2,"0001","SyntheticPass12");
         Equal(true,official.OfficialCancelled,"D0501/99 is official cancellation");
         Equal(false,official.CanAutoClose,"still manager-protected");
+        var matched=await client.ReconcileAsync(ItemId,2,"0001","SyntheticPass12");
+        Equal(AllowanceNumber,matched.AllowanceNumber,"only D1 official number");
+        Equal("OFFICIAL_STATUS_CHANGED_OR_PENDING",matched.ListReason,"two-date list match");
+        Equal(true,matched.Readback!.OfficialCancelled,"selective official g0501 evidence");
+        Equal(false,matched.Readback.CanAutoRetry,"cannot resend from reconciliation");
+        Equal(false,matched.Readback.CanAutoClose,"cannot auto-close from reconciliation");
+        var missing=await client.ReconcileAsync(ItemId,2,"0001","SyntheticPass12");
+        Equal("NOT_SEEN_NOT_PROOF",missing.ListReason,"not seen is not proof of failure");
+        True(missing.Readback is null,"absence never invents evidence");
+        await RejectAsync<InvalidDataException>(()=>
+            client.ReconcileAsync(ItemId,2,"0001","SyntheticPass12"));
+        await RejectAsync<InvalidDataException>(()=>
+            client.ReconcileAsync(ItemId,2,"0001","SyntheticPass12"));
         var closed=await client.CloseVerifiedAsync(ItemId,2,"0001","SyntheticPass12");
         Equal(true,closed.OfficialConfirmed,"official checked before closing");
         await RejectAsync<InvalidDataException>(() =>
@@ -156,6 +214,8 @@ internal static class CloudAllowanceVoidClientTests
         await RejectAsync<ArgumentOutOfRangeException>(() =>
             client.SendOnceAsync(ItemId,0,"0001","SyntheticPass12"));
         await RejectAsync<ArgumentOutOfRangeException>(() =>
+            client.ReconcileAsync(ItemId,0,"0001","SyntheticPass12"));
+        await RejectAsync<ArgumentOutOfRangeException>(() =>
             client.CloseVerifiedAsync(ItemId,int.MaxValue,"0001","SyntheticPass12"));
         await RejectAsync<ArgumentException>(() =>
             client.ApproveAsync(ItemId,2,"bad employee","SyntheticPass12"));
@@ -163,6 +223,13 @@ internal static class CloudAllowanceVoidClientTests
         True(CloudAllowanceVoidClient.CreateItemId().StartsWith("wi_"),"stable client-generated ID");
     }
 
+    private static object ValidReadback()=>new {
+        itemId=ItemId,revision=2,allowanceNumber=AllowanceNumber,
+        officialType="D0501",officialUploadStatus=99,
+        officialCancelled=true,definitiveOpen=false,
+        checkedAtUtc="2026-10-15T02:20:00Z",evidenceSha256=new string('a',64),
+        canAutoRetry=false,canAutoClose=false
+    };
     private static object Summary()=>new{
         itemId=ItemId,environment="test",allowanceNumber=AllowanceNumber,
         originalInvoiceNumber="AB12345678",reason="Synthetic return",
