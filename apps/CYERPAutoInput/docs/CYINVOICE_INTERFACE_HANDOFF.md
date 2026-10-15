@@ -145,7 +145,7 @@ AutoInput 在自己的設定裡讓使用者指定 `CYInvoice.exe` 路徑（porta
 
 ## 8. 追加需求：紙本發票 PDF（`--autoinput-pdf`，2026-10-15）
 
-> 狀態：提案，CYInvoice 端尚未實作。AutoInput V0.3.0 Build 26 已依本節寫好呼叫端；CYInvoice 不支援時，AutoInput 只在結果清單註明「請在 CYInvoice 列印」。
+> 狀態：提案，CYInvoice 端尚未實作；完整交接（含需確認事項與完成回報欄）見 `docs/CYINVOICE_PDF_HANDOFF.md`。AutoInput V0.3.0 Build 26 已依本節寫好呼叫端；CYInvoice 不支援時，AutoInput 只在結果清單註明「請在 CYInvoice 列印」。
 
 使用者 2026-10-15：
 - MO店+ 一般消費者開**會員載具**發票，不印紙本；客人有填**統編抬頭**的開**紙本**發票，要印出。
