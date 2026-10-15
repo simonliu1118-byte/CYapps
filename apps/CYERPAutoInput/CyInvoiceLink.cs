@@ -16,6 +16,13 @@ internal sealed record CyInvoiceOrder(
     string Message,
     string PdfFile);
 
+/// <summary>What the platform export says about an order's invoice, to check CYInvoice's answer against.</summary>
+internal sealed record InvoiceExpectation(decimal Total, string BuyerTaxId, string InvoiceNo = "")
+{
+    public static InvoiceExpectation Of(MoOrder o) => new(o.InvoiceTotal, o.BuyerTaxId, o.InvoiceNo);
+    public static InvoiceExpectation Of(CoupangOrder o) => new(o.InvoiceTotal, o.BuyerTaxId);
+}
+
 internal sealed record CyInvoiceResult(string RequestId, string Version, string Environment, IReadOnlyList<CyInvoiceOrder> Orders)
 {
     public bool IsProduction => Environment == CyInvoiceLink.Production;
@@ -34,6 +41,9 @@ internal static class CyInvoiceLink
     public const string ResultSchema = "cyinvoice-autoinput-result/1";
     public const string Production = "production";
     public const string Test = "test";
+    /// <summary>CYInvoice's entries: MO店+ (會員載具 unless 統編) and 酷澎 (always paper).</summary>
+    public const string Mo = "mo";
+    public const string Coupang = "coupang";
 
     private static readonly Regex InvoiceNumber = new("^[A-Z]{2}[0-9]{8}$", RegexOptions.CultureInvariant);
 
@@ -64,13 +74,13 @@ internal static class CyInvoiceLink
     /// request.json. <paramref name="pdf"/> only for <c>--autoinput-pdf</c> (proposal in
     /// README「MO店+ 發票（CYInvoice）」): the folder for the official PDFs and the style.
     /// </summary>
-    public static string Request(string requestId, string file, IReadOnlyCollection<string> orderIds, (string Folder, int Style)? pdf = null)
+    public static string Request(string requestId, string file, IReadOnlyCollection<string> orderIds, (string Folder, int Style)? pdf = null, string source = Mo)
     {
         var request = new Dictionary<string, object>
         {
             ["schema"] = RequestSchema,
             ["requestId"] = requestId,
-            ["source"] = "mo",
+            ["source"] = source,
             ["file"] = file,
             ["orderIds"] = orderIds.ToArray()
         };
@@ -107,18 +117,18 @@ internal static class CyInvoiceLink
 
     /// <summary>
     /// Why this result may not go on the order (null when it may): only issued／existing, a real
-    /// invoice number and date, the MO店+ invoice total, the same 統編, and no other invoice
+    /// invoice number and date, the export's invoice total, the same 統編, and no other invoice
     /// number already on the export. Anything else is left for a person.
     /// </summary>
-    public static string? Mismatch(MoOrder order, CyInvoiceOrder result)
+    public static string? Mismatch(InvoiceExpectation order, CyInvoiceOrder result)
     {
         if (result.Status is not ("issued" or "existing"))
             return $"CYInvoice：{StatusName(result.Status)}{(result.Message.Length > 0 ? $"（{result.Message}）" : string.Empty)}";
         if (!InvoiceNumber.IsMatch(result.InvoiceNumber)) return $"CYInvoice 回傳的發票號碼「{result.InvoiceNumber}」格式不對";
         if (!DateTime.TryParseExact(result.InvoiceDate, "yyyy/MM/dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
             return $"CYInvoice 回傳的發票日期「{result.InvoiceDate}」格式不對";
-        if (result.TotalAmount != order.InvoiceTotal)
-            return $"發票金額 {result.TotalAmount} 與 MO店+ 訂單的發票金額 {order.InvoiceTotal:0.##} 不同";
+        if (result.TotalAmount != order.Total)
+            return $"發票金額 {result.TotalAmount} 與訂單的發票金額 {order.Total:0.##} 不同";
         if (!string.Equals(result.BuyerBan, order.BuyerTaxId.Trim(), StringComparison.Ordinal))
             return $"發票統編「{result.BuyerBan}」與訂單統編「{order.BuyerTaxId}」不同";
         if (order.InvoiceNo.Trim().Length > 0 && !string.Equals(order.InvoiceNo.Trim(), result.InvoiceNumber, StringComparison.OrdinalIgnoreCase))
@@ -134,8 +144,11 @@ internal static class CyInvoiceLink
         if (result.BuyerBan.Length > 0 && result.BuyerName.Length > 0) imported.InvoiceName = result.BuyerName;
     }
 
-    /// <summary>A paper invoice is printed for a buyer with 統編; a consumer's goes to the member carrier (user, 2026-10-15).</summary>
-    public static bool IsPaper(CyInvoiceOrder result) => result.BuyerBan.Length > 0;
+    /// <summary>
+    /// A paper invoice to print — CYInvoice's rule per entry (user, 2026-10-15): MO店+ only for a
+    /// buyer with 統編 (a consumer's goes to the member carrier); 酷澎 always paper.
+    /// </summary>
+    public static bool IsPaper(CyInvoiceOrder result, string source = Mo) => source == Coupang || result.BuyerBan.Length > 0;
 
     /// <summary>How long to wait for CYInvoice: a minute per order plus one (the handoff's suggestion).</summary>
     public static TimeSpan Timeout(int orders) => TimeSpan.FromSeconds(60 * Math.Max(1, orders) + 60);

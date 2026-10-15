@@ -14,6 +14,8 @@ internal sealed class MoInvoiceOutcome
     public string Exe { get; set; } = string.Empty;
     public string File { get; set; } = string.Empty;
     public string Folder { get; set; } = string.Empty;
+    /// <summary>CYInvoice's entry: <see cref="CyInvoiceLink.Mo"/> or <see cref="CyInvoiceLink.Coupang"/>.</summary>
+    public string Source { get; set; } = CyInvoiceLink.Mo;
     public List<string> Notes { get; } = [];
     /// <summary>Filled orders whose buyer has 統編: a paper invoice to print.</summary>
     public List<CyInvoiceOrder> Paper { get; } = [];
@@ -33,16 +35,20 @@ internal sealed class MoInvoiceOutcome
 /// </summary>
 internal sealed partial class MainForm
 {
-    private async Task<MoInvoiceOutcome> InvoiceMoAsync(string title, string file, IReadOnlyList<MoOrder> mo, IReadOnlyList<ImportedOrder> imported, bool fullAuto)
+    private Task<MoInvoiceOutcome> InvoiceMoAsync(string title, string file, IReadOnlyList<MoOrder> mo, IReadOnlyList<ImportedOrder> imported, bool fullAuto) =>
+        InvoiceAsync(title, CyInvoiceLink.Mo, file, mo.GroupBy(o => o.OrderSn).ToDictionary(g => g.Key, g => InvoiceExpectation.Of(g.First()), StringComparer.Ordinal), imported, fullAuto);
+
+    /// <summary>The invoices of one export through CYInvoice's <paramref name="cySource"/> entry (MO店+ or 酷澎).</summary>
+    private async Task<MoInvoiceOutcome> InvoiceAsync(string title, string cySource, string file, IReadOnlyDictionary<string, InvoiceExpectation> source,
+        IReadOnlyList<ImportedOrder> imported, bool fullAuto, bool testEntry = false)
     {
-        var outcome = new MoInvoiceOutcome();
+        var outcome = new MoInvoiceOutcome { Source = cySource };
         var exe = _settings.CyInvoicePath;
         if (exe.Length == 0 || !File.Exists(exe))
         {
             outcome.Notes.Add("找不到 CYInvoice.exe（設定 › 平台匯入 › CYInvoice），發票請手動填。");
             return outcome;
         }
-        var source = mo.GroupBy(o => o.OrderSn).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         // An order a person takes over is not issued automatically (handoff).
         foreach (var o in imported.Where(o => o.HandoffReason.Length > 0))
             outcome.Notes.Add($"訂單 {o.OrderSn} 轉人工（{o.HandoffReason}），發票沒有交給 CYInvoice，請手動處理。");
@@ -56,7 +62,7 @@ internal sealed partial class MainForm
         outcome.Folder = folder;
 
         SetStatus($"CYInvoice：查詢 {targets.Count} 筆訂單的發票…");
-        var (query, queryError) = await RunCyInvoiceAsync(exe, "query", folder, file, targets);
+        var (query, queryError) = await RunCyInvoiceAsync(exe, "query", folder, file, targets, source: cySource);
         if (query is null)
         {
             outcome.Notes.Add($"CYInvoice 查詢沒有結果：{queryError}。發票請手動填（請求與紀錄在 {folder}）。");
@@ -70,7 +76,7 @@ internal sealed partial class MainForm
         }
         // 全自動 issues in either environment (user, 2026-10-15: the whole chain, tested first on
         // CYInvoice's test environment); a test environment's invoices never go into ERP.
-        if (fullAuto && !query.IsProduction)
+        if (fullAuto && !testEntry && !query.IsProduction)
             outcome.Notes.Add($"CYInvoice 是{query.EnvironmentName}：發票照常開立帶入預覽，寄件單照常列印，但不會輸入 ERP。");
 
         var results = query.Orders.GroupBy(o => o.OrderId).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
@@ -93,7 +99,7 @@ internal sealed partial class MainForm
             else
             {
                 SetStatus($"CYInvoice：開立 {toIssue.Count} 筆發票…");
-                var (issue, issueError) = await RunCyInvoiceAsync(exe, "issue", folder, file, toIssue);
+                var (issue, issueError) = await RunCyInvoiceAsync(exe, "issue", folder, file, toIssue, source: cySource);
                 // No answer is never "not issued" (handoff): never sent again, checked by a query later.
                 CyInvoiceOrder Unknown(string id, string why) => new(id, "unknown", "", "", "", "", -1, why, "");
                 if (issue is null)
@@ -114,7 +120,7 @@ internal sealed partial class MainForm
                     if (unknown.Count > 0)
                     {
                         SetStatus($"CYInvoice：再查詢 {unknown.Count} 筆結果不明的發票…");
-                        var (again, _) = await RunCyInvoiceAsync(exe, "query", folder, file, unknown);
+                        var (again, _) = await RunCyInvoiceAsync(exe, "query", folder, file, unknown, source: cySource);
                         if (again is not null && again.Environment == query.Environment)
                             foreach (var r in again.Orders.Where(r => r.Status == "existing")) results[r.OrderId] = r;
                     }
@@ -137,7 +143,7 @@ internal sealed partial class MainForm
             }
             CyInvoiceLink.Fill(order, r);
             filled++;
-            if (CyInvoiceLink.IsPaper(r)) outcome.Paper.Add(r);
+            if (CyInvoiceLink.IsPaper(r, cySource)) outcome.Paper.Add(r);
         }
         _log.Info("cyinvoice", $"done environment={query.Environment} targets={targets.Count} filled={filled} paper={outcome.Paper.Count}");
         outcome.Notes.Insert(0, $"CYInvoice（{query.EnvironmentName}）：{filled}／{targets.Count} 筆發票已帶入預覽" +
@@ -152,12 +158,12 @@ internal sealed partial class MainForm
     /// "not issued".
     /// </summary>
     private async Task<(CyInvoiceResult? Result, string? Error)> RunCyInvoiceAsync(string exe, string mode, string folder, string file,
-        IReadOnlyCollection<string> orderIds, (string Folder, int Style)? pdf = null)
+        IReadOnlyCollection<string> orderIds, (string Folder, int Style)? pdf = null, string source = CyInvoiceLink.Mo)
     {
         var id = Guid.NewGuid().ToString("D");
         var request = Path.Combine(folder, $"{mode}-{id}.request.json");
         var resultPath = Path.Combine(folder, $"{mode}-{id}.result.json");
-        File.WriteAllText(request, CyInvoiceLink.Request(id, Path.GetFullPath(file), orderIds, pdf), new UTF8Encoding(false));
+        File.WriteAllText(request, CyInvoiceLink.Request(id, Path.GetFullPath(file), orderIds, pdf, source), new UTF8Encoding(false));
         _log.Info("cyinvoice", $"{mode} orders={orderIds.Count} request={Path.GetFileName(request)}");
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
         start.ArgumentList.Add($"--autoinput-{mode}");
@@ -290,7 +296,7 @@ internal sealed partial class MainForm
             var jobs = group.ToList();
             var pdfFolder = Path.Combine(outcome.Folder, "paper");
             Directory.CreateDirectory(pdfFolder);
-            var (answer, error) = await RunCyInvoiceAsync(outcome.Exe, "pdf", outcome.Folder, outcome.File, jobs.Select(j => j.Invoice.OrderId).ToList(), (pdfFolder, style));
+            var (answer, error) = await RunCyInvoiceAsync(outcome.Exe, "pdf", outcome.Folder, outcome.File, jobs.Select(j => j.Invoice.OrderId).ToList(), (pdfFolder, style), outcome.Source);
             if (answer is null || answer.Environment != outcome.Environment)
             {
                 var why = answer is null ? error : $"CYInvoice 變成{answer.EnvironmentName}";
@@ -402,7 +408,7 @@ internal sealed partial class MainForm
                 "1. 放入 MO店+ 訂單匯出檔（出貨前那份；出貨後那份可省略）\n" +
                 "2. 程式呼叫 CYInvoice 先查詢，再對查無發票的訂單開立（開立前會再問一次，並顯示 CYInvoice 的環境）\n" +
                 "3. 有統編抬頭的訂單印紙本發票：光貿開立完成、拿到 PDF 後才會請你放紙（A4 印表機，不必等，可以先看預覽）；一般消費者是會員載具，不印\n" +
-                "4. 停在預覽畫面，發票資料已帶入；測試環境的發票不會輸入 ERP\n\n" +
+                "4. 停在預覽畫面，發票資料已帶入；按開始會輸入 ERP（不論 CYInvoice 是測試或正式環境）\n\n" +
                 $"CYInvoice：{_settings.CyInvoicePath}\n\n要開始嗎？",
                 title, MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
             return;
@@ -426,12 +432,111 @@ internal sealed partial class MainForm
         // In the background: the paper prompt comes once 光貿 has the PDFs, over the preview.
         QueuePaperInvoices(invoice);
         SetStatus(string.Empty);
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. files.Notes],
-            () =>
-            {
-                if (invoice.IsProduction) return Task.FromResult(true);
-                MessageBox.Show(this, "這是發票測試：CYInvoice 不是正式環境，發票不輸入 ERP。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return Task.FromResult(false);
-            });
+        // A 測試 enters ERP whatever CYInvoice's environment (user, 2026-10-15: they switch it).
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. files.Notes]);
+    }
+
+    /// <summary>
+    /// 酷澎 › 測試 (user, 2026-10-15): on the 酷澎 page the user opened (配送指示), 「下載Excel」 →
+    /// Temp → CYInvoice's 酷澎 entry issues (always paper) → printing in the background → ERP,
+    /// whatever CYInvoice's environment (the user switches it). Every order clean → straight to ERP;
+    /// otherwise the preview.
+    /// </summary>
+    private async Task TestCoupangAsync()
+    {
+        const string title = "酷澎 測試";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (!ErpWindowReady()) return;
+        var missing = new[]
+        {
+            _settings.CoupangOrderType.Length == 0 ? "酷澎銷貨單別" : null,
+            _settings.CoupangCustomerCode.Length == 0 ? "酷澎客戶代號" : null,
+            _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
+            _settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath) ? "CYInvoice.exe" : null,
+            _settings.A4Printer.Length == 0 ? "A4 印表機（紙本發票）" : null
+        }.Where(x => x is not null).ToList();
+        if (missing.Count > 0)
+        {
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (MessageBox.Show(this,
+                "請先在 Chrome 打開酷澎「我的訂單 › 配送指示」頁面，並讓它在最前面（本程式以外）。\n\n" +
+                "1. 按頁面上的「下載Excel」，存到程式的 Temp 資料夾\n" +
+                "2. CYInvoice 開立發票（酷澎一律紙本；不論 CYInvoice 是測試或正式環境）並帶入\n" +
+                "3. 紙本發票拿到 PDF 後請你放 A4 白紙列印（不必等，打單照常進行）\n" +
+                "4. 全部沒問題就直接輸入 ERP，否則開預覽\n\n網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
+                title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        MoPrintedDocuments.Prune(_log);
+        var folder = Path.Combine(MoPrintedDocuments.TempRoot, "coupang-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        string? file = null;
+        string? stopped = null;
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+        try { file = await runner.DownloadCoupangExcelAsync(folder); }
+        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
+        catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
+        finally
+        {
+            Session.Unpin();
+            Session.End();
+            _shopeeBatchRunning = false;
+        }
+        if (stopped is not null || file is null)
+        {
+            _log.Warn("coupang-batch", $"stopped: {stopped}");
+            Alarm(needsPerson: true);
+            MessageBox.Show(this, $"酷澎測試停止：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        CoupangImportResult parsed;
+        try
+        {
+            await using var stream = File.OpenRead(file);
+            parsed = CoupangOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
+        {
+            _log.Warn("coupang-batch", $"export read failed: {ex.GetType().Name}");
+            MessageBox.Show(this, $"下載的 Excel 讀不到：{ex.Message}\n檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("coupang-batch", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+        if (parsed.Orders.Count == 0 && parsed.Errors.Count == 0)
+        {
+            MessageBox.Show(this, "下載的 Excel 沒有訂單。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
+        var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
+        var expect = parsed.Orders.GroupBy(o => o.OrderSn).ToDictionary(g => g.Key, g => InvoiceExpectation.Of(g.First()), StringComparer.Ordinal);
+        var invoice = await InvoiceAsync(title, CyInvoiceLink.Coupang, file, expect, orders, fullAuto: true, testEntry: true);
+        QueuePaperInvoices(invoice);
+
+        var ledger = LoadLedger();
+        if (ledger is null) return;
+        var notes = new List<string>(invoice.Notes);
+        var clean = _settings.AutoSave && orders.Count > 0 && parsed.Errors.Count == 0 &&
+                    orders.All(o => o.HandoffReason.Length == 0 && o.InvoiceNo.Trim().Length > 0 && o.ValidationError().Length == 0 &&
+                                    !o.MissingInvoiceName && ledger.Find(o.LedgerKey) is null);
+        if (clean)
+        {
+            _log.Info("coupang-batch", $"all {orders.Count} orders ready; no preview");
+            _paperHold++;
+            try { if (await RunImportBatchAsync(CoupangOrderImport.Source, orders, ledger, notes)) return; }
+            finally { _paperHold--; }
+        }
+        SetStatus("酷澎測試：請在預覽確認");
+        Alarm(needsPerson: true);
+        await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(file), orders, parsed.Errors, notes);
     }
 }

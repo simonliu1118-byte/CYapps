@@ -2228,7 +2228,14 @@ internal sealed partial class MainForm : Form
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")
-            button.Click += async (_, _) => await ImportCoupangAsync();
+        {
+            // 匯入 / 測試 (user, 2026-10-15); 全自動 waits for real orders to walk through.
+            var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
+            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試：配送指示下載 Excel → 發票 → 列印 → ERP", null, async (_, _) => await TestCoupangAsync());
+            button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        }
         return button;
     }
 

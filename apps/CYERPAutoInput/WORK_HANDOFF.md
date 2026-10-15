@@ -33,6 +33,7 @@
 3. 「配送準備」分頁：每筆有「安排配送」，也可右下角選配送方式（例：宅配 - 嘉里）後「批次安排配送」。細節等有訂單時使用者帶著做再告知。
 4. 「配送指示」分頁：全選 → 「下載Excel」→ 存 Temp → CYInvoice 開發票 → 帶回發票 → ERP 輸入（同 MO店+）。此頁另有右下角「批次列印寄件單」（選配送方式），寄件單列印方式待確認。
 - 發票：紙本或載具是 CYInvoice 依開立入口的既有規則（使用者 2026-10-15）：MO店+ 入口開會員載具，沒統編的不印；酷澎入口一律開紙本，沒統編印無統編版本、有統編印有統編版本。AUTO 目前只對有統編的訂單取 PDF（`CyInvoiceLink.IsPaper` 看 `buyerBan`，是照 MO店+ 寫的）；做酷澎時改為依來源（酷澎全部取 PDF），並先向 CYInvoice 確認 `--autoinput-pdf` 對酷澎無統編的紙本發票也回 `ready`（2026-10-15 的回報寫的是只輸出有公司統編的紙本，B2C 回 `skipped`）。
+- 2026-10-15 先做的測試入口：「酷澎商城 › 測試：配送指示下載 Excel → 發票 → 列印 → ERP」（`ShopeeBatchRunner.DownloadCoupangExcelAsync` 只找頁面上的「下載Excel」，頁面由使用者開好；`MainForm.TestCoupangAsync`；發票走共用 `InvoiceAsync(source: coupang)`，`CyInvoiceLink.IsPaper` 酷澎一律紙本）。CYInvoice 需調整 `--autoinput-pdf` 支援酷澎無統編紙本，交接在 `docs/CYINVOICE_COUPANG_HANDOFF.md`（待對方完成回報，收到後彙整回 README／本文件再刪）。尚未實機：下載鈕位置、Chrome 另存新檔、下載檔格式。
 - 共用：開始前 ERP 檢查（`ErpWindowReady`）、完成清單表格、背景紙本佇列、`source: "coupang"`（CYInvoice 契約已預留）。
 
 **C. 其他待辦**：蝦皮全自動的 7-11／全家實測、黑貓 A4（§6）、無人值守（Roadmap 5）。合併與正式發布都要使用者同意。

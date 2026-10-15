@@ -58,17 +58,17 @@ public sealed class CyInvoiceLinkTests
     [Fact]
     public void OnlyACheckedInvoiceMayBeUsed()
     {
-        Assert.Null(CyInvoiceLink.Mismatch(Order(), Result()));
-        Assert.Null(CyInvoiceLink.Mismatch(Order(), Result("existing")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result("unknown")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result("failed")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result("skipped")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result(number: "AB1234")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result(date: "2026-10-15")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(), Result(amount: 724)));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(ban: "12345675"), Result()));
-        Assert.Null(CyInvoiceLink.Mismatch(Order(ban: "12345675"), Result(ban: "12345675")));
-        Assert.NotNull(CyInvoiceLink.Mismatch(Order(invoiceNo: "CD87654321"), Result()));
+        Assert.Null(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result()));
+        Assert.Null(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result("existing")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result("unknown")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result("failed")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result("skipped")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result(number: "AB1234")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result(date: "2026-10-15")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order()), Result(amount: 724)));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order(ban: "12345675")), Result()));
+        Assert.Null(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order(ban: "12345675")), Result(ban: "12345675")));
+        Assert.NotNull(CyInvoiceLink.Mismatch(InvoiceExpectation.Of(Order(invoiceNo: "CD87654321")), Result()));
     }
 
     [Fact]
@@ -86,6 +86,8 @@ public sealed class CyInvoiceLinkTests
         CyInvoiceLink.Fill(company, Result(ban: "12345675"));
         Assert.Equal("測試股份有限公司", company.InvoiceName);
         Assert.True(CyInvoiceLink.IsPaper(Result(ban: "12345675")));
+        // 酷澎 is always paper (CYInvoice's 酷澎 entry).
+        Assert.True(CyInvoiceLink.IsPaper(Result(), CyInvoiceLink.Coupang));
     }
 
     [Fact]
