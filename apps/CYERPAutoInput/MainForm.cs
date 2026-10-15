@@ -1562,7 +1562,7 @@ internal sealed partial class MainForm : Form
             else
             {
                 _paperHold++;
-                try { entered = await RunImportBatchAsync(MoOrderImport.Source, orders, ledger); }
+                try { entered = await RunImportBatchAsync(MoOrderImport.Source, orders, ledger, [.. invoice?.Notes ?? [], .. files.Notes, .. result.Notes]); }
                 finally { _paperHold--; }
             }
         }
@@ -1871,7 +1871,8 @@ internal sealed partial class MainForm : Form
     /// review / handoff / duplicate / failed / missing tracking / stopped / not started lists.
     /// </summary>
     /// <returns>False when the batch did not start, so the preview comes back.</returns>
-    private async Task<bool> RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
+    /// <param name="notes">More for the closing list (MO店+ 全自動: other carriers, 總表 to void, invoices).</param>
+    private async Task<bool> RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger, IReadOnlyList<string>? notes = null)
     {
         var earlier = orders
             .Where(o => o.HandoffReason.Length == 0 && ledger.Find(o.LedgerKey) is { Status: not LedgerStatus.Saved })
@@ -1986,7 +1987,7 @@ internal sealed partial class MainForm : Form
                     stoppedAt = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
                     return;
                 }
-                done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
+                done.Add($"{order.OrderSn} → {DocumentKeyText(result)}" + (order.InvoiceNo.Trim().Length > 0 ? $"，發票 {order.InvoiceNo.Trim()}" : string.Empty));
                 ClearFormIfSaved(result);
                 if (order.TrackingNumber.Trim().Length == 0) noTracking.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
                 review.AddRange(result.Warnings.Select(w => $"{order.OrderSn}（{DocumentKeyText(result)}）第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
@@ -2009,7 +2010,8 @@ internal sealed partial class MainForm : Form
             new("需人工確認：", review),
             new($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff),
             new($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates),
-            new($"失敗 {failed.Count} 張（未儲存，已略過）：", failed)
+            new($"失敗 {failed.Count} 張（未儲存，已略過）：", failed),
+            new("其他事項：", notes ?? [])
         ], stopped);
         summary.ShowDialog(this);
         return true;
