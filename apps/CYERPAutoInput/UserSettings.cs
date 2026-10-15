@@ -14,9 +14,10 @@ internal sealed class UserSettings
     public bool ClearAfterSave { get; set; } = true;
     /// <summary>
     /// 蝦皮全自動 (batch, user 2026-10-12): Chrome's print dialog must show this printer and
-    /// scale before the label is printed; otherwise the batch stops.
+    /// scale before the label is printed; otherwise the batch stops. Blank until ticked in
+    /// 設定 › 印表機 among this PC's printers (user, 2026-10-15: no built-in name).
     /// </summary>
-    public string ShopeeLabelPrinter { get; set; } = "GG-D410 Printer";
+    public string ShopeeLabelPrinter { get; set; } = string.Empty;
     public int ShopeeLabelScale { get; set; } = 110;
     /// <summary>
     /// A4 印表機 (user, 2026-10-14: the Brother) for MO店+ 新竹物流 寄件單 and 到廠取貨總表, printed
