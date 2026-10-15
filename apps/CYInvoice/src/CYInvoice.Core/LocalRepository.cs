@@ -79,7 +79,7 @@ public sealed class LocalRepository
         var employees = new EmployeeStore(data);
         var cyIdOffline = new CyIdOfflineCache(data, protector);
         var connections = new ServiceConnectivity(settings, serviceHttp,
-            cyIdOffline.Forget, cyIdOffline, baseDirectory);
+            () => cyIdOffline.Forget(), cyIdOffline, baseDirectory);
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
