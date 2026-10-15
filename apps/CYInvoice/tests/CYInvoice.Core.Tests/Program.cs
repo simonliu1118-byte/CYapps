@@ -1586,6 +1586,7 @@ static async Task TestAutoInputPdfAsync()
     coupangRecord.Source = InvoiceSources.Coupang;
     coupangRecord.OriginalOrderId = "COUPANG-ORDER-01";
     coupangRecord.OrderId = "COUPANG-ORDER-01";
+    coupangRecord.InvoiceDate = "2026/10/15";
     coupangRecord.BuyerIdentifier = string.Empty;
     coupangRecord.BuyerName = "消費者";
     repository.Invoices.Save([record,coupangRecord]);
