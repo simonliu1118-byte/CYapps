@@ -39,8 +39,9 @@ internal static class ServiceConnectivityTests
         Check(File.ReadAllText(Path.Combine(repository.DataDirectory, "settings.json")) == settingsBefore,
             "availability checks never change Workspace, Device, Token or mode");
 
-        services.Amego = true;
+        services.Amego = false;
         services.Cloud = false;
+        await repository.Connections.CheckAsync();
         var record = new InvoiceRecord { Id = "retained", Source = "手動", OrderId = "M20261010001",
             Environment = Environments.Test, InvoiceNumber = "AA12345678", InvoiceState = InvoiceStates.Opened,
             Delivery = InvoiceService.DeliveryPaper, Amount = 100 };
@@ -62,6 +63,7 @@ internal static class ServiceConnectivityTests
             "AMEGO outage makes zero business calls and preserves existing records without creating uncertain issuance");
 
         services.Cloud = true;
+        services.Amego = false;
         Check(!(await repository.Connections.CheckAsync()).BlockAll, "Cloud-only recovery unlocks Cloud features");
         await ThrowsAsync<ServiceConnectionException>(() => invoices.IssueManualWithLookupAsync(draft, new()));
         services.Cloud = false;
