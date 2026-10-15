@@ -2,16 +2,6 @@ import { handleCyId, usesCyId, withCyIdSession, cyIdDevice, cyIdBinding, CyIdErr
 import baseWorker from "./worker";
 import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleDeviceSelfStatus } from "./device-self-status";
-import { handleEmployeeTransition } from "./employee-transition";
-import { handleEmployeeTransitionActions } from "./employee-transition-actions";
-import { handleEmployeeTransitionConflicts } from "./employee-transition-conflicts";
-import { handleEmployeeAuthority } from "./employee-authority";
-import { handleEmployeeManagement } from "./employee-management";
-import { handleEmployeeAccountOperations } from "./employee-account-operations";
-import { handleEmployeePasswordRecovery } from "./employee-password-recovery";
-import { handleSuperAdminTransfer } from "./super-admin-transfer";
-import { handleWebAuth } from "./web-auth";
-import { handleWebPasswordRecovery } from "./web-password-recovery";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleWorkItems } from "./work-items-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
@@ -61,20 +51,20 @@ export class CyInvoiceRecoveryEntrypoint extends WorkerEntrypoint<Env> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // V3 ships only Local (no Worker) and CYID Cloud. An old/incorrect
+    // Built-in deployment must fail closed BEFORE handling Device or account
+    // mutations; preserving its old D1 tables does not grant product support.
+    try {
+      if (!usesCyId(env))
+        return cyIdErrorResponse(new CyIdError(409, "CYID_REQUIRED"));
+      cyIdBinding(env);
+    } catch (error) { return cyIdErrorResponse(error); }
+
     const runtimeSync = await handleRuntimeSync(request, env);
     if (runtimeSync) return runtimeSync;
     const cyIdResponse = await handleCyId(request, env);
     if (cyIdResponse) return cyIdResponse;
-    try {
-      if (usesCyId(env)) {
-        const path = new URL(request.url).pathname;
-        // Legacy account authority must never remain an alternate entry in CYID mode.
-        if (path.startsWith("/v1/employees") || path.startsWith("/v1/employee-")
-            || path.startsWith("/v1/web-auth") || path.startsWith("/v1/web-password")
-            || path.startsWith("/v1/super-admin") || path.startsWith("/v1/onboarding/bootstrap"))
-          return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
-      }
-    } catch (error) { return cyIdErrorResponse(error); }
+
     const path = new URL(request.url).pathname;
     const recoveryRoute = request.method === "POST"
       && (path === "/v1/device-recovery/preview" || path === "/v1/device-recovery/claim");
@@ -107,12 +97,6 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
     const disasterRecoveryResponse = await handleRecoveryRoutes(request, env);
     if (disasterRecoveryResponse) return disasterRecoveryResponse;
 
-    const passwordRecoveryResponse = await handleWebPasswordRecovery(request, env);
-    if (passwordRecoveryResponse) return passwordRecoveryResponse;
-
-    const webAuthResponse = await handleWebAuth(request, env);
-    if (webAuthResponse) return webAuthResponse;
-
     const deviceSelfStatusResponse = await handleDeviceSelfStatus(request, env);
     if (deviceSelfStatusResponse) return deviceSelfStatusResponse;
 
@@ -121,29 +105,6 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const deviceLifecycleResponse = await handleDeviceLifecycle(request, env);
     if (deviceLifecycleResponse) return deviceLifecycleResponse;
-
-    const employeePasswordRecoveryResponse = await handleEmployeePasswordRecovery(request, env);
-    if (employeePasswordRecoveryResponse) return employeePasswordRecoveryResponse;
-    const employeeManagementResponse = await handleEmployeeManagement(request, env);
-    if (employeeManagementResponse) return employeeManagementResponse;
-
-    const employeeAccountResponse = await handleEmployeeAccountOperations(request, env);
-    if (employeeAccountResponse) return employeeAccountResponse;
-
-    const transferResponse = await handleSuperAdminTransfer(request, env);
-    if (transferResponse) return transferResponse;
-
-    const conflictResponse = await handleEmployeeTransitionConflicts(request, env);
-    if (conflictResponse) return conflictResponse;
-
-    const transitionResponse = await handleEmployeeTransition(request, env);
-    if (transitionResponse) return transitionResponse;
-
-    const transitionActionResponse = await handleEmployeeTransitionActions(request, env);
-    if (transitionActionResponse) return transitionActionResponse;
-
-    const authorityResponse = await handleEmployeeAuthority(request, env);
-    if (authorityResponse) return authorityResponse;
 
     return baseWorker.fetch(request, env);
 }
