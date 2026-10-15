@@ -10,6 +10,7 @@ export interface AllowanceApprovalTarget {
   expectedRevision: number;
 }
 export interface ServerFrozenAllowanceRequest {
+  referenceHash: string; // canonical frozen Work Item reference, persisted by server
   originalInvoiceNumber: string;
   sellerInvoice: string; // from server-owned company settings
   environment: "production" | "test";
@@ -34,7 +35,7 @@ export interface AllowanceReviewAuthority {
   revalidateManager(): Promise<{
     workspaceId: string; employeeId: string; role: "SUPER_ADMIN"|"ADMIN"|"USER";
   } | null>;
-  loadFrozenApplication(): Promise<ServerFrozenAllowanceRequest>;
+  loadFrozenApplication(target: Readonly<AllowanceApprovalTarget>): Promise<ServerFrozenAllowanceRequest>;
   queryAndVerifyOfficialInvoice(originalInvoiceNumber: string):
     Promise<VerifiedOfficialAllowanceReview>;
 }
@@ -57,7 +58,8 @@ function assertTarget(t: AllowanceApprovalTarget): void {
     throw new Error("ALLOWANCE_APPROVAL_TARGET_INVALID");
 }
 function assertFrozen(f: ServerFrozenAllowanceRequest): void {
-  if (!/^[0-9]{8}$/.test(f.sellerInvoice) ||
+  if (!/^[0-9a-f]{64}$/.test(f.referenceHash) ||
+      !/^[0-9]{8}$/.test(f.sellerInvoice) ||
       !/^[A-Z]{2}[0-9]{8}$/.test(f.originalInvoiceNumber) ||
       !["production","test"].includes(f.environment) ||
       !/^[0-9]{8}$/.test(f.allowanceDay) ||
@@ -102,7 +104,7 @@ export async function approveAllowanceAfterOfficialReview(
       !["ADMIN","SUPER_ADMIN"].includes(first.role) ||
       !first.employeeId || first.employeeId.length>100)
     throw new Error("ALLOWANCE_MANAGER_AUTH_REQUIRED");
-  const frozen=await authority.loadFrozenApplication();
+  const frozen=await authority.loadFrozenApplication(target);
   assertFrozen(frozen);
   const snapshot=await authority.queryAndVerifyOfficialInvoice(frozen.originalInvoiceNumber);
   const time=Date.now();
@@ -130,7 +132,7 @@ export async function approveAllowanceAfterOfficialReview(
       JOIN workspaces w ON w.workspace_id=wi.workspace_id
       WHERE wi.work_item_id=?3 AND wi.workspace_id=?2
         AND wi.kind='ALLOWANCE' AND wi.status='review' AND wi.revision=?4
-        AND wi.environment=?6 AND d.status='active'
+        AND wi.reference_hash=?15 AND wi.environment=?6 AND d.status='active'
         AND d.employee_authority_state='cloud' AND w.status='active')
     AND NOT EXISTS (
       SELECT 1 FROM allowance_number_ledger existing
@@ -145,7 +147,7 @@ export async function approveAllowanceAfterOfficialReview(
     `).bind(approvalId,target.workspaceId,target.workItemId,target.expectedRevision,
       frozen.sellerInvoice,frozen.environment,frozen.allowanceDay,frozen.templateSha256,
       snapshot.officialSnapshotSha256,snapshot.checkedAtUtc,first.employeeId,
-      target.deviceId,approvedAt,validUntilUtc).run();
+      target.deviceId,approvedAt,validUntilUtc,frozen.referenceHash).run();
   if (change.meta.changes!==1)
     throw new Error("ALLOWANCE_APPROVAL_CONFLICT_OR_REVOKED");
   return {approvalId,workItemId:target.workItemId,approvedRevision:target.expectedRevision,
