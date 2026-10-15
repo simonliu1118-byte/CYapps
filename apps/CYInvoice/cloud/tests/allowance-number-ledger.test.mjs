@@ -236,7 +236,10 @@ concurrent.db.close();
   let managerCalls=0, officialCalls=0;
   const authority={
     async revalidateManager(){managerCalls++;return actor;},
-    async loadFrozenApplication(){return request;},
+    async loadFrozenApplication(reviewTarget){
+      return {...request,
+        referenceHash:createHash("sha256").update(reviewTarget.workItemId).digest("hex")};
+    },
     async queryAndVerifyOfficialInvoice(invoiceNumber) {
       officialCalls++;
       assert.equal(invoiceNumber,request.originalInvoiceNumber);
@@ -259,6 +262,11 @@ concurrent.db.close();
     checkedAtUtc:"2020-01-01T00:00:00.000Z"};
   await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
   official={...official,checkedAtUtc:new Date().toISOString()};
+  // Grant must be linked to the exact persisted Work Item source, not just
+  // a matching seller or a client-supplied official result.
+  const different={...authority,
+    loadFrozenApplication:async()=>({...request,referenceHash:"e".repeat(64)})};
+  await assert.rejects(()=>approveOfficial(dbApi,target,different),/CONFLICT_OR_REVOKED/);
   const first=await approveOfficial(dbApi,target,authority);
   assert.equal(first.approvedByEmployeeId,"manager_A");
   assert.equal(first.templateSha256,base.requestSha256);
