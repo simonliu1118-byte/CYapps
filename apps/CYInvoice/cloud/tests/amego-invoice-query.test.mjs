@@ -56,6 +56,14 @@ const pending=await query(request,transport({code:0,data:[{
  allowance:[],wait:[{invoice_type:"C0501",invoice_status:1}]
 }]}),()=>dt);
 assert.equal(pending.voidPending,true,"Official C0501 wait[] is a pending void");
+assert.equal(pending.hasUnsettledMutation,true);
+const pendingAllowance=await query(request,transport({code:0,data:[{
+ invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:100,
+ allowance:[],wait:[{invoice_type:"D0401",invoice_status:1}]
+}]}),()=>dt);
+assert.equal(pendingAllowance.hasUnsettledMutation,true,
+ "Unresolved D0401 cannot be mistaken for zero past allowances");
+assert.equal(pendingAllowance.canApprove,false);
 assert.equal(pending.canApprove,false);
 const existing=await query(request,transport({code:0,data:[{
  invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:100,

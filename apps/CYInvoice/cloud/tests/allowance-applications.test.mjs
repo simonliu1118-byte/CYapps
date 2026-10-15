@@ -211,6 +211,7 @@ try {
   assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
+  assert.equal(firstInspection.data.inspection.officialPendingMutation,false);
   assert.equal(firstInspection.data.inspection.itemCheck.fullyMatched,false);
   assert.equal(firstInspection.data.inspection.itemCheck.reason,"ORIGINAL_TAX_BASIS_NOT_VERIFIED");
   assert.equal(officialCalls,1);

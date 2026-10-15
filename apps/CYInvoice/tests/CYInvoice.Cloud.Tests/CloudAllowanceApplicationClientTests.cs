@@ -118,6 +118,8 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(false,official.CanApprove,"official query does not grant approval");
         Equal(true,official.RequiresPerItemVerification,"per-item verification remains required");
         Equal(0,official.ExistingAllowanceCount,"explicit no allowance summary");
+        Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
+        Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         try {
@@ -145,6 +147,9 @@ internal static class CloudAllowanceApplicationClientTests
         uploadComplete=true,notCancelled=true,allowanceSummaryExplicit=true,
         zeroExistingAllowances=true,invoiceGrossEnough=true,officialProductsPresent=true,
         requiresPerItemVerification=true,canApprove=forgedApproval,
+        officialPendingMutation=false,itemCheck=new{
+            fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0
+        },
         status="OFFICIAL_READ_ONLY_NOT_APPROVED"
     };
     private static object ReviewPreview() => new {

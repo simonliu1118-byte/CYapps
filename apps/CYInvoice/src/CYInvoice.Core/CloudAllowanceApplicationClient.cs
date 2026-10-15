@@ -29,13 +29,17 @@ public sealed record CloudAllowanceReviewPreview(
     IReadOnlyList<CloudAllowanceReviewItem> Items, string OfficialVerification,
     bool CanApprove);
 
+public sealed record CloudAllowanceItemCheck(
+    bool FullyMatched, string Reason, int VerifiedLines);
+
 public sealed record CloudOfficialAllowanceInspection(
     string ItemId, int Revision, string OriginalInvoiceNumber, DateTimeOffset CheckedAtUtc,
     string OfficialSnapshotSha256, int OfficialUploadStatus, bool Cancelled,
     int OfficialInvoiceGross, int RequestedGrossAmount, int ExistingAllowanceCount,
     bool UploadComplete, bool NotCancelled, bool AllowanceSummaryExplicit,
     bool ZeroExistingAllowances, bool InvoiceGrossEnough, bool OfficialProductsPresent,
-    bool RequiresPerItemVerification, bool CanApprove, string Status);
+    bool RequiresPerItemVerification, bool CanApprove, string Status,
+    bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck);
 
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
@@ -249,6 +253,23 @@ public sealed class CloudAllowanceApplicationClient
         var products=Boolean(item,"officialProductsPresent");
         var needsItems=Boolean(item,"requiresPerItemVerification");
         var canApprove=Boolean(item,"canApprove");
+        var pending=Boolean(item,"officialPendingMutation");
+        if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
+            rawCheck.ValueKind!=JsonValueKind.Object ||
+            !rawCheck.TryGetProperty("reason",out var reason) ||
+            reason.ValueKind!=JsonValueKind.String ||
+            !Regex.IsMatch(reason.GetString()??"", @"^[A-Z][A-Z0-9_]{0,100}$") ||
+            !rawCheck.TryGetProperty("verifiedLines",out var lines) ||
+            lines.ValueKind!=JsonValueKind.Number ||
+            !lines.TryGetInt32(out var verifiedCount) ||
+            verifiedCount<0 || verifiedCount>50)
+            throw new InvalidDataException("Official item verification status is invalid.");
+        var matched=Boolean(rawCheck,"fullyMatched");
+        if (matched && (pending || cancelled || existing!=0 || !summary ||
+                        upload!=99 || verifiedCount==0 ||
+                        reason.GetString()!="SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE") ||
+            !matched && verifiedCount!=0)
+            throw new InvalidDataException("Official item verification cannot override safety fences.");
         if (requested==0 || canApprove || !needsItems ||
             complete!=(upload==99) || notCancelled==cancelled ||
             noExisting!=(summary && existing==0) ||
@@ -256,7 +277,8 @@ public sealed class CloudAllowanceApplicationClient
             throw new InvalidDataException("Official inspection must remain non-authorizing.");
         return new CloudOfficialAllowanceInspection(id,actualRev,invoice,instant,digest,
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
-            noExisting,enough,products,needsItems,false,status);
+            noExisting,enough,products,needsItems,false,status,
+            pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount));
     }
 
     public async Task<CloudAllowanceApplicationPage> ListForManagerAsync(
