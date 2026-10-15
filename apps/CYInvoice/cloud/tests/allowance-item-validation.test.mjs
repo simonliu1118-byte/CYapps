@@ -37,7 +37,9 @@ fails({...draft,ProductItem:[{...draft.ProductItem[0],OriginalInvoiceDate:202610
 fails({...draft,ProductItem:[{...draft.ProductItem[0],OriginalDescription:"Other"}]},
   official,53,"REQUEST_ITEM_NOT_IN_ORIGINAL");
 fails({...draft,ProductItem:[{...draft.ProductItem[0],Quantity:3}]},
-  official,53,"REQUEST_EXCEEDS_ORIGINAL_ITEM");
+  official,53,"REQUEST_LINE_ARITHMETIC_MISMATCH");
+fails({...draft,ProductItem:[{...draft.ProductItem[0],Quantity:3,Amount:150,Tax:8}],
+  TotalAmount:150,TaxAmount:8},official,158,"REQUEST_EXCEEDS_ORIGINAL_ITEM");
 fails({...draft,ProductItem:[{...draft.ProductItem[0],Amount:105}],TotalAmount:105},
   official,108,"REQUEST_LINE_ARITHMETIC_MISMATCH");
 fails({...draft,TaxAmount:4},official,53,"REQUEST_TOTALS_MISMATCH");
