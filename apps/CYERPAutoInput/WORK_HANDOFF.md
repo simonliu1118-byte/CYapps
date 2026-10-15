@@ -1,8 +1,33 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-14（V0.3.0 Build 26 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
+> 更新：2026-10-15（V0.3.0 Build 26 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）。**新 session 接手先看 §0。**  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
+
+## 0. 目前進度與下一步（2026-10-15，給下一個 session）
+
+工作方式（使用者指定，沿用）：
+- 一律正體中文。使用者實機測試、每輪傳 LOG（`logs/CYERPAutoInput_日期.log`）與截圖；修好就推到 PR #424 的 branch `cyerp-auto-input/shopee-batch`，等 CI 成功，把 Windows 測試包 Artifact 連結貼成 PR 留言（結尾加 Claude Code 簽名）並回覆使用者。Artifact 保留 3 天。
+- 使用者說「先不要發，湊多一點項目」時只推 `cyerp-auto-input/next-wip`（沒有 PR、不跑 CI）。未交付的修正不加 Build（目前仍是 Build 26）。
+- 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就在 `docs/` 寫交接檔（使用者轉給 CYInvoice session，對方做完會出工程測試包）。
+- Commit 身分依 REPOSITORY_RULES：`simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。2026-10-14～15 有數個 Build 26 commit 誤用 `Claude <noreply@anthropic.com>`，未改寫歷史（PR 以 squash merge 合併時只留一個提交）；之後一律用規定身分。
+- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（283 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
+
+**A. MO店+ 全自動（主線，使用者實機逐步測試中）**
+- 已實機通過（2026-10-14 LOG）：自己的 Chrome 視窗登入判斷 → 訂單 › 訂單管理 › E001訂單管理 › 我的訂單「未出貨」→ 處理提醒／配送方式「全部」→ 匯出報表（另存新檔 Alt+D 切到 `Temp\mo-日期時間`）→ 左側批次出貨 → 讀配送方式 (n) → 全家店出(1) 全選 → 批次出貨 → 併箱出貨 → 確認出貨（真的出貨 1 筆）→ 批次出貨中「查看批次出貨記錄」→ 依出貨時間讀最上面一筆（`MoBatchScreens.LatestRecord`）→ 點「列印文件」（點在連結文字上 `OnText`）→「列印標籤」存 PDF 成功。
+- 2026-10-15 依使用者更正的流程（待實測）：最後一個配送方式出貨完**直接**左側「我的訂單」→「配送中」→ 匯出報表；只有還有其他配送方式時才回批次出貨頁（左側選單沒反應時備援：頁面上的「批次出貨」／返回、Alt+←、F5）。之後：Temp 的兩個匯出檔帶入 `MoImportForm` → 預覽（手動補發票，或 CYInvoice 帶入）→ 按開始後**才列印**所有文件（全家／7-11 熱感、新竹 A4 放紙提醒、紙本發票）→ ERP 打單。
+- 尚未實機跑過：存完標籤後的「注意」視窗關閉、配送中匯出、帶入預覽、列印、ERP；新竹／7-11 的批次出貨與 PDF 存檔；多種配送方式同批。
+- 測試入口（MO店+ 選單）：「測試：從批次出貨記錄繼續（剛出貨的最上面一筆）」（Chrome 停在批次出貨記錄、最上面是剛出貨那筆；只做那一筆，用最近 `Temp\mo-*` 的未出貨匯出檔）。
+- 7-11 標籤（2026-10-15 使用者提供解密實檔）：A4 頁面左上一張實線外框交貨便、旁邊短虛線；`SlipImage.FindFramedSlips` 依外框切，以印表機 dpi 繪出原尺寸列印（實檔 83×122 mm）。熱感紙實印未確認；多張同頁的排法無實檔（以模擬圖測）。全家照舊 `FindSlips`（虛線四格）。
+
+**B. CYInvoice 發票整合（雙程式協同測試待開始）**
+- 契約：`docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md`（query／issue）、`docs/CYINVOICE_PDF_HANDOFF.md`（`--autoinput-pdf` 與 §4 CYInvoice 完成回報，**以此為最新**）、`docs/CYINVOICE_INTERFACE_HANDOFF.md`（最早的需求母本）。CYInvoice Draft PR #445，V2.6.21 Build 0 工程包（commit `283e9f26`，Artifact 於 2026-10-18 過期，過期請 CYInvoice 端重出）。
+- AUTO 端：`CyInvoiceLink.cs`（純：request／result、`Mismatch` 核對號碼／日期／金額／統編、`PaperInvoiceLedger`，有測試）、`MainForm.Invoice.cs`（子行程、query → 使用者確認 → issue 只送 skipped → unknown 再 query 一次；`QueuePaperInvoices` 背景每 20 秒 `--autoinput-pdf`、最多 30 分鐘，`PaperMayPrompt`＝沒有輸入 ERP（`_paperHold`）／沒有跑 Chrome 才請人放 A4 白紙；PDF 再核對號碼與金額）。環境由 AUTO 從結果 `environment` 判斷：全自動只收 production；測試入口兩者皆可但測試環境不進 ERP。轉人工訂單不送 CYInvoice（依交接；使用者尚未表示要改）。
+- 測試入口：MO店+ ›「測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）」。測試前 CYInvoice 要在設定頁切測試環境並**儲存**（CLI 用最後儲存的環境），建議獨立 portable 目錄。request／result 在 `Temp\invoice-日期時間`。
+- 設定：`CyInvoicePath`（檔案選擇器）、`MoAutoInvoice`（預設關；正式發行並經使用者同意前不開）、`PaperInvoiceStyle`。
+- 使用者規則：一般消費者 → 會員載具不印；有統編抬頭 → 紙本要印（A4 印表機、放紙確認）；紙本 PDF 不可中斷全自動。
+
+**C. 其他待辦**：蝦皮全自動的 7-11／全家實測、黑貓 A4（§6）、無人值守（Roadmap 5）。合併與正式發布都要使用者同意。
 
 ## 1. 接手時先讀
 
@@ -73,7 +98,7 @@ V0.3.0（Build 0–26，未發布）現況：
   - ERP 端：`PrimeDetailGridAsync` 以表頭「品號」定位第一列並學欄位順序，列高 22 px；`SetDetailCellAsync` 3 次重試；開始前多個 COPI08 或找不到即提示不開始（Build 18）。
   - MO店+：`MoImportForm` 依內容分類（過半訂單有物流單號＝出貨後），`MoOrderImport.FillTracking` 只填單一號碼、其餘列在預覽下方；寄件單 PDF 路線試過後移除（全家寄件單是圖片且沒有 14 碼訂單編號）。說明視窗共用 `HelpForm`。
 - 設定：`ShopeeLabelPrinter`、`ShopeeLabelScale` 110、`SevenLabelScale` 100、`FamilyLabelScale` 165、`FamilyLabelPages` "2"、`HctLabelScale` 95、`HctPickupAddress`（只存本機）、發送訊息規則 `ShopeeChatRules`（MO店+／酷澎預留）、滿件贈送 `GiftRules`；Chrome 網頁文字診斷在「設定 › 一般」。
-- V0.3.0 Build 26（2026-10-14 打包測試；開發期間的暫存分支 `cyerp-auto-input/next-wip` 已併回 `cyerp-auto-input/shopee-batch` 並刪除）：`ChatRules`（`ChatRule` Keywords／Message、`Problems` 跨則重複關鍵字與半填、`Matches`、`Clean`、`OneLine`，有單元測試）；`UserSettings.ShopeeChatRules`／`MoChatRules`／`CoupangChatRules`，Build 25 的 `ShopeeChatKeywords`／`ShopeeChatMessage` 讀一次後 `MigrateLegacyChat`；`SettingsForm.MessagesPage`＋`ChatRuleEditor`（MO店+／酷澎鎖住），儲存前檢查；`ShopeeBatchChat(Rules)`，`SendChatReplyAsync(messages)` 依序送出多則。 全家：`PrintFamilySlipAsync` 網頁文字 ≤3 行（圖片頁）2 秒後改 `ReadAsync(ocr: true)`，訂單編號用 `ShowsOrderSnLoosely`；`ShipAsync` 申請按鈕分「查看寄件編號內」與「取消右側」兩種各按一次（`ApplyBesideCancel`）。 滿件贈送：`GiftRules`（`GiftRule` ItemCodes（多品號合計）／Every／Gift／GiftItem（空白＝件數最多，同數依卡片順序）／Platforms；`Gifts` 寫在受贈品號第一列，指定品號不在訂單時改送件數最多（使用者 2026-10-14 選 b），寫 LOG；`Problems` 同平台同品號跨卡片（不同平台可各一張）、缺值、指定品號不在卡片內；有單元測試）；`UserSettings.GiftRules`；`SettingsForm.GiftPage`＋`GiftRuleEditor`；`MainForm.LoadOrder` 依 `order.Source` 填 `GiftQuantity`（ERP 端原本就會輸入贈/備品量欄）。 全家裁切列印：`SlipImage`（純邏輯、有單元測試：`FindSlips` 直橫虛線都有才算四格、虛線須細於 8 px；`BarcodeModule`；`Plan` 整數倍放大或整除線寬的縮小；`Render` 純黑白）、`SlipPrinter`（Windows：`Installed` 對應實際印表機名稱、`Label` 由驅動讀 dpi、`LargestPicture` 讀存下的圖檔或網頁內 data: 圖、`Print` 以 `PrintDocument` 1 像素＝1 點置中列印、無進度視窗）；`ShopeeBatchRunner.PrintFamilyCutAsync` 在核對訂單後 Ctrl+S 存到 程式同一層的 `Temp\slip-*`（處理 Chrome 另存新檔對話框，用完刪除），一張、有條碼、裁切圖 OCR 讀得到寄件編號才印，否則回到 Ctrl+P 舊路；送印時出錯則停止並請人確認是否已印。實際蝦皮全家頁存檔會是什麼格式（圖片／網頁／PDF）尚未在實機確認，LOG 有 `family page saved files=` 可查。 Chrome 列印目的地：`PrintDialogAsync` 先檢查目的地，不同時 `ChoosePrinterAsync` 點開清單、OCR 找 `ShopeeBatchScreens.PrinterOption` 點選（最多 2 次）。
+- V0.3.0 Build 26（2026-10-14 打包測試；`cyerp-auto-input/next-wip` 目前與 `cyerp-auto-input/shopee-batch` 同步，作為不跑 CI 的暫存分支）：`ChatRules`（`ChatRule` Keywords／Message、`Problems` 跨則重複關鍵字與半填、`Matches`、`Clean`、`OneLine`，有單元測試）；`UserSettings.ShopeeChatRules`／`MoChatRules`／`CoupangChatRules`，Build 25 的 `ShopeeChatKeywords`／`ShopeeChatMessage` 讀一次後 `MigrateLegacyChat`；`SettingsForm.MessagesPage`＋`ChatRuleEditor`（MO店+／酷澎鎖住），儲存前檢查；`ShopeeBatchChat(Rules)`，`SendChatReplyAsync(messages)` 依序送出多則。 全家：`PrintFamilySlipAsync` 網頁文字 ≤3 行（圖片頁）2 秒後改 `ReadAsync(ocr: true)`，訂單編號用 `ShowsOrderSnLoosely`；`ShipAsync` 申請按鈕分「查看寄件編號內」與「取消右側」兩種各按一次（`ApplyBesideCancel`）。 滿件贈送：`GiftRules`（`GiftRule` ItemCodes（多品號合計）／Every／Gift／GiftItem（空白＝件數最多，同數依卡片順序）／Platforms；`Gifts` 寫在受贈品號第一列，指定品號不在訂單時改送件數最多（使用者 2026-10-14 選 b），寫 LOG；`Problems` 同平台同品號跨卡片（不同平台可各一張）、缺值、指定品號不在卡片內；有單元測試）；`UserSettings.GiftRules`；`SettingsForm.GiftPage`＋`GiftRuleEditor`；`MainForm.LoadOrder` 依 `order.Source` 填 `GiftQuantity`（ERP 端原本就會輸入贈/備品量欄）。 全家裁切列印：`SlipImage`（純邏輯、有單元測試：`FindSlips` 直橫虛線都有才算四格、虛線須細於 8 px；`BarcodeModule`；`Plan` 整數倍放大或整除線寬的縮小；`Render` 純黑白）、`SlipPrinter`（Windows：`Installed` 對應實際印表機名稱、`Label` 由驅動讀 dpi、`LargestPicture` 讀存下的圖檔或網頁內 data: 圖、`Print` 以 `PrintDocument` 1 像素＝1 點置中列印、無進度視窗）；`ShopeeBatchRunner.PrintFamilyCutAsync` 在核對訂單後 Ctrl+S 存到 程式同一層的 `Temp\slip-*`（處理 Chrome 另存新檔對話框，用完刪除），一張、有條碼、裁切圖 OCR 讀得到寄件編號才印，否則回到 Ctrl+P 舊路；送印時出錯則停止並請人確認是否已印。實際蝦皮全家頁存檔會是什麼格式（圖片／網頁／PDF）尚未在實機確認，LOG 有 `family page saved files=` 可查。 Chrome 列印目的地：`PrintDialogAsync` 先檢查目的地，不同時 `ChoosePrinterAsync` 點開清單、OCR 找 `ShopeeBatchScreens.PrinterOption` 點選（最多 2 次）。
 - V0.3.0 Build 25：聊聊通知。`ShopeeBatchChat(Keywords, Message)`（設定 `ShopeeChatKeywords`、`ShopeeChatMessage`，只存本機）；`ShipAsync` 讀到 `BuyerNote` 含關鍵字 → `SendChatReplyAsync`（`ChatButton` 關注右側、捲動到可見；`ChatInput`「輸入文字」；`UnicodeText` 訊息；`ChatInputHolds` 確認；Enter；輸入框清空才算送出；`FoldChatAsync` 按 `ChatCollapseButton`（網頁版聊聊右側）或 Esc）→ `BackToOrderTopAsync` → 重讀安排出貨按鈕。失敗不停批次，記 Notes。`runner.Chats` 進結束清單。未實機測試。
 - V0.3.0 Build 24：`ApplyTrackingButton` 只取「取消」右側同列者（或查看寄件編號視窗內標題下方唯一一顆）；`ShipAsync` 每顆申請按鈕按一次、最多兩次（2026-10-14 LOG：點到標題 714,440）。`CarrierKind`「店到家」→ Shopee（店到家宅配）。
 - V0.3.0 Build 23：新竹物流。`ShopeeBatchCarrier.Hct`（新竹／HCT）；`ShipAsync` 按安排取件後 `ConfirmPickupAsync`：`PickupConfirmButton`（取消右側的確認）、`PickupAddressMatches`（「快遞向你取件的地址」下方卡片含設定 `HctPickupAddress`，空白不計）；不符按取消並 `ShopeeBatchSkip`。`TrackingDialogTitle` 加「快遞取件詳情」（號碼由標題下方 `OtherTrackingPattern` 讀）。寄件單沿用 `PrintShopeeLabelAsync`，號碼無標籤時 `ShowsOrderSn`／`ShowsNumber`（OCR 用 `ShowsOrderSnLoosely`，O／Q／0），縮放 `HctLabelScale` 95。未實機測試：安排取件視窗的網頁文字、快遞取件詳情的號碼、寄件單 PDF 文字。
@@ -116,23 +141,23 @@ V0.3.0（Build 0–26，未發布）現況：
    MO店+／酷澎全自動（使用者 2026-10-13 規劃，未開始；酷澎等有訂單再做）：AutoInput 一次完成 1 未出貨匯出 → 2 批次出貨取寄件單 PDF → 3 配送中匯出 → 4 呼叫 CYInvoice 開立 → 5 取回發票號碼／日期 → 6 兩檔帶入（已完成）→ 7 ERP → 8 列印寄件單 → 9 清除。決定：
    - 下載檔一律放 AutoInput 自建的暫存資料夾，全部成功後連資料夾刪除；有要人工處理的訂單就保留。
    - CYInvoice 接口已由 CYInvoice 主控實作（Draft PR #445，見 `docs/CYINVOICE_IMPLEMENTATION_HANDOFF.md`）。使用者 2026-10-14 決定：等 MO店+ 全自動跑順之後再接；設定裡的 CYInvoice.exe 位置用檔案選擇器選（不用手填）；接上前發票資料仍在預覽手動填。
-   - 2026-10-15 呼叫端已寫好（`CyInvoiceLink`（純，有測試）、`MainForm.Invoice.cs`），尚未實機聯測：MO店+ ›「測試：發票」用真實訂單檔、CYInvoice 測試環境（使用者：測試環境的送出資料 CYInvoice 自己有處理，不必擔心外洩），停在預覽。環境由 AUTO 從查詢結果判斷（全自動只收 production）；全自動開立預設關（設定勾選）。紙本發票：有統編才印，開立後在背景以提案的 `--autoinput-pdf` 每 20 秒取官方 PDF（光貿完成才有；格式在 設定 › 印表機 選；不中斷全自動），拿到後在沒有輸入 ERP 時請人放紙、印在 A4 印表機；CYInvoice 端尚未實作此模式，CYInvoice 已於 2026-10-15 以 V2.6.21 Build 0 工程包實作 `--autoinput-pdf` 並確認四項（`docs/CYINVOICE_PDF_HANDOFF.md` §4 完成回報）；待雙程式實機協同測試。CYInvoice CLI 未開啟時用其設定頁最後儲存的環境，測試前要在 CYInvoice 切到測試環境並儲存。轉人工訂單不送 CYInvoice（依交接）。
+   - 2026-10-15 呼叫端已寫好（`CyInvoiceLink`（純，有測試）、`MainForm.Invoice.cs`），尚未實機聯測：MO店+ ›「測試：發票」用真實訂單檔、CYInvoice 測試環境（使用者：測試環境的送出資料 CYInvoice 自己有處理，不必擔心外洩），停在預覽。環境由 AUTO 從查詢結果判斷（全自動只收 production）；全自動開立預設關（設定勾選）。紙本發票：有統編才印，開立後在背景以提案的 `--autoinput-pdf` 每 20 秒取官方 PDF（光貿完成才有；格式在 設定 › 印表機 選；不中斷全自動），拿到後在沒有輸入 ERP 時請人放紙、印在 A4 印表機；CYInvoice 已於 2026-10-15 以 V2.6.21 Build 0 工程包實作 `--autoinput-pdf` 並確認四項（`docs/CYINVOICE_PDF_HANDOFF.md` §4 完成回報）；待雙程式實機協同測試。CYInvoice CLI 未開啟時用其設定頁最後儲存的環境，測試前要在 CYInvoice 切到測試環境並儲存。轉人工訂單不送 CYInvoice（依交接）。
    - 發票只由 CYInvoice 開立、不需登入；介面規格見 `docs/CYINVOICE_INTERFACE_HANDOFF.md`，交 CYInvoice 主控實作（命令列＋結果檔，開立／查詢兩種模式）。
    - 寄件單：某張訂單失敗仍整份列印（出貨一定要印）。全家／7-11 是 A4 切四格，要轉成熱感紙一張一格（解密 PDF → 轉圖 → 切四格去空白 → 逐張列印）；新竹印單前暫停提示人工放紙，按「繼續」才印（暫停不是中止）。印表機細節等下次實單跑一次再定。
    - 網頁端 1–3 步比照蝦皮全自動（自己的 Chrome 視窗、讀網頁原文），待使用者實單帶一次流程。
    MO店+ 網頁操作步驟（使用者 2026-10-14 實機帶；Build 26 已實作為「MO店+ › 全自動」：`ShopeeBatchRunner.Mo.cs`（`RunMoAsync`，與蝦皮共用 Chrome 讀取／點擊／另存新檔 `SaveFromDialogAsync`）、`MoBatchScreens`（純判讀，有測試）、`MainForm.RunMoBatchAsync`（`MoImportForm.Preload`→預覽填發票→按開始後列印（`PreviewAndRunAsync` 的 `beforeErp`，只印一次；使用者 2026-10-14：紙本發票也在這步印）→ERP）；尚未實機跑過，網頁文字的判讀依截圖寫成，待 LOG 校正。使用者 2026-10-14 決定：轉人工的訂單照樣出貨列印、只跳過 ERP；明細不印；批次出貨記錄非全部成功即停止；未登入停下請人登入）：
    1. 開程式自己的 Chrome 新視窗。訂單 › 訂單管理 › E001訂單管理 → 我的訂單「未出貨(n)」，處理提醒點「全部」、配送方式點「全部」。
    2. 「匯出報表」→「匯出提醒」視窗列出 OrderExport_*.xls 已完成 → Chrome 另存新檔：上方路徑欄（Alt+D）切到程式的 Temp 子資料夾再存（同蝦皮全家寄取貨單的做法）→ 關閉匯出提醒。這份是還沒開發票、沒有寄件資訊的初始訂單檔，以 MO 密碼開啟。
-   3. 初始訂單檔交 CYInvoice 開立並取回發票資訊（`docs/CYINVOICE_INTERFACE_HANDOFF.md`）。
+   3. 初始訂單檔交 CYInvoice 開立並取回發票資訊——實作在配送中匯出之後、預覽之前（見 §0 B）。
    4. 左側「批次出貨」→「未出貨(n)」，處理提醒「全部」；配送方式按鈕上有 (n) 的才要處理。目前只會有「第三方物流-新竹貨運」「7-11店出」「全家店出」三種，做法相同。
    5. 每種配送方式：點該按鈕 → 勾「已選 0 個訂單」旁的全選框（全選該配送方式所有訂單）→「批次出貨」→「批次出貨（共 n 筆訂單）」頁核對訂單編號、選「併箱出貨」→ 往下按「確認出貨」→「批次出貨中」彈窗按「關閉」。
    6. 右上「批次出貨記錄」：最新一筆就是剛處理的（出貨時間、配送方式、筆數、狀態「全部成功」）→「列印文件」→「注意」視窗：全家、7-11 有「列印標籤」「列印明細」；新竹另有「列印出貨總表」。「列印標籤」與「列印出貨總表」都會跳另存新檔存 PDF（LogisticsLabel_*.pdf 等），同樣切到 Temp 存。所有檔案都用同一個 MO 密碼。
-   7. 三種配送方式都出貨、PDF 都存好後，回「批次出貨」確認配送方式按鈕都沒有 (n) 數字了（使用者 2026-10-14）。
+   7. 三種配送方式都出貨、PDF 都存好後（使用者 2026-10-15 更正：最後一種出貨完不再回批次出貨頁，直接進第 8 步；只有還有其他配送方式時才回去）。
    8. 回「我的訂單」，切到「配送中」分頁再按一次「匯出報表」（使用者 2026-10-14 更正：在配送中分頁按），存下出貨後的訂單檔（已有寄件單號）。
-   9. 進 ERP 打單前先把該印的文件印完（使用者 2026-10-14）：全家／7-11 標籤 PDF 切成熱感標籤；新竹寄件單與到廠取貨總表印在 A4 印表機（設定「A4 印表機」，目前是 Brother），各自先跳超大字「請在印表機放入寄件單用紙」／「請在印表機放入取貨總表用紙」，按「好了」才印（`PaperPromptForm`、`MoSlipPdf.RenderPagesAsync`、`SlipPrinter.PrintPages`；使用者 2026-10-14 以 Temp\test1 測試通過）；總表全部印過才不重印、部分印過照印並提醒作廢舊總表（`MoPickupSummary.Decide`、`PickupSummaryLedger`，Data\pickup_summaries.json 保留 30 天）。
+   9. 預覽填好發票、按開始後、進 ERP 打單前把該印的文件印完（使用者 2026-10-14／15：紙本發票也在這步）：全家／7-11 標籤 PDF 切成熱感標籤；新竹寄件單與到廠取貨總表印在 A4 印表機（設定「A4 印表機」，目前是 Brother），各自先跳超大字「請在印表機放入寄件單用紙」／「請在印表機放入取貨總表用紙」，按「好了」才印（`PaperPromptForm`、`MoSlipPdf.RenderPagesAsync`、`SlipPrinter.PrintPages`；使用者 2026-10-14 以 Temp\test1 測試通過）；總表全部印過才不重印、部分印過照印並提醒作廢舊總表（`MoPickupSummary.Decide`、`PickupSummaryLedger`，Data\pickup_summaries.json 保留 30 天）。
    印過的文件保留 7 天供「重新列印寄件單」（`MoPrintedDocuments`、`MoReprintForm`；使用者 2026-10-14：不追蹤印表機狀態，出錯由人發現後重印）。
    10. 接上已完成的 MO店+ 兩檔流程（初始訂單檔＋出貨後訂單檔帶物流單號，加上 CYInvoice 的發票資訊）→ ERP 打單＋列印 → 全部成功後刪 Temp 子資料夾。
-   已有的測試功能（「MO店+」選單）：「測試寄件單裁切列印（全家／7-11 PDF）」選 PDF 後用 MO 密碼開啟，每頁是一張大圖就用原圖、否則由 Windows 以 2 倍印表機 dpi 繪出，切成一張張送熱感印表機。MO 全家 PDF 已確認每頁是一張 2615×4271 原圖（與蝦皮全家同一種四格版面）；MO 7-11 PDF 尚無樣本。
+   已有的測試功能（「MO店+」選單）：「測試寄件單裁切列印（全家／7-11 PDF）」選 PDF 後用 MO 密碼開啟，每頁是一張大圖就用原圖、否則由 Windows 以 2 倍印表機 dpi 繪出，切成一張張送熱感印表機。MO 全家 PDF 已確認每頁是一張 2615×4271 原圖（與蝦皮全家同一種四格版面）；MO 7-11 PDF（2026-10-15 實檔）是向量頁面、A4 左上一張實線外框，依外框切、以印表機 dpi 原尺寸印。
    A4 列印專用紙的寄件單（使用者 2026-10-14 交代記下，未開始）：
    - 蝦皮「黑貓」與 MO店+「新竹物流」的寄件單要印在 A4 列印專用紙上，不是熱感標籤紙（蝦皮全自動目前遇到黑貓會跳過轉人工）。
    - 現階段全自動執行時人都在電腦前：輪到這類寄件單時發出提示（主機沒接喇叭，嗶聲之外要有工作列閃爍、置頂視窗），**暫停**等人把 A4 專用紙放進印表機，按「繼續」才印；暫停不是中止，按 Esc 才停止。
