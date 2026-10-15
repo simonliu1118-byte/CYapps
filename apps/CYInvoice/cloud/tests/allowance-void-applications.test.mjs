@@ -115,7 +115,8 @@ sql.prepare("UPDATE company_settings SET amego_app_key_ciphertext=?").run(secret
 env.COMPANY_SETTINGS_KEY_HEX=privateKey;
 sql.prepare("UPDATE work_items SET status='review',revision=2 WHERE work_item_id=?")
  .run(input.itemId);
-let remoteQueries=0,remoteSends=0,remoteStates=0,officialType="D0401";
+let remoteQueries=0,remoteSends=0,remoteStates=0,remoteLists=0;
+let listPresent=true,officialType="D0401";
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,opts)=>{
  const form=new URLSearchParams(opts.body);
@@ -139,6 +140,16 @@ globalThis.fetch=async(url,opts)=>{
    officialType="D0501";
    return Response.json({code:0,msg:""});
  }
+ if(url.endsWith("/allowance_list")){
+   remoteLists++;
+   assert.ok(payload.date_select===1||payload.date_select===2);
+   assert.equal(payload.page,1);
+   assert.equal(payload.limit,20);
+   return Response.json({code:0,page_now:1,
+     page_total:listPresent?1:0,data_total:listPresent?1:0,
+     data:listPresent?[{allowance_number:input.allowanceNumber,
+       invoice_type:officialType,invoice_status:99,allowance_date:20261015}]:[]});
+ }
  if(url.endsWith("/allowance_status")){
    remoteStates++;
    assert.deepEqual(payload,[{AllowanceNumber:input.allowanceNumber}]);
@@ -161,6 +172,9 @@ try{
  assert.equal(grant.status,201,JSON.stringify(grant));
  assert.equal(grant.data.canIssueNow,false);
  assert.equal(remoteQueries,1);
+ assert.equal((await call("reconcile",revision)).status,409,
+   "Without a one-shot claim no reconciliation can be started");
+ assert.equal(remoteLists,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
  const attempt=await call("send-once",revision);
@@ -178,14 +192,41 @@ try{
  assert.equal(inspected.data.readback.officialCancelled,true);
  assert.equal(inspected.data.readback.canAutoClose,false);
  assert.equal(remoteStates,1);
+ actor={...actor,workspaceRole:"USER"};
+ assert.equal((await call("reconcile",revision)).status,403);
+ actor={...actor,workspaceRole:"ADMIN"};
+ assert.equal((await call("reconcile",{...revision,sellerInvoice:"87654321"})).status,400);
+ assert.equal(remoteLists,0,"Untrusted fields and users never fetch official data");
+ const reconciled=await call("reconcile",revision);
+ assert.equal(reconciled.status,200,JSON.stringify(reconciled));
+ assert.equal(reconciled.data.listReason,"OFFICIAL_STATUS_CHANGED_OR_PENDING");
+ assert.equal(reconciled.data.readback.officialCancelled,true);
+ assert.equal(reconciled.data.canAutoClose,false);
+ assert.equal(reconciled.data.canAutoRetry,false);
+ assert.equal(remoteLists,2,"Only two bounded official date dimensions");
+ assert.equal(remoteStates,2,"Only known D1 Work Item gets selective official status");
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_official_checks").get().n,2);
+ listPresent=false;
+ const notSeen=await call("reconcile",revision);
+ assert.equal(notSeen.status,200,JSON.stringify(notSeen));
+ assert.equal(notSeen.data.listReason,"NOT_SEEN_NOT_PROOF");
+ assert.equal(notSeen.data.readback,undefined);
+ assert.equal(notSeen.data.canAutoRetry,false);
+ assert.equal(remoteLists,4);
+ assert.equal(remoteStates,2,"Missing list entry must not trigger a status call");
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_official_checks").get().n,2,
+   "Only a specific official readback may append the existing Audit");
+ listPresent=true;
+ assert.equal(sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
+   .get(input.itemId).status,"review","Scanning cannot close or alter a Work Item");
  const closed=await call("close",revision);
  assert.equal(closed.status,200,JSON.stringify(closed));
  assert.equal(closed.data.status,"closed");
- assert.equal(remoteStates,2);
+ assert.equal(remoteStates,3);
  assert.equal(sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
    .get(input.itemId).status,"closed");
  assert.equal((await call("close",revision)).status,409);
- assert.equal(remoteStates,2,"Closed Work Item never starts another official request");
+ assert.equal(remoteStates,3,"Closed Work Item never starts another official request");
 }finally{globalThis.fetch=originalFetch;}
 assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
 console.log("CYID allowance void: source, approval, one-shot g0501, official readback and verified close passed");

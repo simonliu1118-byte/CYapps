@@ -19,6 +19,7 @@ const paths=new Set([
  "/v1/allowance-void-applications/approve",
  "/v1/allowance-void-applications/send-once",
  "/v1/allowance-void-applications/status-readback",
+ "/v1/allowance-void-applications/reconcile",
  "/v1/allowance-void-applications/close"
 ]);
 const idPattern=/^[A-Za-z0-9_-]{10,100}$/;
@@ -112,7 +113,7 @@ export async function handleAllowanceVoidApplications(
       return response(401,{error:{code:"DEVICE_INVALID"}});
     const a=await activeActor(env);
     if(!a)return response(403,{error:{code:"AUTHORITY_REQUIRED"}});
-    if(["approve","send-once","status-readback","close"].includes(action)){
+    if(["approve","send-once","status-readback","close","reconcile"].includes(action)){
       if(!manager(a))return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
       if(typeof input.itemId!=="string"||!idPattern.test(input.itemId)||
          !Number.isSafeInteger(input.expectedRevision)||

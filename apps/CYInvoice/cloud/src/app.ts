@@ -97,6 +97,7 @@ export default {
       "/v1/allowance-void-applications/approve",
       "/v1/allowance-void-applications/send-once",
       "/v1/allowance-void-applications/status-readback",
+      "/v1/allowance-void-applications/reconcile",
       "/v1/allowance-void-applications/close",
       "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);

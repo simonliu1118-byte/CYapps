@@ -6,7 +6,8 @@ import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
 import {readOfficialAllowanceVoidStatus} from "./amego-allowance-status";
 import {postAllowanceVoidOnce} from "./amego-allowance-void";
-export type VoidManagerAction="approve"|"send-once"|"status-readback"|"close";
+import {scanAllowanceExceptionPages} from "./amego-allowance-list";
+export type VoidManagerAction="approve"|"send-once"|"status-readback"|"close"|"reconcile";
 export interface VoidManagerTarget{
   workspaceId:string;workItemId:string;deviceId:string;expectedRevision:number;
   environment:"test"|"production";encryptionKeyHex:string;
@@ -100,6 +101,40 @@ export async function managerAllowanceVoidAction(
   await authorized(t,authority);
   const source=await liveSource(db,t);
   const now=new Date().toISOString();
+  if(action==="reconcile"){
+    // Only an existing g0501 one-shot claim is eligible. Not-seen-in-list
+    // is never proof of failure and must not reopen an already sent attempt.
+    const claim=await db.prepare(
+      "SELECT work_item_id FROM allowance_void_send_claims "+
+      "WHERE workspace_id=?1 AND work_item_id=?2 AND allowance_number=?3 LIMIT 1"
+    ).bind(t.workspaceId,t.workItemId,source.allowance_number)
+      .first<{work_item_id:string}>();
+    if(!claim)throw new Error("ALLOWANCE_VOID_RECONCILE_NOT_SENT");
+    const company=await officialIssuer(db,t,source);
+    // Explicit on-demand 14-day UTC window. No Cron, no full invoice mirror,
+    // no caller-provided seller, date range, credentials or allowance number.
+    const end=new Date();
+    const start=new Date(end.getTime()-13*86400000);
+    const compact=(d:Date)=>d.toISOString().slice(0,10).replace(/-/g,"");
+    const scanned=await scanAllowanceExceptionPages({
+      sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+      dateStart:compact(start),dateEnd:compact(end)
+    },[{workItemId:t.workItemId,allowanceNumber:source.allowance_number}]);
+    await authorized(t,authority);
+    await liveSource(db,t); // Keep the same original Work Item revision.
+    const hint=scanned.hints[0];
+    if(!hint.needsSelectiveQuery)
+      return {itemId:t.workItemId,revision:t.expectedRevision,
+        allowanceNumber:source.allowance_number,listReason:hint.reason,
+        requiresManualReconciliation:true,canAutoRetry:false,canAutoClose:false};
+    // Reuse the existing official allowance_status readback AND its immutable
+    // D1 official_checks audit; no parallel status writer or business state.
+    const observed=await managerAllowanceVoidAction("status-readback",db,t,authority);
+    return {itemId:t.workItemId,revision:t.expectedRevision,
+      allowanceNumber:source.allowance_number,listReason:hint.reason,
+      observedTypes:hint.observedTypes,readback:observed.readback,
+      requiresManualReconciliation:true,canAutoRetry:false,canAutoClose:false};
+  }
   if(action==="approve"){
     const sent=await db.prepare(
       "SELECT work_item_id FROM allowance_void_send_claims "+
