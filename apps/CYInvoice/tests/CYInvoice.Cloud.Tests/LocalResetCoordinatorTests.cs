@@ -102,7 +102,7 @@ internal static class LocalResetCoordinatorTests
 
     private static async Task TestSelfRevokeRecoveryAsync()
     {
-        using var temporary = new AuthorityTemporaryDirectory();
+        using var temporary = new TestTemporaryDirectory();
         var protector = new ResetTestProtector();
         var repository = LocalRepository.Open(temporary.Path, protector);
         var settings = repository.Settings.LoadOrCreate();
