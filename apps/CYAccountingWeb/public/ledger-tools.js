@@ -573,7 +573,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
 
-  return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}">
+  return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}"${id < 0 ? ' aria-busy="true"' : ''}>
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
     <td class="ledger-account-name" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
@@ -581,7 +581,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button></td>
+    <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button>`}</td>
   </tr>`;
 }
 

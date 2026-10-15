@@ -13,6 +13,7 @@ const state = {
   groups: [],
   categories: [],
   transactions: [],
+  transactionMonth: '',
   lockedThrough: null,
   ledgerLocked: false,
   settingsKind: 'income',
@@ -25,6 +26,9 @@ let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
 let cyTransactionMutationRevision = 0;
 const cyPendingTransactionUpdates = new Map();
+const cyPendingTransactionCreates = new Map();
+let cyTransactionCreateId = 0;
+let cyEntryDraftRevision = 0;
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
@@ -133,6 +137,16 @@ function bindEvents() {
   els.amount.addEventListener('input', numericInput);
   els.txDate.addEventListener('change', updateEntryLockState);
   els.form.addEventListener('submit', saveTransaction);
+  const markEntryDraftChanged = () => { cyEntryDraftRevision += 1; };
+  els.form.addEventListener('input', markEntryDraftChanged, true);
+  els.form.addEventListener('change', markEntryDraftChanged, true);
+  window.addEventListener('cyacc:entry-kind-changed', markEntryDraftChanged);
+  window.addEventListener('cyacc:entry-draft-reset', markEntryDraftChanged);
+  window.addEventListener('beforeunload', event => {
+    if (!cyPendingTransactionCreates.size) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
   els.monthFilter.addEventListener('change', loadTransactions);
 
   els.transactionRows.addEventListener('click', async event => {
@@ -262,30 +276,81 @@ function updateEntryLockState() {
 
 async function saveTransaction(event) {
   event.preventDefault();
-  showMessage('');
-  if (isLocked(els.txDate.value.slice(0, 7))) return showMessage('此月份已鎖帳，無法新增資料。', true);
-  const amount = Number(els.amount.value);
-  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) {
-    showMessage('金額必須為 1～9,999,999。', true);
-    els.amount.focus();
-    return;
-  }
-  els.saveButton.disabled = true;
+  const entry = {
+    txDate: els.txDate.value, accountName: els.accountName.value,
+    categoryName: els.categoryName.value, kind: state.kind,
+    summary: els.summary.value, amount: els.amount.value
+  };
+  let body;
   try {
-    await api('/api/transactions', {
-      method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ ...manualTransactionValues({ txDate: els.txDate.value, accountName: els.accountName.value, categoryName: els.categoryName.value, summary: els.summary.value, amount }), kind: state.kind })
-    });
-    showMessage('存檔成功');
-    els.summary.value = '';
-    els.amount.value = '';
-    els.monthFilter.value = els.txDate.value.slice(0, 7);
-    await loadTransactions();
-    window.cyAfterEntrySaved?.();
+    if (isLocked(entry.txDate.slice(0, 7))) throw new Error('此月份已鎖帳，無法新增資料。');
+    body = { ...manualTransactionValues(entry), kind: entry.kind };
   } catch (error) {
     showMessage(error.message, true);
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { entry, ok: false, message: error.message } }));
+    if (!Number.isInteger(Number(entry.amount)) || Number(entry.amount) < 1 || Number(entry.amount) > 9_999_999) els.amount.focus();
+    return;
+  }
+
+  const id = --cyTransactionCreateId;
+  const month = body.txDate.slice(0, 7);
+  const row = { id, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName,
+    kind: body.kind, summary: body.summary, amount: body.amount, created_at: new Date().toISOString() };
+  let finish;
+  const settled = new Promise(resolve => { finish = resolve; });
+  cyPendingTransactionCreates.set(id, { row, settled });
+  cyTransactionMutationRevision += 1;
+  els.summary.value = '';
+  els.amount.value = '';
+  const draftRevision = ++cyEntryDraftRevision;
+  let saved = false;
+  try {
+    showMessage('儲存中…');
+    window.dispatchEvent(new CustomEvent('cyacc:entry-submitted', { detail: { id, entry } }));
+    if (els.monthFilter.value !== month) {
+      els.monthFilter.value = month;
+      els.monthFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (state.transactionMonth === month && els.monthFilter.value === month) {
+      state.transactions.push(row);
+      renderOptimisticTransactionState();
+    }
+
+    const result = await api('/api/transactions', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(body) });
+    const confirmed = result.transaction;
+    if (!Number.isSafeInteger(confirmed?.id) || confirmed.id <= 0) throw new Error('尚未確認存檔結果，請重新整理確認後再操作。');
+    // Never replace another request's row or navigate after an asynchronous write.
+    state.transactions = state.transactions.filter(item => Number(item.id) !== id && Number(item.id) !== confirmed.id);
+    if (state.transactionMonth === month) state.transactions.push(confirmed);
+    saved = true;
+    if (id === cyTransactionCreateId) showMessage('存檔成功');
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { id, entry, ok: true, message: '存檔成功' } }));
+  } catch (error) {
+    state.transactions = state.transactions.filter(item => Number(item.id) !== id);
+    if (id === cyTransactionCreateId && draftRevision === cyEntryDraftRevision
+      && els.summary.value === '' && els.amount.value === '' && state.kind === entry.kind
+      && els.txDate.value === entry.txDate && els.accountName.value === entry.accountName
+      && els.categoryName.value === entry.categoryName) {
+      els.summary.value = entry.summary;
+      els.amount.value = entry.amount;
+      cyEntryDraftRevision += 1;
+    }
+    showMessage(error.message, true);
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { id, entry, ok: false, message: error.message } }));
   } finally {
+    cyPendingTransactionCreates.delete(id);
+    cyTransactionMutationRevision += 1;
+    finish();
+    if (state.transactionMonth === els.monthFilter.value) renderOptimisticTransactionState();
     updateEntryLockState();
+  }
+  if (saved) {
+    // A prior-month write can change the currently displayed opening balance.
+    if (month < els.monthFilter.value) {
+      try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
+      catch { showMessage('存檔成功，餘額載入失敗，請重新整理。', true); }
+    }
+    window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded', { detail: { month: els.monthFilter.value } }));
   }
 }
 
@@ -297,8 +362,14 @@ async function loadTransactions() {
   setLedgerLoadingState(true);
   try {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
+    // A GET may see a committed row before its POST acknowledgement arrives.
+    // Wait for this month's outstanding creates before accepting the snapshot,
+    // then use the same revision guard; identical legitimate entries stay distinct.
+    await Promise.all([...cyPendingTransactionCreates.values()]
+      .filter(item => item.row.tx_date.slice(0, 7) === month).map(item => item.settled));
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
     if (mutationRevision !== cyTransactionMutationRevision) return await loadTransactions();
+    state.transactionMonth = month;
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
@@ -381,6 +452,7 @@ function renderOptimisticTransactionState() {
 
 async function persistTransactionUpdate(id, values, onOptimistic) {
   id = Number(id);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('此筆交易仍在儲存中。');
   const original = state.transactions.find(item => Number(item.id) === id);
   if (!original) throw new Error('找不到交易。');
   if (cyPendingTransactionUpdates.has(id)) throw new Error('此筆交易仍在儲存中。');
@@ -411,6 +483,7 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
 }
 
 async function deleteTransaction(id) {
+  if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
   try {
     await api(`/api/transactions/${id}`, { method: 'DELETE' });
     showMessage('已刪除');

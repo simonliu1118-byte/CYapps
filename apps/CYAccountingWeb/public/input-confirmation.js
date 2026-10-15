@@ -1,7 +1,6 @@
 /* CYAccountingWeb input confirmation functional module. */
 
 const cyInputConfirmations = [];
-let cyPendingConfirmation = null;
 
 window.addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual);
 
@@ -63,39 +62,21 @@ function updateEntryKindVisual() {
 }
 
 function bindInputConfirmation() {
-  if (!els.form || !els.saveMessage) return;
-
-  els.form.addEventListener('submit', () => {
-    cyPendingConfirmation = snapshotPendingConfirmation();
-  }, true);
-
-  window.addEventListener('cyacc:entry-message', event => {
-    if (!cyPendingConfirmation) return;
-    const text = String(event.detail?.text || '').trim();
-    if (!text) return;
-
-    if (text === '存檔成功') {
-      pushInputConfirmation({ ...cyPendingConfirmation, ok: true, message: '存檔成功' });
-      cyPendingConfirmation = null;
+  window.addEventListener('cyacc:entry-submitted', event => {
+    const { id, entry } = event.detail;
+    pushInputConfirmation({ ...entry, id, pending: true, ok: false });
+  });
+  window.addEventListener('cyacc:entry-result', event => {
+    const { id, entry, ok, message } = event.detail;
+    if (id === undefined) {
+      pushInputConfirmation({ ...entry, pending: false, ok, message });
       return;
     }
-
-    if (event.detail?.isError) {
-      pushInputConfirmation({ ...cyPendingConfirmation, ok: false, message: text });
-      cyPendingConfirmation = null;
-    }
+    const pending = cyInputConfirmations.find(item => item.id === id);
+    if (!pending) return; // Results never reinsert attempts evicted by the ten-entry limit.
+    Object.assign(pending, { pending: false, ok, message });
+    renderInputConfirmations();
   });
-}
-
-function snapshotPendingConfirmation() {
-  return {
-    txDate: String(els.txDate?.value || ''),
-    accountName: String(els.accountName?.value || ''),
-    kind: state.kind,
-    categoryName: String(els.categoryName?.value || ''),
-    summary: String(els.summary?.value || '').trim(),
-    amount: String(els.amount?.value || '').trim()
-  };
 }
 
 function pushInputConfirmation(entry) {
@@ -119,9 +100,9 @@ function renderInputConfirmations() {
     const amountText = Number.isFinite(amountNumber) && amountNumber > 0 ? money(amountNumber) : `$${escapeHtml(entry.amount || '0')}`;
     const kindText = entry.kind === 'income' ? '收入' : '支出';
     const date = escapeHtml(String(entry.txDate || '').replaceAll('-', '/'));
-    const status = entry.ok ? '存檔成功' : (entry.message || '存檔失敗');
+    const status = entry.pending ? '儲存中…' : entry.ok ? '存檔成功' : (entry.message || '存檔失敗');
     const fullText = `${String(entry.txDate || '').replaceAll('-', '/')} [${entry.accountName}] ${kindText} ${entry.categoryName} - ${summary} ${amountText} ${status}`;
-    return `<div class="confirmation-item ${entry.ok ? 'success' : 'error'}" title="${escapeHtml(fullText)}">
+    return `<div class="confirmation-item ${entry.pending ? 'pending' : entry.ok ? 'success' : 'error'}" title="${escapeHtml(fullText)}">
       <div class="confirmation-main">
         <span class="confirmation-date">${date}</span> <span class="confirmation-account">[${escapeHtml(entry.accountName)}]</span> <span class="confirmation-kind ${entry.kind}">${kindText}</span> <span class="confirmation-description">${escapeHtml(entry.categoryName)} - ${escapeHtml(summary)}</span> <span class="confirmation-amount">${amountText}</span>
       </div>
@@ -129,7 +110,7 @@ function renderInputConfirmations() {
     </div>`;
   }).join('');
   syncConfirmationCount();
-  if (cyInputConfirmations.some(entry => !entry.ok)) setConfirmationDrawer(true);
+  if (cyInputConfirmations.some(entry => !entry.pending && !entry.ok)) setConfirmationDrawer(true);
 }
 
 const CY_CONFIRMATION_DRAWER_KEY = 'cyaccounting.confirmationDrawerOpen';

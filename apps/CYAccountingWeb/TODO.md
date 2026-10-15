@@ -17,12 +17,11 @@
 
 ## 交易互動
 
-- [ ] 一般**新增記帳**的共用 optimistic update 與失敗 rollback 尚未實作；目前各裝置共用既有等待送出流程。 先前未合併 `cyaccountingweb/optimistic-transaction-create` 分支已暫停，沒有部署或取得完整驗證；續作須從 main 正式基準重新檢視。
 - [ ] 若未來加入 PWA、掃碼、拍照、離線或 Push，再由具體需求評估；不得為行動裝置另造第二套 business/data frontend。
 
 ## 帳務與 Identity
 
-- [ ] PR #435 首次登入引導：依最新 main 重新基底及升版；合併前取得正式 CY Web portal 與 CYID authority 相同的 live binding 證據；目前保留未合併，不將 CI 成功當成此 gate 通過。
+- [ ] PR #435 首次登入引導：已依前一主線整合且 CI 通過，正式 gate 回報 AUTHORITY_MISMATCH。已提供使用者轉交 CY Web 對話的交接檔；修正後依最新 main 再整合／升版並重跑嚴格 gate，仍保留草稿，不以 CI 通過代替正式證據。
 
 - [ ] 開帳基準／首期期初的後續工作以私人檢查點及使用者當次指示為準；先確認已完成操作與待補資料，再評估調整及歷史保留，不以公開文件推定帳務狀態。
 - [ ] Password Recovery 真實 Email delivery／browser 完整驗收。
@@ -31,7 +30,7 @@
 ## 備份、復原與維運
 
 - [ ] 觀察 Phase D 首次 GCS 週三／週日排程：2026/10/15 已回讀首次 R2-only 自動備份成功、GCS 本日未排程；新政策後的 GCS 排程仍待實際驗收，不以手動雙副本成功代替。
-- [ ] Google Cloud 每月低額 budget 警示（目標 NT$100）；provider lifecycle 若啟用，需長於 application retention。
+- [ ] Provider lifecycle 設定仍待核對；若啟用，期限需長於 application retention。Google Cloud 帳戶層級每月低額 budget 已由使用者建立並選擇包含優惠，建立證據見 WORK_HANDOFF。
 - [ ] Phase E／shared Backup Service 與 CYWEB 主控協調；尚未啟用，不共用廣權限憑證或取消 App dataset 隔離。
 - [ ] 未來若要停用 `workers.dev` 備援，另做明確切換決策與驗收；目前保留。
 

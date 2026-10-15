@@ -32,10 +32,10 @@ const context = vm.createContext({ CustomEvent: class { constructor(type, option
   setEntryKind(kind) { context.state.kind = kind; }, isLocked: () => locked,
   updateEntryLockState() {}, syncEntryUiAccountChoices() {},
   showMessage(text) { messages.push(text); }, jsonHeaders: () => ({}), renderDesktopLedger() {},
-  async api(path, request) { writes.push({ path, ...request, body: JSON.parse(request.body) }); if (fail) throw new Error('TEST_WRITE_FAILED'); },
+  async api(path, request) { const body = JSON.parse(request.body); writes.push({ path, ...request, body }); if (fail) throw new Error('TEST_WRITE_FAILED'); return { transaction: { id: 10, tx_date: body.txDate } }; },
   switchTouchWorkspaceMobilePage() { throw new Error('desktop must not use mobile page navigation'); }
 });
-vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
+vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map(); const cyPendingTransactionCreates = new Map(); let cyTransactionCreateId = 0; let cyEntryDraftRevision = 0;\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
 vm.runInContext(piece(adaptive, 'function syncTouchWorkspaceEntrySecondaryAction()', 'function clearTouchWorkspaceEntryForm()'), context);
 vm.runInContext(piece(adaptive, 'function cancelEntryTransactionEditAndReturn()', 'function handleTouchWorkspaceSaveMessage('), context);
 vm.runInContext(piece(adaptive, 'function setupEntryTransactionEditing()', 'function switchTouchWorkspaceMobilePage('), context);
@@ -73,9 +73,10 @@ assert.equal(messages.at(-1), 'TEST_WRITE_FAILED');
 // Successful creation focuses the text input once after refresh, never the
 // numeric field; failed validation keeps the original amount correction path.
 fail = false; locked = false; writes.length = 0; focus.length = 0;
-context.window.cyAfterEntrySaved = () => context.handleFastEntrySaved();
+context.window.dispatchEvent = event => { if (event.type === 'cyacc:entry-submitted') context.handleFastEntrySubmitted(); };
+context.state.transactionMonth = '2026-10';
 context.loadFrequentSummaries = () => {}; context.loadTransactions = async () => {};
-vm.runInContext(piece(quick, 'function handleFastEntrySaved()', 'async function prepareQuickEntryUi()'), context);
+vm.runInContext(piece(quick, 'function handleFastEntrySubmitted()', 'async function prepareQuickEntryUi()'), context);
 vm.runInContext(piece(app, 'async function saveTransaction(', 'async function loadTransactions('), context);
 await context.saveTransaction({ preventDefault() {} });
 assert.deepEqual(focus, ['summary']); assert.equal(writes[0].method, 'POST');

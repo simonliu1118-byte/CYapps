@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.2 Build 1**；[PR #454](https://github.com/simonliu1118-byte/CYapps/pull/454)、[PR #455](https://github.com/simonliu1118-byte/CYapps/pull/455) 已合併；[main run 38675354003](https://github.com/simonliu1118-byte/CYapps/actions/runs/38675354003) validate／deploy 成功，正式瀏覽器已回讀版本 |
+| 產品 | **V0.25.3**；本批新增記帳即時顯示與失敗回復。上一正式基準 V0.25.2 Build 1（PR #454／#455、main run 38675354003）已成功部署及瀏覽器回讀；本批 CI／部署驗收見對應 PR |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -17,6 +17,15 @@
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+
+## V0.25.3 新增記帳即時顯示與失敗回復
+
+- app.js 沿唯一 saveTransaction／state／loadTransactions：待存筆使用暫存負 ID，立刻顯示並清空摘要／金額，允許接續下一筆。既有 POST 在相同寫入後回傳 canonical row，成功只替換該筆，不重讀相同月份或跳回舊月份。
+- 失敗撤回該筆；只有尚未輸入／清空／切換編輯的新草稿才回填失敗值，較晚結果不清除新內容或搶焦點。beforeunload 在仍有待確認新增時保留瀏覽器離頁警告；不自動重送，連線中斷仍須重新整理確認實際結果。
+- Input Confirmation 消費明確 entry-submitted／entry-result ID lifecycle，維持依送出順序最近十筆，支援多筆交錯完成與失敗，不再以單一 pending slot 及通用訊息猜測結果。Quick Entry 在送出當下只 focus 摘要，成功才更新常用摘要。
+- 月份 GET 等待該月份既有 create 完成並以同一 mutation revision guard 重讀過期快照，避免同筆 server row／暫存 row 重複；不依內容去重，合法相同交易仍保留。更早月份新增成功時，沿既有 owner 刷新目前月份期初。
+- Ledger Renderer 單一 owner 呈現待存狀態，正式 ID 回來前不允許編輯／刪除。沒有新 API owner、writer、observer、schema、wrapper 或裝置專用 business path；手機／平板原版面保留。
+- 本批驗收追蹤對應 PR／main Actions；自動回歸包含四種 viewport 共用寫入、亂序回應、相同交易、多筆失敗、草稿保留、換月與快照競態、SQLite 實際 POST row 回讀及鎖帳拒絕；不以 production semantic probes 宣稱真機完成全部操作。
 
 ## V0.25.2 舊備份相容與首次登入前置
 
@@ -109,7 +118,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 | PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
 | `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
-| Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。schema 6／7 normalization 已補；GCS 新政策週期排程與 budget／lifecycle 仍待辦 |
+| Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。schema 6／7 normalization 已補；budget 已由使用者建立，GCS 新政策週期排程與 lifecycle 仍待辦 |
 | 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
 
 ## GitHub 清理 — 2026/10/13
@@ -156,5 +165,5 @@ V0.25.2 初次 main run 38674853444 validate 成功，deploy 在唯讀 portal ga
 
 - V0.25.2 Build 1 已正式部署；schema 6／7 normalization 的本地 SQLite、workerd、D1 roundtrip 及其餘 79 項 workflow checks 通過。沒有為驗收而覆寫正式帳本或已用過的復原目標。
 - 首次登入 PR #435 仍不合併。最新 protected deploy 唯讀預檢回報 CYWEB_PRODUCTION_AUTHORITY_MISMATCH：CY Web 的 IDENTITY service target 與本 App 使用的 canonical production provider 不一致；Workspace／application／health 沒有回報差異。由 CY Web／CYID 正式部署維護者核對並修正其既有環境設定後，重新執行 --require-account-portal gate；不可在 CYACC 放寬或另建 authority。
-- Google Cloud 預算尚未建立：操作瀏覽器受限，使用者自己的 Console 正常，已提供手動步驟。每月指定 TWD 100（先確認帳單幣別）、只涵蓋備份專案全部服務、取消 Promotions 抵用以觀察試用後費用、實際支出 50／90／100% 與帳單管理員／專案擁有者 Email 通知；只設 alerts，不宣稱自動硬上限。待使用者儲存後核對，不記為已完成。
+- Google Cloud 每月低額預算已由使用者在 Console 建立，清單截圖確認帳單帳戶範圍、指定金額及實際支出 50／90／100% 門檻；依使用者決定包含優惠，追蹤折抵後支出。截圖未標明幣別／Email 收件者，不推定為 TWD 或已驗收寄信。不是自動硬上限。
 - GCS 新政策首次週期排程及 bucket lifecycle 仍待確認；不新增無必要 workflow，不擴張 IAM，不建立 Release。

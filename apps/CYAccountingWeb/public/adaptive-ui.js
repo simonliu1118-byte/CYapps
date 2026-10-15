@@ -3895,6 +3895,7 @@ function syncTouchWorkspaceEntrySecondaryAction() {
 }
 
 function clearTouchWorkspaceEntryForm() {
+  window.dispatchEvent(new CustomEvent('cyacc:entry-draft-reset'));
   showMessage('');
   const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
   els.txDate.value = today;
@@ -3990,6 +3991,7 @@ function setupEntryTransactionEditing() {
 }
 
 function beginEntryTransactionEdit(id) {
+  if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
   if (cyEntryTransactionEdit?.id === id) {
     if (isTabletWorkspace()) setTabletEntryExpanded(true);
     els.summary?.focus();
