@@ -78,6 +78,21 @@ internal static class CloudAllowanceApplicationClientTests
                     unitPrice=50,amount=50,tax=0,taxType=1}}
             }});
         });
+        handler.Enqueue(req =>
+        {
+            Check(req,"official-inspection");
+            using var body=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(Id,body.RootElement.GetProperty("itemId").GetString(),"official exact id");
+            Equal(2,body.RootElement.GetProperty("expectedRevision").GetInt32(),"official revision");
+            True(!body.RootElement.TryGetProperty("appKey",out _),
+                "Windows must never send company key into official query body");
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=OfficialStatus(false)});
+        });
+        handler.Enqueue(req =>
+        {
+            Check(req,"official-inspection");
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=OfficialStatus(true)});
+        });
         handler.Enqueue(req => {Check(req,"create"); return Json(HttpStatusCode.Conflict,new {
             ok=false,error=new{code="APPLICATION_RESULT_UNKNOWN_READBACK_REQUIRED"}});});
         handler.Enqueue(req => {Check(req,"get"); return Json(HttpStatusCode.OK,new {
@@ -99,6 +114,12 @@ internal static class CloudAllowanceApplicationClientTests
         Equal("Synthetic",preview.Items[0].Description,"allowance line description");
         await RejectAsync<InvalidDataException>(() =>
             client.PreviewForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        var official=await client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12");
+        Equal(false,official.CanApprove,"official query does not grant approval");
+        Equal(true,official.RequiresPerItemVerification,"per-item verification remains required");
+        Equal(0,official.ExistingAllowanceCount,"explicit no allowance summary");
+        await RejectAsync<InvalidDataException>(() =>
+            client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         try {
             await client.CreateAsync(draft,"0001","SyntheticPass12");
             throw new InvalidOperationException("Expected ambiguous create result");
@@ -115,6 +136,17 @@ internal static class CloudAllowanceApplicationClientTests
         True(CloudAllowanceApplicationClient.CreateItemId().StartsWith("wi_",StringComparison.Ordinal),
             "caller can prepare and durably persist an opaque request ID");
     }
+    private static object OfficialStatus(bool forgedApproval) => new {
+        itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
+        checkedAtUtc="2026-10-15T02:00:00.000Z",
+        officialSnapshotSha256=new string('a',64),
+        officialUploadStatus=99,cancelled=false,officialInvoiceGross=100,
+        requestedGrossAmount=50,existingAllowanceCount=0,
+        uploadComplete=true,notCancelled=true,allowanceSummaryExplicit=true,
+        zeroExistingAllowances=true,invoiceGrossEnough=true,officialProductsPresent=true,
+        requiresPerItemVerification=true,canApprove=forgedApproval,
+        status="OFFICIAL_READ_ONLY_NOT_APPROVED"
+    };
     private static object ReviewPreview() => new {
         itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
         allowanceDay="20261015",sellerInvoice="12345678",environment="test",

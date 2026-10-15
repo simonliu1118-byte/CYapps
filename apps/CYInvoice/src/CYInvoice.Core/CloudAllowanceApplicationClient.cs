@@ -29,6 +29,14 @@ public sealed record CloudAllowanceReviewPreview(
     IReadOnlyList<CloudAllowanceReviewItem> Items, string OfficialVerification,
     bool CanApprove);
 
+public sealed record CloudOfficialAllowanceInspection(
+    string ItemId, int Revision, string OriginalInvoiceNumber, DateTimeOffset CheckedAtUtc,
+    string OfficialSnapshotSha256, int OfficialUploadStatus, bool Cancelled,
+    int OfficialInvoiceGross, int RequestedGrossAmount, int ExistingAllowanceCount,
+    bool UploadComplete, bool NotCancelled, bool AllowanceSummaryExplicit,
+    bool ZeroExistingAllowances, bool InvoiceGrossEnough, bool OfficialProductsPresent,
+    bool RequiresPerItemVerification, bool CanApprove, string Status);
+
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
     IReadOnlyList<CloudAllowanceApplicationSummary> Applications,
@@ -182,6 +190,73 @@ public sealed class CloudAllowanceApplicationClient
                 System.Globalization.CultureInfo.InvariantCulture,out var parsed))
             return parsed;
         throw new InvalidDataException("Invalid numeric field in manager review preview.");
+    }
+
+    // Official AMEGO READ-ONLY query through the authorized Worker. This method
+    // never approves, allocates, issues, cancels or retries any allowance.
+    public async Task<CloudOfficialAllowanceInspection> InspectOfficialForManagerAsync(
+        string itemId, int expectedRevision, string employeeNo, string password,
+        CancellationToken cancellationToken = default)
+    {
+        VerifyId(itemId);
+        if (expectedRevision < 1)
+            throw new ArgumentOutOfRangeException(nameof(expectedRevision));
+        Credentials(employeeNo, password);
+        using var result = await SendAsync("official-inspection", new {
+            itemId, expectedRevision, employeeNo, password
+        }, cancellationToken).ConfigureAwait(false);
+        var root = result.RootElement;
+        if (!root.TryGetProperty("inspection", out var item) ||
+            item.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Official inspection response is missing.");
+        var id = Required(item, "itemId");
+        var invoice = Required(item, "originalInvoiceNumber");
+        var digest = Required(item, "officialSnapshotSha256");
+        var status = Required(item, "status");
+        var checkedAt = Required(item, "checkedAtUtc");
+        if (id != itemId || !ValidInvoice(invoice) ||
+            !Regex.IsMatch(digest, @"^[a-f0-9]{64}$") ||
+            status != "OFFICIAL_READ_ONLY_NOT_APPROVED" ||
+            !DateTimeOffset.TryParse(checkedAt, out var instant) ||
+            !item.TryGetProperty("revision", out var rev) ||
+            rev.ValueKind != JsonValueKind.Number ||
+            !rev.TryGetInt32(out var actualRev) || actualRev != expectedRevision)
+            throw new InvalidDataException("Official inspection identity is inconsistent.");
+        static int Integer(JsonElement value,string name)
+        {
+            if (!value.TryGetProperty(name,out var x) || x.ValueKind!=JsonValueKind.Number ||
+                !x.TryGetInt32(out var n) || n<0)
+                throw new InvalidDataException("Invalid official inspection number: "+name);
+            return n;
+        }
+        static bool Boolean(JsonElement value,string name)
+        {
+            if (!value.TryGetProperty(name,out var x) ||
+                x.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new InvalidDataException("Invalid official inspection flag: "+name);
+            return x.GetBoolean();
+        }
+        var upload=Integer(item,"officialUploadStatus");
+        var gross=Integer(item,"officialInvoiceGross");
+        var requested=Integer(item,"requestedGrossAmount");
+        var existing=Integer(item,"existingAllowanceCount");
+        var cancelled=Boolean(item,"cancelled");
+        var complete=Boolean(item,"uploadComplete");
+        var notCancelled=Boolean(item,"notCancelled");
+        var summary=Boolean(item,"allowanceSummaryExplicit");
+        var noExisting=Boolean(item,"zeroExistingAllowances");
+        var enough=Boolean(item,"invoiceGrossEnough");
+        var products=Boolean(item,"officialProductsPresent");
+        var needsItems=Boolean(item,"requiresPerItemVerification");
+        var canApprove=Boolean(item,"canApprove");
+        if (requested==0 || canApprove || !needsItems ||
+            complete!=(upload==99) || notCancelled==cancelled ||
+            noExisting!=(summary && existing==0) ||
+            enough!=(gross>=requested))
+            throw new InvalidDataException("Official inspection must remain non-authorizing.");
+        return new CloudOfficialAllowanceInspection(id,actualRev,invoice,instant,digest,
+            upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
+            noExisting,enough,products,needsItems,false,status);
     }
 
     public async Task<CloudAllowanceApplicationPage> ListForManagerAsync(
