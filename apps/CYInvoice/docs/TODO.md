@@ -8,12 +8,19 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-15 V3 開發續進（Source commit 進展，尚未正式發布）
+
+- [x] **CYID-only 執行路徑收斂（Draft source）**：Cloud Worker `app.ts` 先檢查 `CYID_ENABLED` 及 Binding，舊 Built-in Provider 的 Employee／密碼／轉換 public dispatch 已移除；CYID 仍對舊 API 顯示明確 409。Work Item route／SQL 不再選擇 Built-in `cloud_employees` 或 PBKDF verifier，改以 CYID 目前管理員角色、即時 revalidate 及 D1 active Device／Workspace 寫入柵欄。Windows `LocalRepository` 不再實例化 Built-in Cloud identity provider，`IdentityProviderRuntime` 只接受 Local 與 CYID；舊 Built-in 身分狀態 fail closed。已更新 CYID-only 合成測試，歷史 source／migrations 與舊 Cloud setup 次要欄位**還沒全面刪除**，不得認定 Built-in 完全清乾淨。
+- [x] **AMEGO `g0501` 作廢折讓 Gateway 原始碼（Draft）**：已加 `VoidAllowanceAsync(allowanceNumber)`，送一次官方 `/json/g0501` 的 `[{CancelAllowanceNumber}]`，不重新編號，不對 HTTP 結果不明自動重送；支持光貿網站已有的合法歷史號碼，不限 CYInvoice 的 `AyyyyMMddXXX`。隔離 payload／拒絕測試已新增，**不表示實際光貿操作已驗證，也未接 Windows 核准**。光貿官方 [API 合約](https://invoice.amego.tw/api_doc/)。
+- [ ] **待完整完成的正式折讓執行**：現有 `EmployeeAllowanceWorkflowService` 與 `SyncIssuesForm` 仍以「管理員先去光貿網站人工處理，再按已人工完成」為主；尚未將 g0401／g0501、Local SQLite Ledger、Cloud D1 配號、Work Item 正式覆核與即時官方餘額驗證接成完整受保護的端到端。無此證據不得發布 V3.0。
+- [ ] **CI readback gate**：以上目前是 Draft Source；每一輪以精確 PR head 的 Cloud validate／Windows x64 build＋startup smoke／Governance 成功判定，單次中間失敗與被取消的舊 run 不可當作最終結果。不得部署正式業務 D1 或創建真實光貿測試作廢。
+
 ## 2026-10-15 V3.0 正式交付工作順序（使用者明確批准）
 
 按順序執行：**(1) 清理 Built-in → (2) 完成折讓 API 與安全配號 → (3) 完成 D1 Work Item／跨機覆核 → (4) 官方 List 對帳 → (5) 公司設定卡片與整合驗收 → (6) 災難復原跨服務部署／完整 DR-01～DR-13 實機驗收 → (7) 文件與殘餘 Built-in 清理 → (8) V3.0 正式發行**。不得將任何階段「有文件／有底層 DTO／CI 綠燈」冒充端到端完成；**Cloud Worker／D1 正式遷移與 Windows V3.0 Release 必須在依規則完成真實驗證後才可執行**。
 
 **當次 Draft #440 新增 source 實際進度（非已發行）：**
-- [ ] Built-in 清理：V3 `IdentityProviderRuntime.Current` 現只允許 Local 與已完成 CYID 的 Cloud；Direct Join 缺 CYID binding 將 fail closed、不再拉 Built-in Employee snapshot；設定頁從空白 Cloud Device 改走 CYID Direct Join，舊 CloudSetup 建立／轉換入口受阻。Windows Direct Join smoke 換成 CYID-only、拒絕非 CYID 及原 Token 恢復案例。**其他 Built-in source、Cloud handler、相依測試與部署相容分支尚待審查清理**；不得直接刪正式歷史 migrations 或遠端 D1。
+- [ ] Built-in 清理：V3 `IdentityProviderRuntime.Current` 現只允許 Local 與已完成 CYID 的 Cloud；Direct Join 缺 CYID binding 將 fail closed、不再拉 Built-in Employee snapshot；設定頁從空白 Cloud Device 改走 CYID Direct Join，舊 CloudSetup 建立／轉換入口受阻。Windows Direct Join smoke 換成 CYID-only、拒絕非 CYID 及原 Token 恢復案例。**Cloud Worker 入口與 Work Item 憑證分支已收斂；其他 Built-in source、歷史 handler、相依測試與部署相容分支尚待審查清理**；不得直接刪正式歷史 migrations 或遠端 D1。
 - [ ] 折讓 API：V3 Core 已新增 `/json/allowance_list` 的 `ListAllowancesAsync` 分頁 DTO／官方原發票品項解析，與 `allowance_status` 舊 keyed object、新 array 格式的嚴格單號對應；新增隔離 HTTP 測試。**尚未接 Windows 正式 Sync 與管理員流程。**
 - [ ] Local 安全配號：已新增 `LocalAllowanceNumberStore`，在既有 SQLite 額外建立專用 allocation ledger，以公司／環境／日期原子增號、Work Item 重入返回同一 reserved 單號、先存完整固定 g0401 payload、`MarkSending` 後不允許重送、確切撞號才占號／重配、已用號不回收；新增重啟與碰撞測試。**未接實際折讓核准流程／沒有 Cloud D1 配號／真實 API 驗證。** 需要 CI readback 才能宣稱測試通過。
 - [ ] Windows CI 曾在中途提交的 CYID 模擬續接測試失敗（設定模擬的 discovery 故障次數過多）；已將 `cyid-recover` 的 fail-once 修正為一次，待最新 Windows build／startup smoke 通過後才結案。先前失敗不得默認為成功。
@@ -21,7 +28,7 @@
 ## 2026-10-15 V3 產品範圍定案（覆蓋舊 Built-in 待辦）
 
 - [ ] **V3 僅保留 Local + CYID Cloud 兩種正式模式**：使用者確認沒有正式 Built-in 使用者，停止維護 Built-in Cloud／Self-hosted 做為可用產品；GitHub 第三方如需自行部署 Built-in，改自行 fork。不以其相容性作 V3 合併／驗收／Release 條件；歷史成功測試和已發布 V2.6.19 不被重新定義為已刪除。
-- [ ] **工程簡化清理（尚未動程式）**：清理 Built-in identity provider／Employee CRUD／OTP／忘記密碼／SUPER_ADMIN transfer、Cloud 初始導入及相關相容分支，評估刪除不再需要的 handlers／migrations／fixtures／CI 矩陣；保護仍被 CYID／Local 共用的 Device、Workspace、Window Core、D1 Work Items、錯誤處理與歷史 actor/audit 解讀。不可復活或重做已退役的原 D1 表，不把刪 source 當正式 DB 清理授權。
+- [ ] **工程簡化清理（V3 runtime 已收斂，歷史原始碼待最後清除）**：清理 Built-in identity provider／Employee CRUD／OTP／忘記密碼／SUPER_ADMIN transfer、Cloud 初始導入及相關相容分支，評估刪除不再需要的 handlers／migrations／fixtures／CI 矩陣；保護仍被 CYID／Local 共用的 Device、Workspace、Window Core、D1 Work Items、錯誤處理與歷史 actor/audit 解讀。不可復活或重做已退役的原 D1 表，不把刪 source 當正式 DB 清理授權。
 - [ ] **統一公司設定卡片（含使用者批准的 Cloud DPAPI 快取）**：Local 保留本機 DPAPI 憑證儲存與合理權限；CYID Cloud 的**公司設定權威**在 CYInvoice 業務 D1，僅 SUPER_ADMIN 通過 Worker execution-time 權限驗證才能增改移除公司統編、加密 AMEGO App Key、MO店+ 密碼（加密金鑰不可與密文同存）；ADMIN 只能透過 UI 看統編／設定狀態，不能由設定查詢 API 讀取明文。CYID Windows Device 可保存已授權取得的公司憑證 **DPAPI 加密快取**，光貿正常但 D1 暫時無法連線時支持原本允許的正常開票；連線恢復後檢查版本、刷新／撤銷快取，已知拒絕 fail closed。離線無法即時套用新版本／撤銷，回歸應覆蓋此邊界，不新增 Cloud 斷線時繞過設定權限的寫入入口。
 - [ ] **CYID Cloud 斷線權限／覆核行為（使用者 2026-10-15 已核准）**：D1／Work Item 無法連線時，暫停雲端跨機折讓申請建立／覆核核准／正式開立及其他需要原子執行鎖的操作，不採原先 `allowance_list` 離線暫配號、連線後才回填 D1 的提案；避免不同電腦用不同單號重複執行**同一個申請**（4040161／4040162 不保證防此情況）。Local 單機折讓用 SQLite＋光貿正常可用。CYID Cloud 的既有一般開立／發票查詢在光貿正常且符合最後可信身分安全降級條件下**繼續可用**；已確定的身分／Device 拒絕不得降級。已送出折讓的光貿唯讀查回可繼續，結果不明禁止盲送。需新增斷線矩陣與恢復回歸。
 
