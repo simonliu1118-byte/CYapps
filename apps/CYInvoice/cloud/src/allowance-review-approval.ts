@@ -139,7 +139,9 @@ export async function approveAllowanceAfterOfficialReview(
     AND NOT EXISTS (
       SELECT 1 FROM allowance_execution_approvals prior
       WHERE prior.workspace_id=?2 AND prior.work_item_id=?3
-        AND prior.approved_revision=?4 AND prior.template_sha256<>?8)
+        AND prior.approved_revision=?4
+        AND (prior.template_sha256<>?8 OR prior.seller_invoice<>?5
+          OR prior.environment<>?6 OR prior.allowance_day<>?7))
     `).bind(approvalId,target.workspaceId,target.workItemId,target.expectedRevision,
       frozen.sellerInvoice,frozen.environment,frozen.allowanceDay,frozen.templateSha256,
       snapshot.officialSnapshotSha256,snapshot.checkedAtUtc,first.employeeId,
