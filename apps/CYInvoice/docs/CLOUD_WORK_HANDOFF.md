@@ -15,7 +15,9 @@
 
 ### 下一輪只做一個工作
 
-**下一項：Windows g0501 Core Client。** 先核對並提交 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs` 及 `tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs`，接入現有測試入口，確認 Cloud 路由回傳契約與嚴格 fail-closed 解析一致，單獨跑 exact-HEAD CI。這兩個檔案在最後驗證的功能 HEAD `b55751f` **尚未存在於分支**；先前建立過未提交的 Blob，不能視為程式已完成。此輪**不要**同時做 WinForms UI、正式 D1 Migration 或 g0501 真實送出。
+**步驟 1（Windows g0501 Core Client）已完成。** 功能 Commit `214063e1810d55746d77d22c483de42135f4f907`：已提交 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs`，在 `tests/CYInvoice.Cloud.Tests/Program.cs` 登錄回歸測試；CYID Core 支援 create/get/list/approve/send-once/status-readback/close，拒絕後端可自動重試、偽造官方作廢、異常工作單及非 HTTPS 端點；Cloud Validate ×2、Windows Client、Windows x64、Governance **全部通過**，Worker deploy **skipped**。此提交未操作正式 D1／光貿，亦未接 WinForms。後面的文件提交是純文件異動，不能假裝增加了功能測試結果。
+
+**下一項只有步驟 2（Windows g0501 WinForms）**：將上述 Core Client 接至 CYID 跨機作廢清單，明確區分首次送出與官方查回／結案；每項管理員操作須個別確認，禁止逾時自動重送。獨立提交，完成後再回報 CI。暫不處理正式 D1 Migration、光貿真實送出或其他 V3 模組。
 
 完成後下一小步才是 **Windows WinForms g0501 管理介面**，再分別做：D1 0015～0019 隔離升級演練 → 官方雙日期 List／例外對帳排程及 Audit → 含稅與歷史折讓餘額／公司設定等缺口 → DR-01～DR-13／人工實機驗收／V3 Release。確切排序及逐項勾選均以唯一 [TODO](TODO.md) 頂端「逐項交付索引」為準，不另開新交接文件。
 
