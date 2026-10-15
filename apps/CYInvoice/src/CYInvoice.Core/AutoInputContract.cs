@@ -55,7 +55,24 @@ public static class AutoInputContract
                 ids.Add(id);
             }
         }
-        return new AutoInputRequest(requestId, source, file, ids);
+        string? pdfFolder = null;
+        int? pdfStyle = null;
+        if (root.TryGetProperty("pdfFolder", out var folder))
+        {
+            if (folder.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(folder.GetString()) ||
+                !Path.IsPathFullyQualified(folder.GetString()!))
+                throw new InvalidDataException("AutoInput pdfFolder must be an absolute path.");
+            pdfFolder = Path.GetFullPath(folder.GetString()!);
+        }
+        if (root.TryGetProperty("pdfStyle", out var style))
+        {
+            if (style.ValueKind != JsonValueKind.Number || !style.TryGetInt32(out var code) ||
+                code is not (0 or 1 or 2 or 3 or 5))
+                throw new InvalidDataException("Unsupported AutoInput PDF style.");
+            pdfStyle = code;
+        }
+        return new AutoInputRequest(requestId, source, file, ids, pdfFolder, pdfStyle);
     }
 }
 
@@ -63,7 +80,20 @@ public sealed record AutoInputRequest(
     string RequestId,
     string Source,
     string File,
-    IReadOnlyList<string>? OrderIds);
+    IReadOnlyList<string>? OrderIds,
+    string? PdfFolder = null,
+    int? PdfStyle = null)
+{
+    public void ValidatePdf()
+    {
+        if (OrderIds is not { Count: > 0 } || PdfFolder is null || PdfStyle is null ||
+            !Path.IsPathFullyQualified(PdfFolder) ||
+            PdfStyle.Value is not (0 or 1 or 2 or 3 or 5))
+            throw new InvalidDataException("AutoInput PDF requires orderIds, an absolute pdfFolder and a supported pdfStyle.");
+        if (!Directory.Exists(PdfFolder))
+            throw new InvalidDataException("AutoInput PDF output directory does not exist.");
+    }
+}
 
 public sealed record AutoInputOrderResult(
     string OrderId,
@@ -73,7 +103,8 @@ public sealed record AutoInputOrderResult(
     string BuyerBan = "",
     string BuyerName = "",
     long TotalAmount = 0,
-    string Message = "");
+    string Message = "",
+    string PdfFile = "");
 
 public sealed record AutoInputResult(
     string Schema,
