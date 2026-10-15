@@ -23,6 +23,29 @@ CREATE TABLE allowance_applications (
   created_at TEXT NOT NULL,
   UNIQUE(workspace_id,environment,reference_hash)
 );
+-- The second statement of a D1.batch must be allowed ONLY when the first
+-- Work Item INSERT actually created this exact applicant's source row.
+-- A prior unrelated Work Item ID, stale Device or company revision MUST abort
+-- the whole batch, not leave a committed orphan application.
+CREATE TRIGGER allowance_application_source_guard
+BEFORE INSERT ON allowance_applications
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM work_items wi
+    JOIN devices d ON d.device_id=NEW.applicant_device_id AND d.workspace_id=wi.workspace_id
+    JOIN workspaces w ON w.workspace_id=wi.workspace_id
+    JOIN company_settings c ON c.workspace_id=wi.workspace_id
+    WHERE wi.work_item_id=NEW.work_item_id AND wi.workspace_id=NEW.workspace_id
+      AND wi.kind='ALLOWANCE' AND wi.status='open' AND wi.revision=1
+      AND wi.reference_hash=NEW.reference_hash AND wi.environment=NEW.environment
+      AND wi.actor_id=NEW.applicant_employee_id
+      AND wi.opened_by_device_id=NEW.applicant_device_id
+      AND wi.created_at=NEW.created_at AND wi.updated_at=NEW.created_at
+      AND c.seller_invoice=NEW.seller_invoice AND c.revision=NEW.company_settings_revision
+      AND c.amego_app_key_ciphertext IS NOT NULL
+      AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active'
+  ) THEN RAISE(ABORT,'ALLOWANCE_APPLICATION_SOURCE_MISMATCH') END;
+END;
 CREATE TRIGGER allowance_application_no_update
 BEFORE UPDATE ON allowance_applications
 BEGIN SELECT RAISE(ABORT, 'ALLOWANCE_APPLICATION_IMMUTABLE'); END;
