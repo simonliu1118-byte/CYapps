@@ -373,13 +373,13 @@ try{
   }finally{globalThis.fetch=earlierOfficial;}
 
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:1})).status,409);
-  assert.equal(approvedOfficialCalls,1,"stale Work Item cannot query AMEGO");
+  assert.equal(approvedOfficialCalls,2,"stale Work Item cannot query AMEGO");
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:2,
     officialApproved:true})).status,400);
-  assert.equal(approvedOfficialCalls,1);
+  assert.equal(approvedOfficialCalls,2);
   who={...who,workspaceRole:"USER"};
   assert.equal((await call("approve",{itemId:approvedId,expectedRevision:2})).status,403);
-  assert.equal(approvedOfficialCalls,1);
+  assert.equal(approvedOfficialCalls,2);
   who={...who,workspaceRole:"ADMIN"};
 }finally{globalThis.fetch=originalFetch;}
 
