@@ -12,7 +12,7 @@ internal static class AutoInputPipe
 {
     private const int MaxPacketBytes = 16 * 1024 * 1024;
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
-    internal sealed record Request(bool Issue, string RequestJson);
+    internal sealed record Request(bool Issue, string RequestJson, bool Pdf = false);
     internal sealed record Reply(int ExitCode, AutoInputResult? Result, string Error = "");
 
     internal static string DirectoryKey(string baseDirectory) =>
@@ -22,14 +22,14 @@ internal static class AutoInputPipe
     internal static string Name(string baseDirectory) => "CYInvoice-" + DirectoryKey(baseDirectory) + "-autoinput";
 
     internal static int ExitCode(AutoInputResult result) =>
-        result.Orders.Count != 0 && result.Orders.All(order => order.Status is "issued" or "existing") ? 0 : 1;
+        result.Orders.Count != 0 && result.Orders.All(order => order.Status is "issued" or "existing" or "ready") ? 0 : 1;
 
-    internal static async Task<Reply> ForwardAsync(bool issue, string requestJson, CancellationToken token)
+    internal static async Task<Reply> ForwardAsync(bool issue, string requestJson, CancellationToken token, bool pdf = false)
     {
         using var pipe = new NamedPipeClientStream(".", Name(AppContext.BaseDirectory),
             PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(15_000, token).ConfigureAwait(false);
-        await SendAsync(pipe, new Request(issue, requestJson), token).ConfigureAwait(false);
+        await SendAsync(pipe, new Request(issue, requestJson, pdf), token).ConfigureAwait(false);
         return await ReceiveAsync<Reply>(pipe, token).ConfigureAwait(false);
     }
 
@@ -84,7 +84,10 @@ internal sealed class AutoInputPipeServer(AutoInputProcessor processor, Action o
                         var command = await AutoInputPipe.ReceiveAsync<AutoInputPipe.Request>(server, stop.Token)
                             .ConfigureAwait(false);
                         var request = AutoInputContract.ParseRequest(command.RequestJson);
-                        var result = await processor.ExecuteAsync(request, command.Issue).ConfigureAwait(false);
+                        if (command.Pdf) request.ValidatePdf();
+                        var result = command.Pdf
+                            ? await processor.ExecutePdfAsync(request).ConfigureAwait(false)
+                            : await processor.ExecuteAsync(request, command.Issue).ConfigureAwait(false);
                         reply = new(AutoInputPipe.ExitCode(result), result);
                         onCompleted();
                     }
