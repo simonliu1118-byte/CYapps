@@ -28,6 +28,8 @@ public interface IAmegoGateway
         Task.FromException<VoidResponse>(new NotSupportedException("invoice void is not supported by this gateway"));
     Task<AllowanceIssueResponse> IssueAllowanceAsync(AllowanceIssueRequest request, CancellationToken cancellationToken = default) =>
         Task.FromException<AllowanceIssueResponse>(new NotSupportedException("allowance issue is not supported by this gateway"));
+    Task<AllowanceVoidResponse> VoidAllowanceAsync(string allowanceNumber, CancellationToken cancellationToken = default) =>
+        Task.FromException<AllowanceVoidResponse>(new NotSupportedException("allowance void is not supported by this gateway"));
     Task<AllowanceQueryResponse> QueryAllowanceAsync(string allowanceNumber, CancellationToken cancellationToken = default) =>
         Task.FromException<AllowanceQueryResponse>(new NotSupportedException("allowance query is not supported by this gateway"));
     Task<AllowanceStatusResponse> AllowanceStatusAsync(IEnumerable<string> allowanceNumbers, CancellationToken cancellationToken = default) =>
