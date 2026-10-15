@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
 
@@ -50,7 +51,7 @@ function fixture(){
       updated_by_device_id,environment,kind,reference_hash,status,revision,
       actor_id,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(id,ws,devA,devA,environment,kind,"f".repeat(64),status,
+      .run(id,ws,devA,devA,environment,kind,createHash("sha256").update(id).digest("hex"),status,
         revision,id,"2026-10-15","2026-10-15");
   addWork(base.workItemId);
   return {db,dbApi:{prepare:sql=>new Statement(sql)},addWork,race:fn=>{race=fn;}};
@@ -114,11 +115,8 @@ await assert.rejects(()=>reserve(dbApi,{...base,workItemId:"wi_allowance_six"}),
 const cross=await reserve(dbApi,{...base,deviceId:devB,workItemId:"wi_allowance_six"});
 assert.equal(cross.allowanceNumber,"A20261015004",
   "Revoked Device did not consume the sequence");
-await assert.rejects(()=>markSending(dbApi,{...base,workItemId:"wi_allowance_six"},
-  cross).then(ok=>{if(ok)throw Error("revoked device may not send");}),
-  /revoked device may not send/).catch(e=>{
-    if(e.message.includes("revoked device may not send"))throw e;
-  });
+assert.equal(await markSending(dbApi,{...base,workItemId:"wi_allowance_six"},cross),false,
+  "Revoked original Device cannot begin sending after another Device reserved");
 assert.equal(await markSending(dbApi,{...base,deviceId:devB,workItemId:"wi_allowance_six"},cross),true,
   "Only active Device with same Work Item revision may initiate operation");
 
