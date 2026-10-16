@@ -1211,6 +1211,11 @@ internal sealed class SyncIssuesForm : Form
             rows.Add(new("未稅折讓金額", MoneyFormatter.Integer(untaxed)));
             rows.Add(new("稅額", MoneyFormatter.Integer(tax)));
             rows.Add(new("含稅折讓總額", MoneyFormatter.Integer(taxInclusive)));
+            if(review.DraftItems is { Count: > 0 })
+                rows.Add(new("本次折讓商品",string.Join("；",
+                    review.DraftItems.Select(item =>
+                        $"{item.OriginalDescription}｜數量 {item.Quantity}｜"+
+                        $"未稅 {item.Amount}｜稅 {item.Tax}"))));
         }
         else
         {

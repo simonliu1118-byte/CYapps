@@ -20,6 +20,7 @@
 - [x] g0501 作廢：`amego-allowance-void.ts`、`amego-allowance-status.ts`、`amego-allowance-list.ts`；唯讀官方核對、單次作廢、雙日期 List 異常定位器；`drafts/0019_allowance_void_workflow.sql` 提供不可變申請／核准／Claim／官方狀態稽核及官方證據後結案柵欄。
 - [x] g0501 的 **Cloud CYID routes 已接通於 Draft 原始碼**：`allowance-void-applications-route.ts` + `allowance-void-manager.ts` 包括 create／get／list、manager approve、send-once、status-readback、close；測試核對同一工作單唯一 Claim、逾時不重送、官方 `D0501/99` 後才可結案。**不要再把這組 endpoints 寫成「尚未建立」。**
 
+- [x] **原發票帶入折讓編輯介面（Draft）**：既有 `AllowanceRequestForm` 改為商品清單直接帶入、刪除品項、修改數量與單價、含稅／未稅輸入切換、依課稅別自算小計與稅額，畫面顯示「原發票－已生效折讓」剩餘額。使用者編輯後的商品清單與總額保存在現有人工折讓工作單，由管理員在原待辦明細查看；提交前仍由 `invoice_query` 重查歷史餘額，不新增獨立工作流程。**目前人工待辦仍需管理員完成光貿操作；CYID 雲端申請與直接 g0401 送出銜接／實機含稅四捨五入仍待驗收**。
 ### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
 
 - [x] **2026-10-16 折讓需求校正：以總額餘額為上限，取消逐品項相符的送出限制**：依使用者明確定案，商品及折扣由使用者編輯；後端僅驗證必要的 g0401 payload 算式、原發票最新有效狀態，與 `原發票含稅金額－官方已確認且未作廢折讓含稅金額` 的總額上限。本機 `invoice_query.allowance[]` 已保留原本發票明細查回與歷史顯示，現在額外保存官方摘要是否明確存在，於輸入及提交重查時驗證餘額；Cloud 折讓核准及送出前驗證將改為同一限額並移除 `detail_vat=1`／已有折讓／逐項來源數量匹配的錯誤封鎖。官方摘要缺漏、待處理、重複、超額仍拒絕，不得誤認零折讓。**舊逐品項歷史覆蓋推算不再作為一般折讓開立前置條件。** 開立編輯介面及正式資料測試另待確認；不部署、不 Release。

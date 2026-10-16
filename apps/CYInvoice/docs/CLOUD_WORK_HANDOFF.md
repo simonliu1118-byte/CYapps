@@ -3,6 +3,9 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 原發票帶入式折讓編輯（Draft）
+
+現有 `AllowanceRequestForm` 已改為依最新 `RecordDetailForm` 原發票帶入品項及原本價格模式。使用者可刪除或新增品項，修改數量、單價、品名與課稅別；含稅輸入以 100/105 換算成光貿 g0401 未稅單價，行小計與 5% 稅額依七位 `FixedDecimal` 重算。所有編輯明細寫進原有 `InvoiceAllowanceManualReview.DraftItems`，原管理員「處理中／上傳問題」可閱讀，不另建 parallel Work Item 或第二個資料儲存。人工管理員實際送出仍需原有流程；CYID Cloud Create 表單接入及混合稅別人工實機驗算另待完成，不能宣稱已完成真 g0401。
 ## 2026-10-16 需求修正：折讓改用官方有效歷史總額差額
 
 使用者明確決定以光貿既有介面為模板：載入原發票商品，使用者自行刪除／編輯數量、單價與折扣，介面可含稅輸入且 g0401 送出未稅資料。新折讓的總額上限只看**原發票含稅總額減去已確認、未作廢的官方歷史折讓含稅總額**，不在本地推算逐商品可折數量。發票詳細畫面原本就由 `invoice_query` 刷新並呈現 `allowance[]`；現在必須拿同一來源保守計算。缺漏、待確認、重複、金額錯誤保持禁止送出；保留 CYID、CAS 單次送出、防重送、原號查回。過度設計的 `detail_vat=1`／既有折讓／逐品項相符核准柵欄已確認不適用，應逐項移除，不能誤刪 V3 安全授權機制。工程 CI 每筆 exact head 核對，無正式部署或 Release。

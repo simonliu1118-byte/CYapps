@@ -19,7 +19,8 @@ public sealed record InvoiceAllowanceManualReview(
     DateTimeOffset? ManualCompletedUtc = null,
     string ConfirmedAllowanceNumber = "",
     string HandlerEmployeeNo = "",
-    bool? ConfirmationProblem = null);
+    bool? ConfirmationProblem = null,
+    IReadOnlyList<AllowanceProductItem>? DraftItems = null);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -68,7 +69,8 @@ public sealed class EmployeeAllowanceWorkflowService
         string password,
         string reason,
         long taxInclusiveAmount,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<AllowanceProductItem>? editedItems = null)
     {
         ArgumentNullException.ThrowIfNull(selected);
         reason = (reason ?? string.Empty).Trim();
@@ -121,7 +123,7 @@ public sealed class EmployeeAllowanceWorkflowService
             reason,
             taxInclusiveAmount,
             now().ToUniversalTime(),
-            baseline);
+            baseline) { DraftItems = editedItems?.ToArray() };
         WriteManualReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
