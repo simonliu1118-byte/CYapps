@@ -25,6 +25,40 @@ const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applicat
   "/v1/allowance-applications/approve",
   "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status",
   "/v1/allowance-applications/send-once"]);
+// The ceiling is a READ-ONLY upper bound from *known* effective allocations,
+// not an available refund balance: unreported historical allowances and later
+// provider changes may reduce the actual amount. Never use it for approval.
+// Keep exact seven-place BigInt math; no binary float monetary subtraction.
+function historicalGrossCeiling(
+  originalGross:number,coverage:string,originalEffective:boolean,
+  amounts:readonly {originalGross:string|null;lineTotalsVerified:boolean}[]
+):{status:"NOT_AVAILABLE"|"KNOWN_CEILING_ONLY"|"KNOWN_SUM_EXCEEDS_ORIGINAL";
+   knownGross:string|null;remainingCeiling:string|null}{
+  const unavailable={status:"NOT_AVAILABLE" as const,
+    knownGross:null,remainingCeiling:null};
+  if(coverage!=="HISTORY_RANGE_NOT_PROVEN"||!originalEffective||
+     !Number.isSafeInteger(originalGross)||originalGross<0||
+     amounts.length===0||amounts.some(a=>!a.lineTotalsVerified))
+    return unavailable;
+  const scale=10000000n;
+  let known=0n;
+  for(const a of amounts){
+    const m=/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,7}))?$/.exec(a.originalGross??"");
+    if(!m)return unavailable;
+    known+=BigInt(m[1])*scale+BigInt((m[2]??"").padEnd(7,"0"));
+  }
+  const canon=(value:bigint):string=>{
+    const whole=value/scale,frac=(value%scale).toString().padStart(7,"0")
+      .replace(/0+$/,"");
+    return frac?whole+"."+frac:whole.toString();
+  };
+  const gross=BigInt(originalGross)*scale;
+  if(known>gross)
+    return {status:"KNOWN_SUM_EXCEEDS_ORIGINAL",knownGross:null,
+      remainingCeiling:null};
+  return {status:"KNOWN_CEILING_ONLY",knownGross:canon(known),
+    remainingCeiling:canon(gross-known)};
+}
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -609,6 +643,11 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         checks.some(h=>!h.lineTotalsVerified)?"DETAIL_READBACK_UNVERIFIED":
         snapshot.existingAllowanceCount===0?"NO_HISTORY_REPORTED_NOT_PROOF":
         "HISTORY_RANGE_NOT_PROVEN";
+      const ceiling=historicalGrossCeiling(snapshot.totalAmount,
+        historicalCoverageReason,
+        snapshot.uploadStatus===99&&snapshot.cancelDate===0&&
+          !snapshot.voidPending&&!snapshot.hasUnsettledMutation,
+        checks);
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,
@@ -633,6 +672,9 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         historicalAllocationNotQueriedCount:snapshot.existingAllowanceCount-checks.length,
         historicalAllocationsComplete:false,
         historicalCoverageReason,
+        historicalGrossCeilingStatus:ceiling.status,
+        historicalKnownGross:ceiling.knownGross,
+        historicalRemainingCeiling:ceiling.remainingCeiling,
         safeToInferRemainingBalance:false,
         officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
