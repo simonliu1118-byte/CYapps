@@ -1169,11 +1169,10 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
         }
 
+        // Each segmented date edit must receive eight physical digit keys, followed by Enter.
+        // Read back *after* Enter: never start the ERP query with a partial date.
         await SetDateAsync(invq, boxes[0], range.From, "起", cancellationToken);
         await SetDateAsync(invq, boxes[1], range.To, "迄", cancellationToken);
-        // Leaving 迄 commits it; then both are read back.
-        SafeClick(invq, Win32Automation.Center(boxes[0].Rect));
-        await Pace.Delay(200, cancellationToken);
         var from = NativeMethods.ControlText(boxes[0].Handle);
         var to = NativeMethods.ControlText(boxes[1].Handle);
         _log.Info("invq01", $"history range shown from={_log.Value(from ?? string.Empty)} to={_log.Value(to ?? string.Empty)}");
@@ -1183,16 +1182,36 @@ internal sealed class ItemQueryService
 
     private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what, CancellationToken cancellationToken)
     {
-        SafeClick(invq, Win32Automation.Center(box.Rect));
+        // Clicking the center of a date mask selects 月 or 日, not 年. Click near its
+        // left edge to select 年 and overwrite the three sections in one keyboard pass.
+        // Do not use End/Backspace or Ctrl+A on this segmented ERP control.
+        var width = box.Rect.Right - box.Rect.Left;
+        if (width < 48)
+            throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
+        var yearPoint = new Point(box.Rect.Left + Math.Min(12, width / 10),
+            (box.Rect.Top + box.Rect.Bottom) / 2);
+        SafeClick(invq, yearPoint);
         await Pace.Delay(150, cancellationToken);
         var focus = NativeMethods.FocusedControlOfForeground();
         if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
             throw new InvalidOperationException($"無法把游標移到歷史異動的{what}日欄位。");
-        var current = NativeMethods.ControlText(box.Handle) ?? string.Empty;
-        InputSender.EndBackspace(current.Length + 2);
-        await Pace.Delay(60, cancellationToken);
-        InputSender.UnicodeText(Invq01Layout.ErpDate(date));
-        await Pace.Delay(150, cancellationToken);
+
+        // Use VK_0..VK_9 (keydown/keyup), not Unicode WM_CHAR: the ERP mask reacts to
+        // actual number keys and advances 年 → 月 → 日 as the digits are entered.
+        foreach (var digit in Invq01Layout.ErpDateKeys(date))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            InputSender.Press((ushort)digit);
+            await Pace.Delay(70, cancellationToken);
+        }
+        InputSender.Press(NativeMethods.VK_RETURN);
+        await Pace.Delay(200, cancellationToken);
+        var shown = NativeMethods.ControlText(box.Handle);
+        if (!Invq01Layout.ShowsDate(shown, date))
+        {
+            _log.Warn("invq01", $"history {what} date readback mismatch length={shown?.Length ?? 0}");
+            throw new InvalidOperationException($"查歷史異動的{what}日輸入後讀回不一致，已停止。");
+        }
     }
 
     /// <summary>

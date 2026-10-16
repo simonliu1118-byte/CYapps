@@ -1,5 +1,12 @@
 # CYERPAutoQuery Work Handoff
 
+## 最新變更（V0.3.0 Build 2，2026/10/16）
+
+- 已依使用者實機截圖更正 INVQ01 歷史異動的**分段日期控制項**輸入：以左側「年」位置取得焦點，起日輸入 8 個數字鍵 yyyyMMdd → Enter，讀回檢查；迄日同樣操作，最後再次核對兩欄。輸入不包含斜線，也不使用 End/Backspace 或 Ctrl+A 清除日期。讀回不完整／不一致即停止，防止錯誤日期送出查詢。
+- 本機未選日期的「近一年」現在預設去年同月同日（例如 2025/10/16～2026/10/16）；CY Web 送入的 historyFrom/historyTo 照已補齊值執行。**注意：CYWEB V0.7.35 的預設一年範圍仍從去年同月同日的次日開始**，若要求兩端「近一年」完全一致，CYWEB 需另同步調整；這一輪僅修改桌面程式。
+- 單元測試覆蓋 8 碼格式與兩組日期；Windows ERP 鍵盤分段選取、Enter 及控制項讀回仍須使用者實機驗收。批號查詢成功路徑未修改。
+- 開發線：`governance/cyerp-auto-query`，同一 PR #472；測試包走 `CYERPAutoQuery Build` Actions Artifact，不另建 Release。
+
 ## 現況（V0.3.0 Build 1，2026/10/16）
 
 - 新增 INVQ01（使用者 2026-10-16）：批號管理不是 N 時查各批庫存量；勾「查歷史異動」時查歷史異動（日期選擇器，未填最近一年、最多三年）；INVQ01 用完關閉。程式在 `ItemQueryService` 的 INVQ01 區段，純規則在 `Invq01Layout.cs`（頁籤中心、標題、日期、`HistoryRange`），解析在 `Invq01Export`。已用使用者提供的 INVQ01_5／INVQ01_4 真實檔在本機確認解析（未提交）；歷史異動 1,621 列約 144 KB JSON，Web 回報上限 2,000 列（保留最新），CY Web 需放寬 96 KiB 上限（補充交接見 chihyuan-web `docs/handoff/ERP_ITEM_QUERY_INVQ01_HANDOFF.md`）。

@@ -51,8 +51,11 @@ internal static class Invq01Layout
         return value.Length > 0 && !value.StartsWith('N');
     }
 
-    /// <summary>How ERP's date boxes are filled: 2026/10/16.</summary>
+    /// <summary>Human-readable date shown in status and messages.</summary>
     public static string ErpDate(DateOnly date) => date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+
+    /// <summary>INVQ01 segmented date edit: physical digit keys without separators, then Enter.</summary>
+    public static string ErpDateKeys(DateOnly date) => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
     /// <summary>True when a date box shows <paramref name="date"/>, whatever separators ERP uses.</summary>
     public static bool ShowsDate(string? shown, DateOnly date) =>
@@ -75,7 +78,7 @@ internal sealed record HistoryRange(DateOnly From, DateOnly To)
     public static HistoryRange Resolve(DateOnly? from, DateOnly? to, DateOnly today)
     {
         var end = to ?? today;
-        var start = from ?? end.AddYears(-1).AddDays(1);
+        var start = from ?? end.AddYears(-1);
         if (start > end) throw new ArgumentException("歷史異動的起日不可晚於迄日。");
         if (end > today) throw new ArgumentException("歷史異動的迄日不可晚於今天。");
         if (start < end.AddYears(-MaxYears)) throw new ArgumentException($"歷史異動的日期範圍最多 {MaxYears} 年。");

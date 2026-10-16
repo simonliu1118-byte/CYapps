@@ -159,14 +159,21 @@ public class Invq01Tests
     }
 
     [Fact]
-    public void DatesAreTypedWithSlashesAndReadBackByDigits()
+    public void DatesUseEightPhysicalDigitsAndReadBackFromSegmentedMask()
     {
         var date = new DateOnly(2026, 1, 5);
-        Assert.Equal("2026/01/05", Invq01Layout.ErpDate(date));
+        Assert.Equal("2026/01/05", Invq01Layout.ErpDate(date)); // UI text only
+        Assert.Equal("20260105", Invq01Layout.ErpDateKeys(date)); // keyboard input
         Assert.True(Invq01Layout.ShowsDate("2026/01/05", date));
         Assert.True(Invq01Layout.ShowsDate("20260105", date));
         Assert.False(Invq01Layout.ShowsDate("2026/01/06", date));
         Assert.False(Invq01Layout.ShowsDate(null, date));
+        // Regression: only digits are injected, not slash characters.
+        Assert.Matches("^[0-9]{8}$", Invq01Layout.ErpDateKeys(date));
+        Assert.Equal("20251001", Invq01Layout.ErpDateKeys(new DateOnly(2025, 10, 1)));
+        Assert.Equal("20261001", Invq01Layout.ErpDateKeys(new DateOnly(2026, 10, 1)));
+        Assert.Equal("20251016", Invq01Layout.ErpDateKeys(new DateOnly(2025, 10, 16)));
+        Assert.Equal("20261016", Invq01Layout.ErpDateKeys(new DateOnly(2026, 10, 16)));
     }
 
     private static readonly DateOnly Today = new(2026, 10, 16);
@@ -175,10 +182,10 @@ public class Invq01Tests
     public void EmptyRangeIsTheLastYear()
     {
         var range = HistoryRange.Resolve(null, null, Today);
-        Assert.Equal(new DateOnly(2025, 10, 17), range.From);
+        Assert.Equal(new DateOnly(2025, 10, 16), range.From);
         Assert.Equal(Today, range.To);
         var onlyTo = HistoryRange.Resolve(null, new DateOnly(2026, 3, 31), Today);
-        Assert.Equal(new DateOnly(2025, 4, 1), onlyTo.From);
+        Assert.Equal(new DateOnly(2025, 3, 31), onlyTo.From);
     }
 
     [Fact]
