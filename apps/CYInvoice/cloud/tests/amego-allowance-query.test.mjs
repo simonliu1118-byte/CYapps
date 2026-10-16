@@ -36,6 +36,54 @@ assert.equal(success.safeToAutoResend,false);
 assert.equal(success.safeToAutoConfirm,false);
 assert.deepEqual(success.originalInvoices,["AB12345678"]);
 assert.match(success.officialSnapshotSha256,/^[0-9a-f]{64}$/);
+assert.deepEqual(success.originalAllocation,{
+  lineTotalsVerified:true,originalNet:"50",originalTax:"3",
+  originalGross:"53",reason:"ALLOCATED_LINES_MATCH_HEADER",
+  safeToInferRemainingBalance:false
+},"One original invoice: exact official line sums, not spendable balance");
+// An allowance may span multiple original invoices. Never apply its entire
+// header to this invoice; sum only its own item rows.
+const multi=await query(input,transport({code:0,data:{
+  ...official.data,total_amount:"75.0000000",tax_amount:"4",
+  product_item:[
+    {original_invoice_number:"AB12345678",amount:"20",tax:"1"},
+    {original_invoice_number:"XY12345678",amount:"25",tax:"1"},
+    {original_invoice_number:"AB12345678",amount:"30",tax:"2"}
+  ]
+}}),()=>date);
+assert.equal(multi.possibleMatch,false);
+assert.deepEqual(multi.originalAllocation,{
+  lineTotalsVerified:true,originalNet:"50",originalTax:"3",
+  originalGross:"53",reason:"ALLOCATED_LINES_MATCH_HEADER",
+  safeToInferRemainingBalance:false
+},"Only the AB original-invoice allocation is exposed");
+// The exact 7-place decimal fields must use bigint, not binary floats.
+const fractions=await query(input,transport({code:0,data:{
+  ...official.data,total_amount:"0.6000000",tax_amount:"0.2000000",
+  product_item:[
+    {original_invoice_number:"AB12345678",amount:"0.1000001",tax:"0.1000000"},
+    {original_invoice_number:"XY12345678",amount:"0.4999999",tax:"0.1000000"}
+  ]
+}}),()=>date);
+assert.equal(fractions.originalAllocation.originalGross,"0.2000001");
+assert.equal(fractions.originalAllocation.safeToInferRemainingBalance,false);
+for(const [label,row,expectedReason] of [
+  ["missing line tax",{...official.data,product_item:[{
+    original_invoice_number:"AB12345678",amount:"50"}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["line mismatch",{...official.data,product_item:[{
+    original_invoice_number:"AB12345678",amount:"40",tax:"3"}]},"HEADER_TOTALS_MISMATCH"],
+  ["other original",{...official.data,product_item:[{
+    original_invoice_number:"XY12345678",amount:"50",tax:"3"}]},"ORIGINAL_INVOICE_NOT_IN_ITEMS"],
+  ["pending upload",{...official.data,invoice_status:91},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
+  ["cancelled",{...official.data,cancel_date:20261016},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
+]){
+  const readback=await query(input,transport({code:0,data:row}),()=>date);
+  assert.equal(readback.originalAllocation.lineTotalsVerified,false,label);
+  assert.equal(readback.originalAllocation.originalGross,null,label);
+  assert.equal(readback.originalAllocation.reason,expectedReason,label);
+  assert.equal(readback.originalAllocation.safeToInferRemainingBalance,false,label);
+}
+
 assert.equal((await query(input,transport({code:0,data:{
   ...official.data,invoice_status:91}}),()=>date)).possibleMatch,false);
 assert.equal((await query(input,transport({code:0,data:{
