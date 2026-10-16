@@ -54,7 +54,7 @@ public class ErpAgentProtocolTests
             [new ErpField("品號", "T0001"), new ErpField("商品描述", "第一行\n第二行")],
             [[new ErpField("庫別", "W01"), new ErpField("儲位", "A-01")]],
             TimeSpan.FromMilliseconds(14230));
-        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(result, "v"))!;
+        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(result, "v", includeCost: true))!;
         Assert.Equal("FOUND", body["outcome"]!.GetValue<string>());
         Assert.Equal("第一行\n第二行", body["fields"]![1]!["value"]!.GetValue<string>());
         Assert.Equal("儲位", body["warehouses"]![0]![1]!["name"]!.GetValue<string>());

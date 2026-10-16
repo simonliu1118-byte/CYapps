@@ -63,10 +63,12 @@
 
 ## CY Web 查詢（Agent）
 
-- 主視窗「Web 連線」：填 CY Web 網址、CY Web 超級管理員在「ERP 品號查詢」頁產生的 Token（只顯示一次），勾選「啟用 Web 查詢」。Token 以 Windows DPAPI 加密存在 `config/agent.json`（換電腦或換 Windows 帳號需重新設定）。
+- 主視窗「Web 連線」：填 CY Web 網址、CY Web 超級管理員在「ERP 查詢」頁產生的 Token（只顯示一次），勾選「啟用 Web 查詢」。Token 以 Windows DPAPI 加密存在 `config/agent.json`（換電腦或換 Windows 帳號需重新設定）。
 - 啟用後程式每 3 秒向 CY Web 領一次查詢工作，用與本機相同的流程查詢並回報；狀態列顯示「Web：已連線／查詢中／連線失敗」。
 - 只回傳約定的欄位（`ItemFieldCatalog`）；失敗只回固定錯誤代碼，不送出本機訊息或路徑。
 - 本機正在查詢時不領工作；Token 被拒時停止連線，需重新設定。
+- 領工作時告訴 CY Web 本程式支援的查詢類型（商品、品名、客戶代號、客戶名稱、銷貨銷退單、未收款），CY Web 只派這些工作；舊版本程式只會領到商品查詢。
+- 「標準進價」只在 CY Web 工作帶 `includeCost:true`（該員工有「ERP 商品成本」權限）時才送出。
 - CY Web 可在工作帶 `includeHistory`、`historyFrom`、`historyTo`（yyyy-MM-dd，可省略）要求歷史異動；回報另含 `batchManaged`、`batches`、`history`（欄位＋列，最多 2,000 列保留最新）。舊版 CY Web 會忽略這些欄位。
 - Contract：chihyuan-web `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 

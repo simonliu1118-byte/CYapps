@@ -419,19 +419,7 @@ internal sealed class MainForm : Form
         }
         try
         {
-            ShowResult(null);
-            ShowCustomer(null);
-            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QueryCustomerAsync(code, progress, ct), result =>
-            {
-                if (!result.Found)
-                {
-                    SetStatus($"ERP：查無客戶代號 {code}");
-                    return AutomationOutcome.NotFound;
-                }
-                ShowCustomer(result);
-                SetStatus($"ERP：客戶 {result.Code} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
-                return AutomationOutcome.Done;
-            });
+            await ExecuteCustomerAsync(code, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -444,6 +432,24 @@ internal sealed class MainForm : Form
         Activate();
         _code.Focus();
         _code.SelectAll();
+    }
+
+    /// <summary>One customer from COPI01, shown; local and Web queries both run here. Failures are rethrown.</summary>
+    private async Task<CustomerQueryResult> ExecuteCustomerAsync(string code, CancellationToken external)
+    {
+        ShowResult(null);
+        ShowCustomer(null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.QueryCustomerAsync(code, progress, ct), result =>
+        {
+            if (!result.Found)
+            {
+                SetStatus($"ERP：查無客戶代號 {code}");
+                return AutomationOutcome.NotFound;
+            }
+            ShowCustomer(result);
+            SetStatus($"ERP：客戶 {result.Code} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            return AutomationOutcome.Done;
+        });
     }
 
     /// <summary>銷貨銷退單 mode: a customer's 銷貨單 and 銷退單 in the 單據日期 range; failures shown in a message box.</summary>
@@ -461,20 +467,7 @@ internal sealed class MainForm : Form
         }
         try
         {
-            ShowSales(null);
-            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QuerySalesAsync(query, progress, ct), result =>
-            {
-                ShowSales(result);
-                _details.SelectedTab = _salesPage;
-                var range = $"{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}";
-                if (!result.Found)
-                {
-                    SetStatus($"ERP：客戶 {query.CustomerCode} 在 {range} 查無銷貨單與銷退單");
-                    return AutomationOutcome.NotFound;
-                }
-                SetStatus($"ERP：客戶 {query.CustomerCode} {range} 銷貨 {result.Count(SalesReport.Sales.Kind)} 張、銷退 {result.Count(SalesReport.Returns.Kind)} 張（{result.Elapsed.TotalSeconds:0.0} 秒）");
-                return AutomationOutcome.Done;
-            });
+            await ExecuteSalesAsync(query, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -487,6 +480,25 @@ internal sealed class MainForm : Form
         Activate();
         _code.Focus();
         _code.SelectAll();
+    }
+
+    /// <summary>A customer's 銷貨單 and 銷退單 (COPR15＋COPR16), shown; local and Web. Failures are rethrown.</summary>
+    private async Task<SalesQueryResult> ExecuteSalesAsync(SalesQuery query, CancellationToken external)
+    {
+        ShowSales(null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.QuerySalesAsync(query, progress, ct), result =>
+        {
+            ShowSales(result);
+            _details.SelectedTab = _salesPage;
+            var range = $"{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}";
+            if (!result.Found)
+            {
+                SetStatus($"ERP：客戶 {query.CustomerCode} 在 {range} 查無銷貨單與銷退單");
+                return AutomationOutcome.NotFound;
+            }
+            SetStatus($"ERP：客戶 {query.CustomerCode} {range} 銷貨 {result.Count(SalesReport.Sales.Kind)} 張、銷退 {result.Count(SalesReport.Returns.Kind)} 張（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            return AutomationOutcome.Done;
+        });
     }
 
     /// <summary>未收款 modes: one customer, one 業務員 or everyone; failures shown in a message box.</summary>
@@ -504,19 +516,7 @@ internal sealed class MainForm : Form
         }
         try
         {
-            ShowReceivables(null);
-            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QueryReceivablesAsync(query, progress, ct), result =>
-            {
-                ShowReceivables(result);
-                _details.SelectedTab = _receivablePage;
-                if (!result.Found)
-                {
-                    SetStatus($"ERP：{query.Describe()}沒有未收款");
-                    return AutomationOutcome.NotFound;
-                }
-                SetStatus($"ERP：{query.Describe()}未收款 {result.Bills.Count} 張結帳單、{result.CustomerCount} 位客戶，未收合計 {Num(result.TotalUnpaid)}（{result.Elapsed.TotalSeconds:0.0} 秒）");
-                return AutomationOutcome.Done;
-            });
+            await ExecuteReceivablesAsync(query, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -529,6 +529,24 @@ internal sealed class MainForm : Form
         Activate();
         _code.Focus();
         _code.SelectAll();
+    }
+
+    /// <summary>未收款 (ACRR18), shown; local and Web. Failures are rethrown.</summary>
+    private async Task<ReceivableResult> ExecuteReceivablesAsync(ReceivableQuery query, CancellationToken external)
+    {
+        ShowReceivables(null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.QueryReceivablesAsync(query, progress, ct), result =>
+        {
+            ShowReceivables(result);
+            _details.SelectedTab = _receivablePage;
+            if (!result.Found)
+            {
+                SetStatus($"ERP：{query.Describe()}沒有未收款");
+                return AutomationOutcome.NotFound;
+            }
+            SetStatus($"ERP：{query.Describe()}未收款 {result.Bills.Count} 張結帳單、{result.CustomerCount} 位客戶，未收合計 {Num(result.TotalUnpaid)}（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            return AutomationOutcome.Done;
+        });
     }
 
     private static readonly string[] BillColumns = ["客戶代號", "客戶名稱", "日期", "結帳單號", "業務員", "發票號碼", "幣別", "應收帳款", "應收稅額", "未收帳款", "憑證數"];
@@ -729,6 +747,55 @@ internal sealed class MainForm : Form
         return await ExecuteSearchAsync(keyword, cancellationToken);
     }
 
+    /// <summary>
+    /// A customer, 銷貨銷退 or 未收款 job from CY Web (user, 2026-10-17): the same path as the local
+    /// query, shown in the window; the complete body goes back to Web.
+    /// </summary>
+    private async Task<(bool Found, string Body)> RunWebBusinessAsync(ErpAgentJob job, CancellationToken cancellationToken)
+    {
+        var version = AppVersionInfo.Display;
+        _log.Info("agent", $"web {job.QueryType} job");
+        switch (job.QueryType)
+        {
+            case ErpAgentJob.CustomerQuery:
+            {
+                if (!ItemCodeRules.TryNormalize(job.CustomerCode ?? string.Empty, out var code, out var error, CustomerRules.CodeName))
+                    throw new ArgumentException(error);
+                _mode.SelectedIndex = CustomerMode;
+                _code.Text = code;
+                var result = await ExecuteCustomerAsync(code, cancellationToken);
+                return (result.Found, ErpAgentProtocol.CustomerBody(job, result, version));
+            }
+            case ErpAgentJob.CustomerSearch:
+            {
+                if (!ItemNameRules.TryNormalize(job.Keyword, out var keyword, out var error))
+                    throw new ArgumentException(error);
+                _mode.SelectedIndex = CustomerNameMode;
+                _code.Text = keyword;
+                var result = await ExecuteSearchAsync(keyword, cancellationToken, customers: true);
+                return (result.Items.Count > 0, ErpAgentProtocol.SearchBody(result, version));
+            }
+            case ErpAgentJob.SalesQueryType:
+            {
+                var query = job.Sales(DateOnly.FromDateTime(DateTime.Today));
+                _mode.SelectedIndex = SalesMode;
+                _code.Text = query.CustomerCode;
+                var result = await ExecuteSalesAsync(query, cancellationToken);
+                return (result.Found, ErpAgentProtocol.SalesBody(job, result, version));
+            }
+            case ErpAgentJob.ReceivableQueryType:
+            {
+                var query = job.Receivable();
+                _mode.SelectedIndex = query.Scope == ReceivableScope.Salesperson ? SalespersonReceivableMode : ReceivableMode;
+                _code.Text = query.Code;
+                var result = await ExecuteReceivablesAsync(query, cancellationToken);
+                return (result.Found, ErpAgentProtocol.ReceivableBody(job, result, version));
+            }
+            default:
+                throw new NotSupportedException($"不支援的查詢類型 {job.QueryType}。");
+        }
+    }
+
     /// <summary>A query received from CY Web: same path as the local one, no message box (the outcome goes back to Web).</summary>
     private async Task<ItemQueryResult> RunWebQueryAsync(ErpAgentJob job, CancellationToken cancellationToken)
     {
@@ -899,7 +966,8 @@ internal sealed class MainForm : Form
             () => _queryCts is not null,
             RunWebQueryAsync,
             SetAgentStatus,
-            runSearch: RunWebSearchAsync);
+            runSearch: RunWebSearchAsync,
+            runBusiness: RunWebBusinessAsync);
         _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
     }
 

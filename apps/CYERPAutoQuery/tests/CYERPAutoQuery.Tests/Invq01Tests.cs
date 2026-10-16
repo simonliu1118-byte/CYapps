@@ -265,7 +265,7 @@ public class Invq01Tests
     [Fact]
     public void FoundBodyCarriesBatchesAndHistoryTable()
     {
-        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(2), "v"))!;
+        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(2), "v", includeCost: true))!;
         Assert.True(body["batchManaged"]!.GetValue<bool>());
         Assert.Equal("B001", body["batches"]![0]![0]!["value"]!.GetValue<string>());
         var history = body["history"]!;
@@ -280,7 +280,7 @@ public class Invq01Tests
     [Fact]
     public void FoundBodyWithoutHistoryHasNull()
     {
-        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(-1, batchManaged: false), "v"))!;
+        var body = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(-1, batchManaged: false), "v", includeCost: true))!;
         Assert.False(body["batchManaged"]!.GetValue<bool>());
         Assert.Empty(body["batches"]!.AsArray());
         Assert.Null(body["history"]);
@@ -290,7 +290,7 @@ public class Invq01Tests
     public void LongHistoryKeepsTheNewestRows()
     {
         var total = ErpAgentProtocol.MaxHistoryRows + 5;
-        var history = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(total), "v"))!["history"]!;
+        var history = JsonNode.Parse(ErpAgentProtocol.FoundBody(Found(total), "v", includeCost: true))!["history"]!;
         Assert.Equal(ErpAgentProtocol.MaxHistoryRows, history["rows"]!.AsArray().Count);
         Assert.Equal("5", history["rows"]![0]![5]!.GetValue<string>());
         Assert.Equal(total, history["total"]!.GetValue<int>());

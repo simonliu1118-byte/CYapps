@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.49 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：「標準進價」送往 CY Web 只在工作帶 includeCost（員工有 ERP 商品成本權限）時才送出，本機顯示不變。不改其他 App 規則。
+
 ## 2.3.48 — 2026/10/17
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求加入未收款查詢（ACRR18 未結案應收明細表）：流程同 COPR15；可查單一客戶、單一業務員或全部，單一時勾區間選擇並讀回代號、其他群組須為空，全部時兩群組皆須為空；轉出須符合查詢代號且結帳單未收加總等於報表合計。不改其他 App 規則。

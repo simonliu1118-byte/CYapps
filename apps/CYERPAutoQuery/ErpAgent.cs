@@ -66,7 +66,8 @@ internal sealed class ErpAgentLoop(
     Func<ErpAgentJob, CancellationToken, Task<ItemQueryResult>> runQuery,
     Action<ErpAgentState, string> report,
     Func<TimeSpan, CancellationToken, Task>? delay = null,
-    Func<ErpAgentJob, CancellationToken, Task<ItemSearchResult>>? runSearch = null)
+    Func<ErpAgentJob, CancellationToken, Task<ItemSearchResult>>? runSearch = null,
+    Func<ErpAgentJob, CancellationToken, Task<(bool Found, string Body)>>? runBusiness = null)
 {
     public static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
@@ -129,7 +130,15 @@ internal sealed class ErpAgentLoop(
         string outcome;
         try
         {
-            if (job.IsNameSearch)
+            if (job.IsBusiness)
+            {
+                // Customer, 銷貨銷退 and 未收款 jobs build their own complete body (ErpAgentProtocol).
+                if (runBusiness is null) throw new NotSupportedException("客戶／銷貨銷退／未收款查詢未接上。");
+                var reply = await runBusiness(job, cancellationToken);
+                body = reply.Body;
+                outcome = reply.Found ? "FOUND" : "NOT_FOUND";
+            }
+            else if (job.IsNameSearch)
             {
                 if (runSearch is null) throw new NotSupportedException("品名查詢未接上。");
                 var search = await runSearch(job, cancellationToken);
@@ -140,7 +149,7 @@ internal sealed class ErpAgentLoop(
             {
                 var result = await runQuery(job, cancellationToken);
                 body = result.Found
-                    ? ErpAgentProtocol.FoundBody(result, agentVersion)
+                    ? ErpAgentProtocol.FoundBody(result, agentVersion, job.IncludeCost)
                     : ErpAgentProtocol.NotFoundBody(watch.ElapsedMilliseconds, agentVersion);
                 outcome = result.Found ? "FOUND" : "NOT_FOUND";
             }

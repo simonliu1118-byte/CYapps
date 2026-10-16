@@ -25,13 +25,60 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
 {
     /// <summary>queryType ITEM_NAME: a 品名 search for <see cref="Keyword"/> (user, 2026-10-16: CY Web only sends the 品名).</summary>
     public const string NameSearch = "ITEM_NAME";
+    public const string ItemQuery = "ITEM_NO";
+    // ERP 客戶查詢 and ERP 未收款查詢 (CY Web, user 2026-10-17).
+    public const string CustomerQuery = "CUSTOMER_NO";
+    public const string CustomerSearch = "CUSTOMER_NAME";
+    public const string SalesQueryType = "SALES";
+    public const string ReceivableQueryType = "RECEIVABLE";
+    /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
+    public static readonly IReadOnlyList<string> SupportedTypes =
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SalesQueryType, ReceivableQueryType];
 
-    public string QueryType { get; init; } = "ITEM_NO";
+    public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
+    /// <summary>A customer, 銷貨銷退 or 未收款 job (not the item queries).</summary>
+    public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SalesQueryType or ReceivableQueryType;
+
+    /// <summary>ITEM_NO: the member may see 標準進價 (ERP 商品成本); not sent means not allowed.</summary>
+    public bool IncludeCost { get; init; }
+    /// <summary>CUSTOMER_NO／SALES: the customer.</summary>
+    public string? CustomerCode { get; init; }
+    /// <summary>SALES: the 單據日期 range CY Web resolved (yyyy-MM-dd), echoed back unchanged.</summary>
+    public string? DateFrom { get; init; }
+    public string? DateTo { get; init; }
+    /// <summary>RECEIVABLE: CUSTOMER／SALESPERSON／ALL and the code (null for ALL).</summary>
+    public string? Scope { get; init; }
+    public string? Code { get; init; }
 
     /// <summary>What the job asks for, for status lines.</summary>
-    public string Display => IsNameSearch ? $"品名「{Keyword}」" : ItemNo;
+    public string Display => QueryType switch
+    {
+        NameSearch => $"品名「{Keyword}」",
+        CustomerQuery => $"客戶 {CustomerCode}",
+        CustomerSearch => $"客戶名稱「{Keyword}」",
+        SalesQueryType => $"客戶 {CustomerCode} 銷貨銷退單（{DateFrom}～{DateTo}）",
+        ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
+        _ => ItemNo
+    };
+
+    /// <summary>The SALES request; a bad code or date throws <see cref="ArgumentException"/> (reported as FAILED).</summary>
+    public SalesQuery Sales(DateOnly today)
+    {
+        DateOnly Date(string? text, string what) =>
+            HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的單據日期{what}日缺少或格式不正確。");
+        return SalesQuery.Resolve(CustomerCode ?? string.Empty, Date(DateFrom, "起"), Date(DateTo, "迄"), today);
+    }
+
+    /// <summary>The RECEIVABLE request; an unknown scope or bad code throws <see cref="ArgumentException"/>.</summary>
+    public ReceivableQuery Receivable() => ReceivableQuery.Resolve(Scope switch
+    {
+        "CUSTOMER" => ReceivableScope.Customer,
+        "SALESPERSON" => ReceivableScope.Salesperson,
+        "ALL" => ReceivableScope.All,
+        _ => throw new ArgumentException("CY Web 的未收款查詢範圍不正確。")
+    }, Code ?? string.Empty);
 
     /// <summary>
     /// The query options of this job; a bad date or range throws <see cref="ArgumentException"/>
@@ -67,7 +114,12 @@ internal static class ErpAgentProtocol
     };
 
     public static string ClaimBody(string agentVersion, string erpState) =>
-        new JsonObject { ["agentVersion"] = agentVersion, ["erpState"] = erpState }.ToJsonString();
+        new JsonObject
+        {
+            ["agentVersion"] = agentVersion,
+            ["erpState"] = erpState,
+            ["queryTypes"] = new JsonArray(ErpAgentJob.SupportedTypes.Select(t => (JsonNode?)t).ToArray())
+        }.ToJsonString();
 
     /// <summary>The job in a claim response, or null for <c>{job:null}</c>.</summary>
     public static ErpAgentJob? ParseClaim(string json)
@@ -75,19 +127,38 @@ internal static class ErpAgentProtocol
         var data = Data(json);
         if (data["job"] is not JsonObject job) return null;
         var id = job["id"]?.GetValue<string>();
-        if (OptionalString(job["queryType"]) == ErpAgentJob.NameSearch)
+        var type = OptionalString(job["queryType"]) ?? ErpAgentJob.ItemQuery;
+        string Required(string name) => string.IsNullOrEmpty(id) || OptionalString(job[name]) is not { } value
+            ? throw new InvalidDataException($"CY Web claim 回應缺少 id／{name}。")
+            : value;
+        switch (type)
         {
-            var keyword = OptionalString(job["keyword"]);
-            if (string.IsNullOrEmpty(id) || keyword is null)
-                throw new InvalidDataException("CY Web claim 回應缺少 id／keyword。");
-            return new ErpAgentJob(id, string.Empty) { QueryType = ErpAgentJob.NameSearch, Keyword = keyword };
+            case ErpAgentJob.NameSearch or ErpAgentJob.CustomerSearch:
+                return new ErpAgentJob(id!, string.Empty) { QueryType = type, Keyword = Required("keyword") };
+            case ErpAgentJob.CustomerQuery:
+                return new ErpAgentJob(id!, string.Empty) { QueryType = type, CustomerCode = Required("customerCode") };
+            case ErpAgentJob.SalesQueryType:
+                // Dates are checked when the job runs, so a bad one is reported as FAILED, not lost.
+                return new ErpAgentJob(id!, string.Empty)
+                {
+                    QueryType = type, CustomerCode = Required("customerCode"),
+                    DateFrom = OptionalString(job["dateFrom"]), DateTo = OptionalString(job["dateTo"])
+                };
+            case ErpAgentJob.ReceivableQueryType:
+                return new ErpAgentJob(id!, string.Empty) { QueryType = type, Scope = Required("scope"), Code = OptionalString(job["code"]) };
+            case ErpAgentJob.ItemQuery:
+                break;
+            default:
+                throw new InvalidDataException($"CY Web claim 回應的查詢類型「{type}」不支援。");
         }
         var itemNo = job["itemNo"]?.GetValue<string>();
         if (string.IsNullOrEmpty(id) || itemNo is null)
             throw new InvalidDataException("CY Web claim 回應缺少 id／itemNo。");
         // Options are read leniently: a wrong type here must not lose the claimed job.
         var includeHistory = job["includeHistory"] is JsonValue h && h.TryGetValue<bool>(out var b) && b;
-        return new ErpAgentJob(id, itemNo, includeHistory, OptionalString(job["historyFrom"]), OptionalString(job["historyTo"]));
+        // 標準進價 only when CY Web says the member may see it.
+        var includeCost = job["includeCost"] is JsonValue c && c.TryGetValue<bool>(out var cost) && cost;
+        return new ErpAgentJob(id, itemNo, includeHistory, OptionalString(job["historyFrom"]), OptionalString(job["historyTo"])) { IncludeCost = includeCost };
     }
 
     private static string? OptionalString(JsonNode? node) =>
@@ -116,11 +187,14 @@ internal static class ErpAgentProtocol
     /// <summary>Batches sent at most, the same bound as 庫別.</summary>
     public const int MaxBatchRows = 100;
 
-    public static string FoundBody(ItemQueryResult result, string agentVersion)
+    /// <summary>Item fields only sent when the CY Web member may see them (user, 2026-10-17: 標準進價).</summary>
+    public static readonly IReadOnlySet<string> CostFields = new HashSet<string>(["標準進價"]);
+
+    public static string FoundBody(ItemQueryResult result, string agentVersion, bool includeCost)
     {
         var body = CompleteObject(
             "FOUND",
-            Fields(result.Fields),
+            Fields(includeCost ? result.Fields : result.Fields.Where(f => !CostFields.Contains(f.Name)).ToList()),
             new JsonArray(result.Warehouses.Select(row => (JsonNode)Fields(row)).ToArray()),
             null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
         body["batchManaged"] = result.BatchManaged;
@@ -152,6 +226,75 @@ internal static class ErpAgentProtocol
             ["total"] = result.History.Count,
             ["truncated"] = result.History.Count > MaxHistoryRows
         };
+    }
+
+    // ---- ERP 客戶查詢／未收款查詢 (CY Web, user 2026-10-17) -------------------------------
+
+    public const int MaxOrders = 1000, MaxOrderLines = 500, MaxBills = 3000, MaxVouchers = 500;
+
+    private static string Text(decimal value) => value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>CUSTOMER_NO: the customer's fields, or NOT_FOUND; the code is echoed either way.</summary>
+    public static string CustomerBody(ErpAgentJob job, CustomerQueryResult result, string agentVersion)
+    {
+        var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", result.Found ? Fields(result.Fields) : [], [], null,
+            (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["customerCode"] = job.CustomerCode;
+        return body.ToJsonString(JsonOptions);
+    }
+
+    /// <summary>SALES: the orders newest first (at most <see cref="MaxOrders"/>); the job's customer and dates echoed.</summary>
+    public static string SalesBody(ErpAgentJob job, SalesQueryResult result, string agentVersion)
+    {
+        var orders = result.Orders.Take(MaxOrders).Select(o => (JsonNode)new JsonObject
+        {
+            ["kind"] = o.Kind, ["orderNo"] = o.OrderNo, ["date"] = Iso(o.Date),
+            ["customerCode"] = o.CustomerCode, ["customerName"] = o.CustomerName,
+            ["salesperson"] = o.Salesperson, ["department"] = o.Department, ["paymentTerm"] = o.PaymentTerm,
+            ["taxType"] = o.TaxType, ["invoiceType"] = o.InvoiceType,
+            ["totalQuantity"] = Text(o.TotalQuantity), ["amount"] = Text(o.Amount), ["tax"] = Text(o.Tax), ["total"] = Text(o.Total),
+            ["note"] = o.Note, ["reason"] = o.Reason,
+            ["lines"] = new JsonArray(o.Lines.Take(MaxOrderLines).Select(l => (JsonNode)new JsonObject
+            {
+                ["seq"] = l.Seq, ["itemCode"] = l.ItemCode, ["itemName"] = l.ItemName, ["specification"] = l.Specification,
+                ["warehouse"] = l.Warehouse, ["quantity"] = Text(l.Quantity), ["unit"] = l.Unit,
+                ["unitPrice"] = Text(l.UnitPrice), ["amount"] = Text(l.Amount), ["giftType"] = l.GiftType,
+                ["giftQuantity"] = Text(l.GiftQuantity), ["batch"] = l.Batch, ["note"] = l.Note, ["sourceOrder"] = l.SourceOrder
+            }).ToArray())
+        }).ToArray();
+        var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["customerCode"] = job.CustomerCode;
+        body["dateFrom"] = job.DateFrom;
+        body["dateTo"] = job.DateTo;
+        body["orders"] = new JsonArray(orders);
+        body["total"] = result.Orders.Count;
+        body["truncated"] = result.Orders.Count > MaxOrders;
+        return body.ToJsonString(JsonOptions);
+    }
+
+    /// <summary>RECEIVABLE: the 結帳單 in ERP's order (at most <see cref="MaxBills"/>); the job's scope and code echoed.</summary>
+    public static string ReceivableBody(ErpAgentJob job, ReceivableResult result, string agentVersion)
+    {
+        var bills = result.Bills.Take(MaxBills).Select(b => (JsonNode)new JsonObject
+        {
+            ["customerCode"] = b.CustomerCode, ["customerName"] = b.CustomerName, ["date"] = Iso(b.Date), ["billNo"] = b.BillNo,
+            ["salespersonCode"] = b.SalespersonCode, ["salespersonName"] = b.SalespersonName, ["invoiceNo"] = b.InvoiceNo,
+            ["currency"] = b.Currency, ["receivable"] = Text(b.Receivable), ["receivableTax"] = Text(b.ReceivableTax),
+            ["unpaid"] = Text(b.Unpaid),
+            ["vouchers"] = new JsonArray(b.Vouchers.Take(MaxVouchers).Select(v => (JsonNode)new JsonObject
+            {
+                ["voucherNo"] = v.VoucherNo, ["date"] = v.Date is { } d ? Iso(d) : string.Empty,
+                ["amount"] = Text(v.Amount), ["tax"] = Text(v.Tax)
+            }).ToArray())
+        }).ToArray();
+        var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["scope"] = job.Scope;
+        body["code"] = job.Scope == "ALL" ? null : job.Code;
+        body["bills"] = new JsonArray(bills);
+        body["total"] = result.Bills.Count;
+        body["truncated"] = result.Bills.Count > MaxBills;
+        return body.ToJsonString(JsonOptions);
     }
 
     public static string NotFoundBody(long elapsedMs, string agentVersion) =>
