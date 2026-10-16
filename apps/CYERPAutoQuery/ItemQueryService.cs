@@ -1174,12 +1174,15 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
         }
 
-        // Only write explicitly supplied dates. ERP accepts an unchecked date field.
-        // Always verify each typed date after Enter and once again before querying.
-        if (range.From is { } fromDate)
-            await SetDateAsync(invq, boxes[0], fromDate, "起", cancellationToken);
-        if (range.To is { } toDate)
-            await SetDateAsync(invq, boxes[1], toDate, "迄", cancellationToken);
+        // Correct ERP sequence when both dates are given:
+        // focus 起 year -> yyyyMMdd -> Enter -> yyyyMMdd in 迄 (NO second click/Enter).
+        // When only one side is specified, click and type only that side.
+        foreach (var action in Invq01Layout.DateActions(range))
+        {
+            var name = action.BoxIndex == 0 ? "起" : "迄";
+            await SetDateAsync(invq, boxes[action.BoxIndex], action.Date, name,
+                clickYear: action.ClickYear, pressEnter: action.PressEnter, cancellationToken: cancellationToken);
+        }
         if (range.From is { } expectedFrom &&
             !Invq01Layout.ShowsDate(NativeMethods.ControlText(boxes[0].Handle), expectedFrom))
             throw new InvalidOperationException("查歷史異動的起日讀回不一致，已停止。");
@@ -1188,35 +1191,42 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動的迄日讀回不一致，已停止。");
     }
 
-    private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what, CancellationToken cancellationToken)
+    private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what,
+        bool clickYear, bool pressEnter, CancellationToken cancellationToken)
     {
-        // Clicking the center of a date mask selects 月 or 日, not 年. Click near its
-        // left edge to select 年 and overwrite the three sections in one keyboard pass.
-        // Do not use End/Backspace or Ctrl+A on this segmented ERP control.
-        var width = box.Rect.Right - box.Rect.Left;
-        if (width < 48)
-            throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
-        var yearPoint = new Point(box.Rect.Left + Math.Min(12, width / 10),
-            (box.Rect.Top + box.Rect.Bottom) / 2);
-        SafeClick(invq, yearPoint);
-        await Pace.Delay(150, cancellationToken);
+        // The first explicit date needs a click near the 年 segment. If 起 was
+        // entered, its Enter MUST move focus to 迄. A second click repositions the
+        // cursor within the segmented date and may overwrite the wrong component.
+        if (clickYear)
+        {
+            var width = box.Rect.Right - box.Rect.Left;
+            if (width < 48)
+                throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
+            var yearPoint = new Point(box.Rect.Left + Math.Min(12, width / 10),
+                (box.Rect.Top + box.Rect.Bottom) / 2);
+            SafeClick(invq, yearPoint);
+            await Pace.Delay(150, cancellationToken);
+        }
+
+        // Check the actual focus before typing. If Enter did not move to 迄,
+        // stop instead of clicking a possibly wrong segment or typing elsewhere.
         var focus = NativeMethods.FocusedControlOfForeground();
         if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
-            throw new InvalidOperationException($"無法把游標移到歷史異動的{what}日欄位。");
+            throw new InvalidOperationException($"歷史異動的{what}日沒有取得焦點，已停止，避免日期打到錯誤欄位。");
 
-        // Keep a Chinese IME from intercepting the physical digit keystrokes.
         if (NativeMethods.CloseImeFor(focus))
             await Pace.Delay(60, cancellationToken);
-
-        // Use VK_0..VK_9 (keydown/keyup), not Unicode WM_CHAR: the ERP mask reacts to
-        // actual number keys and advances 年 → 月 → 日 as the digits are entered.
         foreach (var digit in Invq01Layout.ErpDateKeys(date))
         {
             cancellationToken.ThrowIfCancellationRequested();
             InputSender.Press((ushort)digit);
             await Pace.Delay(70, cancellationToken);
         }
-        InputSender.Press(NativeMethods.VK_RETURN);
+
+        // Only 起 needs Enter to commit and advance. 迄 is intentionally
+        // left without Enter; the existing 開始查詢 click commits that field.
+        if (pressEnter)
+            InputSender.Press(NativeMethods.VK_RETURN);
         await Pace.Delay(200, cancellationToken);
         var shown = NativeMethods.ControlText(box.Handle);
         if (!Invq01Layout.ShowsDate(shown, date))

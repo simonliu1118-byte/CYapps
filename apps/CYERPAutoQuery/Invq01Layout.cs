@@ -54,7 +54,24 @@ internal static class Invq01Layout
     /// <summary>Human-readable date shown in status and messages.</summary>
     public static string ErpDate(DateOnly? date) => date?.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) ?? "未指定";
 
-    /// <summary>INVQ01 segmented date edit: physical digit keys without separators, then Enter.</summary>
+    /// <summary>One deliberately minimal keyboard sequence for a local or Web INVQ01 date input.</summary>
+    internal sealed record HistoryDateAction(int BoxIndex, DateOnly Date, bool ClickYear, bool PressEnter);
+
+    /// <summary>
+    /// With both dates, Enter after 起 moves focus to 迄; do not click the second box
+    /// or send a second Enter. For a single entered date click only that box.
+    /// </summary>
+    public static IReadOnlyList<HistoryDateAction> DateActions(HistoryRange range)
+    {
+        var actions = new List<HistoryDateAction>(2);
+        if (range.From is { } from)
+            actions.Add(new HistoryDateAction(0, from, ClickYear: true, PressEnter: true));
+        if (range.To is { } to)
+            actions.Add(new HistoryDateAction(1, to, ClickYear: range.From is null, PressEnter: false));
+        return actions;
+    }
+
+    /// <summary>INVQ01 segmented date edit: physical digit keys without separators, when appropriate.</summary>
     public static string ErpDateKeys(DateOnly date) => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
     /// <summary>True when a date box shows <paramref name="date"/>, whatever separators ERP uses.</summary>

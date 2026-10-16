@@ -176,6 +176,34 @@ public class Invq01Tests
         Assert.Equal("20261016", Invq01Layout.ErpDateKeys(new DateOnly(2026, 10, 16)));
     }
 
+    [Fact]
+    public void HistoryDateEntryHasExactlyOneEnterBetweenTwoDates()
+    {
+        var actions = Invq01Layout.DateActions(new HistoryRange(
+            new DateOnly(2025, 10, 16), new DateOnly(2026, 10, 16)));
+        Assert.Collection(actions,
+            first => {
+                Assert.Equal(0, first.BoxIndex);
+                Assert.Equal("20251016", Invq01Layout.ErpDateKeys(first.Date));
+                Assert.True(first.ClickYear);
+                Assert.True(first.PressEnter);
+            },
+            second => {
+                Assert.Equal(1, second.BoxIndex);
+                Assert.Equal("20261016", Invq01Layout.ErpDateKeys(second.Date));
+                Assert.False(second.ClickYear); // pressing Enter focuses 迄, no extra click
+                Assert.False(second.PressEnter); // no second Enter
+            });
+        Assert.Empty(Invq01Layout.DateActions(new HistoryRange(null, null)));
+        var onlyEnd = Assert.Single(Invq01Layout.DateActions(new HistoryRange(null, new DateOnly(2026,10,16))));
+        Assert.Equal(1, onlyEnd.BoxIndex);
+        Assert.True(onlyEnd.ClickYear);
+        Assert.False(onlyEnd.PressEnter);
+        var onlyStart = Assert.Single(Invq01Layout.DateActions(new HistoryRange(new DateOnly(2025,10,16), null)));
+        Assert.True(onlyStart.ClickYear);
+        Assert.True(onlyStart.PressEnter);
+    }
+
     private static readonly DateOnly Today = new(2026, 10, 16);
 
     [Fact]
