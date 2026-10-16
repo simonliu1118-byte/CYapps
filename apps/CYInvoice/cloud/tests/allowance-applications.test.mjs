@@ -653,7 +653,12 @@ assert.equal((await requestWithdrawal(withdrawReview.itemId,2)).status,200,
 assert.equal((await fromDeviceB("transition",{
   itemId:withdrawReview.itemId,expectedRevision:2,from:"review",to:"closed"
 })).status,403,"Regular user cannot use manager transition");
-// A previously approved/numbered application must NOT be withdrawable.
+// A previously approved/numbered application must NOT be withdrawable,
+// including when the caller really is the original applicant.
+const approvedApplicant=fx.sql.prepare(
+  "SELECT applicant_employee_id FROM allowance_applications WHERE work_item_id=?")
+  .get(approvedId).applicant_employee_id;
+who={...who,employeeId:approvedApplicant,workspaceRole:"USER"};
 assert.equal((await requestWithdrawal(approvedId,2)).status,409);
 assert.equal(fx.sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
   .get(approvedId).status,"review");
