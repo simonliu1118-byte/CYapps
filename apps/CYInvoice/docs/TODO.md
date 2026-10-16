@@ -20,6 +20,7 @@
 - [x] g0501 作廢：`amego-allowance-void.ts`、`amego-allowance-status.ts`、`amego-allowance-list.ts`；唯讀官方核對、單次作廢、雙日期 List 異常定位器；`drafts/0019_allowance_void_workflow.sql` 提供不可變申請／核准／Claim／官方狀態稽核及官方證據後結案柵欄。
 - [x] g0501 的 **Cloud CYID routes 已接通於 Draft 原始碼**：`allowance-void-applications-route.ts` + `allowance-void-manager.ts` 包括 create／get／list、manager approve、send-once、status-readback、close；測試核對同一工作單唯一 Claim、逾時不重送、官方 `D0501/99` 後才可結案。**不要再把這組 endpoints 寫成「尚未建立」。**
 
+- [x] **CYID Cloud 申請接線（Draft，待 exact HEAD CI）**：原 `RecordDetailForm` 在 CYID Cloud Mode 直接使用既有 `CloudAllowanceApplicationClient` 建立不可變 g0401 草案；先持久化同一 `wi_` ID／不含密碼的草案到原發票 metadata，保留原 `open` 申請，由 CYID 管理員在原核准視窗執行 Work Item `open → review`（一般 USER 不具送審權限）。暫時失聯只能原號查回，絕不以新 ID 重送；已結案的舊 Work Item 才允許在重新查核官方餘額後另提下一張。Local 保留原人工待辦。**真 Worker/D1 與光貿送出均尚未實機驗證**。
 - [x] **原發票帶入折讓編輯介面（Draft）**：既有 `AllowanceRequestForm` 改為商品清單直接帶入、刪除品項、修改數量與單價、含稅／未稅輸入切換、依課稅別自算小計與稅額，畫面顯示「原發票－已生效折讓」剩餘額。使用者編輯後的商品清單與總額保存在現有人工折讓工作單，由管理員在原待辦明細查看；提交前仍由 `invoice_query` 重查歷史餘額，不新增獨立工作流程。**目前人工待辦仍需管理員完成光貿操作；CYID 雲端申請與直接 g0401 送出銜接／實機含稅四捨五入仍待驗收**。
 ### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
 

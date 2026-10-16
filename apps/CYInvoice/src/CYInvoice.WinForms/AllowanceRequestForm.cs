@@ -249,11 +249,21 @@ internal sealed class AllowanceRequestForm : Form
                 _=>throw new InvalidOperationException("請選擇課稅別")};
             var netPrice=grossPrices.Checked&&taxType==1
                 ?FixedDecimal.MultiplyRatio(price,100,105):price;
-            var rawNet=FixedDecimal.Multiply(quantity,netPrice);
+            // Gross entry means the entered unit price includes tax.
+            // First round the line gross to whole currency, then split
+            // its 5% tax. This also handles a negative discount line.
+            var lineGross=FixedDecimal.FromInt64(
+                FixedDecimal.Multiply(quantity,price).RoundInt64());
+            var rawNet=grossPrices.Checked&&taxType==1
+                ?FixedDecimal.MultiplyRatio(lineGross,100,105)
+                :FixedDecimal.Multiply(quantity,netPrice);
             var itemNet=FixedDecimal.FromInt64(rawNet.RoundInt64());
-            var itemTax=taxType==1
-                ?FixedDecimal.FromInt64(FixedDecimal.MultiplyRatio(itemNet,5,100).RoundInt64())
-                :new FixedDecimal(0);
+            var itemTax=taxType!=1?new FixedDecimal(0):
+                grossPrices.Checked
+                    ?FixedDecimal.Add(lineGross,
+                        new FixedDecimal(checked(-itemNet.ScaledValue)))
+                    :FixedDecimal.FromInt64(
+                        FixedDecimal.MultiplyRatio(itemNet,5,100).RoundInt64());
             row.Cells["amount"].Value=itemNet.ToString();
             row.Cells["tax"].Value=itemTax.ToString();
             net=FixedDecimal.Add(net,itemNet);

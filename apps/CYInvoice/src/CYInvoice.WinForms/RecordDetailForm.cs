@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -392,21 +393,34 @@ internal sealed class RecordDetailForm : Form
         SetAllowanceBusy(true);
         try
         {
-            var result = await allowanceWorkflow.SubmitAsync(
-                record,
-                request.EmployeeNo,
-                request.Password,
-                request.Reason,
-                request.TaxInclusiveAmount,
-                editedItems:request.EditedItems);
-            MessageBox.Show(
-                this,
-                result.AlreadyQueued
+            var settings=repository.Settings.LoadOrCreate();
+            if(settings.CloudMode!=CloudModes.LocalOnly)
+            {
+                if(settings.CloudIdentityProvider!="CYID")
+                    throw new InvalidOperationException(
+                        "V3 雲端折讓僅支援 CYID，請完成裝置與員工權限設定");
+                var result=await new CloudAllowanceSubmissionService(repository)
+                    .SubmitAsync(record,request.EmployeeNo,request.Password,
+                        request.Reason,request.TaxInclusiveAmount,request.EditedItems);
+                MessageBox.Show(this,
+                    (result.AlreadySubmitted
+                        ? "已查回原本的折讓申請；本次修改不會取代先前已凍結的明細。"
+                        : "折讓明細已送交 CYID Cloud 管理員審核。")+
+                    "\n\nWork Item："+result.ItemId+
+                    "\n目前尚未向光貿送出折讓。",
+                    "CYID 折讓申請",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            else
+            {
+                var result = await allowanceWorkflow.SubmitAsync(
+                    record,request.EmployeeNo,request.Password,
+                    request.Reason,request.TaxInclusiveAmount,
+                    editedItems:request.EditedItems);
+                MessageBox.Show(this,result.AlreadyQueued
                     ? result.Message
                     : "折讓申請已建立。\n\n請通知管理員查看並完成操作。",
-                "折讓人工處理",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                    "折讓人工處理",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
             DialogResult = DialogResult.OK;
             Close();
         }

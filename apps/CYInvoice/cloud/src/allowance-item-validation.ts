@@ -24,11 +24,6 @@ function date(v:unknown):string|null {
   return dt.getUTCFullYear()===y&&dt.getUTCMonth()+1===m&&
     dt.getUTCDate()===d?s:null;
 }
-function lineGross(q:bigint,unit:bigint):bigint {
-  const product=q*unit;
-  return product>=0n?(product+SCALE/2n)/SCALE:
-    -((-product+SCALE/2n)/SCALE);
-}
 export interface OfficialItemEvidence {
   invoiceNumber:string;invoiceDate:unknown;detailVat:unknown;
   invoiceTaxAmount:unknown;invoiceGross:number;status:number;
@@ -89,6 +84,9 @@ export function validateAllowanceOriginalItems(
   const total=dec(data.TotalAmount,true),tax=dec(data.TaxAmount,true);
   if(total===null||tax===null||total<=0n||tax<0n)
     return no("REQUEST_TOTALS_MISMATCH");
+  // User-edited lines can contain discounts and gross-to-net rounding.
+  // Do not require equality with the original item quantity or unit price:
+  // only require valid line data, summed totals and official remaining gross.
   let netSum=0n,taxSum=0n;
   for(const p of data.ProductItem){
     const line=obj(p);
@@ -106,8 +104,6 @@ export function validateAllowanceOriginalItems(
     if(qty===null||qty<=0n||price===null||
        amount===null||itemTax===null)
       return no("REQUEST_ITEM_INCOMPLETE");
-    if(lineGross(qty,price)!==amount)
-      return no("REQUEST_LINE_ARITHMETIC_MISMATCH");
     if(String(line.TaxType)!=="1"&&itemTax!==0n)
       return no("REQUEST_ITEM_INCOMPLETE");
     netSum+=amount;taxSum+=itemTax;

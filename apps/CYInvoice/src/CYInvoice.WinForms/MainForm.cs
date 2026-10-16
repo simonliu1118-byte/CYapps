@@ -52,6 +52,7 @@ internal sealed class MainForm : Form
     private bool ownsAccountManagement = true;
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
+    private readonly Button cloudAllowanceButton = UiControls.StandardButton("折讓管理") { Visible=false };
     private readonly Label copyrightLabel = new()
     {
         Text = "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.",
@@ -221,10 +222,12 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(forgotPasswordButton, OpenPasswordRecovery);
         ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
         ConfigureHeaderButton(settingsButton, OpenSettings);
+        ConfigureHeaderButton(cloudAllowanceButton, OpenCloudAllowanceManager);
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
         tabHost.Controls.Add(accountManagementButton);
         tabHost.Controls.Add(settingsButton);
+        tabHost.Controls.Add(cloudAllowanceButton);
         tabHost.Resize += (_, _) => PositionHeaderButtons();
         tabHost.Layout += (_, _) => PositionHeaderButtons();
         root.Controls.Add(banner, 0, 0);
@@ -276,14 +279,20 @@ internal sealed class MainForm : Form
             top,
             accountManagementButton.Width,
             accountManagementButton.Height);
+        var actionLeft=ownsAccountManagement?accountManagementButton.Left:settingsButton.Left;
+        if(cloudAllowanceButton.Visible){
+            cloudAllowanceButton.SetBounds(
+                Math.Max(0,actionLeft-cloudAllowanceButton.Width-HeaderButtonGap),
+                top,cloudAllowanceButton.Width,cloudAllowanceButton.Height);
+            actionLeft=cloudAllowanceButton.Left;
+        }
         forgotPasswordButton.SetBounds(
-            Math.Max(0, (ownsAccountManagement ? accountManagementButton.Left : settingsButton.Left) - forgotPasswordButton.Width - HeaderButtonGap),
-            top,
-            forgotPasswordButton.Width,
-            forgotPasswordButton.Height);
+            Math.Max(0,actionLeft-forgotPasswordButton.Width-HeaderButtonGap),
+            top,forgotPasswordButton.Width,forgotPasswordButton.Height);
         forgotPasswordButton.BringToFront();
         accountManagementButton.BringToFront();
         settingsButton.BringToFront();
+        cloudAllowanceButton.BringToFront();
     }
 
     protected override void WndProc(ref Message message)
@@ -296,6 +305,31 @@ internal sealed class MainForm : Form
         {
             var hit = message.Result.ToInt32();
             if (hit >= HtLeft && hit <= HtBottomRight) message.Result = (IntPtr)HtBorder;
+        }
+    }
+
+    private void OpenCloudAllowanceManager()
+    {
+        var settings=repository.Settings.LoadOrCreate();
+        if(settings.CloudMode!=CloudModes.CloudPreferred||
+           settings.CloudIdentityProvider!="CYID"||
+           !settings.CloudEmployeeAuthorityReady)
+        {
+            MessageBox.Show(this,"請先完成 CYID 雲端裝置及員工權限設定。",
+                "無法開啟雲端折讓",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        try
+        {
+            var token=repository.Settings.CloudDeviceToken(settings);
+            using var form=new CloudAllowanceManagerForm(repository,
+                settings.CloudBaseUrl,token);
+            form.ShowDialog(this);
+        }
+        catch(Exception error)
+        {
+            MessageBox.Show(this,error.Message,"CYID 折讓管理無法開啟",
+                MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
     }
 
@@ -595,6 +629,8 @@ internal sealed class MainForm : Form
     {
         ownsAccountManagement = settings.CloudIdentityProvider != "CYID";
         accountManagementButton.Visible = ownsAccountManagement;
+        cloudAllowanceButton.Visible=settings.CloudMode==CloudModes.CloudPreferred&&
+            settings.CloudIdentityProvider=="CYID"&&settings.CloudEmployeeAuthorityReady;
         PositionHeaderButtons();
         if (settings.CloudMode == CloudModes.LocalOnly)
         {
@@ -638,6 +674,8 @@ internal sealed class MainForm : Form
         var requested = repository.Settings.LoadOrCreate();
         ownsAccountManagement = requested.CloudIdentityProvider != "CYID";
         accountManagementButton.Visible = ownsAccountManagement;
+        cloudAllowanceButton.Visible=requested.CloudMode==CloudModes.CloudPreferred&&
+            requested.CloudIdentityProvider=="CYID"&&requested.CloudEmployeeAuthorityReady;
         PositionHeaderButtons();
         var requestedMode = requested.CloudMode;
         var requestedUrl = requested.CloudBaseUrl.Trim();

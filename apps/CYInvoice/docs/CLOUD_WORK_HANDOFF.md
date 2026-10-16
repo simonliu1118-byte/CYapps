@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 CYID Cloud 折讓申請銜接（Draft）
+
+沿用 `RecordDetailForm` 與 `AllowanceRequestForm`，在 `cloud_preferred / CYID` 模式送編輯後 g0401 草案到既有 `/v1/allowance-applications/create`，管理員於既有折讓管理視窗使用 Work Item `get` 與 `transition(open→review)` 後再查驗／核准；一般 USER 無此轉換權限。沒有建立第二套工作單；Local 仍是原人工待辦。每一張原發票先保存帶 workspace/device/environment 的凍結草案與 `wi_` ID 到本機 `ExtensionData`，網路不確定時原 ID readback，不產生第二筆；只有伺服端確認 closed 後，才准建立下一個 ID。Cloud 仍以官方 invoice_query 已生效折讓差額作單次上限，含稅介面可修改正負折扣並拆稅。這只是 source CI，尚未實際部署 draft D1 或操作真光貿。請務必驗證套件成功及端對端後才能視為已驗收。
+
 ## 2026-10-16 原發票帶入式折讓編輯（Draft）
 
 現有 `AllowanceRequestForm` 已改為依最新 `RecordDetailForm` 原發票帶入品項及原本價格模式。使用者可刪除或新增品項，修改數量、單價、品名與課稅別；含稅輸入以 100/105 換算成光貿 g0401 未稅單價，行小計與 5% 稅額依七位 `FixedDecimal` 重算。所有編輯明細寫進原有 `InvoiceAllowanceManualReview.DraftItems`，原管理員「處理中／上傳問題」可閱讀，不另建 parallel Work Item 或第二個資料儲存。人工管理員實際送出仍需原有流程；CYID Cloud Create 表單接入及混合稅別人工實機驗算另待完成，不能宣稱已完成真 g0401。

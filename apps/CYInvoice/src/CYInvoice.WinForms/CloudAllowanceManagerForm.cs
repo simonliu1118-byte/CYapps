@@ -11,6 +11,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly LocalRepository repository;
     private readonly HttpClient http = new();
     private readonly CloudAllowanceApplicationClient client;
+    private readonly CloudWorkItemClient workItems;
     private readonly CancellationTokenSource lifetime = new();
     private readonly ListView queue = new() {
         Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,
@@ -22,6 +23,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     };
     private readonly List<Button> operations = [];
     private readonly Button refresh=UiControls.StandardButton("重新整理");
+    private readonly Button review=UiControls.StandardButton("送交覆核");
     private readonly Button preview=UiControls.StandardButton("申請明細");
     private readonly Button inspect=UiControls.StandardButton("官方查驗");
     private readonly Button approve=UiControls.StandardButton("核准");
@@ -37,6 +39,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         if(!Uri.TryCreate(endpoint,UriKind.Absolute,out var url) || url.Scheme!="https")
             throw new ArgumentException("CYID Cloud URL must be HTTPS.",nameof(endpoint));
         client=new CloudAllowanceApplicationClient(http,url,token);
+        workItems=new CloudWorkItemClient(http,url,token,
+            repository.Settings.LoadOrCreate().CloudWorkspaceId);
         Text="CYID 跨裝置折讓覆核";
         Font=new Font("Microsoft JhengHei UI",10F);
         BackColor=Color.White;
@@ -70,7 +74,7 @@ internal sealed class CloudAllowanceManagerForm : Form
             Dock=DockStyle.Fill,FlowDirection=FlowDirection.LeftToRight,
             WrapContents=true
         };
-        foreach(var button in new[]{refresh,preview,inspect,approve,reserve,issue,readback,reconcile})
+        foreach(var button in new[]{refresh,review,preview,inspect,approve,reserve,issue,readback,reconcile})
         {
             button.Margin=new Padding(2,4,3,4);
             buttons.Controls.Add(button);
@@ -79,6 +83,25 @@ internal sealed class CloudAllowanceManagerForm : Form
         root.Controls.Add(buttons,0,2);
         Controls.Add(root);
         refresh.Click+=async (_,_)=>await ReloadAsync();
+        review.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
+            if(entry.Status!="open"){
+                MessageBox.Show(this,"此申請已送交覆核，不能重複送審。",
+                    "已送審",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            if(!Confirm("將折讓申請 "+entry.ItemId+" 送交管理員覆核？\n"+
+                "送審不會配號或送出光貿。"))return;
+            var item=await workItems.GetAsync(entry.ItemId,user,pwd,lifetime.Token)
+                ?? throw new InvalidDataException("CYID Work Item 尚未查回");
+            if(item.Kind!="ALLOWANCE"||item.Revision!=entry.Revision||
+               item.Status!="open")
+                throw new InvalidOperationException("Work Item 狀態已變更，請重新整理");
+            var result=await workItems.TransitionAsync(item,"review",
+                user,pwd,lifetime.Token);
+            MessageBox.Show(this,"Work Item "+result.ItemId+" 已送交覆核。\n"+
+                "尚未核准，也尚未開立折讓。",
+                "送審完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
         preview.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
             var p=await client.PreviewForManagerAsync(entry.ItemId,entry.Revision,
                 user,pwd,lifetime.Token);
@@ -302,8 +325,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         catch(CloudApiException error) when(error.Code=="ALLOWANCE_APPROVAL_NOT_AUTHORIZED")
         {
             MessageBox.Show(this,
-                "折讓核准未獲確認，可能是官方品項、稅額、已有折讓或管理員權限需要進一步核對。\n"+
-                "請先使用「官方查驗」確認原發票，必要時至光貿人工核對。\n"+
+                "折讓核准未獲確認，可能是官方折讓剩餘額、申請總額或管理員權限需要進一步核對。\n"+
+                "請先使用「官方查驗」確認原發票與已生效折讓，必要時至光貿人工核對。\n"+
                 "保留原工作單；在確認核准前不可配號或送出折讓。",
                 "折讓需要人工查核",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }

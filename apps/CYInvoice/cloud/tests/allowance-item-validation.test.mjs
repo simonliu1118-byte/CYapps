@@ -58,8 +58,10 @@ for(const [source,reason]of [
 }
 assert.equal(verify({...draft,TaxAmount:4}).reason,"REQUEST_TOTALS_MISMATCH");
 assert.equal(verify({...draft,ProductItem:[
- {...draft.ProductItem[0],Quantity:2}]}).reason,
- "REQUEST_LINE_ARITHMETIC_MISMATCH");
+ {...draft.ProductItem[0],Quantity:2}]}).fullyMatched,true,
+ "An edited quantity is the employee's decision, not an original-item gate");
+assert.equal(verify({...draft,ProductItem:[
+ {...draft.ProductItem[0],Quantity:0}]}).reason,"REQUEST_ITEM_INCOMPLETE");
 assert.equal(verify({...draft,ProductItem:[
  {...draft.ProductItem[0],OriginalInvoiceNumber:"XY12345678"}]}).reason,
  "REQUEST_ORIGINAL_INVOICE_MISMATCH");
