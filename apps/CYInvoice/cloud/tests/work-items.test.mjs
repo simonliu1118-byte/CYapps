@@ -34,6 +34,7 @@ function fixture() {
     constructor(sql){this.sql=sql;this.args=[];}
     bind(...args){this.args=args;return this;}
     async first(){return db.prepare(this.sql).get(...this.args)??null;}
+    async all(){return {results:db.prepare(this.sql).all(...this.args)};}
     async run(){
       if(beforeWrite){const f=beforeWrite;beforeWrite=null;f();}
       return {meta:{changes:db.prepare(this.sql).run(...this.args).changes}};
