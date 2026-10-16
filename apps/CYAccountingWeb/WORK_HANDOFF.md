@@ -1,6 +1,16 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/15（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+更新：2026/10/17（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+
+## 部署模式變更與下一次發布
+
+使用者於 2026/10/16 改採與 CY Web 相同的合併／發布分離：**本批合併後 main 不再自動部署**。PR 保留自動驗證；Work 在收到當次發布指示後，將 `deploy/cyaccountingweb-production` 前進到已審核的當前 main，或從 main dispatch `cyaccountingweb-deploy.yml`，才會上線。完整指令、GitHub UI 備援與成功判定統一看 [README 正式部署操作](README.md#正式部署操作)，避免後續只合併 PR 卻誤以為已部署。
+
+發布來源必須是當前 main 的完整 SHA；排隊後 main 已更新會停止。正式部署鎖固定且 cancel=false，PR 驗證獨立取消；原有 Environment、CYID／migration／登入／資產檢查保留。Stable Release 改查相同 SHA 的成功 deploy job，validation-only／skipped 不算已部署。
+
+AITeam `docs/infrastructure/CLOUDFLARE_CONSOLIDATION_PLAN.md` 於 2026/10/12 記錄的「保留 main 自動部署」是先前決策；本次使用者已改變部署模式，後續操作以本專案更新後的 PROJECT_RULES 與 README 為準。
+
+這次只調整部署流程與文件，產品仍為 V0.25.5。既有下列 main 自動部署 run 均是**舊模式的歷史驗收證據**；本次 PR 本身不部署網站，首次新模式的實際發布仍待當次發布指示與成功 run 回讀。
 
 ## 正式基準及驗證
 
