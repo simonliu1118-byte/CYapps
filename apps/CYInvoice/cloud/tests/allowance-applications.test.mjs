@@ -245,10 +245,12 @@ try {
       historicInvoiceCalls++;
       assert.equal(data.invoice_number,"AB12345678");
       return Response.json({code:0,data:[{
-        invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:100,
+        invoice_number:"AB12345678",status:99,cancel_date:0,
+        total_amount:105,tax_amount:5,detail_vat:0,date:20261015,
         allowance:[{allowance_number:"3821061800001",allowance_date:20261015,
           total_amount:"75",tax_amount:"4",invoice_status:99,cancel_date:0}],
-        product_item:[{description:"Synthetic"}]
+        product_item:[{description:"Synthetic",quantity:"2",unit_price:"50",
+          amount:"100",tax_type:1}]
       }]});
     }
     assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
@@ -284,11 +286,31 @@ try {
   assert.equal(history.data.inspection.historicalCoverageReason,"HISTORY_RANGE_NOT_PROVEN");
   assert.equal(history.data.inspection.historicalGrossCeilingStatus,"KNOWN_CEILING_ONLY");
   assert.equal(history.data.inspection.historicalKnownGross,"53");
-  assert.equal(history.data.inspection.historicalRemainingCeiling,"47",
+  assert.equal(history.data.inspection.historicalRemainingCeiling,"52",
     "upper ceiling after known per-original allocation, not spendable balance");
   assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(history.data.inspection.canApprove,false);
   assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
+  // Matching allowance totals do not prove item quantity when the source
+  // original invoice's item price or quantity cannot be matched.
+  const validHistoricalFetch=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{
+    const response=await validHistoricalFetch(url,opts);
+    if(url!=="https://invoice-api.amego.tw/json/allowance_query")return response;
+    const payload=await response.json();
+    payload.data.product_item[0].description="Different Item";
+    return Response.json(payload);
+  };
+  const unassignedItem=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(unassignedItem.status,200,JSON.stringify(unassignedItem));
+  assert.equal(unassignedItem.data.inspection.historicalAllocationChecks[0].reason,
+    "ITEM_AMOUNTS_UNVERIFIED");
+  assert.equal(unassignedItem.data.inspection.historicalGrossCeilingStatus,
+    "NOT_AVAILABLE");
+  assert.equal(unassignedItem.data.inspection.historicalRemainingCeiling,null);
+  assert.equal(unassignedItem.data.inspection.canApprove,false);
+  globalThis.fetch=validHistoricalFetch;
   // Totals that still add up must not count as verified historical allocation
   // if the provider omits an OPTIONAL line quantity on official readback.
   const completeHistoryFetch=globalThis.fetch;

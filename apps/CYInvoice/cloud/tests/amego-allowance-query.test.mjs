@@ -36,6 +36,48 @@ assert.equal(requests,1);
 assert.equal(success.possibleMatch,true);
 assert.equal(success.safeToAutoResend,false);
 assert.equal(success.safeToAutoConfirm,false);
+assert.equal(success.knownOriginalQuantities,null,
+  "Number readback without source invoice cannot verify item quantity");
+const sourcedInput={...input,originalInvoiceDate:20261015,originalDetailVat:0,
+  originalInvoiceItems:[{description:"Synthetic",tax_type:1,
+    quantity:"2",unit_price:"50",amount:"100"}]};
+const sourced=await query(sourcedInput,transport(),()=>date);
+assert.deepEqual(sourced.knownOriginalQuantities,[{
+  originalItemIndex:0,knownQuantity:"1",originalQuantity:"2"
+}],"Known historical quantity maps to current original invoice snapshot");
+for(const bad of [
+  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],quantity:0}]},
+  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],quantity:0.5}]},
+  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],unit_price:51}]},
+  {originalInvoiceItems:[sourcedInput.originalInvoiceItems[0],
+    sourcedInput.originalInvoiceItems[0]]},
+  {originalInvoiceDate:20261016},
+  {originalDetailVat:1},
+  {originalInvoiceItems:null}
+]){
+  const result=await query({...sourcedInput,...bad},transport(),()=>date);
+  assert.equal(result.knownOriginalQuantities,null,
+    "Missing, duplicate, changed or gross-priced original source is unknown");
+}
+const splitRows=await query(sourcedInput,transport({code:0,data:{
+  ...official.data,product_item:[
+    {...official.data.product_item[0],quantity:"0.5",
+      amount:"25",tax:"1"},
+    {...official.data.product_item[0],quantity:"0.5",
+      amount:"25",tax:"2"}
+  ]
+}}),()=>date);
+assert.deepEqual(splitRows.knownOriginalQuantities,[{
+  originalItemIndex:0,knownQuantity:"1",originalQuantity:"2"
+}],"Two historical rows against one original item accumulate quantity");
+const overQuantity=await query(sourcedInput,transport({code:0,data:{
+  ...official.data,total_amount:"150",tax_amount:"8",
+  product_item:[{...official.data.product_item[0],quantity:"3",
+    amount:"150",tax:"8"}]
+}}),()=>date);
+assert.equal(overQuantity.originalAllocation.lineTotalsVerified,true);
+assert.equal(overQuantity.knownOriginalQuantities,null,
+  "More historical units than the original source cannot be counted");
 assert.deepEqual(success.originalInvoices,["AB12345678"]);
 assert.match(success.officialSnapshotSha256,/^[0-9a-f]{64}$/);
 assert.deepEqual(success.originalAllocation,{

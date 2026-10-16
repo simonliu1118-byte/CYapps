@@ -26,6 +26,7 @@ export interface OfficialAllowanceReadback {
   allowanceDay:string; totalAmount:string; taxAmount:string;
   originalInvoices:string[];
   originalAllocation:OfficialAllowanceOriginalAllocation;
+  knownOriginalQuantities:HistoricalKnownItemQuantity[]|null;
   checkedAtUtc:string; officialSnapshotSha256:string;
   possibleMatch:boolean;
   safeToAutoResend:false;
@@ -34,6 +35,10 @@ export interface OfficialAllowanceReadback {
 export interface OfficialAllowanceReadbackRequest {
   sellerInvoice:string; appKey:string; allowanceNumber:string;
   originalInvoiceNumber:string;
+  // Optional only for readbacks without an authenticated source invoice.
+  originalInvoiceItems?:unknown;
+  originalInvoiceDate?:unknown;
+  originalDetailVat?:unknown;
 }
 function field(x:unknown):Record<string,unknown>{
   if(!x||typeof x!=="object"||Array.isArray(x))
@@ -72,6 +77,67 @@ function formatScaled(value:bigint):string{
   const fraction=(value%AMOUNT_SCALE).toString().padStart(7,"0").replace(/0+$/,"");
   return fraction?integer+"."+fraction:integer.toString();
 }
+// Snapshot-local row positions are NOT durable original item identifiers.
+// The known quantities are internal and never a spendable refund balance.
+export interface HistoricalKnownItemQuantity {
+  originalItemIndex:number; knownQuantity:string; originalQuantity:string;
+}
+function originalDay(value:unknown):string|null {
+  if(typeof value!=="string"&&typeof value!=="number")return null;
+  const x=String(value).replaceAll("-","");
+  if(!/^[0-9]{8}$/.test(x))return null;
+  const y=Number(x.slice(0,4)),m=Number(x.slice(4,6)),d=Number(x.slice(6));
+  const date=new Date(Date.UTC(y,m-1,d));
+  return date.getUTCFullYear()===y&&date.getUTCMonth()+1===m&&
+    date.getUTCDate()===d?x:null;
+}
+function originalQuantities(
+  historicalItems:unknown[],sourceItems:unknown,invoice:string,
+  sourceDay:unknown,detailVat:unknown
+):HistoricalKnownItemQuantity[]|null {
+  if((detailVat!==0&&detailVat!=="0")||
+     !Array.isArray(sourceItems)||sourceItems.length<1||
+     sourceItems.length>50)return null;
+  const date=originalDay(sourceDay);
+  if(!date)return null;
+  const source=new Map<string,{index:number;quantity:bigint;used:bigint}>();
+  for(let i=0;i<sourceItems.length;i++){
+    const raw=sourceItems[i];
+    if(!raw||typeof raw!=="object"||Array.isArray(raw))return null;
+    const row=raw as Record<string,unknown>;
+    const desc=row.description,kind=String(row.tax_type);
+    const quantity=scaledAmount(row.quantity),price=scaledAmount(row.unit_price);
+    const amount=scaledAmount(row.amount);
+    if(typeof desc!=="string"||desc.length<1||desc.length>256||
+       !/^[123]$/.test(kind)||quantity===null||quantity<=0n||
+       price===null||price<=0n||amount===null||amount<=0n||
+       (quantity*price+AMOUNT_SCALE/2n)/AMOUNT_SCALE!==amount)return null;
+    const key=JSON.stringify([desc,kind,formatScaled(price)]);
+    if(source.has(key))return null;
+    source.set(key,{index:i,quantity,used:0n});
+  }
+  let matched=0;
+  for(const raw of historicalItems){
+    const row=raw as Record<string,unknown>;
+    if(row.original_invoice_number!==invoice)continue;
+    if(originalDay(row.original_invoice_date)!==date)return null;
+    const price=scaledAmount(row.unit_price);
+    if(price===null)return null;
+    const key=JSON.stringify([row.description,String(row.tax_type),formatScaled(price)]);
+    const original=source.get(key),quantity=scaledAmount(row.quantity);
+    if(!original||quantity===null||quantity<=0n)return null;
+    original.used+=quantity;
+    if(original.used>original.quantity)return null;
+    matched++;
+  }
+  if(matched===0)return null;
+  return [...source.values()].filter(x=>x.used>0n)
+    .sort((a,b)=>a.index-b.index).map(x=>({
+      originalItemIndex:x.index,knownQuantity:formatScaled(x.used),
+      originalQuantity:formatScaled(x.quantity)
+    }));
+}
+
 // No numeric rounding and no per-line allocation guess. Incomplete fields,
 // mismatched document totals and pending/cancelled official records fail closed.
 function originalAllocation(
@@ -200,6 +266,11 @@ export async function queryOfficialAllowanceReadOnly(
     uploadStatus===99 && cancelDate===0 && allowanceType===2;
   const allocation=originalAllocation(row.product_item,input.originalInvoiceNumber,
     totalAmount,taxAmount,effective);
+  const knownOriginalQuantities=allocation.lineTotalsVerified&&
+    input.originalInvoiceItems!==undefined
+      ?originalQuantities(row.product_item,input.originalInvoiceItems,
+          input.originalInvoiceNumber,input.originalInvoiceDate,input.originalDetailVat)
+      :null;
   const digest=await crypto.subtle.digest("SHA-256",
     new Uint8Array(te.encode(JSON.stringify(row))));
   const officialSnapshotSha256=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
@@ -210,7 +281,7 @@ export async function queryOfficialAllowanceReadOnly(
     originals.every(x=>x===input.originalInvoiceNumber);
   return {number,invoiceType,uploadStatus,allowanceType,cancelDate,allowanceDay,
     totalAmount,taxAmount,originalInvoices:[...new Set(originals)],
-    originalAllocation:allocation,
+    originalAllocation:allocation,knownOriginalQuantities,
     checkedAtUtc:checked.toISOString(),officialSnapshotSha256,possibleMatch,
     safeToAutoResend:false,safeToAutoConfirm:false};
 }

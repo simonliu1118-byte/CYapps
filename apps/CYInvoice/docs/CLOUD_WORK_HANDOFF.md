@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 V3 續作：已知歷史折讓逐品項對原發票（Draft Source）
+
+原有 `allowance_query` 增加**僅內部**的 `knownOriginalQuantities`：透過同一次 `invoice_query` 的明確未稅原品項、原日期、品名、稅別、精確單價和 7 位小數數量對應，單張與當次列出的多張歷史折讓數量累加均不得超出原品項。原快照重複品項、欄位不足、含稅、單價不符、日期不同或超量時，只保留未知狀態，原歷史分攤與金額上限為 null。對應測試涵蓋有效半量、重複原品項與過量；**不**把 snapshot-local index 當成持久原品項 ID，**不**對客戶端輸出原明細、可折數量或任何核准權限。歷史完整性仍不可證，正式 D1／Cloud 與光貿未異動。本輪以 exact-head CI 為準。
+
 ## 2026-10-16 V3 續作：歷史折讓逐品項原始數量核算（Draft Source）
 
 本輪於現有 `amego-allowance-query.ts` 的歷史 `originalAllocation` 只增加有限的欄位／數學核對：光貿官方折讓 `product_item` 是選填欄位，必須有原發票日期、品名、稅別、數量、未稅單價、小計與整元稅額，且每行以七位 BigInt 精度核對數量乘單價；原全單 header 淨額與稅額仍需一致，才保留原有 `lineTotalsVerified=true`。任一項不足仍為 `ITEM_AMOUNTS_UNVERIFIED`，沒有可用分攤；在原合成測試補缺欄、錯單價、錯數量、整元稅、精度及跨原發票案例。此步只是**歷史折讓可扣算前的品項可信度 Gate**，尚未把歷史單據逐品項扣回原發票求真正剩餘數量，也不更動 API、Windows、D1 Schema、Worker 或 `canApprove=false`。不部署、不 Release，精確 CI 見本輪提交。

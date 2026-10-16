@@ -581,6 +581,14 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         safeToInferRemainingBalance:false
       }[]=[];
       const examined=new Set<string>();
+      // Only known quantities against this specific original-invoice
+      // snapshot are summed. This never proves complete history.
+      const knownUsedByOriginalLine=new Map<number,bigint>();
+      const scale=10000000n;
+      const scaledQuantity=(raw:string):bigint=>{
+        const [whole,frac=""]=raw.split(".");
+        return BigInt(whole)*scale+BigInt(frac.padEnd(7,"0"));
+      };
       for(const hint of snapshot.allowanceHistory){
         if(checks.length>=3)break;
         if(!hint.metadataComplete||hint.uploadStatus!==99||
@@ -597,7 +605,10 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
           const official=await queryOfficialAllowanceReadOnly({
             sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
             allowanceNumber:hint.allowanceNumber,
-            originalInvoiceNumber:frozen.originalInvoiceNumber
+            originalInvoiceNumber:frozen.originalInvoiceNumber,
+            originalInvoiceItems:snapshot.originalProductItems,
+            originalInvoiceDate:snapshot.invoiceDate,
+            originalDetailVat:snapshot.detailVat
           });
           const snapshotChanged=
             official.allowanceDay!==hint.allowanceDate||
@@ -606,12 +617,36 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
             official.totalAmount!==hint.totalAmount||
             official.taxAmount!==hint.taxAmount;
           const allocation=official.originalAllocation;
+          const quantities=official.knownOriginalQuantities;
+          let quantitiesVerified=!snapshotChanged&&allocation.lineTotalsVerified&&
+            quantities!==null;
+          if(quantitiesVerified){
+            // Independently valid historical allowances may exceed one
+            // original line when summed together. Fail closed.
+            for(const line of quantities!){
+              const used=(knownUsedByOriginalLine.get(line.originalItemIndex)??0n)+
+                scaledQuantity(line.knownQuantity);
+              if(used>scaledQuantity(line.originalQuantity)){
+                quantitiesVerified=false;break;
+              }
+            }
+          }
+          if(quantitiesVerified){
+            for(const line of quantities!){
+              knownUsedByOriginalLine.set(line.originalItemIndex,
+                (knownUsedByOriginalLine.get(line.originalItemIndex)??0n)+
+                  scaledQuantity(line.knownQuantity));
+            }
+          }
+          const verified=!snapshotChanged&&allocation.lineTotalsVerified&&quantitiesVerified;
           checks.push({allowanceNumber:hint.allowanceNumber,
-            reason:snapshotChanged?"OFFICIAL_SNAPSHOT_CHANGED":allocation.reason,
-            lineTotalsVerified:!snapshotChanged&&allocation.lineTotalsVerified,
-            originalNet:snapshotChanged?null:allocation.originalNet,
-            originalTax:snapshotChanged?null:allocation.originalTax,
-            originalGross:snapshotChanged?null:allocation.originalGross,
+            reason:snapshotChanged?"OFFICIAL_SNAPSHOT_CHANGED":
+              !quantitiesVerified&&allocation.lineTotalsVerified?
+                "ITEM_AMOUNTS_UNVERIFIED":allocation.reason,
+            lineTotalsVerified:verified,
+            originalNet:verified?allocation.originalNet:null,
+            originalTax:verified?allocation.originalTax:null,
+            originalGross:verified?allocation.originalGross:null,
             safeToInferRemainingBalance:false});
         }catch{
           // An unavailable readback is UNKNOWN, not a zero allowance.
