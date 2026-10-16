@@ -52,3 +52,41 @@ BEGIN SELECT RAISE(ABORT, 'ALLOWANCE_APPLICATION_IMMUTABLE'); END;
 CREATE TRIGGER allowance_application_no_delete
 BEFORE DELETE ON allowance_applications
 BEGIN SELECT RAISE(ABORT, 'ALLOWANCE_APPLICATION_IMMUTABLE'); END;
+
+
+-- Final cross-device send gate. Approval of two distinct Work Items can race
+-- while AMEGO's first g0401 is still pending. Since the provider result can
+-- arrive later, only one Work Item for the same seller/environment/original
+-- invoice may cross reserved -> sending. SQLite serializes trigger checks.
+-- This does not add a new table, sync service or automatic refund logic.
+CREATE TRIGGER allowance_original_invoice_one_inflight
+BEFORE UPDATE OF status ON allowance_number_ledger
+WHEN OLD.status='reserved' AND NEW.status='sending'
+BEGIN
+  SELECT CASE WHEN NOT EXISTS (
+    SELECT 1 FROM allowance_applications source
+    WHERE source.work_item_id=NEW.work_item_id
+      AND source.workspace_id=NEW.workspace_id
+      AND source.seller_invoice=NEW.seller_invoice
+      AND source.environment=NEW.environment
+  ) THEN RAISE(ABORT,'ALLOWANCE_INVOICE_SOURCE_MISSING') END;
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM allowance_applications source
+    JOIN allowance_applications competing
+      ON competing.workspace_id=source.workspace_id
+      AND competing.seller_invoice=source.seller_invoice
+      AND competing.environment=source.environment
+      AND competing.original_invoice_number=source.original_invoice_number
+      AND competing.work_item_id<>source.work_item_id
+    JOIN allowance_number_ledger other
+      ON other.workspace_id=competing.workspace_id
+      AND other.work_item_id=competing.work_item_id
+      AND other.seller_invoice=competing.seller_invoice
+      AND other.environment=competing.environment
+      AND other.status IN ('sending','confirmed')
+    WHERE source.work_item_id=NEW.work_item_id
+      AND source.workspace_id=NEW.workspace_id
+      AND source.seller_invoice=NEW.seller_invoice
+      AND source.environment=NEW.environment
+  ) THEN RAISE(ABORT,'ALLOWANCE_ORIGINAL_INVOICE_IN_FLIGHT') END;
+END;

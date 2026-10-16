@@ -39,6 +39,8 @@
 
 **步驟 5 小提交 1：** 只強化原有 g0401 官方品項稅額核對：`invoice_query` 原品項的應稅未稅額依已支援的 5%／整元四捨五入後必須與官方稅額相同。原淨額＋官方稅額恰好等於官方總額仍不足以通過；額外合成案例驗證高估、低估與免稅品項的異常稅額都必須 fail closed。這不是新增含稅或歷史折讓支援，不建表、不改 API、配號或 Windows；正式資源不變。本提交 CI 需以 exact HEAD 確認。
 
+**步驟 5 小提交 3（本輪）：** 發現兩個獨立 CYID Work Item 可能在官方首次折讓尚未回查前同時通過原發票檢查。僅在 Draft `0018_allowance_applications.sql` 加原子 Trigger，禁止同 Workspace／公司／環境／原發票的第二筆 `reserved→sending`（已存在另一筆 `sending/confirmed` 時）；`allowance-execute-once.ts` 將此安全衝突回傳 `G0401_ORIGINAL_INVOICE_IN_FLIGHT`，不可送第二張 g0401。沿用既有合成測試核對同發票拒絕／不同發票允許，不新增表格、背景查詢或正式 API。本批仍為 Draft Source，CI 待 exact HEAD 核對，正式 D1／光貿沒有異動。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。

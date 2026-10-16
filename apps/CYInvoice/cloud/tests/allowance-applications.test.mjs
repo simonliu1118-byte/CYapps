@@ -339,12 +339,15 @@ try{
 // A strict zero-prior, net-price test case may write an append-only
 // manager grant ONLY after fresh official read-only verification.
 const approvedId="wi_approved_strict_01";
-const strictBody={...createBody,itemId:approvedId,requestedGrossAmount:53,
+// This other original invoice must stay independent of the earlier AB invoice
+// already in a sending state, and may still be processed safely.
+const strictBody={...createBody,itemId:approvedId,
+  originalInvoiceNumber:"XY12345678",requestedGrossAmount:53,
   reason:"SYNTHETIC_VERIFY_AND_APPROVE",
   unnumberedTemplateJson:JSON.stringify({
     AllowanceNumber:"",AllowanceDate:"20261015",AllowanceType:2,
     BuyerIdentifier:"0000000000",BuyerName:"Synthetic consumer",
-    ProductItem:[{OriginalInvoiceNumber:"AB12345678",OriginalInvoiceDate:20261015,
+    ProductItem:[{OriginalInvoiceNumber:"XY12345678",OriginalInvoiceDate:20261015,
       OriginalDescription:"Service",Quantity:1,UnitPrice:50,Amount:50,Tax:3,TaxType:1}],
     TotalAmount:50,TaxAmount:3
   })};
@@ -357,8 +360,9 @@ globalThis.fetch=async (url,opts)=>{
   assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
   const form=new URLSearchParams(opts.body);
   assert.equal(form.get("invoice"),"12345678");
+  assert.equal(JSON.parse(form.get("data")).invoice_number,"XY12345678");
   return Response.json({code:0,data:[{
-    invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:105,
+    invoice_number:"XY12345678",status:99,cancel_date:0,total_amount:105,
     invoice_date:20261015,detail_vat:0,tax_amount:5,allowance:[],wait:[],
     product_item:[{description:"Service",quantity:2,unit_price:50,
       amount:100,tax_type:1}]
@@ -442,6 +446,34 @@ try{
   assert.equal(approvedOfficialCalls,2);
   who={...who,workspaceRole:"ADMIN"};
 }finally{globalThis.fetch=originalFetch;}
+
+// A second manager may reserve for the SAME AB original invoice. That does
+// not permit a second first-send after a different Work Item is "sending".
+// Test the real SQLite Draft trigger, not a non-atomic preflight SELECT.
+const competingSource=fx.sql.prepare(
+  "SELECT template_sha256 FROM allowance_applications WHERE work_item_id=?")
+  .get(input.workItemId);
+assert.ok(competingSource,"Independent frozen AB application is present");
+const nowUtc="2026-10-16T02:00:00Z";
+fx.sql.prepare(
+ "INSERT INTO allowance_number_ledger(ledger_id,workspace_id,work_item_id,"+
+ "seller_invoice,environment,allowance_day,sequence,allowance_number,attempt,"+
+ "request_sha256,status,created_by_device_id,created_at,updated_at) "+
+ "VALUES(?,?,?,?,?,?,?,?,?,?,'reserved',?,?,?)"
+).run("al_competing_original",ws,input.workItemId,"12345678","test",
+ "20261015",3,"A20261015003",1,competingSource.template_sha256,
+ dev,nowUtc,nowUtc);
+assert.throws(()=>fx.sql.prepare(
+ "UPDATE allowance_number_ledger SET status='sending' WHERE ledger_id=?")
+ .run("al_competing_original"),/ALLOWANCE_ORIGINAL_INVOICE_IN_FLIGHT/,
+ "A concurrent second Work Item for AB cannot start another g0401");
+assert.equal(fx.sql.prepare(
+ "SELECT status FROM allowance_number_ledger WHERE ledger_id=?")
+ .get("al_competing_original").status,"reserved",
+ "The blocked original number remains safely unissued");
+assert.equal(fx.sql.prepare(
+ "SELECT COUNT(*) n FROM allowance_number_ledger WHERE status='sending'")
+ .get().n,2,"Different originals AB and XY may each have one sending attempt");
 
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);

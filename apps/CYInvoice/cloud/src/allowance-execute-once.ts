@@ -129,7 +129,16 @@ export async function executeApprovedAllowanceOnce(
    requestSha256:frozen.templateSha256
  };
  // If losing this CAS, NO mutating HTTP request is made.
- const claimed=await markCloudAllowanceSending(db,request,reservation);
+ let claimed:boolean;
+ try{
+   claimed=await markCloudAllowanceSending(db,request,reservation);
+ }catch(error){
+   // The D1 trigger owns the final, atomic cross-Work-Item gate.
+   // A competing original invoice must never cause a mutating HTTP request.
+   if(error instanceof Error && error.message.includes("ALLOWANCE_ORIGINAL_INVOICE_IN_FLIGHT"))
+     throw new Error("G0401_ORIGINAL_INVOICE_IN_FLIGHT");
+   throw error;
+ }
  if(!claimed)throw new Error("G0401_SEND_ALREADY_CLAIMED_OR_REVOKED");
  // After a successful CAS, even a crash BEFORE fetch is uncertain; the
  // ledger stays "sending" and requires readback by the ORIGINAL number.
