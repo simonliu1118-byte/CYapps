@@ -53,7 +53,8 @@ public sealed record CloudOfficialAllowanceInspection(
     IReadOnlyList<CloudHistoricalAllowanceSummary> AllowanceHistory,
     bool SafeToInferRemainingBalance,
     IReadOnlyList<CloudHistoricalAllocationCheck> HistoricalAllocationChecks,
-    int HistoricalAllocationNotQueriedCount,bool HistoricalAllocationsComplete);
+    int HistoricalAllocationNotQueriedCount,bool HistoricalAllocationsComplete,
+    string HistoricalCoverageReason);
 
 public sealed record CloudAllowanceNumberReadback(
     string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
@@ -398,6 +399,22 @@ public sealed class CloudAllowanceApplicationClient
             checks.Add(new CloudHistoricalAllocationCheck(
                 number,reason,verified,net,tax,gross,false));
         }
+        // Server cannot promote a limited snapshot into complete history.
+        var knownIds=history.Where(h=>h.AllowanceNumber is not null)
+            .Select(h=>h.AllowanceNumber!).ToArray();
+        var coverage=!summary?"SUMMARY_NOT_PROVIDED":
+            pending?"PENDING_OFFICIAL_MUTATION":
+            history.Any(h=>!h.MetadataComplete)?"SUMMARY_METADATA_INCOMPLETE":
+            knownIds.Distinct(StringComparer.Ordinal).Count()!=knownIds.Length
+                ?"DUPLICATE_HISTORY_NUMBER":
+            history.Any(h=>h.UploadStatus!=99||h.CancelDate!="0")
+                ?"HISTORY_STATUS_NOT_EFFECTIVE":
+            checks.Count<existing?"DETAIL_QUERY_LIMITED":
+            checks.Any(h=>!h.LineTotalsVerified)?"DETAIL_READBACK_UNVERIFIED":
+            existing==0?"NO_HISTORY_REPORTED_NOT_PROOF":
+            "HISTORY_RANGE_NOT_PROVEN";
+        if(Required(item,"historicalCoverageReason")!=coverage)
+            throw new InvalidDataException("Historical allowance coverage reason mismatch.");
         if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
             rawCheck.ValueKind!=JsonValueKind.Object ||
             !rawCheck.TryGetProperty("reason",out var reason) ||
@@ -423,7 +440,7 @@ public sealed class CloudAllowanceApplicationClient
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount),
-            history,false,checks,skipped,false);
+            history,false,checks,skipped,false,coverage);
     }
 
     // The Worker owns the original D1 allowance number; callers cannot

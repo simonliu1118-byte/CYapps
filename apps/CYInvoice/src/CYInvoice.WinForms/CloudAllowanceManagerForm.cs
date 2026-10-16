@@ -129,12 +129,24 @@ internal sealed class CloudAllowanceManagerForm : Form
             var allocations=v.HistoricalAllocationChecks.Count==0
                 ?"本次沒有可核對的歷史折讓明細。"
                 :string.Join("\n",allocationLines);
+            var coverageText=v.HistoricalCoverageReason switch {
+                "SUMMARY_NOT_PROVIDED"=>"官方未提供歷史折讓清單",
+                "PENDING_OFFICIAL_MUTATION"=>"官方仍有尚未完成的異動",
+                "SUMMARY_METADATA_INCOMPLETE"=>"歷史折讓摘要缺少必要欄位",
+                "DUPLICATE_HISTORY_NUMBER"=>"官方歷史折讓原號重複",
+                "HISTORY_STATUS_NOT_EFFECTIVE"=>"有折讓仍處理中、失敗或已作廢",
+                "DETAIL_QUERY_LIMITED"=>"本次查詢未涵蓋全部歷史原號",
+                "DETAIL_READBACK_UNVERIFIED"=>"原號查回失敗或資料不一致",
+                "NO_HISTORY_REPORTED_NOT_PROOF"=>"本次未列歷史折讓，仍無法保證查齊",
+                _=>"已列原號核對完成，但仍無法證明全部歷史已查齊"
+            };
             MessageBox.Show(this,
                 $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
                 $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
                 $"{historyText}\n"+
                 $"歷史原號詳查（最多 3 筆）：\n{allocations}\n"+
                 $"本次未詳查：{v.HistoricalAllocationNotQueriedCount} 筆\n"+
+                $"歷史完整性：{coverageText}\n"+
                 "此分攤僅供逐張人工核對；歷史範圍尚未完整驗證，不能推定剩餘可折額。\n"+
                 $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
                 $"品項比對：{v.ItemCheck.Reason}\n"+

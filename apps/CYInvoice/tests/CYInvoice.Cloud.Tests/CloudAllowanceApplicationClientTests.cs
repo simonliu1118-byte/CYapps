@@ -121,6 +121,7 @@ internal static class CloudAllowanceApplicationClientTests
                 }},
                 historicalAllocationNotQueriedCount=0,
                 historicalAllocationsComplete=false,
+                historicalCoverageReason="HISTORY_RANGE_NOT_PROVEN",
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -146,6 +147,7 @@ internal static class CloudAllowanceApplicationClientTests
                 historicalAllocationChecks=Array.Empty<object>(),
                 historicalAllocationNotQueriedCount=1,
                 historicalAllocationsComplete=false,
+                historicalCoverageReason="DETAIL_QUERY_LIMITED",
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -275,6 +277,8 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(0,official.HistoricalAllocationChecks.Count,"no detailed history readback");
         Equal(0,official.HistoricalAllocationNotQueriedCount,"no unread history");
         Equal(false,official.HistoricalAllocationsComplete,"coverage never inferred");
+        Equal("NO_HISTORY_REPORTED_NOT_PROOF",official.HistoricalCoverageReason,
+            "zero visible history cannot prove entire range");
         Equal(false,official.SafeToInferRemainingBalance,"summary cannot authorize balance");
         Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
@@ -293,6 +297,8 @@ internal static class CloudAllowanceApplicationClientTests
             "per-original gross, not full allowance gross");
         Equal(false,historical.HistoricalAllocationsComplete,
             "a historical readback never authorizes remaining balance");
+        Equal("HISTORY_RANGE_NOT_PROVEN",historical.HistoricalCoverageReason,
+            "matched details do not prove entire history");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         var readback=await client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12");
@@ -378,6 +384,7 @@ internal static class CloudAllowanceApplicationClientTests
         historicalAllocationChecks=Array.Empty<object>(),
         historicalAllocationNotQueriedCount=0,
         historicalAllocationsComplete=false,
+        historicalCoverageReason="NO_HISTORY_REPORTED_NOT_PROOF",
         safeToInferRemainingBalance=false,
         itemCheck=new{
             fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0

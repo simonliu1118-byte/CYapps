@@ -71,6 +71,8 @@
 
 **步驟 5 小提交 19（本輪）：** 延續 `0a2e6a1` 的七位定點折讓原號分攤證據，Cloud g0401 Manager `official-inspection` 已增最多三張可信歷史原號 `allowance_query` 的只讀詳查（每次重新驗 CYID Manager／Device，不自動 retry），跨官方快照金額／狀態衝突當未確認；Windows Core 對查核理由、唯一原號、固定分攤欄位、上下游剩餘未查筆數嚴格 fail-close，原查驗 UI 顯示有限詳查結果。**已驗證分攤額仍非可用餘額**，兩個授權旗標固定 false，approve 柵欄完全不變。本批未逐筆跑 CI，僅推送 Draft Source，最後整合再執行 CI／Artifact；不部署或 Release。
 
+**步驟 5 小提交 20（本輪）：** 在既有 g0401 Manager `official-inspection` 補 `historicalCoverageReason` 唯讀診斷，將來源摘要缺漏、官方尚有異動、摘要缺欄、原號重複、狀態異常、三筆上限與原號查回失敗區分；「沒有列出折讓」以及「所有已列摘要核對完成」仍只代表有限快照，不代表全歷史已查齊。Windows Core 獨立重算後比對 Cloud 回覆，WinForms 原畫面以正體中文顯示分類。所有 g0401 核准及剩餘額的安全旗標持續 false，不改 D1／Worker 部署或光貿 mutation；本批依使用者授權待最後一次整合 CI／Artifact，不自行 Release。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
