@@ -106,8 +106,8 @@ internal static class CloudWorkItemClientTests
             Equal(1,obj.GetProperty("limit").GetInt32(),"bounded page size");
             Equal("VOID",obj.GetProperty("kind").GetString(),"kind");
             Equal("review",obj.GetProperty("status").GetString(),"status");
-            True(obj.GetProperty("cursor").ValueKind==JsonValueKind.Null,
-                "first page has no cursor");
+            True(!obj.TryGetProperty("cursor",out _),
+                "first page must omit absent cursor instead of sending null");
             True(!obj.TryGetProperty("workspaceId",out _),
                 "client must not choose another workspace");
             return Json(HttpStatusCode.OK,new{ok=true,
