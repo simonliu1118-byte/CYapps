@@ -47,6 +47,9 @@ internal static class Invi02Layout
     public static bool IsErpMainTitle(string title) =>
         title.Contains("Conductor", StringComparison.OrdinalIgnoreCase) && !IsInvi02Title(title);
 
+    /// <summary>SMART ERP's main form class; its caption is 「DSForm」, not Conductor (V0.4.0 Build 3 LOG, 2026-10-16).</summary>
+    public const string ErpMainFormClass = "SmartERP_iSM_MainMenu";
+
     /// <summary>Not a message box and not Delphi's hidden TApplication window (same caption, no size).</summary>
     public static bool IsErpMainClass(string className) =>
         !IsMessageDialogClass(className) && !className.Equals("TApplication", StringComparison.OrdinalIgnoreCase);

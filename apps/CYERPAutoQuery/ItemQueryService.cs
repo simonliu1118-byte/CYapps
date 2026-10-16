@@ -217,6 +217,19 @@ internal sealed class ItemQueryService
     private async Task OpenInvi02Async(CancellationToken cancellationToken)
     {
         var mains = Win32Automation.FindErpMainWindows();
+        if (mains.Count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
+        {
+            // Minimized ERP: its main form is hidden (user, 2026-10-16: only found when the
+            // main window was open). Restore ERP and wait for the main form to show.
+            _log.Info("window", $"ERP minimized; restoring app_iconic={NativeMethods.IsIconic(app)} main_visible={NativeMethods.IsWindowVisible(hidden)}");
+            NativeMethods.ShowWindow(app, NativeMethods.SW_RESTORE);
+            if (!await WaitUntilAsync(() => NativeMethods.IsWindowVisible(hidden) && !NativeMethods.IsIconic(hidden), 3000, cancellationToken))
+                NativeMethods.ShowWindow(hidden, NativeMethods.SW_RESTORE);
+            var shown = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(hidden) && !NativeMethods.IsIconic(hidden), AfterActionWaitMs, cancellationToken);
+            _log.Info("window", $"ERP main form restored={shown}");
+            await Pace.Delay(500, cancellationToken); // let the main form finish painting its Ribbon
+            mains = Win32Automation.FindErpMainWindows();
+        }
         if (mains.Count == 0)
         {
             NativeMethods.EnumWindows((hwnd, _) =>

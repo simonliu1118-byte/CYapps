@@ -71,6 +71,39 @@ internal static class Win32Automation
         return found;
     }
 
+    /// <summary>
+    /// When ERP is minimized Delphi hides its main form (V0.4.0 Build 3 LOG, 2026-10-16: only the
+    /// iconic TApplication window was left). Returns that TApplication window and the hidden
+    /// main form (class <see cref="Invi02Layout.ErpMainFormClass"/>), or nothing.
+    /// </summary>
+    public static (nint Application, nint Main)? FindMinimizedErp()
+    {
+        var applications = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd)) &&
+                NativeMethods.ClassName(hwnd).Equals("TApplication", StringComparison.OrdinalIgnoreCase))
+                applications.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var app in applications)
+        {
+            var pid = ProcessId(app);
+            nint main = 0;
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (ProcessId(hwnd) == pid && NativeMethods.ClassName(hwnd).Equals(Invi02Layout.ErpMainFormClass, StringComparison.OrdinalIgnoreCase))
+                {
+                    main = hwnd;
+                    return false;
+                }
+                return true;
+            }, 0);
+            if (main != 0) return (app, main);
+        }
+        return null;
+    }
+
     private static bool IsMainSized(nint hwnd) =>
         NativeMethods.IsIconic(hwnd) || NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 300 && r.Height >= 200;
 
