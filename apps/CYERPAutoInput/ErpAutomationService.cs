@@ -830,8 +830,12 @@ internal sealed class ErpAutomationService
     /// past any IME (user, 2026-10-16: 銷貨單別 … 金額). The clipboard is put back once the
     /// document is done; an empty value or a busy clipboard is typed as before.
     /// </summary>
-    private void PasteText(nint box, string value, string key)
+    private async Task PasteTextAsync(nint box, string value, string key, CancellationToken cancellationToken)
     {
+        // Keys sent just before (Backspace through SendInput) are still queued while WM_PASTE
+        // goes straight in, and cleared what was pasted: 銷貨單別 came out empty and ERP gave
+        // no sales order number (user LOG 2026-10-17). So the queue drains first.
+        await Delay(120, cancellationToken);
         if (value.Length > 0)
         {
             try
@@ -840,7 +844,12 @@ internal sealed class ErpAutomationService
                 Clipboard.SetText(value);
                 NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
                 NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, nint.Zero, nint.Zero);
-                return;
+                await Delay(80, cancellationToken);
+                var shown = (NativeMethods.ControlText(box) ?? string.Empty).Trim();
+                if (shown == value.Trim()) return;
+                // Not taken as it is (or shown formatted): typed over the selection instead.
+                _log.Info("field", $"paste read back differs; typed instead key={key} expected_len={value.Length} shown_len={shown.Length}");
+                NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
             }
             catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException)
             {
@@ -934,7 +943,7 @@ internal sealed class ErpAutomationService
 
         if (field.Key is "cod" or "freight_fee")
         {
-            PasteText(focus, value, field.Key);
+            await PasteTextAsync(focus, value, field.Key, cancellationToken);
             await Delay(140, cancellationToken);
             InputSender.Press(NativeMethods.VK_TAB);
             await Delay(180, cancellationToken);
@@ -981,7 +990,7 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        PasteText(focus, value, field.Key);
+        await PasteTextAsync(focus, value, field.Key, cancellationToken);
         if (InputSender.ImeClosedCount != imeClosedBefore) _log.Info("field", $"ERP IME was open; switched off before typing key={field.Key}");
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);
@@ -1314,7 +1323,7 @@ internal sealed class ErpAutomationService
 
             _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
             await Delay(90, cancellationToken);
-            PasteText(editor, value, $"detail col={column}");
+            await PasteTextAsync(editor, value, $"detail col={column}", cancellationToken);
             await Delay(140, cancellationToken);
             // Every detail cell is committed by physical Enter. This is the validated
             // grid behavior and is intentionally different from the upper form fields.
