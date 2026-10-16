@@ -28,6 +28,7 @@ internal static class NativeMethods
     internal const uint KEYEVENTF_UNICODE = 0x0004;
 
     internal const ushort VK_BACK = 0x08;
+    internal const ushort VK_RETURN = 0x0D;
     internal const ushort VK_ESCAPE = 0x1B;
     internal const ushort VK_END = 0x23;
     internal const ushort VK_HOME = 0x24;

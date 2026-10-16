@@ -43,7 +43,7 @@ internal sealed class ItemQueryService
         _log.Info("query", $"start item={_log.Value(code)}");
 
         progress.Report("ERP：尋找品號資料建立作業…");
-        var root = FindSingleInvi02();
+        var root = await ResolveInvi02Async(progress, cancellationToken);
 
         // Same as CYERPAutoInput with COPI08: always maximize so every geometry is the same.
         NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
@@ -116,7 +116,8 @@ internal sealed class ItemQueryService
         {
             var windows = Win32Automation.FindInvi02Windows();
             if (windows.Count == 0) return Invi02Status.NotOpen;
-            if (windows.Count > 1) return Invi02Status.Multiple;
+            // With several, a query uses one in browse state (user, 2026-10-16).
+            if (windows.Count > 1) return windows.Any(IsInBrowseState) ? Invi02Status.Browse : Invi02Status.Multiple;
             var root = windows[0];
             if (!NativeMethods.IsWindowEnabled(root)) return Invi02Status.DialogOpen;
             var header = ResolveHeader(root, FindMainPageControl(root));
@@ -129,16 +130,106 @@ internal sealed class ItemQueryService
         }
     }
 
-    private nint FindSingleInvi02()
+    /// <summary>
+    /// The INVI02 window to use (user, 2026-10-16): with several, the first (top of the z-order)
+    /// in browse state; with none, it is opened from the ERP main window through 作業速查.
+    /// </summary>
+    private async Task<nint> ResolveInvi02Async(IProgress<string> progress, CancellationToken cancellationToken)
     {
         var windows = Win32Automation.FindInvi02Windows();
         if (windows.Count == 0)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP「品號資料建立作業 (INVI02)」視窗。\n請先在 ERP 開啟品號資料建立作業。");
-        if (windows.Count > 1)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"偵測到 {windows.Count} 個品號資料建立作業視窗。\n請只保留一個再查詢，避免讀到錯誤的視窗。");
-        var root = windows[0];
+        {
+            progress.Report("ERP：開啟品號資料建立作業（作業速查）…");
+            await OpenInvi02Async(cancellationToken);
+            windows = Win32Automation.FindInvi02Windows();
+            if (windows.Count == 0)
+                throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "已從作業速查開啟 INVI02，但找不到品號資料建立作業視窗。");
+        }
+
+        nint root;
+        if (windows.Count == 1) root = windows[0];
+        else
+        {
+            var browse = windows.Where(IsInBrowseState).ToList();
+            _log.Info("window", $"INVI02 windows={windows.Count} browse={browse.Count}");
+            if (browse.Count == 0)
+                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開著 {windows.Count} 個品號資料建立作業，但沒有一個在檢視狀態。\n請把其中一個儲存或取消後再查詢。");
+            root = browse[0];
+        }
         _log.Info("window", $"INVI02 found class={NativeMethods.ClassName(root)} visible={NativeMethods.IsWindowVisible(root)}");
         return root;
+    }
+
+    /// <summary>Browse state: no dialog over the form and the header 品號 read-only.</summary>
+    private static bool IsInBrowseState(nint root)
+    {
+        try
+        {
+            if (!NativeMethods.IsWindowEnabled(root)) return false;
+            var header = ResolveHeader(root, FindMainPageControl(root));
+            return header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase) &&
+                   Win32Automation.IsReadOnly(header.ItemCode.Handle);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// ERP main window → Ribbon 作業速查 (found by OCR, like 「Excel」) → type INVI02 into the search
+    /// box → Enter (user's screenshots 2026-10-16). The typed text is read back from the focused
+    /// ERP control before Enter, so nothing is typed into another program.
+    /// </summary>
+    private async Task OpenInvi02Async(CancellationToken cancellationToken)
+    {
+        var mains = Win32Automation.FindErpMainWindows();
+        if (mains.Count == 0)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著品號資料建立作業。\n請先登入 ERP。");
+        var main = mains[0];
+        _log.Info("window", $"opening INVI02 from main window class={NativeMethods.ClassName(main)} count={mains.Count}");
+        if (!NativeMethods.IsWindowEnabled(main))
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 主視窗目前有對話框開著，無法開啟品號資料建立作業。");
+        if (!Win32Automation.PrepareForeground(main, _log))
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "無法把 ERP 主視窗帶到前景。");
+        if (!NativeMethods.GetWindowRect(main, out var window))
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "讀不到 ERP 主視窗位置。");
+
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(ribbon))
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        if (OcrWordFinder.FindWord(tokens, "作業速查") is not { } label)
+        {
+            _log.Warn("window", $"OCR did not find 作業速查 tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 主視窗找不到「作業速查」。請確認 Ribbon 停在「我的ERP」。");
+        }
+        SafeClick(main, new Point(ribbon.Left + label.Left + label.Width / 2, ribbon.Top + label.Top + label.Height / 2));
+        await Pace.Delay(600, cancellationToken);
+
+        var focus = NativeMethods.FocusedControlOfForeground();
+        if (focus == 0 || Win32Automation.ProcessId(focus) != Win32Automation.ProcessId(main))
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "按「作業速查」後游標不在 ERP 的搜尋框，已停止。");
+        InputSender.UnicodeText(Invi02Layout.FormCode);
+        await Pace.Delay(800, cancellationToken); // let ERP list the matching programs
+        var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        if (!typed.Equals(Invi02Layout.FormCode, StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "作業速查的搜尋框讀回內容不是 INVI02，已停止。");
+        }
+        InputSender.Press(NativeMethods.VK_RETURN);
+        _log.Info("window", "作業速查 INVI02 + Enter sent");
+
+        // Opening a program form can take a while on the first run.
+        var started = Environment.TickCount64;
+        if (!await WaitUntilAsync(() => Win32Automation.FindInvi02Windows().Count > 0, 30000, cancellationToken))
+        {
+            LogProcessWindows(main, "after-作業速查");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "從作業速查開啟品號資料建立作業逾時（30 秒）。");
+        }
+        _log.Info("window", $"INVI02 opened after_ms={Environment.TickCount64 - started}");
+        await Pace.Delay(1500, cancellationToken); // let the new form load its first record
     }
 
     private static WindowControl FindMainPageControl(nint root)

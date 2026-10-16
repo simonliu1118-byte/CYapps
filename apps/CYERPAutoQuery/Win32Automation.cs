@@ -26,6 +26,20 @@ internal static class Win32Automation
         return forms.Count > 0 ? forms : found;
     }
 
+    /// <summary>Visible SMART ERP main windows (鼎新電腦Conductor), top of the z-order first.</summary>
+    public static IReadOnlyList<nint> FindErpMainWindows()
+    {
+        var found = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd)) &&
+                !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                found.Add(hwnd);
+            return true;
+        }, 0);
+        return found;
+    }
+
     /// <summary>
     /// Visible top-level windows of <paramref name="root"/>'s process, other than the listed
     /// ones, that overlap <paramref name="area"/> (a drop-down list is such a popup).

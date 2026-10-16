@@ -38,6 +38,10 @@ internal static class Invi02Layout
         title.Contains(FormTitle, StringComparison.Ordinal) &&
         title.Contains(FormCode, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The SMART ERP main window: 「鼎新電腦Conductor [user]」 (user's screenshot 2026-10-16).</summary>
+    public static bool IsErpMainTitle(string title) =>
+        title.Contains("Conductor", StringComparison.OrdinalIgnoreCase) && !IsInvi02Title(title);
+
     public static bool IsQueryDialogTitle(string title) =>
         title.Contains(QueryDialogTitle, StringComparison.Ordinal);
 

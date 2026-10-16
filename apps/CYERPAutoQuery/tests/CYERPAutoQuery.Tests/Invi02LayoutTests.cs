@@ -14,6 +14,13 @@ public class Invi02LayoutTests
     public void Invi02TitleNeedsNameAndCode(string title, bool expected) =>
         Assert.Equal(expected, Invi02Layout.IsInvi02Title(title));
 
+    [Theory]
+    [InlineData("鼎新電腦Conductor [ccliu-測試]", true)]
+    [InlineData("品號資料建立作業(INVI02)[志遠醫療器材行]", false)]
+    [InlineData("銷貨單建立作業(COPI08)[志遠醫療器材行]", false)]
+    public void ErpMainWindowTitle(string title, bool expected) =>
+        Assert.Equal(expected, Invi02Layout.IsErpMainTitle(title));
+
     [Fact]
     public void QueryDialogTitle() =>
         Assert.True(Invi02Layout.IsQueryDialogTitle("設定查詢條件"));
