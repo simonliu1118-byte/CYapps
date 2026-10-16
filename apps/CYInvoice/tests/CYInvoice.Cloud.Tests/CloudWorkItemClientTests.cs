@@ -17,6 +17,7 @@ internal static class CloudWorkItemClientTests
         await CreateReadAndTransitionAsync();
         await ListPagesAndRejectUnsafeRepliesAsync();
         await UploadIssueReportsAreUnverifiedAsync();
+        await UploadIssueManualArchiveAsync();
         await MissingAndConflictingWorkAsync();
         await RejectUntrustedResponseAsync();
     }
@@ -212,6 +213,49 @@ internal static class CloudWorkItemClientTests
         await ThrowsAsync<InvalidDataException>(()=>
             client.ReportUploadIssueAsync(report,"0001","synthetic-pass"));
         Equal(0,handler.PendingCount,"no hidden resubmit after conflict or forged reply");
+    }
+
+    private static async Task UploadIssueManualArchiveAsync()
+    {
+        var handler=new QueueHandler();
+        var id="wi_upload_test_1234";
+        var hash=new string('c',64);
+        object Row(string status,int revision)=>new{
+            ok=true,item=new {
+                work_item_id=id,workspace_id=Workspace,environment="test",
+                kind="UPLOAD_ISSUE",reference_hash=hash,status,revision,
+                issue_code="query_failed"
+            }
+        };
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"transition");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            True(!body.RootElement.TryGetProperty("resolutionCode",out _),
+                "review is not an archive");
+            return Json(HttpStatusCode.OK,Row("review",2));
+        });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"transition");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal("needs_followup",body.RootElement.GetProperty("resolutionCode").GetString(),
+                "manager closure reason");
+            Equal(2,body.RootElement.GetProperty("expectedRevision").GetInt32(),"CAS revision");
+            return Json(HttpStatusCode.OK,Row("closed",3));
+        });
+        using var http=new HttpClient(handler);
+        var client=new CloudWorkItemClient(http,new Uri("https://cloud.example.test/"),
+            Token,Workspace);
+        var open=new CloudWorkItem(id,Workspace,"test","UPLOAD_ISSUE",hash,"open",1);
+        await ThrowsAsync<ArgumentException>(()=>client.TransitionAsync(open,
+            "closed","0001","synthetic-pass",resolutionCode:"needs_followup"));
+        var review=await client.TransitionAsync(open,"review","0001","synthetic-pass");
+        await ThrowsAsync<ArgumentException>(()=>client.TransitionAsync(
+            review,"closed","0001","synthetic-pass"));
+        var closed=await client.TransitionAsync(review,"closed","0001",
+            "synthetic-pass",resolutionCode:"needs_followup");
+        Equal(3,closed.Revision,"archived revision");
+        Equal("closed",closed.Status,"archived status");
+        Equal(0,handler.PendingCount,"no hidden retries or extra operations");
     }
 
     private static async Task MissingAndConflictingWorkAsync()

@@ -243,7 +243,7 @@ public sealed class CloudWorkItemClient
 
     public async Task<CloudWorkItem> TransitionAsync(
         CloudWorkItem current, string to, string employeeNo, string password,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? resolutionCode = null)
     {
         ArgumentNullException.ThrowIfNull(current);
         ValidateId(current.ItemId);
@@ -252,10 +252,20 @@ public sealed class CloudWorkItemClient
             !((current.Status == "open" && to == "review") ||
               (current.Status == "review" && to == "closed")))
             throw new ArgumentException("Invalid Work Item state transition.", nameof(to));
-        using var response = await SendAsync("transition", new {
-            itemId = current.ItemId, expectedRevision = current.Revision, from = current.Status,
-            to, employeeNo, password
-        }, cancellationToken).ConfigureAwait(false);
+        if(current.Kind=="UPLOAD_ISSUE" && to=="closed" &&
+           resolutionCode is not ("resolved_locally" or "checked_official" or
+               "duplicate_report" or "not_actionable" or "needs_followup"))
+            throw new ArgumentException("Upload issue closure requires an explicit reason.",nameof(resolutionCode));
+        if((current.Kind!="UPLOAD_ISSUE" || to!="closed") && resolutionCode is not null)
+            throw new ArgumentException("A closure reason is only for upload issues.",nameof(resolutionCode));
+        var body=new Dictionary<string,object?>{
+            ["itemId"]=current.ItemId,["expectedRevision"]=current.Revision,
+            ["from"]=current.Status,["to"]=to,
+            ["employeeNo"]=employeeNo,["password"]=password
+        };
+        if(resolutionCode is not null)body["resolutionCode"]=resolutionCode;
+        using var response = await SendAsync("transition",body,cancellationToken)
+            .ConfigureAwait(false);
         var item = ReadItem(response.RootElement, current.ItemId);
         if (item.Revision != current.Revision + 1 || item.Status != to ||
             item.Environment != current.Environment || item.Kind != current.Kind ||
