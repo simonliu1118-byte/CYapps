@@ -14,9 +14,9 @@ internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Excep
 }
 
 /// <summary>
-/// A job handed out by CY Web's claim endpoint. The history fields are optional (CY Web
-/// before the INVQ01 handoff does not send them): includeHistory with historyFrom／historyTo
-/// as yyyy-MM-dd, either date may be missing.
+/// A job handed out by CY Web's claim endpoint. For includeHistory=true CY Web
+/// resolves both dates in advance and supplies historyFrom/historyTo as yyyy-MM-dd.
+/// Only the local desktop query is allowed to leave ERP date inputs untouched.
 /// </summary>
 internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory = false, string? HistoryFrom = null, string? HistoryTo = null)
 {
@@ -27,8 +27,8 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public ItemQueryOptions Options(DateOnly today)
     {
         if (!IncludeHistory) return ItemQueryOptions.Default;
-        DateOnly? Date(string? text, string what) => string.IsNullOrEmpty(text) ? null
-            : HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的歷史異動{what}日格式不正確。");
+        DateOnly Date(string? text, string what) =>
+            HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的歷史異動{what}日缺少或格式不正確。");
         return new ItemQueryOptions(HistoryRange.Resolve(Date(HistoryFrom, "起"), Date(HistoryTo, "迄"), today));
     }
 }
@@ -98,6 +98,9 @@ internal static class ErpAgentProtocol
     private static JsonNode? History(ItemQueryResult result)
     {
         if (result.HistoryRange is not { } range) return null;
+        // A Web history job must always have both dates supplied by CY Web.
+        if (range.From is null || range.To is null)
+            throw new InvalidOperationException("CY Web 歷史異動工作沒有完整日期，不能回傳不一致的歷史結果。");
         var columns = ItemFieldCatalog.History.Select(c => c.Label).ToList();
         var rows = result.History.Skip(Math.Max(0, result.History.Count - MaxHistoryRows))
             .Select(row => (JsonNode)new JsonArray(columns.Select(c => (JsonNode?)(row.FirstOrDefault(f => f.Name == c)?.Value ?? string.Empty)).ToArray()))

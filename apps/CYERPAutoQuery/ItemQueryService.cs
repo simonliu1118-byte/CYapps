@@ -1156,6 +1156,11 @@ internal sealed class ItemQueryService
     /// <summary>查歷史異動 選擇日期 起／迄: the two boxes of that group, left to right, each read back.</summary>
     private async Task FillHistoryRangeAsync(nint invq, HistoryRange range, CancellationToken cancellationToken)
     {
+        if (range.From is null && range.To is null)
+        {
+            _log.Info("invq01", "history date fields not specified; leave both unchanged in ERP");
+            return;
+        }
         var group = Win32Automation.EnumerateChildren(invq)
             .FirstOrDefault(c => c.Visible && Invi02Layout.NormalizeCaption(c.Text) == Invq01Layout.DateGroup);
         var boxes = group is null ? [] : Win32Automation.InputControls(group.Handle, visibleOnly: true)
@@ -1169,15 +1174,18 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
         }
 
-        // Each segmented date edit must receive eight physical digit keys, followed by Enter.
-        // Read back *after* Enter: never start the ERP query with a partial date.
-        await SetDateAsync(invq, boxes[0], range.From, "起", cancellationToken);
-        await SetDateAsync(invq, boxes[1], range.To, "迄", cancellationToken);
-        var from = NativeMethods.ControlText(boxes[0].Handle);
-        var to = NativeMethods.ControlText(boxes[1].Handle);
-        _log.Info("invq01", $"history range shown from={_log.Value(from ?? string.Empty)} to={_log.Value(to ?? string.Empty)}");
-        if (!Invq01Layout.ShowsDate(from, range.From) || !Invq01Layout.ShowsDate(to, range.To))
-            throw new InvalidOperationException("查歷史異動的日期輸入後讀回不一致，已停止。");
+        // Only write explicitly supplied dates. ERP accepts an unchecked date field.
+        // Always verify each typed date after Enter and once again before querying.
+        if (range.From is { } fromDate)
+            await SetDateAsync(invq, boxes[0], fromDate, "起", cancellationToken);
+        if (range.To is { } toDate)
+            await SetDateAsync(invq, boxes[1], toDate, "迄", cancellationToken);
+        if (range.From is { } expectedFrom &&
+            !Invq01Layout.ShowsDate(NativeMethods.ControlText(boxes[0].Handle), expectedFrom))
+            throw new InvalidOperationException("查歷史異動的起日讀回不一致，已停止。");
+        if (range.To is { } expectedTo &&
+            !Invq01Layout.ShowsDate(NativeMethods.ControlText(boxes[1].Handle), expectedTo))
+            throw new InvalidOperationException("查歷史異動的迄日讀回不一致，已停止。");
     }
 
     private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what, CancellationToken cancellationToken)

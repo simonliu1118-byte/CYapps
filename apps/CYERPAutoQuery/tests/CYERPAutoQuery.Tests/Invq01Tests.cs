@@ -179,13 +179,19 @@ public class Invq01Tests
     private static readonly DateOnly Today = new(2026, 10, 16);
 
     [Fact]
-    public void EmptyRangeIsTheLastYear()
+    public void EmptyLocalHistoryDatesStayEmpty()
     {
-        var range = HistoryRange.Resolve(null, null, Today);
-        Assert.Equal(new DateOnly(2025, 10, 16), range.From);
-        Assert.Equal(Today, range.To);
+        var empty = HistoryRange.Resolve(null, null, Today);
+        Assert.Null(empty.From);
+        Assert.Null(empty.To);
+
         var onlyTo = HistoryRange.Resolve(null, new DateOnly(2026, 3, 31), Today);
-        Assert.Equal(new DateOnly(2025, 3, 31), onlyTo.From);
+        Assert.Null(onlyTo.From);
+        Assert.Equal(new DateOnly(2026, 3, 31), onlyTo.To);
+
+        var onlyFrom = HistoryRange.Resolve(new DateOnly(2025, 10, 16), null, Today);
+        Assert.Equal(new DateOnly(2025, 10, 16), onlyFrom.From);
+        Assert.Null(onlyFrom.To);
     }
 
     [Fact]
@@ -200,10 +206,13 @@ public class Invq01Tests
     [Fact]
     public void ClaimCarriesHistoryOptions()
     {
-        var job = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j1","itemNo":"T0001","expiresAt":"x","includeHistory":true,"historyFrom":"2026-01-01","historyTo":null}},"requestId":"r"}""")!;
+        var job = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j1","itemNo":"T0001","expiresAt":"x","includeHistory":true,"historyFrom":"2026-01-01","historyTo":"2026-10-16"}},"requestId":"r"}""")!;
         Assert.True(job.IncludeHistory);
         var options = job.Options(Today);
         Assert.Equal(new HistoryRange(new DateOnly(2026, 1, 1), Today), options.History);
+        // CY Web computes the dates. The Agent must not fill missing ones locally.
+        var incomplete = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j5","itemNo":"T0001","includeHistory":true,"historyFrom":"2026-01-01","historyTo":null}}}""")!;
+        Assert.Throws<ArgumentException>(() => incomplete.Options(Today));
 
         var plain = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j2","itemNo":"T0001","expiresAt":"x"}},"requestId":"r"}""")!;
         Assert.Null(plain.Options(Today).History);

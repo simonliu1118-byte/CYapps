@@ -52,7 +52,7 @@ internal static class Invq01Layout
     }
 
     /// <summary>Human-readable date shown in status and messages.</summary>
-    public static string ErpDate(DateOnly date) => date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+    public static string ErpDate(DateOnly? date) => date?.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) ?? "未指定";
 
     /// <summary>INVQ01 segmented date edit: physical digit keys without separators, then Enter.</summary>
     public static string ErpDateKeys(DateOnly date) => date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
@@ -64,29 +64,32 @@ internal static class Invq01Layout
 }
 
 /// <summary>
-/// The 查歷史異動 date range (user, 2026-10-16): chosen with a date picker; left empty it is the
-/// last year; at most three years.
+/// Optional dates for a local INVQ01 history query. An unchecked date picker means
+/// do not type that date into ERP. CY Web supplies both dates for Agent jobs.
 /// </summary>
-internal sealed record HistoryRange(DateOnly From, DateOnly To)
+internal sealed record HistoryRange(DateOnly? From, DateOnly? To)
 {
     public const int MaxYears = 3;
 
     /// <summary>
-    /// Fills what is missing (迄 = today, 起 = one year before 迄) and checks the range. The
-    /// message of <see cref="ArgumentException"/> is shown to the user as is.
+    /// Validate only dates the user supplied. Never invent a one-year range:
+    /// an unchecked local date picker stays untouched in INVQ01.
     /// </summary>
     public static HistoryRange Resolve(DateOnly? from, DateOnly? to, DateOnly today)
     {
-        var end = to ?? today;
-        var start = from ?? end.AddYears(-1);
-        if (start > end) throw new ArgumentException("歷史異動的起日不可晚於迄日。");
-        if (end > today) throw new ArgumentException("歷史異動的迄日不可晚於今天。");
-        if (start < end.AddYears(-MaxYears)) throw new ArgumentException($"歷史異動的日期範圍最多 {MaxYears} 年。");
-        return new HistoryRange(start, end);
+        if (from is { } start && start > today)
+            throw new ArgumentException("歷史異動的起日不可晚於今天。");
+        if (to is { } end && end > today)
+            throw new ArgumentException("歷史異動的迄日不可晚於今天。");
+        if (from is { } beginning && to is { } ending && beginning > ending)
+            throw new ArgumentException("歷史異動的起日不可晚於迄日。");
+        if (from is { } lower && lower < (to ?? today).AddYears(-MaxYears))
+            throw new ArgumentException($"歷史異動的日期範圍最多 {MaxYears} 年。");
+        return new HistoryRange(from, to);
     }
 
     /// <summary>yyyy-MM-dd, as CY Web sends and receives it.</summary>
-    public static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    public static string Iso(DateOnly? date) => date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
 
     public static DateOnly? ParseIso(string? text) =>
         DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;

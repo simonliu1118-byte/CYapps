@@ -1,5 +1,12 @@
 # CYERPAutoQuery Work Handoff
 
+## 最新變更（V0.3.0 Build 3，2026/10/16）
+
+- 本機勾選「查歷史異動」但起日、迄日都沒有勾選時，不再自動補近一年，也不輸入或讀回這兩個 ERP 日期欄；只有一端勾選時只輸入那一端，按 Enter 讀回核對。保留 ERP 自己對未指定日期的處理方式。
+- CY Web 由現有 Worker 先算好起迄日期，**維持原本預設近一年起日加一天的計算規則**，AUTOQUERY Agent 只照 claim 交付的完整起／迄日期查詢。當 Web 要求查歷史卻缺其中一端時，Agent 明確報錯，不再自行補日期。**CY Web 儲存庫未修改。**
+- 此修改僅針對 INVQ01 日期輸入；已成功的批號查詢、Excel 解析、Web Agent token 與 ERP 其餘控制流程不動。Unit tests 覆蓋空白／單端／雙端日期與 Web 缺日期驗證；實際 ERP 日期遮罩仍需實機測試。
+- CI 使用原分支 `governance/cyerp-auto-query`、PR #472，測試包由原 `CYERPAutoQuery Build` workflow 提供，無正式 Release。
+
 ## 最新變更（V0.3.0 Build 2，2026/10/16）
 
 - 已依使用者實機截圖更正 INVQ01 歷史異動的**分段日期控制項**輸入：以左側「年」位置取得焦點，起日輸入 8 個數字鍵 yyyyMMdd → Enter，讀回檢查；迄日同樣操作，最後再次核對兩欄。輸入不包含斜線，也不使用 End/Backspace 或 Ctrl+A 清除日期。讀回不完整／不一致即停止，防止錯誤日期送出查詢。
