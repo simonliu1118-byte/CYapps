@@ -93,6 +93,44 @@ internal static class RetentionTests
         Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("test|12345678").Count);
     }
 
+    public static void RetentionPreservesFailureUntilArchive()
+    {
+        using var temporary=new RetentionTemporaryDirectory();
+        var repository=TestRepository.Open(temporary.Path,new RetentionTestProtector());
+        ConfigureProduction(repository);
+        var failed=Record("expired-failed-archive",string.Empty,"ORDER-FAILED-OLD",
+            InvoiceStates.Failed,"2026/06/01");
+        failed.ErrorMessage="上傳失敗必須保留";
+        var opened=Record("expired-opened-cleanup","AA20000001","ORDER-OPENED-OLD",
+            InvoiceStates.Opened,"2026/06/01");
+        repository.Invoices.Append(failed);
+        repository.Invoices.Append(opened);
+        var retention=new InvoiceRetentionService(repository);
+        var result=retention.Prune(new DateOnly(2026,9,18));
+        Equal(1,result.Deleted); // Regular expired opened invoice is still pruned.
+        var live=repository.Invoices.LoadOrCreate();
+        Equal(1,live.Count);
+        Equal(failed.Id,live.Single().Id);
+        Equal("測試商品",live.Single().Items.Single().Description);
+        // Only an explicit archive command may move the failed source out
+        // of the normal invoice list; retention never archives or deletes it.
+        var store=new FailedInvoiceRecordStore(repository.DataDirectory);
+        Equal(1,store.Archive([failed]));
+        Equal(0,repository.Invoices.LoadOrCreate().Count);
+        Equal(0,retention.Prune(new DateOnly(2026,10,16)).Deleted);
+        var archived=new FailedInvoiceRecordStore(repository.DataDirectory)
+            .AllArchived(Environments.Production,"12345675");
+        Equal(1,archived.Count);
+        Equal(failed.Id,archived.Single().Record.Id);
+        Equal(failed.ErrorMessage,archived.Single().Record.ErrorMessage);
+        Equal("測試商品",archived.Single().Record.Items.Single().Description);
+        using var connection=OpenReadOnly(Path.Combine(repository.DataDirectory,
+            SqliteBootstrapper.DatabaseFileName));
+        using var check=connection.CreateCommand();
+        check.CommandText="PRAGMA integrity_check;";
+        Equal("ok",Convert.ToString(check.ExecuteScalar()));
+    }
+
     public static void FailedStoreArchivesOnlyFailedRows()
     {
         using var temporary = new RetentionTemporaryDirectory();

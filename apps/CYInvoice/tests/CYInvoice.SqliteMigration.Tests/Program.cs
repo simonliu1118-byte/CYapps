@@ -19,6 +19,7 @@ var tests = new (string Name, Action Run)[]
     ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
     ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
     ("failed invoices archive complete snapshots and survive later saves", RetentionTests.FailedStoreArchivesOnlyFailedRows),
+    ("retention leaves failed issuance until explicit archive", RetentionTests.RetentionPreservesFailureUntilArchive),
 };
 
 var failures = 0;
