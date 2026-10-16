@@ -203,11 +203,23 @@ internal sealed class AutomationOverlay : Form
         if (IsHandleCreated && Visible) Hide();
     }
 
-    /// <summary>Just wide enough for the text (user, 2026-10-12: the box was too wide), centered.</summary>
+    /// <summary>Every title and hint the notice can show, so its width is fixed for a whole run.</summary>
+    private static readonly string[] Titles =
+        [AutomationSession.QueryTitle, "自動查詢完成", "查無此品號", "自動查詢已中斷", "使用者已停止", "已暫停"];
+    private static readonly string[] Hints = [RunningHint, "請確認品號", "請看提示視窗", "已按 Esc 緊急停止"];
+
+    /// <summary>
+    /// Just wide enough for the longest text (user, 2026-10-12: the box was too wide), centered.
+    /// The width never changes between 「自動查詢中」 and the outcome: growing the box while it
+    /// was on screen cut off the right of 「自動查詢已中斷」 (user's photo, 2026-10-16).
+    /// </summary>
     private void Place()
     {
-        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(_hint, HintFont).Width);
-        Size = new Size(86 + textWidth + 26, 92);
+        var textWidth = Titles.Append(_title).Max(t => TextRenderer.MeasureText(t, TitleFont).Width);
+        textWidth = Math.Max(textWidth, Hints.Append(_hint).Max(h => TextRenderer.MeasureText(h, HintFont).Width));
+        var size = new Size(86 + textWidth + 36, 92);
+        if (Size == size && Visible) return;
+        Size = size;
         var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
         Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
         Region?.Dispose();

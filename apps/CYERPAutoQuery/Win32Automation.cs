@@ -21,7 +21,10 @@ internal static class Win32Automation
                 (NativeMethods.IsWindowVisible(hwnd) ? visible : hidden).Add(hwnd);
             return true;
         }, 0);
-        var found = visible.Count > 0 ? visible : hidden;
+        // A hidden INVI02 is one the user closed and Delphi kept in memory; driving it went wrong
+        // (V0.4.0 LOG, 2026-10-16: visible=False), so only visible ones count and a closed one is
+        // opened again through 作業速查.
+        var found = visible;
         var forms = found.Where(h => NativeMethods.ClassName(h).Equals(Invi02Layout.FormClass, StringComparison.OrdinalIgnoreCase)).ToList();
         return forms.Count > 0 ? forms : found;
     }
@@ -35,16 +38,41 @@ internal static class Win32Automation
     public static IReadOnlyList<nint> FindErpMainWindows()
     {
         var found = new List<nint>();
+        var applications = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
-            if (NativeMethods.IsWindowVisible(hwnd) && Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd)) &&
-                Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) &&
-                (NativeMethods.IsIconic(hwnd) || NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 300 && r.Height >= 200))
+            if (!Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd))) return true;
+            if (NativeMethods.ClassName(hwnd).Equals("TApplication", StringComparison.OrdinalIgnoreCase)) applications.Add(hwnd);
+            else if (NativeMethods.IsWindowVisible(hwnd) && Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd))
                 found.Add(hwnd);
             return true;
         }, 0);
+        if (found.Count > 0) return found;
+
+        // The main form's own caption need not say Conductor: on the user's PC only the hidden
+        // TApplication window did (V0.4.0 Build 2 LOG). Then the main form is the largest visible
+        // window of that ERP process that is not a program form (INVxx) or a message box.
+        foreach (var app in applications)
+        {
+            var pid = ProcessId(app);
+            var candidates = new List<(nint Handle, long Area)>();
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (hwnd != app && ProcessId(hwnd) == pid && NativeMethods.IsWindowVisible(hwnd) &&
+                    Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd) &&
+                    !Invi02Layout.IsInvi02Title(NativeMethods.WindowText(hwnd)) &&
+                    !Invq01Layout.IsInvq01Title(NativeMethods.WindowText(hwnd)) &&
+                    NativeMethods.GetWindowRect(hwnd, out var r))
+                    candidates.Add((hwnd, NativeMethods.IsIconic(hwnd) ? 0 : (long)r.Width * r.Height));
+                return true;
+            }, 0);
+            found.AddRange(candidates.OrderByDescending(c => c.Area).Select(c => c.Handle));
+        }
         return found;
     }
+
+    private static bool IsMainSized(nint hwnd) =>
+        NativeMethods.IsIconic(hwnd) || NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 300 && r.Height >= 200;
 
     /// <summary>
     /// Visible top-level windows of <paramref name="root"/>'s process, other than the listed

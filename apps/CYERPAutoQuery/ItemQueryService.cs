@@ -231,7 +231,7 @@ internal sealed class ItemQueryService
             throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著品號資料建立作業。\n請先登入 ERP。");
         }
         var main = mains[0];
-        _log.Info("window", $"opening INVI02 from main window class={NativeMethods.ClassName(main)} count={mains.Count}");
+        _log.Info("window", $"opening INVI02 from main window class={NativeMethods.ClassName(main)} title=\"{NativeMethods.WindowText(main)}\" count={mains.Count}");
         if (!NativeMethods.IsWindowEnabled(main))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 主視窗目前有對話框開著，無法開啟品號資料建立作業。");
         if (!Win32Automation.PrepareForeground(main, _log))
@@ -306,6 +306,23 @@ internal sealed class ItemQueryService
         return new HeaderControls(rows[0][0]);
     }
 
+    /// <summary>The header, polled while ERP is still building the form (just opened, maximized or re-queried).</summary>
+    private static async Task<HeaderControls> ResolveHeaderAsync(nint root, WindowControl page, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + AfterActionWaitMs;
+        while (true)
+        {
+            try
+            {
+                return ResolveHeader(root, page);
+            }
+            catch (InvalidOperationException) when (Environment.TickCount64 < deadline)
+            {
+                await Pace.Delay(150, cancellationToken);
+            }
+        }
+    }
+
     // ---- query dialog -----------------------------------------------------------------
 
     private async Task<nint> OpenQueryDialogAsync(nint root, WindowControl page, CancellationToken cancellationToken)
@@ -322,7 +339,7 @@ internal sealed class ItemQueryService
         if (!NativeMethods.IsWindowEnabled(root))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前有其他對話框開著，請先處理後再查詢。");
 
-        var header = ResolveHeader(root, page);
+        var header = await ResolveHeaderAsync(root, page, cancellationToken);
         if (header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase) &&
             !Win32Automation.IsReadOnly(header.ItemCode.Handle))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前在新增或修改狀態。\n請先儲存或取消後再查詢。");
@@ -519,7 +536,18 @@ internal sealed class ItemQueryService
         var shown = string.Empty;
         while (true)
         {
-            var header = ResolveHeader(root, page);
+            HeaderControls header;
+            try
+            {
+                header = ResolveHeader(root, page);
+            }
+            catch (InvalidOperationException) when (Environment.TickCount64 < deadline)
+            {
+                // ERP is rebuilding the form after 確定 (V0.4.0 LOG: 0 rows 0.2 s after 確定).
+                emptySince = null;
+                await Pace.Delay(100, cancellationToken);
+                continue;
+            }
             shown = (NativeMethods.ControlText(header.ItemCode.Handle) ?? string.Empty).Trim();
             if (ItemCodeRules.SameCode(shown, code)) return header;
             if (shown.Length == 0)
