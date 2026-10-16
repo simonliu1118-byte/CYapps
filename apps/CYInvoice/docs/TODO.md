@@ -12,6 +12,8 @@
 
 > **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `4c897a44257de764c87d6ba3130e89327f5a1d56`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
+- [x] **逐品項歷史查回移除（Draft，待 exact-head CI）**：CYID 管理員的 `official-inspection` 不再為了推算已折讓商品數量而額外呼叫每張 `allowance_query`；使用單次 `invoice_query.allowance[]` 及其已生效含稅總額進行本次折讓上限驗證。舊歷史分攤／「已知剩餘上限」僅保留回應欄位空值供現有 Windows 契約相容，**不能**取代餘額驗證。原 D1 配號的 `number-readback`／`reconcile`、CYID／CAS 不變。Cloud source 及合成回歸測試尚未實機驗收。
+
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。

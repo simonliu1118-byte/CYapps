@@ -25,40 +25,6 @@ const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applicat
   "/v1/allowance-applications/approve",
   "/v1/allowance-applications/reserve","/v1/allowance-applications/number-status",
   "/v1/allowance-applications/send-once"]);
-// The ceiling is a READ-ONLY upper bound from *known* effective allocations,
-// not an available refund balance: unreported historical allowances and later
-// provider changes may reduce the actual amount. Never use it for approval.
-// Keep exact seven-place BigInt math; no binary float monetary subtraction.
-function historicalGrossCeiling(
-  originalGross:number,coverage:string,originalEffective:boolean,
-  amounts:readonly {originalGross:string|null;lineTotalsVerified:boolean}[]
-):{status:"NOT_AVAILABLE"|"KNOWN_CEILING_ONLY"|"KNOWN_SUM_EXCEEDS_ORIGINAL";
-   knownGross:string|null;remainingCeiling:string|null}{
-  const unavailable={status:"NOT_AVAILABLE" as const,
-    knownGross:null,remainingCeiling:null};
-  if(coverage!=="HISTORY_RANGE_NOT_PROVEN"||!originalEffective||
-     !Number.isSafeInteger(originalGross)||originalGross<0||
-     amounts.length===0||amounts.some(a=>!a.lineTotalsVerified))
-    return unavailable;
-  const scale=10000000n;
-  let known=0n;
-  for(const a of amounts){
-    const m=/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,7}))?$/.exec(a.originalGross??"");
-    if(!m)return unavailable;
-    known+=BigInt(m[1])*scale+BigInt((m[2]??"").padEnd(7,"0"));
-  }
-  const canon=(value:bigint):string=>{
-    const whole=value/scale,frac=(value%scale).toString().padStart(7,"0")
-      .replace(/0+$/,"");
-    return frac?whole+"."+frac:whole.toString();
-  };
-  const gross=BigInt(originalGross)*scale;
-  if(known>gross)
-    return {status:"KNOWN_SUM_EXCEEDS_ORIGINAL",knownGross:null,
-      remainingCeiling:null};
-  return {status:"KNOWN_CEILING_ONLY",knownGross:canon(known),
-    remainingCeiling:canon(gross-known)};
-}
 const itemPattern=/^[A-Za-z0-9_-]{10,100}$/;
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
@@ -576,98 +542,20 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
           officialItems:snapshot.originalProductItems,
           allowanceHistory:snapshot.allowanceHistory
         },frozen.originalInvoiceNumber,frozen.requestedGrossAmount);
-      // At most three distinct historical allowance numbers, each queried
-      // once and only by the authorized Worker. No approval or balance grant.
-      const checks:{
-        allowanceNumber:string;reason:string;lineTotalsVerified:boolean;
-        originalNet:string|null;originalTax:string|null;originalGross:string|null;
-        safeToInferRemainingBalance:false
-      }[]=[];
-      const examined=new Set<string>();
-      // Only known quantities against this specific original-invoice
-      // snapshot are summed. This never proves complete history.
-      const knownUsedByOriginalLine=new Map<number,bigint>();
-      const scale=10000000n;
-      const scaledQuantity=(raw:string):bigint=>{
-        const [whole,frac=""]=raw.split(".");
-        return BigInt(whole)*scale+BigInt(frac.padEnd(7,"0"));
-      };
-      for(const hint of snapshot.allowanceHistory){
-        if(checks.length>=3)break;
-        if(!hint.metadataComplete||hint.uploadStatus!==99||
-           hint.cancelDate!=="0"||!hint.allowanceNumber||
-           examined.has(hint.allowanceNumber))continue;
-        examined.add(hint.allowanceNumber);
-        const verifiedManager=await authority(env).revalidate();
-        const verifiedDevice=await dev(request,env);
-        if(!verifiedManager||verifiedManager.employeeId!==actor.employeeId||
-           !["ADMIN","SUPER_ADMIN"].includes(verifiedManager.workspaceRole)||
-           verifiedDevice?.device_id!==d.device_id)
-          return response(403,{error:{code:"AUTHORITY_CHANGED"}});
-        try{
-          const official=await queryOfficialAllowanceReadOnly({
-            sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
-            allowanceNumber:hint.allowanceNumber,
-            originalInvoiceNumber:frozen.originalInvoiceNumber,
-            originalInvoiceItems:snapshot.originalProductItems,
-            originalInvoiceDate:snapshot.invoiceDate,
-            originalDetailVat:snapshot.detailVat
-          });
-          const snapshotChanged=
-            official.allowanceDay!==hint.allowanceDate||
-            official.uploadStatus!==hint.uploadStatus||
-            String(official.cancelDate)!==hint.cancelDate||
-            official.totalAmount!==hint.totalAmount||
-            official.taxAmount!==hint.taxAmount;
-          const allocation=official.originalAllocation;
-          const quantities=official.knownOriginalQuantities;
-          let quantitiesVerified=!snapshotChanged&&allocation.lineTotalsVerified&&
-            quantities!==null;
-          if(quantitiesVerified){
-            // Independently valid historical allowances may exceed one
-            // original line when summed together. Fail closed.
-            for(const line of quantities!){
-              const used=(knownUsedByOriginalLine.get(line.originalItemIndex)??0n)+
-                scaledQuantity(line.knownQuantity);
-              if(used>scaledQuantity(line.originalQuantity)){
-                quantitiesVerified=false;break;
-              }
-            }
-          }
-          if(quantitiesVerified){
-            for(const line of quantities!){
-              knownUsedByOriginalLine.set(line.originalItemIndex,
-                (knownUsedByOriginalLine.get(line.originalItemIndex)??0n)+
-                  scaledQuantity(line.knownQuantity));
-            }
-          }
-          const verified=!snapshotChanged&&allocation.lineTotalsVerified&&quantitiesVerified;
-          checks.push({allowanceNumber:hint.allowanceNumber,
-            reason:snapshotChanged?"OFFICIAL_SNAPSHOT_CHANGED":
-              !quantitiesVerified&&allocation.lineTotalsVerified?
-                "ITEM_AMOUNTS_UNVERIFIED":allocation.reason,
-            lineTotalsVerified:verified,
-            originalNet:verified?allocation.originalNet:null,
-            originalTax:verified?allocation.originalTax:null,
-            originalGross:verified?allocation.originalGross:null,
-            safeToInferRemainingBalance:false});
-        }catch{
-          // An unavailable readback is UNKNOWN, not a zero allowance.
-          // Never retry the same provider request automatically.
-          checks.push({allowanceNumber:hint.allowanceNumber,
-            reason:"OFFICIAL_READBACK_UNCONFIRMED",lineTotalsVerified:false,
-            originalNet:null,originalTax:null,originalGross:null,
-            safeToInferRemainingBalance:false});
-        }
-      }
+      // The single official invoice_query summary already contains all reported
+      // allowances and amounts used by the gross ceiling. Do not query
+      // historical per-product allocations from allowance_query here.
+      // The separate D1-reserved number-readback/reconcile is unchanged.
       const lastAuthority=await authority(env).revalidate();
       const lastDevice=await dev(request,env);
       if(!lastAuthority||lastAuthority.employeeId!==actor.employeeId||
          !["ADMIN","SUPER_ADMIN"].includes(lastAuthority.workspaceRole)||
          lastDevice?.device_id!==d.device_id)
         return response(403,{error:{code:"AUTHORITY_CHANGED"}});
-      // This is evidence coverage, NOT proof that AMEGO's current
-      // invoice summary enumerates the entire historical allowance range.
+      // Preserve compatibility-only diagnostics; all per-product history fields
+      // are empty and non-authorizing. Official history is still the original
+      // invoice_query allowance[] for the actual remaining-gross check.
+      const checks:never[]=[];
       const knownIds=snapshot.allowanceHistory.map(h=>h.allowanceNumber)
         .filter((id):id is string=>id!==null);
       const historicalCoverageReason=
@@ -677,15 +565,10 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         new Set(knownIds).size!==knownIds.length?"DUPLICATE_HISTORY_NUMBER":
         snapshot.allowanceHistory.some(h=>h.uploadStatus!==99||h.cancelDate!=="0")
           ?"HISTORY_STATUS_NOT_EFFECTIVE":
-        checks.length<snapshot.existingAllowanceCount?"DETAIL_QUERY_LIMITED":
-        checks.some(h=>!h.lineTotalsVerified)?"DETAIL_READBACK_UNVERIFIED":
-        snapshot.existingAllowanceCount===0?"NO_HISTORY_REPORTED_NOT_PROOF":
-        "HISTORY_RANGE_NOT_PROVEN";
-      const ceiling=historicalGrossCeiling(snapshot.totalAmount,
-        historicalCoverageReason,
-        snapshot.uploadStatus===99&&snapshot.cancelDate===0&&
-          !snapshot.voidPending&&!snapshot.hasUnsettledMutation,
-        checks);
+        snapshot.existingAllowanceCount>0?"DETAIL_QUERY_LIMITED":
+        "NO_HISTORY_REPORTED_NOT_PROOF";
+      const ceiling={status:"NOT_AVAILABLE" as const,knownGross:null,
+        remainingCeiling:null};
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,

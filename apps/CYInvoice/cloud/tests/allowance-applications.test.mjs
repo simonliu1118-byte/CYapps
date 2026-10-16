@@ -238,108 +238,47 @@ try {
     expectedRevision:2})).status,403);
   assert.equal(officialCalls,1);
   who={...who,workspaceRole:"ADMIN"};
-  let historicInvoiceCalls=0,historicAllowanceCalls=0;
-  globalThis.fetch=async(url,opts)=>{
+  let historicInvoiceCalls=0;
+  // invoice_query already includes this invoice's allowance[]; no unrelated
+  // allowance_query per-product reconstruction is permitted during inspection.
+  const officialHistory=async(url,opts)=>{
+    assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query",
+      "Historical per-item allowance_query should not be invoked");
+    historicInvoiceCalls++;
     const data=JSON.parse(new URLSearchParams(opts.body).get("data"));
-    if(url==="https://invoice-api.amego.tw/json/invoice_query"){
-      historicInvoiceCalls++;
-      assert.equal(data.invoice_number,"AB12345678");
-      return Response.json({code:0,data:[{
-        invoice_number:"AB12345678",status:99,cancel_date:0,
-        total_amount:105,tax_amount:5,detail_vat:0,date:20261015,
-        allowance:[{allowance_number:"3821061800001",allowance_date:20261015,
-          total_amount:"75",tax_amount:"4",invoice_status:99,cancel_date:0}],
-        product_item:[{description:"Synthetic",quantity:"2",unit_price:"50",
-          amount:"100",tax_type:1}]
-      }]});
-    }
-    assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
-    historicAllowanceCalls++;
-    assert.equal(data.allowance_number,"3821061800001");
-    return Response.json({code:0,data:{
-      allowance_number:"3821061800001",invoice_type:"D0401",
-      invoice_status:99,allowance_date:"20261015",allowance_type:2,
-      cancel_date:0,total_amount:"75",tax_amount:"4",
-      product_item:[
-        {original_invoice_number:"AB12345678",original_invoice_date:20261015,
-          description:"Synthetic",quantity:"1",unit_price:"50",
-          tax_type:1,amount:"50",tax:"3"},
-        {original_invoice_number:"XY12345678",original_invoice_date:20261015,
-          description:"Other",quantity:"1",unit_price:"25",
-          tax_type:1,amount:"25",tax:"1"}
-      ]
-    }});
+    assert.equal(data.invoice_number,"AB12345678");
+    return Response.json({code:0,data:[{
+      invoice_number:"AB12345678",status:99,cancel_date:0,
+      total_amount:105,tax_amount:5,detail_vat:0,date:20261015,
+      allowance:[{allowance_number:"3821061800001",allowance_date:20261015,
+        total_amount:"75",tax_amount:"4",invoice_status:99,cancel_date:0}],
+      product_item:[{description:"Synthetic",quantity:"2",unit_price:"50",
+        amount:"100",tax_type:1}]
+    }]});
   };
+  globalThis.fetch=officialHistory;
   const history=await call("official-inspection",{
     itemId:createBody.itemId,expectedRevision:2});
   assert.equal(history.status,200,JSON.stringify(history));
-  assert.equal(historicInvoiceCalls,1,"exactly one original invoice query");
-  assert.equal(historicAllowanceCalls,1,"one known historical allowance");
-  assert.deepEqual(history.data.inspection.historicalAllocationChecks,[{
-    allowanceNumber:"3821061800001",
-    reason:"ALLOCATED_LINES_MATCH_HEADER",lineTotalsVerified:true,
-    originalNet:"50",originalTax:"3",originalGross:"53",
-    safeToInferRemainingBalance:false
-  }]);
-  assert.equal(history.data.inspection.historicalAllocationNotQueriedCount,0);
-  assert.equal(history.data.inspection.historicalAllocationsComplete,false);
-  assert.equal(history.data.inspection.historicalCoverageReason,"HISTORY_RANGE_NOT_PROVEN");
-  assert.equal(history.data.inspection.historicalGrossCeilingStatus,"KNOWN_CEILING_ONLY");
-  assert.equal(history.data.inspection.historicalKnownGross,"53");
-  assert.equal(history.data.inspection.historicalRemainingCeiling,"52",
-    "upper ceiling after known per-original allocation, not spendable balance");
+  assert.equal(historicInvoiceCalls,1,"exactly one invoice_query");
+  assert.equal(history.data.inspection.existingAllowanceCount,1);
+  assert.equal(history.data.inspection.allowanceHistory[0].allowanceNumber,
+    "3821061800001");
+  assert.deepEqual(history.data.inspection.historicalAllocationChecks,[]);
+  assert.equal(history.data.inspection.historicalAllocationNotQueriedCount,1);
+  assert.equal(history.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
+  assert.equal(history.data.inspection.historicalKnownGross,null);
+  assert.equal(history.data.inspection.historicalRemainingCeiling,null);
+  assert.equal(history.data.inspection.historicalCoverageReason,"DETAIL_QUERY_LIMITED");
+  assert.equal(history.data.inspection.itemCheck.reason,"REQUEST_EXCEEDS_REMAINING",
+    "105 minus effective 79 leaves 26, below the requested 50");
   assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(history.data.inspection.canApprove,false);
   assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
-  // Matching allowance totals do not prove item quantity when the source
-  // original invoice's item price or quantity cannot be matched.
-  const validHistoricalFetch=globalThis.fetch;
+  // Duplicate or incomplete official summaries must still fail closed,
+  // without triggering a speculative detail fetch.
   globalThis.fetch=async(url,opts)=>{
-    const response=await validHistoricalFetch(url,opts);
-    if(url!=="https://invoice-api.amego.tw/json/allowance_query")return response;
-    const payload=await response.json();
-    payload.data.product_item[0].description="Different Item";
-    return Response.json(payload);
-  };
-  const unassignedItem=await call("official-inspection",{
-    itemId:createBody.itemId,expectedRevision:2});
-  assert.equal(unassignedItem.status,200,JSON.stringify(unassignedItem));
-  assert.equal(unassignedItem.data.inspection.historicalAllocationChecks[0].reason,
-    "ITEM_AMOUNTS_UNVERIFIED");
-  assert.equal(unassignedItem.data.inspection.historicalGrossCeilingStatus,
-    "NOT_AVAILABLE");
-  assert.equal(unassignedItem.data.inspection.historicalRemainingCeiling,null);
-  assert.equal(unassignedItem.data.inspection.canApprove,false);
-  globalThis.fetch=validHistoricalFetch;
-  // Totals that still add up must not count as verified historical allocation
-  // if the provider omits an OPTIONAL line quantity on official readback.
-  const completeHistoryFetch=globalThis.fetch;
-  globalThis.fetch=async(url,opts)=>{
-    const response=await completeHistoryFetch(url,opts);
-    if(url!=="https://invoice-api.amego.tw/json/allowance_query")
-      return response;
-    const payload=await response.json();
-    delete payload.data.product_item[0].quantity;
-    return Response.json(payload);
-  };
-  const missingQuantity=await call("official-inspection",{
-    itemId:createBody.itemId,expectedRevision:2});
-  assert.equal(missingQuantity.status,200,JSON.stringify(missingQuantity));
-  assert.equal(missingQuantity.data.inspection.historicalAllocationChecks[0].reason,
-    "ITEM_AMOUNTS_UNVERIFIED");
-  assert.equal(missingQuantity.data.inspection.historicalCoverageReason,
-    "DETAIL_READBACK_UNVERIFIED");
-  assert.equal(missingQuantity.data.inspection.historicalGrossCeilingStatus,
-    "NOT_AVAILABLE");
-  assert.equal(missingQuantity.data.inspection.historicalKnownGross,null);
-  assert.equal(missingQuantity.data.inspection.historicalRemainingCeiling,null);
-  assert.equal(missingQuantity.data.inspection.canApprove,false);
-  globalThis.fetch=completeHistoryFetch;
-  // Duplicate official source numbers must not inflate verified coverage.
-  const fetchHistory=globalThis.fetch;
-  globalThis.fetch=async(url,opts)=>{
-    const response=await fetchHistory(url,opts);
-    if(url!=="https://invoice-api.amego.tw/json/invoice_query")return response;
+    const response=await officialHistory(url,opts);
     const payload=await response.json();
     payload.data[0].allowance.push({...payload.data[0].allowance[0]});
     return Response.json(payload);
@@ -349,14 +288,11 @@ try {
   assert.equal(duplicate.status,200,JSON.stringify(duplicate));
   assert.equal(duplicate.data.inspection.historicalCoverageReason,
     "DUPLICATE_HISTORY_NUMBER");
-  assert.equal(duplicate.data.inspection.historicalAllocationChecks.length,1);
-  assert.equal(duplicate.data.inspection.historicalAllocationNotQueriedCount,1);
-  assert.equal(duplicate.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
-  assert.equal(duplicate.data.inspection.historicalRemainingCeiling,null);
-  // A malformed second summary remains unqueried, never zero-valued.
+  assert.equal(duplicate.data.inspection.itemCheck.reason,
+    "OFFICIAL_HISTORY_UNVERIFIED");
+  assert.deepEqual(duplicate.data.inspection.historicalAllocationChecks,[]);
   globalThis.fetch=async(url,opts)=>{
-    const response=await fetchHistory(url,opts);
-    if(url!=="https://invoice-api.amego.tw/json/invoice_query")return response;
+    const response=await officialHistory(url,opts);
     const payload=await response.json();
     payload.data[0].allowance.push({
       allowance_number:"3821061800002",allowance_date:"20261340",
@@ -369,24 +305,8 @@ try {
   assert.equal(incomplete.status,200,JSON.stringify(incomplete));
   assert.equal(incomplete.data.inspection.historicalCoverageReason,
     "SUMMARY_METADATA_INCOMPLETE");
-  assert.equal(incomplete.data.inspection.historicalAllocationNotQueriedCount,1);
-  assert.equal(incomplete.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
-  assert.equal(incomplete.data.inspection.historicalKnownGross,null);
-  // Official readback unavailability cannot be silently called "covered".
-  globalThis.fetch=async(url,opts)=>{
-    if(url==="https://invoice-api.amego.tw/json/allowance_query")
-      return Response.json({code:51,data:null});
-    return fetchHistory(url,opts);
-  };
-  const uncertain=await call("official-inspection",{
-    itemId:createBody.itemId,expectedRevision:2});
-  assert.equal(uncertain.status,200,JSON.stringify(uncertain));
-  assert.equal(uncertain.data.inspection.historicalCoverageReason,
-    "DETAIL_READBACK_UNVERIFIED");
-  assert.equal(uncertain.data.inspection.historicalAllocationChecks[0].originalGross,null);
-  assert.equal(uncertain.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
-  assert.equal(uncertain.data.inspection.historicalRemainingCeiling,null);
-  assert.equal(uncertain.data.inspection.canApprove,false);
+  assert.equal(incomplete.data.inspection.itemCheck.reason,
+    "OFFICIAL_HISTORY_UNVERIFIED");
 }finally{globalThis.fetch=originalFetch;}
 
 // Ambiguous g0401 recovery: only the originally D1-reserved number may be

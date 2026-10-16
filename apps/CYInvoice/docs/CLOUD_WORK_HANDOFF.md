@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 逐商品歷史推算退出官方查驗流程（Draft Source）
+
+`allowance-applications-route.ts` 的管理員 `official-inspection` 取消「額外查最多三張歷史折讓的 `allowance_query`、逐品項對原訂單數量、再產生不具核准效力的已知上限」流程。只使用 `invoice_query.allowance[]` 的官方有效折讓總額和使用者凍結的折讓總額進行單張餘額判斷。歷史分攤 response 欄位暫留空陣列／`NOT_AVAILABLE`／null，供既有 Windows 解析契約無破壞性轉換；未來再分階段刪除完全無用的 DTO／parser。**注意** `number-readback`／`reconcile` 對 D1 已配原號的官方唯讀查回仍需 `allowance_query`，不可誤刪；確認未知結果不能重送。這是 source／合成測試，不是真光貿驗收。
+
 ## 2026-10-16 管理員查驗頁清理（Draft Source）
 
 管理員官方查驗視窗不再顯示舊的逐商品歷史分攤推算與所謂「已知餘額上限」，只顯示官方 invoice_query 當次折讓摘要、含稅原額、本次申請總額及真實的總額限額查驗原因。底層舊歷史詳查路由尚未整體刪除，因相關回歸測試／查回契約仍有相依；待分項清理，不能在未驗證前一次性移除。
