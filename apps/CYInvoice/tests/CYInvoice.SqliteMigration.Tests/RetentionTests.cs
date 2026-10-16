@@ -103,7 +103,8 @@ internal static class RetentionTests
         var opened = Record("opened-keep", "AA99999999", "66091800999999", InvoiceStates.Opened, "2026/09/18");
         repository.Invoices.Append(failed);
         repository.Invoices.Append(opened);
-        InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED", resolved: false);
+        InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED",
+            resolved: false, issueType: InvoiceSyncIssueTypes.QueryFailed);
 
         var store = new FailedInvoiceRecordStore(repository.DataDirectory);
         Equal(1,store.Archive([failed]));
@@ -192,7 +193,8 @@ internal static class RetentionTests
         string invoiceNumber,
         string orderId,
         bool resolved,
-        string createdUtc = "2026-09-18T00:00:00.0000000+00:00")
+        string createdUtc = "2026-09-18T00:00:00.0000000+00:00",
+        string issueType = "retention-test")
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -206,13 +208,14 @@ internal static class RetentionTests
             INSERT INTO sync_issues (
                 account_key, invoice_number, order_id, issue_type, message, created_utc, resolved_utc
             ) VALUES (
-                $account_key, $invoice_number, $order_id, 'retention-test', 'test issue',
+                $account_key, $invoice_number, $order_id, $issue_type, 'test issue',
                 $created_utc, $resolved_utc
             );
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", invoiceNumber);
         command.Parameters.AddWithValue("$order_id", orderId);
+        command.Parameters.AddWithValue("$issue_type", issueType);
         command.Parameters.AddWithValue("$created_utc", createdUtc);
         command.Parameters.AddWithValue("$resolved_utc", resolved ? "2026-09-18T01:00:00.0000000+00:00" : "");
         command.ExecuteNonQuery();
