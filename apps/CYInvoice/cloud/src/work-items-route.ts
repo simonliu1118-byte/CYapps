@@ -1,10 +1,10 @@
 import { cyIdDevice, usesCyId, type CyIdEnv, CyIdError } from "./cyid";
-import { createWorkItem, getWorkItem, transitionWorkItem } from "./work-items";
+import { createWorkItem, getWorkItem, transitionWorkItem, listWorkItems } from "./work-items";
 
 interface Env extends CyIdEnv { DB: D1Database }
 type Manager = { id: string };
 const paths = new Set([
-  "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
+  "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/list", "/v1/work-items/transition",
 ]);
 function response(status: number, value: Record<string, unknown>): Response {
   return Response.json({ ok: status < 300, ...value }, {
@@ -50,7 +50,7 @@ async function jsonBody(request: Request): Promise<Record<string, unknown> | nul
   } catch { return null; }
 }
 
-// Exactly three POST actions; employee password never travels in query params.
+// All actions are POST; no employee password travels in query parameters.
 // A missing draft schema is a closed service, not a reason to create tables.
 export async function handleWorkItems(request: Request, env: Env): Promise<Response | null> {
   const path = new URL(request.url).pathname;
@@ -63,6 +63,46 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
   if (!body) return response(400,{error:{code:"INVALID_REQUEST"}});
   const m = await manager(env,d.employee_authority_state);
   if (!m) return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
+  if(path==="/v1/work-items/list"){
+    // A single Workspace-scoped read with a fixed projection. Cursor is
+    // immutable creation time + ID so concurrent status changes do not
+    // duplicate entries across pages. No general invoice replication.
+    if(!Object.keys(body).every(k=>["limit","kind","status","cursor"].includes(k))||
+       (body.limit!==undefined&&(!Number.isSafeInteger(body.limit)||
+         (body.limit as number)<1||(body.limit as number)>50))||
+       (body.kind!==undefined&&!["VOID","ALLOWANCE","ALLOWANCE_VOID"].includes(body.kind as string))||
+       (body.status!==undefined&&!["open","review","closed"].includes(body.status as string)))
+      return response(400,{error:{code:"INVALID_LIST_FILTER"}});
+    let cursor: {createdAt:string;itemId:string}|null=null;
+    if(body.cursor!==undefined){
+      const c=body.cursor;
+      if(!c||typeof c!=="object"||Array.isArray(c))return response(400,{error:{code:"INVALID_LIST_CURSOR"}});
+      const q=c as Record<string,unknown>;
+      if(Object.keys(q).length!==2||!Object.keys(q).every(x=>x==="createdAt"||x==="itemId")||
+         typeof q.createdAt!=="string"||
+         !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(q.createdAt)||
+         typeof q.itemId!=="string"||!/^[a-zA-Z0-9_-]{10,100}$/.test(q.itemId))
+        return response(400,{error:{code:"INVALID_LIST_CURSOR"}});
+      cursor={createdAt:q.createdAt,itemId:q.itemId};
+    }
+    try {
+      const latest=await manager(env,d.employee_authority_state);
+      if(!latest||latest.id!==m.id)return response(409,{error:{code:"AUTHORITY_CHANGED"}});
+      const page=await listWorkItems(env.DB,d.workspace_id,{
+        limit:body.limit===undefined?20:body.limit as number,
+        kind:body.kind as "VOID"|"ALLOWANCE"|"ALLOWANCE_VOID"|undefined,
+        status:body.status as "open"|"review"|"closed"|undefined,
+        beforeCreatedAt:cursor?.createdAt,beforeItemId:cursor?.itemId
+      });
+      const after=await manager(env,d.employee_authority_state);
+      if(!after||after.id!==m.id)return response(409,{error:{code:"AUTHORITY_CHANGED"}});
+      return response(200,page);
+    }catch(error){
+      if(error instanceof Error&&/no such table: work_items/i.test(error.message))
+        return response(503,{error:{code:"WORK_ITEMS_NOT_READY"}});
+      return response(503,{error:{code:"WORK_ITEM_RESULT_UNKNOWN"}});
+    }
+  }
   const itemId = body.itemId;
   if (typeof itemId !== "string" || !/^[a-zA-Z0-9_-]{10,100}$/.test(itemId))
     return response(400,{error:{code:"INVALID_WORK_ITEM"}});

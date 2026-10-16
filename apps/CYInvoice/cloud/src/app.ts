@@ -83,7 +83,7 @@ export default {
       "/v1/devices/revoke", "/v1/devices/rename", "/v1/device-pairings/authorization-email",
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
-      "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/transition",
+      "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/list", "/v1/work-items/transition",
       "/v1/allowance-applications/create", "/v1/allowance-applications/get",
       "/v1/allowance-applications/list", "/v1/allowance-applications/review-preview",
       "/v1/allowance-applications/official-inspection",

@@ -45,6 +45,8 @@
 
 **步驟 5 小提交 5（本輪）：** 原 `SettingsForm`「CYID 公司卡」加入超級管理員明確編輯（臨時簡潔表單，不建新設定系統）。只以 GET 取得 D1 權威統編與版次，雲端金鑰從不預填。空欄 keep、明確勾選才 clear、填新值 replace；二次確認後恰好一次 UpdateAsync。後端 CYID 超管／Device／revision／Audit 保護保持不變；逾時／衝突只讀回最新安全狀態，不自動重送，無本機同步。Core 合成測試加入 keep/clear 及 stale revision。**Draft Source，本輪 CI 須 exact-head 驗證，正式 Cloud 資源未操作。**
 
+**步驟 5 小提交 6（本輪）：** 既有 `work-items` 加管理員**唯讀／分頁**清單：`/v1/work-items/list` 在 CYID Manager 身分與有效 Device／Workspace 內使用不可變 `created_at+work_item_id` keyset，最多 50 筆／頁，僅輸出 work item ID、環境、種類、狀態、revision 與時間；不輸出任何原發票、明細、reference hash、actor 或 secrets。不新增 D1 table/schema/Worker/Cron。Cloud SQLite 合成測試覆蓋 2 頁、權限、惡意範圍與欄位遮蔽。**尚未實作上傳異常事件入庫、`UPLOAD_ISSUE` 類型及 WinForms 來源串接**；此回合不宣稱跨機上傳問題已完成；CI 以 exact HEAD 為準，正式環境不變。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。

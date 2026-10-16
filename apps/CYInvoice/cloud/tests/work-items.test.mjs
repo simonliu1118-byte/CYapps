@@ -130,6 +130,36 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal(created.body.item.status,"open");
   assert.equal(created.body.item.revision,1);
   assert.equal((await call("create",first)).status,409);
+  const second=await call("create",{...first,itemId:"wi_endpoint_second",
+    referenceHash:"b".repeat(64)});
+  assert.equal(second.status,200,JSON.stringify(second));
+  // Manager Work Item listing is limited, cursor-paged, and never leaks
+  // original invoice, arbitrary referenceHash, actor, or Device metadata.
+  assert.equal((await call("list",{limit:51})).status,400);
+  assert.equal((await call("list",{limit:1,workspaceId:"ws_attacker"})).status,400);
+  assert.equal((await call("list",{limit:1,cursor:{createdAt:"not-a-date",itemId:first.itemId}})).status,400);
+  assert.equal((await call("list",{kind:"UPLOAD_ISSUE"})).status,400,
+    "Unimplemented upload issue intake must not be advertised as live");
+  const firstPage=await call("list",{limit:1});
+  assert.equal(firstPage.status,200,JSON.stringify(firstPage));
+  assert.equal(firstPage.body.items.length,1);
+  assert.ok(firstPage.body.nextCursor);
+  const nextPage=await call("list",{limit:1,cursor:firstPage.body.nextCursor});
+  assert.equal(nextPage.status,200,JSON.stringify(nextPage));
+  assert.equal(nextPage.body.items.length,1);
+  assert.equal(nextPage.body.nextCursor,null);
+  assert.notEqual(firstPage.body.items[0].work_item_id,nextPage.body.items[0].work_item_id);
+  for(const entry of [...firstPage.body.items,...nextPage.body.items]){
+    assert.deepEqual(Object.keys(entry).sort(),
+      ["work_item_id","environment","kind","status","revision","created_at","updated_at"].sort());
+    assert.equal(entry.kind,"VOID");
+  }
+  const empty=await call("list",{kind:"ALLOWANCE"});
+  assert.equal(empty.status,200);
+  assert.deepEqual(empty.body.items,[]);
+  permission=false;
+  assert.equal((await call("list",{limit:1})).status,403);
+  permission=true;
   const seen=await call("get",{itemId:first.itemId});
   assert.equal(seen.status,200);
   assert.equal(seen.body.item.environment,"test");

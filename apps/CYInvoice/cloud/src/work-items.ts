@@ -77,3 +77,31 @@ export async function getWorkItem(db: D1Database, workspaceId: string, itemId: s
     FROM work_items WHERE workspace_id = ?1 AND work_item_id = ?2
     LIMIT 1`).bind(workspaceId, itemId).first();
 }
+
+
+// Manager-only, bounded exceptional Work Item index. The original invoices,
+// hashes, actor/device identifiers, templates and secrets are intentionally
+// NOT in the returned projection. This is not a source-of-truth invoice list.
+export async function listWorkItems(db:D1Database,workspaceId:string,options:{
+  kind?:"VOID"|"ALLOWANCE"|"ALLOWANCE_VOID";
+  status?:"open"|"review"|"closed";
+  limit:number; beforeCreatedAt?:string; beforeItemId?:string;
+}){
+  const items=await db.prepare(
+    "SELECT work_item_id,environment,kind,status,revision,created_at,updated_at "+
+    "FROM work_items WHERE workspace_id=?1 "+
+    "AND (?2 IS NULL OR kind=?2) "+
+    "AND ((?3 IS NULL AND status IN ('open','review')) OR status=?3) "+
+    "AND (?4 IS NULL OR created_at<?4 OR (created_at=?4 AND work_item_id<?5)) "+
+    "ORDER BY created_at DESC,work_item_id DESC LIMIT ?6"
+  ).bind(workspaceId,options.kind??null,options.status??null,
+    options.beforeCreatedAt??null,options.beforeItemId??null,
+    options.limit+1).all<{
+      work_item_id:string;environment:string;kind:string;status:string;
+      revision:number;created_at:string;updated_at:string;
+    }>();
+  const page=items.results.slice(0,options.limit);
+  const last=page.at(-1);
+  return {items:page,nextCursor:items.results.length>options.limit&&last?
+    {createdAt:last.created_at,itemId:last.work_item_id}:null};
+}
