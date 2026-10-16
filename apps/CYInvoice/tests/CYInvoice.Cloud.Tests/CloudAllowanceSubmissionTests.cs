@@ -1,3 +1,4 @@
+using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Cloud;
 

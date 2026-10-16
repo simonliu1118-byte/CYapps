@@ -52,7 +52,7 @@ internal sealed class MainForm : Form
     private bool ownsAccountManagement = true;
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
-    private readonly Button cloudAllowanceButton = UiControls.StandardButton("折讓管理") { Visible=false };
+    private readonly Button cloudAllowanceButton = UiControls.StandardButton("折讓管理");
     private readonly Label copyrightLabel = new()
     {
         Text = "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.",
@@ -222,6 +222,7 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(forgotPasswordButton, OpenPasswordRecovery);
         ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
         ConfigureHeaderButton(settingsButton, OpenSettings);
+        cloudAllowanceButton.Visible=false;
         ConfigureHeaderButton(cloudAllowanceButton, OpenCloudAllowanceManager);
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
