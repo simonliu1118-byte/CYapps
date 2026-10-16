@@ -211,6 +211,9 @@ try {
   assert.equal(firstInspection.data.inspection.requiresPerItemVerification,true);
   assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
   assert.deepEqual(firstInspection.data.inspection.allowanceHistory,[]);
+  assert.deepEqual(firstInspection.data.inspection.historicalAllocationChecks,[]);
+  assert.equal(firstInspection.data.inspection.historicalAllocationNotQueriedCount,0);
+  assert.equal(firstInspection.data.inspection.historicalAllocationsComplete,false);
   assert.equal(firstInspection.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
@@ -230,6 +233,48 @@ try {
     expectedRevision:2})).status,403);
   assert.equal(officialCalls,1);
   who={...who,workspaceRole:"ADMIN"};
+  let historicInvoiceCalls=0,historicAllowanceCalls=0;
+  globalThis.fetch=async(url,opts)=>{
+    const data=JSON.parse(new URLSearchParams(opts.body).get("data"));
+    if(url==="https://invoice-api.amego.tw/json/invoice_query"){
+      historicInvoiceCalls++;
+      assert.equal(data.invoice_number,"AB12345678");
+      return Response.json({code:0,data:[{
+        invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:100,
+        allowance:[{allowance_number:"3821061800001",allowance_date:20261015,
+          total_amount:"75",tax_amount:"4",invoice_status:99,cancel_date:0}],
+        product_item:[{description:"Synthetic"}]
+      }]});
+    }
+    assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
+    historicAllowanceCalls++;
+    assert.equal(data.allowance_number,"3821061800001");
+    return Response.json({code:0,data:{
+      allowance_number:"3821061800001",invoice_type:"D0401",
+      invoice_status:99,allowance_date:"20261015",allowance_type:2,
+      cancel_date:0,total_amount:"75",tax_amount:"4",
+      product_item:[
+        {original_invoice_number:"AB12345678",amount:"50",tax:"3"},
+        {original_invoice_number:"XY12345678",amount:"25",tax:"1"}
+      ]
+    }});
+  };
+  const history=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(history.status,200,JSON.stringify(history));
+  assert.equal(historicInvoiceCalls,1,"exactly one original invoice query");
+  assert.equal(historicAllowanceCalls,1,"one known historical allowance");
+  assert.deepEqual(history.data.inspection.historicalAllocationChecks,[{
+    allowanceNumber:"3821061800001",
+    reason:"ALLOCATED_LINES_MATCH_HEADER",lineTotalsVerified:true,
+    originalNet:"50",originalTax:"3",originalGross:"53",
+    safeToInferRemainingBalance:false
+  }]);
+  assert.equal(history.data.inspection.historicalAllocationNotQueriedCount,0);
+  assert.equal(history.data.inspection.historicalAllocationsComplete,false);
+  assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
+  assert.equal(history.data.inspection.canApprove,false);
+  assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
 }finally{globalThis.fetch=originalFetch;}
 
 // Ambiguous g0401 recovery: only the originally D1-reserved number may be

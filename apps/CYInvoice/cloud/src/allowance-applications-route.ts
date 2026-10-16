@@ -539,6 +539,61 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
           existingAllowanceCount:snapshot.existingAllowanceCount,
           officialItems:snapshot.originalProductItems
         },frozen.originalInvoiceNumber,frozen.requestedGrossAmount);
+      // At most three distinct historical allowance numbers, each queried
+      // once and only by the authorized Worker. No approval or balance grant.
+      const checks:{
+        allowanceNumber:string;reason:string;lineTotalsVerified:boolean;
+        originalNet:string|null;originalTax:string|null;originalGross:string|null;
+        safeToInferRemainingBalance:false
+      }[]=[];
+      const examined=new Set<string>();
+      for(const hint of snapshot.allowanceHistory){
+        if(checks.length>=3)break;
+        if(!hint.metadataComplete||hint.uploadStatus!==99||
+           hint.cancelDate!=="0"||!hint.allowanceNumber||
+           examined.has(hint.allowanceNumber))continue;
+        examined.add(hint.allowanceNumber);
+        const verifiedManager=await authority(env).revalidate();
+        const verifiedDevice=await dev(request,env);
+        if(!verifiedManager||verifiedManager.employeeId!==actor.employeeId||
+           !["ADMIN","SUPER_ADMIN"].includes(verifiedManager.workspaceRole)||
+           verifiedDevice?.device_id!==d.device_id)
+          return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+        try{
+          const official=await queryOfficialAllowanceReadOnly({
+            sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+            allowanceNumber:hint.allowanceNumber,
+            originalInvoiceNumber:frozen.originalInvoiceNumber
+          });
+          const snapshotChanged=
+            official.allowanceDay!==hint.allowanceDate||
+            official.uploadStatus!==hint.uploadStatus||
+            String(official.cancelDate)!==hint.cancelDate||
+            official.totalAmount!==hint.totalAmount||
+            official.taxAmount!==hint.taxAmount;
+          const allocation=official.originalAllocation;
+          checks.push({allowanceNumber:hint.allowanceNumber,
+            reason:snapshotChanged?"OFFICIAL_SNAPSHOT_CHANGED":allocation.reason,
+            lineTotalsVerified:!snapshotChanged&&allocation.lineTotalsVerified,
+            originalNet:snapshotChanged?null:allocation.originalNet,
+            originalTax:snapshotChanged?null:allocation.originalTax,
+            originalGross:snapshotChanged?null:allocation.originalGross,
+            safeToInferRemainingBalance:false});
+        }catch{
+          // An unavailable readback is UNKNOWN, not a zero allowance.
+          // Never retry the same provider request automatically.
+          checks.push({allowanceNumber:hint.allowanceNumber,
+            reason:"OFFICIAL_READBACK_UNCONFIRMED",lineTotalsVerified:false,
+            originalNet:null,originalTax:null,originalGross:null,
+            safeToInferRemainingBalance:false});
+        }
+      }
+      const lastAuthority=await authority(env).revalidate();
+      const lastDevice=await dev(request,env);
+      if(!lastAuthority||lastAuthority.employeeId!==actor.employeeId||
+         !["ADMIN","SUPER_ADMIN"].includes(lastAuthority.workspaceRole)||
+         lastDevice?.device_id!==d.device_id)
+        return response(403,{error:{code:"AUTHORITY_CHANGED"}});
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,
@@ -559,6 +614,9 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         requestedGrossAmount:frozen.requestedGrossAmount,
         existingAllowanceCount:snapshot.existingAllowanceCount,
         allowanceHistory:snapshot.allowanceHistory,
+        historicalAllocationChecks:checks,
+        historicalAllocationNotQueriedCount:snapshot.existingAllowanceCount-checks.length,
+        historicalAllocationsComplete:false,
         safeToInferRemainingBalance:false,
         officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
