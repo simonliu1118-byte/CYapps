@@ -1224,6 +1224,11 @@ internal sealed class ItemQueryService
 
         if (NativeMethods.CloseImeFor(focus))
             await Pace.Delay(60, cancellationToken);
+        // Once a date box has been entered it shows the 「    /  /  」 mask and a click can put
+        // the caret on any digit; typing from the second one corrupts the date (user,
+        // 2026-10-16). Home moves the caret to the first digit, whether reached by click or Enter.
+        InputSender.Press(NativeMethods.VK_HOME);
+        await Pace.Delay(60, cancellationToken);
         foreach (var digit in Invq01Layout.ErpDateKeys(date))
         {
             cancellationToken.ThrowIfCancellationRequested();
