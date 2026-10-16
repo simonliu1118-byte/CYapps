@@ -28,9 +28,9 @@ public sealed class FailedInvoiceRecordStore
         foreach (var record in targets)
         {
             if (!string.Equals(record.InvoiceState, InvoiceStates.Failed, StringComparison.Ordinal))
-                throw new InvalidOperationException("只允許刪除開立失敗的本機紀錄");
+                throw new InvalidOperationException("只允許封存開立失敗的本機紀錄");
             if (string.IsNullOrWhiteSpace(record.Id))
-                throw new InvalidDataException("開立失敗紀錄缺少內部識別碼，無法安全刪除");
+                throw new InvalidDataException("開立失敗紀錄缺少內部識別碼，無法安全封存");
         }
 
         using var connection = Open();
@@ -157,7 +157,7 @@ public sealed class FailedInvoiceRecordStore
         var state = reader.GetString(1);
         if (reader.Read()) throw new InvalidDataException($"invoice record ID {recordId} is duplicated");
         if (!string.Equals(state, InvoiceStates.Failed, StringComparison.Ordinal))
-            throw new InvalidOperationException("只允許刪除開立失敗的本機紀錄");
+            throw new InvalidOperationException("只允許封存開立失敗的本機紀錄");
         return localId;
     }
 

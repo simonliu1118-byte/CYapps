@@ -127,6 +127,10 @@ internal static class RetentionTests
         Throws<SqliteException>(()=>repository.Invoices.Save([opened,failed]));
         Equal("opened-keep",repository.Invoices.LoadOrCreate().Single().Id);
         Equal(1,store.AllArchived(Environments.Production,"12345675").Count);
+        var reloadedStore=new FailedInvoiceRecordStore(temporary.Path);
+        Equal("failed-delete",
+            reloadedStore.AllArchived(Environments.Production,"12345675")
+                .Single().Record.Id);
         using var db=OpenReadOnly(Path.Combine(repository.DataDirectory,
             SqliteBootstrapper.DatabaseFileName));
         using var integrity=db.CreateCommand();

@@ -1328,9 +1328,9 @@ internal sealed class SyncIssuesForm : Form
     private bool ConfirmFailedArchive(int count, bool clearAll) => MessageBox.Show(
         this,
         clearAll
-            ? $"確定封存全部 {count} 筆開立失敗紀錄？\\n\\n保留在原 CYInvoice.db，從一般清單移出，不影響光貿。"
-            : $"確定封存勾選的 {count} 筆開立失敗紀錄？\\n\\n保留完整明細，可在封存紀錄查閱。",
-        clearAll ? "封存全部失敗紀錄" : "刪除開立失敗紀錄",
+            ? $"確定封存全部 {count} 筆開立失敗紀錄？\n\n保留在原 CYInvoice.db，從一般清單移出，不影響光貿。"
+            : $"確定封存勾選的 {count} 筆開立失敗紀錄？\n\n保留完整明細，可在封存紀錄查閱。",
+        clearAll ? "封存全部失敗紀錄" : "封存勾選",
         MessageBoxButtons.YesNo,
         MessageBoxIcon.Warning,
         MessageBoxDefaultButton.Button2) == DialogResult.Yes;
@@ -1365,9 +1365,9 @@ internal sealed class SyncIssuesForm : Form
                 x.ArchivedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm")+
                 "｜"+x.Record.Id+"｜"+FriendlyFailureReason(x.Record.ErrorMessage));
             var body=all.Count==0?"目前沒有封存紀錄。":
-                $"共 {all.Count} 筆（顯示最新 15 筆）：\\n"+
-                string.Join("\\n",rows)+
-                "\\n\\n完整發票內容與商品明細仍保留於本機 CYInvoice.db。";
+                $"共 {all.Count} 筆（顯示最新 15 筆）：\n"+
+                string.Join("\n",rows)+
+                "\n\n完整發票內容與商品明細仍保留於本機 CYInvoice.db。";
             MessageBox.Show(this,body,"開立失敗封存紀錄（唯讀）",
                 MessageBoxButtons.OK,MessageBoxIcon.Information);
         }
