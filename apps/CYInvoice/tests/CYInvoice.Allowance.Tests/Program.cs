@@ -542,7 +542,7 @@ static async Task TestPdfCacheAndFingerprintAsync()
     Equal(expectedSign, form["sign"]);
 
     var stored = repository.Invoices.LoadOrCreate().Single();
-    InvoiceAllowanceMetadata.ApplyQuery(stored, [Allowance(UploadStatuses.Processing)]);
+    InvoiceAllowanceMetadata.ApplyQuery(stored, [Allowance(UploadStatuses.Processing)], summaryPresent: true);
     repository.Invoices.Save([stored]);
 
     var third = await service.GetAsync("ALW-001", 0);
