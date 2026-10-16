@@ -333,6 +333,29 @@ internal sealed class AllowanceRequestForm : Form
         control.Focus();
     }
 
+    // Only used by the existing WinForms startup smoke test. Exercise the
+    // real populated grid with an original discount and a prior allowance:
+    // source rows are editable, but the gross cap stays authoritative.
+    internal void VerifySmokeOriginalInvoiceEditing()
+    {
+        if(original is null || products.Rows.Count!=2 || !grossPrices.Checked ||
+           remaining?.ToString()!="148")
+            throw new InvalidOperationException("折讓視窗未帶入原發票與歷史餘額");
+        if(Calculate().Gross.ToString()!="248")
+            throw new InvalidOperationException("原發票商品與折扣金額無法重算");
+        products.Rows.RemoveAt(1); // Employee excludes the original discount.
+        products.Rows[0].Cells["unit_price"].Value="100"; // Employee edits price.
+        if(Calculate().Gross.ToString()!="100" ||
+           Calculate().Gross.ScaledValue>remaining.Value.ScaledValue)
+            throw new InvalidOperationException("折讓價格編輯或總額上限計算有誤");
+        grossPrices.Checked=false;
+        if(Calculate().Gross.ToString()!="100")
+            throw new InvalidOperationException("含稅轉未稅後折讓總額不一致");
+        grossPrices.Checked=true;
+        if(Calculate().Gross.ToString()!="100")
+            throw new InvalidOperationException("切回含稅後折讓總額不一致");
+    }
+
     internal void VerifySmokeLayout()
     {
         if(Text!="折讓申請"||ClientSize.Width!=WindowWidth||

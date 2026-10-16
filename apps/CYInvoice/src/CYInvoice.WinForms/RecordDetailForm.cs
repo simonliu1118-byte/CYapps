@@ -1213,6 +1213,34 @@ internal sealed class RecordDetailForm : Form
         using var allowance = new AllowanceRequestForm();
         allowance.PerformLayout();
         allowance.VerifySmokeLayout();
+
+        // Original gross 330, associated discount -82, prior allowance 100:
+        // users choose their own edited item lines; cap is 248-100=148.
+        var allowanceSource = new InvoiceRecord
+        {
+            InvoiceNumber = "AA12345678",
+            InvoiceDate = "2026/10/15",
+            Amount = 248,
+            DetailVat = 1,
+            Items =
+            [
+                new InvoiceItem { Description="時尚包_大小波點F",
+                    Quantity=1,QuantityDecimal="1",UnitPrice=330,
+                    UnitPriceDecimal="330",Amount=330,TaxType="1" },
+                new InvoiceItem { Description="優惠折扣",
+                    Quantity=1,QuantityDecimal="1",UnitPrice=-82,
+                    UnitPriceDecimal="-82",Amount=-82,TaxType="1" },
+            ],
+        };
+        InvoiceAllowanceMetadata.ApplyQuery(allowanceSource,
+        [
+            new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                "ALW000001", "20261015", "5", "95")
+        ], summaryPresent: true);
+        using var editedAllowance = new AllowanceRequestForm(allowanceSource);
+        editedAllowance.PerformLayout();
+        editedAllowance.VerifySmokeLayout();
+        editedAllowance.VerifySmokeOriginalInvoiceEditing();
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)
