@@ -26,14 +26,20 @@ internal static class Win32Automation
         return forms.Count > 0 ? forms : found;
     }
 
-    /// <summary>Visible SMART ERP main windows (鼎新電腦Conductor), top of the z-order first.</summary>
+    /// <summary>
+    /// Visible SMART ERP main windows (鼎新電腦Conductor), top of the z-order first. Delphi's
+    /// hidden TApplication window carries the same caption but has no size and can never come
+    /// to the front (V0.4.0 LOG, 2026-10-16: 「無法把 ERP 主視窗帶到前景」), so it is skipped,
+    /// as is anything too small to be the main form (a minimized form still counts).
+    /// </summary>
     public static IReadOnlyList<nint> FindErpMainWindows()
     {
         var found = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
             if (NativeMethods.IsWindowVisible(hwnd) && Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd)) &&
-                !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) &&
+                (NativeMethods.IsIconic(hwnd) || NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 300 && r.Height >= 200))
                 found.Add(hwnd);
             return true;
         }, 0);

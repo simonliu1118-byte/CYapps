@@ -124,4 +124,12 @@ public class Invi02LayoutTests
         Assert.Equal(["品名"], rows[1].Select(i => i.Name));
         Assert.Equal(["規格", "定重"], rows[2].Select(i => i.Name));
     }
+
+    [Theory]
+    [InlineData("TApplication", false)]  // Delphi's hidden window with the same caption (V0.4.0 LOG)
+    [InlineData("TMessageForm", false)]
+    [InlineData("#32770", false)]
+    [InlineData("TfrmMain", true)]
+    public void MainWindowClassSkipsHiddenApplicationWindow(string className, bool expected) =>
+        Assert.Equal(expected, Invi02Layout.IsErpMainClass(className));
 }

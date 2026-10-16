@@ -47,6 +47,10 @@ internal static class Invi02Layout
     public static bool IsErpMainTitle(string title) =>
         title.Contains("Conductor", StringComparison.OrdinalIgnoreCase) && !IsInvi02Title(title);
 
+    /// <summary>Not a message box and not Delphi's hidden TApplication window (same caption, no size).</summary>
+    public static bool IsErpMainClass(string className) =>
+        !IsMessageDialogClass(className) && !className.Equals("TApplication", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsQueryDialogTitle(string title) =>
         title.Contains(QueryDialogTitle, StringComparison.Ordinal);
 

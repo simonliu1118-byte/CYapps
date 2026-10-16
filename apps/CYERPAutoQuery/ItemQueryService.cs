@@ -23,6 +23,10 @@ internal sealed class ItemQueryService
     private const int MenuWaitMs = 3000;
     private const int ExportDialogWaitMs = 10000;
     private const int ExportRunWaitMs = 60000;
+    // After any ERP action (確定, a tab, opening a form) ERP rebuilds its windows for a while;
+    // every lookup made right after one polls up to this long instead of looking once
+    // (V0.4.0 LOG, 2026-10-16: 資料瀏覽 looked up 0.1 s after 確定 did not exist yet).
+    private const int AfterActionWaitMs = 10000;
 
     private readonly AppLogger _log;
     private readonly PaddleOcrService _ocr;
@@ -78,13 +82,10 @@ internal sealed class ItemQueryService
         // it was not clicked and the export came from 資料瀏覽 (V0.2.0 Build 1, 2026-10-16).
         // So: wait for 資料瀏覽 first, then always click 基本資料1.
         progress.Report("ERP：切換到基本資料1…");
-        var sheet = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab)
+        var browseSheet = await WaitForTabSheetAsync(root, Invi02Layout.BrowseTab, QuerySettleWaitMs, cancellationToken, visible: true);
+        _log.Info("tab", $"after query 資料瀏覽 shown={browseSheet is { } b && NativeMethods.IsWindowVisible(b.Handle)}");
+        var sheet = await WaitForTabSheetAsync(root, Invi02Layout.ExportTab, AfterActionWaitMs, cancellationToken)
             ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
-        if (Win32Automation.FindTabSheet(root, Invi02Layout.BrowseTab) is { } browseSheet)
-        {
-            var settled = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(browseSheet.Handle), QuerySettleWaitMs, cancellationToken);
-            _log.Info("tab", $"after query 資料瀏覽 shown={settled}");
-        }
         await Pace.Delay(300, cancellationToken);
         await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.ExportTab, sheet.Handle, cancellationToken, force: true);
 
@@ -217,7 +218,18 @@ internal sealed class ItemQueryService
     {
         var mains = Win32Automation.FindErpMainWindows();
         if (mains.Count == 0)
+        {
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (Invi02Layout.IsErpMainTitle(NativeMethods.WindowText(hwnd)))
+                {
+                    NativeMethods.GetWindowRect(hwnd, out var r);
+                    _log.Warn("window", $"main window candidate skipped class={NativeMethods.ClassName(hwnd)} visible={NativeMethods.IsWindowVisible(hwnd)} rect={r.Left},{r.Top},{r.Width}x{r.Height}");
+                }
+                return true;
+            }, 0);
             throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著品號資料建立作業。\n請先登入 ERP。");
+        }
         var main = mains[0];
         _log.Info("window", $"opening INVI02 from main window class={NativeMethods.ClassName(main)} count={mains.Count}");
         if (!NativeMethods.IsWindowEnabled(main))
@@ -375,7 +387,7 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("無法把「設定查詢條件」帶到前景。");
 
         // The dialog remembers the tab used last time (user, 2026-10-16).
-        var sheet = Win32Automation.FindTabSheet(dialog, Invi02Layout.GeneralQueryTab)
+        var sheet = await WaitForTabSheetAsync(dialog, Invi02Layout.GeneralQueryTab, AfterActionWaitMs, cancellationToken)
             ?? throw new InvalidOperationException("「設定查詢條件」找不到「一般選項」頁籤。");
         var pageHandle = NativeMethods.GetParent(sheet.Handle);
         var page = Win32Automation.EnumerateChildren(dialog).FirstOrDefault(c => c.Handle == pageHandle)
@@ -878,6 +890,23 @@ internal sealed class ItemQueryService
         await Pace.Delay(300, cancellationToken);
     }
 
+    /// <summary>
+    /// The tab sheet <paramref name="caption"/> of <paramref name="window"/>, polled until it
+    /// exists (and, with <paramref name="visible"/>, is shown) or the wait ends. Returns the
+    /// sheet if it exists at the end even when not shown, else null.
+    /// </summary>
+    private static async Task<WindowControl?> WaitForTabSheetAsync(nint window, string caption, int timeoutMs, CancellationToken cancellationToken, bool visible = false)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (true)
+        {
+            var sheet = Win32Automation.FindTabSheet(window, caption);
+            if (sheet is not null && (!visible || NativeMethods.IsWindowVisible(sheet.Handle))) return sheet;
+            if (Environment.TickCount64 > deadline) return sheet;
+            await Pace.Delay(100, cancellationToken);
+        }
+    }
+
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, int timeoutMs, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -1027,10 +1056,10 @@ internal sealed class ItemQueryService
 
         progress.Report("ERP：查詢中…");
         await ConfirmQueryAsync(root, dialog, cancellationToken);
-        var browse = Win32Automation.FindTabSheet(root, Invi02Layout.BrowseTab)
-            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.BrowseTab}」。");
-        var settled = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(browse.Handle), QuerySettleWaitMs, cancellationToken);
-        _log.Info("search", $"after query 資料瀏覽 shown={settled}");
+        // ERP rebuilds the form after 確定; 資料瀏覽 appears (and shows) only after a while.
+        var browse = await WaitForTabSheetAsync(root, Invi02Layout.BrowseTab, AfterActionWaitMs, cancellationToken, visible: true)
+            ?? throw new InvalidOperationException($"查詢後 {AfterActionWaitMs / 1000} 秒內找不到 ERP 頁籤「{Invi02Layout.BrowseTab}」。");
+        _log.Info("search", $"after query 資料瀏覽 shown={NativeMethods.IsWindowVisible(browse.Handle)}");
         if (!await HasRecordAsync(root, page, cancellationToken))
         {
             _log.Info("search", $"no match elapsed_ms={watch.ElapsedMilliseconds}");
@@ -1068,15 +1097,22 @@ internal sealed class ItemQueryService
         long since = Environment.TickCount64;
         while (true)
         {
-            var shown = (NativeMethods.ControlText(ResolveHeader(root, page).ItemCode.Handle) ?? string.Empty).Trim();
-            var has = shown.Length > 0;
+            bool? has;
+            try
+            {
+                has = (NativeMethods.ControlText(ResolveHeader(root, page).ItemCode.Handle) ?? string.Empty).Trim().Length > 0;
+            }
+            catch (InvalidOperationException)
+            {
+                has = null; // the header is being rebuilt; look again
+            }
             if (has != last)
             {
                 last = has;
                 since = Environment.TickCount64;
             }
-            else if (Environment.TickCount64 - since >= EmptyRecordStableMs) return has;
-            if (Environment.TickCount64 > deadline) return has;
+            else if (has is { } stable && Environment.TickCount64 - since >= EmptyRecordStableMs) return stable;
+            if (Environment.TickCount64 > deadline) return has ?? throw new InvalidOperationException("查詢後讀不到 ERP 表頭，請人工確認 ERP 畫面。");
             await Pace.Delay(100, cancellationToken);
         }
     }
@@ -1227,7 +1263,7 @@ internal sealed class ItemQueryService
             if (!Win32Automation.PrepareForeground(invq, _log))
                 throw new InvalidOperationException("無法把庫存狀況查詢作業帶到前景。");
             await WaitInvq01ItemAsync(invq, code, cancellationToken);
-            var page = FindInvq01PageControl(invq);
+            var page = await FindInvq01PageControlAsync(invq, cancellationToken);
 
             if (batches)
             {
@@ -1300,9 +1336,11 @@ internal sealed class ItemQueryService
     /// sheet only when its tab is first shown (V0.3.0 LOG, 2026-10-16: only 查各庫庫存量 existed),
     /// so the page is found through any sheet that does exist.
     /// </summary>
-    private WindowControl? FindInvq01PageControl(nint invq)
+    private async Task<WindowControl?> FindInvq01PageControlAsync(nint invq, CancellationToken cancellationToken)
     {
-        var sheet = Invq01Layout.Tabs.Order.Select(t => Win32Automation.FindTabSheet(invq, t)).FirstOrDefault(t => t is not null);
+        WindowControl? sheet = null;
+        await WaitUntilAsync(() => (sheet = Invq01Layout.Tabs.Order.Select(t => Win32Automation.FindTabSheet(invq, t)).FirstOrDefault(t => t is not null)) is not null,
+            AfterActionWaitMs, cancellationToken);
         if (sheet is null)
         {
             _log.Warn("invq01", "INVQ01 tab sheets not found as windows; tabs are found by OCR");
