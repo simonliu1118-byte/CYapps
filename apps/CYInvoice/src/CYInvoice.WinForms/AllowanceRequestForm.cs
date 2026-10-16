@@ -198,7 +198,7 @@ internal sealed class AllowanceRequestForm : Form
             return;
         }
         var kind=taxKind switch {"2"=>"零稅率","3"=>"免稅",_=>"應稅"};
-        products.Rows.Add(name,quantity,price,kind,"","",null);
+        products.Rows.Add(name,quantity,price,kind,"","","");
         UpdateTotals();
     }
 
