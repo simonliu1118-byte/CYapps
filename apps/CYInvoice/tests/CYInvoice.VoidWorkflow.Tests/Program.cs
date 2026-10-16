@@ -22,6 +22,7 @@ var tests = new (string Name, Action Run)[]
     ("reviewed cancel reason format uses reviewer requester and reason", TestReviewedCancelReasonFormat),
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
+    ("original employee may withdraw Local manual allowance before completion", () => AllowanceWorkflowTests.OriginalApplicantWithdrawsManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
     ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),

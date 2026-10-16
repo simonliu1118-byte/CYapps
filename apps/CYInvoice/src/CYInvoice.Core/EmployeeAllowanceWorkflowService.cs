@@ -44,6 +44,7 @@ public sealed class EmployeeAllowanceWorkflowService
 {
     private const string ManualReviewMetadataKey = "cyinvoice_allowance_manual_review";
     private const string HandledReviewMetadataKey = "cyinvoice_allowance_handled_review";
+    private const string WithdrawnReviewMetadataKey = "cyinvoice_allowance_withdrawn_review";
     private const string PendingMetadataKey = "cyinvoice_allowance_pending";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncRepository syncRepository;
@@ -275,6 +276,48 @@ public sealed class EmployeeAllowanceWorkflowService
         ClearPending(record);
         syncRepository.UpsertMany([record]);
         issueStore.Resolve(issue.Id, now());
+    }
+
+    // Applicant-only Local retraction of a not-yet-handled manual request.
+    // Retain the review and withdrawal as non-secret local audit metadata,
+    // and resolve the outstanding issue rather than deleting its history.
+    public void WithdrawManualReview(
+        InvoiceRecord selected,string employeeNo,string password)
+    {
+        ArgumentNullException.ThrowIfNull(selected);
+        var employee=EmployeeOperationAuthentication.AuthenticateEmployee(
+            repository,employeeNo,password,now());
+        var record=Reload(selected);
+        ValidateCurrentAccount(record);
+        var review=ReadManualReview(record)
+            ?? throw new InvalidOperationException("原發票沒有待撤銷的折讓申請");
+        if(!string.Equals(review.RequesterEmployeeNo,employee.EmployeeNo,
+            StringComparison.Ordinal))
+            throw new UnauthorizedAccessException("只有原申請員工本人可以撤銷折讓申請");
+        if(review.AwaitingConfirmation||HasPendingMarker(record))
+            throw new InvalidOperationException(
+                "管理員已完成折讓操作並等待光貿確認，不能由員工撤銷");
+        var invoiceNumber=record.InvoiceNumber.Trim();
+        var orderId=EffectiveOrderId(record);
+        var issues=issueStore.Unresolved(CurrentAccountKey())
+            .Where(item=>item.IssueType==InvoiceAllowanceIssueTypes.ManualReview)
+            .Where(item=>
+                (invoiceNumber.Length>0&&string.Equals(item.InvoiceNumber.Trim(),
+                    invoiceNumber,StringComparison.OrdinalIgnoreCase))||
+                (orderId.Length>0&&string.Equals(item.OrderId.Trim(),
+                    orderId,StringComparison.Ordinal)))
+            .ToArray();
+        if(issues.Length!=1)
+            throw new InvalidDataException("折讓待辦紀錄不唯一，不能自行撤銷");
+        record.ExtensionData??=new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData[WithdrawnReviewMetadataKey]=JsonSerializer.SerializeToElement(new{
+            Review=review,WithdrawnByEmployeeNo=employee.EmployeeNo,
+            WithdrawnUtc=now().ToUniversalTime()
+        });
+        ClearManualReview(record);
+        ClearPending(record);
+        syncRepository.UpsertMany([record]);
+        issueStore.Resolve(issues[0].Id,now());
     }
 
     public async Task<InvoiceAllowanceReconcileResult> ReconcilePendingAsync(

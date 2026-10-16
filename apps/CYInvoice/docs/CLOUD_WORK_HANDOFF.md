@@ -5,7 +5,7 @@
 
 ## 2026-10-16 原申請員工撤回未核准折讓（CYID Cloud Draft）
 
-新增到既有 `allowance-applications/withdraw`，不造第二套 Work Item。只開放**原本提出申請的 CYID Employee ID 本人**（即使其他人是 ADMIN 也不能代撤）；可撤銷 open 或 review，但只要已存在任何核准 Grant 或配號 Ledger 紀錄，絕對不能員工自行撤銷。伺服端於同一 D1 UPDATE 核對申請 owner、當次 Workspace／環境、active Device、Work Item revision、凍結來源 hash 和 grant／ledger 不存在；成功把原 Work Item closed 並留下新的 immutable `withdrawn_by_actor_id`／`withdrawn_at`，不刪除加密申請、Audit 或折讓號，也不呼叫任何官方 API。Windows 現有發票明細提供撤銷按鈕並重新驗證員工；結果不明只能查原 ID，不自動重送。新增欄位僅在未部署的 Draft 0015，原 D1 不受影響；合成測試及跨實機驗收仍須按最新 HEAD 確認。
+新增到既有 `allowance-applications/withdraw`，不造第二套 Work Item。只開放**原本提出申請的 CYID Employee ID 本人**（即使其他人是 ADMIN 也不能代撤）；可撤銷 open 或 review，但只要已存在任何核准 Grant 或配號 Ledger 紀錄，絕對不能員工自行撤銷。伺服端於同一 D1 UPDATE 核對申請 owner、當次 Workspace／環境、active Device、Work Item revision、凍結來源 hash 和 grant／ledger 不存在；成功把原 Work Item closed 並留下新的 immutable `withdrawn_by_actor_id`／`withdrawn_at`，不刪除加密申請、Audit 或折讓號，也不呼叫任何官方 API。Windows 現有發票明細提供撤銷按鈕並重新驗證員工；結果不明只能查原 ID，不自動重送。新增欄位僅在未部署的 Draft 0015，原 D1 不受影響；Local 模式同步新增原申請者可自行撤回尚未由管理員完成的人工待辦，保留原申請、撤回員工與時間，已進入官方確認的待辦仍禁止撤回；合成測試及跨實機驗收須按最新 HEAD 確認。
 
 ## 2026-10-16 CYID 跨機折讓送審：共享 D1、兩台裝置、真路由合成案例（Draft）
 

@@ -41,6 +41,46 @@ internal static class AllowanceWorkflowTests
         Equal(null, issue.ResolvedUtc);
     }
 
+    public static async Task OriginalApplicantWithdrawsManualReviewAsync()
+    {
+        using var temporary=new AllowanceTemporaryDirectory();
+        var setup=CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record,"3015","Employee1",
+            "員工本人提出",50);
+        var issue=AllowanceIssue(setup.Repository);
+        Throws<UnauthorizedAccessException>(()=>setup.Workflow.WithdrawManualReview(
+            setup.Record,"2000","AdminPass1"));
+        Throws<InvalidOperationException>(()=>setup.Workflow.WithdrawManualReview(
+            setup.Record,"3015","incorrect-password"));
+        Equal(null,issue.ResolvedUtc);
+        Equal(true,setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
+
+        setup.Workflow.WithdrawManualReview(setup.Record,"3015","Employee1");
+        var stored=setup.Repository.Invoices.LoadOrCreate().Single();
+        Equal(null,setup.Workflow.ManualReviewFor(stored));
+        Equal(false,HasPending(stored));
+        Equal(true,stored.ExtensionData!.ContainsKey(
+            "cyinvoice_allowance_withdrawn_review"));
+        var audit=stored.ExtensionData["cyinvoice_allowance_withdrawn_review"];
+        Equal("3015",audit.GetProperty("WithdrawnByEmployeeNo").GetString());
+        Equal("員工本人提出",audit.GetProperty("Review").GetProperty("Reason").GetString());
+        Equal(true,new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
+            .All(AccountKey()).Single(x=>x.Id==issue.Id).ResolvedUtc is not null);
+        Equal(1,setup.Gateway.QueryCalls);
+        Equal(0,setup.Gateway.VoidCalls);
+        Throws<InvalidOperationException>(()=>setup.Workflow.WithdrawManualReview(
+            setup.Record,"3015","Employee1"));
+
+        // User can submit a new, independent request after explicit withdrawal.
+        setup.Gateway.Queries.Enqueue(Query());
+        var next=await setup.Workflow.SubmitAsync(setup.Record,
+            "3015","Employee1","重提申請",20);
+        Equal(false,next.AlreadyQueued);
+        Equal(20L,next.Review.TaxInclusiveAmount);
+    }
+
     public static async Task AdministratorCancelsManualReviewAsync()
     {
         using var temporary = new AllowanceTemporaryDirectory();

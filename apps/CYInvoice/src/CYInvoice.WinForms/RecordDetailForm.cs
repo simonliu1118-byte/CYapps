@@ -448,8 +448,7 @@ internal sealed class RecordDetailForm : Form
 
     private async Task WithdrawAllowanceAsync()
     {
-        if(allowanceBusy||voidBusy||!CloudAllowanceSubmissionService.HasPending(record))
-            return;
+        if(allowanceBusy||voidBusy)return;
         using var login=new EmployeeAdminLoginForm(repository,
             "撤銷折讓申請－原申請員工驗證",
             administratorRequired:false,collectCredentialsOnly:true);
@@ -464,12 +463,25 @@ internal sealed class RecordDetailForm : Form
         SetAllowanceBusy(true);
         try
         {
-            var result=await new CloudAllowanceSubmissionService(repository)
-                .WithdrawAsync(record,login.EnteredEmployeeNo,
-                    login.AuthenticatedPassword,previewCancellation.Token);
-            MessageBox.Show(this,"已撤銷原折讓申請。\n\nWork Item："+result.ItemId+
-                "\n原申請已結案，不會向光貿送出折讓。",
-                "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            var settings=repository.Settings.LoadOrCreate();
+            if(settings.CloudMode==CloudModes.LocalOnly)
+            {
+                allowanceWorkflow.WithdrawManualReview(record,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                MessageBox.Show(this,
+                    "已撤銷本機折讓申請，原申請及撤銷人紀錄保留備查。"+
+                    "\n沒有呼叫光貿開立或作廢 API。",
+                    "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            else
+            {
+                var result=await new CloudAllowanceSubmissionService(repository)
+                    .WithdrawAsync(record,login.EnteredEmployeeNo,
+                        login.AuthenticatedPassword,previewCancellation.Token);
+                MessageBox.Show(this,"已撤銷原折讓申請。\n\nWork Item："+result.ItemId+
+                    "\n原申請已結案，不會向光貿送出折讓。",
+                    "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
             DialogResult=DialogResult.OK;
             Close();
         }
@@ -530,9 +542,12 @@ internal sealed class RecordDetailForm : Form
 
         allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
         var cfg=repository.Settings.LoadOrCreate();
-        withdrawAllowance.Visible=cfg.CloudMode==CloudModes.CloudPreferred &&
-            cfg.CloudIdentityProvider=="CYID" &&
-            CloudAllowanceSubmissionService.HasPending(record);
+        withdrawAllowance.Visible=
+            (cfg.CloudMode==CloudModes.CloudPreferred &&
+             cfg.CloudIdentityProvider=="CYID" &&
+             CloudAllowanceSubmissionService.HasPending(record)) ||
+            (cfg.CloudMode==CloudModes.LocalOnly &&
+             allowanceReview is {AwaitingConfirmation:false});
         withdrawAllowance.Enabled=withdrawAllowance.Visible && !operationBusy;
         if (allowanceBusy)
         {

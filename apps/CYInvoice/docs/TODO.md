@@ -20,7 +20,7 @@
 
 - [x] **CYID 跨機折讓送審真實路由合成驗證（Draft，待 exact-head CI）**：擴充既有 `cloud/tests/allowance-applications.test.mjs`，由 Device A／CYID USER 建立 frozen ALLOWANCE 申請，Device B／另一組 Token 經現有 `/v1/work-items/transition` 送到 review，核對 USER 無權送審、revoked manager Device 無權操作、重送舊 revision 得 409、Manager B 與原裝置讀到同一 Work Item、送審不配號也不呼叫光貿；不再以測試直接更新 SQL 模擬送審。只測共享隔離 SQLite 模型，無正式 D1 migration／Worker 部署／光貿 mutation。
 
-- [x] **折讓原申請人撤回（CYID Cloud Draft）**：一般 USER／ADMIN／SUPER_ADMIN 都只能以當次 CYID 原申請 Employee ID 撤銷「自己」尚未核准的折讓，支援 `open`、`review`（未核准）。`withdraw` API 經原 Device Token、原 Workspace／環境、本人 CYID 身分重新驗證，使用 D1 單一原子 UPDATE 同時檢查 Work Item revision、凍結申請 owner、Device active、**不存在任何 manager approval 或 allowance_number_ledger**，再寫 `closed`＋`withdrawn_by_actor_id`／`withdrawn_at`，留下不可變稽核紀錄；不刪凍結申請、不改官方折讓、不呼叫 g0401／g0501。Windows 發票明細新增「撤銷折讓申請」並提示重驗與不可撤銷階段，失聯只能以原 ID readback、不重送。Schema 僅在未上線的 0015 Draft 更新；合成跨 Device 本人／非本人／撤銷／管理員核准後拒絕／撤銷後不可再覆核測試待 exact-head CI。Local 人工折讓的申請者撤回另待處理；真 D1 尚未 migration。
+- [x] **折讓原申請人撤回（CYID Cloud Draft）**：一般 USER／ADMIN／SUPER_ADMIN 都只能以當次 CYID 原申請 Employee ID 撤銷「自己」尚未核准的折讓，支援 `open`、`review`（未核准）。`withdraw` API 經原 Device Token、原 Workspace／環境、本人 CYID 身分重新驗證，使用 D1 單一原子 UPDATE 同時檢查 Work Item revision、凍結申請 owner、Device active、**不存在任何 manager approval 或 allowance_number_ledger**，再寫 `closed`＋`withdrawn_by_actor_id`／`withdrawn_at`，留下不可變稽核紀錄；不刪凍結申請、不改官方折讓、不呼叫 g0401／g0501。Windows 發票明細新增「撤銷折讓申請」並提示重驗與不可撤銷階段，失聯只能以原 ID readback、不重送。Schema 僅在未上線的 0015 Draft 更新；合成跨 Device 本人／非本人／撤銷／管理員核准後拒絕／撤銷後不可再覆核測試待 exact-head CI。Local 亦新增原申請員工驗證後可撤回未進入光貿確認階段的人工待辦；保留原申請與撤銷人時間在本機 metadata，原問題單標為已解決，不變更官方狀態。真 D1 尚未 migration。
 
 ### 已合入此 Draft 分支的功能（尚未上線）
 
