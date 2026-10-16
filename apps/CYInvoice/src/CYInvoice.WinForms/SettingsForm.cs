@@ -18,6 +18,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox moPassword = UiControls.TextBox(200);
     private readonly Button cloudSettings = UiControls.StandardButton("雲端連線設定");
     private readonly Button deviceManagement = UiControls.StandardButton("裝置管理");
+    private readonly Button companyCard = UiControls.StandardButton("CYID 公司卡");
     private readonly Button localReset = UiControls.StandardButton("重設本機資料");
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
@@ -119,13 +120,18 @@ internal sealed class SettingsForm : Form
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.Controls.Add(test, 0, 0);
         environmentLayout.SetColumnSpan(test, 3);
         environmentLayout.Controls.Add(production, 0, 1);
-        environmentLayout.SetColumnSpan(production, 3);
+        environmentLayout.SetColumnSpan(production, 2);
+        companyCard.Width = 116;
+        companyCard.Margin = Padding.Empty;
+        companyCard.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+        companyCard.Click += async (_, _) => await ShowCompanyCardAsync();
+        environmentLayout.Controls.Add(companyCard, 2, 1);
         invoiceLabel = FieldLabel("統編");
         appKeyLabel = FieldLabel("App Key");
         environmentLayout.Controls.Add(invoiceLabel, 1, 2);
@@ -245,6 +251,55 @@ internal sealed class SettingsForm : Form
         UpdateCloudControls();
     }
 
+    // CYID Cloud card is authoritative in D1, not the local invoice/AppKey
+    // textboxes. Only safe metadata is returned; secrets never leave Cloud.
+    private async Task ShowCompanyCardAsync()
+    {
+        if (resetFlowBusy || !companyCard.Enabled) return;
+        using var login = new EmployeeAdminLoginForm(repository,
+            "CYID 公司卡－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        companyCard.Enabled = false;
+        try
+        {
+            var current = repository.Settings.LoadOrCreate();
+            if (current.CloudMode != CloudModes.CloudPreferred ||
+                current.CloudIdentityProvider != "CYID" ||
+                !current.CloudEmployeeAuthorityReady ||
+                !HasCloudIdentity(current) ||
+                string.IsNullOrWhiteSpace(current.CloudBaseUrl))
+                throw new InvalidOperationException("請先完成 CYID 雲端加入與驗證。");
+            var token = repository.Settings.CloudDeviceToken(current);
+            if (string.IsNullOrWhiteSpace(token))
+                throw new InvalidOperationException("找不到有效的 CYID Cloud Device 身分。");
+            using var http = new HttpClient();
+            var client = new CloudCompanySettingsClient(http,
+                new Uri(current.CloudBaseUrl, UriKind.Absolute), token);
+            var card = await client.GetAsync(login.EnteredEmployeeNo,
+                login.AuthenticatedPassword);
+            var message = card is null
+                ? "此 Workspace 尚未建立公司設定卡。"
+                : $"公司統編：{card.SellerInvoice}\n設定版次：{card.Revision}\n"+
+                  $"光貿 App Key：{(card.HasAmegoAppKey ? "已設定" : "尚未設定")}\n"+
+                  $"MO店+ 密碼：{(card.HasMoExcelPassword ? "已設定" : "尚未設定")}";
+            MessageBox.Show(this, message +
+                "\n\n此處只查詢雲端狀態，不顯示金鑰或修改設定。"+
+                "\n本機欄位不會自動覆蓋 CYID 公司卡。",
+                "CYID 公司卡（唯讀）",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this,
+                "目前無法確認 CYID 公司卡狀態：" + error.Message +
+                "\n本機與雲端設定均未變更。",
+                "公司設定查詢未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if (!IsDisposed && !Disposing) UpdateCloudControls();
+        }
+    }
+
     private async Task OpenDeviceManagementAsync()
     {
         try
@@ -354,6 +409,7 @@ internal sealed class SettingsForm : Form
         modeGroup.Text = settings.CloudIdentityProvider == "CYID" ? "運作模式（CYID）" : "運作模式";
         cloudSettings.Visible = cloudMode.Checked;
         deviceManagement.Visible = cloudMode.Checked;
+        companyCard.Visible = cloudMode.Checked;
         localReset.Visible = localMode.Checked && settings.CloudMode == CloudModes.LocalOnly;
         cloudSettings.Enabled = cloudMode.Checked && !resetFlowBusy;
         deviceManagement.Enabled = cloudMode.Checked
@@ -362,6 +418,12 @@ internal sealed class SettingsForm : Form
             && settings.CloudEmployeeAuthorityReady
             && HasCloudIdentity(settings)
             && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
+        companyCard.Enabled = cloudMode.Checked && !resetFlowBusy &&
+            settings.CloudMode == CloudModes.CloudPreferred &&
+            settings.CloudIdentityProvider == "CYID" &&
+            settings.CloudEmployeeAuthorityReady &&
+            HasCloudIdentity(settings) &&
+            !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
         localReset.Enabled = localReset.Visible && !resetFlowBusy;
         save.Enabled = !resetFlowBusy;
         cancel.Enabled = !resetFlowBusy;
@@ -594,6 +656,9 @@ internal sealed class SettingsForm : Form
         if (settings.MoPasswordEncrypted.Length == 0 && moPassword.PlaceholderText != "尚未設定")
             throw new InvalidOperationException("未設定 MO店+ 密碼提示文字不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
+            environmentLayout.GetPositionFromControl(companyCard).Row != 1 ||
+            environmentLayout.GetPositionFromControl(companyCard).Column != 2 ||
+            environmentLayout.GetColumnSpan(production) != 2 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
             invoiceLabel.AutoEllipsis || appKeyLabel.AutoEllipsis)
@@ -612,9 +677,13 @@ internal sealed class SettingsForm : Form
             deviceManagement.PreferredSize.Width > deviceManagement.Width ||
             localReset.PreferredSize.Width > localReset.Width ||
             diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
-            deviceManagement.Text != "裝置管理" || localReset.Text != "重設本機資料" ||
+            deviceManagement.Text != "裝置管理" || companyCard.Text != "CYID 公司卡" ||
+            localReset.Text != "重設本機資料" ||
             localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
-            cloudSettings.Visible != cloudMode.Checked || deviceManagement.Visible != cloudMode.Checked ||
+            cloudSettings.Visible != cloudMode.Checked ||
+            deviceManagement.Visible != cloudMode.Checked ||
+            companyCard.Visible != cloudMode.Checked ||
+            companyCard.Enabled != expectedDeviceManagementEnabled ||
             localReset.Visible != expectedLocalResetVisible ||
             cloudSettings.Enabled != cloudMode.Checked ||
             deviceManagement.Enabled != expectedDeviceManagementEnabled ||
