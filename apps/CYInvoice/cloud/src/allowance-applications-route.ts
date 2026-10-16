@@ -558,6 +558,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         officialInvoiceGross:snapshot.totalAmount,
         requestedGrossAmount:frozen.requestedGrossAmount,
         existingAllowanceCount:snapshot.existingAllowanceCount,
+        allowanceHistory:snapshot.allowanceHistory,
+        safeToInferRemainingBalance:false,
         officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
         ...flags,

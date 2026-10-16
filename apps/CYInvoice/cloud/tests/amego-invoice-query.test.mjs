@@ -40,6 +40,8 @@ const snapshot=await query(request,transport(),()=>dt);
 assert.equal(snapshot.uploadStatus,99);
 assert.equal(snapshot.allowanceSummaryPresent,true);
 assert.equal(snapshot.existingAllowanceCount,0);
+assert.deepEqual(snapshot.allowanceHistory,[]);
+assert.equal(snapshot.safeToInferRemainingBalance,false);
 assert.equal(snapshot.totalAmount,100);
 assert.equal(snapshot.productItemsPresent,true);
 assert.equal(snapshot.canApprove,false);
@@ -70,6 +72,31 @@ const existing=await query(request,transport({code:0,data:[{
  allowance:[{allowance_number:"A20261015001"}]}]}),()=>dt);
 assert.equal(existing.existingAllowanceCount,1);
 assert.equal(existing.canApprove,false);
+assert.deepEqual(existing.allowanceHistory,[{
+  allowanceNumber:"A20261015001",allowanceDate:null,totalAmount:null,
+  taxAmount:null,uploadStatus:null,cancelDate:null,metadataComplete:false
+}],"Partial official allowance summary is NOT zero or a verified balance");
+assert.equal(existing.safeToInferRemainingBalance,false);
+const history=await query(request,transport({code:0,data:[{
+ invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:200,
+ allowance:[{allowance_number:"A20261015001",allowance_date:20261015,
+   total_amount:"50",tax_amount:"3",invoice_status:99,cancel_date:0},
+  {allowance_number:"3821061800001",allowance_date:20261015,
+   total_amount:"15",tax_amount:"1",invoice_status:91,cancel_date:20261016}]
+}]}),()=>dt);
+assert.equal(history.existingAllowanceCount,2);
+assert.deepEqual(history.allowanceHistory.map(x=>x.metadataComplete),[true,true]);
+assert.equal(history.allowanceHistory[1].cancelDate,"20261016");
+assert.equal(history.safeToInferRemainingBalance,false,
+  "Even fully populated summary amounts may include other original invoices");
+const ambiguousHistory=await query(request,transport({code:0,data:[{
+ invoice_number:"AB12345678",status:99,cancel_date:0,total_amount:200,
+ allowance:[{allowance_number:"A20261015001",allowance_date:"20261345",
+  total_amount:"-50",invoice_status:"not-known",cancel_date:null}]
+}]}),()=>dt);
+assert.equal(ambiguousHistory.allowanceHistory[0].metadataComplete,false);
+assert.equal(ambiguousHistory.allowanceHistory[0].totalAmount,null);
+assert.equal(ambiguousHistory.allowanceHistory[0].cancelDate,null);
 for(const [scenario,body,code] of [
  ["wrong invoice",{code:0,data:[{...response.data[0],invoice_number:"XY12345678"}]},
   /INVOICE_MISMATCH/],

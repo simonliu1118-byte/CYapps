@@ -2,6 +2,18 @@
 // The documented AMEGO wire protocol requires MD5(data + time + AppKey);
 // this MD5 is for interoperability only, NOT password storage or generic MAC.
 // No issue, cancellation, allowance approval, number reservation, or retry.
+// These are unverified *summary* fields from invoice_query allowance[].
+// In particular, total_amount may span multiple original invoices. Never
+// infer the original-invoice remaining allowance balance from these rows.
+export interface OfficialAllowanceHistorySummary {
+  allowanceNumber:string|null;
+  allowanceDate:string|null;
+  totalAmount:string|null;
+  taxAmount:string|null;
+  uploadStatus:number|null;
+  cancelDate:string|null;
+  metadataComplete:boolean;
+}
 export interface OfficialInvoiceSnapshot {
   invoiceNumber: string;
   uploadStatus: number;
@@ -16,6 +28,8 @@ export interface OfficialInvoiceSnapshot {
   originalProductItems: unknown;
   allowanceSummaryPresent: boolean;
   existingAllowanceCount: number;
+  allowanceHistory: OfficialAllowanceHistorySummary[];
+  safeToInferRemainingBalance: false;
   productItemsPresent: boolean;
   checkedAtUtc: string;
   snapshotSha256: string;
@@ -84,6 +98,48 @@ function number(v:unknown):number|null {
   const n=Number(s);
   return Number.isSafeInteger(n)&&n>=0?n:null;
 }
+// The official invoice_query summary does not necessarily say which original
+// invoice each allowance amount belongs to. Missing/malformed optional fields
+// become NULL, never numeric zero or "not cancelled".
+function historyAmount(x:unknown):string|null {
+  if(typeof x!=="string"&&typeof x!=="number")return null;
+  const s=String(x);
+  return /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$/.test(s)?s:null;
+}
+function historyDate(x:unknown,allowZero=false):string|null {
+  if(typeof x!=="string"&&typeof x!=="number")return null;
+  const s=String(x);
+  if(allowZero&&s==="0")return "0";
+  if(!/^[0-9]{8}$/.test(s))return null;
+  const y=Number(s.slice(0,4)),m=Number(s.slice(4,6)),d=Number(s.slice(6));
+  const date=new Date(Date.UTC(y,m-1,d));
+  return date.getUTCFullYear()===y&&date.getUTCMonth()+1===m&&
+    date.getUTCDate()===d?s:null;
+}
+export function summarizeOfficialAllowanceHistory(value:unknown):
+  OfficialAllowanceHistorySummary[] {
+  if(!Array.isArray(value)||value.length>50)
+    throw new Error("OFFICIAL_ALLOWANCE_HISTORY_UNVERIFIED");
+  return value.map(raw=>{
+    if(!raw||typeof raw!=="object"||Array.isArray(raw))
+      return {allowanceNumber:null,allowanceDate:null,totalAmount:null,
+        taxAmount:null,uploadStatus:null,cancelDate:null,metadataComplete:false};
+    const row=raw as Record<string,unknown>;
+    const id=typeof row.allowance_number==="string" &&
+      /^[a-zA-Z0-9]{1,16}$/.test(row.allowance_number)?
+      row.allowance_number:null;
+    const allowanceDate=historyDate(row.allowance_date);
+    const totalAmount=historyAmount(row.total_amount);
+    const taxAmount=historyAmount(row.tax_amount);
+    const status=number(row.invoice_status);
+    const cancelDate=historyDate(row.cancel_date,true);
+    return {allowanceNumber:id,allowanceDate,totalAmount,taxAmount,
+      uploadStatus:status,cancelDate,
+      metadataComplete:id!==null&&allowanceDate!==null&&
+        totalAmount!==null&&taxAmount!==null&&status!==null&&cancelDate!==null};
+  });
+}
+
 async function limitedText(res:Response):Promise<string>{
   const length=Number(res.headers.get("content-length"));
   if(length>262144)throw new Error("OFFICIAL_QUERY_RESPONSE_TOO_LARGE");
@@ -163,6 +219,10 @@ export async function queryOfficialInvoiceReadOnly(
   if(status===null||cancel===null||gross===null ||
      (!allowanceSummaryPresent && record.allowance!==undefined && record.allowance!==null))
     throw new Error("OFFICIAL_QUERY_INCOMPLETE");
+  // This parsing supplies only a manual-review summary. It cannot prove
+  // tax basis, actual allocated amount, or any available refund balance.
+  const allowanceHistory=allowanceSummaryPresent?
+    summarizeOfficialAllowanceHistory(record.allowance):[];
   const productItemsPresent=Array.isArray(record.product_item);
   const digest=await crypto.subtle.digest("SHA-256",
     new Uint8Array(encoder.encode(JSON.stringify(record))));
@@ -175,7 +235,8 @@ export async function queryOfficialInvoiceReadOnly(
     invoiceTaxAmount:record.tax_amount??null,
     originalProductItems:record.product_item??null,
     allowanceSummaryPresent,
-    existingAllowanceCount:allowanceSummaryPresent?(record.allowance as unknown[]).length:0,
+    existingAllowanceCount:allowanceHistory.length,allowanceHistory,
+    safeToInferRemainingBalance:false,
     productItemsPresent,checkedAtUtc:clock.toISOString(),snapshotSha256,
     originalItemsAndRequestFullyVerified:false,canApprove:false};
 }

@@ -210,6 +210,8 @@ try {
   assert.equal(firstInspection.data.inspection.status,"OFFICIAL_READ_ONLY_NOT_APPROVED");
   assert.equal(firstInspection.data.inspection.requiresPerItemVerification,true);
   assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
+  assert.deepEqual(firstInspection.data.inspection.allowanceHistory,[]);
+  assert.equal(firstInspection.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
   assert.equal(firstInspection.data.inspection.officialPendingMutation,false);
