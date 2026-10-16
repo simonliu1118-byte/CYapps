@@ -369,13 +369,13 @@ public sealed class CloudAllowanceApplicationClient
             if(raw.ValueKind!=JsonValueKind.Object||raw.EnumerateObject().Count()!=7)
                 throw new InvalidDataException("Unexpected historical allocation fields.");
             var number=Required(raw,"allowanceNumber");
-            var reason=Required(raw,"reason");
+            var allocationReason=Required(raw,"reason");
             var verified=Boolean(raw,"lineTotalsVerified");
             var safe=Boolean(raw,"safeToInferRemainingBalance");
             if(safe||!checkIds.Add(number)||
                !history.Any(h=>h.AllowanceNumber==number &&
                    h.MetadataComplete&&h.UploadStatus==99&&h.CancelDate=="0")||
-               reason is not ("ALLOCATED_LINES_MATCH_HEADER" or
+               allocationReason is not ("ALLOCATED_LINES_MATCH_HEADER" or
                    "ITEM_AMOUNTS_UNVERIFIED" or "HEADER_TOTALS_MISMATCH" or
                    "ORIGINAL_INVOICE_NOT_IN_ITEMS" or
                    "OFFICIAL_STATUS_NOT_EFFECTIVE" or
@@ -386,19 +386,19 @@ public sealed class CloudAllowanceApplicationClient
                 @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
             var tax=TextField(raw,"originalTax",
                 @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
-            var gross=TextField(raw,"originalGross",
+            var allocatedGross=TextField(raw,"originalGross",
                 @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
-            if(verified!=(reason=="ALLOCATED_LINES_MATCH_HEADER")||
-               (verified&&(net is null||tax is null||gross is null))||
-               (!verified&&(net is not null||tax is not null||gross is not null)))
+            if(verified!=(allocationReason=="ALLOCATED_LINES_MATCH_HEADER")||
+               (verified&&(net is null||tax is null||allocatedGross is null))||
+               (!verified&&(net is not null||tax is not null||allocatedGross is not null)))
                 throw new InvalidDataException("Historical allocation certainty is inconsistent.");
             if(verified &&
                decimal.Parse(net!,System.Globalization.CultureInfo.InvariantCulture)+
                decimal.Parse(tax!,System.Globalization.CultureInfo.InvariantCulture)!=
-               decimal.Parse(gross!,System.Globalization.CultureInfo.InvariantCulture))
+               decimal.Parse(allocatedGross!,System.Globalization.CultureInfo.InvariantCulture))
                 throw new InvalidDataException("Historical allocation arithmetic disagrees.");
             checks.Add(new CloudHistoricalAllocationCheck(
-                number,reason,verified,net,tax,gross,false));
+                number,allocationReason,verified,net,tax,allocatedGross,false));
         }
         // Server cannot promote a limited snapshot into complete history.
         var knownIds=history.Where(h=>h.AllowanceNumber is not null)

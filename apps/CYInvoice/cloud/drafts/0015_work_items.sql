@@ -9,14 +9,6 @@ CREATE TABLE work_items (
     kind TEXT NOT NULL CHECK (kind IN ('VOID', 'ALLOWANCE', 'ALLOWANCE_VOID', 'UPLOAD_ISSUE')),
     -- Upload issues are UNVERIFIED local Device reports, never AMEGO evidence.
     issue_code TEXT,
-    CHECK (
-      (kind='UPLOAD_ISSUE' AND issue_code IN (
-        'invoice_list_failed','query_failed','remote_not_found',
-        'unknown_remote_not_found','reconciliation_failed','ambiguous_match',
-        'local_write_failed','upload_failed','duplicate_order_id'
-      ))
-      OR (kind<>'UPLOAD_ISSUE' AND issue_code IS NULL)
-    ),
     reference_hash TEXT NOT NULL CHECK (
       length(reference_hash) = 64 AND reference_hash NOT GLOB '*[^0-9a-f]*'),
     status TEXT NOT NULL DEFAULT 'open'
@@ -29,6 +21,16 @@ CREATE TABLE work_items (
     resolution_code TEXT CHECK (resolution_code IN (
       'resolved_locally','checked_official','duplicate_report',
       'not_actionable','needs_followup')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (
+      (kind='UPLOAD_ISSUE' AND issue_code IN (
+        'invoice_list_failed','query_failed','remote_not_found',
+        'unknown_remote_not_found','reconciliation_failed','ambiguous_match',
+        'local_write_failed','upload_failed','duplicate_order_id'
+      ))
+      OR (kind<>'UPLOAD_ISSUE' AND issue_code IS NULL)
+    ),
     CHECK (
       (kind='UPLOAD_ISSUE' AND reported_by_actor_id IS NOT NULL)
       OR (kind<>'UPLOAD_ISSUE' AND reported_by_actor_id IS NULL
@@ -38,8 +40,6 @@ CREATE TABLE work_items (
     CHECK(kind<>'UPLOAD_ISSUE' OR status<>'closed'
        OR (reviewed_by_actor_id IS NOT NULL
          AND closed_by_actor_id IS NOT NULL AND resolution_code IS NOT NULL)),
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
     UNIQUE (workspace_id, environment, kind, reference_hash)
 );
 CREATE INDEX idx_work_items_workspace_status
