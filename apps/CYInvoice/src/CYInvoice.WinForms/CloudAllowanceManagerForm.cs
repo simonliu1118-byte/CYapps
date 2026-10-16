@@ -93,11 +93,30 @@ internal sealed class CloudAllowanceManagerForm : Form
         inspect.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
             var v=await client.InspectOfficialForManagerAsync(entry.ItemId,entry.Revision,
                 user,pwd,lifetime.Token);
+            // Show business guidance without weakening the server's exact
+            // original-invoice/item approval gate or exposing buyer data.
+            var guidance=v.ItemCheck.Reason switch
+            {
+                "SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE" =>
+                    "品項與稅額符合目前支援的核對條件；核准前仍會再查官方。",
+                "ORIGINAL_TAX_BASIS_NOT_VERIFIED" =>
+                    "原發票為含稅單價或計稅基礎未確認，不能自動核准；請人工核對。",
+                "OFFICIAL_STATE_NOT_SAFE" =>
+                    "原發票狀態不符、尚有異動或已有折讓；請人工查核。",
+                "OFFICIAL_TAX_ARITHMETIC_UNVERIFIED" or
+                "REQUEST_TAX_ARITHMETIC_UNVERIFIED" =>
+                    "官方原稅額或本次折讓稅額無法安全核對；請人工查核。",
+                "REQUEST_EXCEEDS_ORIGINAL_ITEM" or
+                "REQUEST_EXCEEDS_INVOICE_BALANCE" =>
+                    "申請品項或金額超過可證明的原始範圍；不能核准。",
+                _ => "官方資料或折讓明細不足以安全核對，請人工查核。"
+            };
             MessageBox.Show(this,
                 $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
                 $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
                 $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
                 $"品項比對：{v.ItemCheck.Reason}\n"+
+                $"處理提示：{guidance}\n"+
                 $"官方查核時間：{v.CheckedAtUtc:yyyy/MM/dd HH:mm:ss}\n\n"+
                 "這是唯讀查驗，不是核准，也沒有送出折讓。",
                 "光貿原發票查驗",MessageBoxButtons.OK,MessageBoxIcon.Information);
@@ -224,6 +243,14 @@ internal sealed class CloudAllowanceManagerForm : Form
         SetBusy(true);
         try{await action(selected,employeeNo,password);}
         catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+        catch(CloudApiException error) when(error.Code=="ALLOWANCE_APPROVAL_NOT_AUTHORIZED")
+        {
+            MessageBox.Show(this,
+                "折讓核准未獲確認，可能是官方品項、稅額、已有折讓或管理員權限需要進一步核對。\n"+
+                "請先使用「官方查驗」確認原發票，必要時至光貿人工核對。\n"+
+                "保留原工作單；在確認核准前不可配號或送出折讓。",
+                "折讓需要人工查核",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
         catch(Exception error){
             MessageBox.Show(this,"此次操作未獲確認："+error.Message+
                 "\n請先查回原工作單／折讓號碼，不要重新送出。",
