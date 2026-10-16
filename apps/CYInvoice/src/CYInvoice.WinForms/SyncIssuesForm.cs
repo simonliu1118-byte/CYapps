@@ -346,6 +346,55 @@ internal sealed class SyncIssuesForm : Form
         }finally{SetManualReviewBusy(false);}
     }
 
+    // The reason is deliberately an enumerated administrative outcome.
+    // It never asserts an official AMEGO invoice status.
+    private static string? PromptUploadIssueArchiveReason(Form owner)
+    {
+        using var form=new Form {
+            Text="CYID 上傳問題－人工封存原因",
+            StartPosition=FormStartPosition.CenterParent,
+            ClientSize=new Size(400,150),ShowIcon=false,
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            MinimizeBox=false,MaximizeBox=false
+        };
+        var label=new Label {
+            Location=new Point(12,10),Size=new Size(375,40),
+            Text="請選擇明確的人工處理原因（不等於官方結果）。"
+        };
+        var choices=new ComboBox {
+            Location=new Point(12,53),Width=375,
+            DropDownStyle=ComboBoxStyle.DropDownList
+        };
+        choices.Items.AddRange(new object[]{
+            "本機問題已處理","已人工查核光貿",
+            "重複回報","確認無需處理","仍需後續追蹤"
+        });
+        var accept=UiControls.StandardButton("確定");
+        accept.Location=new Point(218,102);
+        accept.Click+=(_,_)=>{
+            if(choices.SelectedIndex<0){
+                MessageBox.Show(form,"必須先選取原因。",
+                    "缺少結案原因",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                return;
+            }
+            form.DialogResult=DialogResult.OK;
+        };
+        var cancel=UiControls.StandardButton("取消");
+        cancel.Location=new Point(307,102);
+        cancel.DialogResult=DialogResult.Cancel;
+        form.Controls.AddRange(new Control[]{label,choices,accept,cancel});
+        form.CancelButton=cancel;
+        if(form.ShowDialog(owner)!=DialogResult.OK)return null;
+        return choices.SelectedIndex switch {
+            0=>"resolved_locally",
+            1=>"checked_official",
+            2=>"duplicate_report",
+            3=>"not_actionable",
+            4=>"needs_followup",
+            _=>null
+        };
+    }
+
     // Read-only window for the already-existing manager Work Item list. Local
     // processing and upload failures remain untouched; no Cloud state change.
     private async Task ShowCloudExceptionsAsync()
@@ -391,18 +440,22 @@ internal sealed class SyncIssuesForm : Form
         var previous=UiControls.StandardButton("上一頁");
         var next=UiControls.StandardButton("下一頁");
         var copy=UiControls.StandardButton("複製工作單 ID");
+        var review=UiControls.StandardButton("開始覆核");
+        var archive=UiControls.StandardButton("人工封存");
+        review.Enabled=false;
+        archive.Enabled=false;
         var close=UiControls.StandardButton("關閉");
         close.Click+=(_,_)=>dialog.Close();
         copy.Click+=(_,_)=>{
             if(grid.SelectedItems.Count!=1)return;
-            var id=grid.SelectedItems[0].Tag as string;
-            if(!string.IsNullOrWhiteSpace(id))Clipboard.SetText(id);
+            if(grid.SelectedItems[0].Tag is CloudWorkItemSummary entry)
+                Clipboard.SetText(entry.ItemId);
         };
         var bottom=new FlowLayoutPanel{
             Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,
             WrapContents=false
         };
-        foreach(var button in new[]{close,copy,next,previous})
+        foreach(var button in new[]{close,copy,archive,review,next,previous})
             bottom.Controls.Add(button);
         var layout=new TableLayoutPanel{
             Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(10)
@@ -422,7 +475,8 @@ internal sealed class SyncIssuesForm : Form
         {
             if(busy||dialog.IsDisposed)return;
             busy=true;
-            foreach(var button in new[]{previous,next,copy})button.Enabled=false;
+            foreach(var button in new[]{previous,next,copy,review,archive})
+                button.Enabled=false;
             try
             {
                 var result=await client.ListAsync(login.EnteredEmployeeNo,
@@ -467,7 +521,7 @@ internal sealed class SyncIssuesForm : Form
                         row.SubItems.Add(item.Environment=="production"?"正式":"測試");
                         row.SubItems.Add(state);
                         row.SubItems.Add(item.ItemId);
-                        row.Tag=item.ItemId;
+                        row.Tag=item;
                         grid.Items.Add(row);
                     }
                 }
@@ -488,17 +542,79 @@ internal sealed class SyncIssuesForm : Form
                 if(!dialog.IsDisposed){
                     previous.Enabled=history.Count>0;
                     next.Enabled=page?.NextCursor is not null;
-                    copy.Enabled=grid.SelectedItems.Count==1;
+                    var entry=grid.SelectedItems.Count==1?
+                        grid.SelectedItems[0].Tag as CloudWorkItemSummary:null;
+                    copy.Enabled=entry is not null;
+                    review.Enabled=entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="open";
+                    archive.Enabled=entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="review";
                 }
             }
         }
+        async Task ApplyManagerActionAsync(bool closeIssue)
+        {
+            if(busy || grid.SelectedItems.Count!=1 ||
+               grid.SelectedItems[0].Tag is not CloudWorkItemSummary chosen ||
+               chosen.Kind!="UPLOAD_ISSUE" ||
+               chosen.Status!=(closeIssue?"review":"open"))return;
+            var reason=closeIssue?PromptUploadIssueArchiveReason(dialog):null;
+            if(closeIssue && reason is null)return;
+            if(MessageBox.Show(dialog,closeIssue
+                ?"將這筆裝置回報標記為已人工處理，並留下原因？不會修改任何發票。"
+                :"開始覆核此筆裝置回報？不會呼叫光貿。",
+                "CYID 例外工作單",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+            busy=true;
+            review.Enabled=archive.Enabled=copy.Enabled=previous.Enabled=next.Enabled=false;
+            try
+            {
+                var current=await client.GetAsync(chosen.ItemId,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                if(current is null||current.Kind!="UPLOAD_ISSUE"||
+                   current.Status!=chosen.Status||current.Revision!=chosen.Revision)
+                    throw new InvalidOperationException("工作單已改變，需重新查詢最新狀態。");
+                var updated=await client.TransitionAsync(current,
+                    closeIssue?"closed":"review",login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword,resolutionCode:reason);
+                MessageBox.Show(dialog,closeIssue
+                    ?$"工作單 {updated.ItemId} 已人工封存。這不代表光貿確認成功。"
+                    :$"工作單 {updated.ItemId} 已開始覆核。尚未影響任何發票。",
+                    "CYID 工作單已更新",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                dialog.Close();
+            }
+            catch(Exception error)
+            {
+                if(!dialog.IsDisposed)MessageBox.Show(dialog,
+                    "處理結果未確認："+error.Message+
+                    "\n請重新查詢原工作單，不得自動重送。",
+                    "處理待查回",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                busy=false;
+                if(!dialog.IsDisposed){
+                    review.Enabled=chosen.Status=="open";
+                    archive.Enabled=chosen.Status=="review";
+                    copy.Enabled=true;
+                    previous.Enabled=history.Count>0;
+                    next.Enabled=page?.NextCursor is not null;
+                }
+            }
+        }
+        review.Click+=async(_,_)=>await ApplyManagerActionAsync(false);
+        archive.Click+=async(_,_)=>await ApplyManagerActionAsync(true);
         next.Click+=async(_,_)=>{
             if(page?.NextCursor is { } more)await ReloadAsync(more,false);
         };
         previous.Click+=async(_,_)=>{
             if(history.TryPeek(out var earlier))await ReloadAsync(earlier,true);
         };
-        grid.SelectedIndexChanged+=(_,_)=>copy.Enabled=!busy&&grid.SelectedItems.Count==1;
+        grid.SelectedIndexChanged+=(_,_)=>{
+            var entry=grid.SelectedItems.Count==1?
+                grid.SelectedItems[0].Tag as CloudWorkItemSummary:null;
+            copy.Enabled=!busy&&entry is not null;
+            review.Enabled=!busy&&entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="open";
+            archive.Enabled=!busy&&entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="review";
+        };
         dialog.Shown+=async(_,_)=>await ReloadAsync(null,false);
         await Task.CompletedTask;
         dialog.ShowDialog(this);
