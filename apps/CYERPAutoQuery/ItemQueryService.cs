@@ -9,7 +9,7 @@ namespace CYERPAutoQuery;
 /// Read-only towards ERP data: it opens the query dialog (F6), sets 一般選項 品號 = code,
 /// confirms, shows 基本資料1 and exports; it never presses 新增／修改／刪除／儲存／取消.
 /// </summary>
-internal sealed class ItemQueryService
+internal sealed partial class ItemQueryService
 {
     private const int MaximizeSettleMs = 300;
     // The first F6 of a session can take more than 3 s (user's PC, 2026-10-16: the dialog
@@ -240,7 +240,10 @@ internal sealed class ItemQueryService
     /// box → Enter (user's screenshots 2026-10-16). The typed text is read back from the focused
     /// ERP control before Enter, so nothing is typed into another program.
     /// </summary>
-    private async Task OpenFormAsync(CancellationToken cancellationToken)
+    private Task OpenFormAsync(CancellationToken cancellationToken) =>
+        OpenFormAsync(_form.Code, _form.Title, () => Win32Automation.FindFormWindows(_form).Count > 0, cancellationToken);
+
+    private async Task OpenFormAsync(string code, string title, Func<bool> opened, CancellationToken cancellationToken)
     {
         var mains = Win32Automation.FindErpMainWindows();
         if (mains.Count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
@@ -267,12 +270,12 @@ internal sealed class ItemQueryService
                 }
                 return true;
             }, 0);
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著{_form.Title}。\n請先登入 ERP。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著{title}。\n請先登入 ERP。");
         }
         var main = mains[0];
-        _log.Info("window", $"opening {_form.Code} from main window class={NativeMethods.ClassName(main)} title=\"{NativeMethods.WindowText(main)}\" count={mains.Count}");
+        _log.Info("window", $"opening {code} from main window class={NativeMethods.ClassName(main)} title=\"{NativeMethods.WindowText(main)}\" count={mains.Count}");
         if (!NativeMethods.IsWindowEnabled(main))
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP 主視窗目前有對話框開著，無法開啟{_form.Title}。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP 主視窗目前有對話框開著，無法開啟{title}。");
         if (!Win32Automation.PrepareForeground(main, _log))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "無法把 ERP 主視窗帶到前景。");
         if (!NativeMethods.GetWindowRect(main, out var window))
@@ -293,25 +296,25 @@ internal sealed class ItemQueryService
         var focus = NativeMethods.FocusedControlOfForeground();
         if (focus == 0 || Win32Automation.ProcessId(focus) != Win32Automation.ProcessId(main))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "按「作業速查」後游標不在 ERP 的搜尋框，已停止。");
-        InputSender.UnicodeText(_form.Code);
+        InputSender.UnicodeText(code);
         await Pace.Delay(800, cancellationToken); // let ERP list the matching programs
         var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
-        if (!typed.Equals(_form.Code, StringComparison.OrdinalIgnoreCase))
+        if (!typed.Equals(code, StringComparison.OrdinalIgnoreCase))
         {
             _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"作業速查的搜尋框讀回內容不是 {_form.Code}，已停止。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"作業速查的搜尋框讀回內容不是 {code}，已停止。");
         }
         InputSender.Press(NativeMethods.VK_RETURN);
-        _log.Info("window", $"作業速查 {_form.Code} + Enter sent");
+        _log.Info("window", $"作業速查 {code} + Enter sent");
 
         // Opening a program form can take a while on the first run.
         var started = Environment.TickCount64;
-        if (!await WaitUntilAsync(() => Win32Automation.FindFormWindows(_form).Count > 0, 30000, cancellationToken))
+        if (!await WaitUntilAsync(() => opened(), 30000, cancellationToken))
         {
             LogProcessWindows(main, "after-作業速查");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"從作業速查開啟{_form.Title}逾時（30 秒）。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"從作業速查開啟{title}逾時（30 秒）。");
         }
-        _log.Info("window", $"{_form.Code} opened after_ms={Environment.TickCount64 - started}");
+        _log.Info("window", $"{code} opened after_ms={Environment.TickCount64 - started}");
         await Pace.Delay(1500, cancellationToken); // let the new form load its first record
     }
 
@@ -1706,14 +1709,14 @@ internal sealed class ItemQueryService
     }
 
     private async Task SetDateAsync(nint invq, WindowControl targetBox, DateOnly date, string what,
-        bool click, bool enterAfter, CancellationToken cancellationToken)
+        bool click, bool enterAfter, CancellationToken cancellationToken, string field = "歷史異動")
     {
         if (click)
         {
             // Click the 年 part (left end) so the digits start at the year.
             var width = targetBox.Rect.Right - targetBox.Rect.Left;
             if (width < 48)
-                throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
+                throw new InvalidOperationException($"{field}的{what}日欄位寬度不正確，已停止。");
             var yearPoint = new Point(targetBox.Rect.Left + Math.Min(12, width / 10),
                 (targetBox.Rect.Top + targetBox.Rect.Bottom) / 2);
             SafeClick(invq, yearPoint);
@@ -1722,7 +1725,7 @@ internal sealed class ItemQueryService
 
         var focus = NativeMethods.FocusedControlOfForeground();
         if (focus != targetBox.Handle && !Win32Automation.IsInside(focus, targetBox.Handle))
-            throw new InvalidOperationException($"歷史異動的{what}日沒有取得焦點，已停止，避免日期打到錯誤欄位。");
+            throw new InvalidOperationException($"{field}的{what}日沒有取得焦點，已停止，避免日期打到錯誤欄位。");
 
         if (NativeMethods.CloseImeFor(focus))
             await Pace.Delay(60, cancellationToken);
@@ -1745,7 +1748,7 @@ internal sealed class ItemQueryService
         if (!Invq01Layout.ShowsDate(shown, date))
         {
             _log.Warn("invq01", $"history {what} date readback mismatch length={shown?.Length ?? 0}");
-            throw new InvalidOperationException($"查歷史異動的{what}日輸入後讀回不一致，已停止。");
+            throw new InvalidOperationException($"{field}的{what}日輸入後讀回不一致，已停止。");
         }
     }
 

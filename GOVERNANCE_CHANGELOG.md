@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.47 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：加入銷貨單查詢（COPR15 銷貨單明細表、COPR16 銷退單明細表：只設客戶代號、單據日期與進階選項狀態，只按即時報表與 XLSX 匯出，ERP 匯出資料夾的檔案立即移到 TEMP 讀完即刪，報表與條件視窗用完關閉）；新增「Agent 與 CY Web 分工」：本程式只當中介層，關聯、呈現與業務規則交給 CY Web，判斷放 Web 更好時必須告知使用者。不改其他 App 規則。
+
 ## 2.3.46 — 2026/10/16
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求加入客戶查詢：使用 COPI01 客戶資料建立作業，規則同 INVI02；客戶名稱只可貼上程式固定產生的簡稱 OR 全名條件（COPMA.MA002／MA003），結果每筆須含關鍵字否則不採用；客戶代號只接受英數。不改其他 App 規則。

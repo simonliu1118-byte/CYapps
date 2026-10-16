@@ -7,8 +7,9 @@ namespace CYERPAutoQuery;
 /// </summary>
 internal static class ExportFiles
 {
-    /// <summary>One prefix per ERP program whose export is read (INVI02, INVQ01).</summary>
-    private static readonly string[] Prefixes = [Invi02Layout.FormCode + "_", Invq01Layout.FormCode + "_", ErpForm.Copi01.Code + "_"];
+    /// <summary>One prefix per ERP program whose export is read (INVI02, INVQ01, COPI01, COPR15, COPR16).</summary>
+    private static readonly string[] Prefixes =
+        [Invi02Layout.FormCode + "_", Invq01Layout.FormCode + "_", ErpForm.Copi01.Code + "_", .. SalesReport.All.Select(r => r.Code + "_")];
 
     public static string Folder => Path.Combine(AppContext.BaseDirectory, "TEMP");
 

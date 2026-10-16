@@ -22,7 +22,9 @@ internal sealed class MainForm : Form
     // (user, 2026-10-16), from which one is picked and queried by 品號.
     // 客戶代號／客戶名稱 query COPI01 the same way (user, 2026-10-16).
     private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
-    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3;
+    // 銷貨單: a customer's 銷貨單 and 銷退單 (COPR15/COPR16) by 客戶代號, or by name through the
+    // customer list first (user, 2026-10-16: nobody remembers 客戶代號).
+    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SalesMode = 4;
     private readonly Label[] _headerLabels = new Label[3];
     private GroupBox? _detailBox;
     /// <summary>Whether the list on the search tab is customers (a double-click then queries 客戶代號).</summary>
@@ -42,6 +44,10 @@ internal sealed class MainForm : Form
     private readonly TabPage _warehousePage = new("庫別");
     private readonly TabPage _batchPage = new("批號");
     private readonly TabPage _historyPage = new("歷史異動");
+    private readonly TabPage _salesPage = new("銷貨單");
+    private readonly DataGridView _orders = new();
+    private readonly DataGridView _orderLines = new();
+    private SalesQueryResult? _salesResult;
     // 查歷史異動 only when asked, for a date range picked here (user, 2026-10-16); an
     // unticked date means 「not filled」: the last year.
     private readonly CheckBox _includeHistory = new() { Text = "查歷史異動", AutoSize = true };
@@ -108,7 +114,7 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨單"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -192,6 +198,20 @@ internal sealed class MainForm : Form
             page.Controls.Add(grid);
             _details.TabPages.Add(page);
         }
+        // 銷貨單: the orders above, the picked order's lines below.
+        var salesSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
+        foreach (var grid in new[] { _orders, _orderLines })
+        {
+            ConfigureGrid(grid);
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+        }
+        _orders.MultiSelect = false;
+        _orders.SelectionChanged += (_, _) => ShowOrderLines();
+        salesSplit.Panel1.Controls.Add(_orders);
+        salesSplit.Panel2.Controls.Add(_orderLines);
+        _salesPage.Padding = new Padding(4);
+        _salesPage.Controls.Add(salesSplit);
+        _details.TabPages.Add(_salesPage);
         root.Controls.Add(_details, 0, 4);
         _search.CellDoubleClick += async (_, e) => await QueryPickedItemAsync(e.RowIndex);
 
@@ -220,18 +240,21 @@ internal sealed class MainForm : Form
 
     private void UpdateHistoryInputs()
     {
-        // History belongs to one item; a 品名 search only lists items.
+        // History belongs to one item; a 品名 search only lists items. 銷貨單 uses the same two
+        // dates as its 單據日期 range.
         var itemQuery = _mode.SelectedIndex == ItemMode;
+        var sales = _mode.SelectedIndex == SalesMode;
         _includeHistory.Enabled = itemQuery;
-        _historyFrom.Enabled = _includeHistory.Checked && itemQuery;
-        _historyTo.Enabled = _includeHistory.Checked && itemQuery;
+        _historyFrom.Enabled = (_includeHistory.Checked && itemQuery) || sales;
+        _historyTo.Enabled = (_includeHistory.Checked && itemQuery) || sales;
     }
+
+    private static DateOnly? Pick(DateTimePicker p) => p.Checked ? DateOnly.FromDateTime(p.Value) : null;
 
     /// <summary>The options of a local query; a bad date range throws ArgumentException with the message to show.</summary>
     private ItemQueryOptions LocalOptions()
     {
         if (!_includeHistory.Checked) return ItemQueryOptions.Default;
-        DateOnly? Pick(DateTimePicker p) => p.Checked ? DateOnly.FromDateTime(p.Value) : null;
         return new ItemQueryOptions(HistoryRange.Resolve(Pick(_historyFrom), Pick(_historyTo), DateOnly.FromDateTime(DateTime.Today)));
     }
 
@@ -291,6 +314,15 @@ internal sealed class MainForm : Form
                 return;
             case CustomerMode:
                 await StartCustomerQueryAsync();
+                return;
+            case SalesMode:
+                // A name instead of a 客戶代號 lists the customers first; a double-click then queries
+                // that customer's 銷貨單.
+                if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, CustomerRules.CodeName) &&
+                    ItemNameRules.TryNormalize(_code.Text, out _, out _))
+                    await StartSearchAsync(customers: true);
+                else
+                    await StartSalesQueryAsync();
                 return;
         }
         if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error))
@@ -364,6 +396,101 @@ internal sealed class MainForm : Form
         _code.SelectAll();
     }
 
+    /// <summary>銷貨單 mode: a customer's 銷貨單 and 銷退單 in the 單據日期 range; failures shown in a message box.</summary>
+    private async Task StartSalesQueryAsync()
+    {
+        SalesQuery query;
+        try
+        {
+            query = SalesQuery.Resolve(_code.Text, Pick(_historyFrom), Pick(_historyTo), DateOnly.FromDateTime(DateTime.Today));
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(this, ex.Message, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            ShowSales(null);
+            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QuerySalesAsync(query, progress, ct), result =>
+            {
+                ShowSales(result);
+                _details.SelectedTab = _salesPage;
+                var range = $"{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}";
+                if (!result.Found)
+                {
+                    SetStatus($"ERP：客戶 {query.CustomerCode} 在 {range} 查無銷貨單與銷退單");
+                    return AutomationOutcome.NotFound;
+                }
+                SetStatus($"ERP：客戶 {query.CustomerCode} {range} 銷貨 {result.Count(SalesReport.Sales.Kind)} 張、銷退 {result.Count(SalesReport.Returns.Kind)} 張（{result.Elapsed.TotalSeconds:0.0} 秒）");
+                return AutomationOutcome.Done;
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 銷貨單查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        Activate();
+        _code.Focus();
+        _code.SelectAll();
+    }
+
+    private static readonly string[] OrderColumns = ["類別", "單據日期", "單號", "品項", "總數量", "金額", "稅額", "合計", "業務員", "備註", "銷退原因"];
+    private static readonly string[] LineColumns = ["序號", "品號", "品名", "規格", "數量", "單位", "單價", "金額", "類型", "贈/備品量", "庫別", "批號", "備註", "原銷貨單"];
+
+    private static string Num(decimal value) => value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The orders newest first (the 銷退單 ↔ 銷貨單 links are CY Web's, user 2026-10-17).</summary>
+    private void ShowSales(SalesQueryResult? result)
+    {
+        _salesResult = result;
+        SetHeaderCaptions(customer: true);
+        _headerLabels[2].Text = "查詢範圍";
+        if (_detailBox is not null) _detailBox.Text = "單頭（點選下方銷貨單）";
+        _itemCode.Text = result?.Query.CustomerCode ?? string.Empty;
+        _itemName.Text = result?.Orders.FirstOrDefault()?.CustomerName ?? string.Empty;
+        _specification.Text = result is null ? string.Empty
+            : $"單據日期 {Invq01Layout.ErpDate(result.Query.From)}～{Invq01Layout.ErpDate(result.Query.To)}：銷貨 {result.Count(SalesReport.Sales.Kind)} 張、銷退 {result.Count(SalesReport.Returns.Kind)} 張";
+        _fields.Rows.Clear();
+        _orders.Rows.Clear();
+        _orders.Columns.Clear();
+        foreach (var c in OrderColumns) _orders.Columns.Add(c, c);
+        if (result is not null)
+            foreach (var o in result.Orders)
+                _orders.Rows.Add(o.Kind, o.Date.ToString("yyyy/MM/dd"), o.OrderNo, o.Lines.Count, Num(o.TotalQuantity),
+                    Num(o.Amount), Num(o.Tax), Num(o.Total), o.Salesperson, o.Note, o.Reason);
+        _salesPage.Text = result is null ? "銷貨單" : $"銷貨單（{result.Orders.Count}）";
+        ShowOrderLines();
+    }
+
+    /// <summary>The picked order: its 單頭 in the detail grid, its lines below the order list.</summary>
+    private void ShowOrderLines()
+    {
+        _orderLines.Rows.Clear();
+        if (_orderLines.Columns.Count == 0)
+            foreach (var c in LineColumns) _orderLines.Columns.Add(c, c);
+        var index = _orders.CurrentRow?.Index ?? -1;
+        if (_salesResult is null || index < 0 || index >= _salesResult.Orders.Count) return;
+        var o = _salesResult.Orders[index];
+        _fields.Rows.Clear();
+        foreach (var (name, value) in new[]
+        {
+            ("類別", o.Kind), ("單號", o.OrderNo), ("單據日期", o.Date.ToString("yyyy/MM/dd")),
+            ("客戶", $"{o.CustomerCode} {o.CustomerName}"), ("業務員", o.Salesperson), ("部門", o.Department),
+            ("付款條件", o.PaymentTerm), ("課稅別", o.TaxType), ("發票聯數", o.InvoiceType),
+            ("總數量", Num(o.TotalQuantity)), ("金額", Num(o.Amount)), ("稅額", Num(o.Tax)), ("合計", Num(o.Total)),
+            ("備註", o.Note), ("銷退原因", o.Reason),
+        })
+            if (value.Length > 0) _fields.Rows.Add(name, value);
+        foreach (var l in o.Lines)
+            _orderLines.Rows.Add(l.Seq, l.ItemCode, l.ItemName, l.Specification, Num(l.Quantity), l.Unit, Num(l.UnitPrice),
+                Num(l.Amount), l.GiftType, Num(l.GiftQuantity), l.Warehouse, l.Batch, l.Note, l.SourceOrder);
+    }
+
     private void ShowCustomer(CustomerQueryResult? result)
     {
         SetHeaderCaptions(customer: true);
@@ -408,7 +535,8 @@ internal sealed class MainForm : Form
         var column = _searchIsCustomer ? "客戶代號" : "品號";
         var code = Convert.ToString(_search.Rows[rowIndex].Cells[column].Value) ?? string.Empty;
         if (code.Length == 0) return;
-        _mode.SelectedIndex = _searchIsCustomer ? CustomerMode : ItemMode;
+        if (!(_searchIsCustomer && _mode.SelectedIndex == SalesMode))
+            _mode.SelectedIndex = _searchIsCustomer ? CustomerMode : ItemMode;
         _code.Text = code;
         await StartQueryAsync();
     }
