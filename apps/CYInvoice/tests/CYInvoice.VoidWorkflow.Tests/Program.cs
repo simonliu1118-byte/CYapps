@@ -332,7 +332,13 @@ static QueryResponse Query(
             ProductItems: default,
             DetailVat: 1,
             DetailVatPresent: true,
-            VoidPending: voidPending));
+            VoidPending: voidPending)
+        {
+            // Explicitly empty official allowance[] is the required
+            // synthetic baseline. Missing history is not proof of zero.
+            AllowanceSummaryPresent = true,
+            Allowances = [],
+        });
 
 static void Equal<T>(T expected, T actual)
 {
