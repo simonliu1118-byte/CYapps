@@ -280,6 +280,7 @@ internal static class AllowanceWorkflowTests
             DetailVatPresent: true)
         {
             Allowances = allowances ?? [],
+            AllowanceSummaryPresent = true,
         };
         return new QueryResponse(0, "", data);
     }
