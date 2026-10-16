@@ -191,6 +191,7 @@ internal sealed class ItemQueryService
     /// </summary>
     private async Task<nint> ResolveFormAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
+        await CloseLeftoverInvq01Async(progress, cancellationToken);
         var windows = Win32Automation.FindFormWindows(_form);
         if (windows.Count == 0)
         {
@@ -1684,6 +1685,31 @@ internal sealed class ItemQueryService
         }
         _log.Info("invq01", $"query shown tab={tab} after_ms={Environment.TickCount64 - started}");
         await Pace.Delay(600, cancellationToken); // let the result grid and the Ribbon settle
+    }
+
+    /// <summary>
+    /// An INVQ01 left open (opened from INVI02 by hand, or by a run that was stopped) locks INVI02:
+    /// the query then stops with 「有其他對話框開著」 (V0.5.0 LOG, 2026-10-16). INVQ01 is a query
+    /// form only, so it is closed (user, 2026-10-16), and INVI02 is waited for until it is usable.
+    /// </summary>
+    private async Task CloseLeftoverInvq01Async(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        var open = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && Invq01Layout.IsInvq01Title(NativeMethods.WindowText(hwnd)) &&
+                !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                open.Add(hwnd);
+            return true;
+        }, 0);
+        if (open.Count == 0) return;
+        progress.Report("ERP：關閉開著的庫存狀況查詢作業…");
+        _log.Info("invq01", $"closing {open.Count} INVQ01 left open");
+        foreach (var hwnd in open)
+            if (!await CloseInvq01Async(hwnd))
+                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "開著的庫存狀況查詢作業無法自動關閉，請先手動關閉後再查詢。");
+        // INVI02 becomes usable again once INVQ01 is gone.
+        await WaitUntilAsync(() => Win32Automation.FindInvi02Windows().All(NativeMethods.IsWindowEnabled), AfterActionWaitMs, cancellationToken);
     }
 
     /// <summary>Closes INVQ01 with WM_CLOSE (no keys, no clicks); not cancellable so it also runs after Esc.</summary>
