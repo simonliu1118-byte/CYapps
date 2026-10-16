@@ -2,6 +2,7 @@
 
 ## V0.2.0
 
+- Build 3（2026/10/16）：Build 1 實機：查詢的品號剛好是畫面上那一筆時，表頭立刻相符、ERP 尚未跳到「資料瀏覽」，「基本資料1」看起來仍顯示而沒有點擊，結果從資料瀏覽轉出（只有單頭、沒有單身頁籤）。改為查詢後先等 ERP 顯示「資料瀏覽」（最多 3 秒），一律點擊「基本資料1」並確認穩定，按 Ribbon Excel 前再確認一次仍在基本資料1，否則停止。
 - Build 2（2026/10/16）：使用者要求。沒有 INVI02 視窗時，從 ERP 主視窗（鼎新電腦Conductor）Ribbon「作業速查」（OCR 定位）輸入 INVI02（讀回確認）→ Enter 自動開啟，最多等 30 秒；開著多個 INVI02 時，使用第一個（最上層）處於檢視狀態的視窗，都不在檢視狀態才停止。狀態標籤在多個視窗中有一個可用時顯示「檢視」。
 - Build 1（2026/10/16）：V0.2.0 實機回報。匯出設定的「全選／清除／確定」是 TBitBtn 視窗，按鈕辨識補上 TBitBtn，不再走 OCR；單頭／單身是 TcxPageControl（單身頁點過才建立），改回量測座標點擊、以「該頁出現且可見」確認，OCR 只作備援，省下每步約 2 秒。「檢視Excel資料?」只認有 No 按鈕的新視窗（Build 0 把 ERP 的「處理進度」小視窗誤當成問題框），OCR 備援延後 8 秒且須讀到「檢視」才點；匯出完成等待延長為 60 秒、回答後等待 15 秒、匯出設定出現後先等 0.5 秒。匯出路徑改為貼上（EM_SETSEL＋WM_PASTE，事後還原剪貼簿），不再逐字輸入。
 - Build 0（2026/10/16）：新增 CY Web 查詢連線（Agent）。依 chihyuan-web #169 的 ERP 品號查詢 contract：程式定時（閒置 3 秒）向 CY Web 領取查詢工作，用與本機相同的查詢流程執行（同樣鎖滑鼠、中央提示），回報 FOUND／NOT_FOUND／FAILED；失敗只回固定錯誤代碼（ERP_NOT_OPEN／ERP_BUSY／ERP_STATE／EXPORT_FAILED／CANCELLED／INTERNAL），不送出本機訊息。網路錯誤 3→30 秒退避；Token 被拒即停止；本機查詢中不領工作。主視窗新增「Web 連線」設定（網址、Token、啟用），Token 以 Windows DPAPI 加密存在程式旁 `config/agent.json`，狀態列顯示 Web 連線狀態。已對本機執行的 chihyuan-web #169 Worker（local D1）實測領取與回報成功。

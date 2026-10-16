@@ -19,6 +19,7 @@ internal sealed class ItemQueryService
     private const int RecordWaitMs = 5000;
     private const int EmptyRecordStableMs = 800;
     private const int TabWaitMs = 1200;
+    private const int QuerySettleWaitMs = 3000;
     private const int MenuWaitMs = 3000;
     private const int ExportDialogWaitMs = 10000;
     private const int ExportRunWaitMs = 60000;
@@ -70,10 +71,20 @@ internal sealed class ItemQueryService
 
         // Exported from 資料瀏覽 the workbook lacks 單身資料 (庫別); from 基本資料1 it has both
         // sheets (user, 2026-10-16).
+        // ERP ends a query on 資料瀏覽. When the record asked for was already shown, the header
+        // matches before ERP has finished, and 基本資料1 still looked shown at that moment, so
+        // it was not clicked and the export came from 資料瀏覽 (V0.2.0 Build 1, 2026-10-16).
+        // So: wait for 資料瀏覽 first, then always click 基本資料1.
         progress.Report("ERP：切換到基本資料1…");
         var sheet = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab)
             ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
-        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.ExportTab, sheet.Handle, cancellationToken);
+        if (Win32Automation.FindTabSheet(root, Invi02Layout.BrowseTab) is { } browseSheet)
+        {
+            var settled = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(browseSheet.Handle), QuerySettleWaitMs, cancellationToken);
+            _log.Info("tab", $"after query 資料瀏覽 shown={settled}");
+        }
+        await Pace.Delay(300, cancellationToken);
+        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.ExportTab, sheet.Handle, cancellationToken, force: true);
 
         progress.Report("ERP：轉出 Excel…");
         var path = ExportFiles.NewPath();
@@ -95,6 +106,10 @@ internal sealed class ItemQueryService
     private async Task<ItemQueryResult> ExportAndReadAsync(nint root, HeaderControls header, string code, string path,
         Stopwatch watch, IProgress<string> progress, CancellationToken cancellationToken)
     {
+        // Exporting from any tab but 基本資料1 loses 單身資料; checked again right before.
+        var exportSheet = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab);
+        if (exportSheet is null || !NativeMethods.IsWindowVisible(exportSheet.Handle))
+            throw new InvalidOperationException("轉出前 ERP 不在「基本資料1」頁籤，已停止（從資料瀏覽轉出會缺少庫別）。");
         await ExportToExcelAsync(root, path, cancellationToken);
 
         // The record must still be the one asked for after the export.
@@ -498,9 +513,10 @@ internal sealed class ItemQueryService
     /// the measured position, and when that does not show it, find the caption by OCR and
     /// click there (user decision 2026-10-16). Success is always the sheet becoming visible.
     /// </summary>
-    private async Task ActivateTabAsync(nint root, WindowControl page, TabStrip strip, string tab, nint sheet, CancellationToken cancellationToken)
+    private async Task ActivateTabAsync(nint root, WindowControl page, TabStrip strip, string tab, nint sheet, CancellationToken cancellationToken, bool force = false)
     {
-        if (NativeMethods.IsWindowVisible(sheet)) return;
+        // force: click even when the sheet already looks shown (ERP may still be switching).
+        if (!force && NativeMethods.IsWindowVisible(sheet)) return;
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException($"切換頁籤「{tab}」前無法把 ERP 視窗帶到前景。");
 

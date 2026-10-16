@@ -20,6 +20,9 @@ internal static class Invi02Layout
     /// </summary>
     public const string ExportTab = "基本資料1";
 
+    /// <summary>The tab ERP shows after a query (資料瀏覽, the result list).</summary>
+    public const string BrowseTab = "資料瀏覽";
+
     // INVI02 TcxPageControl tabs have one fixed width whatever the caption length. Measured
     // from the user's screenshots (2026-10-16, three captures identical): tab i is centered
     // 56 + 79 * i px right of the page control's left edge.
