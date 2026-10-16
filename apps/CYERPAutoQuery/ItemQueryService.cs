@@ -1062,7 +1062,7 @@ internal sealed class ItemQueryService
         if (!Win32Automation.PrepareForeground(invi02, _log))
             throw new InvalidOperationException("串查前無法把品號資料建立作業帶到前景。");
         var before = Win32Automation.VisibleProcessWindows(invi02);
-        var label = await RibbonClickAsync(invi02, Invq01Layout.LinkMenu, "工具列的「串查」", cancellationToken);
+        var label = await RibbonClickAsync(invi02, Invq01Layout.LinkMenu, "工具列的「串查」", cancellationToken, group: Invq01Layout.LinkMenuGroup);
 
         var near = new Rectangle(label.Left - 150, label.Top - 40, 640, 560);
         var item = await FindMenuItemAsync(invi02, near, Invq01Layout.FormTitle, cancellationToken, topmost: true);
@@ -1097,10 +1097,14 @@ internal sealed class ItemQueryService
         throw new InvalidOperationException($"庫存狀況查詢作業沒有帶出品號「{code}」，已停止。");
     }
 
-    /// <summary>The lower TcxPageControl (查各庫庫存量 … 查詢結果), or null when its sheets are not windows.</summary>
+    /// <summary>
+    /// The lower TcxPageControl (查各庫庫存量 … 查詢結果), or null when not found. ERP creates a
+    /// sheet only when its tab is first shown (V0.3.0 LOG, 2026-10-16: only 查各庫庫存量 existed),
+    /// so the page is found through any sheet that does exist.
+    /// </summary>
     private WindowControl? FindInvq01PageControl(nint invq)
     {
-        var sheet = Win32Automation.FindTabSheet(invq, Invq01Layout.BatchTab) ?? Win32Automation.FindTabSheet(invq, Invq01Layout.HistoryTab);
+        var sheet = Invq01Layout.Tabs.Order.Select(t => Win32Automation.FindTabSheet(invq, t)).FirstOrDefault(t => t is not null);
         if (sheet is null)
         {
             _log.Warn("invq01", "INVQ01 tab sheets not found as windows; tabs are found by OCR");
@@ -1118,7 +1122,7 @@ internal sealed class ItemQueryService
         await ShowInvq01TabAsync(invq, page, tab, cancellationToken);
         if (range is not null) await FillHistoryRangeAsync(invq, range, cancellationToken);
 
-        await RibbonClickAsync(invq, Invq01Layout.StartQuery, "工具列的「開始查詢」", cancellationToken);
+        await RibbonClickAsync(invq, Invq01Layout.StartQuery, "工具列的「開始查詢」", cancellationToken, group: Invq01Layout.RunGroup);
         _log.Info("invq01", $"開始查詢 clicked tab={tab}");
         await WaitInvq01QueryAsync(invq, tab, cancellationToken);
 
@@ -1126,7 +1130,7 @@ internal sealed class ItemQueryService
         try
         {
             var before = Win32Automation.VisibleProcessWindows(invq);
-            await RibbonClickAsync(invq, Invq01Layout.ExportButton, "工具列的「轉出到Excel」", cancellationToken);
+            await RibbonClickAsync(invq, Invq01Layout.ExportButton, "工具列的「轉出到Excel」", cancellationToken, group: Invq01Layout.RunGroup);
             _log.Info("invq01", $"轉出到Excel clicked tab={tab}");
             await CompleteExportAsync(invq, before, path, Invq01Layout.IsInvq01Title, strict: false, cancellationToken);
             return await ExportFiles.ReadAsync(path, cancellationToken);
@@ -1137,11 +1141,35 @@ internal sealed class ItemQueryService
         }
     }
 
+    /// <summary>
+    /// Shows an INVQ01 tab: the measured position first, then OCR of the tab strip only (a whole
+    /// window OCR took 2.6 s, V0.3.0 LOG). Shown means a visible sheet with that caption, which
+    /// ERP creates on the first click.
+    /// </summary>
     private async Task ShowInvq01TabAsync(nint invq, WindowControl? page, string tab, CancellationToken cancellationToken)
     {
-        if (page is not null && Win32Automation.FindTabSheet(invq, tab) is { } sheet)
+        if (page is not null)
         {
-            await ActivateTabAsync(invq, page, Invq01Layout.Tabs, tab, sheet.Handle, cancellationToken);
+            bool Shown() => Win32Automation.FindTabSheet(invq, tab) is { } sheet && NativeMethods.IsWindowVisible(sheet.Handle);
+            if (Shown()) return;
+            if (!Win32Automation.PrepareForeground(invq, _log))
+                throw new InvalidOperationException($"切換頁籤「{tab}」前無法把庫存狀況查詢作業帶到前景。");
+            var pageRect = page.Rect.ToRectangle();
+            if (Invq01Layout.Tabs.PointFor(pageRect, tab) is { } point)
+            {
+                SafeClick(invq, point);
+                if (await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
+                {
+                    _log.Info("tab", $"shown tab={tab} by=geometry");
+                    return;
+                }
+                _log.Warn("tab", $"geometry click did not show tab={tab} point={point.X - pageRect.Left},{point.Y - pageRect.Top}");
+            }
+            var strip = new Rectangle(pageRect.Left, pageRect.Top, pageRect.Width, Math.Min(32, pageRect.Height));
+            await OcrClickAsync(invq, strip, tab, $"庫存狀況查詢作業的頁籤「{tab}」", cancellationToken);
+            if (!await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
+                throw new InvalidOperationException($"已點擊庫存狀況查詢作業的頁籤「{tab}」，但頁籤沒有切換。");
+            _log.Info("tab", $"shown tab={tab} by=ocr");
             return;
         }
         // Without sheet windows the caption is found by OCR; that the right query ran is checked
@@ -1300,13 +1328,39 @@ internal sealed class ItemQueryService
         return false;
     }
 
-    /// <summary>Finds <paramref name="word"/> on the Ribbon of <paramref name="window"/> by OCR and clicks it; returns the label's screen rectangle.</summary>
-    private async Task<Rectangle> RibbonClickAsync(nint window, string word, string what, CancellationToken cancellationToken)
+    /// <summary>
+    /// Finds <paramref name="word"/> on the Ribbon of <paramref name="window"/> by OCR and clicks
+    /// it; returns the label's screen rectangle. Each Ribbon group is a TdxRibbonGroupBarControl
+    /// window captioned with the group name (V0.3.0 LOG); reading only <paramref name="group"/>
+    /// instead of the whole Ribbon (about 2 s per click) is much faster. The whole Ribbon is
+    /// read only when the group is missing or does not show the word.
+    /// </summary>
+    private async Task<Rectangle> RibbonClickAsync(nint window, string word, string what, CancellationToken cancellationToken, string? group = null)
     {
         if (!Win32Automation.PrepareForeground(window, _log))
             throw new InvalidOperationException($"點擊{what}前無法把 ERP 視窗帶到前景。");
         if (!NativeMethods.GetWindowRect(window, out var w))
             throw new InvalidOperationException($"讀不到{what}所在視窗的位置。");
+
+        if (group is not null && Win32Automation.EnumerateChildren(window)
+                .FirstOrDefault(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase) &&
+                                     Invi02Layout.NormalizeCaption(c.Text) == Invi02Layout.NormalizeCaption(group)) is { } bar)
+        {
+            var area = bar.Rect.ToRectangle();
+            IReadOnlyList<OcrToken> groupTokens;
+            using (var image = ScreenCapture.Capture(area))
+                groupTokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+            if (OcrWordFinder.FindWord(groupTokens, word) is { } g)
+            {
+                var found = new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
+                SafeClick(window, new Point(found.Left + found.Width / 2, found.Top + found.Height / 2));
+                _log.Info("ribbon", $"clicked {word} in group={group}");
+                return found;
+            }
+            _log.Warn("ribbon", $"group={group} has no {word} tokens=\"{string.Join(" ", groupTokens.Select(t => t.Text))}\"");
+        }
+        else if (group is not null) _log.Warn("ribbon", $"ribbon group {group} not found; reading the whole Ribbon");
+
         var ribbon = new Rectangle(w.Left, w.Top, Math.Min(w.Width, 1200), Math.Min(w.Height, 220));
         IReadOnlyList<OcrToken> tokens;
         using (var image = ScreenCapture.Capture(ribbon))

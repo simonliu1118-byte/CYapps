@@ -13,6 +13,10 @@ internal static class Invq01Layout
 
     /// <summary>INVI02 Ribbon drop-down that lists the linked programs.</summary>
     public const string LinkMenu = "串查";
+    /// <summary>Ribbon group holding 串查 (INVQ01's own Ribbon has it in 導覽; assumed the same in INVI02, else the whole Ribbon is read).</summary>
+    public const string LinkMenuGroup = "導覽";
+    /// <summary>Ribbon group holding 開始查詢 and 轉出到Excel (V0.3.0 LOG, 2026-10-16).</summary>
+    public const string RunGroup = "執行";
     public const string StartQuery = "開始查詢";
     /// <summary>INVQ01's Ribbon export button (INVI02's is 「Excel」 → 「轉出至 Excel」).</summary>
     public const string ExportButton = "轉出到";
