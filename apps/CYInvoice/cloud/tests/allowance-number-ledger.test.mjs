@@ -277,10 +277,12 @@ concurrent.db.close();
   actor={...actor,role:"ADMIN"};
   official={...official,allowanceSummaryPresent:false};
   await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
-  official={...official,allowanceSummaryPresent:true,existingAllowanceCount:1};
-  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
-  official={...official,existingAllowanceCount:0,
+  // Prior confirmed allowances are allowed when the trusted Worker has
+  // already validated the remaining gross; a false balance verdict is not.
+  official={...official,allowanceSummaryPresent:true,existingAllowanceCount:1,
     originalItemsAndRequestFullyVerified:false};
+  await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
+  official={...official,originalItemsAndRequestFullyVerified:false};
   await assert.rejects(()=>approveOfficial(dbApi,target,authority),/REVIEW_NOT_AUTHORITATIVE/);
   official={...official,originalItemsAndRequestFullyVerified:true,
     checkedAtUtc:"2020-01-01T00:00:00.000Z"};
