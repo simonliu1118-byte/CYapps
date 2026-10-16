@@ -1196,6 +1196,10 @@ internal sealed class ItemQueryService
         if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
             throw new InvalidOperationException($"無法把游標移到歷史異動的{what}日欄位。");
 
+        // Keep a Chinese IME from intercepting the physical digit keystrokes.
+        if (NativeMethods.CloseImeFor(focus))
+            await Pace.Delay(60, cancellationToken);
+
         // Use VK_0..VK_9 (keydown/keyup), not Unicode WM_CHAR: the ERP mask reacts to
         // actual number keys and advances 年 → 月 → 日 as the digits are entered.
         foreach (var digit in Invq01Layout.ErpDateKeys(date))
