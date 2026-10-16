@@ -10,18 +10,19 @@
 
 ## 2026-10-16 V3 逐項交付索引（最新權威快照）
 
-> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，最新已驗證**功能** HEAD `f4872ab85243956c0f9df6224eb75098e7860374`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
+> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `4c897a44257de764c87d6ba3130e89327f5a1d56`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。
-- [x] g0401 折讓：服務端官方 invoice_query／品項、稅額保守核對；CYID Manager 核准 Grant、D1 永久配號與 send-once CAS；原號 allowance_query 唯讀查回。含稅 `detail_vat=1`、已有折讓／跨原發票餘額等未驗證案例繼續 fail closed。
+- [x] g0401 折讓：使用者帶入原發票後自行編輯／刪除折讓品項，前後端核對本次含稅總額不得超過「原發票－官方已生效未作廢折讓」；摘要缺漏、未完成及金額異常仍 fail closed。CYID Manager 核准 Grant、D1 永久配號與 send-once CAS、原號查回維持原設計，逐品項歷史推算**不是**開立資格。
 - [x] CYID 折讓跨機申請、預覽、管理員覆核、配號、首次送出及原號查回的 Cloud／Windows Core 契約與主要 WinForms Manager Queue（`CloudAllowanceManagerForm`），僅 source CI／模擬資料驗證。
 - [x] g0501 作廢：`amego-allowance-void.ts`、`amego-allowance-status.ts`、`amego-allowance-list.ts`；唯讀官方核對、單次作廢、雙日期 List 異常定位器；`drafts/0019_allowance_void_workflow.sql` 提供不可變申請／核准／Claim／官方狀態稽核及官方證據後結案柵欄。
 - [x] g0501 的 **Cloud CYID routes 已接通於 Draft 原始碼**：`allowance-void-applications-route.ts` + `allowance-void-manager.ts` 包括 create／get／list、manager approve、send-once、status-readback、close；測試核對同一工作單唯一 Claim、逾時不重送、官方 `D0501/99` 後才可結案。**不要再把這組 endpoints 寫成「尚未建立」。**
 
-- [x] **CYID Cloud 申請接線（Draft，待 exact HEAD CI）**：原 `RecordDetailForm` 在 CYID Cloud Mode 直接使用既有 `CloudAllowanceApplicationClient` 建立不可變 g0401 草案；先持久化同一 `wi_` ID／不含密碼的草案到原發票 metadata，保留原 `open` 申請，由 CYID 管理員在原核准視窗執行 Work Item `open → review`（一般 USER 不具送審權限）。暫時失聯只能原號查回，絕不以新 ID 重送；已結案的舊 Work Item 才允許在重新查核官方餘額後另提下一張。Local 保留原人工待辦。**真 Worker/D1 與光貿送出均尚未實機驗證**。
-- [x] **原發票帶入折讓編輯介面（Draft）**：既有 `AllowanceRequestForm` 改為商品清單直接帶入、刪除品項、修改數量與單價、含稅／未稅輸入切換、依課稅別自算小計與稅額，畫面顯示「原發票－已生效折讓」剩餘額。使用者編輯後的商品清單與總額保存在現有人工折讓工作單，由管理員在原待辦明細查看；提交前仍由 `invoice_query` 重查歷史餘額，不新增獨立工作流程。**目前人工待辦仍需管理員完成光貿操作；CYID 雲端申請與直接 g0401 送出銜接／實機含稅四捨五入仍待驗收**。
+- [x] **CYID Cloud 申請接線（Draft，已通過 4c897a44 CI）**：原 `RecordDetailForm` 在 CYID Cloud Mode 直接使用既有 `CloudAllowanceApplicationClient` 建立不可變 g0401 草案；先持久化同一 `wi_` ID／不含密碼的草案到原發票 metadata，保留原 `open` 申請，由 CYID 管理員在原核准視窗執行 Work Item `open → review`（一般 USER 不具送審權限）。暫時失聯只能原號查回，絕不以新 ID 重送；已結案的舊 Work Item 才允許在重新查核官方餘額後另提下一張。Local 保留原人工待辦。**真 Worker/D1 與光貿送出均尚未實機驗證**。
+- [x] **原發票帶入折讓編輯介面（Draft）**：既有 `AllowanceRequestForm` 改為商品清單直接帶入、刪除品項、修改數量與單價、含稅／未稅輸入切換、依課稅別自算小計與稅額，畫面顯示「原發票－已生效折讓」剩餘額。使用者編輯後的商品清單與總額保存在現有人工折讓工作單，由管理員在原待辦明細查看；提交前仍由 `invoice_query` 重查歷史餘額，不新增獨立工作流程。**Local 人工待辦仍需管理員完成光貿操作；CYID Cloud create／manager review 已接通 Draft UI，但真 D1、光貿 g0401 與實機含稅四捨五入仍待驗收**。
+- [x] **管理員唯讀查驗 UI 清理（Draft）**：刪除不適用的歷史逐品項分攤／推算上限敘述，保留官方折讓摘要、原發票總額、本次申請總額與後端真正的核准原因；不更動發票歷史資料、CYID 權限、send-once 或 D1。
 ### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
 
 - [x] **2026-10-16 折讓需求校正：以總額餘額為上限，取消逐品項相符的送出限制**：依使用者明確定案，商品及折扣由使用者編輯；後端僅驗證必要的 g0401 payload 算式、原發票最新有效狀態，與 `原發票含稅金額－官方已確認且未作廢折讓含稅金額` 的總額上限。本機 `invoice_query.allowance[]` 已保留原本發票明細查回與歷史顯示，現在額外保存官方摘要是否明確存在，於輸入及提交重查時驗證餘額；Cloud 折讓核准及送出前驗證將改為同一限額並移除 `detail_vat=1`／已有折讓／逐項來源數量匹配的錯誤封鎖。官方摘要缺漏、待處理、重複、超額仍拒絕，不得誤認零折讓。**舊逐品項歷史覆蓋推算不再作為一般折讓開立前置條件。** 開立編輯介面及正式資料測試另待確認；不部署、不 Release。

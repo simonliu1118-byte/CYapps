@@ -116,89 +116,49 @@ internal sealed class CloudAllowanceManagerForm : Form
         inspect.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
             var v=await client.InspectOfficialForManagerAsync(entry.ItemId,entry.Revision,
                 user,pwd,lifetime.Token);
-            // Show business guidance without weakening the server's exact
-            // original-invoice/item approval gate or exposing buyer data.
+            // This UI shows the official gross allowance gate only.
+            // Historical item allocation/remaining-quantity estimates are NOT
+            // an eligibility condition and must not mislead the manager.
             var guidance=v.ItemCheck.Reason switch
             {
                 "REQUEST_TOTALS_WITHIN_REMAINING" =>
-                    "本次含稅折讓額未超過原發票扣除已生效折讓後的餘額；送出前仍須查回最新官方資料。",
-                "OFFICIAL_HISTORY_UNVERIFIED" =>
-                    "官方折讓摘要不完整、異常或仍在處理中，尚無法確認剩餘金額。",
+                    "本次含稅金額未超過原發票扣除已生效折讓後的總額上限。",
                 "REQUEST_EXCEEDS_REMAINING" =>
-                    "本次折讓含稅金額超過原發票扣除已生效折讓後的餘額。",
-                "ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY" =>
-                    "含稅原品項與官方稅額算式一致，但未稅折讓品項及可折餘額未核准；須人工核對。",
-                "ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE" =>
-                    "含稅原品項總額可核對，但官方未提供可安全拆分的稅額；不得據此開立折讓。",
-                "ORIGINAL_GROSS_ITEMS_UNVERIFIED" or
-                "ORIGINAL_GROSS_TOTAL_MISMATCH" or
-                "ORIGINAL_GROSS_TAX_ARITHMETIC_UNVERIFIED" =>
-                    "含稅原品項、總額或稅額無法完整核對；請人工查核，不得核准。",
-                "ORIGINAL_TAX_BASIS_NOT_VERIFIED" =>
-                    "原發票為含稅單價或計稅基礎未確認，不能自動核准；請人工核對。",
+                    "本次折讓超過原發票扣除已生效折讓後的剩餘上限。",
+                "OFFICIAL_HISTORY_UNVERIFIED" =>
+                    "官方折讓摘要缺漏、重複或狀態不明，不能核准。",
                 "OFFICIAL_STATE_NOT_SAFE" =>
-                    "原發票狀態不符、尚有異動或已有折讓；請人工查核。",
-                "OFFICIAL_TAX_ARITHMETIC_UNVERIFIED" or
-                "REQUEST_TAX_ARITHMETIC_UNVERIFIED" =>
-                    "官方原稅額或本次折讓稅額無法安全核對；請人工查核。",
-                "REQUEST_EXCEEDS_ORIGINAL_ITEM" or
-                "REQUEST_EXCEEDS_INVOICE_BALANCE" =>
-                    "申請品項或金額超過可證明的原始範圍；不能核准。",
-                _ => "官方資料或折讓明細不足以安全核對，請人工查核。"
+                    "原發票未完成、已作廢或存在未確認的異動。",
+                "REQUEST_TOTALS_MISMATCH" =>
+                    "使用者編輯後的折讓明細總額與申請金額不一致。",
+                "REQUEST_ITEM_INCOMPLETE" or "REQUEST_ITEMS_INVALID" =>
+                    "折讓明細有必要欄位缺漏，請修正後再申請。",
+                "REQUEST_ORIGINAL_INVOICE_MISMATCH" =>
+                    "折讓來源發票號碼或日期不符。",
+                _ => "官方狀態或本次折讓資料尚未完成核對。"
             };
             var histories=v.AllowanceHistory.Take(8).Select(h=>
-                $"  單號 {h.AllowanceNumber??"未確認"}｜日期 {h.AllowanceDate??"未確認"}｜"+
-                $"摘要金額 {h.TotalAmount??"未確認"}／稅 {h.TaxAmount??"未確認"}｜"+
-                $"上傳 {h.UploadStatus?.ToString()??"未確認"}｜"+
-                $"作廢 {(h.CancelDate=="0"?"否":h.CancelDate is null?"未確認":"是 "+h.CancelDate)}"+
-                (h.MetadataComplete?"":"｜資料不全"));
-            var historyText=v.ExistingAllowanceCount==0
-                ? (v.AllowanceSummaryExplicit?"官方摘要：無既有折讓":"官方折讓摘要缺漏，不能視為無折讓")
-                : "官方歷史折讓（最多列出前 8 筆）：\n"+
-                  string.Join("\n",histories)+
-                  (v.ExistingAllowanceCount>8?$"\n其餘 {v.ExistingAllowanceCount-8} 筆未列出。":"");
-            var allocationLines=v.HistoricalAllocationChecks.Select(x=>
-                $"  {x.AllowanceNumber}："+(x.LineTotalsVerified
-                    ?$"本張原發票分攤未稅 {x.OriginalNet}／稅 {x.OriginalTax}／含稅 {x.OriginalGross}"
-                    :"明細未核實（"+x.Reason+"）"));
-            var allocations=v.HistoricalAllocationChecks.Count==0
-                ?"本次沒有可核對的歷史折讓明細。"
-                :string.Join("\n",allocationLines);
-            var coverageText=v.HistoricalCoverageReason switch {
-                "SUMMARY_NOT_PROVIDED"=>"官方未提供歷史折讓清單",
-                "PENDING_OFFICIAL_MUTATION"=>"官方仍有尚未完成的異動",
-                "SUMMARY_METADATA_INCOMPLETE"=>"歷史折讓摘要缺少必要欄位",
-                "DUPLICATE_HISTORY_NUMBER"=>"官方歷史折讓原號重複",
-                "HISTORY_STATUS_NOT_EFFECTIVE"=>"有折讓仍處理中、失敗或已作廢",
-                "DETAIL_QUERY_LIMITED"=>"本次查詢未涵蓋全部歷史原號",
-                "DETAIL_READBACK_UNVERIFIED"=>"原號查回失敗或資料不一致",
-                "NO_HISTORY_REPORTED_NOT_PROOF"=>"本次未列歷史折讓，仍無法保證查齊",
-                _=>"已列原號核對完成，但仍無法證明全部歷史已查齊"
-            };
-            var ceilingText=v.HistoricalGrossCeilingStatus switch {
-                "KNOWN_CEILING_ONLY"=>
-                    $"本次查證的歷史分攤：{v.HistoricalKnownGross} 元；"+
-                    $"剩餘金額上限參考：{v.HistoricalRemainingCeiling} 元。"+
-                    "注意：這不是已核准的可折餘額。",
-                "KNOWN_SUM_EXCEEDS_ORIGINAL"=>
-                    "已查證歷史分攤總額超過原發票總額，請人工排查。",
-                _=>"無法從目前官方資料計算可靠的金額上限。"
-            };
+                $"  折讓號 {h.AllowanceNumber??"未確認"}｜"+
+                $"未稅 {h.TotalAmount??"未確認"}｜稅 {h.TaxAmount??"未確認"}｜"+
+                $"狀態 {h.UploadStatus?.ToString()??"未確認"}｜"+
+                $"作廢 {(h.CancelDate=="0"?"否":h.CancelDate is null?"未確認":"是")}");
+            var summary=v.ExistingAllowanceCount==0
+                ?(v.AllowanceSummaryExplicit?"官方摘要：沒有已記錄的折讓":"官方折讓摘要缺漏")
+                :string.Join("\n",histories)+
+                    (v.ExistingAllowanceCount>8?"\n（另有其他折讓紀錄）":"");
             MessageBox.Show(this,
-                $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
-                $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
-                $"{historyText}\n"+
-                $"歷史原號詳查（最多 3 筆）：\n{allocations}\n"+
-                $"本次未詳查：{v.HistoricalAllocationNotQueriedCount} 筆\n"+
-                $"歷史完整性：{coverageText}\n"+
-                $"{ceilingText}\n"+
-                "此分攤僅供逐張人工核對；歷史範圍尚未完整驗證，不能推定剩餘可折額。\n"+
-                $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
-                $"品項比對：{v.ItemCheck.Reason}\n"+
-                $"處理提示：{guidance}\n"+
-                $"官方查核時間：{v.CheckedAtUtc:yyyy/MM/dd HH:mm:ss}\n\n"+
-                "這是唯讀查驗，不是核准，也沒有送出折讓。",
-                "光貿原發票查驗",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                $"原發票：{v.OriginalInvoiceNumber}\n"+
+                $"原發票含稅總額：{v.OfficialInvoiceGross:N0} 元\n"+
+                $"本次申請含稅金額：{v.RequestedGrossAmount:N0} 元\n"+
+                $"官方上傳狀態：{v.OfficialUploadStatus}\n"+
+                $"官方已列折讓數：{v.ExistingAllowanceCount}\n"+
+                $"已列折讓紀錄：\n{summary}\n\n"+
+                $"總額核對：{guidance}\n"+
+                $"核准條件：{(v.CanApprove?"本次查驗符合":"尚未符合")}\n"+
+                $"查核時間：{v.CheckedAtUtc:yyyy/MM/dd HH:mm:ss}\n\n"+
+                "這是唯讀查驗，不會核准、配號或向光貿送出折讓。",
+                "光貿折讓總額查驗",MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         });
         approve.Click+=async (_,_)=>await RunForSelectedAsync(async (entry,user,pwd)=>{
             if(!Confirm($"確認核准折讓申請？\n原發票：{entry.OriginalInvoiceNumber}\n"+

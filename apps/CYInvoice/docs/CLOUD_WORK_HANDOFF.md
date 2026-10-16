@@ -3,13 +3,17 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 管理員查驗頁清理（Draft Source）
+
+管理員官方查驗視窗不再顯示舊的逐商品歷史分攤推算與所謂「已知餘額上限」，只顯示官方 invoice_query 當次折讓摘要、含稅原額、本次申請總額及真實的總額限額查驗原因。底層舊歷史詳查路由尚未整體刪除，因相關回歸測試／查回契約仍有相依；待分項清理，不能在未驗證前一次性移除。
+
 ## 2026-10-16 CYID Cloud 折讓申請銜接（Draft）
 
 沿用 `RecordDetailForm` 與 `AllowanceRequestForm`，在 `cloud_preferred / CYID` 模式送編輯後 g0401 草案到既有 `/v1/allowance-applications/create`，管理員於既有折讓管理視窗使用 Work Item `get` 與 `transition(open→review)` 後再查驗／核准；一般 USER 無此轉換權限。沒有建立第二套工作單；Local 仍是原人工待辦。每一張原發票先保存帶 workspace/device/environment 的凍結草案與 `wi_` ID 到本機 `ExtensionData`，網路不確定時原 ID readback，不產生第二筆；只有伺服端確認 closed 後，才准建立下一個 ID。Cloud 仍以官方 invoice_query 已生效折讓差額作單次上限，含稅介面可修改正負折扣並拆稅。這只是 source CI，尚未實際部署 draft D1 或操作真光貿。請務必驗證套件成功及端對端後才能視為已驗收。
 
 ## 2026-10-16 原發票帶入式折讓編輯（Draft）
 
-現有 `AllowanceRequestForm` 已改為依最新 `RecordDetailForm` 原發票帶入品項及原本價格模式。使用者可刪除或新增品項，修改數量、單價、品名與課稅別；含稅輸入以 100/105 換算成光貿 g0401 未稅單價，行小計與 5% 稅額依七位 `FixedDecimal` 重算。所有編輯明細寫進原有 `InvoiceAllowanceManualReview.DraftItems`，原管理員「處理中／上傳問題」可閱讀，不另建 parallel Work Item 或第二個資料儲存。人工管理員實際送出仍需原有流程；CYID Cloud Create 表單接入及混合稅別人工實機驗算另待完成，不能宣稱已完成真 g0401。
+現有 `AllowanceRequestForm` 已改為依最新 `RecordDetailForm` 原發票帶入品項及原本價格模式。使用者可刪除或新增品項，修改數量、單價、品名與課稅別；含稅輸入以 100/105 換算成光貿 g0401 未稅單價，行小計與 5% 稅額依七位 `FixedDecimal` 重算。所有編輯明細寫進原有 `InvoiceAllowanceManualReview.DraftItems`，原管理員「處理中／上傳問題」可閱讀，不另建 parallel Work Item 或第二個資料儲存。人工管理員實際送出仍需原有流程；CYID Cloud Create 表單已接入；混合稅別人工實機驗算與真 D1/光貿測試另待完成，不能宣稱已完成真 g0401。
 ## 2026-10-16 需求修正：折讓改用官方有效歷史總額差額
 
 使用者明確決定以光貿既有介面為模板：載入原發票商品，使用者自行刪除／編輯數量、單價與折扣，介面可含稅輸入且 g0401 送出未稅資料。新折讓的總額上限只看**原發票含稅總額減去已確認、未作廢的官方歷史折讓含稅總額**，不在本地推算逐商品可折數量。發票詳細畫面原本就由 `invoice_query` 刷新並呈現 `allowance[]`；現在必須拿同一來源保守計算。缺漏、待確認、重複、金額錯誤保持禁止送出；保留 CYID、CAS 單次送出、防重送、原號查回。過度設計的 `detail_vat=1`／既有折讓／逐品項相符核准柵欄已確認不適用，應逐項移除，不能誤刪 V3 安全授權機制。工程 CI 每筆 exact head 核對，無正式部署或 Release。
