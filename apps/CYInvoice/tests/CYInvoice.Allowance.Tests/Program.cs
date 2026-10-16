@@ -805,6 +805,9 @@ static QueryResponse Query(IReadOnlyList<InvoiceAllowanceResult> allowances, str
         DetailVatPresent: true)
     {
         Allowances = allowances,
+        // A synthetic non-empty official allowance[] must be explicitly
+        // present; an absent summary is different from an empty array.
+        AllowanceSummaryPresent = allowances.Count > 0,
     };
     return new QueryResponse(0, "", data);
 }
