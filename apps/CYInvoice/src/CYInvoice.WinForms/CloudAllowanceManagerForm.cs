@@ -97,8 +97,12 @@ internal sealed class CloudAllowanceManagerForm : Form
             // original-invoice/item approval gate or exposing buyer data.
             var guidance=v.ItemCheck.Reason switch
             {
-                "SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE" =>
-                    "品項與稅額符合目前支援的核對條件；核准前仍會再查官方。",
+                "REQUEST_TOTALS_WITHIN_REMAINING" =>
+                    "本次含稅折讓額未超過原發票扣除已生效折讓後的餘額；送出前仍須查回最新官方資料。",
+                "OFFICIAL_HISTORY_UNVERIFIED" =>
+                    "官方折讓摘要不完整、異常或仍在處理中，尚無法確認剩餘金額。",
+                "REQUEST_EXCEEDS_REMAINING" =>
+                    "本次折讓含稅金額超過原發票扣除已生效折讓後的餘額。",
                 "ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY" =>
                     "含稅原品項與官方稅額算式一致，但未稅折讓品項及可折餘額未核准；須人工核對。",
                 "ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE" =>

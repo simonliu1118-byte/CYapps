@@ -30,8 +30,8 @@ export interface VerifiedOfficialAllowanceReview {
   allowanceSummaryPresent: boolean;
   existingAllowanceCount: number;
   originalInvoiceGrossAmount: number;
-  // The trusted official verifier must resolve invoice item allocations;
-  // no amounts from client or a cross-invoice allowance summary count here.
+  // Worker verifier checks official remaining gross and the edited request
+  // totals; it never guesses an individual product's remaining quantity.
   originalItemsAndRequestFullyVerified: boolean;
 }
 export interface AllowanceReviewAuthority {
@@ -88,7 +88,7 @@ function assertOfficial(f: ServerFrozenAllowanceRequest, evidence: VerifiedOffic
       evidence.invoiceUploadStatus!==99 || evidence.invoiceCancelled ||
       evidence.allowanceSummaryPresent!==true ||
       !Number.isSafeInteger(evidence.existingAllowanceCount) ||
-      evidence.existingAllowanceCount!==0 ||
+      evidence.existingAllowanceCount<0 ||
       !Number.isSafeInteger(evidence.originalInvoiceGrossAmount) ||
       evidence.originalInvoiceGrossAmount < f.requestedGrossAmount ||
       evidence.originalItemsAndRequestFullyVerified!==true)

@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 需求修正：折讓改用官方有效歷史總額差額
+
+使用者明確決定以光貿既有介面為模板：載入原發票商品，使用者自行刪除／編輯數量、單價與折扣，介面可含稅輸入且 g0401 送出未稅資料。新折讓的總額上限只看**原發票含稅總額減去已確認、未作廢的官方歷史折讓含稅總額**，不在本地推算逐商品可折數量。發票詳細畫面原本就由 `invoice_query` 刷新並呈現 `allowance[]`；現在必須拿同一來源保守計算。缺漏、待確認、重複、金額錯誤保持禁止送出；保留 CYID、CAS 單次送出、防重送、原號查回。過度設計的 `detail_vat=1`／既有折讓／逐品項相符核准柵欄已確認不適用，應逐項移除，不能誤刪 V3 安全授權機制。工程 CI 每筆 exact head 核對，無正式部署或 Release。
+
 ## 2026-10-16 V3 續作：已知歷史折讓逐品項對原發票（Draft Source）
 
 原有 `allowance_query` 增加**僅內部**的 `knownOriginalQuantities`：透過同一次 `invoice_query` 的明確未稅原品項、原日期、品名、稅別、精確單價和 7 位小數數量對應，單張與當次列出的多張歷史折讓數量累加均不得超出原品項。原快照重複品項、欄位不足、含稅、單價不符、日期不同或超量時，只保留未知狀態，原歷史分攤與金額上限為 null。對應測試涵蓋有效半量、重複原品項與過量；**不**把 snapshot-local index 當成持久原品項 ID，**不**對客戶端輸出原明細、可折數量或任何核准權限。歷史完整性仍不可證，正式 D1／Cloud 與光貿未異動。本輪以 exact-head CI 為準。

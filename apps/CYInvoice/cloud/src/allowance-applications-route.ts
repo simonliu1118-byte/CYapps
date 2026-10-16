@@ -339,10 +339,12 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
             invoiceGross:official.totalAmount,status:official.uploadStatus,
             cancelled,allowanceSummaryPresent:official.allowanceSummaryPresent,
             existingAllowanceCount:official.existingAllowanceCount,
-            officialItems:official.originalProductItems
+            officialItems:official.originalProductItems,
+            allowanceHistory:official.allowanceHistory
           },application.originalInvoiceNumber,application.requestedGrossAmount);
-          // A positive result is only possible in the narrow, unambiguous
-          // net-price, no-prior-allowance, exact 5% VAT subset.
+          // This snapshot verifies edited request arithmetic and remaining
+          // gross capacity, not the individual refund quantities of the
+          // original invoice. Prior allowances may be entirely legitimate.
           if(!check.fullyMatched)
             throw new Error("ALLOWANCE_APPROVAL_OFFICIAL_ITEM_UNVERIFIED");
           return {originalInvoiceNumber:official.invoiceNumber,
@@ -571,7 +573,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
             snapshot.hasUnsettledMutation,
           allowanceSummaryPresent:snapshot.allowanceSummaryPresent,
           existingAllowanceCount:snapshot.existingAllowanceCount,
-          officialItems:snapshot.originalProductItems
+          officialItems:snapshot.originalProductItems,
+          allowanceHistory:snapshot.allowanceHistory
         },frozen.originalInvoiceNumber,frozen.requestedGrossAmount);
       // At most three distinct historical allowance numbers, each queried
       // once and only by the authorized Worker. No approval or balance grant.

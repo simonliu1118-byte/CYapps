@@ -102,7 +102,8 @@ export async function executeApprovedAllowanceOnce(
    invoiceGross:original.totalAmount,status:original.uploadStatus,cancelled,
    allowanceSummaryPresent:original.allowanceSummaryPresent,
    existingAllowanceCount:original.existingAllowanceCount,
-   officialItems:original.originalProductItems
+   officialItems:original.originalProductItems,
+   allowanceHistory:original.allowanceHistory
  },frozen.originalInvoiceNumber,frozen.requestedGrossAmount);
  // Approval's original official document must still be identical.
  if(!check.fullyMatched||original.snapshotSha256!==approve.official_snapshot_sha256)

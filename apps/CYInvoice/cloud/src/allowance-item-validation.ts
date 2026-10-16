@@ -1,212 +1,120 @@
-// V3 DRAFT: conservative and read-only verification of one invoice's
-// unnumbered g0401 lines against official invoice_query product_item.
-// AMEGO invoice query detail_vat=1 prices are gross, while g0401 amounts
-// are net. Never compare those directly or imply an approval on that path.
+// Gross-only allowance gate. Employees choose and edit g0401 line items;
+// official capacity is invoice gross minus completed, effective allowances.
+// Unknown official history is NOT zero. No per-product balance estimation.
 const SCALE=10000000n;
-// Mirrors CYInvoice.Core.FixedDecimal.Multiply and RoundInt64: half away
-// from zero. Only positive monetary source/claim values are accepted here.
-function roundedDividePositive(numerator:bigint,denominator:bigint):bigint {
-  return (numerator+denominator/2n)/denominator;
-}
-function lineAmount(quantity:bigint,unitPrice:bigint):bigint {
-  return roundedDividePositive(quantity*unitPrice,SCALE);
-}
-function vatInWholeTwd(taxableNet:bigint):bigint {
-  return roundedDividePositive(taxableNet*5n,100n*SCALE)*SCALE;
-}
-type Data=Record<string,unknown>;
-function object(value:unknown):Data|null {
-  return value!==null && typeof value==="object" && !Array.isArray(value)
-    ? value as Data : null;
-}
-function decimal(value:unknown):bigint|null {
-  if(typeof value!=="string" && typeof value!=="number")return null;
-  if(typeof value==="number" && (!Number.isFinite(value) || !Number.isSafeInteger(Math.trunc(value))))
-    return null;
-  const s=String(value).trim();
-  const m=/^(\d{1,12})(?:\.(\d{1,7}))?$/.exec(s);
-  if(!m)return null;
-  return BigInt(m[1])*SCALE+BigInt((m[2]||"").padEnd(7,"0"));
-}
-function integer(value:unknown):number|null {
-  const v=typeof value==="number"?String(value):value;
-  return typeof v==="string" && /^(0|[1-9]\d{0,2})$/.test(v)?Number(v):null;
-}
-function day(value:unknown):string|null {
+type Obj=Record<string,unknown>;
+const obj=(v:unknown):Obj|null=>v!==null&&typeof v==="object"&&
+  !Array.isArray(v)?v as Obj:null;
+function dec(value:unknown,signed=false):bigint|null {
   if(typeof value!=="string"&&typeof value!=="number")return null;
-  const digits=String(value).replaceAll("-","");
-  if(!/^\d{8}$/.test(digits))return null;
-  const year=+digits.slice(0,4),month=+digits.slice(4,6),date=+digits.slice(6,8);
-  const d=new Date(Date.UTC(year,month-1,date));
-  return d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===date
-    ? digits:null;
+  if(typeof value==="number"&&(!Number.isFinite(value)||
+     !Number.isSafeInteger(Math.trunc(value))))return null;
+  const m=/^(-?)(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,7}))?$/.exec(String(value));
+  if(!m||(!signed&&m[1]==="-"))return null;
+  const valueScaled=BigInt(m[2])*SCALE+
+    BigInt((m[3]??"").padEnd(7,"0"));
+  return m[1]==="-"?-valueScaled:valueScaled;
 }
-function exactName(value:unknown):string|null {
-  return typeof value==="string" && value.length>=1 && value.length<=256 ? value:null;
+function date(v:unknown):string|null {
+  if(typeof v!=="string"&&typeof v!=="number")return null;
+  const s=String(v).replaceAll("-","");
+  if(!/^[0-9]{8}$/.test(s))return null;
+  const y=+s.slice(0,4),m=+s.slice(4,6),d=+s.slice(6,8);
+  const dt=new Date(Date.UTC(y,m-1,d));
+  return dt.getUTCFullYear()===y&&dt.getUTCMonth()+1===m&&
+    dt.getUTCDate()===d?s:null;
 }
-export type AllowanceLineVerdict = {
-  fullyMatched: boolean;
-  reason: string; // safe status code, never a buyer name or raw product data
-  verifiedLines: number;
-};
+function lineGross(q:bigint,unit:bigint):bigint {
+  const product=q*unit;
+  return product>=0n?(product+SCALE/2n)/SCALE:
+    -((-product+SCALE/2n)/SCALE);
+}
 export interface OfficialItemEvidence {
-  invoiceNumber:string;
-  invoiceDate:unknown;
-  detailVat:unknown;
-  invoiceTaxAmount:unknown;
-  invoiceGross:number;
-  status:number;
-  cancelled:boolean;
-  allowanceSummaryPresent:boolean;
-  existingAllowanceCount:number;
-  officialItems:unknown;
+  invoiceNumber:string;invoiceDate:unknown;detailVat:unknown;
+  invoiceTaxAmount:unknown;invoiceGross:number;status:number;
+  cancelled:boolean;allowanceSummaryPresent:boolean;
+  existingAllowanceCount:number;officialItems:unknown;
+  allowanceHistory?:unknown;
 }
-// A gross-priced (detail_vat=1) invoice is NOT a g0401 net-price basis.
-// Verify only source arithmetic; NEVER return matched allowance lines.
-// Official B2C invoices can report tax 0 despite taxable gross prices.
-function inspectGrossOriginalForManualReview(evidence:OfficialItemEvidence):
-  AllowanceLineVerdict {
-  const reject=(reason:string):AllowanceLineVerdict=>({
-    fullyMatched:false,reason,verifiedLines:0
-  });
-  if(!day(evidence.invoiceDate))return reject("OFFICIAL_DATE_MISSING");
-  const gross=decimal(evidence.invoiceGross),tax=decimal(evidence.invoiceTaxAmount);
-  const rows=evidence.officialItems;
-  if(gross===null||tax===null||!Array.isArray(rows)||rows.length===0||
-     rows.length>9999)return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
-  let total=0n,taxableGross=0n;
-  const names=new Set<string>();
-  for(const raw of rows){
-    const item=object(raw);
-    if(!item)return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
-    const name=exactName(item.description),kind=integer(item.tax_type);
-    const quantity=decimal(item.quantity),price=decimal(item.unit_price);
-    const amount=decimal(item.amount);
-    if(!name||kind===null||kind<1||kind>3||quantity===null||
-       quantity<=0n||price===null||amount===null||amount<=0n||
-       lineAmount(quantity,price)!==amount)
-      return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
-    // No stable official row ID for otherwise indistinguishable items.
-    const identity=JSON.stringify([name,kind,String(price)]);
-    if(names.has(identity))return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
-    names.add(identity);
-    total+=amount;
-    if(kind===1)taxableGross+=amount;
+export interface AllowanceLineVerdict {
+  fullyMatched:boolean;reason:string;verifiedLines:number;
+}
+// invoice_query allowance[] amounts are for this invoice, not a separate
+// cross-invoice list. This is a single official snapshot and must be fresh.
+export function remainingOfficialGross(x:OfficialItemEvidence):bigint|null {
+  if(!x.allowanceSummaryPresent||!Number.isSafeInteger(x.invoiceGross)||
+     x.invoiceGross<=0||!Number.isSafeInteger(x.existingAllowanceCount)||
+     x.existingAllowanceCount<0)return null;
+  const history=x.allowanceHistory??(x.existingAllowanceCount===0?[]:null);
+  if(!Array.isArray(history)||history.length!==x.existingAllowanceCount||
+     history.length>50)return null;
+  let taken=0n;const known=new Set<string>();
+  for(const raw of history){
+    const h=obj(raw);
+    if(!h||h.metadataComplete!==true||
+       typeof h.allowanceNumber!=="string"||
+       !/^[A-Za-z0-9]{1,16}$/.test(h.allowanceNumber)||
+       known.has(h.allowanceNumber)||!date(h.allowanceDate))return null;
+    known.add(h.allowanceNumber);
+    if(h.uploadStatus!==99)return null;
+    if(h.cancelDate!=="0"){
+      if(!date(h.cancelDate))return null;
+      continue; // Confirmed void: this allowance no longer consumes capacity.
+    }
+    const net=dec(h.totalAmount),tax=dec(h.taxAmount);
+    if(net===null||tax===null)return null;
+    taken+=net+tax;
   }
-  if(total!==gross)return reject("ORIGINAL_GROSS_TOTAL_MISMATCH");
-  if(tax===0n)return reject("ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE");
-  // AMEGO's published detail_vat=1 calculation for a tax-split invoice:
-  // SalesAmount=Round(taxable gross), Tax=SalesAmount-Round(SalesAmount/1.05).
-  // This only diagnoses the original header; it cannot price a g0401 line.
-  const taxableWhole=roundedDividePositive(taxableGross,SCALE);
-  const expectedTax=(taxableWhole-
-    roundedDividePositive(taxableWhole*100n,105n))*SCALE;
-  if(tax!==expectedTax)
-    return reject("ORIGINAL_GROSS_TAX_ARITHMETIC_UNVERIFIED");
-  return reject("ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY");
+  const total=BigInt(x.invoiceGross)*SCALE;
+  return taken<=total?total-taken:null;
 }
-
 export function validateAllowanceOriginalItems(
-  json:string, evidence:OfficialItemEvidence,
-  requestedInvoice:string, requestedGross:number
+  json:string,x:OfficialItemEvidence,invoice:string,gross:number
 ):AllowanceLineVerdict {
-  const failed=(reason:string):AllowanceLineVerdict=>({fullyMatched:false,reason,verifiedLines:0});
-  if(evidence.invoiceNumber!==requestedInvoice||evidence.status!==99||
-      evidence.cancelled||!evidence.allowanceSummaryPresent||
-      evidence.existingAllowanceCount!==0)
-    return failed("OFFICIAL_STATE_NOT_SAFE");
-  // Gross source arithmetic is read-only evidence, never net g0401 proof.
-  if(evidence.detailVat===1||evidence.detailVat==="1")
-    return inspectGrossOriginalForManualReview(evidence);
-  if(evidence.detailVat!==0 && evidence.detailVat!=="0")
-    return failed("ORIGINAL_TAX_BASIS_NOT_VERIFIED");
-  const originalDay=day(evidence.invoiceDate);
-  if(!originalDay)return failed("OFFICIAL_DATE_MISSING");
-  if(!Array.isArray(evidence.officialItems)||evidence.officialItems.length<1||
-     evidence.officialItems.length>9999)
-    return failed("OFFICIAL_ITEMS_MISSING");
-  if(!Number.isSafeInteger(requestedGross)||requestedGross<1)
-    return failed("REQUEST_GROSS_INVALID");
-  let draft:Data|null=null;
-  try{draft=object(JSON.parse(json));}catch{return failed("REQUEST_ITEMS_INVALID");}
-  if(!draft||draft.AllowanceNumber!=="" || !Array.isArray(draft.ProductItem)||
-      draft.ProductItem.length===0||draft.ProductItem.length>50)
-    return failed("REQUEST_ITEMS_INVALID");
-  const netClaim=decimal(draft.TotalAmount),taxClaim=decimal(draft.TaxAmount);
-  const invoiceTax=decimal(evidence.invoiceTaxAmount);
-  const originalGross=decimal(evidence.invoiceGross);
-  if(netClaim===null||taxClaim===null||invoiceTax===null||originalGross===null)
-    return failed("TOTALS_MISSING");
-  const originals=new Map<string,{quantity:bigint;amount:bigint}>();
-  let originalNet=0n,originalTaxableNet=0n;
-  for(const raw of evidence.officialItems){
-    const line=object(raw);
-    if(!line)return failed("OFFICIAL_ITEM_INCOMPLETE");
-    const name=exactName(line.description),taxType=integer(line.tax_type);
-    const quantity=decimal(line.quantity),unitPrice=decimal(line.unit_price);
-    const amount=decimal(line.amount);
-    if(!name||taxType===null||taxType<1||taxType>3||
-        quantity===null||quantity===0n||unitPrice===null||
-        amount===null||amount===0n)
-      return failed("OFFICIAL_ITEM_INCOMPLETE");
-    if(lineAmount(quantity,unitPrice)!==amount)
-      return failed("OFFICIAL_LINE_ARITHMETIC_MISMATCH");
-    originalNet+=amount;
-    if(taxType===1)originalTaxableNet+=amount;
-    const key=JSON.stringify([name,taxType,String(unitPrice)]);
-    // Identical official rows lack a stable line ID: ambiguous partial
-    // allocation cannot authorize a later refund.
-    if(originals.has(key))return failed("OFFICIAL_DUPLICATE_ITEM");
-    originals.set(key,{quantity,amount});
+  const no=(reason:string):AllowanceLineVerdict=>({
+    fullyMatched:false,reason,verifiedLines:0});
+  if(x.invoiceNumber!==invoice||x.status!==99||x.cancelled)
+    return no("OFFICIAL_STATE_NOT_SAFE");
+  const remaining=remainingOfficialGross(x);
+  if(remaining===null)return no("OFFICIAL_HISTORY_UNVERIFIED");
+  if(!Number.isSafeInteger(gross)||gross<=0)return no("REQUEST_GROSS_INVALID");
+  if(BigInt(gross)*SCALE>remaining)return no("REQUEST_EXCEEDS_REMAINING");
+  const origDay=date(x.invoiceDate);
+  if(!origDay)return no("OFFICIAL_DATE_MISSING");
+  let data:Obj|null=null;
+  try{data=obj(JSON.parse(json));}catch{return no("REQUEST_ITEMS_INVALID");}
+  if(!data||data.AllowanceNumber!==""||
+     !Array.isArray(data.ProductItem)||data.ProductItem.length<1||
+     data.ProductItem.length>50)return no("REQUEST_ITEMS_INVALID");
+  const total=dec(data.TotalAmount,true),tax=dec(data.TaxAmount,true);
+  if(total===null||tax===null||total<=0n||tax<0n)
+    return no("REQUEST_TOTALS_MISMATCH");
+  let netSum=0n,taxSum=0n;
+  for(const p of data.ProductItem){
+    const line=obj(p);
+    if(!line)return no("REQUEST_ITEM_INCOMPLETE");
+    if(line.OriginalInvoiceNumber!==invoice||
+       date(line.OriginalInvoiceDate)!==origDay)
+      return no("REQUEST_ORIGINAL_INVOICE_MISMATCH");
+    if(typeof line.OriginalDescription!=="string"||
+       line.OriginalDescription.length<1||
+       line.OriginalDescription.length>256||
+       !["1","2","3"].includes(String(line.TaxType)))
+      return no("REQUEST_ITEM_INCOMPLETE");
+    const qty=dec(line.Quantity),price=dec(line.UnitPrice,true),
+      amount=dec(line.Amount,true),itemTax=dec(line.Tax,true);
+    if(qty===null||qty<=0n||price===null||
+       amount===null||itemTax===null)
+      return no("REQUEST_ITEM_INCOMPLETE");
+    if(lineGross(qty,price)!==amount)
+      return no("REQUEST_LINE_ARITHMETIC_MISMATCH");
+    if(String(line.TaxType)!=="1"&&itemTax!==0n)
+      return no("REQUEST_ITEM_INCOMPLETE");
+    netSum+=amount;taxSum+=itemTax;
   }
-  // An inconsistent official invoice is not proof of remaining balance.
-  if(originalNet+invoiceTax!==originalGross)
-    return failed("OFFICIAL_TOTAL_ARITHMETIC_MISMATCH");
-  // Original gross can add up while the claimed VAT itself is inconsistent.
-  // Never treat overstated/understated official tax as unused refund capacity.
-  // Only the already-supported explicit 5%, whole-TWD rounding case is safe.
-  if(invoiceTax!==vatInWholeTwd(originalTaxableNet))
-    return failed("OFFICIAL_TAX_ARITHMETIC_UNVERIFIED");
-  const claimed=new Map<string,{quantity:bigint;amount:bigint}>();
-  let net=0n,tax=0n,taxableNet=0n;
-  for(const raw of draft.ProductItem){
-    const line=object(raw);
-    if(!line)return failed("REQUEST_ITEM_INCOMPLETE");
-    if(line.OriginalInvoiceNumber!==requestedInvoice ||
-       day(line.OriginalInvoiceDate)!==originalDay)
-      return failed("REQUEST_ORIGINAL_INVOICE_MISMATCH");
-    const name=exactName(line.OriginalDescription),taxType=integer(line.TaxType);
-    const quantity=decimal(line.Quantity),unitPrice=decimal(line.UnitPrice);
-    const amount=decimal(line.Amount),itemTax=decimal(line.Tax);
-    if(!name||taxType===null||taxType<1||taxType>3||quantity===null||
-        quantity===0n||unitPrice===null||amount===null||amount===0n||
-        itemTax===null||(taxType!==1&&itemTax!==0n))
-      return failed("REQUEST_ITEM_INCOMPLETE");
-    if(lineAmount(quantity,unitPrice)!==amount)
-      return failed("REQUEST_LINE_ARITHMETIC_MISMATCH");
-    // For the narrow automatic match use only explicit standard 5% VAT
-    // with whole-TWD, half-away-from-zero rounding. Unsupported rounding
-    // rules must stay manual rather than look like a positive proof.
-    if(itemTax%SCALE!==0n || (taxType===1 &&
-       itemTax!==vatInWholeTwd(amount)))
-      return failed("REQUEST_TAX_ARITHMETIC_UNVERIFIED");
-    if(taxType===1)taxableNet+=amount;
-    const key=JSON.stringify([name,taxType,String(unitPrice)]);
-    const official=originals.get(key);
-    if(!official)return failed("REQUEST_ITEM_NOT_IN_ORIGINAL");
-    const before=claimed.get(key)||{quantity:0n,amount:0n};
-    const newQty=before.quantity+quantity,newAmt=before.amount+amount;
-    if(newQty>official.quantity||newAmt>official.amount)
-      return failed("REQUEST_EXCEEDS_ORIGINAL_ITEM");
-    claimed.set(key,{quantity:newQty,amount:newAmt});
-    net+=amount;tax+=itemTax;
-  }
-  if(tax!==vatInWholeTwd(taxableNet))
-    return failed("REQUEST_TAX_ARITHMETIC_UNVERIFIED");
-  if(net!==netClaim||tax!==taxClaim||net+tax!==BigInt(requestedGross)*SCALE)
-    return failed("REQUEST_TOTALS_MISMATCH");
-  if(tax>invoiceTax||BigInt(requestedGross)*SCALE>originalGross)
-    return failed("REQUEST_EXCEEDS_INVOICE_BALANCE");
-  return {fullyMatched:true,reason:"SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE",
-    verifiedLines:draft.ProductItem.length};
+  if(total!==netSum||tax!==taxSum||
+     total+tax!==BigInt(gross)*SCALE)
+    return no("REQUEST_TOTALS_MISMATCH");
+  return {fullyMatched:true,reason:"REQUEST_TOTALS_WITHIN_REMAINING",
+    verifiedLines:data.ProductItem.length};
 }

@@ -448,9 +448,9 @@ public sealed class CloudAllowanceApplicationClient
             verifiedCount<0 || verifiedCount>50)
             throw new InvalidDataException("Official item verification status is invalid.");
         var matched=Boolean(rawCheck,"fullyMatched");
-        if (matched && (pending || cancelled || existing!=0 || !summary ||
+        if (matched && (pending || cancelled || !summary ||
                         upload!=99 || verifiedCount==0 ||
-                        reason.GetString()!="SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE") ||
+                        reason.GetString()!="REQUEST_TOTALS_WITHIN_REMAINING") ||
             !matched && verifiedCount!=0)
             throw new InvalidDataException("Official item verification cannot override safety fences.");
         if (requested==0 || canApprove || !needsItems ||
