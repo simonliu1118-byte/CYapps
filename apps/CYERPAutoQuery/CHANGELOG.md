@@ -1,5 +1,10 @@
 # CYERPAutoQuery Changelog
 
+## V0.2.0
+
+- Build 0（2026/10/16）：新增 CY Web 查詢連線（Agent）。依 chihyuan-web #169 的 ERP 品號查詢 contract：程式定時（閒置 3 秒）向 CY Web 領取查詢工作，用與本機相同的查詢流程執行（同樣鎖滑鼠、中央提示），回報 FOUND／NOT_FOUND／FAILED；失敗只回固定錯誤代碼（ERP_NOT_OPEN／ERP_BUSY／ERP_STATE／EXPORT_FAILED／CANCELLED／INTERNAL），不送出本機訊息。網路錯誤 3→30 秒退避；Token 被拒即停止；本機查詢中不領工作。主視窗新增「Web 連線」設定（網址、Token、啟用），Token 以 Windows DPAPI 加密存在程式旁 `config/agent.json`，狀態列顯示 Web 連線狀態。已對本機執行的 chihyuan-web #169 Worker（local D1）實測領取與回報成功。
+- 同版修正（V0.1.0 Build 3 實機回報）：匯出設定的「單頭／單身」頁籤與「全選」「確定」按鈕在使用者電腦上不是視窗控制項（LOG：tabs not found as windows），改為找不到控制項時以 OCR 找文字點擊；「檢視Excel資料?」改以新出現的小視窗辨識，No 按鈕找不到控制項時同樣用 OCR。找不到時 LOG 列出對話框子視窗。
+
 ## V0.1.0
 
 - Build 3（2026/10/16）：品號比對改為區分大小寫（使用者確認 SMART ERP 品號區分大小寫，小寫 c00154 查不到 C00154），與 CY Web contract 一致。程式圖示改用 AITeam CY Icon Family 的 `AutoQ`（AITeam#74，使用者確認：沿用 AutoInput 的 Auto 字樣與橘色，下方改為大 Q），由 `tools/fetch-canonical-icon.ps1` 依固定 revision 下載並核對 SHA-256，嵌入 EXE、視窗與工作列。實機 Build 2 按 F6 後回報「3 秒內沒有出現設定查詢條件」，但視窗其實約 4 秒後才出現（LOG：F6 12:03:48.457、失敗 51.519、狀態 52.547 轉為對話框開啟）。等待改為 10 秒；查詢條件視窗改以「一般選項」頁籤辨識（標題比對為輔，也找 INVI02 內的子視窗），匯出設定視窗改以「儲存檔案」路徑欄辨識；找不到時 LOG 列出 ERP 所有可見視窗。點擊遮擋檢查改為只認真正的子視窗，不把 ERP 彈出視窗當成 INVI02 的一部分。

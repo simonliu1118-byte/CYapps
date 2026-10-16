@@ -1,6 +1,12 @@
 # CYERPAutoQuery Work Handoff
 
-## 現況（V0.1.0 Build 2，2026/10/16）
+## 現況（V0.2.0 Build 0，2026/10/16）
+
+- CY Web Agent 完成（`ErpAgentProtocol`／`ErpAgent`（client + loop，純 .NET、有單元測試）／`ErpAgentSettings`（DPAPI）／`ErpAgentSettingsForm`）；本機與 Web 查詢共用 `MainForm.ExecuteQueryAsync` → `ItemQueryService`，不另寫第二套流程。已對本機 `wrangler dev` 執行的 chihyuan-web #169 Worker（local D1、假工作）實測 claim → complete(FOUND) 成功；`tests/.../LiveCyWebTests.cs` 為 opt-in 測試（需 CYQ_LIVE_BASE／CYQ_LIVE_TOKEN）。
+- 待：chihyuan-web #169 合併並部署後，用真的 CY Web 網址與 Token 實機端對端測試。
+- V0.1.0 Build 3 實機：查詢、基本資料1、Ribbon Excel（OCR）、轉出至 Excel（OCR）都成功；匯出設定的單頭／單身頁籤與全選不是視窗控制項，V0.2.0 改為 OCR 備援。
+
+## 先前狀態（V0.1.0 Build 2）
 
 - 欄位已定（使用者 2026-10-16）：`ItemFieldCatalog` 是唯一欄位清單，本機畫面與 Web 白名單共用；已用真實匯出檔在本機確認每個欄位都對得到（未提交）。
 

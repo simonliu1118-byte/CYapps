@@ -78,23 +78,34 @@ internal sealed class ItemQueryService
         var path = ExportFiles.NewPath();
         try
         {
-            await ExportToExcelAsync(root, path, cancellationToken);
-
-            // The record must still be the one asked for after the export.
-            if (!ItemCodeRules.SameCode(NativeMethods.ControlText(header.ItemCode.Handle), code))
-                throw new InvalidOperationException("轉出途中 ERP 顯示的品號改變了；結果不採用，請重新查詢。");
-
-            progress.Report("讀取匯出資料…");
-            var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
-            var (fields, warehouses) = Invi02Export.Parse(sheets, code);
-            var result = new ItemQueryResult(code, fields, warehouses, watch.Elapsed);
-            _log.Info("query", $"done item={_log.Value(code)} fields={fields.Count} warehouses={warehouses.Count} elapsed_ms={watch.ElapsedMilliseconds}");
-            return result;
+            return await ExportAndReadAsync(root, header, code, path, watch, progress, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure)
+        {
+            // Every failure from here on is an export failure for the Web contract.
+            throw new QueryFailure(ErpAgentErrorCode.EXPORT_FAILED, ex.Message, ex);
         }
         finally
         {
             ExportFiles.Delete(path, _log);
         }
+    }
+
+    private async Task<ItemQueryResult> ExportAndReadAsync(nint root, HeaderControls header, string code, string path,
+        Stopwatch watch, IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        await ExportToExcelAsync(root, path, cancellationToken);
+
+        // The record must still be the one asked for after the export.
+        if (!ItemCodeRules.SameCode(NativeMethods.ControlText(header.ItemCode.Handle), code))
+            throw new InvalidOperationException("轉出途中 ERP 顯示的品號改變了；結果不採用，請重新查詢。");
+
+        progress.Report("讀取匯出資料…");
+        var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
+        var (fields, warehouses) = Invi02Export.Parse(sheets, code);
+        var result = new ItemQueryResult(code, fields, warehouses, watch.Elapsed);
+        _log.Info("query", $"done item={_log.Value(code)} fields={fields.Count} warehouses={warehouses.Count} elapsed_ms={watch.ElapsedMilliseconds}");
+        return result;
     }
 
     /// <summary>Read-only status probe for the UI status badge; never writes to ERP and never logs.</summary>
@@ -121,9 +132,9 @@ internal sealed class ItemQueryService
     {
         var windows = Win32Automation.FindInvi02Windows();
         if (windows.Count == 0)
-            throw new InvalidOperationException("找不到 SMART ERP「品號資料建立作業 (INVI02)」視窗。\n請先在 ERP 開啟品號資料建立作業。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP「品號資料建立作業 (INVI02)」視窗。\n請先在 ERP 開啟品號資料建立作業。");
         if (windows.Count > 1)
-            throw new InvalidOperationException($"偵測到 {windows.Count} 個品號資料建立作業視窗。\n請只保留一個再查詢，避免讀到錯誤的視窗。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"偵測到 {windows.Count} 個品號資料建立作業視窗。\n請只保留一個再查詢，避免讀到錯誤的視窗。");
         var root = windows[0];
         _log.Info("window", $"INVI02 found class={NativeMethods.ClassName(root)} visible={NativeMethods.IsWindowVisible(root)}");
         return root;
@@ -171,14 +182,14 @@ internal sealed class ItemQueryService
             _log.Info("dialog", "query dialog already open; reused");
             return open[0];
         }
-        if (open.Count > 1) throw new InvalidOperationException("ERP 開著多個「設定查詢條件」視窗，請先關閉再查詢。");
+        if (open.Count > 1) throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 開著多個「設定查詢條件」視窗，請先關閉再查詢。");
         if (!NativeMethods.IsWindowEnabled(root))
-            throw new InvalidOperationException("ERP 品號資料建立作業目前有其他對話框開著，請先處理後再查詢。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前有其他對話框開著，請先處理後再查詢。");
 
         var header = ResolveHeader(root, page);
         if (header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase) &&
             !Win32Automation.IsReadOnly(header.ItemCode.Handle))
-            throw new InvalidOperationException("ERP 品號資料建立作業目前在新增或修改狀態。\n請先儲存或取消後再查詢。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前在新增或修改狀態。\n請先儲存或取消後再查詢。");
 
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("按 F6 前無法把品號資料建立作業帶到前景。");
@@ -199,7 +210,7 @@ internal sealed class ItemQueryService
             }
         }
         LogProcessWindows(root, "after-F6");
-        throw new InvalidOperationException("已按 F6，但 10 秒內沒有找到「設定查詢條件」視窗。\n請確認品號資料建立作業在檢視狀態；若視窗已出現，請把 LOG 傳給開發人員。");
+        throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "已按 F6，但 10 秒內沒有找到「設定查詢條件」視窗。\n請確認品號資料建立作業在檢視狀態；若視窗已出現，請把 LOG 傳給開發人員。");
     }
 
     /// <summary>
@@ -522,11 +533,22 @@ internal sealed class ItemQueryService
                 throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。");
             }
             await Pace.Delay(150, cancellationToken);
+            // The question is a small new window once 匯出設定 has closed (its buttons may be
+            // windows or drawn; both are handled below).
+            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) continue;
             question = Win32Automation.VisibleProcessWindows(root)
-                .FirstOrDefault(h => h != dialog && !before.Contains(h) && FindButton(h, IsNoCaption) is not null);
+                .FirstOrDefault(h => !before.Contains(h) && IsSmallDialog(h));
         }
-        var no = FindButton(question, IsNoCaption)!;
-        SafeClick(question, Win32Automation.Center(no.Rect));
+        await Pace.Delay(200, cancellationToken); // let it paint before a possible OCR
+        if (FindButton(question, IsNoCaption) is { } no)
+            SafeClick(question, Win32Automation.Center(no.Rect));
+        else
+        {
+            LogChildren(question, "export-question");
+            if (!NativeMethods.GetWindowRect(question, out var q))
+                throw new InvalidOperationException("讀不到「檢視Excel資料?」視窗位置。");
+            await OcrClickAsync(question, q.ToRectangle(), "No", "「檢視Excel資料?」的 No", cancellationToken, alternative: "否");
+        }
         _log.Info("export", "檢視Excel資料? answered No");
 
         deadline = Environment.TickCount64 + 5000;
@@ -602,9 +624,7 @@ internal sealed class ItemQueryService
             if (attempt >= 2) throw new InvalidOperationException("匯出路徑輸入後讀回的內容不一致，已停止。");
         }
 
-        var ok = FindButton(dialog, c => c.StartsWith("確定", StringComparison.Ordinal))
-            ?? throw new InvalidOperationException("匯出設定視窗找不到「確定」按鈕。");
-        SafeClick(dialog, Win32Automation.Center(ok.Rect));
+        await ClickButtonAsync(dialog, "確定", "匯出設定視窗的「確定」", cancellationToken);
         _log.Info("export", "匯出設定 確定 clicked");
     }
 
@@ -620,8 +640,19 @@ internal sealed class ItemQueryService
             .ToList();
         if (sheets.Any(s => s.Sheet is null))
         {
-            _log.Warn("export", "匯出欄位 tabs not found as windows; pressing the visible 全選 only");
-            await PressSelectAllAsync(dialog, "匯出欄位", cancellationToken);
+            // On the user's PC (Build 3, 2026-10-16) 單頭／單身 and 全選 are drawn, not windows:
+            // the tab captions are found by OCR in the dialog's left part (「匯出子單頭」 sits to
+            // the right and is left out), each tab clicked, then its 全選.
+            LogChildren(dialog, "export-dialog");
+            if (!NativeMethods.GetWindowRect(dialog, out var d))
+                throw new InvalidOperationException("讀不到匯出設定視窗位置。");
+            var tabArea = new Rectangle(d.Left, d.Top, Math.Min(d.Width, 360), d.Height);
+            foreach (var tab in Invi02Layout.ExportFieldTabs.Order)
+            {
+                await OcrClickAsync(dialog, tabArea, tab, $"匯出設定頁籤「{tab}」", cancellationToken);
+                await Pace.Delay(300, cancellationToken);
+                await PressSelectAllAsync(dialog, tab, cancellationToken);
+            }
             return;
         }
 
@@ -637,12 +668,55 @@ internal sealed class ItemQueryService
 
     private async Task PressSelectAllAsync(nint dialog, string what, CancellationToken cancellationToken)
     {
-        var button = FindButton(dialog, c => c.StartsWith("全選", StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"匯出設定「{what}」找不到「全選」按鈕。");
-        SafeClick(dialog, Win32Automation.Center(button.Rect));
+        await ClickButtonAsync(dialog, "全選", $"匯出設定「{what}」的「全選」", cancellationToken);
         _log.Info("export", $"全選 clicked tab={what}");
         await Pace.Delay(200, cancellationToken);
     }
+
+    /// <summary>
+    /// Clicks the button captioned <paramref name="caption"/>: the button window when ERP has
+    /// one, otherwise the caption found by OCR in the dialog (drawn DevExpress buttons).
+    /// </summary>
+    private async Task ClickButtonAsync(nint dialog, string caption, string what, CancellationToken cancellationToken)
+    {
+        if (FindButton(dialog, c => c.StartsWith(caption, StringComparison.Ordinal)) is { } button)
+        {
+            SafeClick(dialog, Win32Automation.Center(button.Rect));
+            return;
+        }
+        if (!NativeMethods.GetWindowRect(dialog, out var d))
+            throw new InvalidOperationException($"讀不到{what}所在視窗的位置。");
+        await OcrClickAsync(dialog, d.ToRectangle(), caption, what, cancellationToken);
+    }
+
+    /// <summary>Finds <paramref name="word"/> (or <paramref name="alternative"/>) by OCR inside <paramref name="area"/> of <paramref name="window"/> and clicks it.</summary>
+    private async Task OcrClickAsync(nint window, Rectangle area, string word, string what, CancellationToken cancellationToken, string? alternative = null)
+    {
+        if (!Win32Automation.PrepareForeground(window, _log))
+            throw new InvalidOperationException($"點擊{what}前無法把視窗帶到前景。");
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(area))
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        if ((OcrWordFinder.FindWord(tokens, word) ?? (alternative is null ? null : OcrWordFinder.FindWord(tokens, alternative))) is not { } r)
+        {
+            _log.Warn("export", $"OCR did not find {what} tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
+            throw new InvalidOperationException($"找不到{what}。");
+        }
+        var point = new Point(area.Left + r.Left + r.Width / 2, area.Top + r.Top + r.Height / 2);
+        SafeClick(window, point);
+        _log.Info("export", $"clicked by OCR what={what} point={point.X - area.Left},{point.Y - area.Top}");
+    }
+
+    /// <summary>For on-site diagnosis: the child windows of an ERP dialog (classes, captions, positions).</summary>
+    private void LogChildren(nint window, string context)
+    {
+        NativeMethods.GetWindowRect(window, out var w);
+        foreach (var c in Win32Automation.EnumerateChildren(window).Where(c => c.Visible))
+            _log.Info("dialog", $"{context}: child class={c.ClassName} text=\"{c.Text}\" rect={c.Rect.Left - w.Left},{c.Rect.Top - w.Top},{c.Rect.Width}x{c.Rect.Height}");
+    }
+
+    private static bool IsSmallDialog(nint hwnd) =>
+        NativeMethods.GetWindowRect(hwnd, out var r) && r.Width is > 120 and < 700 && r.Height is > 80 and < 450;
 
     private static bool IsNoCaption(string caption) =>
         caption is "NO" or "否" || caption.StartsWith("否(", StringComparison.Ordinal);
@@ -664,8 +738,6 @@ internal sealed class ItemQueryService
         return null;
     }
 }
-
-internal enum Invi02Status { NotOpen, Multiple, Browse, Editing, DialogOpen, Unknown }
 
 /// <summary>Delays that also stop the automation when the user presses Esc.</summary>
 internal static class Pace
@@ -711,7 +783,7 @@ internal sealed class ErpAutomationGate : IDisposable
         if (!acquired)
         {
             mutex.Dispose();
-            throw new InvalidOperationException("另一支 CY 程式正在操作 SMART ERP，請等它完成後再查詢。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_BUSY, "另一支 CY 程式正在操作 SMART ERP，請等它完成後再查詢。");
         }
         return new ErpAutomationGate(mutex);
     }

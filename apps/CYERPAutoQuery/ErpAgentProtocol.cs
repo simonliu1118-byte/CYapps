@@ -1,0 +1,112 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace CYERPAutoQuery;
+
+/// <summary>FAILED error codes of the CY Web ERP item query contract (chihyuan-web #169).</summary>
+internal enum ErpAgentErrorCode { ERP_NOT_OPEN, ERP_BUSY, ERP_STATE, EXPORT_FAILED, CANCELLED, INTERNAL }
+
+/// <summary>A query failure whose contract error code is known where it is raised.</summary>
+internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Exception? inner = null)
+    : InvalidOperationException(message, inner)
+{
+    public ErpAgentErrorCode Code { get; } = code;
+}
+
+/// <summary>A job handed out by CY Web's claim endpoint.</summary>
+internal sealed record ErpAgentJob(string Id, string ItemNo);
+
+/// <summary>
+/// JSON shapes of the CY Web ERP item query Agent API (contract:
+/// chihyuan-web docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md). Pure, so it is unit
+/// tested on any OS.
+/// </summary>
+internal static class ErpAgentProtocol
+{
+    public const string ClaimPath = "api/erp-agent/item-queries/claim";
+    public static string CompletePath(string jobId) => $"api/erp-agent/item-queries/{Uri.EscapeDataString(jobId)}/complete";
+
+    public static string ErpState(Invi02Status status) => status switch
+    {
+        Invi02Status.Browse => "BROWSE",
+        Invi02Status.Editing => "EDITING",
+        Invi02Status.DialogOpen => "DIALOG_OPEN",
+        Invi02Status.Multiple => "MULTIPLE",
+        Invi02Status.NotOpen => "NOT_OPEN",
+        _ => "UNKNOWN"
+    };
+
+    public static string ClaimBody(string agentVersion, string erpState) =>
+        new JsonObject { ["agentVersion"] = agentVersion, ["erpState"] = erpState }.ToJsonString();
+
+    /// <summary>The job in a claim response, or null for <c>{job:null}</c>.</summary>
+    public static ErpAgentJob? ParseClaim(string json)
+    {
+        var data = Data(json);
+        if (data["job"] is not JsonObject job) return null;
+        var id = job["id"]?.GetValue<string>();
+        var itemNo = job["itemNo"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(id) || itemNo is null)
+            throw new InvalidDataException("CY Web claim 回應缺少 id／itemNo。");
+        return new ErpAgentJob(id, itemNo);
+    }
+
+    public static string FoundBody(ItemQueryResult result, string agentVersion) => Complete(
+        "FOUND",
+        Fields(result.Fields),
+        new JsonArray(result.Warehouses.Select(row => (JsonNode)Fields(row)).ToArray()),
+        null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+
+    public static string NotFoundBody(long elapsedMs, string agentVersion) =>
+        Complete("NOT_FOUND", [], [], null, elapsedMs, agentVersion);
+
+    public static string FailedBody(ErpAgentErrorCode code, long elapsedMs, string agentVersion) =>
+        Complete("FAILED", [], [], code, elapsedMs, agentVersion);
+
+    /// <summary>
+    /// Contract code for a failed query. The message itself is never sent: CY Web stores a
+    /// fixed Chinese text per code, so local paths or ERP text cannot leak.
+    /// </summary>
+    public static ErpAgentErrorCode Classify(Exception ex) => ex switch
+    {
+        QueryFailure failure => failure.Code,
+        OperationCanceledException => ErpAgentErrorCode.CANCELLED,
+        InvalidDataException => ErpAgentErrorCode.EXPORT_FAILED,
+        _ => ErpAgentErrorCode.INTERNAL
+    };
+
+    /// <summary>The error code of a failed CY Web response envelope, or the HTTP status when unreadable.</summary>
+    public static string ErrorCode(string json, int httpStatus)
+    {
+        try
+        {
+            return JsonNode.Parse(json)?["error"]?["code"]?.GetValue<string>() ?? $"HTTP_{httpStatus}";
+        }
+        catch (JsonException)
+        {
+            return $"HTTP_{httpStatus}";
+        }
+    }
+
+    private static string Complete(string outcome, JsonArray fields, JsonArray warehouses, ErpAgentErrorCode? code, long elapsedMs, string agentVersion) =>
+        new JsonObject
+        {
+            ["outcome"] = outcome,
+            ["fields"] = fields,
+            ["warehouses"] = warehouses,
+            ["errorCode"] = code?.ToString(),
+            ["errorMessage"] = null,
+            ["elapsedMs"] = Math.Clamp(elapsedMs, 0, 3_600_000),
+            ["agentVersion"] = agentVersion
+        }.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+    private static JsonArray Fields(IReadOnlyList<ErpField> fields) =>
+        new(fields.Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["value"] = f.Value }).ToArray());
+
+    private static JsonObject Data(string json)
+    {
+        var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("CY Web 回應不是 JSON 物件。");
+        if (root["ok"]?.GetValue<bool>() != true) throw new InvalidDataException("CY Web 回應 ok 不是 true。");
+        return root["data"] as JsonObject ?? throw new InvalidDataException("CY Web 回應缺少 data。");
+    }
+}

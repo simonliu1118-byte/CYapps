@@ -32,11 +32,17 @@ internal sealed class MainForm : Form
     private Invi02Status? _shownState;
     private ItemQueryResult? _lastResult;
     private CancellationTokenSource? _queryCts;
+    private readonly ToolStripStatusLabel _agentStatus = new() { Text = "Web：未啟用" };
+    private readonly ErpAgentSettings _agentSettings;
+    private CancellationTokenSource? _agentCts;
+    private Task? _agentTask;
+    private ErpAgentState? _agentState;
 
     public MainForm(AppLogger log)
     {
         _log = log;
         _service = new ItemQueryService(log);
+        _agentSettings = ErpAgentSettings.Load(log);
         // Same as CYERPAutoInput: the local log keeps what CY read, for troubleshooting.
         _log.Diagnostic = true;
 
@@ -56,9 +62,10 @@ internal sealed class MainForm : Form
             RefreshErpState();
             _statePoll.Start();
             _code.Focus();
+            if (_agentSettings.Enabled) StartAgent();
         };
         DpiChanged += (_, _) => UpdateDpiHint();
-        FormClosing += (_, _) => { _statePoll.Stop(); _automationSession?.Dispose(); };
+        FormClosing += (_, _) => { _statePoll.Stop(); StopAgent(); _automationSession?.Dispose(); };
     }
 
     private void BuildUi()
@@ -102,6 +109,9 @@ internal sealed class MainForm : Form
         var copy = MakeButton("複製明細", 120);
         copy.Click += (_, _) => CopyFields();
         rightTools.Controls.Add(copy);
+        var web = MakeButton("Web 連線", 120);
+        web.Click += (_, _) => OpenAgentSettings();
+        rightTools.Controls.Add(web);
         _erpStateTag.Size = new Size(150, ToolbarButtonHeight);
         _erpStateTag.Margin = new Padding(4, 1, 12, 1);
         _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
@@ -137,6 +147,7 @@ internal sealed class MainForm : Form
         var statusStrip = new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Font = new Font("Microsoft JhengHei UI", 8.5F), Padding = new Padding(2, 0, 2, 0), Margin = Padding.Empty };
         _status.Text = "請先在 ERP 開啟「品號資料建立作業」，輸入品號後按「開始查詢 ERP」。";
         statusStrip.Items.Add(_status);
+        statusStrip.Items.Add(_agentStatus);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
         root.Controls.Add(statusStrip, 0, 4);
@@ -175,6 +186,7 @@ internal sealed class MainForm : Form
 
     private void SetStatus(string text) => _status.Text = text;
 
+    /// <summary>The 開始查詢 button / Enter: one local query, failures shown in a message box.</summary>
     private async Task StartQueryAsync()
     {
         if (_queryCts is not null) return;
@@ -184,32 +196,70 @@ internal sealed class MainForm : Form
             return;
         }
 
-        _queryCts = new CancellationTokenSource();
+        try
+        {
+            await ExecuteQueryAsync(code, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            // Status already says so.
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 自動查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        Activate();
+        _code.Focus();
+        _code.SelectAll();
+    }
+
+    /// <summary>A query received from CY Web: same path as the local one, no message box (the outcome goes back to Web).</summary>
+    private async Task<ItemQueryResult> RunWebQueryAsync(string itemNo, CancellationToken cancellationToken)
+    {
+        _code.Text = itemNo;
+        _log.Info("agent", $"web query item={_log.Value(itemNo)}");
+        return await ExecuteQueryAsync(itemNo, cancellationToken);
+    }
+
+    /// <summary>
+    /// The single query runner for local and Web queries: locks the physical mouse and shows
+    /// 「自動查詢中」 (same as CYERPAutoInput), shows the result, and rethrows failures to the caller.
+    /// </summary>
+    private async Task<ItemQueryResult> ExecuteQueryAsync(string code, CancellationToken external)
+    {
+        _queryCts = CancellationTokenSource.CreateLinkedTokenSource(external);
         _start.Enabled = false;
         _statePoll.Stop();
         ShowResult(null);
         var progress = new Progress<string>(SetStatus);
         var outcome = AutomationOutcome.Stopped;
-        ItemQueryResult? result = null;
-        Exception? failure = null;
         try
         {
-            // The physical mouse is ignored and 「自動查詢中」 shows in the middle of the screen
-            // while CY drives ERP, the same as CYERPAutoInput (user, 2026-10-16).
             Session.Begin(AutomationSession.QueryTitle);
             using var escape = Session.EscapeToken.Register(() => { try { _queryCts?.Cancel(); } catch (ObjectDisposedException) { } });
-            result = await _service.QueryAsync(code, progress, _queryCts.Token);
+            var result = await _service.QueryAsync(code, progress, _queryCts.Token);
             outcome = result.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
+            if (result.Found)
+            {
+                ShowResult(result);
+                SetStatus($"ERP：品號 {result.ItemCode} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            }
+            else SetStatus($"ERP：查無品號 {code}");
+            return result;
         }
         catch (OperationCanceledException)
         {
             outcome = AutomationOutcome.Cancelled;
-            _log.Info("query", "cancelled by Esc");
+            _log.Info("query", "cancelled");
+            SetStatus("ERP：已按 Esc 緊急停止");
+            throw;
         }
         catch (Exception ex)
         {
-            failure = ex;
             _log.Error("query", ex);
+            SetStatus("ERP：查詢失敗");
+            throw;
         }
         finally
         {
@@ -220,27 +270,6 @@ internal sealed class MainForm : Form
             _start.Enabled = true;
             _statePoll.Start();
         }
-
-        Activate();
-        switch (outcome)
-        {
-            case AutomationOutcome.Done:
-                ShowResult(result);
-                SetStatus($"ERP：品號 {result!.ItemCode} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
-                break;
-            case AutomationOutcome.NotFound:
-                SetStatus($"ERP：查無品號 {code}");
-                break;
-            case AutomationOutcome.Cancelled:
-                SetStatus("ERP：已按 Esc 緊急停止");
-                break;
-            default:
-                SetStatus("ERP：查詢失敗");
-                MessageBox.Show(this, failure?.Message ?? "查詢失敗。", "ERP 自動查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                break;
-        }
-        _code.Focus();
-        _code.SelectAll();
     }
 
     private void ShowResult(ItemQueryResult? result)
@@ -292,6 +321,97 @@ internal sealed class MainForm : Form
         };
         _erpStateTag.SetState($"ERP：{text}", fore, back, CyVisualTheme.Blend(fore, back, 0.35));
         _log.Info("state", $"status tag {state}");
+    }
+
+    // ---- CY Web Agent ----------------------------------------------------------------
+
+    private void OpenAgentSettings()
+    {
+        using var form = new ErpAgentSettingsForm(_agentSettings);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            _agentSettings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Web 連線設定儲存失敗：{ex.Message}", "Web 連線", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("agent", $"settings saved enabled={_agentSettings.Enabled} token={_agentSettings.HasToken}");
+        StopAgent();
+        if (_agentSettings.Enabled) StartAgent();
+        else SetAgentStatus(ErpAgentState.Stopped, "Web：未啟用");
+    }
+
+    private void StartAgent()
+    {
+        if (_agentTask is not null) return;
+        ErpAgentClient client;
+        try
+        {
+            client = new ErpAgentClient(new Uri(_agentSettings.BaseUrl), _agentSettings.ReadToken());
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException or System.Security.Cryptography.CryptographicException or FormatException)
+        {
+            _log.Warn("agent", $"agent not started: {ex.GetType().Name}");
+            SetAgentStatus(ErpAgentState.Unauthorized, "Web：設定無法使用，請重新設定網址與 Token");
+            return;
+        }
+
+        _agentCts = new CancellationTokenSource();
+        var loop = new ErpAgentLoop(
+            client,
+            AppVersionInfo.Display,
+            () => ErpAgentProtocol.ErpState(_service.ProbeStatus()),
+            () => _queryCts is not null,
+            RunWebQueryAsync,
+            SetAgentStatus);
+        _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
+    }
+
+    private async Task RunAgentAsync(ErpAgentLoop loop, ErpAgentClient client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await loop.RunAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            SetAgentStatus(ErpAgentState.Stopped, "Web：已停止");
+        }
+        catch (Exception ex)
+        {
+            _log.Error("agent", ex);
+            SetAgentStatus(ErpAgentState.Offline, "Web：連線程式發生錯誤，已停止");
+        }
+        finally
+        {
+            client.Dispose();
+            _agentTask = null;
+        }
+    }
+
+    private void StopAgent()
+    {
+        _agentCts?.Cancel();
+        _agentCts?.Dispose();
+        _agentCts = null;
+    }
+
+    private void SetAgentStatus(ErpAgentState state, string text)
+    {
+        _agentStatus.Text = text.StartsWith("Web", StringComparison.Ordinal) ? text : $"Web：{text}";
+        _agentStatus.ForeColor = state switch
+        {
+            ErpAgentState.Online or ErpAgentState.Querying => CyVisualTheme.Success,
+            ErpAgentState.Offline or ErpAgentState.Unauthorized => CyVisualTheme.Warning,
+            _ => CyVisualTheme.TextSecondary
+        };
+        // Only state changes go to the log: the idle poll repeats every few seconds.
+        if (state == _agentState) return;
+        _agentState = state;
+        _log.Info("agent", $"state {state}");
     }
 
     private void UpdateDpiHint()

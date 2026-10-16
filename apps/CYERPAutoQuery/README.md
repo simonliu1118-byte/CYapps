@@ -27,6 +27,14 @@
 -> 讀取單頭資料與單身資料，立即刪除暫存檔，再次確認品號沒變，列出結果
 ```
 
+## CY Web 查詢（Agent）
+
+- 主視窗「Web 連線」：填 CY Web 網址、CY Web 超級管理員在「ERP 品號查詢」頁產生的 Token（只顯示一次），勾選「啟用 Web 查詢」。Token 以 Windows DPAPI 加密存在 `config/agent.json`（換電腦或換 Windows 帳號需重新設定）。
+- 啟用後程式每 3 秒向 CY Web 領一次查詢工作，用與本機相同的流程查詢並回報；狀態列顯示「Web：已連線／查詢中／連線失敗」。
+- 只回傳約定的欄位（`ItemFieldCatalog`）；失敗只回固定錯誤代碼，不送出本機訊息或路徑。
+- 本機正在查詢時不領工作；Token 被拒時停止連線，需重新設定。
+- Contract：chihyuan-web `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
+
 ## 讀取方式
 
 - 資料來自 ERP 匯出的 xlsx，由程式自己解析（不需要 Excel 或 OpenOffice）。欄位名稱就是 ERP 的欄位標題（例如「品名」「標準售價」「售價定價一」「商品描述」）；日期欄轉成 yyyy/MM/dd。
@@ -43,6 +51,7 @@
 ## 檔案
 
 - `logs/CYERPAutoQuery_YYYYMMDD.log`：本機 LOG，預設只記錄長度，不記錄品號與欄位內容。
+- `config/agent.json`：CY Web 連線設定（Token 已加密，不要複製到其他電腦）。
 - `TEMP/`：ERP 匯出暫存，讀完立即刪除（含成本、庫存金額，不要手動保留）。
 - `runtime/ocr/*.onnx`：PaddleOCR 模型（與 CYERPAutoInput 相同），Ribbon／選單與頁籤備援使用。
 

@@ -122,6 +122,9 @@ internal sealed record TabStrip(string[] Order, double Origin, double Pitch)
     }
 }
 
+/// <summary>What the read-only status probe sees of INVI02.</summary>
+internal enum Invi02Status { NotOpen, Multiple, Browse, Editing, DialogOpen, Unknown }
+
 internal static class ItemCodeRules
 {
     public const int MaxLength = 40;
