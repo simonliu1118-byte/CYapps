@@ -93,6 +93,51 @@ internal static class CloudAllowanceApplicationClientTests
             Check(req,"official-inspection");
             return Json(HttpStatusCode.OK,new{ok=true,inspection=OfficialStatus(true)});
         });
+        handler.Enqueue(req =>
+        {
+            Check(req,"official-inspection");
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=new {
+                itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
+                checkedAtUtc="2026-10-15T02:00:00.000Z",
+                officialSnapshotSha256=new string('a',64),
+                officialUploadStatus=99,cancelled=false,officialInvoiceGross=100,
+                requestedGrossAmount=50,existingAllowanceCount=1,
+                uploadComplete=true,notCancelled=true,allowanceSummaryExplicit=true,
+                zeroExistingAllowances=false,invoiceGrossEnough=true,
+                officialProductsPresent=true,requiresPerItemVerification=true,
+                canApprove=false,officialPendingMutation=false,
+                itemCheck=new{fullyMatched=false,reason="OFFICIAL_STATE_NOT_SAFE",verifiedLines=0},
+                safeToInferRemainingBalance=false,
+                allowanceHistory=new[]{new{
+                    allowanceNumber="3821061800001",allowanceDate="20261015",
+                    totalAmount="50",taxAmount="3",uploadStatus=99,
+                    cancelDate="0",metadataComplete=true
+                }},
+                status="OFFICIAL_READ_ONLY_NOT_APPROVED"
+            }});
+        });
+        handler.Enqueue(req => {
+            Check(req,"official-inspection");
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=new {
+                itemId=Id,revision=2,originalInvoiceNumber="AB12345678",
+                checkedAtUtc="2026-10-15T02:00:00.000Z",
+                officialSnapshotSha256=new string('a',64),
+                officialUploadStatus=99,cancelled=false,officialInvoiceGross=100,
+                requestedGrossAmount=50,existingAllowanceCount=1,
+                uploadComplete=true,notCancelled=true,allowanceSummaryExplicit=true,
+                zeroExistingAllowances=false,invoiceGrossEnough=true,
+                officialProductsPresent=true,requiresPerItemVerification=true,
+                canApprove=false,officialPendingMutation=false,
+                itemCheck=new{fullyMatched=false,reason="OFFICIAL_STATE_NOT_SAFE",verifiedLines=0},
+                safeToInferRemainingBalance=true,
+                allowanceHistory=new[]{new{
+                    allowanceNumber="3821061800001",allowanceDate="20261015",
+                    totalAmount="50",taxAmount="3",uploadStatus=99,
+                    cancelDate="0",metadataComplete=true
+                }},
+                status="OFFICIAL_READ_ONLY_NOT_APPROVED"
+            }});
+        });
         handler.Enqueue(req => {
             Check(req,"number-readback");
             using var data=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
@@ -215,8 +260,19 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(false,official.CanApprove,"official query does not grant approval");
         Equal(true,official.RequiresPerItemVerification,"per-item verification remains required");
         Equal(0,official.ExistingAllowanceCount,"explicit no allowance summary");
+        Equal(0,official.AllowanceHistory.Count,"zero historical entries");
+        Equal(false,official.SafeToInferRemainingBalance,"summary cannot authorize balance");
         Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
+        await RejectAsync<InvalidDataException>(() =>
+            client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
+        var historical=await client.InspectOfficialForManagerAsync(
+            Id,2,"0001","SyntheticPass12");
+        Equal(1,historical.AllowanceHistory.Count,"official historical records visible");
+        Equal("3821061800001",historical.AllowanceHistory[0].AllowanceNumber,
+            "legacy allowance number preserved");
+        Equal(false,historical.SafeToInferRemainingBalance,
+            "multi-invoice allocation remains unverified");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         var readback=await client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12");
@@ -297,7 +353,10 @@ internal static class CloudAllowanceApplicationClientTests
         uploadComplete=true,notCancelled=true,allowanceSummaryExplicit=true,
         zeroExistingAllowances=true,invoiceGrossEnough=true,officialProductsPresent=true,
         requiresPerItemVerification=true,canApprove=forgedApproval,
-        officialPendingMutation=false,itemCheck=new{
+        officialPendingMutation=false,
+        allowanceHistory=Array.Empty<object>(),
+        safeToInferRemainingBalance=false,
+        itemCheck=new{
             fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0
         },
         status="OFFICIAL_READ_ONLY_NOT_APPROVED"

@@ -65,6 +65,8 @@
 
 **步驟 5 小提交 16（本輪）：** 修正本機 `InvoiceRetentionService.LoadCandidates`，排除所有 `InvoiceStates.Failed` 過期發票；日期清理不能繞過前輪完整快照封存規則。SQLite synthetic 在同一公司驗證普通開立逾期仍可清除、逾期失敗維持本機清單直到明確 `Archive`、封存後再清理仍有完整原失敗與商品明細。無新資料表、Cloud API 或 Worker，尚未逐項跑 CI；最終整合完成才統一 CI／Artifact，Release 另需使用者要求。
 
+**步驟 5 小提交 17（本輪）：** 沿用現有 g0401 Manager 「官方查驗」，Cloud 從唯一 `invoice_query` 的 `allowance[]` 輸出最多 50 筆**限定／唯讀歷史摘要**（單號、日期、摘要金額、稅額、上傳狀態、作廢日期，缺欄全部明確表示 unknown）。Windows Core 驗證欄位、回應筆數和歷史欄位完整性，對「可推定剩餘金額」永遠要求 `false`；既有 WinForms 查驗顯示前八筆。不能用整張折讓單 `total_amount` 算單一原發票剩餘額，核准／送出保守柵欄不變；沒有新 API、D1 表、真正光貿呼叫、Release 或部署。新功能留最後整合 CI／Artifact 再驗證。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。

@@ -111,9 +111,22 @@ internal sealed class CloudAllowanceManagerForm : Form
                     "申請品項或金額超過可證明的原始範圍；不能核准。",
                 _ => "官方資料或折讓明細不足以安全核對，請人工查核。"
             };
+            var histories=v.AllowanceHistory.Take(8).Select(h=>
+                $"  單號 {h.AllowanceNumber??"未確認"}｜日期 {h.AllowanceDate??"未確認"}｜"+
+                $"摘要金額 {h.TotalAmount??"未確認"}／稅 {h.TaxAmount??"未確認"}｜"+
+                $"上傳 {h.UploadStatus?.ToString()??"未確認"}｜"+
+                $"作廢 {(h.CancelDate=="0"?"否":h.CancelDate is null?"未確認":"是 "+h.CancelDate)}"+
+                (h.MetadataComplete?"":"｜資料不全"));
+            var historyText=v.ExistingAllowanceCount==0
+                ? (v.AllowanceSummaryExplicit?"官方摘要：無既有折讓":"官方折讓摘要缺漏，不能視為無折讓")
+                : "官方歷史折讓（最多列出前 8 筆）：\n"+
+                  string.Join("\n",histories)+
+                  (v.ExistingAllowanceCount>8?$"\n其餘 {v.ExistingAllowanceCount-8} 筆未列出。":"");
             MessageBox.Show(this,
                 $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
                 $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
+                $"{historyText}\n"+
+                "歷史折讓摘要不代表本張原發票的已折讓或剩餘可折金額。\n"+
                 $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
                 $"品項比對：{v.ItemCheck.Reason}\n"+
                 $"處理提示：{guidance}\n"+

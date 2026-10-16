@@ -32,6 +32,11 @@ public sealed record CloudAllowanceReviewPreview(
 public sealed record CloudAllowanceItemCheck(
     bool FullyMatched, string Reason, int VerifiedLines);
 
+// From official invoice_query allowance[] summary; never per-original allocation.
+public sealed record CloudHistoricalAllowanceSummary(
+    string? AllowanceNumber,string? AllowanceDate,string? TotalAmount,
+    string? TaxAmount,int? UploadStatus,string? CancelDate,bool MetadataComplete);
+
 public sealed record CloudOfficialAllowanceInspection(
     string ItemId, int Revision, string OriginalInvoiceNumber, DateTimeOffset CheckedAtUtc,
     string OfficialSnapshotSha256, int OfficialUploadStatus, bool Cancelled,
@@ -39,7 +44,9 @@ public sealed record CloudOfficialAllowanceInspection(
     bool UploadComplete, bool NotCancelled, bool AllowanceSummaryExplicit,
     bool ZeroExistingAllowances, bool InvoiceGrossEnough, bool OfficialProductsPresent,
     bool RequiresPerItemVerification, bool CanApprove, string Status,
-    bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck);
+    bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck,
+    IReadOnlyList<CloudHistoricalAllowanceSummary> AllowanceHistory,
+    bool SafeToInferRemainingBalance);
 
 public sealed record CloudAllowanceNumberReadback(
     string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
@@ -281,6 +288,63 @@ public sealed class CloudAllowanceApplicationClient
         var needsItems=Boolean(item,"requiresPerItemVerification");
         var canApprove=Boolean(item,"canApprove");
         var pending=Boolean(item,"officialPendingMutation");
+        var canInfer=Boolean(item,"safeToInferRemainingBalance");
+        if(!item.TryGetProperty("allowanceHistory",out var rawHistory) ||
+           rawHistory.ValueKind!=JsonValueKind.Array ||
+           rawHistory.GetArrayLength()>50 ||
+           (summary && rawHistory.GetArrayLength()!=existing) ||
+           (!summary && rawHistory.GetArrayLength()!=0) ||
+           canInfer)
+            throw new InvalidDataException("Official allowance history must not imply verified balance.");
+        static string? TextField(JsonElement source,string name,string pattern)
+        {
+            if(!source.TryGetProperty(name,out var field))
+                throw new InvalidDataException("Official allowance history field missing.");
+            if(field.ValueKind==JsonValueKind.Null)return null;
+            if(field.ValueKind!=JsonValueKind.String)
+                throw new InvalidDataException("Invalid official allowance history field.");
+            var value=field.GetString()!;
+            if(!Regex.IsMatch(value,pattern,RegexOptions.CultureInvariant))
+                throw new InvalidDataException("Unsafe historical allowance detail.");
+            return value;
+        }
+        var history=new List<CloudHistoricalAllowanceSummary>();
+        foreach(var raw in rawHistory.EnumerateArray())
+        {
+            if(raw.ValueKind!=JsonValueKind.Object ||raw.EnumerateObject().Count()!=7)
+                throw new InvalidDataException("Official history projection is not minimal.");
+            var number=TextField(raw,"allowanceNumber",@"^[a-zA-Z0-9]{1,16}$");
+            var date=TextField(raw,"allowanceDate",@"^[0-9]{8}$");
+            var amount=TextField(raw,"totalAmount",@"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
+            var tax=TextField(raw,"taxAmount",@"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
+            var cancel=TextField(raw,"cancelDate",@"^(?:0|[0-9]{8})$");
+            if(date is not null &&
+               !DateOnly.TryParseExact(date,"yyyyMMdd",
+                  System.Globalization.CultureInfo.InvariantCulture,
+                  System.Globalization.DateTimeStyles.None,out _) ||
+               cancel is not null && cancel!="0" &&
+               !DateOnly.TryParseExact(cancel,"yyyyMMdd",
+                  System.Globalization.CultureInfo.InvariantCulture,
+                  System.Globalization.DateTimeStyles.None,out _))
+                throw new InvalidDataException("Invalid official history date.");
+            int? state=null;
+            if(!raw.TryGetProperty("uploadStatus",out var rawStatus))
+                throw new InvalidDataException("Missing historical upload status.");
+            if(rawStatus.ValueKind!=JsonValueKind.Null)
+            {
+                if(rawStatus.ValueKind!=JsonValueKind.Number ||
+                   !rawStatus.TryGetInt32(out var n)||n<0)
+                    throw new InvalidDataException("Invalid historical upload status.");
+                state=n;
+            }
+            var completeHistory=Boolean(raw,"metadataComplete");
+            if(completeHistory!=(number is not null && date is not null &&
+                amount is not null && tax is not null && state is not null &&
+                cancel is not null))
+                throw new InvalidDataException("Historical allowance completeness was forged.");
+            history.Add(new CloudHistoricalAllowanceSummary(
+                number,date,amount,tax,state,cancel,completeHistory));
+        }
         if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
             rawCheck.ValueKind!=JsonValueKind.Object ||
             !rawCheck.TryGetProperty("reason",out var reason) ||
@@ -305,7 +369,8 @@ public sealed class CloudAllowanceApplicationClient
         return new CloudOfficialAllowanceInspection(id,actualRev,invoice,instant,digest,
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
-            pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount));
+            pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount),
+            history,false);
     }
 
     // The Worker owns the original D1 allowance number; callers cannot
