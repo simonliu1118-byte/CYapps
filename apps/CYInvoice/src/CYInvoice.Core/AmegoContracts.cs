@@ -107,7 +107,8 @@ public sealed record InvoiceAllowanceResult(
     string AllowanceNumber,
     string AllowanceDate,
     string TaxAmount,
-    string TotalAmount);
+    string TotalAmount,
+    long CancelDate = 0);
 
 public sealed record QueryResult(
     string InvoiceNumber,

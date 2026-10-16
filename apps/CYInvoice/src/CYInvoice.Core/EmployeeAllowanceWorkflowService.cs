@@ -482,8 +482,10 @@ public sealed class EmployeeAllowanceWorkflowService
             throw new InvalidOperationException("發票尚未完成上傳，不能提出折讓");
         if (InvoiceVoidService.HasPendingMarker(record))
             throw new InvalidOperationException("這張發票已有作廢作業待確認，不能提出折讓");
-        if (taxInclusiveAmount > record.Amount)
-            throw new InvalidOperationException("折讓金額不可大於原發票含稅金額");
+        var remaining=InvoiceAllowanceMetadata.RemainingGross(record);
+        if (FixedDecimal.FromInt64(taxInclusiveAmount).ScaledValue>remaining.ScaledValue)
+            throw new InvalidOperationException(
+                $"折讓金額不可大於原發票扣除已折讓後的剩餘額 {remaining} 元");
     }
 
     private void ValidateCurrentAccount(InvoiceRecord record)

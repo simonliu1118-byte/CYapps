@@ -12,6 +12,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
     ("allowance g0501 cancels existing number exactly once and never reallocates", TestG0501GatewayAsync),
     ("manager review fetches exact official invoice allowances once", TestAllowanceReviewInspectionAsync),
+    ("local allowance ceiling deducts only confirmed effective prior allowances", () => RunSync(TestAllowanceRemainingGross)),
     ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
     ("allowance_list pages and maps original invoice numbers", TestAllowanceListAsync),
     ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
@@ -48,6 +49,39 @@ foreach (var test in tests)
 }
 Console.WriteLine($"{tests.Length - failures}/{tests.Length} allowance tests passed");
 return failures == 0 ? 0 : 1;
+
+
+static void TestAllowanceRemainingGross()
+{
+    var record = new InvoiceRecord { Amount = 1000 };
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent:true);
+    Equal("1000",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285"),
+        new InvoiceAllowanceResult("B0401",99,2,"ALW002","20261015","10","190")
+    ], summaryPresent:true);
+    Equal("500",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285",20261016)
+    ], summaryPresent:true);
+    Equal("1000",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",91,2,"ALW001","20261015","15","285")
+    ], summaryPresent:true);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","50","1000")
+    ], summaryPresent:true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285"),
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285")
+    ], summaryPresent:true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent:false);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+}
 
 static Task RunSync(Action action)
 {

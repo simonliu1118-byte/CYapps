@@ -13,8 +13,12 @@ internal sealed class AllowanceRequestForm : Form
     private readonly Button submit = UiControls.StandardButton("提出申請");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
-    public AllowanceRequestForm()
+    private readonly FixedDecimal? remaining;
+
+    public AllowanceRequestForm(InvoiceRecord? invoice = null)
     {
+        if(invoice is not null)
+            remaining=InvoiceAllowanceMetadata.RemainingGross(invoice);
         Text = "折讓申請";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
@@ -94,7 +98,9 @@ internal sealed class AllowanceRequestForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         root.Controls.Add(new Label
         {
-            Text = "請輸入本次人工折讓申請資料",
+            Text = remaining is null
+                ? "請輸入本次人工折讓申請資料"
+                : $"原發票扣除已折讓後，本次最高可折讓 {remaining.Value} 元",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = Padding.Empty,
@@ -144,6 +150,12 @@ internal sealed class AllowanceRequestForm : Form
         if (!long.TryParse(amountText, out var parsed) || parsed <= 0)
         {
             ValidationError("含稅折讓總額必須是大於 0 的整數。", amount);
+            return;
+        }
+        if (remaining is not null &&
+            FixedDecimal.FromInt64(parsed).ScaledValue>remaining.Value.ScaledValue)
+        {
+            ValidationError($"本次金額不得超過剩餘可折讓 {remaining.Value} 元。",amount);
             return;
         }
         if (EmployeeNo.Length == 0)

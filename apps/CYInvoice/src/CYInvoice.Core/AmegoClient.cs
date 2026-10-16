@@ -563,7 +563,8 @@ public sealed class AmegoClient : IAmegoGateway
                 Text(item, "allowance_number"),
                 Scalar(item, "allowance_date"),
                 Scalar(item, "tax_amount"),
-                Scalar(item, "total_amount")));
+                Scalar(item, "total_amount"),
+                Int64(item, "cancel_date")));
         }
         return results;
     }

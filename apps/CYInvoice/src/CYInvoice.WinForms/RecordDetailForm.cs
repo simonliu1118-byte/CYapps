@@ -378,7 +378,15 @@ internal sealed class RecordDetailForm : Form
     private async Task StartAllowanceAsync()
     {
         if (allowanceBusy || voidBusy) return;
-        using var request = new AllowanceRequestForm();
+        AllowanceRequestForm request;
+        try { request = new AllowanceRequestForm(record); }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException)
+        {
+            MessageBox.Show(this,error.Message,"無法確認折讓餘額",
+                MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        using var form = request;
         if (request.ShowDialog(this) != DialogResult.OK) return;
 
         SetAllowanceBusy(true);
