@@ -42,6 +42,7 @@ export async function handleBackupApi(request, env, session, options = {}) {
       return html?recoveryPage(result):json({ok:true,...result});
     } catch(error) { return request.headers.get('accept')?.includes('text/html')?recoveryPage({error:safeMessage(error),code:safeCode(error)},409):json({ok:false,error:safeMessage(error),code:safeCode(error)},409); }
   }
+  if (url.pathname === '/api/backup/health' && request.method === 'GET') return json({ ok: true, health: await readBackupHealth(env.DB) });
   if (url.pathname === '/api/backup/status' && request.method === 'GET') {
     return parallelBackupStatus(env);
   }
@@ -74,17 +75,28 @@ export async function handleBackupApi(request, env, session, options = {}) {
   return null;
 }
 
-export async function runScheduledBackup(env) {
-  try {
-    const topology = resolveTieredBackupTopology(env);
-    if (topology === LEGACY_GCS) return runLegacyScheduledBackup(env);
-    if (!env?.DB) {
-      return { skipped: true, reason: 'not_configured' };
-    }
-    return await runTieredBackup(env, 'scheduled');
-  } catch (error) {
+export async function runScheduledBackup(env, options = {}) {
+  if (resolveTieredBackupTopology(env) === LEGACY_GCS) return runLegacyScheduledBackup(env);
+  if (!env?.DB) return { skipped: true, reason: 'not_configured' };
+  let hold;
+  try { hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first(); }
+  catch {
+    const delivery = await notifyBackupIncident(env, crypto.randomUUID());
+    return { ok: false, error: 'BACKUP_DATABASE_UNAVAILABLE', emailSent: delivery.sent };
+  }
+  if (hold?.value === '1') return { skipped: true, reason: 'recovery_workspace' };
+  let backup;
+  try { backup = await runTieredBackup(env, 'scheduled', options); }
+  catch (error) {
     console.error('cyaccounting_tiered_backup_failed', safeCode(error));
-    return { ok: false, error: safeCode(error) };
+    backup = { ok: false, error: safeCode(error) };
+  }
+  // A failed new backup must not suppress verification / incident notification.
+  try { return { ...backup, health: await checkBackupHealth(env, { ...options, backupFailed: backup.ok === false }) }; }
+  catch (error) {
+    console.error('cyaccounting_backup_health_failed', safeCode(error));
+    const delivery = await notifyBackupIncident(env, crypto.randomUUID());
+    return { ...backup, health: { status: 'failed', code: 'BACKUP_HEALTH_CHECK_FAILED', emailSent: delivery.sent } };
   }
 }
 
@@ -347,32 +359,111 @@ export async function verifyStoredBackup(env, session, backupId = '', options = 
       SELECT 1 FROM backup_copies bc WHERE bc.backup_id = bs.backup_id AND bc.status = 'success')
     ORDER BY bs.created_at DESC LIMIT 1`).bind(backupId, backupId).first();
   if (!source) throw new TieredBackupError('尚無可驗證的備份。', 'BACKUP_SOURCE_MISSING');
-  const verify = options.verifyRestore || (await import('./backup-restore-runtime.js')).verifyRestoreInMemory;
   const checks = [];
   const attemptId = crypto.randomUUID();
   for (const providerName of [R2_PROVIDER, GCS_PROVIDER]) {
-    const id = crypto.randomUUID(), createdAt = new Date().toISOString();
-    let result, status = 'failed';
-    try {
-      const provider = providerName === R2_PROVIDER ? options.r2Provider || createR2BackupStorageProvider(env)
-        : options.gcsProvider || createGcsBackupStorageProvider(env, options.gcsProviderOptions);
-      const prefix = `CYAccountingWeb/${source.backup_id}/`;
-      const [manifestBytes, dataBytes] = await Promise.all([provider.getObject(prefix + 'manifest.json'), provider.getObject(prefix + 'data.json')]);
-      if (!(manifestBytes instanceof Uint8Array) || !(dataBytes instanceof Uint8Array) || dataBytes.byteLength > MAX_RESTORE_BYTES) throw new TieredBackupError('備份超出隔離驗證大小上限或副本不存在。', 'RESTORE_SIZE_OR_SOURCE');
-      const validated = await validateBackupSetBytes(manifestBytes, dataBytes, source.backup_id);
-      const packageSha256 = await backupPackageDigest({ manifestBytes, dataBytes });
-      if (packageSha256 !== source.package_sha256 || validated.dataSha256 !== source.data_sha256 || validated.manifestSha256 !== source.manifest_sha256) throw new TieredBackupError('副本與備份紀錄不符。', 'RESTORE_CATALOG_MISMATCH');
-      result = await verify(validated);
-      status = 'success';
-    } catch (error) { result = { code: safeCode(error), isolated: true, liveAccountingModified: false }; }
-    await env.DB.prepare(`INSERT INTO backup_restore_checks(id, attempt_id, backup_id, provider, package_sha256,
-      source_schema_version, target_schema_version, status, result_json, actor_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, attemptId, source.backup_id, providerName, source.package_sha256, Number(source.schema_version), Number(result.targetSchemaVersion || 0),
-        status, JSON.stringify(result), JSON.stringify(backupActor(session)), createdAt).run();
-    checks.push({ id, attemptId, backupId: source.backup_id, provider: providerName, packageSha256: source.package_sha256, status, result, createdAt });
+    checks.push(await verifyStoredBackupCopy(env, source, providerName, backupActor(session), attemptId, options));
   }
   return checks;
+}
+
+async function verifyStoredBackupCopy(env, source, providerName, actor, attemptId, options) {
+  const id = crypto.randomUUID(), createdAt = new Date().toISOString();
+  let result, status = 'failed';
+  try {
+    const verify = options.verifyRestore || (await import('./backup-restore-runtime.js')).verifyRestoreInMemory;
+    const provider = providerName === R2_PROVIDER ? options.r2Provider || createR2BackupStorageProvider(env)
+      : options.gcsProvider || createGcsBackupStorageProvider(env, options.gcsProviderOptions);
+    const prefix = `CYAccountingWeb/${source.backup_id}/`;
+    const [manifestBytes, dataBytes] = await Promise.all([provider.getObject(prefix + 'manifest.json'), provider.getObject(prefix + 'data.json')]);
+    if (!(manifestBytes instanceof Uint8Array) || !(dataBytes instanceof Uint8Array) || dataBytes.byteLength > MAX_RESTORE_BYTES) throw new TieredBackupError('備份超出隔離驗證大小上限或副本不存在。', 'RESTORE_SIZE_OR_SOURCE');
+    const validated = await validateBackupSetBytes(manifestBytes, dataBytes, source.backup_id);
+    const packageSha256 = await backupPackageDigest({ manifestBytes, dataBytes });
+    if (packageSha256 !== source.package_sha256 || validated.dataSha256 !== source.data_sha256 || validated.manifestSha256 !== source.manifest_sha256) throw new TieredBackupError('副本與備份紀錄不符。', 'RESTORE_CATALOG_MISMATCH');
+    result = await verify(validated);
+    if (!result.fullRowRoundtrip || !result.integrityCheck || !result.foreignKeyCheck) throw new TieredBackupError('還原核對未完整通過。', 'RESTORE_PROOF_INCOMPLETE');
+    status = 'success';
+  } catch (error) { result = { code: safeCode(error), isolated: true, liveAccountingModified: false }; }
+  await env.DB.prepare(`INSERT INTO backup_restore_checks(id, attempt_id, backup_id, provider, package_sha256,
+    source_schema_version, target_schema_version, status, result_json, actor_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, attemptId, source.backup_id, providerName, source.package_sha256, Number(source.schema_version), Number(result.targetSchemaVersion || 0),
+      status, JSON.stringify(result), JSON.stringify(actor), createdAt).run();
+  return { id, attemptId, backupId: source.backup_id, provider: providerName, packageSha256: source.package_sha256, status, result, createdAt };
+}
+
+
+// One scheduled health owner: same immutable-byte + fresh SQLite verifier as
+// controlled restore, with independent newest R2/GCS sources under Phase D.
+export async function checkBackupHealth(env, options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const timestamp = now.toISOString(), lease = crypto.randomUUID();
+  const hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
+  if (hold?.value === '1') return { skipped: true, reason: 'recovery_workspace' };
+  const claimed = await env.DB.prepare(`UPDATE backup_health_state SET lease_token = ?, lease_until = ?
+    WHERE id = 1 AND lease_until <= ? RETURNING id`)
+    .bind(lease, new Date(now.getTime() + 600_000).toISOString(), timestamp).first();
+  if (!claimed) return { skipped: true, reason: 'check_in_progress' };
+  try {
+    const previous = await env.DB.prepare('SELECT * FROM backup_health_state WHERE id=1').first();
+    const attemptId = crypto.randomUUID(), details = options.backupFailed
+      ? [{ provider: '', status: 'failed', code: 'BACKUP_JOB_FAILED' }] : [];
+    for (const provider of [R2_PROVIDER, GCS_PROVIDER]) {
+      const source = await env.DB.prepare(`SELECT bs.*, bc.status AS copy_status FROM backup_sets bs
+        LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id AND bc.provider = ?
+        WHERE (? = 'cloudflare_r2' OR bs.gcs_expected = 1)
+        ORDER BY bs.created_at DESC LIMIT 1`).bind(provider, provider).first();
+      let code = '', check = null;
+      if (!source) code = 'BACKUP_SOURCE_MISSING';
+      else if (source.copy_status !== 'success') code = 'BACKUP_COPY_FAILED';
+      else if (now.getTime() - Date.parse(source.created_at) > (provider === R2_PROVIDER ? 36 : 120) * 3_600_000
+        || Date.parse(source.created_at) > now.getTime() + 300_000) code = 'BACKUP_COPY_STALE';
+      else {
+        check = await verifyStoredBackupCopy(env, source, provider, { type: 'scheduled_backup_health' }, attemptId, options);
+        if (check.status !== 'success') code = check.result.code || 'RESTORE_VERIFY_FAILED';
+      }
+      details.push({ provider, status: code ? 'failed' : 'success', code,
+        backupId: source?.backup_id || null, checkId: check?.id || null });
+    }
+    const failed = details.some(detail => detail.status === 'failed');
+    const incident = failed ? previous.incident_id || crypto.randomUUID() : null;
+    const emailSentAt = failed && previous.incident_id === incident ? previous.email_sent_at : null;
+    await env.DB.prepare(`UPDATE backup_health_state SET status=?, checked_at=?, details_json=?,
+      incident_id=?, email_sent_at=?, email_error_code='' WHERE id=1 AND lease_token=?`)
+      .bind(failed ? 'failed' : 'healthy', timestamp, JSON.stringify(details), incident, emailSentAt, lease).run();
+    if (failed && !emailSentAt) {
+      const delivery = await notifyBackupIncident(env, incident);
+      const sentAt = delivery.sent ? timestamp : null, code = delivery.code;
+      await env.DB.prepare(`UPDATE backup_health_state SET email_sent_at=?, email_error_code=?
+        WHERE id=1 AND lease_token=? AND incident_id=?`).bind(sentAt, code, lease, incident).run();
+    }
+    return await readBackupHealth(env.DB, now);
+  } finally {
+    await env.DB.prepare("UPDATE backup_health_state SET lease_token='',lease_until='' WHERE id=1 AND lease_token=?").bind(lease).run();
+  }
+}
+
+async function notifyBackupIncident(env, incident) {
+  try {
+    if (typeof env.BACKUP_NOTIFICATIONS?.notifySuperAdmin !== 'function') throw new Error('missing binding');
+    const result = await env.BACKUP_NOTIFICATIONS.notifySuperAdmin({
+      workspaceId: String(env.CYID_WORKSPACE_ID || ''), applicationId: String(env.CYID_APPLICATION_ID || ''),
+      type: 'backup_health_failed', eventId: incident
+    });
+    return ['delivered','already_delivered'].includes(result?.status)
+      ? { sent: true, code: '' } : { sent: false, code: 'NOTIFICATION_DEFERRED' };
+  } catch { return { sent: false, code: 'NOTIFICATION_DELIVERY_FAILED' }; }
+}
+
+export async function readBackupHealth(db, now = new Date()) {
+  const row = await db.prepare('SELECT status,checked_at,details_json,incident_id,email_sent_at,email_error_code FROM backup_health_state WHERE id=1').first();
+  const stale = row?.checked_at && now.getTime() - Date.parse(row.checked_at) > 36 * 3_600_000;
+  return { status: stale ? 'failed' : row?.status || 'unknown', checkedAt: row?.checked_at || null,
+    incidentId: row?.incident_id || (stale ? 'check-overdue' : null),
+    issues: stale ? [{ provider: '', status: 'failed', code: 'BACKUP_HEALTH_OVERDUE' }]
+      : JSON.parse(row?.details_json || '[]').filter(detail => detail.status === 'failed')
+        .map(({provider, code}) => ({ provider, code })),
+    emailSent: Boolean(row?.email_sent_at), emailPending: Boolean(row?.incident_id && !row?.email_sent_at) };
 }
 
 async function recentRestoreChecks(db) {

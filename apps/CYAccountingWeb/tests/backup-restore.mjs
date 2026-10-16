@@ -19,7 +19,7 @@ assert.equal(JSON.stringify(source.db.prepare('SELECT * FROM transactions ORDER 
 assert.ok(validated.data.transactions[0].summary.includes('DROP TABLE'), 'SQL-like values roundtrip through bound parameters');
 const schema8 = structuredClone(validated); schema8.manifest.schemaVersion = 8;
 assert.equal((await verify(schema8)).sourceSchemaVersion, 8, 'current pre-rollout backups restore to the new schema');
-for (const version of [5, 11]) {
+for (const version of [5, 12]) {
   const bad = structuredClone(validated); bad.manifest.schemaVersion = version;
   await assert.rejects(verify(bad), error => error.code === 'RESTORE_SCHEMA_UNSUPPORTED');
 }

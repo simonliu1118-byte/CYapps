@@ -6,6 +6,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.25.5 Build 0 | 備份回讀及隔離還原驗證改每日原排程自動執行；R2／GCS 依 Phase D 各取最新應有副本，損壞／失敗／過期建立事件，CYID 通知目前超管並於登入顯示警告。移除手動驗證 UI；底部還原與緊急入口左右並排。統計移轉科目緊密雙欄；刪除手機平板預覽全鏈及舊 Session 表，D1 schema 11，舊 schema 6～10 備份仍可還原。 |
 | V0.25.4 Build 0 | 首次登入共用說明、安全 HTTPS CY Web 入口與只讀 metadata；不轉交員工編號、密碼、Session 或 ticket。FIRST_LOGIN_REQUIRED 明確引導，真實 5xx 保留服務錯誤；部署強制既有 canonical portal authority／Workspace／core App／health gate。依最新主線整合 PR #435，保留 V0.25.3 共用即時記帳及 D1 schema 10。 |
 | V0.25.3 Build 0 | 新增記帳共用 optimistic lifecycle：立即顯示待存列及回到摘要，多筆交錯結果各自確認、失敗僅撤回該筆並保留較新草稿。POST 同次回傳實際 row，移除成功後重讀整月；換月／GET 競態沿原 revision guard，合法重複交易不合併。最近十筆確認依 request ID 更新，待存列不允許編輯／刪除。手機／平板版面與 server 權限／鎖帳語意保留，D1 schema 10 不變。 |
 | V0.25.2 Build 1 | 收斂首次登入入口前置檢查的部署範圍：入口尚未啟用時只作唯讀盤點並回報無識別值的差異；首次登入版本以 --require-account-portal 強制同 authority／Workspace／health gate，不通過不能部署。既有 CYID runtime guard 始終強制，不改登入 authority 或權限。PR #455／main run 38675354003 成功、正式版本已回讀；portal 預檢指出 AUTHORITY 不一致，首次登入入口仍不啟用。 |

@@ -52,7 +52,7 @@ async function downloadMonthlyExcel() {
     });
     const nativeShareSurface = window.matchMedia('(max-width: 767px)').matches
       || Boolean(document.documentElement.dataset.tabletLayout)
-      || window.__cyaccTabletPreviewEnabled === true;
+;
     const nativeShare = nativeShareSurface
       && typeof navigator.share === 'function'
       && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));

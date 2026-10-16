@@ -344,14 +344,17 @@ const displayVersion = `V${version}${build > 0 ? ` Build ${build}` : ''}`;
 assert.ok(indexHtml.includes(`<span class="version">${displayVersion}</span>`), 'frontend version must match canonical VERSION and BUILD files');
 
 const migrationDir = path.join(ROOT, 'migrations');
+const readFileSyncSafe = name => fs.readFileSync(path.join(migrationDir, name), 'utf8');
 const migrationTexts = fs.readdirSync(migrationDir)
   .filter(name => name.endsWith('.sql'))
   .map(name => fs.readFileSync(path.join(migrationDir, name), 'utf8'))
   .join('\n');
 assert.doesNotMatch(
-  migrationTexts,
+  fs.readdirSync(migrationDir).filter(name => /^000[1-9]_|^0010_/.test(name)).map(name => readFileSyncSafe(name)).join('\n'),
   /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?web_sessions/i,
   '0.21.6 cutover must not drop the legacy table before post-cutover acceptance'
 );
 
 console.log('CYID integration tests passed.');
+
+assert.match(fs.readFileSync(path.join(migrationDir, '0011_backup_health_retire_sessions.sql'), 'utf8'), /DROP TABLE IF EXISTS web_sessions/);

@@ -566,14 +566,14 @@ function setupMobileEntryMobilePages() {
 
   const apply = page => {
     current = ['entry', 'ledger', 'statistics'].includes(page) ? page : 'entry';
-    const enabled = mobile.matches && !isTabletPreviewMode();
+    const enabled = mobile.matches;
     nav.hidden = !enabled;
     applyMobileWorkspacePage(current, enabled);
   };
 
   nav.addEventListener('click', event => {
     const button = event.target.closest('[data-mobile-page]');
-    if (!button || !mobile.matches || isTabletPreviewMode()) return;
+    if (!button || !mobile.matches) return;
     apply(button.dataset.mobilePage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -714,24 +714,6 @@ function syncMobileWorkspaceAfterLoad() {
 
 
 
-function isTabletPreviewMode() {
-  if (window.__cyaccTabletPreviewEnabled === true || document.documentElement.dataset.tabletPreview === 'true') return true;
-  try {
-    return sessionStorage.getItem(window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview') === '1';
-  } catch {
-    return false;
-  }
-}
-
-function setTabletPreviewMode(enabled) {
-  const key = window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview';
-  try {
-    if (enabled) sessionStorage.setItem(key, '1');
-    else sessionStorage.removeItem(key);
-  } catch { /* preview remains best-effort in restricted storage */ }
-  window.location.reload();
-}
-
 function usesMobileAccountMenuIdentity() {
   return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
 }
@@ -756,18 +738,6 @@ function setupMobileWorkspaceMobileAppBar() {
     topbar.append(trigger);
   }
 
-  let returnButton = document.querySelector('#tabletPreviewReturnButton');
-  if (!returnButton) {
-    returnButton = document.createElement('button');
-    returnButton.id = 'tabletPreviewReturnButton';
-    returnButton.className = 'secondary compact tablet-preview-return';
-    returnButton.type = 'button';
-    returnButton.textContent = '返回手機版';
-    returnButton.hidden = true;
-    actions.append(returnButton);
-  }
-  returnButton.addEventListener('click', () => setTabletPreviewMode(false));
-
   let menu = document.querySelector('#mobileAccountMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -779,7 +749,6 @@ function setupMobileWorkspaceMobileAppBar() {
         <strong id="mobileAccountMenuName"></strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
-      <button type="button" data-mobile-account-action="tablet-preview" hidden>測試用平板版</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -804,10 +773,6 @@ function setupMobileWorkspaceMobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
-    if (action === 'tablet-preview') {
-      setTabletPreviewMode(!isTabletPreviewMode());
-      return;
-    }
     if (action === 'logout') logoutButton.click();
   });
 
@@ -826,7 +791,7 @@ function setupMobileWorkspaceMobileAppBar() {
 
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
-    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
     if (!usesMobileAccountMenuIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
@@ -842,14 +807,11 @@ function syncMobileWorkspaceMobileIdentity() {
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
-  const previewButton = menu?.querySelector('[data-mobile-account-action="tablet-preview"]');
-  const returnButton = document.querySelector('#tabletPreviewReturnButton');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
   const mobileAccountMenu = usesMobileAccountMenuIdentity();
-  const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
   const cluster = source.closest('.cy-account-cluster');
   if (cluster) cluster.dataset.identityReady = String(ready);
@@ -860,7 +822,6 @@ function syncMobileWorkspaceMobileIdentity() {
   cluster?.classList.toggle('role-admin', admin);
   cluster?.classList.toggle('role-user', ready && !superAdmin && !admin);
 
-  if (returnButton) returnButton.hidden = !preview;
 
   if (!mobileAccountMenu || !ready) {
     trigger.hidden = true;
@@ -878,10 +839,7 @@ function syncMobileWorkspaceMobileIdentity() {
   menuName.textContent = main;
   menuRole.textContent = role;
   trigger.hidden = false;
-  if (previewButton) {
-    previewButton.hidden = false;
-    previewButton.textContent = '測試用平板版';
-  }
+
 
   trigger.classList.toggle('role-super-admin', superAdmin);
   trigger.classList.toggle('role-admin', admin);
@@ -911,7 +869,7 @@ function setupMobileWorkspaceMobileNavigation() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
@@ -4237,9 +4195,6 @@ function showTouchWorkspaceLedgerNotice(text) {
 
 /* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
 function isTabletWorkspace() {
-  const preview = window.__cyaccTabletPreviewEnabled === true ||
-    document.documentElement?.dataset?.tabletPreview === 'true';
-  if (preview) return true;
   const width = window.innerWidth;
   return width >= 768 && (width < 1024 ||
     (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));

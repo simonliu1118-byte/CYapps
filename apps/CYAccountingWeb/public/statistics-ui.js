@@ -284,7 +284,7 @@ async function loadSettings() {
     transferSettingsIds = data.transferCategoryIds;
     const selected = new Set(transferSettingsIds);
     const readOnly = document.body.dataset.cyaccReadOnly === 'true';
-    host.innerHTML = `<form id="statisticsTransferForm">${['income', 'expense'].map(kind => `<fieldset><legend>${kind === 'income' ? '收入' : '支出'}移轉科目</legend>${data.categories.filter(category => category.kind === kind).map(category => `<label class="statistics-transfer-choice"><input type="checkbox" name="transfer" value="${category.id}" ${selected.has(category.id) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(category.group_name)}／${esc(category.name)}</span></label>`).join('') || '<p class="hint">尚無科目</p>'}</fieldset>`).join('')}<button type="submit" class="primary" ${readOnly ? 'disabled' : ''}>儲存移轉科目</button></form>`;
+    host.innerHTML = `<form id="statisticsTransferForm"><div class="statistics-transfer-columns">${['income', 'expense'].map(kind => `<fieldset><legend>${kind === 'income' ? '收入' : '支出'}移轉科目</legend>${data.categories.filter(category => category.kind === kind).map(category => `<label class="statistics-transfer-choice"><input type="checkbox" name="transfer" value="${category.id}" ${selected.has(category.id) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(category.group_name)}／${esc(category.name)}</span></label>`).join('') || '<p class="hint">尚無科目</p>'}</fieldset>`).join('')}</div><button type="submit" class="primary" ${readOnly ? 'disabled' : ''}>儲存移轉科目</button></form>`;
     host.removeAttribute('aria-busy');
   } catch (error) { if (request === settingsRequest) failure(host, error); }
 }

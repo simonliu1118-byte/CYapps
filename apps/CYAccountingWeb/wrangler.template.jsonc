@@ -35,6 +35,11 @@
     {
       "binding": "IDENTITY",
       "service": "__CF_IDENTITY_SERVICE__"
+    },
+    {
+      "binding": "BACKUP_NOTIFICATIONS",
+      "service": "__CF_IDENTITY_SERVICE__",
+      "entrypoint": "ConsumerNotifications"
     }
   ],
   "r2_buckets": [

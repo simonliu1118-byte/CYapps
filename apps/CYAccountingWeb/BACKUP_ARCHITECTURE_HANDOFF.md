@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/15（台灣時間）。程式版本 **V0.25.3**、D1 schema **10**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
+更新：2026/10/15（台灣時間）。程式版本 **V0.25.5**、D1 schema **11**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
@@ -35,7 +35,7 @@ binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`
 
 啟用只新增 policy event 與操作者／驗證證據，**切換當下不清除既有物件**。未排 GCS 的日期不建立假失敗 copy，桌機 UI 留白，觸控資訊保留未排程狀態。後續僅由既有 provider cleanup 處理超期 managed objects，失敗仍維持兩 provider 隔離；保留期限依 provider object 建立時間計算。原 Phase C 驗收證據不會被 Phase D 的 R2-only 日清除。
 
-Phase D 啟用時原流程：桌機設定 → 備份／復原 → 兩 provider 隔離驗證通過 → 啟用。現已啟用，測試進度／啟用控制退場；現行檢查按鈕為「檢查備份可還原性」，真正重建由底部「還原操作…」開啟獨立 dialog。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，確認「Phase D 已啟用」、R2 30 天／GCS 182 天及週三／週日 03:30 排程。首次新排程結果仍待觀察；不把啟用成功當成排程或 DR 已驗收。
+Phase D 啟用時原流程：桌機設定 → 備份／復原 → 兩 provider 隔離驗證通過 → 啟用。現已啟用，測試進度／啟用控制退場；手動檢查按鈕及說明已由 V0.25.5 移除，改每日自動檢查；真正重建由底部左側「還原操作…」開啟獨立 dialog，右側為緊急復原入口。伺服器重新驗證門檻及最新 Phase C 排程，避免只信任 client；最新失敗或超時證據不得回退重用舊成功。啟用具 idempotence，不另加排程或第二 policy authority。[PR #446](https://github.com/simonliu1118-byte/CYapps/pull/446) 與 [main deploy](https://github.com/simonliu1118-byte/CYapps/actions/runs/38608683533) 已成功；正式 R2／GCS 副本隔離還原、完整資料比對及資料庫檢查已通過。使用者於另一瀏覽器完成啟用後，2026/10/15 已重新整理正式備份頁，確認「Phase D 已啟用」、R2 30 天／GCS 182 天及週三／週日 03:30 排程。首次新排程結果仍待觀察；不把啟用成功當成排程或 DR 已驗收。
 
 provider lifecycle 如啟用，期限須長於 application policy，避免提前刪除 replication／rollback 來源；本次不擴大 provider IAM 或修改 bucket lifecycle，外部 lifecycle 仍列 TODO。每月低額預算已由使用者建立於帳單帳戶範圍，依其決定包含優惠，實際支出門檻 50／90／100%；幣別與 Email 送達未由清單驗收，不宣稱自動支出硬上限。
 
@@ -45,7 +45,7 @@ provider lifecycle 如啟用，期限須長於 application policy，避免提前
 | --- | --- |
 | Outer | `CYAccountingWebBackupSet / formatVersion 2` |
 | Inner | `CYAccountingWebBackup / formatVersion 2` |
-| 目前新備份 schema | **10** |
+| 目前新備份 schema | **11** |
 | 物件 | `CYAccountingWeb/<backup-id>/manifest.json` 與 `data.json` |
 | Manifest | app/schema version、row counts、SHA-256、byte size、dataFormat／dataFormatVersion |
 
@@ -111,3 +111,13 @@ V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成�
 正式驗收（2026/10/15）：V0.25.0 Build 1、PR #450／#451、main runs 38671076691／38671618879 全成功。真實新備份雙副本回讀及 GCS 獨立 D1 重建通過，主站回讀 verified 且已禁止重用目標；原正式帳本／月份合計維持。原 D1 不可用與 R2 缺席由本地實際 workerd／D1／API 測試驗證，正式環境不以停用服務模擬故障。資料／稽核／政策完整比對及資料庫檢查成功不等於 production traffic promotion 已執行。
 
 V0.25.2 normalization：schema 6 僅補 migration 0007 定義的帳戶色碼，排序依 created_at／id；6／7 缺 excelImportRuns 時補空陣列。交易、期初與既有 audit 全部原樣保留，未改寫來源 bytes／manifest／hash。驗證與目標 writer 共用同一 normalized accounting payload 並回報 normalization；新 schema 缺稽核仍拒絕。真實 workerd WASM 與 SQLite／D1 合成資料回歸涵蓋 6／7／10，不據此宣稱真實歷史備份已逐份驗收。
+
+## V0.25.5 每日背景檢查與告警
+
+沿現有 Cron，在每日備份後執行 health check，備份失敗也執行；R2 與 GCS 各驗證最新應有 copy（失敗 copy 不回退較舊成功），R2 36 小時／GCS 120 小時過期視為異常。GCS 未排程日回讀最近實際副本，不要求同日雙副本。全程沿原 digest、catalog 及 fresh SQLite 完整還原 verifier，不寫正式帳本。
+
+`backup_health_state` 是唯一 current health／lease／active incident／notification state；不屬 portable accounting 或 source recovery evidence，還原後需重新檢查目標環境。`backup_restore_checks` 保留既有 append-only 證據，automation actor 不冒用 SUPER_ADMIN。復原 hold 工作區不跑排程。健康結果超過 36 小時，超管登入視為檢查過期警告。
+
+異常透過 private `BACKUP_NOTIFICATIONS` → CYID `ConsumerNotifications`，scope 只從部署 env 取得；送出固定 type 與 UUID，不送帳務、備份內容、Email、resource ID 或 Session。CYID 根據目前受保護超管與已驗證信箱寄固定通知，沿原額度；同一 active incident 去重，failed/deferred 於下次排程重試，新事件最多一小時一封。超管每次進入主頁讀同一健康狀態，異常以 alertdialog 提示，正常不顯示檢查面板。
+
+0011 forward migration 刪除已退役 app-local Session 表並建立 health state，帳務與稽核不變；sandbox 套用同 migration，新 schema 11 與來源 6～10 均可還原。首次正式每日 check／實際異常郵件需依真實事件觀察，不用假異常或破壞正式副本作驗收。

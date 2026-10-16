@@ -9728,26 +9728,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
   display: none !important;
 }
 
-#tabletPreviewReturnButton {
-  display: none !important;
-}
 
-html[data-tablet-preview="true"] #tabletPreviewReturnButton:not([hidden]) {
-  order: 2 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 34px !important;
-  height: 34px !important;
-  padding: 0 9px !important;
-  border: 1px solid #b8c4d0 !important;
-  border-radius: 8px !important;
-  background: #fff !important;
-  color: #425466 !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  white-space: nowrap !important;
-}
 
 #mobileEntrySecondaryButton { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) body {
@@ -10668,21 +10649,6 @@ html[data-tablet-layout="landscape"] .entry-grid > #saveMessage { order: 22 !imp
 }
 
 html[data-tablet-layout]:not([data-tablet-layout=""]) #mobileEntrySecondaryButton {
-  display: block !important;
-}
-
-
-/* Phone-only tablet preview: tablet presentation wins even if Safari briefly keeps mobile-width state. */
-html[data-tablet-preview="true"] #mobileMainNav {
-  display: none !important;
-}
-html[data-tablet-preview="true"] .shell > .cy-mobile-page-hidden {
-  display: block !important;
-}
-html[data-tablet-preview="true"] body {
-  padding-bottom: 0 !important;
-}
-html[data-tablet-preview="true"] .cy-mobile-account-menu [data-mobile-account-action="tablet-preview"] {
   display: block !important;
 }
 
@@ -11866,7 +11832,6 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint { grid-column: 2; margin: 0; }
   html[data-viewport="desktop"] #settingsDialog .backup-provider-card { align-content: center; }
   html[data-viewport="desktop"] #settingsDialog .backup-provider-card-head { align-items: center; }
-  html[data-viewport="desktop"] #settingsDialog .backup-restore-tools .hint,
   html[data-viewport="desktop"] #settingsDialog .backup-recovery-launcher .hint { margin: 6px 0; }
   html[data-viewport="desktop"] #settingsDialog .backup-heading-actions { display: flex; flex-shrink: 0; gap: 8px; }
   html[data-viewport="desktop"] #settingsDialog .backup-heading-actions button { min-height: 32px; padding: 5px 10px; }

@@ -14,6 +14,7 @@ async function setupBackupSettings() {
   if (user?.role !== 'SUPER_ADMIN') return;
 
   setupMobileBackupInfo();
+  void showBackupHealthWarning();
 
   const nav = document.querySelector('.settings-nav');
   const content = document.querySelector('.settings-content');
@@ -41,8 +42,6 @@ async function setupBackupSettings() {
   });
   pane.querySelector('#backupRunNow')?.addEventListener('click', runBackupNow);
   pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatus);
-  pane.querySelector('#backupVerifyRestore')?.addEventListener('click', verifyBackupRestore);
-  pane.querySelector('#backupActivatePhaseD')?.addEventListener('click', activateBackupPhaseD);
   pane.querySelector('#backupOpenRecovery')?.addEventListener('click', openBackupRecovery);
   ensureBackupRecoveryDialog();
 }
@@ -56,6 +55,35 @@ async function sharedSessionUser() {
   }
 }
 
+
+async function showBackupHealthWarning() {
+  let health;
+  try { health = (await api('/api/backup/health')).health; }
+  catch { health = { status: 'failed', issues: [{ code: 'BACKUP_HEALTH_UNAVAILABLE' }] }; }
+  if (health?.status !== 'failed') return;
+  let dialog = document.querySelector('#backupHealthWarning');
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.id = 'backupHealthWarning';
+    dialog.className = 'modal backup-health-dialog';
+    dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-labelledby', 'backupHealthWarningTitle');
+    dialog.setAttribute('aria-describedby', 'backupHealthWarningText');
+    dialog.innerHTML = `<div class="modal-header"><h2 id="backupHealthWarningTitle">備份異常警告</h2></div>
+      <p id="backupHealthWarningText"></p><p class="backup-health-delivery"></p>
+      <div class="backup-health-actions"><button type="button" class="primary">已了解</button></div>`;
+    dialog.querySelector('button').addEventListener('click', () => dialog.close());
+    document.body.append(dialog);
+  }
+  const providers = [...new Set((health.issues || []).map(item => item.provider === 'cloudflare_r2' ? 'R2'
+    : item.provider === 'google_cloud_storage' ? 'GCS' : '').filter(Boolean))];
+  dialog.querySelector('#backupHealthWarningText').textContent = providers.length
+    ? `${providers.join('／')} 備份自動檢查未通過，請通知維運人員檢查備份／復原狀態。目前帳本不會自動還原或切換。`
+    : '備份自動檢查未完成或結果已逾期，請通知維運人員確認。';
+  dialog.querySelector('.backup-health-delivery').textContent = health.emailSent ? '已寄出超級管理員通知信。'
+    : health.emailPending ? '通知信尚未寄達，系統將於下次排程重試。' : '';
+  if (!dialog.open) dialog.showModal();
+}
 
 function setupMobileBackupInfo() {
   const action = document.querySelector('[data-mobile-ledger-action="backup"]');
@@ -196,14 +224,9 @@ function backupSettingsHtml() {
       </div>
     </div>
 
-    <div id="backupRestoreTools" class="backup-restore-tools" hidden>
-      <div class="backup-actions-row"><button id="backupVerifyRestore" class="secondary" type="button" disabled>檢查備份可還原性</button><button id="backupActivatePhaseD" class="secondary" type="button" disabled>啟用 Phase D</button></div>
-      <p class="hint backup-verification-explanation">試還原並核對資料，不會寫入帳本。</p>
-      <p id="backupRestoreStatus" class="hint">尚未執行隔離還原驗證。</p>
-    </div>
     <section id="backupRecoveryTools" class="backup-recovery-launcher" hidden>
-      <button id="backupOpenRecovery" class="secondary" type="button" aria-haspopup="dialog">還原操作…</button>
-      <p id="backupRecoverySummary" class="hint" role="status"></p>
+      <div class="backup-recovery-action"><button id="backupOpenRecovery" class="secondary" type="button" aria-haspopup="dialog">還原操作…</button>
+      <p id="backupRecoverySummary" class="hint" role="status"></p></div>
       <a class="backup-emergency-link" href="/recovery" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 4 6v6c0 4 8 9 8 9s8-5 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>
         <span><strong>緊急復原入口</strong><small>正式帳本無法開啟時使用</small></span>
@@ -395,7 +418,6 @@ function renderBackupStatus(data) {
 
   if (run) run.disabled = !model.configured;
   renderPhaseCAcceptance(data);
-  renderBackupRestoreState(data);
   renderBackupRecoveryState(data);
 }
 
@@ -490,53 +512,6 @@ function backupCopyBadgeBase(copy) {
   const label = success ? '成功' : failed ? '失敗' : '處理中';
   const cls = success ? 'success' : failed ? 'failed' : 'neutral';
   return `<span class="backup-run-badge ${cls}" title="${escapeBackupHtml(copy.lastError || '')}">${label}</span>`;
-}
-
-function renderBackupRestoreState(data) {
-  const tools = document.querySelector('#backupRestoreTools');
-  if (!tools) return;
-  tools.hidden = !window.cyIsDesktopInteractionWorkspace?.() || !data?.policy;
-  const checks = Array.isArray(data?.restoreChecks) ? data.restoreChecks : [];
-  const latestId = checks[0]?.backupId;
-  const pair = ['cloudflare_r2', 'google_cloud_storage'].map(provider => checks.find(check => check.backupId === latestId && check.provider === provider)).filter(Boolean);
-  const successful = pair.length === 2 && pair[0].attemptId === pair[1].attemptId && pair.every(check => check.status === 'success');
-  const label = document.querySelector('#backupRestoreStatus');
-  if (label) label.textContent = successful ? '最近檢查：R2／GCS 皆通過。'
-    : pair.length ? '隔離驗證未完整通過：' + pair.filter(check => check.status !== 'success').map(check => check.result?.code || '驗證失敗').join('、') : data?.policy?.phase === 'phase_d' ? '可隨時檢查最近備份是否能完整還原。' : '先驗證備份能完整還原，再啟用 Phase D。';
-  const verify = document.querySelector('#backupVerifyRestore');
-  if (verify) verify.disabled = !data?.configured || !data?.logicalBackups?.length;
-  const activate = document.querySelector('#backupActivatePhaseD');
-  if (activate) {
-    activate.hidden = data?.policy?.phase === 'phase_d';
-    activate.disabled = data?.policy?.phase === 'phase_d' || !data?.phaseDReady;
-    activate.textContent = data?.policy?.phase === 'phase_d' ? 'Phase D 已啟用' : '啟用 Phase D';
-  }
-}
-
-async function verifyBackupRestore() {
-  const button = document.querySelector('#backupVerifyRestore');
-  if (button) button.disabled = true;
-  setBackupMessage('正在回讀 R2／GCS 並於隔離 SQLite 驗證完整還原…');
-  try {
-    const data = await api('/api/backup/verify-restore', { method: 'POST', headers: jsonHeaders(), body: '{}' }, 120_000);
-    if (!data.ok) throw new Error('隔離還原未完整通過，請查看驗證結果。');
-    await loadBackupStatus();
-    setBackupMessage('隔離還原驗證通過，正式帳本未更動。');
-  } catch (error) {
-    await loadBackupStatus();
-    setBackupMessage(error.message || '隔離還原驗證失敗。', true);
-  }
-}
-
-async function activateBackupPhaseD() {
-  if (!await window.cyConfirm({title:'啟用分層備份',message:'R2 每日保留 30 天；GCS 每週三、週日備份，保留 182 天。現有備份不會在切換時清除。',confirmText:'啟用'})) return;
-  const button = document.querySelector('#backupActivatePhaseD');
-  if (button) button.disabled = true;
-  try {
-    await api('/api/backup/phase-d/activate', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ confirm: 'phase_d' }) });
-    await loadBackupStatus();
-    setBackupMessage('Phase D 已啟用。');
-  } catch (error) { await loadBackupStatus(); setBackupMessage(error.message || '切換失敗。', true); }
 }
 
 async function runBackupNow() {
