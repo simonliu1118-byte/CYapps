@@ -58,28 +58,21 @@ internal static class Invq01Layout
     /// <summary>Human-readable date shown in status and messages.</summary>
     public static string ErpDate(DateOnly? date) => date?.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) ?? "未指定";
 
-    /// <summary>One deliberately minimal keyboard sequence for a local or Web INVQ01 date input.</summary>
-    internal sealed record HistoryDateAction(
-        int BoxIndex, DateOnly Date, bool ClickStart, bool EnterBefore, bool EnterAfter);
+    /// <summary>One date to type into INVQ01: which box, whether to click it first, whether Enter follows.</summary>
+    internal sealed record HistoryDateAction(int BoxIndex, DateOnly Date, bool Click, bool EnterAfter);
 
     /// <summary>
-    /// The exact INVQ01 keystroke order confirmed by the user:
-    /// 起 only: click 起, type 起 (no Enter).
-    /// 迄 only: click 起, Enter, type 迄 (no second click/Enter).
-    /// Both: click 起, type 起, Enter, type 迄 (no second click/Enter).
-    /// Unspecified dates are not touched.
+    /// The INVQ01 keystroke order confirmed by the user (2026-10-16):
+    /// both: click 起, type 起 (yyyyMMdd), Enter (jumps to 迄, no click), type 迄;
+    /// 起 only: click 起, type 起; 迄 only: click 迄, type 迄. Unspecified dates are not touched.
     /// </summary>
     public static IReadOnlyList<HistoryDateAction> DateActions(HistoryRange range)
     {
         var actions = new List<HistoryDateAction>(2);
         if (range.From is { } from)
-            actions.Add(new HistoryDateAction(0, from,
-                ClickStart: true, EnterBefore: false, EnterAfter: range.To is not null));
+            actions.Add(new HistoryDateAction(0, from, Click: true, EnterAfter: range.To is not null));
         if (range.To is { } to)
-            actions.Add(new HistoryDateAction(1, to,
-                ClickStart: range.From is null,
-                EnterBefore: range.From is null,
-                EnterAfter: false));
+            actions.Add(new HistoryDateAction(1, to, Click: range.From is null, EnterAfter: false));
         return actions;
     }
 

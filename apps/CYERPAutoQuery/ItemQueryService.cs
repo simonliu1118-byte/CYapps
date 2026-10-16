@@ -598,25 +598,9 @@ internal sealed class ItemQueryService
     /// </summary>
     private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken)
     {
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("轉出 Excel 前無法把品號資料建立作業帶到前景。");
-        if (!NativeMethods.GetWindowRect(root, out var window))
-            throw new InvalidOperationException("讀不到品號資料建立作業的視窗位置。");
-
-        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
-        IReadOnlyList<OcrToken> tokens;
-        using (var image = ScreenCapture.Capture(ribbon))
-            tokens = await _ocr.RecognizeAsync(image, cancellationToken);
-        var label = OcrWordFinder.FindWord(tokens, "Excel") ?? OcrWordFinder.FindWord(tokens, "EXCEL");
-        if (label is null)
-        {
-            foreach (var t in tokens)
-                _log.Info("export", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
-            throw new InvalidOperationException("ERP 工具列上找不到「Excel」。請確認 Ribbon 停在「常用」。");
-        }
-        var labelScreen = new Rectangle(ribbon.Left + label.Value.Left, ribbon.Top + label.Value.Top, label.Value.Width, label.Value.Height);
         var before = Win32Automation.VisibleProcessWindows(root);
-        SafeClick(root, new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
+        var labelScreen = await RibbonClickAsync(root, "Excel", "工具列的「Excel」（請確認 Ribbon 停在「常用」）", cancellationToken,
+            alternative: "EXCEL", requireChinese: false);
         _log.Info("export", $"ribbon Excel clicked label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
 
         // The drop-down: 轉出至 Excel / 轉出全部符合查詢條件的資料.
@@ -1202,17 +1186,14 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
         }
 
-        // Exact ERP keyboard sequence:
-        // 起 only: click 起 -> yyyyMMdd
-        // 迄 only: click 起 -> Enter -> yyyyMMdd
-        // both:    click 起 -> yyyyMMdd -> Enter -> yyyyMMdd
-        // No second click or final Enter. Never type in a field with unexpected focus.
+        // ERP keyboard sequence (user, 2026-10-16), see Invq01Layout.DateActions:
+        // both: click 起 -> yyyyMMdd -> Enter -> yyyyMMdd; 起 only: click 起 -> yyyyMMdd;
+        // 迄 only: click 迄 -> yyyyMMdd. Never type in a field with unexpected focus.
         foreach (var action in Invq01Layout.DateActions(range))
         {
             var name = action.BoxIndex == 0 ? "起" : "迄";
-            await SetDateAsync(invq, boxes[0], boxes[action.BoxIndex], action.Date, name,
-                clickStart: action.ClickStart, enterBefore: action.EnterBefore,
-                enterAfter: action.EnterAfter, cancellationToken: cancellationToken);
+            await SetDateAsync(invq, boxes[action.BoxIndex], action.Date, name,
+                click: action.Click, enterAfter: action.EnterAfter, cancellationToken: cancellationToken);
         }
         if (range.From is { } expectedFrom &&
             !Invq01Layout.ShowsDate(NativeMethods.ControlText(boxes[0].Handle), expectedFrom))
@@ -1222,29 +1203,18 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動的迄日讀回不一致，已停止。");
     }
 
-    private async Task SetDateAsync(nint invq, WindowControl startBox, WindowControl targetBox, DateOnly date, string what,
-        bool clickStart, bool enterBefore, bool enterAfter, CancellationToken cancellationToken)
+    private async Task SetDateAsync(nint invq, WindowControl targetBox, DateOnly date, string what,
+        bool click, bool enterAfter, CancellationToken cancellationToken)
     {
-        if (clickStart)
+        if (click)
         {
-            // Always start by clicking the 年 portion of 起, even when only 迄 is specified.
-            // Clicking 迄 directly can select an unexpected year/month/day segment.
-            var width = startBox.Rect.Right - startBox.Rect.Left;
+            // Click the 年 part (left end) so the digits start at the year.
+            var width = targetBox.Rect.Right - targetBox.Rect.Left;
             if (width < 48)
-                throw new InvalidOperationException("歷史異動的起日欄位寬度不正確，已停止。");
-            var yearPoint = new Point(startBox.Rect.Left + Math.Min(12, width / 10),
-                (startBox.Rect.Top + startBox.Rect.Bottom) / 2);
+                throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
+            var yearPoint = new Point(targetBox.Rect.Left + Math.Min(12, width / 10),
+                (targetBox.Rect.Top + targetBox.Rect.Bottom) / 2);
             SafeClick(invq, yearPoint);
-            await Pace.Delay(150, cancellationToken);
-        }
-
-        if (enterBefore)
-        {
-            // End-only case: 起 stays untouched; Enter advances from 起 to 迄.
-            var startFocus = NativeMethods.FocusedControlOfForeground();
-            if (startFocus != startBox.Handle && !Win32Automation.IsInside(startFocus, startBox.Handle))
-                throw new InvalidOperationException("無法將歷史異動的游標定位在起日，已停止。");
-            InputSender.Press(NativeMethods.VK_RETURN);
             await Pace.Delay(150, cancellationToken);
         }
 
@@ -1328,50 +1298,73 @@ internal sealed class ItemQueryService
         return false;
     }
 
+    /// <summary>Ribbon group learned per window class and word during this run (see <see cref="RibbonClickAsync"/>).</summary>
+    private readonly Dictionary<string, string> _ribbonGroups = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Finds <paramref name="word"/> on the Ribbon of <paramref name="window"/> by OCR and clicks
     /// it; returns the label's screen rectangle. Each Ribbon group is a TdxRibbonGroupBarControl
-    /// window captioned with the group name (V0.3.0 LOG); reading only <paramref name="group"/>
-    /// instead of the whole Ribbon (about 2 s per click) is much faster. The whole Ribbon is
-    /// read only when the group is missing or does not show the word.
+    /// window captioned with the group name (V0.3.0 LOG). Reading the whole Ribbon takes about
+    /// 2 s; reading one group a fraction of that. So the group is read first: the one given, or
+    /// the one the word was found in earlier this run (learned after a whole-Ribbon read). The
+    /// click is still where OCR read the word: Ribbon clicks are never blind coordinates.
     /// </summary>
-    private async Task<Rectangle> RibbonClickAsync(nint window, string word, string what, CancellationToken cancellationToken, string? group = null)
+    private async Task<Rectangle> RibbonClickAsync(nint window, string word, string what, CancellationToken cancellationToken,
+        string? group = null, string? alternative = null, bool requireChinese = true)
     {
         if (!Win32Automation.PrepareForeground(window, _log))
             throw new InvalidOperationException($"點擊{what}前無法把 ERP 視窗帶到前景。");
         if (!NativeMethods.GetWindowRect(window, out var w))
             throw new InvalidOperationException($"讀不到{what}所在視窗的位置。");
 
-        if (group is not null && Win32Automation.EnumerateChildren(window)
-                .FirstOrDefault(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase) &&
-                                     Invi02Layout.NormalizeCaption(c.Text) == Invi02Layout.NormalizeCaption(group)) is { } bar)
+        Rectangle? Find(IReadOnlyList<OcrToken> tokens) =>
+            OcrWordFinder.FindWord(tokens, word) ?? (alternative is null ? null : OcrWordFinder.FindWord(tokens, alternative));
+
+        var bars = Win32Automation.EnumerateChildren(window)
+            .Where(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var key = NativeMethods.ClassName(window) + "|" + word;
+        var preferred = group ?? (_ribbonGroups.TryGetValue(key, out var learned) ? learned : null);
+        if (preferred is not null)
         {
-            var area = bar.Rect.ToRectangle();
-            IReadOnlyList<OcrToken> groupTokens;
-            using (var image = ScreenCapture.Capture(area))
-                groupTokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-            if (OcrWordFinder.FindWord(groupTokens, word) is { } g)
+            if (bars.FirstOrDefault(c => Invi02Layout.NormalizeCaption(c.Text) == Invi02Layout.NormalizeCaption(preferred)) is { } bar)
             {
-                var found = new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
-                SafeClick(window, new Point(found.Left + found.Width / 2, found.Top + found.Height / 2));
-                _log.Info("ribbon", $"clicked {word} in group={group}");
-                return found;
+                var area = bar.Rect.ToRectangle();
+                IReadOnlyList<OcrToken> groupTokens;
+                using (var image = ScreenCapture.Capture(area))
+                    groupTokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: requireChinese);
+                if (Find(groupTokens) is { } g)
+                {
+                    var found = new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
+                    SafeClick(window, new Point(found.Left + found.Width / 2, found.Top + found.Height / 2));
+                    _log.Info("ribbon", $"clicked {word} in group={preferred}");
+                    return found;
+                }
+                _log.Warn("ribbon", $"group={preferred} has no {word} tokens=\"{string.Join(" ", groupTokens.Select(t => t.Text))}\"");
             }
-            _log.Warn("ribbon", $"group={group} has no {word} tokens=\"{string.Join(" ", groupTokens.Select(t => t.Text))}\"");
+            else _log.Warn("ribbon", $"ribbon group {preferred} not found; reading the whole Ribbon");
         }
-        else if (group is not null) _log.Warn("ribbon", $"ribbon group {group} not found; reading the whole Ribbon");
 
         var ribbon = new Rectangle(w.Left, w.Top, Math.Min(w.Width, 1200), Math.Min(w.Height, 220));
         IReadOnlyList<OcrToken> tokens;
         using (var image = ScreenCapture.Capture(ribbon))
-            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-        if (OcrWordFinder.FindWord(tokens, word) is not { } r)
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: requireChinese);
+        if (Find(tokens) is not { } r)
         {
             _log.Warn("ribbon", $"OCR did not find {word} tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
             throw new InvalidOperationException($"ERP 找不到{what}。");
         }
         var label = new Rectangle(ribbon.Left + r.Left, ribbon.Top + r.Top, r.Width, r.Height);
-        SafeClick(window, new Point(label.Left + label.Width / 2, label.Top + label.Height / 2));
+        var point = new Point(label.Left + label.Width / 2, label.Top + label.Height / 2);
+        SafeClick(window, point);
+
+        // Learn the group so the next query reads only that group.
+        if (bars.FirstOrDefault(c => c.Rect.ToRectangle().Contains(point) && c.Text.Trim().Length > 0) is { } home)
+        {
+            _ribbonGroups[key] = home.Text.Trim();
+            _log.Info("ribbon", $"clicked {word} by whole Ribbon; group={home.Text.Trim()} remembered");
+        }
+        else _log.Info("ribbon", $"clicked {word} by whole Ribbon; no group window");
         return label;
     }
 }
