@@ -87,7 +87,22 @@ function originalAllocation(
   for(const raw of items){
     const row=raw as Record<string,unknown>;
     const net=scaledAmount(row.amount),tax=scaledAmount(row.tax);
-    if(net===null||tax===null||net<=0n)
+    const quantity=scaledAmount(row.quantity);
+    const unitPrice=scaledAmount(row.unit_price);
+    const taxType=String(row.tax_type);
+    const description=row.description;
+    const originalDay=String(row.original_invoice_date);
+    // Official allowance_query detail fields are OPTIONAL. Do not promote
+    // matching headers into verified source quantities when any line lacks
+    // a valid original-date/item/quantity/price/tax basis. The rounding is
+    // seven decimal places, half away from zero, not floating-point math.
+    if(net===null||tax===null||net<=0n||tax%AMOUNT_SCALE!==0n||
+       quantity===null||quantity<=0n||unitPrice===null||unitPrice<=0n||
+       typeof description!=="string"||description.length<1||
+       description.length>256||!/^[0-9]{8}$/.test(originalDay)||
+       !/^[123]$/.test(taxType)||
+       (taxType!=="1"&&tax!==0n)||
+       (quantity*unitPrice+AMOUNT_SCALE/2n)/AMOUNT_SCALE!==net)
       return unknown("ITEM_AMOUNTS_UNVERIFIED");
     lineNet+=net;lineTax+=tax;
     if(row.original_invoice_number===originalInvoice){

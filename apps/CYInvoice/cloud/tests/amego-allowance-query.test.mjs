@@ -12,7 +12,9 @@ const input={sellerInvoice:"12345678",appKey,allowanceNumber:"A20261015001",
 const official={code:0,data:{allowance_number:"A20261015001",invoice_type:"D0401",
  invoice_status:99,allowance_date:"20261015",allowance_type:2,
  cancel_date:0,total_amount:"50",tax_amount:"3",
- product_item:[{original_invoice_number:"AB12345678",amount:"50",tax:"3"}]}};
+ product_item:[{original_invoice_number:"AB12345678",
+   original_invoice_date:20261015,description:"Synthetic",
+   quantity:"1",unit_price:"50",tax_type:1,amount:"50",tax:"3"}]}};
 let requests=0;
 function transport(result=official){
  return async (url,options)=>{
@@ -46,9 +48,10 @@ assert.deepEqual(success.originalAllocation,{
 const multi=await query(input,transport({code:0,data:{
   ...official.data,total_amount:"75.0000000",tax_amount:"4",
   product_item:[
-    {original_invoice_number:"AB12345678",amount:"20",tax:"1"},
-    {original_invoice_number:"XY12345678",amount:"25",tax:"1"},
-    {original_invoice_number:"AB12345678",amount:"30",tax:"2"}
+    {...official.data.product_item[0],amount:"20",unit_price:"20",tax:"1"},
+    {...official.data.product_item[0],original_invoice_number:"XY12345678",
+      amount:"25",unit_price:"25",tax:"1"},
+    {...official.data.product_item[0],amount:"30",unit_price:"30",tax:"2"}
   ]
 }}),()=>date);
 assert.equal(multi.possibleMatch,false);
@@ -59,21 +62,62 @@ assert.deepEqual(multi.originalAllocation,{
 },"Only the AB original-invoice allocation is exposed");
 // The exact 7-place decimal fields must use bigint, not binary floats.
 const fractions=await query(input,transport({code:0,data:{
-  ...official.data,total_amount:"0.6000000",tax_amount:"0.2000000",
+  ...official.data,total_amount:"0.6000000",tax_amount:"0",
   product_item:[
-    {original_invoice_number:"AB12345678",amount:"0.1000001",tax:"0.1000000"},
-    {original_invoice_number:"XY12345678",amount:"0.4999999",tax:"0.1000000"}
+    {...official.data.product_item[0],unit_price:"0.1000001",
+      amount:"0.1000001",tax:"0",tax_type:3},
+    {...official.data.product_item[0],original_invoice_number:"XY12345678",
+      unit_price:"0.4999999",amount:"0.4999999",tax:"0",tax_type:3}
   ]
 }}),()=>date);
-assert.equal(fractions.originalAllocation.originalGross,"0.2000001");
+assert.equal(fractions.originalAllocation.originalGross,"0.1000001");
 assert.equal(fractions.originalAllocation.safeToInferRemainingBalance,false);
+const roundedFraction=await query(input,transport({code:0,data:{
+  ...official.data,total_amount:"0.3333333",tax_amount:"0",
+  product_item:[{...official.data.product_item[0],tax_type:3,
+    quantity:"3",unit_price:"0.1111111",amount:"0.3333333",tax:"0"}]
+}}),()=>date);
+assert.equal(roundedFraction.originalAllocation.lineTotalsVerified,true,
+  "7-decimal quantity * unit price is compared without Number");
+assert.equal(roundedFraction.originalAllocation.originalGross,"0.3333333");
+const roundedMismatch=await query(input,transport({code:0,data:{
+  ...official.data,total_amount:"0.3333334",tax_amount:"0",
+  product_item:[{...official.data.product_item[0],tax_type:3,
+    quantity:"3",unit_price:"0.1111111",amount:"0.3333334",tax:"0"}]
+}}),()=>date);
+assert.equal(roundedMismatch.originalAllocation.reason,"ITEM_AMOUNTS_UNVERIFIED");
+assert.equal(roundedMismatch.originalAllocation.originalGross,null);
+// Header sum matching is not enough to prove an individual historical
+// allowance quantity, and neither case grants an actual remaining balance.
 for(const [label,row,expectedReason] of [
   ["missing line tax",{...official.data,product_item:[{
-    original_invoice_number:"AB12345678",amount:"50"}]},"ITEM_AMOUNTS_UNVERIFIED"],
+    ...official.data.product_item[0],tax:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["missing quantity",{...official.data,product_item:[{
+    ...official.data.product_item[0],quantity:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["zero quantity",{...official.data,product_item:[{
+    ...official.data.product_item[0],quantity:0}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["missing unit price",{...official.data,product_item:[{
+    ...official.data.product_item[0],unit_price:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["mismatched line quantity",{...official.data,product_item:[{
+    ...official.data.product_item[0],quantity:2}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["mismatched unit price",{...official.data,product_item:[{
+    ...official.data.product_item[0],unit_price:"49.9999999"}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["invalid price precision",{...official.data,product_item:[{
+    ...official.data.product_item[0],unit_price:"50.00000001"}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["missing original date",{...official.data,product_item:[{
+    ...official.data.product_item[0],original_invoice_date:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["missing description",{...official.data,product_item:[{
+    ...official.data.product_item[0],description:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["missing tax type",{...official.data,product_item:[{
+    ...official.data.product_item[0],tax_type:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["non-taxable taxed",{...official.data,product_item:[{
+    ...official.data.product_item[0],tax_type:3}]},"ITEM_AMOUNTS_UNVERIFIED"],
+  ["fractional tax",{...official.data,product_item:[{
+    ...official.data.product_item[0],tax:"2.5"}]},"ITEM_AMOUNTS_UNVERIFIED"],
   ["line mismatch",{...official.data,product_item:[{
-    original_invoice_number:"AB12345678",amount:"40",tax:"3"}]},"HEADER_TOTALS_MISMATCH"],
+    ...official.data.product_item[0],amount:"40"}]},"ITEM_AMOUNTS_UNVERIFIED"],
   ["other original",{...official.data,product_item:[{
-    original_invoice_number:"XY12345678",amount:"50",tax:"3"}]},"ORIGINAL_INVOICE_NOT_IN_ITEMS"],
+    ...official.data.product_item[0],original_invoice_number:"XY12345678"}]},"ORIGINAL_INVOICE_NOT_IN_ITEMS"],
   ["pending upload",{...official.data,invoice_status:91},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
   ["cancelled",{...official.data,cancel_date:20261016},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
 ]){
@@ -115,4 +159,4 @@ assert.equal(before,requests);
 await assert.rejects(()=>query(input,async()=>{throw Error("network")},()=>date),/UNAVAILABLE/);
 await assert.rejects(()=>query(input,async()=>new Response("a".repeat(300000)),()=>date),
  /RESPONSE_TOO_LARGE/);
-console.log("Official allowance readback: number, source, status, signature, no resend/auto-confirm passed");
+console.log("Official allowance readback: number, source, seven-decimal line quantity/price math, status, no resend/auto-confirm passed");

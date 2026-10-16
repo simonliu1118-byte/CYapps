@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 V3 續作：歷史折讓逐品項原始數量核算（Draft Source）
+
+本輪於現有 `amego-allowance-query.ts` 的歷史 `originalAllocation` 只增加有限的欄位／數學核對：光貿官方折讓 `product_item` 是選填欄位，必須有原發票日期、品名、稅別、數量、未稅單價、小計與整元稅額，且每行以七位 BigInt 精度核對數量乘單價；原全單 header 淨額與稅額仍需一致，才保留原有 `lineTotalsVerified=true`。任一項不足仍為 `ITEM_AMOUNTS_UNVERIFIED`，沒有可用分攤；在原合成測試補缺欄、錯單價、錯數量、整元稅、精度及跨原發票案例。此步只是**歷史折讓可扣算前的品項可信度 Gate**，尚未把歷史單據逐品項扣回原發票求真正剩餘數量，也不更動 API、Windows、D1 Schema、Worker 或 `canApprove=false`。不部署、不 Release，精確 CI 見本輪提交。
+
 ## 2026-10-16 V3 續作：含稅原發票唯讀診斷（Draft Source）
 
 本輪沿用 #440 步驟 5，在 `allowance-item-validation.ts` 增加 `detail_vat=1` 的來源自洽性檢查：有限 7 位 BigInt 原品項算式、含稅合計，以及光貿已揭露稅額情形的 5% 含稅拆稅公式；未揭露稅額（例如一般 B2C）明確維持人工處理。對應 Synthetic Test 及 `CloudAllowanceManagerForm` 正體中文原因提示。**不把原含稅單價轉成 g0401 未稅單價；所有含稅案 fullyMatched=false／verifiedLines=0、canApprove=false、歷史餘額未核准**。無 D1／Worker 變更、真實光貿操作、部署或 Release；exact-head CI 依本輪 commit 結果另核。
