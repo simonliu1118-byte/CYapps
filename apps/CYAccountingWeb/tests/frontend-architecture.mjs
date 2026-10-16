@@ -196,4 +196,6 @@ assert.match(adaptiveUi, /window\.cyShowMigrationComplete = showMigrationComplet
 assert.doesNotMatch(adaptiveUi, /setupOptimisticSettings/, 'settings mutations must not be intercepted by a secondary patch layer');
 
 
+const deploymentWorkflow = read('../../.github/workflows/cyaccountingweb-deploy.yml');
+assert.doesNotMatch(deploymentWorkflow, /__cyaccTabletPreviewEnabled|tabletPreviewReturnButton/, 'production probes must not require retired preview code');
 console.log('Semantic frontend architecture checks passed.');

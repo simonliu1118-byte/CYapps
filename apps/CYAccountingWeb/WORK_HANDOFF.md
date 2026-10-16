@@ -6,7 +6,7 @@
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.5** 本批備份自動檢查、設定密度與技術清理；上一正式 V0.25.4／PR #435／main run 38736782701 全部 gate／部署及登入入口回讀成功 |
+| 產品 | **V0.25.5**／PR #473 已合併；正式 migration／Worker／登入與桌機設定目視回讀成功。已移除部署檢查的 retired preview marker，最終 Actions 證據見本批收尾 PR；產品 source／版本不變 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
@@ -25,6 +25,7 @@
 - CYID 0.3.10／contract 1.0.6 的 private `ConsumerNotifications` 解析目前受保護超管信箱，沿原 Email adapter／額度，固定通知內容、delivery slot 與冷卻。CYACC `BACKUP_NOTIFICATIONS` 掛到與 IDENTITY 相同 provider，沒有複製郵件憑證或 Identity authority。
 - Backup UI 移除手動驗證／結果說明；底部左還原操作、右緊急復原入口。超管 boot 只讀健康狀態，異常以唯一 alertdialog 提醒；正常不增加檢查說明區。統計移轉設定沿原 form／設定 API，緊密雙欄、窄畫面單欄。
 - 刪除手機平板 preview bootstrap、session state、menu／return action、Excel preview 分支及對應 CSS；真實平板 classification、layout、native picker／share 不改。forward migration 0011 只 DROP 舊 web_sessions，新增檢查狀態；CYID 仍是唯一 Session authority，帳務／稽核保留。新 schema 11、舊 schema 6～10 正規化／還原保留，sandbox 套用全 migrations。
+- 正式桌機 1363×936 已登入回讀 V0.25.5；統計設定左右等寬、列高約 30px，無水平溢出；備份底部左右各 236.5px、同高，手動檢查控制與結果節點皆已移除。首次 main run 38846351061 尾端因殘留 preview probe 失敗，收尾 PR 移除舊 marker 並補 architecture regression；不回復已退休程式。
 - 本地測試包含真實 SQLite roundtrip、排程失敗、R2-only 日、損壞／過期、通知重試／去重／lease、超管限制與復原 hold；provider 98 tests、auth／first-login local Worker 驗證通過；完整本地 80 項 workflow checks 通過，補充 forward migration 全帳務保留與 DB 中斷獨立通知回歸。共用通知 PR #459 已合併；正式部署門檻依支援範圍修正追蹤 #471。正式首次 daily check 仍需排程後觀察，不發假異常信或更動正式備份作驗收。
 
 ## V0.25.4 首次登入引導

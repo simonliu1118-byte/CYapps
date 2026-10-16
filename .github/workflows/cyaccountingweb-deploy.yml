@@ -372,7 +372,6 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=backup-health-layout" '#settingsDialog.settings-modal'
           verify_asset "$base/adaptive-ui.css?rev=backup-health-layout" 'grid-template-columns: repeat(5, minmax(0, 1fr))'
           verify_asset "$base/adaptive-ui.css?rev=backup-health-layout" 'writing-mode: vertical-rl'
-          verify_asset "$base/excel-export-ui.js?rev=native-device-share" 'window.__cyaccTabletPreviewEnabled === true'
           verify_asset "$base/excel-export-ui.js?rev=native-device-share" 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           verify_asset "$base/adaptive-ui.css?rev=backup-health-layout" 'border-radius: 11px 11px 0 0'
           verify_asset "$base/adaptive-ui.css?rev=backup-health-layout" 'grid-row: 3 !important'
