@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -14,6 +15,15 @@ public sealed record CloudWorkItemDraft(
 public sealed record CloudWorkItem(
     string ItemId, string WorkspaceId, string Environment, string Kind,
     string ReferenceHash, string Status, int Revision);
+
+// Privacy-limited list transport: no source hashes, invoice details, employee
+// identities or device identifiers are present in a manager's queue response.
+public sealed record CloudWorkItemSummary(
+    string ItemId, string Environment, string Kind, string Status, int Revision,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+public sealed record CloudWorkItemCursor(string CreatedAt, string ItemId);
+public sealed record CloudWorkItemPage(
+    IReadOnlyList<CloudWorkItemSummary> Items, CloudWorkItemCursor? NextCursor);
 
 public sealed class CloudWorkItemClient
 {
@@ -73,6 +83,112 @@ public sealed class CloudWorkItemClient
             return null;
         }
     }
+
+    public async Task<CloudWorkItemPage> ListAsync(
+        string employeeNo, string password, int limit = 20,
+        string? kind = null, string? status = null,
+        CloudWorkItemCursor? cursor = null, CancellationToken cancellationToken = default)
+    {
+        ValidateCredentials(employeeNo,password);
+        if(limit is < 1 or > 50 ||
+           (kind is not null && kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID")) ||
+           (status is not null && status is not ("open" or "review" or "closed")))
+            throw new ArgumentException("Work Item list filter is invalid.");
+        if(cursor is not null)
+        {
+            ValidateId(cursor.ItemId);
+            if(!ValidTimestamp(cursor.CreatedAt))
+                throw new ArgumentException("Work Item cursor is invalid.",nameof(cursor));
+        }
+        // Work Item scope is exclusively derived from the active Cloud Device;
+        // never send a client-selected workspace or an original invoice.
+        using var response=await SendAsync("list",new{
+            limit,kind,status,cursor=cursor is null?null:new{
+                createdAt=cursor.CreatedAt,itemId=cursor.ItemId
+            },employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=response.RootElement;
+        if(!root.TryGetProperty("items",out var items) ||
+           items.ValueKind!=JsonValueKind.Array ||
+           items.GetArrayLength()>limit ||
+           !root.TryGetProperty("nextCursor",out var next))
+            throw new InvalidDataException("Cloud Work Item list reply is invalid.");
+        var parsed=new List<CloudWorkItemSummary>();
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        string? lastTime=null;
+        string? lastId=null;
+        foreach(var row in items.EnumerateArray())
+        {
+            // Fail closed if the service accidentally exposes extra business
+            // data or fields beyond the manager's approved seven-field view.
+            if(row.ValueKind!=JsonValueKind.Object||
+               row.EnumerateObject().Count()!=7)
+                throw new InvalidDataException("Work Item list exposed unexpected fields.");
+            string Required(string key)
+            {
+                if(!row.TryGetProperty(key,out var field) ||
+                   field.ValueKind!=JsonValueKind.String ||
+                   string.IsNullOrWhiteSpace(field.GetString()))
+                    throw new InvalidDataException("Work Item list has a missing field.");
+                return field.GetString()!;
+            }
+            var id=Required("work_item_id");
+            var environment=Required("environment");
+            var itemKind=Required("kind");
+            var state=Required("status");
+            var createdAt=Required("created_at");
+            var updatedAt=Required("updated_at");
+            if(!row.TryGetProperty("revision",out var revision)||
+               revision.ValueKind!=JsonValueKind.Number ||
+               !revision.TryGetInt32(out var rev)||rev<1||
+               !Regex.IsMatch(id,@"^[a-zA-Z0-9_-]{10,100}$",RegexOptions.CultureInvariant)||
+               !seen.Add(id)||
+               environment is not ("production" or "test")||
+               itemKind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID")||
+               state is not ("open" or "review" or "closed")||
+               (kind is not null && kind!=itemKind)||
+               (status is not null && status!=state)||
+               !ValidTimestamp(createdAt)||!ValidTimestamp(updatedAt)||
+               (lastTime is not null &&
+                (string.CompareOrdinal(createdAt,lastTime)>0||
+                 (createdAt==lastTime && string.CompareOrdinal(id,lastId)>=0)))||
+               (cursor is not null &&
+                (string.CompareOrdinal(createdAt,cursor.CreatedAt)>0 ||
+                 (createdAt==cursor.CreatedAt &&
+                  string.CompareOrdinal(id,cursor.ItemId)>=0))))
+                throw new InvalidDataException("Work Item list has inconsistent data.");
+            var timestamp=DateTimeOffset.ParseExact(createdAt,
+                "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal);
+            var updated=DateTimeOffset.ParseExact(updatedAt,
+                "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal);
+            parsed.Add(new CloudWorkItemSummary(id,environment,itemKind,state,rev,timestamp,updated));
+            lastTime=createdAt;lastId=id;
+        }
+        CloudWorkItemCursor? nextCursor=null;
+        if(next.ValueKind==JsonValueKind.Object)
+        {
+            if(parsed.Count==0 ||next.EnumerateObject().Count()!=2||
+               !next.TryGetProperty("createdAt",out var date)||
+               date.ValueKind!=JsonValueKind.String||
+               !next.TryGetProperty("itemId",out var last)||
+               last.ValueKind!=JsonValueKind.String||
+               date.GetString()!=lastTime||last.GetString()!=lastId)
+                throw new InvalidDataException("Work Item list cursor is inconsistent.");
+            nextCursor=new CloudWorkItemCursor(lastTime!,lastId!);
+        }
+        else if(next.ValueKind!=JsonValueKind.Null)
+            throw new InvalidDataException("Work Item list cursor is invalid.");
+        return new CloudWorkItemPage(parsed,nextCursor);
+    }
+
+    private static bool ValidTimestamp(string value)=>
+        Regex.IsMatch(value,@"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$",
+            RegexOptions.CultureInvariant) &&
+        DateTimeOffset.TryParseExact(value,"yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal,out _);
 
     public async Task<CloudWorkItem> TransitionAsync(
         CloudWorkItem current, string to, string employeeNo, string password,

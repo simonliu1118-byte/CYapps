@@ -15,6 +15,7 @@ internal static class CloudWorkItemClientTests
         RejectInvalidTransport();
         await RejectUnfrozenAllowanceAsync();
         await CreateReadAndTransitionAsync();
+        await ListPagesAndRejectUnsafeRepliesAsync();
         await MissingAndConflictingWorkAsync();
         await RejectUntrustedResponseAsync();
     }
@@ -86,6 +87,75 @@ internal static class CloudWorkItemClientTests
         Equal("review", moved.Status, "transition result");
         await ThrowsAsync<ArgumentException>(async () => { await client.TransitionAsync(created, "closed", "0001", "synthetic-pass"); });
         Equal(0, handler.PendingCount, "all script requests consumed");
+    }
+
+    private static async Task ListPagesAndRejectUnsafeRepliesAsync()
+    {
+        const string createdFirst="2026-10-16T03:00:00.000Z";
+        const string createdSecond="2026-10-16T02:59:59.000Z";
+        var secondId="wi_synthetic_request_02";
+        object Row(string id,string created)=>new{
+            work_item_id=id,environment="test",kind="VOID",status="review",
+            revision=2,created_at=created,updated_at=created
+        };
+        var handler=new QueueHandler();
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"list");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var obj=body.RootElement;
+            Equal(1,obj.GetProperty("limit").GetInt32(),"bounded page size");
+            Equal("VOID",obj.GetProperty("kind").GetString(),"kind");
+            Equal("review",obj.GetProperty("status").GetString(),"status");
+            True(obj.GetProperty("cursor").ValueKind==JsonValueKind.Null,
+                "first page has no cursor");
+            True(!obj.TryGetProperty("workspaceId",out _),
+                "client must not choose another workspace");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                items=new[]{Row(ItemId,createdFirst)},
+                nextCursor=new{createdAt=createdFirst,itemId=ItemId}});
+        });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"list");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(ItemId,body.RootElement.GetProperty("cursor").GetProperty("itemId").GetString(),
+                "second page uses original server cursor");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                items=new[]{Row(secondId,createdSecond)},nextCursor=(object?)null});
+        });
+        handler.Enqueue(_=>Json(HttpStatusCode.OK,new{ok=true,
+            items=new object[]{new {
+                work_item_id=ItemId,environment="test",kind="VOID",
+                status="review",revision=2,created_at=createdFirst,
+                updated_at=createdFirst,reference_hash=ReferenceHash
+            }},nextCursor=(object?)null}));
+        handler.Enqueue(_=>Json(HttpStatusCode.OK,new{ok=true,
+            items=new[]{Row(ItemId,createdFirst)},nextCursor=new {
+                createdAt=createdSecond,itemId=ItemId
+            }}));
+        using var http=new HttpClient(handler);
+        var client=new CloudWorkItemClient(http,new Uri("https://cloud.example.test/"),
+            Token,Workspace);
+        var page1=await client.ListAsync("0001","synthetic-pass",1,"VOID","review");
+        Equal(1,page1.Items.Count,"first page count");
+        Equal(ItemId,page1.Items[0].ItemId,"first page ID");
+        Equal(2,page1.Items[0].Revision,"first page revision");
+        True(page1.NextCursor is not null,"first page must have next cursor");
+        var page2=await client.ListAsync("0001","synthetic-pass",1,"VOID","review",
+            page1.NextCursor);
+        Equal(secondId,page2.Items[0].ItemId,"second page ID");
+        True(page2.NextCursor is null,"last page has no cursor");
+        await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
+            "0001","synthetic-pass",51));
+        await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
+            "0001","synthetic-pass",1,"UPLOAD_ISSUE"));
+        await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
+            "0001","synthetic-pass",1,cursor:new CloudWorkItemCursor(
+                "untrusted_time",ItemId)));
+        await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(
+            "0001","synthetic-pass",1));
+        await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(
+            "0001","synthetic-pass",1));
+        Equal(0,handler.PendingCount,"invalid requests never consume scripted responses");
     }
 
     private static async Task MissingAndConflictingWorkAsync()
