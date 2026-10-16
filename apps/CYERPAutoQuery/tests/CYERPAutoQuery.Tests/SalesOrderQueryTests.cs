@@ -201,4 +201,26 @@ public class SalesOrderQueryTests
             Line("2026/10/14", "901A-20261014002", "AC0001", "X00001", "1", "2000", "2000")), SalesReport.Sales, Query));
         Assert.Contains("列印單價金額", ex.Message);
     }
+
+    [Fact]
+    public void OneOrderByNumber()
+    {
+        var query = SalesQuery.ForOrder(" 901a-20261014002 ".Replace("901a", "231a"));
+        Assert.Equal("231A-20261014002", query.OrderNo);
+        Assert.Equal("231A20261014002", query.OrderKeys);
+        Assert.Same(SalesReport.Sales, SalesReport.ForOrder("232A-20260804003"));
+        Assert.Same(SalesReport.Returns, SalesReport.ForOrder("241A-20260910001"));
+        Assert.Null(SalesReport.ForOrder("631A-20260422002"));
+        Assert.Throws<ArgumentException>(() => SalesQuery.ForOrder("631A-20260422002"));
+        Assert.Throws<ArgumentException>(() => SalesQuery.ForOrder("232A20260804003"));
+        Assert.Equal("選擇銷貨單號", SalesReport.Sales.OrderGroup);
+
+        var order = SalesQuery.ForOrder("901A-20261014002".Replace("901A", "232A"));
+        var parsed = SalesExport.Parse(Export(
+            Line("2026/10/14", "232A-20261014002", "AC0001", "X00001", "1", "2000", "2000"),
+            Subtotal()), SalesReport.Sales, order);
+        Assert.Single(parsed);
+        Assert.Throws<InvalidDataException>(() => SalesExport.Parse(Export(
+            Line("2026/10/14", "232A-20261014003", "AC0001", "X00001", "1", "2000", "2000")), SalesReport.Sales, order));
+    }
 }

@@ -13,7 +13,7 @@ public class ErpAgentBusinessTests
     public void ClaimListsEverySupportedQueryType()
     {
         var body = JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!;
-        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SALES", "RECEIVABLE"],
+        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SALES", "RECEIVABLE", "ORDER"],
             body["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 
@@ -87,5 +87,17 @@ public class ErpAgentBusinessTests
         Assert.Equal("NOT_FOUND", none["outcome"]!.GetValue<string>());
         Assert.Equal("CU0009", none["customerCode"]!.GetValue<string>());
         Assert.Empty(none["fields"]!.AsArray());
+    }
+
+    [Fact]
+    public void OrderJobEchoesItsNumber()
+    {
+        var job = Claim("""{"id":"j1","queryType":"ORDER","orderNo":"232A-20260101001"}""");
+        Assert.True(job.IsBusiness);
+        Assert.Equal("232A-20260101001", job.OrderNo);
+        var none = JsonNode.Parse(ErpAgentProtocol.SalesBody(job, new SalesQueryResult(SalesQuery.ForOrder(job.OrderNo!), [], TimeSpan.Zero), "v"))!;
+        Assert.Equal("232A-20260101001", none["orderNo"]!.GetValue<string>());
+        Assert.Null(none["customerCode"]);
+        Assert.Contains("ORDER", JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 }

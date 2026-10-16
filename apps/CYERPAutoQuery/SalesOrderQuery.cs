@@ -64,6 +64,26 @@ internal static class SalesReportLayout
 /// <summary>A customer's 銷貨單 in a date range; both dates optional (ERP then leaves that end open).</summary>
 internal sealed record SalesQuery(string CustomerCode, DateOnly? From, DateOnly? To)
 {
+    /// <summary>
+    /// One 銷貨單／銷退單 by its number (user, 2026-10-17: open the order behind a 未收款 憑證 without
+    /// leaving the list). Then <see cref="CustomerCode"/> is empty and the dates are not used.
+    /// </summary>
+    public string? OrderNo { get; init; }
+
+    /// <summary>「232A-20260804003」: 單別, a dash, the number (ERP's mask shows the dash itself).</summary>
+    public static SalesQuery ForOrder(string input)
+    {
+        var no = (input ?? string.Empty).Trim().ToUpperInvariant();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(no, "^[A-Z0-9]{2,6}-[0-9]{6,20}$"))
+            throw new ArgumentException("單號格式不正確（例如 232A-20260804003）。");
+        if (SalesReport.ForOrder(no) is null)
+            throw new ArgumentException($"「{no}」不是銷貨單（23 開頭）或銷退單（24 開頭），無法查詢。");
+        return new SalesQuery(string.Empty, null, null) { OrderNo = no };
+    }
+
+    /// <summary>What is typed into ERP's 單號 box: the number without the dash (the mask adds it).</summary>
+    public string OrderKeys => (OrderNo ?? string.Empty).Replace("-", string.Empty);
+
     public static SalesQuery Resolve(string customerInput, DateOnly? from, DateOnly? to, DateOnly today)
     {
         if (!ItemCodeRules.TryNormalize(customerInput, out var code, out var error, CustomerRules.CodeName))
@@ -98,6 +118,14 @@ internal sealed record SalesReport(
         SourceColumn: "原銷貨單", ReasonCodeColumn: "銷退原因代號", ReasonColumn: "原因說明");
 
     public static readonly IReadOnlyList<SalesReport> All = [Sales, Returns];
+
+    /// <summary>基本選項 group holding the 單號 起／迄 (user's screenshot 2026-10-17: 選擇銷貨單號).</summary>
+    public string OrderGroup => "選擇" + NoColumn;
+
+    /// <summary>The report an order number belongs to: 單別 23x 銷貨, 24x 銷退; else null.</summary>
+    public static SalesReport? ForOrder(string orderNo) =>
+        orderNo.StartsWith("23", StringComparison.Ordinal) ? Sales
+        : orderNo.StartsWith("24", StringComparison.Ordinal) ? Returns : null;
 
     /// <summary>The ERP report this one is read from.</summary>
     public ErpReport Form => new(Code, Title, SalesReportLayout.Tabs, SalesReportLayout.TabStrip);
@@ -183,6 +211,16 @@ internal static class SalesExport
             {
                 if (IsSubtotal(values)) continue;
                 throw new InvalidDataException($"ERP 匯出的{what}有一列沒有{report.NoColumn}。");
+            }
+            if (query.OrderNo is { } wanted)
+            {
+                // One order: every row is that order (a row of another one means the 單號 was not applied).
+                if (no != wanted)
+                    throw new InvalidDataException($"ERP 匯出的單號「{no}」不是查詢的「{wanted}」，查詢條件可能沒有套用，結果不採用。");
+                var one = orders.FirstOrDefault(o => o.No == no);
+                if (one.Rows is null) orders.Add(one = (no, []));
+                one.Rows.Add(r);
+                continue;
             }
             var code = r["客戶代號"];
             if (!ItemCodeRules.SameCode(code, query.CustomerCode))

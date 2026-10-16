@@ -1,5 +1,9 @@
 # CYERPAutoQuery Changelog
 
+## V0.7.2
+
+- Build 1（2026/10/17）：單筆銷貨／銷退單查詢（使用者要求：確認未收款憑證那張賣了什麼，但不離開已查好的未收款）。本機在未收款下方的憑證列表雙擊一筆，另開視窗顯示該單單頭與明細，主視窗結果不變；CY Web 新類型 `ORDER`（CY Web 0.8.1，從未收款憑證開視窗）。流程同銷貨單查詢，基本選項改用「選擇銷貨單號」（24 開頭的銷退單用 COPR16「選擇銷退單號」）：起、迄各自點選 → Home（確保從第一格開始）→ 貼上不含「-」的單號（例如 232A20260804003）→ 讀回比對；客戶代號與單據日期群組必須是空的。轉出每列單號須等於查詢單號。只接受 23／24 開頭的單號（631A 等其他憑證不是銷貨／銷退單）。
+
 ## V0.7.1
 
 - Build 1（2026/10/17）：客戶、銷貨銷退單、未收款接上 CY Web（使用者要求；CY Web 0.8.0，chihyuan-web `cyweb/feat-erp-customer-sales-receivable`）。claim 時送出本程式支援的查詢類型（ITEM_NO、ITEM_NAME、CUSTOMER_NO、CUSTOMER_NAME、SALES、RECEIVABLE），CY Web 只派這些類型的工作；新類型與本機查詢走同一條路徑（`ExecuteCustomerAsync`／`ExecuteSearchAsync`／`ExecuteSalesAsync`／`ExecuteReceivablesAsync`），結果同樣顯示在視窗。回報格式：客戶代號（19 欄）、客戶名稱清單（6 欄）、銷貨銷退單（單頭＋明細，最多 1,000 張、每張 500 行）、未收款（結帳單＋憑證，最多 3,000 張），金額數量以 ERP 數值字串送出，日期 yyyy-MM-dd；非失敗結果都回聲工作的客戶代號／日期範圍／範圍代號供 CY Web 核對。「標準進價」改為只在 CY Web 工作帶 `includeCost:true` 時送出（CY Web 新增「ERP 商品成本」權限；未帶即不送，測試階段不做向下相容）。銷退與原銷貨單的連結、未收款分組小計由 CY Web 處理。已將本程式產生的六種回報內容交給 CY Web Worker 驗證全部接受（本機，未提交）。

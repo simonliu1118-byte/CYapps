@@ -30,13 +30,28 @@ internal sealed partial class ItemQueryService
         return new SalesQueryResult(query, orders.OrderBy(o => o, SalesExport.Newest).ToList(), watch.Elapsed);
     }
 
+    /// <summary>One 銷貨單 or 銷退單 by number (its report chosen by 單別), for a 未收款 憑證.</summary>
+    public Task<SalesQueryResult> QueryOrderAsync(SalesQuery query, IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(async () =>
+        {
+            var watch = Stopwatch.StartNew();
+            var report = SalesReport.ForOrder(query.OrderNo ?? string.Empty)
+                ?? throw new ArgumentException("單號不是銷貨單或銷退單。");
+            var orders = await RunSalesReportAsync(report, query, progress, cancellationToken);
+            _log.Info("sales", $"order query orders={orders.Count} ms={watch.ElapsedMilliseconds}");
+            return new SalesQueryResult(query, orders, watch.Elapsed);
+        });
+
     private async Task<IReadOnlyList<SalesOrder>> RunSalesReportAsync(SalesReport sales, SalesQuery query, IProgress<string> progress, CancellationToken cancellationToken)
     {
         var report = sales.Form;
-        var sheets = await RunReportAsync(report, $"客戶 {query.CustomerCode}，{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}",
+        var describe = query.OrderNo is { } no ? $"單號 {no}"
+            : $"客戶 {query.CustomerCode}，{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}";
+        var sheets = await RunReportAsync(report, describe,
             async (dialog, ct) =>
             {
-                await FillReportBasicAsync(dialog, report, query, ct);
+                if (query.OrderNo is not null) await FillReportOrderAsync(dialog, report, sales, query, ct);
+                else await FillReportBasicAsync(dialog, report, query, ct);
                 await FillReportAdvancedAsync(dialog, report, ct);
                 await VerifyReportAdvancedAsync(dialog, report, ct);
             }, progress, cancellationToken);
@@ -223,6 +238,38 @@ internal sealed partial class ItemQueryService
         for (var i = 0; i < 2; i++)
             if ((i == 0 ? query.From : query.To) is { } expected && !Invq01Layout.ShowsDate(NativeMethods.ControlText(dates[i].Handle), expected))
                 throw new InvalidOperationException($"{report.Title}的單據日期{(i == 0 ? "起" : "迄")}讀回不一致，已停止。");
+    }
+
+    /// <summary>
+    /// 基本選項 for one order (user, 2026-10-17): 選擇銷貨單號 (銷退單號) 起 and 迄 both the number —
+    /// click, Home (the mask must be filled from its first cell), paste the number without the dash,
+    /// read back. The customer and date groups must stay empty.
+    /// </summary>
+    private async Task FillReportOrderAsync(nint dialog, ErpReport report, SalesReport sales, SalesQuery query, CancellationToken cancellationToken)
+    {
+        await ShowReportTabAsync(dialog, report, SalesReportLayout.BasicTab, cancellationToken);
+        EnsureGroupEmpty(dialog, report, SalesReportLayout.CustomerGroup);
+        EnsureGroupEmpty(dialog, report, SalesReportLayout.DateGroup);
+        var boxes = GroupBoxes(dialog, report, sales.OrderGroup);
+        for (var i = 0; i < 2; i++)
+        {
+            var what = $"{report.Title}的{sales.NoColumn}{(i == 0 ? "起" : "迄")}";
+            var box = boxes[i];
+            SafeClick(dialog, new Point(box.Rect.Left + 8, (box.Rect.Top + box.Rect.Bottom) / 2));
+            await Pace.Delay(150, cancellationToken);
+            var focus = NativeMethods.FocusedControlOfForeground();
+            if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
+                throw new InvalidOperationException($"{what}沒有取得焦點，已停止。");
+            InputSender.Press(NativeMethods.VK_HOME);
+            await Pace.Delay(60, cancellationToken);
+            await PasteIntoAsync(focus, query.OrderKeys, cancellationToken, selectAll: false);
+            var shown = new string((NativeMethods.ControlText(box.Handle) ?? string.Empty).Where(char.IsLetterOrDigit).ToArray());
+            if (!string.Equals(shown, query.OrderKeys, StringComparison.OrdinalIgnoreCase))
+            {
+                _log.Warn("sales", $"{what} read-back mismatch length={shown.Length}");
+                throw new InvalidOperationException($"{what}輸入後讀回不一致，已停止。");
+            }
+        }
     }
 
     /// <summary>Clicks the box, pastes the text and reads it back.</summary>

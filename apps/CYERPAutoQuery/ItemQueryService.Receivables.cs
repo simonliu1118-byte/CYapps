@@ -98,7 +98,8 @@ internal sealed partial class ItemQueryService
             LogChildren(dialog, report.Code);
             throw new InvalidOperationException($"{report.Title}找不到「{caption}」。");
         }
-        var filled = RangeBoxes(group).Select(b => (NativeMethods.ControlText(b.Handle) ?? string.Empty).Trim()).Where(t => t.Length > 0).ToList();
+        // A masked box shows 「    /  /  」 or 「    -」 when empty: only letters and digits count as a value.
+        var filled = RangeBoxes(group).Select(b => NativeMethods.ControlText(b.Handle) ?? string.Empty).Where(t => t.Any(char.IsLetterOrDigit)).ToList();
         var items = Win32Automation.EnumerateChildren(group.Handle)
             .Where(c => c.Visible && c.ClassName.Contains("ListBox", StringComparison.OrdinalIgnoreCase))
             .Sum(c => Math.Max(0, (int)(NativeMethods.QueryNumber(c.Handle, LB_GETCOUNT) ?? 0)));

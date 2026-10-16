@@ -31,15 +31,17 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public const string CustomerSearch = "CUSTOMER_NAME";
     public const string SalesQueryType = "SALES";
     public const string ReceivableQueryType = "RECEIVABLE";
+    /// <summary>One 銷貨單／銷退單 by number (a 未收款 憑證, user 2026-10-17).</summary>
+    public const string OrderQueryType = "ORDER";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SalesQueryType, ReceivableQueryType];
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SalesQueryType, ReceivableQueryType, OrderQueryType];
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
     /// <summary>A customer, 銷貨銷退 or 未收款 job (not the item queries).</summary>
-    public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SalesQueryType or ReceivableQueryType;
+    public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SalesQueryType or ReceivableQueryType or OrderQueryType;
 
     /// <summary>ITEM_NO: the member may see 標準進價 (ERP 商品成本); not sent means not allowed.</summary>
     public bool IncludeCost { get; init; }
@@ -51,6 +53,8 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     /// <summary>RECEIVABLE: CUSTOMER／SALESPERSON／ALL and the code (null for ALL).</summary>
     public string? Scope { get; init; }
     public string? Code { get; init; }
+    /// <summary>ORDER: the 銷貨單／銷退單 number, echoed back unchanged.</summary>
+    public string? OrderNo { get; init; }
 
     /// <summary>What the job asks for, for status lines.</summary>
     public string Display => QueryType switch
@@ -60,6 +64,7 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         CustomerSearch => $"客戶名稱「{Keyword}」",
         SalesQueryType => $"客戶 {CustomerCode} 銷貨銷退單（{DateFrom}～{DateTo}）",
         ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
+        OrderQueryType => $"單號 {OrderNo}",
         _ => ItemNo
     };
 
@@ -146,6 +151,8 @@ internal static class ErpAgentProtocol
                 };
             case ErpAgentJob.ReceivableQueryType:
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, Scope = Required("scope"), Code = OptionalString(job["code"]) };
+            case ErpAgentJob.OrderQueryType:
+                return new ErpAgentJob(id!, string.Empty) { QueryType = type, OrderNo = Required("orderNo") };
             case ErpAgentJob.ItemQuery:
                 break;
             default:
@@ -244,7 +251,7 @@ internal static class ErpAgentProtocol
         return body.ToJsonString(JsonOptions);
     }
 
-    /// <summary>SALES: the orders newest first (at most <see cref="MaxOrders"/>); the job's customer and dates echoed.</summary>
+    /// <summary>SALES／ORDER: the orders newest first (at most <see cref="MaxOrders"/>); the job's customer and dates echoed.</summary>
     public static string SalesBody(ErpAgentJob job, SalesQueryResult result, string agentVersion)
     {
         var orders = result.Orders.Take(MaxOrders).Select(o => (JsonNode)new JsonObject
@@ -264,9 +271,14 @@ internal static class ErpAgentProtocol
             }).ToArray())
         }).ToArray();
         var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
-        body["customerCode"] = job.CustomerCode;
-        body["dateFrom"] = job.DateFrom;
-        body["dateTo"] = job.DateTo;
+        // ORDER echoes its number, SALES its customer and dates.
+        if (job.QueryType == ErpAgentJob.OrderQueryType) body["orderNo"] = job.OrderNo;
+        else
+        {
+            body["customerCode"] = job.CustomerCode;
+            body["dateFrom"] = job.DateFrom;
+            body["dateTo"] = job.DateTo;
+        }
         body["orders"] = new JsonArray(orders);
         body["total"] = result.Orders.Count;
         body["truncated"] = result.Orders.Count > MaxOrders;

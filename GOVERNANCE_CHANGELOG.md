@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.50 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入單筆銷貨／銷退單查詢（未收款憑證）：23 開頭 COPR15、24 開頭 COPR16，起迄點選後 Home＋貼上單號並讀回，客戶與日期群組須為空，轉出單號須相符。不改其他 App 規則。
+
 ## 2.3.49 — 2026/10/17
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求：「標準進價」送往 CY Web 只在工作帶 includeCost（員工有 ERP 商品成本權限）時才送出，本機顯示不變。不改其他 App 規則。

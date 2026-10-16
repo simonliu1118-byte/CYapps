@@ -228,6 +228,7 @@ internal sealed class MainForm : Form
         }
         _bills.MultiSelect = false;
         _bills.SelectionChanged += (_, _) => ShowVouchers();
+        _vouchers.CellDoubleClick += async (_, e) => await ShowOrderWindowAsync(e.RowIndex);
         receivableSplit.Panel1.Controls.Add(_bills);
         receivableSplit.Panel2.Controls.Add(_vouchers);
         _receivablePage.Padding = new Padding(4);
@@ -549,6 +550,47 @@ internal sealed class MainForm : Form
         });
     }
 
+    /// <summary>
+    /// Double-click on a 憑證: that 銷貨單／銷退單 in its own window (user, 2026-10-17), so the 未收款
+    /// list stays as it is. Only 23x／24x numbers are orders; others are refused before ERP is touched.
+    /// </summary>
+    private async Task ShowOrderWindowAsync(int rowIndex)
+    {
+        if (_queryCts is not null || rowIndex < 0 || rowIndex >= _vouchers.Rows.Count) return;
+        var voucherNo = Convert.ToString(_vouchers.Rows[rowIndex].Cells[0].Value) ?? string.Empty;
+        SalesQuery query;
+        try
+        {
+            query = SalesQuery.ForOrder(voucherNo);
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(this, ex.Message, "查單筆憑證", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            var result = await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QueryOrderAsync(query, progress, ct), r =>
+            {
+                SetStatus(r.Found ? $"ERP：單號 {query.OrderNo} 查詢完成（{r.Elapsed.TotalSeconds:0.0} 秒）" : $"ERP：查無單號 {query.OrderNo}");
+                return r.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
+            });
+            Activate();
+            if (result.Orders.FirstOrDefault() is { } order)
+                new OrderDetailForm(order).Show(this);
+            else
+                MessageBox.Show(this, $"ERP 查無單號 {query.OrderNo}。", "查單筆憑證", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 單筆憑證查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
     private static readonly string[] BillColumns = ["客戶代號", "客戶名稱", "日期", "結帳單號", "業務員", "發票號碼", "幣別", "應收帳款", "應收稅額", "未收帳款", "憑證數"];
     private static readonly string[] VoucherColumns = ["憑證號碼", "憑證日期", "未稅金額", "稅額"];
 
@@ -781,6 +823,16 @@ internal sealed class MainForm : Form
                 _mode.SelectedIndex = SalesMode;
                 _code.Text = query.CustomerCode;
                 var result = await ExecuteSalesAsync(query, cancellationToken);
+                return (result.Found, ErpAgentProtocol.SalesBody(job, result, version));
+            }
+            case ErpAgentJob.OrderQueryType:
+            {
+                var query = SalesQuery.ForOrder(job.OrderNo ?? string.Empty);
+                var result = await RunAutomationAsync(cancellationToken, (progress, ct) => _service.QueryOrderAsync(query, progress, ct), r =>
+                {
+                    SetStatus(r.Found ? $"ERP：單號 {query.OrderNo} 查詢完成（{r.Elapsed.TotalSeconds:0.0} 秒）" : $"ERP：查無單號 {query.OrderNo}");
+                    return r.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
+                });
                 return (result.Found, ErpAgentProtocol.SalesBody(job, result, version));
             }
             case ErpAgentJob.ReceivableQueryType:

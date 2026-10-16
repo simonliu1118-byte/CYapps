@@ -998,14 +998,15 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>Replaces an edit box's text by a clipboard paste (EM_SETSEL + WM_PASTE), keeping the user's clipboard.</summary>
-    private async Task PasteIntoAsync(nint box, string text, CancellationToken cancellationToken)
+    private async Task PasteIntoAsync(nint box, string text, CancellationToken cancellationToken, bool selectAll = true)
     {
         IDataObject? saved = null;
         try { saved = Clipboard.GetDataObject(); } catch (ExternalException) { }
         try
         {
             Clipboard.SetText(text);
-            NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
+            // A masked box is pasted at the caret (after Home) instead of over a selection.
+            if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
             NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
             await Pace.Delay(150, cancellationToken);
         }
