@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace CYERPAutoQuery;
 
@@ -20,7 +21,7 @@ internal sealed class ItemQueryService
     private const int TabWaitMs = 1200;
     private const int MenuWaitMs = 3000;
     private const int ExportDialogWaitMs = 10000;
-    private const int ExportRunWaitMs = 30000;
+    private const int ExportRunWaitMs = 60000;
 
     private readonly AppLogger _log;
     private readonly PaddleOcrService _ocr;
@@ -519,11 +520,16 @@ internal sealed class ItemQueryService
             LogProcessWindows(root, "after-export-menu");
             throw new InvalidOperationException("按「轉出至 Excel」後沒有出現匯出設定視窗。");
         }
-        await Pace.Delay(200, cancellationToken);
+        await Pace.Delay(500, cancellationToken); // let ERP finish building the dialog
         await FillExportDialogAsync(dialog, path, cancellationToken);
 
-        // ERP writes the file, closes the dialog and asks 「檢視Excel資料?」: No.
+        // ERP writes the file (showing a 處理進度 window meanwhile), closes the dialog and asks
+        // 「檢視Excel資料?」. Only a window with a No button counts: the progress window is
+        // small too and was mistaken for the question (V0.2.0 LOG, 2026-10-16). OCR is only a
+        // late fallback and must read 「檢視」 before it clicks.
         var deadline = Environment.TickCount64 + ExportRunWaitMs;
+        long? dialogClosedAt = null;
+        long nextOcr = 0;
         nint question = 0;
         while (question == 0)
         {
@@ -532,26 +538,38 @@ internal sealed class ItemQueryService
                 LogProcessWindows(root, "after-export");
                 throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。");
             }
-            await Pace.Delay(150, cancellationToken);
-            // The question is a small new window once 匯出設定 has closed (its buttons may be
-            // windows or drawn; both are handled below).
+            await Pace.Delay(250, cancellationToken);
             if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) continue;
-            question = Win32Automation.VisibleProcessWindows(root)
-                .FirstOrDefault(h => !before.Contains(h) && IsSmallDialog(h));
-        }
-        await Pace.Delay(200, cancellationToken); // let it paint before a possible OCR
-        if (FindButton(question, IsNoCaption) is { } no)
-            SafeClick(question, Win32Automation.Center(no.Rect));
-        else
-        {
-            LogChildren(question, "export-question");
-            if (!NativeMethods.GetWindowRect(question, out var q))
-                throw new InvalidOperationException("讀不到「檢視Excel資料?」視窗位置。");
-            await OcrClickAsync(question, q.ToRectangle(), "No", "「檢視Excel資料?」的 No", cancellationToken, alternative: "否");
+            dialogClosedAt ??= Environment.TickCount64;
+
+            var fresh = Win32Automation.VisibleProcessWindows(root).Where(h => !before.Contains(h) && IsSmallDialog(h)).ToList();
+            foreach (var h in fresh)
+            {
+                if (FindButton(h, IsNoCaption) is not { } no) continue;
+                await Pace.Delay(200, cancellationToken);
+                SafeClick(h, Win32Automation.Center(no.Rect));
+                question = h;
+                break;
+            }
+            if (question != 0 || Environment.TickCount64 - dialogClosedAt < 8000 || Environment.TickCount64 < nextOcr) continue;
+
+            nextOcr = Environment.TickCount64 + 2000;
+            foreach (var h in fresh)
+            {
+                if (!NativeMethods.GetWindowRect(h, out var q)) continue;
+                IReadOnlyList<OcrToken> questionText;
+                using (var image = ScreenCapture.Capture(q.ToRectangle()))
+                    questionText = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+                if (OcrWordFinder.FindWord(questionText, "檢視") is null) continue;
+                LogChildren(h, "export-question");
+                await OcrClickAsync(h, q.ToRectangle(), "No", "「檢視Excel資料?」的 No", cancellationToken, alternative: "否");
+                question = h;
+                break;
+            }
         }
         _log.Info("export", "檢視Excel資料? answered No");
 
-        deadline = Environment.TickCount64 + 5000;
+        deadline = Environment.TickCount64 + 15000;
         while (NativeMethods.IsWindow(question) && NativeMethods.IsWindowVisible(question) || !NativeMethods.IsWindowEnabled(root))
         {
             if (Environment.TickCount64 > deadline)
@@ -609,60 +627,102 @@ internal sealed class ItemQueryService
 
         await SelectAllExportFieldsAsync(dialog, cancellationToken);
 
+        // The path is pasted, not typed (user, 2026-10-16: faster): select the box's whole
+        // text with EM_SETSEL (never Ctrl+A in ERP) and send WM_PASTE; the clipboard is
+        // restored afterwards.
         for (var attempt = 1; ; attempt++)
         {
             SafeClick(dialog, Win32Automation.Center(box.Rect));
             await Pace.Delay(150, cancellationToken);
-            var current = NativeMethods.ControlText(box.Handle) ?? string.Empty;
-            InputSender.EndBackspace(current.Length + 2);
-            await Pace.Delay(60, cancellationToken);
-            InputSender.UnicodeText(path, delayMs: 8);
-            await Pace.Delay(150, cancellationToken);
+            await PasteIntoAsync(box.Handle, path, cancellationToken);
             var shown = (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
             if (string.Equals(shown, path, StringComparison.OrdinalIgnoreCase)) break;
             _log.Warn("export", $"path read-back mismatch attempt={attempt} len={shown.Length}");
-            if (attempt >= 2) throw new InvalidOperationException("匯出路徑輸入後讀回的內容不一致，已停止。");
+            if (attempt >= 2) throw new InvalidOperationException("匯出路徑貼上後讀回的內容不一致，已停止。");
         }
+        _log.Info("export", "path pasted");
 
         await ClickButtonAsync(dialog, "確定", "匯出設定視窗的「確定」", cancellationToken);
         _log.Info("export", "匯出設定 確定 clicked");
     }
 
     /// <summary>
-    /// 全選 on each 匯出欄位 tab (單頭, 單身). The buttons sit on the tab sheets, so only the
-    /// shown tab's 全選 is visible. When ERP does not expose the tabs as windows, the one
-    /// visible 全選 is pressed and the gap is logged.
+    /// 全選 on each 匯出欄位 tab (單頭, 單身). On the user's PC (V0.2.0 LOG, 2026-10-16) the tabs
+    /// live on a TcxPageControl whose 單身 sheet only exists after its tab is clicked, and
+    /// 全選／清除／確定 are TBitBtn windows. The tab is clicked at its measured position and
+    /// counts as shown once a visible sheet with that caption exists; OCR is the fallback.
     /// </summary>
     private async Task SelectAllExportFieldsAsync(nint dialog, CancellationToken cancellationToken)
     {
-        var sheets = Invi02Layout.ExportFieldTabs.Order
-            .Select(tab => (Tab: tab, Sheet: Win32Automation.FindTabSheet(dialog, tab)))
-            .ToList();
-        if (sheets.Any(s => s.Sheet is null))
+        var page = Win32Automation.EnumerateChildren(dialog)
+            .Where(c => c.Visible && c.ClassName.Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(c => Win32Automation.EnumerateChildren(c.Handle).Any(s => s.ClassName.Contains("TabSheet", StringComparison.OrdinalIgnoreCase)));
+        if (page is null) LogChildren(dialog, "export-dialog");
+        if (!NativeMethods.GetWindowRect(dialog, out var d))
+            throw new InvalidOperationException("讀不到匯出設定視窗位置。");
+        foreach (var tab in Invi02Layout.ExportFieldTabs.Order)
         {
-            // On the user's PC (Build 3, 2026-10-16) 單頭／單身 and 全選 are drawn, not windows:
-            // the tab captions are found by OCR in the dialog's left part (「匯出子單頭」 sits to
-            // the right and is left out), each tab clicked, then its 全選.
-            LogChildren(dialog, "export-dialog");
-            if (!NativeMethods.GetWindowRect(dialog, out var d))
-                throw new InvalidOperationException("讀不到匯出設定視窗位置。");
-            var tabArea = new Rectangle(d.Left, d.Top, Math.Min(d.Width, 360), d.Height);
-            foreach (var tab in Invi02Layout.ExportFieldTabs.Order)
-            {
-                await OcrClickAsync(dialog, tabArea, tab, $"匯出設定頁籤「{tab}」", cancellationToken);
-                await Pace.Delay(300, cancellationToken);
-                await PressSelectAllAsync(dialog, tab, cancellationToken);
-            }
-            return;
-        }
-
-        var pageHandle = NativeMethods.GetParent(sheets[0].Sheet!.Handle);
-        var page = Win32Automation.EnumerateChildren(dialog).FirstOrDefault(c => c.Handle == pageHandle)
-            ?? throw new InvalidOperationException("匯出設定視窗找不到「單頭／單身」頁籤控制項。");
-        foreach (var (tab, sheet) in sheets)
-        {
-            await ActivateTabAsync(dialog, page, Invi02Layout.ExportFieldTabs, tab, sheet!.Handle, cancellationToken);
+            await ShowExportTabAsync(dialog, page, d.ToRectangle(), tab, cancellationToken);
             await PressSelectAllAsync(dialog, tab, cancellationToken);
+        }
+    }
+
+    private async Task ShowExportTabAsync(nint dialog, WindowControl? page, Rectangle dialogRect, string tab, CancellationToken cancellationToken)
+    {
+        bool Shown() => Win32Automation.FindTabSheet(dialog, tab) is { } sheet && NativeMethods.IsWindowVisible(sheet.Handle);
+        if (Shown()) return;
+        if (page is not null && Invi02Layout.ExportFieldTabs.PointFor(page.Rect.ToRectangle(), tab) is { } point)
+        {
+            SafeClick(dialog, point);
+            if (await WaitUntilAsync(Shown, 1500, cancellationToken))
+            {
+                _log.Info("export", $"export tab shown tab={tab} by=geometry");
+                return;
+            }
+            _log.Warn("export", $"geometry click did not show export tab={tab}");
+        }
+        // 「匯出子單頭」 sits right of the tabs; only the dialog's left part is read.
+        var tabArea = new Rectangle(dialogRect.Left, dialogRect.Top, Math.Min(dialogRect.Width, 360), dialogRect.Height);
+        await OcrClickAsync(dialog, tabArea, tab, $"匯出設定頁籤「{tab}」", cancellationToken);
+        if (page is not null && !await WaitUntilAsync(Shown, 1500, cancellationToken))
+            throw new InvalidOperationException($"已點擊匯出設定頁籤「{tab}」，但頁籤沒有切換。");
+        await Pace.Delay(300, cancellationToken);
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, int timeoutMs, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Pace.Delay(60, cancellationToken);
+            if (condition()) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Replaces an edit box's text by a clipboard paste (EM_SETSEL + WM_PASTE), keeping the user's clipboard.</summary>
+    private async Task PasteIntoAsync(nint box, string text, CancellationToken cancellationToken)
+    {
+        IDataObject? saved = null;
+        try { saved = Clipboard.GetDataObject(); } catch (ExternalException) { }
+        try
+        {
+            Clipboard.SetText(text);
+            NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
+            NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
+            await Pace.Delay(150, cancellationToken);
+        }
+        finally
+        {
+            try
+            {
+                if (saved is not null) Clipboard.SetDataObject(saved, copy: true);
+                else Clipboard.Clear();
+            }
+            catch (ExternalException ex)
+            {
+                _log.Warn("export", $"clipboard not restored: {ex.GetType().Name}");
+            }
         }
     }
 
@@ -670,7 +730,7 @@ internal sealed class ItemQueryService
     {
         await ClickButtonAsync(dialog, "全選", $"匯出設定「{what}」的「全選」", cancellationToken);
         _log.Info("export", $"全選 clicked tab={what}");
-        await Pace.Delay(200, cancellationToken);
+        await Pace.Delay(300, cancellationToken);
     }
 
     /// <summary>
@@ -715,6 +775,10 @@ internal sealed class ItemQueryService
             _log.Info("dialog", $"{context}: child class={c.ClassName} text=\"{c.Text}\" rect={c.Rect.Left - w.Left},{c.Rect.Top - w.Top},{c.Rect.Width}x{c.Rect.Height}");
     }
 
+    /// <summary>Win32 Button, Delphi TButton／TBitBtn (ERP's 全選／確定) and DevExpress TcxButton.</summary>
+    private static bool IsButtonClass(string className) =>
+        className.Contains("Button", StringComparison.OrdinalIgnoreCase) || className.Contains("Btn", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsSmallDialog(nint hwnd) =>
         NativeMethods.GetWindowRect(hwnd, out var r) && r.Width is > 120 and < 700 && r.Height is > 80 and < 450;
 
@@ -723,7 +787,7 @@ internal sealed class ItemQueryService
 
     private static WindowControl? FindButton(nint window, Func<string, bool> caption) =>
         Win32Automation.EnumerateChildren(window)
-            .FirstOrDefault(c => c.Visible && c.Enabled && c.ClassName.Contains("Button", StringComparison.OrdinalIgnoreCase) &&
+            .FirstOrDefault(c => c.Visible && c.Enabled && IsButtonClass(c.ClassName) &&
                                  caption(Invi02Layout.NormalizeCaption(c.Text)));
 
     private static async Task<nint?> WaitNewWindowAsync(nint root, IReadOnlySet<nint> before, Func<nint, bool> match, int timeoutMs, CancellationToken cancellationToken)

@@ -20,6 +20,8 @@ internal static class NativeMethods
     internal const uint GA_ROOT = 2;
 
     internal const uint CB_GETDROPPEDSTATE = 0x0157;
+    internal const uint EM_SETSEL = 0x00B1;
+    internal const uint WM_PASTE = 0x0302;
 
     internal const uint INPUT_KEYBOARD = 1;
     internal const uint KEYEVENTF_KEYUP = 0x0002;
