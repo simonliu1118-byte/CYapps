@@ -61,6 +61,38 @@ internal static class Win32Automation
         return count;
     }
 
+    /// <summary>Every visible top-level window of <paramref name="root"/>'s process except root itself.</summary>
+    public static IReadOnlySet<nint> VisibleProcessWindows(nint root)
+    {
+        var pid = ProcessId(root);
+        var set = new HashSet<nint>();
+        if (pid == 0) return set;
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (hwnd != root && NativeMethods.IsWindowVisible(hwnd) && ProcessId(hwnd) == pid) set.Add(hwnd);
+            return true;
+        }, 0);
+        return set;
+    }
+
+    /// <summary>
+    /// Visible top-level windows of the ERP process (not <paramref name="root"/>) that overlap
+    /// <paramref name="area"/>, of any size: a Ribbon drop-down is such a small popup
+    /// (CYERPAutoInput).
+    /// </summary>
+    public static IReadOnlyList<Rectangle> ProcessPopupsNear(nint root, Rectangle area)
+    {
+        var popups = new List<Rectangle>();
+        foreach (var hwnd in VisibleProcessWindows(root))
+        {
+            if (!NativeMethods.GetWindowRect(hwnd, out var rect)) continue;
+            var bounds = rect.ToRectangle();
+            if (bounds.Width is < 20 or > 1200 || bounds.Height is < 16 or > 800 || !bounds.IntersectsWith(area)) continue;
+            popups.Add(bounds);
+        }
+        return popups;
+    }
+
     public static uint ProcessId(nint hwnd)
     {
         if (hwnd == 0) return 0;

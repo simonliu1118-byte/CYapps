@@ -16,6 +16,7 @@
     <Compile Include="..\..\ItemQueryModels.cs" Link="Linked\ItemQueryModels.cs" />
     <Compile Include="..\..\OcrWordFinder.cs" Link="Linked\OcrWordFinder.cs" />
     <Compile Include="..\..\OcrTextNormalizer.cs" Link="Linked\OcrTextNormalizer.cs" />
+    <Compile Include="..\..\XlsxReader.cs" Link="Linked\XlsxReader.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -52,8 +52,17 @@ public class Invi02LayoutTests
     }
 
     [Fact]
-    public void EveryReadTabHasAGeometry() =>
-        Assert.All(Invi02Layout.ReadTabs, t => Assert.True(Invi02Layout.Invi02Tabs.IndexOf(t) >= 0));
+    public void ExportTabHasAGeometry() =>
+        Assert.Equal(0, Invi02Layout.Invi02Tabs.IndexOf(Invi02Layout.ExportTab));
+
+    [Theory]
+    [InlineData(@"C:\Users\User\DocumentsFile\INVI02_2.XLSX", true)]
+    [InlineData(@"D:\CY\TEMP\INVI02_1.XLSX", true)]
+    [InlineData("Excel 2007以上 試算表(*.xlsx)", false)]
+    [InlineData("", false)]
+    [InlineData("MB001", false)]
+    public void FilePaths(string text, bool expected) =>
+        Assert.Equal(expected, Invi02Layout.LooksLikeFilePath(text));
 
     [Theory]
     [InlineData("TDBEdit", true)]

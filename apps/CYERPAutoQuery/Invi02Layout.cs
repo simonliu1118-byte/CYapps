@@ -14,8 +14,11 @@ internal static class Invi02Layout
     public const string QueryDialogTitle = "設定查詢條件";
     public const string GeneralQueryTab = "一般選項";
 
-    /// <summary>The tabs CYERPAutoQuery reads, in reading order.</summary>
-    public static readonly IReadOnlyList<string> ReadTabs = ["基本資料1", "基本資料2", "採購生管1", "售價"];
+    /// <summary>
+    /// The tab shown before 轉出至 Excel: from 資料瀏覽 the export has no 單身資料 (庫別), from
+    /// any other tab it has; 基本資料1 is used (user, 2026-10-16).
+    /// </summary>
+    public const string ExportTab = "基本資料1";
 
     // INVI02 TcxPageControl tabs have one fixed width whatever the caption length. Measured
     // from the user's screenshots (2026-10-16, three captures identical): tab i is centered
@@ -37,6 +40,10 @@ internal static class Invi02Layout
     /// <summary>ERP message boxes may reuse the caption of the form that raised them.</summary>
     public static bool IsMessageDialogClass(string className) =>
         className is "#32770" or "TMessageForm";
+
+    /// <summary>A Windows file path such as the 儲存檔案 default 「C:\Users\…\INVI02_2.XLSX」.</summary>
+    public static bool LooksLikeFilePath(string text) =>
+        text.Length >= 4 && char.IsAsciiLetter(text[0]) && text[1] == ':' && text[2] == '\\';
 
     public static string NormalizeCaption(string value) =>
         value.Trim().Replace(" ", string.Empty).Replace("&", string.Empty)

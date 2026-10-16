@@ -12,6 +12,39 @@ namespace CYERPAutoQuery;
 
 internal static class ScreenCapture
 {
+    /// <summary>
+    /// Like <see cref="Capture"/> but includes layered windows (CAPTUREBLT): ERP's Ribbon
+    /// drop-down is one, and a plain copy shows the form behind it (user's PC, 2026-10-11).
+    /// </summary>
+    public static Bitmap CaptureWithLayers(Rectangle screenRect)
+    {
+        // CopyFromScreen rejects SourceCopy|CaptureBlt (Build 5 on the user's PC), so BitBlt it.
+        var bitmap = new Bitmap(screenRect.Width, screenRect.Height, PixelFormat.Format32bppArgb);
+        using var graphics = Graphics.FromImage(bitmap);
+        var target = graphics.GetHdc();
+        var screen = GetDC(0);
+        try
+        {
+            const int SrcCopy = 0x00CC0020, CaptureBlt = 0x40000000;
+            BitBlt(target, 0, 0, screenRect.Width, screenRect.Height, screen, screenRect.Left, screenRect.Top, SrcCopy | CaptureBlt);
+        }
+        finally
+        {
+            ReleaseDC(0, screen);
+            graphics.ReleaseHdc(target);
+        }
+        return bitmap;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint GetDC(nint hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int ReleaseDC(nint hWnd, nint hDC);
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern bool BitBlt(nint hdcDest, int xDest, int yDest, int width, int height, nint hdcSrc, int xSrc, int ySrc, int rop);
+
     public static Bitmap Capture(Rectangle screenRect)
     {
         if (screenRect.Width <= 0 || screenRect.Height <= 0)

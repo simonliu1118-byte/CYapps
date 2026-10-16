@@ -24,6 +24,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _itemName = ReadOnlyBox();
     private readonly TextBox _specification = ReadOnlyBox();
     private readonly DataGridView _fields = new();
+    private readonly DataGridView _warehouses = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ToolStripStatusLabel _buildStatus = new();
@@ -62,10 +63,11 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12), Margin = Padding.Empty };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(12), Margin = Padding.Empty };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         Controls.Add(root);
 
@@ -116,17 +118,28 @@ internal sealed class MainForm : Form
         headerBox.Controls.Add(header);
         root.Controls.Add(headerBox, 0, 1);
 
-        var detailBox = new GroupBox { Text = "讀取明細（表頭與基本資料1、基本資料2、採購生管1、售價，依畫面位置列出）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
-        ConfigureFieldGrid();
+        var detailBox = new GroupBox { Text = "品號資料（ERP 轉出 Excel 的單頭資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
+        ConfigureGrid(_fields);
+        _fields.Columns.Add("name", "欄位");
+        _fields.Columns.Add("value", "內容");
+        _fields.Columns[0].Width = 220;
+        _fields.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        _fields.Columns[1].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
         detailBox.Controls.Add(_fields);
         root.Controls.Add(detailBox, 0, 2);
+
+        var warehouseBox = new GroupBox { Text = "庫別（單身資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
+        ConfigureGrid(_warehouses);
+        _warehouses.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+        warehouseBox.Controls.Add(_warehouses);
+        root.Controls.Add(warehouseBox, 0, 3);
 
         var statusStrip = new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Font = new Font("Microsoft JhengHei UI", 8.5F), Padding = new Padding(2, 0, 2, 0), Margin = Padding.Empty };
         _status.Text = "請先在 ERP 開啟「品號資料建立作業」，輸入品號後按「開始查詢 ERP」。";
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
-        root.Controls.Add(statusStrip, 0, 3);
+        root.Controls.Add(statusStrip, 0, 4);
 
         CyVisualTheme.Apply(this);
     }
@@ -140,25 +153,16 @@ internal sealed class MainForm : Form
         table.Controls.Add(box, 1, row);
     }
 
-    private void ConfigureFieldGrid()
+    private static void ConfigureGrid(DataGridView grid)
     {
-        _fields.Dock = DockStyle.Fill;
-        _fields.ReadOnly = true;
-        _fields.AllowUserToAddRows = false;
-        _fields.AllowUserToDeleteRows = false;
-        _fields.AllowUserToResizeRows = false;
-        _fields.RowHeadersVisible = false;
-        _fields.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _fields.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
-        _fields.Columns.Add("group", "頁籤");
-        _fields.Columns.Add("position", "位置");
-        _fields.Columns.Add("value", "內容");
-        _fields.Columns.Add("type", "控制項");
-        _fields.Columns[0].Width = 110;
-        _fields.Columns[1].Width = 120;
-        _fields.Columns[2].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        _fields.Columns[2].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
-        _fields.Columns[3].Width = 170;
+        grid.Dock = DockStyle.Fill;
+        grid.ReadOnly = true;
+        grid.AllowUserToAddRows = false;
+        grid.AllowUserToDeleteRows = false;
+        grid.AllowUserToResizeRows = false;
+        grid.RowHeadersVisible = false;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
     }
 
     private Button MakeButton(string text, int width) => new CyButton
@@ -246,9 +250,16 @@ internal sealed class MainForm : Form
         _itemName.Text = result?.ItemName ?? string.Empty;
         _specification.Text = result?.Specification ?? string.Empty;
         _fields.Rows.Clear();
+        _warehouses.Rows.Clear();
+        _warehouses.Columns.Clear();
         if (result is null) return;
         foreach (var f in result.Fields)
-            _fields.Rows.Add(f.Group, f.Position, f.Value, f.ControlClass);
+            _fields.Rows.Add(f.Name, f.Value);
+        if (result.Warehouses.Count == 0) return;
+        foreach (var f in result.Warehouses[0])
+            _warehouses.Columns.Add(f.Name, f.Name);
+        foreach (var row in result.Warehouses)
+            _warehouses.Rows.Add(row.Select(f => (object)f.Value).ToArray());
     }
 
     private void CopyFields()

@@ -18,7 +18,6 @@ internal static class NativeMethods
     internal const long ES_READONLY = 0x0800;
     internal const uint GA_ROOT = 2;
 
-    internal const uint BM_GETCHECK = 0x00F0;
     internal const uint CB_GETDROPPEDSTATE = 0x0157;
 
     internal const uint INPUT_KEYBOARD = 1;

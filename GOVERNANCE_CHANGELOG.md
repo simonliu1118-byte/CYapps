@@ -3,7 +3,7 @@
 ## 2.3.41 — 2026/10/16
 
 - 依使用者要求新增 `apps/CYERPAutoQuery/`（SMART ERP 自動查詢工具）：最小 `PROJECT_RULES.md`、VERSION／BUILD 與 PR／手動 Build workflow；REPO_POLICY 正式維護專案與 CY 桌面視覺採用清單加入本專案。
-- PROJECT_RULES 記錄對 ERP 只讀、INVI02 精準定位、介面與 CYERPAutoInput 一致、查詢期間鎖滑鼠＋中央提示、頁籤「固定座標為主、未切換才 OCR」單一備援，以及使用者核准先由 CYERPAutoInput 複製必要程式碼、日後收斂為共用庫；不改其他 App 規則。
+- PROJECT_RULES 記錄對 ERP 只讀、INVI02 精準定位、介面與 CYERPAutoInput 一致、查詢期間鎖滑鼠＋中央提示、頁籤「固定座標為主、未切換才 OCR」單一備援、品號資料以 ERP「轉出至 Excel」取得（暫存檔只放程式旁 TEMP、讀完即刪、Ribbon 以 OCR 點擊）、以及使用者核准先由 CYERPAutoInput 複製必要程式碼、日後收斂為共用庫；不改其他 App 規則。
 
 ## 2.3.40 — 2026/10/14
 

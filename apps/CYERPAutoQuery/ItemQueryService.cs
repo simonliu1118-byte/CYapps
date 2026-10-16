@@ -3,10 +3,10 @@ using System.Diagnostics;
 namespace CYERPAutoQuery;
 
 /// <summary>
-/// Looks up one 品號 in SMART ERP 品號資料建立作業 (INVI02) and reads the header and the
-/// 基本資料1／基本資料2／採購生管1／售價 tabs. Read-only towards ERP data: it opens the
-/// query dialog (F6), sets 一般選項 品號 = code, confirms, and switches tabs; it never
-/// presses 新增／修改／刪除／儲存／取消.
+/// Looks up one 品號 in SMART ERP 品號資料建立作業 (INVI02) and takes its data from ERP's own
+/// 「轉出至 Excel」 export (user, 2026-10-16: cleaner and safer than reading tab by tab).
+/// Read-only towards ERP data: it opens the query dialog (F6), sets 一般選項 品號 = code,
+/// confirms, shows 基本資料1 and exports; it never presses 新增／修改／刪除／儲存／取消.
 /// </summary>
 internal sealed class ItemQueryService
 {
@@ -16,6 +16,9 @@ internal sealed class ItemQueryService
     private const int RecordWaitMs = 5000;
     private const int EmptyRecordStableMs = 800;
     private const int TabWaitMs = 1200;
+    private const int MenuWaitMs = 3000;
+    private const int ExportDialogWaitMs = 5000;
+    private const int ExportRunWaitMs = 30000;
 
     private readonly AppLogger _log;
     private readonly PaddleOcrService _ocr;
@@ -32,6 +35,7 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException(error);
 
         using var gate = ErpAutomationGate.Enter();
+        ExportFiles.CleanUp(_log);
         var watch = Stopwatch.StartNew();
         _log.Info("query", $"start item={_log.Value(code)}");
 
@@ -61,32 +65,34 @@ internal sealed class ItemQueryService
             return ItemQueryResult.NotFound(code, watch.Elapsed);
         }
 
-        var fields = new List<ErpFieldValue>(ReadFields(ItemQueryResult.HeaderGroup, header.Inputs));
-        foreach (var tab in Invi02Layout.ReadTabs)
+        // Exported from 資料瀏覽 the workbook lacks 單身資料 (庫別); from 基本資料1 it has both
+        // sheets (user, 2026-10-16).
+        progress.Report("ERP：切換到基本資料1…");
+        var sheet = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab)
+            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
+        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.ExportTab, sheet.Handle, cancellationToken);
+
+        progress.Report("ERP：轉出 Excel…");
+        var path = ExportFiles.NewPath();
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            progress.Report($"ERP：讀取「{tab}」…");
-            var sheet = Win32Automation.FindTabSheet(root, tab)
-                ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{tab}」。");
-            await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, tab, sheet.Handle, cancellationToken);
-            var inputs = Win32Automation.InputControls(sheet.Handle, visibleOnly: true);
-            fields.AddRange(ReadFields(tab, inputs));
-            _log.Info("read", $"tab={tab} fields={inputs.Count}");
+            await ExportToExcelAsync(root, path, cancellationToken);
+
+            // The record must still be the one asked for after the export.
+            if (!ItemCodeRules.SameCode(NativeMethods.ControlText(header.ItemCode.Handle), code))
+                throw new InvalidOperationException("轉出途中 ERP 顯示的品號改變了；結果不採用，請重新查詢。");
+
+            progress.Report("讀取匯出資料…");
+            var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
+            var (fields, warehouses) = Invi02Export.Parse(sheets, code);
+            var result = new ItemQueryResult(code, fields, warehouses, watch.Elapsed);
+            _log.Info("query", $"done item={_log.Value(code)} fields={fields.Count} warehouses={warehouses.Count} elapsed_ms={watch.ElapsedMilliseconds}");
+            return result;
         }
-
-        // The record must still be the one asked for after all the tab switching.
-        var finalCode = NativeMethods.ControlText(header.ItemCode.Handle);
-        if (!ItemCodeRules.SameCode(finalCode, code))
-            throw new InvalidOperationException("讀取頁籤途中 ERP 顯示的品號改變了；結果不採用，請重新查詢。");
-
-        var result = new ItemQueryResult(
-            code,
-            (NativeMethods.ControlText(header.ItemName.Handle) ?? string.Empty).Trim(),
-            (NativeMethods.ControlText(header.Specification.Handle) ?? string.Empty).Trim(),
-            fields,
-            watch.Elapsed);
-        _log.Info("query", $"done item={_log.Value(code)} fields={fields.Count} elapsed_ms={watch.ElapsedMilliseconds}");
-        return result;
+        finally
+        {
+            ExportFiles.Delete(path, _log);
+        }
     }
 
     /// <summary>Read-only status probe for the UI status badge; never writes to ERP and never logs.</summary>
@@ -123,8 +129,8 @@ internal sealed class ItemQueryService
 
     private static WindowControl FindMainPageControl(nint root)
     {
-        var first = Win32Automation.FindTabSheet(root, Invi02Layout.ReadTabs[0])
-            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ReadTabs[0]}」。");
+        var first = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab)
+            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
         var pageHandle = NativeMethods.GetParent(first.Handle);
         return Win32Automation.EnumerateChildren(root).FirstOrDefault(c => c.Handle == pageHandle)
             ?? throw new InvalidOperationException("找不到 ERP 品號資料頁籤的 TcxPageControl。");
@@ -132,12 +138,11 @@ internal sealed class ItemQueryService
 
     // ---- header -----------------------------------------------------------------------
 
-    private sealed record HeaderControls(
-        WindowControl ItemCode, WindowControl ItemName, WindowControl Specification, IReadOnlyList<WindowControl> Inputs);
+    private sealed record HeaderControls(WindowControl ItemCode);
 
     /// <summary>
-    /// The header is every input above the tab page control. Its first three rows start
-    /// with 品號, 品名 and 規格 (checkboxes such as 定重 are left out of that row structure).
+    /// The header is every input above the tab page control. Its first row starts with 品號,
+    /// then 品名 and 規格 rows (checkboxes such as 定重 are left out of that row structure).
     /// </summary>
     private static HeaderControls ResolveHeader(nint root, WindowControl page)
     {
@@ -149,7 +154,7 @@ internal sealed class ItemQueryService
             c => c.Rect.ToRectangle());
         if (rows.Count < 3)
             throw new InvalidOperationException($"ERP 品號資料表頭結構不符預期（只找到 {rows.Count} 列欄位）。");
-        return new HeaderControls(rows[0][0], rows[1][0], rows[2][0], inputs);
+        return new HeaderControls(rows[0][0]);
     }
 
     // ---- query dialog -----------------------------------------------------------------
@@ -410,31 +415,165 @@ internal sealed class ItemQueryService
         InputSender.Click(point);
     }
 
-    // ---- reading ----------------------------------------------------------------------
+    // ---- Excel export ---------------------------------------------------------------
 
-    private static IEnumerable<ErpFieldValue> ReadFields(string group, IReadOnlyList<WindowControl> inputs)
+    /// <summary>
+    /// Ribbon 「Excel」 → 「轉出至 Excel」 → type the path into 儲存檔案 → 確定 → answer No to
+    /// 「檢視Excel資料?」 (Yes would open the file). ERP has no shortcut for it (user,
+    /// 2026-10-16). The Ribbon is not made of windows, so its text is found by OCR, the
+    /// same as CYERPAutoInput's 列印 → 直接列印; a wrong Ribbon click could start another
+    /// function, so no fixed coordinates are used there.
+    /// </summary>
+    private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken)
     {
-        var rows = Invi02Layout.BuildRows(inputs, c => c.Rect.ToRectangle());
-        for (var r = 0; r < rows.Count; r++)
-        for (var c = 0; c < rows[r].Count; c++)
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("轉出 Excel 前無法把品號資料建立作業帶到前景。");
+        if (!NativeMethods.GetWindowRect(root, out var window))
+            throw new InvalidOperationException("讀不到品號資料建立作業的視窗位置。");
+
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(ribbon))
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+        var label = OcrWordFinder.FindWord(tokens, "Excel") ?? OcrWordFinder.FindWord(tokens, "EXCEL");
+        if (label is null)
         {
-            var control = rows[r][c];
-            yield return new ErpFieldValue(group, r, c, control.ClassName, ReadValue(control));
+            foreach (var t in tokens)
+                _log.Info("export", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+            throw new InvalidOperationException("ERP 工具列上找不到「Excel」。請確認 Ribbon 停在「常用」。");
+        }
+        var labelScreen = new Rectangle(ribbon.Left + label.Value.Left, ribbon.Top + label.Value.Top, label.Value.Width, label.Value.Height);
+        var before = Win32Automation.VisibleProcessWindows(root);
+        SafeClick(root, new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
+        _log.Info("export", $"ribbon Excel clicked label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
+
+        // The drop-down: 轉出至 Excel / 轉出全部符合查詢條件的資料.
+        var near = new Rectangle(labelScreen.Left - 120, labelScreen.Top - 60, 480, 220);
+        var item = await FindMenuItemAsync(root, near, "轉出至", cancellationToken);
+        if (item is null)
+        {
+            // Close a drop-down left open; Esc only when ERP really shows a popup, so a stray
+            // Esc never reaches the INVI02 form itself (CYERPAutoInput rule).
+            if (Win32Automation.ProcessPopupsNear(root, near).Count > 0) InputSender.Press(NativeMethods.VK_ESCAPE);
+            throw new InvalidOperationException("Excel 選單沒有出現「轉出至 Excel」。");
+        }
+        InputSender.Click(item.Value);
+        _log.Info("export", "轉出至 Excel clicked");
+
+        var dialog = await WaitNewWindowAsync(root, before, h => Invi02Layout.IsInvi02Title(NativeMethods.WindowText(h)) &&
+            !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)), ExportDialogWaitMs, cancellationToken)
+            ?? throw new InvalidOperationException("按「轉出至 Excel」後沒有出現匯出設定視窗。");
+        await Pace.Delay(200, cancellationToken);
+        await FillExportDialogAsync(dialog, path, cancellationToken);
+
+        // ERP writes the file, closes the dialog and asks 「檢視Excel資料?」: No.
+        var deadline = Environment.TickCount64 + ExportRunWaitMs;
+        nint question = 0;
+        while (question == 0)
+        {
+            if (Environment.TickCount64 > deadline)
+                throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。");
+            await Pace.Delay(150, cancellationToken);
+            question = Win32Automation.VisibleProcessWindows(root)
+                .FirstOrDefault(h => h != dialog && !before.Contains(h) && FindButton(h, IsNoCaption) is not null);
+        }
+        var no = FindButton(question, IsNoCaption)!;
+        SafeClick(question, Win32Automation.Center(no.Rect));
+        _log.Info("export", "檢視Excel資料? answered No");
+
+        deadline = Environment.TickCount64 + 5000;
+        while (NativeMethods.IsWindow(question) && NativeMethods.IsWindowVisible(question) || !NativeMethods.IsWindowEnabled(root))
+        {
+            if (Environment.TickCount64 > deadline)
+                throw new InvalidOperationException("回答「檢視Excel資料?」後 ERP 仍有視窗開著，請人工確認。");
+            await Pace.Delay(100, cancellationToken);
         }
     }
 
-    private static string ReadValue(WindowControl control)
+    /// <summary>Screen point of the drop-down item containing <paramref name="word"/>, or null after a bounded wait.</summary>
+    private async Task<Point?> FindMenuItemAsync(nint root, Rectangle near, string word, CancellationToken cancellationToken)
     {
-        if (Invi02Layout.IsCheckBox(control.ClassName))
+        var deadline = Environment.TickCount64 + MenuWaitMs;
+        while (Environment.TickCount64 < deadline)
         {
-            return NativeMethods.QueryNumber(control.Handle, NativeMethods.BM_GETCHECK) switch
+            await Pace.Delay(250, cancellationToken);
+            var areas = Win32Automation.ProcessPopupsNear(root, near).ToList();
+            areas.Add(near);
+            foreach (var area in areas)
             {
-                null => "（讀取逾時）",
-                1 => "勾選",
-                _ => "未勾選"
-            };
+                // The Ribbon drop-down is a layered window; a plain screen copy misses it.
+                using var image = ScreenCapture.CaptureWithLayers(area);
+                var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+                if (OcrWordFinder.FindWord(tokens, word) is { } r)
+                    return new Point(area.Left + r.Left + r.Width / 2, area.Top + r.Top + r.Height / 2);
+                if (Environment.TickCount64 >= deadline)
+                    _log.Info("export", $"  menu area=({area.Left},{area.Top},{area.Width},{area.Height}) tokens=\"{string.Join(" ", tokens.Select(t => _log.Value(t.Text)))}\"");
+            }
         }
-        return NativeMethods.ControlText(control.Handle)?.Trim() ?? "（讀取逾時）";
+        return null;
+    }
+
+    /// <summary>
+    /// 匯出設定 (user's screenshot 2026-10-16): 檔案格式 must already be the xlsx one; 儲存檔案
+    /// gets CYERPAutoQuery's own TEMP path, read back; 確定 is clicked with the mouse.
+    /// </summary>
+    private async Task FillExportDialogAsync(nint dialog, string path, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法把匯出設定視窗帶到前景。");
+        var inputs = Win32Automation.InputControls(dialog, visibleOnly: true);
+        var texts = inputs.Select(c => (Control: c, Text: (NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim())).ToList();
+        if (!texts.Any(t => Invi02Layout.IsCombo(t.Control.ClassName) && t.Text.Contains(".xlsx", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("匯出設定的檔案格式不是「Excel 2007以上 (*.xlsx)」，請在 ERP 改好後再查詢。");
+        var pathBoxes = texts
+            .Where(t => Invi02Layout.IsEditBox(t.Control.ClassName) && Invi02Layout.LooksLikeFilePath(t.Text))
+            .ToList();
+        if (pathBoxes.Count != 1)
+        {
+            _log.Warn("export", $"path box candidates={pathBoxes.Count} inputs=[{string.Join(",", inputs.Select(c => c.ClassName))}]");
+            throw new InvalidOperationException("匯出設定視窗找不到唯一的「儲存檔案」欄位。");
+        }
+        var box = pathBoxes[0].Control;
+
+        for (var attempt = 1; ; attempt++)
+        {
+            SafeClick(dialog, Win32Automation.Center(box.Rect));
+            await Pace.Delay(150, cancellationToken);
+            var current = NativeMethods.ControlText(box.Handle) ?? string.Empty;
+            InputSender.EndBackspace(current.Length + 2);
+            await Pace.Delay(60, cancellationToken);
+            InputSender.UnicodeText(path, delayMs: 8);
+            await Pace.Delay(150, cancellationToken);
+            var shown = (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
+            if (string.Equals(shown, path, StringComparison.OrdinalIgnoreCase)) break;
+            _log.Warn("export", $"path read-back mismatch attempt={attempt} len={shown.Length}");
+            if (attempt >= 2) throw new InvalidOperationException("匯出路徑輸入後讀回的內容不一致，已停止。");
+        }
+
+        var ok = FindButton(dialog, c => c.StartsWith("確定", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException("匯出設定視窗找不到「確定」按鈕。");
+        SafeClick(dialog, Win32Automation.Center(ok.Rect));
+        _log.Info("export", "匯出設定 確定 clicked");
+    }
+
+    private static bool IsNoCaption(string caption) =>
+        caption is "NO" or "否" || caption.StartsWith("否(", StringComparison.Ordinal);
+
+    private static WindowControl? FindButton(nint window, Func<string, bool> caption) =>
+        Win32Automation.EnumerateChildren(window)
+            .FirstOrDefault(c => c.Visible && c.Enabled && c.ClassName.Contains("Button", StringComparison.OrdinalIgnoreCase) &&
+                                 caption(Invi02Layout.NormalizeCaption(c.Text)));
+
+    private static async Task<nint?> WaitNewWindowAsync(nint root, IReadOnlySet<nint> before, Func<nint, bool> match, int timeoutMs, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Pace.Delay(120, cancellationToken);
+            var found = Win32Automation.VisibleProcessWindows(root).Where(h => !before.Contains(h) && match(h)).ToList();
+            if (found.Count == 1) return found[0];
+        }
+        return null;
     }
 }
 
