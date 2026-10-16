@@ -26,22 +26,6 @@ internal static class Win32Automation
         return forms.Count > 0 ? forms : found;
     }
 
-    /// <summary>Visible top-level windows of <paramref name="owner"/>'s process whose caption matches.</summary>
-    public static IReadOnlyList<nint> FindProcessWindows(nint owner, Func<string, bool> title)
-    {
-        var pid = ProcessId(owner);
-        var list = new List<nint>();
-        if (pid == 0) return list;
-        NativeMethods.EnumWindows((hwnd, _) =>
-        {
-            if (hwnd != owner && NativeMethods.IsWindowVisible(hwnd) && ProcessId(hwnd) == pid &&
-                title(NativeMethods.WindowText(hwnd)))
-                list.Add(hwnd);
-            return true;
-        }, 0);
-        return list;
-    }
-
     /// <summary>
     /// Visible top-level windows of <paramref name="root"/>'s process, other than the listed
     /// ones, that overlap <paramref name="area"/> (a drop-down list is such a popup).
@@ -103,6 +87,9 @@ internal static class Win32Automation
     public static bool PrepareForeground(nint hwnd, AppLogger? log = null)
     {
         if (hwnd == 0) return false;
+        // A window parented inside another (an ERP dialog shown within INVI02) is brought
+        // forward through its top-level window.
+        hwnd = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT) is var top && top != 0 ? top : hwnd;
         if (NativeMethods.IsIconic(hwnd)) NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
         NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0,
             NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW);
@@ -168,19 +155,28 @@ internal static class Win32Automation
         return false;
     }
 
+    /// <summary>
+    /// True when <paramref name="child"/> is <paramref name="ancestor"/> or lies inside it. Walks
+    /// real parents only (GA_PARENT): GetParent would also climb to the owner of a popup, so
+    /// an ERP popup over INVI02 would count as part of INVI02.
+    /// </summary>
     public static bool IsInside(nint child, nint ancestor)
     {
         if (child == 0 || ancestor == 0) return false;
-        for (var p = child; p != 0; p = NativeMethods.GetParent(p))
+        var p = child;
+        for (var depth = 0; p != 0 && depth < 64; depth++)
+        {
             if (p == ancestor) return true;
+            p = NativeMethods.GetAncestor(p, NativeMethods.GA_PARENT);
+        }
         return false;
     }
 
-    /// <summary>True when the screen at <paramref name="point"/> belongs to <paramref name="root"/>, i.e. nothing covers it.</summary>
-    public static bool IsPointShownBy(nint root, Point point)
+    /// <summary>True when the screen at <paramref name="point"/> belongs to <paramref name="window"/> (or a window inside it), i.e. nothing covers it.</summary>
+    public static bool IsPointShownBy(nint window, Point point)
     {
         var hit = NativeMethods.WindowFromPoint(new NativeMethods.POINT { X = point.X, Y = point.Y });
-        return hit != 0 && NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) == root;
+        return hit != 0 && IsInside(hit, window);
     }
 
     public static bool IsReadOnly(nint hwnd) =>

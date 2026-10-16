@@ -16,6 +16,7 @@ internal static class NativeMethods
 
     internal const int GWL_STYLE = -16;
     internal const long ES_READONLY = 0x0800;
+    internal const uint GA_PARENT = 1;
     internal const uint GA_ROOT = 2;
 
     internal const uint CB_GETDROPPEDSTATE = 0x0157;

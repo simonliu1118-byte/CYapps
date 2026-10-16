@@ -11,13 +11,15 @@ namespace CYERPAutoQuery;
 internal sealed class ItemQueryService
 {
     private const int MaximizeSettleMs = 300;
-    private const int QueryDialogWaitMs = 3000;
+    // The first F6 of a session can take more than 3 s (user's PC, 2026-10-16: the dialog
+    // showed about 4 s after F6 and the 3 s wait had already given up).
+    private const int QueryDialogWaitMs = 10000;
     private const int QueryRunWaitMs = 15000;
     private const int RecordWaitMs = 5000;
     private const int EmptyRecordStableMs = 800;
     private const int TabWaitMs = 1200;
     private const int MenuWaitMs = 3000;
-    private const int ExportDialogWaitMs = 5000;
+    private const int ExportDialogWaitMs = 10000;
     private const int ExportRunWaitMs = 30000;
 
     private readonly AppLogger _log;
@@ -161,8 +163,9 @@ internal sealed class ItemQueryService
 
     private async Task<nint> OpenQueryDialogAsync(nint root, WindowControl page, CancellationToken cancellationToken)
     {
-        // A dialog left open by the user is reused instead of pressing F6 again.
-        var open = Win32Automation.FindProcessWindows(root, Invi02Layout.IsQueryDialogTitle);
+        // A dialog left open (by the user, or by an earlier run that gave up) is reused
+        // instead of pressing F6 again.
+        var open = FindQueryDialogs(root);
         if (open.Count == 1)
         {
             _log.Info("dialog", "query dialog already open; reused");
@@ -182,18 +185,53 @@ internal sealed class ItemQueryService
         InputSender.Press(NativeMethods.VK_F6);
         _log.Info("dialog", "F6 sent");
 
-        var deadline = Environment.TickCount64 + QueryDialogWaitMs;
+        var started = Environment.TickCount64;
+        var deadline = started + QueryDialogWaitMs;
         while (Environment.TickCount64 < deadline)
         {
             await Pace.Delay(100, cancellationToken);
-            var found = Win32Automation.FindProcessWindows(root, Invi02Layout.IsQueryDialogTitle);
+            var found = FindQueryDialogs(root);
             if (found.Count == 1)
             {
+                _log.Info("dialog", $"query dialog shown after_ms={Environment.TickCount64 - started} class={NativeMethods.ClassName(found[0])}");
                 await Pace.Delay(150, cancellationToken); // let the dialog finish painting
                 return found[0];
             }
         }
-        throw new InvalidOperationException("已按 F6，但 3 秒內沒有出現「設定查詢條件」視窗。\n請確認品號資料建立作業在檢視狀態。");
+        LogProcessWindows(root, "after-F6");
+        throw new InvalidOperationException("已按 F6，但 10 秒內沒有找到「設定查詢條件」視窗。\n請確認品號資料建立作業在檢視狀態；若視窗已出現，請把 LOG 傳給開發人員。");
+    }
+
+    /// <summary>
+    /// 設定查詢條件 windows: recognised by their 一般選項 tab, or by the caption. The tab is the
+    /// stronger signal (a skinned caption or a dialog parented inside INVI02 would hide from a
+    /// caption-only search).
+    /// </summary>
+    private static IReadOnlyList<nint> FindQueryDialogs(nint root)
+    {
+        var found = Win32Automation.VisibleProcessWindows(root)
+            .Where(h => Invi02Layout.IsQueryDialogTitle(NativeMethods.WindowText(h)) ||
+                        Win32Automation.FindTabSheet(h, Invi02Layout.GeneralQueryTab) is not null)
+            .ToList();
+        if (found.Count == 0 && Win32Automation.FindTabSheet(root, Invi02Layout.GeneralQueryTab) is { } inner)
+        {
+            // Parented inside INVI02: the dialog is the sheet's ancestor right below root.
+            var h = inner.Handle;
+            while (NativeMethods.GetParent(h) is var p && p != 0 && p != root) h = p;
+            if (NativeMethods.IsWindowVisible(h)) found.Add(h);
+        }
+        return found;
+    }
+
+    /// <summary>For on-site diagnosis: every visible window of the ERP process (captions are ERP UI text, not business data).</summary>
+    private void LogProcessWindows(nint root, string context)
+    {
+        _log.Warn("dialog", $"{context}: root enabled={NativeMethods.IsWindowEnabled(root)}");
+        foreach (var h in Win32Automation.VisibleProcessWindows(root))
+        {
+            NativeMethods.GetWindowRect(h, out var r);
+            _log.Warn("dialog", $"{context}: window class={NativeMethods.ClassName(h)} title=\"{NativeMethods.WindowText(h)}\" rect={r.Left},{r.Top},{r.Width}x{r.Height} enabled={NativeMethods.IsWindowEnabled(h)}");
+        }
     }
 
     private async Task FillGeneralQueryAsync(nint dialog, string code, CancellationToken cancellationToken)
@@ -460,9 +498,16 @@ internal sealed class ItemQueryService
         InputSender.Click(item.Value);
         _log.Info("export", "轉出至 Excel clicked");
 
-        var dialog = await WaitNewWindowAsync(root, before, h => Invi02Layout.IsInvi02Title(NativeMethods.WindowText(h)) &&
-            !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)), ExportDialogWaitMs, cancellationToken)
-            ?? throw new InvalidOperationException("按「轉出至 Excel」後沒有出現匯出設定視窗。");
+        // 匯出設定 is recognised by its 儲存檔案 path box, or by the INVI02 caption it carries.
+        var found = await WaitNewWindowAsync(root, before, h => !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)) &&
+            (Invi02Layout.IsInvi02Title(NativeMethods.WindowText(h)) ||
+             Win32Automation.InputControls(h, visibleOnly: true).Any(c => Invi02Layout.LooksLikeFilePath((NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim()))),
+            ExportDialogWaitMs, cancellationToken);
+        if (found is not { } dialog)
+        {
+            LogProcessWindows(root, "after-export-menu");
+            throw new InvalidOperationException("按「轉出至 Excel」後沒有出現匯出設定視窗。");
+        }
         await Pace.Delay(200, cancellationToken);
         await FillExportDialogAsync(dialog, path, cancellationToken);
 
@@ -472,7 +517,10 @@ internal sealed class ItemQueryService
         while (question == 0)
         {
             if (Environment.TickCount64 > deadline)
+            {
+                LogProcessWindows(root, "after-export");
                 throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。");
+            }
             await Pace.Delay(150, cancellationToken);
             question = Win32Automation.VisibleProcessWindows(root)
                 .FirstOrDefault(h => h != dialog && !before.Contains(h) && FindButton(h, IsNoCaption) is not null);
