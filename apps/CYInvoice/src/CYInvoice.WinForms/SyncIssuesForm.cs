@@ -1,6 +1,8 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Cloud;
+using System.Security.Cryptography;
+using System.Text;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -137,6 +139,19 @@ internal sealed class SyncIssuesForm : Form
         {
             failedActions.Controls.Add(deleteFailed);
             failedActions.Controls.Add(clearFailed);
+            var cfg=repository.Settings.LoadOrCreate();
+            if(cfg.CloudMode==CloudModes.CloudPreferred &&
+               cfg.CloudIdentityProvider=="CYID" &&
+               cfg.CloudEmployeeAuthorityReady &&
+               !string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId) &&
+               !string.IsNullOrWhiteSpace(cfg.CloudDeviceId) &&
+               !string.IsNullOrWhiteSpace(cfg.CloudBaseUrl) &&
+               !string.IsNullOrWhiteSpace(repository.Settings.CloudDeviceToken(cfg)))
+            {
+                var report=UiControls.StandardButton("回報選取至 CYID");
+                report.Click+=async(_,_)=>await ReportSelectedUploadIssuesAsync();
+                failedActions.Controls.Add(report);
+            }
         }
         else
         {
@@ -229,6 +244,106 @@ internal sealed class SyncIssuesForm : Form
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
+    }
+
+    private async Task ReportSelectedUploadIssuesAsync()
+    {
+        if(processing||manualReviewBusy)return;
+        var cfg=repository.Settings.LoadOrCreate();
+        var deviceToken=repository.Settings.CloudDeviceToken(cfg);
+        if(cfg.CloudMode!=CloudModes.CloudPreferred||
+           cfg.CloudIdentityProvider!="CYID"||
+           !cfg.CloudEmployeeAuthorityReady||
+           string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId)||
+           string.IsNullOrWhiteSpace(cfg.CloudDeviceId)||
+           string.IsNullOrWhiteSpace(cfg.CloudBaseUrl)||
+           string.IsNullOrWhiteSpace(deviceToken))
+        {
+            MessageBox.Show(this,"尚未完成 CYID Cloud 裝置驗證。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        var selected=list.SelectedItems.Cast<ListViewItem>()
+            .Select(row=>row.Tag)
+            .Select(tag=>tag switch{
+                InvoiceSyncIssue issue when issue.ResolvedUtc is null &&
+                    issue.IssueType is (
+                        InvoiceSyncIssueTypes.InvoiceListFailed or
+                        InvoiceSyncIssueTypes.QueryFailed or
+                        InvoiceSyncIssueTypes.RemoteNotFound or
+                        InvoiceSyncIssueTypes.UnknownRemoteNotFound or
+                        InvoiceSyncIssueTypes.ReconciliationFailed or
+                        InvoiceSyncIssueTypes.AmbiguousMatch or
+                        InvoiceSyncIssueTypes.LocalWriteFailed)
+                    =>(Key:"sync:"+issue.Id,Code:issue.IssueType),
+                InvoiceRecord record when record.InvoiceState==InvoiceStates.Failed
+                    =>(Key:"failed:"+record.Id,Code:"upload_failed"),
+                _=>(Key:string.Empty,Code:string.Empty)
+            })
+            .Where(x=>x.Key.Length>0)
+            .Distinct()
+            .Take(11).ToArray();
+        if(selected.Length==0){
+            MessageBox.Show(this,"請先選取需要回報的上傳問題或開立失敗紀錄。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        if(selected.Length>10){
+            MessageBox.Show(this,"一次最多選取 10 筆，請減少選取項目。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        if(MessageBox.Show(this,
+            $"確認將 {selected.Length} 筆本機異常回報至 CYID 管理員清單？\n"+
+            "只會傳送異常種類與不可逆來源識別，不傳買受人、訂單或發票內容。\n"+
+            "回報不代表光貿已驗證，也不會重送發票。",
+            "回報 CYID 上傳問題",MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            return;
+        using var login=new EmployeeAdminLoginForm(repository,
+            "CYID 上傳問題－員工驗證",administratorRequired:false,
+            collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        var saved=0;var already=0;var unknown=0;
+        SetManualReviewBusy(true);
+        try{
+            using var http=new HttpClient();
+            var client=new CloudWorkItemClient(http,
+                new Uri(cfg.CloudBaseUrl,UriKind.Absolute),deviceToken,cfg.CloudWorkspaceId);
+            foreach(var issue in selected)
+            {
+                // Hash a Device-scoped durable local issue identity, not its
+                // order/invoice/buyer/message. Re-selecting the same item
+                // produces the exact same D1 Work Item ID and dedupe hash.
+                var identity=$"upload-report|{cfg.CloudWorkspaceId}|"+
+                    $"{cfg.CloudDeviceId}|{cfg.Environment}|{issue.Key}|{issue.Code}";
+                var hash=Convert.ToHexString(SHA256.HashData(
+                    Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+                var draft=new CloudUploadIssueReport(
+                    "wi_issue_"+hash[..40],cfg.Environment,hash,issue.Code);
+                try{
+                    await client.ReportUploadIssueAsync(draft,
+                        login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                    saved++;
+                }catch(CloudApiException e)when(e.Code=="WORK_ITEM_CONFLICT"){
+                    already++;
+                }catch{
+                    unknown++;
+                    // A timeout may mean D1 committed; no automatic retry.
+                    break;
+                }
+            }
+            MessageBox.Show(this,
+                $"已收到確認：{saved} 筆；已存在或衝突：{already} 筆；結果不明：{unknown} 筆。\n"+
+                "結果不明時請由管理員在 CYID 例外清單核對，勿盲目重送。\n"+
+                "本機異常未被刪除或標記已解決。",
+                "異常回報結果",MessageBoxButtons.OK,
+                unknown>0?MessageBoxIcon.Warning:MessageBoxIcon.Information);
+        }catch(Exception error){
+            MessageBox.Show(this,"無法送出 CYID 異常回報："+error.Message+
+                "\n本機異常紀錄均未變更。","回報未完成",
+                MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }finally{SetManualReviewBusy(false);}
     }
 
     // Read-only window for the already-existing manager Work Item list. Local

@@ -16,6 +16,7 @@ internal static class CloudWorkItemClientTests
         await RejectUnfrozenAllowanceAsync();
         await CreateReadAndTransitionAsync();
         await ListPagesAndRejectUnsafeRepliesAsync();
+        await UploadIssueReportsAreUnverifiedAsync();
         await MissingAndConflictingWorkAsync();
         await RejectUntrustedResponseAsync();
     }
@@ -171,6 +172,46 @@ internal static class CloudWorkItemClientTests
         await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(
             "0001","synthetic-pass",1));
         Equal(0,handler.PendingCount,"invalid requests never consume scripted responses");
+    }
+
+    private static async Task UploadIssueReportsAreUnverifiedAsync()
+    {
+        var handler=new QueueHandler();
+        var report=new CloudUploadIssueReport("wi_upload_test_1234","test",
+            new string('c',64),"query_failed");
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"report-upload-issue");
+            using var json=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var data=json.RootElement;
+            Equal(report.ItemId,data.GetProperty("itemId").GetString(),"source-bound ID");
+            Equal("query_failed",data.GetProperty("issueCode").GetString(),"only local issue code");
+            Equal(report.ReferenceHash,data.GetProperty("referenceHash").GetString(),"source digest");
+            True(!data.TryGetProperty("invoiceNumber",out _)&&
+                 !data.TryGetProperty("orderId",out _)&&
+                 !data.TryGetProperty("message",out _)&&
+                 !data.TryGetProperty("workspaceId",out _),"privacy and scope");
+            return Json(HttpStatusCode.OK,new{ok=true,itemId=report.ItemId,
+                reported=true,officialVerified=false});
+        });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"report-upload-issue");
+            return Json(HttpStatusCode.Conflict,new{ok=false,
+                error=new{code="WORK_ITEM_CONFLICT"}});
+        });
+        handler.Enqueue(_=>Json(HttpStatusCode.OK,new{ok=true,
+            itemId=report.ItemId,reported=true,officialVerified=true}));
+        using var http=new HttpClient(handler);
+        var client=new CloudWorkItemClient(http,new Uri("https://cloud.example.test/"),
+            Token,Workspace);
+        await ThrowsAsync<ArgumentException>(()=>client.ReportUploadIssueAsync(
+            report with {IssueCode="invoice_success"},"0001","synthetic-pass"));
+        await client.ReportUploadIssueAsync(report,"0001","synthetic-pass");
+        await ThrowsAsync<CloudApiException>(()=>
+            client.ReportUploadIssueAsync(report,"0001","synthetic-pass"),
+            "WORK_ITEM_CONFLICT");
+        await ThrowsAsync<InvalidDataException>(()=>
+            client.ReportUploadIssueAsync(report,"0001","synthetic-pass"));
+        Equal(0,handler.PendingCount,"no hidden resubmit after conflict or forged reply");
     }
 
     private static async Task MissingAndConflictingWorkAsync()

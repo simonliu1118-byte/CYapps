@@ -24,6 +24,8 @@ public sealed record CloudWorkItemSummary(
 public sealed record CloudWorkItemCursor(string CreatedAt, string ItemId);
 public sealed record CloudWorkItemPage(
     IReadOnlyList<CloudWorkItemSummary> Items, CloudWorkItemCursor? NextCursor);
+public sealed record CloudUploadIssueReport(
+    string ItemId,string Environment,string ReferenceHash,string IssueCode);
 
 public sealed class CloudWorkItemClient
 {
@@ -82,6 +84,40 @@ public sealed class CloudWorkItemClient
         {
             return null;
         }
+    }
+
+    public async Task ReportUploadIssueAsync(
+        CloudUploadIssueReport report,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ValidateCredentials(employeeNo,password);
+        ValidateId(report.ItemId);
+        if(report.Environment is not ("test" or "production")||
+           report.ReferenceHash is null||
+           !Regex.IsMatch(report.ReferenceHash,@"^[a-f0-9]{64}$",RegexOptions.CultureInvariant)||
+           report.IssueCode is not (
+               "invoice_list_failed" or "query_failed" or "remote_not_found" or
+               "unknown_remote_not_found" or "reconciliation_failed" or
+               "ambiguous_match" or "local_write_failed" or "upload_failed" or
+               "duplicate_order_id"))
+            throw new ArgumentException("Upload issue report is invalid.",nameof(report));
+        // Deliberately no invoice number, buyer, order, message or credentials
+        // in the event itself. Manager sees a local report, not AMEGO evidence.
+        using var response=await SendAsync("report-upload-issue",new{
+            itemId=report.ItemId,environment=report.Environment,
+            referenceHash=report.ReferenceHash,issueCode=report.IssueCode,
+            employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=response.RootElement;
+        if(!root.TryGetProperty("itemId",out var id)||
+           id.ValueKind!=JsonValueKind.String||
+           id.GetString()!=report.ItemId||
+           !root.TryGetProperty("reported",out var reported)||
+           reported.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("officialVerified",out var verified)||
+           verified.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud upload issue response is untrusted.");
     }
 
     public async Task<CloudWorkItemPage> ListAsync(
