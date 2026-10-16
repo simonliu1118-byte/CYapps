@@ -55,19 +55,27 @@ internal static class Invq01Layout
     public static string ErpDate(DateOnly? date) => date?.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) ?? "未指定";
 
     /// <summary>One deliberately minimal keyboard sequence for a local or Web INVQ01 date input.</summary>
-    internal sealed record HistoryDateAction(int BoxIndex, DateOnly Date, bool ClickYear, bool PressEnter);
+    internal sealed record HistoryDateAction(
+        int BoxIndex, DateOnly Date, bool ClickStart, bool EnterBefore, bool EnterAfter);
 
     /// <summary>
-    /// With both dates, Enter after 起 moves focus to 迄; do not click the second box
-    /// or send a second Enter. For a single entered date click only that box.
+    /// The exact INVQ01 keystroke order confirmed by the user:
+    /// 起 only: click 起, type 起 (no Enter).
+    /// 迄 only: click 起, Enter, type 迄 (no second click/Enter).
+    /// Both: click 起, type 起, Enter, type 迄 (no second click/Enter).
+    /// Unspecified dates are not touched.
     /// </summary>
     public static IReadOnlyList<HistoryDateAction> DateActions(HistoryRange range)
     {
         var actions = new List<HistoryDateAction>(2);
         if (range.From is { } from)
-            actions.Add(new HistoryDateAction(0, from, ClickYear: true, PressEnter: true));
+            actions.Add(new HistoryDateAction(0, from,
+                ClickStart: true, EnterBefore: false, EnterAfter: range.To is not null));
         if (range.To is { } to)
-            actions.Add(new HistoryDateAction(1, to, ClickYear: range.From is null, PressEnter: false));
+            actions.Add(new HistoryDateAction(1, to,
+                ClickStart: range.From is null,
+                EnterBefore: range.From is null,
+                EnterAfter: false));
         return actions;
     }
 

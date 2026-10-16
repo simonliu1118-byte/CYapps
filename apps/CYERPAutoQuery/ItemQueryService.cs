@@ -1174,14 +1174,17 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
         }
 
-        // Correct ERP sequence when both dates are given:
-        // focus 起 year -> yyyyMMdd -> Enter -> yyyyMMdd in 迄 (NO second click/Enter).
-        // When only one side is specified, click and type only that side.
+        // Exact ERP keyboard sequence:
+        // 起 only: click 起 -> yyyyMMdd
+        // 迄 only: click 起 -> Enter -> yyyyMMdd
+        // both:    click 起 -> yyyyMMdd -> Enter -> yyyyMMdd
+        // No second click or final Enter. Never type in a field with unexpected focus.
         foreach (var action in Invq01Layout.DateActions(range))
         {
             var name = action.BoxIndex == 0 ? "起" : "迄";
-            await SetDateAsync(invq, boxes[action.BoxIndex], action.Date, name,
-                clickYear: action.ClickYear, pressEnter: action.PressEnter, cancellationToken: cancellationToken);
+            await SetDateAsync(invq, boxes[0], boxes[action.BoxIndex], action.Date, name,
+                clickStart: action.ClickStart, enterBefore: action.EnterBefore,
+                enterAfter: action.EnterAfter, cancellationToken: cancellationToken);
         }
         if (range.From is { } expectedFrom &&
             !Invq01Layout.ShowsDate(NativeMethods.ControlText(boxes[0].Handle), expectedFrom))
@@ -1191,27 +1194,34 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("查歷史異動的迄日讀回不一致，已停止。");
     }
 
-    private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what,
-        bool clickYear, bool pressEnter, CancellationToken cancellationToken)
+    private async Task SetDateAsync(nint invq, WindowControl startBox, WindowControl targetBox, DateOnly date, string what,
+        bool clickStart, bool enterBefore, bool enterAfter, CancellationToken cancellationToken)
     {
-        // The first explicit date needs a click near the 年 segment. If 起 was
-        // entered, its Enter MUST move focus to 迄. A second click repositions the
-        // cursor within the segmented date and may overwrite the wrong component.
-        if (clickYear)
+        if (clickStart)
         {
-            var width = box.Rect.Right - box.Rect.Left;
+            // Always start by clicking the 年 portion of 起, even when only 迄 is specified.
+            // Clicking 迄 directly can select an unexpected year/month/day segment.
+            var width = startBox.Rect.Right - startBox.Rect.Left;
             if (width < 48)
-                throw new InvalidOperationException($"歷史異動的{what}日欄位寬度不正確，已停止。");
-            var yearPoint = new Point(box.Rect.Left + Math.Min(12, width / 10),
-                (box.Rect.Top + box.Rect.Bottom) / 2);
+                throw new InvalidOperationException("歷史異動的起日欄位寬度不正確，已停止。");
+            var yearPoint = new Point(startBox.Rect.Left + Math.Min(12, width / 10),
+                (startBox.Rect.Top + startBox.Rect.Bottom) / 2);
             SafeClick(invq, yearPoint);
             await Pace.Delay(150, cancellationToken);
         }
 
-        // Check the actual focus before typing. If Enter did not move to 迄,
-        // stop instead of clicking a possibly wrong segment or typing elsewhere.
+        if (enterBefore)
+        {
+            // End-only case: 起 stays untouched; Enter advances from 起 to 迄.
+            var startFocus = NativeMethods.FocusedControlOfForeground();
+            if (startFocus != startBox.Handle && !Win32Automation.IsInside(startFocus, startBox.Handle))
+                throw new InvalidOperationException("無法將歷史異動的游標定位在起日，已停止。");
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await Pace.Delay(150, cancellationToken);
+        }
+
         var focus = NativeMethods.FocusedControlOfForeground();
-        if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
+        if (focus != targetBox.Handle && !Win32Automation.IsInside(focus, targetBox.Handle))
             throw new InvalidOperationException($"歷史異動的{what}日沒有取得焦點，已停止，避免日期打到錯誤欄位。");
 
         if (NativeMethods.CloseImeFor(focus))
@@ -1223,12 +1233,10 @@ internal sealed class ItemQueryService
             await Pace.Delay(70, cancellationToken);
         }
 
-        // Only 起 needs Enter to commit and advance. 迄 is intentionally
-        // left without Enter; the existing 開始查詢 click commits that field.
-        if (pressEnter)
+        if (enterAfter)
             InputSender.Press(NativeMethods.VK_RETURN);
         await Pace.Delay(200, cancellationToken);
-        var shown = NativeMethods.ControlText(box.Handle);
+        var shown = NativeMethods.ControlText(targetBox.Handle);
         if (!Invq01Layout.ShowsDate(shown, date))
         {
             _log.Warn("invq01", $"history {what} date readback mismatch length={shown?.Length ?? 0}");

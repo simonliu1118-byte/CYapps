@@ -177,31 +177,47 @@ public class Invq01Tests
     }
 
     [Fact]
-    public void HistoryDateEntryHasExactlyOneEnterBetweenTwoDates()
+    public void HistoryDateActionsFollowExactUserSpecifiedSequences()
     {
-        var actions = Invq01Layout.DateActions(new HistoryRange(
-            new DateOnly(2025, 10, 16), new DateOnly(2026, 10, 16)));
-        Assert.Collection(actions,
+        var from = new DateOnly(2025, 10, 16);
+        var to = new DateOnly(2026, 10, 16);
+
+        // Only 起: click 起, type 20251016. No Enter.
+        var start = Assert.Single(Invq01Layout.DateActions(new HistoryRange(from, null)));
+        Assert.Equal(0, start.BoxIndex);
+        Assert.Equal("20251016", Invq01Layout.ErpDateKeys(start.Date));
+        Assert.True(start.ClickStart);
+        Assert.False(start.EnterBefore);
+        Assert.False(start.EnterAfter);
+
+        // Only 迄: click 起, Enter, type 20261016. Never click 迄.
+        var end = Assert.Single(Invq01Layout.DateActions(new HistoryRange(null, to)));
+        Assert.Equal(1, end.BoxIndex);
+        Assert.Equal("20261016", Invq01Layout.ErpDateKeys(end.Date));
+        Assert.True(end.ClickStart);
+        Assert.True(end.EnterBefore);
+        Assert.False(end.EnterAfter);
+
+        // Both: click 起, 20251016, Enter, 20261016. Nothing after.
+        var both = Invq01Layout.DateActions(new HistoryRange(from, to));
+        Assert.Collection(both,
             first => {
                 Assert.Equal(0, first.BoxIndex);
+                Assert.True(first.ClickStart);
+                Assert.False(first.EnterBefore);
+                Assert.True(first.EnterAfter);
                 Assert.Equal("20251016", Invq01Layout.ErpDateKeys(first.Date));
-                Assert.True(first.ClickYear);
-                Assert.True(first.PressEnter);
             },
             second => {
                 Assert.Equal(1, second.BoxIndex);
+                Assert.False(second.ClickStart);
+                Assert.False(second.EnterBefore);
+                Assert.False(second.EnterAfter);
                 Assert.Equal("20261016", Invq01Layout.ErpDateKeys(second.Date));
-                Assert.False(second.ClickYear); // pressing Enter focuses 迄, no extra click
-                Assert.False(second.PressEnter); // no second Enter
             });
+
+        // No dates: no mouse movement, no keys at all.
         Assert.Empty(Invq01Layout.DateActions(new HistoryRange(null, null)));
-        var onlyEnd = Assert.Single(Invq01Layout.DateActions(new HistoryRange(null, new DateOnly(2026,10,16))));
-        Assert.Equal(1, onlyEnd.BoxIndex);
-        Assert.True(onlyEnd.ClickYear);
-        Assert.False(onlyEnd.PressEnter);
-        var onlyStart = Assert.Single(Invq01Layout.DateActions(new HistoryRange(new DateOnly(2025,10,16), null)));
-        Assert.True(onlyStart.ClickYear);
-        Assert.True(onlyStart.PressEnter);
     }
 
     private static readonly DateOnly Today = new(2026, 10, 16);

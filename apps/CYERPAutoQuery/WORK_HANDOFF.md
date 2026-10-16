@@ -1,5 +1,15 @@
 # CYERPAutoQuery Work Handoff
 
+## 最新修正（V0.3.0 Build 5，2026/10/16）
+
+使用者明確指定 INVQ01 日期欄**只從起日開始定位**，不同輸入條件的正確流程：
+- 只有起日：點起日年份區段，輸入 `yyyyMMdd`，不按 Enter。
+- 只有迄日：點起日年份區段，按 Enter，輸入迄日 `yyyyMMdd`，不點迄日、不再按 Enter。
+- 起迄都有：點起日年份區段，輸入起日 `yyyyMMdd`，按 Enter，輸入迄日 `yyyyMMdd`；不點迄日、不再按 Enter。
+- 兩個日期都沒有：ERP 日期欄完全不動，不補近一年。
+
+以 `Invq01Layout.DateActions` 統一描述順序，`ItemQueryService` 只依序送鍵並驗證焦點與已輸入欄位，避免增加不必要步驟。CYWEB 仍自行計算日期並保留原本近一年起日加一天的規則；Agent 不替 CYWEB 補值。修改限 INVQ01 歷史日期，批號庫存及其他功能不動。單元測試已涵蓋四種情況，Windows 實機日期控制項仍需使用者驗收。
+
 ## 最新修正（V0.3.0 Build 4，2026/10/16）
 
 - 使用者再次確認 ERP 所需動作只有 **20251016 → Enter → 20261016**，沒有點第二欄、沒有迄日後 Enter。Build 2／3 多做迄日點選及第二個 Enter，可能造成輸入位置錯誤，已修正。
