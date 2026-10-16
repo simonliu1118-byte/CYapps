@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Amego;
 
@@ -152,6 +153,12 @@ internal static class CloudAllowanceApplicationClientTests
             }});
         });
         handler.Enqueue(req => {
+            Check(req,"official-inspection");
+            var forged=JsonNode.Parse(JsonSerializer.Serialize(OfficialStatus(false)))!;
+            forged["historicalCoverageReason"]="HISTORY_RANGE_NOT_PROVEN";
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=forged});
+        });
+        handler.Enqueue(req => {
             Check(req,"number-readback");
             using var data=JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             Equal(Id,data.RootElement.GetProperty("itemId").GetString(),"readback frozen id");
@@ -299,6 +306,8 @@ internal static class CloudAllowanceApplicationClientTests
             "a historical readback never authorizes remaining balance");
         Equal("HISTORY_RANGE_NOT_PROVEN",historical.HistoricalCoverageReason,
             "matched details do not prove entire history");
+        await RejectAsync<InvalidDataException>(() =>
+            client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         var readback=await client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12");
