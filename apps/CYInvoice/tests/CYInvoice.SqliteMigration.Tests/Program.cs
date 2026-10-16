@@ -18,7 +18,7 @@ var tests = new (string Name, Action Run)[]
     ("legacy management password mechanism is absent", EmployeeStoreTests.SettingsModelHasNoLegacyManagementPasswordFields),
     ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
     ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
-    ("failed invoice cleanup deletes only definite failures", RetentionTests.FailedStoreDeletesOnlyFailedRows),
+    ("failed invoices archive complete snapshots and survive later saves", RetentionTests.FailedStoreArchivesOnlyFailedRows),
 };
 
 var failures = 0;

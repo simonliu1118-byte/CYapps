@@ -93,7 +93,7 @@ internal static class RetentionTests
         Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("test|12345678").Count);
     }
 
-    public static void FailedStoreDeletesOnlyFailedRows()
+    public static void FailedStoreArchivesOnlyFailedRows()
     {
         using var temporary = new RetentionTemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
@@ -106,13 +106,32 @@ internal static class RetentionTests
         InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED", resolved: false);
 
         var store = new FailedInvoiceRecordStore(repository.DataDirectory);
-        Equal(1, store.Delete([failed]));
-        var remaining = repository.Invoices.LoadOrCreate();
-        Equal(1, remaining.Count);
-        Equal("opened-keep", remaining.Single().Id);
-        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("prod|12345675").Count);
-        Throws<InvalidOperationException>(() => store.Delete([opened]));
-        Equal(1, repository.Invoices.LoadOrCreate().Count);
+        Equal(1,store.Archive([failed]));
+        var remaining=repository.Invoices.LoadOrCreate();
+        Equal(1,remaining.Count);
+        Equal("opened-keep",remaining.Single().Id);
+        // The issue is retained as a resolved history entry, not erased.
+        var issues=new InvoiceSyncIssueStore(repository.DataDirectory).All("prod|12345675");
+        Equal(1,issues.Count);
+        Equal(true,issues.Single().ResolvedUtc is not null);
+        var archived=store.AllArchived(Environments.Production,"12345675");
+        Equal(1,archived.Count);
+        Equal("failed-delete",archived.Single().Record.Id);
+        Equal("明確開立失敗",archived.Single().Record.ErrorMessage);
+        Equal("測試商品",archived.Single().Record.Items.Single().Description);
+        Equal(1,store.AllArchived(Environments.Production,"12345675").Count);
+        Throws<InvalidOperationException>(()=>store.Archive([opened]));
+        // Both ordinary Append and a stale full-list Save must fail closed;
+        // the archive and previously opened invoice remain intact.
+        Throws<SqliteException>(()=>repository.Invoices.Append(failed));
+        Throws<SqliteException>(()=>repository.Invoices.Save([opened,failed]));
+        Equal("opened-keep",repository.Invoices.LoadOrCreate().Single().Id);
+        Equal(1,store.AllArchived(Environments.Production,"12345675").Count);
+        using var db=OpenReadOnly(Path.Combine(repository.DataDirectory,
+            SqliteBootstrapper.DatabaseFileName));
+        using var integrity=db.CreateCommand();
+        integrity.CommandText="PRAGMA integrity_check;";
+        Equal("ok",Convert.ToString(integrity.ExecuteScalar()));
     }
 
     private static InvoiceRecord Record(

@@ -46,8 +46,8 @@ internal sealed class SyncIssuesForm : Form
         ForeColor = Color.DimGray,
         Anchor = AnchorStyles.Left,
     };
-    private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
-    private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
+    private readonly Button archiveFailed = UiControls.StandardButton("封存勾選");
+    private readonly Button archiveAllFailed = UiControls.StandardButton("封存全部失敗紀錄");
 
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
@@ -109,10 +109,10 @@ internal sealed class SyncIssuesForm : Form
         list.MouseMove += ShowClippedContentToolTip;
         list.MouseLeave += (_, _) => ClearContentToolTip();
 
-        deleteFailed.Enabled = false;
-        deleteFailed.Click += (_, _) => DeleteCheckedFailed();
-        clearFailed.Enabled = false;
-        clearFailed.Click += (_, _) => ClearAllFailed();
+        archiveFailed.Enabled = false;
+        archiveFailed.Click += (_, _) => ArchiveCheckedFailed();
+        archiveAllFailed.Enabled = false;
+        archiveAllFailed.Click += (_, _) => ArchiveAllFailed();
 
         var close = UiControls.StandardButton("關閉");
         close.Click += (_, _) => Close();
@@ -137,8 +137,11 @@ internal sealed class SyncIssuesForm : Form
         };
         if (!processing)
         {
-            failedActions.Controls.Add(deleteFailed);
-            failedActions.Controls.Add(clearFailed);
+            failedActions.Controls.Add(archiveFailed);
+            failedActions.Controls.Add(archiveAllFailed);
+            var history=UiControls.StandardButton("檢視封存紀錄");
+            history.Click+=(_,_)=>ShowArchivedFailed();
+            failedActions.Controls.Add(history);
             var cfg=repository.Settings.LoadOrCreate();
             if(cfg.CloudMode==CloudModes.CloudPreferred &&
                cfg.CloudIdentityProvider=="CYID" &&
@@ -1308,40 +1311,70 @@ internal sealed class SyncIssuesForm : Form
         record.ApiOrderId.Trim().Length != 0 ? record.ApiOrderId.Trim() :
         record.OrderId.Trim().Length != 0 ? record.OrderId.Trim() : record.OriginalOrderId.Trim();
 
-    private void DeleteCheckedFailed()
+    private void ArchiveCheckedFailed()
     {
         var records = list.CheckedItems.Cast<ListViewItem>().Select(item => item.Tag).OfType<InvoiceRecord>().ToArray();
-        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length, clearAll: false)) return;
-        DeleteFailedRecords(records);
+        if (records.Length == 0 || !ConfirmFailedArchive(records.Length, clearAll: false)) return;
+        ArchiveFailedRecords(records);
     }
 
-    private void ClearAllFailed()
+    private void ArchiveAllFailed()
     {
         var records = CurrentFailedRecords().ToArray();
-        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length, clearAll: true)) return;
-        DeleteFailedRecords(records);
+        if (records.Length == 0 || !ConfirmFailedArchive(records.Length, clearAll: true)) return;
+        ArchiveFailedRecords(records);
     }
 
-    private bool ConfirmFailedDeletion(int count, bool clearAll) => MessageBox.Show(
+    private bool ConfirmFailedArchive(int count, bool clearAll) => MessageBox.Show(
         this,
         clearAll
-            ? $"確定清除全部 {count} 筆開立失敗紀錄？\n\n此操作只清除 CYInvoice 本機的開立失敗紀錄，不影響上傳問題及光貿資料。"
-            : $"確定刪除勾選的 {count} 筆開立失敗紀錄？\n\n此操作只刪除 CYInvoice 本機紀錄，不會影響光貿資料。",
-        clearAll ? "清除開立失敗紀錄" : "刪除開立失敗紀錄",
+            ? $"確定封存全部 {count} 筆開立失敗紀錄？\\n\\n保留在原 CYInvoice.db，從一般清單移出，不影響光貿。"
+            : $"確定封存勾選的 {count} 筆開立失敗紀錄？\\n\\n保留完整明細，可在封存紀錄查閱。",
+        clearAll ? "封存全部失敗紀錄" : "刪除開立失敗紀錄",
         MessageBoxButtons.YesNo,
         MessageBoxIcon.Warning,
         MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
-    private void DeleteFailedRecords(IReadOnlyCollection<InvoiceRecord> records)
+    private void ArchiveFailedRecords(IReadOnlyCollection<InvoiceRecord> records)
     {
         try
         {
-            failedStore.Delete(records);
+            failedStore.Archive(records);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, "刪除開立失敗紀錄失敗：" + error.Message, "刪除失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "封存開立失敗紀錄失敗：" + error.Message, "封存失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ShowArchivedFailed()
+    {
+        try
+        {
+            var settings=repository.Settings.LoadOrCreate();
+            var seller=settings.Environment==Environments.Test?
+                AmegoDefaults.TestInvoice:settings.ProductionInvoice.Trim();
+            if(string.IsNullOrWhiteSpace(seller)){
+                MessageBox.Show(this,"請先設定公司統編。","封存紀錄",
+                    MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            var all=failedStore.AllArchived(settings.Environment,seller);
+            var rows=all.Take(15).Select(x=>
+                x.ArchivedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm")+
+                "｜"+x.Record.Id+"｜"+FriendlyFailureReason(x.Record.ErrorMessage));
+            var body=all.Count==0?"目前沒有封存紀錄。":
+                $"共 {all.Count} 筆（顯示最新 15 筆）：\\n"+
+                string.Join("\\n",rows)+
+                "\\n\\n完整發票內容與商品明細仍保留於本機 CYInvoice.db。";
+            MessageBox.Show(this,body,"開立失敗封存紀錄（唯讀）",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
+        catch(Exception error)
+        {
+            MessageBox.Show(this,"無法讀取封存紀錄："+error.Message,
+                "封存查詢失敗",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
     }
 
@@ -1364,9 +1397,9 @@ internal sealed class SyncIssuesForm : Form
     {
         if (IsDisposed) return;
         var count = list.CheckedItems.Cast<ListViewItem>().Count(item => item.Tag is InvoiceRecord);
-        deleteFailed.Text = count == 0 ? "刪除勾選" : $"刪除勾選 ({count})";
-        deleteFailed.Enabled = count > 0;
-        clearFailed.Enabled = list.Items.Cast<ListViewItem>().Any(item => item.Tag is InvoiceRecord);
+        archiveFailed.Text = count == 0 ? "封存勾選" : $"封存勾選 ({count})";
+        archiveFailed.Enabled = count > 0;
+        archiveAllFailed.Enabled = list.Items.Cast<ListViewItem>().Any(item => item.Tag is InvoiceRecord);
     }
 
     private string IssueState(InvoiceSyncIssue issue)
@@ -1526,7 +1559,7 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
         if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
-        if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄")
+        if (list.Columns[5].Text != "狀態" || archiveAllFailed.Text != "封存全部失敗紀錄")
             throw new InvalidOperationException("上傳問題欄位或開立失敗清除按鈕不正確");
         if (Descendants(this).OfType<Button>().Any(button => button.Text is "標記已解決" or "查看明細" or "確認送出作廢" or "取消退回"))
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");

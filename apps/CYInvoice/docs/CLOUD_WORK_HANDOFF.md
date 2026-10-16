@@ -61,6 +61,8 @@
 
 **步驟 5 小提交 14（本輪）：** Windows 既有「處理中→CYID 例外清單」可由 CYID 管理員選取 `UPLOAD_ISSUE` 工作單，經版本／Workspace 回讀後單次 `open→review`，或經選擇固定結案原因單次 `review→closed`。處理結果不明只提示重新查詢，不盲重送；本機上傳問題保持原樣且不執行光貿。封存原因與處理人由 D1 保留。尚未最後 CI／Artifact，後續一併驗證。
 
+**步驟 5 小提交 15（本輪）：** 既有本機上傳問題的「刪除勾選／清除開立失敗」改為**「封存勾選／封存全部失敗紀錄」**，同一 `CYInvoice.db` 增設一個快照表 `archived_failed_invoices`，以 SQLite transaction 保留完整 failed `InvoiceRecord` 與 `Items`、封存時間；封存後一般發票清單不顯示，但可由「檢視封存紀錄」唯讀查看。對應技術型 sync_issues 只標記已解決、不刪稽核；資料庫 Trigger 禁止重新插入相同 record ID 或修改／刪除既有封存快照，能抵擋 `InvoiceStore.Save` 清空重建造成的誤覆寫。SQLite synthetic 更新驗證真實資料保留、後續 Save rollback、Append block 及 integrity。**未跑 CI、未動正式資源、待最後整合 Artifact。**
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
