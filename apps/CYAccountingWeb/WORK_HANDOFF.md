@@ -1,22 +1,42 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/15（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+更新：2026/10/17（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+
+## 部署模式變更與下一次發布
+
+使用者於 2026/10/16 改採與 CY Web 相同的合併／發布分離：**本批合併後 main 不再自動部署**。PR 保留自動驗證；Work 在收到當次發布指示後，將 `deploy/cyaccountingweb-production` 前進到已審核的當前 main，或從 main dispatch `cyaccountingweb-deploy.yml`，才會上線。完整指令、GitHub UI 備援與成功判定統一看 [README 正式部署操作](README.md#正式部署操作)，避免後續只合併 PR 卻誤以為已部署。
+
+發布來源必須是當前 main 的完整 SHA；排隊後 main 已更新會停止。正式部署鎖固定且 cancel=false，PR 驗證獨立取消；原有 Environment、CYID／migration／登入／資產檢查保留。Stable Release 改查相同 SHA 的成功 deploy job，validation-only／skipped 不算已部署。
+
+AITeam `docs/infrastructure/CLOUDFLARE_CONSOLIDATION_PLAN.md` 於 2026/10/12 記錄的「保留 main 自動部署」是先前決策；本次使用者已改變部署模式，後續操作以本專案更新後的 PROJECT_RULES 與 README 為準。
+
+這次只調整部署流程與文件，產品仍為 V0.25.5。既有下列 main 自動部署 run 均是**舊模式的歷史驗收證據**；本次 PR 本身不部署網站，首次新模式的實際發布仍待當次發布指示與成功 run 回讀。
 
 ## 正式基準及驗證
 
 | 項目 | 已確認狀態 |
 | --- | --- |
-| 產品 | **V0.25.4**；首次登入說明及安全 CY Web 入口沿 PR #435。上一正式 V0.25.3（PR #457、main run 38678168558）已完成部署及瀏覽器回讀；本版嚴格 gate／部署驗收追蹤 PR #435 |
+| 產品 | **V0.25.5**／PR #473 已合併；正式 migration／Worker／登入與桌機設定目視回讀成功。已移除部署檢查的 retired preview marker，最終 Actions 證據見本批收尾 PR；產品 source／版本不變 |
 | 日期修復 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441)；本版 merge／main Actions 與正式瀏覽器回讀為驗收依據 |
 | 統計返修 | PR #409、#410、#411 已合併；Build 2 merge `19e5318446ce2295d1993f41c5b187a1ac22ea63` |
 | 統計部署 | [run 38160506567](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)，validate／deploy 成功 |
 | 後續部署設定 | Provider base-name 改讀既有共通 Secret；[main run 38191534386／#608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)成功。只改部署 input，產品 VERSION／BUILD、Identity authority 與帳務 runtime 不變 |
 | 公開 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；不與正式網站版本混用 |
-| D1 | schema **10**，新增 append-only 受控復原預覽／執行／結果 audit；既有帳務 payload 不變 |
+| D1 | schema **11**，退休舊 Session 表並新增衍生備份檢查狀態；既有帳務／受控復原稽核保留 |
 | CYID | consumer **1.0.1**；canonical 已發布 contract **1.0.5**、minimum **1.0.0**。實際環境部署另核對，不以原始碼版本推定 |
 | 共通規則 | AITeam main 與本 repo Common Rules **2.8.0** 已直接核對；repo 治理以根 VERSION／CHANGELOG 為準 |
 
 本次 V0.25.0 新增獨立 D1 受控復原，Minor 升版、Build 歸零；PR #450 已合併（da0c618a9ff6cc2da91ab3d99033f4b75b69e5c6），main run 38671076691 validate／deploy／migration／正式 semantic probes 全部成功。真實 GCS → 獨立 D1 演練已完成，完整欄列／稽核／政策／資料庫檢查通過。不建立 Stable Release、不切換正式帳本、不更動手機／平板原版面。
+
+## V0.25.5 備份監測與清理
+
+- `backup-service.js` 沿既有 daily Cron，在備份完成或失敗後各驗證最新應有 R2／GCS copy；Phase D 不要求 GCS 每日都有新副本。共用原 immutable digest／catalog／fresh SQLite verifier，核對全部欄列、integrity／FK，不寫正式帳務。失敗、過期或不完整證據均不回退舊成功。
+- 唯一 `backup_health_state` 保存衍生狀態、lease、active incident 及寄信結果；不存收件信箱，亦不混入 portable accounting／recovery evidence。修復清除 active incident；相同未恢復事件不重寄，失敗在下次排程重試。復原驗證工作區不啟動背景備份／檢查。
+- CYID 0.3.10／contract 1.0.6 的 private `ConsumerNotifications` 解析目前受保護超管信箱，沿原 Email adapter／額度，固定通知內容、delivery slot 與冷卻。CYACC `BACKUP_NOTIFICATIONS` 掛到與 IDENTITY 相同 provider，沒有複製郵件憑證或 Identity authority。
+- Backup UI 移除手動驗證／結果說明；底部左還原操作、右緊急復原入口。超管 boot 只讀健康狀態，異常以唯一 alertdialog 提醒；正常不增加檢查說明區。統計移轉設定沿原 form／設定 API，緊密雙欄、窄畫面單欄。
+- 刪除手機平板 preview bootstrap、session state、menu／return action、Excel preview 分支及對應 CSS；真實平板 classification、layout、native picker／share 不改。forward migration 0011 只 DROP 舊 web_sessions，新增檢查狀態；CYID 仍是唯一 Session authority，帳務／稽核保留。新 schema 11、舊 schema 6～10 正規化／還原保留，sandbox 套用全 migrations。
+- 正式桌機 1363×936 已登入回讀 V0.25.5；統計設定左右等寬、列高約 30px，無水平溢出；備份底部左右各 236.5px、同高，手動檢查控制與結果節點皆已移除。首次 main run 38846351061 尾端因殘留 preview probe 失敗，收尾 PR 移除舊 marker 並補 architecture regression；不回復已退休程式。
+- 本地測試包含真實 SQLite roundtrip、排程失敗、R2-only 日、損壞／過期、通知重試／去重／lease、超管限制與復原 hold；provider 98 tests、auth／first-login local Worker 驗證通過；完整本地 80 項 workflow checks 通過，補充 forward migration 全帳務保留與 DB 中斷獨立通知回歸。共用通知 PR #459 已合併；正式部署門檻依支援範圍修正追蹤 #471。正式首次 daily check 仍需排程後觀察，不發假異常信或更動正式備份作驗收。
 
 ## V0.25.4 首次登入引導
 
@@ -24,7 +44,7 @@
 - 入口連結不附員工編號、密碼、Session 或 first-login ticket；新分頁採 noopener noreferrer。非列舉式帳密錯誤可提示首次登入步驟，FIRST_LOGIN_REQUIRED 明確引導；真正 provider 5xx 保留服務錯誤分類，不建立第二啟用流程。
 - CY Web PR #154／正式 run 38712562070 已修正 authority；後續 run 38717773511（2026/10/15 18:07 台灣時間）回讀 canonical production、Workspace、core App、consumer 1.0.5／health 一致、productionPortalReady=true。帳務 D1 未切換，歷史 development environment 名稱不是 authority 判斷依據。
 - CYACC 自己的既有正式部署 run 38678168558 attempt 2 已於 2026/10/15 20:36 通過完整 portal／CYID authority／Workspace／consumer health 檢查；未變更 VERSION／BUILD。首次登入版本 production deploy 再強制 --require-account-portal，完整 gate 通過才注入 metadata。既有 provider runtime guard 始終強制，不把 URL 或單純 CI 綠燈當正式 readiness。
-- 使用者真 Email／一次性密碼／正式密碼／重新登入的完整鏈仍待受控真人驗收，不自行新增帳號、寄信或改密碼。手機／平板共用原登入 shell、native form／Session／recovery；只增加此功能必要說明與入口。
+- 使用者於 2026/10/15 確認收信及啟用已驗收，後續歸 CYWEB 維護；不把不同裝置的一般登入／Session 或 Password Recovery 銜接自動視為均已驗收。手機／平板共用原登入 shell、native form／Session／recovery；只增加此功能必要說明與入口。
 
 ## V0.25.3 新增記帳即時顯示與失敗回復
 
@@ -119,12 +139,12 @@
 
 Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先完成 R2＋GCS paired backup 及回讀，再以 snapshot guard 執行原子 D1 batch，保留重複發生交易、期間外資料與 append-only audit。功能部署證據 [run 38062352888](https://github.com/simonliu1118-byte/CYapps/actions/runs/38062352888)不代表可以推定實際匯入狀態。
 
-## 未合併工作與下一步
+## 已完成交接與下一步
 
 | 工作 | 現況及接續條件 |
 | --- | --- |
-| PR **#435** 首次登入引導 | **保留、尚未合併**。原分支 V0.23.2 已不是可直接沿用的版本；合併前依最新 main 重新基底及升版。CI 成功不代替正式 CY Web portal 與 CYID authority 相同的 live binding gate；待該工作確認後再合併部署。不要因清理順便合併 |
-| `cyaccountingweb/optimistic-transaction-create` | 暫停的未合併實驗；保留供檢視，不是部署基準。續作從 main 重建，不直接延續舊架構 |
+| PR **#435** 首次登入引導 | 已以 V0.25.4 合併部署，main run 38736782701 完整成功；使用者確認收信／啟用已驗收，後續由 CYWEB 維護 |
+| optimistic create | 已由 PR #457／V0.25.3 完成並部署，舊實驗線不是接續基準 |
 | 真機統計／記帳驗收 | 手機、平板雙方向、鍵盤／picker／分享及大科目報表仍有待驗證項目 |
 | Backup／Restore／DR | Phase D 生效、首次 R2-only 自動排程與手動雙副本成功；正式 GCS → 獨立 D1 完整還原／對帳完成，原正式帳本未切換。schema 6／7 normalization 已補；budget 已由使用者建立，GCS 新政策週期排程與 lifecycle 仍待辦 |
 | 實際帳務操作 | 先讀私人檢查點與當次指示，再唯讀核對；公開文件不宣告尚未或已完成某次匯入，不據舊 TODO 重跑 |
@@ -133,7 +153,7 @@ Excel V0.22.32 沿用 inspect／preview／commit owner；指定期間替換先�
 
 - PR **#436** 已合併；[清理 run 38383025033](https://github.com/simonliu1118-byte/CYapps/actions/runs/38383025033) completed／success，作業回讀確認 **34 個過期 branch、16 個已退場流程的 22 筆 completed runs** 已清理。候選 branch／run／到期 Artifact 殘留均為 **0**；沒有需要處理的到期 Artifact，共 56 次刪除。
 - 舊文件 PR **#268、#291、#383** 已關閉，現行文件已涵蓋有效內容；PR 歷史保留。已完成分支清單與盤點 SHA 可由 #436 commit 追溯。
-- **#435 首次登入引導**與 **optimistic create** 未合併工作線保留；執行中 run、現行部署／Release 全部歷史及 Stable Release／tag／assets、其他 App／共通流程保留。
+- 當時 **#435 首次登入引導**與 **optimistic create** 未合併工作線保留（目前均已完成，見上方現況）；執行中 run、現行部署／Release 全部歷史及 Stable Release／tag／assets、其他 App／共通流程保留。
 - 一次性 maintenance workflow、script 及 manifest 已從本次收尾 source 移除；主線僅保留正式 `cyaccountingweb-deploy.yml` 與 `cyaccountingweb-release.yml`。本次清理的驗證／執行紀錄保留作維護證據，不留下長期清理權限入口。
 - 文件、Backup schema、平板現況與 TODO 已彙整；產品維持 **V0.23.1 Build 2／schema 8**。部署驗證不代表更動帳務資料，也不合併未完成的 #435。
 

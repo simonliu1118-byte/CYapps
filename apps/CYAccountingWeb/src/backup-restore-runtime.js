@@ -10,9 +10,10 @@ import colors from '../migrations/0007_account_color_slots.sql';
 import imports from '../migrations/0008_excel_import_runs.sql';
 import recovery from '../migrations/0010_backup_recovery.sql';
 import phaseD from '../migrations/0009_backup_phase_d.sql';
+import health from '../migrations/0011_backup_health_retire_sessions.sql';
 import { verifyRestoreIntoEmptySqlite } from './backup-restore.js';
 
-const schemas = [initial, sessions, runs, catalog, archive, opening, colors, imports, phaseD, recovery];
+const schemas = [initial, sessions, runs, catalog, archive, opening, colors, imports, phaseD, recovery, health];
 export async function verifyRestoreInMemory(backup) {
   // Each verification owns a new SQLite database in the pinned WASM engine.
   // It has no D1 binding and closes the database on success or failure.

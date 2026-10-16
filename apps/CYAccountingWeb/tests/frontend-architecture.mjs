@@ -185,7 +185,6 @@ assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingStat
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
 assert.match(read('public/excel-export-ui.js'), /navigator\.canShare/, 'file sharing capability must be checked before native share');
 assert.match(read('public/excel-export-ui.js'), /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'tablet portrait and landscape Excel export must reuse native share when available');
-assert.match(read('public/excel-export-ui.js'), /window\.__cyaccTabletPreviewEnabled === true/, 'tablet preview must reuse the same native Excel share path');
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
 assert.match(appJs, /window\.cySettingsManager\?\.renderAccountManager\?\.\(\)/, 'app.js must delegate account rendering to the canonical settings manager');
@@ -197,4 +196,6 @@ assert.match(adaptiveUi, /window\.cyShowMigrationComplete = showMigrationComplet
 assert.doesNotMatch(adaptiveUi, /setupOptimisticSettings/, 'settings mutations must not be intercepted by a secondary patch layer');
 
 
+const deploymentWorkflow = read('../../.github/workflows/cyaccountingweb-deploy.yml');
+assert.doesNotMatch(deploymentWorkflow, /__cyaccTabletPreviewEnabled|tabletPreviewReturnButton/, 'production probes must not require retired preview code');
 console.log('Semantic frontend architecture checks passed.');

@@ -154,17 +154,7 @@ context.document.querySelector = selector => nodes.get(selector) || null;
 context.renderTieredBackupHistory([{gcsExpected:false,copies:[{provider:'cloudflare_r2',status:'success'}],status:'success'}]);
 assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML,/本日未排程/);
 assert.match(nodes.get('#backupHistoryRows').innerHTML, /<td class="backup-copy-cell"><\/td>/, 'unscheduled GCS stays an empty cell');
-context.window.cyIsDesktopInteractionWorkspace=()=>false;
-context.renderBackupRestoreState({policy:{phase:'phase_d'}});
-assert.equal(nodes.get('#backupRestoreTools').hidden,true,'no new touch controls');
-context.window.cyIsDesktopInteractionWorkspace=()=>true;
-context.renderBackupRestoreState({policy:{phase:'phase_d'},phaseDReady:true});
-assert.equal(nodes.get('#backupRestoreTools').hidden,false);
-assert.equal(nodes.get('#backupActivatePhaseD').disabled,true);
-assert.equal(nodes.get('#backupActivatePhaseD').textContent,'Phase D 已啟用');
-
-assert.equal(context.window.phaseCAcceptanceUiModel({provider:'tiered',policy:{phase:'phase_d'}}).visible,false,'retired Phase C progress is absent after activation');
-assert.equal(nodes.get('#backupActivatePhaseD').hidden,true,'completed activation is not a permanent action');
+assert.doesNotMatch(renderedHtml, /backupVerifyRestore|backupRestoreStatus|backupActivatePhaseD|檢查備份可還原性|試還原並核對/);
 assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);
 
 // Only the launcher remains in settings; the single restore form is dialog-owned.
@@ -192,3 +182,19 @@ recoveryDialog.open=false;context.cancelBackupRecoveryPreview();
 resolvePreview({preview:{id:'TEST_LATE',counts:{transactions:1}}});await pendingPreview;
 assert.equal(confirmPanel.hidden,true);assert.equal(commit.disabled,true);
 console.log('Backup launcher/dialog boundary, cancellation, typed confirmation and late-preview discard passed.');
+
+// Healthy boots stay silent; failed health opens one accessible warning, without
+// exposing operational identifiers or making any restore request.
+let warningCreated=0,shown=0,closed=0;
+const textNodes=new Map([['#backupHealthWarningText',{}],['.backup-health-delivery',{}]]);
+const warning={open:false,setAttribute(){},querySelector(selector){return selector==='button'?{addEventListener(name,fn){this.close=fn;}}:textNodes.get(selector);},showModal(){shown++;this.open=true;},close(){closed++;this.open=false;}};
+context.document.createElement=()=>{warningCreated++;return warning;};
+context.document.body={append(node){nodes.set('#backupHealthWarning',node);}};
+context.api=async()=>({health:{status:'healthy'}});
+await context.showBackupHealthWarning();assert.equal(warningCreated,0);
+context.api=async()=>({health:{status:'failed',issues:[{provider:'google_cloud_storage',code:'RESTORE_SIZE_OR_SOURCE'}],emailPending:true}});
+await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS.*自動檢查未通過/);
+assert.match(textNodes.get('.backup-health-delivery').textContent,/下次排程重試/);
+await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
+console.log('Healthy boot silence and single accessible Super Admin incident warning passed.');
