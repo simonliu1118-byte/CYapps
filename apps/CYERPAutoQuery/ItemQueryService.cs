@@ -651,7 +651,12 @@ internal sealed class ItemQueryService
     /// same as CYERPAutoInput's 列印 → 直接列印; a wrong Ribbon click could start another
     /// function, so no fixed coordinates are used there.
     /// </summary>
-    private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken, bool headerOnly = false)
+    /// <param name="allMatches">
+    /// 「轉出全部符合查詢條件的資料」 instead of 「轉出至 Excel」: 資料瀏覽 loads records in pages and
+    /// 轉出至 only exports the loaded ones (user, 2026-10-16: 針灸針 gave 12, more appeared after
+    /// scrolling past the last row), so a 品名 search needs the export of everything matching.
+    /// </param>
+    private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken, bool headerOnly = false, bool allMatches = false)
     {
         var before = Win32Automation.VisibleProcessWindows(root);
         var labelScreen = await RibbonClickAsync(root, "Excel", "工具列的「Excel」（請確認 Ribbon 停在「常用」）", cancellationToken,
@@ -660,16 +665,17 @@ internal sealed class ItemQueryService
 
         // The drop-down: 轉出至 Excel / 轉出全部符合查詢條件的資料.
         var near = new Rectangle(labelScreen.Left - 120, labelScreen.Top - 60, 480, 220);
-        var item = await FindMenuItemAsync(root, near, "轉出至", cancellationToken);
+        var (menuWord, menuName) = allMatches ? ("轉出全部", "轉出全部符合查詢條件的資料") : ("轉出至", "轉出至 Excel");
+        var item = await FindMenuItemAsync(root, near, menuWord, cancellationToken);
         if (item is null)
         {
             // Close a drop-down left open; Esc only when ERP really shows a popup, so a stray
             // Esc never reaches the INVI02 form itself (CYERPAutoInput rule).
             if (Win32Automation.ProcessPopupsNear(root, near).Count > 0) InputSender.Press(NativeMethods.VK_ESCAPE);
-            throw new InvalidOperationException("Excel 選單沒有出現「轉出至 Excel」。");
+            throw new InvalidOperationException($"Excel 選單沒有出現「{menuName}」。");
         }
         InputSender.Click(item.Value);
-        _log.Info("export", "轉出至 Excel clicked");
+        _log.Info("export", $"{menuName} clicked");
 
         // 匯出設定 is recognised by its 儲存檔案 path box, or by the INVI02 caption it carries.
         await CompleteExportAsync(root, before, path, Invi02Layout.IsInvi02Title, strict: true, cancellationToken, headerOnly);
@@ -863,7 +869,9 @@ internal sealed class ItemQueryService
         }
         var box = pathBoxes[0].Control;
 
-        if (strict || Win32Automation.FindTabSheet(dialog, Invi02Layout.ExportFieldTabs.Order[0]) is not null)
+        // A 品名 search (headerOnly, 轉出全部) has not been seen on site: its dialog may have no
+        // 單頭／單身 tabs, so there they are used only when present.
+        if ((strict && !headerOnly) || Win32Automation.FindTabSheet(dialog, Invi02Layout.ExportFieldTabs.Order[0]) is not null)
             await SelectAllExportFieldsAsync(dialog, cancellationToken, headerOnly);
         else if (FindButton(dialog, c => c.StartsWith("全選", StringComparison.Ordinal)) is not null)
             await PressSelectAllAsync(dialog, "匯出欄位", cancellationToken);
@@ -973,14 +981,24 @@ internal sealed class ItemQueryService
         }
         finally
         {
-            try
+            // Another program may hold the clipboard for a moment (V0.4.0 LOG): try a few times.
+            for (var attempt = 1; ; attempt++)
             {
-                if (saved is not null) Clipboard.SetDataObject(saved, copy: true);
-                else Clipboard.Clear();
-            }
-            catch (ExternalException ex)
-            {
-                _log.Warn("export", $"clipboard not restored: {ex.GetType().Name}");
+                try
+                {
+                    if (saved is not null) Clipboard.SetDataObject(saved, copy: true, retryTimes: 5, retryDelay: 50);
+                    else Clipboard.Clear();
+                    break;
+                }
+                catch (ExternalException ex)
+                {
+                    if (attempt >= 3)
+                    {
+                        _log.Warn("export", $"clipboard not restored: {ex.GetType().Name}");
+                        break;
+                    }
+                    Thread.Sleep(100);
+                }
             }
         }
     }
@@ -1113,7 +1131,7 @@ internal sealed class ItemQueryService
         var path = ExportFiles.NewPath();
         try
         {
-            await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true);
+            await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true, allMatches: true);
             progress.Report("讀取匯出資料…");
             var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
             var items = ItemSearchExport.Parse(sheets, keyword);
