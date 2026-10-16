@@ -93,6 +93,12 @@ const bundle=await build({entryPoints:["src/allowance-applications-route.ts"],
   bundle:true,format:"esm",platform:"node",target:"node24",write:false});
 const {handleAllowanceApplications:route}=await import("data:text/javascript;base64,"+
   Buffer.from(bundle.outputFiles[0].text).toString("base64"));
+// Exercise real manager transitions rather than modifying work_items with
+// test-only SQL; both Workers use one synthetic shared D1.
+const workBundle=await build({entryPoints:["src/work-items-route.ts"],
+  bundle:true,format:"esm",platform:"node",target:"node24",write:false});
+const {handleWorkItems:workRoute}=await import("data:text/javascript;base64,"+
+  Buffer.from(workBundle.outputFiles[0].text).toString("base64"));
 const token="cydev_"+"a".repeat(64);
 fx.sql.prepare("UPDATE devices SET token_hash=?").run(createHash("sha256").update(token).digest("hex"));
 let who={workspaceId:"identity_synthetic",employeeId:"cyid_employee",
@@ -139,12 +145,57 @@ who={...who,employeeId:"other_cyid_employee"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,404);
 who={...who,workspaceRole:"ADMIN"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,200);
+// Device B is distinct from the employee's Device A, but uses the same D1
+// and CYID-scoped business Workspace. Generic create MUST remain prohibited.
+const devB="dev_22222222-2222-4222-8222-222222222222";
+const tokenB="cydev_"+"b".repeat(64);
+fx.sql.prepare("INSERT INTO devices(device_id,workspace_id,token_hash) VALUES(?,?,?)")
+  .run(devB,ws,createHash("sha256").update(tokenB).digest("hex"));
+async function fromDeviceB(action,body){
+  const res=await workRoute(new Request(
+    "https://cyinvoice.synthetic/v1/work-items/"+action,{
+      method:"POST",headers:{authorization:"Bearer "+tokenB,
+        "content-type":"application/json"},
+      body:JSON.stringify(body)
+    }),env);
+  return{status:res.status,data:await res.json()};
+}
+const move={itemId:createBody.itemId,expectedRevision:1,
+  from:"open",to:"review"};
+who={...who,workspaceRole:"USER"};
+assert.equal((await fromDeviceB("transition",move)).status,403,
+  "CYID USER cannot send an allowance to manager review");
+assert.equal(fx.sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
+  .get(createBody.itemId).status,"open");
+who={...who,workspaceRole:"ADMIN"};
+assert.equal((await fromDeviceB("create",{...createBody,
+  kind:"ALLOWANCE",environment:"test",referenceHash:"f".repeat(64)})).status,409,
+  "Managers cannot bypass the frozen allowance route with generic create");
+fx.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?")
+  .run(devB);
+assert.equal((await fromDeviceB("transition",move)).status,401,
+  "Revoked manager device cannot change an existing allowance Work Item");
+fx.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?")
+  .run(devB);
+const transitioned=await fromDeviceB("transition",move);
+assert.equal(transitioned.status,200,JSON.stringify(transitioned));
+assert.equal(transitioned.data.item.status,"review");
+assert.equal(transitioned.data.item.revision,2);
+assert.equal(transitioned.data.item.updated_by_device_id,devB,
+  "Review must record the independent manager device");
+assert.equal(fx.sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_ledger")
+  .get().n,0,"Review transition must not allocate an allowance number");
+assert.equal((await fromDeviceB("transition",move)).status,409,
+  "Second device or lost-response replay cannot transition the same revision");
+assert.equal((await fromDeviceB("get",{itemId:createBody.itemId})).status,200);
+assert.equal((await call("get",{itemId:createBody.itemId})).status,200,
+  "Creator-side readback sees the same reviewed Work Item");
+assert.equal((await call("list",{limit:20},env,tokenB)).status,200,
+  "Manager on second device sees applicant-created allowance");
 // Review is a read-only preview of the tamper-checked frozen Work Item.
 // It must never be mistaken for approval or a verified official invoice.
 assert.equal((await call("review-preview",{itemId:createBody.itemId,
   expectedRevision:1})).status,409);
-fx.sql.prepare("UPDATE work_items SET status='review',revision=2 WHERE work_item_id=?")
-  .run(createBody.itemId);
 const review=await call("review-preview",{itemId:createBody.itemId,expectedRevision:2});
 assert.equal(review.status,200,JSON.stringify(review));
 assert.equal(review.data.review.canApprove,false);
@@ -541,4 +592,4 @@ assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
 assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,3);
 assert.deepEqual(fx.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 fx.sql.close();
-console.log("Draft allowance applications: immutable encrypted template, atomic SQL, scoped CYID protected routes and readback passed");
+console.log("Draft allowance applications: distinct USER/ADMIN devices, actual manager review CAS, immutable encrypted template, scoped CYID routes and no-repeat issuance passed");

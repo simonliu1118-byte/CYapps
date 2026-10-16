@@ -18,6 +18,8 @@
 
 - [x] **Windows Cloud 歷史分攤欄位退役（Draft，待 exact HEAD CI）**：Worker `official-inspection` 不再輸出 `historicalAllocationChecks`／`historicalCoverageReason`／`historicalGrossCeiling` 等無人使用的推算欄位；Windows `CloudAllowanceApplicationClient` 同步刪除解析 DTO 與歷史推算邏輯，改為只驗證 `invoice_query.allowance[]` 的原號、日期、已完成／作廢狀態及「本次含稅額 ≤ 原額－已生效折讓總額」。Worker 仍 `canApprove=false` 唯讀，CYID、D1、CAS、原號查回及正式核准前重查不變。Cloud／Windows 合成回歸測試同步更新，不代表 D1 或真光貿實機驗收。
 
+- [x] **CYID 跨機折讓送審真實路由合成驗證（Draft，待 exact-head CI）**：擴充既有 `cloud/tests/allowance-applications.test.mjs`，由 Device A／CYID USER 建立 frozen ALLOWANCE 申請，Device B／另一組 Token 經現有 `/v1/work-items/transition` 送到 review，核對 USER 無權送審、revoked manager Device 無權操作、重送舊 revision 得 409、Manager B 與原裝置讀到同一 Work Item、送審不配號也不呼叫光貿；不再以測試直接更新 SQL 模擬送審。只測共享隔離 SQLite 模型，無正式 D1 migration／Worker 部署／光貿 mutation。
+
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。
