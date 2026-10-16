@@ -45,6 +45,14 @@ public class Invi02LayoutTests
     }
 
     [Fact]
+    public void ExportFieldTabCenters()
+    {
+        var page = new Rectangle(712, 436, 490, 280);
+        Assert.Equal(new Point(772, 448), Invi02Layout.ExportFieldTabs.PointFor(page, "單頭"));
+        Assert.Equal(new Point(862, 448), Invi02Layout.ExportFieldTabs.PointFor(page, "單身"));
+    }
+
+    [Fact]
     public void TabPointIsNullWhenUnknownOrOutsideThePage()
     {
         Assert.Null(Invi02Layout.Invi02Tabs.PointFor(new Rectangle(0, 0, 1200, 300), "不存在"));

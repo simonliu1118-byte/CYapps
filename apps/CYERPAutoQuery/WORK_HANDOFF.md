@@ -3,7 +3,7 @@
 ## 現況（V0.1.0 Build 1，2026/10/16）
 
 - 資料改由 ERP「轉出至 Excel」取得（使用者發現匯出更乾淨、不會錯），取代 Build 0 的逐頁籤讀畫面欄位；Build 0 未實機驗收。
-- 流程：找 INVI02 → 最大化 → F6 → 一般選項 → 品號 = → 確定 → 核對品號（查無即結束）→ 基本資料1 → Ribbon Excel（OCR）→ 轉出至 Excel（OCR，layered popup）→ 匯出設定填 TEMP 路徑 → 確定 → 檢視Excel資料? No → 解析 xlsx → 刪檔。
+- 流程：找 INVI02 → 最大化 → F6 → 一般選項 → 品號 = → 確定 → 核對品號（查無即結束）→ 基本資料1 → Ribbon Excel（OCR）→ 轉出至 Excel（OCR，layered popup）→ 匯出設定單頭／單身各按全選、填 TEMP 路徑 → 確定 → 檢視Excel資料? No → 解析 xlsx → 刪檔。
 - 解析已用使用者提供的兩個真實匯出檔在本機驗證（未提交）：從資料瀏覽轉出只有「單頭資料」，從其他頁籤轉出有「單頭資料」＋「單身資料」，單頭內容逐字相同；156 欄。
 - 介面比照 CYERPAutoInput（使用者 2026-10-16：未來合併成微服務，兩邊不能差太多）；查詢期間鎖實體滑鼠＋中央「自動查詢中」。
 - 程式結構：
@@ -32,7 +32,7 @@
 2. 頁籤：LOG `tab ... by=geometry` 表示座標命中（一般選項、基本資料1）。
 3. 「一般選項」條件設為 `=` 是否成功（LOG `operator set shown=`）。
 4. 查無品號是否 1 秒左右就顯示「查無此品號」。
-5. 轉出：LOG `ribbon Excel clicked`、`轉出至 Excel clicked`、`匯出設定 確定 clicked`、`檢視Excel資料? answered No`；失敗時 LOG 會列出 OCR 讀到的 Ribbon／選單文字。
+5. 轉出：LOG `ribbon Excel clicked`、`轉出至 Excel clicked`、`全選 clicked tab=單頭／單身`（單頭／單身頁籤 `by=geometry`）、`匯出設定 確定 clicked`、`檢視Excel資料? answered No`；失敗時 LOG 會列出 OCR 讀到的 Ribbon／選單文字。
 6. 程式旁 `TEMP` 資料夾查完應該是空的。
 7. 主視窗列出的欄位，用來決定之後提供給 Web 的欄位。
 8. 無人值守電腦（OpenOffice）上 ERP 轉出是否正常。

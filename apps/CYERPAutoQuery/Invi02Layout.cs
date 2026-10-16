@@ -30,6 +30,10 @@ internal static class Invi02Layout
     // 設定查詢條件 dialog tabs (user's screenshot 2026-10-16): 一般選項 then 進階設定.
     public static readonly TabStrip QueryDialogTabs = new([GeneralQueryTab, "進階設定"], Origin: 50 - 66 / 2.0, Pitch: 66);
 
+    // 轉出至 Excel 匯出設定: 匯出欄位設定 tabs 單頭 then 單身, measured from the user's
+    // screenshot (2026-10-16): centers about 60 and 150 px right of the page control.
+    public static readonly TabStrip ExportFieldTabs = new(["單頭", "單身"], Origin: 60 - 90 / 2.0, Pitch: 90);
+
     public static bool IsInvi02Title(string title) =>
         title.Contains(FormTitle, StringComparison.Ordinal) &&
         title.Contains(FormCode, StringComparison.OrdinalIgnoreCase);

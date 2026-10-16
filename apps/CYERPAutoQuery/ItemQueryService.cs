@@ -514,8 +514,10 @@ internal sealed class ItemQueryService
     }
 
     /// <summary>
-    /// 匯出設定 (user's screenshot 2026-10-16): 檔案格式 must already be the xlsx one; 儲存檔案
-    /// gets CYERPAutoQuery's own TEMP path, read back; 確定 is clicked with the mouse.
+    /// 匯出設定 (user's screenshot 2026-10-16): 檔案格式 must already be the xlsx one; every
+    /// field is ticked with 全選 on both 單頭 and 單身, because 儲存設定 remembers whatever
+    /// someone ticked last (user, 2026-10-16); 儲存檔案 gets CYERPAutoQuery's own TEMP path,
+    /// read back; 確定 is clicked with the mouse.
     /// </summary>
     private async Task FillExportDialogAsync(nint dialog, string path, CancellationToken cancellationToken)
     {
@@ -534,6 +536,8 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException("匯出設定視窗找不到唯一的「儲存檔案」欄位。");
         }
         var box = pathBoxes[0].Control;
+
+        await SelectAllExportFieldsAsync(dialog, cancellationToken);
 
         for (var attempt = 1; ; attempt++)
         {
@@ -554,6 +558,42 @@ internal sealed class ItemQueryService
             ?? throw new InvalidOperationException("匯出設定視窗找不到「確定」按鈕。");
         SafeClick(dialog, Win32Automation.Center(ok.Rect));
         _log.Info("export", "匯出設定 確定 clicked");
+    }
+
+    /// <summary>
+    /// 全選 on each 匯出欄位 tab (單頭, 單身). The buttons sit on the tab sheets, so only the
+    /// shown tab's 全選 is visible. When ERP does not expose the tabs as windows, the one
+    /// visible 全選 is pressed and the gap is logged.
+    /// </summary>
+    private async Task SelectAllExportFieldsAsync(nint dialog, CancellationToken cancellationToken)
+    {
+        var sheets = Invi02Layout.ExportFieldTabs.Order
+            .Select(tab => (Tab: tab, Sheet: Win32Automation.FindTabSheet(dialog, tab)))
+            .ToList();
+        if (sheets.Any(s => s.Sheet is null))
+        {
+            _log.Warn("export", "匯出欄位 tabs not found as windows; pressing the visible 全選 only");
+            await PressSelectAllAsync(dialog, "匯出欄位", cancellationToken);
+            return;
+        }
+
+        var pageHandle = NativeMethods.GetParent(sheets[0].Sheet!.Handle);
+        var page = Win32Automation.EnumerateChildren(dialog).FirstOrDefault(c => c.Handle == pageHandle)
+            ?? throw new InvalidOperationException("匯出設定視窗找不到「單頭／單身」頁籤控制項。");
+        foreach (var (tab, sheet) in sheets)
+        {
+            await ActivateTabAsync(dialog, page, Invi02Layout.ExportFieldTabs, tab, sheet!.Handle, cancellationToken);
+            await PressSelectAllAsync(dialog, tab, cancellationToken);
+        }
+    }
+
+    private async Task PressSelectAllAsync(nint dialog, string what, CancellationToken cancellationToken)
+    {
+        var button = FindButton(dialog, c => c.StartsWith("全選", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"匯出設定「{what}」找不到「全選」按鈕。");
+        SafeClick(dialog, Win32Automation.Center(button.Rect));
+        _log.Info("export", $"全選 clicked tab={what}");
+        await Pace.Delay(200, cancellationToken);
     }
 
     private static bool IsNoCaption(string caption) =>
