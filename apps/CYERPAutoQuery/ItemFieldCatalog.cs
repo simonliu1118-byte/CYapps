@@ -50,6 +50,20 @@ internal static class ItemFieldCatalog
         new("最近出庫日", "最近出庫日"),
     ];
 
+    /// <summary>
+    /// The columns of the 品名 search list (one row per matching item); the user picks a row
+    /// and that item is then queried by 品號 for the full data.
+    /// </summary>
+    public static readonly IReadOnlyList<CatalogField> SearchList =
+    [
+        new("品號", "品號"),
+        new("品名", "品名"),
+        new("規格", "規格"),
+        new("單位", "單位"),
+        new("庫存數量", "庫存數量"),
+        new("標準售價", "標準售價"),
+    ];
+
     /// <summary>INVQ01 查各批庫存量 columns (user, 2026-10-16).</summary>
     public static readonly IReadOnlyList<CatalogField> Batch =
     [

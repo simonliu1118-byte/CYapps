@@ -15,6 +15,7 @@
     <Compile Include="..\..\Invi02Layout.cs" Link="Linked\Invi02Layout.cs" />
     <Compile Include="..\..\ItemQueryModels.cs" Link="Linked\ItemQueryModels.cs" />
     <Compile Include="..\..\Invq01Layout.cs" Link="Linked\Invq01Layout.cs" />
+    <Compile Include="..\..\ItemNameSearch.cs" Link="Linked\ItemNameSearch.cs" />
     <Compile Include="..\..\OcrWordFinder.cs" Link="Linked\OcrWordFinder.cs" />
     <Compile Include="..\..\OcrTextNormalizer.cs" Link="Linked\OcrTextNormalizer.cs" />
     <Compile Include="..\..\XlsxReader.cs" Link="Linked\XlsxReader.cs" />

@@ -65,7 +65,8 @@ internal sealed class ErpAgentLoop(
     Func<bool> localBusy,
     Func<ErpAgentJob, CancellationToken, Task<ItemQueryResult>> runQuery,
     Action<ErpAgentState, string> report,
-    Func<TimeSpan, CancellationToken, Task>? delay = null)
+    Func<TimeSpan, CancellationToken, Task>? delay = null,
+    Func<ErpAgentJob, CancellationToken, Task<ItemSearchResult>>? runSearch = null)
 {
     public static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
@@ -122,17 +123,27 @@ internal sealed class ErpAgentLoop(
 
     private async Task RunJobAsync(ErpAgentJob job, CancellationToken cancellationToken)
     {
-        report(ErpAgentState.Querying, $"Web 查詢：{job.ItemNo}");
+        report(ErpAgentState.Querying, $"Web 查詢：{job.Display}");
         var watch = System.Diagnostics.Stopwatch.StartNew();
         string body;
         string outcome;
         try
         {
-            var result = await runQuery(job, cancellationToken);
-            body = result.Found
-                ? ErpAgentProtocol.FoundBody(result, agentVersion)
-                : ErpAgentProtocol.NotFoundBody(watch.ElapsedMilliseconds, agentVersion);
-            outcome = result.Found ? "FOUND" : "NOT_FOUND";
+            if (job.IsNameSearch)
+            {
+                if (runSearch is null) throw new NotSupportedException("品名查詢未接上。");
+                var search = await runSearch(job, cancellationToken);
+                body = ErpAgentProtocol.SearchBody(search, agentVersion);
+                outcome = search.Items.Count > 0 ? "FOUND" : "NOT_FOUND";
+            }
+            else
+            {
+                var result = await runQuery(job, cancellationToken);
+                body = result.Found
+                    ? ErpAgentProtocol.FoundBody(result, agentVersion)
+                    : ErpAgentProtocol.NotFoundBody(watch.ElapsedMilliseconds, agentVersion);
+                outcome = result.Found ? "FOUND" : "NOT_FOUND";
+            }
         }
         catch (Exception ex)
         {
@@ -147,12 +158,12 @@ internal sealed class ErpAgentLoop(
             // Reported even when the Agent is being stopped, so the Web user is not left waiting.
             using var reportTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await client.CompleteAsync(job.Id, body, reportTimeout.Token);
-            report(ErpAgentState.Online, $"Web 查詢 {job.ItemNo} 已回報（{outcome}）。");
+            report(ErpAgentState.Online, $"Web 查詢 {job.Display} 已回報（{outcome}）。");
         }
         catch (Exception ex) when (ex is HttpRequestException or ErpAgentHttpException or TaskCanceledException)
         {
             // 409 QUERY_NOT_RUNNING: CY Web already timed the job out. 400: contract drift.
-            report(ErpAgentState.Offline, $"Web 查詢 {job.ItemNo} 回報失敗（{Describe(ex)}）。");
+            report(ErpAgentState.Offline, $"Web 查詢 {job.Display} 回報失敗（{Describe(ex)}）。");
         }
     }
 

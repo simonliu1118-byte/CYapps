@@ -20,6 +20,16 @@ internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Excep
 /// </summary>
 internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory = false, string? HistoryFrom = null, string? HistoryTo = null)
 {
+    /// <summary>queryType ITEM_NAME: a 品名 search for <see cref="Keyword"/> (user, 2026-10-16: CY Web only sends the 品名).</summary>
+    public const string NameSearch = "ITEM_NAME";
+
+    public string QueryType { get; init; } = "ITEM_NO";
+    public string? Keyword { get; init; }
+    public bool IsNameSearch => QueryType == NameSearch;
+
+    /// <summary>What the job asks for, for status lines.</summary>
+    public string Display => IsNameSearch ? $"品名「{Keyword}」" : ItemNo;
+
     /// <summary>
     /// The query options of this job; a bad date or range throws <see cref="ArgumentException"/>
     /// (reported as FAILED, the job is not left hanging).
@@ -62,6 +72,13 @@ internal static class ErpAgentProtocol
         var data = Data(json);
         if (data["job"] is not JsonObject job) return null;
         var id = job["id"]?.GetValue<string>();
+        if (OptionalString(job["queryType"]) == ErpAgentJob.NameSearch)
+        {
+            var keyword = OptionalString(job["keyword"]);
+            if (string.IsNullOrEmpty(id) || keyword is null)
+                throw new InvalidDataException("CY Web claim 回應缺少 id／keyword。");
+            return new ErpAgentJob(id, string.Empty) { QueryType = ErpAgentJob.NameSearch, Keyword = keyword };
+        }
         var itemNo = job["itemNo"]?.GetValue<string>();
         if (string.IsNullOrEmpty(id) || itemNo is null)
             throw new InvalidDataException("CY Web claim 回應缺少 id／itemNo。");
@@ -72,6 +89,24 @@ internal static class ErpAgentProtocol
 
     private static string? OptionalString(JsonNode? node) =>
         node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    /// <summary>品名 search rows sent at most (ERP's own 總資料筆數限制 is 500 by default).</summary>
+    public const int MaxSearchItems = 500;
+
+    /// <summary>
+    /// A 品名 search: FOUND with the listed items, or NOT_FOUND when none matched. Each item has
+    /// the <see cref="ItemFieldCatalog.SearchList"/> fields; fields／warehouses stay empty.
+    /// </summary>
+    public static string SearchBody(ItemSearchResult result, string agentVersion)
+    {
+        var found = result.Items.Count > 0;
+        var body = CompleteObject(found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["keyword"] = result.Keyword;
+        body["items"] = new JsonArray(result.Items.Take(MaxSearchItems).Select(row => (JsonNode)Fields(row)).ToArray());
+        body["total"] = result.Items.Count;
+        body["truncated"] = result.Truncated || result.Items.Count > MaxSearchItems;
+        return body.ToJsonString(JsonOptions);
+    }
 
     /// <summary>History rows sent at most (newest kept); the rest is counted in total.</summary>
     public const int MaxHistoryRows = 2000;

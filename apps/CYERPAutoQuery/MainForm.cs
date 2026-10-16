@@ -17,7 +17,12 @@ internal sealed class MainForm : Form
     /// <summary>Mouse lock and on-screen notice while CY queries ERP (user, 2026-10-16).</summary>
     private AutomationSession Session => _automationSession ??= new AutomationSession(_log);
 
-    private readonly TextBox _code = new() { MaxLength = ItemCodeRules.MaxLength };
+    private readonly TextBox _code = new() { MaxLength = Math.Max(ItemCodeRules.MaxLength, ItemNameRules.MaxLength) };
+    // 品號: one item with all its data; 品名: the list of items whose 品名 contains the text
+    // (user, 2026-10-16), from which one is picked and queried by 品號.
+    private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
+    private readonly DataGridView _search = new();
+    private readonly TabPage _searchPage = new("品名查詢");
     private readonly CyPrimaryButton _start = new();
     private readonly CyStatusBadge _erpStateTag = new();
     private readonly TextBox _itemCode = ReadOnlyBox();
@@ -96,7 +101,13 @@ internal sealed class MainForm : Form
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
-        actions.Controls.Add(new Label { Text = "品號：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
+        actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
+        _mode.Items.AddRange(["品號", "品名"]);
+        _mode.SelectedIndex = 0;
+        _mode.Font = new Font(Font.FontFamily, 10.5F);
+        _mode.Margin = new Padding(4, 7, 0, 1);
+        _mode.SelectedIndexChanged += (_, _) => UpdateHistoryInputs();
+        actions.Controls.Add(_mode);
         _code.Font = new Font(Font.FontFamily, 10.5F);
         _code.Width = 220;
         _code.Margin = new Padding(4, 7, 8, 1);
@@ -167,7 +178,7 @@ internal sealed class MainForm : Form
         // 庫別 (INVI02 單身資料), 批號 (INVQ01 查各批庫存量) and 歷史異動 (INVQ01 查歷史異動).
         _details.Dock = DockStyle.Fill;
         _details.Margin = new Padding(0, 4, 0, 4);
-        foreach (var (page, grid) in new[] { (_warehousePage, _warehouses), (_batchPage, _batches), (_historyPage, _history) })
+        foreach (var (page, grid) in new[] { (_warehousePage, _warehouses), (_batchPage, _batches), (_historyPage, _history), (_searchPage, _search) })
         {
             ConfigureGrid(grid);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
@@ -176,6 +187,9 @@ internal sealed class MainForm : Form
             _details.TabPages.Add(page);
         }
         root.Controls.Add(_details, 0, 4);
+        foreach (var c in ItemFieldCatalog.SearchList)
+            _search.Columns.Add(c.Label, c.Label);
+        _search.CellDoubleClick += async (_, e) => await QueryPickedItemAsync(e.RowIndex);
 
         var statusStrip = new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Font = new Font("Microsoft JhengHei UI", 8.5F), Padding = new Padding(2, 0, 2, 0), Margin = Padding.Empty };
         _status.Text = "請先在 ERP 開啟「品號資料建立作業」，輸入品號後按「開始查詢 ERP」。";
@@ -198,10 +212,14 @@ internal sealed class MainForm : Form
         Margin = new Padding(0, 3, 0, 0)
     };
 
+    private bool NameMode => _mode.SelectedIndex == 1;
+
     private void UpdateHistoryInputs()
     {
-        _historyFrom.Enabled = _includeHistory.Checked;
-        _historyTo.Enabled = _includeHistory.Checked;
+        // History belongs to one item; a 品名 search only lists items.
+        _includeHistory.Enabled = !NameMode;
+        _historyFrom.Enabled = _includeHistory.Checked && !NameMode;
+        _historyTo.Enabled = _includeHistory.Checked && !NameMode;
     }
 
     /// <summary>The options of a local query; a bad date range throws ArgumentException with the message to show.</summary>
@@ -247,6 +265,11 @@ internal sealed class MainForm : Form
     private async Task StartQueryAsync()
     {
         if (_queryCts is not null) return;
+        if (NameMode)
+        {
+            await StartSearchAsync();
+            return;
+        }
         if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error))
         {
             MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -281,9 +304,84 @@ internal sealed class MainForm : Form
         _code.SelectAll();
     }
 
+    /// <summary>品名 mode: lists the matching items on the 品名查詢 tab; failures shown in a message box.</summary>
+    private async Task StartSearchAsync()
+    {
+        if (!ItemNameRules.TryNormalize(_code.Text, out var keyword, out var error))
+        {
+            MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            await ExecuteSearchAsync(keyword, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 品名查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        Activate();
+        _code.Focus();
+        _code.SelectAll();
+    }
+
+    /// <summary>Double-click on a 品名查詢 row: that item is queried by 品號 (user, 2026-10-16).</summary>
+    private async Task QueryPickedItemAsync(int rowIndex)
+    {
+        if (_queryCts is not null || rowIndex < 0 || rowIndex >= _search.Rows.Count) return;
+        var code = Convert.ToString(_search.Rows[rowIndex].Cells["品號"].Value) ?? string.Empty;
+        if (code.Length == 0) return;
+        _mode.SelectedIndex = 0;
+        _code.Text = code;
+        await StartQueryAsync();
+    }
+
+    private async Task<ItemSearchResult> ExecuteSearchAsync(string keyword, CancellationToken external)
+    {
+        ShowSearch(null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.SearchByNameAsync(keyword, progress, ct), result =>
+        {
+            ShowSearch(result);
+            _details.SelectedTab = _searchPage;
+            if (result.Items.Count == 0)
+            {
+                SetStatus($"ERP：品名含「{keyword}」的品號查無資料");
+                return AutomationOutcome.NotFound;
+            }
+            var more = result.Truncated ? $"（已達 ERP 筆數上限 {result.Limit}，可能還有更多，請加長關鍵字）" : string.Empty;
+            SetStatus($"ERP：品名含「{keyword}」共 {result.Items.Count} 筆{more}，雙擊一筆查詢明細（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            return AutomationOutcome.Done;
+        });
+    }
+
+    private void ShowSearch(ItemSearchResult? result)
+    {
+        _search.Rows.Clear();
+        if (result is not null)
+            foreach (var row in result.Items)
+                _search.Rows.Add(ItemFieldCatalog.SearchList.Select(c => (object)ItemSearchResult.Value(row, c.Label)).ToArray());
+        _searchPage.Text = result is null ? "品名查詢" : $"品名查詢（{result.Items.Count}{(result.Truncated ? "+" : string.Empty)}）";
+    }
+
+    /// <summary>A 品名 search received from CY Web: same path as the local one, the list goes back to Web.</summary>
+    private async Task<ItemSearchResult> RunWebSearchAsync(ErpAgentJob job, CancellationToken cancellationToken)
+    {
+        if (!ItemNameRules.TryNormalize(job.Keyword, out var keyword, out var error))
+            throw new ArgumentException(error);
+        _mode.SelectedIndex = 1;
+        _code.Text = keyword;
+        _log.Info("agent", $"web 品名 search keyword={_log.Value(keyword)}");
+        return await ExecuteSearchAsync(keyword, cancellationToken);
+    }
+
     /// <summary>A query received from CY Web: same path as the local one, no message box (the outcome goes back to Web).</summary>
     private async Task<ItemQueryResult> RunWebQueryAsync(ErpAgentJob job, CancellationToken cancellationToken)
     {
+        _mode.SelectedIndex = 0;
         _code.Text = job.ItemNo;
         var options = job.Options(DateOnly.FromDateTime(DateTime.Today));
         _log.Info("agent", $"web query item={_log.Value(job.ItemNo)} history={(options.History is { } h ? $"{HistoryRange.Iso(h.From)}~{HistoryRange.Iso(h.To)}" : "no")}");
@@ -296,26 +394,41 @@ internal sealed class MainForm : Form
     /// </summary>
     private async Task<ItemQueryResult> ExecuteQueryAsync(string code, ItemQueryOptions options, CancellationToken external)
     {
+        ShowResult(null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.QueryAsync(code, options, progress, ct), result =>
+        {
+            if (!result.Found)
+            {
+                SetStatus($"ERP：查無品號 {code}");
+                return AutomationOutcome.NotFound;
+            }
+            ShowResult(result);
+            var extra = (result.BatchManaged ? $"，批號 {result.Batches.Count} 筆" : string.Empty) +
+                        (result.HistoryRange is not null ? $"，歷史異動 {result.History.Count} 筆" : string.Empty);
+            SetStatus($"ERP：品號 {result.ItemCode} 查詢完成，共 {result.Fields.Count} 欄{extra}（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            return AutomationOutcome.Done;
+        });
+    }
+
+    /// <summary>
+    /// The single runner for every ERP automation (品號 query, 品名 search; local or Web): locks
+    /// the physical mouse and shows 「自動查詢中」 (same as CYERPAutoInput), lets
+    /// <paramref name="show"/> display the result, and rethrows failures to the caller.
+    /// </summary>
+    private async Task<T> RunAutomationAsync<T>(CancellationToken external,
+        Func<IProgress<string>, CancellationToken, Task<T>> run, Func<T, AutomationOutcome> show)
+    {
         _queryCts = CancellationTokenSource.CreateLinkedTokenSource(external);
         _start.Enabled = false;
         _statePoll.Stop();
-        ShowResult(null);
         var progress = new Progress<string>(SetStatus);
         var outcome = AutomationOutcome.Stopped;
         try
         {
             Session.Begin(AutomationSession.QueryTitle);
             using var escape = Session.EscapeToken.Register(() => { try { _queryCts?.Cancel(); } catch (ObjectDisposedException) { } });
-            var result = await _service.QueryAsync(code, options, progress, _queryCts.Token);
-            outcome = result.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
-            if (result.Found)
-            {
-                ShowResult(result);
-                var extra = (result.BatchManaged ? $"，批號 {result.Batches.Count} 筆" : string.Empty) +
-                            (result.HistoryRange is not null ? $"，歷史異動 {result.History.Count} 筆" : string.Empty);
-                SetStatus($"ERP：品號 {result.ItemCode} 查詢完成，共 {result.Fields.Count} 欄{extra}（{result.Elapsed.TotalSeconds:0.0} 秒）");
-            }
-            else SetStatus($"ERP：查無品號 {code}");
+            var result = await run(progress, _queryCts.Token);
+            outcome = show(result);
             return result;
         }
         catch (OperationCanceledException)
@@ -433,7 +546,8 @@ internal sealed class MainForm : Form
             () => ErpAgentProtocol.ErpState(_service.ProbeStatus()),
             () => _queryCts is not null,
             RunWebQueryAsync,
-            SetAgentStatus);
+            SetAgentStatus,
+            runSearch: RunWebSearchAsync);
         _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
     }
 

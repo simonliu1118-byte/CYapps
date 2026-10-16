@@ -1,37 +1,19 @@
 # CYERPAutoQuery Work Handoff
 
-## 最新修正（V0.3.0 Build 5，2026/10/16）
+## 現況（V0.4.0 Build 1，2026/10/16）
 
-使用者明確指定 INVQ01 日期欄**只從起日開始定位**，不同輸入條件的正確流程：
-- 只有起日：點起日年份區段，輸入 `yyyyMMdd`，不按 Enter。
-- 只有迄日：點起日年份區段，按 Enter，輸入迄日 `yyyyMMdd`，不點迄日、不再按 Enter。
-- 起迄都有：點起日年份區段，輸入起日 `yyyyMMdd`，按 Enter，輸入迄日 `yyyyMMdd`；不點迄日、不再按 Enter。
-- 兩個日期都沒有：ERP 日期欄完全不動，不補近一年。
+- 新增品名查詢（`ItemNameSearch.cs` 純規則與解析、`ItemQueryService.SearchByNameAsync`）。條件文字貼到進階設定條件框是使用者提議的做法，尚未實機驗證 ERP 確定時是否採用條件框文字；程式以「每筆品名都含關鍵字」驗證，不符就不採用。待實機：LOG `search: advanced condition pasted`、`after query 資料瀏覽 shown=`、`done items=`；若條件框不能輸入，LOG 會列出進階設定子視窗。
+- Web 品名查詢的補充交接待寫入 chihyuan-web（queryType ITEM_NAME、keyword、items）。
 
-以 `Invq01Layout.DateActions` 統一描述順序，`ItemQueryService` 只依序送鍵並驗證焦點與已輸入欄位，避免增加不必要步驟。CYWEB 仍自行計算日期並保留原本近一年起日加一天的規則；Agent 不替 CYWEB 補值。修改限 INVQ01 歷史日期，批號庫存及其他功能不動。單元測試已涵蓋四種情況，Windows 實機日期控制項仍需使用者驗收。
+## INVQ01 歷史異動日期輸入（V0.3.0 Build 2～8，使用者確認）
 
-## 最新修正（V0.3.0 Build 4，2026/10/16）
+- 起迄都有：點起日年份位置 → Home → 起日 `yyyyMMdd` → Enter（自動跳到迄日，不點）→ Home → 迄日 `yyyyMMdd`。
+- 只有起日：點起日 → Home → `yyyyMMdd`。只有迄日：直接點迄日 → Home → `yyyyMMdd`。
+- 兩個都沒填：本機查詢不動日期欄；CY Web 由 Worker 補齊起迄後傳入。
+- Home：日期欄點過一次後會顯示「    /  /  」遮罩，點擊可能落在第二位以後（使用者 2026-10-16）。輸入後讀回，不符即停止、不按開始查詢。
+- 實機慢點（V0.3.0 LOG）：整條 Ribbon OCR 約 2 秒、整窗頁籤 OCR 約 2.6 秒；Build 6～7 改為只讀按鈕所在群組（並記住群組）與頁籤先點座標。
 
-- 使用者再次確認 ERP 所需動作只有 **20251016 → Enter → 20261016**，沒有點第二欄、沒有迄日後 Enter。Build 2／3 多做迄日點選及第二個 Enter，可能造成輸入位置錯誤，已修正。
-- 有起／迄日時，先點起日「年」區段，送出起日 8 碼並按 Enter；直接驗證焦點是否移到迄日後送出迄日 8 碼，**不再點迄日、也不送第二個 Enter**。若焦點未轉到迄日，立即停止，避免錯位。輸入後仍讀回兩欄確認。
-- 只有一欄指定時才直接點選該欄年份位置，並保持另一欄完全不動；兩欄未指定不發出任何日期按鍵。Web 傳入日期仍由 CYWEB 計算，AUTOQUERY 不自行補值。
-- 新增 DateActions 按鍵順序測試，Windows CI／測試包 Build 4 待驗證；實際 ERP 分段日期控制項仍需人工實機確認。未修改批號查詢、Excel 解析、CYWEB 或 Agent API。
-
-## 最新變更（V0.3.0 Build 3，2026/10/16）
-
-- 本機勾選「查歷史異動」但起日、迄日都沒有勾選時，不再自動補近一年，也不輸入或讀回這兩個 ERP 日期欄；只有一端勾選時只輸入那一端，按 Enter 讀回核對。保留 ERP 自己對未指定日期的處理方式。
-- CY Web 由現有 Worker 先算好起迄日期，**維持原本預設近一年起日加一天的計算規則**，AUTOQUERY Agent 只照 claim 交付的完整起／迄日期查詢。當 Web 要求查歷史卻缺其中一端時，Agent 明確報錯，不再自行補日期。**CY Web 儲存庫未修改。**
-- 此修改僅針對 INVQ01 日期輸入；已成功的批號查詢、Excel 解析、Web Agent token 與 ERP 其餘控制流程不動。Unit tests 覆蓋空白／單端／雙端日期與 Web 缺日期驗證；實際 ERP 日期遮罩仍需實機測試。
-- CI 使用原分支 `governance/cyerp-auto-query`、PR #472，測試包由原 `CYERPAutoQuery Build` workflow 提供，無正式 Release。
-
-## 最新變更（V0.3.0 Build 2，2026/10/16）
-
-- 已依使用者實機截圖更正 INVQ01 歷史異動的**分段日期控制項**輸入：以左側「年」位置取得焦點，起日輸入 8 個數字鍵 yyyyMMdd → Enter，讀回檢查；迄日同樣操作，最後再次核對兩欄。輸入不包含斜線，也不使用 End/Backspace 或 Ctrl+A 清除日期。讀回不完整／不一致即停止，防止錯誤日期送出查詢。
-- 本機未選日期的「近一年」現在預設去年同月同日（例如 2025/10/16～2026/10/16）；CY Web 送入的 historyFrom/historyTo 照已補齊值執行。**注意：CYWEB V0.7.35 的預設一年範圍仍從去年同月同日的次日開始**，若要求兩端「近一年」完全一致，CYWEB 需另同步調整；這一輪僅修改桌面程式。
-- 單元測試覆蓋 8 碼格式與兩組日期；Windows ERP 鍵盤分段選取、Enter 及控制項讀回仍須使用者實機驗收。批號查詢成功路徑未修改。
-- 開發線：`governance/cyerp-auto-query`，同一 PR #472；測試包走 `CYERPAutoQuery Build` Actions Artifact，不另建 Release。
-
-## 現況（V0.3.0 Build 1，2026/10/16）
+## 先前狀態（V0.3.0）
 
 - 新增 INVQ01（使用者 2026-10-16）：批號管理不是 N 時查各批庫存量；勾「查歷史異動」時查歷史異動（日期選擇器，未填最近一年、最多三年）；INVQ01 用完關閉。程式在 `ItemQueryService` 的 INVQ01 區段，純規則在 `Invq01Layout.cs`（頁籤中心、標題、日期、`HistoryRange`），解析在 `Invq01Export`。已用使用者提供的 INVQ01_5／INVQ01_4 真實檔在本機確認解析（未提交）；歷史異動 1,621 列約 144 KB JSON，Web 回報上限 2,000 列（保留最新），CY Web 需放寬 96 KiB 上限（補充交接見 chihyuan-web `docs/handoff/ERP_ITEM_QUERY_INVQ01_HANDOFF.md`）。
 - 尚未實機看過：INVI02 Ribbon「串查」下拉、INVQ01 頁籤是否為視窗（不是時改 OCR 並以標題確認）、「轉出到Excel」的設定視窗（程式自動辨識 ERP 匯出設定或 Windows 另存新檔，並在 LOG 列出子視窗）、轉出後是否有「檢視Excel資料?」（有就按 No，沒有則以檔案寫好且 ERP 閒置 1.5 秒為完成）、歷史異動日期欄的輸入方式、批號為零時 ERP 的反應。

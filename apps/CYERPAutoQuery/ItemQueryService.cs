@@ -57,6 +57,8 @@ internal sealed class ItemQueryService
         progress.Report("ERP：開啟查詢條件（F6）…");
         var dialog = await OpenQueryDialogAsync(root, page, cancellationToken);
 
+        // A 品名 search leaves its 進階設定 condition in the dialog; it must not narrow this query.
+        await ClearAdvancedConditionAsync(dialog, cancellationToken);
         progress.Report("ERP：輸入一般選項品號…");
         await FillGeneralQueryAsync(dialog, code, cancellationToken);
 
@@ -596,7 +598,7 @@ internal sealed class ItemQueryService
     /// same as CYERPAutoInput's 列印 → 直接列印; a wrong Ribbon click could start another
     /// function, so no fixed coordinates are used there.
     /// </summary>
-    private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken)
+    private async Task ExportToExcelAsync(nint root, string path, CancellationToken cancellationToken, bool headerOnly = false)
     {
         var before = Win32Automation.VisibleProcessWindows(root);
         var labelScreen = await RibbonClickAsync(root, "Excel", "工具列的「Excel」（請確認 Ribbon 停在「常用」）", cancellationToken,
@@ -617,7 +619,7 @@ internal sealed class ItemQueryService
         _log.Info("export", "轉出至 Excel clicked");
 
         // 匯出設定 is recognised by its 儲存檔案 path box, or by the INVI02 caption it carries.
-        await CompleteExportAsync(root, before, path, Invi02Layout.IsInvi02Title, strict: true, cancellationToken);
+        await CompleteExportAsync(root, before, path, Invi02Layout.IsInvi02Title, strict: true, cancellationToken, headerOnly);
     }
 
     /// <summary>
@@ -627,7 +629,7 @@ internal sealed class ItemQueryService
     /// 「檢視Excel資料?」 question. INVQ01's 轉出到Excel dialog has not been seen yet, so there
     /// whatever applies is done and the end is the file written with ERP idle again.
     /// </summary>
-    private async Task CompleteExportAsync(nint root, IReadOnlySet<nint> before, string path, Func<string, bool> ownTitle, bool strict, CancellationToken cancellationToken)
+    private async Task CompleteExportAsync(nint root, IReadOnlySet<nint> before, string path, Func<string, bool> ownTitle, bool strict, CancellationToken cancellationToken, bool headerOnly = false)
     {
         var found = await WaitNewWindowAsync(root, before, h => IsExportDialog(h, ownTitle), ExportDialogWaitMs, cancellationToken);
         if (found is not { } dialog)
@@ -637,7 +639,7 @@ internal sealed class ItemQueryService
         }
         await Pace.Delay(500, cancellationToken); // let ERP finish building the dialog
         if (IsSaveDialog(dialog)) await FillSaveDialogAsync(dialog, path, cancellationToken);
-        else await FillExportDialogAsync(dialog, path, strict, cancellationToken);
+        else await FillExportDialogAsync(dialog, path, strict, cancellationToken, headerOnly);
         await FinishExportAsync(root, before, dialog, path, questionRequired: strict, cancellationToken);
     }
 
@@ -788,7 +790,7 @@ internal sealed class ItemQueryService
     /// someone ticked last (user, 2026-10-16); 儲存檔案 gets CYERPAutoQuery's own TEMP path,
     /// read back; 確定 is clicked with the mouse.
     /// </summary>
-    private async Task FillExportDialogAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken)
+    private async Task FillExportDialogAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken, bool headerOnly = false)
     {
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法把匯出設定視窗帶到前景。");
@@ -809,7 +811,7 @@ internal sealed class ItemQueryService
         var box = pathBoxes[0].Control;
 
         if (strict || Win32Automation.FindTabSheet(dialog, Invi02Layout.ExportFieldTabs.Order[0]) is not null)
-            await SelectAllExportFieldsAsync(dialog, cancellationToken);
+            await SelectAllExportFieldsAsync(dialog, cancellationToken, headerOnly);
         else if (FindButton(dialog, c => c.StartsWith("全選", StringComparison.Ordinal)) is not null)
             await PressSelectAllAsync(dialog, "匯出欄位", cancellationToken);
 
@@ -838,7 +840,8 @@ internal sealed class ItemQueryService
     /// 全選／清除／確定 are TBitBtn windows. The tab is clicked at its measured position and
     /// counts as shown once a visible sheet with that caption exists; OCR is the fallback.
     /// </summary>
-    private async Task SelectAllExportFieldsAsync(nint dialog, CancellationToken cancellationToken)
+    /// <param name="headerOnly">Only 單頭 (a 品名 search exports the 資料瀏覽 list, which has no 單身).</param>
+    private async Task SelectAllExportFieldsAsync(nint dialog, CancellationToken cancellationToken, bool headerOnly = false)
     {
         var page = Win32Automation.EnumerateChildren(dialog)
             .Where(c => c.Visible && c.ClassName.Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
@@ -846,7 +849,7 @@ internal sealed class ItemQueryService
         if (page is null) LogChildren(dialog, "export-dialog");
         if (!NativeMethods.GetWindowRect(dialog, out var d))
             throw new InvalidOperationException("讀不到匯出設定視窗位置。");
-        foreach (var tab in Invi02Layout.ExportFieldTabs.Order)
+        foreach (var tab in headerOnly ? Invi02Layout.ExportFieldTabs.Order.Take(1) : Invi02Layout.ExportFieldTabs.Order)
         {
             await ShowExportTabAsync(dialog, page, d.ToRectangle(), tab, cancellationToken);
             await PressSelectAllAsync(dialog, tab, cancellationToken);
@@ -986,6 +989,217 @@ internal sealed class ItemQueryService
             if (found.Count == 1) return found[0];
         }
         return null;
+    }
+
+    // ---- 品名 search ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Lists the items whose 品名 contains <paramref name="keywordInput"/> (user, 2026-10-16):
+    /// F6 → 進階設定 → paste 「(INVMB.MB002 like N'%關鍵字%')」 into the condition box → 確定 →
+    /// ERP lists the matches on 資料瀏覽 (empty when none) → 轉出至 Excel from 資料瀏覽. Read-only
+    /// like the 品號 query. Every listed 品名 must contain the keyword, or the result is refused.
+    /// </summary>
+    public async Task<ItemSearchResult> SearchByNameAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        if (!ItemNameRules.TryNormalize(keywordInput, out var keyword, out var error))
+            throw new InvalidOperationException(error);
+
+        using var gate = ErpAutomationGate.Enter();
+        ExportFiles.CleanUp(_log);
+        var watch = Stopwatch.StartNew();
+        _log.Info("search", $"start keyword={_log.Value(keyword)}");
+
+        progress.Report("ERP：尋找品號資料建立作業…");
+        var root = await ResolveInvi02Async(progress, cancellationToken);
+        NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
+        await Pace.Delay(MaximizeSettleMs, cancellationToken);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("無法把品號資料建立作業帶到前景。");
+        var page = FindMainPageControl(root);
+
+        progress.Report("ERP：開啟查詢條件（F6）…");
+        var dialog = await OpenQueryDialogAsync(root, page, cancellationToken);
+        var limit = ReadRecordLimit(dialog);
+        // An old 品號 left in 一般選項 must not narrow the search.
+        await ClearGeneralValueAsync(dialog, cancellationToken);
+        progress.Report("ERP：輸入進階設定品名條件…");
+        await FillAdvancedConditionAsync(dialog, ItemNameRules.Condition(keyword), cancellationToken);
+
+        progress.Report("ERP：查詢中…");
+        await ConfirmQueryAsync(root, dialog, cancellationToken);
+        var browse = Win32Automation.FindTabSheet(root, Invi02Layout.BrowseTab)
+            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.BrowseTab}」。");
+        var settled = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(browse.Handle), QuerySettleWaitMs, cancellationToken);
+        _log.Info("search", $"after query 資料瀏覽 shown={settled}");
+        if (!await HasRecordAsync(root, page, cancellationToken))
+        {
+            _log.Info("search", $"no match elapsed_ms={watch.ElapsedMilliseconds}");
+            return new ItemSearchResult(keyword, [], limit, watch.Elapsed);
+        }
+
+        // The list is exported from 資料瀏覽 (one 單頭 row per item; user, 2026-10-16).
+        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.BrowseTab, browse.Handle, cancellationToken);
+        progress.Report("ERP：轉出 Excel…");
+        var path = ExportFiles.NewPath();
+        try
+        {
+            await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true);
+            progress.Report("讀取匯出資料…");
+            var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
+            var items = ItemSearchExport.Parse(sheets, keyword);
+            _log.Info("search", $"done items={items.Count} limit={limit?.ToString() ?? "?"} elapsed_ms={watch.ElapsedMilliseconds}");
+            return new ItemSearchResult(keyword, items, limit, watch.Elapsed);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure)
+        {
+            throw new QueryFailure(ErpAgentErrorCode.EXPORT_FAILED, ex.Message, ex);
+        }
+        finally
+        {
+            ExportFiles.Delete(path, _log);
+        }
+    }
+
+    /// <summary>After a query: true when the header shows a record, false when it stays empty (nothing found).</summary>
+    private async Task<bool> HasRecordAsync(nint root, WindowControl page, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + RecordWaitMs;
+        bool? last = null;
+        long since = Environment.TickCount64;
+        while (true)
+        {
+            var shown = (NativeMethods.ControlText(ResolveHeader(root, page).ItemCode.Handle) ?? string.Empty).Trim();
+            var has = shown.Length > 0;
+            if (has != last)
+            {
+                last = has;
+                since = Environment.TickCount64;
+            }
+            else if (Environment.TickCount64 - since >= EmptyRecordStableMs) return has;
+            if (Environment.TickCount64 > deadline) return has;
+            await Pace.Delay(100, cancellationToken);
+        }
+    }
+
+    /// <summary>設定查詢條件's 總資料筆數限制 (a combo holding a number, e.g. 500), or null when not readable.</summary>
+    private static int? ReadRecordLimit(nint dialog)
+    {
+        foreach (var c in Win32Automation.InputControls(dialog, visibleOnly: true).Where(c => Invi02Layout.IsCombo(c.ClassName)))
+        {
+            var text = (NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim();
+            if (text.Length is > 0 and <= 6 && text.All(char.IsAsciiDigit) && int.TryParse(text, out var limit)) return limit;
+        }
+        return null;
+    }
+
+    /// <summary>The dialog's TcxPageControl (一般選項／進階設定).</summary>
+    private static WindowControl DialogPage(nint dialog)
+    {
+        var sheet = Win32Automation.FindTabSheet(dialog, Invi02Layout.GeneralQueryTab)
+            ?? Win32Automation.FindTabSheet(dialog, Invi02Layout.AdvancedQueryTab)
+            ?? throw new InvalidOperationException("「設定查詢條件」找不到頁籤。");
+        var pageHandle = NativeMethods.GetParent(sheet.Handle);
+        return Win32Automation.EnumerateChildren(dialog).FirstOrDefault(c => c.Handle == pageHandle)
+            ?? throw new InvalidOperationException("「設定查詢條件」找不到頁籤控制項。");
+    }
+
+    /// <summary>The 進階設定 condition box: a memo, else the tallest input of that sheet.</summary>
+    private static WindowControl? ConditionBox(nint advancedSheet)
+    {
+        var inputs = Win32Automation.InputControls(advancedSheet, visibleOnly: false);
+        return inputs.FirstOrDefault(c => c.ClassName.Contains("Memo", StringComparison.OrdinalIgnoreCase) ||
+                                          c.ClassName.Contains("RichEdit", StringComparison.OrdinalIgnoreCase))
+            ?? inputs.Where(c => c.Rect.Height >= 40).OrderByDescending(c => c.Rect.Height).FirstOrDefault();
+    }
+
+    private static string ConditionText(WindowControl box) => (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
+
+    /// <summary>進階設定 → 清除 (when a condition is there) → paste the condition → read back.</summary>
+    private async Task FillAdvancedConditionAsync(nint dialog, string condition, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法把「設定查詢條件」帶到前景。");
+        await ShowLazyTabAsync(dialog, DialogPage(dialog), Invi02Layout.QueryDialogTabs, Invi02Layout.AdvancedQueryTab, "設定查詢條件", cancellationToken);
+        var sheet = Win32Automation.FindTabSheet(dialog, Invi02Layout.AdvancedQueryTab)
+            ?? throw new InvalidOperationException("「設定查詢條件」找不到「進階設定」頁籤。");
+        if (ConditionBox(sheet.Handle) is not { } box)
+        {
+            LogChildren(sheet.Handle, "advanced");
+            throw new InvalidOperationException("「進階設定」找不到條件框。");
+        }
+        await PressClearAsync(dialog, sheet.Handle, box, cancellationToken);
+
+        SafeClick(dialog, Win32Automation.Center(box.Rect));
+        await Pace.Delay(150, cancellationToken);
+        var focus = NativeMethods.FocusedControlOfForeground();
+        if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
+            throw new InvalidOperationException("無法把游標移到「進階設定」的條件框。");
+        if (Win32Automation.IsReadOnly(focus))
+        {
+            LogChildren(sheet.Handle, "advanced");
+            throw new InvalidOperationException("「進階設定」的條件框不能直接輸入，已停止。");
+        }
+        // Pasted, not typed (user, 2026-10-16).
+        await PasteIntoAsync(focus, condition, cancellationToken);
+        var shown = ConditionText(box);
+        if (!ItemNameRules.SameCondition(shown, condition))
+        {
+            _log.Warn("search", $"condition read-back mismatch shown={_log.Value(shown)}");
+            throw new InvalidOperationException("品名條件貼上後讀回的內容不一致，已停止。");
+        }
+        _log.Info("search", "advanced condition pasted");
+    }
+
+    /// <summary>「清除」 on 進階設定 when its condition box is not empty; confirmed by the box becoming empty.</summary>
+    private async Task PressClearAsync(nint dialog, nint advancedSheet, WindowControl box, CancellationToken cancellationToken)
+    {
+        if (ConditionText(box).Length == 0) return;
+        var clear = FindButton(advancedSheet, c => c.StartsWith("清除", StringComparison.Ordinal))
+            ?? FindButton(dialog, c => c.StartsWith("清除", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException("「進階設定」找不到「清除」按鈕。");
+        SafeClick(dialog, Win32Automation.Center(clear.Rect));
+        if (!await WaitUntilAsync(() => ConditionText(box).Length == 0, 1500, cancellationToken))
+            throw new InvalidOperationException("按「清除」後進階設定的條件沒有清空，已停止。");
+        _log.Info("dialog", "advanced condition cleared");
+    }
+
+    /// <summary>Before a 品號 query: a 進階設定 condition left by a 品名 search is cleared.</summary>
+    private async Task ClearAdvancedConditionAsync(nint dialog, CancellationToken cancellationToken)
+    {
+        if (Win32Automation.FindTabSheet(dialog, Invi02Layout.AdvancedQueryTab) is not { } sheet ||
+            ConditionBox(sheet.Handle) is not { } box || ConditionText(box).Length == 0)
+            return;
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法把「設定查詢條件」帶到前景。");
+        await ShowLazyTabAsync(dialog, DialogPage(dialog), Invi02Layout.QueryDialogTabs, Invi02Layout.AdvancedQueryTab, "設定查詢條件", cancellationToken);
+        await PressClearAsync(dialog, sheet.Handle, box, cancellationToken);
+    }
+
+    /// <summary>Before a 品名 search: an old 品號 in 一般選項 is erased (End + Backspace, read back empty).</summary>
+    private async Task ClearGeneralValueAsync(nint dialog, CancellationToken cancellationToken)
+    {
+        if (Win32Automation.FindTabSheet(dialog, Invi02Layout.GeneralQueryTab) is not { } sheet) return;
+        var rows = Invi02Layout.BuildRows(
+            Win32Automation.InputControls(sheet.Handle, visibleOnly: false).Where(c => !Invi02Layout.IsCheckBox(c.ClassName)),
+            c => c.Rect.ToRectangle());
+        if (rows.Count == 0 || rows[0].Count != 2 || !Invi02Layout.IsEditBox(rows[0][1].ClassName)) return;
+        var value = rows[0][1];
+        var current = NativeMethods.ControlText(value.Handle) ?? string.Empty;
+        if (current.Trim().Length == 0) return;
+
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法把「設定查詢條件」帶到前景。");
+        await ActivateTabAsync(dialog, DialogPage(dialog), Invi02Layout.QueryDialogTabs, Invi02Layout.GeneralQueryTab, sheet.Handle, cancellationToken);
+        SafeClick(dialog, Win32Automation.Center(value.Rect));
+        await Pace.Delay(150, cancellationToken);
+        var focus = NativeMethods.FocusedControlOfForeground();
+        if (focus != value.Handle && !Win32Automation.IsInside(focus, value.Handle))
+            throw new InvalidOperationException("無法把游標移到一般選項的品號欄。");
+        InputSender.EndBackspace(current.Length + 2);
+        await Pace.Delay(100, cancellationToken);
+        if ((NativeMethods.ControlText(value.Handle) ?? string.Empty).Trim().Length != 0)
+            throw new InvalidOperationException("一般選項的品號沒有清空，已停止。");
+        _log.Info("dialog", "general 品號 cleared before 品名 search");
     }
 
     // ---- INVQ01 庫存狀況查詢作業 ---------------------------------------------------------
@@ -1134,26 +1348,7 @@ internal sealed class ItemQueryService
     {
         if (page is not null)
         {
-            bool Shown() => Win32Automation.FindTabSheet(invq, tab) is { } sheet && NativeMethods.IsWindowVisible(sheet.Handle);
-            if (Shown()) return;
-            if (!Win32Automation.PrepareForeground(invq, _log))
-                throw new InvalidOperationException($"切換頁籤「{tab}」前無法把庫存狀況查詢作業帶到前景。");
-            var pageRect = page.Rect.ToRectangle();
-            if (Invq01Layout.Tabs.PointFor(pageRect, tab) is { } point)
-            {
-                SafeClick(invq, point);
-                if (await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
-                {
-                    _log.Info("tab", $"shown tab={tab} by=geometry");
-                    return;
-                }
-                _log.Warn("tab", $"geometry click did not show tab={tab} point={point.X - pageRect.Left},{point.Y - pageRect.Top}");
-            }
-            var strip = new Rectangle(pageRect.Left, pageRect.Top, pageRect.Width, Math.Min(32, pageRect.Height));
-            await OcrClickAsync(invq, strip, tab, $"庫存狀況查詢作業的頁籤「{tab}」", cancellationToken);
-            if (!await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
-                throw new InvalidOperationException($"已點擊庫存狀況查詢作業的頁籤「{tab}」，但頁籤沒有切換。");
-            _log.Info("tab", $"shown tab={tab} by=ocr");
+            await ShowLazyTabAsync(invq, page, Invq01Layout.Tabs, tab, "庫存狀況查詢作業", cancellationToken);
             return;
         }
         // Without sheet windows the caption is found by OCR; that the right query ran is checked
@@ -1163,6 +1358,35 @@ internal sealed class ItemQueryService
         var area = new Rectangle(w.Left, w.Top + 150, w.Width, Math.Max(100, w.Height - 150));
         await OcrClickAsync(invq, area, tab, $"庫存狀況查詢作業的頁籤「{tab}」", cancellationToken);
         await Pace.Delay(500, cancellationToken);
+    }
+
+    /// <summary>
+    /// Shows a tab whose sheet window ERP may create only on the first click: the measured
+    /// position first, then OCR of the tab strip only. Shown means a visible sheet with that
+    /// caption.
+    /// </summary>
+    private async Task ShowLazyTabAsync(nint window, WindowControl page, TabStrip strip, string tab, string what, CancellationToken cancellationToken)
+    {
+        bool Shown() => Win32Automation.FindTabSheet(window, tab) is { } sheet && NativeMethods.IsWindowVisible(sheet.Handle);
+        if (Shown()) return;
+        if (!Win32Automation.PrepareForeground(window, _log))
+            throw new InvalidOperationException($"切換頁籤「{tab}」前無法把{what}帶到前景。");
+        var pageRect = page.Rect.ToRectangle();
+        if (strip.PointFor(pageRect, tab) is { } point)
+        {
+            SafeClick(window, point);
+            if (await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
+            {
+                _log.Info("tab", $"shown tab={tab} by=geometry");
+                return;
+            }
+            _log.Warn("tab", $"geometry click did not show tab={tab} point={point.X - pageRect.Left},{point.Y - pageRect.Top}");
+        }
+        var area = new Rectangle(pageRect.Left, pageRect.Top, pageRect.Width, Math.Min(32, pageRect.Height));
+        await OcrClickAsync(window, area, tab, $"{what}的頁籤「{tab}」", cancellationToken);
+        if (!await WaitUntilAsync(Shown, TabWaitMs, cancellationToken))
+            throw new InvalidOperationException($"已點擊{what}的頁籤「{tab}」，但頁籤沒有切換。");
+        _log.Info("tab", $"shown tab={tab} by=ocr");
     }
 
     /// <summary>查歷史異動 選擇日期 起／迄: the two boxes of that group, left to right, each read back.</summary>

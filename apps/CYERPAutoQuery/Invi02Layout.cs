@@ -13,6 +13,8 @@ internal static class Invi02Layout
     public const string FormClass = "TfrmInvi02";
     public const string QueryDialogTitle = "設定查詢條件";
     public const string GeneralQueryTab = "一般選項";
+    /// <summary>The 設定查詢條件 tab with the free condition box, used for the 品名 search.</summary>
+    public const string AdvancedQueryTab = "進階設定";
 
     /// <summary>
     /// The tab shown before 轉出至 Excel: from 資料瀏覽 the export has no 單身資料 (庫別), from
@@ -31,7 +33,7 @@ internal static class Invi02Layout
         Origin: 56 - 79 / 2.0, Pitch: 79);
 
     // 設定查詢條件 dialog tabs (user's screenshot 2026-10-16): 一般選項 then 進階設定.
-    public static readonly TabStrip QueryDialogTabs = new([GeneralQueryTab, "進階設定"], Origin: 50 - 66 / 2.0, Pitch: 66);
+    public static readonly TabStrip QueryDialogTabs = new([GeneralQueryTab, AdvancedQueryTab], Origin: 50 - 66 / 2.0, Pitch: 66);
 
     // 轉出至 Excel 匯出設定: 匯出欄位設定 tabs 單頭 then 單身, measured from the user's
     // screenshot (2026-10-16): centers about 60 and 150 px right of the page control.
