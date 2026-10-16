@@ -257,12 +257,18 @@ internal sealed class AutomationOverlay : Form
         // A running timer is measured at its widest so the box does not jump.
         var hint = _since is not null && _outcome is null ? $"{RunningHint}　0:00:00" : _hint;
         var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(hint, HintFont).Width);
-        Size = new Size(86 + textWidth + 26, 92);
+        var size = new Size(86 + textWidth + 36, 92);
+        // Growing the box while it is on screen (「自動輸入中」 → a longer outcome) left its right
+        // part cut off (CYERPAutoQuery, user's photo 2026-10-16): it is resized only while hidden.
+        var shown = Visible;
+        if (shown && size != Size) Hide();
+        Size = size;
         var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
         Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
         Region?.Dispose();
         using var path = Rounded(new Rectangle(Point.Empty, Size), 16);
         Region = new Region(path);
+        if (shown && !Visible) Show();
     }
 
     protected override void OnPaint(PaintEventArgs e)
