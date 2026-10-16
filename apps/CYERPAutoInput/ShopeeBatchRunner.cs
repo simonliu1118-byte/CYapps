@@ -352,6 +352,39 @@ internal sealed partial class ShopeeBatchRunner
         NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
     }
 
+    /// <summary>
+    /// <paramref name="text"/> pasted (Ctrl+V) where the caret is — faster than typing it (user,
+    /// 2026-10-16: the 另存新檔 path). The clipboard's own text is put back; when the clipboard
+    /// cannot be used, the text is typed as before.
+    /// </summary>
+    private async Task PasteAsync(string text)
+    {
+        string? previous = null;
+        try
+        {
+            if (Clipboard.ContainsText()) previous = Clipboard.GetText();
+            Clipboard.SetText(text);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException)
+        {
+            _log.Info("shopee-batch", $"clipboard busy ({ex.GetType().Name}); typed instead");
+            InputSender.UnicodeText(text);
+            await Task.Delay(200, _token);
+            return;
+        }
+        InputSender.Chord(NativeMethods.VK_CONTROL, 0x56 /* V */);
+        await Task.Delay(200, _token);
+        try
+        {
+            if (previous is not null) Clipboard.SetText(previous);
+            else Clipboard.Clear();
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException)
+        {
+            _log.Info("shopee-batch", "clipboard not restored");
+        }
+    }
+
     private void Keys(string what, params ushort[] keys)
     {
         _inputs++;
@@ -997,8 +1030,7 @@ internal sealed partial class ShopeeBatchRunner
             await Task.Delay(300, _token);
             InputSender.Chord(NativeMethods.VK_CONTROL, 0x41 /* A */);
             await Task.Delay(100, _token);
-            InputSender.UnicodeText(folder);
-            await Task.Delay(200, _token);
+            await PasteAsync(folder);
             InputSender.Press(NativeMethods.VK_RETURN);
             string? shownFolder = null;
             for (var i = 0; i < 8; i++)
