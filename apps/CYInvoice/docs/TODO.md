@@ -22,6 +22,8 @@
 
 - [x] **折讓原申請人撤回（CYID Cloud Draft）**：一般 USER／ADMIN／SUPER_ADMIN 都只能以當次 CYID 原申請 Employee ID 撤銷「自己」尚未核准的折讓，支援 `open`、`review`（未核准）。`withdraw` API 經原 Device Token、原 Workspace／環境、本人 CYID 身分重新驗證，使用 D1 單一原子 UPDATE 同時檢查 Work Item revision、凍結申請 owner、Device active、**不存在任何 manager approval 或 allowance_number_ledger**，再寫 `closed`＋`withdrawn_by_actor_id`／`withdrawn_at`，留下不可變稽核紀錄；不刪凍結申請、不改官方折讓、不呼叫 g0401／g0501。Windows 發票明細新增「撤銷折讓申請」並提示重驗與不可撤銷階段，失聯只能以原 ID readback、不重送。Schema 僅在未上線的 0015 Draft 更新；合成跨 Device 本人／非本人／撤銷／管理員核准後拒絕／撤銷後不可再覆核測試待 exact-head CI。Local 亦新增原申請員工驗證後可撤回未進入光貿確認階段的人工待辦；保留原申請與撤銷人時間在本機 metadata，原問題單標為已解決，不變更官方狀態。真 D1 尚未 migration。
 
+- [x] **2026-10-17 階段一／g0401 負數折扣傳輸整合（Draft）**：發現原發票帶入式 `AllowanceRequestForm` 允許保留負數折扣，但 `AmegoClient.IssueAllowanceAsync` 的舊送出前檢查擋住負單價／負未稅小計／負品項稅額。依官方 D0401 明細可有負數的規格，保留含正負行的 g0401 payload；要求正數整張未稅總額、非負整張稅額、逐行欄位基本有效、所有**行合計須與 header 完全相符**（如正 314／16、負 78／4，最後未稅 236＋稅 12＝含稅 248），不進行原發票逐項歷史分攤比對。新增隔離 HTTP wire 及不合法合計零傳輸回歸測試。**只改 Draft Local Core Gateway，並未把 Local 管理員人工待辦改為自動 g0401、未測真光貿、不授權實際操作**；CI 以此提交 exact HEAD 為準。
+
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。

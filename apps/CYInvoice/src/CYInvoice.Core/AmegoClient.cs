@@ -84,15 +84,26 @@ public sealed class AmegoClient : IAmegoGateway
             throw new ArgumentException("ProductItem count must be between 1 and 9999", nameof(request));
         if (request.TotalAmount <= 0 || request.TaxAmount < 0)
             throw new ArgumentException("allowance totals must be nonnegative with positive net amount", nameof(request));
+        // The original invoice editor retains discounts as negative product
+        // lines. Official D0401 allows signed unit prices, amounts and line
+        // taxes; only the final allowance net/tax totals must be positive.
+        // Do not re-match edited items to the source invoice's item quantities.
+        decimal itemNet = 0m;
+        decimal itemTax = 0m;
         foreach (var item in request.ProductItem)
         {
             if (item.OriginalInvoiceNumber.Trim().Length != 10 ||
                 item.OriginalDescription.Trim().Length is < 1 or > 256 ||
                 !DateOnly.TryParseExact(item.OriginalInvoiceDate.ToString(CultureInfo.InvariantCulture), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
-                item.Quantity <= 0 || item.UnitPrice < 0 || item.Amount <= 0 || item.Tax < 0 ||
-                item.TaxType is < 1 or > 3)
+                item.Quantity <= 0 || item.Amount == 0 ||
+                item.TaxType is < 1 or > 3 ||
+                (item.TaxType != 1 && item.Tax != 0))
                 throw new ArgumentException("invalid allowance item", nameof(request));
+            itemNet = checked(itemNet + item.Amount);
+            itemTax = checked(itemTax + item.Tax);
         }
+        if (itemNet != request.TotalAmount || itemTax != request.TaxAmount)
+            throw new ArgumentException("allowance item totals must match the header", nameof(request));
         using var document = await PostAsync("/json/g0401", new[] { request }, cancellationToken).ConfigureAwait(false);
         var (code, message) = ReadEnvelope(document.RootElement);
         ThrowResponseError(code, message);

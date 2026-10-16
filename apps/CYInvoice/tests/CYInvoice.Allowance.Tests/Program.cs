@@ -10,6 +10,7 @@ using CYInvoice.Core.Storage;
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
+    ("allowance g0401 retains negative discount lines and verifies final totals", TestG0401SignedDiscountAsync),
     ("allowance g0501 cancels existing number exactly once and never reallocates", TestG0501GatewayAsync),
     ("manager review fetches exact official invoice allowances once", TestAllowanceReviewInspectionAsync),
     ("local allowance ceiling deducts only confirmed effective prior allowances", () => RunSync(TestAllowanceRemainingGross)),
@@ -313,6 +314,76 @@ static async Task TestG0401GatewayAsync()
     Equal("AA12345678", data.RootElement[0].GetProperty("ProductItem")[0].GetProperty("OriginalInvoiceNumber").GetString());
     Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
     await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestG0401SignedDiscountAsync()
+{
+    // Matches the original-invoice editor: item 330 gross minus an 82-gross
+    // discount = 248 gross. The g0401 payload is untaxed net and signed tax.
+    var product = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Original item",
+        Quantity = 1, UnitPrice = 314.2857143m,
+        Amount = 314, Tax = 16, TaxType = 1,
+    };
+    var discount = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Original discount",
+        Quantity = 1, UnitPrice = -78.0952381m,
+        Amount = -78, Tax = -4, TaxType = 1,
+    };
+    AllowanceIssueRequest Draft(decimal net, decimal tax,
+        IReadOnlyList<AllowanceProductItem> items) => new()
+    {
+        AllowanceNumber = "A20261015001",
+        AllowanceDate = "20261015",
+        AllowanceType = 2,
+        BuyerIdentifier = "0000000000",
+        BuyerName = "Test Buyer",
+        ProductItem = items,
+        TotalAmount = net,
+        TaxAmount = tax,
+    };
+    var handler = new RecordingHttpHandler((_, _, _) =>
+        JsonResponse("""{"code":0,"msg":""}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var result = await gateway.IssueAllowanceAsync(Draft(236, 12, [product, discount]));
+    Equal(0, result.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    using (var payload = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]))
+    {
+        var row = payload.RootElement[0];
+        Equal(236m, row.GetProperty("TotalAmount").GetDecimal());
+        Equal(12m, row.GetProperty("TaxAmount").GetDecimal());
+        Equal(2, row.GetProperty("ProductItem").GetArrayLength());
+        var rebate = row.GetProperty("ProductItem")[1];
+        Equal(-78.0952381m, rebate.GetProperty("UnitPrice").GetDecimal());
+        Equal(-78m, rebate.GetProperty("Amount").GetDecimal());
+        Equal(-4m, rebate.GetProperty("Tax").GetDecimal());
+    }
+    // Never contact AMEGO if the employee-edited line totals or tax type
+    // disagree with the signed final amount.
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(237, 12, [product, discount])));
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(236, 13, [product, discount])));
+    var invalidTax = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = discount.OriginalInvoiceNumber,
+        OriginalInvoiceDate = discount.OriginalInvoiceDate,
+        OriginalDescription = discount.OriginalDescription,
+        Quantity = 1, UnitPrice = -78.0952381m,
+        Amount = -78, Tax = -4, TaxType = 3,
+    };
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(236, 12, [product, invalidTax])));
     Equal(1, handler.Requests.Count);
 }
 

@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-17 階段一：g0401 Gateway 支援原發票折扣負數明細（Draft）
+
+沿用使用者已定案「帶出原單，自行留下商品與折扣，僅限制最終含稅折讓不得超過官方剩餘額」的設計。發現 Windows `AllowanceRequestForm` 已支援折扣負行，CYID Draft validator 亦支援，但既有 `AmegoClient.IssueAllowanceAsync` 阻擋負 `UnitPrice`／`Amount`／`Tax`，使實際 g0401 發送前被程式拒絕。調整 Local Core Gateway 僅做負行合約合法性及總額一致性查驗：保留原號、日期、正數數量／稅別與整張正數未稅、非負稅額，逐行 Amount／Tax 合計須等於 header；負數折扣行允許，不附加逐品項歷史扣算。增加 330−82＝248 元隔離 HTTP 測試及總額矛盾零送出測試。本輪不接 Local 管理員真 g0401，不觸碰 Cloud D1／Worker、真光貿、發行或部署，後續仍需 g0401 端到端及四捨五入實機驗收。
+
 ## 2026-10-16 原申請員工撤回未核准折讓（CYID Cloud Draft）
 
 新增到既有 `allowance-applications/withdraw`，不造第二套 Work Item。只開放**原本提出申請的 CYID Employee ID 本人**（即使其他人是 ADMIN 也不能代撤）；可撤銷 open 或 review，但只要已存在任何核准 Grant 或配號 Ledger 紀錄，絕對不能員工自行撤銷。伺服端於同一 D1 UPDATE 核對申請 owner、當次 Workspace／環境、active Device、Work Item revision、凍結來源 hash 和 grant／ledger 不存在；成功把原 Work Item closed 並留下新的 immutable `withdrawn_by_actor_id`／`withdrawn_at`，不刪除加密申請、Audit 或折讓號，也不呼叫任何官方 API。Windows 現有發票明細提供撤銷按鈕並重新驗證員工；結果不明只能查原 ID，不自動重送。新增欄位僅在未部署的 Draft 0015，原 D1 不受影響；Local 模式同步新增原申請者可自行撤回尚未由管理員完成的人工待辦，保留原申請、撤回員工與時間，已進入官方確認的待辦仍禁止撤回；合成測試及跨實機驗收須按最新 HEAD 確認。
