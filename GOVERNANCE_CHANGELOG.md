@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.41 — 2026/10/16
+
+- 依使用者要求新增 `apps/CYERPAutoQuery/`（SMART ERP 自動查詢工具）：最小 `PROJECT_RULES.md`、VERSION／BUILD 與 PR／手動 Build workflow；REPO_POLICY 正式維護專案與 CY 桌面視覺採用清單加入本專案。
+- PROJECT_RULES 記錄對 ERP 只讀、INVI02 精準定位、頁籤「固定座標為主、未切換才 OCR」單一備援，以及使用者核准先由 CYERPAutoInput 複製必要程式碼、日後收斂為共用庫；不改其他 App 規則。
+
 ## 2.3.40 — 2026/10/14
 
 - 依使用者要求，CYAccountingWeb 桌機編輯回到原記帳表單；跨裝置共用既有 Adaptive entry editor／draft／cancel 與 app.js transaction writer，移除被取代的 ledger inline renderer、listener、assets 及樣式。PROJECT_RULES owner 地圖同步更新，不新增第二 writer 或 authority。
