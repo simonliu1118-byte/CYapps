@@ -123,6 +123,8 @@ internal static class CloudAllowanceApplicationClientTests
                 historicalAllocationNotQueriedCount=0,
                 historicalAllocationsComplete=false,
                 historicalCoverageReason="HISTORY_RANGE_NOT_PROVEN",
+                historicalGrossCeilingStatus="KNOWN_CEILING_ONLY",
+                historicalKnownGross="53",historicalRemainingCeiling="47",
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -149,6 +151,8 @@ internal static class CloudAllowanceApplicationClientTests
                 historicalAllocationNotQueriedCount=1,
                 historicalAllocationsComplete=false,
                 historicalCoverageReason="DETAIL_QUERY_LIMITED",
+                historicalGrossCeilingStatus="NOT_AVAILABLE",
+                historicalKnownGross=(string?)null,historicalRemainingCeiling=(string?)null,
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -156,6 +160,14 @@ internal static class CloudAllowanceApplicationClientTests
             Check(req,"official-inspection");
             var forged=JsonNode.Parse(JsonSerializer.Serialize(OfficialStatus(false)))!;
             forged["historicalCoverageReason"]="HISTORY_RANGE_NOT_PROVEN";
+            return Json(HttpStatusCode.OK,new{ok=true,inspection=forged});
+        });
+        handler.Enqueue(req => {
+            Check(req,"official-inspection");
+            var forged=JsonNode.Parse(JsonSerializer.Serialize(OfficialStatus(false)))!;
+            forged["historicalGrossCeilingStatus"]="KNOWN_CEILING_ONLY";
+            forged["historicalKnownGross"]="0";
+            forged["historicalRemainingCeiling"]="100";
             return Json(HttpStatusCode.OK,new{ok=true,inspection=forged});
         });
         handler.Enqueue(req => {
@@ -286,6 +298,9 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(false,official.HistoricalAllocationsComplete,"coverage never inferred");
         Equal("NO_HISTORY_REPORTED_NOT_PROOF",official.HistoricalCoverageReason,
             "zero visible history cannot prove entire range");
+        Equal("NOT_AVAILABLE",official.HistoricalGrossCeilingStatus,
+            "no history cannot yield an authorized balance");
+        True(official.HistoricalRemainingCeiling is null,"unknown ceiling is null");
         Equal(false,official.SafeToInferRemainingBalance,"summary cannot authorize balance");
         Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
@@ -306,6 +321,12 @@ internal static class CloudAllowanceApplicationClientTests
             "a historical readback never authorizes remaining balance");
         Equal("HISTORY_RANGE_NOT_PROVEN",historical.HistoricalCoverageReason,
             "matched details do not prove entire history");
+        Equal("KNOWN_CEILING_ONLY",historical.HistoricalGrossCeilingStatus,
+            "known verified rows permit only a ceiling");
+        Equal("53",historical.HistoricalKnownGross,"verified historic gross");
+        Equal("47",historical.HistoricalRemainingCeiling,"non-authorizing upper ceiling");
+        await RejectAsync<InvalidDataException>(() =>
+            client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         await RejectAsync<InvalidDataException>(() =>
@@ -394,6 +415,8 @@ internal static class CloudAllowanceApplicationClientTests
         historicalAllocationNotQueriedCount=0,
         historicalAllocationsComplete=false,
         historicalCoverageReason="NO_HISTORY_REPORTED_NOT_PROOF",
+        historicalGrossCeilingStatus="NOT_AVAILABLE",
+        historicalKnownGross=(string?)null,historicalRemainingCeiling=(string?)null,
         safeToInferRemainingBalance=false,
         itemCheck=new{
             fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0

@@ -140,6 +140,15 @@ internal sealed class CloudAllowanceManagerForm : Form
                 "NO_HISTORY_REPORTED_NOT_PROOF"=>"本次未列歷史折讓，仍無法保證查齊",
                 _=>"已列原號核對完成，但仍無法證明全部歷史已查齊"
             };
+            var ceilingText=v.HistoricalGrossCeilingStatus switch {
+                "KNOWN_CEILING_ONLY"=>
+                    $"本次查證的歷史分攤：{v.HistoricalKnownGross} 元；"+
+                    $"剩餘金額上限參考：{v.HistoricalRemainingCeiling} 元。"+
+                    "注意：這不是已核准的可折餘額。",
+                "KNOWN_SUM_EXCEEDS_ORIGINAL"=>
+                    "已查證歷史分攤總額超過原發票總額，請人工排查。",
+                _=>"無法從目前官方資料計算可靠的金額上限。"
+            };
             MessageBox.Show(this,
                 $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
                 $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
@@ -147,6 +156,7 @@ internal sealed class CloudAllowanceManagerForm : Form
                 $"歷史原號詳查（最多 3 筆）：\n{allocations}\n"+
                 $"本次未詳查：{v.HistoricalAllocationNotQueriedCount} 筆\n"+
                 $"歷史完整性：{coverageText}\n"+
+                $"{ceilingText}\n"+
                 "此分攤僅供逐張人工核對；歷史範圍尚未完整驗證，不能推定剩餘可折額。\n"+
                 $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
                 $"品項比對：{v.ItemCheck.Reason}\n"+

@@ -54,7 +54,8 @@ public sealed record CloudOfficialAllowanceInspection(
     bool SafeToInferRemainingBalance,
     IReadOnlyList<CloudHistoricalAllocationCheck> HistoricalAllocationChecks,
     int HistoricalAllocationNotQueriedCount,bool HistoricalAllocationsComplete,
-    string HistoricalCoverageReason);
+    string HistoricalCoverageReason,string HistoricalGrossCeilingStatus,
+    string? HistoricalKnownGross,string? HistoricalRemainingCeiling);
 
 public sealed record CloudAllowanceNumberReadback(
     string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
@@ -415,6 +416,27 @@ public sealed class CloudAllowanceApplicationClient
             "HISTORY_RANGE_NOT_PROVEN";
         if(Required(item,"historicalCoverageReason")!=coverage)
             throw new InvalidDataException("Historical allowance coverage reason mismatch.");
+        // Seven-decimal values are bounded and recomputed from verified
+        // detail rows; even a plausible Cloud amount is untrusted.
+        var amountPattern=@"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$";
+        var knownAmount=TextField(item,"historicalKnownGross",amountPattern);
+        var remainingCeiling=TextField(item,"historicalRemainingCeiling",amountPattern);
+        var ceilingStatus=Required(item,"historicalGrossCeilingStatus");
+        var canBound=coverage=="HISTORY_RANGE_NOT_PROVEN"&&upload==99&&
+            !cancelled&&!pending&&checks.Count>0&&
+            checks.All(c=>c.LineTotalsVerified&&c.OriginalGross is not null);
+        var knownSum=canBound?checks.Sum(c=>decimal.Parse(c.OriginalGross!,
+            System.Globalization.CultureInfo.InvariantCulture)):0m;
+        var expectedCeilingStatus=!canBound?"NOT_AVAILABLE":
+            knownSum>gross?"KNOWN_SUM_EXCEEDS_ORIGINAL":"KNOWN_CEILING_ONLY";
+        var fmt=System.Globalization.CultureInfo.InvariantCulture;
+        if(ceilingStatus!=expectedCeilingStatus||
+           (expectedCeilingStatus=="KNOWN_CEILING_ONLY" &&
+              (knownAmount!=knownSum.ToString("0.#######",fmt)||
+               remainingCeiling!=(gross-knownSum).ToString("0.#######",fmt)))||
+           (expectedCeilingStatus!="KNOWN_CEILING_ONLY" &&
+              (knownAmount is not null||remainingCeiling is not null)))
+            throw new InvalidDataException("Historical gross ceiling is not verified.");
         if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
             rawCheck.ValueKind!=JsonValueKind.Object ||
             !rawCheck.TryGetProperty("reason",out var reason) ||
@@ -440,7 +462,8 @@ public sealed class CloudAllowanceApplicationClient
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount),
-            history,false,checks,skipped,false,coverage);
+            history,false,checks,skipped,false,coverage,
+            ceilingStatus,knownAmount,remainingCeiling);
     }
 
     // The Worker owns the original D1 allowance number; callers cannot
