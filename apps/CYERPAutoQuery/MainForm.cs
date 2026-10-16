@@ -24,7 +24,10 @@ internal sealed class MainForm : Form
     private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     // 銷貨銷退單: a customer's 銷貨單 and 銷退單 (COPR15/COPR16) by 客戶代號, or by name through the
     // customer list first (user, 2026-10-16: nobody remembers 客戶代號).
-    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SalesMode = 4;
+    // 未收款 (ACRR18, user 2026-10-17): one customer (code, or name through the customer list), all
+    // customers when left empty; 業務未收款: one 業務員's.
+    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SalesMode = 4,
+        ReceivableMode = 5, SalespersonReceivableMode = 6;
     private readonly Label[] _headerLabels = new Label[3];
     private GroupBox? _detailBox;
     /// <summary>Whether the list on the search tab is customers (a double-click then queries 客戶代號).</summary>
@@ -48,6 +51,10 @@ internal sealed class MainForm : Form
     private readonly DataGridView _orders = new();
     private readonly DataGridView _orderLines = new();
     private SalesQueryResult? _salesResult;
+    private readonly TabPage _receivablePage = new("未收款");
+    private readonly DataGridView _bills = new();
+    private readonly DataGridView _vouchers = new();
+    private ReceivableResult? _receivableResult;
     // 查歷史異動 only when asked, for a date range picked here (user, 2026-10-16); an
     // unticked date means 「not filled」: the last year.
     private readonly CheckBox _includeHistory = new() { Text = "查歷史異動", AutoSize = true };
@@ -114,7 +121,7 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨銷退單"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨銷退單", "未收款", "業務未收款"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -212,6 +219,20 @@ internal sealed class MainForm : Form
         _salesPage.Padding = new Padding(4);
         _salesPage.Controls.Add(salesSplit);
         _details.TabPages.Add(_salesPage);
+        // 未收款: the 結帳單 above, the picked one's 憑證 below.
+        var receivableSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
+        foreach (var grid in new[] { _bills, _vouchers })
+        {
+            ConfigureGrid(grid);
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+        }
+        _bills.MultiSelect = false;
+        _bills.SelectionChanged += (_, _) => ShowVouchers();
+        receivableSplit.Panel1.Controls.Add(_bills);
+        receivableSplit.Panel2.Controls.Add(_vouchers);
+        _receivablePage.Padding = new Padding(4);
+        _receivablePage.Controls.Add(receivableSplit);
+        _details.TabPages.Add(_receivablePage);
         root.Controls.Add(_details, 0, 4);
         _search.CellDoubleClick += async (_, e) => await QueryPickedItemAsync(e.RowIndex);
 
@@ -314,6 +335,26 @@ internal sealed class MainForm : Form
                 return;
             case CustomerMode:
                 await StartCustomerQueryAsync();
+                return;
+            case ReceivableMode:
+                // Empty: every customer. A name lists the customers first (one match is queried at once).
+                if (_code.Text.Trim().Length == 0)
+                    await StartReceivableQueryAsync(ReceivableScope.All);
+                else if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, CustomerRules.CodeName) &&
+                         ItemNameRules.TryNormalize(_code.Text, out _, out _))
+                {
+                    if (await StartSearchAsync(customers: true) is { Items.Count: 1 } match &&
+                        ItemSearchResult.Value(match.Items[0], "客戶代號") is { Length: > 0 } matched)
+                    {
+                        _code.Text = matched;
+                        await StartReceivableQueryAsync(ReceivableScope.Customer);
+                    }
+                }
+                else
+                    await StartReceivableQueryAsync(ReceivableScope.Customer);
+                return;
+            case SalespersonReceivableMode:
+                await StartReceivableQueryAsync(ReceivableScope.Salesperson);
                 return;
             case SalesMode:
                 // A name instead of a 客戶代號 lists the customers first; a double-click then queries
@@ -448,6 +489,94 @@ internal sealed class MainForm : Form
         _code.SelectAll();
     }
 
+    /// <summary>未收款 modes: one customer, one 業務員 or everyone; failures shown in a message box.</summary>
+    private async Task StartReceivableQueryAsync(ReceivableScope scope)
+    {
+        ReceivableQuery query;
+        try
+        {
+            query = ReceivableQuery.Resolve(scope, _code.Text);
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(this, ex.Message, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            ShowReceivables(null);
+            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QueryReceivablesAsync(query, progress, ct), result =>
+            {
+                ShowReceivables(result);
+                _details.SelectedTab = _receivablePage;
+                if (!result.Found)
+                {
+                    SetStatus($"ERP：{query.Describe()}沒有未收款");
+                    return AutomationOutcome.NotFound;
+                }
+                SetStatus($"ERP：{query.Describe()}未收款 {result.Bills.Count} 張結帳單、{result.CustomerCount} 位客戶，未收合計 {Num(result.TotalUnpaid)}（{result.Elapsed.TotalSeconds:0.0} 秒）");
+                return AutomationOutcome.Done;
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 未收款查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        Activate();
+        _code.Focus();
+        _code.SelectAll();
+    }
+
+    private static readonly string[] BillColumns = ["客戶代號", "客戶名稱", "日期", "結帳單號", "業務員", "發票號碼", "幣別", "應收帳款", "應收稅額", "未收帳款", "憑證數"];
+    private static readonly string[] VoucherColumns = ["憑證號碼", "憑證日期", "未稅金額", "稅額"];
+
+    private void ShowReceivables(ReceivableResult? result)
+    {
+        _receivableResult = result;
+        SetHeaderCaptions(customer: true);
+        _headerLabels[2].Text = "未收合計";
+        if (_detailBox is not null) _detailBox.Text = "結帳單（點選下方結帳單）";
+        var single = result?.Query.Scope == ReceivableScope.Customer;
+        _itemCode.Text = result is null ? string.Empty : single ? result.Query.Code : result.Query.Describe();
+        _itemName.Text = single ? result!.Bills.FirstOrDefault()?.CustomerName ?? string.Empty
+            : result is null ? string.Empty : $"{result.CustomerCount} 位客戶";
+        _specification.Text = result is null ? string.Empty : $"{Num(result.TotalUnpaid)}（{result.Bills.Count} 張結帳單）";
+        _fields.Rows.Clear();
+        _bills.Rows.Clear();
+        _bills.Columns.Clear();
+        foreach (var c in BillColumns) _bills.Columns.Add(c, c);
+        if (result is not null)
+            foreach (var b in result.Bills)
+                _bills.Rows.Add(b.CustomerCode, b.CustomerName, b.Date.ToString("yyyy/MM/dd"), b.BillNo, $"{b.SalespersonCode} {b.SalespersonName}".Trim(),
+                    b.InvoiceNo, b.Currency, Num(b.Receivable), Num(b.ReceivableTax), Num(b.Unpaid), b.Vouchers.Count);
+        _receivablePage.Text = result is null ? "未收款" : $"未收款（{result.Bills.Count}）";
+        ShowVouchers();
+    }
+
+    private void ShowVouchers()
+    {
+        _vouchers.Rows.Clear();
+        if (_vouchers.Columns.Count == 0)
+            foreach (var c in VoucherColumns) _vouchers.Columns.Add(c, c);
+        var index = _bills.CurrentRow?.Index ?? -1;
+        if (_receivableResult is null || index < 0 || index >= _receivableResult.Bills.Count) return;
+        var b = _receivableResult.Bills[index];
+        _fields.Rows.Clear();
+        foreach (var (name, value) in new[]
+        {
+            ("客戶", $"{b.CustomerCode} {b.CustomerName}"), ("結帳單號", b.BillNo), ("日期", b.Date.ToString("yyyy/MM/dd")),
+            ("業務員", $"{b.SalespersonCode} {b.SalespersonName}".Trim()), ("發票號碼", b.InvoiceNo), ("幣別", b.Currency),
+            ("應收帳款", Num(b.Receivable)), ("應收稅額", Num(b.ReceivableTax)), ("未收帳款", Num(b.Unpaid)),
+        })
+            if (value.Length > 0) _fields.Rows.Add(name, value);
+        foreach (var v in b.Vouchers)
+            _vouchers.Rows.Add(v.VoucherNo, v.Date?.ToString("yyyy/MM/dd") ?? string.Empty, Num(v.Amount), Num(v.Tax));
+    }
+
     private static readonly string[] OrderColumns = ["類別", "單據日期", "單號", "品項", "總數量", "金額", "稅額", "合計", "業務員", "備註", "銷退原因"];
     private static readonly string[] LineColumns = ["序號", "品號", "品名", "規格", "數量", "單位", "單價", "金額", "類型", "贈/備品量", "庫別", "批號", "備註", "原銷貨單"];
 
@@ -546,7 +675,7 @@ internal sealed class MainForm : Form
         var column = _searchIsCustomer ? "客戶代號" : "品號";
         var code = Convert.ToString(_search.Rows[rowIndex].Cells[column].Value) ?? string.Empty;
         if (code.Length == 0) return;
-        if (!(_searchIsCustomer && _mode.SelectedIndex == SalesMode))
+        if (!(_searchIsCustomer && _mode.SelectedIndex is SalesMode or ReceivableMode))
             _mode.SelectedIndex = _searchIsCustomer ? CustomerMode : ItemMode;
         _code.Text = code;
         await StartQueryAsync();

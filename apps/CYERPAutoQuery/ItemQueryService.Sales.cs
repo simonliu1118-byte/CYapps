@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace CYERPAutoQuery;
 
 /// <summary>
-/// 銷貨單查詢 (user, 2026-10-16/17): a customer's 銷貨單 from COPR15 銷貨單明細表 and 銷退單 from
+/// ERP 報表 (明細表) queries. 銷貨銷退單 (user, 2026-10-16/17): a customer's 銷貨單 from COPR15 銷貨單明細表 and 銷退單 from
 /// COPR16 銷退單明細表, both driven the same way: 作業速查 → 基本選項 客戶代號 起＝迄＝code, 單據日期 →
 /// 進階選項 確認狀態／結帳狀態 「全部」 → 即時報表 → report window → XLSX → 存成EXCEL檔 (no thousands
 /// separator) → 確認 → ERP writes into C:\My Documents → the file is moved to TEMP, read and
@@ -30,31 +30,50 @@ internal sealed partial class ItemQueryService
         return new SalesQueryResult(query, orders.OrderBy(o => o, SalesExport.Newest).ToList(), watch.Elapsed);
     }
 
-    private async Task<IReadOnlyList<SalesOrder>> RunSalesReportAsync(SalesReport report, SalesQuery query, IProgress<string> progress, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SalesOrder>> RunSalesReportAsync(SalesReport sales, SalesQuery query, IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        var report = sales.Form;
+        var sheets = await RunReportAsync(report, $"客戶 {query.CustomerCode}，{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}",
+            async (dialog, ct) =>
+            {
+                await FillReportBasicAsync(dialog, report, query, ct);
+                await FillReportAdvancedAsync(dialog, report, ct);
+                await VerifyReportAdvancedAsync(dialog, report, ct);
+            }, progress, cancellationToken);
+        var orders = SalesExport.Parse(sheets, sales, query);
+        _log.Info("sales", $"{report.Code} orders={orders.Count} lines={orders.Sum(o => o.Lines.Count)}");
+        return orders;
+    }
+
+    /// <summary>
+    /// One report run: close leftovers → open through 作業速查 → <paramref name="fill"/> the conditions
+    /// → 即時報表 → XLSX export → read → close the report and condition windows (also after a
+    /// failure or Esc). The export is deleted from TEMP once read.
+    /// </summary>
+    private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>> RunReportAsync(ErpReport report, string conditions,
+        Func<nint, CancellationToken, Task> fill, IProgress<string> progress, CancellationToken cancellationToken)
     {
         await CloseReportWindowsAsync(report, progress, leftover: true);
         progress.Report($"ERP：開啟{report.Title}（作業速查）…");
         await OpenFormAsync(report.Code, report.Title, () => FindReportConditions(report).Count > 0, cancellationToken);
-        var conditions = FindReportConditions(report);
-        if (conditions.Count != 1)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開啟{report.Code}後找到 {conditions.Count} 個{report.Title}條件視窗，已停止。");
-        var dialog = conditions[0];
-        _log.Info("sales", $"{report.Code} conditions class={NativeMethods.ClassName(dialog)} title=\"{NativeMethods.WindowText(dialog)}\"");
+        var found = FindReportConditions(report);
+        if (found.Count != 1)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開啟{report.Code}後找到 {found.Count} 個{report.Title}條件視窗，已停止。");
+        var dialog = found[0];
+        _log.Info("report", $"{report.Code} conditions class={NativeMethods.ClassName(dialog)} title=\"{NativeMethods.WindowText(dialog)}\"");
 
         var closed = false;
         try
         {
             if (!Win32Automation.PrepareForeground(dialog, _log))
                 throw new InvalidOperationException($"無法把{report.Title}帶到前景。");
-            progress.Report($"ERP：設定{report.Title}條件（客戶 {query.CustomerCode}，{Invq01Layout.ErpDate(query.From)}～{Invq01Layout.ErpDate(query.To)}）…");
-            await FillReportBasicAsync(dialog, report, query, cancellationToken);
-            await FillReportAdvancedAsync(dialog, report, cancellationToken);
+            progress.Report($"ERP：設定{report.Title}條件（{conditions}）…");
+            await fill(dialog, cancellationToken);
 
             progress.Report($"ERP：產生{report.Title}（即時報表）…");
-            await VerifyReportAdvancedAsync(dialog, report, cancellationToken);
             var before = FindReportWindows(report).ToHashSet();
             await ClickButtonAsync(dialog, SalesReportLayout.RunButton, $"{report.Title}的「即時報表」", cancellationToken);
-            _log.Info("sales", $"{report.Code} 即時報表 clicked");
+            _log.Info("report", $"{report.Code} 即時報表 clicked");
             var viewer = await WaitReportViewerAsync(dialog, report, before, cancellationToken);
 
             progress.Report($"ERP：{report.Title}轉出 Excel…");
@@ -62,13 +81,11 @@ internal sealed partial class ItemQueryService
             try
             {
                 await ExportReportAsync(viewer, report, path, cancellationToken);
-                var orders = SalesExport.Parse(await ExportFiles.ReadAsync(path, cancellationToken), report, query);
-                _log.Info("sales", $"{report.Code} orders={orders.Count} lines={orders.Sum(o => o.Lines.Count)}");
-
+                var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
                 progress.Report($"ERP：關閉{report.Title}…");
                 closed = await CloseReportWindowsAsync(report, null, leftover: false);
                 if (!closed) throw new InvalidOperationException($"{report.Title}的視窗沒有全部關閉，請人工確認 ERP 畫面。");
-                return orders;
+                return sheets;
             }
             finally
             {
@@ -78,14 +95,14 @@ internal sealed partial class ItemQueryService
         finally
         {
             if (!closed && !await CloseReportWindowsAsync(report, null, leftover: false))
-                _log.Warn("sales", $"{report.Code} windows left open after a failure");
+                _log.Warn("report", $"{report.Code} windows left open after a failure");
         }
     }
 
     // ---- windows ---------------------------------------------------------------------
 
     /// <summary>Visible top-level windows captioned with the report's name (conditions and report), message boxes excluded.</summary>
-    private static List<nint> FindReportWindows(SalesReport report)
+    private static List<nint> FindReportWindows(ErpReport report)
     {
         var found = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
@@ -103,14 +120,14 @@ internal sealed partial class ItemQueryService
         Win32Automation.EnumerateChildren(hwnd).Any(c => Invi02Layout.NormalizeCaption(c.Text) == SalesReportLayout.CustomerGroup) ||
         FindButton(hwnd, c => c.StartsWith(SalesReportLayout.RunButton, StringComparison.Ordinal)) is not null;
 
-    private static List<nint> FindReportConditions(SalesReport report) =>
+    private static List<nint> FindReportConditions(ErpReport report) =>
         FindReportWindows(report).Where(IsReportConditions).ToList();
 
     /// <summary>
     /// Closes the report windows (report first, then conditions) with WM_CLOSE; not cancellable so it
     /// also runs after Esc. <paramref name="leftover"/>: ones left by the user or an earlier run.
     /// </summary>
-    private async Task<bool> CloseReportWindowsAsync(SalesReport report, IProgress<string>? progress, bool leftover)
+    private async Task<bool> CloseReportWindowsAsync(ErpReport report, IProgress<string>? progress, bool leftover)
     {
         var open = FindReportWindows(report).OrderBy(IsReportConditions).ToList();
         if (open.Count == 0) return true;
@@ -147,10 +164,10 @@ internal sealed partial class ItemQueryService
     // ---- conditions --------------------------------------------------------------------
 
     /// <summary>Shows a condition tab: measured position, then OCR of the tab strip (via <see cref="ShowLazyTabAsync"/>).</summary>
-    private async Task ShowReportTabAsync(nint dialog, SalesReport report, string tab, CancellationToken cancellationToken)
+    private async Task ShowReportTabAsync(nint dialog, ErpReport report, string tab, CancellationToken cancellationToken)
     {
         WindowControl? sheet = null;
-        await WaitUntilAsync(() => (sheet = SalesReportLayout.Tabs.Select(t => Win32Automation.FindTabSheet(dialog, t)).FirstOrDefault(t => t is not null)) is not null,
+        await WaitUntilAsync(() => (sheet = report.Tabs.Select(t => Win32Automation.FindTabSheet(dialog, t)).FirstOrDefault(t => t is not null)) is not null,
             AfterActionWaitMs, cancellationToken);
         if (sheet is null)
         {
@@ -160,11 +177,11 @@ internal sealed partial class ItemQueryService
         var pageHandle = NativeMethods.GetParent(sheet.Handle);
         var page = Win32Automation.EnumerateChildren(dialog).FirstOrDefault(c => c.Handle == pageHandle)
             ?? throw new InvalidOperationException($"{report.Title}找不到頁籤所在的頁面。");
-        await ShowLazyTabAsync(dialog, page, SalesReportLayout.TabStrip, tab, report.Title, cancellationToken);
+        await ShowLazyTabAsync(dialog, page, report.Strip, tab, report.Title, cancellationToken);
     }
 
     /// <summary>The visible group box captioned <paramref name="caption"/> and its input boxes, top to bottom.</summary>
-    private List<WindowControl> GroupBoxes(nint dialog, SalesReport report, string caption)
+    private List<WindowControl> GroupBoxes(nint dialog, ErpReport report, string caption)
     {
         var group = Win32Automation.EnumerateChildren(dialog)
             .FirstOrDefault(c => c.Visible && Invi02Layout.NormalizeCaption(c.Text) == caption);
@@ -184,7 +201,7 @@ internal sealed partial class ItemQueryService
     /// then 單據日期 typed as in INVQ01. An unasked date must be empty: a date left in the box
     /// would narrow the report without anyone noticing.
     /// </summary>
-    private async Task FillReportBasicAsync(nint dialog, SalesReport report, SalesQuery query, CancellationToken cancellationToken)
+    private async Task FillReportBasicAsync(nint dialog, ErpReport report, SalesQuery query, CancellationToken cancellationToken)
     {
         await ShowReportTabAsync(dialog, report, SalesReportLayout.BasicTab, cancellationToken);
         var customer = GroupBoxes(dialog, report, SalesReportLayout.CustomerGroup);
@@ -229,7 +246,7 @@ internal sealed partial class ItemQueryService
     /// 進階選項 (user, 2026-10-16): 確認狀態 and 結帳狀態 「全部」 — the two drop-downs, top to bottom,
     /// 全部 the last item of both. 列印單價金額 must stay ticked; the export is refused without 單價.
     /// </summary>
-    private async Task FillReportAdvancedAsync(nint dialog, SalesReport report, CancellationToken cancellationToken)
+    private async Task FillReportAdvancedAsync(nint dialog, ErpReport report, CancellationToken cancellationToken)
     {
         await ShowReportTabAsync(dialog, report, SalesReportLayout.AdvancedTab, cancellationToken);
         var sheet = await WaitForTabSheetAsync(dialog, SalesReportLayout.AdvancedTab, AfterActionWaitMs, cancellationToken, visible: true)
@@ -277,7 +294,7 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>Both 進階選項 drop-downs still show 「全部」 after focus has left them; else ERP dropped the choice.</summary>
-    private async Task VerifyReportAdvancedAsync(nint dialog, SalesReport report, CancellationToken cancellationToken)
+    private async Task VerifyReportAdvancedAsync(nint dialog, ErpReport report, CancellationToken cancellationToken)
     {
         await Pace.Delay(200, cancellationToken);
         var sheet = Win32Automation.FindTabSheet(dialog, SalesReportLayout.AdvancedTab);
@@ -296,7 +313,7 @@ internal sealed partial class ItemQueryService
     /// top-level windows: V0.6.0 Build 2 LOG (2026-10-17) never found it among the ERP process's
     /// own windows although it was on screen. An ERP message instead stops with that message.
     /// </summary>
-    private async Task<nint> WaitReportViewerAsync(nint dialog, SalesReport report, IReadOnlySet<nint> before, CancellationToken cancellationToken)
+    private async Task<nint> WaitReportViewerAsync(nint dialog, ErpReport report, IReadOnlySet<nint> before, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + ReportRunWaitMs;
         var started = Environment.TickCount64;
@@ -329,7 +346,7 @@ internal sealed partial class ItemQueryService
     /// workbook ERP wrote is moved to <paramref name="path"/>. 「匯出失敗 … 系統找不到指定的路徑」
     /// means ERP's folder is missing (user, 2026-10-16): it is created and the export done once more.
     /// </summary>
-    private async Task ExportReportAsync(nint viewer, SalesReport report, string path, CancellationToken cancellationToken)
+    private async Task ExportReportAsync(nint viewer, ErpReport report, string path, CancellationToken cancellationToken)
     {
         var folders = new List<string> { SalesReportLayout.ErpExportFolder };
         EnsureFolder(SalesReportLayout.ErpExportFolder);
@@ -385,14 +402,14 @@ internal sealed partial class ItemQueryService
         }
     }
 
-    private static HashSet<string> ReportFiles(IEnumerable<string> folders, SalesReport report) =>
+    private static HashSet<string> ReportFiles(IEnumerable<string> folders, ErpReport report) =>
         folders.Where(Directory.Exists)
             .SelectMany(f => Directory.EnumerateFiles(f, "*.xlsx"))
             .Where(f => SalesReportLayout.IsReportFile(Path.GetFileName(f), report))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The new workbook: the path ERP named when it exists, else the one new report file in the folders.</summary>
-    private static async Task<string?> WaitReportFileAsync(List<string> folders, SalesReport report, IReadOnlySet<string> known,
+    private static async Task<string?> WaitReportFileAsync(List<string> folders, ErpReport report, IReadOnlySet<string> known,
         DateTime started, string message, CancellationToken cancellationToken)
     {
         string? found = null;
@@ -428,7 +445,7 @@ internal sealed partial class ItemQueryService
     /// The report window's toolbar button 「XLSX」 (second from the left, user's screenshot
     /// 2026-10-16): its measured position first, OCR of the toolbar when no dialog follows.
     /// </summary>
-    private async Task<nint> OpenSaveDialogAsync(nint viewer, SalesReport report, CancellationToken cancellationToken)
+    private async Task<nint> OpenSaveDialogAsync(nint viewer, ErpReport report, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(viewer, _log))
             throw new InvalidOperationException($"無法把{report.Title}的報表視窗帶到前景。");
@@ -467,7 +484,7 @@ internal sealed partial class ItemQueryService
     /// 存成EXCEL檔: format xlsx (ERP's default, checked), 「顯示數值欄位無千分符號」 (user,
     /// 2026-10-16: plain numbers are easier to read), then 確認.
     /// </summary>
-    private async Task FillSaveDialogAsync(nint dialog, SalesReport report, CancellationToken cancellationToken)
+    private async Task FillSaveDialogAsync(nint dialog, ErpReport report, CancellationToken cancellationToken)
     {
         var format = Win32Automation.InputControls(dialog, visibleOnly: true).FirstOrDefault(c => Invi02Layout.IsCombo(c.ClassName));
         var formatText = format is null ? string.Empty : ComboText(format);

@@ -152,8 +152,8 @@ public class SalesOrderQueryTests
         Assert.Equal(@"C:\My Documents\COPR1520261016000009202610160001.xlsx", SalesReportLayout.PathIn(failed));
         const string done = "匯出成功: C:\\My Documents\\ COPR1520261016000009202610160001.xlsx";
         Assert.False(SalesReportLayout.IsExportFailed(done));
-        Assert.True(SalesReportLayout.IsReportFile("COPR1520261016000009202610160001.xlsx", SalesReport.Sales));
-        Assert.False(SalesReportLayout.IsReportFile("COPR1620261016000009202610160001.xlsx", SalesReport.Sales));
+        Assert.True(SalesReportLayout.IsReportFile("COPR1520261016000009202610160001.xlsx", SalesReport.Sales.Form));
+        Assert.False(SalesReportLayout.IsReportFile("COPR1620261016000009202610160001.xlsx", SalesReport.Sales.Form));
     }
 
     // COPR16 銷退單明細表 (user's sample 2026-10-17): other column names, no 金額 (原幣未稅金額 instead).

@@ -56,7 +56,7 @@ internal static class SalesReportLayout
     }
 
     /// <summary>A workbook ERP wrote for <paramref name="report"/>: 「COPR1520261016000003202610160001.xlsx」.</summary>
-    public static bool IsReportFile(string fileName, SalesReport report) =>
+    public static bool IsReportFile(string fileName, ErpReport report) =>
         fileName.StartsWith(report.Code, StringComparison.OrdinalIgnoreCase) &&
         fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
 }
@@ -99,8 +99,11 @@ internal sealed record SalesReport(
 
     public static readonly IReadOnlyList<SalesReport> All = [Sales, Returns];
 
+    /// <summary>The ERP report this one is read from.</summary>
+    public ErpReport Form => new(Code, Title, SalesReportLayout.Tabs, SalesReportLayout.TabStrip);
+
     /// <summary>「銷貨單明細表[公司]」 or 「銷貨單明細表(COPR15)[A]」.</summary>
-    public bool IsTitle(string title) => title.Contains(Title, StringComparison.Ordinal);
+    public bool IsTitle(string title) => Form.IsTitle(title);
 }
 
 /// <summary>One line of a 銷貨單 or 銷退單.</summary>

@@ -18,6 +18,8 @@
     <Compile Include="..\..\ItemNameSearch.cs" Link="Linked\ItemNameSearch.cs" />
     <Compile Include="..\..\CustomerQuery.cs" Link="Linked\CustomerQuery.cs" />
     <Compile Include="..\..\SalesOrderQuery.cs" Link="Linked\SalesOrderQuery.cs" />
+    <Compile Include="..\..\ErpReport.cs" Link="Linked\ErpReport.cs" />
+    <Compile Include="..\..\ReceivableQuery.cs" Link="Linked\ReceivableQuery.cs" />
     <Compile Include="..\..\ErpForm.cs" Link="Linked\ErpForm.cs" />
     <Compile Include="..\..\OcrWordFinder.cs" Link="Linked\OcrWordFinder.cs" />
     <Compile Include="..\..\OcrTextNormalizer.cs" Link="Linked\OcrTextNormalizer.cs" />
