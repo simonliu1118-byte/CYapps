@@ -41,7 +41,18 @@ internal sealed class AppLogger : IDisposable
 
     public void Info(string area, string message) => Write("INFO", area, message);
     public void Warn(string area, string message) => Write("WARN", area, message);
-    public void Error(string area, Exception ex) => Write("ERROR", area, $"{ex.GetType().Name}: {ex.Message}");
+    // The place in the code is logged too (V0.5.0 LOG: a bare IndexOutOfRangeException could not
+    // be traced). Stack frames name methods and line numbers only, no business data.
+    public void Error(string area, Exception ex) =>
+        Write("ERROR", area, $"{ex.GetType().Name}: {ex.Message} at {Where(ex)}" +
+                             (ex.InnerException is { } inner ? $" inner={inner.GetType().Name} at {Where(inner)}" : string.Empty));
+
+    /// <summary>The innermost few stack frames of <paramref name="ex"/>, on one line.</summary>
+    public static string Where(Exception ex) =>
+        string.Join(" < ", (ex.StackTrace ?? string.Empty)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(4)
+            .Select(f => f.StartsWith("at ", StringComparison.Ordinal) ? f[3..] : f));
 
     private void Write(string level, string area, string message)
     {

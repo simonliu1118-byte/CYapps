@@ -75,16 +75,40 @@ internal sealed class PaddleOcrService
         var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoQuery_paddle_{Guid.NewGuid():N}.png");
         try
         {
-            using var prepared = PrepareForOcr(bitmap, maxScale, out var scale);
-            prepared.Save(temp, ImageFormat.Png);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var engine = EnsureEngine();
-            var result = await Task.Run(() => engine.RecognizeText(temp), cancellationToken);
+            // The engine itself can throw on a particular image (V0.5.0 LOG, 2026-10-16:
+            // IndexOutOfRangeException reading COPI01's Ribbon); the same picture at another scale
+            // is read fine, so a failure is retried at other scales before giving up.
+            var scales = new[] { maxScale, 1.0, 1.5 }.Distinct().ToArray();
+            Bitmap? prepared = null;
+            double scale = 1;
+            OcrResult? result = null;
+            for (var attempt = 0; attempt < scales.Length; attempt++)
+            {
+                prepared?.Dispose();
+                prepared = PrepareForOcr(bitmap, scales[attempt], out scale);
+                prepared.Save(temp, ImageFormat.Png);
+                cancellationToken.ThrowIfCancellationRequested();
+                var engine = EnsureEngine();
+                try
+                {
+                    result = await Task.Run(() => engine.RecognizeText(temp), cancellationToken);
+                    break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _log.Warn("vision", $"PaddleOCR failed attempt={attempt + 1} max_scale={scales[attempt]:0.##} image={bitmap.Width}x{bitmap.Height}: {ex.GetType().Name} at {AppLogger.Where(ex)}");
+                    if (attempt == scales.Length - 1)
+                    {
+                        prepared.Dispose();
+                        throw new InvalidOperationException("文字辨識（OCR）失敗，請再查詢一次；若一直發生，請把 LOG 傳給開發人員。", ex);
+                    }
+                }
+            }
+            using var _ = prepared!;
             cancellationToken.ThrowIfCancellationRequested();
 
             var tokens = new List<(int Line, OcrToken Token)>();
-            if (result.WordResults is not null)
+            if (result!.WordResults is not null)
             {
                 foreach (var word in result.WordResults)
                 {
