@@ -18,6 +18,10 @@ CREATE TABLE work_items (
     reported_by_actor_id TEXT,
     reviewed_by_actor_id TEXT,
     closed_by_actor_id TEXT,
+    -- Applicant withdrawal closes only the unapproved ALLOWANCE work item.
+    -- Immutable audit metadata remains even though the request is not issued.
+    withdrawn_by_actor_id TEXT,
+    withdrawn_at TEXT,
     resolution_code TEXT CHECK (resolution_code IN (
       'resolved_locally','checked_official','duplicate_report',
       'not_actionable','needs_followup')),
@@ -40,6 +44,10 @@ CREATE TABLE work_items (
     CHECK(kind<>'UPLOAD_ISSUE' OR status<>'closed'
        OR (reviewed_by_actor_id IS NOT NULL
          AND closed_by_actor_id IS NOT NULL AND resolution_code IS NOT NULL)),
+    CHECK((withdrawn_by_actor_id IS NULL AND withdrawn_at IS NULL)
+       OR (kind='ALLOWANCE' AND status='closed'
+           AND withdrawn_by_actor_id IS NOT NULL
+           AND withdrawn_at IS NOT NULL)),
     UNIQUE (workspace_id, environment, kind, reference_hash)
 );
 CREATE INDEX idx_work_items_workspace_status
@@ -54,3 +62,14 @@ CREATE TRIGGER upload_issue_no_delete
 BEFORE DELETE ON work_items
 WHEN OLD.kind='UPLOAD_ISSUE'
 BEGIN SELECT RAISE(ABORT,'UPLOAD_ISSUE_NOT_DELETABLE'); END;
+
+-- A withdrawn allowance is a permanent audit event; it may not reopen,
+-- change actor, or lose the original withdrawal timestamp.
+CREATE TRIGGER allowance_withdrawn_immutable
+BEFORE UPDATE ON work_items
+WHEN OLD.kind='ALLOWANCE' AND OLD.withdrawn_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_WITHDRAWAL_IMMUTABLE'); END;
+CREATE TRIGGER allowance_withdrawn_no_delete
+BEFORE DELETE ON work_items
+WHEN OLD.kind='ALLOWANCE' AND OLD.withdrawn_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'ALLOWANCE_WITHDRAWAL_NOT_DELETABLE'); END;

@@ -356,7 +356,64 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(0,handler.PendingCount,"client validations never send unsafe requests");
         True(CloudAllowanceApplicationClient.CreateItemId().StartsWith("wi_",StringComparison.Ordinal),
             "caller can prepare and durably persist an opaque request ID");
+        await VerifyEmployeeWithdrawalAsync();
     }
+    private static async Task VerifyEmployeeWithdrawalAsync()
+    {
+        var h=new QueueHandler();
+        h.Enqueue(req => {
+            Check(req,"withdraw");
+            using var json=JsonDocument.Parse(req.Content!.ReadAsStringAsync()
+                .GetAwaiter().GetResult());
+            Equal(Id,json.RootElement.GetProperty("itemId").GetString(),
+                "Cannot withdraw a different Work Item");
+            Equal(2,json.RootElement.GetProperty("expectedRevision").GetInt32(),
+                "Caller must use server current revision");
+            True(!json.RootElement.TryGetProperty("workspaceId",out _),
+                "Workspace must come from CYID Device binding");
+            return Json(HttpStatusCode.OK,new {
+                ok=true,itemId=Id,status="closed",revision=3,withdrawn=true,
+                withdrawnAt="2026-10-16T13:00:00Z",officialIssued=false
+            });
+        });
+        h.Enqueue(req => {
+            Check(req,"get");
+            return Json(HttpStatusCode.OK,new {ok=true,application=new {
+                itemId=Id,environment="test",status="closed",revision=3,
+                originalInvoiceNumber="AB12345678",allowanceDay="20261015",
+                requestedGrossAmount=50,reason="Synthetic allowance",
+                applicantEmployeeId="cyid_user",sellerInvoice="12345678",
+                createdAt="2026-10-15T02:00:00Z",
+                withdrawn=true,withdrawnAt="2026-10-16T13:00:00Z"
+            }});
+        });
+        using var transport=new HttpClient(h);
+        var api=new CloudAllowanceApplicationClient(transport,new Uri(Endpoint),Token);
+        var result=await api.WithdrawAsync(Id,2,"0001","SyntheticPass12");
+        Equal(Id,result.ItemId,"withdrawal readback Work Item");
+        Equal(3,result.Revision,"withdrawal increments only one revision");
+        True((await api.GetAsync(Id,"0001","SyntheticPass12"))?.Withdrawn==true,
+            "Applicant may read back a successful withdrawn application");
+        Equal(0,h.PendingCount,"Withdrawal never invokes g0401 or g0501");
+        await RejectAsync<ArgumentOutOfRangeException>(()=>
+            api.WithdrawAsync(Id,0,"0001","SyntheticPass12"));
+        var fail=new QueueHandler();
+        fail.Enqueue(req=>{
+            Check(req,"withdraw");
+            return Json(HttpStatusCode.Conflict,new {
+                ok=false,error=new{code="WITHDRAWAL_NOT_ALLOWED_REFRESH_REQUIRED"}
+            });
+        });
+        using var failTransport=new HttpClient(fail);
+        var blocked=new CloudAllowanceApplicationClient(failTransport,new Uri(Endpoint),Token);
+        try {
+            await blocked.WithdrawAsync(Id,2,"0001","SyntheticPass12");
+            throw new InvalidOperationException("Approved allowance was withdrawn");
+        }
+        catch(CloudApiException e) when(e.Code=="WITHDRAWAL_NOT_ALLOWED_REFRESH_REQUIRED"){}
+        Equal(0,fail.PendingCount,"No automatic withdrawal retry after a conflict");
+    }
+
     private static object Reconciliation(string reason) => new {
         itemId=Id,expectedRevision=2,allowanceNumber="A20261015001",
         listReason=reason,requiresManualReconciliation=true,

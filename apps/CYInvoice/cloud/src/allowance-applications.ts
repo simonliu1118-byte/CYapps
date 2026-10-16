@@ -192,3 +192,64 @@ export async function loadFrozenAllowanceApplication(db:D1Database,
     applicantDeviceId:row.applicant_device_id,applicationReason:row.application_reason,
     templateJson:json,companySettingsRevision:row.company_settings_revision};
 }
+
+/** Applicant-only cancellation of an unapproved, never-numbered request.
+ * Every guard (owner, CYID principal, device, revision, missing grant and
+ * missing number) is checked in the ONE atomic D1 UPDATE. Never delete the
+ * encrypted application or its original Work Item audit trail.
+ */
+export async function withdrawFrozenAllowanceApplication(db:D1Database,input:{
+  workspaceId:string;deviceId:string;workItemId:string;
+  expectedRevision:number;environment:"test"|"production";
+},authority:ApplicantAuthority):Promise<{revision:number;withdrawnAt:string}>{
+  assertScope(input.workspaceId,input.deviceId,input.workItemId);
+  if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1||
+     !["test","production"].includes(input.environment))
+    throw new Error("ALLOWANCE_WITHDRAW_INVALID");
+  const first=await authority.revalidate();
+  if(!first||first.workspaceId!==input.workspaceId||!first.employeeId||
+     first.employeeId.length>100)
+    throw new Error("ALLOWANCE_WITHDRAW_AUTH_REQUIRED");
+  const second=await authority.revalidate();
+  if(!samePrincipal(first,second,input.workspaceId))
+    throw new Error("ALLOWANCE_WITHDRAW_AUTH_CHANGED");
+  const at=new Date().toISOString();
+  // Closing a reviewed item without a grant is safe; once a manager grants
+  // authority, allocates a number or sends, withdrawal is permanently blocked.
+  const changed=await db.prepare(`
+    UPDATE work_items SET status='closed',revision=revision+1,
+      actor_id=?1,updated_by_device_id=?2,updated_at=?3,
+      withdrawn_by_actor_id=?1,withdrawn_at=?3
+    WHERE work_item_id=?4 AND workspace_id=?5
+      AND environment=?6 AND kind='ALLOWANCE'
+      AND revision=?7 AND status IN ('open','review')
+      AND withdrawn_at IS NULL
+      -- Managers may have reviewed this Work Item, updating actor_id.
+      -- Original applicant is verified against immutable application owner.
+      AND EXISTS (
+        SELECT 1 FROM allowance_applications a
+        WHERE a.work_item_id=work_items.work_item_id
+          AND a.workspace_id=work_items.workspace_id
+          AND a.environment=work_items.environment
+          AND a.reference_hash=work_items.reference_hash
+          AND a.applicant_employee_id=?1)
+      AND EXISTS (
+        SELECT 1 FROM devices d JOIN workspaces w
+          ON d.workspace_id=w.workspace_id
+        WHERE d.device_id=?2 AND d.workspace_id=?5
+          AND d.status='active' AND d.employee_authority_state='cloud'
+          AND w.status='active')
+      AND NOT EXISTS (
+        SELECT 1 FROM allowance_execution_approvals g
+        WHERE g.work_item_id=work_items.work_item_id
+          AND g.workspace_id=work_items.workspace_id)
+      AND NOT EXISTS (
+        SELECT 1 FROM allowance_number_ledger l
+        WHERE l.work_item_id=work_items.work_item_id
+          AND l.workspace_id=work_items.workspace_id)
+  `).bind(first.employeeId,input.deviceId,at,input.workItemId,
+    input.workspaceId,input.environment,input.expectedRevision).run();
+  if(changed.meta.changes!==1)
+    throw new Error("ALLOWANCE_WITHDRAW_NOT_ALLOWED");
+  return {revision:input.expectedRevision+1,withdrawnAt:at};
+}

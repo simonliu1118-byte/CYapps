@@ -17,7 +17,8 @@ public sealed record CloudAllowanceApplicationDraft(
 public sealed record CloudAllowanceApplicationSummary(
     string ItemId, string Environment, string Status, int Revision,
     string OriginalInvoiceNumber, string AllowanceDay, int RequestedGrossAmount,
-    string Reason, string ApplicantEmployeeId, string SellerInvoice, DateTimeOffset CreatedAt);
+    string Reason, string ApplicantEmployeeId, string SellerInvoice, DateTimeOffset CreatedAt,
+    bool Withdrawn = false, DateTimeOffset? WithdrawnAt = null);
 
 public sealed record CloudAllowanceReviewItem(
     string Description, decimal? Quantity, decimal? UnitPrice, decimal? Amount,
@@ -73,6 +74,8 @@ public sealed record CloudAllowanceNumberStatus(
 public sealed record CloudAllowanceOneShotAttempt(
     string ItemId,int Revision,string AllowanceNumber,string Result,int? OfficialCode,
     bool SafeToAutoResend,bool SafeToAutoConfirm,bool MustReadbackByOriginalNumber);
+
+public sealed record CloudAllowanceWithdrawalReceipt(string ItemId,int Revision,DateTimeOffset WithdrawnAt);
 
 public sealed record CloudAllowanceApplicationCursor(string CreatedAt, string ItemId);
 public sealed record CloudAllowanceApplicationPage(
@@ -152,6 +155,34 @@ public sealed class CloudAllowanceApplicationClient
         {
             return null;
         }
+    }
+
+    // Applicant-only cancellation; the Worker verifies the same CYID Employee
+    // against the immutable frozen application before closing the Work Item.
+    // No automatic retry: a lost response must be followed by GetAsync.
+    public async Task<CloudAllowanceWithdrawalReceipt> WithdrawAsync(
+        string itemId,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        VerifyId(itemId);
+        if(expectedRevision<1)throw new ArgumentOutOfRangeException(nameof(expectedRevision));
+        Credentials(employeeNo,password);
+        using var response=await SendAsync("withdraw",new {
+            itemId,expectedRevision,employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=response.RootElement;
+        if(Required(root,"itemId")!=itemId||
+           Required(root,"status")!="closed"||
+           !root.TryGetProperty("revision",out var rev)||
+           rev.ValueKind!=JsonValueKind.Number||!rev.TryGetInt32(out var revision)||
+           revision!=expectedRevision+1||
+           !root.TryGetProperty("withdrawn",out var withdrawn)||
+           withdrawn.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("officialIssued",out var issued)||
+           issued.ValueKind!=JsonValueKind.False||
+           !DateTimeOffset.TryParse(Required(root,"withdrawnAt"),out var when))
+            throw new InvalidDataException("Allowance withdrawal response is inconsistent.");
+        return new CloudAllowanceWithdrawalReceipt(itemId,revision,when);
     }
 
     // Read-only frozen Work Item preview. This DOES NOT query AMEGO, create
@@ -699,8 +730,19 @@ public sealed class CloudAllowanceApplicationClient
             !obj.TryGetProperty("requestedGrossAmount", out var gross) ||
             gross.ValueKind != JsonValueKind.Number || !gross.TryGetInt32(out var amount) || amount < 1)
             throw new InvalidDataException("Allowance application record fails validation.");
+        var withdrawn=obj.TryGetProperty("withdrawn",out var withdrawnField) &&
+            withdrawnField.ValueKind==JsonValueKind.True;
+        DateTimeOffset? withdrawnAt=null;
+        if(withdrawn)
+        {
+            if(state!="closed"||!obj.TryGetProperty("withdrawnAt",out var when)||
+               when.ValueKind!=JsonValueKind.String||
+               !DateTimeOffset.TryParse(when.GetString(),out var parsed))
+                throw new InvalidDataException("Withdrawn allowance must have a closed audit timestamp.");
+            withdrawnAt=parsed;
+        }
         return new CloudAllowanceApplicationSummary(id,env,state,version,invoice,day,amount,
-            reason,applicant,seller,timestamp);
+            reason,applicant,seller,timestamp,withdrawn,withdrawnAt);
     }
     private static string Required(JsonElement obj,string key)
     {

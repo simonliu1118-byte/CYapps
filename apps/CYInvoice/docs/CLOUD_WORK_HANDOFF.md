@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 原申請員工撤回未核准折讓（CYID Cloud Draft）
+
+新增到既有 `allowance-applications/withdraw`，不造第二套 Work Item。只開放**原本提出申請的 CYID Employee ID 本人**（即使其他人是 ADMIN 也不能代撤）；可撤銷 open 或 review，但只要已存在任何核准 Grant 或配號 Ledger 紀錄，絕對不能員工自行撤銷。伺服端於同一 D1 UPDATE 核對申請 owner、當次 Workspace／環境、active Device、Work Item revision、凍結來源 hash 和 grant／ledger 不存在；成功把原 Work Item closed 並留下新的 immutable `withdrawn_by_actor_id`／`withdrawn_at`，不刪除加密申請、Audit 或折讓號，也不呼叫任何官方 API。Windows 現有發票明細提供撤銷按鈕並重新驗證員工；結果不明只能查原 ID，不自動重送。新增欄位僅在未部署的 Draft 0015，原 D1 不受影響；合成測試及跨實機驗收仍須按最新 HEAD 確認。
+
 ## 2026-10-16 CYID 跨機折讓送審：共享 D1、兩台裝置、真路由合成案例（Draft）
 
 補強原本測試直接 SQL `UPDATE work_items SET status='review'` 的缺口：讓 A Device 的 CYID USER 透過正式 `allowance-applications/create` 建立同一凍結申請；讓另一台已 active 的 B Device 使用不同 Device Token 與 CYID ADMIN 角色走既有 `work-items/transition`，在同一隔離 SQLite D1 上完成 open→review；另外確認一般 USER、已撤銷 Device 不可送審、舊 revision 重播 409、B 與 A readback 一致、沒有在 review 時取得折讓號碼，且禁止繞過 frozen application 使用 generic Work Item create。此案例是 API route／SQL 合成驗證，不能宣稱遠端兩台 Windows 或真 D1／光貿端對端已驗收，原有的送出／原號查回另有測試。

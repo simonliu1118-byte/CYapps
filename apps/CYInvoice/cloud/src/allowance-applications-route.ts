@@ -2,7 +2,7 @@
 // No official AMEGO call, approval, allowance numbering or execution route.
 // Worker app.ts must wrap these endpoints in app-scoped withCyIdSession.
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
-import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication} from "./allowance-applications";
+import {createFrozenAllowanceApplication,loadFrozenAllowanceApplication,withdrawFrozenAllowanceApplication} from "./allowance-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 import {queryOfficialAllowanceReadOnly} from "./amego-allowance-query";
@@ -18,6 +18,7 @@ interface Env extends CyIdEnv {
   ALLOWANCE_OPERATION_ENVIRONMENT?:string; // 'test' or 'production' from deploy gate
 }
 const paths=new Set(["/v1/allowance-applications/create","/v1/allowance-applications/get",
+  "/v1/allowance-applications/withdraw",
   "/v1/allowance-applications/list","/v1/allowance-applications/review-preview",
   "/v1/allowance-applications/official-inspection",
   "/v1/allowance-applications/number-readback",
@@ -33,9 +34,10 @@ type Device={device_id:string,workspace_id:string,employee_authority_state:strin
 type Metadata={
  work_item_id:string,workspace_id:string,environment:string,work_status:string,work_revision:number,
  original_invoice_number:string,allowance_day:string,requested_gross_amount:number,
- application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string
+ application_reason:string,applicant_employee_id:string,seller_invoice:string,created_at:string,
+ withdrawn_at?:string|null
 };
-type Action = "create"|"get"|"list"|"review-preview"|"official-inspection"|"number-readback"|"reconcile"|"approve"|"reserve"|"number-status"|"send-once";
+type Action = "create"|"get"|"withdraw"|"list"|"review-preview"|"official-inspection"|"number-readback"|"reconcile"|"approve"|"reserve"|"number-status"|"send-once";
 function validBody(body:unknown,action:Action):body is Record<string,unknown>{
   if(!body||typeof body!=="object"||Array.isArray(body))return false;
   const val=body as Record<string,unknown>;
@@ -43,6 +45,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
     ? new Set(["employeeNo","password","itemId","originalInvoiceNumber","allowanceDay",
       "requestedGrossAmount","reason","unnumberedTemplateJson"])
     : action==="get" ? new Set(["employeeNo","password","itemId"])
+    : action==="withdraw" ? new Set(["employeeNo","password","itemId","expectedRevision"])
     : (action==="review-preview"||action==="official-inspection"||
        action==="number-readback"||action==="reconcile"||action==="approve"||
        action==="reserve"||action==="number-status"||action==="send-once")
@@ -56,7 +59,7 @@ function validBody(body:unknown,action:Action):body is Record<string,unknown>{
         typeof val.cursorItemId==="string" && itemPattern.test(val.cursorItemId)));
   }
   return typeof val.itemId==="string"&&itemPattern.test(val.itemId) &&
-    (!["review-preview","official-inspection","number-readback","reconcile","approve","reserve","number-status","send-once"].includes(action) ||
+    (!["withdraw","review-preview","official-inspection","number-readback","reconcile","approve","reserve","number-status","send-once"].includes(action) ||
       (Number.isSafeInteger(val.expectedRevision) && Number(val.expectedRevision)>=1));
 }
 async function body(request:Request,action:Action){
@@ -96,7 +99,8 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
   if(request.method!=="POST")return response(405,{error:{code:"METHOD_NOT_ALLOWED"}});
   // Defense in depth; direct dispatch without withCyIdSession cannot enter.
   if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
-  const action=path.endsWith("/create")?"create":path.endsWith("/list")?"list":
+  const action=path.endsWith("/create")?"create":path.endsWith("/withdraw")?"withdraw":
+    path.endsWith("/list")?"list":
     path.endsWith("/review-preview")?"review-preview":
     path.endsWith("/official-inspection")?"official-inspection":
     path.endsWith("/number-readback")?"number-readback":
@@ -637,7 +641,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         "SELECT a.work_item_id,a.workspace_id,a.environment,a.original_invoice_number,"+
         "a.allowance_day,a.requested_gross_amount,a.application_reason,"+
         "a.applicant_employee_id,a.seller_invoice,a.created_at,"+
-        "wi.status AS work_status,wi.revision AS work_revision "+
+        "wi.status AS work_status,wi.revision AS work_revision,wi.withdrawn_at "+
         "FROM allowance_applications a JOIN work_items wi "+
         "ON wi.work_item_id=a.work_item_id AND wi.workspace_id=a.workspace_id "+
         "WHERE a.workspace_id=?1 AND a.work_item_id=?2 AND wi.kind='ALLOWANCE' "+
@@ -655,8 +659,33 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         revision:row.work_revision,originalInvoiceNumber:row.original_invoice_number,
         allowanceDay:row.allowance_day,requestedGrossAmount:row.requested_gross_amount,
         reason:row.application_reason,applicantEmployeeId:row.applicant_employee_id,
-        sellerInvoice:row.seller_invoice,createdAt:row.created_at
+        sellerInvoice:row.seller_invoice,createdAt:row.created_at,
+        withdrawn:row.withdrawn_at!==null,withdrawnAt:row.withdrawn_at
       }});
+    }
+    if(action==="withdraw"){
+      // Only the original applicant, not a manager impersonating that user.
+      if(!["test","production"].includes(env.ALLOWANCE_OPERATION_ENVIRONMENT??""))
+        return response(503,{error:{code:"ALLOWANCE_ENVIRONMENT_NOT_CONFIGURED"}});
+      const source=await env.DB.prepare(
+        "SELECT a.applicant_employee_id FROM allowance_applications a "+
+        "JOIN work_items wi ON wi.work_item_id=a.work_item_id AND wi.workspace_id=a.workspace_id "+
+        "WHERE a.workspace_id=?1 AND a.work_item_id=?2 "+
+        "AND a.environment=?3 AND wi.kind='ALLOWANCE' "+
+        "AND wi.reference_hash=a.reference_hash")
+        .bind(d.workspace_id,input.itemId,env.ALLOWANCE_OPERATION_ENVIRONMENT)
+        .first<{applicant_employee_id:string}>();
+      if(!source||source.applicant_employee_id!==actor.employeeId)
+        return response(404,{error:{code:"NOT_FOUND"}});
+      const result=await withdrawFrozenAllowanceApplication(env.DB,{
+        workspaceId:d.workspace_id,deviceId:d.device_id,
+        workItemId:input.itemId as string,
+        expectedRevision:input.expectedRevision as number,
+        environment:env.ALLOWANCE_OPERATION_ENVIRONMENT as "test"|"production"
+      },authority(env));
+      return response(200,{itemId:input.itemId,status:"closed",
+        revision:result.revision,withdrawn:true,withdrawnAt:result.withdrawnAt,
+        officialIssued:false});
     }
     if(env.ALLOWANCE_OPERATION_ENVIRONMENT!=="test"&&
        env.ALLOWANCE_OPERATION_ENVIRONMENT!=="production")
@@ -685,6 +714,12 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
     if(error instanceof CyIdError)
       return response(error.status,{error:{code:error.code}});
     if(error instanceof Error){
+      if(error.message==="ALLOWANCE_WITHDRAW_INVALID")
+        return response(400,{error:{code:"INVALID_WITHDRAWAL"}});
+      if(error.message==="ALLOWANCE_WITHDRAW_AUTH_REQUIRED"||error.message==="ALLOWANCE_WITHDRAW_AUTH_CHANGED")
+        return response(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
+      if(error.message==="ALLOWANCE_WITHDRAW_NOT_ALLOWED")
+        return response(409,{error:{code:"WITHDRAWAL_NOT_ALLOWED_REFRESH_REQUIRED"}});
       if(/^ALLOWANCE_(APPLICATION_INVALID|APPLICATION_DATE_INVALID|APPLICATION_SCOPE_INVALID|TEMPLATE_INVALID|TEMPLATE_MISMATCH)$/.test(error.message))
         return response(400,{error:{code:"INVALID_APPLICATION"}});
       if(/ALLOWANCE_(APPLICANT_AUTH_REQUIRED|APPLICANT_AUTH_CHANGED)/.test(error.message))

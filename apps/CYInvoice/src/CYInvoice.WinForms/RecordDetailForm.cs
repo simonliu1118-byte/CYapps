@@ -32,6 +32,7 @@ internal sealed class RecordDetailForm : Form
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
     private readonly Button voidInvoice = UiControls.StandardButton("作廢");
     private readonly Button allowanceInvoice = UiControls.StandardButton("折讓");
+    private readonly Button withdrawAllowance = UiControls.StandardButton("撤銷折讓申請");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly InvoiceOperationHistoryControl history = new();
     private readonly TableLayoutPanel details = new()
@@ -168,6 +169,7 @@ internal sealed class RecordDetailForm : Form
         CompactDetailAction(changePrinter);
         CompactDetailAction(voidInvoice);
         CompactDetailAction(allowanceInvoice);
+        CompactDetailAction(withdrawAllowance);
         close.Width = 100;
         close.Margin = new Padding(3, 2, 3, 2);
         close.DialogResult = DialogResult.OK;
@@ -196,6 +198,8 @@ internal sealed class RecordDetailForm : Form
             allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
             actions.Controls.Add(allowanceInvoice);
         }
+        withdrawAllowance.Click += async (_, _) => await WithdrawAllowanceAsync();
+        actions.Controls.Add(withdrawAllowance);
         actions.Controls.Add(close);
 
         root.Controls.Add(content, 0, 0);
@@ -442,6 +446,47 @@ internal sealed class RecordDetailForm : Form
         }
     }
 
+    private async Task WithdrawAllowanceAsync()
+    {
+        if(allowanceBusy||voidBusy||!CloudAllowanceSubmissionService.HasPending(record))
+            return;
+        using var login=new EmployeeAdminLoginForm(repository,
+            "撤銷折讓申請－原申請員工驗證",
+            administratorRequired:false,collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        if(MessageBox.Show(this,
+            "確定撤銷這筆尚未核准的折讓申請？\n\n"+
+            "撤銷後管理員不能再核准原工作單，原紀錄仍會保留備查。\n"+
+            "若折讓已核准或配號，系統會拒絕撤銷。",
+            "確認撤銷折讓申請",MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            return;
+        SetAllowanceBusy(true);
+        try
+        {
+            var result=await new CloudAllowanceSubmissionService(repository)
+                .WithdrawAsync(record,login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword,previewCancellation.Token);
+            MessageBox.Show(this,"已撤銷原折讓申請。\n\nWork Item："+result.ItemId+
+                "\n原申請已結案，不會向光貿送出折讓。",
+                "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            DialogResult=DialogResult.OK;
+            Close();
+        }
+        catch(OperationCanceledException) when(previewCancellation.IsCancellationRequested){}
+        catch(Exception error)
+        {
+            MessageBox.Show(this,
+                "撤銷結果未確認，請重新開啟發票明細，用原申請編號查回；"+
+                "不要另外建立申請。\n\n"+error.Message,
+                "撤銷尚未確認",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if(!IsDisposed)SetAllowanceBusy(false);
+        }
+    }
+
     private void SetVoidBusy(bool busy)
     {
         voidBusy = busy;
@@ -484,6 +529,11 @@ internal sealed class RecordDetailForm : Form
         }
 
         allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
+        var cfg=repository.Settings.LoadOrCreate();
+        withdrawAllowance.Visible=cfg.CloudMode==CloudModes.CloudPreferred &&
+            cfg.CloudIdentityProvider=="CYID" &&
+            CloudAllowanceSubmissionService.HasPending(record);
+        withdrawAllowance.Enabled=withdrawAllowance.Visible && !operationBusy;
         if (allowanceBusy)
         {
             allowanceInvoice.Text = "折讓申請中…";

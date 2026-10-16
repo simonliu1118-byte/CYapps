@@ -587,9 +587,84 @@ assert.equal(fx.sql.prepare(
  "SELECT COUNT(*) n FROM allowance_number_ledger WHERE status='sending'")
  .get().n,2,"Different originals AB and XY may each have one sending attempt");
 
+// Applicant-controlled withdrawal: no D1 deletion, no manager role,
+// never after approval or numbering, and safe against cross-device replay.
+const withdrawOpen={...createBody,itemId:"wi_employee_withdraw_open",reason:"Synthetic cancelled by applicant"};
+const withdrawReview={...createBody,itemId:"wi_employee_withdraw_review",reason:"Synthetic reviewed but unapproved"};
+who={...who,workspaceId:"identity_synthetic",employeeId:"cyid_employee",
+  workspaceRole:"USER",emailVerified:true};
+assert.equal((await call("create",withdrawOpen)).status,201);
+assert.equal((await call("create",withdrawReview)).status,201);
+let applicantOps=0;
+const requestWithdrawal=async(itemId,rev,bearer=token)=>{
+  applicantOps++;
+  return call("withdraw",{itemId,expectedRevision:rev},env,bearer);
+};
+who={...who,employeeId:"different_employee",workspaceRole:"ADMIN"};
+assert.equal((await requestWithdrawal(withdrawOpen.itemId,1)).status,404,
+  "A manager cannot withdraw a different employee's application");
+who={...who,employeeId:"cyid_employee",workspaceRole:"USER"};
+assert.equal((await requestWithdrawal(withdrawOpen.itemId,999)).status,409,
+  "Stale revision cannot withdraw a live application");
+fx.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devB);
+assert.equal((await requestWithdrawal(withdrawOpen.itemId,1,tokenB)).status,401,
+  "Revoked Device B cannot withdraw, even with correct employee identity");
+fx.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(devB);
+const withdrawnOpen=await requestWithdrawal(withdrawOpen.itemId,1,tokenB);
+assert.equal(withdrawnOpen.status,200,JSON.stringify(withdrawnOpen));
+assert.equal(withdrawnOpen.data.status,"closed");
+assert.equal(withdrawnOpen.data.revision,2);
+assert.equal(withdrawnOpen.data.withdrawn,true);
+assert.equal(withdrawnOpen.data.officialIssued,false);
+assert.match(withdrawnOpen.data.withdrawnAt,/^20\d\d-/);
+const appReadback=await call("get",{itemId:withdrawOpen.itemId});
+assert.equal(appReadback.data.application.withdrawn,true);
+assert.equal(appReadback.data.application.status,"closed");
+assert.equal(appReadback.data.application.revision,2);
+assert.equal((await requestWithdrawal(withdrawOpen.itemId,1,tokenB)).status,409,
+  "Withdrawn record is not reopened or withdrawn twice");
+assert.throws(()=>fx.sql.prepare(
+  "UPDATE work_items SET status='review' WHERE work_item_id=?")
+  .run(withdrawOpen.itemId),/ALLOWANCE_WITHDRAWAL_IMMUTABLE/);
+assert.throws(()=>fx.sql.prepare(
+  "DELETE FROM work_items WHERE work_item_id=?")
+  .run(withdrawOpen.itemId),/ALLOWANCE_WITHDRAWAL_NOT_DELETABLE/);
+const closed=fx.sql.prepare(
+  "SELECT withdrawn_by_actor_id,withdrawn_at,updated_by_device_id FROM work_items WHERE work_item_id=?")
+  .get(withdrawOpen.itemId);
+assert.equal(closed.withdrawn_by_actor_id,"cyid_employee");
+assert.equal(closed.updated_by_device_id,devB);
+assert.equal(closed.withdrawn_at,withdrawnOpen.data.withdrawnAt);
+assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications WHERE work_item_id=?")
+  .get(withdrawOpen.itemId).n,1,"Encrypted request remains auditable");
+assert.equal(fx.sql.prepare(
+  "SELECT COUNT(*) n FROM allowance_number_ledger WHERE work_item_id=?")
+  .get(withdrawOpen.itemId).n,0,"Withdrawal cannot reserve a number");
+// Manager Device B may advance another applicant request to review, but
+// the applicant can still withdraw it before *any* manager approval.
+who={...who,employeeId:"different_manager",workspaceRole:"ADMIN"};
+const reviewedWithdraw=await fromDeviceB("transition",{
+  itemId:withdrawReview.itemId,expectedRevision:1,from:"open",to:"review"});
+assert.equal(reviewedWithdraw.status,200,JSON.stringify(reviewedWithdraw));
+assert.equal(reviewedWithdraw.data.item.revision,2);
+who={...who,employeeId:"cyid_employee",workspaceRole:"USER"};
+assert.equal((await requestWithdrawal(withdrawReview.itemId,2)).status,200,
+  "The original applicant may withdraw a reviewed but unapproved request");
+assert.equal((await fromDeviceB("transition",{
+  itemId:withdrawReview.itemId,expectedRevision:2,from:"review",to:"closed"
+})).status,403,"Regular user cannot use manager transition");
+// A previously approved/numbered application must NOT be withdrawable.
+assert.equal((await requestWithdrawal(approvedId,2)).status,409);
+assert.equal(fx.sql.prepare("SELECT status FROM work_items WHERE work_item_id=?")
+  .get(approvedId).status,"review");
+assert.equal(fx.sql.prepare(
+  "SELECT COUNT(*) n FROM allowance_execution_approvals WHERE work_item_id=?")
+  .get(approvedId).n,1);
+assert.ok(applicantOps>=7);
+
 who={...who,workspaceId:"attacker_identity_workspace"};
 assert.equal((await call("get",{itemId:createBody.itemId})).status,403);
-assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,3);
+assert.equal(fx.sql.prepare("SELECT COUNT(*) n FROM allowance_applications").get().n,5);
 assert.deepEqual(fx.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 fx.sql.close();
 console.log("Draft allowance applications: distinct USER/ADMIN devices, actual manager review CAS, immutable encrypted template, scoped CYID routes and no-repeat issuance passed");

@@ -140,6 +140,60 @@ public sealed class CloudAllowanceSubmissionService
             AlreadySubmitted:false);
     }
 
+    // The only employee who may retract the still-unapproved request is
+    // the original CYID applicant. A manager grant or numbering ends this
+    // option forever; withdrawal never calls g0501 or g0401.
+    public async Task<CloudAllowanceWithdrawalReceipt> WithdrawAsync(
+        InvoiceRecord selected,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(selected);
+        var settings=repository.Settings.LoadOrCreate();
+        if(settings.CloudMode!=CloudModes.CloudPreferred||
+           settings.CloudIdentityProvider!="CYID"||
+           !settings.CloudEmployeeAuthorityReady)
+            throw new InvalidOperationException("只有 CYID Cloud 折讓申請可由原申請人撤銷");
+        if(!Uri.TryCreate(settings.CloudBaseUrl,UriKind.Absolute,out var endpoint)||
+           endpoint.Scheme!=Uri.UriSchemeHttps)
+            throw new InvalidOperationException("CYID Cloud 尚未完成 HTTPS 設定");
+        var record=Current(selected.Id);
+        var pending=ReadPending(record)
+            ?? throw new InvalidOperationException("本機沒有待處理的 CYID 折讓申請");
+        VerifyScope(pending,settings,record);
+        var client=new CloudAllowanceApplicationClient(http,endpoint,
+            repository.Settings.CloudDeviceToken(settings));
+        // Read latest revision; do not trust a cached open/review status.
+        var current=await client.GetAsync(pending.Draft.ItemId,employeeNo,password,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                "無法查回原折讓申請，不能換號撤銷或重送");
+        VerifyExisting(current,pending.Draft,settings);
+        if(current.Withdrawn)
+        {
+            RemovePending(record);
+            return new CloudAllowanceWithdrawalReceipt(
+                current.ItemId,current.Revision,current.WithdrawnAt
+                    ?? throw new InvalidDataException("撤銷紀錄缺少伺服端確認時間"));
+        }
+        if(current.Status is not ("open" or "review"))
+            throw new InvalidOperationException(
+                "折讓已結案，不能用員工撤銷功能變更官方處理結果");
+        // A timeout is ambiguous; the caller must GET the same Item ID.
+        // Never reissue a withdraw request automatically.
+        var result=await client.WithdrawAsync(pending.Draft.ItemId,
+            current.Revision,employeeNo,password,cancellationToken)
+            .ConfigureAwait(false);
+        RemovePending(record);
+        return result;
+    }
+
+    private void RemovePending(InvoiceRecord record)
+    {
+        if(record.ExtensionData is null)return;
+        record.ExtensionData.Remove(PendingKey);
+        new InvoiceSyncRepository(repository.DataDirectory).UpsertMany([record]);
+    }
+
     private static async Task CreatePersistedAsync(
         CloudAllowanceApplicationClient application,
         CloudAllowanceApplicationDraft draft,
