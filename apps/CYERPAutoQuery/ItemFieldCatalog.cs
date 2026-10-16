@@ -50,6 +50,30 @@ internal static class ItemFieldCatalog
         new("最近出庫日", "最近出庫日"),
     ];
 
+    /// <summary>INVQ01 查各批庫存量 columns (user, 2026-10-16).</summary>
+    public static readonly IReadOnlyList<CatalogField> Batch =
+    [
+        new("批號", "批號"),
+        new("庫存數量", "庫存數量"),
+        new("入庫日", "入庫日"),
+        new("有效日期", "有效日期"),
+    ];
+
+    /// <summary>
+    /// INVQ01 查歷史異動 columns. 單位成本 and 異動金額 are costs and are left out, the same as
+    /// INVI02's cost columns.
+    /// </summary>
+    public static readonly IReadOnlyList<CatalogField> History =
+    [
+        new("日期", "日期"),
+        new("單別-單號-序號", "單別-單號-序號"),
+        new("庫別", "庫別"),
+        new("庫別名稱", "庫別名稱"),
+        new("入出別", "入出別"),
+        new("異動數量", "異動數量"),
+        new("備註", "備註"),
+    ];
+
     /// <summary>
     /// The catalog's fields of one exported row, in catalog order and labelled. A missing
     /// column means the export did not include it (全選 failed or ERP changed); that stops

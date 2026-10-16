@@ -136,6 +136,7 @@ public class ErpAgentLoopTests
         public readonly List<TimeSpan> Delays = [];
         public readonly List<ErpAgentState> States = [];
         public readonly List<string> Queried = [];
+        public readonly List<ErpAgentJob> Jobs = [];
         public Func<string, ItemQueryResult> Query = code => new ItemQueryResult(code, [new ErpField("品號", code)], [], TimeSpan.FromSeconds(1));
         public bool LocalBusy;
         public int StopAfterDelays = 3;
@@ -145,7 +146,7 @@ public class ErpAgentLoopTests
         {
             using var client = new ErpAgentClient(new Uri("https://cyweb.example.test/"), "secret-token-0123456789-abcdefghijklmnop", Web);
             var loop = new ErpAgentLoop(client, "V0.1.0 Build 4", () => "BROWSE", () => LocalBusy,
-                (code, _) => { Queried.Add(code); return Task.FromResult(Query(code)); },
+                (job, _) => { Queried.Add(job.ItemNo); Jobs.Add(job); return Task.FromResult(Query(job.ItemNo)); },
                 (state, _) => States.Add(state),
                 (span, _) =>
                 {

@@ -22,6 +22,7 @@ internal static class NativeMethods
     internal const uint CB_GETDROPPEDSTATE = 0x0157;
     internal const uint EM_SETSEL = 0x00B1;
     internal const uint WM_PASTE = 0x0302;
+    internal const uint WM_CLOSE = 0x0010;
 
     internal const uint INPUT_KEYBOARD = 1;
     internal const uint KEYEVENTF_KEYUP = 0x0002;
@@ -180,6 +181,10 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     internal static extern nint SendMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
+
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

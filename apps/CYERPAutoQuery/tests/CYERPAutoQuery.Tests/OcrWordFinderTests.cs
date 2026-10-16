@@ -32,4 +32,19 @@ public class OcrWordFinderTests
     [Fact]
     public void MissingWordIsNull() =>
         Assert.Null(OcrWordFinder.FindWord([new OcrToken("成本", new Rectangle(0, 0, 20, 12))], "售價"));
+
+    [Fact]
+    public void FindsEveryOccurrenceOnSeparateLines()
+    {
+        // 串查 lists 庫存狀況查詢作業 twice (user's screenshot 2026-10-16).
+        var tokens = new[]
+        {
+            new OcrToken("庫存狀況查詢作業", new Rectangle(10, 60, 128, 16)),
+            new OcrToken("庫存狀況查詢作業", new Rectangle(10, 20, 128, 16)),
+            new OcrToken("批號管理", new Rectangle(10, 40, 64, 16)),
+        };
+        var found = OcrWordFinder.FindWords(tokens, "庫存狀況查詢作業");
+        Assert.Equal(2, found.Count);
+        Assert.Equal(20, found.Min(r => r.Top));
+    }
 }

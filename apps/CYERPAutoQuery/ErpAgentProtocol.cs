@@ -13,8 +13,25 @@ internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Excep
     public ErpAgentErrorCode Code { get; } = code;
 }
 
-/// <summary>A job handed out by CY Web's claim endpoint.</summary>
-internal sealed record ErpAgentJob(string Id, string ItemNo);
+/// <summary>
+/// A job handed out by CY Web's claim endpoint. The history fields are optional (CY Web
+/// before the INVQ01 handoff does not send them): includeHistory with historyFrom／historyTo
+/// as yyyy-MM-dd, either date may be missing.
+/// </summary>
+internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory = false, string? HistoryFrom = null, string? HistoryTo = null)
+{
+    /// <summary>
+    /// The query options of this job; a bad date or range throws <see cref="ArgumentException"/>
+    /// (reported as FAILED, the job is not left hanging).
+    /// </summary>
+    public ItemQueryOptions Options(DateOnly today)
+    {
+        if (!IncludeHistory) return ItemQueryOptions.Default;
+        DateOnly? Date(string? text, string what) => string.IsNullOrEmpty(text) ? null
+            : HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的歷史異動{what}日格式不正確。");
+        return new ItemQueryOptions(HistoryRange.Resolve(Date(HistoryFrom, "起"), Date(HistoryTo, "迄"), today));
+    }
+}
 
 /// <summary>
 /// JSON shapes of the CY Web ERP item query Agent API (contract:
@@ -48,14 +65,53 @@ internal static class ErpAgentProtocol
         var itemNo = job["itemNo"]?.GetValue<string>();
         if (string.IsNullOrEmpty(id) || itemNo is null)
             throw new InvalidDataException("CY Web claim 回應缺少 id／itemNo。");
-        return new ErpAgentJob(id, itemNo);
+        // Options are read leniently: a wrong type here must not lose the claimed job.
+        var includeHistory = job["includeHistory"] is JsonValue h && h.TryGetValue<bool>(out var b) && b;
+        return new ErpAgentJob(id, itemNo, includeHistory, OptionalString(job["historyFrom"]), OptionalString(job["historyTo"]));
     }
 
-    public static string FoundBody(ItemQueryResult result, string agentVersion) => Complete(
-        "FOUND",
-        Fields(result.Fields),
-        new JsonArray(result.Warehouses.Select(row => (JsonNode)Fields(row)).ToArray()),
-        null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+    private static string? OptionalString(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    /// <summary>History rows sent at most (newest kept); the rest is counted in total.</summary>
+    public const int MaxHistoryRows = 2000;
+    /// <summary>Batches sent at most, the same bound as 庫別.</summary>
+    public const int MaxBatchRows = 100;
+
+    public static string FoundBody(ItemQueryResult result, string agentVersion)
+    {
+        var body = CompleteObject(
+            "FOUND",
+            Fields(result.Fields),
+            new JsonArray(result.Warehouses.Select(row => (JsonNode)Fields(row)).ToArray()),
+            null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["batchManaged"] = result.BatchManaged;
+        body["batches"] = new JsonArray(result.Batches.Take(MaxBatchRows).Select(row => (JsonNode)Fields(row)).ToArray());
+        body["history"] = History(result);
+        return body.ToJsonString(JsonOptions);
+    }
+
+    /// <summary>
+    /// 查歷史異動 as columns + rows (a year can hold hundreds of rows; name/value pairs per cell
+    /// would multiply the size), newest rows kept when there are more than <see cref="MaxHistoryRows"/>.
+    /// </summary>
+    private static JsonNode? History(ItemQueryResult result)
+    {
+        if (result.HistoryRange is not { } range) return null;
+        var columns = ItemFieldCatalog.History.Select(c => c.Label).ToList();
+        var rows = result.History.Skip(Math.Max(0, result.History.Count - MaxHistoryRows))
+            .Select(row => (JsonNode)new JsonArray(columns.Select(c => (JsonNode?)(row.FirstOrDefault(f => f.Name == c)?.Value ?? string.Empty)).ToArray()))
+            .ToArray();
+        return new JsonObject
+        {
+            ["from"] = HistoryRange.Iso(range.From),
+            ["to"] = HistoryRange.Iso(range.To),
+            ["columns"] = new JsonArray(columns.Select(c => (JsonNode?)c).ToArray()),
+            ["rows"] = new JsonArray(rows),
+            ["total"] = result.History.Count,
+            ["truncated"] = result.History.Count > MaxHistoryRows
+        };
+    }
 
     public static string NotFoundBody(long elapsedMs, string agentVersion) =>
         Complete("NOT_FOUND", [], [], null, elapsedMs, agentVersion);
@@ -71,6 +127,7 @@ internal static class ErpAgentProtocol
     {
         QueryFailure failure => failure.Code,
         OperationCanceledException => ErpAgentErrorCode.CANCELLED,
+        ArgumentException => ErpAgentErrorCode.INTERNAL,
         InvalidDataException => ErpAgentErrorCode.EXPORT_FAILED,
         _ => ErpAgentErrorCode.INTERNAL
     };
@@ -88,7 +145,12 @@ internal static class ErpAgentProtocol
         }
     }
 
+    private static readonly JsonSerializerOptions JsonOptions = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     private static string Complete(string outcome, JsonArray fields, JsonArray warehouses, ErpAgentErrorCode? code, long elapsedMs, string agentVersion) =>
+        CompleteObject(outcome, fields, warehouses, code, elapsedMs, agentVersion).ToJsonString(JsonOptions);
+
+    private static JsonObject CompleteObject(string outcome, JsonArray fields, JsonArray warehouses, ErpAgentErrorCode? code, long elapsedMs, string agentVersion) =>
         new JsonObject
         {
             ["outcome"] = outcome,
@@ -98,7 +160,7 @@ internal static class ErpAgentProtocol
             ["errorMessage"] = null,
             ["elapsedMs"] = Math.Clamp(elapsedMs, 0, 3_600_000),
             ["agentVersion"] = agentVersion
-        }.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        };
 
     private static JsonArray Fields(IReadOnlyList<ErpField> fields) =>
         new(fields.Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["value"] = f.Value }).ToArray());

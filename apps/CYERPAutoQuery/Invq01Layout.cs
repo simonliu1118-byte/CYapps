@@ -1,0 +1,96 @@
+using System.Globalization;
+
+namespace CYERPAutoQuery;
+
+/// <summary>
+/// Pure rules about SMART ERP 庫存狀況查詢作業 (INVQ01), opened from INVI02 through 串查 for the
+/// item shown there (user, 2026-10-16). No Win32 calls, so they are unit tested on any OS.
+/// </summary>
+internal static class Invq01Layout
+{
+    public const string FormTitle = "庫存狀況查詢作業";
+    public const string FormCode = "INVQ01";
+
+    /// <summary>INVI02 Ribbon drop-down that lists the linked programs.</summary>
+    public const string LinkMenu = "串查";
+    public const string StartQuery = "開始查詢";
+    /// <summary>INVQ01's Ribbon export button (INVI02's is 「Excel」 → 「轉出至 Excel」).</summary>
+    public const string ExportButton = "轉出到";
+
+    public const string BatchTab = "查各批庫存量";
+    public const string HistoryTab = "查歷史異動";
+    public const string ResultTab = "查詢結果";
+    /// <summary>查歷史異動's group box holding the 起 and 迄 date boxes.</summary>
+    public const string DateGroup = "選擇日期";
+
+    // The lower tabs are as wide as their caption. Centers measured from the user's two
+    // screenshots (2026-10-16, identical in both), px right of the page control's left edge.
+    public static readonly TabStrip Tabs = new(
+        ["查各庫庫存量", "查庫存可用量", "查未來異動量", HistoryTab, BatchTab, "查批號異動", "暫出/入狀況查詢", "品號廠商價格查詢", ResultTab],
+        Origin: 0, Pitch: 0,
+        Centers: [59, 148, 237, 320, 403, 486, 578, 689, 778]);
+
+    /// <summary>
+    /// 「庫存狀況查詢作業(INVQ01)[公司]」 before a query, 「庫存狀況查詢作業[公司]-查各批庫存量」 after
+    /// (the code disappears), so only the program name is required.
+    /// </summary>
+    public static bool IsInvq01Title(string title) =>
+        title.Contains(FormTitle, StringComparison.Ordinal);
+
+    /// <summary>After 開始查詢 ERP appends the query tab to the caption: 「…-查各批庫存量」.</summary>
+    public static bool TitleShowsQuery(string title, string tab) =>
+        IsInvq01Title(title) && title.TrimEnd().EndsWith("-" + tab, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 批號管理 other than 「N:不需要」 means the item is tracked by batch, so its batches are
+    /// looked up (user, 2026-10-16). An empty value counts as not tracked.
+    /// </summary>
+    public static bool IsBatchManaged(string? batchSetting)
+    {
+        var value = (batchSetting ?? string.Empty).Trim();
+        return value.Length > 0 && !value.StartsWith('N');
+    }
+
+    /// <summary>How ERP's date boxes are filled: 2026/10/16.</summary>
+    public static string ErpDate(DateOnly date) => date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+
+    /// <summary>True when a date box shows <paramref name="date"/>, whatever separators ERP uses.</summary>
+    public static bool ShowsDate(string? shown, DateOnly date) =>
+        new string((shown ?? string.Empty).Where(char.IsAsciiDigit).ToArray()) ==
+        date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// The 查歷史異動 date range (user, 2026-10-16): chosen with a date picker; left empty it is the
+/// last year; at most three years.
+/// </summary>
+internal sealed record HistoryRange(DateOnly From, DateOnly To)
+{
+    public const int MaxYears = 3;
+
+    /// <summary>
+    /// Fills what is missing (迄 = today, 起 = one year before 迄) and checks the range. The
+    /// message of <see cref="ArgumentException"/> is shown to the user as is.
+    /// </summary>
+    public static HistoryRange Resolve(DateOnly? from, DateOnly? to, DateOnly today)
+    {
+        var end = to ?? today;
+        var start = from ?? end.AddYears(-1).AddDays(1);
+        if (start > end) throw new ArgumentException("歷史異動的起日不可晚於迄日。");
+        if (end > today) throw new ArgumentException("歷史異動的迄日不可晚於今天。");
+        if (start < end.AddYears(-MaxYears)) throw new ArgumentException($"歷史異動的日期範圍最多 {MaxYears} 年。");
+        return new HistoryRange(start, end);
+    }
+
+    /// <summary>yyyy-MM-dd, as CY Web sends and receives it.</summary>
+    public static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    public static DateOnly? ParseIso(string? text) =>
+        DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+}
+
+/// <summary>What a query looks up besides INVI02: 查歷史異動 only when asked (user, 2026-10-16).</summary>
+internal sealed record ItemQueryOptions(HistoryRange? History)
+{
+    public static readonly ItemQueryOptions Default = new((HistoryRange?)null);
+}

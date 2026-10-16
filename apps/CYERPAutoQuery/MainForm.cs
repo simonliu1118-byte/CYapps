@@ -25,6 +25,17 @@ internal sealed class MainForm : Form
     private readonly TextBox _specification = ReadOnlyBox();
     private readonly DataGridView _fields = new();
     private readonly DataGridView _warehouses = new();
+    private readonly DataGridView _batches = new();
+    private readonly DataGridView _history = new();
+    private readonly TabControl _details = new();
+    private readonly TabPage _warehousePage = new("庫別");
+    private readonly TabPage _batchPage = new("批號");
+    private readonly TabPage _historyPage = new("歷史異動");
+    // 查歷史異動 only when asked, for a date range picked here (user, 2026-10-16); an
+    // unticked date means 「not filled」: the last year.
+    private readonly CheckBox _includeHistory = new() { Text = "查歷史異動", AutoSize = true };
+    private readonly DateTimePicker _historyFrom = HistoryPicker();
+    private readonly DateTimePicker _historyTo = HistoryPicker();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ToolStripStatusLabel _buildStatus = new();
@@ -69,11 +80,12 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(12), Margin = Padding.Empty };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12), Margin = Padding.Empty };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         Controls.Add(root);
 
@@ -114,6 +126,24 @@ internal sealed class MainForm : Form
         _erpStateTag.AccessibleName = "ERP 品號資料狀態";
         rightTools.Controls.Add(_erpStateTag);
 
+        var options = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 2, 0, 0), Margin = Padding.Empty };
+        _includeHistory.Margin = new Padding(4, 5, 12, 0);
+        _includeHistory.CheckedChanged += (_, _) => UpdateHistoryInputs();
+        options.Controls.Add(_includeHistory);
+        options.Controls.Add(new Label { Text = "起", AutoSize = true, Margin = new Padding(4, 7, 2, 0) });
+        options.Controls.Add(_historyFrom);
+        options.Controls.Add(new Label { Text = "迄", AutoSize = true, Margin = new Padding(8, 7, 2, 0) });
+        options.Controls.Add(_historyTo);
+        options.Controls.Add(new Label
+        {
+            Text = $"未勾日期：最近一年；範圍最多 {HistoryRange.MaxYears} 年。批號管理的品號會自動查各批庫存量。",
+            AutoSize = true,
+            ForeColor = CyVisualTheme.TextSecondary,
+            Margin = new Padding(12, 7, 0, 0)
+        });
+        root.Controls.Add(options, 0, 1);
+        UpdateHistoryInputs();
+
         var headerBox = new GroupBox { Text = "表頭", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(3, 2, 3, 2), Margin = Padding.Empty };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 98));
@@ -122,7 +152,7 @@ internal sealed class MainForm : Form
         AddHeaderRow(header, 1, "品名", _itemName);
         AddHeaderRow(header, 2, "規格", _specification);
         headerBox.Controls.Add(header);
-        root.Controls.Add(headerBox, 0, 1);
+        root.Controls.Add(headerBox, 0, 2);
 
         var detailBox = new GroupBox { Text = "品號資料（ERP 轉出 Excel 的單頭資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
         ConfigureGrid(_fields);
@@ -132,13 +162,20 @@ internal sealed class MainForm : Form
         _fields.Columns[1].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
         _fields.Columns[1].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
         detailBox.Controls.Add(_fields);
-        root.Controls.Add(detailBox, 0, 2);
+        root.Controls.Add(detailBox, 0, 3);
 
-        var warehouseBox = new GroupBox { Text = "庫別（單身資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
-        ConfigureGrid(_warehouses);
-        _warehouses.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
-        warehouseBox.Controls.Add(_warehouses);
-        root.Controls.Add(warehouseBox, 0, 3);
+        // 庫別 (INVI02 單身資料), 批號 (INVQ01 查各批庫存量) and 歷史異動 (INVQ01 查歷史異動).
+        _details.Dock = DockStyle.Fill;
+        _details.Margin = new Padding(0, 4, 0, 4);
+        foreach (var (page, grid) in new[] { (_warehousePage, _warehouses), (_batchPage, _batches), (_historyPage, _history) })
+        {
+            ConfigureGrid(grid);
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+            page.Padding = new Padding(4);
+            page.Controls.Add(grid);
+            _details.TabPages.Add(page);
+        }
+        root.Controls.Add(_details, 0, 4);
 
         var statusStrip = new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Font = new Font("Microsoft JhengHei UI", 8.5F), Padding = new Padding(2, 0, 2, 0), Margin = Padding.Empty };
         _status.Text = "請先在 ERP 開啟「品號資料建立作業」，輸入品號後按「開始查詢 ERP」。";
@@ -146,9 +183,33 @@ internal sealed class MainForm : Form
         statusStrip.Items.Add(_agentStatus);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
-        root.Controls.Add(statusStrip, 0, 4);
+        root.Controls.Add(statusStrip, 0, 5);
 
         CyVisualTheme.Apply(this);
+    }
+
+    private static DateTimePicker HistoryPicker() => new()
+    {
+        Format = DateTimePickerFormat.Custom,
+        CustomFormat = "yyyy/MM/dd",
+        ShowCheckBox = true,
+        Checked = false,
+        Width = 140,
+        Margin = new Padding(0, 3, 0, 0)
+    };
+
+    private void UpdateHistoryInputs()
+    {
+        _historyFrom.Enabled = _includeHistory.Checked;
+        _historyTo.Enabled = _includeHistory.Checked;
+    }
+
+    /// <summary>The options of a local query; a bad date range throws ArgumentException with the message to show.</summary>
+    private ItemQueryOptions LocalOptions()
+    {
+        if (!_includeHistory.Checked) return ItemQueryOptions.Default;
+        DateOnly? Pick(DateTimePicker p) => p.Checked ? DateOnly.FromDateTime(p.Value) : null;
+        return new ItemQueryOptions(HistoryRange.Resolve(Pick(_historyFrom), Pick(_historyTo), DateOnly.FromDateTime(DateTime.Today)));
     }
 
     private static TextBox ReadOnlyBox() => new() { ReadOnly = true, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 0, 3) };
@@ -191,10 +252,20 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+        ItemQueryOptions options;
+        try
+        {
+            options = LocalOptions();
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(this, ex.Message, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
 
         try
         {
-            await ExecuteQueryAsync(code, CancellationToken.None);
+            await ExecuteQueryAsync(code, options, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -211,18 +282,19 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>A query received from CY Web: same path as the local one, no message box (the outcome goes back to Web).</summary>
-    private async Task<ItemQueryResult> RunWebQueryAsync(string itemNo, CancellationToken cancellationToken)
+    private async Task<ItemQueryResult> RunWebQueryAsync(ErpAgentJob job, CancellationToken cancellationToken)
     {
-        _code.Text = itemNo;
-        _log.Info("agent", $"web query item={_log.Value(itemNo)}");
-        return await ExecuteQueryAsync(itemNo, cancellationToken);
+        _code.Text = job.ItemNo;
+        var options = job.Options(DateOnly.FromDateTime(DateTime.Today));
+        _log.Info("agent", $"web query item={_log.Value(job.ItemNo)} history={(options.History is { } h ? $"{HistoryRange.Iso(h.From)}~{HistoryRange.Iso(h.To)}" : "no")}");
+        return await ExecuteQueryAsync(job.ItemNo, options, cancellationToken);
     }
 
     /// <summary>
     /// The single query runner for local and Web queries: locks the physical mouse and shows
     /// 「自動查詢中」 (same as CYERPAutoInput), shows the result, and rethrows failures to the caller.
     /// </summary>
-    private async Task<ItemQueryResult> ExecuteQueryAsync(string code, CancellationToken external)
+    private async Task<ItemQueryResult> ExecuteQueryAsync(string code, ItemQueryOptions options, CancellationToken external)
     {
         _queryCts = CancellationTokenSource.CreateLinkedTokenSource(external);
         _start.Enabled = false;
@@ -234,12 +306,14 @@ internal sealed class MainForm : Form
         {
             Session.Begin(AutomationSession.QueryTitle);
             using var escape = Session.EscapeToken.Register(() => { try { _queryCts?.Cancel(); } catch (ObjectDisposedException) { } });
-            var result = await _service.QueryAsync(code, progress, _queryCts.Token);
+            var result = await _service.QueryAsync(code, options, progress, _queryCts.Token);
             outcome = result.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
             if (result.Found)
             {
                 ShowResult(result);
-                SetStatus($"ERP：品號 {result.ItemCode} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
+                var extra = (result.BatchManaged ? $"，批號 {result.Batches.Count} 筆" : string.Empty) +
+                            (result.HistoryRange is not null ? $"，歷史異動 {result.History.Count} 筆" : string.Empty);
+                SetStatus($"ERP：品號 {result.ItemCode} 查詢完成，共 {result.Fields.Count} 欄{extra}（{result.Elapsed.TotalSeconds:0.0} 秒）");
             }
             else SetStatus($"ERP：查無品號 {code}");
             return result;
@@ -274,16 +348,28 @@ internal sealed class MainForm : Form
         _itemName.Text = result?.ItemName ?? string.Empty;
         _specification.Text = result?.Specification ?? string.Empty;
         _fields.Rows.Clear();
-        _warehouses.Rows.Clear();
-        _warehouses.Columns.Clear();
-        if (result is null) return;
-        foreach (var f in result.Fields)
-            _fields.Rows.Add(f.Name, f.Value);
-        if (result.Warehouses.Count == 0) return;
-        foreach (var f in result.Warehouses[0])
-            _warehouses.Columns.Add(f.Name, f.Name);
-        foreach (var row in result.Warehouses)
-            _warehouses.Rows.Add(row.Select(f => (object)f.Value).ToArray());
+        if (result is not null)
+            foreach (var f in result.Fields)
+                _fields.Rows.Add(f.Name, f.Value);
+
+        FillTable(_warehouses, result?.Warehouses ?? [], ItemFieldCatalog.Warehouse);
+        FillTable(_batches, result?.Batches ?? [], ItemFieldCatalog.Batch);
+        FillTable(_history, result?.History ?? [], ItemFieldCatalog.History);
+        _warehousePage.Text = result is null ? "庫別" : $"庫別（{result.Warehouses.Count}）";
+        _batchPage.Text = result is null ? "批號" : result.BatchManaged ? $"批號（{result.Batches.Count}）" : "批號（非批號管理）";
+        _historyPage.Text = result?.HistoryRange is { } range
+            ? $"歷史異動（{Invq01Layout.ErpDate(range.From)}～{Invq01Layout.ErpDate(range.To)}，{result.History.Count}）"
+            : "歷史異動（未查）";
+    }
+
+    private static void FillTable(DataGridView grid, IReadOnlyList<IReadOnlyList<ErpField>> rows, IReadOnlyList<CatalogField> catalog)
+    {
+        grid.Rows.Clear();
+        grid.Columns.Clear();
+        foreach (var c in catalog)
+            grid.Columns.Add(c.Label, c.Label);
+        foreach (var row in rows)
+            grid.Rows.Add(catalog.Select(c => (object)(row.FirstOrDefault(f => f.Name == c.Label)?.Value ?? string.Empty)).ToArray());
     }
 
     private void RefreshErpState()

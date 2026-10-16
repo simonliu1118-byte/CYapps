@@ -7,15 +7,16 @@ namespace CYERPAutoQuery;
 /// </summary>
 internal static class ExportFiles
 {
-    private const string Prefix = "INVI02_";
+    /// <summary>One prefix per ERP program whose export is read (INVI02, INVQ01).</summary>
+    private static readonly string[] Prefixes = [Invi02Layout.FormCode + "_", Invq01Layout.FormCode + "_"];
 
     public static string Folder => Path.Combine(AppContext.BaseDirectory, "TEMP");
 
     /// <summary>A unique path that does not exist yet (ERP would otherwise ask to overwrite).</summary>
-    public static string NewPath()
+    public static string NewPath(string program = Invi02Layout.FormCode)
     {
         Directory.CreateDirectory(Folder);
-        return Path.Combine(Folder, $"{Prefix}{DateTime.Now:yyyyMMddHHmmssfff}.XLSX");
+        return Path.Combine(Folder, $"{program}_{DateTime.Now:yyyyMMddHHmmssfff}.XLSX");
     }
 
     /// <summary>Waits until ERP has finished writing the file, then reads every sheet.</summary>
@@ -62,8 +63,9 @@ internal static class ExportFiles
         try
         {
             if (!Directory.Exists(Folder)) return;
-            foreach (var file in Directory.EnumerateFiles(Folder, Prefix + "*.XLSX"))
-                Delete(file, log);
+            foreach (var prefix in Prefixes)
+                foreach (var file in Directory.EnumerateFiles(Folder, prefix + "*.XLSX"))
+                    Delete(file, log);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

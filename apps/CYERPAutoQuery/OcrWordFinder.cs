@@ -16,8 +16,16 @@ internal static class OcrWordFinder
     /// </summary>
     public static Rectangle? FindWord(IReadOnlyList<OcrToken> tokens, string word)
     {
+        var all = FindWords(tokens, word);
+        return all.Count > 0 ? all[0] : null;
+    }
+
+    /// <summary>Every place <paramref name="word"/> appears (one per joined line run), first run leftmost.</summary>
+    public static IReadOnlyList<Rectangle> FindWords(IReadOnlyList<OcrToken> tokens, string word)
+    {
+        var found = new List<Rectangle>();
         var target = OcrTextNormalizer.Normalize(word);
-        if (target.Length == 0) return null;
+        if (target.Length == 0) return found;
 
         // Each glyph with its share of the token's box.
         var glyphs = new List<(char Char, Rectangle Rect)>();
@@ -56,8 +64,8 @@ internal static class OcrWordFinder
             if (index < 0) continue;
             var area = glyphs[run[index]].Rect;
             for (var k = 1; k < target.Length; k++) area = Rectangle.Union(area, glyphs[run[index + k]].Rect);
-            return area;
+            found.Add(area);
         }
-        return null;
+        return found;
     }
 }

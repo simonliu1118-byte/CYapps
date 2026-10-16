@@ -63,7 +63,7 @@ internal sealed class ErpAgentLoop(
     string agentVersion,
     Func<string> erpState,
     Func<bool> localBusy,
-    Func<string, CancellationToken, Task<ItemQueryResult>> runQuery,
+    Func<ErpAgentJob, CancellationToken, Task<ItemQueryResult>> runQuery,
     Action<ErpAgentState, string> report,
     Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
@@ -128,7 +128,7 @@ internal sealed class ErpAgentLoop(
         string outcome;
         try
         {
-            var result = await runQuery(job.ItemNo, cancellationToken);
+            var result = await runQuery(job, cancellationToken);
             body = result.Found
                 ? ErpAgentProtocol.FoundBody(result, agentVersion)
                 : ErpAgentProtocol.NotFoundBody(watch.ElapsedMilliseconds, agentVersion);

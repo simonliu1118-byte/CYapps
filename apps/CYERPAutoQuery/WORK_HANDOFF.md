@@ -1,6 +1,12 @@
 # CYERPAutoQuery Work Handoff
 
-## 現況（V0.2.0 Build 0，2026/10/16）
+## 現況（V0.3.0 Build 1，2026/10/16）
+
+- 新增 INVQ01（使用者 2026-10-16）：批號管理不是 N 時查各批庫存量；勾「查歷史異動」時查歷史異動（日期選擇器，未填最近一年、最多三年）；INVQ01 用完關閉。程式在 `ItemQueryService` 的 INVQ01 區段，純規則在 `Invq01Layout.cs`（頁籤中心、標題、日期、`HistoryRange`），解析在 `Invq01Export`。已用使用者提供的 INVQ01_5／INVQ01_4 真實檔在本機確認解析（未提交）；歷史異動 1,621 列約 144 KB JSON，Web 回報上限 2,000 列（保留最新），CY Web 需放寬 96 KiB 上限（補充交接見 chihyuan-web `docs/handoff/ERP_ITEM_QUERY_INVQ01_HANDOFF.md`）。
+- 尚未實機看過：INVI02 Ribbon「串查」下拉、INVQ01 頁籤是否為視窗（不是時改 OCR 並以標題確認）、「轉出到Excel」的設定視窗（程式自動辨識 ERP 匯出設定或 Windows 另存新檔，並在 LOG 列出子視窗）、轉出後是否有「檢視Excel資料?」（有就按 No，沒有則以檔案寫好且 ERP 閒置 1.5 秒為完成）、歷史異動日期欄的輸入方式、批號為零時 ERP 的反應。
+- V0.2.0 Build 4 已實機：本機與 Web 查詢都成功。
+
+## 先前狀態（V0.2.0 Build 0）
 
 - CY Web Agent 完成（`ErpAgentProtocol`／`ErpAgent`（client + loop，純 .NET、有單元測試）／`ErpAgentSettings`（DPAPI）／`ErpAgentSettingsForm`）；本機與 Web 查詢共用 `MainForm.ExecuteQueryAsync` → `ItemQueryService`，不另寫第二套流程。已對本機 `wrangler dev` 執行的 chihyuan-web #169 Worker（local D1、假工作）實測 claim → complete(FOUND) 成功；`tests/.../LiveCyWebTests.cs` 為 opt-in 測試（需 CYQ_LIVE_BASE／CYQ_LIVE_TOKEN）。
 - 待：chihyuan-web #169 合併並部署後，用真的 CY Web 網址與 Token 實機端對端測試。
@@ -33,9 +39,21 @@
 - 轉出 Excel：Ribbon「Excel」下拉 →「轉出至 Excel」／「轉出全部符合查詢條件的資料」，無快捷鍵。匯出設定視窗標題與 INVI02 相同；檔案格式下拉、儲存檔案（黃色欄位）、單頭／單身欄位勾選（「儲存設定」會記住），確定要用滑鼠點。完成後跳「檢視Excel資料?」Yes／No，Yes 會開檔。
 - 在「資料瀏覽」頁籤轉出不含單身（庫別）；其他頁籤轉出含單身，統一用「基本資料1」。
 - 匯出檔由 ERP 自行產生（xlsx 內無 docProps，非 Excel 存檔），推測不需要安裝 Excel；無人值守電腦將裝 OpenOffice，需實機確認匯出正常。
+- INVQ01（使用者截圖 2026-10-16）：從 INVI02「串查」→「庫存狀況查詢作業」開啟，已帶出該品號。下方頁籤：查各庫庫存量、查庫存可用量、查未來異動量、查歷史異動、查各批庫存量、查批號異動、暫出/入狀況查詢、品號廠商價格查詢、查詢結果；寬度隨文字（中心距頁籤控制項左緣 59、148、237、320、403、486、578、689、778）。開始查詢後自動跳到「查詢結果」，標題由「庫存狀況查詢作業(INVQ01)[公司]」變成「庫存狀況查詢作業[公司]-查各批庫存量」。查歷史異動頁有選擇庫別、選擇日期起／迄、庫別性質。
+- INVQ01 轉出檔：單一工作表「查詢資料」，第 3 列標題（部分帶空白），A～X 是品號資料（只有第一列有值），查各批庫存量從「批號」欄起、查歷史異動從「日期」欄起每列一筆；品號資料與明細都有「庫存數量」，以明細起始欄切開。
 - INVI02 頁籤順序：基本資料1、基本資料2、採購生管1、採購生管2、售價、成本、標準包裝、屬性類別頁、產品圖示、資料瀏覽。
 
 ## 實機驗收重點
+
+INVQ01（V0.3.0）：
+
+1. LOG `invq01: 串查 庫存狀況查詢作業 clicked`、`INVQ01 opened`；若出現 `INVQ01 tab sheets not found as windows`，請回報（改走 OCR）。
+2. `開始查詢 clicked tab=…`、`query shown tab=… after_ms=`。
+3. `轉出到Excel clicked`，之後 `dialog: export-dialog: child …` 會列出轉出設定視窗的內容，請把 LOG 傳回來核對。
+4. 歷史異動：`history range shown from=… to=…` 兩個日期都要對。
+5. 最後 `INVQ01 closed`，ERP 畫面不應留下 INVQ01。
+
+INVI02：
 
 1. LOG 的 `INVI02 found class=`：確認視窗類別（程式預期 `TfrmInvi02`，不同也能用，但請回報）。
 2. 頁籤：LOG `tab ... by=geometry` 表示座標命中（一般選項、基本資料1）。
@@ -59,6 +77,8 @@
   - 大量搬移的效率：畫面自動化每筆數秒且全程鎖滑鼠；一次性搬移可評估 ERP 的 Excel 匯出或唯讀查詢舊資料庫，畫面查詢留給日常單筆與補查（由使用者決定）。
 
 ## 後續工作
+
+- CY Web 端：依補充交接加上歷史異動選項（日期選擇器）、批號與歷史異動顯示、放寬回報大小上限；結果保留改為 5 分鐘，每次查詢一律重跑（使用者 2026-10-16）。
 
 - CY Web 接口：交接文件在 chihyuan-web `erp-item-query/handoff` 分支 `docs/handoff/ERP_ITEM_QUERY_BRIDGE_HANDOFF.md`；等 CY Web 端完成報告（`docs/handoff/ERP_ITEM_QUERY_BRIDGE_REPORT.md`）後實作 Agent 連線並核對。
 - 進階設定查詢（清除 → 選條件 → 加入）。

@@ -33,7 +33,7 @@ internal sealed class ItemQueryService
         _ocr = new PaddleOcrService(log);
     }
 
-    public async Task<ItemQueryResult> QueryAsync(string itemCode, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task<ItemQueryResult> QueryAsync(string itemCode, ItemQueryOptions options, IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!ItemCodeRules.TryNormalize(itemCode, out var code, out var error))
             throw new InvalidOperationException(error);
@@ -88,9 +88,10 @@ internal sealed class ItemQueryService
 
         progress.Report("ERP：轉出 Excel…");
         var path = ExportFiles.NewPath();
+        ItemQueryResult result;
         try
         {
-            return await ExportAndReadAsync(root, header, code, path, watch, progress, cancellationToken);
+            result = await ExportAndReadAsync(root, header, code, path, watch, progress, cancellationToken);
         }
         catch (InvalidOperationException ex) when (ex is not QueryFailure)
         {
@@ -101,6 +102,20 @@ internal sealed class ItemQueryService
         {
             ExportFiles.Delete(path, _log);
         }
+
+        // Batches when the item is batch managed; history only when asked (user, 2026-10-16).
+        var batchManaged = Invq01Layout.IsBatchManaged(result.Value("批號管理"));
+        if (!batchManaged && options.History is null) return result;
+        try
+        {
+            result = await QueryInvq01Async(root, code, result, batchManaged, options.History, progress, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure)
+        {
+            throw new QueryFailure(ErpAgentErrorCode.EXPORT_FAILED, ex.Message, ex);
+        }
+        _log.Info("query", $"done with INVQ01 item={_log.Value(code)} batches={result.Batches.Count} history={result.History.Count} elapsed_ms={watch.ElapsedMilliseconds}");
+        return result with { Elapsed = watch.Elapsed };
     }
 
     private async Task<ItemQueryResult> ExportAndReadAsync(nint root, HeaderControls header, string code, string path,
@@ -618,24 +633,76 @@ internal sealed class ItemQueryService
         _log.Info("export", "轉出至 Excel clicked");
 
         // 匯出設定 is recognised by its 儲存檔案 path box, or by the INVI02 caption it carries.
-        var found = await WaitNewWindowAsync(root, before, h => !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)) &&
-            (Invi02Layout.IsInvi02Title(NativeMethods.WindowText(h)) ||
-             Win32Automation.InputControls(h, visibleOnly: true).Any(c => Invi02Layout.LooksLikeFilePath((NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim()))),
-            ExportDialogWaitMs, cancellationToken);
+        await CompleteExportAsync(root, before, path, Invi02Layout.IsInvi02Title, strict: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Everything after the export command: the export dialog (ERP's 匯出設定, or a Windows
+    /// 另存新檔 dialog), the path, 確定, and the end of the export. <paramref name="strict"/> is
+    /// INVI02's known flow: xlsx format and 單頭／單身 全選 are required, and so is the
+    /// 「檢視Excel資料?」 question. INVQ01's 轉出到Excel dialog has not been seen yet, so there
+    /// whatever applies is done and the end is the file written with ERP idle again.
+    /// </summary>
+    private async Task CompleteExportAsync(nint root, IReadOnlySet<nint> before, string path, Func<string, bool> ownTitle, bool strict, CancellationToken cancellationToken)
+    {
+        var found = await WaitNewWindowAsync(root, before, h => IsExportDialog(h, ownTitle), ExportDialogWaitMs, cancellationToken);
         if (found is not { } dialog)
         {
-            LogProcessWindows(root, "after-export-menu");
-            throw new InvalidOperationException("按「轉出至 Excel」後沒有出現匯出設定視窗。");
+            LogProcessWindows(root, "after-export-command");
+            throw new InvalidOperationException("按下轉出 Excel 後沒有出現匯出設定視窗。");
         }
         await Pace.Delay(500, cancellationToken); // let ERP finish building the dialog
-        await FillExportDialogAsync(dialog, path, cancellationToken);
+        if (IsSaveDialog(dialog)) await FillSaveDialogAsync(dialog, path, cancellationToken);
+        else await FillExportDialogAsync(dialog, path, strict, cancellationToken);
+        await FinishExportAsync(root, before, dialog, path, questionRequired: strict, cancellationToken);
+    }
 
-        // ERP writes the file (showing a 處理進度 window meanwhile), closes the dialog and asks
-        // 「檢視Excel資料?」. Only a window with a No button counts: the progress window is
-        // small too and was mistaken for the question (V0.2.0 LOG, 2026-10-16). OCR is only a
-        // late fallback and must read 「檢視」 before it clicks.
+    private static bool IsExportDialog(nint h, Func<string, bool> ownTitle)
+    {
+        if (IsSaveDialog(h)) return true;
+        if (Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h))) return false;
+        return ownTitle(NativeMethods.WindowText(h)) ||
+               Win32Automation.InputControls(h, visibleOnly: true).Any(c => Invi02Layout.LooksLikeFilePath((NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim()));
+    }
+
+    /// <summary>A Windows 另存新檔 dialog: class #32770 with a file name box and a 存檔 button.</summary>
+    private static bool IsSaveDialog(nint h) =>
+        NativeMethods.ClassName(h) == "#32770" &&
+        Win32Automation.EnumerateChildren(h).Any(c => c.Visible && c.ClassName == "Edit") &&
+        FindButton(h, IsSaveCaption) is not null;
+
+    private static bool IsSaveCaption(string caption) =>
+        caption.StartsWith("存檔", StringComparison.Ordinal) || caption.StartsWith("儲存", StringComparison.Ordinal) ||
+        caption.StartsWith("SAVE", StringComparison.Ordinal);
+
+    private async Task FillSaveDialogAsync(nint dialog, string path, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法把另存新檔視窗帶到前景。");
+        var box = Win32Automation.EnumerateChildren(dialog).First(c => c.Visible && c.ClassName == "Edit");
+        SafeClick(dialog, Win32Automation.Center(box.Rect));
+        await Pace.Delay(150, cancellationToken);
+        await PasteIntoAsync(box.Handle, path, cancellationToken);
+        var shown = (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
+        if (!string.Equals(shown, path, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("另存新檔的檔名貼上後讀回的內容不一致，已停止。");
+        var save = FindButton(dialog, IsSaveCaption) ?? throw new InvalidOperationException("另存新檔視窗找不到「存檔」按鈕。");
+        SafeClick(dialog, Win32Automation.Center(save.Rect));
+        _log.Info("export", "save dialog path pasted and 存檔 clicked");
+    }
+
+    /// <summary>
+    /// ERP writes the file (showing a 處理進度 window meanwhile), closes the dialog and may ask
+    /// 「檢視Excel資料?」, answered No. Only a window with a No button counts: the progress window
+    /// is small too and was mistaken for the question (V0.2.0 LOG, 2026-10-16). OCR is only a
+    /// late fallback and must read 「檢視」 before it clicks. Without a required question the
+    /// export is done once the file exists and ERP has been idle for a moment.
+    /// </summary>
+    private async Task FinishExportAsync(nint root, IReadOnlySet<nint> before, nint dialog, string path, bool questionRequired, CancellationToken cancellationToken)
+    {
         var deadline = Environment.TickCount64 + ExportRunWaitMs;
         long? dialogClosedAt = null;
+        long? quietSince = null;
         long nextOcr = 0;
         nint question = 0;
         while (question == 0)
@@ -643,7 +710,11 @@ internal sealed class ItemQueryService
             if (Environment.TickCount64 > deadline)
             {
                 LogProcessWindows(root, "after-export");
-                throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。");
+                foreach (var h in Win32Automation.VisibleProcessWindows(root).Where(h => !before.Contains(h)))
+                    LogChildren(h, "after-export-window");
+                throw new InvalidOperationException(questionRequired
+                    ? "轉出 Excel 後沒有出現「檢視Excel資料?」，請人工確認 ERP 畫面。"
+                    : "轉出 Excel 後 ERP 沒有完成（仍有視窗開著或沒有產生檔案），請人工確認 ERP 畫面。");
             }
             await Pace.Delay(250, cancellationToken);
             if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) continue;
@@ -658,7 +729,20 @@ internal sealed class ItemQueryService
                 question = h;
                 break;
             }
-            if (question != 0 || Environment.TickCount64 - dialogClosedAt < 8000 || Environment.TickCount64 < nextOcr) continue;
+            if (question != 0) break;
+
+            if (!questionRequired)
+            {
+                var quiet = NativeMethods.IsWindowEnabled(root) && File.Exists(path) &&
+                            !Win32Automation.VisibleProcessWindows(root).Any(h => !before.Contains(h));
+                if (!quiet) quietSince = null;
+                else if ((quietSince ??= Environment.TickCount64) + 1500 <= Environment.TickCount64)
+                {
+                    _log.Info("export", "export finished without a question");
+                    return;
+                }
+            }
+            if (Environment.TickCount64 - dialogClosedAt < 8000 || Environment.TickCount64 < nextOcr) continue;
 
             nextOcr = Environment.TickCount64 + 2000;
             foreach (var h in fresh)
@@ -686,7 +770,7 @@ internal sealed class ItemQueryService
     }
 
     /// <summary>Screen point of the drop-down item containing <paramref name="word"/>, or null after a bounded wait.</summary>
-    private async Task<Point?> FindMenuItemAsync(nint root, Rectangle near, string word, CancellationToken cancellationToken)
+    private async Task<Point?> FindMenuItemAsync(nint root, Rectangle near, string word, CancellationToken cancellationToken, bool topmost = false)
     {
         var deadline = Environment.TickCount64 + MenuWaitMs;
         while (Environment.TickCount64 < deadline)
@@ -699,8 +783,14 @@ internal sealed class ItemQueryService
                 // The Ribbon drop-down is a layered window; a plain screen copy misses it.
                 using var image = ScreenCapture.CaptureWithLayers(area);
                 var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
-                if (OcrWordFinder.FindWord(tokens, word) is { } r)
+                var matches = OcrWordFinder.FindWords(tokens, word);
+                if (matches.Count > 0)
+                {
+                    // 串查 lists 庫存狀況查詢作業 twice; the first (top) one is used (user, 2026-10-16).
+                    var r = topmost ? matches.MinBy(m => m.Top) : matches[0];
+                    if (matches.Count > 1) _log.Info("export", $"menu word={word} matches={matches.Count} topmost={topmost}");
                     return new Point(area.Left + r.Left + r.Width / 2, area.Top + r.Top + r.Height / 2);
+                }
                 if (Environment.TickCount64 >= deadline)
                     _log.Info("export", $"  menu area=({area.Left},{area.Top},{area.Width},{area.Height}) tokens=\"{string.Join(" ", tokens.Select(t => _log.Value(t.Text)))}\"");
             }
@@ -714,13 +804,15 @@ internal sealed class ItemQueryService
     /// someone ticked last (user, 2026-10-16); 儲存檔案 gets CYERPAutoQuery's own TEMP path,
     /// read back; 確定 is clicked with the mouse.
     /// </summary>
-    private async Task FillExportDialogAsync(nint dialog, string path, CancellationToken cancellationToken)
+    private async Task FillExportDialogAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法把匯出設定視窗帶到前景。");
         var inputs = Win32Automation.InputControls(dialog, visibleOnly: true);
         var texts = inputs.Select(c => (Control: c, Text: (NativeMethods.ControlText(c.Handle) ?? string.Empty).Trim())).ToList();
-        if (!texts.Any(t => Invi02Layout.IsCombo(t.Control.ClassName) && t.Text.Contains(".xlsx", StringComparison.OrdinalIgnoreCase)))
+        if (!strict) LogChildren(dialog, "export-dialog");
+        var formats = texts.Where(t => Invi02Layout.IsCombo(t.Control.ClassName) && t.Text.Contains(".xls", StringComparison.OrdinalIgnoreCase)).ToList();
+        if ((strict || formats.Count > 0) && !formats.Any(t => t.Text.Contains(".xlsx", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("匯出設定的檔案格式不是「Excel 2007以上 (*.xlsx)」，請在 ERP 改好後再查詢。");
         var pathBoxes = texts
             .Where(t => Invi02Layout.IsEditBox(t.Control.ClassName) && Invi02Layout.LooksLikeFilePath(t.Text))
@@ -732,7 +824,10 @@ internal sealed class ItemQueryService
         }
         var box = pathBoxes[0].Control;
 
-        await SelectAllExportFieldsAsync(dialog, cancellationToken);
+        if (strict || Win32Automation.FindTabSheet(dialog, Invi02Layout.ExportFieldTabs.Order[0]) is not null)
+            await SelectAllExportFieldsAsync(dialog, cancellationToken);
+        else if (FindButton(dialog, c => c.StartsWith("全選", StringComparison.Ordinal)) is not null)
+            await PressSelectAllAsync(dialog, "匯出欄位", cancellationToken);
 
         // The path is pasted, not typed (user, 2026-10-16: faster): select the box's whole
         // text with EM_SETSEL (never Ctrl+A in ERP) and send WM_PASTE; the clipboard is
@@ -907,6 +1002,274 @@ internal sealed class ItemQueryService
             if (found.Count == 1) return found[0];
         }
         return null;
+    }
+
+    // ---- INVQ01 庫存狀況查詢作業 ---------------------------------------------------------
+
+    private const int Invq01OpenWaitMs = 30000;
+    private const int Invq01QueryWaitMs = 60000;
+    private const int Invq01CloseWaitMs = 10000;
+
+    /// <summary>
+    /// INVI02 串查 → 庫存狀況查詢作業 opens INVQ01 on the item shown (user, 2026-10-16). For a
+    /// batch-managed item 查各批庫存量 is queried and exported; when asked, 查歷史異動 for the date
+    /// range as well. Read-only: only query conditions are set. INVQ01 is closed afterwards
+    /// (user, 2026-10-16), also when something failed.
+    /// </summary>
+    private async Task<ItemQueryResult> QueryInvq01Async(nint invi02, string code, ItemQueryResult result,
+        bool batches, HistoryRange? history, IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        progress.Report("ERP：開啟庫存狀況查詢作業（串查）…");
+        var invq = await OpenInvq01Async(invi02, cancellationToken);
+        var closed = false;
+        try
+        {
+            NativeMethods.ShowWindow(invq, NativeMethods.SW_MAXIMIZE);
+            await Pace.Delay(MaximizeSettleMs, cancellationToken);
+            if (!Win32Automation.PrepareForeground(invq, _log))
+                throw new InvalidOperationException("無法把庫存狀況查詢作業帶到前景。");
+            await WaitInvq01ItemAsync(invq, code, cancellationToken);
+            var page = FindInvq01PageControl(invq);
+
+            if (batches)
+            {
+                progress.Report("ERP：查各批庫存量…");
+                var sheets = await RunInvq01QueryAsync(invq, page, Invq01Layout.BatchTab, null, cancellationToken);
+                result = result with { Batches = Invq01Export.ParseBatches(sheets, code), BatchManaged = true };
+            }
+            if (history is not null)
+            {
+                progress.Report($"ERP：查歷史異動（{Invq01Layout.ErpDate(history.From)}～{Invq01Layout.ErpDate(history.To)}）…");
+                var sheets = await RunInvq01QueryAsync(invq, page, Invq01Layout.HistoryTab, history, cancellationToken);
+                result = result with { History = Invq01Export.ParseHistory(sheets, code), HistoryRange = history };
+            }
+
+            progress.Report("ERP：關閉庫存狀況查詢作業…");
+            closed = await CloseInvq01Async(invq);
+            if (!closed) throw new InvalidOperationException("庫存狀況查詢作業沒有關閉，請人工確認 ERP 畫面。");
+            Win32Automation.PrepareForeground(invi02, _log);
+            return result;
+        }
+        finally
+        {
+            if (!closed && !await CloseInvq01Async(invq))
+                _log.Warn("invq01", "INVQ01 left open after a failure");
+        }
+    }
+
+    private async Task<nint> OpenInvq01Async(nint invi02, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(invi02, _log))
+            throw new InvalidOperationException("串查前無法把品號資料建立作業帶到前景。");
+        var before = Win32Automation.VisibleProcessWindows(invi02);
+        var label = await RibbonClickAsync(invi02, Invq01Layout.LinkMenu, "工具列的「串查」", cancellationToken);
+
+        var near = new Rectangle(label.Left - 150, label.Top - 40, 640, 560);
+        var item = await FindMenuItemAsync(invi02, near, Invq01Layout.FormTitle, cancellationToken, topmost: true);
+        if (item is null)
+        {
+            if (Win32Automation.ProcessPopupsNear(invi02, near).Count > 0) InputSender.Press(NativeMethods.VK_ESCAPE);
+            throw new InvalidOperationException("串查選單沒有出現「庫存狀況查詢作業」。");
+        }
+        InputSender.Click(item.Value);
+        _log.Info("invq01", "串查 庫存狀況查詢作業 clicked");
+
+        var started = Environment.TickCount64;
+        var found = await WaitNewWindowAsync(invi02, before,
+            h => Invq01Layout.IsInvq01Title(NativeMethods.WindowText(h)) && !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)),
+            Invq01OpenWaitMs, cancellationToken);
+        if (found is not { } invq)
+        {
+            LogProcessWindows(invi02, "after-串查");
+            throw new InvalidOperationException("從串查開啟庫存狀況查詢作業逾時。");
+        }
+        _log.Info("invq01", $"INVQ01 opened after_ms={Environment.TickCount64 - started} class={NativeMethods.ClassName(invq)}");
+        return invq;
+    }
+
+    /// <summary>INVQ01 opened from INVI02 shows the same 品號; anything else stops the query.</summary>
+    private async Task WaitInvq01ItemAsync(nint invq, string code, CancellationToken cancellationToken)
+    {
+        bool Shows() => Win32Automation.InputControls(invq, visibleOnly: true)
+            .Any(c => ItemCodeRules.SameCode(NativeMethods.ControlText(c.Handle), code));
+        if (await WaitUntilAsync(Shows, 10000, cancellationToken)) return;
+        LogChildren(invq, "invq01");
+        throw new InvalidOperationException($"庫存狀況查詢作業沒有帶出品號「{code}」，已停止。");
+    }
+
+    /// <summary>The lower TcxPageControl (查各庫庫存量 … 查詢結果), or null when its sheets are not windows.</summary>
+    private WindowControl? FindInvq01PageControl(nint invq)
+    {
+        var sheet = Win32Automation.FindTabSheet(invq, Invq01Layout.BatchTab) ?? Win32Automation.FindTabSheet(invq, Invq01Layout.HistoryTab);
+        if (sheet is null)
+        {
+            _log.Warn("invq01", "INVQ01 tab sheets not found as windows; tabs are found by OCR");
+            LogChildren(invq, "invq01");
+            return null;
+        }
+        var pageHandle = NativeMethods.GetParent(sheet.Handle);
+        return Win32Automation.EnumerateChildren(invq).FirstOrDefault(c => c.Handle == pageHandle);
+    }
+
+    /// <summary>One INVQ01 query: tab → (dates) → 開始查詢 → 查詢結果 → 轉出到Excel → read.</summary>
+    private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>> RunInvq01QueryAsync(
+        nint invq, WindowControl? page, string tab, HistoryRange? range, CancellationToken cancellationToken)
+    {
+        await ShowInvq01TabAsync(invq, page, tab, cancellationToken);
+        if (range is not null) await FillHistoryRangeAsync(invq, range, cancellationToken);
+
+        await RibbonClickAsync(invq, Invq01Layout.StartQuery, "工具列的「開始查詢」", cancellationToken);
+        _log.Info("invq01", $"開始查詢 clicked tab={tab}");
+        await WaitInvq01QueryAsync(invq, tab, cancellationToken);
+
+        var path = ExportFiles.NewPath(Invq01Layout.FormCode);
+        try
+        {
+            var before = Win32Automation.VisibleProcessWindows(invq);
+            await RibbonClickAsync(invq, Invq01Layout.ExportButton, "工具列的「轉出到Excel」", cancellationToken);
+            _log.Info("invq01", $"轉出到Excel clicked tab={tab}");
+            await CompleteExportAsync(invq, before, path, Invq01Layout.IsInvq01Title, strict: false, cancellationToken);
+            return await ExportFiles.ReadAsync(path, cancellationToken);
+        }
+        finally
+        {
+            ExportFiles.Delete(path, _log);
+        }
+    }
+
+    private async Task ShowInvq01TabAsync(nint invq, WindowControl? page, string tab, CancellationToken cancellationToken)
+    {
+        if (page is not null && Win32Automation.FindTabSheet(invq, tab) is { } sheet)
+        {
+            await ActivateTabAsync(invq, page, Invq01Layout.Tabs, tab, sheet.Handle, cancellationToken);
+            return;
+        }
+        // Without sheet windows the caption is found by OCR; that the right query ran is checked
+        // afterwards through the caption ERP gives the window (…-查各批庫存量).
+        if (!NativeMethods.GetWindowRect(invq, out var w))
+            throw new InvalidOperationException("讀不到庫存狀況查詢作業的視窗位置。");
+        var area = new Rectangle(w.Left, w.Top + 150, w.Width, Math.Max(100, w.Height - 150));
+        await OcrClickAsync(invq, area, tab, $"庫存狀況查詢作業的頁籤「{tab}」", cancellationToken);
+        await Pace.Delay(500, cancellationToken);
+    }
+
+    /// <summary>查歷史異動 選擇日期 起／迄: the two boxes of that group, left to right, each read back.</summary>
+    private async Task FillHistoryRangeAsync(nint invq, HistoryRange range, CancellationToken cancellationToken)
+    {
+        var group = Win32Automation.EnumerateChildren(invq)
+            .FirstOrDefault(c => c.Visible && Invi02Layout.NormalizeCaption(c.Text) == Invq01Layout.DateGroup);
+        var boxes = group is null ? [] : Win32Automation.InputControls(group.Handle, visibleOnly: true)
+            .Where(c => !Invi02Layout.IsCheckBox(c.ClassName)).OrderBy(c => c.Rect.Left).ToList();
+        if (boxes.Count != 2)
+            boxes = Win32Automation.InputControls(invq, visibleOnly: true)
+                .Where(c => c.ClassName.Contains("Date", StringComparison.OrdinalIgnoreCase)).OrderBy(c => c.Rect.Left).ToList();
+        if (boxes.Count != 2)
+        {
+            LogChildren(invq, "invq01-history");
+            throw new InvalidOperationException("查歷史異動找不到「選擇日期」的起、迄欄位。");
+        }
+
+        await SetDateAsync(invq, boxes[0], range.From, "起", cancellationToken);
+        await SetDateAsync(invq, boxes[1], range.To, "迄", cancellationToken);
+        // Leaving 迄 commits it; then both are read back.
+        SafeClick(invq, Win32Automation.Center(boxes[0].Rect));
+        await Pace.Delay(200, cancellationToken);
+        var from = NativeMethods.ControlText(boxes[0].Handle);
+        var to = NativeMethods.ControlText(boxes[1].Handle);
+        _log.Info("invq01", $"history range shown from={_log.Value(from ?? string.Empty)} to={_log.Value(to ?? string.Empty)}");
+        if (!Invq01Layout.ShowsDate(from, range.From) || !Invq01Layout.ShowsDate(to, range.To))
+            throw new InvalidOperationException("查歷史異動的日期輸入後讀回不一致，已停止。");
+    }
+
+    private async Task SetDateAsync(nint invq, WindowControl box, DateOnly date, string what, CancellationToken cancellationToken)
+    {
+        SafeClick(invq, Win32Automation.Center(box.Rect));
+        await Pace.Delay(150, cancellationToken);
+        var focus = NativeMethods.FocusedControlOfForeground();
+        if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
+            throw new InvalidOperationException($"無法把游標移到歷史異動的{what}日欄位。");
+        var current = NativeMethods.ControlText(box.Handle) ?? string.Empty;
+        InputSender.EndBackspace(current.Length + 2);
+        await Pace.Delay(60, cancellationToken);
+        InputSender.UnicodeText(Invq01Layout.ErpDate(date));
+        await Pace.Delay(150, cancellationToken);
+    }
+
+    /// <summary>
+    /// After 開始查詢 ERP names the query in the caption (…-查各批庫存量) and shows 查詢結果. A
+    /// message box raised by the query (one with a button that stays) stops the wait.
+    /// </summary>
+    private async Task WaitInvq01QueryAsync(nint invq, string tab, CancellationToken cancellationToken)
+    {
+        var before = Win32Automation.VisibleProcessWindows(invq);
+        var result = Win32Automation.FindTabSheet(invq, Invq01Layout.ResultTab);
+        var started = Environment.TickCount64;
+        var deadline = started + Invq01QueryWaitMs;
+        var messageSince = new Dictionary<nint, long>();
+        while (true)
+        {
+            await Pace.Delay(150, cancellationToken);
+            if (Invq01Layout.TitleShowsQuery(NativeMethods.WindowText(invq), tab) && NativeMethods.IsWindowEnabled(invq) &&
+                (result is null || NativeMethods.IsWindowVisible(result.Handle)))
+                break;
+            foreach (var h in Win32Automation.VisibleProcessWindows(invq).Where(h => !before.Contains(h) && IsSmallDialog(h)))
+            {
+                // A 處理進度 window may carry 取消; only a message box (確定／OK) counts.
+                if (!Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)) &&
+                    FindButton(h, c => c.StartsWith("確定", StringComparison.Ordinal) || c == "OK") is null) continue;
+                var since = messageSince.TryGetValue(h, out var t) ? t : messageSince[h] = Environment.TickCount64;
+                if (Environment.TickCount64 - since < 1500) continue;
+                LogChildren(h, "invq01-message");
+                throw new InvalidOperationException($"「{tab}」開始查詢後 ERP 顯示了訊息視窗，請人工確認並關閉。");
+            }
+            if (Environment.TickCount64 > deadline)
+            {
+                LogProcessWindows(invq, "after-開始查詢");
+                throw new InvalidOperationException($"「{tab}」開始查詢後 {Invq01QueryWaitMs / 1000} 秒內沒有出現查詢結果。");
+            }
+        }
+        _log.Info("invq01", $"query shown tab={tab} after_ms={Environment.TickCount64 - started}");
+        await Pace.Delay(600, cancellationToken); // let the result grid and the Ribbon settle
+    }
+
+    /// <summary>Closes INVQ01 with WM_CLOSE (no keys, no clicks); not cancellable so it also runs after Esc.</summary>
+    private async Task<bool> CloseInvq01Async(nint invq)
+    {
+        if (!NativeMethods.IsWindow(invq)) return true;
+        NativeMethods.PostMessage(invq, NativeMethods.WM_CLOSE, 0, 0);
+        var deadline = Environment.TickCount64 + Invq01CloseWaitMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Task.Delay(100);
+            if (!NativeMethods.IsWindow(invq) || !NativeMethods.IsWindowVisible(invq))
+            {
+                _log.Info("invq01", "INVQ01 closed");
+                return true;
+            }
+        }
+        LogProcessWindows(invq, "after-close-INVQ01");
+        return false;
+    }
+
+    /// <summary>Finds <paramref name="word"/> on the Ribbon of <paramref name="window"/> by OCR and clicks it; returns the label's screen rectangle.</summary>
+    private async Task<Rectangle> RibbonClickAsync(nint window, string word, string what, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(window, _log))
+            throw new InvalidOperationException($"點擊{what}前無法把 ERP 視窗帶到前景。");
+        if (!NativeMethods.GetWindowRect(window, out var w))
+            throw new InvalidOperationException($"讀不到{what}所在視窗的位置。");
+        var ribbon = new Rectangle(w.Left, w.Top, Math.Min(w.Width, 1200), Math.Min(w.Height, 220));
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(ribbon))
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        if (OcrWordFinder.FindWord(tokens, word) is not { } r)
+        {
+            _log.Warn("ribbon", $"OCR did not find {word} tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
+            throw new InvalidOperationException($"ERP 找不到{what}。");
+        }
+        var label = new Rectangle(ribbon.Left + r.Left, ribbon.Top + r.Top, r.Width, r.Height);
+        SafeClick(window, new Point(label.Left + label.Width / 2, label.Top + label.Height / 2));
+        return label;
     }
 }
 

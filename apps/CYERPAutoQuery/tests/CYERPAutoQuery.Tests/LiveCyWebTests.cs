@@ -20,8 +20,9 @@ public class LiveCyWebTests
         var states = new List<(ErpAgentState, string)>();
         using var cts = new CancellationTokenSource();
         var loop = new ErpAgentLoop(client, "live-test", () => "BROWSE", () => false,
-            (code, _) =>
+            (job, _) =>
             {
+                var code = job.ItemNo;
                 queried.Add(code);
                 return Task.FromResult(new ItemQueryResult(code,
                     ItemFieldCatalog.Header.Select(c => new ErpField(c.Label, c.Label == "品號" ? code : "假" + c.Label)).ToList(),

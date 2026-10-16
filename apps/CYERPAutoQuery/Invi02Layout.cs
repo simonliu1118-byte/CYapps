@@ -107,12 +107,14 @@ internal static class Invi02Layout
 }
 
 /// <summary>
-/// A DevExpress tab strip whose tabs all have the same width. The measured geometry is the
-/// primary path; when clicking there does not show the tab, the caller locates the caption by
-/// OCR instead (user decision 2026-10-16).
+/// A DevExpress tab strip. Tabs either all have the same width (Origin + Pitch) or, when
+/// their width follows the caption, each has a measured center (<paramref name="Centers"/>).
+/// The measured geometry is the primary path; when clicking there does not show the tab, the
+/// caller locates the caption by OCR instead (user decision 2026-10-16).
 /// </summary>
 /// <param name="Origin">Left edge of the first tab, px right of the page control's left edge.</param>
-internal sealed record TabStrip(string[] Order, double Origin, double Pitch)
+/// <param name="Centers">Per-tab center, px right of the page control's left edge (overrides Origin/Pitch).</param>
+internal sealed record TabStrip(string[] Order, double Origin, double Pitch, double[]? Centers = null)
 {
     private const int StripCenterY = 12;
 
@@ -122,8 +124,19 @@ internal sealed record TabStrip(string[] Order, double Origin, double Pitch)
     public Point? PointFor(Rectangle page, string tab)
     {
         var index = IndexOf(tab);
-        if (index < 0 || Pitch < 8) return null;
-        var x = (int)Math.Round(Origin + Pitch * (index + 0.5));
+        if (index < 0) return null;
+        double center;
+        if (Centers is not null)
+        {
+            if (index >= Centers.Length) return null;
+            center = Centers[index];
+        }
+        else
+        {
+            if (Pitch < 8) return null;
+            center = Origin + Pitch * (index + 0.5);
+        }
+        var x = (int)Math.Round(center);
         if (x <= 2 || x >= page.Width - 4) return null;
         return new Point(page.Left + x, page.Top + StripCenterY);
     }

@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.42 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入 INVQ01 庫存狀況查詢作業：只從 INVI02「串查」開啟並核對品號、只設頁籤與歷史異動起迄日（未填最近一年、最多三年）、「開始查詢」與「轉出到Excel」比照只讀與暫存檔即刪規則、成本與金額欄位解析後即丟棄、INVQ01 用完一律關閉；不改其他 App 規則。
+
 ## 2.3.41 — 2026/10/16
 
 - 依使用者要求新增 `apps/CYERPAutoQuery/`（SMART ERP 自動查詢工具）：最小 `PROJECT_RULES.md`、VERSION／BUILD 與 PR／手動 Build workflow；REPO_POLICY 正式維護專案與 CY 桌面視覺採用清單加入本專案。
