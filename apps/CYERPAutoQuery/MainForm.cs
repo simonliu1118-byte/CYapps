@@ -20,7 +20,13 @@ internal sealed class MainForm : Form
     private readonly TextBox _code = new() { MaxLength = Math.Max(ItemCodeRules.MaxLength, ItemNameRules.MaxLength) };
     // 品號: one item with all its data; 品名: the list of items whose 品名 contains the text
     // (user, 2026-10-16), from which one is picked and queried by 品號.
-    private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
+    // 客戶代號／客戶名稱 query COPI01 the same way (user, 2026-10-16).
+    private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
+    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3;
+    private readonly Label[] _headerLabels = new Label[3];
+    private GroupBox? _detailBox;
+    /// <summary>Whether the list on the search tab is customers (a double-click then queries 客戶代號).</summary>
+    private bool _searchIsCustomer;
     private readonly DataGridView _search = new();
     private readonly TabPage _searchPage = new("品名查詢");
     private readonly CyPrimaryButton _start = new();
@@ -102,7 +108,7 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -159,13 +165,13 @@ internal sealed class MainForm : Form
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(3, 2, 3, 2), Margin = Padding.Empty };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 98));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddHeaderRow(header, 0, "品號", _itemCode);
-        AddHeaderRow(header, 1, "品名", _itemName);
-        AddHeaderRow(header, 2, "規格", _specification);
+        _headerLabels[0] = AddHeaderRow(header, 0, "品號", _itemCode);
+        _headerLabels[1] = AddHeaderRow(header, 1, "品名", _itemName);
+        _headerLabels[2] = AddHeaderRow(header, 2, "規格", _specification);
         headerBox.Controls.Add(header);
         root.Controls.Add(headerBox, 0, 2);
 
-        var detailBox = new GroupBox { Text = "品號資料（ERP 轉出 Excel 的單頭資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
+        var detailBox = _detailBox = new GroupBox { Text = "品號資料（ERP 轉出 Excel 的單頭資料）", Dock = DockStyle.Fill, Padding = new Padding(7), Margin = new Padding(0, 4, 0, 4) };
         ConfigureGrid(_fields);
         _fields.Columns.Add("name", "欄位");
         _fields.Columns.Add("value", "內容");
@@ -187,8 +193,6 @@ internal sealed class MainForm : Form
             _details.TabPages.Add(page);
         }
         root.Controls.Add(_details, 0, 4);
-        foreach (var c in ItemFieldCatalog.SearchList)
-            _search.Columns.Add(c.Label, c.Label);
         _search.CellDoubleClick += async (_, e) => await QueryPickedItemAsync(e.RowIndex);
 
         var statusStrip = new StatusStrip { Dock = DockStyle.Fill, SizingGrip = false, Font = new Font("Microsoft JhengHei UI", 8.5F), Padding = new Padding(2, 0, 2, 0), Margin = Padding.Empty };
@@ -212,14 +216,15 @@ internal sealed class MainForm : Form
         Margin = new Padding(0, 3, 0, 0)
     };
 
-    private bool NameMode => _mode.SelectedIndex == 1;
+    private bool NameMode => _mode.SelectedIndex == ItemNameMode;
 
     private void UpdateHistoryInputs()
     {
         // History belongs to one item; a 品名 search only lists items.
-        _includeHistory.Enabled = !NameMode;
-        _historyFrom.Enabled = _includeHistory.Checked && !NameMode;
-        _historyTo.Enabled = _includeHistory.Checked && !NameMode;
+        var itemQuery = _mode.SelectedIndex == ItemMode;
+        _includeHistory.Enabled = itemQuery;
+        _historyFrom.Enabled = _includeHistory.Checked && itemQuery;
+        _historyTo.Enabled = _includeHistory.Checked && itemQuery;
     }
 
     /// <summary>The options of a local query; a bad date range throws ArgumentException with the message to show.</summary>
@@ -232,11 +237,22 @@ internal sealed class MainForm : Form
 
     private static TextBox ReadOnlyBox() => new() { ReadOnly = true, Dock = DockStyle.Fill, Margin = new Padding(0, 3, 0, 3) };
 
-    private static void AddHeaderRow(TableLayoutPanel table, int row, string label, TextBox box)
+    private static Label AddHeaderRow(TableLayoutPanel table, int row, string label, TextBox box)
     {
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3F));
-        table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, row);
+        var caption = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) };
+        table.Controls.Add(caption, 0, row);
         table.Controls.Add(box, 1, row);
+        return caption;
+    }
+
+    /// <summary>The header and detail captions follow what is shown: an item or a customer.</summary>
+    private void SetHeaderCaptions(bool customer)
+    {
+        string[] captions = customer ? ["客戶代號", "客戶簡稱", "客戶全名"] : ["品號", "品名", "規格"];
+        for (var i = 0; i < 3; i++) _headerLabels[i].Text = captions[i];
+        if (_detailBox is not null)
+            _detailBox.Text = customer ? "客戶資料（ERP 轉出 Excel 的單頭資料）" : "品號資料（ERP 轉出 Excel 的單頭資料）";
     }
 
     private static void ConfigureGrid(DataGridView grid)
@@ -265,10 +281,17 @@ internal sealed class MainForm : Form
     private async Task StartQueryAsync()
     {
         if (_queryCts is not null) return;
-        if (NameMode)
+        switch (_mode.SelectedIndex)
         {
-            await StartSearchAsync();
-            return;
+            case ItemNameMode:
+                await StartSearchAsync(customers: false);
+                return;
+            case CustomerNameMode:
+                await StartSearchAsync(customers: true);
+                return;
+            case CustomerMode:
+                await StartCustomerQueryAsync();
+                return;
         }
         if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error))
         {
@@ -304,8 +327,57 @@ internal sealed class MainForm : Form
         _code.SelectAll();
     }
 
-    /// <summary>品名 mode: lists the matching items on the 品名查詢 tab; failures shown in a message box.</summary>
-    private async Task StartSearchAsync()
+    /// <summary>客戶代號 mode: one customer from COPI01; failures shown in a message box.</summary>
+    private async Task StartCustomerQueryAsync()
+    {
+        if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error, CustomerRules.CodeName))
+        {
+            MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            ShowResult(null);
+            ShowCustomer(null);
+            await RunAutomationAsync(CancellationToken.None, (progress, ct) => _service.QueryCustomerAsync(code, progress, ct), result =>
+            {
+                if (!result.Found)
+                {
+                    SetStatus($"ERP：查無客戶代號 {code}");
+                    return AutomationOutcome.NotFound;
+                }
+                ShowCustomer(result);
+                SetStatus($"ERP：客戶 {result.Code} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
+                return AutomationOutcome.Done;
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Activate();
+            MessageBox.Show(this, ex.Message, "ERP 客戶查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        Activate();
+        _code.Focus();
+        _code.SelectAll();
+    }
+
+    private void ShowCustomer(CustomerQueryResult? result)
+    {
+        SetHeaderCaptions(customer: true);
+        _itemCode.Text = result?.Code ?? string.Empty;
+        _itemName.Text = result?.Value("客戶簡稱") ?? string.Empty;
+        _specification.Text = result?.Value("客戶全名") ?? string.Empty;
+        _fields.Rows.Clear();
+        if (result is not null)
+            foreach (var f in result.Fields)
+                _fields.Rows.Add(f.Name, f.Value);
+    }
+
+    /// <summary>品名／客戶名稱 mode: lists the matches on the search tab; failures shown in a message box.</summary>
+    private async Task StartSearchAsync(bool customers)
     {
         if (!ItemNameRules.TryNormalize(_code.Text, out var keyword, out var error))
         {
@@ -314,7 +386,7 @@ internal sealed class MainForm : Form
         }
         try
         {
-            await ExecuteSearchAsync(keyword, CancellationToken.None);
+            await ExecuteSearchAsync(keyword, CancellationToken.None, customers);
         }
         catch (OperationCanceledException)
         {
@@ -322,49 +394,60 @@ internal sealed class MainForm : Form
         catch (Exception ex)
         {
             Activate();
-            MessageBox.Show(this, ex.Message, "ERP 品名查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, customers ? "ERP 客戶名稱查詢失敗" : "ERP 品名查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         Activate();
         _code.Focus();
         _code.SelectAll();
     }
 
-    /// <summary>Double-click on a 品名查詢 row: that item is queried by 品號 (user, 2026-10-16).</summary>
+    /// <summary>Double-click on a search row: that item (品號) or customer (客戶代號) is queried (user, 2026-10-16).</summary>
     private async Task QueryPickedItemAsync(int rowIndex)
     {
         if (_queryCts is not null || rowIndex < 0 || rowIndex >= _search.Rows.Count) return;
-        var code = Convert.ToString(_search.Rows[rowIndex].Cells["品號"].Value) ?? string.Empty;
+        var column = _searchIsCustomer ? "客戶代號" : "品號";
+        var code = Convert.ToString(_search.Rows[rowIndex].Cells[column].Value) ?? string.Empty;
         if (code.Length == 0) return;
-        _mode.SelectedIndex = 0;
+        _mode.SelectedIndex = _searchIsCustomer ? CustomerMode : ItemMode;
         _code.Text = code;
         await StartQueryAsync();
     }
 
-    private async Task<ItemSearchResult> ExecuteSearchAsync(string keyword, CancellationToken external)
+    private async Task<ItemSearchResult> ExecuteSearchAsync(string keyword, CancellationToken external, bool customers = false)
     {
-        ShowSearch(null);
-        return await RunAutomationAsync(external, (progress, ct) => _service.SearchByNameAsync(keyword, progress, ct), result =>
+        ShowSearch(null, customers);
+        var what = customers ? "客戶簡稱或全名" : "品名";
+        return await RunAutomationAsync(external, (progress, ct) => customers
+            ? _service.SearchCustomersAsync(keyword, progress, ct)
+            : _service.SearchByNameAsync(keyword, progress, ct), result =>
         {
-            ShowSearch(result);
+            ShowSearch(result, customers);
             _details.SelectedTab = _searchPage;
             if (result.Items.Count == 0)
             {
-                SetStatus($"ERP：品名含「{keyword}」的品號查無資料");
+                SetStatus($"ERP：{what}含「{keyword}」查無資料");
                 return AutomationOutcome.NotFound;
             }
             var more = result.Truncated ? $"（已達 ERP 筆數上限 {result.Limit}，可能還有更多，請加長關鍵字）" : string.Empty;
-            SetStatus($"ERP：品名含「{keyword}」共 {result.Items.Count} 筆{more}，雙擊一筆查詢明細（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            SetStatus($"ERP：{what}含「{keyword}」共 {result.Items.Count} 筆{more}，雙擊一筆查詢明細（{result.Elapsed.TotalSeconds:0.0} 秒）");
             return AutomationOutcome.Done;
         });
     }
 
-    private void ShowSearch(ItemSearchResult? result)
+    private void ShowSearch(ItemSearchResult? result, bool customers)
     {
+        _searchIsCustomer = customers;
+        var labels = customers
+            ? CustomerFieldCatalog.SearchList.Select(f => f.Label).ToList()
+            : ItemFieldCatalog.SearchList.Select(c => c.Label).ToList();
         _search.Rows.Clear();
+        _search.Columns.Clear();
+        foreach (var label in labels) _search.Columns.Add(label, label);
         if (result is not null)
             foreach (var row in result.Items)
-                _search.Rows.Add(ItemFieldCatalog.SearchList.Select(c => (object)ItemSearchResult.Value(row, c.Label)).ToArray());
-        _searchPage.Text = result is null ? "品名查詢" : $"品名查詢（{result.Items.Count}{(result.Truncated ? "+" : string.Empty)}）";
+                _search.Rows.Add(labels.Select(l => (object)ItemSearchResult.Value(row, l)).ToArray());
+        var title = customers ? "客戶查詢" : "品名查詢";
+        _searchPage.Text = result is null ? title : $"{title}（{result.Items.Count}{(result.Truncated ? "+" : string.Empty)}）";
     }
 
     /// <summary>A 品名 search received from CY Web: same path as the local one, the list goes back to Web.</summary>
@@ -372,7 +455,7 @@ internal sealed class MainForm : Form
     {
         if (!ItemNameRules.TryNormalize(job.Keyword, out var keyword, out var error))
             throw new ArgumentException(error);
-        _mode.SelectedIndex = 1;
+        _mode.SelectedIndex = ItemNameMode;
         _code.Text = keyword;
         _log.Info("agent", $"web 品名 search keyword={_log.Value(keyword)}");
         return await ExecuteSearchAsync(keyword, cancellationToken);
@@ -457,6 +540,7 @@ internal sealed class MainForm : Form
 
     private void ShowResult(ItemQueryResult? result)
     {
+        SetHeaderCaptions(customer: false);
         _itemCode.Text = result?.ItemCode ?? string.Empty;
         _itemName.Text = result?.ItemName ?? string.Empty;
         _specification.Text = result?.Specification ?? string.Empty;

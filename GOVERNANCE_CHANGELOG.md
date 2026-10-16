@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.46 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入客戶查詢：使用 COPI01 客戶資料建立作業，規則同 INVI02；客戶名稱只可貼上程式固定產生的簡稱 OR 全名條件（COPMA.MA002／MA003），結果每筆須含關鍵字否則不採用；客戶代號只接受英數。不改其他 App 規則。
+
 ## 2.3.45 — 2026/10/16
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求：INVQ01 歷史異動起迄範圍不再由 Agent 限制最多三年，改由 CY Web 查詢模組負責；Agent 只提供開放的查詢功能。不改其他 App 規則。

@@ -162,25 +162,25 @@ internal static class ItemCodeRules
     /// Accepts one ERP 品號: trimmed, 1..40 characters, ASCII letters and digits only (no spaces,
     /// symbols, full-width or Chinese characters).
     /// </summary>
-    public static bool TryNormalize(string? input, out string code, out string error)
+    public static bool TryNormalize(string? input, out string code, out string error, string what = "品號")
     {
         code = (input ?? string.Empty).Trim();
         error = string.Empty;
         if (code.Length == 0)
         {
-            error = "請輸入品號。";
+            error = $"請輸入{what}。";
             return false;
         }
         if (code.Length > MaxLength)
         {
-            error = $"品號長度超過 {MaxLength} 字。";
+            error = $"{what}長度超過 {MaxLength} 字。";
             return false;
         }
-        // SMART ERP 品號 are letters and digits only (user, 2026-10-16); anything else is refused
-        // before ERP is touched.
+        // SMART ERP codes are letters and digits only (user, 2026-10-16); anything else is
+        // refused before ERP is touched.
         if (!code.All(char.IsAsciiLetterOrDigit))
         {
-            error = "品號只能輸入英文字母與數字。";
+            error = $"{what}只能輸入英文字母與數字。";
             return false;
         }
         return true;

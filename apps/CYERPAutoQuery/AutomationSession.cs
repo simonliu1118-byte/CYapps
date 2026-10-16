@@ -206,7 +206,7 @@ internal sealed class AutomationOverlay : Form
         (_title, _hint) = outcome switch
         {
             AutomationOutcome.Done => ("自動查詢完成", string.Empty),
-            AutomationOutcome.NotFound => ("查無此品號", "請確認品號"),
+            AutomationOutcome.NotFound => ("查無資料", "請確認查詢內容"),
             AutomationOutcome.Stopped => ("自動查詢已中斷", "請看提示視窗"),
             AutomationOutcome.Cancelled => ("使用者已停止", "已按 Esc 緊急停止"),
             _ => ("已暫停", "請看提示視窗")

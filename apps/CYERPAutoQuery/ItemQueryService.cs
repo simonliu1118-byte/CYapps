@@ -30,6 +30,11 @@ internal sealed class ItemQueryService
 
     private readonly AppLogger _log;
     private readonly PaddleOcrService _ocr;
+    /// <summary>
+    /// The ERP form the running query drives (INVI02 or COPI01). Set by each public query under the
+    /// automation gate, so only one query uses it at a time.
+    /// </summary>
+    private ErpForm _form = ErpForm.Invi02;
 
     public ItemQueryService(AppLogger log)
     {
@@ -43,51 +48,14 @@ internal sealed class ItemQueryService
             throw new InvalidOperationException(error);
 
         using var gate = ErpAutomationGate.Enter();
+        _form = ErpForm.Invi02;
         ExportFiles.CleanUp(_log);
         var watch = Stopwatch.StartNew();
         _log.Info("query", $"start item={_log.Value(code)}");
 
-        progress.Report("ERP：尋找品號資料建立作業…");
-        var root = await ResolveInvi02Async(progress, cancellationToken);
-
-        // Same as CYERPAutoInput with COPI08: always maximize so every geometry is the same.
-        NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
-        await Pace.Delay(MaximizeSettleMs, cancellationToken);
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("無法把品號資料建立作業帶到前景。");
-
-        var page = FindMainPageControl(root);
-
-        progress.Report("ERP：開啟查詢條件（F6）…");
-        var dialog = await OpenQueryDialogAsync(root, page, cancellationToken);
-
-        // A 品名 search leaves its 進階設定 condition in the dialog; it must not narrow this query.
-        await ClearAdvancedConditionAsync(dialog, cancellationToken);
-        progress.Report("ERP：輸入一般選項品號…");
-        await FillGeneralQueryAsync(dialog, code, cancellationToken);
-
-        progress.Report("ERP：查詢中…");
-        await ConfirmQueryAsync(root, dialog, cancellationToken);
-        var header = await WaitForRecordAsync(root, page, code, cancellationToken);
-        if (header is null)
-        {
-            _log.Info("query", $"not found item={_log.Value(code)} elapsed_ms={watch.ElapsedMilliseconds}");
+        if (await FindRecordAsync(code, watch, progress, cancellationToken) is not { } found)
             return ItemQueryResult.NotFound(code, watch.Elapsed);
-        }
-
-        // Exported from 資料瀏覽 the workbook lacks 單身資料 (庫別); from 基本資料1 it has both
-        // sheets (user, 2026-10-16).
-        // ERP ends a query on 資料瀏覽. When the record asked for was already shown, the header
-        // matches before ERP has finished, and 基本資料1 still looked shown at that moment, so
-        // it was not clicked and the export came from 資料瀏覽 (V0.2.0 Build 1, 2026-10-16).
-        // So: wait for 資料瀏覽 first, then always click 基本資料1.
-        progress.Report("ERP：切換到基本資料1…");
-        var browseSheet = await WaitForTabSheetAsync(root, Invi02Layout.BrowseTab, QuerySettleWaitMs, cancellationToken, visible: true);
-        _log.Info("tab", $"after query 資料瀏覽 shown={browseSheet is { } b && NativeMethods.IsWindowVisible(b.Handle)}");
-        var sheet = await WaitForTabSheetAsync(root, Invi02Layout.ExportTab, AfterActionWaitMs, cancellationToken)
-            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
-        await Pace.Delay(300, cancellationToken);
-        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.ExportTab, sheet.Handle, cancellationToken, force: true);
+        var (root, header) = found;
 
         progress.Report("ERP：轉出 Excel…");
         var path = ExportFiles.NewPath();
@@ -121,11 +89,64 @@ internal sealed class ItemQueryService
         return result with { Elapsed = watch.Elapsed };
     }
 
+    /// <summary>
+    /// The query part every form shares (INVI02, COPI01): find the form (opening it through 作業速查
+    /// when needed), maximize, F6 → 一般選項 code = value → 確定, wait for the record, then show
+    /// the export tab. Null when ERP has no such code.
+    /// </summary>
+    private async Task<(nint Root, HeaderControls Header)?> FindRecordAsync(string code, Stopwatch watch,
+        IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        progress.Report($"ERP：尋找{_form.Title}…");
+        var root = await ResolveFormAsync(progress, cancellationToken);
+
+        // Same as CYERPAutoInput with COPI08: always maximize so every geometry is the same.
+        NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
+        await Pace.Delay(MaximizeSettleMs, cancellationToken);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException($"無法把{_form.Title}帶到前景。");
+
+        var page = FindMainPageControl(root, _form);
+
+        progress.Report("ERP：開啟查詢條件（F6）…");
+        var dialog = await OpenQueryDialogAsync(root, page, cancellationToken);
+
+        // A 品名 search leaves its 進階設定 condition in the dialog; it must not narrow this query.
+        await ClearAdvancedConditionAsync(dialog, cancellationToken);
+        progress.Report($"ERP：輸入一般選項{_form.CodeName}…");
+        await FillGeneralQueryAsync(dialog, code, cancellationToken);
+
+        progress.Report("ERP：查詢中…");
+        await ConfirmQueryAsync(root, dialog, cancellationToken);
+        var header = await WaitForRecordAsync(root, page, code, cancellationToken);
+        if (header is null)
+        {
+            _log.Info("query", $"not found {_form.Code} code={_log.Value(code)} elapsed_ms={watch.ElapsedMilliseconds}");
+            return null;
+        }
+
+        // Exported from 資料瀏覽 the workbook lacks 單身資料 (庫別); from 基本資料1 it has both
+        // sheets (user, 2026-10-16).
+        // ERP ends a query on 資料瀏覽. When the record asked for was already shown, the header
+        // matches before ERP has finished, and 基本資料1 still looked shown at that moment, so
+        // it was not clicked and the export came from 資料瀏覽 (V0.2.0 Build 1, 2026-10-16).
+        // So: wait for 資料瀏覽 first, then always click 基本資料1.
+        progress.Report($"ERP：切換到{_form.ExportTab}…");
+        var browseSheet = await WaitForTabSheetAsync(root, ErpForm.BrowseTab, QuerySettleWaitMs, cancellationToken, visible: true);
+        _log.Info("tab", $"after query 資料瀏覽 shown={browseSheet is { } b && NativeMethods.IsWindowVisible(b.Handle)}");
+        var sheet = await WaitForTabSheetAsync(root, _form.ExportTab, AfterActionWaitMs, cancellationToken)
+            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{_form.ExportTab}」。");
+        await Pace.Delay(300, cancellationToken);
+        await ActivateTabAsync(root, page, _form.Tabs, _form.ExportTab, sheet.Handle, cancellationToken, force: true);
+
+        return (root, header);
+    }
+
     private async Task<ItemQueryResult> ExportAndReadAsync(nint root, HeaderControls header, string code, string path,
         Stopwatch watch, IProgress<string> progress, CancellationToken cancellationToken)
     {
         // Exporting from any tab but 基本資料1 loses 單身資料; checked again right before.
-        var exportSheet = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab);
+        var exportSheet = Win32Automation.FindTabSheet(root, _form.ExportTab);
         if (exportSheet is null || !NativeMethods.IsWindowVisible(exportSheet.Handle))
             throw new InvalidOperationException("轉出前 ERP 不在「基本資料1」頁籤，已停止（從資料瀏覽轉出會缺少庫別）。");
         await ExportToExcelAsync(root, path, cancellationToken);
@@ -147,13 +168,14 @@ internal sealed class ItemQueryService
     {
         try
         {
-            var windows = Win32Automation.FindInvi02Windows();
+            var form = ErpForm.Invi02; // the status badge is about INVI02
+            var windows = Win32Automation.FindFormWindows(form);
             if (windows.Count == 0) return Invi02Status.NotOpen;
             // With several, a query uses one in browse state (user, 2026-10-16).
-            if (windows.Count > 1) return windows.Any(IsInBrowseState) ? Invi02Status.Browse : Invi02Status.Multiple;
+            if (windows.Count > 1) return windows.Any(w => IsInBrowseState(w, form)) ? Invi02Status.Browse : Invi02Status.Multiple;
             var root = windows[0];
             if (!NativeMethods.IsWindowEnabled(root)) return Invi02Status.DialogOpen;
-            var header = ResolveHeader(root, FindMainPageControl(root));
+            var header = ResolveHeader(root, FindMainPageControl(root, form), form);
             if (!header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase)) return Invi02Status.Unknown;
             return Win32Automation.IsReadOnly(header.ItemCode.Handle) ? Invi02Status.Browse : Invi02Status.Editing;
         }
@@ -167,39 +189,39 @@ internal sealed class ItemQueryService
     /// The INVI02 window to use (user, 2026-10-16): with several, the first (top of the z-order)
     /// in browse state; with none, it is opened from the ERP main window through 作業速查.
     /// </summary>
-    private async Task<nint> ResolveInvi02Async(IProgress<string> progress, CancellationToken cancellationToken)
+    private async Task<nint> ResolveFormAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
-        var windows = Win32Automation.FindInvi02Windows();
+        var windows = Win32Automation.FindFormWindows(_form);
         if (windows.Count == 0)
         {
-            progress.Report("ERP：開啟品號資料建立作業（作業速查）…");
-            await OpenInvi02Async(cancellationToken);
-            windows = Win32Automation.FindInvi02Windows();
+            progress.Report($"ERP：開啟{_form.Title}（作業速查）…");
+            await OpenFormAsync(cancellationToken);
+            windows = Win32Automation.FindFormWindows(_form);
             if (windows.Count == 0)
-                throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "已從作業速查開啟 INVI02，但找不到品號資料建立作業視窗。");
+                throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"已從作業速查開啟 {_form.Code}，但找不到{_form.Title}視窗。");
         }
 
         nint root;
         if (windows.Count == 1) root = windows[0];
         else
         {
-            var browse = windows.Where(IsInBrowseState).ToList();
-            _log.Info("window", $"INVI02 windows={windows.Count} browse={browse.Count}");
+            var browse = windows.Where(w => IsInBrowseState(w, _form)).ToList();
+            _log.Info("window", $"{_form.Code} windows={windows.Count} browse={browse.Count}");
             if (browse.Count == 0)
-                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開著 {windows.Count} 個品號資料建立作業，但沒有一個在檢視狀態。\n請把其中一個儲存或取消後再查詢。");
+                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開著 {windows.Count} 個{_form.Title}，但沒有一個在檢視狀態。\n請把其中一個儲存或取消後再查詢。");
             root = browse[0];
         }
-        _log.Info("window", $"INVI02 found class={NativeMethods.ClassName(root)} visible={NativeMethods.IsWindowVisible(root)}");
+        _log.Info("window", $"{_form.Code} found class={NativeMethods.ClassName(root)} visible={NativeMethods.IsWindowVisible(root)}");
         return root;
     }
 
     /// <summary>Browse state: no dialog over the form and the header 品號 read-only.</summary>
-    private static bool IsInBrowseState(nint root)
+    private static bool IsInBrowseState(nint root, ErpForm form)
     {
         try
         {
             if (!NativeMethods.IsWindowEnabled(root)) return false;
-            var header = ResolveHeader(root, FindMainPageControl(root));
+            var header = ResolveHeader(root, FindMainPageControl(root, form), form);
             return header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase) &&
                    Win32Automation.IsReadOnly(header.ItemCode.Handle);
         }
@@ -214,7 +236,7 @@ internal sealed class ItemQueryService
     /// box → Enter (user's screenshots 2026-10-16). The typed text is read back from the focused
     /// ERP control before Enter, so nothing is typed into another program.
     /// </summary>
-    private async Task OpenInvi02Async(CancellationToken cancellationToken)
+    private async Task OpenFormAsync(CancellationToken cancellationToken)
     {
         var mains = Win32Automation.FindErpMainWindows();
         if (mains.Count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
@@ -241,12 +263,12 @@ internal sealed class ItemQueryService
                 }
                 return true;
             }, 0);
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著品號資料建立作業。\n請先登入 ERP。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著{_form.Title}。\n請先登入 ERP。");
         }
         var main = mains[0];
-        _log.Info("window", $"opening INVI02 from main window class={NativeMethods.ClassName(main)} title=\"{NativeMethods.WindowText(main)}\" count={mains.Count}");
+        _log.Info("window", $"opening {_form.Code} from main window class={NativeMethods.ClassName(main)} title=\"{NativeMethods.WindowText(main)}\" count={mains.Count}");
         if (!NativeMethods.IsWindowEnabled(main))
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 主視窗目前有對話框開著，無法開啟品號資料建立作業。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP 主視窗目前有對話框開著，無法開啟{_form.Title}。");
         if (!Win32Automation.PrepareForeground(main, _log))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "無法把 ERP 主視窗帶到前景。");
         if (!NativeMethods.GetWindowRect(main, out var window))
@@ -267,35 +289,35 @@ internal sealed class ItemQueryService
         var focus = NativeMethods.FocusedControlOfForeground();
         if (focus == 0 || Win32Automation.ProcessId(focus) != Win32Automation.ProcessId(main))
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "按「作業速查」後游標不在 ERP 的搜尋框，已停止。");
-        InputSender.UnicodeText(Invi02Layout.FormCode);
+        InputSender.UnicodeText(_form.Code);
         await Pace.Delay(800, cancellationToken); // let ERP list the matching programs
         var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
-        if (!typed.Equals(Invi02Layout.FormCode, StringComparison.OrdinalIgnoreCase))
+        if (!typed.Equals(_form.Code, StringComparison.OrdinalIgnoreCase))
         {
             _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "作業速查的搜尋框讀回內容不是 INVI02，已停止。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"作業速查的搜尋框讀回內容不是 {_form.Code}，已停止。");
         }
         InputSender.Press(NativeMethods.VK_RETURN);
-        _log.Info("window", "作業速查 INVI02 + Enter sent");
+        _log.Info("window", $"作業速查 {_form.Code} + Enter sent");
 
         // Opening a program form can take a while on the first run.
         var started = Environment.TickCount64;
-        if (!await WaitUntilAsync(() => Win32Automation.FindInvi02Windows().Count > 0, 30000, cancellationToken))
+        if (!await WaitUntilAsync(() => Win32Automation.FindFormWindows(_form).Count > 0, 30000, cancellationToken))
         {
             LogProcessWindows(main, "after-作業速查");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "從作業速查開啟品號資料建立作業逾時（30 秒）。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"從作業速查開啟{_form.Title}逾時（30 秒）。");
         }
-        _log.Info("window", $"INVI02 opened after_ms={Environment.TickCount64 - started}");
+        _log.Info("window", $"{_form.Code} opened after_ms={Environment.TickCount64 - started}");
         await Pace.Delay(1500, cancellationToken); // let the new form load its first record
     }
 
-    private static WindowControl FindMainPageControl(nint root)
+    private static WindowControl FindMainPageControl(nint root, ErpForm form)
     {
-        var first = Win32Automation.FindTabSheet(root, Invi02Layout.ExportTab)
-            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{Invi02Layout.ExportTab}」。");
+        var first = Win32Automation.FindTabSheet(root, form.ExportTab)
+            ?? throw new InvalidOperationException($"找不到 ERP 頁籤「{form.ExportTab}」。");
         var pageHandle = NativeMethods.GetParent(first.Handle);
         return Win32Automation.EnumerateChildren(root).FirstOrDefault(c => c.Handle == pageHandle)
-            ?? throw new InvalidOperationException("找不到 ERP 品號資料頁籤的 TcxPageControl。");
+            ?? throw new InvalidOperationException($"找不到 ERP {form.Title}頁籤的 TcxPageControl。");
     }
 
     // ---- header -----------------------------------------------------------------------
@@ -303,10 +325,11 @@ internal sealed class ItemQueryService
     private sealed record HeaderControls(WindowControl ItemCode);
 
     /// <summary>
-    /// The header is every input above the tab page control. Its first row starts with 品號,
-    /// then 品名 and 規格 rows (checkboxes such as 定重 are left out of that row structure).
+    /// The header is every input above the tab page control. Its first row starts with the code
+    /// (INVI02 品號, then 品名 and 規格 rows; COPI01 客戶代號＋簡稱, then 全名). Checkboxes such
+    /// as 定重 are left out of that row structure.
     /// </summary>
-    private static HeaderControls ResolveHeader(nint root, WindowControl page)
+    private static HeaderControls ResolveHeader(nint root, WindowControl page, ErpForm form)
     {
         var inputs = Win32Automation.InputControls(root, visibleOnly: true)
             .Where(c => c.Rect.Bottom <= page.Rect.Top && !Win32Automation.IsInside(c.Handle, page.Handle))
@@ -314,20 +337,20 @@ internal sealed class ItemQueryService
         var rows = Invi02Layout.BuildRows(
             inputs.Where(c => !Invi02Layout.IsCheckBox(c.ClassName)),
             c => c.Rect.ToRectangle());
-        if (rows.Count < 3)
-            throw new InvalidOperationException($"ERP 品號資料表頭結構不符預期（只找到 {rows.Count} 列欄位）。");
+        if (rows.Count < form.HeaderRows)
+            throw new InvalidOperationException($"ERP {form.Title}表頭結構不符預期（只找到 {rows.Count} 列欄位）。");
         return new HeaderControls(rows[0][0]);
     }
 
     /// <summary>The header, polled while ERP is still building the form (just opened, maximized or re-queried).</summary>
-    private static async Task<HeaderControls> ResolveHeaderAsync(nint root, WindowControl page, CancellationToken cancellationToken)
+    private async Task<HeaderControls> ResolveHeaderAsync(nint root, WindowControl page, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + AfterActionWaitMs;
         while (true)
         {
             try
             {
-                return ResolveHeader(root, page);
+                return ResolveHeader(root, page, _form);
             }
             catch (InvalidOperationException) when (Environment.TickCount64 < deadline)
             {
@@ -350,15 +373,15 @@ internal sealed class ItemQueryService
         }
         if (open.Count > 1) throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 開著多個「設定查詢條件」視窗，請先關閉再查詢。");
         if (!NativeMethods.IsWindowEnabled(root))
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前有其他對話框開著，請先處理後再查詢。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {_form.Title}目前有其他對話框開著，請先處理後再查詢。");
 
         var header = await ResolveHeaderAsync(root, page, cancellationToken);
         if (header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase) &&
             !Win32Automation.IsReadOnly(header.ItemCode.Handle))
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "ERP 品號資料建立作業目前在新增或修改狀態。\n請先儲存或取消後再查詢。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {_form.Title}目前在新增或修改狀態。\n請先儲存或取消後再查詢。");
 
         if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("按 F6 前無法把品號資料建立作業帶到前景。");
+            throw new InvalidOperationException($"按 F6 前無法把{_form.Title}帶到前景。");
         InputSender.Press(NativeMethods.VK_F6);
         _log.Info("dialog", "F6 sent");
 
@@ -376,7 +399,7 @@ internal sealed class ItemQueryService
             }
         }
         LogProcessWindows(root, "after-F6");
-        throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, "已按 F6，但 10 秒內沒有找到「設定查詢條件」視窗。\n請確認品號資料建立作業在檢視狀態；若視窗已出現，請把 LOG 傳給開發人員。");
+        throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"已按 F6，但 10 秒內沒有找到「設定查詢條件」視窗。\n請確認{_form.Title}在檢視狀態；若視窗已出現，請把 LOG 傳給開發人員。");
     }
 
     /// <summary>
@@ -549,7 +572,7 @@ internal sealed class ItemQueryService
             HeaderControls header;
             try
             {
-                header = ResolveHeader(root, page);
+                header = ResolveHeader(root, page, _form);
             }
             catch (InvalidOperationException) when (Environment.TickCount64 < deadline)
             {
@@ -675,7 +698,7 @@ internal sealed class ItemQueryService
         _log.Info("export", $"{menuName} clicked");
 
         // 匯出設定 is recognised by its 儲存檔案 path box, or by the INVI02 caption it carries.
-        await CompleteExportAsync(root, before, path, Invi02Layout.IsInvi02Title, strict: true, cancellationToken, headerOnly);
+        await CompleteExportAsync(root, before, path, _form.IsTitle, strict: true, cancellationToken, headerOnly);
     }
 
     /// <summary>
@@ -1076,6 +1099,53 @@ internal sealed class ItemQueryService
         return null;
     }
 
+    // ---- 客戶 (COPI01) ----------------------------------------------------------------
+
+    /// <summary>
+    /// One customer from COPI01 (user, 2026-10-16): the same flow as a 品號 — F6 → 一般選項 客戶代號
+    /// = code → 確定 → 基本資料 → 轉出至 Excel. COPI01 exports one sheet (單頭資料) only.
+    /// </summary>
+    public async Task<CustomerQueryResult> QueryCustomerAsync(string input, IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        if (!ItemCodeRules.TryNormalize(input, out var code, out var error, CustomerRules.CodeName))
+            throw new InvalidOperationException(error);
+
+        using var gate = ErpAutomationGate.Enter();
+        _form = ErpForm.Copi01;
+        ExportFiles.CleanUp(_log);
+        var watch = Stopwatch.StartNew();
+        _log.Info("customer", $"start code={_log.Value(code)}");
+
+        if (await FindRecordAsync(code, watch, progress, cancellationToken) is not { } found)
+            return CustomerQueryResult.NotFound(code, watch.Elapsed);
+        var (root, header) = found;
+
+        progress.Report("ERP：轉出 Excel…");
+        var path = ExportFiles.NewPath(_form.Code);
+        try
+        {
+            var exportSheet = Win32Automation.FindTabSheet(root, _form.ExportTab);
+            if (exportSheet is null || !NativeMethods.IsWindowVisible(exportSheet.Handle))
+                throw new InvalidOperationException($"轉出前 ERP 不在「{_form.ExportTab}」頁籤，已停止。");
+            await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true);
+            if (!ItemCodeRules.SameCode(NativeMethods.ControlText(header.ItemCode.Handle), code))
+                throw new InvalidOperationException("轉出途中 ERP 顯示的客戶代號改變了；結果不採用，請重新查詢。");
+            progress.Report("讀取匯出資料…");
+            var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
+            var fields = CustomerExport.Parse(sheets, code);
+            _log.Info("customer", $"done code={_log.Value(code)} fields={fields.Count} elapsed_ms={watch.ElapsedMilliseconds}");
+            return new CustomerQueryResult(code, fields, watch.Elapsed);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure)
+        {
+            throw new QueryFailure(ErpAgentErrorCode.EXPORT_FAILED, ex.Message, ex);
+        }
+        finally
+        {
+            ExportFiles.Delete(path, _log);
+        }
+    }
+
     // ---- 品名 search ---------------------------------------------------------------------
 
     /// <summary>
@@ -1084,37 +1154,51 @@ internal sealed class ItemQueryService
     /// ERP lists the matches on 資料瀏覽 (empty when none) → 轉出至 Excel from 資料瀏覽. Read-only
     /// like the 品號 query. Every listed 品名 must contain the keyword, or the result is refused.
     /// </summary>
-    public async Task<ItemSearchResult> SearchByNameAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken)
+    public Task<ItemSearchResult> SearchByNameAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken) =>
+        SearchAsync(ErpForm.Invi02, keywordInput, ItemNameRules.Condition, ItemSearchExport.Parse, progress, cancellationToken);
+
+    /// <summary>
+    /// Customers whose 簡稱 or 全名 contains the keyword (user, 2026-10-16: always both, so a name
+    /// written in either is found), from COPI01 the same way as the 品名 search.
+    /// </summary>
+    public Task<ItemSearchResult> SearchCustomersAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken) =>
+        SearchAsync(ErpForm.Copi01, keywordInput, CustomerRules.NameCondition, CustomerExport.ParseList, progress, cancellationToken);
+
+    private async Task<ItemSearchResult> SearchAsync(ErpForm form, string keywordInput, Func<string, string> condition,
+        Func<IReadOnlyList<(string Name, List<string[]> Rows)>, string, IReadOnlyList<IReadOnlyList<ErpField>>> parse,
+        IProgress<string> progress, CancellationToken cancellationToken)
     {
+        // The keyword rules (no quote, no LIKE wildcard) hold for every form's condition text.
         if (!ItemNameRules.TryNormalize(keywordInput, out var keyword, out var error))
             throw new InvalidOperationException(error);
 
         using var gate = ErpAutomationGate.Enter();
+        _form = form;
         ExportFiles.CleanUp(_log);
         var watch = Stopwatch.StartNew();
-        _log.Info("search", $"start keyword={_log.Value(keyword)}");
+        _log.Info("search", $"start {_form.Code} keyword={_log.Value(keyword)}");
 
-        progress.Report("ERP：尋找品號資料建立作業…");
-        var root = await ResolveInvi02Async(progress, cancellationToken);
+        progress.Report($"ERP：尋找{_form.Title}…");
+        var root = await ResolveFormAsync(progress, cancellationToken);
         NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
         await Pace.Delay(MaximizeSettleMs, cancellationToken);
         if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("無法把品號資料建立作業帶到前景。");
-        var page = FindMainPageControl(root);
+            throw new InvalidOperationException($"無法把{_form.Title}帶到前景。");
+        var page = FindMainPageControl(root, _form);
 
         progress.Report("ERP：開啟查詢條件（F6）…");
         var dialog = await OpenQueryDialogAsync(root, page, cancellationToken);
         var limit = ReadRecordLimit(dialog);
-        // An old 品號 left in 一般選項 must not narrow the search.
+        // An old code left in 一般選項 must not narrow the search.
         await ClearGeneralValueAsync(dialog, cancellationToken);
-        progress.Report("ERP：輸入進階設定品名條件…");
-        await FillAdvancedConditionAsync(dialog, ItemNameRules.Condition(keyword), cancellationToken);
+        progress.Report("ERP：輸入進階設定名稱條件…");
+        await FillAdvancedConditionAsync(dialog, condition(keyword), cancellationToken);
 
         progress.Report("ERP：查詢中…");
         await ConfirmQueryAsync(root, dialog, cancellationToken);
         // ERP rebuilds the form after 確定; 資料瀏覽 appears (and shows) only after a while.
-        var browse = await WaitForTabSheetAsync(root, Invi02Layout.BrowseTab, AfterActionWaitMs, cancellationToken, visible: true)
-            ?? throw new InvalidOperationException($"查詢後 {AfterActionWaitMs / 1000} 秒內找不到 ERP 頁籤「{Invi02Layout.BrowseTab}」。");
+        var browse = await WaitForTabSheetAsync(root, ErpForm.BrowseTab, AfterActionWaitMs, cancellationToken, visible: true)
+            ?? throw new InvalidOperationException($"查詢後 {AfterActionWaitMs / 1000} 秒內找不到 ERP 頁籤「{ErpForm.BrowseTab}」。");
         _log.Info("search", $"after query 資料瀏覽 shown={NativeMethods.IsWindowVisible(browse.Handle)}");
         if (!await HasRecordAsync(root, page, cancellationToken))
         {
@@ -1123,15 +1207,15 @@ internal sealed class ItemQueryService
         }
 
         // The list is exported from 資料瀏覽 (one 單頭 row per item; user, 2026-10-16).
-        await ActivateTabAsync(root, page, Invi02Layout.Invi02Tabs, Invi02Layout.BrowseTab, browse.Handle, cancellationToken);
+        await ActivateTabAsync(root, page, _form.Tabs, ErpForm.BrowseTab, browse.Handle, cancellationToken);
         progress.Report("ERP：轉出 Excel…");
-        var path = ExportFiles.NewPath();
+        var path = ExportFiles.NewPath(_form.Code);
         try
         {
             await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true, allMatches: true);
             progress.Report("讀取匯出資料…");
             var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
-            var items = ItemSearchExport.Parse(sheets, keyword);
+            var items = parse(sheets, keyword);
             _log.Info("search", $"done items={items.Count} limit={limit?.ToString() ?? "?"} elapsed_ms={watch.ElapsedMilliseconds}");
             return new ItemSearchResult(keyword, items, limit, watch.Elapsed);
         }
@@ -1156,7 +1240,7 @@ internal sealed class ItemQueryService
             bool? has;
             try
             {
-                has = (NativeMethods.ControlText(ResolveHeader(root, page).ItemCode.Handle) ?? string.Empty).Trim().Length > 0;
+                has = (NativeMethods.ControlText(ResolveHeader(root, page, _form).ItemCode.Handle) ?? string.Empty).Trim().Length > 0;
             }
             catch (InvalidOperationException)
             {

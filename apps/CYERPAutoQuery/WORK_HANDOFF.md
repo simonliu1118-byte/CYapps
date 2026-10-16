@@ -5,10 +5,15 @@
 - 新增品名查詢（`ItemNameSearch.cs` 純規則與解析、`ItemQueryService.SearchByNameAsync`）。條件文字貼到進階設定條件框是使用者提議的做法，尚未實機驗證 ERP 確定時是否採用條件框文字；程式以「每筆品名都含關鍵字」驗證，不符就不採用。待實機：LOG `search: advanced condition pasted`、`after query 資料瀏覽 shown=`、`done items=`；若條件框不能輸入，LOG 會列出進階設定子視窗。
 - Web 品名查詢的補充交接待寫入 chihyuan-web（queryType ITEM_NAME、keyword、items）。
 
+## 現況（V0.5.0 Build 1，2026/10/16）
+
+- 新增 COPI01 客戶查詢（`CustomerQuery.cs` 規則、欄位、解析；`ErpForm.cs` 讓 INVI02／COPI01 共用查詢流程）。尚未實機：COPI01 視窗類別（程式猜 TfrmCopi01，不符時以標題辨識）、頁籤座標（基本資料中心約距頁籤控制項 72 px、間距 99 px，不符時 OCR）、一般選項客戶代號的條件下拉順序（程式以 Home＋下×2 設成「=」並讀回）、轉出設定是否有單頭／單身頁籤、送貨地址的郵遞區號是否為第三欄。
+
 ## CY Web 待改（下次與其他項目一起交接，使用者 2026-10-16）
 
 - 品號只能是英文字母與數字（使用者 2026-10-16）：CY Web 建立品號查詢時，`itemNo` 去頭尾空白後若含英數以外的字元（符號、空白、全形、中文），直接回 400 `INVALID_ITEM_NO`，不建立工作。Agent 端 `ItemCodeRules.TryNormalize` 已同樣拒收（V0.4.0 Build 6）；若仍收到這種工作會回 FAILED／INTERNAL。前端輸入框也建議即時提示。
 - 歷史異動起迄範圍最多 3 年改由 CY Web 查詢模組限制（使用者 2026-10-16）：Agent 已移除這個上限（V0.4.0 Build 8），CY Web 建立工作時須自行檢查並拒收超過 3 年的範圍（目前 contract 已有此檢查，請確認保留）。
+- 客戶查詢（V0.5.0）尚未接 Web：之後 CY Web 由 Claude 直接修改（使用者 2026-10-16：不再寫交接文件），一併加入客戶代號／客戶名稱查詢與 Agent 協定。
 - 品名查詢交接已寫（chihyuan-web `erp-item-query/name-search-handoff`），尚未實作。
 
 ## INVQ01 歷史異動日期輸入（V0.3.0 Build 2～8，使用者確認）

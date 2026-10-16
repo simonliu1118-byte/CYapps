@@ -6,26 +6,26 @@ namespace CYERPAutoQuery;
 // copy the needed parts now, merge both tools into a shared library later).
 internal static class Win32Automation
 {
+    public static IReadOnlyList<nint> FindInvi02Windows() => FindFormWindows(ErpForm.Invi02);
+
     /// <summary>
-    /// Every INVI02 (品號資料建立作業) form, whatever else ERP has open. ERP message boxes can
-    /// reuse the form caption, so when the real form class is present only that class counts.
+    /// Every visible window of <paramref name="form"/> (INVI02, COPI01 …), whatever else ERP has
+    /// open. ERP message boxes can reuse the form caption, so when the real form class is present
+    /// only that class counts. A hidden one is a form the user closed and Delphi kept in memory;
+    /// driving it went wrong (V0.4.0 LOG, 2026-10-16: visible=False), so it is opened again
+    /// through 作業速查 instead.
     /// </summary>
-    public static IReadOnlyList<nint> FindInvi02Windows()
+    public static IReadOnlyList<nint> FindFormWindows(ErpForm form)
     {
-        var visible = new List<nint>();
-        var hidden = new List<nint>();
+        var found = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
-            if (Invi02Layout.IsInvi02Title(NativeMethods.WindowText(hwnd)) &&
+            if (NativeMethods.IsWindowVisible(hwnd) && form.IsTitle(NativeMethods.WindowText(hwnd)) &&
                 !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
-                (NativeMethods.IsWindowVisible(hwnd) ? visible : hidden).Add(hwnd);
+                found.Add(hwnd);
             return true;
         }, 0);
-        // A hidden INVI02 is one the user closed and Delphi kept in memory; driving it went wrong
-        // (V0.4.0 LOG, 2026-10-16: visible=False), so only visible ones count and a closed one is
-        // opened again through 作業速查.
-        var found = visible;
-        var forms = found.Where(h => NativeMethods.ClassName(h).Equals(Invi02Layout.FormClass, StringComparison.OrdinalIgnoreCase)).ToList();
+        var forms = found.Where(h => NativeMethods.ClassName(h).Equals(form.FormClass, StringComparison.OrdinalIgnoreCase)).ToList();
         return forms.Count > 0 ? forms : found;
     }
 
@@ -61,6 +61,7 @@ internal static class Win32Automation
                 if (hwnd != app && ProcessId(hwnd) == pid && NativeMethods.IsWindowVisible(hwnd) &&
                     Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd) &&
                     !Invi02Layout.IsInvi02Title(NativeMethods.WindowText(hwnd)) &&
+                    !ErpForm.Copi01.IsTitle(NativeMethods.WindowText(hwnd)) &&
                     !Invq01Layout.IsInvq01Title(NativeMethods.WindowText(hwnd)) &&
                     NativeMethods.GetWindowRect(hwnd, out var r))
                     candidates.Add((hwnd, NativeMethods.IsIconic(hwnd) ? 0 : (long)r.Width * r.Height));
