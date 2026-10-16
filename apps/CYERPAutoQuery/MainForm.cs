@@ -22,7 +22,7 @@ internal sealed class MainForm : Form
     // (user, 2026-10-16), from which one is picked and queried by 品號.
     // 客戶代號／客戶名稱 query COPI01 the same way (user, 2026-10-16).
     private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
-    // 銷貨單: a customer's 銷貨單 and 銷退單 (COPR15/COPR16) by 客戶代號, or by name through the
+    // 銷貨銷退單: a customer's 銷貨單 and 銷退單 (COPR15/COPR16) by 客戶代號, or by name through the
     // customer list first (user, 2026-10-16: nobody remembers 客戶代號).
     private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SalesMode = 4;
     private readonly Label[] _headerLabels = new Label[3];
@@ -44,7 +44,7 @@ internal sealed class MainForm : Form
     private readonly TabPage _warehousePage = new("庫別");
     private readonly TabPage _batchPage = new("批號");
     private readonly TabPage _historyPage = new("歷史異動");
-    private readonly TabPage _salesPage = new("銷貨單");
+    private readonly TabPage _salesPage = new("銷貨銷退單");
     private readonly DataGridView _orders = new();
     private readonly DataGridView _orderLines = new();
     private SalesQueryResult? _salesResult;
@@ -114,7 +114,7 @@ internal sealed class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨單"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨銷退單"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -396,7 +396,7 @@ internal sealed class MainForm : Form
         _code.SelectAll();
     }
 
-    /// <summary>銷貨單 mode: a customer's 銷貨單 and 銷退單 in the 單據日期 range; failures shown in a message box.</summary>
+    /// <summary>銷貨銷退單 mode: a customer's 銷貨單 and 銷退單 in the 單據日期 range; failures shown in a message box.</summary>
     private async Task StartSalesQueryAsync()
     {
         SalesQuery query;
@@ -432,7 +432,7 @@ internal sealed class MainForm : Form
         catch (Exception ex)
         {
             Activate();
-            MessageBox.Show(this, ex.Message, "ERP 銷貨單查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, "ERP 銷貨銷退單查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         Activate();
         _code.Focus();
@@ -450,7 +450,7 @@ internal sealed class MainForm : Form
         _salesResult = result;
         SetHeaderCaptions(customer: true);
         _headerLabels[2].Text = "查詢範圍";
-        if (_detailBox is not null) _detailBox.Text = "單頭（點選下方銷貨單）";
+        if (_detailBox is not null) _detailBox.Text = "單頭（點選下方單據）";
         _itemCode.Text = result?.Query.CustomerCode ?? string.Empty;
         _itemName.Text = result?.Orders.FirstOrDefault()?.CustomerName ?? string.Empty;
         _specification.Text = result is null ? string.Empty
@@ -463,7 +463,7 @@ internal sealed class MainForm : Form
             foreach (var o in result.Orders)
                 _orders.Rows.Add(o.Kind, o.Date.ToString("yyyy/MM/dd"), o.OrderNo, o.Lines.Count, Num(o.TotalQuantity),
                     Num(o.Amount), Num(o.Tax), Num(o.Total), o.Salesperson, o.Note, o.Reason);
-        _salesPage.Text = result is null ? "銷貨單" : $"銷貨單（{result.Orders.Count}）";
+        _salesPage.Text = result is null ? "銷貨銷退單" : $"銷貨銷退單（{result.Orders.Count}）";
         ShowOrderLines();
     }
 
