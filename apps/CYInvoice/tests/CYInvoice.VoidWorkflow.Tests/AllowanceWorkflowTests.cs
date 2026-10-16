@@ -287,6 +287,28 @@ internal static class AllowanceWorkflowTests
             .All(AccountKey()).Single(x => x.Id == issue.Id).ResolvedUtc is not null);
     }
 
+    public static async Task LocalAcceptedResponseWaitsForOfficialConfirmationAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+        // Preflight and immediate readback both succeed as queries, but no
+        // confirmed allowance is visible yet after g0401 API code 0.
+        setup.Gateway.Queries.Enqueue(Query());
+        setup.Gateway.Queries.Enqueue(Query());
+        var pending = await setup.Workflow.IssueApprovedLocalAsync(
+            issue, "2000", "AdminPass1");
+        Equal(InvoiceAllowanceReconcileOutcome.PendingConfirmation, pending.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        Equal(true, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())!.AwaitingConfirmation);
+        Equal("sending", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())?.Status);
+    }
+
     public static async Task LocalManagerTimeoutNeverResendsAsync()
     {
         using var temporary = new AllowanceTemporaryDirectory();

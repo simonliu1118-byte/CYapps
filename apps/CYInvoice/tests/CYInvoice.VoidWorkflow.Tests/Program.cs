@@ -23,6 +23,7 @@ var tests = new (string Name, Action Run)[]
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("Local manager sends frozen g0401 once and official readback closes ledger", () => AllowanceWorkflowTests.LocalManagerSendsOnceAndConfirmsAsync().GetAwaiter().GetResult()),
+    ("Local g0401 accepted reply remains pending without official confirmation", () => AllowanceWorkflowTests.LocalAcceptedResponseWaitsForOfficialConfirmationAsync().GetAwaiter().GetResult()),
     ("Local g0401 timeout never resends and official original-number readback confirms", () => AllowanceWorkflowTests.LocalManagerTimeoutNeverResendsAsync().GetAwaiter().GetResult()),
     ("Local manager checks changed official remaining before any number allocation", () => AllowanceWorkflowTests.LocalManagerChangedRemainingBlocksSendAsync().GetAwaiter().GetResult()),
     ("Local automatic issue denies old manual requests and unauthorized actors", () => AllowanceWorkflowTests.LocalManagerRejectsOldManualReviewAndWrongAuthAsync().GetAwaiter().GetResult()),

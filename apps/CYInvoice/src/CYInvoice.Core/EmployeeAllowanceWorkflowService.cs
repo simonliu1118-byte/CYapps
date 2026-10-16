@@ -507,7 +507,15 @@ public sealed class EmployeeAllowanceWorkflowService
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             if (selected.Length == 0)
+            {
+                // Local g0401 code=0 only confirms API acceptance, and a
+                // timeout proves nothing. A fixed number absent from the
+                // official invoice_query must remain pending, not treated as
+                // rejected or sent a second time.
+                if (review.LocalLedgerWorkItemId is not null && newAllowances.Count == 0)
+                    return Pending(fresh, $"折讓單 {review.ConfirmedAllowanceNumber} 尚未出現在光貿官方紀錄，維持待確認；不得重送。");
                 return Problem(fresh, $"已確認的折讓單 {review.ConfirmedAllowanceNumber} 不在本次申請後新增的折讓資料中。");
+            }
             if (selected.Length > 1)
                 return Problem(fresh, $"光貿回傳多筆相同折讓單號 {review.ConfirmedAllowanceNumber}，無法唯一確認。");
             return EvaluateCandidate(fresh, review, selected[0]);
