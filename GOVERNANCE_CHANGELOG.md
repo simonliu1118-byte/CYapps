@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.45 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：INVQ01 歷史異動起迄範圍不再由 Agent 限制最多三年，改由 CY Web 查詢模組負責；Agent 只提供開放的查詢功能。不改其他 App 規則。
+
 ## 2.3.44 — 2026/10/16
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求加入：ERP 每個動作之後的畫面讀取一律以有上限的輪詢等待，不得只看一次就判定失敗（多次實機失敗皆因太早讀取）。不改其他 App 規則。

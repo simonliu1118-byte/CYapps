@@ -220,10 +220,10 @@ public class Invq01Tests
     }
 
     [Fact]
-    public void RangeIsAtMostThreeYears()
+    public void RangeHasNoMaximumSpan()
     {
-        Assert.Equal(new DateOnly(2023, 10, 16), HistoryRange.Resolve(new DateOnly(2023, 10, 16), null, Today).From);
-        Assert.Throws<ArgumentException>(() => HistoryRange.Resolve(new DateOnly(2023, 10, 15), null, Today));
+        // The 3-year limit belongs to CY Web's module; the Agent offers the open query (user, 2026-10-16).
+        Assert.Equal(new DateOnly(2015, 1, 1), HistoryRange.Resolve(new DateOnly(2015, 1, 1), null, Today).From);
         Assert.Throws<ArgumentException>(() => HistoryRange.Resolve(new DateOnly(2026, 5, 1), new DateOnly(2026, 4, 1), Today));
         Assert.Throws<ArgumentException>(() => HistoryRange.Resolve(null, Today.AddDays(1), Today));
     }

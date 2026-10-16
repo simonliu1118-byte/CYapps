@@ -52,7 +52,8 @@ internal sealed class AutomationSession : IDisposable
         try
         {
             _overlay ??= new AutomationOverlay();
-            _overlay.ShowNotice(title, _log);
+            // Every query shows its running time, the same timer as CYERPAutoInput (user, 2026-10-16).
+            _overlay.ShowNotice(title, _log, DateTime.Now);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ExternalException)
         {
@@ -120,6 +121,7 @@ internal sealed class AutomationOverlay : Form
     private static readonly Font TitleFont = new("Microsoft JhengHei UI", 15F, FontStyle.Bold);
     private static readonly Font HintFont = new("Microsoft JhengHei UI", 10.5F);
     private string _hint = RunningHint;
+    private DateTime? _since;
     private const string RunningHint = "按 Esc 中止";
     private static readonly Color DoneGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color AttentionAmber = Color.FromArgb(245, 180, 0);
@@ -136,7 +138,12 @@ internal sealed class AutomationOverlay : Form
         Opacity = 0.9;
         Size = new Size(240, 92);
         DoubleBuffered = true;
-        _timer.Tick += (_, _) => { _angle = (_angle + 30) % 360; Invalidate(); };
+        _timer.Tick += (_, _) =>
+        {
+            _angle = (_angle + 30) % 360;
+            if (_since is { } since && _outcome is null) _hint = $"{RunningHint}　{Elapsed(DateTime.Now - since)}";
+            Invalidate();
+        };
         _linger.Tick += (_, _) => HideNotice();
     }
 
@@ -152,12 +159,18 @@ internal sealed class AutomationOverlay : Form
         }
     }
 
-    public void ShowNotice(string title, AppLogger log)
+    /// <summary>分:秒, with 時 only when needed (same as CYERPAutoInput).</summary>
+    private static string Elapsed(TimeSpan t) =>
+        t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
+
+    /// <param name="since">Shows the time since then beside the hint.</param>
+    public void ShowNotice(string title, AppLogger log, DateTime? since = null)
     {
         _linger.Stop();
         _outcome = null;
         _title = title;
-        _hint = RunningHint;
+        _since = since;
+        _hint = since is { } s ? $"{RunningHint}　{Elapsed(DateTime.Now - s)}" : RunningHint;
         if (!IsHandleCreated) CreateHandle();
         if (!_excluded)
         {
@@ -169,7 +182,15 @@ internal sealed class AutomationOverlay : Form
             }
         }
         Place();
-        Show();
+        if (!Visible)
+        {
+            // Drawn before it is seen, so the last run's end never flashes (CYERPAutoInput).
+            Opacity = 0;
+            Show();
+            Refresh();
+            Opacity = 0.9;
+        }
+        else Invalidate();
         _timer.Start();
     }
 
@@ -211,7 +232,9 @@ internal sealed class AutomationOverlay : Form
     /// </summary>
     private void Place()
     {
-        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(_hint, HintFont).Width);
+        // A running timer is measured at its widest so the box does not jump.
+        var hint = _since is not null && _outcome is null ? $"{RunningHint}　0:00:00" : _hint;
+        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(hint, HintFont).Width);
         var size = new Size(86 + textWidth + 36, 92);
         var shown = Visible;
         if (shown && size != Size) Hide();

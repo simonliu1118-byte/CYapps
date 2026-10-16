@@ -497,11 +497,8 @@ internal sealed class ItemQueryService
                 continue; // the first click may only have closed the operator list
             }
 
-            var current = NativeMethods.ControlText(value.Handle) ?? string.Empty;
-            InputSender.EndBackspace(current.Length + 2);
-            await Pace.Delay(60, cancellationToken);
-            InputSender.UnicodeText(code);
-            await Pace.Delay(120, cancellationToken);
+            // Pasted, not typed (user, 2026-10-16): the box's whole text is replaced.
+            await PasteIntoAsync(focus, code, cancellationToken);
 
             var shown = (NativeMethods.ControlText(value.Handle) ?? string.Empty).Trim();
             if (shown == code) return;

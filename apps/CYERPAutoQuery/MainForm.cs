@@ -147,7 +147,7 @@ internal sealed class MainForm : Form
         options.Controls.Add(_historyTo);
         options.Controls.Add(new Label
         {
-            Text = $"未勾的日期不輸入 ERP；範圍最多 {HistoryRange.MaxYears} 年。批號管理的品號會自動查各批庫存量。",
+            Text = "未勾的日期不輸入 ERP。批號管理的品號會自動查各批庫存量。",
             AutoSize = true,
             ForeColor = CyVisualTheme.TextSecondary,
             Margin = new Padding(12, 7, 0, 0)

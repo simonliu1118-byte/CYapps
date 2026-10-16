@@ -8,6 +8,7 @@
 ## CY Web 待改（下次與其他項目一起交接，使用者 2026-10-16）
 
 - 品號只能是英文字母與數字（使用者 2026-10-16）：CY Web 建立品號查詢時，`itemNo` 去頭尾空白後若含英數以外的字元（符號、空白、全形、中文），直接回 400 `INVALID_ITEM_NO`，不建立工作。Agent 端 `ItemCodeRules.TryNormalize` 已同樣拒收（V0.4.0 Build 6）；若仍收到這種工作會回 FAILED／INTERNAL。前端輸入框也建議即時提示。
+- 歷史異動起迄範圍最多 3 年改由 CY Web 查詢模組限制（使用者 2026-10-16）：Agent 已移除這個上限（V0.4.0 Build 8），CY Web 建立工作時須自行檢查並拒收超過 3 年的範圍（目前 contract 已有此檢查，請確認保留）。
 - 品名查詢交接已寫（chihyuan-web `erp-item-query/name-search-handoff`），尚未實作。
 
 ## INVQ01 歷史異動日期輸入（V0.3.0 Build 2～8，使用者確認）

@@ -91,11 +91,10 @@ internal static class Invq01Layout
 /// </summary>
 internal sealed record HistoryRange(DateOnly? From, DateOnly? To)
 {
-    public const int MaxYears = 3;
-
     /// <summary>
     /// Validate only dates the user supplied. Never invent a one-year range:
-    /// an unchecked local date picker stays untouched in INVQ01.
+    /// an unchecked local date picker stays untouched in INVQ01. There is no maximum span: the
+    /// Agent offers the open query and CY Web's module limits the range (user, 2026-10-16).
     /// </summary>
     public static HistoryRange Resolve(DateOnly? from, DateOnly? to, DateOnly today)
     {
@@ -105,8 +104,6 @@ internal sealed record HistoryRange(DateOnly? From, DateOnly? To)
             throw new ArgumentException("歷史異動的迄日不可晚於今天。");
         if (from is { } beginning && to is { } ending && beginning > ending)
             throw new ArgumentException("歷史異動的起日不可晚於迄日。");
-        if (from is { } lower && lower < (to ?? today).AddYears(-MaxYears))
-            throw new ArgumentException($"歷史異動的日期範圍最多 {MaxYears} 年。");
         return new HistoryRange(from, to);
     }
 
