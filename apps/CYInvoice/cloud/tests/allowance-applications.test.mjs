@@ -259,8 +259,12 @@ try {
       invoice_status:99,allowance_date:"20261015",allowance_type:2,
       cancel_date:0,total_amount:"75",tax_amount:"4",
       product_item:[
-        {original_invoice_number:"AB12345678",amount:"50",tax:"3"},
-        {original_invoice_number:"XY12345678",amount:"25",tax:"1"}
+        {original_invoice_number:"AB12345678",original_invoice_date:20261015,
+          description:"Synthetic",quantity:"1",unit_price:"50",
+          tax_type:1,amount:"50",tax:"3"},
+        {original_invoice_number:"XY12345678",original_invoice_date:20261015,
+          description:"Other",quantity:"1",unit_price:"25",
+          tax_type:1,amount:"25",tax:"1"}
       ]
     }});
   };
@@ -285,6 +289,30 @@ try {
   assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(history.data.inspection.canApprove,false);
   assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
+  // Totals that still add up must not count as verified historical allocation
+  // if the provider omits an OPTIONAL line quantity on official readback.
+  const completeHistoryFetch=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{
+    const response=await completeHistoryFetch(url,opts);
+    if(url!=="https://invoice-api.amego.tw/json/allowance_query")
+      return response;
+    const payload=await response.json();
+    delete payload.data.product_item[0].quantity;
+    return Response.json(payload);
+  };
+  const missingQuantity=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(missingQuantity.status,200,JSON.stringify(missingQuantity));
+  assert.equal(missingQuantity.data.inspection.historicalAllocationChecks[0].reason,
+    "ITEM_AMOUNTS_UNVERIFIED");
+  assert.equal(missingQuantity.data.inspection.historicalCoverageReason,
+    "DETAIL_READBACK_UNVERIFIED");
+  assert.equal(missingQuantity.data.inspection.historicalGrossCeilingStatus,
+    "NOT_AVAILABLE");
+  assert.equal(missingQuantity.data.inspection.historicalKnownGross,null);
+  assert.equal(missingQuantity.data.inspection.historicalRemainingCeiling,null);
+  assert.equal(missingQuantity.data.inspection.canApprove,false);
+  globalThis.fetch=completeHistoryFetch;
   // Duplicate official source numbers must not inflate verified coverage.
   const fetchHistory=globalThis.fetch;
   globalThis.fetch=async(url,opts)=>{
