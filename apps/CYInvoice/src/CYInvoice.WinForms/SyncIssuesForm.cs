@@ -442,7 +442,17 @@ internal sealed class SyncIssuesForm : Form
                             "VOID"=>"作廢",
                             "ALLOWANCE"=>"折讓",
                             "ALLOWANCE_VOID"=>"折讓作廢",
-                            "UPLOAD_ISSUE"=>"上傳問題（裝置回報）",
+                            "UPLOAD_ISSUE"=>item.IssueCode switch{
+                                "invoice_list_failed"=>"官方清單查詢失敗",
+                                "query_failed"=>"發票查回失敗",
+                                "remote_not_found"=>"光貿查無發票",
+                                "unknown_remote_not_found"=>"結果不明／光貿查無",
+                                "reconciliation_failed"=>"發票同步核對失敗",
+                                "ambiguous_match"=>"發票比對無法唯一對應",
+                                "local_write_failed"=>"本機資料寫入失敗",
+                                "duplicate_order_id"=>"重複訂單編號",
+                                _=>"開立上傳失敗"
+                            },
                             _=>"其他例外"
                         };
                         var state=item.Status switch{

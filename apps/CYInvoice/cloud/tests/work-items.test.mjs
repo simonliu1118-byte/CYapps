@@ -156,7 +156,7 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.notEqual(firstPage.body.items[0].work_item_id,nextPage.body.items[0].work_item_id);
   for(const entry of [...firstPage.body.items,...nextPage.body.items]){
     assert.deepEqual(Object.keys(entry).sort(),
-      ["work_item_id","environment","kind","status","revision","created_at","updated_at"].sort());
+      ["work_item_id","environment","kind","issue_code","status","revision","created_at","updated_at"].sort());
     assert.equal(entry.kind,"VOID");
   }
   const empty=await call("list",{kind:"ALLOWANCE"});
@@ -187,6 +187,7 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal(reportedPage.status,200);
   assert.equal(reportedPage.body.items.length,1);
   assert.equal(reportedPage.body.items[0].kind,"UPLOAD_ISSUE");
+  assert.equal(reportedPage.body.items[0].issue_code,"query_failed");
   assert.equal(db.prepare(
     "SELECT issue_code FROM work_items WHERE work_item_id=?")
     .get(reportRequest.itemId).issue_code,"query_failed");

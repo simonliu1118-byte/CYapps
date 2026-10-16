@@ -19,8 +19,8 @@ public sealed record CloudWorkItem(
 // Privacy-limited list transport: no source hashes, invoice details, employee
 // identities or device identifiers are present in a manager's queue response.
 public sealed record CloudWorkItemSummary(
-    string ItemId, string Environment, string Kind, string Status, int Revision,
-    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+    string ItemId, string Environment, string Kind, string? IssueCode,
+    string Status, int Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 public sealed record CloudWorkItemCursor(string CreatedAt, string ItemId);
 public sealed record CloudWorkItemPage(
     IReadOnlyList<CloudWorkItemSummary> Items, CloudWorkItemCursor? NextCursor);
@@ -163,7 +163,7 @@ public sealed class CloudWorkItemClient
             // Fail closed if the service accidentally exposes extra business
             // data or fields beyond the manager's approved seven-field view.
             if(row.ValueKind!=JsonValueKind.Object||
-               row.EnumerateObject().Count()!=7)
+               row.EnumerateObject().Count()!=8)
                 throw new InvalidDataException("Work Item list exposed unexpected fields.");
             string Required(string key)
             {
@@ -176,6 +176,16 @@ public sealed class CloudWorkItemClient
             var id=Required("work_item_id");
             var environment=Required("environment");
             var itemKind=Required("kind");
+            if(!row.TryGetProperty("issue_code",out var code)||
+               code.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                throw new InvalidDataException("Missing reported issue type.");
+            var issueCode=code.ValueKind==JsonValueKind.Null?null:code.GetString();
+            if((itemKind=="UPLOAD_ISSUE" && issueCode is not (
+                   "invoice_list_failed" or "query_failed" or "remote_not_found" or
+                   "unknown_remote_not_found" or "reconciliation_failed" or "ambiguous_match" or
+                   "local_write_failed" or "upload_failed" or "duplicate_order_id"))||
+               (itemKind!="UPLOAD_ISSUE" && issueCode is not null))
+                throw new InvalidDataException("Work Item type does not match issue reason.");
             var state=Required("status");
             var createdAt=Required("created_at");
             var updatedAt=Required("updated_at");
@@ -204,7 +214,7 @@ public sealed class CloudWorkItemClient
             var updated=DateTimeOffset.ParseExact(updatedAt,
                 "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal);
-            parsed.Add(new CloudWorkItemSummary(id,environment,itemKind,state,rev,timestamp,updated));
+            parsed.Add(new CloudWorkItemSummary(id,environment,itemKind,issueCode,state,rev,timestamp,updated));
             lastTime=createdAt;lastId=id;
         }
         CloudWorkItemCursor? nextCursor=null;

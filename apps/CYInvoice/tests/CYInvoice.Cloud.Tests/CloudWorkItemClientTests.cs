@@ -96,7 +96,7 @@ internal static class CloudWorkItemClientTests
         const string createdSecond="2026-10-16T02:59:59.000Z";
         var secondId="wi_synthetic_request_02";
         object Row(string id,string created)=>new{
-            work_item_id=id,environment="test",kind="VOID",status="review",
+            work_item_id=id,environment="test",kind="VOID",issue_code=(string?)null,status="review",
             revision=2,created_at=created,updated_at=created
         };
         var handler=new QueueHandler();
@@ -138,7 +138,7 @@ internal static class CloudWorkItemClientTests
         });
         handler.Enqueue(_=>Json(HttpStatusCode.OK,new{ok=true,
             items=new object[]{new {
-                work_item_id=ItemId,environment="test",kind="VOID",
+                work_item_id=ItemId,environment="test",kind="VOID",issue_code=(string?)null,
                 status="review",revision=2,created_at=createdFirst,
                 updated_at=createdFirst,reference_hash=ReferenceHash
             }},nextCursor=(object?)null}));

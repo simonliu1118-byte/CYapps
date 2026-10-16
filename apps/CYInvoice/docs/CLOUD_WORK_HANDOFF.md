@@ -55,6 +55,8 @@
 
 **步驟 5 小提交 10（本輪）：** Windows「上傳問題」增加使用者**明確選取→CYID 員工驗證→二次確認**的有限回報（最多 10 筆）。採既有本機 `InvoiceSyncIssue` 與 `InvoiceRecord.Failed`，只傳 Device+Workspace+本機 source 鍵產生的穩定 SHA256 工作單識別與固定異常碼，不傳原發票、買方或訂單。若 D1 回重複 409 則顯示已存在／衝突；若網路不明則停止而非自動重送；不標記本機資料結案。Cloud `CloudWorkItemClient.ReportUploadIssueAsync` 拒絕偽造 officialVerified true。後續仍需管理員覆核／稽核封存，全部待整合後一次驗證 CI／產 Artifact。
 
+**步驟 5 小提交 11（本輪）：** 現有工作單 manager list 僅增加有限 `issue_code` 投影（正常 VOID／ALLOWANCE／ALLOWANCE_VOID 為 NULL），不回傳 invoice/order/actor/Device/reference hash；Windows `CloudWorkItemClient.ListAsync` 按固定 8 欄嚴格驗證 UPLOAD_ISSUE 對應合法代碼，既有「處理中」清單依代碼顯示正體中文問題分類。增加雙端假資料驗證與欄位清單。仍無正式 D1／Worker 操作，等待 V3 整合後一次性 CI 及 Artifact。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
