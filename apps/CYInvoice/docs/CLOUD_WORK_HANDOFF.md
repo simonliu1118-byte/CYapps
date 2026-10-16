@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-17 階段一：Local 管理員 g0401 單次送出接線（Draft）
+
+本輪在原 `EmployeeAllowanceWorkflowService` 與 `SyncIssuesForm` 上延伸既有 Local 待辦：管理員重新輸入帳密，完整保留使用者編輯的正負品項，先透過 `InvoiceDetailRefreshService` 更新官方原發票及有效歷史折讓的**整張含稅剩餘額**；額度變少就拒絕，不推算逐商品餘量。使用原 `LocalAllowanceNumberStore` 以本機 `sync_issues.local_id` 為固定 Work Item ID、審核當日為折讓日，原子配號、保存完整 g0401 固定內容，先將管理員／原號／pending 持久化，再經 `MarkSending` CAS 改為 sending 才向光貿送**一次**。結果不明與重按按鈕只能原號查回，不再送出；只有 `invoice_query` 真正確認同號、同含稅金額、完成狀態才標記 SQLite confirmed 並結案。明確外部撞號記 occupied_external 並停止盲換號；舊無品項的待辦維持網站人工流程。測試注入合成 IAmegoGateway，不向光貿真實操作。新增多個 VoidWorkflow isolated test 及原 UI 接線，無 D1／Worker／CYWEB 修改、未部署、未 Release。
+
+**剩餘風險／驗收：**此 Draft 需要 latest HEAD Windows／Cloud CI 回報；仍需受控 Windows 操作、光貿測試環境 g0401、實際已送出後回覆遺失、關閉程式後重新查回、當日跨日與正式環境安全部署驗收。安全策略是在不確定情況留下已配號 pending，不允許自行重送，可能需要人工查核與復原流程。這不是 V3 完工或授權正式發票操作的證據。
+
 ## 2026-10-17 階段一：g0401 Gateway 支援原發票折扣負數明細（Draft）
 
 沿用使用者已定案「帶出原單，自行留下商品與折扣，僅限制最終含稅折讓不得超過官方剩餘額」的設計。發現 Windows `AllowanceRequestForm` 已支援折扣負行，CYID Draft validator 亦支援，但既有 `AmegoClient.IssueAllowanceAsync` 阻擋負 `UnitPrice`／`Amount`／`Tax`，使實際 g0401 發送前被程式拒絕。調整 Local Core Gateway 僅做負行合約合法性及總額一致性查驗：保留原號、日期、正數數量／稅別與整張正數未稅、非負稅額，逐行 Amount／Tax 合計須等於 header；負數折扣行允許，不附加逐品項歷史扣算。增加 330−82＝248 元隔離 HTTP 測試及總額矛盾零送出測試。本輪不接 Local 管理員真 g0401，不觸碰 Cloud D1／Worker、真光貿、發行或部署，後續仍需 g0401 端到端及四捨五入實機驗收。

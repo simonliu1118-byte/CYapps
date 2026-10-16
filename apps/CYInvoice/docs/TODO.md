@@ -24,6 +24,8 @@
 
 - [x] **2026-10-17 階段一／g0401 負數折扣傳輸整合（Draft）**：發現原發票帶入式 `AllowanceRequestForm` 允許保留負數折扣，但 `AmegoClient.IssueAllowanceAsync` 的舊送出前檢查擋住負單價／負未稅小計／負品項稅額。依官方 D0401 明細可有負數的規格，保留含正負行的 g0401 payload；要求正數整張未稅總額、非負整張稅額、逐行欄位基本有效、所有**行合計須與 header 完全相符**（如正 314／16、負 78／4，最後未稅 236＋稅 12＝含稅 248），不進行原發票逐項歷史分攤比對。新增隔離 HTTP wire 及不合法合計零傳輸回歸測試。**只改 Draft Local Core Gateway，並未把 Local 管理員人工待辦改為自動 g0401、未測真光貿、不授權實際操作**；CI 以此提交 exact HEAD 為準。
 
+- [x] **2026-10-17 階段一／Local 管理員 g0401 單次送出接線（Draft）**：沿用既有本機折讓待辦及編輯明細；管理員再次驗證後重新查 `invoice_query`，確保本次整張含稅折讓金額 <= 原發票含稅總額扣除已生效折讓金額。原 `LocalAllowanceNumberStore` 依公司／環境／Work Item 原子固定號碼及完整 g0401 payload；先保存管理員處理人、固定原號與 pending，接著 SQLite `reserved→sending` CAS 成功才准呼叫光貿**一次**。回覆逾時／未知、再次按下按鈕都只用 `invoice_query` 查回原號，不自動換號或重送；光貿確認完成後 ledger 才更新 confirmed。明確撞號則記 `occupied_external`，後續需人工核對才可處理。舊無品項的折讓申請保留原網站人工流程，不冒稱已自動送出。已加入隔離測試：確認成功／結果不明後查回／官方額度變更／權限及舊人工待辦／撞號。**尚待 exact-HEAD CI、真 Windows 畫面／光貿測試環境及原始 SQLite 中斷回復驗收；不可因此推定 V3 已可正式發行。**
+
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。

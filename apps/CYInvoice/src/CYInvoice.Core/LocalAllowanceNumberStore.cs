@@ -163,6 +163,31 @@ public sealed class LocalAllowanceNumberStore
         return new LocalAllowanceReservation(workItemId, number, payloadJson, "reserved", next);
     }
 
+    // Read-only recovery by the original local work item identity. A sending
+    // reservation is NOT permission to send again; only official readback can
+    // promote it to confirmed.
+    public LocalAllowanceReservation? FindLatest(
+        string sellerInvoice, string environment, string workItemId)
+    {
+        using var connection = Open();
+        using var query = connection.CreateCommand();
+        query.CommandText = """
+            SELECT allowance_number, payload_json, status, sequence
+            FROM allowance_number_ledger
+            WHERE seller_invoice=$seller AND environment=$environment
+              AND work_item_id=$work
+            ORDER BY attempt DESC LIMIT 1;
+            """;
+        query.Parameters.AddWithValue("$seller", Require(sellerInvoice, nameof(sellerInvoice)));
+        query.Parameters.AddWithValue("$environment", Require(environment, nameof(environment)));
+        query.Parameters.AddWithValue("$work", Require(workItemId, nameof(workItemId)));
+        using var reader = query.ExecuteReader();
+        return reader.Read()
+            ? new LocalAllowanceReservation(workItemId, reader.GetString(0),
+                reader.GetString(1), reader.GetString(2), reader.GetInt32(3))
+            : null;
+    }
+
     // Must commit immediately BEFORE sending the frozen payload. Never mark
     // an already-sending operation as safe for retry after a crash or timeout.
     public void MarkSending(string sellerInvoice, string environment, LocalAllowanceReservation reservation) =>

@@ -248,6 +248,151 @@ internal static class AllowanceWorkflowTests
         Equal(0, setup.Gateway.VoidCalls);
     }
 
+    private static readonly AllowanceProductItem[] EditedAllowances =
+    [
+        new AllowanceProductItem {
+            OriginalInvoiceNumber = "AA12345678",
+            OriginalInvoiceDate = 20260919,
+            OriginalDescription = "Selected product",
+            Quantity = 1, UnitPrice = 47, Amount = 47, Tax = 3, TaxType = 1,
+        }
+    ];
+
+    public static async Task LocalManagerSendsOnceAndConfirmsAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query());
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "A20260919001", "3", "47")
+        ]));
+        var result = await setup.Workflow.IssueApprovedLocalAsync(
+            issue, "2000", "AdminPass1");
+        Equal(InvoiceAllowanceReconcileOutcome.Confirmed, result.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        Equal("A20260919001", setup.Gateway.LastAllowance!.AllowanceNumber);
+        Equal(47m, setup.Gateway.LastAllowance.TotalAmount);
+        Equal(3m, setup.Gateway.LastAllowance.TaxAmount);
+        var reservation = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
+                issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Equal("confirmed", reservation?.Status);
+        Equal(null, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single()));
+        Equal(true, new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
+            .All(AccountKey()).Single(x => x.Id == issue.Id).ResolvedUtc is not null);
+    }
+
+    public static async Task LocalManagerTimeoutNeverResendsAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query());
+        setup.Gateway.AllowanceIssueError = new HttpRequestException("lost response");
+        var unknown = await setup.Workflow.IssueApprovedLocalAsync(
+            issue, "2000", "AdminPass1");
+        Equal(InvoiceAllowanceReconcileOutcome.Problem, unknown.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        var reservation = ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
+            issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Equal("sending", reservation?.Status);
+        Equal(true, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())!.AwaitingConfirmation);
+
+        // A second manager click may read the original number, never send a
+        // new g0401 payload or allocate another sequence.
+        setup.Gateway.Queries.Enqueue(Query());
+        var stillPending = await setup.Workflow.IssueApprovedLocalAsync(
+            issue, "2000", "AdminPass1");
+        Equal(InvoiceAllowanceReconcileOutcome.PendingConfirmation, stillPending.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        Equal("sending", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, issue.Id.ToString())?.Status);
+
+        // Only a later official invoice_query can confirm the same number.
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "A20260919001", "3", "47")
+        ]));
+        var confirmed = await setup.Workflow.ReconcilePendingAsync(setup.Record);
+        Equal(InvoiceAllowanceReconcileOutcome.Confirmed, confirmed.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        Equal("confirmed", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, issue.Id.ToString())?.Status);
+    }
+
+    public static async Task LocalManagerChangedRemainingBlocksSendAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+        // A fresh official allocation reduces the remaining gross from 100
+        // to 40 after the applicant opened the original invoice.
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "EXTERNAL-60", "3", "57")
+        ]));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.IssueApprovedLocalAsync(issue, "2000", "AdminPass1"));
+        Equal(0, setup.Gateway.AllowanceIssueCalls);
+        Equal(null, new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString()));
+    }
+
+    public static async Task LocalManagerRejectsOldManualReviewAndWrongAuthAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "舊人工折讓", 50);
+        var issue = AllowanceIssue(setup.Repository);
+        await ThrowsAsync<UnauthorizedAccessException>(() =>
+            setup.Workflow.IssueApprovedLocalAsync(issue, "3015", "Employee1"));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.IssueApprovedLocalAsync(issue, "2000", "AdminPass1"));
+        Equal(0, setup.Gateway.AllowanceIssueCalls);
+        Equal(1, setup.Gateway.QueryCalls);
+    }
+
+    public static async Task LocalManagerCollisionKeepsSingleAttemptAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query());
+        setup.Gateway.AllowanceIssueError =
+            new AmegoApiException(AmegoAllowanceErrorCodes.ExistingIssuedAllowanceNumber,
+                "number occupied");
+        var rejected = await setup.Workflow.IssueApprovedLocalAsync(
+            issue, "2000", "AdminPass1");
+        Equal(InvoiceAllowanceReconcileOutcome.Problem, rejected.Outcome);
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        Equal("occupied_external", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, issue.Id.ToString())?.Status);
+        // No automatic new number or second side effect after a confirmed
+        // external collision; explicit future reconciliation is required.
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.IssueApprovedLocalAsync(issue, "2000", "AdminPass1");
+        Equal(1, setup.Gateway.AllowanceIssueCalls);
+        Equal("occupied_external", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, issue.Id.ToString())?.Status);
+    }
+
     private static AllowanceSetup CreateSetup(string path)
     {
         var repository = TestRepository.Open(path, new AllowanceTestProtector());
@@ -280,7 +425,7 @@ internal static class AllowanceWorkflowTests
         var gateway = new AllowanceGateway();
         var clock = new DateTimeOffset(2026, 9, 19, 14, 32, 0, TimeSpan.FromHours(8));
         var detail = new InvoiceDetailRefreshService(repository, (_, _) => gateway, () => clock);
-        var workflow = new EmployeeAllowanceWorkflowService(repository, detail, () => clock);
+        var workflow = new EmployeeAllowanceWorkflowService(repository, detail, () => clock, (_, _) => gateway);
         var voidService = new InvoiceVoidService(repository, (_, _) => gateway, () => clock);
         var voidWorkflow = new EmployeeVoidWorkflowService(repository, voidService, () => clock);
         return new AllowanceSetup(repository, gateway, workflow, voidWorkflow, record);
@@ -368,6 +513,19 @@ internal static class AllowanceWorkflowTests
         public Queue<QueryResponse> Queries { get; } = new();
         public int QueryCalls { get; private set; }
         public int VoidCalls { get; private set; }
+        public int AllowanceIssueCalls { get; private set; }
+        public AllowanceIssueRequest? LastAllowance { get; private set; }
+        public Exception? AllowanceIssueError { get; set; }
+
+        public Task<AllowanceIssueResponse> IssueAllowanceAsync(
+            AllowanceIssueRequest request, CancellationToken cancellationToken = default)
+        {
+            AllowanceIssueCalls++;
+            LastAllowance = request;
+            return AllowanceIssueError is null
+                ? Task.FromResult(new AllowanceIssueResponse(0, "accepted"))
+                : Task.FromException<AllowanceIssueResponse>(AllowanceIssueError);
+        }
 
         public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default)
         {

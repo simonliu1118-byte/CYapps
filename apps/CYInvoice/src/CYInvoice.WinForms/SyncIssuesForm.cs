@@ -984,7 +984,7 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
 
-        if (!review.AwaitingConfirmation) await CompleteAllowanceAsync(issue);
+        if (!review.AwaitingConfirmation) await CompleteAllowanceAsync(issue, review);
         else await ConfirmAllowanceCandidateAsync(issue, record, review);
     }
 
@@ -1053,24 +1053,40 @@ internal sealed class SyncIssuesForm : Form
         finally { SetManualReviewBusy(false); }
     }
 
-    private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue)
+    private async Task CompleteAllowanceAsync(
+        InvoiceSyncIssue issue, InvoiceAllowanceManualReview review)
     {
-        if (MessageBox.Show(this,
-                "請先確認已在光貿網站完成這筆人工折讓。\n\n按下「是」後，CYInvoice 會進入等待確認並用 invoice_query 自動比對新的折讓資料。",
-                "折讓已人工處理", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        var useApi = review.DraftItems is { Count: > 0 };
+        var prompt = useApi
+            ? "確認核准並向光貿送出這筆折讓？\n\n" +
+              $"含稅總額：{review.TaxInclusiveAmount} 元\n" +
+              $"保留明細：{review.DraftItems!.Count} 筆\n\n" +
+              "系統會重新查剩餘折讓額、固定原單號與內容後只送一次 g0401。" +
+              "如遇逾時或結果不明，只能查回原單號，不得重送。"
+            : "這是沒有編輯明細的舊人工折讓申請。\n\n" +
+              "請先確認已在光貿網站人工完成折讓；本次僅查回官方結果，不送出 API。";
+        if (MessageBox.Show(this, prompt,
+            useApi ? "核准並送出折讓（單次）" : "折讓已人工處理",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證", collectCredentialsOnly: true);
+        using var login = new EmployeeAdminLoginForm(repository, "折讓－管理員驗證", collectCredentialsOnly: true);
         if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            var result = useApi
+                ? await allowanceWorkflow.IssueApprovedLocalAsync(
+                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword)
+                : await allowanceWorkflow.MarkManualCompletedAsync(
+                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "折讓人工處理未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, error.Message, "折讓處理未完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
     }
