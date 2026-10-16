@@ -214,6 +214,8 @@ try {
   assert.deepEqual(firstInspection.data.inspection.historicalAllocationChecks,[]);
   assert.equal(firstInspection.data.inspection.historicalAllocationNotQueriedCount,0);
   assert.equal(firstInspection.data.inspection.historicalAllocationsComplete,false);
+  assert.equal(firstInspection.data.inspection.historicalCoverageReason,
+    "NO_HISTORY_REPORTED_NOT_PROOF");
   assert.equal(firstInspection.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
@@ -272,9 +274,56 @@ try {
   }]);
   assert.equal(history.data.inspection.historicalAllocationNotQueriedCount,0);
   assert.equal(history.data.inspection.historicalAllocationsComplete,false);
+  assert.equal(history.data.inspection.historicalCoverageReason,"HISTORY_RANGE_NOT_PROVEN");
   assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(history.data.inspection.canApprove,false);
   assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
+  // Duplicate official source numbers must not inflate verified coverage.
+  const fetchHistory=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{
+    const response=await fetchHistory(url,opts);
+    if(url!=="https://invoice-api.amego.tw/json/invoice_query")return response;
+    const payload=await response.json();
+    payload.data[0].allowance.push({...payload.data[0].allowance[0]});
+    return Response.json(payload);
+  };
+  const duplicate=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(duplicate.status,200,JSON.stringify(duplicate));
+  assert.equal(duplicate.data.inspection.historicalCoverageReason,
+    "DUPLICATE_HISTORY_NUMBER");
+  assert.equal(duplicate.data.inspection.historicalAllocationChecks.length,1);
+  assert.equal(duplicate.data.inspection.historicalAllocationNotQueriedCount,1);
+  // A malformed second summary remains unqueried, never zero-valued.
+  globalThis.fetch=async(url,opts)=>{
+    const response=await fetchHistory(url,opts);
+    if(url!=="https://invoice-api.amego.tw/json/invoice_query")return response;
+    const payload=await response.json();
+    payload.data[0].allowance.push({
+      allowance_number:"3821061800002",allowance_date:"20261340",
+      total_amount:"50",invoice_status:99,cancel_date:0
+    });
+    return Response.json(payload);
+  };
+  const incomplete=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(incomplete.status,200,JSON.stringify(incomplete));
+  assert.equal(incomplete.data.inspection.historicalCoverageReason,
+    "SUMMARY_METADATA_INCOMPLETE");
+  assert.equal(incomplete.data.inspection.historicalAllocationNotQueriedCount,1);
+  // Official readback unavailability cannot be silently called "covered".
+  globalThis.fetch=async(url,opts)=>{
+    if(url==="https://invoice-api.amego.tw/json/allowance_query")
+      return Response.json({code:51,data:null});
+    return fetchHistory(url,opts);
+  };
+  const uncertain=await call("official-inspection",{
+    itemId:createBody.itemId,expectedRevision:2});
+  assert.equal(uncertain.status,200,JSON.stringify(uncertain));
+  assert.equal(uncertain.data.inspection.historicalCoverageReason,
+    "DETAIL_READBACK_UNVERIFIED");
+  assert.equal(uncertain.data.inspection.historicalAllocationChecks[0].originalGross,null);
+  assert.equal(uncertain.data.inspection.canApprove,false);
 }finally{globalThis.fetch=originalFetch;}
 
 // Ambiguous g0401 recovery: only the originally D1-reserved number may be

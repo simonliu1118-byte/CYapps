@@ -594,6 +594,21 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
          !["ADMIN","SUPER_ADMIN"].includes(lastAuthority.workspaceRole)||
          lastDevice?.device_id!==d.device_id)
         return response(403,{error:{code:"AUTHORITY_CHANGED"}});
+      // This is evidence coverage, NOT proof that AMEGO's current
+      // invoice summary enumerates the entire historical allowance range.
+      const knownIds=snapshot.allowanceHistory.map(h=>h.allowanceNumber)
+        .filter((id):id is string=>id!==null);
+      const historicalCoverageReason=
+        !snapshot.allowanceSummaryPresent?"SUMMARY_NOT_PROVIDED":
+        snapshot.hasUnsettledMutation?"PENDING_OFFICIAL_MUTATION":
+        snapshot.allowanceHistory.some(h=>!h.metadataComplete)?"SUMMARY_METADATA_INCOMPLETE":
+        new Set(knownIds).size!==knownIds.length?"DUPLICATE_HISTORY_NUMBER":
+        snapshot.allowanceHistory.some(h=>h.uploadStatus!==99||h.cancelDate!=="0")
+          ?"HISTORY_STATUS_NOT_EFFECTIVE":
+        checks.length<snapshot.existingAllowanceCount?"DETAIL_QUERY_LIMITED":
+        checks.some(h=>!h.lineTotalsVerified)?"DETAIL_READBACK_UNVERIFIED":
+        snapshot.existingAllowanceCount===0?"NO_HISTORY_REPORTED_NOT_PROOF":
+        "HISTORY_RANGE_NOT_PROVEN";
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,
@@ -617,6 +632,7 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         historicalAllocationChecks:checks,
         historicalAllocationNotQueriedCount:snapshot.existingAllowanceCount-checks.length,
         historicalAllocationsComplete:false,
+        historicalCoverageReason,
         safeToInferRemainingBalance:false,
         officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
