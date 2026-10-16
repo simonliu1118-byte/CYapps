@@ -141,6 +141,10 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal((await call("list",{limit:1,cursor:{createdAt:"not-a-date",itemId:first.itemId}})).status,400);
   assert.equal((await call("list",{kind:"UPLOAD_ISSUE"})).status,400,
     "Unimplemented upload issue intake must not be advertised as live");
+  const managerAuthenticated=await call("list",{
+    limit:1,employeeNo:"0001",password:"SyntheticPass12"
+  });
+  assert.equal(managerAuthenticated.status,200,JSON.stringify(managerAuthenticated));
   const firstPage=await call("list",{limit:1});
   assert.equal(firstPage.status,200,JSON.stringify(firstPage));
   assert.equal(firstPage.body.items.length,1);

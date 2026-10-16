@@ -67,7 +67,8 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
     // A single Workspace-scoped read with a fixed projection. Cursor is
     // immutable creation time + ID so concurrent status changes do not
     // duplicate entries across pages. No general invoice replication.
-    if(!Object.keys(body).every(k=>["limit","kind","status","cursor"].includes(k))||
+    if(!Object.keys(body).every(k=>["limit","kind","status","cursor",
+           "employeeNo","password"].includes(k))||
        (body.limit!==undefined&&(!Number.isSafeInteger(body.limit)||
          (body.limit as number)<1||(body.limit as number)>50))||
        (body.kind!==undefined&&!["VOID","ALLOWANCE","ALLOWANCE_VOID"].includes(body.kind as string))||

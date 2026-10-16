@@ -122,6 +122,19 @@ internal static class CloudWorkItemClientTests
             return Json(HttpStatusCode.OK,new{ok=true,
                 items=new[]{Row(secondId,createdSecond)},nextCursor=(object?)null});
         });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"list");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var root=body.RootElement;
+            Equal(20,root.GetProperty("limit").GetInt32(),"default page limit");
+            Equal("0001",root.GetProperty("employeeNo").GetString(),"CYID manager identity");
+            True(!root.TryGetProperty("kind",out _)&&
+                 !root.TryGetProperty("status",out _)&&
+                 !root.TryGetProperty("cursor",out _),
+                 "omitted filters must not arrive as null");
+            return Json(HttpStatusCode.OK,new{ok=true,
+                items=Array.Empty<object>(),nextCursor=(object?)null});
+        });
         handler.Enqueue(_=>Json(HttpStatusCode.OK,new{ok=true,
             items=new object[]{new {
                 work_item_id=ItemId,environment="test",kind="VOID",
@@ -151,6 +164,8 @@ internal static class CloudWorkItemClientTests
         await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
             "0001","synthetic-pass",1,cursor:new CloudWorkItemCursor(
                 "untrusted_time",ItemId)));
+        var defaults=await client.ListAsync("0001","synthetic-pass");
+        Equal(0,defaults.Items.Count,"default empty pending list");
         await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(
             "0001","synthetic-pass",1));
         await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(

@@ -102,11 +102,16 @@ public sealed class CloudWorkItemClient
         }
         // Work Item scope is exclusively derived from the active Cloud Device;
         // never send a client-selected workspace or an original invoice.
-        using var response=await SendAsync("list",new{
-            limit,kind,status,cursor=cursor is null?null:new{
-                createdAt=cursor.CreatedAt,itemId=cursor.ItemId
-            },employeeNo,password
-        },cancellationToken).ConfigureAwait(false);
+        var query=new Dictionary<string,object?>{
+            ["limit"]=limit,["employeeNo"]=employeeNo,["password"]=password
+        };
+        if(kind is not null)query["kind"]=kind;
+        if(status is not null)query["status"]=status;
+        if(cursor is not null)query["cursor"]=new{
+            createdAt=cursor.CreatedAt,itemId=cursor.ItemId
+        };
+        using var response=await SendAsync("list",query,cancellationToken)
+            .ConfigureAwait(false);
         var root=response.RootElement;
         if(!root.TryGetProperty("items",out var items) ||
            items.ValueKind!=JsonValueKind.Array ||
