@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 
 namespace CYERPAutoQuery;
 
@@ -27,23 +26,6 @@ internal sealed record ItemQueryResult(
     public static ItemQueryResult NotFound(string itemCode, TimeSpan elapsed) =>
         new(itemCode, [], [], elapsed) { Found = false };
 
-    /// <summary>Tab-separated text for pasting into Excel: 欄位／內容, then the 庫別 table.</summary>
-    public string ToTsv()
-    {
-        var sb = new StringBuilder();
-        sb.Append("欄位\t內容\r\n");
-        foreach (var f in Fields) sb.Append(Clean(f.Name)).Append('\t').Append(Clean(f.Value)).Append("\r\n");
-        if (Warehouses.Count > 0)
-        {
-            sb.Append("\r\n");
-            sb.Append(string.Join('\t', Warehouses[0].Select(f => Clean(f.Name)))).Append("\r\n");
-            foreach (var row in Warehouses) sb.Append(string.Join('\t', row.Select(f => Clean(f.Value)))).Append("\r\n");
-        }
-        return sb.ToString();
-    }
-
-    private static string Clean(string value) =>
-        value.Replace("\t", " ").Replace("\r\n", " / ").Replace('\r', ' ').Replace('\n', ' ');
 }
 
 /// <summary>

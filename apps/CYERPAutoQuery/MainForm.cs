@@ -30,7 +30,6 @@ internal sealed class MainForm : Form
     private readonly ToolStripStatusLabel _buildStatus = new();
     private readonly System.Windows.Forms.Timer _statePoll = new() { Interval = 1000 };
     private Invi02Status? _shownState;
-    private ItemQueryResult? _lastResult;
     private CancellationTokenSource? _queryCts;
     private readonly ToolStripStatusLabel _agentStatus = new() { Text = "Web：未啟用" };
     private readonly ErpAgentSettings _agentSettings;
@@ -106,9 +105,6 @@ internal sealed class MainForm : Form
 
         var rightTools = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty, Anchor = AnchorStyles.Top | AnchorStyles.Right };
         toolbar.Controls.Add(rightTools, 1, 0);
-        var copy = MakeButton("複製明細", 120);
-        copy.Click += (_, _) => CopyFields();
-        rightTools.Controls.Add(copy);
         var web = MakeButton("Web 連線", 120);
         web.Click += (_, _) => OpenAgentSettings();
         rightTools.Controls.Add(web);
@@ -274,7 +270,6 @@ internal sealed class MainForm : Form
 
     private void ShowResult(ItemQueryResult? result)
     {
-        _lastResult = result;
         _itemCode.Text = result?.ItemCode ?? string.Empty;
         _itemName.Text = result?.ItemName ?? string.Empty;
         _specification.Text = result?.Specification ?? string.Empty;
@@ -289,20 +284,6 @@ internal sealed class MainForm : Form
             _warehouses.Columns.Add(f.Name, f.Name);
         foreach (var row in result.Warehouses)
             _warehouses.Rows.Add(row.Select(f => (object)f.Value).ToArray());
-    }
-
-    private void CopyFields()
-    {
-        if (_lastResult is null || _lastResult.Fields.Count == 0) return;
-        try
-        {
-            Clipboard.SetText(_lastResult.ToTsv());
-            SetStatus("已複製明細，可貼到 Excel。");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, $"複製失敗：{ex.Message}", "複製明細", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
     }
 
     private void RefreshErpState()
