@@ -46,6 +46,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Fetch canonical CYERPAutoQuery icon
+        shell: pwsh
+        run: ./tools/fetch-canonical-icon.ps1
+
       - name: Fetch pinned PaddleOCR models
         shell: pwsh
         run: ./tools/fetch-ocr-models.ps1

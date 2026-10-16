@@ -51,3 +51,4 @@
 - C# / .NET 8 / WinForms，Windows x64 self-contained 單檔。
 - 單元測試：`dotnet test tests/CYERPAutoQuery.Tests/CYERPAutoQuery.Tests.csproj`（純邏輯，任何 OS 可跑）。
 - OCR 模型：`tools/fetch-ocr-models.ps1` 依 `tools/ocr-models.json` 下載並核對 SHA-256。
+- 圖示：`tools/fetch-canonical-icon.ps1` 從 AITeam CY Icon Family 固定 revision 下載 `AutoQ.ico` 並核對 SHA-256（不進 Git）。

@@ -17,3 +17,4 @@ ui-snapshots/
 runtime/ocr/*.onnx
 runtime/ocr/SHA256.txt
 TEMP/
+assets/*.ico

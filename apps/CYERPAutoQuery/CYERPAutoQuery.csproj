@@ -14,6 +14,7 @@
     <PublishTrimmed>false</PublishTrimmed>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\AutoQ.ico</ApplicationIcon>
     <AssemblyName>CYERPAutoQuery</AssemblyName>
     <RootNamespace>CYERPAutoQuery</RootNamespace>
   </PropertyGroup>
@@ -32,6 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- AITeam CY Icon Family AutoQ, fetched by tools/fetch-canonical-icon.ps1 (not in Git). -->
+    <EmbeddedResource Include="assets\AutoQ.ico" LogicalName="CYERPAutoQuery.AutoQ.ico" />
     <EmbeddedResource Include="VERSION" LogicalName="CYERPAutoQuery.VERSION" />
     <EmbeddedResource Include="BUILD" LogicalName="CYERPAutoQuery.BUILD" />
   </ItemGroup>

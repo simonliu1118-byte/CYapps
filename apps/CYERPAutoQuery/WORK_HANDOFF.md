@@ -58,5 +58,5 @@
 - 進階設定查詢（清除 → 選條件 → 加入）。
 - Web 入口（呼叫 `ItemQueryService`）。
 - CYERPAutoInput 也取用 `Local\Chihyuan.SmartErp.UiAutomation` 鎖，兩支程式同機使用才真正互斥（目前只有 CYERPAutoQuery 會取用）。
-- Icon：AITeam Icon Family 尚無本程式圖示，目前使用 Windows 預設圖示。
+- Icon：已採用 AITeam Icon Family `apps/erp-autoquery/AutoQ.ico`（AITeam main 3ec4ed8）；Windows 檔案總管／工作列顯示待實機確認。
 - 兩支程式穩定後抽出共用庫，移除複製的程式碼。
