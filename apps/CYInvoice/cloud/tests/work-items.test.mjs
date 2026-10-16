@@ -193,6 +193,31 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
     .get(reportRequest.itemId).issue_code,"query_failed");
   assert.equal(db.prepare("SELECT COUNT(*) n FROM work_items WHERE kind='UPLOAD_ISSUE'")
     .get().n,1);
+  const reportReview=await call("transition",{itemId:reportRequest.itemId,
+    expectedRevision:1,from:"open",to:"review"});
+  assert.equal(reportReview.status,200,JSON.stringify(reportReview));
+  assert.equal((await call("transition",{itemId:reportRequest.itemId,
+    expectedRevision:2,from:"review",to:"closed"})).status,409,
+    "Upload anomaly archive requires a manager reason");
+  const reportClose=await call("transition",{itemId:reportRequest.itemId,
+    expectedRevision:2,from:"review",to:"closed",resolutionCode:"needs_followup"});
+  assert.equal(reportClose.status,200,JSON.stringify(reportClose));
+  const audit=db.prepare(
+    "SELECT reported_by_actor_id,reviewed_by_actor_id,closed_by_actor_id,"+
+    "resolution_code,status,revision FROM work_items WHERE work_item_id=?")
+    .get(reportRequest.itemId);
+  assert.equal(audit.status,"closed");
+  assert.equal(audit.revision,3);
+  assert.equal(audit.reported_by_actor_id,"synthetic_manager");
+  assert.equal(audit.reviewed_by_actor_id,"synthetic_manager");
+  assert.equal(audit.closed_by_actor_id,"synthetic_manager");
+  assert.equal(audit.resolution_code,"needs_followup");
+  assert.throws(()=>db.prepare(
+    "UPDATE work_items SET status='open' WHERE work_item_id=?")
+    .run(reportRequest.itemId),/UPLOAD_ISSUE_ARCHIVED_IMMUTABLE/);
+  assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?")
+    .run(reportRequest.itemId),/UPLOAD_ISSUE_NOT_DELETABLE/);
+
     const seen=await call("get",{itemId:first.itemId});
   assert.equal(seen.status,200);
   assert.equal(seen.body.item.environment,"test");

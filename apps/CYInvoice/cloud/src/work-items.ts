@@ -9,6 +9,11 @@ export const uploadIssueCodes = [
 ] as const;
 export type UploadIssueCode = typeof uploadIssueCodes[number];
 export type WorkItemStatus = "open" | "review" | "closed";
+export const uploadResolutionCodes = [
+  "resolved_locally","checked_official","duplicate_report",
+  "not_actionable","needs_followup"
+] as const;
+export type UploadResolutionCode=typeof uploadResolutionCodes[number];
 
 export interface NewWorkItem {
   itemId: string; workspaceId: string; deviceId: string;
@@ -31,8 +36,9 @@ export async function reportUploadIssue(db:D1Database,input:ReportUploadIssue):P
   const result=await db.prepare(`
     INSERT INTO work_items(
       work_item_id,workspace_id,opened_by_device_id,updated_by_device_id,
-      environment,kind,issue_code,reference_hash,actor_id,created_at,updated_at)
-    SELECT ?1,?2,?3,?3,?4,'UPLOAD_ISSUE',?5,?6,?7,?8,?8
+      environment,kind,issue_code,reference_hash,actor_id,reported_by_actor_id,
+      created_at,updated_at)
+    SELECT ?1,?2,?3,?3,?4,'UPLOAD_ISSUE',?5,?6,?7,?7,?8,?8
     WHERE EXISTS (
       SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id
       WHERE d.device_id=?3 AND d.workspace_id=?2
@@ -46,6 +52,7 @@ export async function reportUploadIssue(db:D1Database,input:ReportUploadIssue):P
 export interface WorkItemTransition {
   itemId: string; workspaceId: string; deviceId: string; actorId: string;
   expectedRevision: number; from: "open" | "review"; to: "review" | "closed";
+  resolutionCode?:UploadResolutionCode;
 }
 
 function validId(value: string): boolean {
@@ -84,6 +91,8 @@ export async function createWorkItem(db: D1Database, input: NewWorkItem): Promis
 // changes zero rows; no blind retry. "closed" closes the manual workflow only.
 export async function transitionWorkItem(db: D1Database, input: WorkItemTransition): Promise<boolean> {
   if (!validId(input.itemId) || !validId(input.deviceId) || !validActor(input.actorId) ||
+      (input.resolutionCode!==undefined &&
+       !uploadResolutionCodes.includes(input.resolutionCode)) ||
       !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1 ||
       !((input.from === "open" && input.to === "review") ||
         (input.from === "review" && input.to === "closed")))
@@ -91,15 +100,25 @@ export async function transitionWorkItem(db: D1Database, input: WorkItemTransiti
   const now = new Date().toISOString();
   const result = await db.prepare(`
     UPDATE work_items SET status = ?1, revision = revision + 1,
-      updated_by_device_id = ?2, actor_id = ?3, updated_at = ?4
+      updated_by_device_id = ?2, actor_id = ?3, updated_at = ?4,
+      reviewed_by_actor_id = CASE WHEN kind='UPLOAD_ISSUE' AND ?1='review'
+        THEN ?3 ELSE reviewed_by_actor_id END,
+      closed_by_actor_id = CASE WHEN kind='UPLOAD_ISSUE' AND ?1='closed'
+        THEN ?3 ELSE closed_by_actor_id END,
+      resolution_code = CASE WHEN kind='UPLOAD_ISSUE' AND ?1='closed'
+        THEN ?9 ELSE resolution_code END
     WHERE work_item_id = ?5 AND workspace_id = ?6 AND status = ?7 AND revision = ?8
+      AND (kind<>'UPLOAD_ISSUE' OR ?1<>'closed' OR
+        ?9 IN ('resolved_locally','checked_official','duplicate_report',
+          'not_actionable','needs_followup'))
       AND EXISTS (
         SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
         WHERE d.device_id = ?2 AND d.workspace_id = ?6
           AND d.status = 'active' AND w.status = 'active')
       `
   ).bind(input.to, input.deviceId, input.actorId, now, input.itemId,
-         input.workspaceId, input.from, input.expectedRevision).run();
+         input.workspaceId, input.from, input.expectedRevision,
+         input.resolutionCode??null).run();
   return result.meta.changes === 1;
 }
 
@@ -107,7 +126,9 @@ export async function getWorkItem(db: D1Database, workspaceId: string, itemId: s
   if (!validId(itemId)) throw new Error("INVALID_WORK_ITEM");
   return db.prepare(`
     SELECT work_item_id, workspace_id, environment, kind, reference_hash,
-      status, revision, updated_by_device_id, actor_id, created_at, updated_at
+      status, revision, updated_by_device_id, actor_id,
+      issue_code,reported_by_actor_id,reviewed_by_actor_id,closed_by_actor_id,
+      resolution_code,created_at,updated_at
     FROM work_items WHERE workspace_id = ?1 AND work_item_id = ?2
     LIMIT 1`).bind(workspaceId, itemId).first();
 }

@@ -1,5 +1,5 @@
 import { cyIdDevice, usesCyId, type CyIdEnv, CyIdError } from "./cyid";
-import { createWorkItem, getWorkItem, transitionWorkItem, listWorkItems, reportUploadIssue, uploadIssueCodes } from "./work-items";
+import { createWorkItem, getWorkItem, transitionWorkItem, listWorkItems, reportUploadIssue, uploadIssueCodes, uploadResolutionCodes } from "./work-items";
 
 interface Env extends CyIdEnv { DB: D1Database }
 type Manager = { id: string };
@@ -177,12 +177,15 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
     } else {
       if (!Number.isSafeInteger(body.expectedRevision) ||
           body.from !== "open" && body.from !== "review" ||
-          body.to !== "review" && body.to !== "closed")
+          body.to !== "review" && body.to !== "closed" ||
+          (body.resolutionCode!==undefined &&
+           !uploadResolutionCodes.includes(body.resolutionCode as typeof uploadResolutionCodes[number])))
         return response(400,{error:{code:"INVALID_TRANSITION"}});
       changed = await transitionWorkItem(env.DB,{
         itemId,workspaceId:d.workspace_id,deviceId:d.device_id,actorId:latest.id,
         expectedRevision:body.expectedRevision as number,
         from:body.from as "open"|"review",to:body.to as "review"|"closed",
+        resolutionCode:body.resolutionCode as typeof uploadResolutionCodes[number]|undefined,
       });
     }
     // A failed CAS or missing auth fence returns conflict, never an automatic retry.

@@ -57,6 +57,8 @@
 
 **步驟 5 小提交 11（本輪）：** 現有工作單 manager list 僅增加有限 `issue_code` 投影（正常 VOID／ALLOWANCE／ALLOWANCE_VOID 為 NULL），不回傳 invoice/order/actor/Device/reference hash；Windows `CloudWorkItemClient.ListAsync` 按固定 8 欄嚴格驗證 UPLOAD_ISSUE 對應合法代碼，既有「處理中」清單依代碼顯示正體中文問題分類。增加雙端假資料驗證與欄位清單。仍無正式 D1／Worker 操作，等待 V3 整合後一次性 CI 及 Artifact。
 
+**步驟 5 小提交 12（本輪）：** 只在既有 Draft `0015 work_items` 留下 `UPLOAD_ISSUE` 的原回報員工、覆核員工、封存員工及受限結案原因代碼，不建稽核新表。Work Item CAS 僅在 `review→closed` 且附限定 `resolutionCode` 時接受，終局禁止 UPDATE 或 DELETE；合成 SQLite 測試檢查理由缺失與不可逆封存。此種「結案」純管理員行政處理，不是官方發票狀態；Windows UI 尚未接操作，整合 CI／Artifact 於完成時再跑。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
