@@ -120,7 +120,7 @@ internal sealed class SettingsForm : Form
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.Controls.Add(test, 0, 0);
@@ -128,6 +128,7 @@ internal sealed class SettingsForm : Form
         environmentLayout.Controls.Add(production, 0, 1);
         environmentLayout.SetColumnSpan(production, 2);
         companyCard.Width = 116;
+        companyCard.Height = 24; // Fit the existing 26-pixel row without moving local fields.
         companyCard.Margin = Padding.Empty;
         companyCard.Anchor = AnchorStyles.Right | AnchorStyles.Top;
         companyCard.Click += async (_, _) => await ShowCompanyCardAsync();
@@ -655,9 +656,13 @@ internal sealed class SettingsForm : Form
             throw new InvalidOperationException("MO店+ 密碼保留提示文字不正確");
         if (settings.MoPasswordEncrypted.Length == 0 && moPassword.PlaceholderText != "尚未設定")
             throw new InvalidOperationException("未設定 MO店+ 密碼提示文字不正確");
+        // Hidden controls may not have a realized TableLayoutPanel position.
+        // Verify the new cloud-only control only when it is actually displayed.
+        if (companyCard.Visible &&
+            (environmentLayout.GetPositionFromControl(companyCard).Row != 1 ||
+             environmentLayout.GetPositionFromControl(companyCard).Column != 2))
+            throw new InvalidOperationException("CYID 公司卡位置不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
-            environmentLayout.GetPositionFromControl(companyCard).Row != 1 ||
-            environmentLayout.GetPositionFromControl(companyCard).Column != 2 ||
             environmentLayout.GetColumnSpan(production) != 2 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
