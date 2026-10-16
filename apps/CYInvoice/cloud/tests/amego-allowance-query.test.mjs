@@ -33,172 +33,75 @@ function transport(result=official){
 }
 const success=await query(input,transport(),()=>date);
 assert.equal(requests,1);
+assert.equal(success.number,"A20261015001");
+assert.equal(success.invoiceType,"D0401");
+assert.equal(success.totalAmount,"50");
+assert.equal(success.taxAmount,"3");
 assert.equal(success.possibleMatch,true);
 assert.equal(success.safeToAutoResend,false);
 assert.equal(success.safeToAutoConfirm,false);
-assert.equal(success.knownOriginalQuantities,null,
-  "Number readback without source invoice cannot verify item quantity");
-const sourcedInput={...input,originalInvoiceDate:20261015,originalDetailVat:0,
-  originalInvoiceItems:[{description:"Synthetic",tax_type:1,
-    quantity:"2",unit_price:"50",amount:"100"}]};
-const sourced=await query(sourcedInput,transport(),()=>date);
-assert.deepEqual(sourced.knownOriginalQuantities,[{
-  originalItemIndex:0,knownQuantity:"1",originalQuantity:"2"
-}],"Known historical quantity maps to current original invoice snapshot");
-for(const bad of [
-  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],quantity:0}]},
-  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],quantity:0.5}]},
-  {originalInvoiceItems:[{...sourcedInput.originalInvoiceItems[0],unit_price:51}]},
-  {originalInvoiceItems:[sourcedInput.originalInvoiceItems[0],
-    sourcedInput.originalInvoiceItems[0]]},
-  {originalInvoiceDate:20261016},
-  {originalDetailVat:1},
-  {originalInvoiceItems:null}
-]){
-  const result=await query({...sourcedInput,...bad},transport(),()=>date);
-  assert.equal(result.knownOriginalQuantities,null,
-    "Missing, duplicate, changed or gross-priced original source is unknown");
-}
-const splitRows=await query(sourcedInput,transport({code:0,data:{
-  ...official.data,product_item:[
-    {...official.data.product_item[0],quantity:"0.5",
-      amount:"25",tax:"1"},
-    {...official.data.product_item[0],quantity:"0.5",
-      amount:"25",tax:"2"}
-  ]
-}}),()=>date);
-assert.deepEqual(splitRows.knownOriginalQuantities,[{
-  originalItemIndex:0,knownQuantity:"1",originalQuantity:"2"
-}],"Two historical rows against one original item accumulate quantity");
-const overQuantity=await query(sourcedInput,transport({code:0,data:{
-  ...official.data,total_amount:"150",tax_amount:"8",
-  product_item:[{...official.data.product_item[0],quantity:"3",
-    amount:"150",tax:"8"}]
-}}),()=>date);
-assert.equal(overQuantity.originalAllocation.lineTotalsVerified,true);
-assert.equal(overQuantity.knownOriginalQuantities,null,
-  "More historical units than the original source cannot be counted");
 assert.deepEqual(success.originalInvoices,["AB12345678"]);
 assert.match(success.officialSnapshotSha256,/^[0-9a-f]{64}$/);
-assert.deepEqual(success.originalAllocation,{
-  lineTotalsVerified:true,originalNet:"50",originalTax:"3",
-  originalGross:"53",reason:"ALLOCATED_LINES_MATCH_HEADER",
-  safeToInferRemainingBalance:false
-},"One original invoice: exact official line sums, not spendable balance");
-// An allowance may span multiple original invoices. Never apply its entire
-// header to this invoice; sum only its own item rows.
+assert.equal(Object.hasOwn(success,"originalAllocation"),false,
+  "Unverified historical item allocations must not be returned");
+assert.equal(Object.hasOwn(success,"knownOriginalQuantities"),false,
+  "No per-product remaining quantity inference");
+
+// Even valid-looking details may span several original invoices. The
+// existing exact original-number check prevents false confirmation.
 const multi=await query(input,transport({code:0,data:{
   ...official.data,total_amount:"75.0000000",tax_amount:"4",
   product_item:[
-    {...official.data.product_item[0],amount:"20",unit_price:"20",tax:"1"},
-    {...official.data.product_item[0],original_invoice_number:"XY12345678",
-      amount:"25",unit_price:"25",tax:"1"},
-    {...official.data.product_item[0],amount:"30",unit_price:"30",tax:"2"}
+    {...official.data.product_item[0],amount:"50"},
+    {original_invoice_number:"XY12345678"}
   ]
 }}),()=>date);
 assert.equal(multi.possibleMatch,false);
-assert.deepEqual(multi.originalAllocation,{
-  lineTotalsVerified:true,originalNet:"50",originalTax:"3",
-  originalGross:"53",reason:"ALLOCATED_LINES_MATCH_HEADER",
-  safeToInferRemainingBalance:false
-},"Only the AB original-invoice allocation is exposed");
-// The exact 7-place decimal fields must use bigint, not binary floats.
-const fractions=await query(input,transport({code:0,data:{
-  ...official.data,total_amount:"0.6000000",tax_amount:"0",
-  product_item:[
-    {...official.data.product_item[0],unit_price:"0.1000001",
-      amount:"0.1000001",tax:"0",tax_type:3},
-    {...official.data.product_item[0],original_invoice_number:"XY12345678",
-      unit_price:"0.4999999",amount:"0.4999999",tax:"0",tax_type:3}
-  ]
-}}),()=>date);
-assert.equal(fractions.originalAllocation.originalGross,"0.1000001");
-assert.equal(fractions.originalAllocation.safeToInferRemainingBalance,false);
-const roundedFraction=await query(input,transport({code:0,data:{
-  ...official.data,total_amount:"0.3333333",tax_amount:"0",
-  product_item:[{...official.data.product_item[0],tax_type:3,
-    quantity:"3",unit_price:"0.1111111",amount:"0.3333333",tax:"0"}]
-}}),()=>date);
-assert.equal(roundedFraction.originalAllocation.lineTotalsVerified,true,
-  "7-decimal quantity * unit price is compared without Number");
-assert.equal(roundedFraction.originalAllocation.originalGross,"0.3333333");
-const roundedMismatch=await query(input,transport({code:0,data:{
-  ...official.data,total_amount:"0.3333334",tax_amount:"0",
-  product_item:[{...official.data.product_item[0],tax_type:3,
-    quantity:"3",unit_price:"0.1111111",amount:"0.3333334",tax:"0"}]
-}}),()=>date);
-assert.equal(roundedMismatch.originalAllocation.reason,"ITEM_AMOUNTS_UNVERIFIED");
-assert.equal(roundedMismatch.originalAllocation.originalGross,null);
-// Header sum matching is not enough to prove an individual historical
-// allowance quantity, and neither case grants an actual remaining balance.
-for(const [label,row,expectedReason] of [
-  ["missing line tax",{...official.data,product_item:[{
-    ...official.data.product_item[0],tax:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["missing quantity",{...official.data,product_item:[{
-    ...official.data.product_item[0],quantity:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["zero quantity",{...official.data,product_item:[{
-    ...official.data.product_item[0],quantity:0}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["missing unit price",{...official.data,product_item:[{
-    ...official.data.product_item[0],unit_price:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["mismatched line quantity",{...official.data,product_item:[{
-    ...official.data.product_item[0],quantity:2}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["mismatched unit price",{...official.data,product_item:[{
-    ...official.data.product_item[0],unit_price:"49.9999999"}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["invalid price precision",{...official.data,product_item:[{
-    ...official.data.product_item[0],unit_price:"50.00000001"}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["missing original date",{...official.data,product_item:[{
-    ...official.data.product_item[0],original_invoice_date:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["missing description",{...official.data,product_item:[{
-    ...official.data.product_item[0],description:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["missing tax type",{...official.data,product_item:[{
-    ...official.data.product_item[0],tax_type:undefined}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["non-taxable taxed",{...official.data,product_item:[{
-    ...official.data.product_item[0],tax_type:3}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["fractional tax",{...official.data,product_item:[{
-    ...official.data.product_item[0],tax:"2.5"}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["line mismatch",{...official.data,product_item:[{
-    ...official.data.product_item[0],amount:"40"}]},"ITEM_AMOUNTS_UNVERIFIED"],
-  ["other original",{...official.data,product_item:[{
-    ...official.data.product_item[0],original_invoice_number:"XY12345678"}]},"ORIGINAL_INVOICE_NOT_IN_ITEMS"],
-  ["pending upload",{...official.data,invoice_status:91},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
-  ["cancelled",{...official.data,cancel_date:20261016},"OFFICIAL_STATUS_NOT_EFFECTIVE"],
-]){
-  const readback=await query(input,transport({code:0,data:row}),()=>date);
-  assert.equal(readback.originalAllocation.lineTotalsVerified,false,label);
-  assert.equal(readback.originalAllocation.originalGross,null,label);
-  assert.equal(readback.originalAllocation.reason,expectedReason,label);
-  assert.equal(readback.originalAllocation.safeToInferRemainingBalance,false,label);
-}
+assert.deepEqual(multi.originalInvoices,["AB12345678","XY12345678"]);
 
-assert.equal((await query(input,transport({code:0,data:{
-  ...official.data,invoice_status:91}}),()=>date)).possibleMatch,false);
-assert.equal((await query(input,transport({code:0,data:{
-  ...official.data,cancel_date:20261015}}),()=>date)).possibleMatch,false);
-assert.equal((await query(input,transport({code:0,data:{
-  ...official.data,product_item:[
-    {original_invoice_number:"AB12345678"},
-    {original_invoice_number:"XY12345678"}]}}),()=>date)).possibleMatch,false,
-  "A multi-invoice allowance is NOT proof of this single-invoice request");
+// Optional historical item fields must NOT be mistaken for a proven refund
+// quantity; the authoritative gross is from invoice_query's allowance[].
+const missingQuantity=await query(input,transport({code:0,data:{
+  ...official.data,product_item:[{original_invoice_number:"AB12345678"}]
+}}),()=>date);
+assert.equal(missingQuantity.possibleMatch,true);
+assert.equal(missingQuantity.safeToAutoConfirm,false);
+assert.equal(Object.hasOwn(missingQuantity,"originalAllocation"),false);
+
+for(const [response,expectedMatch] of [
+  [{...official.data,invoice_status:91},false],
+  [{...official.data,cancel_date:20261016},false],
+  [{...official.data,invoice_type:"D0501"},false],
+  [{...official.data,allowance_type:1},false],
+]){
+  const result=await query(input,transport({code:0,data:response}),()=>date);
+  assert.equal(result.possibleMatch,expectedMatch);
+  assert.equal(result.safeToAutoResend,false);
+  assert.equal(result.safeToAutoConfirm,false);
+}
 for(const [response,expected] of [
  [{code:51,data:null},/UNCONFIRMED/],
  [{code:0,data:{...official.data,allowance_number:"A20261015002"}},/NUMBER_MISMATCH/],
  [{code:0,data:{...official.data,product_item:[]}},/ITEMS_UNCONFIRMED/],
  [{code:0,data:{...official.data,tax_amount:"oops"}},/AMOUNT_INVALID/],
  [{code:0,data:{...official.data,allowance_date:"20261014"}},/DATE_MISMATCH/],
- ])await assert.rejects(()=>query(input,transport(response),()=>date),expected);
+ [{code:0,data:{...official.data,product_item:[{original_invoice_number:"invalid"}]}},
+   /ORIGINAL_INVOICE_INVALID/]
+])await assert.rejects(()=>query(input,transport(response),()=>date),expected);
 const historicInput={...input,allowanceNumber:"3821061800001"};
 const historic=await query(historicInput,async(url,opts)=>{
   requests++;
   assert.equal(JSON.parse(new URLSearchParams(opts.body).get("data")).allowance_number,
     historicInput.allowanceNumber);
-  return Response.json({code:0,data:{...official.data,allowance_number:"3821061800001"}});
+  return Response.json({code:0,data:{
+    ...official.data,allowance_number:"3821061800001"}});
 },()=>date);
 assert.equal(historic.possibleMatch,true,
- "Old official allowance numbers have no encoded date and must remain queryable");
+  "Old official allowance numbers don't embed dates and must remain queryable");
 const before=requests;
 await assert.rejects(()=>query({...input,appKey:""},transport(),()=>date),/INPUT_INVALID/);
 assert.equal(before,requests);
 await assert.rejects(()=>query(input,async()=>{throw Error("network")},()=>date),/UNAVAILABLE/);
 await assert.rejects(()=>query(input,async()=>new Response("a".repeat(300000)),()=>date),
- /RESPONSE_TOO_LARGE/);
-console.log("Official allowance readback: number, source, seven-decimal line quantity/price math, status, no resend/auto-confirm passed");
+  /RESPONSE_TOO_LARGE/);
+console.log("Official original-number readback: exact source/status, no inferred per-item quantity, no resend");

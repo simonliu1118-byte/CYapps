@@ -7,26 +7,11 @@ import {validOfficialAllowanceNumber} from "./amego-allowance-void";
 const url="https://invoice-api.amego.tw/json/allowance_query";
 const te=new TextEncoder();
 const numberPattern=/^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$/;
-// One official allowance_query can contain lines for several original invoices.
-// This checks ONLY its item-to-header arithmetic. A matching subtotal is NOT
-// proof that all historical allowances were found, and never grants balance.
-export interface OfficialAllowanceOriginalAllocation {
-  lineTotalsVerified:boolean;
-  originalNet:string|null;
-  originalTax:string|null;
-  originalGross:string|null;
-  reason:"ALLOCATED_LINES_MATCH_HEADER"|"ITEM_AMOUNTS_UNVERIFIED"|
-    "HEADER_TOTALS_MISMATCH"|"ORIGINAL_INVOICE_NOT_IN_ITEMS"|
-    "OFFICIAL_STATUS_NOT_EFFECTIVE";
-  safeToInferRemainingBalance:false;
-}
 export interface OfficialAllowanceReadback {
   number:string; invoiceType:string; uploadStatus:number;
   allowanceType:number; cancelDate:number;
   allowanceDay:string; totalAmount:string; taxAmount:string;
   originalInvoices:string[];
-  originalAllocation:OfficialAllowanceOriginalAllocation;
-  knownOriginalQuantities:HistoricalKnownItemQuantity[]|null;
   checkedAtUtc:string; officialSnapshotSha256:string;
   possibleMatch:boolean;
   safeToAutoResend:false;
@@ -35,10 +20,6 @@ export interface OfficialAllowanceReadback {
 export interface OfficialAllowanceReadbackRequest {
   sellerInvoice:string; appKey:string; allowanceNumber:string;
   originalInvoiceNumber:string;
-  // Optional only for readbacks without an authenticated source invoice.
-  originalInvoiceItems?:unknown;
-  originalInvoiceDate?:unknown;
-  originalDetailVat?:unknown;
 }
 function field(x:unknown):Record<string,unknown>{
   if(!x||typeof x!=="object"||Array.isArray(x))
@@ -63,128 +44,6 @@ function amount(x:unknown):string{
     throw new Error("ALLOWANCE_QUERY_AMOUNT_INVALID");
   return v;
 }
-const AMOUNT_SCALE=10_000_000n;
-function scaledAmount(raw:unknown):bigint|null{
-  if(typeof raw!=="string"&&typeof raw!=="number")return null;
-  if(typeof raw==="number"&&(!Number.isFinite(raw)||
-     Math.abs(raw)>Number.MAX_SAFE_INTEGER))return null;
-  const match=/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,7}))?$/.exec(String(raw));
-  return match?BigInt(match[1])*AMOUNT_SCALE+
-    BigInt((match[2]??"").padEnd(7,"0")):null;
-}
-function formatScaled(value:bigint):string{
-  const integer=value/AMOUNT_SCALE;
-  const fraction=(value%AMOUNT_SCALE).toString().padStart(7,"0").replace(/0+$/,"");
-  return fraction?integer+"."+fraction:integer.toString();
-}
-// Snapshot-local row positions are NOT durable original item identifiers.
-// The known quantities are internal and never a spendable refund balance.
-export interface HistoricalKnownItemQuantity {
-  originalItemIndex:number; knownQuantity:string; originalQuantity:string;
-}
-function originalDay(value:unknown):string|null {
-  if(typeof value!=="string"&&typeof value!=="number")return null;
-  const x=String(value).replaceAll("-","");
-  if(!/^[0-9]{8}$/.test(x))return null;
-  const y=Number(x.slice(0,4)),m=Number(x.slice(4,6)),d=Number(x.slice(6));
-  const date=new Date(Date.UTC(y,m-1,d));
-  return date.getUTCFullYear()===y&&date.getUTCMonth()+1===m&&
-    date.getUTCDate()===d?x:null;
-}
-function originalQuantities(
-  historicalItems:unknown[],sourceItems:unknown,invoice:string,
-  sourceDay:unknown,detailVat:unknown
-):HistoricalKnownItemQuantity[]|null {
-  if((detailVat!==0&&detailVat!=="0")||
-     !Array.isArray(sourceItems)||sourceItems.length<1||
-     sourceItems.length>50)return null;
-  const date=originalDay(sourceDay);
-  if(!date)return null;
-  const source=new Map<string,{index:number;quantity:bigint;used:bigint}>();
-  for(let i=0;i<sourceItems.length;i++){
-    const raw=sourceItems[i];
-    if(!raw||typeof raw!=="object"||Array.isArray(raw))return null;
-    const row=raw as Record<string,unknown>;
-    const desc=row.description,kind=String(row.tax_type);
-    const quantity=scaledAmount(row.quantity),price=scaledAmount(row.unit_price);
-    const amount=scaledAmount(row.amount);
-    if(typeof desc!=="string"||desc.length<1||desc.length>256||
-       !/^[123]$/.test(kind)||quantity===null||quantity<=0n||
-       price===null||price<=0n||amount===null||amount<=0n||
-       (quantity*price+AMOUNT_SCALE/2n)/AMOUNT_SCALE!==amount)return null;
-    const key=JSON.stringify([desc,kind,formatScaled(price)]);
-    if(source.has(key))return null;
-    source.set(key,{index:i,quantity,used:0n});
-  }
-  let matched=0;
-  for(const raw of historicalItems){
-    const row=raw as Record<string,unknown>;
-    if(row.original_invoice_number!==invoice)continue;
-    if(originalDay(row.original_invoice_date)!==date)return null;
-    const price=scaledAmount(row.unit_price);
-    if(price===null)return null;
-    const key=JSON.stringify([row.description,String(row.tax_type),formatScaled(price)]);
-    const original=source.get(key),quantity=scaledAmount(row.quantity);
-    if(!original||quantity===null||quantity<=0n)return null;
-    original.used+=quantity;
-    if(original.used>original.quantity)return null;
-    matched++;
-  }
-  if(matched===0)return null;
-  return [...source.values()].filter(x=>x.used>0n)
-    .sort((a,b)=>a.index-b.index).map(x=>({
-      originalItemIndex:x.index,knownQuantity:formatScaled(x.used),
-      originalQuantity:formatScaled(x.quantity)
-    }));
-}
-
-// No numeric rounding and no per-line allocation guess. Incomplete fields,
-// mismatched document totals and pending/cancelled official records fail closed.
-function originalAllocation(
-  items:unknown[], originalInvoice:string, netHeader:string,taxHeader:string,
-  officiallyEffective:boolean
-):OfficialAllowanceOriginalAllocation{
-  const unknown=(reason:OfficialAllowanceOriginalAllocation["reason"]):
-    OfficialAllowanceOriginalAllocation=>({
-      lineTotalsVerified:false,originalNet:null,originalTax:null,
-      originalGross:null,reason,safeToInferRemainingBalance:false
-    });
-  let lineNet=0n,lineTax=0n,invoiceNet=0n,invoiceTax=0n,found=false;
-  for(const raw of items){
-    const row=raw as Record<string,unknown>;
-    const net=scaledAmount(row.amount),tax=scaledAmount(row.tax);
-    const quantity=scaledAmount(row.quantity);
-    const unitPrice=scaledAmount(row.unit_price);
-    const taxType=String(row.tax_type);
-    const description=row.description;
-    const originalDay=String(row.original_invoice_date);
-    // Official allowance_query detail fields are OPTIONAL. Do not promote
-    // matching headers into verified source quantities when any line lacks
-    // a valid original-date/item/quantity/price/tax basis. The rounding is
-    // seven decimal places, half away from zero, not floating-point math.
-    if(net===null||tax===null||net<=0n||tax%AMOUNT_SCALE!==0n||
-       quantity===null||quantity<=0n||unitPrice===null||unitPrice<=0n||
-       typeof description!=="string"||description.length<1||
-       description.length>256||!/^[0-9]{8}$/.test(originalDay)||
-       !/^[123]$/.test(taxType)||
-       (taxType!=="1"&&tax!==0n)||
-       (quantity*unitPrice+AMOUNT_SCALE/2n)/AMOUNT_SCALE!==net)
-      return unknown("ITEM_AMOUNTS_UNVERIFIED");
-    lineNet+=net;lineTax+=tax;
-    if(row.original_invoice_number===originalInvoice){
-      found=true;invoiceNet+=net;invoiceTax+=tax;
-    }
-  }
-  if(lineNet!==scaledAmount(netHeader)||lineTax!==scaledAmount(taxHeader))
-    return unknown("HEADER_TOTALS_MISMATCH");
-  if(!found)return unknown("ORIGINAL_INVOICE_NOT_IN_ITEMS");
-  if(!officiallyEffective)return unknown("OFFICIAL_STATUS_NOT_EFFECTIVE");
-  return {lineTotalsVerified:true,originalNet:formatScaled(invoiceNet),
-    originalTax:formatScaled(invoiceTax),
-    originalGross:formatScaled(invoiceNet+invoiceTax),
-    reason:"ALLOCATED_LINES_MATCH_HEADER",safeToInferRemainingBalance:false};
-}
-
 async function readLimited(res:Response):Promise<string>{
   const n=Number(res.headers.get("content-length"));
   if(n>262144)throw new Error("ALLOWANCE_QUERY_RESPONSE_TOO_LARGE");
@@ -262,15 +121,6 @@ export async function queryOfficialAllowanceReadOnly(
       throw new Error("ALLOWANCE_QUERY_ORIGINAL_INVOICE_INVALID");
     originals.push(original);
   }
-  const effective=["D0401","B0401","B0101","B0102"].includes(invoiceType) &&
-    uploadStatus===99 && cancelDate===0 && allowanceType===2;
-  const allocation=originalAllocation(row.product_item,input.originalInvoiceNumber,
-    totalAmount,taxAmount,effective);
-  const knownOriginalQuantities=allocation.lineTotalsVerified&&
-    input.originalInvoiceItems!==undefined
-      ?originalQuantities(row.product_item,input.originalInvoiceItems,
-          input.originalInvoiceNumber,input.originalInvoiceDate,input.originalDetailVat)
-      :null;
   const digest=await crypto.subtle.digest("SHA-256",
     new Uint8Array(te.encode(JSON.stringify(row))));
   const officialSnapshotSha256=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
@@ -281,7 +131,6 @@ export async function queryOfficialAllowanceReadOnly(
     originals.every(x=>x===input.originalInvoiceNumber);
   return {number,invoiceType,uploadStatus,allowanceType,cancelDate,allowanceDay,
     totalAmount,taxAmount,originalInvoices:[...new Set(originals)],
-    originalAllocation:allocation,knownOriginalQuantities,
     checkedAtUtc:checked.toISOString(),officialSnapshotSha256,possibleMatch,
     safeToAutoResend:false,safeToAutoConfirm:false};
 }

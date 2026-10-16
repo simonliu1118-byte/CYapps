@@ -14,6 +14,8 @@
 
 - [x] **逐品項歷史查回移除（Draft，待 exact-head CI）**：CYID 管理員的 `official-inspection` 不再為了推算已折讓商品數量而額外呼叫每張 `allowance_query`；使用單次 `invoice_query.allowance[]` 及其已生效含稅總額進行本次折讓上限驗證。舊歷史分攤／「已知剩餘上限」僅保留回應欄位空值供現有 Windows 契約相容，**不能**取代餘額驗證。原 D1 配號的 `number-readback`／`reconcile`、CYID／CAS 不變。Cloud source 及合成回歸測試尚未實機驗收。
 
+- [x] **刪除未使用的歷史逐品項折讓數量推算（Draft）**：`amego-allowance-query.ts` 的 `originalAllocation`、`knownOriginalQuantities`、原品項日期／單價／數量對照 helpers 與舊測試已退役。保留 `allowance_query` 原號、折讓日期、含稅金額組成、有效狀態、原發票集合、Snapshot hash 及禁止重送確認；絕不由歷史細項推測商品剩餘數量。這是本次確定沒有正式路由依賴後的 source 精簡，仍需以新 HEAD CI 證明。
+
 ### 已合入此 Draft 分支的功能（尚未上線）
 
 - [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。
