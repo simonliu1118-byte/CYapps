@@ -51,7 +51,8 @@ internal sealed partial class ItemQueryService
             await FillReportAdvancedAsync(dialog, report, cancellationToken);
 
             progress.Report($"ERP：產生{report.Title}（即時報表）…");
-            var before = Win32Automation.VisibleProcessWindows(dialog);
+            await VerifyReportAdvancedAsync(dialog, report, cancellationToken);
+            var before = FindReportWindows(report).ToHashSet();
             await ClickButtonAsync(dialog, SalesReportLayout.RunButton, $"{report.Title}的「即時報表」", cancellationToken);
             _log.Info("sales", $"{report.Code} 即時報表 clicked");
             var viewer = await WaitReportViewerAsync(dialog, report, before, cancellationToken);
@@ -129,6 +130,18 @@ internal sealed partial class ItemQueryService
         if (leftover)
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開著的{report.Title}無法自動關閉，請先手動關閉後再查詢。");
         return false;
+    }
+
+    /// <summary>For on-site diagnosis: every top-level window whose caption contains <paramref name="word"/>, any process.</summary>
+    private void LogTitledWindows(string word, string context)
+    {
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            var title = NativeMethods.WindowText(hwnd);
+            if (title.Contains(word, StringComparison.Ordinal))
+                _log.Info("sales", $"{context}: window class={NativeMethods.ClassName(hwnd)} pid={Win32Automation.ProcessId(hwnd)} visible={NativeMethods.IsWindowVisible(hwnd)} title=\"{title}\"");
+            return true;
+        }, 0);
     }
 
     // ---- conditions --------------------------------------------------------------------
@@ -236,65 +249,78 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>
-    /// Selects <paramref name="target"/>, the last item: click opens the list, End goes to the last
-    /// item, Enter (only while the list is open, else it would press 確定) commits. Read back.
+    /// Selects <paramref name="target"/>, the last item: the list is the new popup window of the
+    /// ERP process after the click; with it open End + Enter commits (Enter only then, else it
+    /// would press 確定); without it End changes the closed box directly. Read back here and
+    /// again before 即時報表 (<see cref="VerifyReportAdvancedAsync"/>).
     /// </summary>
     private async Task SetComboLastAsync(nint dialog, WindowControl combo, string target, string what, CancellationToken cancellationToken)
     {
         if (ComboText(combo) == target) return;
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var before = Win32Automation.VisibleProcessWindows(dialog);
+        SafeClick(dialog, Win32Automation.Center(combo.Rect));
+        nint popup = 0;
+        await WaitUntilAsync(() => (popup = Win32Automation.VisibleProcessWindows(dialog).FirstOrDefault(h => !before.Contains(h))) != 0, 800, cancellationToken);
+        _log.Info("sales", $"{what} list open={popup != 0} class={(popup != 0 ? NativeMethods.ClassName(popup) : "-")}");
+        InputSender.Press(NativeMethods.VK_END);
+        await Pace.Delay(120, cancellationToken);
+        if ((popup != 0 && NativeMethods.IsWindowVisible(popup)) || IsDropDownOpen(dialog, combo))
         {
-            SafeClick(dialog, Win32Automation.Center(combo.Rect));
-            await Pace.Delay(250, cancellationToken);
-            if (attempt == 1) InputSender.Press(NativeMethods.VK_END);
-            else
-                for (var i = 0; i < 6; i++)
-                {
-                    InputSender.Press(NativeMethods.VK_DOWN);
-                    await Pace.Delay(60, cancellationToken);
-                }
-            await Pace.Delay(100, cancellationToken);
-            if (IsDropDownOpen(dialog, combo))
-            {
-                InputSender.Press(NativeMethods.VK_RETURN);
-                await Pace.Delay(150, cancellationToken);
-            }
-            var shown = ComboText(combo);
-            _log.Info("sales", $"{what} attempt={attempt} shown=\"{shown}\"");
-            if (shown == target) return;
-            if (IsDropDownOpen(dialog, combo))
-            {
-                InputSender.Press(NativeMethods.VK_ESCAPE);
-                await Pace.Delay(150, cancellationToken);
-            }
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await WaitUntilAsync(() => popup == 0 || !NativeMethods.IsWindowVisible(popup), 1000, cancellationToken);
         }
-        throw new InvalidOperationException($"無法把{what}設為「{target}」（目前顯示「{ComboText(combo)}」）。");
+        await Pace.Delay(150, cancellationToken);
+        var shown = ComboText(combo);
+        _log.Info("sales", $"{what} shown=\"{shown}\"");
+        if (shown != target)
+            throw new InvalidOperationException($"無法把{what}設為「{target}」（目前顯示「{shown}」）。");
+    }
+
+    /// <summary>Both 進階選項 drop-downs still show 「全部」 after focus has left them; else ERP dropped the choice.</summary>
+    private async Task VerifyReportAdvancedAsync(nint dialog, SalesReport report, CancellationToken cancellationToken)
+    {
+        await Pace.Delay(200, cancellationToken);
+        var sheet = Win32Automation.FindTabSheet(dialog, SalesReportLayout.AdvancedTab);
+        var combos = sheet is null ? [] : Win32Automation.InputControls(sheet.Handle, visibleOnly: false)
+            .Where(c => Invi02Layout.IsCombo(c.ClassName)).OrderBy(c => c.Rect.Top).Take(2).ToList();
+        var shown = combos.Select(ComboText).ToList();
+        _log.Info("sales", $"{report.Code} status before 即時報表 shown=\"{string.Join("/", shown)}\"");
+        if (combos.Count != 2 || shown.Any(t => t != SalesReportLayout.AllStatus))
+            throw new InvalidOperationException($"{report.Title}的確認狀態／結帳狀態沒有維持「全部」（目前「{string.Join("／", shown)}」），已停止。");
     }
 
     // ---- report and export -------------------------------------------------------------
 
-    /// <summary>The report window opened by 即時報表; an ERP message instead stops with that message.</summary>
+    /// <summary>
+    /// The report window opened by 即時報表 (「銷貨單明細表(COPR15)[A]」), looked for among all
+    /// top-level windows: V0.6.0 Build 2 LOG (2026-10-17) never found it among the ERP process's
+    /// own windows although it was on screen. An ERP message instead stops with that message.
+    /// </summary>
     private async Task<nint> WaitReportViewerAsync(nint dialog, SalesReport report, IReadOnlySet<nint> before, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + ReportRunWaitMs;
         var started = Environment.TickCount64;
+        var logged = false;
         while (Environment.TickCount64 < deadline)
         {
             await Pace.Delay(200, cancellationToken);
-            var viewer = Win32Automation.VisibleProcessWindows(dialog)
-                .Where(h => !before.Contains(h) && report.IsTitle(NativeMethods.WindowText(h)) &&
-                            !Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)) && !IsReportConditions(h))
-                .FirstOrDefault();
+            var viewer = FindReportWindows(report).FirstOrDefault(h => !before.Contains(h) && !IsReportConditions(h));
             if (viewer != 0)
             {
-                _log.Info("sales", $"{report.Code} report window after_ms={Environment.TickCount64 - started} class={NativeMethods.ClassName(viewer)} title=\"{NativeMethods.WindowText(viewer)}\"");
+                var same = Win32Automation.ProcessId(viewer) == Win32Automation.ProcessId(dialog);
+                _log.Info("sales", $"{report.Code} report window after_ms={Environment.TickCount64 - started} class={NativeMethods.ClassName(viewer)} same_process={same} title=\"{NativeMethods.WindowText(viewer)}\"");
                 await Pace.Delay(800, cancellationToken); // let it finish painting its toolbar
                 return viewer;
             }
             if (FindErpMessageBox(dialog) is var box && box != 0)
                 await ThrowErpMessageAsync(box, $"{report.Title}按「即時報表」後，");
+            if (!logged && Environment.TickCount64 - started > 10000)
+            {
+                logged = true;
+                LogTitledWindows("明細表", $"{report.Code}-waiting");
+            }
         }
-        LogProcessWindows(dialog, $"after-{report.Code}-即時報表");
+        LogTitledWindows("明細表", $"after-{report.Code}-即時報表");
         throw new InvalidOperationException($"{report.Title}按「即時報表」後等了 {ReportRunWaitMs / 1000} 秒仍沒有出現報表視窗。");
     }
 

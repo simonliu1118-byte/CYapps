@@ -320,7 +320,16 @@ internal sealed class MainForm : Form
                 // that customer's 銷貨單.
                 if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, CustomerRules.CodeName) &&
                     ItemNameRules.TryNormalize(_code.Text, out _, out _))
-                    await StartSearchAsync(customers: true);
+                {
+                    // Only one customer matches: query that one at once (user, 2026-10-17).
+                    if (await StartSearchAsync(customers: true) is { Items.Count: 1 } one &&
+                        ItemSearchResult.Value(one.Items[0], "客戶代號") is { Length: > 0 } only)
+                    {
+                        _log.Info("sales", "one customer matched; querying it");
+                        _code.Text = only;
+                        await StartSalesQueryAsync();
+                    }
+                }
                 else
                     await StartSalesQueryAsync();
                 return;
@@ -504,16 +513,17 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>品名／客戶名稱 mode: lists the matches on the search tab; failures shown in a message box.</summary>
-    private async Task StartSearchAsync(bool customers)
+    private async Task<ItemSearchResult?> StartSearchAsync(bool customers)
     {
         if (!ItemNameRules.TryNormalize(_code.Text, out var keyword, out var error))
         {
             MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return null;
         }
+        ItemSearchResult? result = null;
         try
         {
-            await ExecuteSearchAsync(keyword, CancellationToken.None, customers);
+            result = await ExecuteSearchAsync(keyword, CancellationToken.None, customers);
         }
         catch (OperationCanceledException)
         {
@@ -526,6 +536,7 @@ internal sealed class MainForm : Form
         Activate();
         _code.Focus();
         _code.SelectAll();
+        return result;
     }
 
     /// <summary>Double-click on a search row: that item (品號) or customer (客戶代號) is queried (user, 2026-10-16).</summary>
