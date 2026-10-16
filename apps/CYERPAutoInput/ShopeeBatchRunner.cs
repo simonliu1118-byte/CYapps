@@ -354,7 +354,7 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>
     /// <paramref name="text"/> pasted (Ctrl+V) where the caret is — faster than typing it (user,
-    /// 2026-10-16: the 另存新檔 path). The clipboard's own text is put back; when the clipboard
+    /// 2026-10-16: the 另存新檔 path, 聊聊 messages). The clipboard's own text is put back; when the clipboard
     /// cannot be used, the text is typed as before.
     /// </summary>
     private async Task PasteAsync(string text)
@@ -611,8 +611,9 @@ internal sealed partial class ShopeeBatchRunner
                 var text = messages[m];
                 await Task.Delay(300, _token);
                 _inputs++;
-                _log.Info("shopee-batch", $"type 聊聊 message {m + 1}/{messages.Count} length={text.Length}");
-                InputSender.UnicodeText(text);
+                _log.Info("shopee-batch", $"paste 聊聊 message {m + 1}/{messages.Count} length={text.Length}");
+                // Pasted, not typed (user, 2026-10-16: faster); still checked in the input below.
+                await PasteAsync(text);
 
                 var (filled, _) = await WaitOrNullAsync(5, s => ShopeeBatchScreens.ChatInputHolds(s.Boxes, input, text) ? s : null);
                 if (filled is null) { ClearChatInput(); return $"第 {m + 1} 則訊息沒有出現在輸入框"; }
