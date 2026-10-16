@@ -42,7 +42,10 @@ internal sealed class ItemQueryService
         _ocr = new PaddleOcrService(log);
     }
 
-    public async Task<ItemQueryResult> QueryAsync(string itemCode, ItemQueryOptions options, IProgress<string> progress, CancellationToken cancellationToken)
+    public Task<ItemQueryResult> QueryAsync(string itemCode, ItemQueryOptions options, IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(() => QueryCoreAsync(itemCode, options, progress, cancellationToken));
+
+    private async Task<ItemQueryResult> QueryCoreAsync(string itemCode, ItemQueryOptions options, IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!ItemCodeRules.TryNormalize(itemCode, out var code, out var error))
             throw new InvalidOperationException(error);
@@ -543,6 +546,7 @@ internal sealed class ItemQueryService
         var deadline = Environment.TickCount64 + QueryRunWaitMs;
         while (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog))
         {
+            await ThrowIfErpMessageAsync(root);
             if (Environment.TickCount64 > deadline)
                 throw new InvalidOperationException("按「確定」後查詢視窗沒有關閉，請人工確認 ERP 畫面。");
             await Pace.Delay(100, cancellationToken);
@@ -552,8 +556,9 @@ internal sealed class ItemQueryService
         deadline = Environment.TickCount64 + 3000;
         while (!NativeMethods.IsWindowEnabled(root))
         {
+            await ThrowIfErpMessageAsync(root);
             if (Environment.TickCount64 > deadline)
-                throw new InvalidOperationException("查詢後 ERP 顯示了訊息視窗（可能查無此品號），請人工確認並關閉。");
+                throw new InvalidOperationException("查詢後 ERP 被其他視窗擋住，請人工確認 ERP 畫面。");
             await Pace.Delay(100, cancellationToken);
         }
     }
@@ -570,6 +575,7 @@ internal sealed class ItemQueryService
         var shown = string.Empty;
         while (true)
         {
+            await ThrowIfErpMessageAsync(root);
             HeaderControls header;
             try
             {
@@ -1100,13 +1106,100 @@ internal sealed class ItemQueryService
         return null;
     }
 
+    // ---- ERP's own messages ----------------------------------------------------------
+
+    /// <summary>
+    /// A failure while ERP shows its own message box is reported with that message (user,
+    /// 2026-10-16: when ERP itself reports an error the program must say so clearly), not as
+    /// whatever step happened to fail next. The box is left for the user; nothing is clicked.
+    /// </summary>
+    private async Task<T> GuardErpMessagesAsync<T>(Func<Task<T>> run)
+    {
+        try
+        {
+            return await run();
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure { FromErpMessage: true })
+        {
+            var anyErpWindow = Win32Automation.FindFormWindows(_form).Concat(Win32Automation.FindErpMainWindows()).FirstOrDefault();
+            if (anyErpWindow != 0 && FindErpMessageBox(anyErpWindow) is var box && box != 0)
+                await ThrowErpMessageAsync(box, null, ex);
+            throw;
+        }
+    }
+
+    /// <summary>A visible ERP message box (Delphi TMessageForm or Windows #32770 with a button) of the ERP process, or 0.</summary>
+    private static nint FindErpMessageBox(nint anyErpWindow)
+    {
+        foreach (var h in Win32Automation.VisibleProcessWindows(anyErpWindow))
+            if (Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(h)) && FindButton(h, _ => true) is not null)
+                return h;
+        return 0;
+    }
+
+    /// <summary>Stops with ERP's message when ERP is showing one.</summary>
+    private async Task ThrowIfErpMessageAsync(nint anyErpWindow)
+    {
+        if (FindErpMessageBox(anyErpWindow) is var box && box != 0)
+            await ThrowErpMessageAsync(box, null);
+    }
+
+    private async Task ThrowErpMessageAsync(nint box, string? when, Exception? inner = null)
+    {
+        var text = await ReadErpMessageAsync(box);
+        _log.Warn("erp-message", $"title=\"{NativeMethods.WindowText(box)}\" text={_log.Value(text)}");
+        LogChildren(box, "erp-message");
+        var shown = text.Length > 0 ? $"「{text}」" : "（讀不到內容，請看 ERP 畫面）";
+        throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
+            $"{when ?? string.Empty}ERP 顯示了訊息：{shown}\n查詢已停止，請先在 ERP 處理這個訊息後再查詢。", inner)
+        { FromErpMessage = true };
+    }
+
+    /// <summary>
+    /// The message text: the box's own text windows when ERP made them windows, otherwise OCR of
+    /// the box (Delphi's TMessageForm draws its text with a TLabel, which is not a window).
+    /// Button captions are left out.
+    /// </summary>
+    private async Task<string> ReadErpMessageAsync(nint box)
+    {
+        static bool IsButtonWord(string t) => Invi02Layout.NormalizeCaption(t) is var c &&
+            (c.StartsWith("確定", StringComparison.Ordinal) || c.StartsWith("取消", StringComparison.Ordinal) ||
+             c.StartsWith("是", StringComparison.Ordinal) || c.StartsWith("否", StringComparison.Ordinal) ||
+             c is "OK" or "YES" or "NO" or "CANCEL");
+        var texts = Win32Automation.EnumerateChildren(box)
+            .Where(c => c.Visible && !IsButtonClass(c.ClassName) && c.Text.Trim().Length > 0)
+            .Select(c => c.Text.Trim())
+            .ToList();
+        if (texts.Count == 0 && NativeMethods.GetWindowRect(box, out var r))
+        {
+            try
+            {
+                IReadOnlyList<OcrToken> tokens;
+                using (var image = ScreenCapture.Capture(r.ToRectangle()))
+                    tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
+                texts = tokens.Where(t => !IsButtonWord(t.Text))
+                    .OrderBy(t => t.Rect.Top / 12).ThenBy(t => t.Rect.Left)
+                    .Select(t => t.Text.Trim()).Where(t => t.Length > 0).ToList();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ExternalException)
+            {
+                _log.Warn("erp-message", $"OCR failed: {ex.GetType().Name}");
+            }
+        }
+        var text = string.Join(" ", texts);
+        return text.Length > 0 ? text : NativeMethods.WindowText(box).Trim();
+    }
+
     // ---- 客戶 (COPI01) ----------------------------------------------------------------
 
     /// <summary>
     /// One customer from COPI01 (user, 2026-10-16): the same flow as a 品號 — F6 → 一般選項 客戶代號
     /// = code → 確定 → 基本資料 → 轉出至 Excel. COPI01 exports one sheet (單頭資料) only.
     /// </summary>
-    public async Task<CustomerQueryResult> QueryCustomerAsync(string input, IProgress<string> progress, CancellationToken cancellationToken)
+    public Task<CustomerQueryResult> QueryCustomerAsync(string input, IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(() => QueryCustomerCoreAsync(input, progress, cancellationToken));
+
+    private async Task<CustomerQueryResult> QueryCustomerCoreAsync(string input, IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!ItemCodeRules.TryNormalize(input, out var code, out var error, CustomerRules.CodeName))
             throw new InvalidOperationException(error);
@@ -1165,7 +1258,12 @@ internal sealed class ItemQueryService
     public Task<ItemSearchResult> SearchCustomersAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken) =>
         SearchAsync(ErpForm.Copi01, keywordInput, CustomerRules.NameCondition, CustomerExport.ParseList, progress, cancellationToken);
 
-    private async Task<ItemSearchResult> SearchAsync(ErpForm form, string keywordInput, Func<string, string> condition,
+    private Task<ItemSearchResult> SearchAsync(ErpForm form, string keywordInput, Func<string, string> condition,
+        Func<IReadOnlyList<(string Name, List<string[]> Rows)>, string, IReadOnlyList<IReadOnlyList<ErpField>>> parse,
+        IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(() => SearchCoreAsync(form, keywordInput, condition, parse, progress, cancellationToken));
+
+    private async Task<ItemSearchResult> SearchCoreAsync(ErpForm form, string keywordInput, Func<string, string> condition,
         Func<IReadOnlyList<(string Name, List<string[]> Rows)>, string, IReadOnlyList<IReadOnlyList<ErpField>>> parse,
         IProgress<string> progress, CancellationToken cancellationToken)
     {
@@ -1238,6 +1336,7 @@ internal sealed class ItemQueryService
         long since = Environment.TickCount64;
         while (true)
         {
+            await ThrowIfErpMessageAsync(root);
             bool? has;
             try
             {
@@ -1674,8 +1773,7 @@ internal sealed class ItemQueryService
                     FindButton(h, c => c.StartsWith("確定", StringComparison.Ordinal) || c == "OK") is null) continue;
                 var since = messageSince.TryGetValue(h, out var t) ? t : messageSince[h] = Environment.TickCount64;
                 if (Environment.TickCount64 - since < 1500) continue;
-                LogChildren(h, "invq01-message");
-                throw new InvalidOperationException($"「{tab}」開始查詢後 ERP 顯示了訊息視窗，請人工確認並關閉。");
+                await ThrowErpMessageAsync(h, $"「{tab}」開始查詢後");
             }
             if (Environment.TickCount64 > deadline)
             {

@@ -11,6 +11,9 @@ internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Excep
     : InvalidOperationException(message, inner)
 {
     public ErpAgentErrorCode Code { get; } = code;
+
+    /// <summary>The failure is ERP's own message box (its text is in the message).</summary>
+    public bool FromErpMessage { get; init; }
 }
 
 /// <summary>
