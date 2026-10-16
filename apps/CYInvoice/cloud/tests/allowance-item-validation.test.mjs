@@ -45,6 +45,17 @@ fails({...draft,ProductItem:[{...draft.ProductItem[0],Amount:105}],TotalAmount:1
 fails({...draft,TaxAmount:4},official,53,"REQUEST_TOTALS_MISMATCH");
 fails(draft,{...official,invoiceTaxAmount:1},53,"OFFICIAL_TOTAL_ARITHMETIC_MISMATCH");
 fails(draft,{...official,invoiceGross:50},53,"OFFICIAL_TOTAL_ARITHMETIC_MISMATCH");
+// Totals alone are insufficient: official VAT must agree with the exact
+// taxable original items. Previously, 100 + 10 = 110 could be accepted even
+// though the documented narrow 5% path permits only tax 5.
+fails(draft,{...official,invoiceTaxAmount:10,invoiceGross:110},53,
+  "OFFICIAL_TAX_ARITHMETIC_UNVERIFIED");
+fails(draft,{...official,invoiceTaxAmount:0,invoiceGross:100},53,
+  "OFFICIAL_TAX_ARITHMETIC_UNVERIFIED");
+const exemptOfficial={...official,invoiceTaxAmount:1,invoiceGross:101,
+  officialItems:[{description:"Service",quantity:"2",unit_price:"50",
+    amount:"100",tax_type:3}]};
+fails(draft,exemptOfficial,53,"OFFICIAL_TAX_ARITHMETIC_UNVERIFIED");
 fails(draft,{...official,officialItems:[...official.officialItems,...official.officialItems]},
   52,"OFFICIAL_DUPLICATE_ITEM");
 fails({...draft,ProductItem:[draft.ProductItem[0],draft.ProductItem[0]],

@@ -92,7 +92,7 @@ export function validateAllowanceOriginalItems(
   if(netClaim===null||taxClaim===null||invoiceTax===null||originalGross===null)
     return failed("TOTALS_MISSING");
   const originals=new Map<string,{quantity:bigint;amount:bigint}>();
-  let originalNet=0n;
+  let originalNet=0n,originalTaxableNet=0n;
   for(const raw of evidence.officialItems){
     const line=object(raw);
     if(!line)return failed("OFFICIAL_ITEM_INCOMPLETE");
@@ -106,6 +106,7 @@ export function validateAllowanceOriginalItems(
     if(lineAmount(quantity,unitPrice)!==amount)
       return failed("OFFICIAL_LINE_ARITHMETIC_MISMATCH");
     originalNet+=amount;
+    if(taxType===1)originalTaxableNet+=amount;
     const key=JSON.stringify([name,taxType,String(unitPrice)]);
     // Identical official rows lack a stable line ID: ambiguous partial
     // allocation cannot authorize a later refund.
@@ -115,6 +116,11 @@ export function validateAllowanceOriginalItems(
   // An inconsistent official invoice is not proof of remaining balance.
   if(originalNet+invoiceTax!==originalGross)
     return failed("OFFICIAL_TOTAL_ARITHMETIC_MISMATCH");
+  // Original gross can add up while the claimed VAT itself is inconsistent.
+  // Never treat overstated/understated official tax as unused refund capacity.
+  // Only the already-supported explicit 5%, whole-TWD rounding case is safe.
+  if(invoiceTax!==vatInWholeTwd(originalTaxableNet))
+    return failed("OFFICIAL_TAX_ARITHMETIC_UNVERIFIED");
   const claimed=new Map<string,{quantity:bigint;amount:bigint}>();
   let net=0n,tax=0n,taxableNet=0n;
   for(const raw of draft.ProductItem){
