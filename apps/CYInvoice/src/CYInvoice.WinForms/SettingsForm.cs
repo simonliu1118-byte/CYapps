@@ -283,16 +283,59 @@ internal sealed class SettingsForm : Form
                 : $"公司統編：{card.SellerInvoice}\n設定版次：{card.Revision}\n"+
                   $"光貿 App Key：{(card.HasAmegoAppKey ? "已設定" : "尚未設定")}\n"+
                   $"MO店+ 密碼：{(card.HasMoExcelPassword ? "已設定" : "尚未設定")}";
-            MessageBox.Show(this, message +
-                "\n\n此處只查詢雲端狀態，不顯示金鑰或修改設定。"+
-                "\n本機欄位不會自動覆蓋 CYID 公司卡。",
-                "CYID 公司卡（唯讀）",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            if(MessageBox.Show(this,message+
+                "\n\n雲端金鑰不會顯示，本機欄位不會覆蓋雲端資料。"+
+                "\n\n是否開啟編輯？只有 CYID 超級管理員有權修改。",
+                "CYID 公司卡",MessageBoxButtons.YesNo,MessageBoxIcon.Information,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+                return;
+            var edit=PromptCompanyCardEdit(card);
+            if(edit is null)return;
+            if(MessageBox.Show(this,
+                $"確定修改 CYID 公司卡（原版次 {edit.ExpectedRevision}）？\n"+
+                $"公司統編：{edit.SellerInvoice}\n"+
+                $"光貿 App Key：{SecretActionLabel(edit.AmegoAppKey.Action)}\n"+
+                $"MO店+ 密碼：{SecretActionLabel(edit.MoExcelPassword.Action)}\n\n"+
+                "僅超級管理員可修改，且雲端會記錄永久稽核。\n"+
+                "系統只送出一次更新要求。",
+                "確認雲端公司設定",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+                return;
+            try
+            {
+                var updated=await client.UpdateAsync(edit,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                MessageBox.Show(this,
+                    $"CYID 公司卡更新已確認。\n統編：{updated.SellerInvoice}\n"+
+                    $"版次：{updated.Revision}\n"+
+                    $"光貿 App Key：{(updated.HasAmegoAppKey?"已設定":"尚未設定")}\n"+
+                    $"MO店+ 密碼：{(updated.HasMoExcelPassword?"已設定":"尚未設定")}\n\n"+
+                    "本機設定不受影響。","公司卡已更新",
+                    MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            catch(Exception error)
+            {
+                CloudCompanySettingsStatus? latest=null;
+                try{latest=await client.GetAsync(login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword);}
+                catch{/* The result remains ambiguous, never retry UPDATE. */}
+                var observed=latest is null?"目前無法查回最新雲端狀態。":
+                    $"雲端目前統編：{latest.SellerInvoice}，版次：{latest.Revision}。";
+                var reason=error is CloudApiException ex&&
+                    ex.Code=="COMPANY_AUTH_REQUIRED"
+                    ?"只有 CYID 超級管理員可以修改公司卡。":
+                    "更新結果未確認；可能已寫入，也可能遇到版次衝突或權限變動。";
+                MessageBox.Show(this,reason+"\n"+observed+
+                    "\n請核對雲端內容，再決定是否重新編輯。"+
+                    "\n系統沒有自動重送，也未修改本機設定。",
+                    "公司卡更新待確認",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
         }
         catch (Exception error)
         {
             MessageBox.Show(this,
                 "目前無法確認 CYID 公司卡狀態：" + error.Message +
-                "\n本機與雲端設定均未變更。",
+                "\n本機設定未變更。雲端若有未確認的更新，請重新查回公司卡。",
                 "公司設定查詢未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
         finally
@@ -300,6 +343,109 @@ internal sealed class SettingsForm : Form
             if (!IsDisposed && !Disposing) UpdateCloudControls();
         }
     }
+
+    // Temporary editor under the existing Settings menu; no new settings
+    // system. Empty secret fields always mean KEEP, never implicit deletion.
+    private CloudCompanySettingsEdit? PromptCompanyCardEdit(
+        CloudCompanySettingsStatus? current)
+    {
+        using var editor=new Form{
+            Text="編輯 CYID 公司卡（超級管理員）",
+            StartPosition=FormStartPosition.CenterParent,
+            ClientSize=new Size(490,260),
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            MinimizeBox=false,MaximizeBox=false,ShowInTaskbar=false,ShowIcon=false,
+            Font=new Font("Microsoft JhengHei UI",10F)
+        };
+        var table=new TableLayoutPanel{
+            Dock=DockStyle.Fill,ColumnCount=3,RowCount=5,Padding=new Padding(12)
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,100));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,65));
+        foreach(var h in new[]{40,35,43,43,50})
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute,h));
+        var note=new Label{
+            Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+            Text="金鑰留白＝保留原值；只有明確勾選清除才會刪除。"
+        };
+        table.Controls.Add(note,0,0);
+        table.SetColumnSpan(note,3);
+        var seller=UiControls.TextBox(8);
+        seller.Text=current?.SellerInvoice??string.Empty;
+        var key=UiControls.TextBox(512);
+        var mo=UiControls.TextBox(256);
+        key.UseSystemPasswordChar=true;
+        mo.UseSystemPasswordChar=true;
+        key.PlaceholderText="留白保留雲端 App Key";
+        mo.PlaceholderText="留白保留雲端密碼";
+        var clearKey=new CheckBox{Text="清除",AutoSize=true,
+            Enabled=current?.HasAmegoAppKey==true};
+        var clearMo=new CheckBox{Text="清除",AutoSize=true,
+            Enabled=current?.HasMoExcelPassword==true};
+        clearKey.CheckedChanged+=(_,_)=>{key.Enabled=!clearKey.Checked;
+            if(clearKey.Checked)key.Clear();};
+        clearMo.CheckedChanged+=(_,_)=>{mo.Enabled=!clearMo.Checked;
+            if(clearMo.Checked)mo.Clear();};
+        table.Controls.Add(new Label{Text="公司統編",Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.MiddleLeft},0,1);
+        table.Controls.Add(seller,1,1);
+        table.SetColumnSpan(seller,2);
+        table.Controls.Add(new Label{Text="光貿 App Key",Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.MiddleLeft},0,2);
+        table.Controls.Add(key,1,2);
+        table.Controls.Add(clearKey,2,2);
+        table.Controls.Add(new Label{Text="MO店+ 密碼",Dock=DockStyle.Fill,
+            TextAlign=ContentAlignment.MiddleLeft},0,3);
+        table.Controls.Add(mo,1,3);
+        table.Controls.Add(clearMo,2,3);
+        var buttons=new FlowLayoutPanel{
+            Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft
+        };
+        var apply=UiControls.StandardButton("確認修改");
+        var cancel=UiControls.StandardButton("取消");
+        cancel.DialogResult=DialogResult.Cancel;
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(apply);
+        table.Controls.Add(buttons,0,4);
+        table.SetColumnSpan(buttons,3);
+        editor.Controls.Add(table);
+        editor.CancelButton=cancel;
+        apply.Click+=(_,_)=>{
+            var sellerId=seller.Text.Trim();
+            if(sellerId.Length!=8||!sellerId.All(char.IsAsciiDigit)){
+                MessageBox.Show(editor,"請輸入八位數公司統編。",
+                    "統編不正確",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                return;
+            }
+            if(sellerId==(current?.SellerInvoice??string.Empty)&&
+                key.Text.Length==0&&mo.Text.Length==0&&
+                !clearKey.Checked&&!clearMo.Checked){
+                MessageBox.Show(editor,"沒有資料變更，請取消。",
+                    "沒有修改",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            editor.DialogResult=DialogResult.OK;
+        };
+        if(editor.ShowDialog(this)!=DialogResult.OK)return null;
+        var keyAction=clearKey.Checked?CloudCompanySecretChange.Clear():
+            key.Text.Length!=0?CloudCompanySecretChange.Replace(key.Text):
+                CloudCompanySecretChange.Keep();
+        var moAction=clearMo.Checked?CloudCompanySecretChange.Clear():
+            mo.Text.Length!=0?CloudCompanySecretChange.Replace(mo.Text):
+                CloudCompanySecretChange.Keep();
+        var change=new CloudCompanySettingsEdit(current?.Revision??0,
+            seller.Text.Trim(),keyAction,moAction);
+        key.Clear();
+        mo.Clear();
+        return change;
+    }
+
+    private static string SecretActionLabel(string action)=>action switch{
+        "replace"=>"取代（不顯示內容）",
+        "clear"=>"明確清除",
+        _=>"保留原值"
+    };
 
     private async Task OpenDeviceManagementAsync()
     {

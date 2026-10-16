@@ -47,6 +47,25 @@ internal static class CloudCompanySettingsClientTests
         });
         handler.Enqueue(request =>
         {
+            Check(request,"update");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var obj=body.RootElement;
+            Equal(1,obj.GetProperty("expectedRevision").GetInt32(),"no stale version write");
+            Equal("keep",obj.GetProperty("amegoAppKey").GetProperty("action").GetString(),
+                "an empty App Key is kept");
+            True(!obj.GetProperty("amegoAppKey").TryGetProperty("value",out _),
+                "keep never exposes old App Key");
+            Equal("clear",obj.GetProperty("moExcelPassword").GetProperty("action").GetString(),
+                "deletion is explicit");
+            return Json(HttpStatusCode.OK,Reply(2,false));
+        });
+        handler.Enqueue(request =>
+        {
+            Check(request,"get");
+            return Json(HttpStatusCode.OK,Reply(2,false));
+        });
+        handler.Enqueue(request =>
+        {
             Check(request, "update");
             return Json(HttpStatusCode.Conflict,
                 new { ok = false, error = new { code = "COMPANY_CONFLICT_READBACK_REQUIRED" } });
@@ -63,6 +82,13 @@ internal static class CloudCompanySettingsClientTests
         True(created.HasAmegoAppKey, "app key configured");
         True(!created.HasMoExcelPassword, "MO remains unset");
         Equal(created, await client.GetAsync("0001", "SyntheticPass12"), "safe readback");
+        var updated=await client.UpdateAsync(new CloudCompanySettingsEdit(1,"12345678",
+            CloudCompanySecretChange.Keep(),CloudCompanySecretChange.Clear()),
+            "0001","SyntheticPass12");
+        Equal(2,updated.Revision,"explicit clear advances the revision only once");
+        True(updated.HasAmegoAppKey,"unchanged App Key is retained");
+        Equal(updated,await client.GetAsync("0001","SyntheticPass12"),
+            "readback contains safe metadata only");
         try
         {
             await client.UpdateAsync(new CloudCompanySettingsEdit(1, "12345678",

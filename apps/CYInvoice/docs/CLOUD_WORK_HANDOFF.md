@@ -43,6 +43,8 @@
 
 **步驟 5 小提交 4（本輪）：** `9ef66a8` 已全套 CI 通過；既有 Windows 設定選單 `SettingsForm` 的正式公司欄旁新增唯讀「CYID 公司卡」查詢，使用既有 `CloudCompanySettingsClient.GetAsync` 取得 D1 安全中繼資料（統編／revision／兩種密鑰是否設定）並經 CYID 管理員當次驗證，不取回明文憑證、不從本機設定覆寫雲端。沒有新對話框或資料模型（僅 MessageBox 顯示結果），且只在完整 CYID Cloud 裝置啟用；Startup smoke 已納入位置與 Enabled 核對。CI 待 exact SHA 驗證。下一個小項目將復用現有 Update API 處理超級管理員明確編輯，不擴建另一套設定架構。
 
+**步驟 5 小提交 5（本輪）：** 原 `SettingsForm`「CYID 公司卡」加入超級管理員明確編輯（臨時簡潔表單，不建新設定系統）。只以 GET 取得 D1 權威統編與版次，雲端金鑰從不預填。空欄 keep、明確勾選才 clear、填新值 replace；二次確認後恰好一次 UpdateAsync。後端 CYID 超管／Device／revision／Audit 保護保持不變；逾時／衝突只讀回最新安全狀態，不自動重送，無本機同步。Core 合成測試加入 keep/clear 及 stale revision。**Draft Source，本輪 CI 須 exact-head 驗證，正式 Cloud 資源未操作。**
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
