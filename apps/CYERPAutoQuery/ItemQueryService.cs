@@ -14,6 +14,7 @@ internal sealed class ItemQueryService
     private const int QueryDialogWaitMs = 3000;
     private const int QueryRunWaitMs = 15000;
     private const int RecordWaitMs = 5000;
+    private const int EmptyRecordStableMs = 800;
     private const int TabWaitMs = 1200;
 
     private readonly AppLogger _log;
@@ -54,6 +55,11 @@ internal sealed class ItemQueryService
         progress.Report("ERP：查詢中…");
         await ConfirmQueryAsync(root, dialog, cancellationToken);
         var header = await WaitForRecordAsync(root, page, code, cancellationToken);
+        if (header is null)
+        {
+            _log.Info("query", $"not found item={_log.Value(code)} elapsed_ms={watch.ElapsedMilliseconds}");
+            return ItemQueryResult.NotFound(code, watch.Elapsed);
+        }
 
         var fields = new List<ErpFieldValue>(ReadFields(ItemQueryResult.HeaderGroup, header.Inputs));
         foreach (var tab in Invi02Layout.ReadTabs)
@@ -81,6 +87,26 @@ internal sealed class ItemQueryService
             watch.Elapsed);
         _log.Info("query", $"done item={_log.Value(code)} fields={fields.Count} elapsed_ms={watch.ElapsedMilliseconds}");
         return result;
+    }
+
+    /// <summary>Read-only status probe for the UI status badge; never writes to ERP and never logs.</summary>
+    public Invi02Status ProbeStatus()
+    {
+        try
+        {
+            var windows = Win32Automation.FindInvi02Windows();
+            if (windows.Count == 0) return Invi02Status.NotOpen;
+            if (windows.Count > 1) return Invi02Status.Multiple;
+            var root = windows[0];
+            if (!NativeMethods.IsWindowEnabled(root)) return Invi02Status.DialogOpen;
+            var header = ResolveHeader(root, FindMainPageControl(root));
+            if (!header.ItemCode.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase)) return Invi02Status.Unknown;
+            return Win32Automation.IsReadOnly(header.ItemCode.Handle) ? Invi02Status.Browse : Invi02Status.Editing;
+        }
+        catch (InvalidOperationException)
+        {
+            return Invi02Status.Unknown;
+        }
     }
 
     private nint FindSingleInvi02()
@@ -291,22 +317,32 @@ internal sealed class ItemQueryService
         }
     }
 
-    private async Task<HeaderControls> WaitForRecordAsync(nint root, WindowControl page, string code, CancellationToken cancellationToken)
+    /// <summary>
+    /// The record ERP shows after the query, or null when there is none: for a 品號 that does
+    /// not exist ERP goes to 資料瀏覽 with an empty list and an empty header (user, 2026-10-16),
+    /// so a 品號 field that stays empty for a moment means not found.
+    /// </summary>
+    private async Task<HeaderControls?> WaitForRecordAsync(nint root, WindowControl page, string code, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + RecordWaitMs;
+        long? emptySince = null;
         var shown = string.Empty;
         while (true)
         {
             var header = ResolveHeader(root, page);
             shown = (NativeMethods.ControlText(header.ItemCode.Handle) ?? string.Empty).Trim();
             if (ItemCodeRules.SameCode(shown, code)) return header;
+            if (shown.Length == 0)
+            {
+                emptySince ??= Environment.TickCount64;
+                if (Environment.TickCount64 - emptySince >= EmptyRecordStableMs) return null;
+            }
+            else emptySince = null;
             if (Environment.TickCount64 > deadline) break;
-            await Pace.Delay(120, cancellationToken);
+            await Pace.Delay(100, cancellationToken);
         }
         _log.Warn("query", $"record mismatch shown={_log.Value(shown)}");
-        throw new InvalidOperationException(shown.Length == 0
-            ? $"查無品號「{code}」。"
-            : $"查無品號「{code}」（ERP 目前顯示的是「{shown}」）。");
+        throw new InvalidOperationException($"查詢「{code}」後 ERP 顯示的是另一個品號「{shown}」，結果不採用，請人工確認。");
     }
 
     // ---- tabs -------------------------------------------------------------------------
@@ -401,6 +437,8 @@ internal sealed class ItemQueryService
         return NativeMethods.ControlText(control.Handle)?.Trim() ?? "（讀取逾時）";
     }
 }
+
+internal enum Invi02Status { NotOpen, Multiple, Browse, Editing, DialogOpen, Unknown }
 
 /// <summary>Delays that also stop the automation when the user presses Esc.</summary>
 internal static class Pace

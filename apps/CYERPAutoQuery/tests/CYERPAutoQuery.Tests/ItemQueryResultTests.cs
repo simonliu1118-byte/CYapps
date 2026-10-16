@@ -21,3 +21,16 @@ public class ItemQueryResultTests
         Assert.Equal("基本資料1\t第 1 列第 2 欄\tTDBMemo\ta b / c", lines[2]);
     }
 }
+
+public class ItemQueryNotFoundTests
+{
+    [Fact]
+    public void NotFoundHasNoFields()
+    {
+        var result = ItemQueryResult.NotFound("X9", TimeSpan.FromSeconds(2));
+        Assert.False(result.Found);
+        Assert.Empty(result.Fields);
+        Assert.Equal("X9", result.ItemCode);
+        Assert.True(new ItemQueryResult("X1", "", "", [], TimeSpan.Zero).Found);
+    }
+}

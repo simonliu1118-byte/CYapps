@@ -22,6 +22,12 @@ internal sealed record ItemQueryResult(
 {
     public const string HeaderGroup = "表頭";
 
+    /// <summary>False when ERP has no such 品號 (the query left the record empty).</summary>
+    public bool Found { get; init; } = true;
+
+    public static ItemQueryResult NotFound(string itemCode, TimeSpan elapsed) =>
+        new(itemCode, string.Empty, string.Empty, [], elapsed) { Found = false };
+
     /// <summary>Tab-separated text (with a header line) for pasting into Excel.</summary>
     public string ToTsv()
     {
