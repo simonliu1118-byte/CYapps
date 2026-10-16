@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 V3 續作：含稅原發票唯讀診斷（Draft Source）
+
+本輪沿用 #440 步驟 5，在 `allowance-item-validation.ts` 增加 `detail_vat=1` 的來源自洽性檢查：有限 7 位 BigInt 原品項算式、含稅合計，以及光貿已揭露稅額情形的 5% 含稅拆稅公式；未揭露稅額（例如一般 B2C）明確維持人工處理。對應 Synthetic Test 及 `CloudAllowanceManagerForm` 正體中文原因提示。**不把原含稅單價轉成 g0401 未稅單價；所有含稅案 fullyMatched=false／verifiedLines=0、canApprove=false、歷史餘額未核准**。無 D1／Worker 變更、真實光貿操作、部署或 Release；exact-head CI 依本輪 commit 結果另核。
+
 ## 2026-10-15 V3 新對話接續點：一步一提交（以此節覆蓋下方過時進度）
 
 **這次僅更新交接與唯一 TODO，不改功能、不部署。** GitHub：`simonliu1118-byte/CYapps`，V3 Draft [PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`。文件整理前最新**功能** HEAD `b55751f0156784ba4548bffac49e61b9b25af86a`：Cloud Validate ×2、Windows Client、Windows x64、Governance 均成功；Worker deploy skipped。**後續文檔 commit 不改功能，但新開發 commit 需要重新確認其 own exact-HEAD CI。**

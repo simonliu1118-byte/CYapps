@@ -22,7 +22,36 @@ const verify=(d=draft,o=official,gross=53)=>check(JSON.stringify(d),o,"AB1234567
 assert.deepEqual(verify(),{fullyMatched:true,
  reason:"SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE",verifiedLines:1});
 const fails=(d,o,gross,expected)=>assert.equal(verify(d,o,gross).reason,expected);
-fails(draft,{...official,detailVat:1},53,"ORIGINAL_TAX_BASIS_NOT_VERIFIED");
+// Gross original source totals can be independently checked without
+// authorizing the net-priced g0401 claim or any remaining balance.
+const grossOriginal={...official,detailVat:1,officialItems:[
+  {...official.officialItems[0],unit_price:"52.5",amount:"105"}
+]};
+assert.deepEqual(verify(draft,grossOriginal,53),{
+  fullyMatched:false,reason:"ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY",
+  verifiedLines:0
+});
+fails(draft,{...grossOriginal,detailVat:"1"},53,
+  "ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY");
+fails(draft,{...grossOriginal,invoiceTaxAmount:0},53,
+  "ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE");
+fails(draft,{...grossOriginal,invoiceGross:104},53,
+  "ORIGINAL_GROSS_TOTAL_MISMATCH");
+fails(draft,{...grossOriginal,invoiceTaxAmount:6},53,
+  "ORIGINAL_GROSS_TAX_ARITHMETIC_UNVERIFIED");
+fails(draft,{...grossOriginal,officialItems:[{...grossOriginal.officialItems[0],
+  unit_price:"49"}]},53,"ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+fails(draft,{...grossOriginal,officialItems:[
+  grossOriginal.officialItems[0],grossOriginal.officialItems[0]],
+  invoiceGross:210,invoiceTaxAmount:10},53,"ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+const mixedGross={...grossOriginal,invoiceGross:155,
+  officialItems:[...grossOriginal.officialItems,
+    {description:"Exempt",quantity:1,unit_price:50,amount:50,tax_type:3}]};
+fails(draft,mixedGross,53,"ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY");
+fails(draft,{...grossOriginal,existingAllowanceCount:1},53,
+  "OFFICIAL_STATE_NOT_SAFE");
+fails(draft,{...grossOriginal,detailVat:null},53,
+  "ORIGINAL_TAX_BASIS_NOT_VERIFIED");
 fails(draft,{...official,detailVat:null},53,"ORIGINAL_TAX_BASIS_NOT_VERIFIED");
 fails(draft,{...official,allowanceSummaryPresent:false},53,"OFFICIAL_STATE_NOT_SAFE");
 fails(draft,{...official,existingAllowanceCount:1},53,"OFFICIAL_STATE_NOT_SAFE");

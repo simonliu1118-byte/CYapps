@@ -99,6 +99,14 @@ internal sealed class CloudAllowanceManagerForm : Form
             {
                 "SOURCE_ITEMS_MATCHED_NO_PRIOR_ALLOWANCE" =>
                     "品項與稅額符合目前支援的核對條件；核准前仍會再查官方。",
+                "ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY" =>
+                    "含稅原品項與官方稅額算式一致，但未稅折讓品項及可折餘額未核准；須人工核對。",
+                "ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE" =>
+                    "含稅原品項總額可核對，但官方未提供可安全拆分的稅額；不得據此開立折讓。",
+                "ORIGINAL_GROSS_ITEMS_UNVERIFIED" or
+                "ORIGINAL_GROSS_TOTAL_MISMATCH" or
+                "ORIGINAL_GROSS_TAX_ARITHMETIC_UNVERIFIED" =>
+                    "含稅原品項、總額或稅額無法完整核對；請人工查核，不得核准。",
                 "ORIGINAL_TAX_BASIS_NOT_VERIFIED" =>
                     "原發票為含稅單價或計稅基礎未確認，不能自動核准；請人工核對。",
                 "OFFICIAL_STATE_NOT_SAFE" =>

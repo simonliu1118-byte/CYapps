@@ -61,6 +61,51 @@ export interface OfficialItemEvidence {
   existingAllowanceCount:number;
   officialItems:unknown;
 }
+// A gross-priced (detail_vat=1) invoice is NOT a g0401 net-price basis.
+// Verify only source arithmetic; NEVER return matched allowance lines.
+// Official B2C invoices can report tax 0 despite taxable gross prices.
+function inspectGrossOriginalForManualReview(evidence:OfficialItemEvidence):
+  AllowanceLineVerdict {
+  const reject=(reason:string):AllowanceLineVerdict=>({
+    fullyMatched:false,reason,verifiedLines:0
+  });
+  if(!day(evidence.invoiceDate))return reject("OFFICIAL_DATE_MISSING");
+  const gross=decimal(evidence.invoiceGross),tax=decimal(evidence.invoiceTaxAmount);
+  const rows=evidence.officialItems;
+  if(gross===null||tax===null||!Array.isArray(rows)||rows.length===0||
+     rows.length>9999)return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+  let total=0n,taxableGross=0n;
+  const names=new Set<string>();
+  for(const raw of rows){
+    const item=object(raw);
+    if(!item)return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+    const name=exactName(item.description),kind=integer(item.tax_type);
+    const quantity=decimal(item.quantity),price=decimal(item.unit_price);
+    const amount=decimal(item.amount);
+    if(!name||kind===null||kind<1||kind>3||quantity===null||
+       quantity<=0n||price===null||amount===null||amount<=0n||
+       lineAmount(quantity,price)!==amount)
+      return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+    // No stable official row ID for otherwise indistinguishable items.
+    const identity=JSON.stringify([name,kind,String(price)]);
+    if(names.has(identity))return reject("ORIGINAL_GROSS_ITEMS_UNVERIFIED");
+    names.add(identity);
+    total+=amount;
+    if(kind===1)taxableGross+=amount;
+  }
+  if(total!==gross)return reject("ORIGINAL_GROSS_TOTAL_MISMATCH");
+  if(tax===0n)return reject("ORIGINAL_GROSS_TAX_SPLIT_UNAVAILABLE");
+  // AMEGO's published detail_vat=1 calculation for a tax-split invoice:
+  // SalesAmount=Round(taxable gross), Tax=SalesAmount-Round(SalesAmount/1.05).
+  // This only diagnoses the original header; it cannot price a g0401 line.
+  const taxableWhole=roundedDividePositive(taxableGross,SCALE);
+  const expectedTax=(taxableWhole-
+    roundedDividePositive(taxableWhole*100n,105n))*SCALE;
+  if(tax!==expectedTax)
+    return reject("ORIGINAL_GROSS_TAX_ARITHMETIC_UNVERIFIED");
+  return reject("ORIGINAL_GROSS_SOURCE_VERIFIED_MANUAL_ONLY");
+}
+
 export function validateAllowanceOriginalItems(
   json:string, evidence:OfficialItemEvidence,
   requestedInvoice:string, requestedGross:number
@@ -70,8 +115,9 @@ export function validateAllowanceOriginalItems(
       evidence.cancelled||!evidence.allowanceSummaryPresent||
       evidence.existingAllowanceCount!==0)
     return failed("OFFICIAL_STATE_NOT_SAFE");
-  // detailVat must be EXPLICITLY zero. For 1, official amounts are gross
-  // and cannot be used as net g0401 allowance item proof.
+  // Gross source arithmetic is read-only evidence, never net g0401 proof.
+  if(evidence.detailVat===1||evidence.detailVat==="1")
+    return inspectGrossOriginalForManualReview(evidence);
   if(evidence.detailVat!==0 && evidence.detailVat!=="0")
     return failed("ORIGINAL_TAX_BASIS_NOT_VERIFIED");
   const originalDay=day(evidence.invoiceDate);
