@@ -37,6 +37,11 @@ public sealed record CloudHistoricalAllowanceSummary(
     string? AllowanceNumber,string? AllowanceDate,string? TotalAmount,
     string? TaxAmount,int? UploadStatus,string? CancelDate,bool MetadataComplete);
 
+public sealed record CloudHistoricalAllocationCheck(
+    string AllowanceNumber,string Reason,bool LineTotalsVerified,
+    string? OriginalNet,string? OriginalTax,string? OriginalGross,
+    bool SafeToInferRemainingBalance);
+
 public sealed record CloudOfficialAllowanceInspection(
     string ItemId, int Revision, string OriginalInvoiceNumber, DateTimeOffset CheckedAtUtc,
     string OfficialSnapshotSha256, int OfficialUploadStatus, bool Cancelled,
@@ -46,7 +51,9 @@ public sealed record CloudOfficialAllowanceInspection(
     bool RequiresPerItemVerification, bool CanApprove, string Status,
     bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck,
     IReadOnlyList<CloudHistoricalAllowanceSummary> AllowanceHistory,
-    bool SafeToInferRemainingBalance);
+    bool SafeToInferRemainingBalance,
+    IReadOnlyList<CloudHistoricalAllocationCheck> HistoricalAllocationChecks,
+    int HistoricalAllocationNotQueriedCount,bool HistoricalAllocationsComplete);
 
 public sealed record CloudAllowanceNumberReadback(
     string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
@@ -345,6 +352,52 @@ public sealed class CloudAllowanceApplicationClient
             history.Add(new CloudHistoricalAllowanceSummary(
                 number,date,amount,tax,state,cancel,completeHistory));
         }
+        if(!item.TryGetProperty("historicalAllocationChecks",out var checksRaw)||
+           checksRaw.ValueKind!=JsonValueKind.Array||
+           checksRaw.GetArrayLength()>3||
+           Boolean(item,"historicalAllocationsComplete"))
+            throw new InvalidDataException("Historical allocation checks do not authorize a balance.");
+        var skipped=Integer(item,"historicalAllocationNotQueriedCount");
+        if(skipped!=existing-checksRaw.GetArrayLength())
+            throw new InvalidDataException("History coverage count is inconsistent.");
+        var checks=new List<CloudHistoricalAllocationCheck>();
+        var checkIds=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var raw in checksRaw.EnumerateArray())
+        {
+            if(raw.ValueKind!=JsonValueKind.Object||raw.EnumerateObject().Count()!=7)
+                throw new InvalidDataException("Unexpected historical allocation fields.");
+            var number=Required(raw,"allowanceNumber");
+            var reason=Required(raw,"reason");
+            var verified=Boolean(raw,"lineTotalsVerified");
+            var safe=Boolean(raw,"safeToInferRemainingBalance");
+            if(safe||!checkIds.Add(number)||
+               !history.Any(h=>h.AllowanceNumber==number &&
+                   h.MetadataComplete&&h.UploadStatus==99&&h.CancelDate=="0")||
+               reason is not ("ALLOCATED_LINES_MATCH_HEADER" or
+                   "ITEM_AMOUNTS_UNVERIFIED" or "HEADER_TOTALS_MISMATCH" or
+                   "ORIGINAL_INVOICE_NOT_IN_ITEMS" or
+                   "OFFICIAL_STATUS_NOT_EFFECTIVE" or
+                   "OFFICIAL_SNAPSHOT_CHANGED" or
+                   "OFFICIAL_READBACK_UNCONFIRMED"))
+                throw new InvalidDataException("Historical allocation source is invalid.");
+            var net=TextField(raw,"originalNet",
+                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
+            var tax=TextField(raw,"originalTax",
+                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
+            var gross=TextField(raw,"originalGross",
+                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
+            if(verified!=(reason=="ALLOCATED_LINES_MATCH_HEADER")||
+               (verified&&(net is null||tax is null||gross is null))||
+               (!verified&&(net is not null||tax is not null||gross is not null)))
+                throw new InvalidDataException("Historical allocation certainty is inconsistent.");
+            if(verified &&
+               decimal.Parse(net!,System.Globalization.CultureInfo.InvariantCulture)+
+               decimal.Parse(tax!,System.Globalization.CultureInfo.InvariantCulture)!=
+               decimal.Parse(gross!,System.Globalization.CultureInfo.InvariantCulture))
+                throw new InvalidDataException("Historical allocation arithmetic disagrees.");
+            checks.Add(new CloudHistoricalAllocationCheck(
+                number,reason,verified,net,tax,gross,false));
+        }
         if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
             rawCheck.ValueKind!=JsonValueKind.Object ||
             !rawCheck.TryGetProperty("reason",out var reason) ||
@@ -370,7 +423,7 @@ public sealed class CloudAllowanceApplicationClient
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount),
-            history,false);
+            history,false,checks,skipped,false);
     }
 
     // The Worker owns the original D1 allowance number; callers cannot

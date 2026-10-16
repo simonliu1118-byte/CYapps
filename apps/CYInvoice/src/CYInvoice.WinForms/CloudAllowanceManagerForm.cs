@@ -122,11 +122,20 @@ internal sealed class CloudAllowanceManagerForm : Form
                 : "官方歷史折讓（最多列出前 8 筆）：\n"+
                   string.Join("\n",histories)+
                   (v.ExistingAllowanceCount>8?$"\n其餘 {v.ExistingAllowanceCount-8} 筆未列出。":"");
+            var allocationLines=v.HistoricalAllocationChecks.Select(x=>
+                $"  {x.AllowanceNumber}："+(x.LineTotalsVerified
+                    ?$"本張原發票分攤未稅 {x.OriginalNet}／稅 {x.OriginalTax}／含稅 {x.OriginalGross}"
+                    :"明細未核實（"+x.Reason+"）"));
+            var allocations=v.HistoricalAllocationChecks.Count==0
+                ?"本次沒有可核對的歷史折讓明細。"
+                :string.Join("\n",allocationLines);
             MessageBox.Show(this,
                 $"原發票：{v.OriginalInvoiceNumber}\n官方上傳狀態：{v.OfficialUploadStatus}\n"+
                 $"已存在折讓數：{v.ExistingAllowanceCount}\n"+
                 $"{historyText}\n"+
-                "歷史折讓摘要不代表本張原發票的已折讓或剩餘可折金額。\n"+
+                $"歷史原號詳查（最多 3 筆）：\n{allocations}\n"+
+                $"本次未詳查：{v.HistoricalAllocationNotQueriedCount} 筆\n"+
+                "此分攤僅供逐張人工核對；歷史範圍尚未完整驗證，不能推定剩餘可折額。\n"+
                 $"作廢或異動中：{(v.Cancelled||v.OfficialPendingMutation?"是":"否")}\n"+
                 $"品項比對：{v.ItemCheck.Reason}\n"+
                 $"處理提示：{guidance}\n"+

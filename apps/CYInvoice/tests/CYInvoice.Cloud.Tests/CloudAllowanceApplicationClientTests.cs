@@ -113,6 +113,14 @@ internal static class CloudAllowanceApplicationClientTests
                     totalAmount="50",taxAmount="3",uploadStatus=99,
                     cancelDate="0",metadataComplete=true
                 }},
+                historicalAllocationChecks=new[]{new{
+                    allowanceNumber="3821061800001",
+                    reason="ALLOCATED_LINES_MATCH_HEADER",
+                    lineTotalsVerified=true,originalNet="50",originalTax="3",
+                    originalGross="53",safeToInferRemainingBalance=false
+                }},
+                historicalAllocationNotQueriedCount=0,
+                historicalAllocationsComplete=false,
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -135,6 +143,9 @@ internal static class CloudAllowanceApplicationClientTests
                     totalAmount="50",taxAmount="3",uploadStatus=99,
                     cancelDate="0",metadataComplete=true
                 }},
+                historicalAllocationChecks=Array.Empty<object>(),
+                historicalAllocationNotQueriedCount=1,
+                historicalAllocationsComplete=false,
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -261,6 +272,9 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(true,official.RequiresPerItemVerification,"per-item verification remains required");
         Equal(0,official.ExistingAllowanceCount,"explicit no allowance summary");
         Equal(0,official.AllowanceHistory.Count,"zero historical entries");
+        Equal(0,official.HistoricalAllocationChecks.Count,"no detailed history readback");
+        Equal(0,official.HistoricalAllocationNotQueriedCount,"no unread history");
+        Equal(false,official.HistoricalAllocationsComplete,"coverage never inferred");
         Equal(false,official.SafeToInferRemainingBalance,"summary cannot authorize balance");
         Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
@@ -273,6 +287,12 @@ internal static class CloudAllowanceApplicationClientTests
             "legacy allowance number preserved");
         Equal(false,historical.SafeToInferRemainingBalance,
             "multi-invoice allocation remains unverified");
+        Equal(1,historical.HistoricalAllocationChecks.Count,
+            "one official original allocation readback");
+        Equal("53",historical.HistoricalAllocationChecks[0].OriginalGross,
+            "per-original gross, not full allowance gross");
+        Equal(false,historical.HistoricalAllocationsComplete,
+            "a historical readback never authorizes remaining balance");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         var readback=await client.ReadbackNumberForManagerAsync(Id,2,"0001","SyntheticPass12");
@@ -355,6 +375,9 @@ internal static class CloudAllowanceApplicationClientTests
         requiresPerItemVerification=true,canApprove=forgedApproval,
         officialPendingMutation=false,
         allowanceHistory=Array.Empty<object>(),
+        historicalAllocationChecks=Array.Empty<object>(),
+        historicalAllocationNotQueriedCount=0,
+        historicalAllocationsComplete=false,
         safeToInferRemainingBalance=false,
         itemCheck=new{
             fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0
