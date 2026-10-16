@@ -20,6 +20,7 @@ internal static class NativeMethods
     internal const uint WM_CHAR = 0x0102;
     internal const uint WM_SETTEXT = 0x000C;
     internal const uint WM_COPY = 0x0301;
+    internal const uint WM_PASTE = 0x0302;
     internal const uint EM_SETSEL = 0x00B1;
 
     internal const uint INPUT_KEYBOARD = 1;

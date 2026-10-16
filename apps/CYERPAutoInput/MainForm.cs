@@ -820,24 +820,26 @@ internal sealed partial class MainForm : Form
     {
         RefreshErpState();
         var state = _shownState;
-        if (state is not (ErpDocumentState.MultipleWindows or ErpDocumentState.NotFound))
+        // No COPI08 open: the run opens it through 作業速查 (user, 2026-10-17, as CYERPAutoQuery).
+        if (state == ErpDocumentState.NotFound) return true;
+        if (state != ErpDocumentState.MultipleWindows)
         {
-            var copi = Win32Automation.FindCopi08Windows();
-            var others = copi.Count == 1 ? Win32Automation.FindVisibleProcessPeerWindows(copi[0]) : [];
+            var copi = _automation.SelectCopi08(out _);
+            var others = copi != 0 ? Win32Automation.FindVisibleProcessPeerWindows(copi) : [];
             if (others.Count == 0) return true;
             var names = others.Select(NativeMethods.WindowText).Where(t => t.Trim().Length > 0).Distinct().ToList();
             _log.Info("automation", $"entry refused: erp has {others.Count} other window(s)");
             MessageBox.Show(this, "ERP 目前有其他視窗開著" + (names.Count > 0 ? $"（{string.Join("、", names)}）" : string.Empty) +
-                    "。\n\n請先關閉，只留銷貨單建立作業（COPI08），再開始。", "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "。\n\n請先關閉這些對話框再開始。", "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        MessageBox.Show(this, state == ErpDocumentState.MultipleWindows
-                ? "偵測到不只一個 COPI08（銷貨單建立作業）視窗。\n\n請只保留一個，關掉其他的之後再開始，避免輸入到錯誤的視窗。"
-                : "找不到 SMART ERP COPI08 視窗。\n\n請先開啟銷貨單建立作業再開始。",
-            "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(this, MultipleCopi08Message, "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         _log.Info("automation", $"entry refused: erp state {state}");
         return false;
     }
+
+    private const string MultipleCopi08Message =
+        "開著多個銷貨單建立作業（COPI08），但沒有一個在檢視狀態。\n\n請把其中一個儲存或取消後再開始。";
 
     /// <summary>
     /// Safeguard (user, 2026-10-10): when ERP is already in 新增／修改, CY asks before
@@ -851,13 +853,10 @@ internal sealed partial class MainForm : Form
         var state = _shownState;
         // Checked before anything starts (user, 2026-10-13: from the MO店+ preview two COPI08
         // windows ended in an error mid-run), so the preview comes back unchanged.
-        if (state is ErpDocumentState.MultipleWindows or ErpDocumentState.NotFound)
+        if (state == ErpDocumentState.MultipleWindows)
         {
             _automationSession?.End();
-            MessageBox.Show(this, state == ErpDocumentState.MultipleWindows
-                    ? "偵測到不只一個 COPI08（銷貨單建立作業）視窗。\n\n請只保留一個，關掉其他的之後再開始，避免輸入到錯誤的視窗。"
-                    : "找不到 SMART ERP COPI08 視窗。\n\n請先開啟銷貨單建立作業再開始。",
-                "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, MultipleCopi08Message, "ERP 視窗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             _log.Info("automation", $"start refused: erp state {state}");
             return false;
         }
@@ -1945,7 +1944,7 @@ internal sealed partial class MainForm : Form
                 {
                     _log.Error("import", ex);
                     var createdNumber = _automation.LastSalesOrderNumber;
-                    if (createdNumber.Length == 0 && Win32Automation.FindCopi08Windows().Count == 1 &&
+                    if (createdNumber.Length == 0 && _automation.SelectCopi08(out _) != 0 &&
                         _automation.ProbeStatus().Mode == ErpMode.Browse)
                     {
                         failed.Add($"{order.OrderSn}：{ex.Message}");
