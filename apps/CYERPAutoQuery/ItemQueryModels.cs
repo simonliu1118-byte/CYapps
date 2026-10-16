@@ -7,9 +7,8 @@ namespace CYERPAutoQuery;
 internal sealed record ErpField(string Name, string Value);
 
 /// <summary>
-/// One 品號 as ERP exports it from INVI02: 單頭資料 (one row, about 150 named columns) and
-/// 單身資料 (one row per 庫別). The names are ERP's own column titles; which ones a caller
-/// keeps (the Web contract) is decided later.
+/// One 品號: the <see cref="ItemFieldCatalog"/> fields of ERP's INVI02 export, 單頭 (one
+/// row) and 單身 (one row per 庫別), labelled and in catalog order.
 /// </summary>
 internal sealed record ItemQueryResult(
     string ItemCode,
@@ -75,7 +74,10 @@ internal static class Invi02Export
         var detail = sheets.FirstOrDefault(s => s.Name == DetailSheet);
         if (detail.Rows is null)
             throw new InvalidDataException("ERP 匯出的 Excel 沒有「單身資料」（庫別）。請確認匯出前停在「基本資料1」頁籤。");
-        return (fields, Table(detail.Rows, "庫別", "單身"));
+        var warehouses = Table(detail.Rows, "庫別", "單身")
+            .Select(row => ItemFieldCatalog.Select(row, ItemFieldCatalog.Warehouse, "單身資料"))
+            .ToList();
+        return (ItemFieldCatalog.Select(fields, ItemFieldCatalog.Header, "單頭資料"), warehouses);
     }
 
     /// <summary>Rows under the title row that starts with <paramref name="firstTitle"/>, as named fields.</summary>
