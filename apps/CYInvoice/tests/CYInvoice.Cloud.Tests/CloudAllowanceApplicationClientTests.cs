@@ -107,24 +107,13 @@ internal static class CloudAllowanceApplicationClientTests
                 zeroExistingAllowances=false,invoiceGrossEnough=true,
                 officialProductsPresent=true,requiresPerItemVerification=true,
                 canApprove=false,officialPendingMutation=false,
-                itemCheck=new{fullyMatched=false,reason="OFFICIAL_STATE_NOT_SAFE",verifiedLines=0},
-                safeToInferRemainingBalance=false,
+                itemCheck=new{fullyMatched=true,
+                    reason="REQUEST_TOTALS_WITHIN_REMAINING",verifiedLines=1},
                 allowanceHistory=new[]{new{
                     allowanceNumber="3821061800001",allowanceDate="20261015",
-                    totalAmount="50",taxAmount="3",uploadStatus=99,
+                    totalAmount="20",taxAmount="1",uploadStatus=99,
                     cancelDate="0",metadataComplete=true
                 }},
-                historicalAllocationChecks=new[]{new{
-                    allowanceNumber="3821061800001",
-                    reason="ALLOCATED_LINES_MATCH_HEADER",
-                    lineTotalsVerified=true,originalNet="50",originalTax="3",
-                    originalGross="53",safeToInferRemainingBalance=false
-                }},
-                historicalAllocationNotQueriedCount=0,
-                historicalAllocationsComplete=false,
-                historicalCoverageReason="HISTORY_RANGE_NOT_PROVEN",
-                historicalGrossCeilingStatus="KNOWN_CEILING_ONLY",
-                historicalKnownGross="53",historicalRemainingCeiling="47",
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
@@ -140,34 +129,35 @@ internal static class CloudAllowanceApplicationClientTests
                 zeroExistingAllowances=false,invoiceGrossEnough=true,
                 officialProductsPresent=true,requiresPerItemVerification=true,
                 canApprove=false,officialPendingMutation=false,
-                itemCheck=new{fullyMatched=false,reason="OFFICIAL_STATE_NOT_SAFE",verifiedLines=0},
-                safeToInferRemainingBalance=true,
+                itemCheck=new{fullyMatched=true,
+                    reason="REQUEST_TOTALS_WITHIN_REMAINING",verifiedLines=1},
                 allowanceHistory=new[]{new{
                     allowanceNumber="3821061800001",allowanceDate="20261015",
                     totalAmount="50",taxAmount="3",uploadStatus=99,
                     cancelDate="0",metadataComplete=true
                 }},
-                historicalAllocationChecks=Array.Empty<object>(),
-                historicalAllocationNotQueriedCount=1,
-                historicalAllocationsComplete=false,
-                historicalCoverageReason="DETAIL_QUERY_LIMITED",
-                historicalGrossCeilingStatus="NOT_AVAILABLE",
-                historicalKnownGross=(string?)null,historicalRemainingCeiling=(string?)null,
                 status="OFFICIAL_READ_ONLY_NOT_APPROVED"
             }});
         });
         handler.Enqueue(req => {
             Check(req,"official-inspection");
             var forged=JsonNode.Parse(JsonSerializer.Serialize(OfficialStatus(false)))!;
-            forged["historicalCoverageReason"]="HISTORY_RANGE_NOT_PROVEN";
+            forged["existingAllowanceCount"]=1; // list is still empty: impossible
             return Json(HttpStatusCode.OK,new{ok=true,inspection=forged});
         });
         handler.Enqueue(req => {
             Check(req,"official-inspection");
             var forged=JsonNode.Parse(JsonSerializer.Serialize(OfficialStatus(false)))!;
-            forged["historicalGrossCeilingStatus"]="KNOWN_CEILING_ONLY";
-            forged["historicalKnownGross"]="0";
-            forged["historicalRemainingCeiling"]="100";
+            forged["existingAllowanceCount"]=1;
+            forged["zeroExistingAllowances"]=false;
+            forged["allowanceHistory"]=JsonSerializer.SerializeToNode(new[]{new {
+                allowanceNumber="3821061800001",allowanceDate="20261015",
+                totalAmount="60",taxAmount="0",uploadStatus=99,
+                cancelDate="0",metadataComplete=true
+            }});
+            forged["itemCheck"]=JsonSerializer.SerializeToNode(new {
+                fullyMatched=true,reason="REQUEST_TOTALS_WITHIN_REMAINING",verifiedLines=1
+            });
             return Json(HttpStatusCode.OK,new{ok=true,inspection=forged});
         });
         handler.Enqueue(req => {
@@ -293,15 +283,6 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(true,official.RequiresPerItemVerification,"per-item verification remains required");
         Equal(0,official.ExistingAllowanceCount,"explicit no allowance summary");
         Equal(0,official.AllowanceHistory.Count,"zero historical entries");
-        Equal(0,official.HistoricalAllocationChecks.Count,"no detailed history readback");
-        Equal(0,official.HistoricalAllocationNotQueriedCount,"no unread history");
-        Equal(false,official.HistoricalAllocationsComplete,"coverage never inferred");
-        Equal("NO_HISTORY_REPORTED_NOT_PROOF",official.HistoricalCoverageReason,
-            "zero visible history cannot prove entire range");
-        Equal("NOT_AVAILABLE",official.HistoricalGrossCeilingStatus,
-            "no history cannot yield an authorized balance");
-        True(official.HistoricalRemainingCeiling is null,"unknown ceiling is null");
-        Equal(false,official.SafeToInferRemainingBalance,"summary cannot authorize balance");
         Equal(false,official.ItemCheck.FullyMatched,"missing original net details remain unverified");
         Equal("ORIGINAL_TAX_BASIS_NOT_VERIFIED",official.ItemCheck.Reason,"safe reason preserved");
         await RejectAsync<InvalidDataException>(() =>
@@ -311,20 +292,10 @@ internal static class CloudAllowanceApplicationClientTests
         Equal(1,historical.AllowanceHistory.Count,"official historical records visible");
         Equal("3821061800001",historical.AllowanceHistory[0].AllowanceNumber,
             "legacy allowance number preserved");
-        Equal(false,historical.SafeToInferRemainingBalance,
-            "multi-invoice allocation remains unverified");
-        Equal(1,historical.HistoricalAllocationChecks.Count,
-            "one official original allocation readback");
-        Equal("53",historical.HistoricalAllocationChecks[0].OriginalGross,
-            "per-original gross, not full allowance gross");
-        Equal(false,historical.HistoricalAllocationsComplete,
-            "a historical readback never authorizes remaining balance");
-        Equal("HISTORY_RANGE_NOT_PROVEN",historical.HistoricalCoverageReason,
-            "matched details do not prove entire history");
-        Equal("KNOWN_CEILING_ONLY",historical.HistoricalGrossCeilingStatus,
-            "known verified rows permit only a ceiling");
-        Equal("53",historical.HistoricalKnownGross,"verified historic gross");
-        Equal("47",historical.HistoricalRemainingCeiling,"non-authorizing upper ceiling");
+        Equal(true,historical.ItemCheck.FullyMatched,
+            "confirmed historical gross 21 leaves 79 for requested 50");
+        Equal(false,historical.CanApprove,
+            "read-only inspection never authorizes issuance");
         await RejectAsync<InvalidDataException>(() =>
             client.InspectOfficialForManagerAsync(Id,2,"0001","SyntheticPass12"));
         await RejectAsync<InvalidDataException>(() =>
@@ -411,13 +382,6 @@ internal static class CloudAllowanceApplicationClientTests
         requiresPerItemVerification=true,canApprove=forgedApproval,
         officialPendingMutation=false,
         allowanceHistory=Array.Empty<object>(),
-        historicalAllocationChecks=Array.Empty<object>(),
-        historicalAllocationNotQueriedCount=0,
-        historicalAllocationsComplete=false,
-        historicalCoverageReason="NO_HISTORY_REPORTED_NOT_PROOF",
-        historicalGrossCeilingStatus="NOT_AVAILABLE",
-        historicalKnownGross=(string?)null,historicalRemainingCeiling=(string?)null,
-        safeToInferRemainingBalance=false,
         itemCheck=new{
             fullyMatched=false,reason="ORIGINAL_TAX_BASIS_NOT_VERIFIED",verifiedLines=0
         },

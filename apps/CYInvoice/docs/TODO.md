@@ -10,11 +10,13 @@
 
 ## 2026-10-16 V3 逐項交付索引（最新權威快照）
 
-> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `4c897a44257de764c87d6ba3130e89327f5a1d56`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
+> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `a1e6090c28fcd85e0ab0fffaf88cafb31be28111`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
 
-- [x] **逐品項歷史查回移除（Draft，待 exact-head CI）**：CYID 管理員的 `official-inspection` 不再為了推算已折讓商品數量而額外呼叫每張 `allowance_query`；使用單次 `invoice_query.allowance[]` 及其已生效含稅總額進行本次折讓上限驗證。舊歷史分攤／「已知剩餘上限」僅保留回應欄位空值供現有 Windows 契約相容，**不能**取代餘額驗證。原 D1 配號的 `number-readback`／`reconcile`、CYID／CAS 不變。Cloud source 及合成回歸測試尚未實機驗收。
+- [x] **逐品項歷史查回移除（Draft，已通過 a1e6090c CI）**：CYID 管理員的 `official-inspection` 不再為了推算已折讓商品數量而額外呼叫每張 `allowance_query`；使用單次 `invoice_query.allowance[]` 及其已生效含稅總額進行本次折讓上限驗證。舊歷史分攤／「已知剩餘上限」僅保留回應欄位空值供現有 Windows 契約相容，**不能**取代餘額驗證。原 D1 配號的 `number-readback`／`reconcile`、CYID／CAS 不變。Cloud source 及合成回歸測試尚未實機驗收。
 
 - [x] **刪除未使用的歷史逐品項折讓數量推算（Draft）**：`amego-allowance-query.ts` 的 `originalAllocation`、`knownOriginalQuantities`、原品項日期／單價／數量對照 helpers 與舊測試已退役。保留 `allowance_query` 原號、折讓日期、含稅金額組成、有效狀態、原發票集合、Snapshot hash 及禁止重送確認；絕不由歷史細項推測商品剩餘數量。這是本次確定沒有正式路由依賴後的 source 精簡，仍需以新 HEAD CI 證明。
+
+- [x] **Windows Cloud 歷史分攤欄位退役（Draft，待 exact HEAD CI）**：Worker `official-inspection` 不再輸出 `historicalAllocationChecks`／`historicalCoverageReason`／`historicalGrossCeiling` 等無人使用的推算欄位；Windows `CloudAllowanceApplicationClient` 同步刪除解析 DTO 與歷史推算邏輯，改為只驗證 `invoice_query.allowance[]` 的原號、日期、已完成／作廢狀態及「本次含稅額 ≤ 原額－已生效折讓總額」。Worker 仍 `canApprove=false` 唯讀，CYID、D1、CAS、原號查回及正式核准前重查不變。Cloud／Windows 合成回歸測試同步更新，不代表 D1 或真光貿實機驗收。
 
 ### 已合入此 Draft 分支的功能（尚未上線）
 

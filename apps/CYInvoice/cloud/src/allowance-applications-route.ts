@@ -552,23 +552,6 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
          !["ADMIN","SUPER_ADMIN"].includes(lastAuthority.workspaceRole)||
          lastDevice?.device_id!==d.device_id)
         return response(403,{error:{code:"AUTHORITY_CHANGED"}});
-      // Preserve compatibility-only diagnostics; all per-product history fields
-      // are empty and non-authorizing. Official history is still the original
-      // invoice_query allowance[] for the actual remaining-gross check.
-      const checks:never[]=[];
-      const knownIds=snapshot.allowanceHistory.map(h=>h.allowanceNumber)
-        .filter((id):id is string=>id!==null);
-      const historicalCoverageReason=
-        !snapshot.allowanceSummaryPresent?"SUMMARY_NOT_PROVIDED":
-        snapshot.hasUnsettledMutation?"PENDING_OFFICIAL_MUTATION":
-        snapshot.allowanceHistory.some(h=>!h.metadataComplete)?"SUMMARY_METADATA_INCOMPLETE":
-        new Set(knownIds).size!==knownIds.length?"DUPLICATE_HISTORY_NUMBER":
-        snapshot.allowanceHistory.some(h=>h.uploadStatus!==99||h.cancelDate!=="0")
-          ?"HISTORY_STATUS_NOT_EFFECTIVE":
-        snapshot.existingAllowanceCount>0?"DETAIL_QUERY_LIMITED":
-        "NO_HISTORY_REPORTED_NOT_PROOF";
-      const ceiling={status:"NOT_AVAILABLE" as const,knownGross:null,
-        remainingCeiling:null};
       // Minimal status only: no key, buyer PII or raw official line items.
       const flags={
         uploadComplete:snapshot.uploadStatus===99,
@@ -589,14 +572,6 @@ export async function handleAllowanceApplications(request:Request,env:Env):Promi
         requestedGrossAmount:frozen.requestedGrossAmount,
         existingAllowanceCount:snapshot.existingAllowanceCount,
         allowanceHistory:snapshot.allowanceHistory,
-        historicalAllocationChecks:checks,
-        historicalAllocationNotQueriedCount:snapshot.existingAllowanceCount-checks.length,
-        historicalAllocationsComplete:false,
-        historicalCoverageReason,
-        historicalGrossCeilingStatus:ceiling.status,
-        historicalKnownGross:ceiling.knownGross,
-        historicalRemainingCeiling:ceiling.remainingCeiling,
-        safeToInferRemainingBalance:false,
         officialPendingMutation:snapshot.hasUnsettledMutation,
         itemCheck,
         ...flags,

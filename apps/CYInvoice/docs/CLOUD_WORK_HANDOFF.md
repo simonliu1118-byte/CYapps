@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-16 Worker／Windows 歷史分攤回應欄位退役（Draft）
+
+沿用原本 `official-inspection` API 與 Windows Client；移除 Worker 中永遠只回空陣列／null 的 `historicalAllocationChecks`、`historicalCoverageReason`、`historicalKnownGross`、`historicalRemainingCeiling`、`safeToInferRemainingBalance` 等舊欄位，Windows 同步移除對應 DTO／解析器。改為保留真正的 `invoice_query.allowance[]`、原發票含稅額、本次申請總額、不可變本次檢查結論，以及本機獨立加總／驗證完成未作廢折讓、重複號、未決狀態；僅唯讀診斷，不是管理員核准。尚未部署任何新 Worker／D1；傳輸契約一次同步更新於 Draft，真環境要同版接入才可用。此前歷史章節關於逐品項／歷史範圍推算均已由此章覆蓋。
+
 ## 2026-10-16 移除無呼叫者的歷史逐品項助手（Draft）
 
 確認 `allowance-applications-route.ts` 已不讀 `originalAllocation`／`knownOriginalQuantities`，其餘折讓發票／作廢／配號核心亦無引用；刪除 `amego-allowance-query.ts` 內逐商品歷史數量推算與原發票 snapshot index 對應。原號唯讀查回仍核實光貿原號、來源發票集合、日期、金額、上傳與作廢狀態，不宣稱無人可知的退款剩餘數量或自動確認。歷史數量相關合成測試改成原號回查、跨發票拒絕、狀態未知與防重送測試；這一層不更動 CYID／CAS／D1。

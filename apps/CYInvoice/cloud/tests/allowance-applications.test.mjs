@@ -211,15 +211,8 @@ try {
   assert.equal(firstInspection.data.inspection.requiresPerItemVerification,true);
   assert.equal(firstInspection.data.inspection.zeroExistingAllowances,true);
   assert.deepEqual(firstInspection.data.inspection.allowanceHistory,[]);
-  assert.deepEqual(firstInspection.data.inspection.historicalAllocationChecks,[]);
-  assert.equal(firstInspection.data.inspection.historicalAllocationNotQueriedCount,0);
-  assert.equal(firstInspection.data.inspection.historicalAllocationsComplete,false);
-  assert.equal(firstInspection.data.inspection.historicalCoverageReason,
-    "NO_HISTORY_REPORTED_NOT_PROOF");
-  assert.equal(firstInspection.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
-  assert.equal(firstInspection.data.inspection.historicalKnownGross,null);
-  assert.equal(firstInspection.data.inspection.historicalRemainingCeiling,null);
-  assert.equal(firstInspection.data.inspection.safeToInferRemainingBalance,false);
+  assert.equal(Object.hasOwn(firstInspection.data.inspection,"historicalAllocationChecks"),false,
+    "Obsolete per-product inference must not appear in new responses");
   assert.equal(firstInspection.data.inspection.invoiceGrossEnough,true);
   assert.equal(firstInspection.data.inspection.officialProductsPresent,true);
   assert.equal(firstInspection.data.inspection.officialPendingMutation,false);
@@ -264,15 +257,9 @@ try {
   assert.equal(history.data.inspection.existingAllowanceCount,1);
   assert.equal(history.data.inspection.allowanceHistory[0].allowanceNumber,
     "3821061800001");
-  assert.deepEqual(history.data.inspection.historicalAllocationChecks,[]);
-  assert.equal(history.data.inspection.historicalAllocationNotQueriedCount,1);
-  assert.equal(history.data.inspection.historicalGrossCeilingStatus,"NOT_AVAILABLE");
-  assert.equal(history.data.inspection.historicalKnownGross,null);
-  assert.equal(history.data.inspection.historicalRemainingCeiling,null);
-  assert.equal(history.data.inspection.historicalCoverageReason,"DETAIL_QUERY_LIMITED");
+  assert.equal(Object.hasOwn(history.data.inspection,"historicalRemainingCeiling"),false);
   assert.equal(history.data.inspection.itemCheck.reason,"REQUEST_EXCEEDS_REMAINING",
     "105 minus effective 79 leaves 26, below the requested 50");
-  assert.equal(history.data.inspection.safeToInferRemainingBalance,false);
   assert.equal(history.data.inspection.canApprove,false);
   assert.equal(JSON.stringify(history.data).includes(officialTestKey),false);
   // Duplicate or incomplete official summaries must still fail closed,
@@ -286,11 +273,8 @@ try {
   const duplicate=await call("official-inspection",{
     itemId:createBody.itemId,expectedRevision:2});
   assert.equal(duplicate.status,200,JSON.stringify(duplicate));
-  assert.equal(duplicate.data.inspection.historicalCoverageReason,
-    "DUPLICATE_HISTORY_NUMBER");
   assert.equal(duplicate.data.inspection.itemCheck.reason,
     "OFFICIAL_HISTORY_UNVERIFIED");
-  assert.deepEqual(duplicate.data.inspection.historicalAllocationChecks,[]);
   globalThis.fetch=async(url,opts)=>{
     const response=await officialHistory(url,opts);
     const payload=await response.json();
@@ -303,8 +287,6 @@ try {
   const incomplete=await call("official-inspection",{
     itemId:createBody.itemId,expectedRevision:2});
   assert.equal(incomplete.status,200,JSON.stringify(incomplete));
-  assert.equal(incomplete.data.inspection.historicalCoverageReason,
-    "SUMMARY_METADATA_INCOMPLETE");
   assert.equal(incomplete.data.inspection.itemCheck.reason,
     "OFFICIAL_HISTORY_UNVERIFIED");
 }finally{globalThis.fetch=originalFetch;}

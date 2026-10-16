@@ -37,11 +37,6 @@ public sealed record CloudHistoricalAllowanceSummary(
     string? AllowanceNumber,string? AllowanceDate,string? TotalAmount,
     string? TaxAmount,int? UploadStatus,string? CancelDate,bool MetadataComplete);
 
-public sealed record CloudHistoricalAllocationCheck(
-    string AllowanceNumber,string Reason,bool LineTotalsVerified,
-    string? OriginalNet,string? OriginalTax,string? OriginalGross,
-    bool SafeToInferRemainingBalance);
-
 public sealed record CloudOfficialAllowanceInspection(
     string ItemId, int Revision, string OriginalInvoiceNumber, DateTimeOffset CheckedAtUtc,
     string OfficialSnapshotSha256, int OfficialUploadStatus, bool Cancelled,
@@ -50,12 +45,7 @@ public sealed record CloudOfficialAllowanceInspection(
     bool ZeroExistingAllowances, bool InvoiceGrossEnough, bool OfficialProductsPresent,
     bool RequiresPerItemVerification, bool CanApprove, string Status,
     bool OfficialPendingMutation, CloudAllowanceItemCheck ItemCheck,
-    IReadOnlyList<CloudHistoricalAllowanceSummary> AllowanceHistory,
-    bool SafeToInferRemainingBalance,
-    IReadOnlyList<CloudHistoricalAllocationCheck> HistoricalAllocationChecks,
-    int HistoricalAllocationNotQueriedCount,bool HistoricalAllocationsComplete,
-    string HistoricalCoverageReason,string HistoricalGrossCeilingStatus,
-    string? HistoricalKnownGross,string? HistoricalRemainingCeiling);
+    IReadOnlyList<CloudHistoricalAllowanceSummary> AllowanceHistory);
 
 public sealed record CloudAllowanceNumberReadback(
     string ItemId, int Revision, string AllowanceNumber, string LedgerStatus,
@@ -297,13 +287,11 @@ public sealed class CloudAllowanceApplicationClient
         var needsItems=Boolean(item,"requiresPerItemVerification");
         var canApprove=Boolean(item,"canApprove");
         var pending=Boolean(item,"officialPendingMutation");
-        var canInfer=Boolean(item,"safeToInferRemainingBalance");
         if(!item.TryGetProperty("allowanceHistory",out var rawHistory) ||
            rawHistory.ValueKind!=JsonValueKind.Array ||
            rawHistory.GetArrayLength()>50 ||
            (summary && rawHistory.GetArrayLength()!=existing) ||
-           (!summary && rawHistory.GetArrayLength()!=0) ||
-           canInfer)
+           (!summary && rawHistory.GetArrayLength()!=0))
             throw new InvalidDataException("Official allowance history must not imply verified balance.");
         static string? TextField(JsonElement source,string name,string pattern)
         {
@@ -354,89 +342,6 @@ public sealed class CloudAllowanceApplicationClient
             history.Add(new CloudHistoricalAllowanceSummary(
                 number,date,amount,tax,state,cancel,completeHistory));
         }
-        if(!item.TryGetProperty("historicalAllocationChecks",out var checksRaw)||
-           checksRaw.ValueKind!=JsonValueKind.Array||
-           checksRaw.GetArrayLength()>3||
-           Boolean(item,"historicalAllocationsComplete"))
-            throw new InvalidDataException("Historical allocation checks do not authorize a balance.");
-        var skipped=Integer(item,"historicalAllocationNotQueriedCount");
-        if(skipped!=existing-checksRaw.GetArrayLength())
-            throw new InvalidDataException("History coverage count is inconsistent.");
-        var checks=new List<CloudHistoricalAllocationCheck>();
-        var checkIds=new HashSet<string>(StringComparer.Ordinal);
-        foreach(var raw in checksRaw.EnumerateArray())
-        {
-            if(raw.ValueKind!=JsonValueKind.Object||raw.EnumerateObject().Count()!=7)
-                throw new InvalidDataException("Unexpected historical allocation fields.");
-            var number=Required(raw,"allowanceNumber");
-            var allocationReason=Required(raw,"reason");
-            var verified=Boolean(raw,"lineTotalsVerified");
-            var safe=Boolean(raw,"safeToInferRemainingBalance");
-            if(safe||!checkIds.Add(number)||
-               !history.Any(h=>h.AllowanceNumber==number &&
-                   h.MetadataComplete&&h.UploadStatus==99&&h.CancelDate=="0")||
-               allocationReason is not ("ALLOCATED_LINES_MATCH_HEADER" or
-                   "ITEM_AMOUNTS_UNVERIFIED" or "HEADER_TOTALS_MISMATCH" or
-                   "ORIGINAL_INVOICE_NOT_IN_ITEMS" or
-                   "OFFICIAL_STATUS_NOT_EFFECTIVE" or
-                   "OFFICIAL_SNAPSHOT_CHANGED" or
-                   "OFFICIAL_READBACK_UNCONFIRMED"))
-                throw new InvalidDataException("Historical allocation source is invalid.");
-            var net=TextField(raw,"originalNet",
-                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
-            var tax=TextField(raw,"originalTax",
-                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
-            var allocatedGross=TextField(raw,"originalGross",
-                @"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$");
-            if(verified!=(allocationReason=="ALLOCATED_LINES_MATCH_HEADER")||
-               (verified&&(net is null||tax is null||allocatedGross is null))||
-               (!verified&&(net is not null||tax is not null||allocatedGross is not null)))
-                throw new InvalidDataException("Historical allocation certainty is inconsistent.");
-            if(verified &&
-               decimal.Parse(net!,System.Globalization.CultureInfo.InvariantCulture)+
-               decimal.Parse(tax!,System.Globalization.CultureInfo.InvariantCulture)!=
-               decimal.Parse(allocatedGross!,System.Globalization.CultureInfo.InvariantCulture))
-                throw new InvalidDataException("Historical allocation arithmetic disagrees.");
-            checks.Add(new CloudHistoricalAllocationCheck(
-                number,allocationReason,verified,net,tax,allocatedGross,false));
-        }
-        // Server cannot promote a limited snapshot into complete history.
-        var knownIds=history.Where(h=>h.AllowanceNumber is not null)
-            .Select(h=>h.AllowanceNumber!).ToArray();
-        var coverage=!summary?"SUMMARY_NOT_PROVIDED":
-            pending?"PENDING_OFFICIAL_MUTATION":
-            history.Any(h=>!h.MetadataComplete)?"SUMMARY_METADATA_INCOMPLETE":
-            knownIds.Distinct(StringComparer.Ordinal).Count()!=knownIds.Length
-                ?"DUPLICATE_HISTORY_NUMBER":
-            history.Any(h=>h.UploadStatus!=99||h.CancelDate!="0")
-                ?"HISTORY_STATUS_NOT_EFFECTIVE":
-            checks.Count<existing?"DETAIL_QUERY_LIMITED":
-            checks.Any(h=>!h.LineTotalsVerified)?"DETAIL_READBACK_UNVERIFIED":
-            existing==0?"NO_HISTORY_REPORTED_NOT_PROOF":
-            "HISTORY_RANGE_NOT_PROVEN";
-        if(Required(item,"historicalCoverageReason")!=coverage)
-            throw new InvalidDataException("Historical allowance coverage reason mismatch.");
-        // Seven-decimal values are bounded and recomputed from verified
-        // detail rows; even a plausible Cloud amount is untrusted.
-        var amountPattern=@"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,7})?$";
-        var knownAmount=TextField(item,"historicalKnownGross",amountPattern);
-        var remainingCeiling=TextField(item,"historicalRemainingCeiling",amountPattern);
-        var ceilingStatus=Required(item,"historicalGrossCeilingStatus");
-        var canBound=coverage=="HISTORY_RANGE_NOT_PROVEN"&&upload==99&&
-            !cancelled&&!pending&&checks.Count>0&&
-            checks.All(c=>c.LineTotalsVerified&&c.OriginalGross is not null);
-        var knownSum=canBound?checks.Sum(c=>decimal.Parse(c.OriginalGross!,
-            System.Globalization.CultureInfo.InvariantCulture)):0m;
-        var expectedCeilingStatus=!canBound?"NOT_AVAILABLE":
-            knownSum>gross?"KNOWN_SUM_EXCEEDS_ORIGINAL":"KNOWN_CEILING_ONLY";
-        var fmt=System.Globalization.CultureInfo.InvariantCulture;
-        if(ceilingStatus!=expectedCeilingStatus||
-           (expectedCeilingStatus=="KNOWN_CEILING_ONLY" &&
-              (knownAmount!=knownSum.ToString("0.#######",fmt)||
-               remainingCeiling!=(gross-knownSum).ToString("0.#######",fmt)))||
-           (expectedCeilingStatus!="KNOWN_CEILING_ONLY" &&
-              (knownAmount is not null||remainingCeiling is not null)))
-            throw new InvalidDataException("Historical gross ceiling is not verified.");
         if (!item.TryGetProperty("itemCheck",out var rawCheck) ||
             rawCheck.ValueKind!=JsonValueKind.Object ||
             !rawCheck.TryGetProperty("reason",out var reason) ||
@@ -448,11 +353,43 @@ public sealed class CloudAllowanceApplicationClient
             verifiedCount<0 || verifiedCount>50)
             throw new InvalidDataException("Official item verification status is invalid.");
         var matched=Boolean(rawCheck,"fullyMatched");
+        // This is NOT a grant to approve. Independently refuse a claimed
+        // valid balance if the official invoice_query history is ambiguous,
+        // duplicated, pending, or exceeds the original gross.
+        var historyVerified=summary && history.Count==existing;
+        var ids=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        decimal previousGross=0m;
+        foreach(var h in history)
+        {
+            if(!h.MetadataComplete||h.AllowanceNumber is null||
+               !ids.Add(h.AllowanceNumber)||h.UploadStatus!=99)
+            {
+                historyVerified=false;
+                continue;
+            }
+            if(h.CancelDate=="0")
+            {
+                try
+                {
+                    previousGross=checked(previousGross+
+                        decimal.Parse(h.TotalAmount!,
+                            System.Globalization.CultureInfo.InvariantCulture)+
+                        decimal.Parse(h.TaxAmount!,
+                            System.Globalization.CultureInfo.InvariantCulture));
+                }
+                catch(OverflowException error)
+                {
+                    throw new InvalidDataException("Official allowance amount overflow.",error);
+                }
+            }
+        }
         if (matched && (pending || cancelled || !summary ||
                         upload!=99 || verifiedCount==0 ||
-                        reason.GetString()!="REQUEST_TOTALS_WITHIN_REMAINING") ||
+                        reason.GetString()!="REQUEST_TOTALS_WITHIN_REMAINING" ||
+                        !historyVerified || previousGross>gross ||
+                        requested>gross-previousGross) ||
             !matched && verifiedCount!=0)
-            throw new InvalidDataException("Official item verification cannot override safety fences.");
+            throw new InvalidDataException("Official gross or allowance history does not verify the request.");
         if (requested==0 || canApprove || !needsItems ||
             complete!=(upload==99) || notCancelled==cancelled ||
             noExisting!=(summary && existing==0) ||
@@ -462,8 +399,7 @@ public sealed class CloudAllowanceApplicationClient
             upload,cancelled,gross,requested,existing,complete,notCancelled,summary,
             noExisting,enough,products,needsItems,false,status,
             pending,new CloudAllowanceItemCheck(matched,reason.GetString()!,verifiedCount),
-            history,false,checks,skipped,false,coverage,
-            ceilingStatus,knownAmount,remainingCeiling);
+            history);
     }
 
     // The Worker owns the original D1 allowance number; callers cannot
