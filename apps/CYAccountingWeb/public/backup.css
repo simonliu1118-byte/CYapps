@@ -384,8 +384,10 @@
 }
 
 /* Recovery presentation; the existing backup UI owns the single form/action state. */
-.backup-recovery-launcher { border-top: 1px solid #dce2e8; padding-top: 12px; margin-top: 12px; }
-.backup-emergency-link { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid #cbddeb; border-radius: 8px; background: #f2f7fc; color: #2e5e87; text-decoration: none; }
+.backup-recovery-launcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; border-top: 1px solid #dce2e8; padding-top: 12px; margin-top: 12px; }
+.backup-recovery-action { min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; }
+.backup-recovery-action .hint { margin: 0; }
+.backup-emergency-link { display: flex; align-items: center; gap: 10px; margin-top: 0; padding: 12px; border: 1px solid #cbddeb; border-radius: 8px; background: #f2f7fc; color: #2e5e87; text-decoration: none; }
 .backup-emergency-link svg { width: 27px; height: 27px; flex: 0 0 auto; }
 .backup-emergency-link > span:nth-child(2) { display: grid; gap: 3px; flex: 1; }
 .backup-emergency-link strong { font-size: 13px; }
@@ -406,3 +408,11 @@
 #backupRecoveryConfirm { margin-top: 14px; padding-top: 4px; border-top: 1px solid #dce2e8; }
 
 html[data-viewport="desktop"] #settingsDialog .backup-policy-row { display: none; }
+
+@media (max-width: 540px) { .backup-recovery-launcher { grid-template-columns: minmax(0, 1fr); } }
+
+.backup-health-dialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
+.backup-health-dialog p { line-height: 1.6; }
+.backup-health-dialog .modal-header { color: #9b2c21; }
+.backup-health-delivery:empty { display: none; }
+.backup-health-actions { display: flex; justify-content: flex-end; margin-top: 16px; }

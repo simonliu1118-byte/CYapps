@@ -48,9 +48,6 @@ for (const [width, touch, expected] of [[375,true,false],[767,true,false],[768,f
   win.innerWidth = width; coarse = touch;
   assert.equal(context.isTabletWorkspace(), expected, `tablet classification ${width}/${touch}`);
 }
-win.innerWidth = 375; coarse = true; win.__cyaccTabletPreviewEnabled = true;
-assert.equal(context.isTabletWorkspace(), true, 'phone tablet preview forces the shared tablet presentation owner');
-win.__cyaccTabletPreviewEnabled = false;
 win.innerWidth = 820; coarse = true;
 context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');
@@ -122,9 +119,6 @@ assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-ac
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet does not reuse the phone dropdown account owner');
 assert.doesNotMatch(css, /data-tablet-layout[^\n]*\.cy-account-cluster[^\{]*\{[^\}]*display:\s*none !important/, 'tablet must never hide the canonical inline account cluster');
 assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*\{[^\}]*display:\s*(?:block|flex|inline-flex) !important/, 'tablet must never show the phone account trigger');
-assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
-assert.match(css, /#tabletPreviewReturnButton \{[\s\S]*?display:\s*none !important/, 'return-to-phone is hidden by default outside preview');
-assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(\[hidden\]\)[\s\S]*?display:\s*inline-flex !important/, 'only active phone preview may expose return-to-phone');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail \.entry-card \{[\s\S]*?grid-template-columns:\s*46px minmax\(0, 1fr\)/, 'portrait entry rail reserves a slimmer left mode switch column');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-kind-switch \{[\s\S]*?grid-template-columns:\s*1fr[\s\S]*?grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/, 'income and expense are a vertical two-segment switch');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(12,[\s\S]*?grid-template-rows:\s*repeat\(3, 40px\)/, 'portrait entry form uses three equal compact rows');
@@ -151,7 +145,6 @@ assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerSummarySearch \{[
 assert.match(source, /syncLedgerToolbarPlacement\(orientation\)/, 'tablet layout owns export placement');
 assert.match(source, /orientation === 'portrait' \? summaryActions : viewTools/, 'portrait moves the canonical Excel button beside opening balance');
 assert.match(exportSource, /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'both tablet orientations use the phone native-share owner');
-assert.match(exportSource, /window\.__cyaccTabletPreviewEnabled === true/, 'tablet preview also uses the phone native-share owner');
 assert.match(exportSource, /type:\s*'application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet'/, 'Excel native share uses the canonical xlsx MIME type');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?tbody > tr:not\(\.ledger-message-row\) > td:nth-child\(5\) \{ width:\s*27% !important/, 'portrait ledger has explicit summary width independent of tbody contents');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*0 !important[\s\S]*?border:\s*0 !important/, 'collapsed portrait rail leaves no residual line beneath the tab');

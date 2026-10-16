@@ -107,10 +107,16 @@ html[data-viewport="desktop"] .statistics-pie-labels-compact { display: none; }
 .statement-footer .statistics-note { margin: 3px 0 0; font-size: 11px; line-height: 1.35; }
 .statement-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 5px; font-size: 12px; }
 .statement-pagination button { height: 27px; min-height: 27px; padding: 0 9px; font-size: 12px; }
-#statisticsTransferForm fieldset { border: 1px solid #d8e0e8; border-radius: 8px; margin: 12px 0; padding: 10px; }
-#statisticsTransferForm legend { font-size: 14px; font-weight: 600; }
-#statisticsTransferForm .statistics-transfer-choice { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 13px; }
-#statisticsTransferForm input { width: 16px; height: 16px; flex: 0 0 auto; }
+#statisticsTransferForm .statistics-transfer-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 8px 0 12px; align-items: start; }
+#statisticsTransferForm fieldset { min-width: 0; border: 1px solid #d8e0e8; border-radius: 8px; margin: 0; padding: 5px 8px 8px; }
+#statisticsTransferForm legend { font-size: 14px; font-weight: 600; padding: 0 4px; }
+#statisticsTransferForm .statistics-transfer-choice { display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 3px 0; font-size: 13px; line-height: 1.4; }
+#statisticsTransferForm .statistics-transfer-choice span { min-width: 0; overflow-wrap: anywhere; }
+#statisticsTransferForm input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
+@media (max-width: 540px) {
+  #statisticsTransferForm .statistics-transfer-columns { grid-template-columns: minmax(0, 1fr); }
+  #statisticsTransferForm .statistics-transfer-choice { min-height: 36px; }
+}
 @media (max-width: 767px) {
   html[data-viewport="mobile"]:not([data-tablet-layout]) .statistics-card,
   html[data-viewport="mobile"][data-tablet-layout=""] .statistics-card { display: block; padding: 14px 14px 90px; margin: 0; width: 100%; box-sizing: border-box; border: 0; border-radius: 0; box-shadow: none; background: #fff; }
