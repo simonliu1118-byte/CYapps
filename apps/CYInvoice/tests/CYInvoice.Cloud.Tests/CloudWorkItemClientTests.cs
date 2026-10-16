@@ -162,7 +162,7 @@ internal static class CloudWorkItemClientTests
         await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
             "0001","synthetic-pass",51));
         await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
-            "0001","synthetic-pass",1,"UPLOAD_ISSUE"));
+            "0001","synthetic-pass",1,"UNSUPPORTED_KIND"));
         await ThrowsAsync<ArgumentException>(()=>client.ListAsync(
             "0001","synthetic-pass",1,cursor:new CloudWorkItemCursor(
                 "untrusted_time",ItemId)));
