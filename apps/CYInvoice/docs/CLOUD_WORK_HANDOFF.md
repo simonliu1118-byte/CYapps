@@ -49,6 +49,8 @@
 
 **步驟 5 小提交 7（本輪）：** 沿用既有 `CloudWorkItemClient` 加入 Manager `ListAsync`，對齊前筆 Cloud Work Item List：最多 50 筆、固定資料投影、keyset cursor，不傳來源雜湊或買方明細，不允許 Windows 指定 Workspace；任何多餘敏感欄、偽造狀態、順序／cursor 不一致均拒絕。原 Cloud Core 合成測試覆蓋兩頁、資料邊界、非法類型及不可信回覆。**只補 Windows Core 契約**，不建 UI、不更動 Worker、D1 或正式資料；上傳異常來源、入庫和跨機 UI 仍待下一小項。使用者既有節奏為小功能→CI→Artifact，**Release 只在明確要求時才做**。最新提交須看 exact HEAD CI。
 
+**步驟 5 小提交 8（本輪）：** 依使用者最新指示，完成整體工作前可**不逐項等待 CI**，最後才統一產出 Artifact；正式 Release 仍需明確授權。Windows `SyncIssuesForm`「處理中」增加「CYID 例外清單」，沿用既有 `CloudWorkItemClient.ListAsync` 顯示管理員經 CYID 驗證後可見的有限例外工作單（分頁、唯讀、複製 ID），沒有改本機問題資料、官方請求、D1 Schema／正式環境。此項目前是未驗證 Draft Source，未做完整 Windows CI。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。

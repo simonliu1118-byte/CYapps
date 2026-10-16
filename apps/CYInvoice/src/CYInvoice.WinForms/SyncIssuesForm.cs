@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -200,6 +201,9 @@ internal sealed class SyncIssuesForm : Form
                     }
                 };
                 failedActions.Controls.Add(allowanceVoidQueue);
+                var cloudExceptions = UiControls.StandardButton("CYID 例外清單");
+                cloudExceptions.Click += async (_, _) => await ShowCloudExceptionsAsync();
+                failedActions.Controls.Add(cloudExceptions);
             }
         }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -225,6 +229,153 @@ internal sealed class SyncIssuesForm : Form
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
+    }
+
+    // Read-only window for the already-existing manager Work Item list. Local
+    // processing and upload failures remain untouched; no Cloud state change.
+    private async Task ShowCloudExceptionsAsync()
+    {
+        var cfg=repository.Settings.LoadOrCreate();
+        var token=repository.Settings.CloudDeviceToken(cfg);
+        if(cfg.CloudMode!=CloudModes.CloudPreferred ||
+           cfg.CloudIdentityProvider!="CYID" ||
+           !cfg.CloudEmployeeAuthorityReady ||
+           string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId) ||
+           string.IsNullOrWhiteSpace(cfg.CloudBaseUrl) ||
+           string.IsNullOrWhiteSpace(token))
+        {
+            MessageBox.Show(this,"CYID 雲端裝置尚未完成驗證。",
+                "例外清單",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        using var login=new EmployeeAdminLoginForm(repository,
+            "CYID 例外清單－管理員驗證",collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        using var http=new HttpClient();
+        var client=new CloudWorkItemClient(http,
+            new Uri(cfg.CloudBaseUrl,UriKind.Absolute),token,cfg.CloudWorkspaceId);
+        using var dialog=new Form{
+            Text="CYID 跨裝置例外工作單（唯讀）",
+            StartPosition=FormStartPosition.CenterParent,
+            ClientSize=new Size(810,410),MinimumSize=new Size(760,340),
+            ShowIcon=false,Font=new Font("Microsoft JhengHei UI",10F)
+        };
+        var grid=new ListView{
+            Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,
+            HideSelection=false,GridLines=true,MultiSelect=false
+        };
+        grid.Columns.Add("更新時間",153);
+        grid.Columns.Add("類別",115);
+        grid.Columns.Add("環境",80);
+        grid.Columns.Add("狀態",100);
+        grid.Columns.Add("工作單 ID",315);
+        var caption=new Label{
+            Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+            Text="僅顯示 CYID 管理員可見的例外工作單，不包含發票明細或密鑰。"
+        };
+        var previous=UiControls.StandardButton("上一頁");
+        var next=UiControls.StandardButton("下一頁");
+        var copy=UiControls.StandardButton("複製工作單 ID");
+        var close=UiControls.StandardButton("關閉");
+        close.Click+=(_,_)=>dialog.Close();
+        copy.Click+=(_,_)=>{
+            if(grid.SelectedItems.Count!=1)return;
+            var id=grid.SelectedItems[0].Tag as string;
+            if(!string.IsNullOrWhiteSpace(id))Clipboard.SetText(id);
+        };
+        var bottom=new FlowLayoutPanel{
+            Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,
+            WrapContents=false
+        };
+        foreach(var button in new[]{close,copy,next,previous})
+            bottom.Controls.Add(button);
+        var layout=new TableLayoutPanel{
+            Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(10)
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+        layout.Controls.Add(caption,0,0);
+        layout.Controls.Add(grid,0,1);
+        layout.Controls.Add(bottom,0,2);
+        dialog.Controls.Add(layout);
+        var history=new Stack<CloudWorkItemCursor?>();
+        CloudWorkItemCursor? cursor=null;
+        CloudWorkItemPage? page=null;
+        bool busy=false;
+        async Task ReloadAsync(CloudWorkItemCursor? target,bool back)
+        {
+            if(busy||dialog.IsDisposed)return;
+            busy=true;
+            foreach(var button in new[]{previous,next,copy})button.Enabled=false;
+            try
+            {
+                var result=await client.ListAsync(login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword,20,cursor:target);
+                if(dialog.IsDisposed)return;
+                if(back && history.Count>0)history.Pop();
+                if(!back && page is not null)history.Push(cursor);
+                cursor=target;
+                page=result;
+                grid.BeginUpdate();
+                try
+                {
+                    grid.Items.Clear();
+                    foreach(var item in result.Items)
+                    {
+                        var kind=item.Kind switch{
+                            "VOID"=>"作廢",
+                            "ALLOWANCE"=>"折讓",
+                            "ALLOWANCE_VOID"=>"折讓作廢",
+                            _=>"其他例外"
+                        };
+                        var state=item.Status switch{
+                            "open"=>"待覆核",
+                            "review"=>"覆核中",
+                            "closed"=>"已結案",
+                            _=>"待確認"
+                        };
+                        var row=new ListViewItem(item.UpdatedAtUtc.ToLocalTime()
+                            .ToString("yyyy/MM/dd HH:mm"));
+                        row.SubItems.Add(kind);
+                        row.SubItems.Add(item.Environment=="production"?"正式":"測試");
+                        row.SubItems.Add(state);
+                        row.SubItems.Add(item.ItemId);
+                        row.Tag=item.ItemId;
+                        grid.Items.Add(row);
+                    }
+                }
+                finally{grid.EndUpdate();}
+                caption.Text=$"CYID 例外工作單｜本頁 {result.Items.Count} 筆"+
+                    "｜清單僅供查看，不會結案或重送光貿。";
+            }
+            catch(Exception error)
+            {
+                if(!dialog.IsDisposed)
+                    MessageBox.Show(dialog,"CYID 工作單查詢失敗："+error.Message+
+                        "\n既有工作單與本機資料均未變更。",
+                        "例外清單",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                busy=false;
+                if(!dialog.IsDisposed){
+                    previous.Enabled=history.Count>0;
+                    next.Enabled=page?.NextCursor is not null;
+                    copy.Enabled=grid.SelectedItems.Count==1;
+                }
+            }
+        }
+        next.Click+=async(_,_)=>{
+            if(page?.NextCursor is { } more)await ReloadAsync(more,false);
+        };
+        previous.Click+=async(_,_)=>{
+            if(history.TryPeek(out var earlier))await ReloadAsync(earlier,true);
+        };
+        grid.SelectedIndexChanged+=(_,_)=>copy.Enabled=!busy&&grid.SelectedItems.Count==1;
+        dialog.Shown+=async(_,_)=>await ReloadAsync(null,false);
+        await Task.CompletedTask;
+        dialog.ShowDialog(this);
     }
 
     private void ConfigureList()
