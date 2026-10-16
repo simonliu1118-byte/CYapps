@@ -327,6 +327,7 @@ internal sealed class SyncIssuesForm : Form
                             "VOID"=>"作廢",
                             "ALLOWANCE"=>"折讓",
                             "ALLOWANCE_VOID"=>"折讓作廢",
+                            "UPLOAD_ISSUE"=>"上傳問題（裝置回報）",
                             _=>"其他例外"
                         };
                         var state=item.Status switch{

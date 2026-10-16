@@ -1,10 +1,11 @@
 import { cyIdDevice, usesCyId, type CyIdEnv, CyIdError } from "./cyid";
-import { createWorkItem, getWorkItem, transitionWorkItem, listWorkItems } from "./work-items";
+import { createWorkItem, getWorkItem, transitionWorkItem, listWorkItems, reportUploadIssue, uploadIssueCodes } from "./work-items";
 
 interface Env extends CyIdEnv { DB: D1Database }
 type Manager = { id: string };
 const paths = new Set([
-  "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/list", "/v1/work-items/transition",
+  "/v1/work-items/create", "/v1/work-items/get", "/v1/work-items/list",
+  "/v1/work-items/report-upload-issue", "/v1/work-items/transition",
 ]);
 function response(status: number, value: Record<string, unknown>): Response {
   return Response.json({ ok: status < 300, ...value }, {
@@ -61,6 +62,45 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
   if (!d) return response(401,{error:{code:"DEVICE_INVALID"}});
   const body = await jsonBody(request);
   if (!body) return response(400,{error:{code:"INVALID_REQUEST"}});
+  if(path==="/v1/work-items/report-upload-issue"){
+    // CYID USER may report a *local anomaly*; this is not an official status
+    // or permission to retry an invoice operation. The manager-only paths
+    // below remain unchanged.
+    const reporter=await env.cyIdContext?.revalidate();
+    if(d.employee_authority_state!=="cloud"||!reporter||
+       typeof reporter.employeeId!=="string"||!reporter.employeeId)
+      return response(403,{error:{code:"CYID_USER_REQUIRED"}});
+    if(!Object.keys(body).every(k=>[
+      "itemId","environment","referenceHash","issueCode",
+      "employeeNo","password"].includes(k))||
+       typeof body.itemId!=="string"||!/^[a-zA-Z0-9_-]{10,100}$/.test(body.itemId)||
+       (body.environment!=="production"&&body.environment!=="test")||
+       typeof body.referenceHash!=="string"||!/^[a-f0-9]{64}$/.test(body.referenceHash)||
+       !uploadIssueCodes.includes(body.issueCode as typeof uploadIssueCodes[number]))
+      return response(400,{error:{code:"INVALID_UPLOAD_ISSUE"}});
+    try{
+      const verified=await env.cyIdContext?.revalidate();
+      if(!verified||verified.employeeId!==reporter.employeeId)
+        return response(409,{error:{code:"AUTHORITY_CHANGED"}});
+      const saved=await reportUploadIssue(env.DB,{
+        itemId:body.itemId,workspaceId:d.workspace_id,deviceId:d.device_id,
+        actorId:verified.employeeId,
+        environment:body.environment as "test"|"production",
+        referenceHash:body.referenceHash as string,
+        issueCode:body.issueCode as typeof uploadIssueCodes[number]
+      });
+      if(!saved)return response(409,{error:{code:"WORK_ITEM_CONFLICT"}});
+      // A report is accepted; it never asserts invoice success, official
+      // failure, or grants authority to resend an AMEGO request.
+      return response(200,{itemId:body.itemId,reported:true,officialVerified:false});
+    }catch(error){
+      if(error instanceof Error&&/UNIQUE constraint failed/i.test(error.message))
+        return response(409,{error:{code:"WORK_ITEM_CONFLICT"}});
+      if(error instanceof Error&&/no such table: work_items/i.test(error.message))
+        return response(503,{error:{code:"WORK_ITEMS_NOT_READY"}});
+      return response(503,{error:{code:"WORK_ITEM_RESULT_UNKNOWN"}});
+    }
+  }
   const m = await manager(env,d.employee_authority_state);
   if (!m) return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
   if(path==="/v1/work-items/list"){
@@ -71,7 +111,7 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
            "employeeNo","password"].includes(k))||
        (body.limit!==undefined&&(!Number.isSafeInteger(body.limit)||
          (body.limit as number)<1||(body.limit as number)>50))||
-       (body.kind!==undefined&&!["VOID","ALLOWANCE","ALLOWANCE_VOID"].includes(body.kind as string))||
+       (body.kind!==undefined&&!["VOID","ALLOWANCE","ALLOWANCE_VOID","UPLOAD_ISSUE"].includes(body.kind as string))||
        (body.status!==undefined&&!["open","review","closed"].includes(body.status as string)))
       return response(400,{error:{code:"INVALID_LIST_FILTER"}});
     let cursor: {createdAt:string;itemId:string}|null=null;
@@ -91,7 +131,7 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
       if(!latest||latest.id!==m.id)return response(409,{error:{code:"AUTHORITY_CHANGED"}});
       const page=await listWorkItems(env.DB,d.workspace_id,{
         limit:body.limit===undefined?20:body.limit as number,
-        kind:body.kind as "VOID"|"ALLOWANCE"|"ALLOWANCE_VOID"|undefined,
+        kind:body.kind as "VOID"|"ALLOWANCE"|"ALLOWANCE_VOID"|"UPLOAD_ISSUE"|undefined,
         status:body.status as "open"|"review"|"closed"|undefined,
         beforeCreatedAt:cursor?.createdAt,beforeItemId:cursor?.itemId
       });
@@ -121,9 +161,10 @@ export async function handleWorkItems(request: Request, env: Env): Promise<Respo
     if (path === "/v1/work-items/create") {
       // Allowances require a server-frozen exceptional application. The generic
       // manager endpoint must never accept a client-chosen allowance hash.
-      if (body.kind === "ALLOWANCE" || body.kind === "ALLOWANCE_VOID")
+      if (body.kind === "ALLOWANCE" || body.kind === "ALLOWANCE_VOID" || body.kind === "UPLOAD_ISSUE")
         return response(409,{error:{code:body.kind === "ALLOWANCE"
-          ? "ALLOWANCE_APPLICATION_REQUIRED" : "ALLOWANCE_VOID_APPLICATION_REQUIRED"}});
+          ? "ALLOWANCE_APPLICATION_REQUIRED" : body.kind === "ALLOWANCE_VOID"
+          ? "ALLOWANCE_VOID_APPLICATION_REQUIRED" : "UPLOAD_ISSUE_REPORT_REQUIRED"}});
       if (typeof body.referenceHash !== "string" || !/^[a-f0-9]{64}$/.test(body.referenceHash) ||
           (body.kind !== "VOID" && body.kind !== "ALLOWANCE" && body.kind !== "ALLOWANCE_VOID") ||
           (body.environment !== "production" && body.environment !== "test"))

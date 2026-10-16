@@ -1,7 +1,13 @@
 // Internal V3 Work Item storage, not a public route or AMEGO operation.
 // Calling route must revalidate employee authority. Every write independently
 // fences the Device and Workspace at SQL execution time.
-export type WorkItemKind = "VOID" | "ALLOWANCE" | "ALLOWANCE_VOID";
+export type WorkItemKind = "VOID" | "ALLOWANCE" | "ALLOWANCE_VOID" | "UPLOAD_ISSUE";
+export const uploadIssueCodes = [
+  "invoice_list_failed","query_failed","remote_not_found",
+  "unknown_remote_not_found","reconciliation_failed","ambiguous_match",
+  "local_write_failed","upload_failed","duplicate_order_id",
+] as const;
+export type UploadIssueCode = typeof uploadIssueCodes[number];
 export type WorkItemStatus = "open" | "review" | "closed";
 
 export interface NewWorkItem {
@@ -9,6 +15,34 @@ export interface NewWorkItem {
   environment: "production" | "test"; kind: WorkItemKind;
   referenceHash: string; actorId: string;
 }
+export interface ReportUploadIssue {
+  itemId:string; workspaceId:string; deviceId:string; actorId:string;
+  environment:"production"|"test"; referenceHash:string; issueCode:UploadIssueCode;
+}
+export async function reportUploadIssue(db:D1Database,input:ReportUploadIssue):Promise<boolean>{
+  if(!validId(input.itemId)||!validId(input.deviceId)||!validActor(input.actorId)||
+     !/^[a-f0-9]{64}$/.test(input.referenceHash)||
+     !["test","production"].includes(input.environment)||
+     !uploadIssueCodes.includes(input.issueCode))
+     throw new Error("INVALID_UPLOAD_ISSUE");
+  const now=new Date().toISOString();
+  // Data from Windows is only a local problem REPORT, never proof of any
+  // provider action. No recipient/order/details/secrets or AMEGO call.
+  const result=await db.prepare(`
+    INSERT INTO work_items(
+      work_item_id,workspace_id,opened_by_device_id,updated_by_device_id,
+      environment,kind,issue_code,reference_hash,actor_id,created_at,updated_at)
+    SELECT ?1,?2,?3,?3,?4,'UPLOAD_ISSUE',?5,?6,?7,?8,?8
+    WHERE EXISTS (
+      SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id
+      WHERE d.device_id=?3 AND d.workspace_id=?2
+        AND d.status='active' AND w.status='active'
+        AND d.employee_authority_state='cloud')`
+  ).bind(input.itemId,input.workspaceId,input.deviceId,input.environment,
+    input.issueCode,input.referenceHash,input.actorId,now).run();
+  return result.meta.changes===1;
+}
+
 export interface WorkItemTransition {
   itemId: string; workspaceId: string; deviceId: string; actorId: string;
   expectedRevision: number; from: "open" | "review"; to: "review" | "closed";
@@ -83,7 +117,7 @@ export async function getWorkItem(db: D1Database, workspaceId: string, itemId: s
 // hashes, actor/device identifiers, templates and secrets are intentionally
 // NOT in the returned projection. This is not a source-of-truth invoice list.
 export async function listWorkItems(db:D1Database,workspaceId:string,options:{
-  kind?:"VOID"|"ALLOWANCE"|"ALLOWANCE_VOID";
+  kind?:"VOID"|"ALLOWANCE"|"ALLOWANCE_VOID"|"UPLOAD_ISSUE";
   status?:"open"|"review"|"closed";
   limit:number; beforeCreatedAt?:string; beforeItemId?:string;
 }){

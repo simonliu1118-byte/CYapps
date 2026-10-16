@@ -139,8 +139,8 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal((await call("list",{limit:51})).status,400);
   assert.equal((await call("list",{limit:1,workspaceId:"ws_attacker"})).status,400);
   assert.equal((await call("list",{limit:1,cursor:{createdAt:"not-a-date",itemId:first.itemId}})).status,400);
-  assert.equal((await call("list",{kind:"UPLOAD_ISSUE"})).status,400,
-    "Unimplemented upload issue intake must not be advertised as live");
+  assert.equal((await call("list",{kind:"UPLOAD_ISSUE"})).status,200,
+    "No upload issue yet, but managers can filter for reported local problems");
   const managerAuthenticated=await call("list",{
     limit:1,employeeNo:"0001",password:"SyntheticPass12"
   });
@@ -162,10 +162,37 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   const empty=await call("list",{kind:"ALLOWANCE"});
   assert.equal(empty.status,200);
   assert.deepEqual(empty.body.items,[]);
+  // A regular CYID USER can submit a bounded local-problem report, but
+  // neither user nor manager can pass a fabricated official invoice status.
   permission=false;
+  const reportRequest={itemId:"wi_upload_issue_01",environment:"test",
+    referenceHash:"c".repeat(64),issueCode:"query_failed"};
+  const reported=await call("report-upload-issue",reportRequest);
+  assert.equal(reported.status,200,JSON.stringify(reported));
+  assert.equal(reported.body.reported,true);
+  assert.equal(reported.body.officialVerified,false);
+  assert.equal((await call("report-upload-issue",reportRequest)).status,409,
+    "same event cannot be duplicated by another Work Item");
+  assert.equal((await call("report-upload-issue",{...reportRequest,
+    itemId:"wi_invalid_code",issueCode:"invoice_success"})).status,400);
+  assert.equal((await call("report-upload-issue",{...reportRequest,
+    itemId:"wi_extra_fields",invoiceNumber:"AB12345678"})).status,400,
+    "invoice business data is never sent to D1");
+  assert.equal((await call("create",{...reportRequest,
+    itemId:"wi_forged_generic",kind:"UPLOAD_ISSUE"})).status,403,
+    "generic manager create remains manager-only");
   assert.equal((await call("list",{limit:1})).status,403);
   permission=true;
-  const seen=await call("get",{itemId:first.itemId});
+  const reportedPage=await call("list",{kind:"UPLOAD_ISSUE"});
+  assert.equal(reportedPage.status,200);
+  assert.equal(reportedPage.body.items.length,1);
+  assert.equal(reportedPage.body.items[0].kind,"UPLOAD_ISSUE");
+  assert.equal(db.prepare(
+    "SELECT issue_code FROM work_items WHERE work_item_id=?")
+    .get(reportRequest.itemId).issue_code,"query_failed");
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM work_items WHERE kind='UPLOAD_ISSUE'")
+    .get().n,1);
+    const seen=await call("get",{itemId:first.itemId});
   assert.equal(seen.status,200);
   assert.equal(seen.body.item.environment,"test");
   const change={itemId:first.itemId,expectedRevision:1,from:"open",to:"review"};

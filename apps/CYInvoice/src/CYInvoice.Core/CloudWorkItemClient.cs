@@ -91,7 +91,7 @@ public sealed class CloudWorkItemClient
     {
         ValidateCredentials(employeeNo,password);
         if(limit is < 1 or > 50 ||
-           (kind is not null && kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID")) ||
+           (kind is not null && kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID" or "UPLOAD_ISSUE")) ||
            (status is not null && status is not ("open" or "review" or "closed")))
             throw new ArgumentException("Work Item list filter is invalid.");
         if(cursor is not null)
@@ -149,7 +149,7 @@ public sealed class CloudWorkItemClient
                !Regex.IsMatch(id,@"^[a-zA-Z0-9_-]{10,100}$",RegexOptions.CultureInvariant)||
                !seen.Add(id)||
                environment is not ("production" or "test")||
-               itemKind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID")||
+               itemKind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID" or "UPLOAD_ISSUE")||
                state is not ("open" or "review" or "closed")||
                (kind is not null && kind!=itemKind)||
                (status is not null && status!=state)||
@@ -273,7 +273,7 @@ public sealed class CloudWorkItemClient
         var status = Required("status");
         if (id != expectedId || workspace != workspaceId ||
             environment is not ("production" or "test") ||
-            kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID") ||
+            kind is not ("VOID" or "ALLOWANCE" or "ALLOWANCE_VOID" or "UPLOAD_ISSUE") ||
             !Regex.IsMatch(referenceHash, @"^[a-f0-9]{64}$", RegexOptions.CultureInvariant) ||
             status is not ("open" or "review" or "closed") ||
             !item.TryGetProperty("revision", out var revision) ||

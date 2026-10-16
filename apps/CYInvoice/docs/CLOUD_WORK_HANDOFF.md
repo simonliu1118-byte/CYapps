@@ -51,6 +51,8 @@
 
 **步驟 5 小提交 8（本輪）：** 依使用者最新指示，完成整體工作前可**不逐項等待 CI**，最後才統一產出 Artifact；正式 Release 仍需明確授權。Windows `SyncIssuesForm`「處理中」增加「CYID 例外清單」，沿用既有 `CloudWorkItemClient.ListAsync` 顯示管理員經 CYID 驗證後可見的有限例外工作單（分頁、唯讀、複製 ID），沒有改本機問題資料、官方請求、D1 Schema／正式環境。此項目前是未驗證 Draft Source，未做完整 Windows CI。
 
+**步驟 5 小提交 9（本輪）：** 將 `UPLOAD_ISSUE` 併入既有 Draft `0015` Work Items（只有一個新代碼欄、無新表）；CYID USER／Device 可經獨立 `report-upload-issue` 記錄有限本機異常類型＋SHA-256 來源識別，明確標示 `officialVerified:false`。拒絕任何額外業務欄位、未列名的類型或重複回報，Manager 既有清單可篩選此種類；沒有 AMEGO mutation／自動重送。Windows 目前只可**唯讀查看**此類 Work Item，尚未自動回報或封存。本批使用者允許暫緩逐項 CI，最終整合後統一驗證取 Artifact。
+
 ### 不可跨越的界線
 
 V3 SQL 0015～0019 仍是 `cloud/drafts`，**尚未遷移正式 D1**。不可建立測試 Worker、部署正式 Worker、合併 PR、對真實光貿 g0401／g0501 操作，或從合成 CI 宣稱 V3 已完成。出現 `sending`／作廢結果不明，查回原單號，沒有官方及 Audit 證據不得改號、再送或結案。既有 AUTOINPUT 獨立 PR #445 不應混進 V3。每輪只完成一個小提交、CI、回報，再決定下一輪，避免對話逾時。
