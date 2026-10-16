@@ -8,24 +8,21 @@ on:
     paths:
       - "apps/CYAccountingWeb/**"
       - ".github/workflows/cyaccountingweb-deploy.yml"
+      - ".github/workflows/cyaccountingweb-release.yml"
   push:
     branches:
-      - main
-    paths:
-      - "apps/CYAccountingWeb/**"
-      - ".github/workflows/cyaccountingweb-deploy.yml"
+      - deploy/cyaccountingweb-production
 
 permissions:
   contents: read
-
-concurrency:
-  group: cyaccountingweb-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: cyaccountingweb-validate-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: true
     defaults:
       run:
         working-directory: apps/CYAccountingWeb
@@ -72,6 +69,7 @@ jobs:
           node --check src/desktop-migration-core.js
           node --check src/desktop-migration.js
           node --check scripts/render-wrangler.mjs
+          node --check scripts/verify-deployment.mjs
           node --check scripts/prepare-sqljs.mjs
           node --check scripts/validate-cyid-consumer-version.mjs
           node --check scripts/resolve-cyid-production-runtime.mjs
@@ -123,6 +121,7 @@ jobs:
           node tests/opening-balances-d1.mjs
           node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
+          node tests/deployment-flow.mjs
           node tests/cyid-integration.mjs
           node tests/startup.mjs
           node tests/frontend-architecture.mjs
@@ -161,11 +160,14 @@ jobs:
           node scripts/prepare-sqljs.mjs --clean
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cyaccountingweb-production') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: development
+    concurrency:
+      group: cyaccountingweb-production
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: apps/CYAccountingWeb
@@ -200,6 +202,9 @@ jobs:
 
       - name: Resolve CYID production consumer runtime
         run: node scripts/resolve-cyid-production-runtime.mjs --require-account-portal
+
+      - name: Verify reviewed main source before remote changes
+        run: node scripts/verify-deployment.mjs source
 
       - name: Prepare isolated recovery D1
         run: node scripts/provision-recovery-d1.mjs

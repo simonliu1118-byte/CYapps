@@ -1,6 +1,10 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/15（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/17（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+
+## 部署模式切換驗收
+
+- [ ] 部署流程 PR 合併後，確認 main 合併不自動部署；下一次收到發布指示時，依 [README 正式部署操作](README.md#正式部署操作) 推進發布分支或從 main dispatch，回讀相同 SHA 的 validate／deploy 成功與既有 production smoke。此待辦不授權現在部署或建立 Stable Release。
 
 ## 裝置與 UI 驗收
 

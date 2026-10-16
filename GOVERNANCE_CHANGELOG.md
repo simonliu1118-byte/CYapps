@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.41 — 2026/10/17
+
+- 依使用者新指示，CYAccountingWeb 改採合併與發布分離：PR 自動驗證，main 合併不自動部署；只有 `deploy/cyaccountingweb-production` 發布分支 push 或 main workflow_dispatch 可部署，來源須與當前 main 完整 SHA 相同。
+- 正式部署使用固定鎖且不取消進行中的部署，保留既有 Environment、Identity／migration／登入與資產檢查；Stable Release 必須取得相同 SHA 的成功 deploy job 證據，不能把 validation-only／skipped 當成已部署。README 為操作入口，交接與 PROJECT_RULES 同步；產品 VERSION／BUILD、業務程式與資料契約不變。
+
 ## 2.3.40 — 2026/10/14
 
 - 依使用者要求，CYAccountingWeb 桌機編輯回到原記帳表單；跨裝置共用既有 Adaptive entry editor／draft／cancel 與 app.js transaction writer，移除被取代的 ledger inline renderer、listener、assets 及樣式。PROJECT_RULES owner 地圖同步更新，不新增第二 writer 或 authority。
