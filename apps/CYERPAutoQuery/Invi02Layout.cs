@@ -152,7 +152,10 @@ internal static class ItemCodeRules
         return true;
     }
 
-    /// <summary>ERP may pad or change case; the record matches when the codes are equal ignoring both.</summary>
+    /// <summary>
+    /// SMART ERP item codes are case-sensitive (user, 2026-10-16: a lower-case c00154 does not
+    /// find C00154), so only surrounding spaces are ignored.
+    /// </summary>
     public static bool SameCode(string? shown, string requested) =>
-        string.Equals((shown ?? string.Empty).Trim(), requested.Trim(), StringComparison.OrdinalIgnoreCase);
+        string.Equals((shown ?? string.Empty).Trim(), requested.Trim(), StringComparison.Ordinal);
 }

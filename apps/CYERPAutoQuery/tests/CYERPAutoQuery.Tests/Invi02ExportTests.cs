@@ -117,7 +117,7 @@ public class Invi02ExportTests
     [Fact]
     public void KeepsOnlyCatalogWarehouseFields()
     {
-        var (_, warehouses) = Invi02Export.Parse(Read(FakeExport(withDetail: true)), "t0001");
+        var (_, warehouses) = Invi02Export.Parse(Read(FakeExport(withDetail: true)), "T0001");
         Assert.Equal(2, warehouses.Count);
         Assert.Equal(ItemFieldCatalog.Warehouse.Select(c => c.Label), warehouses[0].Select(f => f.Name));
         Assert.Equal("W01", warehouses[0].Single(f => f.Name == "庫別").Value);
@@ -145,6 +145,10 @@ public class Invi02ExportTests
     [Fact]
     public void OtherItemCodeIsRejected() =>
         Assert.Throws<InvalidDataException>(() => Invi02Export.Parse(Read(FakeExport(withDetail: true, code: "T0002")), "T0001"));
+
+    [Fact]
+    public void ItemCodeCaseMustMatch() =>
+        Assert.Throws<InvalidDataException>(() => Invi02Export.Parse(Read(FakeExport(withDetail: true)), "t0001"));
 
     [Fact]
     public void MoreThanOneHeaderRowIsRejected() =>

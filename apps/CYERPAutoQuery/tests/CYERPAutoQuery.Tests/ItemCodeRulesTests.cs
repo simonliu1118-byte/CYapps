@@ -30,7 +30,8 @@ public class ItemCodeRulesTests
 
     [Theory]
     [InlineData("C00154", "C00154", true)]
-    [InlineData("c00154 ", "C00154", true)]
+    [InlineData("C00154 ", "C00154", true)]
+    [InlineData("c00154", "C00154", false)]
     [InlineData("C00155", "C00154", false)]
     [InlineData("", "C00154", false)]
     [InlineData(null, "C00154", false)]
