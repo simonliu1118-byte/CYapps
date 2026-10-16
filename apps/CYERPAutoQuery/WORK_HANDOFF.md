@@ -5,6 +5,11 @@
 - 新增品名查詢（`ItemNameSearch.cs` 純規則與解析、`ItemQueryService.SearchByNameAsync`）。條件文字貼到進階設定條件框是使用者提議的做法，尚未實機驗證 ERP 確定時是否採用條件框文字；程式以「每筆品名都含關鍵字」驗證，不符就不採用。待實機：LOG `search: advanced condition pasted`、`after query 資料瀏覽 shown=`、`done items=`；若條件框不能輸入，LOG 會列出進階設定子視窗。
 - Web 品名查詢的補充交接待寫入 chihyuan-web（queryType ITEM_NAME、keyword、items）。
 
+## CY Web 待改（下次與其他項目一起交接，使用者 2026-10-16）
+
+- 品號只能是英文字母與數字（使用者 2026-10-16）：CY Web 建立品號查詢時，`itemNo` 去頭尾空白後若含英數以外的字元（符號、空白、全形、中文），直接回 400 `INVALID_ITEM_NO`，不建立工作。Agent 端 `ItemCodeRules.TryNormalize` 已同樣拒收（V0.4.0 Build 6）；若仍收到這種工作會回 FAILED／INTERNAL。前端輸入框也建議即時提示。
+- 品名查詢交接已寫（chihyuan-web `erp-item-query/name-search-handoff`），尚未實作。
+
 ## INVQ01 歷史異動日期輸入（V0.3.0 Build 2～8，使用者確認）
 
 - 起迄都有：點起日年份位置 → Home → 起日 `yyyyMMdd` → Enter（自動跳到迄日，不點）→ Home → 迄日 `yyyyMMdd`。
