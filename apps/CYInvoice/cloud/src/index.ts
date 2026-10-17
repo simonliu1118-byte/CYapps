@@ -22,6 +22,11 @@ interface Env extends CyIdEnv {
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
 }
 
+// Existing CYID_ONLY D1 storage13 remains fully usable during 3.0 rollout.
+// Recovery-only schema columns appear in the additive 0014 migration.
+function hasRecoveryColumns(env: Env): boolean {
+  return /^\d+$/.test(env.SCHEMA_VERSION) && Number(env.SCHEMA_VERSION) >= 14;
+}
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 type DeviceIdentity = {
@@ -564,7 +569,9 @@ async function previewPairing(request: Request, env: Env, requestId: string): Pr
   const hash = await sha256Hex(body.code.trim().toLowerCase());
   const pairing = await env.DB.prepare(
     `SELECT pairing_id, workspace_id FROM device_pairing_codes
-      WHERE code_hash = ?1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?2 LIMIT 1`
+      WHERE code_hash = ?1 AND used_at IS NULL
+      ${hasRecoveryColumns(env) ? "AND revoked_at IS NULL" : ""}
+      AND expires_at > ?2 LIMIT 1`
   ).bind(hash, new Date().toISOString()).first<{ pairing_id: string; workspace_id: string }>();
   const workspace = pairing && await directJoinWorkspace(env, pairing.workspace_id);
   if (!workspace) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid or Workspace is not ready.");
@@ -625,7 +632,8 @@ type InvitationRow = {
 
 async function findInvitation(env: Env, code: string): Promise<InvitationRow | null> {
   return env.DB.prepare(`SELECT invitation_id, workspace_id, delivery_state, expires_at,
-      revoked_at, consumed_at, consumed_by_device_id, issuer_channel, purpose
+      revoked_at, consumed_at, consumed_by_device_id,
+      ${hasRecoveryColumns(env) ? "issuer_channel, purpose" : "'DEVICE' AS issuer_channel, 'JOIN' AS purpose"}
       FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
     .bind(await sha256Hex(code.trim().toLowerCase())).first<InvitationRow>();
 }
@@ -798,7 +806,8 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
         JOIN workspaces w ON w.workspace_id = i.workspace_id AND w.status = 'active'
         WHERE i.invitation_id = ?6 AND i.delivery_state = 'sent'
           AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'
-          AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?7`)
+          AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?7`.replace("AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'",
+          hasRecoveryColumns(env) ? "AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'" : ""))
         .bind(deviceId, invitation.workspace_id, body.deviceDisplayName.trim(), tokenHash,
           body.clientVersion.trim(), invitation.invitation_id, now),
       env.DB.prepare(`UPDATE device_invitations SET consumed_at = ?1, consumed_by_device_id = ?2
@@ -835,7 +844,7 @@ async function revokeInvitation(request: Request, env: Env, requestId: string): 
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
       WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL
-        AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'
+        ${hasRecoveryColumns(env) ? "AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'" : ""}
         AND EXISTS (SELECT 1 FROM devices issuer WHERE issuer.device_id = ?4
           AND issuer.workspace_id = device_invitations.workspace_id AND issuer.status = 'active')`)
       .bind(now, invitationId, device.workspaceId, device.deviceId),
@@ -861,7 +870,9 @@ async function onboardingTicketStatus(request: Request, env: Env, requestId: str
   const creatorColumn = kind === "pairing" ? "created_by_device_id" : "issued_by_device_id";
   const usedColumn = kind === "pairing" ? "used_at" : "consumed_at";
   const claimedColumn = kind === "pairing" ? "claimed_device_id" : "consumed_by_device_id";
-  const stateColumns = kind === "invitation" ? "t.revoked_at, t.delivery_state" : "t.revoked_at, 'sent' AS delivery_state";
+  const stateColumns = kind === "invitation" ? "t.revoked_at, t.delivery_state"
+    : hasRecoveryColumns(env) ? "t.revoked_at, 'sent' AS delivery_state"
+      : "NULL AS revoked_at, 'sent' AS delivery_state";
   const row = await env.DB.prepare(`SELECT t.expires_at, t.${usedColumn} AS used_at, ${stateColumns},
     t.${claimedColumn} AS joined_device_id, d.display_name AS joined_device_name
     FROM ${table} t LEFT JOIN devices d ON d.device_id = t.${claimedColumn}
@@ -880,7 +891,8 @@ async function recentJoinTickets(request: Request, env: Env, requestId: string):
   const device = await authenticateDevice(request, env);
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
   const now = new Date().toISOString();
-  const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at, p.revoked_at, p.used_at AS joined_at,
+  const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at,
+    ${hasRecoveryColumns(env) ? "p.revoked_at" : "NULL AS revoked_at"}, p.used_at AS joined_at,
     d.display_name AS joined_device_name FROM device_pairing_codes p
     LEFT JOIN devices d ON d.device_id = p.claimed_device_id
     WHERE p.workspace_id = ?1 AND p.created_by_device_id = ?2 ORDER BY p.created_at DESC LIMIT 1`)
@@ -946,7 +958,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
 
   const now = new Date().toISOString();
   const pairing = await env.DB.prepare(
-    `SELECT pairing_id, workspace_id, used_at, claimed_device_id, expires_at, revoked_at
+    `SELECT pairing_id, workspace_id, used_at, claimed_device_id, expires_at,
+         ${hasRecoveryColumns(env) ? "revoked_at" : "NULL AS revoked_at"}
        FROM device_pairing_codes
       WHERE code_hash = ?1
       LIMIT 1`
@@ -993,7 +1006,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
         JOIN devices issuer ON issuer.device_id = p.created_by_device_id
           AND issuer.workspace_id = p.workspace_id AND issuer.status = 'active'
         WHERE p.pairing_id = ?6 AND p.workspace_id = ?2
-          AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > ?7`
+          AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > ?7`.replace("AND p.revoked_at IS NULL",
+          hasRecoveryColumns(env) ? "AND p.revoked_at IS NULL" : "")
       ).bind(
         deviceId, pairing.workspace_id, (body.deviceDisplayName as string).trim(),
         tokenHash, (body.clientVersion as string).trim(), pairing.pairing_id,
@@ -1001,7 +1015,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
       env.DB.prepare(
         `UPDATE device_pairing_codes
             SET used_at = ?1, claimed_device_id = ?2
-          WHERE pairing_id = ?3 AND used_at IS NULL AND revoked_at IS NULL
+          WHERE pairing_id = ?3 AND used_at IS NULL
+            ${hasRecoveryColumns(env) ? "AND revoked_at IS NULL" : ""}
             AND EXISTS (SELECT 1 FROM devices d
               WHERE d.device_id = ?2 AND d.pairing_id = device_pairing_codes.pairing_id)`
       ).bind(now, deviceId, pairing.pairing_id),
