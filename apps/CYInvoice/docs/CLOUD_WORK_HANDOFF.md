@@ -3,6 +3,20 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-17 最新交接：V3 拆為 3.0／3.1／3.2／3.3，保留全部已做工程
+
+**使用者決定：**V3.0 完成 Local／CYID Cloud 雙模式、公司設定卡、災難復原與必要 D1；V3.1 完成非折讓跨機協同；V3.2 完成折讓全流程（g0401／g0501／折讓跨機、雲端失聯安全本機 API、光貿網站操作同步、舊人工選號退役）；V3.3 收完剩餘一般發票結果不明／同步／UI／技術債。**這是最新版本邊界**，舊章節標的「V3.0 折讓／全部跨機」均為過時版本分類，不代表應在 3.0 發行。
+
+**唯一完整待辦／未收斂設計問題／來源檔清單：[TODO「2026-10-17 V3.0～3.3 分階段來源索引」](TODO.md)。**這裡只寫新對話入口，避免同一工作在多份文件各有一個狀態；業務規格 [REQUIREMENTS](REQUIREMENTS.md)，版別人工驗收 [RC_TEST](RC_TEST.md)，DR 方案 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)。
+
+**已保存的進度（避免重寫）：**
+
+- CYapps [PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 為開啟中的 **Draft**，已做功能來源定錨 `0d651688450cb3033209d1d0c7965c82949b93b0`；其 Windows、Cloud、Governance CI 在該 SHA 成功，Cloud Deploy 的實際部署 job skipped。source 已包括 CYID-only 收斂、公司卡 Worker／WinForms、0014 recovery、DR Windows、0015～0019 D1 Draft、Work Item／跨機上傳問題草稿、Local/Cloud g0401、Cloud g0501、官方查回與歷史折讓修正；**不是全部完成或已實際上線**。
+- CYWEB [PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 為 **Draft**，來源 `a1f09d70239d2e23018ab5c6fec7eb27f916d586`，有 CYWEB 超管復原 UI／Worker private Binding 草稿，沒有正式發行／Email 真實驗收證據。原 development CYID_ONLY D1 storage13 仍是已存在基準，V3 0014 未套、0015～0019 草稿未套。
+- **下一輪只能從 3.0 開始**：以最新 main 為基礎另開版別 PR；對照 #440 的 CYID-only／`SettingsForm`＋`company-settings*.ts`／`CloudCompanySettingsClient`／0017 公司表、`recovery-*.ts`／`CloudRecoveryForm`／0014、以及 CYWEB #151，**逐功能搬移現有 source、測試和文件**，檢查 schema 編號與相依，補完真驗收。每完成一項在 TODO 更新該版 checkbox、移入 commit、CI／實機證據。不要直接合入整包 #440。
+- **別提前動折讓**：3.0／3.1 須保留 V2.6.19 可用的人工折讓／作廢；#440 最後 `0d651688` 的人工選號視窗／人工完成 UI 退役以及 `b46cf7f3` 的 Local g0401 核准配號、Cloud D1 Ledger、g0501 只能在 3.2 安全接回，不刪保留來源。已知雲端離線 g0401 **需求已決但實作尚缺跨機唯一號碼／執行權**，不可無鎖開放；官方不明只能查原號，不盲重送。
+- **未授權操作禁令持續**：不在此輪拆 PR／部署 Worker／D1／正式光貿／發布版本；不要建立 Cloudflare 測試 Worker；實際上線／正式 Release 都需另外批准及備份／回復驗證。
+
 ## 2026-10-17 V3 折讓入口退役與最新連線決議（Draft）
 
 V3 正常折讓只能是「編輯原發票→管理員核准→CYInvoice 自動配號→單次 g0401→原號唯讀查回」；舊 2026/9/19 V2 方案的「管理員光貿網站人工開立→已人工完成」與「候選單號人工挑選」不再對新案提供 UI。此次由 `SyncIssuesForm` 移除手選候選及人工完成呼叫，保留對已送出／舊 pending 的查回；物理刪除 `AllowanceCandidateForm`。歷史 Core API／合成舊紀錄測試暫保留避免破壞過往相容性，不代表重新開啟人工送出。Local `g0501` 舊流程待完成等價 API 後另行退役。
