@@ -41,7 +41,7 @@ function makeDb(){
     catch(error){db.exec("ROLLBACK");throw error}
   }
   apply(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
-  apply(readFileSync("drafts/0014_invitation_recovery_metadata.sql","utf8"));
+  apply(readFileSync("migrations/0014_invitation_recovery_metadata.sql","utf8"));
   apply(readFileSync("maintenance/enable-cyweb-recovery-issuer.sql","utf8"));
   db.prepare(`INSERT INTO device_invitations(
       invitation_id,workspace_id,code_hash,issued_by_device_id,issued_by_cyid_employee_id,

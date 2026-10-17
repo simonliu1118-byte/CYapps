@@ -49,7 +49,7 @@ function fixture() {
     VALUES ('legacy_owner',?,'0001','Legacy Owner','old@example.test','SUPER_ADMIN',1)`)
     .run(workspace);
   transaction(db, readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8"));
-  transaction(db, readFileSync("drafts/0014_invitation_recovery_metadata.sql", "utf8"));
+  transaction(db, readFileSync("migrations/0014_invitation_recovery_metadata.sql", "utf8"));
   transaction(db, readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8"));
   return db;
 }

@@ -125,7 +125,7 @@ assert.equal((await call('/v1/device-recovery/claim',credentials,tokens[0],
   'schema13 must reject recovery even with flag set');
 assert.equal((await call('/v1/company-settings/get',companyCredentials,tokens[0],
   {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'13'})).status,503);
-consumer.db.exec(readFileSync('drafts/0015_company_settings.sql','utf8'));
+// Canonical migration 0015 was already applied by database('migrations').
 const companyEnabled = {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'15',
   COMPANY_SETTINGS_KEY_HEX:'ab'.repeat(32)};
 const initialCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);

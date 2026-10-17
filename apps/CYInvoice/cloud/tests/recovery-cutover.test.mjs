@@ -58,7 +58,7 @@ function dbFixture() {
       pairing_id,workspace_id,code_hash,created_by_device_id,expires_at)
       VALUES ('old_pairing',?,'b'||'bbbbbbbb','old_device_1','2030-01-01')`).run(workspace);
   transaction(db, readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8"));
-  transaction(db, readFileSync("drafts/0014_invitation_recovery_metadata.sql", "utf8"));
+  transaction(db, readFileSync("migrations/0014_invitation_recovery_metadata.sql", "utf8"));
   transaction(db, readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8"));
   db.prepare(`INSERT INTO device_invitations (
     invitation_id,workspace_id,code_hash,issued_by_device_id,issued_by_cyid_employee_id,
