@@ -27,10 +27,11 @@
 - [x] **3.0-C 復原的舊裝置競爭防護**：沿用 #440 的 `cloud/src/index.ts`，新增配對碼、邀請發送、普通 JOIN 的提交當下 Device 狀態保護；舊裝置一旦因災難復原撤銷，不得以稍早的請求再建立授權。原 `recovery-cutover.test.mjs` 為不可降低的安全門檻，未通過不得發行。只調整既有 Device 安全性，不新增資料庫或跨機／折讓功能。
 - [x] **3.0-C 復原 Windows UI／Pending Token 從 #440 接回**：`SettingsStore`、`SettingsModels` 的 DPAPI Pending Recovery／同 scope 原 Token 保存，以及原 `CloudRecoveryClient`／`CloudRecoveryForm`、從直接加入雲端開啟復原、WinForms 預設禁用不可逆接管的 smoke；延用 #440 程式，不重寫 CYID 或 D1。尚未部署，不能宣稱真 Email／雙機驗收完成。
 - [x] **3.0-C migration 升級為正式來源（尚未遠端執行）**：沿用隔離 SQLite 已驗證的復原 0014／公司設定 0015 原 SQL，納入 `cloud/migrations/` 單一版本化來源，移除 `drafts` 重複副本；更新退役 CYID_ONLY、復原邀請／公司卡與 3.0 可回復演練測試，確保先以舊 0013 建模，再追加 0014→0015。**仍未連線或修改遠端 D1**、Worker `SCHEMA_VERSION` 仍為13、兩項功能預設停用；部署稽核的現有 pending-migration gate 未開放，須有私有備份及獨立上線授權才可解開。此 PR 僅為可審查的發行程式來源。
-- [ ] **3.0-C 待續**：接回 #440 的 Windows `CloudRecoveryClient`、`CloudRecoveryForm`、既有 SettingsStore 的 DPAPI Pending Token，對接 CYWEB #151；驗真 Email、兩台 Windows、DR-01～13，執行前確認原 D1 備份／實際 schema／回復能力並另行授權。
+- [ ] **3.0-C 待續**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、SettingsStore DPAPI Pending Token **均已接回原始碼**；下一步是對接 CYWEB #151、真 Email／兩台 Windows／DR-01～13，核對原 D1 備份、schema、復原能力並於實際執行前另行授權。
 - [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
 - **禁止提前帶入** #440 的 0015 Work Item、0016／0018／0019 折讓 D1、g0401／g0501、`0d651688` 舊人工折讓 UI 退役；3.0／3.1 保留 V2 人工折讓與作廢。
-- 目前完成的是**第一小步工程提交**，不是整個 3.0，更不是正式部署；當前 Worker／原 D1／CYWEB／真光貿未變更。
+- [x] **3.0 安全收尾：請求前置容量限制**：公司卡 4096 bytes、復原 Preview/Claim 2048 bytes；Worker 在登入 CYID 與查 Device 前已依實際串流位元組數拒絕超量請求（含無 Content-Length），並補合成測試，避免只依靠路由後段的 body cap。這僅是 Source／CI 變更。
+- 目前已完成 3.0-A/B/C 的多個工程切片，但**不是整個 3.0，也不是正式部署**；Worker／原 D1／CYWEB／真光貿未變更。
 
 ## 0. 接續優先順序
 

@@ -115,6 +115,32 @@ assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/
 // source. It needs an explicit flag AND installed schema 0014+0015.
 // No real D1/Worker is modified by this synthetic exercise.
 const companyCredentials = credentials;
+// Reject oversized sensitive requests before opening any CYID Session.
+// Exercise both Content-Length-free streams and standard JSON bodies.
+const cyIdReadsBeforeOversize = paths.length;
+const oversizeCompany = await call('/v1/company-settings/get',
+  {...companyCredentials,extra:'x'.repeat(4096)}, tokens[0],
+  {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'15'});
+assert.equal(oversizeCompany.status,413);
+assert.equal(oversizeCompany.body.error.code,'REQUEST_TOO_LARGE');
+const streamed = new Request('https://invoice.example.test/v1/device-recovery/preview',{
+  method:'POST',duplex:'half',headers:{
+    Authorization:`Bearer ${tokens[0]}`, 'content-type':'application/json'
+  },
+  body:new ReadableStream({start(controller) {
+    controller.enqueue(new TextEncoder().encode(JSON.stringify(
+      {...companyCredentials,code:'a'.repeat(40),extra:'x'.repeat(2048)})));
+    controller.close();
+  }})
+});
+assert.equal(streamed.headers.get('content-length'),null);
+const rejectedStream = await invoice.fetch(streamed,{
+  ...env,RECOVERY_ENABLED:'true',SCHEMA_VERSION:'15'
+});
+assert.equal(rejectedStream.status,413);
+assert.equal((await rejectedStream.json()).error.code,'REQUEST_TOO_LARGE');
+assert.equal(paths.length,cyIdReadsBeforeOversize,
+  'Oversized V3 company/recovery payloads must never invoke CYID Login');
 const disabledProvision = await call('/v1/company-settings/provision',companyCredentials);
 assert.equal(disabledProvision.status,503);
 assert.equal(disabledProvision.body.error.code,'COMPANY_SETTINGS_NOT_READY');

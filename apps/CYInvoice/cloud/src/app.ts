@@ -30,6 +30,39 @@ interface Env extends CyIdEnv {
   EMAIL_FROM?: string;
 }
 
+ // Limit untrusted V3.0 credential-bearing request bodies BEFORE the generic
+ // CYID Login -> Resolve -> Logout flow parses JSON or touches a Device.
+ // Do not rely on Content-Length: streamed/chunked requests may omit it.
+async function boundedEmployeeBody(request: Request, maxBytes: number): Promise<Record<string, unknown> | null> {
+  const header = request.headers.get("content-length");
+  if (header !== null && (!/^[0-9]+$/.test(header) || Number(header) > maxBytes))
+    throw new CyIdError(413, "REQUEST_TOO_LARGE");
+  const reader = request.clone().body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new CyIdError(413, "REQUEST_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try {
+    const body: unknown = JSON.parse(new TextDecoder("utf-8", {fatal:true}).decode(bytes));
+    return body && typeof body === "object" && !Array.isArray(body)
+      ? body as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
 // No public issuance URL: named CYWEB private Service Binding only.
 // Remains disabled until 3.0 D1 migration and recovery maintenance are approved.
 function recoveryEnabled(env: Env): boolean {
@@ -108,9 +141,15 @@ export default {
         cyIdBinding(env);
         if (path === "/v1/bootstrap") return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
         if (needsEmployee) {
+          // Company card: 4096 bytes; recovery: 2048 bytes. This bounded read
+          // runs before Device/CYID authorization, including missing-length bodies.
+          const bounded = companySettingsPath || recoveryPath;
+          const boundedBody = bounded
+            ? await boundedEmployeeBody(request, recoveryPath ? 2048 : 4096) : null;
           if (!recoveryPath && !["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
             await cyIdDevice(request, env);
-          const body = await request.clone().json<Record<string, unknown>>().catch(() => null);
+          const body = bounded ? boundedBody
+            : await request.clone().json<Record<string, unknown>>().catch(() => null);
           return await withCyIdSession(env, body?.employeeNo, body?.password, async (_, revalidate, verifiedEmail) =>
             dispatchRequest(request, { ...env, cyIdContext: { revalidate, verifiedEmail } }));
         }

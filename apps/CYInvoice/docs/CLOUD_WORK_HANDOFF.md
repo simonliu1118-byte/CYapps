@@ -4,7 +4,15 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：災難復原併入 V3；CYWEB 超管復原邀請設計（2026-10-13）
+## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
+
+- 當前開發 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) `cyinvoice/v3.0-mode-setup`；3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機、3.2 折讓 API／跨機、3.3 其餘。不要將下方 2026-10-13 歷史階段重新當成待實作清單。
+- 3.0-A Windows CYID-only 入口與 Worker fail-closed；3.0-B 公司卡 API／Windows DPAPI 手動套用與版本標記；3.0-C 復原 Worker／Windows Pending Token／UI、0014/0015 canonical migrations 均已有工程實作。已完成／未完成逐項只看 `TODO.md` 最前段與最新精確 head CI。
+- 本輪安全收尾：公司卡／復原帶 CYID 密碼的輸入在 Worker 開始 Session／Device 核對**之前**執行串流實際位元組容量限制，不以可能缺少的 Content-Length 判斷；僅新增隔離回歸，原 V2 發票、人工折讓和 Local 不改。
+- **遠端不動**：原 CYID activation／CYID_ONLY D1 已完成，不重做；3.0 的 0014/0015 目前只在 Git source，正式原 D1 schema 13、Cloud Worker 0.9.3 保留。兩項功能 feature flag 預設關閉；需獨立核准備份、受控 migration、Worker/CYWEB 接線及真實 DR-01～13／兩模式驗收，不能憑 CI 綠燈宣稱上線。
+- 保留前期完整版程式 [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 作後續分版來源；CYWEB 復原草稿 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 尚未合併。不要重寫既有 CYID、Device、D1。正式 Release 必須另有當次授權。
+
+## 歷史停點：災難復原併入 V3；CYWEB 超管復原邀請設計（2026-10-13）
 
 - **使用者方向**：災難復原與 V3 多機協同一起做；由 CYID 超管在 CYWEB 簽發短效一次性復原邀請，新機加入原 CYInvoice business Workspace，不靠遺失的舊 Token。
 - **設計已整理**：[CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md) 定義情境、CYWEB/core 與 CYInvoice App scoped 授權、private issuer、現有 invitation／Audit migration、protected Pending Token／scope／結果不明、舊 Device history、V3 Work Item 重整及服務故障備份邊界。未增加永久規則或 shared Identity authority。
