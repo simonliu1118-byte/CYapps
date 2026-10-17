@@ -22,6 +22,14 @@ var tests = new (string Name, Action Run)[]
     ("reviewed cancel reason format uses reviewer requester and reason", TestReviewedCancelReasonFormat),
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
+    ("Local manager approval remains durable and cannot be withdrawn before numbering", () => AllowanceWorkflowTests.LocalApprovalPersistedBeforeLedgerFailureAsync().GetAwaiter().GetResult()),
+    ("Local manager sends frozen g0401 once and official readback closes ledger", () => AllowanceWorkflowTests.LocalManagerSendsOnceAndConfirmsAsync().GetAwaiter().GetResult()),
+    ("Local g0401 accepted reply remains pending without official confirmation", () => AllowanceWorkflowTests.LocalAcceptedResponseWaitsForOfficialConfirmationAsync().GetAwaiter().GetResult()),
+    ("Local g0401 timeout never resends and official original-number readback confirms", () => AllowanceWorkflowTests.LocalManagerTimeoutNeverResendsAsync().GetAwaiter().GetResult()),
+    ("Local manager checks changed official remaining before any number allocation", () => AllowanceWorkflowTests.LocalManagerChangedRemainingBlocksSendAsync().GetAwaiter().GetResult()),
+    ("Local automatic issue denies old manual requests and unauthorized actors", () => AllowanceWorkflowTests.LocalManagerRejectsOldManualReviewAndWrongAuthAsync().GetAwaiter().GetResult()),
+    ("Local g0401 occupied external number remains single attempt", () => AllowanceWorkflowTests.LocalManagerCollisionKeepsSingleAttemptAsync().GetAwaiter().GetResult()),
+    ("original employee may withdraw Local manual allowance before completion", () => AllowanceWorkflowTests.OriginalApplicantWithdrawsManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
     ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),
@@ -332,7 +340,13 @@ static QueryResponse Query(
             ProductItems: default,
             DetailVat: 1,
             DetailVatPresent: true,
-            VoidPending: voidPending));
+            VoidPending: voidPending)
+        {
+            // Explicitly empty official allowance[] is the required
+            // synthetic baseline. Missing history is not proof of zero.
+            AllowanceSummaryPresent = true,
+            Allowances = [],
+        });
 
 static void Equal<T>(T expected, T actual)
 {

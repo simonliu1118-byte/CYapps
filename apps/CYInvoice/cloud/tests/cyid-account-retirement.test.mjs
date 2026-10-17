@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const migrations = fs.readdirSync('migrations').filter(name => /^\d{4}_.*\.sql$/.test(name)).sort();
-assert.equal(migrations.at(-1), '0013_cyid_invitation_actor.sql',
+assert.equal(migrations.at(-1), '0014_invitation_recovery_metadata.sql',
   'CYID-only retirement is opt-in maintenance, not an automatic Built-in migration');
 const maintenance = fs.readFileSync('maintenance/retire-built-in-for-cyid-only.sql', 'utf8');
 assert.match(maintenance, /CREATE TABLE cyid_storage_profile/);
@@ -11,7 +11,9 @@ assert.doesNotMatch(maintenance, /DROP TABLE (workspaces|devices|device_pairing_
 
 function makeDatabase({ secondWorkspace = false, transitioning = false, pending = false } = {}) {
   const db = new DatabaseSync(':memory:');
-  for (const migration of migrations)
+  // The original CYID_ONLY retirement happened under schema 0013. A normal
+  // forward 0014 is applied afterward; it must not be reversed by maintenance.
+  for (const migration of migrations.filter(name => name < '0014'))
     db.exec(fs.readFileSync('migrations/' + migration, 'utf8'));
   db.exec(`
     INSERT INTO workspaces (workspace_id, display_name, recovery_email, recovery_email_verified_at)
@@ -96,11 +98,17 @@ assert.equal(retiredRecovery.recovery_email_verified_at, null);
 assert.equal(db.prepare("SELECT profile FROM cyid_storage_profile").get().profile, 'CYID_ONLY');
 assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
 assert.throws(() => transact(db), /already exists/i, 'maintenance must refuse a second execution');
+// The V3 invitation migration must also be valid for the already-retired D1.
+db.exec(fs.readFileSync('migrations/0014_invitation_recovery_metadata.sql', 'utf8'));
+assert.equal(db.prepare("SELECT issuer_channel FROM device_invitations WHERE invitation_id='inv_cyid'").get().issuer_channel, 'DEVICE');
+assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
 db.close();
 
 // When not explicitly selected, a Built-in/self-hosted database remains entirely
 // intact, with working account table FKs and the original legacy invitation FK.
 const builtIn = makeDatabase();
+builtIn.exec(fs.readFileSync('migrations/0014_invitation_recovery_metadata.sql', 'utf8'));
+
 assert.equal(tableExists(builtIn, 'cloud_employees'), true);
 assert.equal(builtIn.prepare('SELECT COUNT(*) AS n FROM cloud_employees').get().n, 1);
 assert.equal(builtIn.prepare("SELECT recovery_email FROM workspaces WHERE workspace_id='workspace_synthetic'").get().recovery_email, 'owner@example.test');

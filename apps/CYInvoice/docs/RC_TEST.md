@@ -1,5 +1,8 @@
 # CYInvoice Windows 候選版驗證清單
 
+> 2026-10-14 補充：**V2.6.20 Build 0** 工程測試包已由 [Windows CI #38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718) 產生，交給 AutoInput 做本機 EXE／IPC／Excel COM 整合測試；此測試包不是 V3 復原版本，也不是正式 Release。DR-01～DR-13 繼續使用 V3 Draft #440／CYWEB #151 的合成及後續受控實機驗收，不得以 AutoInput CI 勾選。
+
+
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。**2026-10-13 本批 V2.6.19 驗收決策：使用者批准其餘項目由 AI 以本地／隔離測試及已完成精確 source CI 核對即可，不要求再次逐項真人實機驗收；已知人工折讓逐筆歷史缺欄位併入 V3.0 重做，不當作本批阻塞，也不得標示修復。** 這是本批發行判斷，不是實機／雲端行為已全部驗證。**禁止建立、上傳、部署任何 Cloudflare 測試 Worker／版本／handler；不可重試刪除先前刪不掉的測試 Worker，也不得以新的測試 Worker 取代。** 不更動既有 Workspace／Device／Token／D1／真實帳號；撤銷會完整清除 portable folder，不以真實裝置代替測試。
 
 - **正式版已發布：**2026-10-13 [CYInvoice V2.6.19](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)，[正式 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) Windows 全套測試／Cloud Client／PE／套件／啟動／安全掃描／SHA-256 成功；tag `cyinvoice-v2.6.19`，ZIP 與 .sha256 已可下載。**以下工程包、待驗實機勾選維持其原本意義，不冒充正式環境逐項實測。** 折讓人工歷史於 V3.0 重做；Cloudflare 測試 Worker 禁令持續有效。
@@ -7,6 +10,47 @@
 - Development Cloud：**0.9.3 / API 1 / compatibility marker 8 / storage Schema 13 / CYID_ONLY**；2026-10-13 [原 Worker 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 完成，另經使用者批准完成私有備份、本機還原驗證與原 D1 退役維護；保留資料逐筆一致、FK 無異常。首次啟用歷史：prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows CYID 帳密進設定已由使用者回報成功；其餘角色／裝置／AA／AB／AC 真實實機項目未驗，僅可引用本地／CI 證據作本批版本接受；折讓歷史缺欄位已經使用者改列 V3.0 重做（AD），不阻塞本批 Release。
 - PR #216／#379 的 source 已隨 #380 進入 main；舊 Windows／Cloud runs 僅為歷史證據，不再作現行停點。下方節名中的舊版號表示功能首次引入；本次一律使用 V2.6.19 驗收。
 - 升級原安裝：先關閉程式並備份完整 portable folder，以工程包程式檔覆蓋原位置（含 Runtime／package-files.json），保留 Data／Cache／Logs 與原 Windows 使用者。重開應延續原 Workspace／Device／資料，不重新加入或進行 reset。
+
+## V3.0～3.3 分版本獨立驗收（最新；皆未完成）
+
+> 2026-10-17 使用者決議：四次獨立交付，不再一次驗整個 V3。歷史 V2.6.19 RC 的「V3.0 重做全部折讓／跨機」舊版號分類由本節及 [TODO 分版索引](TODO.md) 取代。**本節勾選均為新版本正式發布前待驗事項**；#440 已通過的 Windows／Cloud／Governance 合成 CI 不等於現場測試完成，也不是新的 Release 授權。每版回填 exact source SHA、Actions run、測試裝置／光貿測試環境、D1 備份／回復、缺陷與通過紀錄，不上傳真憑證／客戶資料。
+
+### 3.0.0：雙模式＋公司設定＋災難復原＋必要 D1
+
+- [ ] Local 新安裝與從 V2.6.19 升級，CYID 舊裝置保留 Workspace／Device／原本發票資料；沒有 Built-in／Self-hosted 的正式新登入入口；既有一般開票、MO店+／酷澎／鼎新匯入、PDF／原發票作廢均不退步。
+- [ ] **既有 V2 人工折讓／人工折讓作廢仍能操作**；不得把 #440 最後的「移除人工選號」當作 3.0 發行內容。
+- [ ] 公司設定 SUPER_ADMIN 才可新增／修改，公司 ADMIN 只能看統編及密鑰是否設定；App Key／MO 密碼加密與 DPAPI 授權快取、版本刷新／撤銷、Cloud 斷線正常開票權限回歸。
+- [ ] CYWEB 超管真實邀請／Email／私有 Binding／新 Device 接管及全數舊 Device 撤銷：預覽／簽發不提早撤銷；重入、失效、權限變化、斷線重啟；[CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md) DR-01～DR-13 在至少兩台實際 Windows 驗收。
+- [ ] 原 D1 先備份、0014＋公司設定所需 migration 編號和依賴、資料一致性／FK／回復演練，**不能提前套 3.1/3.2 的 Work Item／折讓 Draft migration**。
+
+### 3.1.0：非折讓跨機協同
+
+- [ ] A 機發出上傳問題 → B 機管理員查看／註記／封存 → A 機查回；所有異常類型、Audit、封存與來源 Device／Workspace 範圍正確，D1 不能新增正常無異常發票資料。
+- [ ] 紙本未收回發票作廢申請：B 機 ADMIN 覆核、官方狀態查回，跨機一致；兩個管理員並行、Device 撤銷、D1 斷線／回線及 Work Item revision 競爭不能重複執行或假結案。
+- [ ] 本機上傳／SQLite 故障不能由另一台假裝已修好；已成功 OrderID 與第二次重複失敗原分流不改；**V2 人工折讓仍可用**。
+
+### 3.2.0：折讓 g0401＋g0501＋跨機＋官方同步
+
+- [ ] 原單帶入折讓品項、**未稅輸入唯一模式／含稅自算**、負折扣、部分／多次折讓；只限制整張含稅折讓不超過官方有效餘額，官方歷史不完整／待定不得送。
+- [ ] 管理員核准前可撤回、核准後不可撤回；Local SQLite 與 Cloud D1 同公司配號不重疊，原 Work Item 固定 `AyyyyMMddXXX`，跨重啟／跨日；`reserved` 尚未取得送出權才可原號首次送，`sending` timeout／程式中止不能重送同號或換號。
+- [ ] g0401 真光貿**測試環境**單次開立／原號回查、g0501 原號折讓作廢／官方 D0501/99 才結案；A/B 兩機 ADMIN、Device 失效、Cloud CAS 衝突都不雙送。
+- [ ] 雲端失聯而光貿可用時，本機折讓 g0401 **安全降級**（先證明跨機號段／執行權／授權）；光貿失聯時程式禁止發送，管理員網站自行操作後 `invoice_list`＋`allowance_list` 低 API 量自動同步原本 SQLite，含舊期回掃／PDF Cache 更新，不杜撰官方操作 Audit。
+- [ ] **以上驗完才正式移除** V2 人工開立／人工選候選號碼入口；舊原單／稽核／unknown pending 能唯讀追蹤，不遺失歷史。
+
+### 3.3.0：剩餘全部完成
+
+- [ ] 一般發票結果不明：管理員詢問／官方證據／人工確認成功時更新**原本**發票列，明確未開立才可受控同 OrderID 再送一次；任何流程不能產生第二張同號成功發票。
+- [ ] 其餘非折讓同步／異常／PDF／Cache、UI 操作簡化、可刪舊程式、文件更新及 CI 全回歸；**不得把 3.2 的折讓核心缺口延後到這版**。
+- [ ] V2.6.19→3.0→3.1→3.2→3.3 各版升級、資料／Audit／DPAPI／Device 保留、回退與真實維運演練已實測。
+
+### 再次檢視補充：跨版相依／真實業務可操作性（全部待驗）
+
+- [ ] **3.0 公司卡不是只有新增／讀取成功**：Cloud 統編／App Key／MO 密碼變更經正式權限同步後，實際開票與 MO 匯入使用正確版本的授權設定；斷網／已撤銷／換電腦／重啟不得使用失效祕密。ADMIN 只讀狀態。Local／CYID 雙模式舊開票不退步。
+- [ ] **3.0 逐版 D1 migration**：既有 storage13→復原 0014→獨立公司表可連續套用；未先建 3.1 Work Item；舊邀請、Workspace、Device、Audit 仍相容；更新 migration rehearsal 的 3.0／3.1／3.2 階段測試，回復／向後相容 Worker／舊 Windows 真核對。
+- [ ] **3.0 Worker 路由分版**：工作單／折讓與折讓作廢 API 在 3.0 不對外啟用（即使未建表），現行舊 Windows 及 3.0 Windows 都可與部署後 Worker 安全相容；CYWEB private Recovery 鏈路與既有裝置狀態同步可用。
+- [ ] **3.1 真跨機作廢**：B 機**沒有** A 機的發票 SQLite 時，仍可在正確權限下取得必要申請摘要、查官方並完成紙本作廢覆核；不能只驗 D1 Work Item 建立／列表。上傳問題具備可判斷的安全摘要，不只列錯誤碼。
+- [ ] **3.2 雲端失聯折讓**：真雙機多申請、多號段及相同 Work Item 重入測試；授權撤銷與連線中斷分別處理，不得因有本機 App Key 就繞過 CYID 執行權。回線後只補 Audit／官方結果、不重開折讓。
+- [ ] **各版都維持發票安全不變量**：原 OrderID 防重、官方未知不是成功、本機保存故障、原 V2 人工折讓及 AutoInput 現有 IPC；若出現會造成重複開立／資料遺失的重大回歸，即使完整一般發票管理員功能預定 3.3 也不准先行發版。
 
 ## 本次維護與驗收範圍（2026-10-13）
 
@@ -393,7 +437,14 @@
 - [ ] 寫入失敗／中斷不留下只有成功狀態而沒有人工紀錄的半成品，原發票／待辦／資料保留。
 - [ ] 舊紀錄只用可核對的本機 metadata／備份恢復；缺失明确顯示，不編造人員／時間／原因或依光貿猜補。
 
-## AE. V3 多機協同與 CYWEB 復原邀請（待實作／未驗）
+## AE. V3 多機協同與 CYWEB 復原邀請（Draft Source 已實作，實機未驗）
+
+**2026-10-14 驗收停點：**CYInvoice #440 的 Windows/Cloud CI 與 CYWEB #151 的 TypeScript／API／deployment-contract CI 已通過（精確跑次見 [交接](CLOUD_WORK_HANDOFF.md)）；仍未合併、部署、執行 original D1 migration 0014/optional maintenance、使用真 Email／多台 Device 做 DR-01～DR-13。不能勾選實機結果。
+
+Windows 人工入口固定為「首次啟動 → 直接加入雲端 → 災難復原」按鈕（Pending 時「繼續災難復原」），**沒有首次啟動第三選項**。超管要在 CYWEB「帳號與權限」內簽發／查詢／撤銷邀請；只有新機完成 claim 才全數撤銷舊 Device，一般配對加入不受影響。
+
+實際演練前先取得獨立部署與資料庫修改授權、驗證正式 CYID／CYWEB／CYInvoice Application Scope、原 D1 0014＋optional profile、Workspace/Device baseline/rollback、寄信安全與全數撤銷的不可逆影響；**不可拿既有正式公司 Device 做未核准的災復**，也不能為了測試新增 Cloudflare 測試 Worker／handler。
+
 
 使用者決定災難復原併入 V3，由 CYID 超管在 CYWEB 簽發短效一次性復原邀請；設計與 DR-01～DR-13 完整驗收矩陣見 [CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md#9-實作順序與驗收條件)。本節不新增第二份勾選清單，未完成項目只在 TODO §7.4／§7.5 追蹤。
 

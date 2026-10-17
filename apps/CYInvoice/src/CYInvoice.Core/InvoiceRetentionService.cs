@@ -112,10 +112,14 @@ public sealed class InvoiceRetentionService
                    invoice_date, sent_at, extra_json
             FROM invoices
             WHERE seller_invoice = $seller_invoice AND environment = $environment
+              -- V3: failed issuance must be explicitly archived, never
+              -- silently deleted by regular date-based housekeeping.
+              AND invoice_state <> $failed
             ORDER BY local_id;
             """;
         command.Parameters.AddWithValue("$seller_invoice", account.SellerInvoice);
         command.Parameters.AddWithValue("$environment", account.Environment);
+        command.Parameters.AddWithValue("$failed", InvoiceStates.Failed);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {

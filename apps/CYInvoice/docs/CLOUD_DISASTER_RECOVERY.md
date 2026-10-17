@@ -1,8 +1,10 @@
 # CYInvoice V3 多機協同與 CYWEB 裝置復原設計
 
-更新日期：2026-10-13（Asia/Taipei）。
+更新日期：2026-10-14（Asia/Taipei）。
 
-**狀態：產品方向已依使用者要求併入 V3，以下為待實作設計。** 本文件描述 CYInvoice 的業務裝置信任與資料回復，不建立新的永久規則或 CYID shared contract。尚未增加 CYWEB 介面、private RPC、D1 migration、復原 API 或可攜備份工具，也未進行遠端復原。唯一未完成清單仍為 [TODO.md](TODO.md)。
+**狀態：V3 Source 已在兩個 Draft PR 逐步實作、CI 成功，但尚未部署或取得真實 DR 驗收。** [CYInvoice #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已有 forward migration 0014、獨立 optional maintenance、CYInvoice private RPC issuer／Email pending-sent／status-revoke、Windows 專用 preview／claim、DPAPI Pending Token、原子全數撤銷／Audit；[CYWEB #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已有超管管理 UI／route 和 optional named Service Binding renderer。兩邊仍 Draft／未合併；**原 Worker、原 D1 0014／issuer maintenance、真 Email／Device 尚未執行；DR-01～DR-13 全未做實機驗收。** 不建立新的永久規則或 CYID shared authority。唯一未完成清單見 [TODO.md](TODO.md)。
+
+**2026-10-14 CYWEB 交接補正：**#151 指出 private issuer 應提供明確 `revoked` 狀態，不能以通用 `failed` 冒充已撤銷。本 V3 Draft #440 已在 source 加入 `revoked_at` 唯一證據、成功撤銷及同操作重讀回 `revoked`、consumed／expired 不回 `revoked`，並在 D1 batch 寫入時再次驗證 invitation 未消耗／未過期；synthetic SQLite 競態測試需按 exact-head CI 判定，真遠端／多裝置仍未驗。
 
 ## 1. 本次決策與範圍
 
@@ -23,6 +25,12 @@ V3 的裝置管理與復原共用同一份 Device registry、邀請 lifecycle �
 | 現行 D1 maintenance 私有備份 | DPAPI 加密、原電腦解密／SQLite 還原及逐筆核對已驗證 | 不構成異機備份，不代表已完成 Cloudflare 遠端還原 |
 
 現有 `device_invitations.issued_by_device_id` 是 NOT NULL／Device FK；不能為 CYWEB 簽發偽造一台 issuer Device，也不能借用遺失或 revoked Device 當管理入口。現有 audit event-type CHECK 與 deployment snapshot 也需隨 forward migration 一併適配，不能只新增 handler。
+
+### 2026-10-14 入口及撤銷決議（覆蓋舊設計描述）
+
+Windows 第一次開啟只提供「使用單機版／直接加入雲端」。**「災難復原」放在「直接加入雲端」的 `CloudDirectJoinForm` 內作為獨立按鈕**，需要時顯示「繼續災難復原」，另開 `CloudRecoveryForm` 的超管重新驗證、Workspace Preview、撤銷全部舊 Device 二次確認；正常 JOIN 的配對或邀請沒有額外撤銷副作用。
+
+CYWEB 只對有效、已驗證 Email 的 CYID SUPER_ADMIN 顯示「帳號與權限 → CYInvoice 裝置災難復原」管理區，提供操作 ID 的**簽發／狀態查詢／明確撤銷**；Email 寄送成功也**不撤銷**。只有新 Device 完成復原兌換時，一筆 D1 transaction 才使同 Workspace 全部其他舊 active Device revoke、所有未用邀請／配對碼失效、Audit 原子寫入。**既有已開始且尚未 commit 的業務寫入另需 fencing/epoch**，不能用 Device token 失效推斷原先在途業務 mutation 全部自動取消。
 
 ## 3. 情境分流
 
@@ -77,7 +85,7 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 - 邀請 RECOVERY 用途、原目標 scope、已送達／可交付狀態、expiry、revocation、issuer principal 與當下 Role／App enablement；issuer 轉移／停用或 credential／revision 變動後重新簽發，不默認舊 grant 仍可用。
 - Token hash 與既有 Device 的關係、Workspace active、CYID profile；已 revoked／外 Workspace 的 Device 不可因 `recovered=true` 復活。
-- 新 Device insert、單次 invitation consume 與成功 Audit 為一個受 guard 的 transaction；競爭失敗不能留下未授權 orphan Device 或成功 audit。
+- **公司級災難復原接管：**新 Device insert、單次 RECOVERY invitation consume、**同 Workspace 其餘全部 active Device revoke**、舊 JOIN／RECOVERY invitation 與未使用 pairing code 撤銷，以及逐裝置撤銷 Audit／成功接管 Audit，必須是**同一筆 D1 原子交易**。任何驗證／寫入／稽核失敗均 rollback，不能有 orphan Device、部分舊 Token 有效或成功 Audit。這是正式復原與一般新增裝置的關鍵差異。
 
 若 response 遺失，保留同一 Pending Token，先透過 authenticated current-device/discovery 讀回原 Device／Workspace／provider scope。未確認時不產生第二個 Token、重簽 invitation 或重播業務；若確定尚未完成且邀請仍有效，才以原 attempt 重試。新身份正式寫入前核對 scope 全部一致；不使用 current claim 的「同 token 找到舊列」分支當作充分證據。
 
@@ -87,11 +95,11 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 ## 7. 舊裝置管理與 V3 協同
 
-D1 中仍 active 的遺失裝置不自動全部撤銷。CYWEB 管理頁顯示該次邀請 ID、到期與狀態，不將原碼放 URL／log；碼寄到當下由 CYID 確認的超管 Email。超管在新裝置連通後看到原 Device registry，明確選擇失聯裝置撤銷；LAST_ACTIVE_DEVICE 保護保持，新 Device 正常加入後才可處理最後一個失聯舊 Device。revoked 歷史與 Invitation／Audit actor 留存，不覆寫成新 Device。
+**2026-10-14 使用者確認的新正式規則：CYWEB 公司級災難復原成功接管時，自動撤銷原 Workspace 的全部舊 Device。** CYWEB 簽發前必須明示「成功兌換後將使所有現有裝置失效」並取得超管確認；僅建立／寄送邀請時不得提前撤銷，以免 Email／新機失敗造成鎖死。新 Device Token 建立與所有舊 active Device `status=revoked`、`revoked_at`、未使用舊邀請與配對碼失效、撤銷／接管 Audit 必須同一個原子交易。**不刪除舊 Device row，不重建 Workspace，不還原舊 Token**；只有新 Device 成功才保持一台 active，舊 Token 立即不能再對 Cloud API 驗證，連線後依既有 durable wipe 流程失效處理。正常多機加入仍不撤銷其他裝置；LAST_ACTIVE_DEVICE 保護只適用一般逐台撤銷，不阻止有新 Device 同交易上線的正式復原切換。
 
-若是疑似 Token 外洩而需緊急全撤銷，屬另一個明確的事件處理範圍；不能偷偷借災復 UI 刪掉全部 active 或將其標為已恢復。
+若是疑似 Token 外洩而需**尚無新 Device 就全部撤銷**，仍屬另一個明確的緊急事件處理範圍；不能偷偷讓僅「簽發復原邀請」提前做全撤銷，也不能將尚未完成的復原標為成功。
 
-V3 Work Item、revision／原子狀態轉移、跨機 OrderID 防撞、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
+V3 Work Item、revision／原子狀態轉移、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。**正常開立發票不建 D1 索引**，僅申請／上傳異常留事件；正式匯入使用原始 OrderID，光貿判重且現有本機 Failed 隔離已完成，僅程式自行產生的手動 OrderID 需考慮多機唯一性，不新增全域 Cloud Lock。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
 
 ## 8. 備份與服務故障回復
 
@@ -138,16 +146,16 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-03 | USER、ADMIN、Identity Admin、first-login ticket、過期／revoked core Session、未驗證 Email 均不能簽發復原邀請 |
 | DR-04 | CYWEB core 授權與 CYInvoice App-scoped authority 均重驗；錯 Employee／identity Workspace／Application／business Workspace／profile 拒絕 |
 | DR-05 | Provider outage、Workspace/App disabled、轉移超管、密碼／revision 改變後 fail closed；offline cache 不簽發或兌換 |
-| DR-06 | 兩台／兩個 Token 同時兌換只有一台成功；失敗無 orphan Device、無成功 Audit；Device registry、issuer 與 actor 正確 |
+| DR-06 | 兩台／兩個 Token 同時兌換只有一台成功，且**只有勝者 Device 為 active**、全部舊 Device 一律 revoked；失敗無 orphan Device、無部分 revoke、無假成功 Audit；Device registry、issuer 與 actor 正確 |
 | DR-07 | claim 已提交但 response 遺失、Windows 重啟／settings 寫入失敗，沿用同 Pending Token 找回；原安裝遺失 Token 保留同 Workspace 的本地資料，revoked wipe／外 scope 不旁路 |
 | DR-08 | 簽發 response 遺失可查同一次 request 結果，不盲目重簽；過期／撤銷／重寄及雙重提交按同一 lifecycle 收斂 |
-| DR-09 | 成功後保留原 Workspace／資料／Device history；舊裝置只有經超管明確選擇才撤銷，LAST_ACTIVE_DEVICE 維持 |
+| DR-09 | 超管簽發時清楚確認「復原成功將全數撤銷舊裝置」；簽發未完成或逾時不撤銷；**新 Device 成功兌換的同一 D1 交易**中，原 Workspace 所有其他 active Device 被 revoke、全部舊 Token 失效、舊未使用 JOIN／RECOVERY／Pairing 授權碼撤銷，成功 Audit 記錄每台舊 Device；任一步驟失敗全數 rollback，不存在雙 active／半接管。舊裝置歷史、Workspace、資料仍保留；一般新增裝置不受影響。 |
 | DR-10 | 正常 Device issuer、配對／邀請與獨立 Built-in fixture 可升級；audit／history fingerprint／migration readback 仍成立 |
 | DR-11 | 無帳密、provider token、原邀請碼或 Device Token 明文進入 D1／public source／logs；CSRF／rate/body limits 與 private capability 防濫用 |
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
 | DR-13 | V3 新機 pending／revision／官方結果重整不自動重送 AMEGO；未上雲的原機資料遺失有明確界線 |
 
-以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+以上仍是後續真實驗收條件。**Draft 原始碼及多個 synthetic Node／SQLite／Windows/CI 測試已完成**，但 DR-01～DR-13 的跨服務／真實裝置／真 Email 實機驗收仍未完成，故未將任何 DR 項目勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 
 ## 10. 原始碼與 canonical 參考
 

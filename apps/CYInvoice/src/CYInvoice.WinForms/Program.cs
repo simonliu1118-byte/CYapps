@@ -249,7 +249,6 @@ internal static class Program
         try
         {
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
-            var settings = repository.Settings.LoadOrCreate();
             CloudDirectJoinForm.VerifySmokeJoinFlow();
 
             using var firstRun = new FirstRunModeForm();
@@ -266,12 +265,11 @@ internal static class Program
             directJoin.VerifySmokeLayout();
             directJoin.Close();
 
-            // Device Join deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
-            // The startup smoke validates static layout without displaying the form so CI
-            // never bypasses or blocks on the real runtime authorization gate.
-            using var join = new CloudJoinWorkspaceForm(repository, settings, "https://cloud.example.test/");
-            join.PerformLayout();
-            join.VerifySmokeLayout();
+            // Recovery form is never executed by CI; only the default-safe UI
+            // is checked without an old Device token or network call.
+            using var recovery = new CloudRecoveryForm(repository);
+            recovery.PerformLayout();
+            recovery.VerifySmokeLayout();
 
             // Device Management now loads the trusted-Device inventory from Cloud on Shown.
             // Smoke validation must remain deterministic and offline, so validate the complete
@@ -280,6 +278,31 @@ internal static class Program
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
             management.PerformLayout();
             management.VerifySmokeLayout();
+            // No network or CYID login is triggered by this static layout
+            // validation: g0501 form must be usable in a fresh Windows build.
+            using var allowanceVoid = new CloudAllowanceVoidManagerForm(
+                repository, "https://cloud.example.test/", token, "ws_synthetic");
+            allowanceVoid.PerformLayout();
+            allowanceVoid.VerifySmokeLayout();
+            // Simulate abrupt closure after send: the exact original Work
+            // Item must survive a new form/process and remain Workspace scoped.
+            const string pendingId = "wi_smoke_00000000000000000001";
+            var persistent = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_smoke|https://cloud.example.test/");
+            if(persistent.Peek() is not null)
+                throw new InvalidOperationException("Unexpected previous smoke Work Item.");
+            persistent.Remember(pendingId);
+            var recovered = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_smoke|https://cloud.example.test/");
+            if(recovered.Peek()!=pendingId)
+                throw new InvalidOperationException("Original g0501 Work Item was lost after restart.");
+            var differentWorkspace = new PendingAllowanceVoidRequestStore(
+                temporaryRoot, "ws_other|https://cloud.example.test/");
+            if(differentWorkspace.Peek() is not null)
+                throw new InvalidOperationException("Pending g0501 ID leaked across Workspaces.");
+            recovered.Confirm(pendingId);
+            if(persistent.Peek() is not null)
+                throw new InvalidOperationException("Confirmed g0501 Work Item remains pending.");
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
             addDevice.CreateControl();
             addDevice.PerformLayout();

@@ -1,12 +1,256 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-13（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-16（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；AutoInput **V2.6.20 Build 0** 僅在獨立 [PR #445](https://github.com/simonliu1118-byte/CYapps/pull/445) 有 CI 通過的工程測試包（[run 38554728718](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)，非正式 Release）。V3 原工作仍在 Draft #440／CYWEB #151，尚未部署。原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
-- 本公司使用 CYID；其他公司 Built-in／Self-hosted 用自己的新 D1 與原 migrations。Built-in 是正式支援模式，不是 CYID 故障 fallback；不能復活本公司已退役的舊帳號表。
+- 本公司現使用 CYID；2026-10-15 使用者決定 V3 停止正式支援 Built-in／Self-hosted，僅保留 Local／CYID Cloud。此前其他公司自架的設計為歷史資料，不再是 V3 維護目標；不能復活本公司已退役的舊帳號表。
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
+
+## 2026-10-17 V3.0～3.3 分階段來源索引（**最新版本權威待辦**）
+
+> **新決議優先於下方歷史版本標題。**V3 改為 3.0「雙模式／公司設定／災難復原／必要 D1」、3.1「**非折讓**跨機協同」、3.2「**全部折讓** API／作廢／跨機／同步」、3.3「剩餘異常與整合」。下方舊日期段落仍寫「V3.0 折讓／跨機」只是當時 checkpoint，**不代表現行版本安排**。本節是唯一分版 checklist、未收斂問題及來源接續索引；[REQUIREMENTS](REQUIREMENTS.md) 管業務基準，[CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md) 管新對話入口，[RC_TEST](RC_TEST.md) 管驗收。
+
+### 已做工程的保存方式（所有版本共通）
+
+- **正式基準** Windows V2.6.19 Build 0，tag `cyinvoice-v2.6.19`；AutoInput V2.6.20 是另一條工程測試 PR #445，非 V3 Release。
+- **不可丟掉、不可重寫的 V3 source**：[CYapps Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440)，本次來源定錨 SHA [`0d651688450cb3033209d1d0c7965c82949b93b0`](https://github.com/simonliu1118-byte/CYapps/commit/0d651688450cb3033209d1d0c7965c82949b93b0)；[CYWEB Draft PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) source `a1f09d70239d2e23018ab5c6fec7eb27f916d586`。來源 SHA 是保留既有工程的錨點，**不是未來版別 PR 的 HEAD**。
+- **證據邊界**：#440 此 SHA 的 Windows Build／Cloud Check／Governance 成功，Cloud Deploy workflow 的 `validate` 成功、真正部署 job **skipped**。成功的是程式與合成測試，**沒有 V3 原 D1 Migration、真 AMEGO、跨機實測、CYWEB Recovery 實際部署或正式 Release**。
+- **版本切片**：在當時最新 `main`（保護最新已正式變更）為每版開獨立短期 PR；以 #440、#151 及明確 SHA **逐檔比對選取已有實作、測試、schema 與相依**，必要時拆依賴而非複製貼上重寫；禁止直接整包 merge #440。每版回填來源 SHA→版別 commit→新 exact-head CI→真人驗收／D1 回復→正式授權的 Release。每個後續版本以已發布前版為基礎，延後功能從保留的 #440 續接。
+- **關鍵版本隔離**：#440 `0d651688` 已把 V3 Draft 的人工選號／人工完成 UI 退役，這是**3.2 才能啟用**的改動；**3.0／3.1 必須沿用 V2.6.19 原有人工折讓及折讓作廢**，直到完整折讓 API 驗證完成，不能讓前版失去既有功能。歷史 SQLite、Audit 及尚未確認舊單必須保留可查。
+- **實際操作授權**：分支 CI、文件、Migration rehearsal 不等於正式 D1／Worker／光貿操作或發行授權；任何生產資料先備份／驗證／有可回復方案。不得建新 Cloudflare 測試 Worker；公開 repo 不含真憑證與真客戶紀錄。
+
+### V3.0.0 — 雙模式、公司卡、災難復原、必要 D1
+
+**不帶入**非折讓 Work Item 跨機正式路徑、g0401／g0501 新流程或 `0d651688` 的人工選號 UI 退役。
+
+- [ ] **3.0-A Local＋CYID Cloud 模式收斂**：已寫／CI 通過的基礎在 `cloud/src/app.ts` CYID-only routes、`IdentityProviderRuntime`、`LocalRepository`、`src/CYInvoice.WinForms/SettingsForm.cs`，現行正式路徑不應開 Built-in／Self-hosted。待查完整舊 handlers、Employee CRUD／OTP／transfer、UI、fixtures、CI 相依並只刪**不再使用的現行程式**；不能刪已發行歷史／SQLite 舊資料解讀或復活本公司已退役 D1 帳號表。驗 Local／CYID 首次啟動、登入、回線、拒絕、裝置撤銷、升級。
+- [ ] **3.0-B 公司設定卡**：已寫 `cloud/src/company-settings.ts`、`company-settings-route.ts`、`cloud/drafts/0017_company_settings.sql`、`src/CYInvoice.Core/CloudCompanySettingsClient.cs`、`src/CYInvoice.WinForms/SettingsForm.cs`；SUPER_ADMIN 修改、ADMIN 僅讀狀態、AES-GCM 密文與 Worker 另放金鑰的 source 已有。待完成 UI／MO匯入與發票憑證取用、Windows DPAPI 已授權快取／版本失效、斷線及撤銷權限矩陣、真 D1 實測；不能因 source 存在即勾正式完成。
+- [ ] **3.0-C 災難復原**：已寫 `cloud/migrations/0014_invitation_recovery_metadata.sql`，`cloud/src/recovery-{authority,issuer,claim,routes}.ts`、`src/CYInvoice.Core/CloudRecoveryClient.cs`、`src/CYInvoice.WinForms/{CloudRecoveryForm,CloudDirectJoinForm}.cs` 的邀請、私有 RPC、原子接管、舊 Device 撤銷、DPAPI pending token；CYWEB #151 有超管入口草稿。待 #151 private Binding 真實聯通、Email、失效／重啟、DR-01～13 及兩台實機驗證；**簽發／預覽不得提早撤舊裝置**。
+- [ ] **3.0-D D1 僅必要部分**：現有原 development Cloud 0.9.3／storage13／CYID_ONLY 已存在；V3 0014 未套，0017 公司設定在 Draft。只提 3.0 必要 recovery + 公司設定 schema；**先確定公司表的 migration 新序號／相依順序及後續 3.1/3.2 的 0015～0019 不撞版**，不能跳 migration、不能把 Work Item／折讓表全套先行部署。備份、還原、FK、保留裝置稽核證據，另取得授權。
+- [ ] **3.0-E 發行 gate**：兩模式、公司卡角色與秘密、真 DR、原發票開立／匯入／作廢和 **V2 人工折讓仍可用**、既有裝置資料、正式 D1 回退全部驗收；才可授權由 `main` 發 3.0.0。
+- **接回素材**：#440 Built-in 清理／公司卡／recovery + #151 CYWEB；`docs/CLOUD_DISASTER_RECOVERY.md`。**暫不搬** `cloud/drafts/0015_work_items.sql`、0016、0018、0019、`CloudAllowanceManagerForm`、Local g0401、舊 UI 退役。
+
+### V3.1.0 — 非折讓跨機協同全部完成
+
+- [ ] **3.1-A Work Item／Audit 通用底層**：已有 `cloud/drafts/0015_work_items.sql`、`cloud/src/{work-items,work-items-route}.ts`、`src/CYInvoice.Core/CloudWorkItemClient.cs` 的 create/get/list/transition、revision CAS、active Device/Workspace fence、合成測試。以已發布 3.0 的**實際 migration 編號**恢復相依；兩機真測試、兩個管理員競爭、權限撤銷、重啟、Audit 原子寫入。
+- [ ] **3.1-B 所有「上傳問題」跨機**：已有 `reportUploadIssue`、`SyncIssuesForm.cs` 舊清單及 `InvoiceSyncIssueStore`；補齊 `invoice_list_failed`／`query_failed`／`remote_not_found`／`unknown_remote_not_found`／`reconciliation_failed`／`ambiguous_match`／`local_write_failed`／`upload_failed`／`duplicate_order_id` 的真正跨機事件、去重、處理／封存及 Audit。不存成功一般發票、完整 Excel／PDF；遠端不能假裝本機 SQLite 已修好或官方成功。
+- [ ] **3.1-C 紙本未收回作廢跨機**：沿用 `InvoiceVoidService`／`EmployeeVoidWorkflowService` 舊作廢核心，加申請→B 機管理員覆核→官方查回→A 機同步的 Work Item；本機與雲端角色分離、並發與不明結果 fail closed。
+- [ ] **3.1-D 開立失敗保留歷史**：`src/CYInvoice.Core/FailedInvoiceRecordStore.cs` 的 Archive 與 `InvoiceRetentionService.cs` 已寫／有測試，續接 D1 封存 Audit、UI 回線同步。**重複 OrderID 原判定已完成，禁止重做；第一次成功保留原清單，第二次拒絕只進開立失敗**。
+- [ ] **3.1-E 驗收／發行**：A 機問題→B 機覆核→A 機回查、斷線／撤權／雙人衝突、D1 schema 回復；3.0 原功能和 **V2 人工折讓**不退步。
+- **接回素材**：#440 Work Item／upload issue／封存程式和 `cloud/tests/v3-migration-rehearsal.test.mjs`；**折讓專屬 Work Item 的核准／配號／開立屬 3.2**，3.1 不為提前結案而假裝已完成。
+
+### V3.2.0 — 折讓整體正式版（含折讓跨機）
+
+- [ ] **3.2-A 折讓編輯與金額**：已有 `src/CYInvoice.WinForms/AllowanceRequestForm.cs`、`InvoiceAllowanceMetadata.cs`、`AllowanceReviewInspectionService.cs`、`cloud/src/allowance-item-validation.ts` 的原發票帶入、品項編修、負折扣、七位小數／官方有效餘額計算。**未收斂**：畫面仍有「含稅單價輸入」切換，依使用者要求改**強制未稅輸入、含稅自動顯示**；只檢查本次整張含稅額 `<=` 原發票減已生效未作廢折讓，不再做逐項歷史數量限制；官方摘要不完整拒絕。
+- [ ] **3.2-B Local g0401 核准配號單次送出**：已有 `EmployeeAllowanceWorkflowService.IssueApprovedLocalAsync`、`LocalAllowanceNumberStore.cs`、`AmegoAllowanceContracts.cs`、`AmegoClient.cs`；`b46cf7f3` 將核准 `ApprovedAt` 先持久化，後以原 `sync_issues.local_id` 固定 `AyyyyMMddXXX` 配號，`reserved → sending → confirmed`、原號唯讀查回。**未收斂**：Windows 實機 crash／重新啟動／跨日期／真光貿測試、已配號未送與 `sending` 丟回覆之界線。**確定從未取得 send Claim 才能用原號首次送；送出不明不能同號盲重送，更不能換新號**。
+- [ ] **3.2-C CYID 折讓跨機**：已有 `cloud/drafts/{0016_allowance_number_ledger,0018_allowance_applications}.sql`、`cloud/src/{allowance-applications-route,allowance-applications,allowance-review-approval,allowance-number-ledger,allowance-execute-once}.ts`、`CloudAllowanceSubmissionService.cs`／`CloudAllowanceApplicationClient.cs`／`CloudAllowanceManagerForm.cs`，凍結模板、D1 原號 Ledger、工作單 CAS、官方原號回查與兩組合成 Device Token。待真 Worker/D1、兩台 Windows、競爭與執行時權限。**未收斂**：管理員 UI 有「核准、配號、送出」多個按鈕，評估整合簡單核准流程但不造新權限／流程。
+- [ ] **3.2-D 雲端失聯本機折讓 API**：最新決議是雲端失聯、光貿正常仍可降級本機走 g0401；**尚未實作**。Cloud ledger/D1 才是跨機權威，Local `IssueApprovedLocalAsync` 仍只允許 LocalOnly；需解決不同裝置 `001` 重號、同 Work Item 雙送、CYID/Device 已知拒絕、快取權限、回線合併 Audit。**不安全時不得擅自開放無鎖 fallback**。
+- [ ] **3.2-E g0501 折讓作廢**：已有 `cloud/drafts/0019_allowance_void_workflow.sql`、`cloud/src/{allowance-void-applications-route,allowance-void-manager,amego-allowance-void,amego-allowance-status}.ts`、`CloudAllowanceVoidClient.cs`、`CloudAllowanceVoidManagerForm.cs`，申請／覆核／send-once Claim／原號 status／官方 D0501/99 結案的 source；**Local `EmployeeAllowanceVoidWorkflowService.cs` 舊人工版本尚須 API 對齊**。已成功折讓無論權限皆只能走折讓作廢，不能取消原申請。
+- [ ] **3.2-F 光貿離線與外部操作回補／PDF**：已有 `AmegoClient.ListAllowancesAsync`、`cloud/src/amego-allowance-list.ts`、雙日期例外定位器／原號查回；**尚缺**將低呼叫量 `invoice_list`＋`allowance_list` 接入 Local `InvoiceAutomaticSyncService`／`InvoiceSyncService`、跨期舊折讓回掃、官方變動 Fingerprint／PDF Cache 失效。光貿失聯時程式不送 g0401/g0501；管理員可自行至光貿網站處理，回線同步原本 SQLite 官方事實，**不虛構 CYInvoice Audit**。
+- [ ] **3.2-G 舊人工功能退役／刪無用碼**：已在 #440 `0d651688` 移除 `SyncIssuesForm` 的一般「已人工處理、人工選號」入口及 `AllowanceCandidateForm.cs`；底層 `MarkManualCompletedAsync`、`ConfirmCandidateAsync` 和舊測試目前還保留歷史相容。到 3.2 **API 全流程驗收後**才從正式線搬入退役 UI，核對最後 caller、清理無用執行程式；保留舊資料／已 pending 安全查回，3.0/3.1 不搬。
+- [ ] **3.2-H 端到端驗收**：Local／CYID 真光貿測試環境 g0401/g0501、普通／多次／部分折讓、負折扣、作廢、跨機、同號、掉線、斷電、兩種服務分開故障、外部操作同步。**完整折讓不得移往 3.3 補驗**。
+- **接回素材**：#440 SHA `0d651688`／其前一版核准修正 `b46cf7f3`／折讓 core 與 tests；`cfcc7b29` 的「ledger 推論撤回權限」已被後者取代，**不要再搬回**。歷史 V2 手動候選 UI 來源 2026-09-19 只供理解，非 V3 目標。
+
+### V3.3.0 — 其餘全部完成，避免再變成大版
+
+- [ ] **3.3-A 一般發票官方結果不明管理員處置**：已確認需求但未完整接線；① 留管理員向光貿詢問的文字、時間與 Audit；② 官方確認成功時更新**原本那筆**發票的號碼／開立日期時間而非新增第二筆；③ 官方確認未開立、管理員明確批准後才可用**同原 OrderID** 一次受控重送。既有 OrderID 防重與原本開票邏輯不重做。**g0401/g0501 不明查回已屬 3.2 門檻，不得延後**。
+- [ ] **3.3-B 非折讓長期官方同步及剩餘 PDF／Cache／例外 UI**，沿用已發布 3.1 事件與 3.2 折讓同步，不重建。
+- [ ] **3.3-C 技術債與 UI、文件清理**：可證明無 caller 的舊程式、過大 UI 元件／操作效率、Built-in 舊相容殘餘、過時的 TODO／handoff 歷史文字、CI 重複；不因此重構已穩定的 owner。
+- [ ] **3.3-D V2.6.19→3.0→3.1→3.2→3.3 升級／回退與最終正式驗收**。如有新範圍先給使用者定版，不無限塞進 3.3。
+
+### 未收斂的設計問題按版處理（勿現在順手重做）
+
+| 問題 | 歸屬與完成判斷 | 對應已做的程式／進度 |
+| --- | --- | --- |
+| Built-in／Self-hosted 清乾淨？ | **3.0**；只刪正式路徑、不刪歷史 schema | `app.ts`、`IdentityProviderRuntime`、`SettingsForm` 已部分做 |
+| 公司卡權限、DPAPI 快取、MO 設定 | **3.0**；真角色／金鑰／斷線回歸 | `company-settings*.ts`、`SettingsForm`、Draft 0017 已有 |
+| Recovery Email／實機 DR 與公司表 migration 編號 | **3.0**；DR-01～13、兩機、0014／公司表回退 | #440 recovery／#151 CYWEB 已有 Source |
+| 一般 Work Item／上傳問題是否可跨機一致、不可假結案 | **3.1**；A/B 兩機與 D1 revision | Draft 0015、`work-items.ts`、`CloudWorkItemClient` 已有 |
+| 開立失敗封存與遠端修復責任 | **3.1**；本機修復與 D1 Audit 不混淆 | `FailedInvoiceRecordStore`、`InvoiceRetentionService` 已有 |
+| 舊「人工選號／人工完成」何時刪 | **3.2**；API 真驗收後退役，3.0/3.1 保留 | `0d651688` UI 已退役，Core 舊相容尚有 |
+| 強制未稅、含稅自算、負折扣及整單餘額 | **3.2**；UI 與送 API 數值一致 | `AllowanceRequestForm`、`AmegoClient`、`allowance-item-validation.ts` 已有 |
+| Cloud 核准／配號／送出是否能簡化 UI | **3.2**；維持管理員核准後程式配號 | `CloudAllowanceManagerForm` 九按鈕草稿 |
+| 核准後不能撤回、Local crash 回復 | **3.2**；固定原號、不可重送 | `b46cf7f3`、SQLite ledger、源 CI 已通過 |
+| 雲端斷線本機 g0401 如何防多機重號／重做 | **3.2**；跨機配號與工作單執行權的設計及實測 | D1 ledger／Local SQLite 兩套**現有 owner**，不可直接互換 |
+| g0501 原號作廢，Local 仍是舊人工 | **3.2**；兩種模式均 API、官方 D0501/99 | Cloud g0501 Draft 已做、Local 尚未接完 |
+| 光貿失聯／外部網站操作／折讓同步／PDF cache | **3.2**；雙 List 低呼叫量與跨期 | `AmegoClient.ListAllowancesAsync` 已有，日常同步未完 |
+| 送出不明「同號重送」或「換新號」 | **3.2**；一旦 `sending` 只查原號、不盲送／換號 | Local `MarkSending`、Cloud D1 CAS 已有 |
+| 一般發票官方不明、手動補登／同 OrderID 受控重送 | **3.3**；更新原列、有 Audit、不得重複成功 | 原 Invoice Sync／Upload Issue 保留 |
+| 其餘非折讓同步／PDF／UI／文件技術債 | **3.3**；全版回歸且無未知 blocker | 以前版為基礎，不新造 core |
+
+### 2026-10-17 分版二次複查：跨版相依與尚未寫透的發行阻塞（在所屬版處理）
+
+此節補充「目前 Source 有什麼」與「當版能獨立驗收」的差距，**不新增一套資料庫、管理員權限或重寫既有核心**。這些是實際程式與 SQL 對照結果；後續按下列版本接回，沒有驗收證據就不得直接打勾。
+
+- [ ] **3.0：公司卡不能只有存取 UI，必須真正供現有開票與 MO 匯入使用。**現有 `cloud/src/company-settings.ts`、`company-settings-route.ts`、`CloudCompanySettingsClient.cs`／`SettingsForm.cs` 只讓管理員讀**安全狀態**／超管寫加密欄位；`loadAmegoCompanySettingsForGateway` 是 Worker 內部 helper，**尚無完成的 Windows DPAPI 加密憑證授權同步／變更時快取失效**。現有 `AmegoClient` 仍由呼叫端傳入統編／App Key；必須選定單一合法取用流程，測試 D1 存的公司卡真的影響 CYID 開票及 MO 匯入、一般 ADMIN 不會取得密文或明文，且**Cloud 失聯時既有安全開票降級不退步**；禁止為了通過 UI 測試把秘密未授權下發。
+- [ ] **3.0：公司卡 migration 可與 Work Item 拆，但現有 Draft 測試順序不能直接照搬。**`cloud/drafts/0017_company_settings.sql` 註解寫「等待 0015 Work Item」，實際兩張表的 FK 對象是既有 `workspaces`／`devices`／自身公司設定，**未直接引用 `work_items`**。先獨立審視並選定 3.0 正式公司卡 migration 的連續版本與 SHA；3.1／3.2 的舊 Draft 0015～0019 依正式版次接續調整，不得使已套的 D1 migration 重號／改寫已執行檔；`cloud/tests/v3-migration-rehearsal.test.mjs` 目前直接 assert 0014 最後、0015～0019 全部草稿順序，**必須改為可逐版跑**的 3.0→3.1→3.2/rollback 合成測試。
+- [ ] **3.0：Worker 端點／用戶端版次隔離。**現有 `cloud/src/app.ts` 同時掛載 `handleWorkItems`、`handleAllowanceApplications`、`handleAllowanceVoidApplications`、`handleCompanySettings`、`handleRecoveryRoutes`。3.0 必須只包含已驗收的公司卡／復原端點，不可僅依靠 3.1／3.2 資料表還不存在來保護提前啟用的路由；逐步核對舊 Windows V2.6.19／新 3.0 對原 Worker 的協議及功能相容，不能先撤舊模式就讓現有 Device 失聯。無須新增第二個環境或測試 Worker。
+- [ ] **3.0：發行／資料回復順序的獨立門檻。**必要 D1 備份與完整性／FK／現有裝置稽核核對→加法 schema 與可向後相容 Worker→CYWEB private Binding／Recovery → Windows 3.0 版；執行前明列舊 Windows／新 Windows 能否連到新 Worker、復原邀請已簽發但未完成如何停用／回退、D1 時點回復會否丟失 migration 後新事務。0014 會重建 `security_audit_events`，**合成 SQLite 成功不等於真 D1 與真 Email 已驗收**。原 Worker／D1 操作及 Release 仍須當次另外批准。
+- [ ] **3.1：跨機管理員拿不到必要的作廢業務資料。**`cloud/drafts/0015_work_items.sql`、`CloudWorkItemClient.cs` 目前以 `reference_hash`、工作單狀態、錯誤碼／時間為主，`EmployeeVoidWorkflowService.ApproveManualReviewAsync` 仍查**本機** `InvoiceRecord`；B 機沒有 A 機 SQLite 時不能直接取得原發票號碼、作廢原因、紙本收回狀態或安全查官方的憑證。須在**既有** Work Item 下增補經授權的必要例外業務摘要／遠端官方唯讀查驗（不複製正常發票總表），讓 B 機可操作且 A 機安全回寫；不能把「D1 工作單列表看得到」當作跨機作廢完成。上傳問題 B 機也須能看到足以判斷／封存的錯誤上下文，不是只有錯誤碼。
+- [ ] **3.2：Cloud 斷線降級的授權／唯一性不可因 3.0 公司卡而被錯誤視為已解決。**本機可讀到 App Key ≠ 能合法進行原本 CYID 跨機 Work Item 的 g0401；另須處理裝置已明確撤銷與單純斷線的區分、最後可信管理員核准、同一申請競爭、跨裝置不重疊號段、離線發送固定號碼與重連 D1 稽核合併。以正式 3.1 Work Item 作基礎；不安全不可開放。
+- [ ] **每版安全回歸規則（3.0～3.3）**：雖將「一般發票結果不明」完整管理員新功能排在 3.3，**任何在較早版發現會造成重複開票、官方未知當成功、資料遺失或已撤銷 Device 繼續動作的重大缺陷，都不可因「排在 3.3」而照常發布**；須在發現版先阻擋或修復既有流程，3.3 只延後非阻斷的新 UI／進階管理功能。3.0、3.1 附帶的 V2 人工折讓／作廢、AutoInput/IPC 現有相容不可因功能切片消失。
+
+**續作 SOP**：開始該版本→讀本節及 [CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md)／`PROJECT_RULES.md`→取得前版正式 source／latest `main` 與 #440/#151 定錨→逐檔核對差異、保留既有 tests→只在該版移植及修補缺口→新 exact-head CI→真設備／安全資料驗收→更新本節 checkbox、來源/目標 commit、待辦與驗收證據→另經使用者授權才部署／發布。舊 `[x]` **只代表 Draft 工程做過，不代表任何版別已發行**。
+
+## 2026-10-17 V3 人工選號 UI 退役／斷線新版需求（Draft）
+
+- [x] **Local 正常 UI 切換為 API**：新增的凍結折讓明細只允許管理員核准後由 `IssueApprovedLocalAsync` 配號及單次 g0401；舊「已人工處理」及人工候選號碼選擇入口從 `SyncIssuesForm` 移除，未凍結明細的歷史申請不會透過 UI 建立新官方操作。已有 pending 的舊案仍可使用唯讀官方查回。移除原 `AllowanceCandidateForm`；保留既有 Core 歷史相容方法／測試待安全資料遷移再清理。
+- [ ] **Cloud 斷線本機 g0401 降級**：2026-10-17 最新使用者決議取代 10/15 舊禁止方案。現 CYID Cloud 使用 D1 Work Item 與配號 CAS，Local `IssueApprovedLocalAsync` 明確限 `LocalOnly`；需要確保失聯期間不同裝置不分配重號、同 Work Item 不雙送、已知 CYID/Device 拒絕不降級、連回 D1 時保留稽核。未確立跨機唯一序號權利前，不可直接改動 g0401 送出 gate。
+- [ ] **光貿斷線→網站人工操作→恢復自動同步**：光貿失聯時程式不執行光貿操作；網站操作屬外部官方事實，應回到原 SQLite（`invoice_list.cancel_date`＋`allowance_list`）；待實作完整定期雙清單、跨期回掃、快照差異持久化／PDF Cache 失效，不新增正常發票 D1 表，不杜撰管理員 Audit。
+- [ ] **須確認降級配號範圍**：若多台 CYID 裝置同時雲端失聯，無中央 D1 不能靠各機自動從 `001` 配號保證不重複；需事前唯一號段或等效安全機制，不能以光貿拒絕撞號取代本機跨 Work Item 鎖。
+- 本輪不動原 D1／Worker、不呼叫真光貿、不部署、不 Release；CI 看新 HEAD。
+
+## 2026-10-17 Local 管理員核准持久化先於配號（Draft Source）
+
+依使用者更正，折讓撤回／取消的業務界線是**管理員核准**，不是「是否已有配號」。Local 管理員驗證、官方額度與凍結明細核對後，先將 `ApprovedAt`、原核准管理員和含時區核准時間持久化到既有折讓申請 metadata，再以原 `sync_issues.local_id` 配號及單次送出 g0401。已核准案件本人與管理員都不能撤回／取消或走「網站人工完成」。核准後到配號前中斷仍保留原 Work Item，續作沿用同一核准日期；已配號／結果不明只能原號查回，確認成功後如要取消只能另走原折讓作廢 g0501。原 `cfcc7b29` 基於 ledger 判斷撤回資格的額外 helper 已移除，WinForms 依已核准狀態隱藏撤回並鎖定候選折讓號碼改選。合成回歸測試以 Reserve 異常驗證核准先持久化、不能撤回且不送光貿；**不聲稱跨 SQLite 寫入具完整原子性或所有崩潰交錯均已實測**。新 HEAD CI、實機中斷恢復與真光貿驗收仍待驗，不部署、不 Release。
+
+## 2026-10-16 V3 逐項交付索引（最新權威快照）
+
+> **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `a1e6090c28fcd85e0ab0fffaf88cafb31be28111`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
+
+- [x] **逐品項歷史查回移除（Draft，已通過 a1e6090c CI）**：CYID 管理員的 `official-inspection` 不再為了推算已折讓商品數量而額外呼叫每張 `allowance_query`；使用單次 `invoice_query.allowance[]` 及其已生效含稅總額進行本次折讓上限驗證。舊歷史分攤／「已知剩餘上限」僅保留回應欄位空值供現有 Windows 契約相容，**不能**取代餘額驗證。原 D1 配號的 `number-readback`／`reconcile`、CYID／CAS 不變。Cloud source 及合成回歸測試尚未實機驗收。
+
+- [x] **刪除未使用的歷史逐品項折讓數量推算（Draft）**：`amego-allowance-query.ts` 的 `originalAllocation`、`knownOriginalQuantities`、原品項日期／單價／數量對照 helpers 與舊測試已退役。保留 `allowance_query` 原號、折讓日期、含稅金額組成、有效狀態、原發票集合、Snapshot hash 及禁止重送確認；絕不由歷史細項推測商品剩餘數量。這是本次確定沒有正式路由依賴後的 source 精簡，仍需以新 HEAD CI 證明。
+
+- [x] **Windows Cloud 歷史分攤欄位退役（Draft，待 exact HEAD CI）**：Worker `official-inspection` 不再輸出 `historicalAllocationChecks`／`historicalCoverageReason`／`historicalGrossCeiling` 等無人使用的推算欄位；Windows `CloudAllowanceApplicationClient` 同步刪除解析 DTO 與歷史推算邏輯，改為只驗證 `invoice_query.allowance[]` 的原號、日期、已完成／作廢狀態及「本次含稅額 ≤ 原額－已生效折讓總額」。Worker 仍 `canApprove=false` 唯讀，CYID、D1、CAS、原號查回及正式核准前重查不變。Cloud／Windows 合成回歸測試同步更新，不代表 D1 或真光貿實機驗收。
+
+- [x] **CYID 跨機折讓送審真實路由合成驗證（Draft，待 exact-head CI）**：擴充既有 `cloud/tests/allowance-applications.test.mjs`，由 Device A／CYID USER 建立 frozen ALLOWANCE 申請，Device B／另一組 Token 經現有 `/v1/work-items/transition` 送到 review，核對 USER 無權送審、revoked manager Device 無權操作、重送舊 revision 得 409、Manager B 與原裝置讀到同一 Work Item、送審不配號也不呼叫光貿；不再以測試直接更新 SQL 模擬送審。只測共享隔離 SQLite 模型，無正式 D1 migration／Worker 部署／光貿 mutation。
+
+- [x] **折讓原申請人撤回（CYID Cloud Draft）**：一般 USER／ADMIN／SUPER_ADMIN 都只能以當次 CYID 原申請 Employee ID 撤銷「自己」尚未核准的折讓，支援 `open`、`review`（未核准）。`withdraw` API 經原 Device Token、原 Workspace／環境、本人 CYID 身分重新驗證，使用 D1 單一原子 UPDATE 同時檢查 Work Item revision、凍結申請 owner、Device active、**不存在任何 manager approval 或 allowance_number_ledger**，再寫 `closed`＋`withdrawn_by_actor_id`／`withdrawn_at`，留下不可變稽核紀錄；不刪凍結申請、不改官方折讓、不呼叫 g0401／g0501。Windows 發票明細新增「撤銷折讓申請」並提示重驗與不可撤銷階段，失聯只能以原 ID readback、不重送。Schema 僅在未上線的 0015 Draft 更新；合成跨 Device 本人／非本人／撤銷／管理員核准後拒絕／撤銷後不可再覆核測試待 exact-head CI。Local 亦新增原申請員工驗證後可撤回未進入光貿確認階段的人工待辦；保留原申請與撤銷人時間在本機 metadata，原問題單標為已解決，不變更官方狀態。真 D1 尚未 migration。
+
+- [x] **2026-10-17 階段一／g0401 負數折扣傳輸整合（Draft）**：發現原發票帶入式 `AllowanceRequestForm` 允許保留負數折扣，但 `AmegoClient.IssueAllowanceAsync` 的舊送出前檢查擋住負單價／負未稅小計／負品項稅額。依官方 D0401 明細可有負數的規格，保留含正負行的 g0401 payload；要求正數整張未稅總額、非負整張稅額、逐行欄位基本有效、所有**行合計須與 header 完全相符**（如正 314／16、負 78／4，最後未稅 236＋稅 12＝含稅 248），不進行原發票逐項歷史分攤比對。新增隔離 HTTP wire 及不合法合計零傳輸回歸測試。**只改 Draft Local Core Gateway，並未把 Local 管理員人工待辦改為自動 g0401、未測真光貿、不授權實際操作**；CI 以此提交 exact HEAD 為準。
+
+- [x] **2026-10-17 階段一／Local 管理員 g0401 單次送出接線（Draft）**：沿用既有本機折讓待辦及編輯明細；管理員再次驗證後重新查 `invoice_query`，確保本次整張含稅折讓金額 <= 原發票含稅總額扣除已生效折讓金額。原 `LocalAllowanceNumberStore` 依公司／環境／Work Item 原子固定號碼及完整 g0401 payload；先保存管理員處理人、固定原號與 pending，接著 SQLite `reserved→sending` CAS 成功才准呼叫光貿**一次**。回覆逾時／未知、再次按下按鈕都只用 `invoice_query` 查回原號，不自動換號或重送；光貿確認完成後 ledger 才更新 confirmed。明確撞號則記 `occupied_external`，後續需人工核對才可處理。舊無品項的折讓申請保留原網站人工流程，不冒稱已自動送出。已加入隔離測試：確認成功／結果不明後查回／官方額度變更／權限及舊人工待辦／撞號。**尚待 exact-HEAD CI、真 Windows 畫面／光貿測試環境及原始 SQLite 中斷回復驗收；不可因此推定 V3 已可正式發行。**
+
+### 已合入此 Draft 分支的功能（尚未上線）
+
+- [x] V3 已按產品定案只保留 Local 與 CYID Cloud；Built-in／Self-hosted 不再列正式支援。
+- [x] g0401 折讓：使用者帶入原發票後自行編輯／刪除折讓品項，前後端核對本次含稅總額不得超過「原發票－官方已生效未作廢折讓」；摘要缺漏、未完成及金額異常仍 fail closed。CYID Manager 核准 Grant、D1 永久配號與 send-once CAS、原號查回維持原設計，逐品項歷史推算**不是**開立資格。
+- [x] CYID 折讓跨機申請、預覽、管理員覆核、配號、首次送出及原號查回的 Cloud／Windows Core 契約與主要 WinForms Manager Queue（`CloudAllowanceManagerForm`），僅 source CI／模擬資料驗證。
+- [x] g0501 作廢：`amego-allowance-void.ts`、`amego-allowance-status.ts`、`amego-allowance-list.ts`；唯讀官方核對、單次作廢、雙日期 List 異常定位器；`drafts/0019_allowance_void_workflow.sql` 提供不可變申請／核准／Claim／官方狀態稽核及官方證據後結案柵欄。
+- [x] g0501 的 **Cloud CYID routes 已接通於 Draft 原始碼**：`allowance-void-applications-route.ts` + `allowance-void-manager.ts` 包括 create／get／list、manager approve、send-once、status-readback、close；測試核對同一工作單唯一 Claim、逾時不重送、官方 `D0501/99` 後才可結案。**不要再把這組 endpoints 寫成「尚未建立」。**
+
+- [x] **CYID Cloud 申請接線（Draft，已通過 4c897a44 CI）**：原 `RecordDetailForm` 在 CYID Cloud Mode 直接使用既有 `CloudAllowanceApplicationClient` 建立不可變 g0401 草案；先持久化同一 `wi_` ID／不含密碼的草案到原發票 metadata，保留原 `open` 申請，由 CYID 管理員在原核准視窗執行 Work Item `open → review`（一般 USER 不具送審權限）。暫時失聯只能原號查回，絕不以新 ID 重送；已結案的舊 Work Item 才允許在重新查核官方餘額後另提下一張。Local 保留原人工待辦。**真 Worker/D1 與光貿送出均尚未實機驗證**。
+- [x] **原發票帶入折讓編輯介面（Draft）**：既有 `AllowanceRequestForm` 改為商品清單直接帶入、刪除品項、修改數量與單價、含稅／未稅輸入切換、依課稅別自算小計與稅額，畫面顯示「原發票－已生效折讓」剩餘額。使用者編輯後的商品清單與總額保存在現有人工折讓工作單，由管理員在原待辦明細查看；提交前仍由 `invoice_query` 重查歷史餘額，不新增獨立工作流程。**Local 人工待辦仍需管理員完成光貿操作；CYID Cloud create／manager review 已接通 Draft UI，但真 D1、光貿 g0401 與實機含稅四捨五入仍待驗收**。
+- [x] **管理員唯讀查驗 UI 清理（Draft）**：刪除不適用的歷史逐品項分攤／推算上限敘述，保留官方折讓摘要、原發票總額、本次申請總額與後端真正的核准原因；不更動發票歷史資料、CYID 權限、send-once 或 D1。
+### 一次只完成一個可驗證工作（完成後更新本節並結束當輪）
+
+- [x] **2026-10-16 折讓需求校正：以總額餘額為上限，取消逐品項相符的送出限制**：依使用者明確定案，商品及折扣由使用者編輯；後端僅驗證必要的 g0401 payload 算式、原發票最新有效狀態，與 `原發票含稅金額－官方已確認且未作廢折讓含稅金額` 的總額上限。本機 `invoice_query.allowance[]` 已保留原本發票明細查回與歷史顯示，現在額外保存官方摘要是否明確存在，於輸入及提交重查時驗證餘額；Cloud 折讓核准及送出前驗證將改為同一限額並移除 `detail_vat=1`／已有折讓／逐項來源數量匹配的錯誤封鎖。官方摘要缺漏、待處理、重複、超額仍拒絕，不得誤認零折讓。**舊逐品項歷史覆蓋推算不再作為一般折讓開立前置條件。** 開立編輯介面及正式資料測試另待確認；不部署、不 Release。
+
+
+- [x] **步驟 1 — Windows g0501 Core 客戶端已完成**：`214063e1810d55746d77d22c483de42135f4f907` 新增 `src/CYInvoice.Core/CloudAllowanceVoidClient.cs`、`tests/CYInvoice.Cloud.Tests/CloudAllowanceVoidClientTests.cs` 並登錄到 `tests/CYInvoice.Cloud.Tests/Program.cs`；與 Cloud CYID create/get/list/approve/send-once/status-readback/close 契約對齊。測試涵蓋 HTTPS／Device bearer、來源欄位不可信任、版本比對、歷史折讓號碼、錯誤結果拒絕、自動重送禁止、網路逾時不額外重試。該**功能提交** Cloud Validate ×2、Windows Client、Windows x64、Governance 全數 CI 通過，Cloud deploy skipped。**只有 Core／合成測試，不是 WinForms 操作或正式開立**。
+- [x] **步驟 2 — Windows g0501 WinForms 操作入口與流程已完成（Draft Source）**：`275ec1c652c629aa9ff6eb95877148ff2ce70daa` 新增 `CloudAllowanceVoidManagerForm.cs` 並在 `SyncIssuesForm` 的 CYID「處理中」頁接入「CYID 折讓作廢」，包含一般使用者建立申請／原 ID 查回、管理員清單、`open→review`、官方驗證後核准、明確二次確認的唯一 g0501 送出、`allowance_status` 原號查回、官方完成後二次查驗並結案。建立前會顯示原 Work Item ID、禁止同一視窗重送；`e7efd90b1a7b25ab862d24efb3bd3daa7214c7a6` 加上依 Workspace+Cloud URL 隔離的**本機原 Work Item ID 耐久保存**，網路未回覆／重啟後仍禁止換號重複申請，只能原號查回；`1875b3132f770bc7fd6dae2aee58b5e0e18bfd1b` 修正 C# Nullable 保護。Windows `--startup-smoke-test` 驗證畫面、申請窗、離線原 ID 保存／重啟／跨 Workspace 隔離與確認後清除。此最後**功能** SHA 的 Cloud Validate ×2、Windows Client、Windows x64、Governance **全綠**，Worker deploy skipped。**這不代表真人 WinForms 驗收或 V3 已上線。**
+- [x] **步驟 3 — D1 0015～0019 隔離 Migration 演練（Draft Source）**：新增 `cloud/tests/v3-migration-rehearsal.test.mjs` 並納入 Cloud `npm test`；以現有 0013→CYID_ONLY 退役→0014 歷史合成資料先建立 SQLite 備份，再依 0015→0019 的順序逐項交易升級。針對五個草案逐一注入 SQL 故障，驗證全交易回復、原 Workspace／Device／Invitation／Audit 不變、FK／integrity 正常、僅新增十一張例外／公司設定及稽核表且一般成功發票不可存入 Work Item；從未升級快照進行本機還原。**測試程式已提交，是否通過以本次 exact-HEAD CI 為準**；不代表正式 D1 備份、遠端 migration 或 DR 實機驗收。
+- [ ] **步驟 4 — 官方清單與跨機例外對帳（進行中）**：g0401／g0501 雙日期官方 List、Work Item 原號選擇性查回與服務端 Audit 已於 Draft Source 完成；g0401 Windows「官方對帳」按鈕於 `bdcec96`，Cloud Validate ×2／Windows Client／Windows x64／Governance 全綠。本輪沿用既有 `CloudAllowanceVoidManagerForm` 加入 g0501「官方對帳」按鈕和 `CloudAllowanceVoidClient.ReconcileAsync`，只傳原 Work Item／revision／當次 CYID 管理員憑證，清單命中才驗證原號官方 `status-readback`，查無只能人工核實；Windows Core 模擬測試拒絕變號、虛假可重送／自動結案。`VerifySmokeLayout` 同步驗證九個操作按鈕。**尚待 Windows 與跨機人工驗收、正式 D1／光貿、DR、是否需要背景排程的必要性評估；本輪 CI 以 exact-head 為準。** 不新增表格、Cron 或平行頁面。
+- [ ] **步驟 5 — 複雜折讓與其他整合缺口（進行中）**：使用者 2026-10-16 授權逐項開發、最後統一 CI／取 Artifact，不自行 Release 或正式部署。已實作 CYID 上傳問題跨機回報及管理員封存、本機失敗發票持久封存與 Retention 防誤刪，以及 g0401 三張以內歷史折讓的唯讀原發票分攤與保守完整性診斷。**本輪增加「已核對歷史分攤金額與剩餘上限」唯讀參考**：只有本次官方原發票／歷史折讓狀態有效、無 pending、所有**目前列出的**原號均逐張詳查且 7 位小數核對一致，才從原發票官方含稅總額扣除核實過的該原發票分攤額，得出**截至本次查詢的保守剩餘上限**。Cloud 以 BigInt 精算；Windows Core 由官方最小投影獨立重算，拒絕假上限；WinForms 明確提示此上限**不是可折餘額或核准**。其餘缺漏、重複、異動、未查齊或超額情形回傳 NULL，不推算數字；超出原發票上限有獨立診斷狀態。**`historicalAllocationsComplete:false`、`safeToInferRemainingBalance:false`、`canApprove:false` 不變**，仍不能以此自行核准/開立部分折讓；此批程式待最後 CI/Artifact，尚有含稅/部分折讓、完整歷史覆蓋證明、DR、實機整合。
+- [x] **步驟 5 小項 — 含稅原發票唯讀來源核對（Draft Source）**：依光貿 DetailVat=1 的含稅價與有拆稅情形之 5% 公式，新增以 7 位小數 BigInt 驗證原發票品項、總額及官方稅額的有限診斷。無拆稅稅額（可能為 B2C）、缺漏、重複品項、金額或稅額不一致均給明確原因。**所有含稅來源即使自洽仍固定 fullyMatched=false／verifiedLines=0，不能拿含稅單價對照 g0401 未稅單價，也不變更 canApprove=false 或歷史可折餘額安全旗標**。只修改 Draft 診斷、合成測試與原 WinForms 提示，未完成含稅轉換／部分折讓核准；本次 exact-head CI 另行確認。
+- [x] **步驟 5 小項 — 歷史折讓明細數量與未稅單價保守驗證（Draft Source）**：於既有 `allowance_query` 唯讀原號查回的 `originalAllocation` 中，先確認每一行官方原發票日期、品名、課稅別、正數數量、未稅單價、小計及整元稅額均存在且符合 `Quantity × UnitPrice` 七位 BigInt 四捨五入；再驗證全單的金額／稅額等於官方 header，才保留該原發票的已知分攤金額。缺任一選填欄、數量不符、稅額不整數、非應稅卻有稅，均 `ITEM_AMOUNTS_UNVERIFIED`、原分攤金額為 null。**這是歷史明細可靠性前置條件，尚未從原發票品項扣算逐項剩餘數量，更不是可折餘額證明**；無新資料表、API、正式部署或光貿 mutation；以 exact-HEAD CI 驗證。
+- [x] **步驟 5 小項 — 歷史折讓對應原發票逐品項數量（Draft Source）**：在原 `allowance_query` 唯讀查回中，以本次 `invoice_query` 原發票日期、明確未稅 `detail_vat=0`、品名／稅別／七位小數單價，將核實過的歷史折讓行對應至同一次官方原品項快照；拒絕原品項相同鍵重複、欄位缺漏、原品項算式不符、日期不同、單張或跨多張已知歷史折讓數量累加超過原數量。僅在 Cloud 記憶體累加快照內的**已知使用數量**，不向 Windows 回傳品名／可折數量、也不宣稱歷史範圍完整；不可核對時將既有原分攤驗證與金額上限改為未知 `NULL`。官方含稅來源、部分折讓完整核准、所有歷史覆蓋證明與實機 DR 仍待後續；保留 `historicalAllocationsComplete=false`／`safeToInferRemainingBalance=false`／`canApprove=false`。
+- [ ] **步驟 6 — DR／實機／正式 Release**：DR-01～DR-13、跨裝置權限與斷線、Windows 套件驗收、正式資料備份及遷移計畫、V3.0 發布。未全數驗收前保留 Draft，不合併、不對真實發票進行未批准操作。
+
+**作業節奏（使用者 2026-10-15 指示）：** 先同步本 `TODO.md` 和 `CLOUD_WORK_HANDOFF.md`，往後每次只處理一個步驟／小型可驗證 commit；回報 exact commit、CI 與尚未完成點，避免連續長時間工具操作造成對話逾時。只更新文件時，**不**順手改功能程式。
+
+## 2026-10-15 V3 最新續作：跨機折讓作廢與雙日期 List 對帳基礎（Draft）
+
+- [x] **g0501 單次送出傳輸**：既有 Windows `AmegoClient.VoidAllowanceAsync` 已具備光貿 `g0501`，Cloud 新增 `amego-allowance-void.ts`：只發一次官方 `[{CancelAllowanceNumber}]`，沿用官方 form-urlencoded 簽章與 8 秒逾時；支援 1～16 字元的既有官方單號（不強迫 `AyyyyMMddXXX`）。回傳 `accepted_unconfirmed / definite_rejection_manual / unknown_result`，**任何結果不得自動重送或視為已作廢**。新增合成簽章／逾時／拒絕／無重送測試。
+- [x] **官方作廢狀態唯讀查回**：`amego-allowance-status.ts` 支援光貿 `allowance_status` keyed object／array 兩種回覆及精確號碼比對，只有 `D0501/B0501/B0201/B0202` 且上傳狀態 99 才標 `officialCancelled`。回覆固定 `safeToAutoResend=false`／`safeToAutoClose=false`，**沒有寫入 D1**；待處理／NOT_FOUND／狀態不明一律不作完成認定。
+- [x] **D1 0019 Draft 與 SQLite 合成防重試**：`cloud/drafts/0019_allowance_void_workflow.sql` 新增僅限真正例外的 `ALLOWANCE_VOID` 申請（原因、原單號、申請人）、不可變管理員核准稽核、**唯一的首次送出 Claim**、官方狀態檢查及結案前的官方完成證據柵欄。SQL Trigger 檢查 Work Item kind/revision、Workspace、Device active、公司設定版次；核准到期不得修改原紀錄延長，send claim 一經取得不能刪除／重建。合成 SQLite 測試驗證重複申請、跨裝置、逾期核准、二次送出與早期結案拒絕。
+- [x] **官方 List 異常定位器**：`amego-allowance-list.ts` 僅以官方 `allowance_list` 的折讓日／建立日（`date_select=1/2`）分頁讀取，回傳必要單號／類型／上傳狀態，不傳買受人資料；`selectAllowanceExceptionHints` 僅對原 D1 例外工作單比對，查到異動才建議進行單號 `allowance_query`／`allowance_status` 詳查，**清單查無不是「發生失敗」的證據，不能解除 sending／重送／自動結案**。
+- [ ] **尚未接通、不可冒稱完成：** 0019 正式環境 Migration、完整 CYID 保護的 ALLOWANCE_VOID create/manager approval/send-once/status-readback/close routes、Windows 跨機折讓作廢 UI、官方雙 List 定期排程和全量分頁比對、例外 Work Item 查核的正式 Audit 寫入、已有折讓含稅／跨原發票餘額核對、公司設定安全同步、其他上傳異常跨機、全部 DR-01～DR-13 實機、V3 合併／正式發布。現行 0015～0019 **全部仍是 Draft SQL**，不得套用到正式 D1；新增 Cloud API 模組目前**不是已上線操作端點**。原始碼測試完全合成且沒有真實光貿或 Worker mutation。
+- [ ] 安全 Gate：完整管理員操作必須先在 D1 原子取得唯一 `allowance_void_send_claims`，確認原工作單版本／有效核准／公司綁定，再呼叫**恰好一次** g0501；掉線後只能用原單號查回，官方 99 + D0501 也須經可信 Audit 確認才允許 Work Item 關閉。任何其他情況不得重送。
+
+## 2026-10-15 V3 接續：折讓稅額算式及原單號官方唯讀查回（Draft）
+
+- [x] **品項核對加嚴**：原發票每列及申請每列均以 `FixedDecimal` 對應的 BigInt ×10^7 計算 `Quantity × UnitPrice` 與 `Amount`，要求原發票淨額+稅額等於官方總額，應稅 `TaxType=1` 以固定 5%／整數元四捨五入比對明細與整筆稅額，不允許不合理的稅額數字單憑「尚未超過原稅額」通過。舊版過度寬鬆的合成測試已改成真實七位小數、合法 5% 稅額案例，新增錯單價、錯行金額、錯稅額、拆列重複等失敗案例。這仍只涵蓋**資料明確的未稅模式**，若官方四捨五入或歷史分攤不明，保留人工確認。
+- [x] **原始折讓號碼唯讀查回**：`amego-allowance-query.ts` 使用光貿簽章、`allowance_query`、8 秒 timeout、256 KB 上限與精確單號／原發票／日期／狀態驗證；官方未找到（例如 code 51）、查詢逾時或非確定成功，**不允許自動換號或重送**。處理同單號被其他系統占用及跨原發票折讓的情形，單號相符也不能當作「本次確定開立」。
+- [x] **CYID 管理員查回 API 與 Windows Core**：`/v1/allowance-applications/number-readback` 只能從原 D1 ledger 取出確實保存的 `sending`／`confirmed` 折讓號碼，由服務端公司設定解密 App Key；要求同 CYID manager／有效裝置、公司版次、Workspace／環境與 frozen request 一致。只回傳最小狀態證據、原發票一致與含稅總額比對；**`safeToAutoResend=false`、`safeToAutoConfirm=false`、`requiresManualReconciliation=true`**，不修改 D1 status，不呼叫 g0401。Windows `ReadbackNumberForManagerAsync` 拒絕虛假的自動送出／完成旗標。增加 Cloud SQLite 與 Windows 合成測試。
+- [ ] **未完成**：真正可使用的管理員核准與 g0401／g0501 執行、歷史 allowance_query 逐項扣除及跨原發票餘額分攤、含稅 `detail_vat=1`、WinForms 操作介面、正式 migrations、公司憑證輪替／跨機同步、雙 List 官方對帳、DR-01～DR-13 實機及 V3 Release。以上均未部署；當次已存在的 `sending` 必須以原號查回，不能重送。只完成合成測試不得宣稱正式發票業務完成。
+
+## 2026-10-15 V3 續作：原品項七位小數保守核對（Draft）
+
+- [x] `cloud/src/allowance-item-validation.ts` + Cloud Synthetic Test：比對同原發票日期、品名、課稅別、未稅單價、原品項數量與小計，申請 `Amount`／`Tax`、淨額 `TotalAmount`、`TaxAmount`、申請含稅總額，以 BigInt ×10^7 避免浮點誤差；重複請求品項累加數量與金額，拒絕超出原始數量／金額及重複而沒有穩定行 ID 的官方原明細。
+- [x] CYID 管理員 `official-inspection` 回傳最小必要 `itemCheck`（`fullyMatched`、原因代碼、合格行數），不回傳原始明細或公司密鑰；`wait[]` 任何未處理異動（含 D0401／C0501）都標 `officialPendingMutation` 並阻止安全剩餘額判斷。Windows `CloudAllowanceApplicationClient` 也會拒絕格式錯誤、待處理仍宣稱 matched 或假冒核准的回覆。
+- [ ] `fullyMatched=true` **僅表示官方 `detail_vat=0` 未稅原品項與此單的數量、價額保守符合上界，不等於官方授權或法定稅額確認**；任何已有折讓、`detail_vat=1` 含稅來源、官方缺欄或 Pending mutation 都 fail closed。需要補含稅換算與 rounding、B2C 零稅額差異、跨原發票的歷史折讓剩餘額、逐項稅額審核與最終官方 preflight。仍固定 `requiresPerItemVerification=true`、`canApprove=false`，沒有管理員 Grant、配號或 g0401。
+- [ ] 本輪只改 PR #440 Draft Source／合成測試，0015～0018 尚未套入既有 D1；不得開正式折讓、部署 Worker 或 Release，實機 DR 未驗收。最新 CI 以 [PR #440 checks](https://github.com/simonliu1118-byte/CYapps/pull/440/checks) 為準。
+
+## 2026-10-15 V3 新增：光貿官方 invoice_query 唯讀查驗（Draft，尚未批准折讓）
+
+- [x] `cloud/src/amego-invoice-query.ts` 新增官方 **`POST /json/invoice_query` 唯讀查詢**：固定官方 HTTPS host，依光貿規格將 `{type:"invoice",invoice_number}` JSON 字串與 Unix 秒數及 App Key 做 MD5 wire 簽章，採 `application/x-www-form-urlencoded`，只呼叫一次、8 秒 timeout、限制 256 KB、嚴格核對原發票號碼／狀態／金額、保留 allowance[] 是否明確存在、計算回應 SHA256；`wait[]` 有 C0501 待處理時不得視為未作廢。僅於**服務端**讀取加密公司設定，**不經用戶端傳入憑證**。官方規範查詢僅涵蓋約 180 天內發票，舊發票 code 51／缺欄位皆不可當成無折讓；參考 https://invoice.amego.tw/api_doc/ 。
+- [x] 新增 `POST /v1/allowance-applications/official-inspection`（CYID ADMIN／SUPER_ADMIN、Device active、frozen Work Item 正確 revision／公司設定版次／environment 驗證）。API **只顯示**官方上傳、作廢／待作廢、折讓摘要是否明確、已存在折讓筆數、原始總額、查詢時間及雜湊；固定 `requiresPerItemVerification=true`、`canApprove=false`、`status=OFFICIAL_READ_ONLY_NOT_APPROVED`。不會寫入 Approval、配號或觸發 g0401／g0501。
+- [x] Windows Core `CloudAllowanceApplicationClient.InspectOfficialForManagerAsync` 新增同一個唯讀契約，強制拒絕宣稱 `canApprove=true`、狀態不一致或不合格式的回覆；Cloud synthetic 用 Node Crypto 驗證簽章與隔離官方回覆、錯號、漏 allowance[]、重複結果、不完整資料、已存在折讓、無權限不發 API 及無自動重試。
+- [ ] **仍須完成**：官方品項及稅額核對、曾有折讓的同原發票剩餘額分攤、金額四捨五入規則、動態公司憑證版本／環境治理、即時核准寫入與其最終 preflight、Windows WinForms 覆核 UI、g0401 執行與結果不明查回、正式 migration／DR 實機。以上皆是**未部署的 Source Draft**，此次未向光貿傳送任何真實 API 請求。
+
+## 2026-10-15 V3 進度：管理員唯讀覆核預覽與折讓 D1 不可竄改閘門（Draft）
+
+- [x] 新增受 CYID 管理員驗證的 `POST /v1/allowance-applications/review-preview`：從已進 `review` 的原 Work Item 及服務端已加密不可變折讓申請讀取明細，核對 revision、公司設定版本、環境、SHA256，僅傳回管理員必要品項與摘要；回覆固定 `officialVerification=NOT_PERFORMED`、`canApprove=false`，**不呼叫光貿、不核准、不配號、不產生折讓**。一般使用者、錯 Workspace、過期 revision 都拒絕；附 Cloud 合成測試。
+- [x] Windows `CloudAllowanceApplicationClient.PreviewForManagerAsync` 新增唯讀 preview 契約及回覆驗證：如回傳誤稱可批准／非 NOT_PERFORMED，客戶端 fail closed。合成測試已加入原 Windows Cloud suite；無 WinForms UI。
+- [x] D1 Draft 0016 新增保障：`allowance_execution_approvals` 不可 UPDATE/DELETE；`allowance_number_ledger` 不可 DELETE 或改號；同工作單尚有 `reserved`／`sending` 配號時不得直接關閉，但 `confirmed` 可正常結案。原 approval TTL 測試改用合成時間流逝驗證，不修改已核准歷史。對應 SQLite 合成測試保留。
+- [ ] **仍未接通**：官方 invoice_query／品項與剩餘折讓額真正驗證、能記錄核准 Grant 的受保護管理員 API、g0401 官方安全送出、官方結果不明查回、WinForms 申請與覆核操作 UI、正式 D1 migration、跨裝置實機及全套 DR。只有上述唯讀預覽與 SQL 防護通過原始碼測試，不代表已可正式覆核或開折讓。
+
+## 2026-10-15 V3 接續：CYID protected routes／Windows 公司卡 Client／跨機覆核清單（Draft）
+
+- [x] **CYID 保護的折讓例外申請入口**：Worker `app.ts` 經 CYID 應用範圍登入和每次的 Device Token 驗證後，提供 `POST /v1/allowance-applications/create|get|list`。僅由服務端 binding 決定 business Workspace／公司統編／正式或測試環境；不接受客戶端自訂 authority 或雜湊。USER 可以原 ID 提出申請並唯讀查自己的結果；ADMIN／SUPER_ADMIN 可在別台 Device 查看例外工作單（依建立時間+ID 游標分頁，每頁最多 50），沒有一般發票清單／所有使用者全表。返回最小必要摘要，不含密碼、金鑰、加密模板。
+- [x] **SQL batch 的第二段寫入保護**：`0018_allowance_applications.sql` 新增 BEFORE INSERT source guard，確認同一 Work Item、首次建立時間、申請 actor、Device、environment、reference SHA256、公司設定 revision 及有效狀態；不能以既有不同工作單或被撤銷裝置形成半筆申請。結果不明時 GET 原 Work Item ID，不能另建新單／自動重送。Cloud synthetic regression 覆蓋兩 Workspace mapping、角色、錯誤 scope／環境、分頁、沒有 secrets 的回覆與 batch rollback。
+- [x] **公司卡受保護 API 與 Windows 傳輸**：`POST /v1/company-settings/get|update` 同樣以 CYID revalidate、business Workspace binding、Cloud Device、SUPER_ADMIN 當次 marker／Email 確認；ADMIN 唯讀不含 Secrets 的設定狀態。Windows `CloudCompanySettingsClient` 提供 HTTPS／Bearer／CYID 當次帳密／預期 revision、明確 keep/replace/clear、無自動重送與安全 JSON 回覆驗證；工程合成測試已加入 Windows suite。通用 Windows `CloudWorkItemClient` 不再接受 ALLOWANCE 偽建立。
+- [ ] **仍未完成：**WinForms 公司設定與折讓申請／覆核 UI、現行本機 DPAPI 快取版本同步、服務端光貿官方完整 item／餘額驗證、manager approval route、g0401／g0501 的真正安全送出與查回、其他作廢和失敗事件跨機、背景雙 List 官方對帳、DR-01～DR-13。雲端公司卡與折讓的受保護入口是 **Draft，0015～0018 尚未正式套用**，不授權立即供日常使用。最新 CI 與工程包以 #440 exact-head 為準；不自動 deploy／Release。
+
+## 2026-10-15 V3 折讓申請不可變來源（Draft-only）
+
+- [x] 新增 `cloud/drafts/0018_allowance_applications.sql`、`src/allowance-applications.ts` 與隔離測試：只在 CYID 業務 D1 的**例外折讓申請**建立資料，沒有一般發票總表。由 CYID USER／ADMIN／SUPER_ADMIN 當次身分確認後，使用**原 Work Item ID** 執行 `D1.batch` 原子建立 Work Item＋申請；賣方統編／設定版次來自服務端公司卡、environment 由可信 Worker runtime 注入；原發票號碼、原因、正整數金額、申請 actor 與時間持久化，未編號 g0401 模板使用 Workspace＋Work Item AES-GCM AAD 加密儲存，雜湊由服務端依固定欄位建立，不信任前端 referenceHash。
+- [x] 讀取待覆核內容必須比對 Work Item `review`／revision、申請 reference hash、公司設定版次與原來統編、解密後模板 SHA256，任何不符 fail closed；申請資料有 D1 UPDATE／DELETE 禁止 trigger。通用 `/v1/work-items/create` 拒絕 ALLOWANCE 人工雜湊建立；正式申請專用 route 尚未開放。測試涵蓋 USER 建立、錯誤模板、重複申請、Device 撤銷、D1 批次 rollback、公司設定變動與不可變約束。
+- [ ] **尚未完成**：申請正式 UI／CYID 專用 API、管理員官方 live 查核及真實餘額分攤、Windows 管理員核准、持久化申請與 `approveAllowanceAfterOfficialReview` 的受保護整合、g0401 安全首次送出及事後唯讀 reconciliation。0015～0018 都是 Draft，禁止部署到原 D1 或開放寫入。D1 batch 回覆不明時必須依原 Work Item ID 查回、不可用新單號盲重送。
+
+## 2026-10-15 V3 公司設定權威 Draft（尚未接 Windows／正式 Worker）
+
+- [x] 新增 `cloud/drafts/0017_company_settings.sql`、`src/company-settings.ts`：只供內部 Worker 使用的 CYID 公司設定權威草案。SUPER_ADMIN＋當前超管 marker／Email 驗證前後重新驗權；Workspace＋Device active 寫入 SQL 柵欄；revision CAS；AES-256-GCM 隨機 nonce＋Workspace／欄位 AAD；密鑰由部署時私有設定注入，絕不放 D1；原設定以明確 keep／replace／clear 避免空白覆蓋；Audit 同一 D1 batch 保存異動欄位／員編／裝置，不記秘密。ADMIN 唯讀統編＋設定狀態，無解密接口；服務內部可經金鑰解密供未來 Gateway。
+- [ ] 尚未建立正式公司卡片 UI／CYID auth route／DPAPI Device Cache，亦未處理憑證輪替後舊 Device 收斂；0017 只是 Draft，禁止套入原 D1 或對外啟用。要使用於折讓覆核，仍需服務端 frozen application 與官方 Gateway final preflight；先完成完整測試與授權整合。
+
+## 2026-10-15 V3 接續：管理員官方覆核 Grant 寫入者（Draft-only）
+
+- [x] **內部 approval writer 已新增**：`cloud/src/allowance-review-approval.ts` 的 `approveAllowanceAfterOfficialReview` 只接受 Worker 內部**可信任**三項 callback（CYID manager 重新驗證、從服務端讀取 frozen application、由光貿 Gateway 查詢及完整驗證單張原發票）。核准前後重新驗證同一管理員、Workspace；官方查詢資料必須在 60 秒內、具明確 allowance 陣列、發票上傳狀態 99、未作廢，原發票金額與申請品項分攤均被服務端確認。**暫時遇到任何已存在的官方折讓，都 fail closed**，留待品項分攤／剩餘額正式核對，絕不把多原發票折讓單的總額直接視為此張可折。
+- [x] **D1 簽核證據改成 append-only**：`cloud/drafts/0016_allowance_number_ledger.sql` 的 `allowance_execution_approvals` 增 `approval_id` 與索引；核准時間到期後重新查官方可新增簽核，而非覆寫前筆 actor／時間。寫入採單條 INSERT SELECT 檢查當下 Work Item `review` 與 revision、CYID Cloud Device／Workspace active，且此前號碼不可處於 `sending`／`confirmed`；同 revision 已簽過的公司、環境、日期、固定 template SHA256 不可偷改。核准本身**不會配號或開折讓**，配號／首次送出還有有效 grant fence。隔離 D1 SQLite 測試涵蓋缺官方折讓欄位、已有折讓、品項不明、過期官方快照、權限撤銷、競態、逐次 audit、核准後資料不變。
+- [ ] **仍為 Draft／不可對外呼叫**：三個 trusted callbacks 目前尚未接上實際公司設定卡片、持久化的含申請人/原因/明細之完整 frozen Work Item、真實光貿 Gateway 或 CYID session／route。沒有 Windows 管理員核准畫面與可操作 `g0401` 的安全執行路由，也未驗證已存在折讓的精確品項分攤。此進度不可當「折讓覆核功能已完成」；0015／0016 依舊**沒有套用正式 D1**。有任何官方狀態不明／無法判定餘額，禁止核准自動開立。下階段先完成可信 company settings 與 frozen request source，再接 route。
+- [ ] **已送出後 reconciliation 的獨立追蹤**：目前 D1 ledger 仍以 Device active／Work Item `review` revision 限制 `sending→confirmed`；若外部成功後 Work Item 被其他管理員關閉／Device 撤銷，需另設具核對證據的唯讀查回及 audit 寫入路徑，不能為了失去本機 Device 狀態而盲送 g0401 或重配號。
+
+## 2026-10-15 插隊 AutoInput 後接續 V3：官方覆核先於配號（Draft Source）
+
+- [x] **V3 Cloud 草案配號加上 explicit approval fence**：`drafts/0016_allowance_number_ledger.sql` 新增 `allowance_execution_approvals`，以 Workspace／Work Item revision／公司統編／環境／日期／未編號的固定 g0401 template SHA256／官方狀態快照 SHA256／CYID 核准人及核准時間／有效期限記錄最小覆核證據；`allowance-number-ledger.ts` 的占號 SQL 與 `reserved→sending` SQL 均要求 approval grant 存在、內容一致且未逾期。後續官方確定拒絕的撞號與查回結果入帳不受時間過期妨礙，避免處理中的舊操作永遠無法記錄。新裝置可以在原 Device 撤銷後接手仍有效的工作單，但每次業務寫入仍須檢查**執行者自己**的 Device active、Workspace 與 Work Item revision。新增無核准／核准過期／重新核准／雙裝置安全測試。
+- [ ] **上述 Draft 尚缺官方覆核核准寫入者及安全開立執行路由**：目前沒有 API 能把 client 宣稱的「已查光貿」直接寫成 approval，將來必須由 CYID manager 線上 revalidate、Cloud server 信任的公司設定與唯讀官方發票／折讓餘額查詢證據建立 grant；申請人與覆核者身分／申請內容須在 D1 真正可驗證，最終 g0401 前須核對 Work Item revision + grant 未逾期、完整固定 payload 與已占號一致。**不可將 `review` 當 `approved`，也不准先送光貿再補配號。** 0015／0016 仍僅在 Draft，未部署原 D1。
+- [x] **AutoInput 插隊交接已處理，與 V3 互不混用**：獨立 PR #445 V2.6.21 Build 0 `--autoinput-pdf`／工程包／Windows CI 完成；已將 Artifact 與四項確認寫回 AutoInput PR #424 的 `CYINVOICE_PDF_HANDOFF.md`。主 V3 不 cherry-pick 該支 V2 功能，後續版本整合另按正式 main 基準處理。
+
+## 2026-10-15 CYWEB 交回確認與 CYID Cloud D1 配號草案（待整合）
+
+- [x] **CYWEB Recovery handoff 原阻塞解除並回報**：已核對 [CYWEB #151 的 `CYINVOICE_RECOVERY_HANDOFF.md`](https://github.com/simonliu1118-byte/chihyuan-web/blob/cyweb/feat-cyinvoice-recovery-auth-gate/docs/development/CYINVOICE_RECOVERY_HANDOFF.md)，其中「CYInvoice 還缺 explicit revoked」為 10/14 舊快照。CYInvoice `recovery-issuer.ts` 與 `recovery-issuer.test.mjs` 已有 `revoked_at` 明確成功、consumed／expired 不冒充撤銷、lost D1 response 查回與 claim/revoke 競態 SQL rollback。已更新 CYWEB 該 handoff、CYWEB 根 TODO、PR #151 留言，並取得兩 repo source CI 正向結果。**只結案原 Source blocker，不勾 DR-01～DR-13；交接文件暫留作驗收依據**，後續依正式 V3 順序完成。
+- [ ] **Cloud D1 安全配號底層（新增 Draft，尚未完成跨機正式開立）**：新增 `cloud/drafts/0016_allowance_number_ledger.sql` 與 `cloud/src/allowance-number-ledger.ts`、`cloud/tests/allowance-number-ledger.test.mjs`。以 Workspace＋公司統編＋環境＋日期唯一序號，格式 `AyyyyMMddXXX`，永久保留已占號 attempt；關聯 exceptional ALLOWANCE Work Item，不存一般成功發票／原始 AMEGO payload／API 金鑰，只保存 SHA256 frozen request 雜湊。單條 D1 SQL INSERT 對 current max+1、`review` revision、active Device／Workspace 執行當下 fence；`reserved→sending→confirmed`，只有**同一次確定首次 API 拒絕 `4040161`／`4040162`**才准 `sending→occupied_external→`同工作單下一次占號；timeout 必須原號官方查回。synthetic SQLite 涵蓋跨工作單、跨裝置競爭、撤銷、同一工作單重入、999→A00、ZZZ 上限與永不回收。**這只是 Draft foundation：0015／0016 未移入正式 migrations／未部署，尚無真正 manager approval UI、Work Item 可驗證最小申請內容、權限 revalidation 路由、g0401 execution wiring、官方 reconciliation 或真實 AMEGO 實測。**進入正式 approval route 前必須由 server 綁定的公司設定決定 sellerInvoice，絕不能接受瀏覽器傳統編／憑證作為權威；不可單靠 `review` 代表已核准。
+- [ ] **V3 覆核開窗唯讀即時官方資料 Core（新增 Draft，尚未接 UI）**：`AllowanceReviewInspectionService.InspectAsync(originalInvoiceNumber)` 不依賴原機 SQLite，使用當次授權公司的 Gateway 只發**一次 `invoice_query`**，回傳原發票作廢／上傳狀態、所有官方 `allowance[]`、查詢時間及資訊不全旗標。Amego `QueryResult.AllowanceSummaryPresent` 分辨實際 `allowance:[]` 與未提供／null；後者不能當無折讓，任何已有折讓都先要求跨原發票的品項分攤查核，不能用折讓單總額直接扣該張發票餘額。新隔離測試涵蓋查詢一次、不同本地 Device 不需要紀錄、缺欄位、取消、待處理、錯號及實際 wire parser。**目前尚無可核准判斷／WinForms 接線／CYID server-side company key 接線，不能只靠此唯讀 Service 直接送 g0401。**
+
+## 2026-10-15 V3 開發續進（Source commit 進展，尚未正式發布）
+
+- [x] **CYID-only 執行路徑收斂（Draft source）**：Cloud Worker `app.ts` 先檢查 `CYID_ENABLED` 及 Binding，舊 Built-in Provider 的 Employee／密碼／轉換 public dispatch 已移除；CYID 仍對舊 API 顯示明確 409。Work Item route／SQL 不再選擇 Built-in `cloud_employees` 或 PBKDF verifier，改以 CYID 目前管理員角色、即時 revalidate 及 D1 active Device／Workspace 寫入柵欄。Windows `LocalRepository` 不再實例化 Built-in Cloud identity provider，`IdentityProviderRuntime` 只接受 Local 與 CYID；舊 Built-in 身分狀態 fail closed。已更新 CYID-only 合成測試，歷史 source／migrations 與舊 Cloud setup 次要欄位**還沒全面刪除**，不得認定 Built-in 完全清乾淨。
+- [x] **AMEGO `g0501` 作廢折讓 Gateway 原始碼（Draft）**：已加 `VoidAllowanceAsync(allowanceNumber)`，送一次官方 `/json/g0501` 的 `[{CancelAllowanceNumber}]`，不重新編號，不對 HTTP 結果不明自動重送；支持光貿網站已有的合法歷史號碼，不限 CYInvoice 的 `AyyyyMMddXXX`。隔離 payload／拒絕測試已新增，**不表示實際光貿操作已驗證，也未接 Windows 核准**。光貿官方 [API 合約](https://invoice.amego.tw/api_doc/)。
+- [ ] **待完整完成的正式折讓執行**：現有 `EmployeeAllowanceWorkflowService` 與 `SyncIssuesForm` 仍以「管理員先去光貿網站人工處理，再按已人工完成」為主；尚未將 g0401／g0501、Local SQLite Ledger、Cloud D1 配號、Work Item 正式覆核與即時官方餘額驗證接成完整受保護的端到端。無此證據不得發布 V3.0。
+- [ ] **CI readback gate**：以上目前是 Draft Source；每一輪以精確 PR head 的 Cloud validate／Windows x64 build＋startup smoke／Governance 成功判定，單次中間失敗與被取消的舊 run 不可當作最終結果。不得部署正式業務 D1 或創建真實光貿測試作廢。
+
+## 2026-10-15 V3.0 正式交付工作順序（使用者明確批准）
+
+按順序執行：**(1) 清理 Built-in → (2) 完成折讓 API 與安全配號 → (3) 完成 D1 Work Item／跨機覆核 → (4) 官方 List 對帳 → (5) 公司設定卡片與整合驗收 → (6) 災難復原跨服務部署／完整 DR-01～DR-13 實機驗收 → (7) 文件與殘餘 Built-in 清理 → (8) V3.0 正式發行**。不得將任何階段「有文件／有底層 DTO／CI 綠燈」冒充端到端完成；**Cloud Worker／D1 正式遷移與 Windows V3.0 Release 必須在依規則完成真實驗證後才可執行**。
+
+**當次 Draft #440 新增 source 實際進度（非已發行）：**
+- [ ] Built-in 清理：V3 `IdentityProviderRuntime.Current` 現只允許 Local 與已完成 CYID 的 Cloud；Direct Join 缺 CYID binding 將 fail closed、不再拉 Built-in Employee snapshot；設定頁從空白 Cloud Device 改走 CYID Direct Join，舊 CloudSetup 建立／轉換入口受阻。Windows Direct Join smoke 換成 CYID-only、拒絕非 CYID 及原 Token 恢復案例。**Cloud Worker 入口與 Work Item 憑證分支已收斂；其他 Built-in source、歷史 handler、相依測試與部署相容分支尚待審查清理**；不得直接刪正式歷史 migrations 或遠端 D1。
+- [ ] 折讓 API：V3 Core 已新增 `/json/allowance_list` 的 `ListAllowancesAsync` 分頁 DTO／官方原發票品項解析，與 `allowance_status` 舊 keyed object、新 array 格式的嚴格單號對應；新增隔離 HTTP 測試。**尚未接 Windows 正式 Sync 與管理員流程。**
+- [ ] Local 安全配號：已新增 `LocalAllowanceNumberStore`，在既有 SQLite 額外建立專用 allocation ledger，以公司／環境／日期原子增號、Work Item 重入返回同一 reserved 單號、先存完整固定 g0401 payload、`MarkSending` 後不允許重送、確切撞號才占號／重配、已用號不回收；新增重啟與碰撞測試。**未接實際折讓核准流程／沒有 Cloud D1 配號／真實 API 驗證。** 需要 CI readback 才能宣稱測試通過。
+- [ ] Windows CI 曾在中途提交的 CYID 模擬續接測試失敗（設定模擬的 discovery 故障次數過多）；已將 `cyid-recover` 的 fail-once 修正為一次，待最新 Windows build／startup smoke 通過後才結案。先前失敗不得默認為成功。
+
+## 2026-10-15 V3 產品範圍定案（覆蓋舊 Built-in 待辦）
+
+- [ ] **V3 僅保留 Local + CYID Cloud 兩種正式模式**：使用者確認沒有正式 Built-in 使用者，停止維護 Built-in Cloud／Self-hosted 做為可用產品；GitHub 第三方如需自行部署 Built-in，改自行 fork。不以其相容性作 V3 合併／驗收／Release 條件；歷史成功測試和已發布 V2.6.19 不被重新定義為已刪除。
+- [ ] **工程簡化清理（V3 runtime 已收斂，歷史原始碼待最後清除）**：清理 Built-in identity provider／Employee CRUD／OTP／忘記密碼／SUPER_ADMIN transfer、Cloud 初始導入及相關相容分支，評估刪除不再需要的 handlers／migrations／fixtures／CI 矩陣；保護仍被 CYID／Local 共用的 Device、Workspace、Window Core、D1 Work Items、錯誤處理與歷史 actor/audit 解讀。不可復活或重做已退役的原 D1 表，不把刪 source 當正式 DB 清理授權。
+- [ ] **統一公司設定卡片（含使用者批准的 Cloud DPAPI 快取）**：Local 保留本機 DPAPI 憑證儲存與合理權限；CYID Cloud 的**公司設定權威**在 CYInvoice 業務 D1，僅 SUPER_ADMIN 通過 Worker execution-time 權限驗證才能增改移除公司統編、加密 AMEGO App Key、MO店+ 密碼（加密金鑰不可與密文同存）；ADMIN 只能透過 UI 看統編／設定狀態，不能由設定查詢 API 讀取明文。CYID Windows Device 可保存已授權取得的公司憑證 **DPAPI 加密快取**，光貿正常但 D1 暫時無法連線時支持原本允許的正常開票；連線恢復後檢查版本、刷新／撤銷快取，已知拒絕 fail closed。離線無法即時套用新版本／撤銷，回歸應覆蓋此邊界，不新增 Cloud 斷線時繞過設定權限的寫入入口。
+- [ ] **CYID Cloud 斷線權限／覆核行為（使用者 2026-10-15 已核准）**：D1／Work Item 無法連線時，暫停雲端跨機折讓申請建立／覆核核准／正式開立及其他需要原子執行鎖的操作，不採原先 `allowance_list` 離線暫配號、連線後才回填 D1 的提案；避免不同電腦用不同單號重複執行**同一個申請**（4040161／4040162 不保證防此情況）。Local 單機折讓用 SQLite＋光貿正常可用。CYID Cloud 的既有一般開立／發票查詢在光貿正常且符合最後可信身分安全降級條件下**繼續可用**；已確定的身分／Device 拒絕不得降級。已送出折讓的光貿唯讀查回可繼續，結果不明禁止盲送。需新增斷線矩陣與恢復回歸。
+
+本決策取代本文舊章節中「Built-in 是正式支援模式」、「三版共用」及自架支援的**未來產品承諾**；舊的已完成工程與歷史遷移紀錄仍可供追溯，不能當成應繼續實作的待辦。
 
 ## 0. 接續優先順序
 
@@ -18,7 +262,7 @@
 | V3 接續 3 | V3 折讓 API／不可覆寫逐筆歷史 | §1.1／§6／§7.5；依使用者決定整體重做，不回頭修 V2.6.19 |
 | V3 接續 4 | 業務 Audit／查看介面 | §7.4／§7.6；現有 Device audit 保留，新增業務事件與 actor provider |
 | 待補證據 | 原裝置權限刷新、斷線／恢復、撤銷中斷與 UI／AMEGO 行為 | §1／§4／§7.2／§7.3；缺實測證據不等於未實作或已發現 defect |
-| 後續／延後 | 酷澎特殊樣本、自架手冊、多公司、營運摘要、高 DPI／cache 簽章 | §5／§8～§11；維持原延後與非本次阻塞決定 |
+| 後續／延後 | 酷澎特殊樣本、多公司、營運摘要、高 DPI／cache 簽章 | §5／§8～§11；原 Built-in 自架手冊依 2026-10-15 決定取消 |
 
 - [x] V2.6.19 正式 tag／ZIP／SHA-256 與 Windows／Cloud Client／package／安全掃描已完成。
 - [x] PR #216／#379 head 已由 #380 合併；裝置管理、邀請、分流工程不重列為未實作。
@@ -97,18 +341,30 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 折扣／負數調整樣本。
 - [ ] 取得樣本後補 parser、金額、防重與測試案例。
 
-## 6. 正式折讓 API（V3.0 雲端化階段）
+## 6. 正式折讓 API（V3.0，先完成 API 再做 D1 協同）
 
 目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。2026-10-13 使用者決定目前人工折讓歷史缺欄位不單獨修補，V3.0 隨正式折讓及 Cloud Work Item／Audit 重做；既有 V2 缺陷不因此視為修復。
 
-- [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
+**2026-10-14 使用者確認開發順序：**優先把折讓申請 → 管理員至光貿網站人工折讓改為 CYInvoice 直接呼叫 `/json/g0401`；CYID、單機版共用同一 Core/Gateway，不要把 API 功能依賴在 D1。開立後直接以確定的折讓單號查官方狀態，通過驗收再取消手動填折讓單號與人工挑選多筆候選的操作 UI；結果不明仍保留安全回查，不自動重送。
+
+**官方 API 契約注意：**光貿 `/json/g0401` 要求呼叫端必填 `AllowanceNumber`（最長 16 字、不可重複）；公開成功回應只明列 `code`、`msg`，不能假定光貿會自動配號或回傳號碼。CYInvoice 必須自行產生、先保存同一唯一號碼，確保跨機不撞號；逾時只能用**原號**查 `/json/allowance_query`／`/json/allowance_status`。文件：https://invoice.amego.tw/api_doc/ 。
+
+**2026-10-15 工程進度（Draft #440，尚未上線）：**已加入 Core 的 `AllowanceIssueRequest`／`AllowanceProductItem`、依使用者 2026-10-15 核准的 `AyyyyMMddXXX`（12 字、每公司／環境每日 001–999 後接 A00–ZZZ）`AllowanceNumberGenerator.Format` 與 `TryReadSequence`，與 `IAmegoGateway`／`AmegoClient` 的 `IssueAllowanceAsync`（g0401）／`QueryAllowanceAsync`（allowance_query）／`AllowanceStatusAsync`（allowance_status）及隔離 HTTP 測試。g0401 送出官方要求的 JSON 陣列；code 0 僅代表 API 接受，**不代表財政部上傳完成**。目前**沒有已接線的持久化 Pending Operation、跨機操作撞號防護、官方回查狀態機或 Windows 操作入口**，所以絕不能把下列功能勾完成，也不能直接啟用正式折讓。原人工流程與 g0501 完全未變動。CI 證據應對照本次精確 head；沒有 AMEGO live 驗收。下一步先實作送出前原號＋payload 本機 durable 存證、曾嘗試送出不可自動重送、按原號查回；再做部分／多次折讓金額核對、Work Item 協同及 UI 切換。\n\n- [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
+- [ ] **V3 管理員折讓覆核開窗即時官方資料（2026-10-15 使用者新需求）**：管理員開啟既有「折讓申請覆核」視窗時，針對**這張原發票號碼**呼叫**一次 `/json/invoice_query`**，從 `data.allowance[]` 顯示最新已開立／已作廢／等待中／錯誤的折讓單號、日期、金額（明確標示未稅＋稅／含稅）及官方狀態，並列原發票目前是否作廢、本次申請金額、申請人／原因／時間。**不要誤用 `/json/allowance_query` 用發票號碼查，該 API 必須帶既有折讓單號**；只有需查單筆詳情、跨多張原發票的折讓金額分攤或官方欄位不完整時，才針對已知折讓單號額外呼叫 `allowance_query`，不能把整張多發票折讓的總額直接算成此一原發票已折讓額。載入要顯示「正在查詢光貿」→「最新官方資料／查詢時間」或「查詢失敗」，不能把本機舊快照顯示成已即時確認；查詢失敗、發票已作廢、尚有影響可折額度的 pending／不明折讓、無法核對可折餘額時**禁用核准／正式開立**，仍允許管理員檢視／退回。操作中不要封鎖 UI 主執行緒，必要時支援手動重新查詢；核准到執行 `g0401` 前仍須重新核對官方最新狀態及當下管理員權限、D1 Work Item revision／原子配號，避免開窗後資料變更／其他裝置同時覆核。CYID 管理員 B 機**不保證有原機 SQLite 發票列**，應由原 Work Item 發票號碼＋已授權公司設定建立 Gateway 直接查光貿，不能用「B 機找不到本地 InvoiceRecord」拒絕看覆核詳情；Local 可沿用 `InvoiceDetailRefreshService` 核對的 Core，但同一 UI 規則。官方 `invoice_query` 查詢原發票日期 180 天限制外／未能確認時，不宣稱「沒有折讓」，走保守人工核對流程。這是**V3 待做 UI／Core／跨機整合**，現有 `SyncIssuesForm` 仍以本地舊快照列出折讓，不代表已完成。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
-- [ ] `AllowanceNumber` 由 CYInvoice 自動產生，建立全域唯一編號與跨裝置防重機制。
+- [ ] **2026-10-15 折讓配號規則（已確認）**：`AyyyyMMddXXX`，固定 12 碼，當日 001～999；第 1000 筆起 A00、A01、…、A0A、…、AZZ、B00、…、ZZZ，上限 **34,695**。僅在管理員確認核准執行折讓時由原 Work Item 分配，申請／等待覆核／退回完全不占號。Cloud 於本公司的業務 D1 原子配號且永久保留所有號碼與 Audit；Local 單機不依賴 D1，需 SQLite 等價的 durable 保護。已分配號碼永不回收，包含取消、作廢、失敗、結果不明與光貿外部撞號。正式／測試環境隔離；兩臺 Cloud 裝置不得同號或重覆處理同一申請。
+- [ ] **光貿手動折讓撞號後的受限自動換號（官方錯誤碼已核對）**：光貿 [官方 API 錯誤碼](https://invoice.amego.tw/info_detail?mid=71) 明訂 `4040161`＝「指定折讓單號 已存在折讓開立」、`4040162`＝「指定折讓單號 已存在作廢折讓」，**兩者都表示號碼已經使用且不能回收，採相同撞號處置**；`4040163`＝「指定折讓單號 折讓類型錯誤」，不可換號重試。Core `AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied` 已分類 4040161／4040162，synthetic HTTP 測試涵蓋兩碼與 4040163 排除；Gateway 只傳遞錯誤碼，**尚未實作自動配號或重送**。待 Work Item/D1 原子配號及送出前 durable operation 完成後，只有**同一操作沒有任何先前不明送出、且這次已收到官方確切 4040161／4040162 拒絕**，才將原號永久標記 `occupied_external`、保留歷史 Audit，替同一 Work Item 原子分配新號並有限次重試；timeout／斷線／模糊結果以及可能是前次自身送出造成的 4040161／4040162，均必須查原號核對官方資料，不得直接換號。尚無 AMEGO live 驗收，不能宣稱流程已上線。
+- [ ] `AllowanceNumber` 由 CYInvoice **送出前先產生、持久化原號**（光貿 g0401 必填，不是光貿自動配號）；不同裝置與單機模式都不能撞號，unknown 不換號重送。
+- [ ] **V3 官方異動回補（2026-10-15 最新低呼叫量方案）**：若 CYInvoice Cloud D1 中斷但光貿正常，管理員可直接在光貿網站人工**作廢發票／開立折讓／作廢折讓**。復原後 CYInvoice 以既有 `invoice_list.cancel_date` 和新增 `allowance_list` 的 `allowance_number`／`invoice_type`／`invoice_status`／`cancel_date`／`product_item[].original_invoice_number` 比對**本機 SQLite 現有發票與官方折讓快照**，補回官方事實；當完整列表欄位不足或對應衝突時才調 `invoice_query`／`allowance_query`，不要逐張掃所有發票。`f0501`／`g0501` 是實際作廢操作 API，**絕不能當查詢 API**。外部網站操作**不得新增 D1 的 CYInvoice 執行操作 Audit**，不能杜撰操作者／核准／原因；原有申請 Work Item／Audit 永久保留，恢復後可更新**原申請**官方核對狀態，不另建正常發票 D1 索引。Local 同樣共用，無 D1。
+- [ ] **列表導向、低 API 量的增量對帳**：保留目前 `InvoiceAutomaticSyncService` **每日首次當期＋前一期、其餘近 3 日**列表同步節奏，不再提議背景定期對每張發票打 `invoice_query`。發票作廢可直接從現有 `invoice_list.cancel_date` 得知（現有 `InvoiceSyncService.ApplyList` 已有處理），折讓不能從 invoice_list 判斷，須新增 `IAmegoGateway.ListAllowancesAsync`／`/json/allowance_list` 分頁（官方 limit 20–500）。同日頻繁重整只查必要的近期日期範圍，日首次較大範圍補當期＋前期；按公司／環境保存游標／成功時間，分批查完整 pages，網路失敗不清空前次快照、不自動重送任何發票／折讓。Cloud 的多臺裝置各自只取少量清單頁而非全發票逐筆詳查；暫不為此新增 D1 一般發票索引或中央 sync service。既有 pending、重複號／缺原發票品項、作廢折讓晚於其開立期別等例外，才用針對性唯讀查回。官方兩類 list 都沒有文件化的 last_modified 篩選，所以**不能只以新建立日期游標掃尾**來保證偵測舊折讓的事後作廢：需較寬區間定期回掃，以及針對本機已知舊折讓的 `allowance_status` 或明細回查策略；期限外未知舊資料的完整性另列限制。
+- [ ] **官方折讓快照變更檢出／PDF cache 回歸**：`allowance_list` 的 `product_item[].original_invoice_number` 可將一張或多張原發票對應到同一折讓單；以折讓單號＋官方類型／作廢時間／狀態更新原 `cyinvoice_official_allowances`，不能新增重複發票或同折讓號的重複項，不能將失敗發票反查變成功。`InvoiceAllowanceMetadata.ApplyQuery` 已可存官方折讓快照，但現行 `InvoiceSyncService.Fingerprint`／`InvoiceDetailRefreshService.OfficialFingerprint` 沒有納入折讓快照，需修正變更持久化與相關 PDF Cache 失效。回查不明、分頁未齊、缺原發票對應時，保留上次可信資料並限定補打 `invoice_query`／`allowance_query`。驗證首次折讓、多次部分折讓、外部作廢折讓、原發票作廢、跨重啟、跨裝置、近／舊期、180 天限制、漏頁錯誤與增量同步重入。
+- [ ] **官方按發票號碼查折讓／作廢紀錄**：光貿 [官方文件](https://invoice.amego.tw/api_doc/) 的 `invoice_list` 可查原發票 `cancel_date`，**沒有文件化的折讓摘要／修改標記**；`allowance_list` 可查折讓單號、D0401／D0501、上傳狀態、`cancel_date`、原發票 `product_item[].original_invoice_number`，適合整批增量對帳；`invoice_query` 的 `data.allowance[]` 可在開啟詳情或資料有疑義時針對單張查。超過 `invoice_query` 以發票日期計算 180 天限制（code 51）不得誤判無折讓。Core 現有 `QueryByInvoiceNumberAsync`／`ParseAllowances`，**allowance_list Gateway 已加入 Draft（待驗證），尚無本機合併與日常同步**，需實作並用真樣本核對 list 的選填欄位是否完整、作廢異動能否在相同折讓日期範圍被查出。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
+- [ ] **光貿 allowance_status 新舊回應格式兼容（核對 API 文件發現）**：官方文件現列新版 `data:[{allowance_number,type,status,tax_amount,total_amount}]` 與舊版 `data:{"單號":{type,status,...}}`；目前 Draft `AmegoClient.AllowanceStatusAsync` 只解析舊 object，須新增 array 解析、單號精確匹配／重複拒絕與兩種隔離回歸後才能視為正式查詢可靠。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
 - [ ] 自動折讓／折讓作廢時，確認 AMEGO 正式可保存且可依折讓單號查回的欄位，再決定如何保存 `管理員編號-使用者編號-原因`；若官方沒有合適欄位，不濫用未文件化欄位。
-- [ ] 雲端化完成後移除暫行人工折讓與人工折讓作廢路徑，收斂為正式 API 流程。
+- [ ] **先驗收 g0401** 的發送、相同折讓單號查回、結果不明與 Local／CYID 兩種版本共用後，再移除「管理員至光貿網站人工折讓」、「手填折讓單號」、「從多筆候選人工挑單號」的正常操作 UI；歷史及不明結果追查保留。**g0501 折讓作廢屬另一個 API 驗收點，不可隨 g0401 一併宣告完工；D1 折讓協同在 g0401 後再接。**
 
 `/json/allowance_file` 折讓 PDF 已完成工程實作，後續只需實機驗證與雲端化時確認多裝置 Cache 行為。
 
@@ -122,13 +378,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.2 目前剩餘驗證／修正
 
+Built-in／Self-hosted 專屬 Employee identity／OTP／Email／超管移交矩陣共四項已依產品範圍定案移出 V3 待辦（取消，**不是通過驗收**）。既有 Device 與 CYID／Local 回歸仍按實際依賴保留。
+
 - [ ] **待補 A/B baseline 證據：**兩台既有 Device 保留原安裝升級現行 V2.6.19 後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
 - [ ] V2.6.12 邀請第一次加入與首次說明實機驗收（RC X）。10/09 舊包已取得「第一次錯誤、重開成功」證據，已定位 password.Clear → TextChanged → preview=null；修正版單次完成尚待使用者驗證。邀請撤銷／重寄與其他不明結果仍待實測。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
 - [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；雲端暫時不可用且光貿正常時沿用原降級可信 cache，恢復連線後 Online authority 重新覆蓋。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**Built-in Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**Built-in Cloud「忘記密碼」員編／已驗證 Email challenge、重寄倒數、OTP／新密碼 confirm 及 A/B 舊密碼失效實機驗收；工程已實作。
-- [ ] **Built-in／Self-hosted 專用證據（其他公司獨立 D1）：**SUPER_ADMIN transfer 的 execution-time re-auth／OTP／原子 X→ADMIN、Y→SUPER_ADMIN／Recovery Email 與 A/B authority 驗收。
 - [ ] **Cloud → Local 實機驗收：**優先用可拋棄的 Device C，在 A/B 仍保留 Workspace recovery path 的前提下測 current-device reset；確認 A/B、Workspace、中央 Employees 完整保留。
 - [ ] **Device revoke A/B/C 實機驗收：**新增可拋棄 Device C，從 A/B 遠端 revoke C，確認 C 舊 Token 立即失效、history 保留 revoked、重新加入產生新 Device identity。
 - [ ] **LAST_ACTIVE_DEVICE 實機驗收：**只在專用可拋棄 Workspace／環境驗證，不為測試而破壞目前 A/B 唯一 recovery topology。
@@ -178,27 +432,55 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.4 V3 多機裝置復原、備份與安全紀錄
 
+**2026-10-15 現行狀態：**[CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) + [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 已完成相應 Source／CI；CYInvoice [Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)／[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)／Governance 成功，CYWEB [Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806)／Deployment contract／Governance 成功；**兩份 PR 未合併，正式服務未部署，實機 DR-01～DR-13 沒有驗收通過**。Windows UI 入口正式定案在**「直接加入雲端」內的「災難復原」按鈕**，首次啟動只有單機版／直接加入雲端兩選項。詳細單一最新停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+
+**下一輪工程待辦**（V3 專用，不與 AutoInput 測試包混版）：
+- [ ] **CYWEB #151 明確 revoked 契約雙端聯測：**CYInvoice #440 已在 Draft source 加 `revoked`（只根據 persisted `revoked_at`／成功原子撤銷）與 consumed／expired fail-closed，增加 SQL-time guard、重複撤銷、lost-response status readback、claim/revoke race synthetic regression；等 exact-head CI 通過及 CYWEB #151 消費者合約對照後才可標 source 整合完成。真 D1／Email／Device 仍未驗。
+- [ ] 雙 Repo 最新 diff、正式契約／權限／race 安全審查，補強 in-flight 業務 mutation 的 fencing/epoch 及依操作邊界再驗證；防止被撤銷舊 Device 在新 Device 切換後仍提交舊工作。
+- [ ] CYWEB 操作 ID／寄送結果不明時的 UI 恢復體驗、超管保護與 Chrome／行動裝置人工驗收；任何時候不自動重寄、不產生另一有效邀請。
+- [ ] **唯讀**核對正式 Worker／original D1／CYID Service Binding／Email provider／已有 migration history；形成 migration 0014 + optional CYID_ONLY issuer maintenance 的受控部署／rollback／readback 計畫。未獲使用者獨立批准前不更動原 Worker/D1，禁止測試 Worker。
+- [ ] 真實 DR-01～DR-13／多機切換／接管時全數撤銷／原一般 JOIN／Built-in fixture／遺失 response／DPAPI 復原／失敗 rollback；憑人工及實際 API／裝置證據逐一勾選，不用 mock 充當真人通過。
+
+
 2026-10-13 使用者決定：**災難復原與 V3 多機協同一起做，從 CYWEB 由 CYID 超管簽發復原邀請碼**。裝置／邀請／協同資料上 CYInvoice 業務 D1，CYID 身分權威與其 D1 分離。詳細見 [V3 多機與復原設計](CLOUD_DISASTER_RECOVERY.md)；不再要求獨立災復功能先於 V3 完成。
 
 - [x] **設計與 source 核對：**區分可用舊裝置、有效加入碼、所有 Token 遺失及服務／資料毀損；確認 active 筆數不是可用 Token 數、現有 issuer Device FK 與 app-scoped Session 邊界。
 - [ ] **V3 CYWEB 管理接線：**核對實際 CYWEB source／core Session／CSRF owner；超管簽發／撤銷／狀態查核經專用 private capability 與當次 CYInvoice App authority，不轉用 core token、不要求舊 Device。
+  - [ ] **私有 RPC 原始碼已備齊，待部署與整合：**[CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的三個 POST gate（issue／status／revoke）與 [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 的 named WorkerEntrypoint、兩個 Workspace／Application 的即時 CYID 再授權、pending→Email 服務接受→sent 原子 Audit、同一操作只寄一次、狀態查回與明確撤銷均已實作／加入合成測試。**Windows 專用 preview／claim 與 UI 原始碼已在 Draft #440 接上；CYWEB Draft #151 已加入僅超管可見的簽發／狀態／撤銷 UI，以及部署時選用的 named Service Binding 注入與 CI 驗證；仍缺正式 Binding 啟用、原 D1 0014＋optional recovery 維護、跨服務／真 Email／Windows 實機 DR 驗收**，不能勾完成。
+
 - [ ] **V3 邀請與 Audit schema：**forward migration 擴充 issuer channel／RECOVERY purpose／nullable CYWEB Device issuer 與 constraint，保留歷史 actor；原子單次 claim／Audit、失敗及 delivery 不明安全收斂。
-- [ ] **V3 新裝置復原加入：**沿用 protected Pending Token owner，固定兩 Workspace／Application scope；同 Token retry／重啟／scope mismatch／revoked 不復活，成功加入原 Workspace 後才明確撤銷選定失聯舊 Device。LAST_ACTIVE_DEVICE 維持。
+  - [ ] **2026-10-14 全數撤銷決議／交易核心：**復原與一般 JOIN 區分；新 Device 成功兌換時須同一筆 D1 交易讓原 Workspace 所有其他 active Device revoked、未使用 JOIN／RECOVERY 邀請及 Pairing 授權碼失效、逐裝置撤銷與成功 Audit 原子寫入；簽發時不得提前撤銷，失敗必須全數 rollback。Draft #440 已新增內部 `recovery-claim.ts`、Pairing `revoked_at`、transaction guard 與 synthetic SQLite 測試；**private issuer、受限 CYID SUPER_ADMIN preview／claim 路由、Windows DPAPI Pending Token 均已有 Draft 原始碼與自動測試；尚未正式部署、尚未套用真實 D1，且實機未驗**。
+  - [ ] 工程中：[CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 已加入 canonical 0014／optional CYID_ONLY issuer maintenance 與 synthetic Built-in／CYID_ONLY／FK／Audit／唯一 operation ID 測試；**尚未合併或套用原 D1；private 簽發與 claim 原始碼已有，但沒有正式部署／現場 DR 驗收**。與 [CYWEB Draft PR #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的超管 Auth/CSRF gate 同步收斂，不把 CI 等同 DR 實機完成。
+- [ ] **V3 新裝置復原加入：**沿用 protected Pending Token owner，固定兩 Workspace／Application scope；同 Token retry／重啟／scope mismatch／revoked 不復活，**成功加入原 Workspace 的同一原子交易自動撤銷所有舊 Device**（不先撤銷，不只選定失聯者）。LAST_ACTIVE_DEVICE 僅約束一般逐台撤銷；正式復原必須保證新 Device Active、其他全部 Revoked。
+- [ ] **2026-10-14 Windows 新裝置復原串接（Draft 原始碼）：**`SettingsStore` 的獨立 DPAPI Pending Recovery（Cloud endpoint、業務 Workspace、Identity Workspace、Invitation ID、新裝置名稱、加密 Token），`CloudRecoveryClient` 專用 preview／claim（不用舊 Device Bearer），`CloudRecoveryForm` 由「直接加入雲端」頁的獨立復原按鈕開啟，並要求全數撤銷二次確認；首次啟動仍只保留兩個選項，`Cloud` 專用 CYID 重新驗證路由與原子 cutover 均已寫入 #440。任何斷線／結果不明不能產生新 Token，必須使用同一 Pending Token 與原邀請查回；**仍屬未發行、未上線／未實機驗收，故保持未勾選**。
+- [ ] **2026-10-14 復原入口改位與 revoked Device 寫入競態：**首次啟動維持「使用單機版／直接加入雲端」兩選項，雲端加入頁提供「災難復原／繼續災難復原」按鈕，保持既有一般 JOIN 不變。舊 Device 已撤銷後，`createPairing`／`issueInvitation`／`claimInvitation` 均在 D1 寫入當下驗證 issuer active，阻止撤銷前已啟動、撤銷後才完成的授權請求。Synthetic SQLite 測試已加進 `recovery-cutover.test.mjs`；跨服務 in-flight 業務 mutation fencing 仍留在 V3 Work Item 範圍，須另驗收。
 - [ ] **私有備份異機回復工具與保管：**設計建議 age recipient encryption；仍待核准 recipient／獨立金鑰及備份位置、工具、RPO／RTO／retention 與真正異機 drill。現有 DPAPI 只證明原帳戶／機器本地回復。
 - [ ] **人工維運回復：**CYWEB／CYID／D1 故障先由各 owner 恢復服務；先保留目前 snapshot／新資料，核對 storage profile 與相容 Worker，遠端 restore 另以具體範圍批准。回復後舊 revoked Token／已用邀請不得倒退復活。
-- [ ] **RC AE／DR-01～DR-13：**本地／CI 與必要實機驗證；目前均未執行。業務 Audit／viewer 由 §7.6 共用追蹤。
+- [ ] **RC AE／DR-01～DR-13：**已完成多項 synthetic SQLite／Node／Windows 合約及 PR CI；**跨服務真 Email、受控真 Worker／D1、實際 Windows 裝置的 DR-01～DR-13 尚未執行／驗收**。業務 Audit／viewer 由 §7.6 共用追蹤。
 
+
+- [ ] **V3 execution-time fencing：**已先把 /v1/devices/revoke 的 D1 同交易存活 Device guard 與 Built-in SUPER_ADMIN credential guard 實作並加遲到撤銷 SQLite regression。此僅為「裝置管理」實際 write fence；作廢／折讓還未接實際業務 Work Item（create/get/transition 原型及 Windows transport 已有 CI），**D1 事件／覆核資料範圍已定案，非尚待討論**。仍需最小業務狀態／Audit、Device/actor 執行當下 guard、光貿 side-effect 結果不明處理，不能勾整體完成。
 
 ### 7.5 跨機 Work Item / Sync
 
 災難復原不獨立先行，與 §7.4 的 CYWEB 邀請／Device registry／actor 共用 V3 設計。新機加入不代表未上雲的舊機 pending 已找回，也不觸發 AMEGO 自動重送。
 
 - [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
-- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
+- [x] **D1 範圍決議（2026-10-14）**：D1 不是發票資料庫，不建立一般發票最小索引。正常開立且未申請、未出現異常的發票**不進 D1**；有紙本未收回作廢覆核、折讓／折讓作廢申請、退回，或「上傳問題」異常才建立必要事件紀錄與不可覆寫 Audit。折讓協同在 §6 g0401 API 升級與驗收後接。
+- [ ] **整個現有「上傳問題」須跨機可見**：包含 `InvoiceSyncIssueStore` 記錄的 `invoice_list_failed`、`query_failed`、`remote_not_found`、`unknown_remote_not_found`、`reconciliation_failed`、`ambiguous_match`、`local_write_failed`，人工覆核事件，以及在相同 UI 顯示的「開立失敗」發票。D1 只存每次真正異常的事件摘要、Workspace／環境、必要發票／訂單識別、來源 Device、建立時間、處理人、狀態及 Audit；不存正常發票清單、完整品項、Excel、PDF、原始錯誤堆疊或光貿整份回應。
+  - 同一未結案事件防重複；管理員可在其他電腦查看、追蹤、註記處理。**本機資料寫入／SQLite 損壞須由來源電腦修復**，遠端不能直接標成修好；**官方開票／上傳狀態不明必須查光貿**，雲端 `closed`／管理員已讀不能假裝官方成功。恢復後留下處理歷史。
+- [ ] 作廢（未收回紙本）／折讓／折讓作廢申請以及退回／人工結案的跨機 Work Item／Audit；折讓待 §6 API 完成後再接。管理員用自己電腦接手，不需到申請人電腦。
+- [ ] CYID_ONLY 專屬公司設定卡片：統編 + 加密 AMEGO App Key + 加密 MO店+ Excel 密碼；僅 SUPER_ADMIN 可新增／修改／移除。一般 ADMIN 仍可開設定，但只能看到公司統編及「已設定」狀態，不能取得 Secrets 明文；解密金鑰不可跟密文同放 D1。Built-in／單機不強制搬既有 DPAPI。
+  - Draft #440 已新增最小三個受保護 POST 操作（create/get/transition）：Device Token + 每次管理員重新驗證，Built-in 的 credential 在 SQL 寫入時再核對，CYID_ONLY 不查已退役表；**Windows Core 的 `CloudWorkItemClient` 已接同一 API 契約並有 CI 測試**。SQL 0015 仍在 `drafts/` 未部署，故正式 Worker 不可用；未接 Windows 業務按鈕／UI 或官方作廢／折讓。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
+  - 2026-10-14 已在 Draft #440 加最小草案 `cloud/drafts/0015_work_items.sql`／`work-items.ts`：只存業務參考雜湊與 Work Item 狀態、CAS revision、實際 D1 寫入時 active Device+Workspace fence；支援 Built-in／CYID_ONLY synthetic test。**已加受保護的 API／Windows transport，但尚未接 Windows UI、未部署原 D1，也不能視為作廢／折讓官方狀態或已完成跨機流程。**
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
 - [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
-- [ ] 解決多機離線自動 OrderID 撞號；正式多機上線前需 Device namespace／短碼或等效方案。
+- [x] **相同 OrderID 重複開立的既有防護（已核對 Core＋Sync＋WinForms 程式／測試；不重做）：**正式 MO店+／酷澎／鼎新 ERP 使用來源原始 `order.OrderId` 送光貿，官方負責擋相同 OrderID；測試環境沿用原本 `TestOrderIdPrefix`。**第一次成功開立的原紀錄持續存在正常發票清單**；再次以同 OrderID 送出而收到重複錯誤（含 `3040171`）時，第二次嘗試狀態改為 `Failed`、發票號碼清空，**只在「上傳問題 → 開立失敗：重複訂單編號」顯示，不進正常發票清單，也不參與重新整理時的官方查詢**。這是刻意保留失敗嘗試的行為，不代表產生第二張成功發票或缺少本機防重。已由 `TestWireDuplicateRejectionAsync`、`TestIssueOpensAndBlocksResendAsync`、`TestRecoveryOfExistingInvoiceAsync` 及 Windows `RecordsControl.Matches`、`InvoiceService.RefreshAllAsync` 現行測試／程式確認；**禁止再把第二筆失敗列當成待修復的「重複有效發票」**。
+- [ ] **V3 僅調整失敗事件的跨機呈現／保存方式**（目前 D1／UI 尚未實作）：沿用上述原本分流，將「上傳問題」的失敗事件同步 D1，含原始 OrderID、錯誤類型與必要 Audit，讓管理員跨機看見；原成功發票仍只存在本機正常發票清單，不因此上傳 D1。原本「清除失敗」改為**封存事件**，保留歷程；不改光貿 OrderID 判重、不改已正常運作的開立和重新整理路徑。真正由程式自行產生的手動 OrderID 唯一性，獨立依原 §7.5 討論，不必為此加整體 Cloud Lock。
+- [ ] **結果不明管理員處置（需求已確認，尚未實作）：**① 管理員聯絡光貿，將詢問原因／回覆文字及操作人、時間登錄 D1 事件 Audit；② 管理員確認光貿實際已成功時，可憑官方證據手動補入發票號碼、開立日期與時間，將**原本那筆**本機紀錄更新成已開立（不得 Append 第二筆），保留完整人工補登 Audit；③ 管理員自行在光貿網站核對確實未開立後，明確批准以**同一原始 OrderID** 再送一次，紀錄確認、核准與重送歷程。前兩項不觸發光貿重送；第三項即使送出後結果不明，仍不能自動連續重試。
+- [ ] **開立失敗由清除改封存**：現有 `FailedInvoiceRecordStore.Delete` 會刪本機發票列及相關 `sync_issues`，未來事件／Audit 上 D1 後，對使用者改為封存、保留追蹤歷程與管理員身分；預設待辦清單可隱藏封存，但不可因此刪 Audit。光貿成功但本機保存失敗，也走管理員可見的事件／人工修復（從原設備完成本機紀錄回補），不誤認官方結果不明。
+- [ ] **處理中不搬成額外的永久事件：**光貿作廢已送出、仍在處理的正常進度留在既有「處理中」列表，完成後從該列表消失；只有變成例外事件或管理員必須介入時才建立 D1 異常待辦。
 
 ### 7.6 Cloud Audit
 
@@ -219,7 +501,7 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 - **驗收限制：**identity ready、舊 Built-in route 拒絕與缺 Device 授權拒絕已檢查；真人帳密／多裝置矩陣仍依 §7.3／RC_TEST 保留未驗，不冒稱全矩陣通過。
 - [ ] **V3 actor ownership：**Work Item／Audit 區分 CYID 外部 actor 與 Built-in 歷史，不靠員編猜同人；合併追蹤 §7.5／§7.6。
 
-本次不取消其他公司的 Built-in handler／migrations，也不代表新 Windows Release 或另一環境的部署授權。
+**2026-10-15 後 V3 方向改為移除 Built-in 正式支援；此句原為當時歷史界線。**清理 source 仍須逐項驗證，不代表已刪或授權刪遠端 D1；更不代表 Windows Release 或部署授權。
 
 ## 8. 後續大版本：多公司 Workspace
 
@@ -229,14 +511,13 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 - [ ] V3 單公司 Workspace 升級時自動建立第一個 Company。
 - [ ] 視實際需求再做 Employee ↔ Company scope、Device 預設 Company、公司切換 UI、跨公司待辦／查詢／報表。
 
-## 9. 對外相容／自架準備
+## 9. 對外相容／自架準備（V3 取消）
 
-- [ ] Cloud API 穩定後撰寫 CYInvoice Self-hosted / Cloud Integration User Manual。
-- [ ] Guide 定義 Built-in Cloud 部署需求、endpoint、schema、Device auth、Employee authorization、錯誤碼、版本、idempotency／reconciliation 語意；不得要求 CY ID 才能完成基本部署。
+2026-10-15 使用者決定不再交付 Built-in／Self-hosted。原自架手冊與 Built-in 相容承諾從 V3 待辦移除；第三方自行 fork，團隊不負責這條產品線的部署與驗收。
 
 ## 10. 後續增強
 
-Built-in Cloud Email password recovery 工程已完成，實機驗收見 7.2。
+Built-in Cloud Email password recovery 屬歷史工程完成紀錄；V3 已取消該模式，不再安排專屬實機驗收。
 
 - [ ] MO 密碼安全 Cloud sync。
 - [ ] 小型營運摘要：今日／本月開票張數與金額、待處理工作數、同步異常數。

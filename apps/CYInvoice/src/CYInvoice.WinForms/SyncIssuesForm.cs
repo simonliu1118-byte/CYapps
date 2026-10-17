@@ -1,5 +1,8 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
+using System.Security.Cryptography;
+using System.Text;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -43,8 +46,8 @@ internal sealed class SyncIssuesForm : Form
         ForeColor = Color.DimGray,
         Anchor = AnchorStyles.Left,
     };
-    private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
-    private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
+    private readonly Button archiveFailed = UiControls.StandardButton("封存勾選");
+    private readonly Button archiveAllFailed = UiControls.StandardButton("封存全部失敗紀錄");
 
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
@@ -106,10 +109,10 @@ internal sealed class SyncIssuesForm : Form
         list.MouseMove += ShowClippedContentToolTip;
         list.MouseLeave += (_, _) => ClearContentToolTip();
 
-        deleteFailed.Enabled = false;
-        deleteFailed.Click += (_, _) => DeleteCheckedFailed();
-        clearFailed.Enabled = false;
-        clearFailed.Click += (_, _) => ClearAllFailed();
+        archiveFailed.Enabled = false;
+        archiveFailed.Click += (_, _) => ArchiveCheckedFailed();
+        archiveAllFailed.Enabled = false;
+        archiveAllFailed.Click += (_, _) => ArchiveAllFailed();
 
         var close = UiControls.StandardButton("關閉");
         close.Click += (_, _) => Close();
@@ -134,8 +137,92 @@ internal sealed class SyncIssuesForm : Form
         };
         if (!processing)
         {
-            failedActions.Controls.Add(deleteFailed);
-            failedActions.Controls.Add(clearFailed);
+            failedActions.Controls.Add(archiveFailed);
+            failedActions.Controls.Add(archiveAllFailed);
+            var history=UiControls.StandardButton("檢視封存紀錄");
+            history.Click+=(_,_)=>ShowArchivedFailed();
+            failedActions.Controls.Add(history);
+            var cfg=repository.Settings.LoadOrCreate();
+            if(cfg.CloudMode==CloudModes.CloudPreferred &&
+               cfg.CloudIdentityProvider=="CYID" &&
+               cfg.CloudEmployeeAuthorityReady &&
+               !string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId) &&
+               !string.IsNullOrWhiteSpace(cfg.CloudDeviceId) &&
+               !string.IsNullOrWhiteSpace(cfg.CloudBaseUrl) &&
+               !string.IsNullOrWhiteSpace(repository.Settings.CloudDeviceToken(cfg)))
+            {
+                var report=UiControls.StandardButton("回報選取至 CYID");
+                report.Click+=async(_,_)=>await ReportSelectedUploadIssuesAsync();
+                failedActions.Controls.Add(report);
+            }
+        }
+        else
+        {
+            // V3: a dedicated CYID / multi-device queue. Local manual review
+            // remains independent and unchanged; no Built-in Cloud fallback.
+            var cfg = repository.Settings.LoadOrCreate();
+            if (cfg.CloudMode == CloudModes.CloudPreferred
+                && cfg.CloudIdentityProvider == "CYID"
+                && cfg.CloudEmployeeAuthorityReady
+                && cfg.CloudWorkspaceId.Length != 0
+                && cfg.CloudDeviceId.Length != 0
+                && !string.IsNullOrWhiteSpace(cfg.CloudBaseUrl)
+                && !string.IsNullOrWhiteSpace(repository.Settings.CloudDeviceToken(cfg)))
+            {
+                var cloudQueue = UiControls.StandardButton("CYID 跨機折讓");
+                cloudQueue.Click += (_, _) =>
+                {
+                    try
+                    {
+                        var current = repository.Settings.LoadOrCreate();
+                        var token = repository.Settings.CloudDeviceToken(current);
+                        using var manager = new CloudAllowanceManagerForm(
+                            repository, current.CloudBaseUrl, token);
+                        manager.ShowDialog(this);
+                        ReloadAll();
+                    }
+                    catch (Exception error)
+                    {
+                        MessageBox.Show(this, "無法開啟 CYID 跨機折讓：" + error.Message,
+                            "雲端覆核", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                };
+                failedActions.Controls.Add(cloudQueue);
+                // V3 g0501 is a separate queue from g0401. A regular CYID
+                // employee can create/read back an application; manager-only
+                // actions are authorized again on the Cloud Worker.
+                var allowanceVoidQueue=UiControls.StandardButton("CYID 折讓作廢");
+                allowanceVoidQueue.Click+=(_,_)=>
+                {
+                    try
+                    {
+                        var current=repository.Settings.LoadOrCreate();
+                        if(current.CloudMode!=CloudModes.CloudPreferred||
+                           current.CloudIdentityProvider!="CYID"||
+                           !current.CloudEmployeeAuthorityReady||
+                           string.IsNullOrWhiteSpace(current.CloudWorkspaceId))
+                        {
+                            MessageBox.Show(this,"CYID 裝置尚未就緒，無法開啟跨機折讓作廢。",
+                                "CYID 作廢",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                            return;
+                        }
+                        var token=repository.Settings.CloudDeviceToken(current);
+                        using var manager=new CloudAllowanceVoidManagerForm(
+                            repository,current.CloudBaseUrl,token,current.CloudWorkspaceId);
+                        manager.ShowDialog(this);
+                        ReloadAll();
+                    }
+                    catch(Exception error)
+                    {
+                        MessageBox.Show(this,"無法開啟 CYID 折讓作廢："+error.Message,
+                            "雲端作廢",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                    }
+                };
+                failedActions.Controls.Add(allowanceVoidQueue);
+                var cloudExceptions = UiControls.StandardButton("CYID 例外清單");
+                cloudExceptions.Click += async (_, _) => await ShowCloudExceptionsAsync();
+                failedActions.Controls.Add(cloudExceptions);
+            }
         }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         close.Margin = new Padding(0, 4, 0, 0);
@@ -160,6 +247,380 @@ internal sealed class SyncIssuesForm : Form
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
+    }
+
+    private async Task ReportSelectedUploadIssuesAsync()
+    {
+        if(processing||manualReviewBusy)return;
+        var cfg=repository.Settings.LoadOrCreate();
+        var deviceToken=repository.Settings.CloudDeviceToken(cfg);
+        if(cfg.CloudMode!=CloudModes.CloudPreferred||
+           cfg.CloudIdentityProvider!="CYID"||
+           !cfg.CloudEmployeeAuthorityReady||
+           string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId)||
+           string.IsNullOrWhiteSpace(cfg.CloudDeviceId)||
+           string.IsNullOrWhiteSpace(cfg.CloudBaseUrl)||
+           string.IsNullOrWhiteSpace(deviceToken))
+        {
+            MessageBox.Show(this,"尚未完成 CYID Cloud 裝置驗證。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        var selected=list.SelectedItems.Cast<ListViewItem>()
+            .Select(row=>row.Tag)
+            .Select(tag=>tag switch{
+                InvoiceSyncIssue issue when issue.ResolvedUtc is null &&
+                    issue.IssueType is (
+                        InvoiceSyncIssueTypes.InvoiceListFailed or
+                        InvoiceSyncIssueTypes.QueryFailed or
+                        InvoiceSyncIssueTypes.RemoteNotFound or
+                        InvoiceSyncIssueTypes.UnknownRemoteNotFound or
+                        InvoiceSyncIssueTypes.ReconciliationFailed or
+                        InvoiceSyncIssueTypes.AmbiguousMatch or
+                        InvoiceSyncIssueTypes.LocalWriteFailed)
+                    =>(Key:"sync:"+issue.Id,Code:issue.IssueType),
+                InvoiceRecord record when record.InvoiceState==InvoiceStates.Failed
+                    =>(Key:"failed:"+record.Id,Code:"upload_failed"),
+                _=>(Key:string.Empty,Code:string.Empty)
+            })
+            .Where(x=>x.Key.Length>0)
+            .Distinct()
+            .Take(11).ToArray();
+        if(selected.Length==0){
+            MessageBox.Show(this,"請先選取需要回報的上傳問題或開立失敗紀錄。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        if(selected.Length>10){
+            MessageBox.Show(this,"一次最多選取 10 筆，請減少選取項目。",
+                "異常回報",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        if(MessageBox.Show(this,
+            $"確認將 {selected.Length} 筆本機異常回報至 CYID 管理員清單？\n"+
+            "只會傳送異常種類與不可逆來源識別，不傳買受人、訂單或發票內容。\n"+
+            "回報不代表光貿已驗證，也不會重送發票。",
+            "回報 CYID 上傳問題",MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            return;
+        using var login=new EmployeeAdminLoginForm(repository,
+            "CYID 上傳問題－員工驗證",administratorRequired:false,
+            collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        var saved=0;var already=0;var unknown=0;
+        SetManualReviewBusy(true);
+        try{
+            using var http=new HttpClient();
+            var client=new CloudWorkItemClient(http,
+                new Uri(cfg.CloudBaseUrl,UriKind.Absolute),deviceToken,cfg.CloudWorkspaceId);
+            foreach(var issue in selected)
+            {
+                // Hash a Device-scoped durable local issue identity, not its
+                // order/invoice/buyer/message. Re-selecting the same item
+                // produces the exact same D1 Work Item ID and dedupe hash.
+                var identity=$"upload-report|{cfg.CloudWorkspaceId}|"+
+                    $"{cfg.CloudDeviceId}|{cfg.Environment}|{issue.Key}|{issue.Code}";
+                var hash=Convert.ToHexString(SHA256.HashData(
+                    Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+                var draft=new CloudUploadIssueReport(
+                    "wi_issue_"+hash[..40],cfg.Environment,hash,issue.Code);
+                try{
+                    await client.ReportUploadIssueAsync(draft,
+                        login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                    saved++;
+                }catch(CloudApiException e)when(e.Code=="WORK_ITEM_CONFLICT"){
+                    already++;
+                }catch{
+                    unknown++;
+                    // A timeout may mean D1 committed; no automatic retry.
+                    break;
+                }
+            }
+            MessageBox.Show(this,
+                $"已收到確認：{saved} 筆；已存在或衝突：{already} 筆；結果不明：{unknown} 筆。\n"+
+                "結果不明時請由管理員在 CYID 例外清單核對，勿盲目重送。\n"+
+                "本機異常未被刪除或標記已解決。",
+                "異常回報結果",MessageBoxButtons.OK,
+                unknown>0?MessageBoxIcon.Warning:MessageBoxIcon.Information);
+        }catch(Exception error){
+            MessageBox.Show(this,"無法送出 CYID 異常回報："+error.Message+
+                "\n本機異常紀錄均未變更。","回報未完成",
+                MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }finally{SetManualReviewBusy(false);}
+    }
+
+    // The reason is deliberately an enumerated administrative outcome.
+    // It never asserts an official AMEGO invoice status.
+    private static string? PromptUploadIssueArchiveReason(Form owner)
+    {
+        using var form=new Form {
+            Text="CYID 上傳問題－人工封存原因",
+            StartPosition=FormStartPosition.CenterParent,
+            ClientSize=new Size(400,150),ShowIcon=false,
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            MinimizeBox=false,MaximizeBox=false
+        };
+        var label=new Label {
+            Location=new Point(12,10),Size=new Size(375,40),
+            Text="請選擇明確的人工處理原因（不等於官方結果）。"
+        };
+        var choices=new ComboBox {
+            Location=new Point(12,53),Width=375,
+            DropDownStyle=ComboBoxStyle.DropDownList
+        };
+        choices.Items.AddRange(new object[]{
+            "本機問題已處理","已人工查核光貿",
+            "重複回報","確認無需處理","仍需後續追蹤"
+        });
+        var accept=UiControls.StandardButton("確定");
+        accept.Location=new Point(218,102);
+        accept.Click+=(_,_)=>{
+            if(choices.SelectedIndex<0){
+                MessageBox.Show(form,"必須先選取原因。",
+                    "缺少結案原因",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                return;
+            }
+            form.DialogResult=DialogResult.OK;
+        };
+        var cancel=UiControls.StandardButton("取消");
+        cancel.Location=new Point(307,102);
+        cancel.DialogResult=DialogResult.Cancel;
+        form.Controls.AddRange(new Control[]{label,choices,accept,cancel});
+        form.CancelButton=cancel;
+        if(form.ShowDialog(owner)!=DialogResult.OK)return null;
+        return choices.SelectedIndex switch {
+            0=>"resolved_locally",
+            1=>"checked_official",
+            2=>"duplicate_report",
+            3=>"not_actionable",
+            4=>"needs_followup",
+            _=>null
+        };
+    }
+
+    // Read-only window for the already-existing manager Work Item list. Local
+    // processing and upload failures remain untouched; no Cloud state change.
+    private async Task ShowCloudExceptionsAsync()
+    {
+        var cfg=repository.Settings.LoadOrCreate();
+        var token=repository.Settings.CloudDeviceToken(cfg);
+        if(cfg.CloudMode!=CloudModes.CloudPreferred ||
+           cfg.CloudIdentityProvider!="CYID" ||
+           !cfg.CloudEmployeeAuthorityReady ||
+           string.IsNullOrWhiteSpace(cfg.CloudWorkspaceId) ||
+           string.IsNullOrWhiteSpace(cfg.CloudBaseUrl) ||
+           string.IsNullOrWhiteSpace(token))
+        {
+            MessageBox.Show(this,"CYID 雲端裝置尚未完成驗證。",
+                "例外清單",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        using var login=new EmployeeAdminLoginForm(repository,
+            "CYID 例外清單－管理員驗證",collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        using var http=new HttpClient();
+        var client=new CloudWorkItemClient(http,
+            new Uri(cfg.CloudBaseUrl,UriKind.Absolute),token,cfg.CloudWorkspaceId);
+        using var dialog=new Form{
+            Text="CYID 跨裝置例外工作單（唯讀）",
+            StartPosition=FormStartPosition.CenterParent,
+            ClientSize=new Size(810,410),MinimumSize=new Size(760,340),
+            ShowIcon=false,Font=new Font("Microsoft JhengHei UI",10F)
+        };
+        var grid=new ListView{
+            Dock=DockStyle.Fill,View=View.Details,FullRowSelect=true,
+            HideSelection=false,GridLines=true,MultiSelect=false
+        };
+        grid.Columns.Add("更新時間",153);
+        grid.Columns.Add("類別",115);
+        grid.Columns.Add("環境",80);
+        grid.Columns.Add("狀態",100);
+        grid.Columns.Add("工作單 ID",315);
+        var caption=new Label{
+            Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+            Text="僅顯示 CYID 管理員可見的例外工作單，不包含發票明細或密鑰。"
+        };
+        var previous=UiControls.StandardButton("上一頁");
+        var next=UiControls.StandardButton("下一頁");
+        var copy=UiControls.StandardButton("複製工作單 ID");
+        var review=UiControls.StandardButton("開始覆核");
+        var archive=UiControls.StandardButton("人工封存");
+        review.Enabled=false;
+        archive.Enabled=false;
+        var close=UiControls.StandardButton("關閉");
+        close.Click+=(_,_)=>dialog.Close();
+        copy.Click+=(_,_)=>{
+            if(grid.SelectedItems.Count!=1)return;
+            if(grid.SelectedItems[0].Tag is CloudWorkItemSummary entry)
+                Clipboard.SetText(entry.ItemId);
+        };
+        var bottom=new FlowLayoutPanel{
+            Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,
+            WrapContents=false
+        };
+        foreach(var button in new[]{close,copy,archive,review,next,previous})
+            bottom.Controls.Add(button);
+        var layout=new TableLayoutPanel{
+            Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Padding=new Padding(10)
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+        layout.Controls.Add(caption,0,0);
+        layout.Controls.Add(grid,0,1);
+        layout.Controls.Add(bottom,0,2);
+        dialog.Controls.Add(layout);
+        var history=new Stack<CloudWorkItemCursor?>();
+        CloudWorkItemCursor? cursor=null;
+        CloudWorkItemPage? page=null;
+        bool busy=false;
+        async Task ReloadAsync(CloudWorkItemCursor? target,bool back)
+        {
+            if(busy||dialog.IsDisposed)return;
+            busy=true;
+            foreach(var button in new[]{previous,next,copy,review,archive})
+                button.Enabled=false;
+            try
+            {
+                var result=await client.ListAsync(login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword,20,cursor:target);
+                if(dialog.IsDisposed)return;
+                if(back && history.Count>0)history.Pop();
+                if(!back && page is not null)history.Push(cursor);
+                cursor=target;
+                page=result;
+                grid.BeginUpdate();
+                try
+                {
+                    grid.Items.Clear();
+                    foreach(var item in result.Items)
+                    {
+                        var kind=item.Kind switch{
+                            "VOID"=>"作廢",
+                            "ALLOWANCE"=>"折讓",
+                            "ALLOWANCE_VOID"=>"折讓作廢",
+                            "UPLOAD_ISSUE"=>item.IssueCode switch{
+                                "invoice_list_failed"=>"官方清單查詢失敗",
+                                "query_failed"=>"發票查回失敗",
+                                "remote_not_found"=>"光貿查無發票",
+                                "unknown_remote_not_found"=>"結果不明／光貿查無",
+                                "reconciliation_failed"=>"發票同步核對失敗",
+                                "ambiguous_match"=>"發票比對無法唯一對應",
+                                "local_write_failed"=>"本機資料寫入失敗",
+                                "duplicate_order_id"=>"重複訂單編號",
+                                _=>"開立上傳失敗"
+                            },
+                            _=>"其他例外"
+                        };
+                        var state=item.Status switch{
+                            "open"=>"待覆核",
+                            "review"=>"覆核中",
+                            "closed"=>"已結案",
+                            _=>"待確認"
+                        };
+                        var row=new ListViewItem(item.UpdatedAtUtc.ToLocalTime()
+                            .ToString("yyyy/MM/dd HH:mm"));
+                        row.SubItems.Add(kind);
+                        row.SubItems.Add(item.Environment=="production"?"正式":"測試");
+                        row.SubItems.Add(state);
+                        row.SubItems.Add(item.ItemId);
+                        row.Tag=item;
+                        grid.Items.Add(row);
+                    }
+                }
+                finally{grid.EndUpdate();}
+                caption.Text=$"CYID 例外工作單｜本頁 {result.Items.Count} 筆"+
+                    "｜清單僅供查看，不會結案或重送光貿。";
+            }
+            catch(Exception error)
+            {
+                if(!dialog.IsDisposed)
+                    MessageBox.Show(dialog,"CYID 工作單查詢失敗："+error.Message+
+                        "\n既有工作單與本機資料均未變更。",
+                        "例外清單",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                busy=false;
+                if(!dialog.IsDisposed){
+                    previous.Enabled=history.Count>0;
+                    next.Enabled=page?.NextCursor is not null;
+                    var entry=grid.SelectedItems.Count==1?
+                        grid.SelectedItems[0].Tag as CloudWorkItemSummary:null;
+                    copy.Enabled=entry is not null;
+                    review.Enabled=entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="open";
+                    archive.Enabled=entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="review";
+                }
+            }
+        }
+        async Task ApplyManagerActionAsync(bool closeIssue)
+        {
+            if(busy || grid.SelectedItems.Count!=1 ||
+               grid.SelectedItems[0].Tag is not CloudWorkItemSummary chosen ||
+               chosen.Kind!="UPLOAD_ISSUE" ||
+               chosen.Status!=(closeIssue?"review":"open"))return;
+            var reason=closeIssue?PromptUploadIssueArchiveReason(dialog):null;
+            if(closeIssue && reason is null)return;
+            if(MessageBox.Show(dialog,closeIssue
+                ?"將這筆裝置回報標記為已人工處理，並留下原因？不會修改任何發票。"
+                :"開始覆核此筆裝置回報？不會呼叫光貿。",
+                "CYID 例外工作單",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+            busy=true;
+            review.Enabled=archive.Enabled=copy.Enabled=previous.Enabled=next.Enabled=false;
+            try
+            {
+                var current=await client.GetAsync(chosen.ItemId,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                if(current is null||current.Kind!="UPLOAD_ISSUE"||
+                   current.Status!=chosen.Status||current.Revision!=chosen.Revision)
+                    throw new InvalidOperationException("工作單已改變，需重新查詢最新狀態。");
+                var updated=await client.TransitionAsync(current,
+                    closeIssue?"closed":"review",login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword,resolutionCode:reason);
+                MessageBox.Show(dialog,closeIssue
+                    ?$"工作單 {updated.ItemId} 已人工封存。這不代表光貿確認成功。"
+                    :$"工作單 {updated.ItemId} 已開始覆核。尚未影響任何發票。",
+                    "CYID 工作單已更新",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                dialog.Close();
+            }
+            catch(Exception error)
+            {
+                if(!dialog.IsDisposed)MessageBox.Show(dialog,
+                    "處理結果未確認："+error.Message+
+                    "\n請重新查詢原工作單，不得自動重送。",
+                    "處理待查回",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                busy=false;
+                if(!dialog.IsDisposed){
+                    review.Enabled=chosen.Status=="open";
+                    archive.Enabled=chosen.Status=="review";
+                    copy.Enabled=true;
+                    previous.Enabled=history.Count>0;
+                    next.Enabled=page?.NextCursor is not null;
+                }
+            }
+        }
+        review.Click+=async(_,_)=>await ApplyManagerActionAsync(false);
+        archive.Click+=async(_,_)=>await ApplyManagerActionAsync(true);
+        next.Click+=async(_,_)=>{
+            if(page?.NextCursor is { } more)await ReloadAsync(more,false);
+        };
+        previous.Click+=async(_,_)=>{
+            if(history.TryPeek(out var earlier))await ReloadAsync(earlier,true);
+        };
+        grid.SelectedIndexChanged+=(_,_)=>{
+            var entry=grid.SelectedItems.Count==1?
+                grid.SelectedItems[0].Tag as CloudWorkItemSummary:null;
+            copy.Enabled=!busy&&entry is not null;
+            review.Enabled=!busy&&entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="open";
+            archive.Enabled=!busy&&entry?.Kind=="UPLOAD_ISSUE"&&entry.Status=="review";
+        };
+        dialog.Shown+=async(_,_)=>await ReloadAsync(null,false);
+        await Task.CompletedTask;
+        dialog.ShowDialog(this);
     }
 
     private void ConfigureList()
@@ -379,16 +840,19 @@ internal sealed class SyncIssuesForm : Form
                     var review = allowanceWorkflow.ManualReviewFor(record);
                     if (review is not null)
                     {
-                        if (!review.AwaitingConfirmation)
+                        if (review.AwaitingConfirmation)
                         {
-                            primaryText = "已人工處理";
-                            allowCancel = true;
+                            // V3 never allows a person to select or change
+                            // an allowance number. Keep official readback.
+                            primaryText = "查詢官方折讓狀態";
                         }
                         else
                         {
-                            var candidates = NewAllowanceCandidates(record, review);
-                            if (candidates.Count > 1 && candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus)))
-                                primaryText = "確認折讓單號";
+                            primaryText = review.DraftItems is { Count: > 0 }
+                                ? review.ApprovedAt is not null
+                                    ? "繼續已核准折讓" : "核准並送出折讓"
+                                : string.Empty;
+                            allowCancel = review.ApprovedAt is null;
                         }
                     }
                 }
@@ -523,8 +987,20 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
 
-        if (!review.AwaitingConfirmation) await CompleteAllowanceAsync(issue);
-        else await ConfirmAllowanceCandidateAsync(issue, record, review);
+        if (review.AwaitingConfirmation)
+        {
+            await ReadbackAllowanceAsync(record);
+            return;
+        }
+        if (review.DraftItems is not { Count: > 0 })
+        {
+            MessageBox.Show(this,
+                "這是沒有固定 g0401 明細的舊版申請；舊人工開立／人工選號已退役。\n" +
+                "原紀錄仍保留，可在官方資料恢復後唯讀核對。",
+                "舊折讓流程已退役", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        await CompleteAllowanceAsync(issue, review);
     }
 
     private void CompleteAllowanceVoid(InvoiceSyncIssue issue)
@@ -592,52 +1068,52 @@ internal sealed class SyncIssuesForm : Form
         finally { SetManualReviewBusy(false); }
     }
 
-    private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue)
+    private async Task CompleteAllowanceAsync(
+        InvoiceSyncIssue issue, InvoiceAllowanceManualReview review)
     {
-        if (MessageBox.Show(this,
-                "請先確認已在光貿網站完成這筆人工折讓。\n\n按下「是」後，CYInvoice 會進入等待確認並用 invoice_query 自動比對新的折讓資料。",
-                "折讓已人工處理", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        if (review.DraftItems is not { Count: > 0 })
+            throw new InvalidOperationException("舊版人工開立流程已退役，沒有凍結明細不能送出 g0401。");
+        var prompt = "確認核准並向光貿送出這筆折讓？\\n\\n" +
+            $"含稅總額：{review.TaxInclusiveAmount} 元\\n" +
+            $"保留明細：{review.DraftItems.Count} 筆\\n\\n" +
+            "系統會重新查剩餘折讓額、固定原單號與內容後只送一次 g0401。" +
+            "如遇逾時或結果不明，只能查回原單號，不得重送。";
+        if (MessageBox.Show(this, prompt,
+            "核准並送出折讓（單次）",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證", collectCredentialsOnly: true);
+        using var login = new EmployeeAdminLoginForm(repository, "折讓－管理員驗證", collectCredentialsOnly: true);
         if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.IssueApprovedLocalAsync(
+                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "折讓人工處理未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, error.Message, "折讓處理未完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
     }
 
-    private async Task ConfirmAllowanceCandidateAsync(InvoiceSyncIssue issue, InvoiceRecord record, InvoiceAllowanceManualReview review)
+    private async Task ReadbackAllowanceAsync(InvoiceRecord record)
     {
-        var candidates = NewAllowanceCandidates(record, review);
-        if (candidates.Count <= 1)
-        {
-            MessageBox.Show(this, "目前沒有多筆可供人工選擇的折讓候選。系統會在每次正常同步時繼續查詢。", "等待折讓確認",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        using var login = new EmployeeAdminLoginForm(repository, "折讓單號確認－管理員驗證", collectCredentialsOnly: true);
-        if (login.ShowDialog(this) != DialogResult.OK) return;
-        using var selector = new AllowanceCandidateForm(candidates);
-        if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedAllowanceNumber.Length == 0) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.ConfirmCandidateAsync(issue, selector.SelectedAllowanceNumber,
-                login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.ReconcilePendingAsync(record);
             ShowAllowanceResult(result);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "折讓單號確認未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, error.Message, "官方折讓狀態無法查回",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally { SetManualReviewBusy(false); }
     }
@@ -742,6 +1218,9 @@ internal sealed class SyncIssuesForm : Form
         rows.Add(new("處理管理員", EmployeeDisplay(review?.HandlerEmployeeNo ?? "")));
         rows.Add(new("人工處理時間", review?.ManualCompletedUtc is { } completed
             ? completed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
+        if (review?.DraftItems is { Count: > 0 })
+            rows.Add(new("管理員核准時間", review.ApprovedAt is { } approved
+                ? approved.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
         if (review is not null)
         {
             var taxInclusive = review.TaxInclusiveAmount;
@@ -750,6 +1229,11 @@ internal sealed class SyncIssuesForm : Form
             rows.Add(new("未稅折讓金額", MoneyFormatter.Integer(untaxed)));
             rows.Add(new("稅額", MoneyFormatter.Integer(tax)));
             rows.Add(new("含稅折讓總額", MoneyFormatter.Integer(taxInclusive)));
+            if(review.DraftItems is { Count: > 0 })
+                rows.Add(new("本次折讓商品",string.Join("；",
+                    review.DraftItems.Select(item =>
+                        $"{item.OriginalDescription}｜數量 {item.Quantity}｜"+
+                        $"未稅 {item.Amount}｜稅 {item.Tax}"))));
         }
         else
         {
@@ -758,7 +1242,9 @@ internal sealed class SyncIssuesForm : Form
         }
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null
             ? "已人工處理"
-            : review?.AwaitingConfirmation == true ? "等待光貿確認" : "等待管理員人工處理"));
+            : review?.AwaitingConfirmation == true ? "等待光貿確認"
+            : review?.ApprovedAt is not null ? "管理員已核准，待完成原工作單送出"
+            : "等待管理員人工處理"));
         if (record is not null)
         {
             rows.Add(new("官方折讓資料", FormatAllowances(InvoiceAllowanceMetadata.ReadOfficial(record))));
@@ -850,40 +1336,70 @@ internal sealed class SyncIssuesForm : Form
         record.ApiOrderId.Trim().Length != 0 ? record.ApiOrderId.Trim() :
         record.OrderId.Trim().Length != 0 ? record.OrderId.Trim() : record.OriginalOrderId.Trim();
 
-    private void DeleteCheckedFailed()
+    private void ArchiveCheckedFailed()
     {
         var records = list.CheckedItems.Cast<ListViewItem>().Select(item => item.Tag).OfType<InvoiceRecord>().ToArray();
-        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length, clearAll: false)) return;
-        DeleteFailedRecords(records);
+        if (records.Length == 0 || !ConfirmFailedArchive(records.Length, clearAll: false)) return;
+        ArchiveFailedRecords(records);
     }
 
-    private void ClearAllFailed()
+    private void ArchiveAllFailed()
     {
         var records = CurrentFailedRecords().ToArray();
-        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length, clearAll: true)) return;
-        DeleteFailedRecords(records);
+        if (records.Length == 0 || !ConfirmFailedArchive(records.Length, clearAll: true)) return;
+        ArchiveFailedRecords(records);
     }
 
-    private bool ConfirmFailedDeletion(int count, bool clearAll) => MessageBox.Show(
+    private bool ConfirmFailedArchive(int count, bool clearAll) => MessageBox.Show(
         this,
         clearAll
-            ? $"確定清除全部 {count} 筆開立失敗紀錄？\n\n此操作只清除 CYInvoice 本機的開立失敗紀錄，不影響上傳問題及光貿資料。"
-            : $"確定刪除勾選的 {count} 筆開立失敗紀錄？\n\n此操作只刪除 CYInvoice 本機紀錄，不會影響光貿資料。",
-        clearAll ? "清除開立失敗紀錄" : "刪除開立失敗紀錄",
+            ? $"確定封存全部 {count} 筆開立失敗紀錄？\n\n保留在原 CYInvoice.db，從一般清單移出，不影響光貿。"
+            : $"確定封存勾選的 {count} 筆開立失敗紀錄？\n\n保留完整明細，可在封存紀錄查閱。",
+        clearAll ? "封存全部失敗紀錄" : "封存勾選",
         MessageBoxButtons.YesNo,
         MessageBoxIcon.Warning,
         MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
-    private void DeleteFailedRecords(IReadOnlyCollection<InvoiceRecord> records)
+    private void ArchiveFailedRecords(IReadOnlyCollection<InvoiceRecord> records)
     {
         try
         {
-            failedStore.Delete(records);
+            failedStore.Archive(records);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, "刪除開立失敗紀錄失敗：" + error.Message, "刪除失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "封存開立失敗紀錄失敗：" + error.Message, "封存失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ShowArchivedFailed()
+    {
+        try
+        {
+            var settings=repository.Settings.LoadOrCreate();
+            var seller=settings.Environment==Environments.Test?
+                AmegoDefaults.TestInvoice:settings.ProductionInvoice.Trim();
+            if(string.IsNullOrWhiteSpace(seller)){
+                MessageBox.Show(this,"請先設定公司統編。","封存紀錄",
+                    MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            var all=failedStore.AllArchived(settings.Environment,seller);
+            var rows=all.Take(15).Select(x=>
+                x.ArchivedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm")+
+                "｜"+x.Record.Id+"｜"+FriendlyFailureReason(x.Record.ErrorMessage));
+            var body=all.Count==0?"目前沒有封存紀錄。":
+                $"共 {all.Count} 筆（顯示最新 15 筆）：\n"+
+                string.Join("\n",rows)+
+                "\n\n完整發票內容與商品明細仍保留於本機 CYInvoice.db。";
+            MessageBox.Show(this,body,"開立失敗封存紀錄（唯讀）",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
+        catch(Exception error)
+        {
+            MessageBox.Show(this,"無法讀取封存紀錄："+error.Message,
+                "封存查詢失敗",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
     }
 
@@ -899,16 +1415,13 @@ internal sealed class SyncIssuesForm : Form
             .ToArray();
     }
 
-    private static bool IsPendingAllowanceStatus(int status) => status is
-        UploadStatuses.Pending or UploadStatuses.Uploading or UploadStatuses.Uploaded or UploadStatuses.Processing or UploadStatuses.Confirming;
-
     private void UpdateFailedButtons()
     {
         if (IsDisposed) return;
         var count = list.CheckedItems.Cast<ListViewItem>().Count(item => item.Tag is InvoiceRecord);
-        deleteFailed.Text = count == 0 ? "刪除勾選" : $"刪除勾選 ({count})";
-        deleteFailed.Enabled = count > 0;
-        clearFailed.Enabled = list.Items.Cast<ListViewItem>().Any(item => item.Tag is InvoiceRecord);
+        archiveFailed.Text = count == 0 ? "封存勾選" : $"封存勾選 ({count})";
+        archiveFailed.Enabled = count > 0;
+        archiveAllFailed.Enabled = list.Items.Cast<ListViewItem>().Any(item => item.Tag is InvoiceRecord);
     }
 
     private string IssueState(InvoiceSyncIssue issue)
@@ -1068,7 +1581,7 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
         if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
-        if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄")
+        if (list.Columns[5].Text != "狀態" || archiveAllFailed.Text != "封存全部失敗紀錄")
             throw new InvalidOperationException("上傳問題欄位或開立失敗清除按鈕不正確");
         if (Descendants(this).OfType<Button>().Any(button => button.Text is "標記已解決" or "查看明細" or "確認送出作廢" or "取消退回"))
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
@@ -1076,7 +1589,7 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
-            DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理" ||
+            DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓申請覆核" ||
             DisplayType(InvoiceAllowanceVoidIssueTypes.ManualReview) != "折讓作廢人工處理")
             throw new InvalidOperationException("人工確認問題類型顯示不正確");
     }
@@ -1101,7 +1614,7 @@ internal sealed class SyncIssuesForm : Form
         InvoiceSyncIssueTypes.LocalWriteFailed => "本機資料庫寫入失敗",
         InvoiceVoidIssueTypes.ManualReview => "紙本作廢確認",
         InvoiceVoidSyncIssueTypes.PendingConfirmation => "作廢結果待確認",
-        InvoiceAllowanceIssueTypes.ManualReview => "折讓人工處理",
+        InvoiceAllowanceIssueTypes.ManualReview => "折讓申請覆核",
         InvoiceAllowanceVoidIssueTypes.ManualReview => "折讓作廢人工處理",
         _ => type,
     };

@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -31,6 +32,7 @@ internal sealed class RecordDetailForm : Form
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
     private readonly Button voidInvoice = UiControls.StandardButton("作廢");
     private readonly Button allowanceInvoice = UiControls.StandardButton("折讓");
+    private readonly Button withdrawAllowance = UiControls.StandardButton("撤銷折讓申請");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly InvoiceOperationHistoryControl history = new();
     private readonly TableLayoutPanel details = new()
@@ -167,6 +169,7 @@ internal sealed class RecordDetailForm : Form
         CompactDetailAction(changePrinter);
         CompactDetailAction(voidInvoice);
         CompactDetailAction(allowanceInvoice);
+        CompactDetailAction(withdrawAllowance);
         close.Width = 100;
         close.Margin = new Padding(3, 2, 3, 2);
         close.DialogResult = DialogResult.OK;
@@ -195,6 +198,8 @@ internal sealed class RecordDetailForm : Form
             allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
             actions.Controls.Add(allowanceInvoice);
         }
+        withdrawAllowance.Click += async (_, _) => await WithdrawAllowanceAsync();
+        actions.Controls.Add(withdrawAllowance);
         actions.Controls.Add(close);
 
         root.Controls.Add(content, 0, 0);
@@ -378,26 +383,48 @@ internal sealed class RecordDetailForm : Form
     private async Task StartAllowanceAsync()
     {
         if (allowanceBusy || voidBusy) return;
-        using var request = new AllowanceRequestForm();
+        AllowanceRequestForm request;
+        try { request = new AllowanceRequestForm(record); }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException)
+        {
+            MessageBox.Show(this,error.Message,"無法確認折讓餘額",
+                MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        using var form = request;
         if (request.ShowDialog(this) != DialogResult.OK) return;
 
         SetAllowanceBusy(true);
         try
         {
-            var result = await allowanceWorkflow.SubmitAsync(
-                record,
-                request.EmployeeNo,
-                request.Password,
-                request.Reason,
-                request.TaxInclusiveAmount);
-            MessageBox.Show(
-                this,
-                result.AlreadyQueued
+            var settings=repository.Settings.LoadOrCreate();
+            if(settings.CloudMode!=CloudModes.LocalOnly)
+            {
+                if(settings.CloudIdentityProvider!="CYID")
+                    throw new InvalidOperationException(
+                        "V3 雲端折讓僅支援 CYID，請完成裝置與員工權限設定");
+                var result=await new CloudAllowanceSubmissionService(repository)
+                    .SubmitAsync(record,request.EmployeeNo,request.Password,
+                        request.Reason,request.TaxInclusiveAmount,request.EditedItems);
+                MessageBox.Show(this,
+                    (result.AlreadySubmitted
+                        ? "已查回原本的折讓申請；本次修改不會取代先前已凍結的明細。"
+                        : "折讓明細已送交 CYID Cloud 管理員審核。")+
+                    "\n\nWork Item："+result.ItemId+
+                    "\n目前尚未向光貿送出折讓。",
+                    "CYID 折讓申請",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            else
+            {
+                var result = await allowanceWorkflow.SubmitAsync(
+                    record,request.EmployeeNo,request.Password,
+                    request.Reason,request.TaxInclusiveAmount,
+                    editedItems:request.EditedItems);
+                MessageBox.Show(this,result.AlreadyQueued
                     ? result.Message
                     : "折讓申請已建立。\n\n請通知管理員查看並完成操作。",
-                "折讓人工處理",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                    "折讓人工處理",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
             DialogResult = DialogResult.OK;
             Close();
         }
@@ -416,6 +443,59 @@ internal sealed class RecordDetailForm : Form
         finally
         {
             if (!IsDisposed) SetAllowanceBusy(false);
+        }
+    }
+
+    private async Task WithdrawAllowanceAsync()
+    {
+        if(allowanceBusy||voidBusy)return;
+        using var login=new EmployeeAdminLoginForm(repository,
+            "撤銷折讓申請－原申請員工驗證",
+            administratorRequired:false,collectCredentialsOnly:true);
+        if(login.ShowDialog(this)!=DialogResult.OK)return;
+        if(MessageBox.Show(this,
+            "確定撤銷這筆尚未核准的折讓申請？\n\n"+
+            "撤銷後管理員不能再核准原工作單，原紀錄仍會保留備查。\n"+
+            "若折讓已核准或配號，系統會拒絕撤銷。",
+            "確認撤銷折讓申請",MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            return;
+        SetAllowanceBusy(true);
+        try
+        {
+            var settings=repository.Settings.LoadOrCreate();
+            if(settings.CloudMode==CloudModes.LocalOnly)
+            {
+                allowanceWorkflow.WithdrawManualReview(record,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                MessageBox.Show(this,
+                    "已撤銷本機折讓申請，原申請及撤銷人紀錄保留備查。"+
+                    "\n沒有呼叫光貿開立或作廢 API。",
+                    "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            else
+            {
+                var result=await new CloudAllowanceSubmissionService(repository)
+                    .WithdrawAsync(record,login.EnteredEmployeeNo,
+                        login.AuthenticatedPassword,previewCancellation.Token);
+                MessageBox.Show(this,"已撤銷原折讓申請。\n\nWork Item："+result.ItemId+
+                    "\n原申請已結案，不會向光貿送出折讓。",
+                    "撤銷完成",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            }
+            DialogResult=DialogResult.OK;
+            Close();
+        }
+        catch(OperationCanceledException) when(previewCancellation.IsCancellationRequested){}
+        catch(Exception error)
+        {
+            MessageBox.Show(this,
+                "撤銷結果未確認，請重新開啟發票明細，用原申請編號查回；"+
+                "不要另外建立申請。\n\n"+error.Message,
+                "撤銷尚未確認",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if(!IsDisposed)SetAllowanceBusy(false);
         }
     }
 
@@ -461,6 +541,14 @@ internal sealed class RecordDetailForm : Form
         }
 
         allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
+        var cfg=repository.Settings.LoadOrCreate();
+        withdrawAllowance.Visible=
+            (cfg.CloudMode==CloudModes.CloudPreferred &&
+             cfg.CloudIdentityProvider=="CYID" &&
+             CloudAllowanceSubmissionService.HasPending(record)) ||
+            (cfg.CloudMode==CloudModes.LocalOnly &&
+             allowanceReview is {AwaitingConfirmation:false, ApprovedAt:null});
+        withdrawAllowance.Enabled=withdrawAllowance.Visible && !operationBusy;
         if (allowanceBusy)
         {
             allowanceInvoice.Text = "折讓申請中…";
@@ -470,7 +558,8 @@ internal sealed class RecordDetailForm : Form
         {
             allowanceInvoice.Text = allowanceReview is null
                 ? "折讓"
-                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
+                : allowanceReview.AwaitingConfirmation ? "折讓待確認"
+                    : allowanceReview.ApprovedAt is not null ? "折讓已核准" : "折讓處理中";
             allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
         }
     }
@@ -1204,6 +1293,34 @@ internal sealed class RecordDetailForm : Form
         using var allowance = new AllowanceRequestForm();
         allowance.PerformLayout();
         allowance.VerifySmokeLayout();
+
+        // Original gross 330, associated discount -82, prior allowance 100:
+        // users choose their own edited item lines; cap is 248-100=148.
+        var allowanceSource = new InvoiceRecord
+        {
+            InvoiceNumber = "AA12345678",
+            InvoiceDate = "2026/10/15",
+            Amount = 248,
+            DetailVat = 1,
+            Items =
+            [
+                new InvoiceItem { Description="時尚包_大小波點F",
+                    Quantity=1,QuantityDecimal="1",UnitPrice=330,
+                    UnitPriceDecimal="330",Amount=330,TaxType="1" },
+                new InvoiceItem { Description="優惠折扣",
+                    Quantity=1,QuantityDecimal="1",UnitPrice=-82,
+                    UnitPriceDecimal="-82",Amount=-82,TaxType="1" },
+            ],
+        };
+        InvoiceAllowanceMetadata.ApplyQuery(allowanceSource,
+        [
+            new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                "ALW000001", "20261015", "5", "95")
+        ], summaryPresent: true);
+        using var editedAllowance = new AllowanceRequestForm(allowanceSource);
+        editedAllowance.PerformLayout();
+        editedAllowance.VerifySmokeLayout();
+        editedAllowance.VerifySmokeOriginalInvoiceEditing();
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)

@@ -93,7 +93,45 @@ internal static class RetentionTests
         Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("test|12345678").Count);
     }
 
-    public static void FailedStoreDeletesOnlyFailedRows()
+    public static void RetentionPreservesFailureUntilArchive()
+    {
+        using var temporary=new RetentionTemporaryDirectory();
+        var repository=TestRepository.Open(temporary.Path,new RetentionTestProtector());
+        ConfigureProduction(repository);
+        var failed=Record("expired-failed-archive",string.Empty,"ORDER-FAILED-OLD",
+            InvoiceStates.Failed,"2026/06/01");
+        failed.ErrorMessage="上傳失敗必須保留";
+        var opened=Record("expired-opened-cleanup","AA20000001","ORDER-OPENED-OLD",
+            InvoiceStates.Opened,"2026/06/01");
+        repository.Invoices.Append(failed);
+        repository.Invoices.Append(opened);
+        var retention=new InvoiceRetentionService(repository);
+        var result=retention.Prune(new DateOnly(2026,9,18));
+        Equal(1,result.Deleted); // Regular expired opened invoice is still pruned.
+        var live=repository.Invoices.LoadOrCreate();
+        Equal(1,live.Count);
+        Equal(failed.Id,live.Single().Id);
+        Equal("測試商品",live.Single().Items.Single().Description);
+        // Only an explicit archive command may move the failed source out
+        // of the normal invoice list; retention never archives or deletes it.
+        var store=new FailedInvoiceRecordStore(repository.DataDirectory);
+        Equal(1,store.Archive([failed]));
+        Equal(0,repository.Invoices.LoadOrCreate().Count);
+        Equal(0,retention.Prune(new DateOnly(2026,10,16)).Deleted);
+        var archived=new FailedInvoiceRecordStore(repository.DataDirectory)
+            .AllArchived(Environments.Production,"12345675");
+        Equal(1,archived.Count);
+        Equal(failed.Id,archived.Single().Record.Id);
+        Equal(failed.ErrorMessage,archived.Single().Record.ErrorMessage);
+        Equal("測試商品",archived.Single().Record.Items.Single().Description);
+        using var connection=OpenReadOnly(Path.Combine(repository.DataDirectory,
+            SqliteBootstrapper.DatabaseFileName));
+        using var check=connection.CreateCommand();
+        check.CommandText="PRAGMA integrity_check;";
+        Equal("ok",Convert.ToString(check.ExecuteScalar()));
+    }
+
+    public static void FailedStoreArchivesOnlyFailedRows()
     {
         using var temporary = new RetentionTemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
@@ -103,16 +141,40 @@ internal static class RetentionTests
         var opened = Record("opened-keep", "AA99999999", "66091800999999", InvoiceStates.Opened, "2026/09/18");
         repository.Invoices.Append(failed);
         repository.Invoices.Append(opened);
-        InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED", resolved: false);
+        InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED",
+            resolved: false, issueType: InvoiceSyncIssueTypes.QueryFailed);
 
         var store = new FailedInvoiceRecordStore(repository.DataDirectory);
-        Equal(1, store.Delete([failed]));
-        var remaining = repository.Invoices.LoadOrCreate();
-        Equal(1, remaining.Count);
-        Equal("opened-keep", remaining.Single().Id);
-        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("prod|12345675").Count);
-        Throws<InvalidOperationException>(() => store.Delete([opened]));
-        Equal(1, repository.Invoices.LoadOrCreate().Count);
+        Equal(1,store.Archive([failed]));
+        var remaining=repository.Invoices.LoadOrCreate();
+        Equal(1,remaining.Count);
+        Equal("opened-keep",remaining.Single().Id);
+        // The issue is retained as a resolved history entry, not erased.
+        var issues=new InvoiceSyncIssueStore(repository.DataDirectory).All("prod|12345675");
+        Equal(1,issues.Count);
+        Equal(true,issues.Single().ResolvedUtc is not null);
+        var archived=store.AllArchived(Environments.Production,"12345675");
+        Equal(1,archived.Count);
+        Equal("failed-delete",archived.Single().Record.Id);
+        Equal("明確開立失敗",archived.Single().Record.ErrorMessage);
+        Equal("測試商品",archived.Single().Record.Items.Single().Description);
+        Equal(1,store.AllArchived(Environments.Production,"12345675").Count);
+        Throws<InvalidOperationException>(()=>store.Archive([opened]));
+        // Both ordinary Append and a stale full-list Save must fail closed;
+        // the archive and previously opened invoice remain intact.
+        Throws<SqliteException>(()=>repository.Invoices.Append(failed));
+        Throws<SqliteException>(()=>repository.Invoices.Save([opened,failed]));
+        Equal("opened-keep",repository.Invoices.LoadOrCreate().Single().Id);
+        Equal(1,store.AllArchived(Environments.Production,"12345675").Count);
+        var reloadedStore=new FailedInvoiceRecordStore(repository.DataDirectory);
+        Equal("failed-delete",
+            reloadedStore.AllArchived(Environments.Production,"12345675")
+                .Single().Record.Id);
+        using var db=OpenReadOnly(Path.Combine(repository.DataDirectory,
+            SqliteBootstrapper.DatabaseFileName));
+        using var integrity=db.CreateCommand();
+        integrity.CommandText="PRAGMA integrity_check;";
+        Equal("ok",Convert.ToString(integrity.ExecuteScalar()));
     }
 
     private static InvoiceRecord Record(
@@ -169,7 +231,8 @@ internal static class RetentionTests
         string invoiceNumber,
         string orderId,
         bool resolved,
-        string createdUtc = "2026-09-18T00:00:00.0000000+00:00")
+        string createdUtc = "2026-09-18T00:00:00.0000000+00:00",
+        string issueType = "retention-test")
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -183,13 +246,14 @@ internal static class RetentionTests
             INSERT INTO sync_issues (
                 account_key, invoice_number, order_id, issue_type, message, created_utc, resolved_utc
             ) VALUES (
-                $account_key, $invoice_number, $order_id, 'retention-test', 'test issue',
+                $account_key, $invoice_number, $order_id, $issue_type, 'test issue',
                 $created_utc, $resolved_utc
             );
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", invoiceNumber);
         command.Parameters.AddWithValue("$order_id", orderId);
+        command.Parameters.AddWithValue("$issue_type", issueType);
         command.Parameters.AddWithValue("$created_utc", createdUtc);
         command.Parameters.AddWithValue("$resolved_utc", resolved ? "2026-09-18T01:00:00.0000000+00:00" : "");
         command.ExecuteNonQuery();

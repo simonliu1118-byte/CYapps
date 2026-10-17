@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Storage;
@@ -19,7 +20,10 @@ public sealed record InvoiceAllowanceManualReview(
     DateTimeOffset? ManualCompletedUtc = null,
     string ConfirmedAllowanceNumber = "",
     string HandlerEmployeeNo = "",
-    bool? ConfirmationProblem = null);
+    bool? ConfirmationProblem = null,
+    IReadOnlyList<AllowanceProductItem>? DraftItems = null,
+    long? LocalLedgerWorkItemId = null,
+    DateTimeOffset? ApprovedAt = null);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -43,22 +47,27 @@ public sealed class EmployeeAllowanceWorkflowService
 {
     private const string ManualReviewMetadataKey = "cyinvoice_allowance_manual_review";
     private const string HandledReviewMetadataKey = "cyinvoice_allowance_handled_review";
+    private const string WithdrawnReviewMetadataKey = "cyinvoice_allowance_withdrawn_review";
     private const string PendingMetadataKey = "cyinvoice_allowance_pending";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncRepository syncRepository;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceDetailRefreshService detailRefreshService;
     private readonly Func<DateTimeOffset> now;
+    private readonly Func<string,string,IAmegoGateway> allowanceGatewayFactory;
 
     public EmployeeAllowanceWorkflowService(
         LocalRepository repository,
         InvoiceDetailRefreshService? detailRefreshService = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<string,string,IAmegoGateway>? allowanceGatewayFactory = null)
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         syncRepository = new InvoiceSyncRepository(repository.DataDirectory);
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         this.now = now ?? (() => DateTimeOffset.Now);
+        this.allowanceGatewayFactory = allowanceGatewayFactory ??
+            ((invoice, key) => new AmegoClient(invoice, key));
         this.detailRefreshService = detailRefreshService ?? new InvoiceDetailRefreshService(repository, now: this.now);
     }
 
@@ -68,7 +77,8 @@ public sealed class EmployeeAllowanceWorkflowService
         string password,
         string reason,
         long taxInclusiveAmount,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<AllowanceProductItem>? editedItems = null)
     {
         ArgumentNullException.ThrowIfNull(selected);
         reason = (reason ?? string.Empty).Trim();
@@ -105,7 +115,9 @@ public sealed class EmployeeAllowanceWorkflowService
                 AlreadyQueued: true,
                 Message: existing.AwaitingConfirmation
                     ? "這張發票的折讓已在等待光貿確認"
-                    : "這張發票已有折讓申請等待管理員處理");
+                    : existing.ApprovedAt is not null
+                        ? "這張發票的折讓已由管理員核准，請沿用原工作單完成送出或查回"
+                        : "這張發票已有折讓申請等待管理員處理");
         }
         if (issueStore.HasUnresolved(accountKey, number, orderId, InvoiceAllowanceIssueTypes.ManualReview))
             throw new InvalidDataException("折讓人工處理待辦存在，但申請資料遺失，已停止重複建立");
@@ -121,7 +133,7 @@ public sealed class EmployeeAllowanceWorkflowService
             reason,
             taxInclusiveAmount,
             now().ToUniversalTime(),
-            baseline);
+            baseline) { DraftItems = editedItems?.ToArray() };
         WriteManualReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
@@ -180,6 +192,8 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
         if (review.AwaitingConfirmation)
             return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+        if (review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准，不能切換成網站人工完成；請沿用原工作單。");
 
         review = review with
         {
@@ -194,6 +208,136 @@ public sealed class EmployeeAllowanceWorkflowService
         UpdateIssueMessage(record, "管理員已完成人工折讓，等待光貿回傳新的折讓資料。");
 
         return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    // V3 Local only: approve the user's frozen edited lines and execute ONE
+    // g0401 attempt. The durable ledger and review marker both exist before
+    // any network send; a timeout/crash can only be reconciled by original number.
+    public async Task<InvoiceAllowanceReconcileResult> IssueApprovedLocalAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            throw new InvalidOperationException("Local 折讓送出不能用於 CYID Cloud");
+        var manager = EmployeeOperationAuthentication.AuthenticateManager(
+            repository, actorEmployeeNo, actorPassword);
+        RequireManualReviewIssue(issue);
+        var record = FindIssueRecord(issue);
+        var review = ReadManualReview(record)
+            ?? throw new InvalidOperationException("折讓申請資料已遺失");
+        if (review.AwaitingConfirmation || HasPendingMarker(record))
+            return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+        if (review.DraftItems is not { Count: > 0 and <= 50 })
+            throw new InvalidOperationException("舊折讓申請沒有編輯明細，請沿用人工核對流程");
+
+        // A fresh official query must still allow the WHOLE edited gross
+        // amount after all confirmed effective allowances. No per-item
+        // historical allocation is inferred.
+        var fresh = await detailRefreshService.RefreshAsync(record, cancellationToken)
+            .ConfigureAwait(false);
+        ValidateCurrentAccount(fresh);
+        ValidateEligible(fresh, review.TaxInclusiveAmount);
+        review = ReadManualReview(fresh)
+            ?? throw new InvalidDataException("查回後折讓申請資料遺失");
+        if (review.AwaitingConfirmation || HasPendingMarker(fresh))
+            return await ReconcilePendingAsync(fresh, cancellationToken).ConfigureAwait(false);
+        var items = review.DraftItems
+            ?? throw new InvalidDataException("折讓明細已遺失");
+        if (items.Count is < 1 or > 50)
+            throw new InvalidDataException("折讓品項數量不合法");
+
+        decimal net = 0m, tax = 0m;
+        foreach (var item in items)
+        {
+            if (!string.Equals(item.OriginalInvoiceNumber, fresh.InvoiceNumber,
+                    StringComparison.OrdinalIgnoreCase) ||
+                item.OriginalDescription.Trim().Length is < 1 or > 256 ||
+                item.OriginalInvoiceDate <= 0 || item.Quantity <= 0 ||
+                item.Amount == 0 || item.TaxType is < 1 or > 3 ||
+                (item.TaxType != 1 && item.Tax != 0))
+                throw new InvalidDataException("本次折讓明細不完整，尚未配號");
+            net = checked(net + item.Amount);
+            tax = checked(tax + item.Tax);
+        }
+        if (net <= 0m || tax < 0m || net + tax != review.TaxInclusiveAmount)
+            throw new InvalidDataException("編輯明細總額與本次申請金額不符，尚未配號");
+
+        var settings = repository.Settings.LoadOrCreate();
+        var account = CurrentAccount();
+        var appKey = settings.Environment == Environments.Test
+            ? AmegoDefaults.TestAppKey : repository.Settings.ProductionAppKey(settings);
+        if (string.IsNullOrWhiteSpace(appKey))
+            throw new InvalidOperationException("缺少光貿 App Key，不能配號送出");
+        // Approval is the irrevocable business boundary: commit it before
+        // allocation so a crash cannot restore a withdrawable request.
+        var approvedAt = review.ApprovedAt ?? now();
+        if (review.ApprovedAt is null)
+        {
+            review = review with { ApprovedAt = approvedAt, HandlerEmployeeNo = manager.EmployeeNo };
+            WriteManualReview(fresh, review);
+            syncRepository.UpsertMany([fresh]);
+        }
+        // Retain the approval calendar date even after a restart.
+        var allowanceDate = DateOnly.FromDateTime(approvedAt.Date);
+        var template = new AllowanceIssueRequest {
+            AllowanceNumber = "",
+            AllowanceDate = allowanceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            AllowanceType = 2,
+            BuyerIdentifier = string.IsNullOrWhiteSpace(fresh.BuyerIdentifier)
+                ? "0000000000" : fresh.BuyerIdentifier.Trim(),
+            BuyerName = string.IsNullOrWhiteSpace(fresh.BuyerName)
+                ? "消費者" : fresh.BuyerName.Trim(),
+            ProductItem = items.ToArray(), TotalAmount = net, TaxAmount = tax,
+        };
+        var ledger = new LocalAllowanceNumberStore(repository.DataDirectory);
+        var workId = issue.Id.ToString(CultureInfo.InvariantCulture);
+        var reservation = ledger.Reserve(account.SellerInvoice, account.Environment,
+            workId, allowanceDate, template);
+
+        // This step MUST be durable before the ledger moves to 'sending'.
+        review = review with {
+            AwaitingConfirmation = true,
+            ManualCompletedUtc = now().ToUniversalTime(),
+            ConfirmedAllowanceNumber = reservation.AllowanceNumber,
+            LocalLedgerWorkItemId = issue.Id
+        };
+        WriteManualReview(fresh, review);
+        MarkPending(fresh);
+        syncRepository.UpsertMany([fresh]);
+        UpdateIssueMessage(fresh,
+            "管理員已核准並固定折讓單號 " + reservation.AllowanceNumber +
+            "；結果待光貿查回，不得重送。");
+
+        // Atomic compare-and-set: only the winner sends this fixed payload.
+        ledger.MarkSending(account.SellerInvoice, account.Environment, reservation);
+        try
+        {
+            var numbered = JsonSerializer.Deserialize<AllowanceIssueRequest>(
+                reservation.PayloadJson)
+                ?? throw new InvalidDataException("固定折讓內容無法讀取");
+            var gateway = allowanceGatewayFactory(account.SellerInvoice, appKey);
+            await gateway.IssueAllowanceAsync(numbered, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (AmegoApiException error)
+            when (AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code))
+        {
+            ledger.MarkExternalCollision(account.SellerInvoice,
+                account.Environment, reservation, error.Code);
+            return Problem(fresh,
+                "折讓單號已被光貿使用；已保留原號與審核紀錄，請先核對官方紀錄，不能自動換號重送。");
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return Problem(fresh,
+                "折讓單號 " + reservation.AllowanceNumber +
+                " 送出結果不明（" + error.Message +
+                "）。已鎖定單次送出，只能查回原號，不得再按送出。");
+        }
+        // A code=0 response is NOT proof of completed upload.
+        return await ReconcilePendingAsync(fresh, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // Exceptional path only. Normal reconciliation discovers the new allowance number by comparing
@@ -216,6 +360,8 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
         if (!review.AwaitingConfirmation || !HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓尚未進入官方確認階段");
+        if (review.LocalLedgerWorkItemId is not null || review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准並固定原號，不能改選其他折讓單號；只能查回原號。");
 
         InvoiceRecord fresh;
         try
@@ -266,13 +412,55 @@ public sealed class EmployeeAllowanceWorkflowService
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
-        if (review.AwaitingConfirmation || HasPendingMarker(record))
-            throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
+        if (review.AwaitingConfirmation || HasPendingMarker(record) || review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准或進入光貿確認，不能取消退回；官方開立成功後請走折讓作廢。");
 
         ClearManualReview(record);
         ClearPending(record);
         syncRepository.UpsertMany([record]);
         issueStore.Resolve(issue.Id, now());
+    }
+
+    // Applicant-only Local retraction of a not-yet-handled manual request.
+    // Retain the review and withdrawal as non-secret local audit metadata,
+    // and resolve the outstanding issue rather than deleting its history.
+    public void WithdrawManualReview(
+        InvoiceRecord selected,string employeeNo,string password)
+    {
+        ArgumentNullException.ThrowIfNull(selected);
+        var employee=EmployeeOperationAuthentication.AuthenticateEmployee(
+            repository,employeeNo,password,now());
+        var record=Reload(selected);
+        ValidateCurrentAccount(record);
+        var review=ReadManualReview(record)
+            ?? throw new InvalidOperationException("原發票沒有待撤銷的折讓申請");
+        if(!string.Equals(review.RequesterEmployeeNo,employee.EmployeeNo,
+            StringComparison.Ordinal))
+            throw new UnauthorizedAccessException("只有原申請員工本人可以撤銷折讓申請");
+        if(review.AwaitingConfirmation||HasPendingMarker(record)||review.ApprovedAt is not null)
+            throw new InvalidOperationException(
+                "管理員已核准或已進入光貿確認，不能撤回折讓申請；官方開立成功後請走折讓作廢。");
+        var invoiceNumber=record.InvoiceNumber.Trim();
+        var orderId=EffectiveOrderId(record);
+        var issues=issueStore.Unresolved(CurrentAccountKey())
+            .Where(item=>item.IssueType==InvoiceAllowanceIssueTypes.ManualReview)
+            .Where(item=>
+                (invoiceNumber.Length>0&&string.Equals(item.InvoiceNumber.Trim(),
+                    invoiceNumber,StringComparison.OrdinalIgnoreCase))||
+                (orderId.Length>0&&string.Equals(item.OrderId.Trim(),
+                    orderId,StringComparison.Ordinal)))
+            .ToArray();
+        if(issues.Length!=1)
+            throw new InvalidDataException("折讓待辦紀錄不唯一，不能自行撤銷");
+        record.ExtensionData??=new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData[WithdrawnReviewMetadataKey]=JsonSerializer.SerializeToElement(new{
+            Review=review,WithdrawnByEmployeeNo=employee.EmployeeNo,
+            WithdrawnUtc=now().ToUniversalTime()
+        });
+        ClearManualReview(record);
+        ClearPending(record);
+        syncRepository.UpsertMany([record]);
+        issueStore.Resolve(issues[0].Id,now());
     }
 
     public async Task<InvoiceAllowanceReconcileResult> ReconcilePendingAsync(
@@ -334,7 +522,15 @@ public sealed class EmployeeAllowanceWorkflowService
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             if (selected.Length == 0)
+            {
+                // Local g0401 code=0 only confirms API acceptance, and a
+                // timeout proves nothing. A fixed number absent from the
+                // official invoice_query must remain pending, not treated as
+                // rejected or sent a second time.
+                if (review.LocalLedgerWorkItemId is not null && newAllowances.Count == 0)
+                    return Pending(fresh, $"折讓單 {review.ConfirmedAllowanceNumber} 尚未出現在光貿官方紀錄，維持待確認；不得重送。");
                 return Problem(fresh, $"已確認的折讓單 {review.ConfirmedAllowanceNumber} 不在本次申請後新增的折讓資料中。");
+            }
             if (selected.Length > 1)
                 return Problem(fresh, $"光貿回傳多筆相同折讓單號 {review.ConfirmedAllowanceNumber}，無法唯一確認。");
             return EvaluateCandidate(fresh, review, selected[0]);
@@ -412,6 +608,22 @@ public sealed class EmployeeAllowanceWorkflowService
                 $"折讓單 {number} 官方含稅金額 {officialAmount} 與申請金額 {review.TaxInclusiveAmount} 不符。");
         }
 
+        if (review.LocalLedgerWorkItemId is long workId)
+        {
+            var account = CurrentAccount();
+            var ledger = new LocalAllowanceNumberStore(repository.DataDirectory);
+            var reservation = ledger.FindLatest(account.SellerInvoice, account.Environment,
+                workId.ToString(CultureInfo.InvariantCulture));
+            if (reservation is null ||
+                !string.Equals(reservation.AllowanceNumber, number, StringComparison.Ordinal))
+                return Problem(fresh, "本機固定配號與光貿查回單號不一致，停止結案");
+            if (reservation.Status == "sending")
+                ledger.MarkOfficiallyConfirmed(account.SellerInvoice,
+                    account.Environment, reservation);
+            else if (reservation.Status != "confirmed")
+                return Problem(fresh, "折讓配號仍需人工核對，不能宣稱完成");
+        }
+
         ClearPending(fresh);
         fresh.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         fresh.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
@@ -482,8 +694,10 @@ public sealed class EmployeeAllowanceWorkflowService
             throw new InvalidOperationException("發票尚未完成上傳，不能提出折讓");
         if (InvoiceVoidService.HasPendingMarker(record))
             throw new InvalidOperationException("這張發票已有作廢作業待確認，不能提出折讓");
-        if (taxInclusiveAmount > record.Amount)
-            throw new InvalidOperationException("折讓金額不可大於原發票含稅金額");
+        var remaining=InvoiceAllowanceMetadata.RemainingGross(record);
+        if (FixedDecimal.FromInt64(taxInclusiveAmount).ScaledValue>remaining.ScaledValue)
+            throw new InvalidOperationException(
+                $"折讓金額不可大於原發票扣除已折讓後的剩餘額 {remaining} 元");
     }
 
     private void ValidateCurrentAccount(InvoiceRecord record)

@@ -22,6 +22,17 @@ public sealed record CloudPendingDeviceJoinState(
     DateTimeOffset StartedAtUtc,
     string DeviceToken);
 
+// V3 disaster recovery is deliberately separate from ordinary device join.
+// Never persist the invitation code, CYID password or CYID provider session.
+public sealed record CloudPendingRecoveryState(
+    string BaseUrl,
+    string WorkspaceId,
+    string IdentityWorkspaceId,
+    string InvitationId,
+    string DeviceDisplayName,
+    DateTimeOffset StartedAtUtc,
+    string DeviceToken);
+
 public sealed class Settings
 {
     [JsonPropertyName("environment")] public string Environment { get; set; } = Environments.Test;
@@ -46,6 +57,13 @@ public sealed class Settings
     [JsonPropertyName("cloud_pending_device_join_device_name")] public string CloudPendingDeviceJoinDeviceName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_device_join_started_utc")] public string CloudPendingDeviceJoinStartedUtc { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_device_join_token_enc")] public string CloudPendingDeviceJoinTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_url")] public string CloudPendingRecoveryUrl { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_workspace_id")] public string CloudPendingRecoveryWorkspaceId { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_identity_workspace_id")] public string CloudPendingRecoveryIdentityWorkspaceId { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_invitation_id")] public string CloudPendingRecoveryInvitationId { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_device_name")] public string CloudPendingRecoveryDeviceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_started_utc")] public string CloudPendingRecoveryStartedUtc { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_recovery_token_enc")] public string CloudPendingRecoveryTokenEncrypted { get; set; } = string.Empty;
 }
 
 public interface ISecretProtector

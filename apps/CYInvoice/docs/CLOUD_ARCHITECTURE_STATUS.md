@@ -7,7 +7,7 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- Windows 正式版本：V2.6.19 Build 0 已發布。
+- Windows 正式版本：V2.6.19 Build 0 已發布；V2.6.20 Build 0 僅為 AutoInput #445 工程測試包，不代表 V3 #440 已合併或 Cloud migration 0014 已執行。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
 - Cloud implementation source／原 development Worker：`0.9.3`，CYID_ENABLED=true，本公司原 D1 為 CYID_ONLY。
@@ -217,14 +217,22 @@ Cloud → Local 已完成雙重確認及 crash-safe reset：關閉主 UI／同�
 
 A 機連線與 B 機 Run255 pairing 曾通過實機；四個 identity／freshness／revoke／reset 包已合併，不重新列為未實作。新版 A/B/C lifecycle、invitation、Employee identity matrix／Email OTP／password recovery／SUPER_ADMIN transfer 仍待實機驗收。
 
-CYID consumer 已在原 development 啟用，本公司 CYID_ONLY 維護完成；尚未實作的 Recovery Device flow、可攜式加密備份、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 為 1.0.4／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
+CYID consumer 已在原 development 啟用，本公司 CYID_ONLY 維護完成；尚未部署／實機驗收的 Recovery Device flow、尚未實作的可攜式加密備份、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 為 1.0.4／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
 
 
 ## V2.6.14 Device metadata
 
 Windows inventory 僅顯示 active；Cloud API／DB 保留 revoked history。啟動 POST usage 以 Device Token 更新本 Device 的 client_version／last_seen_at，沒有新增 heartbeat owner。改名 POST rename 以中央 SUPER_ADMIN 執行時驗證，同 Workspace active Device，交易重查 actor／Workspace／credential 並保存 device_renamed audit。0012 擴充 audit vocabulary，不修改已套用 migrations。新增裝置由獨立 CloudAddDeviceForm 管理既有配對／邀請生命周期。
 
-## V3 接續：CYWEB 裝置復原與多機協同設計
+## V3 接續：CYWEB 裝置復原 Draft 實作（2026-10-14）
+
+正式運作／版本基準仍是 Cloud 0.9.3、storage schema 13、CYID_ONLY；**下列 V3 只存在於未合併／未部署的 Draft 原始碼**，不代表 live Worker 已有新路由或 original D1 已升到 0014。
+- [CYInvoice #440](https://github.com/simonliu1118-byte/CYapps/pull/440)：Windows 「加入雲端」內災難復原按鈕與獨立頁、加密 pending Token、CYID SUPER_ADMIN 專用 preview/claim、私有 issuer/status/revoke RPC、邀請 Email pending-sent 冪等、0014＋optional maintenance、原子全數舊 Device revoke/舊授權失效、一般配對/邀請授權 SQL 寫入防競態。
+- [CYWEB #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)：超管「帳號與權限」下復原邀請 UI／三個管理 API、私有 named Service Binding **可選** renderer，未設定即 503 fail-closed；CYWEB core Session 不得代替 CYInvoice App 身分驗證。
+- 程式碼驗證：[CYInvoice Cloud #38501668530](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668530)、[Windows #38501668552](https://github.com/simonliu1118-byte/CYapps/actions/runs/38501668552)、[CYWEB Runtime #38501284806](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/38501284806) 均通過；**沒有正式 Worker/binding deployment，沒有 original D1 0014/maintenance、沒有真 Email、沒有 DR-01～DR-13 實機驗收，也沒有 Windows V3 Release**。
+- 尚有跨服務在途 Work Item mutation 的執行時 fencing/epoch、防並發稽核驗收、人工 UI 目視／真裝置與跨雲復原工作。已完成的 CYID_ONLY 退役**不能重跑**，Built-in 仍供其他新公司自己的 D1 使用。詳見 [交接](CLOUD_WORK_HANDOFF.md)／[待辦](TODO.md)／[DR 設計](CLOUD_DISASTER_RECOVERY.md)。
+
+## 歷史設計停點（2026-10-13；非目前 source 狀態）
 
 2026-10-13 使用者決定災難復原與 V3 多機協同一併實作，由 CYWEB 的 CYID 超管簽發一次性復原邀請。原業務 Workspace／D1、Device registry／Invitation／Audit 與 Work Item actor 共用模型；原 Device Token 可全部不可用，新機仍應能接回原 Workspace。設計已核對現有 source／issuer FK／Session Application 邊界，詳見 [CLOUD_DISASTER_RECOVERY.md](CLOUD_DISASTER_RECOVERY.md)。CYWEB source 接線、runtime／forward migration／UI 與 DR matrix 尚未實作；當前部署仍為上述0.9.3基準。
 

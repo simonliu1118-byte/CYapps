@@ -94,8 +94,8 @@ const continuitySnapshot = () => Object.fromEntries(
 const beforeCutover = continuitySnapshot();
 for (const token of tokens) {
   const before = await call('/v1/identity-provider', undefined, token, { CYID_ENABLED: 'false' });
-  assert.equal(before.status, 200);
-  assert.equal(before.body.provider, 'BUILT_IN');
+  assert.equal(before.status, 409, 'V3 must not serve Built-in employee authority');
+  assert.equal(before.body.error.code, 'CYID_REQUIRED');
   const after = await call('/v1/identity-provider', undefined, token);
   assert.equal(after.status, 200);
   assert.equal(after.body.provider, 'CYID');
@@ -155,7 +155,11 @@ providerBehavior = request => new URL(request.url).pathname === '/v1/health'
   ? new Response('Service unavailable', { status: 503 }) : undefined;
 assert.equal((await call('/v1/identity-provider')).body.error.code, 'IDENTITY_UNAVAILABLE');
 providerBehavior = undefined;
-assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { CYID_ENABLED: 'false' })).body.provider, 'BUILT_IN');
+assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { CYID_ENABLED: 'false' })).body.error.code, 'CYID_REQUIRED');
+assert.equal((await call('/v1/health', undefined, tokens[0], { CYID_ENABLED: 'false' })).status, 409);
+assert.equal((await call('/v1/devices/rename', { ...credentials, targetDeviceId: ids[1], displayName: 'Forbidden' },
+    tokens[0], { CYID_ENABLED: 'false' })).status, 409,
+  'V3 must reject Built-in mutation before any legacy handler');
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_WORKSPACE_ID: undefined })).status, 503);
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_CYINVOICE_WORKSPACE_ID: 'ws_other' })).status, 409);
 assert.deepEqual(continuitySnapshot(), beforeCutover,

@@ -6,6 +6,8 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
+- **目前 V2.6.20 Build 0 是 AutoInput [PR #445](https://github.com/simonliu1118-byte/CYapps/pull/445) 的工程測試包**（[Windows CI / Artifact](https://github.com/simonliu1118-byte/CYapps/actions/runs/38554728718)），不是新正式 Release；V3 裝置復原另在 Draft #440，CYWEB 入口在 Draft #151。三條工作線的唯一最新說明見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+
 - 目前工程基準：**Windows V2.6.19 Build 0 已發布；原 development Cloud 0.9.3／CYID_ENABLED=true／CYID_ONLY**。原 Windows CYID 帳密進設定已由使用者回報成功；其餘全角色／多裝置實機證據待補，折讓歷史缺欄位依使用者決定留待 V3.0 重做，不阻塞已接受的本批 Release。
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。

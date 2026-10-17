@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Microsoft.Data.Sqlite;
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
@@ -829,7 +830,27 @@ internal sealed class RecordsControl : UserControl
         }
         finally
         {
-            new FailedInvoiceRecordStore(repository.DataDirectory).Delete([failed]);
+            // The startup smoke invoice is synthetic, not a business record.
+            // Never preserve it as a real archived invoice or expose a delete API.
+            using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(repository.DataDirectory, SqliteBootstrapper.DatabaseFileName),
+                Mode = SqliteOpenMode.ReadWrite, Pooling = false,
+            }.ToString()))
+            {
+                connection.Open();
+                using var cleanup = connection.CreateCommand();
+                cleanup.CommandText = """
+                    DELETE FROM invoices WHERE record_id=$id AND invoice_state=$state
+                      AND source=$source AND order_id=$order AND original_order_id=$order;
+                    """;
+                cleanup.Parameters.AddWithValue("$id", failed.Id);
+                cleanup.Parameters.AddWithValue("$state", InvoiceStates.Failed);
+                cleanup.Parameters.AddWithValue("$source", InvoiceSources.Manual);
+                cleanup.Parameters.AddWithValue("$order", "SMOKE-DUPLICATE");
+                if (cleanup.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException("未能清除本次啟動測試的臨時失敗紀錄");
+            }
             Reload();
         }
     }

@@ -2,8 +2,8 @@
 
 本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
 
-- 目前工程測試基準：**V2.6.16**。
-- 最新公開正式 Release：**V2.4.2**。
+- 本機資料格式正式基準：**V2.6.19 Build 0**（已公開發行）；**V2.6.20 Build 0** 是 #445 AutoInput 工程測試包（未正式發行、沒有變動既有 SQLite schema）。
+- V3 #440 的復原 Pending Token／Cloud D1 forward 0014 仍為 Draft，不是已套用的原環境資料格式。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。
 - 舊 `invoices.json`／`buyer_names.json` 只作首次 SQLite 遷移來源與保留備份，不再是主要寫入資料。

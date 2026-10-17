@@ -9,6 +9,17 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("allowance g0401 has exact official payload and safe response boundary", TestG0401GatewayAsync),
+    ("allowance g0401 retains negative discount lines and verifies final totals", TestG0401SignedDiscountAsync),
+    ("allowance g0501 cancels existing number exactly once and never reallocates", TestG0501GatewayAsync),
+    ("manager review fetches exact official invoice allowances once", TestAllowanceReviewInspectionAsync),
+    ("local allowance ceiling deducts only confirmed effective prior allowances", () => RunSync(TestAllowanceRemainingGross)),
+    ("allowance query/status require exact matching number", TestAllowanceQueryAndStatusAsync),
+    ("allowance_list pages and maps original invoice numbers", TestAllowanceListAsync),
+    ("allowance_status array wire-format must match each requested number", TestAllowanceStatusArrayAsync),
+    ("g0401 recognizes 4040161 and 4040162 as occupied numbers only", TestG0401DuplicateNumberAsync),
+    ("allowance number uses approved daily AyyyyMMddNNN format", () => RunSync(TestAllowanceNumberGenerator)),
+    ("Local allowance ledger reserves exactly once and never recycles a number", () => RunSync(TestLocalAllowanceLedger)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -40,10 +51,519 @@ foreach (var test in tests)
 Console.WriteLine($"{tests.Length - failures}/{tests.Length} allowance tests passed");
 return failures == 0 ? 0 : 1;
 
+
+static void TestAllowanceRemainingGross()
+{
+    var record = new InvoiceRecord { Amount = 1000 };
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent:true);
+    Equal("1000",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285"),
+        new InvoiceAllowanceResult("B0401",99,2,"ALW002","20261015","10","190")
+    ], summaryPresent:true);
+    Equal("500",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285",20261016)
+    ], summaryPresent:true);
+    Equal("1000",InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",91,2,"ALW001","20261015","15","285")
+    ], summaryPresent:true);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","50","1000")
+    ], summaryPresent:true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285"),
+        new InvoiceAllowanceResult("D0401",99,2,"ALW001","20261015","15","285")
+    ], summaryPresent:true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent:false);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+}
+
 static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static async Task TestAllowanceReviewInspectionAsync()
+{
+    var checkedAt = new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.FromHours(8));
+    var official = Query([], "20261015");
+    var fake = new FakeGateway
+    {
+        QueryResponse = official with
+        {
+            Data = official.Data with { AllowanceSummaryPresent = true },
+        },
+    };
+    var review = new AllowanceReviewInspectionService(fake, () => checkedAt);
+    var result = await review.InspectAsync("AA12345678");
+    Equal("AA12345678", result.InvoiceNumber);
+    Equal(true, result.AllowanceSummaryPresent);
+    Equal(false, result.RequiresManualVerification);
+    Equal(checkedAt.ToUniversalTime(), result.CheckedAtUtc);
+    Equal(1, fake.QueryCalls);
+    Equal(0, fake.OtherCalls);
+
+    var existing = Query([Allowance(UploadStatuses.Complete)], "20261015");
+    fake.QueryResponse = existing with
+    {
+        Data = existing.Data with { AllowanceSummaryPresent = true },
+    };
+    result = await review.InspectAsync("AA12345678");
+    Equal(1, result.ExistingAllowances.Count);
+    Equal(true, result.NeedsPerInvoiceAmountDetail);
+    Equal(true, result.RequiresManualVerification);
+    Equal(2, fake.QueryCalls); // one per dialog opening, not per allowance
+    Equal(0, fake.OtherCalls);
+
+    // A missing allowance[] is NOT authoritative evidence of zero allowances.
+    fake.QueryResponse = official;
+    result = await review.InspectAsync("AA12345678");
+    Equal(false, result.AllowanceSummaryPresent);
+    Equal(true, result.RequiresManualVerification);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            AllowanceSummaryPresent = true,
+            CancelDate = 1,
+        },
+    };
+    result = await review.InspectAsync("AA12345678");
+    Equal(true, result.InvoiceAlreadyVoided);
+    Equal(true, result.RequiresManualVerification);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            AllowanceSummaryPresent = true,
+            VoidPending = true,
+        },
+    };
+    Equal(true, (await review.InspectAsync("AA12345678")).HasUnsettledOfficialState);
+
+    fake.QueryResponse = official with
+    {
+        Data = official.Data with
+        {
+            InvoiceNumber = "AB12345678",
+            AllowanceSummaryPresent = true,
+        },
+    };
+    await ThrowsAsync<InvalidDataException>(() => review.InspectAsync("AA12345678"));
+    var calls = fake.QueryCalls;
+    await ThrowsAsync<ArgumentException>(() => review.InspectAsync("INVALID"));
+    Equal(calls, fake.QueryCalls); // never call official API for malformed IDs
+
+    // Verify the actual AMEGO parser distinguishes explicit [] from absent.
+    var handler = new RecordingHttpHandler((_, _, count) =>
+        JsonResponse(count == 1
+            ? """{"code":0,"msg":"","data":{"invoice_number":"AA12345678","order_id":"ORD-1","invoice_status":99,"allowance":[]}}"""
+            : """{"code":0,"msg":"","data":{"invoice_number":"AA12345678","order_id":"ORD-1","invoice_status":99}}"""));
+    using var http = new HttpClient(handler);
+    var realGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var yes = await realGateway.QueryByInvoiceNumberAsync("AA12345678");
+    var no = await realGateway.QueryByInvoiceNumberAsync("AA12345678");
+    Equal(true, yes.Data.AllowanceSummaryPresent);
+    Equal(false, no.Data.AllowanceSummaryPresent);
+    Equal(2, handler.Requests.Count);
+    Equal("/json/invoice_query", handler.Requests[0].Uri.AbsolutePath);
+}
+
+static void TestAllowanceNumberGenerator()
+{
+    var date = new DateOnly(2026, 10, 15);
+    Equal("A20261015001", AllowanceNumberGenerator.Format(date, 1));
+    Equal("A20261015999", AllowanceNumberGenerator.Format(date, 999));
+    Equal("A20261015A00", AllowanceNumberGenerator.Format(date, 1000));
+    Equal("A20261015A01", AllowanceNumberGenerator.Format(date, 1001));
+    Equal("A20261015A0A", AllowanceNumberGenerator.Format(date, 1010));
+    Equal("A20261015AZZ", AllowanceNumberGenerator.Format(date, 2295));
+    Equal("A20261015B00", AllowanceNumberGenerator.Format(date, 2296));
+    Equal("A20261015ZZZ", AllowanceNumberGenerator.Format(date, AllowanceNumberGenerator.DailyMaximum));
+    Equal("A20261016001", AllowanceNumberGenerator.Format(date.AddDays(1), 1));
+    foreach (var sequence in new[] { 1, 999, 1000, 1001, 1010, 2295, 2296, AllowanceNumberGenerator.DailyMaximum })
+    {
+        var number = AllowanceNumberGenerator.Format(date, sequence);
+        Equal(12, number.Length);
+        Equal(true, AllowanceNumberGenerator.TryReadSequence(number, date, out var decoded));
+        Equal(sequence, decoded);
+    }
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261016001", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261015000", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A202610151000", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("A20261015a00", date, out _));
+    Equal(false, AllowanceNumberGenerator.TryReadSequence("B20261015001", date, out _));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 0));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, AllowanceNumberGenerator.DailyMaximum + 1));
+    Throws<ArgumentOutOfRangeException>(() => AllowanceNumberGenerator.Format(date, 1, '0'));
+    Equal(AllowanceNumberGenerator.DailyMaximum,
+        Enumerable.Range(1, AllowanceNumberGenerator.DailyMaximum)
+            .Select(sequence => AllowanceNumberGenerator.Format(date, sequence))
+            .Distinct(StringComparer.Ordinal).Count());
+}
+
+static void TestLocalAllowanceLedger()
+{
+    using var temporary = new TemporaryDirectory("local-allowance-ledger");
+    var repository = TestRepository.Open(temporary.Path, new TestProtector());
+    var seller = AmegoDefaults.TestInvoice;
+    const string environment = "production";
+    var date = new DateOnly(2026, 10, 15);
+    var original = ValidAllowanceRequest();
+    var unnumbered = new AllowanceIssueRequest
+    {
+        AllowanceDate = original.AllowanceDate,
+        AllowanceType = original.AllowanceType,
+        BuyerIdentifier = original.BuyerIdentifier,
+        BuyerName = original.BuyerName,
+        ProductItem = original.ProductItem,
+        TaxAmount = original.TaxAmount,
+        TotalAmount = original.TotalAmount,
+    };
+
+    var ledger = new LocalAllowanceNumberStore(repository.DataDirectory);
+    var first = ledger.Reserve(seller, environment, "work-1", date, unnumbered);
+    Equal("A20261015001", first.AllowanceNumber);
+    Equal("reserved", first.Status);
+    using (var document = JsonDocument.Parse(first.PayloadJson))
+        Equal(first.AllowanceNumber, document.RootElement.GetProperty("AllowanceNumber").GetString());
+    // Reopening and reusing a pending Work Item must not burn another number.
+    var reopened = new LocalAllowanceNumberStore(repository.DataDirectory);
+    Equal(first, reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    var second = reopened.Reserve(seller, environment, "work-2", date, unnumbered);
+    Equal("A20261015002", second.AllowanceNumber);
+    ledger.MarkSending(seller, environment, first);
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    Throws<InvalidOperationException>(() => ledger.MarkSending(seller, environment, first));
+    Throws<ArgumentException>(() => ledger.MarkExternalCollision(seller, environment, first, 4040163));
+    ledger.MarkExternalCollision(seller, environment, first, 4040161);
+    Throws<InvalidOperationException>(() => ledger.MarkExternalCollision(seller, environment, first, 4040162));
+    // A confirmed external collision is the only state that authorizes a fresh
+    // number for the SAME immutable Work Item payload.
+    var third = reopened.Reserve(seller, environment, "work-1", date, unnumbered);
+    Equal("A20261015003", third.AllowanceNumber);
+    var nextDayTemplate = new AllowanceIssueRequest
+    {
+        AllowanceDate = "20261016",
+        BuyerIdentifier = unnumbered.BuyerIdentifier,
+        BuyerName = unnumbered.BuyerName,
+        ProductItem = unnumbered.ProductItem,
+        TaxAmount = unnumbered.TaxAmount,
+        TotalAmount = unnumbered.TotalAmount,
+    };
+    Throws<InvalidOperationException>(() => reopened.Reserve(
+        seller, environment, "work-1", date.AddDays(1), nextDayTemplate));
+    var changed = new AllowanceIssueRequest
+    {
+        AllowanceDate = unnumbered.AllowanceDate,
+        BuyerIdentifier = unnumbered.BuyerIdentifier,
+        BuyerName = "different",
+        ProductItem = unnumbered.ProductItem,
+        TaxAmount = unnumbered.TaxAmount,
+        TotalAmount = unnumbered.TotalAmount,
+    };
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, changed));
+    ledger.MarkSending(seller, environment, third);
+    ledger.MarkOfficiallyConfirmed(seller, environment, third);
+    Throws<InvalidOperationException>(() => reopened.Reserve(seller, environment, "work-1", date, unnumbered));
+    // Company, environment and date scopes must stay independent.
+    Equal("A20261015001", reopened.Reserve("87654321", environment, "work-3", date, unnumbered).AllowanceNumber);
+    Equal("A20261015001", reopened.Reserve(seller, "test", "work-4", date, unnumbered).AllowanceNumber);
+}
+
+static AllowanceIssueRequest ValidAllowanceRequest() => new()
+{
+    AllowanceNumber = "A20261015001",
+    AllowanceDate = "20261015",
+    AllowanceType = 2,
+    BuyerIdentifier = "0000000000",
+    BuyerName = "Test Buyer",
+    TaxAmount = 5,
+    TotalAmount = 100,
+    ProductItem = [new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Sample",
+        Quantity = 1, UnitPrice = 100, Amount = 100, Tax = 5, TaxType = 1,
+    }],
+};
+
+static async Task TestG0401GatewayAsync()
+{
+    var handler = new RecordingHttpHandler((request, _, _) => JsonResponse("{\"code\":0,\"msg\":\"\"}"));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
+    Equal(0, response.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    using var data = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+    Equal(JsonValueKind.Array, data.RootElement.ValueKind);
+    Equal(1, data.RootElement.GetArrayLength());
+    Equal("A20261015001", data.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    Equal("AA12345678", data.RootElement[0].GetProperty("ProductItem")[0].GetProperty("OriginalInvoiceNumber").GetString());
+    Equal(5m, data.RootElement[0].GetProperty("TaxAmount").GetDecimal());
+    await ThrowsAsync<ArgumentException>(() => gateway.IssueAllowanceAsync(new AllowanceIssueRequest()));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestG0401SignedDiscountAsync()
+{
+    // Matches the original-invoice editor: item 330 gross minus an 82-gross
+    // discount = 248 gross. The g0401 payload is untaxed net and signed tax.
+    var product = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Original item",
+        Quantity = 1, UnitPrice = 314.2857143m,
+        Amount = 314, Tax = 16, TaxType = 1,
+    };
+    var discount = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678",
+        OriginalInvoiceDate = 20261010,
+        OriginalDescription = "Original discount",
+        Quantity = 1, UnitPrice = -78.0952381m,
+        Amount = -78, Tax = -4, TaxType = 1,
+    };
+    AllowanceIssueRequest Draft(decimal net, decimal tax,
+        IReadOnlyList<AllowanceProductItem> items) => new()
+    {
+        AllowanceNumber = "A20261015001",
+        AllowanceDate = "20261015",
+        AllowanceType = 2,
+        BuyerIdentifier = "0000000000",
+        BuyerName = "Test Buyer",
+        ProductItem = items,
+        TotalAmount = net,
+        TaxAmount = tax,
+    };
+    var handler = new RecordingHttpHandler((_, _, _) =>
+        JsonResponse("""{"code":0,"msg":""}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var result = await gateway.IssueAllowanceAsync(Draft(236, 12, [product, discount]));
+    Equal(0, result.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    using (var payload = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]))
+    {
+        var row = payload.RootElement[0];
+        Equal(236m, row.GetProperty("TotalAmount").GetDecimal());
+        Equal(12m, row.GetProperty("TaxAmount").GetDecimal());
+        Equal(2, row.GetProperty("ProductItem").GetArrayLength());
+        var rebate = row.GetProperty("ProductItem")[1];
+        Equal(-78.0952381m, rebate.GetProperty("UnitPrice").GetDecimal());
+        Equal(-78m, rebate.GetProperty("Amount").GetDecimal());
+        Equal(-4m, rebate.GetProperty("Tax").GetDecimal());
+    }
+    // Never contact AMEGO if the employee-edited line totals or tax type
+    // disagree with the signed final amount.
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(237, 12, [product, discount])));
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(236, 13, [product, discount])));
+    var invalidTax = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = discount.OriginalInvoiceNumber,
+        OriginalInvoiceDate = discount.OriginalInvoiceDate,
+        OriginalDescription = discount.OriginalDescription,
+        Quantity = 1, UnitPrice = -78.0952381m,
+        Amount = -78, Tax = -4, TaxType = 3,
+    };
+    await ThrowsAsync<ArgumentException>(() =>
+        gateway.IssueAllowanceAsync(Draft(236, 12, [product, invalidTax])));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestG0501GatewayAsync()
+{
+    // An external AMEGO website allowance number need not match our V3 daily
+    // number generator. The official g0501 requires only that known number.
+    const string websiteNumber = "3821061800001";
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/g0501"
+            ? JsonResponse("""{"code":0,"msg":""}""")
+            : JsonResponse("""{"code":71,"msg":"unexpected endpoint"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.VoidAllowanceAsync(websiteNumber);
+    Equal(0, response.Code);
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0501", handler.Requests[0].Uri.AbsolutePath);
+    using (var request = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]))
+    {
+        Equal(JsonValueKind.Array, request.RootElement.ValueKind);
+        Equal(1, request.RootElement.GetArrayLength());
+        Equal(websiteNumber,
+            request.RootElement[0].GetProperty("CancelAllowanceNumber").GetString());
+        Equal(1, request.RootElement[0].EnumerateObject().Count());
+    }
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(""));
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(" " + websiteNumber));
+    await ThrowsAsync<ArgumentException>(() => gateway.VoidAllowanceAsync(new string('A', 17)));
+    Equal(1, handler.Requests.Count);
+
+    var rejected = new RecordingHttpHandler((_, _, _) =>
+        JsonResponse("""{"code":4050134,"msg":"allowance does not exist"}"""));
+    using var errorHttp = new HttpClient(rejected);
+    var rejectGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, errorHttp);
+    try
+    {
+        await rejectGateway.VoidAllowanceAsync(websiteNumber);
+        throw new InvalidOperationException("g0501 must propagate AMEGO rejection");
+    }
+    catch (AmegoApiException error)
+    {
+        Equal(4050134, error.Code);
+    }
+    // No new allowance number and no mutation retry are performed by Gateway.
+    Equal(1, rejected.Requests.Count);
+}
+
+static async Task TestG0401DuplicateNumberAsync()
+{
+    foreach (var code in new[] { 4040161, 4040162 })
+        Equal(true, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(code));
+
+    foreach (var code in new[] { 0, 15, 71, 4040163, 4040171, 4040173 })
+        Equal(false, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(code));
+
+    foreach (var code in new[] { 4040161, 4040162 })
+    {
+        var handler = new RecordingHttpHandler((_, _, _) =>
+            JsonResponse(JsonSerializer.Serialize(new { code, msg = "allowance number occupied" })));
+        using var http = new HttpClient(handler);
+        var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+        try
+        {
+            await gateway.IssueAllowanceAsync(ValidAllowanceRequest());
+            throw new InvalidOperationException("expected AMEGO allowance number collision");
+        }
+        catch (AmegoApiException error)
+        {
+            Equal(code, error.Code);
+            Equal(true, AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code));
+        }
+
+        // Gateway must never choose a replacement number or silently resend.
+        Equal(1, handler.Requests.Count);
+        Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+        using var request = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+        Equal("A20261015001", request.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    }
+}
+
+static async Task TestAllowanceQueryAndStatusAsync()
+{
+    var handler = new RecordingHttpHandler((request, _, _) => request.RequestUri?.AbsolutePath switch
+    {
+        "/json/allowance_query" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"allowance_number\":\"A20261015001\",\"invoice_type\":\"D0401\",\"invoice_status\":99,\"allowance_date\":\"20261015\",\"allowance_type\":2,\"tax_amount\":5,\"total_amount\":100}}"),
+        "/json/allowance_status" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"A20261015001\":{\"type\":\"D0401\",\"status\":99}}}"),
+        _ => JsonResponse("{\"code\":71,\"msg\":\"not found\"}"),
+    });
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var query = await gateway.QueryAllowanceAsync("A20261015001");
+    Equal("D0401", query.Data.InvoiceType);
+    var status = await gateway.AllowanceStatusAsync(["A20261015001"]);
+    Equal(99, status.Data.Single().Status);
+    Equal("/json/allowance_query", handler.Requests[0].Uri.AbsolutePath);
+    Equal("/json/allowance_status", handler.Requests[1].Uri.AbsolutePath);
+    await ThrowsAsync<ArgumentException>(() => gateway.AllowanceStatusAsync(["x", "x"]));
+    Equal(2, handler.Requests.Count);
+}
+
+static async Task TestAllowanceListAsync()
+{
+    var date = new DateOnly(2026, 10, 15);
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/allowance_list"
+            ? JsonResponse("""
+                {"code":0,"msg":"","page_total":2,"page_now":1,"data_total":501,"data":[
+                  {"allowance_number":"A20261015001","invoice_type":"D0401","invoice_status":99,
+                   "allowance_date":20261015,"allowance_type":2,"tax_amount":5,"total_amount":100,
+                   "cancel_date":0,"create_date":1792000000,
+                   "product_item":[
+                     {"original_invoice_number":"AA12345678","tax":5,"amount":100},
+                     {"original_invoice_number":"AB12345679","tax":0,"amount":0}]}
+                ]}
+                """)
+            : JsonResponse("""{"code":71,"msg":"not found"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var response = await gateway.ListAllowancesAsync(date, date, page: 1, limit: 500);
+    Equal(2, response.PageTotal);
+    Equal(1, response.PageNow);
+    Equal(501, response.DataTotal);
+    Equal(1, response.Data.Count);
+    Equal("A20261015001", response.Data.Single().AllowanceNumber);
+    Equal("D0401", response.Data.Single().InvoiceType);
+    Equal(99, response.Data.Single().InvoiceStatus);
+    Equal("AA12345678",
+        response.Data.Single().ProductItems[0].GetProperty("original_invoice_number").GetString());
+    Equal("AB12345679",
+        response.Data.Single().ProductItems[1].GetProperty("original_invoice_number").GetString());
+
+    Equal(1, handler.Requests.Count);
+    Equal("/json/allowance_list", handler.Requests[0].Uri.AbsolutePath);
+    using var payload = JsonDocument.Parse(ParseForm(handler.Requests[0].Body)["data"]);
+    Equal(1, payload.RootElement.GetProperty("date_select").GetInt32());
+    Equal("20261015", payload.RootElement.GetProperty("date_start").GetString());
+    Equal("20261015", payload.RootElement.GetProperty("date_end").GetString());
+    Equal(500, payload.RootElement.GetProperty("limit").GetInt32());
+    Equal(1, payload.RootElement.GetProperty("page").GetInt32());
+
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date.AddDays(1), date));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, page: 0));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, limit: 19));
+    await ThrowsAsync<ArgumentOutOfRangeException>(() => gateway.ListAllowancesAsync(date, date, dateSelect: 3));
+    Equal(1, handler.Requests.Count);
+}
+
+static async Task TestAllowanceStatusArrayAsync()
+{
+    const string number = "A20261015001";
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        request.RequestUri?.AbsolutePath == "/json/allowance_status"
+        ? JsonResponse("""
+            {"code":0,"msg":"","data":[
+              {"allowance_number":"A20261015001","invoice_type":"D0501","invoice_status":99,
+               "tax_amount":5,"total_amount":100}]}
+            """)
+        : JsonResponse("""{"code":71,"msg":"not found"}"""));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var status = await gateway.AllowanceStatusAsync([number]);
+    Equal(number, status.Data.Single().AllowanceNumber);
+    Equal("D0501", status.Data.Single().Type);
+    Equal(99, status.Data.Single().Status);
+    Equal(1, handler.Requests.Count);
+
+    foreach (var body in new[]
+    {
+        """{"code":0,"msg":"","data":[]}""",
+        """{"code":0,"msg":"","data":[{"allowance_number":"OTHER","status":99}]}""",
+        """{"code":0,"msg":"","data":[{"allowance_number":"A20261015001"},{"allowance_number":"A20261015001"}]}""",
+    })
+    {
+        var malformed = new RecordingHttpHandler((_, _, _) => JsonResponse(body));
+        using var badHttp = new HttpClient(malformed);
+        var badGateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, badHttp);
+        await ThrowsAsync<InvalidDataException>(() => badGateway.AllowanceStatusAsync([number]));
+        Equal(1, malformed.Requests.Count);
+    }
 }
 
 static void TestOfficialStyles()
@@ -93,7 +613,7 @@ static async Task TestPdfCacheAndFingerprintAsync()
     Equal(expectedSign, form["sign"]);
 
     var stored = repository.Invoices.LoadOrCreate().Single();
-    InvoiceAllowanceMetadata.ApplyQuery(stored, [Allowance(UploadStatuses.Processing)]);
+    InvoiceAllowanceMetadata.ApplyQuery(stored, [Allowance(UploadStatuses.Processing)], summaryPresent: true);
     repository.Invoices.Save([stored]);
 
     var third = await service.GetAsync("ALW-001", 0);
@@ -356,6 +876,9 @@ static QueryResponse Query(IReadOnlyList<InvoiceAllowanceResult> allowances, str
         DetailVatPresent: true)
     {
         Allowances = allowances,
+        // A synthetic non-empty official allowance[] must be explicitly
+        // present; an absent summary is different from an empty array.
+        AllowanceSummaryPresent = allowances.Count > 0,
     };
     return new QueryResponse(0, "", data);
 }

@@ -51,8 +51,11 @@ assert.throws(() => checkSettings({ bindings: [...settings.bindings, { name: 'KV
 assert.throws(() => checkSettings({ bindings: [...settings.bindings, { name: 'SECOND_DB', type: 'd1', id: 'other' }] }, config), /ORIGINAL_DATABASE_BINDING_REQUIRED/);
 assert.throws(() => checkSettings({ bindings: settings.bindings.filter(b => b.name !== 'LOGIN') }, config), /RATE_LIMIT_BINDINGS_REQUIRED/);
 
-const migrations = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(4, '0')}_existing.sql`).concat('0013_cyid_invitation_actor.sql');
-assert.deepEqual(checkMigrations(migrations.slice(0, 12), migrations), ['0013_cyid_invitation_actor.sql']);
+const migrations = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(4, '0')}_existing.sql`).concat('0013_cyid_invitation_actor.sql', '0014_invitation_recovery_metadata.sql');
+assert.deepEqual(checkMigrations(migrations.slice(0, 12), migrations),
+  ['0013_cyid_invitation_actor.sql', '0014_invitation_recovery_metadata.sql']);
+assert.deepEqual(checkMigrations(migrations.slice(0, 13), migrations), ['0014_invitation_recovery_metadata.sql']);
+assert.throws(() => checkMigrations(migrations.slice(0, 13), migrations, true), /MIGRATION_NOT_COMPLETE/);
 assert.deepEqual(checkMigrations(migrations, migrations, true), []);
 assert.throws(() => checkMigrations(migrations.slice(0, 11), migrations), /UNREVIEWED_PENDING_MIGRATIONS/);
 assert.throws(() => checkMigrations([...migrations, '0014_unreviewed.sql'], migrations), /MIGRATION_HISTORY_NOT_CANONICAL_PREFIX/);
@@ -126,6 +129,10 @@ for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchem
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
 const canonical = fs.readdirSync('migrations').filter(n => n.endsWith('.sql')).sort();
+// An unapproved Work Item SQL draft stays outside canonical migrations.
+assert.equal(canonical.at(-1), '0014_invitation_recovery_metadata.sql');
+assert.throws(() => checkMigrations(canonical, [...canonical, '0015_work_items.sql']),
+  /UNREVIEWED_PENDING_MIGRATIONS/);
 for (const name of canonical.slice(0, 12)) db.exec(fs.readFileSync(`migrations/${name}`, 'utf8'));
 db.exec(`
   INSERT INTO workspaces (workspace_id, display_name) VALUES ('workspace_synthetic', 'Synthetic');

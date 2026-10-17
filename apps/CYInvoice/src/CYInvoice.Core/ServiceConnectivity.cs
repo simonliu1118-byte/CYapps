@@ -18,7 +18,7 @@ public sealed class ServiceConnectionException(string message, Exception? inner 
 // Service reachability is not Employee authorization. Providers retain their
 // original action-time authority checks and their existing protected fallback.
 public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http = null, Action? forgetRejectedAuthority = null,
-    CyIdOfflineCache? cyIdOffline = null, CloudEmployeeCacheStore? builtInCache = null, string? baseDirectory = null,
+    CyIdOfflineCache? cyIdOffline = null, string? baseDirectory = null,
     Func<long>? monotonicMilliseconds = null)
 {
     private long Now => (monotonicMilliseconds ?? (() => Environment.TickCount64))();
@@ -73,8 +73,9 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
         if (synchronize && cyIdOffline is not null) await cyIdOffline.AuthorityGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var binding = current.CloudIdentityProvider == "CYID" ? settings.CyIdConfiguration(current) : null;
-            var authorities = synchronize && binding is not null && cyIdOffline is not null ? cyIdOffline.AuthorityChecks(binding) : [];
+            // V3 has no Built-in Employee authority or silent migration path.
+            var binding = settings.CyIdConfiguration(current);
+            var authorities = synchronize && cyIdOffline is not null ? cyIdOffline.AuthorityChecks(binding) : [];
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(current.CloudBaseUrl), "v1/runtime/sync"));
             request.Headers.Authorization = new("Bearer", settings.CloudDeviceToken(current));
             request.Content = JsonContent.Create(new { synchronize, authorities });
@@ -114,48 +115,25 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 throw new InvalidDataException("中央權限已拒絕：" + code);
             }
             var remote = root.GetProperty("binding");
-            if (binding is null && remote.GetProperty("provider").GetString() == "CYID")
-            {
-                var discovered = new CyIdBinding(new Uri(current.CloudBaseUrl).AbsoluteUri, current.CloudWorkspaceId,
-                    current.CloudDeviceId, remote.GetProperty("identityWorkspaceId").GetString()!,
-                    remote.GetProperty("applicationId").GetString()!, remote.GetProperty("consumerVersion").GetString()!,
-                    CyIdGateway.TokenDigest(settings.CloudDeviceToken(current)));
-                settings.ConfirmCyIdConfiguration(current, discovered);
-                settings.Save(current);
-                builtInCache?.Clear();
-                binding = discovered;
-            }
-            if (binding is not null && (remote.GetProperty("provider").GetString() != "CYID"
+            if (remote.GetProperty("provider").GetString() != "CYID"
                 || remote.GetProperty("identityWorkspaceId").GetString() != binding.IdentityWorkspaceId
                 || remote.GetProperty("applicationId").GetString() != binding.ApplicationId
-                || remote.GetProperty("workspaceId").GetString() != binding.WorkspaceId))
+                || remote.GetProperty("workspaceId").GetString() != binding.WorkspaceId)
                 throw new InvalidDataException("CYID 綁定不一致。");
-            if (binding is null && (remote.GetProperty("provider").GetString() != "BUILT_IN"
-                || remote.GetProperty("workspaceId").GetString() != current.CloudWorkspaceId))
-                throw new InvalidDataException("雲端綁定不一致。");
-            if (binding is not null)
+            var updated = binding with { ConsumerVersion = remote.GetProperty("consumerVersion").GetString()! };
+            CyIdGateway.ValidateBinding(updated);
+            if (updated != binding)
             {
-                var updated = binding with { ConsumerVersion = remote.GetProperty("consumerVersion").GetString()! };
-                CyIdGateway.ValidateBinding(updated);
-                if (updated != binding)
-                {
-                    settings.ConfirmCyIdConfiguration(current, updated);
-                    settings.Save(current);
-                    binding = updated;
-                }
+                settings.ConfirmCyIdConfiguration(current, updated);
+                settings.Save(current);
+                binding = updated;
             }
             if (synchronize)
             {
                 if (!root.TryGetProperty("permissions", out permissions)) throw new InvalidDataException("權限同步結果缺失。");
-                if (binding is not null && cyIdOffline is not null)
+                if (cyIdOffline is not null)
                     cyIdOffline.InvalidateEmployees(permissions.GetProperty("invalidated").EnumerateArray()
                         .Select(id => id.GetString() ?? throw new InvalidDataException("權限失效清單無效。")).ToHashSet(StringComparer.Ordinal));
-                else if (remote.GetProperty("provider").GetString() == "BUILT_IN" && builtInCache is not null)
-                {
-                    var snapshot = CloudEmployeeAuthorityClient.ReadSnapshot(permissions);
-                    if (snapshot.WorkspaceId != current.CloudWorkspaceId) throw new InvalidDataException("權限 Workspace 不一致。");
-                    builtInCache.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
-                }
                 nextAuthorityRefresh = Now + 60_000;
             }
         }
