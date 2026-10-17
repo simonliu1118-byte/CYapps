@@ -1,6 +1,6 @@
 # CYInvoice Cloud Reference Backend
 
-Cloudflare Worker + D1 reference implementation for CYInvoice coordination. Built-in/self-hosted deployments store their own Employee authority; CYID deployments use the external CYID Employee authority and may opt into a separately approved **CYID-only D1 account-table retirement**.
+Cloudflare Worker + D1 reference implementation for CYInvoice coordination. **V3.0 source supports CYID-only online Employee authority; Local requires no Worker.** Requests with missing or disabled CYID authority fail closed before any Device or legacy account mutation. Built-in/self-hosted deployments are historical and are no longer available as current V3.0 Worker operation. Prior releases, migrations and historical records remain preserved; this code change does not delete any D1 tables.
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
@@ -10,7 +10,7 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engin
 
 [Original Worker deployment](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) completed at 0.9.3 with CYID_ENABLED=true and all bindings preserved. Separately approved company D1 maintenance is complete: private encrypted backup, local restore and maintenance rehearsal, physical retirement, exact retained-record comparisons and clean FK/health readback. Sensitive IDs, data, backup files and recovery details remain private. The full live Windows role/multi-device matrix is still unverified; this status does not authorize maintenance on another D1.
 
-The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no longer needs the Built-in Employee account tables, but it must preserve its Workspace, Devices, token hashes, pairing/invitations, shared pairing OTP, and security audit history. This does **not** remove Built-in Cloud/self-hosted functionality: a separate Built-in deployment gets a new D1 with its own original schema.
+The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no longer needs the Built-in Employee account tables, but it must preserve its Workspace, Devices, token hashes, pairing/invitations, shared pairing OTP, and security audit history. The original maintenance operation did not remove Built-in functionality from historical releases; **the V3.0 Worker entrypoint now retires that runtime mode**. This branch does not issue or deploy another Worker, remove historical account records, or modify previously applied migrations.
 
 - New optional maintenance SQL: `maintenance/retire-built-in-for-cyid-only.sql`. Deliberately **outside** `migrations/`, so normal Built-in and deployment migrations NEVER remove an Employee table.
 - It preserves legacy invitation issuer IDs as **historic opaque strings**, removes the old Employee FK before removing the employee/transition tables, and keeps CYID issuer IDs separate. Shared `email_otp_challenges` remains for Device pairing; only account-specific challenges are removed.

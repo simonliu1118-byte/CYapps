@@ -13,7 +13,8 @@
 > 新規劃：3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機；3.2 完整折讓 API／折讓跨機；3.3 其餘。舊段落的「V3.0 折讓」是過時版本分類。**完整已做程式、延後問題與來源索引仍在 [#440 TODO](https://github.com/simonliu1118-byte/CYapps/blob/cyinvoice/v3-recovery-invitation-schema/apps/CYInvoice/docs/TODO.md)**，來源 SHA `fe0220c567a5a481daf44ee13c6898340b4d1bd1`；CYWEB Recovery 草稿 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)。按版回接，勿重寫。
 
 - [x] **3.0-A 第一小步（工程提交）**：沿用 #440 的 `CloudSetupForm.cs` CYID-only Cloud 連線設定、將 `SettingsForm.OpenCloudSettings` 未加入的 Device 導向既有 `CloudDirectJoinForm`；舊非 CYID Identity 明確拒絕而不刪既有資料。本步只動 Windows UI，不改 Worker／D1／Local Core／發票與折讓。
-- [ ] **3.0-A 待續**：現行 Worker CYID-only 強制、其餘 Built-in／Self-hosted 執行入口退役、裝置與帳號／舊資料回歸。
+- [x] **3.0-A 第二小步（此分支）**：沿用 #440 `cloud/src/app.ts` 的 CYID-only fail-closed 檢查，但只提 3.0 所需的 runtime/device dispatch，**不搬** 3.1 Work Item／3.2 allowance routes；未設 `CYID_ENABLED`／為 false／設定無效時，health、Device、舊 Built-in mutation 均不會觸發退役 Worker 行為。`cloud/tests/cyid.test.mjs` 沿用 #440 既有測試，補未設定和無效設定回歸；`cloud/README.md` 同步標明 3.0 的 Worker 單模式。此項 **source／合成測試待新 exact-head CI**，沒有修改真 Worker／D1。
+- [ ] **3.0-A 待續**：其餘已退役 Built-in／Self-hosted 原始執行程式清理、舊 Windows／新 Worker 相容性、真 Device／CYID 帳號與歷史資料驗收；不可因 runtime gate 已提交就視為完整雙模式驗收。
 - [ ] **3.0-B 公司設定**：從 #440 接回已做的 `company-settings*.ts`／`CloudCompanySettingsClient.cs`／`SettingsForm` 既有卡片，補實際 App Key、MO密碼授權取用及 DPAPI 快取一致性。
 - [ ] **3.0-C DR 與 D1**：從 #440 的 recovery/0014、Draft 0017 公司表及 CYWEB #151 接續，重排只屬 3.0 的 migration，真 Email、雙機 DR-01～13、備份與復原。
 - [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
