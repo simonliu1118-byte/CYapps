@@ -8,6 +8,18 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-17 V3.0 版本切片與接續（最新；僅此分支）
+
+> 新規劃：3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機；3.2 完整折讓 API／折讓跨機；3.3 其餘。舊段落的「V3.0 折讓」是過時版本分類。**完整已做程式、延後問題與來源索引仍在 [#440 TODO](https://github.com/simonliu1118-byte/CYapps/blob/cyinvoice/v3-recovery-invitation-schema/apps/CYInvoice/docs/TODO.md)**，來源 SHA `fe0220c567a5a481daf44ee13c6898340b4d1bd1`；CYWEB Recovery 草稿 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)。按版回接，勿重寫。
+
+- [x] **3.0-A 第一小步（工程提交）**：沿用 #440 的 `CloudSetupForm.cs` CYID-only Cloud 連線設定、將 `SettingsForm.OpenCloudSettings` 未加入的 Device 導向既有 `CloudDirectJoinForm`；舊非 CYID Identity 明確拒絕而不刪既有資料。本步只動 Windows UI，不改 Worker／D1／Local Core／發票與折讓。
+- [ ] **3.0-A 待續**：現行 Worker CYID-only 強制、其餘 Built-in／Self-hosted 執行入口退役、裝置與帳號／舊資料回歸。
+- [ ] **3.0-B 公司設定**：從 #440 接回已做的 `company-settings*.ts`／`CloudCompanySettingsClient.cs`／`SettingsForm` 既有卡片，補實際 App Key、MO密碼授權取用及 DPAPI 快取一致性。
+- [ ] **3.0-C DR 與 D1**：從 #440 的 recovery/0014、Draft 0017 公司表及 CYWEB #151 接續，重排只屬 3.0 的 migration，真 Email、雙機 DR-01～13、備份與復原。
+- [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
+- **禁止提前帶入** #440 的 0015 Work Item、0016／0018／0019 折讓 D1、g0401／g0501、`0d651688` 舊人工折讓 UI 退役；3.0／3.1 保留 V2 人工折讓與作廢。
+- 目前完成的是**第一小步工程提交**，不是整個 3.0，更不是正式部署；當前 Worker／原 D1／CYWEB／真光貿未變更。
+
 ## 0. 接續優先順序
 
 | 順序 | 工作 | 範圍與依據 |

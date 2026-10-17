@@ -187,6 +187,28 @@ internal sealed class SettingsForm : Form
 
     private void OpenCloudSettings()
     {
+        // V3 only supports Local and CYID Cloud. Do not expose the retired
+        // Built-in onboarding flow from Settings for a new installation.
+        if (!HasCloudIdentity(settings))
+        {
+            using var direct = new CloudDirectJoinForm(repository);
+            if (direct.ShowDialog(this) == DialogResult.OK && direct.IdentityCompleted)
+            {
+                // Direct join saves the CYID binding itself. Close this older
+                // settings snapshot so a subsequent Save cannot overwrite it.
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+            return;
+        }
+        if (settings.CloudIdentityProvider != "CYID")
+        {
+            MessageBox.Show(this,
+                "CYInvoice V3 已取消 Built-in Cloud。請使用 CYID 雲端加入流程；既有資料不會在此自動刪除。",
+                "不支援的雲端帳號模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         var originalEndpoint = settings.CloudBaseUrl;
         using var form = new CloudSetupForm(repository, originalEndpoint, settings);
         if (form.ShowDialog(this) != DialogResult.OK) return;
@@ -223,6 +245,8 @@ internal sealed class SettingsForm : Form
         UpdateCloudControls();
     }
 
+    // CYID Cloud card is authoritative in D1, not the local invoice/AppKey
+    // textboxes. Only safe metadata is returned; secrets never leave Cloud.
     private async Task OpenDeviceManagementAsync()
     {
         try
