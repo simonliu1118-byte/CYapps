@@ -2,6 +2,17 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## 測試期帳號刪除與 Audit 暫停 — 2026-10-15
+
+- 使用者明確要求：為反覆測試新增／Email 驗證流程，暫時允許刪除已驗證帳號，並暫停新增／刪除帳號 Audit；一次性測試例外，不改永久 PROJECT_RULES。
+- Source 0.3.9／consumer 1.0.5（minimum1.0.0）：沿用 DELETE route與snapshot；已驗證帳號僅由目前 core portal Super Admin刪除，保留自刪／Super Admin／跨Workspace禁止與transactional session/revision檢查。原credential／first-login material／Session／App Access cascade移除，相關OTP同transaction清除，其他consumer業務資料與history保留。
+- 新增（含首次寄信結果）／刪除 Audit 暫停，既有Audit與其他事件保留。新employeeId不繼承舊帳號或App/Module Access。
+- 本輪一併帶上既有0.3.8 HTML／text可點擊CYWEB驗證入口；使用者提供的舊信確實只有「請前往CY Web」文字而無URL。修正serviceVersion原本落後VERSION的宣告，正式部署後才算寄信程式已更新；不自動重寄真人Email。
+- [x] Local TypeScript／95項Node回歸與實際本機Worker/D1新增→拒絕一般ADMIN刪已驗證→SA刪除→舊Session/密碼拒絕→同編號/Email重建→無繼承App Access／FK檢查通過；新增/刪除Audit為零、其他Audit保留，HTML/text初寄與重寄實際adapter pipeline通過（Email transport為stub）。
+- [ ] exact-head CI／正式既有provider部署；不重播authority、不建test Worker。
+- [ ] 受控真人新增→實際收信連結→驗證→新密碼登入→刪除→同編號／Email重建驗收；未操作真人帳號。
+- [ ] **第一版業務上線前恢復**：`src/account-lifecycle-testing.ts` 的 allowVerifiedDeletion=false、recordCreateDeleteAudit=true，更新consumer契約／Web mirror並部署，驗收已驗證帳號不可刪、pending刪除及新增／刪除Audit正常；完成後收斂本暫時例外。
+
 ## Verification Email clickable CY Web link — 2026-10-13
 
 - [x] CYID source 0.3.8: use existing runtime `ACCOUNT_PORTAL_URL` to include the CY Web root login address in both HTML-clickable and plaintext new-Employee / resend-initial Email; clarify that initial passwords cannot log into CYACCweb, that permanent password setting happens in CY Web, and that fresh login is required.

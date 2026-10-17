@@ -5,7 +5,6 @@ import vm from 'node:vm';
 const read = name => fs.readFileSync(new URL('../public/' + name, import.meta.url), 'utf8');
 const app = read('app.js');
 const adaptive = read('adaptive-ui.js');
-const inline = read('ledger-inline-edit.js');
 const piece = (text, from, to) => text.slice(text.indexOf(from), text.indexOf(to));
 const field = value => ({ value, disabled: false, focus() {} });
 
@@ -20,9 +19,8 @@ for (const width of [375, 820, 1440]) {
   };
   const row = { isConnected: true, querySelector: selector => fields[selector] };
   const els = {
-    editDate: field('2026-09-02'), editAccount: field('現金'), editCategory: field('一般收入'), editSummary: field('  對帳  '), editAmount: field('777'),
     txDate: field('2026-09-02'), accountName: field('現金'), categoryName: field('一般收入'), summary: field('  對帳  '), amount: field('777'),
-    editSaveButton: field(''), saveButton: field(''), editMessage: {}, settingsMessage: {}, editDialog: { close() {} }, monthFilter: field('2026-09')
+    saveButton: field(''), settingsMessage: {}, monthFilter: field('2026-09')
   };
   const nameInput = field('新分類');
   const dialogFields = { '#settingsNameInput': nameInput, '#settingsGroupSelect': field('2'), '#settingsManagerSave': field(''), '#settingsManagerMessage': {} };
@@ -32,38 +30,26 @@ for (const width of [375, 820, 1440]) {
   let hold = false;
   const context = vm.createContext({
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
-    state: { transactions: [tx], editingTx: tx, settingsKind: 'income', groups: [{ id: 2, kind: 'income', name: '門市' }], categories: [] }, els,
+    state: { transactions: [tx], settingsKind: 'income', groups: [{ id: 2, kind: 'income', name: '門市' }], categories: [] }, els,
     window: { dispatchEvent() {}, innerWidth: width, matchMedia: () => ({ matches: width < 768 }) },
     document: { querySelector: selector => selector === '#settingsManagerDialog' ? dialog : null },
     isLocked: month => month === lockedMonth && Boolean(lockedMonth), jsonHeaders: () => ({ 'content-type': 'application/json' }),
     async api(path, options) { writes.push({ path, method: options.method, body: JSON.parse(options.body) }); if (hold) await new Promise(resolve => { release = resolve; }); if (fail) throw new Error('write failed'); return { id: 99 }; },
     setDialogMessage() {}, showMessage() {}, setInlineEditMessage() {}, async loadTransactions() {},
-    resumeLedgerRefreshObserver() {}, cancelInlineLedgerEdit() {}, cancelTouchWorkspaceMobileEdit() {}, switchTouchWorkspaceMobilePage() {}, restoreTouchWorkspaceLedgerContext() {},
-    showTouchWorkspaceLedgerNotice() {}, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
+    cancelEntryTransactionEdit() {}, switchTouchWorkspaceMobilePage() {}, restoreTouchWorkspaceLedgerContext() {},
+    showTouchWorkspaceLedgerNotice() {}, isDesktopInteractionWorkspace: () => width >= 1024, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
     renderSettingsAccountManager() {}, renderDesktopLedger() {}, renderAccounts() {}, renderSettings() {}
   });
   vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
-  vm.runInContext('let cyTouchWorkspaceEdit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveTouchWorkspaceMobileEdit(', 'function cancelTouchWorkspaceMobileEdit('), context);
+  vm.runInContext('let cyEntryTransactionEdit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveEntryTransactionEdit(', 'function cancelEntryTransactionEdit('), context);
   vm.runInContext(piece(adaptive, 'function isTabletWorkspace()', 'function tabletWorkspaceOrientation()'), context);
-  let intercepted = false;
-  context.beginInlineLedgerEdit = () => {};
-  vm.runInContext(piece(inline, 'function handleInlineLedgerClick(', 'function beginInlineLedgerEdit('), context);
-  context.handleInlineLedgerClick({ target: { closest: selector => selector === '[data-edit-id]' ? { dataset: { editId: '1' }, closest: () => row } : null }, preventDefault() { intercepted = true; }, stopImmediatePropagation() {} });
-  assert.equal(intercepted, width >= 1024, 'desktop inline handlers never intercept the shared phone/tablet entry editor');
-  context.inlineRow = row;
-  vm.runInContext('let cyInlineLedgerEdit = { id: 1, row: inlineRow };\n' + piece(inline, 'async function saveInlineLedgerEdit(', 'function cancelInlineLedgerEdit('), context);
-  await context.saveTransactionEdit({ preventDefault() {} });
-  await context.saveTouchWorkspaceMobileEdit();
-  await context.saveInlineLedgerEdit();
-  assert.equal(writes.length, 3);
+  await context.saveEntryTransactionEdit();
+  assert.equal(writes.length, 1);
   for (const write of writes) assert.deepEqual(write, { path: '/api/transactions/1', method: 'PUT', body: { txDate: '2026-09-02', accountName: '現金', categoryName: '一般收入', summary: '對帳', amount: 777 } });
   writes.length = 0;
   context.state.transactions = [tx];
   lockedMonth = '2026-08';
-  await context.saveTransactionEdit({ preventDefault() {} });
-  await context.saveTouchWorkspaceMobileEdit();
-  vm.runInContext('cyInlineLedgerEdit = { id: 1, row: inlineRow };', context);
-  await context.saveInlineLedgerEdit();
+  await context.saveEntryTransactionEdit();
   assert.equal(writes.length, 0, `${width}: all edit interfaces reject a locked source month`);
   lockedMonth = '';
   assert.equal(context.summaryWeightedUnits('中'.repeat(20)), 40);
@@ -167,9 +153,9 @@ for (const scenario of ['read-before-write', 'read-during-write', 'failed-write'
       return { transactions: [stored] };
     }
   });
-  vm.runInContext('let cyTransactionRequestId = 0; let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' +
+  vm.runInContext('let cyTransactionRequestId = 0; let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map(); const cyPendingTransactionCreates = new Map();\n' +
     piece(app, 'async function loadTransactions(', 'function setLedgerLoadingState(') +
-    piece(app, 'function summaryCharacterUnits(', 'async function saveTransactionEdit('), context);
+    piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
   let read;
   if (scenario !== 'read-during-write') read = context.loadTransactions();
   const write = context.persistTransactionUpdate(1, { txDate: original.tx_date, accountName: original.account_name, categoryName: original.category_name, summary: original.summary, amount: 8 });

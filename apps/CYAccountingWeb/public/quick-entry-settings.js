@@ -14,15 +14,10 @@ function bindDateQuickEntry() {
   if (!els.txDate || els.txDate.dataset.quickDateBound === '1') return;
   els.txDate.dataset.quickDateBound = '1';
 
+  els.form?.addEventListener('keydown', handleEntryDateShortcut);
+
   els.txDate.addEventListener('keydown', event => {
     if (event.isComposing) return;
-
-    if (event.ctrlKey && !event.altKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      event.preventDefault();
-      cyDateDigitBuffer = '';
-      stepEntryDate(event.key === 'ArrowUp' ? 1 : -1);
-      return;
-    }
 
     if (/^\d$/.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
@@ -41,6 +36,23 @@ function bindDateQuickEntry() {
   });
 
   els.txDate.addEventListener('blur', () => { cyDateDigitBuffer = ''; });
+}
+
+function handleEntryDateShortcut(event) {
+  if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  const target = event.target;
+  const textDate = target?.id === 'desktopEntryDateText';
+  const nativeDate = target === els.txDate;
+  const desktopField = window.cyIsDesktopInteractionWorkspace?.() && (textDate || target === els.summary || target === els.amount);
+  if ((!nativeDate && !desktopField) || els.txDate.disabled || target?.disabled) return;
+  event.preventDefault();
+  cyDateDigitBuffer = '';
+  const current = parseEntryDateText(textDate ? target.value : els.txDate.value);
+  if (!current) {
+    showMessage('日期不正確，請先輸入有效日期。', true);
+    return;
+  }
+  stepEntryDate(event.key === 'ArrowUp' ? 1 : -1, current);
 }
 
 function applyBufferedDateIfComplete() {
@@ -71,8 +83,16 @@ function validDateValue(year, month, day) {
   return localDateString(date);
 }
 
-function stepEntryDate(delta) {
-  const current = /^\d{4}-\d{2}-\d{2}$/.test(els.txDate.value || '') ? els.txDate.value : localDateString(new Date());
+function parseEntryDateText(text) {
+  const raw = String(text || '').trim();
+  if (/^\d{4}$/.test(raw)) return validDateValue(new Date().getFullYear(), Number(raw.slice(0, 2)), Number(raw.slice(2)));
+  if (/^\d{8}$/.test(raw)) return validDateValue(Number(raw.slice(0, 4)), Number(raw.slice(4, 6)), Number(raw.slice(6)));
+  const match = /^(\d{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})$/.exec(raw);
+  return match ? validDateValue(Number(match[1]), Number(match[2]), Number(match[3])) : '';
+}
+
+function stepEntryDate(delta, source = els.txDate.value) {
+  const current = /^\d{4}-\d{2}-\d{2}$/.test(source || '') ? source : localDateString(new Date());
   const [year, month, day] = current.split('-').map(Number);
   const date = new Date(year, month - 1, day + delta);
   setEntryDateValue(localDateString(date));
@@ -104,7 +124,7 @@ function setupQuickEntrySettingsPane() {
   pane.className = 'settings-pane';
   pane.dataset.settingsPane = 'quick';
   pane.innerHTML = `
-    <h3>快速輸入設定</h3>
+    <h3>快速輸入設定</h3><h4 class="general-summary-heading">常用摘要</h4>
     <p class="hint">調整「常用摘要」的統計方式。常用摘要仍依帳戶、收入／支出與科目分開計算，最多顯示 10 個。</p>
     <div class="quick-settings-grid">
       <label><span>統計依據</span><select id="frequentSummaryBasis"><option value="tx_date">帳務日期最近</option><option value="created_at">近期輸入最近</option></select></label>
@@ -124,10 +144,8 @@ function setupQuickEntrySettingsPane() {
   els.settingsTabs?.push(tab);
   els.settingsPanes?.push(pane);
 
-  tab.addEventListener('click', async () => {
-    setSettingsTab('quick');
-    await loadQuickEntrySettings(true);
-  });
+  tab.addEventListener('click', () => setSettingsTab('quick'));
+  window.cySettingsManager?.syncNavigation?.();
   pane.querySelector('#saveQuickEntrySettings')?.addEventListener('click', saveQuickEntrySettings);
 }
 

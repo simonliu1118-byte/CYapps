@@ -36,6 +36,9 @@
 - CYapps 為 Public repository；任何正式帳務資料、D1 export、Cloudflare API token、session secret、登入密碼／雜湊、公司內部資料或 runtime log 均不得提交至 Git。
 - Cloudflare API token 與 Account ID 由 GitHub Environment／Secrets 提供；workflow 不得把 secret 值寫入 source、log 或 artifact。
 - 正式資料庫 migration 與 Worker 部署優先由可追蹤的 CI/CD 流程執行；若因故需 Dashboard 手動操作，必須確保 Git 中仍有可重建的設定與 migration。
+- CYAccountingWeb 採合併與發布分離：PR 自動驗證，合併 `main` 不自動部署；只有 `deploy/cyaccountingweb-production` 分支 push 或從 `main` 啟動 `cyaccountingweb-deploy.yml` 的 `workflow_dispatch` 才發布。發布分支只指向已審核的當前 `main` 完整 commit，不作開發分支；Work 可代為觸發，操作指令與成功判定見 README。
+- 同一正式目標的部署共用固定 concurrency group，進行中的部署不因新 run 被取消；驗證與部署的 concurrency 分開。正式 migration 或資源準備前必須核對事件 SHA、checkout SHA 與遠端當前 main 相同；過期或分叉來源停止，不以 force-push 繞過來源檢查。
+- Stable Release 的已部署條件須確認相同 source SHA 經上述發布入口執行，且對應 run attempt 的 `deploy` job 完整成功；PR、validation-only 或 skipped deploy 不算正式部署證據。Web 部署不自動建立 Stable Release。
 - 未經使用者明確要求，不自動建立對外公開 Release；Web 部署與 GitHub Release 視為不同流程。
 - `DB`、`IDENTITY` 等 binding **名稱／contract** 可存在 source；正式 D1 database ID、D1 database name、Identity service 實際名稱與其他 deployment-specific Cloudflare resource identifiers 應由 GitHub Deployment Environment 在正式部署時注入，不得作為公開 Release／Artifact 的固定內容。
 - Public source 若需提供 Wrangler／Cloudflare 設定範例，應使用 placeholder／template；Production Deploy 可在 Runner 暫時產生正式 deploy config，但不得 commit、上傳 Artifact 或發布 Release。
@@ -97,7 +100,7 @@
 
 - Transaction state、month load、canonical transaction mutation／optimistic rollback orchestration：`public/app.js`。
 - Ledger transaction rows 的 canonical renderer、row-write lifecycle，以及 Ledger Toolbar structure/action owner：`public/ledger-tools.js`。`#transactionRows` 不得再出現第二 renderer；Toolbar 不得由 Adaptive/Mobile/Tablet 模組事後建立、搬移或改造。
-- Ledger inline edit：`public/ledger-inline-edit.js` 只負責 inline-edit presentation／interaction，資料提交必須委派 canonical transaction mutation path，不得自行形成第二 writer。
+- Transaction edit presentation／draft／cancel：`public/adaptive-ui.js` 的 `setupEntryTransactionEditing` 為跨裝置唯一 owner；共用原記帳表單，桌機從清單帶回左側編輯、觸控保留原 entry editor。資料提交一律委派 `public/app.js persistTransactionUpdate`；不得建立第二列內 renderer 或 writer。
 - Quick-entry：`public/quick-entry.js` 只負責快速輸入／建議相關 presentation 與 lifecycle consumption，不得成為第二 transaction-row renderer 或用 DOM observer 猜測 ledger render 完成。
 - Settings account/category UI 的單一 lifecycle／renderer/action surface：`public/adaptive-ui.js` 的 `window.cySettingsManager`；`public/quick-entry-settings.js`、`public/category-management.js` 提供其專責能力，不得以 injector／observer 再建立第二 Settings renderer/action owner。
 - Device adaptation／RWD presentation：`public/adaptive-ui.js`。它可以調整 layout、native picker、gesture 與 Mobile／Tablet／Desktop presentation，但不得複製 transaction/settings/identity/business owner。

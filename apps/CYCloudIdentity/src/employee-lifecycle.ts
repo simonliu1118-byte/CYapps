@@ -1,8 +1,10 @@
+import { ACCOUNT_LIFECYCLE_TESTING, canDeleteVerifiedEmployee } from "./account-lifecycle-testing";
+import { sha256Hex } from "./crypto";
 import { createEmailSender, normalizeAddress } from "./email";
 import { issueInitialCredential } from "./initial-access";
 import { json, readJsonObject } from "./http";
 import { issueEmailOtp, type OtpIssueResult } from "./otp";
-import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin } from "./admin-auth";
+import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin, liveCoreSuperAdmin } from "./admin-auth";
 import {
   canManageEmployeeLifecycle,
   effectiveWorkspaceRole,
@@ -190,7 +192,7 @@ async function sendActivatedEmailVerification(env: Env, employee: ManagedEmploye
   });
 }
 
-export async function handleDeletePendingEmployee(
+export async function handleDeleteEmployee(
   request: Request,
   env: Env,
   requestId: string,
@@ -210,12 +212,13 @@ export async function handleDeletePendingEmployee(
       error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." },
     });
   }
-  if (targetRole(employee) === "SUPER_ADMIN" || !actorCanManage(actor, employee)) {
+  if (targetRole(employee) === "SUPER_ADMIN" || employee.employee_id === actor.employeeId || !actorCanManage(actor, employee)) {
     return json(env, requestId, 403, {
       error: { code: "EMPLOYEE_MANAGEMENT_NOT_ALLOWED", message: "This Employee cannot be deleted by the current administrator." },
     });
   }
-  if (employee.activated_at || employee.credential_present !== 0) {
+  const verifiedDeletionAllowed = canDeleteVerifiedEmployee(request, env, actor);
+  if ((employee.activated_at || employee.credential_present !== 0) && !verifiedDeletionAllowed) {
     return json(env, requestId, 409, {
       error: {
         code: "EMPLOYEE_DELETE_NOT_ALLOWED",
@@ -224,42 +227,42 @@ export async function handleDeletePendingEmployee(
     });
   }
 
-  const deleted = await env.DB.prepare(
+  const token = request.headers.get("authorization")!.trim().replace(/^Bearer\s+/i, "").trim();
+  const values = [await sha256Hex(token), actor.workspaceId, actor.employeeId,
+    request.headers.get("x-identity-application")!.trim().toUpperCase(), employee.employee_id,
+    employee.revision, verifiedDeletionAllowed ? 1 : 0];
+  // Cascade removes credentials, first-login tickets, Sessions and App Access.
+  // The target revision and live core Super Admin Session are rechecked inside
+  // the delete transaction; authority transfer/revocation cannot race this bypass.
+  const statements = [env.DB.prepare(
     `DELETE FROM employees
-      WHERE workspace_id = ?1
-        AND employee_id = ?2
-        AND activated_at IS NULL
-        AND NOT EXISTS (
+      WHERE workspace_id = ?2 AND employee_id = ?5 AND revision = ?6
+        AND employee_id <> ?3
+        AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.super_admin_employee_id = employees.employee_id)
+        AND ((activated_at IS NULL AND NOT EXISTS (
           SELECT 1 FROM employee_credentials c WHERE c.employee_id = employees.employee_id
-        )
-    RETURNING employee_id, employee_no`
-  ).bind(actor.workspaceId, employee.employee_id).first<{ employee_id: string; employee_no: string }>();
-  if (!deleted) {
-    return json(env, requestId, 409, {
-      error: { code: "EMPLOYEE_DELETE_NOT_ALLOWED", message: "Employee activation state changed and the account was not deleted." },
-    });
-  }
-
-  const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare(
-      `DELETE FROM email_otp_challenges
-        WHERE purpose = 'employee_email_verification'
-          AND scope_key = ?1`
-    ).bind(activationScope(actor.workspaceId, employee.employee_id)),
-    env.DB.prepare(
-      `INSERT INTO identity_audit_events(
-         event_id, workspace_id, actor_employee_id, target_employee_id,
-         event_type, detail_json, created_at
-       ) VALUES(?1, ?2, ?3, NULL, 'employee_pending_activation_deleted', ?4, ?5)`
-    ).bind(
-      `audit_${crypto.randomUUID()}`,
-      actor.workspaceId,
-      actor.employeeId,
-      JSON.stringify({ employeeId: deleted.employee_id, employeeNo: deleted.employee_no }),
-      now,
-    ),
-  ]);
+        )) OR (?7 = 1 AND EXISTS (${liveCoreSuperAdmin})))
+      RETURNING employee_id, employee_no`
+  ).bind(...values), env.DB.prepare(
+    `DELETE FROM email_otp_challenges
+      WHERE purpose IN ('employee_email_verification', 'employee_password_reset')
+        AND scope_key IN (?1, ?2)
+        AND NOT EXISTS (SELECT 1 FROM employees WHERE employee_id = ?3)`
+  ).bind(activationScope(actor.workspaceId, employee.employee_id),
+    emailVerificationScope(actor.workspaceId, employee.employee_id), employee.employee_id)];
+  if (ACCOUNT_LIFECYCLE_TESTING.recordCreateDeleteAudit) statements.push(env.DB.prepare(
+    `INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id,
+      event_type, detail_json, created_at)
+     SELECT ?1, ?2, ?3, 'employee_pending_activation_deleted', ?4, ?5
+     WHERE NOT EXISTS (SELECT 1 FROM employees WHERE employee_id = ?6)`
+  ).bind(`audit_${crypto.randomUUID()}`, actor.workspaceId, actor.employeeId,
+    JSON.stringify({ employeeId: employee.employee_id, employeeNo: employee.employee_no }),
+    new Date().toISOString(), employee.employee_id));
+  const results = await env.DB.batch(statements);
+  const deleted = results[0].results?.[0] as { employee_id: string; employee_no: string } | undefined;
+  if (!deleted) return json(env, requestId, 409, {
+    error: { code: "EMPLOYEE_DELETE_NOT_ALLOWED", message: "Account state or administrator authority changed; the account was not deleted." },
+  });
 
   return json(env, requestId, 200, {
     deleted: true,

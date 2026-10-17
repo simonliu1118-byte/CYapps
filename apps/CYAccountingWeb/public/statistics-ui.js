@@ -30,7 +30,7 @@ export function renderStatistics(data, options = {}) {
   const tab = options.tab === 'totals' ? 'totals' : 'charts';
   const id = options.id || 'statistics';
   const groups = operatingGroups(data);
-  return `<p class="statistics-scope-note">收入、支出、淨利損及圖表均排除指定移轉科目（設定 → 統計／損益）。${data.transferCategoryIds.length ? '' : '目前尚未指定移轉科目。'}</p><div class="statistics-totals">${totalCell('收入', data.operating.income, 'income')}${totalCell('支出', data.operating.expense, 'expense')}${totalCell('淨利損', data.operating.net, data.operating.net < 0 ? 'expense' : 'income')}</div>
+  return `<p class="statistics-scope-note">收入、支出、損益及圖表均排除指定移轉科目${options.compactScope ? '' : '（設定 → 統計／損益）'}。${data.transferCategoryIds.length ? '' : '目前尚未指定移轉科目。'}</p><div class="statistics-totals">${totalCell('收入', data.operating.income, 'income')}${totalCell('支出', data.operating.expense, 'expense')}${totalCell(netResultLabel(data.operating.net), data.operating.net, data.operating.net < 0 ? 'expense' : 'income')}</div>
     <div class="statistics-view-tabs" role="tablist" aria-label="統計內容">${[['charts', '圖表'], ['totals', '統計']].map(([value, label]) => `<button type="button" role="tab" id="${id}-${value}-tab" aria-controls="${id}-${value}" aria-selected="${tab === value}" tabindex="${tab === value ? 0 : -1}" data-statistics-tab="${value}">${label}</button>`).join('')}</div>
     <div id="${id}-charts" role="tabpanel" aria-labelledby="${id}-charts-tab" ${tab !== 'charts' ? 'hidden' : ''}>
     <div class="statistics-level"><label>圖表依據 <select data-statistics-level><option value="group" ${level === 'group' ? 'selected' : ''}>分類</option><option value="subject" ${level === 'subject' ? 'selected' : ''}>科目</option></select></label></div>
@@ -38,6 +38,7 @@ export function renderStatistics(data, options = {}) {
     <div id="${id}-totals" class="statistics-breakdown" role="tabpanel" aria-labelledby="${id}-totals-tab" ${tab !== 'totals' ? 'hidden' : ''}><h3>分類／科目合計</h3>${data.operating.count ? groups.map(group => `<details open><summary><span>${group.kind === 'income' ? '收入' : '支出'}・${esc(group.name)}</span><b>${money(group.amount)}</b></summary><ul>${group.subjects.map(subject => `<li><span>${esc(subject.name)}${subject.isTransfer ? '<small class="statistics-transfer-tag">移轉</small>' : ''}</span><b>${money(subject.amount)}</b></li>`).join('')}</ul></details>`).join('') : '<p class="statistics-empty">此期間尚無記帳資料。</p>'}</div>
     <p class="statistics-note">依現行分類彙總；非移轉記帳共 ${data.operating.count.toLocaleString('zh-TW')} 筆。</p>`;
 }
+export function netResultLabel(net) { return net > 0 ? '淨利' : net < 0 ? '淨損' : '損益'; }
 function totalCell(label, amount, kind) {
   return `<div><span>${label}</span><strong class="statistics-${kind}">${money(amount)}</strong></div>`;
 }
@@ -154,7 +155,7 @@ export function renderIncomeStatement(data, options = {}) {
   const table = (left, right, totals, transfer = false) => `<table class="statement-paired-table ${transfer ? 'statement-transfers' : 'statement-operating'}"><colgroup><col class="statement-name-col"><col class="statement-amount-col"><col class="statement-name-col"><col class="statement-amount-col"></colgroup><thead><tr><th scope="col">${transfer ? '移轉收入' : '收入'}</th><th scope="col">金額</th><th scope="col" class="statement-half-start">${transfer ? '移轉支出' : '支出'}</th><th scope="col">金額</th></tr></thead><tbody>${Array.from({ length: Math.max(left.length, right.length, 1) }, (_, i) => `<tr>${cells(left[i])}${cells(right[i], true)}</tr>`).join('')}</tbody><tfoot><tr><th scope="row">${transfer ? '移轉收入合計' : '總收入'}</th><td>${money(totals.income)}</td><th scope="row" class="statement-half-start">${transfer ? '移轉支出合計' : '總支出'}</th><td>${money(totals.expense)}</td></tr></tfoot></table>`;
   return `<article class="income-statement"><header class="statement-heading"><h3>志遠記帳系統・單月損益表</h3><p class="statement-period">${monthLabel(data.period.start)}　單位：新臺幣元</p></header>
     ${table(paged.lists[0], paged.lists[1], data.operating)}
-    <div class="statement-net"><span>本月${data.operating.net < 0 ? '淨損' : '淨利'}</span><strong class="statistics-${data.operating.net < 0 ? 'expense' : 'income'}">${money(Math.abs(data.operating.net))}</strong></div>
+    <div class="statement-net"><span>本月${netResultLabel(data.operating.net)}</span><strong class="statistics-${data.operating.net < 0 ? 'expense' : 'income'}">${money(Math.abs(data.operating.net))}</strong></div>
     <section class="statement-transfer-section"><h4>帳戶移轉（另列，不計入上述損益）</h4>${data.transfer.count ? table(paged.lists[2], paged.lists[3], data.transfer, true) : '<p class="statement-no-transfers">本月無指定科目的移轉紀錄。</p>'}<p class="statement-transfer-net">移轉收入 ${money(data.transfer.income)}　移轉支出 ${money(data.transfer.expense)}　移轉差額 ${money(data.transfer.net)}</p></section>
     <footer class="statement-footer"><p class="statistics-note">${data.transferCategoryIds.length ? '指定移轉科目不計入損益。' : '尚未指定移轉科目，全部收支計入損益。'}期初餘額不計入損益。合計為整月金額；科目較多時分頁顯示。</p>${paged.pages > 1 ? `<nav class="statement-pagination" aria-label="損益表頁次"><button type="button" class="secondary compact" data-statement-page="${paged.page - 1}" ${paged.page === 0 ? 'disabled' : ''}>上一頁</button><span>${paged.page + 1}／${paged.pages}</span><button type="button" class="secondary compact" data-statement-page="${paged.page + 1}" ${paged.page + 1 === paged.pages ? 'disabled' : ''}>下一頁</button></nav>` : ''}</footer></article>`;
 }
@@ -191,7 +192,7 @@ function paintIncome(host, data, page = 0, refit = false) {
 }
 function paint(host, data) {
   const previous = views.get(host) || { level: 'group', filters: {}, tab: 'charts' };
-  const view = { ...previous, data, id: host.id };
+  const view = { ...previous, data, id: host.id, compactScope: host.id !== 'statisticsDialogResults' && Boolean(window.cyIsDesktopInteractionWorkspace?.()) };
   views.set(host, view);
   host.innerHTML = (host.id === 'statisticsDialogResults' ? `<p class="statistics-range">${monthLabel(data.period.start)} ～ ${monthLabel(data.period.end)}</p>` : '') + renderStatistics(data, view);
   host.removeAttribute('aria-busy');
@@ -283,7 +284,7 @@ async function loadSettings() {
     transferSettingsIds = data.transferCategoryIds;
     const selected = new Set(transferSettingsIds);
     const readOnly = document.body.dataset.cyaccReadOnly === 'true';
-    host.innerHTML = `<form id="statisticsTransferForm">${['income', 'expense'].map(kind => `<fieldset><legend>${kind === 'income' ? '收入' : '支出'}移轉科目</legend>${data.categories.filter(category => category.kind === kind).map(category => `<label class="statistics-transfer-choice"><input type="checkbox" name="transfer" value="${category.id}" ${selected.has(category.id) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(category.group_name)}／${esc(category.name)}</span></label>`).join('') || '<p class="hint">尚無科目</p>'}</fieldset>`).join('')}<button type="submit" class="primary" ${readOnly ? 'disabled' : ''}>儲存移轉科目</button></form>`;
+    host.innerHTML = `<form id="statisticsTransferForm"><div class="statistics-transfer-columns">${['income', 'expense'].map(kind => `<fieldset><legend>${kind === 'income' ? '收入' : '支出'}移轉科目</legend>${data.categories.filter(category => category.kind === kind).map(category => `<label class="statistics-transfer-choice"><input type="checkbox" name="transfer" value="${category.id}" ${selected.has(category.id) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(category.group_name)}／${esc(category.name)}</span></label>`).join('') || '<p class="hint">尚無科目</p>'}</fieldset>`).join('')}</div><button type="submit" class="primary" ${readOnly ? 'disabled' : ''}>儲存移轉科目</button></form>`;
     host.removeAttribute('aria-busy');
   } catch (error) { if (request === settingsRequest) failure(host, error); }
 }

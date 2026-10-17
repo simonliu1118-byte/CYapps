@@ -14,6 +14,7 @@ const REQUIRED = {
   CF_IDENTITY_SERVICE: '__CF_IDENTITY_SERVICE__',
   CF_CYID_APPLICATION_ID: '__CF_CYID_APPLICATION_ID__',
   CF_CYID_WORKSPACE_ID: '__CF_CYID_WORKSPACE_ID__',
+  CF_CYWEB_PORTAL_URL: '__CF_CYWEB_PORTAL_URL__',
   CF_R2_BACKUP_BUCKET: '__CF_R2_BACKUP_BUCKET__',
   CF_BACKUP_TOPOLOGY: '__CF_BACKUP_TOPOLOGY__',
   CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '__CF_CUSTOM_DOMAIN__'
@@ -35,6 +36,13 @@ function validateValues(values) {
   if (values.CF_IDENTITY_SERVICE !== undefined && !workerLike.test(values.CF_IDENTITY_SERVICE)) throw new Error('CF_IDENTITY_SERVICE has an invalid format.');
   if (values.CF_CYID_APPLICATION_ID !== undefined && !/^[A-Z0-9][A-Z0-9_-]{1,63}$/.test(values.CF_CYID_APPLICATION_ID)) throw new Error('CF_CYID_APPLICATION_ID has an invalid format.');
   if (values.CF_CYID_WORKSPACE_ID !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:-]{4,79}$/.test(values.CF_CYID_WORKSPACE_ID)) throw new Error('CF_CYID_WORKSPACE_ID has an invalid format.');
+  if (values.CF_CYWEB_PORTAL_URL !== undefined) {
+    let url;
+    try { url = new URL(values.CF_CYWEB_PORTAL_URL); } catch { throw new Error('CF_CYWEB_PORTAL_URL must be HTTPS.'); }
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error('CF_CYWEB_PORTAL_URL must be a plain HTTPS root URL.');
+    }
+  }
   if (values.CF_R2_BACKUP_BUCKET !== undefined && !/^[a-z0-9][a-z0-9-]{1,62}$/i.test(values.CF_R2_BACKUP_BUCKET)) throw new Error('CF_R2_BACKUP_BUCKET has an invalid format.');
   if (values.CF_BACKUP_TOPOLOGY !== undefined && !['legacy_gcs', 'parallel_dual_provider'].includes(values.CF_BACKUP_TOPOLOGY)) {
     throw new Error('CF_BACKUP_TOPOLOGY must be legacy_gcs or parallel_dual_provider.');
@@ -61,6 +69,14 @@ export function renderWrangler({ env = process.env, templatePath = DEFAULT_TEMPL
   }
   if (/__CF_[A-Z0-9_]+__/.test(rendered)) throw new Error('Unresolved Cloudflare deployment placeholder remains.');
 
+  if (env.CF_RECOVERY_D1_DATABASE_ID || env.CF_RECOVERY_D1_DATABASE_NAME) {
+    const id=requireValue(env,'CF_RECOVERY_D1_DATABASE_ID'), name=requireValue(env,'CF_RECOVERY_D1_DATABASE_NAME');
+    validateValues({CF_D1_DATABASE_ID:id,CF_D1_DATABASE_NAME:name});
+    if(id===values.CF_D1_DATABASE_ID) throw new Error('Recovery D1 must differ from primary D1.');
+    const config=JSON.parse(rendered);
+    config.d1_databases.push({binding:'RECOVERY_DB',database_id:id,database_name:name});
+    rendered=JSON.stringify(config,null,2)+'\n';
+  }
   const absoluteOutput = path.resolve(outputPath);
   fs.writeFileSync(absoluteOutput, rendered, { encoding: 'utf8', mode: 0o600 });
   return absoluteOutput;

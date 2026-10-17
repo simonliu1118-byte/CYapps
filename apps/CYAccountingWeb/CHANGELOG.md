@@ -1,11 +1,25 @@
 # CYAccountingWeb 版本里程碑
 
-更新：2026/10/13。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
+更新：2026/10/15。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
 
 2026/10/13 維護：整理現況／驗收／未合併工作與 GitHub 產物，產品維持 V0.23.1 Build 2；清理執行結果見 WORK_HANDOFF。沒有建立新產品版本或 Stable Release。
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.25.5 Build 0 | 備份回讀及隔離還原驗證改每日原排程自動執行；R2／GCS 依 Phase D 各取最新應有副本，損壞／失敗／過期建立事件，CYID 通知目前超管並於登入顯示警告。移除手動驗證 UI；底部還原與緊急入口左右並排。統計移轉科目緊密雙欄；刪除手機平板預覽全鏈及舊 Session 表，D1 schema 11，舊 schema 6～10 備份仍可還原。 |
+| V0.25.4 Build 0 | 首次登入共用說明、安全 HTTPS CY Web 入口與只讀 metadata；不轉交員工編號、密碼、Session 或 ticket。FIRST_LOGIN_REQUIRED 明確引導，真實 5xx 保留服務錯誤；部署強制既有 canonical portal authority／Workspace／core App／health gate。依最新主線整合 PR #435，保留 V0.25.3 共用即時記帳及 D1 schema 10。 |
+| V0.25.3 Build 0 | 新增記帳共用 optimistic lifecycle：立即顯示待存列及回到摘要，多筆交錯結果各自確認、失敗僅撤回該筆並保留較新草稿。POST 同次回傳實際 row，移除成功後重讀整月；換月／GET 競態沿原 revision guard，合法重複交易不合併。最近十筆確認依 request ID 更新，待存列不允許編輯／刪除。手機／平板版面與 server 權限／鎖帳語意保留，D1 schema 10 不變。 |
+| V0.25.2 Build 1 | 收斂首次登入入口前置檢查的部署範圍：入口尚未啟用時只作唯讀盤點並回報無識別值的差異；首次登入版本以 --require-account-portal 強制同 authority／Workspace／health gate，不通過不能部署。既有 CYID runtime guard 始終強制，不改登入 authority 或權限。PR #455／main run 38675354003 成功、正式版本已回讀；portal 預檢指出 AUTHORITY 不一致，首次登入入口仍不啟用。 |
+| V0.25.2 Build 0 | 舊 schema 6／7 portable 備份明確 normalization：依 canonical migration 補帳戶色碼及空匯入稽核結構，保留全部既有財務／稽核欄列與原始備份；記憶體驗證與 D1 writer 共用同一 normalizer，支援 6～10。補真實 workerd／SQLite 及 D1 roundtrip 測試。部署 resolver 唯讀核對 CY Web 實際 domain、CYID authority／Workspace／core consumer health，沿用 CYID canonical guard，為首次登入引導提供正式前置證據；未在此版開放新登入流程。桌機再精簡重複保留政策／表格說明。 |
+| V0.25.1 Build 0 | 桌機備份立即備份／重新整理同列、卡片文字垂直置中，GCS 未排程欄留白；可還原性檢查改清楚名稱與說明。還原表單由底部按鈕開啟唯一獨立 dialog，關閉取消預覽／確認、忽略晚到回應，送出期間鎖住表單避免重複；緊急復原入口改圖示卡片。設定一般置頂、資料管理倒數第二、月份鎖帳直接顯示目前已鎖年月；共用 settings lifecycle 同步原 picker 並移除舊 header timer。手機／平板原名稱／順序及資訊頁保留，資料與 API 不變。 |
+| V0.25.0 Build 1 | 正式 GCS 演練發現復原頁 no-referrer 使 native POST 送出空 Origin，原同來源 guard 正確拒絕；政策改為 same-origin，保留 server Origin 檢查及 CSP，補回歸。修正後正式 native preview／commit 與 GCS → 獨立 D1 全欄列／政策／稽核還原及對帳通過，主站原帳本維持、目標禁止覆寫；未執行 production promotion。 |
+| V0.25.0 Build 0 | 新增 SUPER_ADMIN 獨立 D1 受控復原：真實備份驗證、10 分鐘且綁定操作者的預覽、勾選及文字確認、原子寫入空白工作區、完整帳務／政策／稽核回讀與資料庫檢查。schema 10 僅新增 append-only 復原 metadata；格式 2 manifest 新增維運 context，GCS 可在原 D1／R2 不可用時獨立重建。沿用原 Backup API／CYID 權限，新增不依賴原帳本的 server-rendered 復原入口。部署以現有受保護權限準備獨立 D1；不自動切換或覆寫正式帳本，目標保持 hold。加入帳本 epoch 防止未來切換後舊頁誤寫；備份確認收斂到既有 in-page dialog，移除重複 capture 攔截。手機／平板既有版面維持。 |
+| V0.24.1 Build 0 | 備份／復原頁於 Phase D 生效後移除 Phase C 驗收進度及已完成的啟用按鈕，「立即備份」取代測試用文字。日期 Ctrl＋↑↓ 收斂由共用 entry form 處理，桌機日期、摘要、金額皆調整同一日期且保留焦點，移除 picker 的重複快捷 handler；觸控原操作維持。單／多月統計、損益表、看帳與 Excel 依正負顯示淨利／淨損，零元顯示損益；財務計算不變。正式還原／DR 接續工作仍列 TODO。 |
+| V0.24.0 Build 0 | 新增完整 Phase D 分層備份及隔離還原能力，升 Minor。R2 每日 30 天、GCS 台灣週三／週日 182 天；手動／匯入前維持雙副本，未排程不記失敗。SUPER_ADMIN server gate 檢查 14 次排程及同一份雙副本的有效隔離還原，append-only policy／驗證／操作者 audit，切換當下不清舊備份。以 canonical migrations／exporter 在全新記憶體 SQLite 完整匯入、逐欄逐列比對及 integrity／FK check，來源 schema 8／9，正式帳本 writer 未開放；新增真實 workerd WASM 測試。schema 9 僅維運 metadata；backup app version 改由 VERSION 產生並 CI 檢查，outer／inner format 2 不變。手機／平板不新增控件、不改版面。 |
+| V0.23.4 Build 0 | 桌機收支／問號同列、確認狀態靠右並移除十筆說明；成功存檔直接回摘要，移除金額焦點競爭與 timer。桌機清單編輯帶回左側共用表單，清空變取消，未儲存退出回復新增草稿；原筆 PUT／optimistic rollback 共用既有 writer，移除被取代的 inline editor。日期改文字＋日曆按鈕，四碼／八碼、Ctrl＋↑↓、Enter 與無效日期驗證；移除日期 observer／synthetic keyboard bridge，RWD teardown abort listeners。桌機單月統計移除括號路徑，右下新增回到頂端圓形按鈕；移轉排除、手機／平板版面及 schema 不變。 |
+| V0.23.3 Build 1 | 同一桌機確認清單驗收：移除 inherited grid gap、修正狀態符號 inline baseline 額外列高，十筆維持單行且更緊湊；存檔提示置中、日期倒序與帳戶分組已在正式瀏覽器確認，餘額不變。 |
+| V0.23.3 | 桌機存檔提示移至輸入確認標題列中央；確認改單行無卡片、最新十筆淘汰，保留完整內容與失敗原因。日期表頭切換新到舊／舊到新，分組顯示「帳戶 [分組]」；只改顯示順序，餘額仍按完整月份時間順序計算。既有 owner 使用明確 lifecycle，移除確認模組內部兩個 observer 與重複字級規則；手機／平板原呈現保留。 |
+| V0.23.2 | 獨立桌機日期 Bug 修復：HTML data attribute 全部改為小寫 kebab-case，正確對應 dataset；選取日／月／年不再清空真正日期欄位，儲存沿用所選日期，前後月份與跨年恢復。更新 Adaptive asset 語意 revision 及正式驗證；行為回歸涵蓋 required date、submit payload、閏日、今天、外部變更與單一初始化。手機／平板原生日期及帳務 writer 不變。 |
 | V0.23.1 Build 2 | 帳號載入隱藏規則移回實際載入的 Adaptive stylesheet，避免未載入的 auth.css 使規則失效；損益表縮減標題、控制列與表列留白，維持可讀字級並增加單頁容量。 |
 | V0.23.1 Build 1 | 線上報表驗收續修：單月損益視窗確實隱藏結束月份，修正 flex label 蓋過 hidden 的樣式衝突；月份標籤不斷行，報表金額與科目統一行高並微縮列高，增加一頁可讀容量。分頁仍沿用固定容量，完整科目與整月合計不變。 |
 | V0.23.1 | 統計介面調整：單月及多月共用圖表／統計頁籤，桌機統計共用頁面捲動，損益按鈕優先且單月視窗不再切換多月；圓餅圖直接標示名稱／金額／百分比，小區段引線排字，手機平板顯示名稱／百分比及完整圖例。損益表改左收入右支出、底部合計及淨利損、最下方另列移轉；超出可讀高度時分頁保留全部科目，不使用內部捲軸。統計合計、圓餅及分類科目亦排除指定移轉並顯示說明，看帳金額維持。Auth 為唯一帳號 renderer，移除 Adaptive identity 重畫與 role observer，資料完成前隱藏帳戶列。 |

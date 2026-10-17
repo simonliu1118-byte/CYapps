@@ -1,10 +1,12 @@
 /* CYAccountingWeb quick entry functional module. */
 
 let cyFastSummaryRequest = 0;
-let cyFocusSummaryAfterSave = false;
 
 window.cyPrepareQuickEntryUi = prepareQuickEntryUi;
-window.addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered);
+window.addEventListener('cyacc:entry-submitted', handleFastEntrySubmitted);
+window.addEventListener('cyacc:entry-result', event => {
+  if (event.detail?.ok) void loadFrequentSummaries();
+});
 window.addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged);
 
 window.addEventListener('load', () => {
@@ -29,13 +31,8 @@ function bindFastEntryKeys() {
   });
   enterStep(els.amount, () => {
     if (!els.saveButton.disabled) {
-      cyFocusSummaryAfterSave = true;
       els.form.requestSubmit();
     }
-  });
-
-  els.form?.addEventListener('submit', () => {
-    cyFocusSummaryAfterSave = true;
   });
 
   els.accountName?.addEventListener('change', loadFrequentSummaries);
@@ -49,7 +46,7 @@ function bindQuickTools() {
     const name = button.dataset.quickCategory;
     if (![...els.categoryName.options].some(option => option.value === name)) return;
     els.categoryName.value = name;
-    loadFrequentSummaries();
+    els.categoryName.dispatchEvent(new Event('change', { bubbles: true }));
     els.summary.focus();
   });
 
@@ -57,6 +54,7 @@ function bindQuickTools() {
     const button = event.target.closest('[data-summary-suggestion]');
     if (!button) return;
     els.summary.value = button.dataset.summarySuggestion || '';
+    els.summary.dispatchEvent(new Event('input', { bubbles: true }));
     els.amount.focus();
   });
 }
@@ -79,13 +77,8 @@ function handleQuickEntryKindChanged() {
   void loadFrequentSummaries();
 }
 
-function handleFastEntryLedgerRendered() {
-  if (!cyFocusSummaryAfterSave || els.saveMessage?.textContent !== '存檔成功') return;
-  cyFocusSummaryAfterSave = false;
-  setTimeout(() => {
-    els.summary.focus();
-    loadFrequentSummaries();
-  }, 0);
+function handleFastEntrySubmitted() {
+  els.summary.focus();
 }
 
 async function prepareQuickEntryUi() {

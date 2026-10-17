@@ -1,3 +1,4 @@
+import buildMetadata from '../src/build-metadata.json' with { type: 'json' };
 import { webcrypto } from 'node:crypto';
 import { assertBackupStorageProvider } from '../src/backup-storage-provider.js';
 import {
@@ -9,7 +10,8 @@ import {
 import {
   buildBackupSet,
   cleanupExpiredBackups,
-  verifyBackupSet
+  verifyBackupSet,
+  validateBackupSetBytes
 } from '../src/gcs-backup.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -155,7 +157,7 @@ assert(backupSet.backupId === '20260926T033000Z', 'backupId mismatch');
 assert(backupSet.dataKey.endsWith('/data.json'), 'data.json key missing');
 assert(backupSet.manifestKey.endsWith('/manifest.json'), 'manifest.json key missing');
 assert(backupSet.manifest.format === 'CYAccountingWebBackupSet', 'backup set format mismatch');
-assert(backupSet.manifest.appVersion === '0.22.2', 'backup app version mismatch');
+assert(backupSet.manifest.appVersion === buildMetadata.appVersion, 'backup app version mismatch');
 assert(backupSet.manifest.files.data.sha256 === backupSet.dataSha256, 'manifest data SHA mismatch');
 
 const fakeObjects = new Map([
@@ -189,3 +191,7 @@ assert(deleted.length === 2, `expected 2 expired managed objects deleted, got ${
 assert(deleted.every(key => key.includes('20260910T033000Z')), 'retention deleted wrong objects');
 
 console.log('GCS provider and backup-set tests passed.');
+
+const empty = await buildBackupSet({prepare(sql) {return {async first(){return {value:'9'};},bind(){return this;},async all(){return {results:[]};}};}},new Date('2026-10-14T00:00:00Z'));
+assert(empty.totalRowCount===0,'empty accounting fixture must stay empty');
+assert((await validateBackupSetBytes(empty.manifestBytes,empty.dataBytes,empty.backupId)).manifest.totalRowCount===0,'zero row count is valid');

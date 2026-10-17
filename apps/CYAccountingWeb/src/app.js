@@ -6,10 +6,11 @@ import { handleAccountLifecycleApi } from './account-lifecycle.js';
 import { handleOpeningBalanceApi } from './opening-balances.js';
 import { handleExcelExportApi } from './excel-export.js';
 import { handleExcelImportApi } from './excel-import.js';
-import { handleBackupApi, runScheduledBackup } from './backup-service.js';
+import { handleBackupApi, runScheduledBackup, recoveryLanding } from './backup-service.js';
 import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
+  cyWebPortalUrl,
   clearProviderSessionCookie,
   confirmPasswordRecovery,
   loginWithCyid,
@@ -69,6 +70,11 @@ export default {
         return handleNavigationLogin(request, env);
       }
 
+      if(url.pathname==='/recovery'&&request.method==='GET') {
+        const resolved=await resolveIdentitySession(request,env);
+        if(!resolved.ok)return redirect('/login');
+        return recoveryLanding(env,resolved.session);
+      }
       if ((url.pathname === '/' || url.pathname === '/index.html') && request.method === 'GET') {
         const resolved = await resolveIdentitySession(request, env);
         if (!resolved.ok) {
@@ -85,6 +91,11 @@ export default {
 
       if (url.pathname === '/api/health' && request.method === 'GET') {
         return coreWorker.fetch(request, env);
+      }
+
+      if (url.pathname === '/api/auth/account-portal' && request.method === 'GET') {
+        const portalUrl = cyWebPortalUrl(env);
+        return portalUrl ? json({ ok: true, url: portalUrl }) : json({ ok: false, code: 'ACCOUNT_PORTAL_NOT_CONFIGURED' }, 503);
       }
 
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
@@ -118,6 +129,15 @@ export default {
         }, 403);
       }
 
+      if(url.pathname.startsWith('/api/backup/recovery/')) {
+        return await handleBackupApi(request,env,resolved.session)||json({ok:false,error:'找不到復原操作。'},404);
+      }
+      const recoveryHold=await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
+      if(recoveryHold?.value==='1') return json({ok:false,error:'此帳本仍為還原驗證工作區，尚未核准切換。',code:'RECOVERY_WORKSPACE_HOLD'},503);
+      if(!['GET','HEAD'].includes(request.method)) {
+        const epoch=await env.DB.prepare("SELECT value FROM meta WHERE key='accounting_epoch'").first();
+        if(epoch?.value&&request.headers.get('x-cyacc-book-epoch')!==epoch.value) return json({ok:false,error:'帳本已完成還原切換，請重新整理後再操作。',code:'ACCOUNTING_BOOK_CHANGED'},409);
+      }
       const mutationValidation = await validateMutationRequest(request, url);
       if (mutationValidation) return mutationValidation;
 
@@ -275,11 +295,11 @@ function apiLoginFailure(result) {
   const key = loginErrorKey(result);
   const messages = {
     invalid: '請輸入正確的 4 碼員工編號與密碼。',
-    failed: '員工編號或密碼不正確。',
+    failed: '員工編號或密碼不正確。如為首次登入，請先在 CY Web 完成 Email 驗證與正式密碼設定。',
     access: '此員工帳號沒有記帳系統 App Access。',
     rate: '登入嘗試次數過多，請稍後再試。',
     service: '中央帳號服務目前無法使用，請稍後再試。',
-    'first-login': '請先至 CY Web 帳號管理入口完成首次帳號啟用與 Email 驗證。'
+    'first-login': '請先前往 CY Web 完成 Email 驗證與正式密碼設定，再回來登入。'
   };
   const status = result.status >= 500 ? 503 : Math.max(400, Number(result.status) || 401);
   return json({

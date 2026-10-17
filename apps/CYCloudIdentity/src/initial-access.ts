@@ -1,3 +1,4 @@
+import { ACCOUNT_LIFECYCLE_TESTING } from "./account-lifecycle-testing";
 import {
   createCredentialVerifier,
   CURRENT_CREDENTIAL_ALGORITHM,
@@ -284,11 +285,13 @@ export async function handleCreateEmployee(request: Request, env: Env, requestId
           email_verified_at, enabled, role_key, identity_admin, activated_at, revision, created_at, updated_at)
          VALUES(?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, 0, NULL, 1, ?7, ?7)`
       ).bind(employeeId, actor.workspaceId, employeeNo, displayName, email, roleKey, now),
+      ...(ACCOUNT_LIFECYCLE_TESTING.recordCreateDeleteAudit ? [
       env.DB.prepare(
         `INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id, target_employee_id,
           event_type, detail_json, created_at)
          VALUES(?1, ?2, ?3, ?4, 'employee_created_pending_activation', ?5, ?6)`
-      ).bind(`audit_${crypto.randomUUID()}`, actor.workspaceId, actor.employeeId, employeeId, JSON.stringify({ employeeNo, roleKey }), now),
+      ).bind(`audit_${crypto.randomUUID()}`, actor.workspaceId, actor.employeeId, employeeId, JSON.stringify({ employeeNo, roleKey }), now)
+      ] : []),
     ]);
   } catch {
     return json(env, requestId, 409, { error: { code: "EMPLOYEE_CONFLICT", message: "Employee No or Email already exists in this Workspace." } });
@@ -300,11 +303,11 @@ export async function handleCreateEmployee(request: Request, env: Env, requestId
   try {
     const issued = await issueInitialCredential(env, created);
     emailVerificationDelivery = { sent: true, expiresAt: issued.expiresAt };
-    await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_sent", detail: { method: "initial_password" } });
+    if (ACCOUNT_LIFECYCLE_TESTING.recordCreateDeleteAudit) await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_sent", detail: { method: "initial_password" } });
   } catch (error) {
     const errorCode = deliveryCode(error);
     emailVerificationDelivery = { sent: false, errorCode };
-    await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_failed", detail: { errorCode, method: "initial_password" } });
+    if (ACCOUNT_LIFECYCLE_TESTING.recordCreateDeleteAudit) await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_failed", detail: { errorCode, method: "initial_password" } });
   }
 
   return json(env, requestId, 201, {

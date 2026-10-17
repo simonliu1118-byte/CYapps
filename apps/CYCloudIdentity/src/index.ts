@@ -15,7 +15,7 @@ import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { handleStartCurrentEmailVerification } from "./current-email-verification";
 import {
   handleUpdateEmployee,
-  handleDeletePendingEmployee,
+  handleDeleteEmployee,
   handleForceEmployeeEmailRecovery,
   handleResendActivatedEmailVerification,
   handleSetEmployeeIdentityAdmin,
@@ -31,6 +31,7 @@ import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot, handleRegis
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
 export { ConsumerAuthoritySync } from "./consumer-authority";
+export { ConsumerNotifications } from "./consumer-notifications-entrypoint";
 
 function decodedSegment(value: string): string | null {
   try {
@@ -123,7 +124,7 @@ export default {
           return await handleUpdateEmployee(request, env, requestId, employeeId);
         }
         if (employeeId && request.method === "DELETE") {
-          return await handleDeletePendingEmployee(request, env, requestId, employeeId);
+          return await handleDeleteEmployee(request, env, requestId, employeeId);
         }
       }
 

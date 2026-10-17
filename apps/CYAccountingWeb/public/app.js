@@ -13,9 +13,9 @@ const state = {
   groups: [],
   categories: [],
   transactions: [],
+  transactionMonth: '',
   lockedThrough: null,
   ledgerLocked: false,
-  editingTx: null,
   settingsKind: 'income',
   activeSettingsTab: 'accounts',
   openingData: null
@@ -26,6 +26,9 @@ let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
 let cyTransactionMutationRevision = 0;
 const cyPendingTransactionUpdates = new Map();
+const cyPendingTransactionCreates = new Map();
+let cyTransactionCreateId = 0;
+let cyEntryDraftRevision = 0;
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
@@ -80,16 +83,6 @@ async function startCyaccApp() {
     saveLockButton: document.querySelector('#saveLockButton'),
     clearLockButton: document.querySelector('#clearLockButton'),
     lockStatusText: document.querySelector('#lockStatusText'),
-    editDialog: document.querySelector('#editDialog'),
-    editForm: document.querySelector('#editTransactionForm'),
-    editKindLabel: document.querySelector('#editKindLabel'),
-    editDate: document.querySelector('#editDate'),
-    editAccount: document.querySelector('#editAccount'),
-    editCategory: document.querySelector('#editCategory'),
-    editSummary: document.querySelector('#editSummary'),
-    editAmount: document.querySelector('#editAmount'),
-    editMessage: document.querySelector('#editMessage'),
-    editSaveButton: document.querySelector('#editSaveButton')
   });
 
     const today = localDateString(new Date());
@@ -142,9 +135,18 @@ function finishCyaccBoot(error = null) {
 function bindEvents() {
   els.kindButtons.forEach(button => button.addEventListener('click', () => setEntryKind(button.dataset.kind)));
   els.amount.addEventListener('input', numericInput);
-  els.editAmount.addEventListener('input', numericInput);
   els.txDate.addEventListener('change', updateEntryLockState);
   els.form.addEventListener('submit', saveTransaction);
+  const markEntryDraftChanged = () => { cyEntryDraftRevision += 1; };
+  els.form.addEventListener('input', markEntryDraftChanged, true);
+  els.form.addEventListener('change', markEntryDraftChanged, true);
+  window.addEventListener('cyacc:entry-kind-changed', markEntryDraftChanged);
+  window.addEventListener('cyacc:entry-draft-reset', markEntryDraftChanged);
+  window.addEventListener('beforeunload', event => {
+    if (!cyPendingTransactionCreates.size) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
   els.monthFilter.addEventListener('change', loadTransactions);
 
   els.transactionRows.addEventListener('click', async event => {
@@ -157,7 +159,6 @@ function bindEvents() {
     }
   });
 
-  els.editForm.addEventListener('submit', saveTransactionEdit);
   els.settingsButton.addEventListener('click', openSettings);
   document.addEventListener('click', event => {
     const close = event.target.closest('[data-close-dialog]');
@@ -216,6 +217,9 @@ async function initialize() {
 
 async function refreshBootstrap() {
   const bootstrap = await api('/api/bootstrap');
+  const epoch=String(bootstrap.accountingEpoch||'');
+  if(window.cyaccBookEpoch!==undefined&&window.cyaccBookEpoch!==epoch) { window.location.reload();throw new Error('帳本已切換，正在重新整理。'); }
+  window.cyaccBookEpoch=epoch;
   const accountValue = els.accountName.value;
   const categoryValue = els.categoryName.value;
   state.accounts = bootstrap.accounts || [];
@@ -272,30 +276,81 @@ function updateEntryLockState() {
 
 async function saveTransaction(event) {
   event.preventDefault();
-  showMessage('');
-  if (isLocked(els.txDate.value.slice(0, 7))) return showMessage('此月份已鎖帳，無法新增資料。', true);
-  const amount = Number(els.amount.value);
-  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) {
-    showMessage('金額必須為 1～9,999,999。', true);
-    els.amount.focus();
-    return;
-  }
-  els.saveButton.disabled = true;
+  const entry = {
+    txDate: els.txDate.value, accountName: els.accountName.value,
+    categoryName: els.categoryName.value, kind: state.kind,
+    summary: els.summary.value, amount: els.amount.value
+  };
+  let body;
   try {
-    await api('/api/transactions', {
-      method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ ...manualTransactionValues({ txDate: els.txDate.value, accountName: els.accountName.value, categoryName: els.categoryName.value, summary: els.summary.value, amount }), kind: state.kind })
-    });
-    showMessage('存檔成功');
-    els.summary.value = '';
-    els.amount.value = '';
-    els.monthFilter.value = els.txDate.value.slice(0, 7);
-    await loadTransactions();
-    els.amount.focus();
+    if (isLocked(entry.txDate.slice(0, 7))) throw new Error('此月份已鎖帳，無法新增資料。');
+    body = { ...manualTransactionValues(entry), kind: entry.kind };
   } catch (error) {
     showMessage(error.message, true);
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { entry, ok: false, message: error.message } }));
+    if (!Number.isInteger(Number(entry.amount)) || Number(entry.amount) < 1 || Number(entry.amount) > 9_999_999) els.amount.focus();
+    return;
+  }
+
+  const id = --cyTransactionCreateId;
+  const month = body.txDate.slice(0, 7);
+  const row = { id, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName,
+    kind: body.kind, summary: body.summary, amount: body.amount, created_at: new Date().toISOString() };
+  let finish;
+  const settled = new Promise(resolve => { finish = resolve; });
+  cyPendingTransactionCreates.set(id, { row, settled });
+  cyTransactionMutationRevision += 1;
+  els.summary.value = '';
+  els.amount.value = '';
+  const draftRevision = ++cyEntryDraftRevision;
+  let saved = false;
+  try {
+    showMessage('儲存中…');
+    window.dispatchEvent(new CustomEvent('cyacc:entry-submitted', { detail: { id, entry } }));
+    if (els.monthFilter.value !== month) {
+      els.monthFilter.value = month;
+      els.monthFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (state.transactionMonth === month && els.monthFilter.value === month) {
+      state.transactions.push(row);
+      renderOptimisticTransactionState();
+    }
+
+    const result = await api('/api/transactions', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(body) });
+    const confirmed = result.transaction;
+    if (!Number.isSafeInteger(confirmed?.id) || confirmed.id <= 0) throw new Error('尚未確認存檔結果，請重新整理確認後再操作。');
+    // Never replace another request's row or navigate after an asynchronous write.
+    state.transactions = state.transactions.filter(item => Number(item.id) !== id && Number(item.id) !== confirmed.id);
+    if (state.transactionMonth === month) state.transactions.push(confirmed);
+    saved = true;
+    if (id === cyTransactionCreateId) showMessage('存檔成功');
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { id, entry, ok: true, message: '存檔成功' } }));
+  } catch (error) {
+    state.transactions = state.transactions.filter(item => Number(item.id) !== id);
+    if (id === cyTransactionCreateId && draftRevision === cyEntryDraftRevision
+      && els.summary.value === '' && els.amount.value === '' && state.kind === entry.kind
+      && els.txDate.value === entry.txDate && els.accountName.value === entry.accountName
+      && els.categoryName.value === entry.categoryName) {
+      els.summary.value = entry.summary;
+      els.amount.value = entry.amount;
+      cyEntryDraftRevision += 1;
+    }
+    showMessage(error.message, true);
+    window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { id, entry, ok: false, message: error.message } }));
   } finally {
+    cyPendingTransactionCreates.delete(id);
+    cyTransactionMutationRevision += 1;
+    finish();
+    if (state.transactionMonth === els.monthFilter.value) renderOptimisticTransactionState();
     updateEntryLockState();
+  }
+  if (saved) {
+    // A prior-month write can change the currently displayed opening balance.
+    if (month < els.monthFilter.value) {
+      try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
+      catch { showMessage('存檔成功，餘額載入失敗，請重新整理。', true); }
+    }
+    window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded', { detail: { month: els.monthFilter.value } }));
   }
 }
 
@@ -307,8 +362,14 @@ async function loadTransactions() {
   setLedgerLoadingState(true);
   try {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
+    // A GET may see a committed row before its POST acknowledgement arrives.
+    // Wait for this month's outstanding creates before accepting the snapshot,
+    // then use the same revision guard; identical legitimate entries stay distinct.
+    await Promise.all([...cyPendingTransactionCreates.values()]
+      .filter(item => item.row.tx_date.slice(0, 7) === month).map(item => item.settled));
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
     if (mutationRevision !== cyTransactionMutationRevision) return await loadTransactions();
+    state.transactionMonth = month;
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
@@ -344,20 +405,7 @@ function setLedgerLoadingState(loading) {
 }
 
 function openEditTransaction(id) {
-  const tx = state.transactions.find(item => Number(item.id) === id);
-  if (!tx || isLocked(tx.tx_date.slice(0, 7))) return;
-  state.editingTx = tx;
-  els.editKindLabel.textContent = tx.kind === 'income' ? '收入' : '支出';
-  els.editDate.value = tx.tx_date;
-  els.editSummary.value = tx.summary || '';
-  els.editAmount.value = String(tx.amount);
-  els.editAccount.innerHTML = optionsWithHistorical(state.accounts.map(a => a.name), tx.account_name);
-  els.editAccount.value = tx.account_name;
-  const categories = state.categories.filter(c => c.kind === tx.kind).map(c => c.name);
-  els.editCategory.innerHTML = optionsWithHistorical(categories, tx.category_name);
-  els.editCategory.value = tx.category_name;
-  setDialogMessage(els.editMessage, '');
-  els.editDialog.showModal();
+  window.cyBeginEntryTransactionEdit?.(id);
 }
 
 function summaryCharacterUnits(char) {
@@ -404,6 +452,7 @@ function renderOptimisticTransactionState() {
 
 async function persistTransactionUpdate(id, values, onOptimistic) {
   id = Number(id);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('此筆交易仍在儲存中。');
   const original = state.transactions.find(item => Number(item.id) === id);
   if (!original) throw new Error('找不到交易。');
   if (cyPendingTransactionUpdates.has(id)) throw new Error('此筆交易仍在儲存中。');
@@ -433,26 +482,8 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
   }
 }
 
-async function saveTransactionEdit(event) {
-  event.preventDefault();
-  if (!state.editingTx) return;
-  const amount = Number(els.editAmount.value);
-  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) return setDialogMessage(els.editMessage, '金額必須為 1～9,999,999。', true);
-  els.editSaveButton.disabled = true;
-  try {
-    await persistTransactionUpdate(state.editingTx.id, {
-      txDate: els.editDate.value, accountName: els.editAccount.value,
-      categoryName: els.editCategory.value, summary: els.editSummary.value, amount
-    }, () => { els.editDialog.close(); showMessage('正在儲存修改…'); });
-    showMessage('修改成功');
-  } catch (error) {
-    showMessage(`${error.message} 已還原原資料。`, true);
-  } finally {
-    els.editSaveButton.disabled = false;
-  }
-}
-
 async function deleteTransaction(id) {
+  if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
   try {
     await api(`/api/transactions/${id}`, { method: 'DELETE' });
     showMessage('已刪除');
@@ -462,8 +493,9 @@ async function deleteTransaction(id) {
   }
 }
 
-function openSettings() {
+function openSettings(initialTab) {
   setDialogMessage(els.settingsMessage, '');
+  window.cySettingsManager?.prepareSettings?.(typeof initialTab === 'string' ? initialTab : null);
   renderSettings();
   els.settingsDialog.showModal();
 }
@@ -474,6 +506,7 @@ function setSettingsTab(tab) {
   els.settingsPanes.forEach(pane => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
   setDialogMessage(els.settingsMessage, '');
   if (tab === 'statistics') window.cyStatistics?.loadSettings();
+  if (tab === 'quick' && typeof loadQuickEntrySettings === 'function') loadQuickEntrySettings(true);
 }
 
 function renderSettings() {
@@ -482,6 +515,8 @@ function renderSettings() {
   els.lockedThrough.value = state.lockedThrough || '';
   els.lockStatusText.textContent = state.lockedThrough ? `目前已鎖帳至 ${formatMonth(state.lockedThrough)}，更早月份也一併鎖定。` : '目前未鎖帳。';
   window.cySyncMobileLockMonthControls?.();
+  els.lockStatusText.hidden = Boolean(window.cyIsDesktopInteractionWorkspace?.() && state.lockedThrough);
+  els.lockedThrough.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 async function handleAccountAction(event) {
@@ -903,11 +938,6 @@ async function saveLock(lockedThrough) {
 }
 window.cyaccSaveLock = saveLock;
 
-function optionsWithHistorical(currentNames, selected) {
-  const names = [...currentNames];
-  if (selected && !names.includes(selected)) names.unshift(selected);
-  return names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}${currentNames.includes(name) ? '' : '（歷史）'}</option>`).join('');
-}
 
 function isLocked(month) {
   return Boolean(state.lockedThrough && /^\d{4}-\d{2}$/.test(month) && month <= state.lockedThrough);
@@ -925,12 +955,14 @@ async function api(path, options = {}, timeoutMs = 12_000) {
   const request = Promise.resolve().then(async () => {
     const response = await fetch(path, {
       ...options,
+      headers:{...options.headers,'x-cyacc-book-epoch':window.cyaccBookEpoch||''},
       credentials: 'include',
       cache: 'no-store',
       signal: controller.signal
     });
     const data = await response.json().catch(() => ({}));
     if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
+    if(data.code==='ACCOUNTING_BOOK_CHANGED') window.location.reload();
     if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
   });
@@ -959,8 +991,10 @@ function jsonHeaders() { return { 'content-type': 'application/json' }; }
 function setConnection(text, type) { els.connectionStatus.textContent = text; els.connectionStatus.className = `status ${type || ''}`.trim(); }
 function showMessage(text, isError = false) {
   els.saveMessage.textContent = text;
+  els.saveMessage.title = text;
   els.saveMessage.classList.toggle('error', isError);
   window.cyAfterSaveMessage?.(els.saveMessage, text, isError);
+  window.dispatchEvent(new CustomEvent('cyacc:entry-message', { detail: { text, isError } }));
 }
 function setDialogMessage(element, text, isError = false) { element.textContent = text; element.classList.toggle('error', isError); }
 function money(value) { return `$${Number(value || 0).toLocaleString('zh-TW')}`; }

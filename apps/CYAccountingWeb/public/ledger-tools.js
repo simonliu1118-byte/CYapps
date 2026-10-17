@@ -1,6 +1,7 @@
 /* CYAccountingWeb ledger tools functional module. */
 
 let cyLedgerGroupByAccount = false;
+let cyLedgerDateDescending = false;
 let cyLedgerSearch = '';
 let cyLedgerOpeningData = null;
 let cyLedgerRequestId = 0;
@@ -8,6 +9,7 @@ let cyLedgerRenderedMonth = '';
 window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
 window.cyaccRenderLedgerMessage = renderLedgerMessage;
+window.cySyncLedgerPresentation = syncLedgerPresentation;
 
 let cyLedgerToolsStarted = false;
 
@@ -411,14 +413,14 @@ function renderDesktopLedger() {
   const openingTotal = [...openingMap.values()].reduce((sum, value) => sum + value, 0);
   const endingTotal = openingTotal + income - expense;
   const net = income - expense;
-  const netLabel = net > 0 ? '淨利' : net < 0 ? '淨損' : '淨利損';
+  const netLabel = net > 0 ? '淨利' : net < 0 ? '淨損' : '損益';
   const netClass = net > 0 ? 'profit' : net < 0 ? 'loss' : 'neutral';
 
   const query = cyLedgerSearch.toLocaleLowerCase('zh-Hant');
   const visible = (query
     ? allTransactions.filter(tx => String(tx.summary || '').toLocaleLowerCase('zh-Hant').includes(query))
     : [...allTransactions]
-  ).sort(compareLedgerChronological);
+  ).sort(compareLedgerDisplayOrder);
 
   els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
@@ -479,12 +481,21 @@ function compareLedgerChronological(left, right) {
   return Number(left.id) - Number(right.id);
 }
 
+function compareLedgerDisplayOrder(left, right) {
+  if (window.cyIsDesktopInteractionWorkspace?.() && cyLedgerDateDescending) {
+    const dateCompare = String(right.tx_date).localeCompare(String(left.tx_date));
+    if (dateCompare) return dateCompare;
+  }
+  // Balance calculation and same-day income/expense ordering remain chronological.
+  return compareLedgerChronological(left, right);
+}
+
 function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculated) {
   const collator = new Intl.Collator('zh-Hant-TW', { numeric: true, sensitivity: 'base' });
   const names = [...new Set(visible.map(tx => String(tx.account_name || '')))].sort((a, b) => collator.compare(a, b));
 
   return names.map(name => {
-    const rows = visible.filter(tx => tx.account_name === name).sort(compareLedgerChronological);
+    const rows = visible.filter(tx => tx.account_name === name).sort(compareLedgerDisplayOrder);
     const opening = openingMap.get(name) || 0;
     const ending = calculated.endingByAccount.get(name) ?? opening;
     const accountVisual = ledgerAccountVisual(name);
@@ -562,7 +573,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
 
-  return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}">
+  return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}"${id < 0 ? ' aria-busy="true"' : ''}>
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
     <td class="ledger-account-name" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
@@ -570,20 +581,36 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button></td>
+    <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button>`}</td>
   </tr>`;
 }
 
 function updateLedgerHeader() {
   const row = document.querySelector('.ledger-card thead tr');
   if (!row) return;
-  const accountLabel = cyLedgerGroupByAccount ? '帳戶 ▲' : '帳戶';
+  const desktop = Boolean(window.cyIsDesktopInteractionWorkspace?.());
+  row.dataset.desktopPresentation = String(desktop);
+  const accountLabel = cyLedgerGroupByAccount ? (desktop ? '帳戶 [分組]' : '帳戶 ▲') : '帳戶';
   const accountTitle = cyLedgerGroupByAccount ? '點擊取消帳戶排列' : '點擊依帳戶排列';
-  row.innerHTML = `<th>日期</th><th id="ledgerAccountHeader" class="ledger-account-header${cyLedgerGroupByAccount ? ' cy-account-group-active' : ''}" title="${accountTitle}" aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}">${accountLabel}</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>`;
+  const dateHeader = desktop ? `<th id="ledgerDateHeader" class="ledger-date-header" aria-sort="${cyLedgerDateDescending ? 'descending' : 'ascending'}"><button type="button" class="ledger-header-button" title="${cyLedgerDateDescending ? '點擊改為舊到新' : '點擊改為新到舊'}">日期 <span aria-hidden="true">${cyLedgerDateDescending ? '↓' : '↑'}</span></button></th>` : '<th>日期</th>';
+  const accountHeader = desktop ? `<button type="button" class="ledger-header-button" aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}">${accountLabel}</button>` : accountLabel;
+  row.innerHTML = `${dateHeader}<th id="ledgerAccountHeader" class="ledger-account-header${cyLedgerGroupByAccount ? ' cy-account-group-active' : ''}" title="${accountTitle}"${desktop ? '' : ` aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}"`}>${accountHeader}</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>`;
+  row.querySelector('#ledgerDateHeader')?.addEventListener('click', () => {
+    cyLedgerDateDescending = !cyLedgerDateDescending;
+    renderDesktopLedger();
+  });
   row.querySelector('#ledgerAccountHeader')?.addEventListener('click', () => {
     cyLedgerGroupByAccount = !cyLedgerGroupByAccount;
     renderDesktopLedger();
   });
+}
+
+function syncLedgerPresentation() {
+  const row = document.querySelector('.ledger-card thead tr');
+  const desktop = String(Boolean(window.cyIsDesktopInteractionWorkspace?.()));
+  if (row?.dataset.desktopPresentation !== undefined && row.dataset.desktopPresentation !== desktop) {
+    renderDesktopLedger();
+  }
 }
 
 function ledgerPresentationColumnSpan() {

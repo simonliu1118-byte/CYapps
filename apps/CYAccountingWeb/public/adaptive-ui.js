@@ -21,14 +21,34 @@ function startAdaptiveUi() {
   setupTabletStatisticsEntry();
   setupAdaptiveSplitWorkspace();
   setupAdaptiveEntryHelp();
+  setupDesktopBackToTop();
   setupAdaptiveDataSettings();
   cleanupAdaptiveInterfaceCopy();
+}
+
+function setupDesktopBackToTop() {
+  if (document.querySelector('#desktopBackToTop')) return;
+  const button = document.createElement('button');
+  button.id = 'desktopBackToTop';
+  button.type = 'button';
+  button.title = '回到頂端';
+  button.setAttribute('aria-label', '回到頂端');
+  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 14l6-6 6 6"/></svg>';
+  document.body.append(button);
+  const sync = () => { button.hidden = !isDesktopInteractionWorkspace() || window.scrollY < 160; };
+  button.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+  window.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync, { passive: true });
+  sync();
 }
 
 function setupAdaptiveViewportState() {
   const sync = () => {
     const width = window.innerWidth;
     document.documentElement.dataset.viewport = width < 768 ? 'mobile' : isTabletWorkspace() ? 'tablet' : 'desktop';
+    syncSettingsNavigation();
   };
   sync();
   window.addEventListener('resize', sync, { passive: true });
@@ -206,9 +226,6 @@ function cleanupAdaptiveInterfaceCopy() {
       '#settingsDialog [data-settings-pane="lock"] > .hint',
       '#settingsDialog [data-settings-pane="data"] .hint',
       '#settingsDialog [data-settings-pane="data"] .cy-data-section > p',
-      '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
-      '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
-      '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
       '#settingsDialog [data-settings-pane="migration"] .migration-privacy',
       '#openingDialog .opening-dialog-heading > .hint'
     ];
@@ -348,7 +365,8 @@ function setupDesktopEntryQuickTools() {
     clear.type = 'button';
     clear.textContent = '清空';
     clear.addEventListener('click', () => {
-      if (typeof clearTouchWorkspaceEntryForm === 'function') clearTouchWorkspaceEntryForm();
+      if (cyEntryTransactionEdit) cancelEntryTransactionEditAndReturn();
+      else clearTouchWorkspaceEntryForm();
     });
     grid.append(clear);
   }
@@ -548,14 +566,14 @@ function setupMobileEntryMobilePages() {
 
   const apply = page => {
     current = ['entry', 'ledger', 'statistics'].includes(page) ? page : 'entry';
-    const enabled = mobile.matches && !isTabletPreviewMode();
+    const enabled = mobile.matches;
     nav.hidden = !enabled;
     applyMobileWorkspacePage(current, enabled);
   };
 
   nav.addEventListener('click', event => {
     const button = event.target.closest('[data-mobile-page]');
-    if (!button || !mobile.matches || isTabletPreviewMode()) return;
+    if (!button || !mobile.matches) return;
     apply(button.dataset.mobilePage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -568,7 +586,7 @@ function setupMobileEntryMobilePages() {
 
 function setupEntryUiSummaryLimit() {
   const composing = new WeakSet();
-  const fields = [document.querySelector('#summary'), document.querySelector('#editSummary')].filter(Boolean);
+  const fields = [document.querySelector('#summary')].filter(Boolean);
 
   for (const input of fields) {
     input.maxLength = 40;
@@ -599,16 +617,7 @@ function setupEntryUiSummaryLimit() {
     summary.focus();
   }, true);
 
-  const editForm = document.querySelector('#editTransactionForm');
-  editForm?.addEventListener('submit', event => {
-    const summary = document.querySelector('#editSummary');
-    if (!summary || summaryWeightedUnits(summary.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const message = document.querySelector('#editMessage');
-    if (message && typeof setDialogMessage === 'function') setDialogMessage(message, '摘要不可超過 20 個中文字或 40 個英數字元。', true);
-    summary.focus();
-  }, true);
+
 }
 
 function enforceEntryUiSummary(input) {
@@ -705,24 +714,6 @@ function syncMobileWorkspaceAfterLoad() {
 
 
 
-function isTabletPreviewMode() {
-  if (window.__cyaccTabletPreviewEnabled === true || document.documentElement.dataset.tabletPreview === 'true') return true;
-  try {
-    return sessionStorage.getItem(window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview') === '1';
-  } catch {
-    return false;
-  }
-}
-
-function setTabletPreviewMode(enabled) {
-  const key = window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview';
-  try {
-    if (enabled) sessionStorage.setItem(key, '1');
-    else sessionStorage.removeItem(key);
-  } catch { /* preview remains best-effort in restricted storage */ }
-  window.location.reload();
-}
-
 function usesMobileAccountMenuIdentity() {
   return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
 }
@@ -747,18 +738,6 @@ function setupMobileWorkspaceMobileAppBar() {
     topbar.append(trigger);
   }
 
-  let returnButton = document.querySelector('#tabletPreviewReturnButton');
-  if (!returnButton) {
-    returnButton = document.createElement('button');
-    returnButton.id = 'tabletPreviewReturnButton';
-    returnButton.className = 'secondary compact tablet-preview-return';
-    returnButton.type = 'button';
-    returnButton.textContent = '返回手機版';
-    returnButton.hidden = true;
-    actions.append(returnButton);
-  }
-  returnButton.addEventListener('click', () => setTabletPreviewMode(false));
-
   let menu = document.querySelector('#mobileAccountMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -770,7 +749,6 @@ function setupMobileWorkspaceMobileAppBar() {
         <strong id="mobileAccountMenuName"></strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
-      <button type="button" data-mobile-account-action="tablet-preview" hidden>測試用平板版</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -795,10 +773,6 @@ function setupMobileWorkspaceMobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
-    if (action === 'tablet-preview') {
-      setTabletPreviewMode(!isTabletPreviewMode());
-      return;
-    }
     if (action === 'logout') logoutButton.click();
   });
 
@@ -817,7 +791,7 @@ function setupMobileWorkspaceMobileAppBar() {
 
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
-    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
     if (!usesMobileAccountMenuIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
@@ -833,14 +807,11 @@ function syncMobileWorkspaceMobileIdentity() {
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
-  const previewButton = menu?.querySelector('[data-mobile-account-action="tablet-preview"]');
-  const returnButton = document.querySelector('#tabletPreviewReturnButton');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
   const mobileAccountMenu = usesMobileAccountMenuIdentity();
-  const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
   const cluster = source.closest('.cy-account-cluster');
   if (cluster) cluster.dataset.identityReady = String(ready);
@@ -851,7 +822,6 @@ function syncMobileWorkspaceMobileIdentity() {
   cluster?.classList.toggle('role-admin', admin);
   cluster?.classList.toggle('role-user', ready && !superAdmin && !admin);
 
-  if (returnButton) returnButton.hidden = !preview;
 
   if (!mobileAccountMenu || !ready) {
     trigger.hidden = true;
@@ -869,10 +839,7 @@ function syncMobileWorkspaceMobileIdentity() {
   menuName.textContent = main;
   menuRole.textContent = role;
   trigger.hidden = false;
-  if (previewButton) {
-    previewButton.hidden = false;
-    previewButton.textContent = '測試用平板版';
-  }
+
 
   trigger.classList.toggle('role-super-admin', superAdmin);
   trigger.classList.toggle('role-admin', admin);
@@ -902,7 +869,7 @@ function setupMobileWorkspaceMobileNavigation() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
@@ -1065,9 +1032,7 @@ window.addEventListener('load', () => {
 
 function syncDesktopLedgerMonthCopy() {
   const summary = document.querySelector('#summary');
-  const editSummary = document.querySelector('#editSummary');
   if (summary) summary.placeholder = '最多20個字';
-  if (editSummary) editSummary.placeholder = '最多20個字';
 }
 
 function setupDesktopLedgerMonthDesktopMonthPicker() {
@@ -1327,22 +1292,6 @@ function setupDesktopManagementHeaderManagement() {
     categoriesButton.addEventListener('click', () => openDesktopManagementManagement('categories', '科目管理'));
   }
 
-  if (settings.dataset.desktopManagementBound !== '1') {
-    settings.dataset.desktopManagementBound = '1';
-    settings.addEventListener('click', () => {
-      setTimeout(() => {
-        dialog.classList.remove('cy-management-mode');
-        delete dialog.dataset.managementPane;
-        title.textContent = '設定';
-        const current = typeof state === 'object' ? String(state.activeSettingsTab || '') : '';
-        if (current === 'accounts' || current === 'categories' || !current) {
-          const preferred = ['quick', 'data', 'lock', 'backup', 'migration']
-            .find(name => document.querySelector(`[data-settings-tab="${name}"]`));
-          if (preferred && typeof setSettingsTab === 'function') setSettingsTab(preferred);
-        }
-      }, 0);
-    });
-  }
 
   const syncDesktop = () => {
     const enabled = isDesktopInteractionWorkspace();
@@ -1368,7 +1317,7 @@ function openDesktopManagementManagement(tab, label) {
   if (!dialog || !title) return;
 
   if (!dialog.open) {
-    if (typeof openSettings === 'function') openSettings();
+    if (typeof openSettings === 'function') openSettings(tab);
     else dialog.showModal();
   } else if (typeof renderSettings === 'function') {
     renderSettings();
@@ -1621,14 +1570,12 @@ const runDesktopUiPatch = () => {
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(runDesktopUiPatch, 0), { once: true });
+  document.addEventListener('DOMContentLoaded', runDesktopUiPatch, { once: true });
 } else {
-  setTimeout(runDesktopUiPatch, 0);
+  runDesktopUiPatch();
 }
 window.addEventListener('load', () => {
   runDesktopUiPatch();
-  setTimeout(runDesktopUiPatch, 80);
-  setTimeout(runDesktopUiPatch, 300);
 }, { once: true });
 
 
@@ -1715,7 +1662,6 @@ function installDesktopUiConfirmInterceptors() {
       '[data-category-delete]',
       '[data-group-delete]',
       '#excelImportCommitButton',
-      '#backupRunNow',
       '#desktopMigrationCommit'
     ].join(','));
     if (!target || cyDesktopUiConfirmBypass.has(target)) return;
@@ -1796,15 +1742,6 @@ function desktopUiConfirmSpec(target) {
       confirmText: '匯入'
     };
   }
-  if (target.id === 'backupRunNow') {
-    const tiered = typeof backupTopology !== 'undefined' && backupTopology === 'parallel_dual_provider';
-    return {
-      title: '立即執行備份',
-      message: tiered ? '現在立即執行一次 R2 + GCS paired backup？' : '現在立即執行一次 Google Cloud Storage 測試備份？',
-      detail: '正常每日備份仍會在排程時間自動執行。',
-      confirmText: '開始備份'
-    };
-  }
   if (target.id === 'desktopMigrationCommit') {
     const plan = window.cyDesktopMigrationConfirmationModel?.() || {};
     const tx = Number(plan.transactions || 0);
@@ -1834,39 +1771,30 @@ function auditDesktopUiMonthPickers() {
 }
 
 function setupDesktopUiDatePickers() {
-  const media = window.matchMedia('(any-pointer: coarse)');
-  const scan = () => {
-    if (!isDesktopInteractionWorkspace()) return;
-    document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
-  };
-  scan();
-  if (document.body.dataset.desktopUiDateObserver !== '1') {
-    document.body.dataset.desktopUiDateObserver = '1';
-    const observer = new MutationObserver(scan);
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
-  if (typeof media.addEventListener === 'function' && document.body.dataset.desktopUiDateMedia !== '1') {
-    document.body.dataset.desktopUiDateMedia = '1';
-    media.addEventListener('change', scan);
-  }
+  if (!isDesktopInteractionWorkspace()) return;
+  document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
 }
 
 function ensureDesktopUiDatePicker(input) {
   if (!input || input.dataset.desktopUiDatePicker === '1') return;
   input.dataset.desktopUiDatePicker = '1';
   input.classList.add('desktopUi-native-date-source');
+  // HTML attribute names must stay lowercase so dataset preserves word boundaries.
 
   const root = document.createElement('div');
   root.className = 'desktopUi-date-picker';
+  const entryDate = input.id === 'txDate';
+  root.classList.toggle('desktopUi-editable-date', entryDate);
   root.innerHTML = `
-    <button type="button" class="desktopUi-date-trigger" aria-haspopup="dialog" aria-expanded="false">
-      <span class="desktopUi-date-label">—</span><svg class="desktopUi-date-calendar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>
+    ${entryDate ? '<input id="desktopEntryDateText" class="desktopUi-date-text" type="text" inputmode="numeric" maxlength="10" aria-label="日期" placeholder="YYYY/MM/DD" autocomplete="off">' : ''}
+    <button type="button" class="desktopUi-date-trigger" aria-label="開啟日期選擇器" aria-haspopup="dialog" aria-expanded="false">
+      ${entryDate ? '' : '<span class="desktopUi-date-label">—</span>'}<svg class="desktopUi-date-calendar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>
     </button>
     <div class="desktopUi-date-popover" role="dialog" aria-label="選擇日期" hidden>
       <div class="desktopUi-date-head">
-        <button type="button" data-desktopUi-date-nav="-1" aria-label="上一個">‹</button>
+        <button type="button" data-desktop-ui-date-nav="-1" aria-label="上一個">‹</button>
         <button type="button" class="desktopUi-date-title" aria-label="切換年月選擇"></button>
-        <button type="button" data-desktopUi-date-nav="1" aria-label="下一個">›</button>
+        <button type="button" data-desktop-ui-date-nav="1" aria-label="下一個">›</button>
       </div>
       <div class="desktopUi-date-content"></div>
       <div class="desktopUi-date-footer"><button type="button" class="desktopUi-date-today-button">今天</button></div>
@@ -1875,6 +1803,10 @@ function ensureDesktopUiDatePicker(input) {
 
   const trigger = root.querySelector('.desktopUi-date-trigger');
   const label = root.querySelector('.desktopUi-date-label');
+  const dateText = root.querySelector('.desktopUi-date-text');
+  let typingDateText = false;
+  const lifecycle = new AbortController();
+  root.cyDisposeDatePicker = () => lifecycle.abort();
   const popover = root.querySelector('.desktopUi-date-popover');
   const title = root.querySelector('.desktopUi-date-title');
   const content = root.querySelector('.desktopUi-date-content');
@@ -1886,7 +1818,9 @@ function ensureDesktopUiDatePicker(input) {
 
   const syncLabel = () => {
     selected = desktopUiReadDate(input);
-    label.textContent = `${selected.year}/${String(selected.month).padStart(2, '0')}/${String(selected.day).padStart(2, '0')}`;
+    const formatted = String(input.value || '').replaceAll('-', '/');
+    if (dateText && !typingDateText) dateText.value = formatted;
+    if (label) label.textContent = formatted || '—';
   };
 
   const render = () => {
@@ -1910,7 +1844,7 @@ function ensureDesktopUiDatePicker(input) {
       const active = y === selected.year && m === selected.month && d === selected.day;
       const current = y === today.year && m === today.month && d === today.day;
       const other = m !== displayMonth;
-      return `<button type="button" class="desktopUi-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-desktopUi-date-value="${value}">${d}</button>`;
+      return `<button type="button" class="desktopUi-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-desktop-ui-date-value="${value}">${d}</button>`;
     }).join('');
     content.innerHTML = `<div class="desktopUi-date-weekdays">${CY_DesktopUi_WEEKDAYS.map(day => `<span>${day}</span>`).join('')}</div><div class="desktopUi-date-days">${cells}</div>`;
   };
@@ -1920,7 +1854,7 @@ function ensureDesktopUiDatePicker(input) {
     content.innerHTML = `<div class="desktopUi-date-choice-grid">${CY_DesktopUi_MONTHS.map((name, index) => {
       const month = index + 1;
       const active = selected.year === displayYear && selected.month === month;
-      return `<button type="button" class="desktopUi-date-month-choice${active ? ' active' : ''}" data-desktopUi-date-month="${month}">${name}</button>`;
+      return `<button type="button" class="desktopUi-date-month-choice${active ? ' active' : ''}" data-desktop-ui-date-month="${month}">${name}</button>`;
     }).join('')}</div>`;
   };
 
@@ -1928,7 +1862,7 @@ function ensureDesktopUiDatePicker(input) {
     title.textContent = `${yearStart}–${yearStart + 11}`;
     content.innerHTML = `<div class="desktopUi-date-choice-grid">${Array.from({ length: 12 }, (_, index) => yearStart + index).map(year => {
       const active = selected.year === year;
-      return `<button type="button" class="desktopUi-date-year-choice${active ? ' active' : ''}" data-desktopUi-date-year="${year}">${year}</button>`;
+      return `<button type="button" class="desktopUi-date-year-choice${active ? ' active' : ''}" data-desktop-ui-date-year="${year}">${year}</button>`;
     }).join('')}</div>`;
   };
 
@@ -1946,7 +1880,7 @@ function ensureDesktopUiDatePicker(input) {
   const close = (focus = false) => {
     popover.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
-    if (focus) trigger.focus();
+    if (focus) (dateText || trigger).focus();
   };
 
   trigger.addEventListener('click', event => {
@@ -1954,7 +1888,7 @@ function ensureDesktopUiDatePicker(input) {
     if (popover.hidden) open(); else close(false);
   });
 
-  root.querySelectorAll('[data-desktopUi-date-nav]').forEach(button => button.addEventListener('click', () => {
+  root.querySelectorAll('[data-desktop-ui-date-nav]').forEach(button => button.addEventListener('click', () => {
     const delta = Number(button.dataset.desktopUiDateNav) || 0;
     if (view === 'days') {
       const next = new Date(displayYear, displayMonth - 1 + delta, 1);
@@ -1978,7 +1912,7 @@ function ensureDesktopUiDatePicker(input) {
   });
 
   content.addEventListener('click', event => {
-    const day = event.target.closest('[data-desktopUi-date-value]');
+    const day = event.target.closest('[data-desktop-ui-date-value]');
     if (day) {
       input.value = day.dataset.desktopUiDateValue;
       input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1986,14 +1920,14 @@ function ensureDesktopUiDatePicker(input) {
       close(true);
       return;
     }
-    const month = event.target.closest('[data-desktopUi-date-month]');
+    const month = event.target.closest('[data-desktop-ui-date-month]');
     if (month) {
       displayMonth = Number(month.dataset.desktopUiDateMonth) || displayMonth;
       view = 'days';
       render();
       return;
     }
-    const year = event.target.closest('[data-desktopUi-date-year]');
+    const year = event.target.closest('[data-desktop-ui-date-year]');
     if (year) {
       displayYear = Number(year.dataset.desktopUiDateYear) || displayYear;
       view = 'months';
@@ -2009,16 +1943,51 @@ function ensureDesktopUiDatePicker(input) {
     close(true);
   });
 
+  if (dateText) {
+    const commitText = (report = false) => {
+      const value = parseEntryDateText(dateText.value);
+      if (!value) {
+        input.value = '';
+        updateEntryLockState();
+        if (report) {
+          showMessage('日期不正確，請輸入 YYYY/MM/DD、四碼月日或八碼日期。', true);
+          dateText.focus();
+        }
+        return false;
+      }
+      setEntryDateValue(value);
+      return true;
+    };
+    dateText.addEventListener('input', () => {
+      typingDateText = true;
+      try { commitText(); } finally { typingDateText = false; }
+    });
+    dateText.addEventListener('blur', () => commitText(true));
+    dateText.addEventListener('keydown', event => {
+      if (event.isComposing) return;
+      if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (commitText(true)) els.summary.focus();
+      }
+    });
+    input.addEventListener('invalid', event => {
+      if (!isDesktopInteractionWorkspace()) return;
+      event.preventDefault();
+      showMessage('日期不正確，請輸入 YYYY/MM/DD、四碼月日或八碼日期。', true);
+      dateText.focus();
+    }, { signal: lifecycle.signal });
+  }
   input.addEventListener('change', () => {
     syncLabel();
     if (!popover.hidden) render();
-  });
+  }, { signal: lifecycle.signal });
   document.addEventListener('pointerdown', event => {
     if (!popover.hidden && !root.contains(event.target)) close(false);
-  });
+  }, { signal: lifecycle.signal });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !popover.hidden) close(true);
-  });
+  }, { signal: lifecycle.signal });
   syncLabel();
 }
 
@@ -2040,75 +2009,52 @@ function refineDesktopUiHeaderIdentity() {
   user.style.removeProperty('padding-bottom');
 }
 
-/* Desktop custom date keyboard bridge. */
-
-
-const setupDesktopUiKeyboardBridge = () => {
-  if (!isDesktopInteractionWorkspace()) return;
-  const input = document.querySelector('#txDate');
-  const root = input?.nextElementSibling?.classList?.contains('desktopUi-date-picker') ? input.nextElementSibling : null;
-  const trigger = root?.querySelector('.desktopUi-date-trigger');
-  if (!input || !trigger || trigger.dataset.desktopUiKeyboardBound === '1') return;
-  trigger.dataset.desktopUiKeyboardBound = '1';
-
-  trigger.addEventListener('keydown', event => {
-    if (event.isComposing) return;
-
-    if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      document.querySelector('#summary')?.focus();
-      return;
-    }
-
-    if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof state === 'object' && typeof setEntryKind === 'function') {
-        setEntryKind(state.kind === 'expense' ? 'income' : 'expense');
-        if (typeof updateEntryKindVisual === 'function') updateEntryKindVisual();
-        if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
-        if (typeof loadFrequentSummaries === 'function') loadFrequentSummaries();
-      }
-      trigger.focus();
-      return;
-    }
-
-    const quickDigit = /^\d$/.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey;
-    const quickStep = event.ctrlKey && !event.altKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
-    if (!quickDigit && !quickStep) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    input.dispatchEvent(new KeyboardEvent('keydown', {
-      key: event.key,
-      code: event.code,
-      ctrlKey: event.ctrlKey,
-      altKey: event.altKey,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-      bubbles: true,
-      cancelable: true
-    }));
-  });
-};
-
-if (document.readyState === 'complete') setTimeout(setupDesktopUiKeyboardBridge, 0);
-else window.addEventListener('load', () => setTimeout(setupDesktopUiKeyboardBridge, 0), { once: true });
-setTimeout(setupDesktopUiKeyboardBridge, 350);
-
 let settingsManagerDialogState = null;
 let settingsManagerDrag = null;
 let settingsManagerPointer = null;
 let settingsManagerSaving = false;
 
 window.cySettingsManager = {
+  syncNavigation: syncSettingsNavigation,
+  prepareSettings: prepareSettingsPresentation,
   renderAccountManager: renderSettingsAccountManager,
   renderCategoryManager: renderSettingsCategoryManager,
   openAddGroupDialog: openSettingsAddGroupDialog,
   openAddCategoryDialog: openSettingsAddCategoryDialog,
   openRenameDialog: openSettingsRenameDialog
 };
+
+function syncSettingsNavigation() {
+  const desktop = isDesktopInteractionWorkspace();
+  const quick = document.querySelector('[data-settings-tab="quick"]');
+  const lock = document.querySelector('[data-settings-tab="lock"]');
+  const quickTitle = document.querySelector('[data-settings-pane="quick"] h3');
+  if (quick) quick.textContent = desktop ? '一般' : '快速輸入';
+  if (lock) lock.textContent = desktop ? '月份鎖帳' : '鎖帳';
+  if (quickTitle) quickTitle.textContent = desktop ? '一般設定' : '快速輸入設定';
+  const nav = document.querySelector('.settings-nav');
+  if (!nav) return;
+  const order = desktop
+    ? ['accounts', 'categories', 'quick', 'statistics', 'lock', 'data', 'backup', 'migration']
+    : ['accounts', 'categories', 'statistics', 'data', 'quick', 'lock', 'backup', 'migration'];
+  const buttons = order.map(name => nav.querySelector(`[data-settings-tab="${name}"]`)).filter(Boolean);
+  if (buttons.some((button, index) => nav.children[index] !== button)) nav.append(...buttons);
+
+}
+
+function prepareSettingsPresentation(initialTab) {
+  syncSettingsNavigation();
+  if (!isDesktopInteractionWorkspace()) return;
+  const dialog = document.querySelector('#settingsDialog');
+  if (!dialog) return;
+  dialog.classList.remove('cy-management-mode');
+  delete dialog.dataset.managementPane;
+  const title = dialog.querySelector('.modal-header h2');
+  if (title) title.textContent = '設定';
+  const current = state.activeSettingsTab;
+  const tab = initialTab || (current && !['accounts', 'categories'].includes(current) ? current : 'quick');
+  if (typeof setSettingsTab === 'function') setSettingsTab(tab);
+}
 
 let settingsManagerInitialized = false;
 
@@ -3131,7 +3077,7 @@ function setupTransactionSwipeSwipeActions() {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('button, input, select, textarea, a')) return;
 
-    const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
+    const row = event.target.closest('tr.ledger-row');
     if (!row) return;
 
     if (event.clientX <= CY_TRANSACTION_SWIPE_EDGE_GUARD) {
@@ -3236,7 +3182,7 @@ function setupTransactionSwipeSwipeActions() {
       return;
     }
 
-    const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
+    const row = event.target.closest('tr.ledger-row');
     if (row && row === cyTransactionSwipeOpenRow) {
       event.preventDefault();
       event.stopPropagation();
@@ -3306,7 +3252,7 @@ function clampTransactionSwipe(value, min, max) {
 }
 
 const CY_TOUCH_WORKSPACE_MOBILE = '(max-width: 767px)';
-let cyTouchWorkspaceEdit = null;
+let cyEntryTransactionEdit = null;
 let cyTouchWorkspaceSaveHideTimer = null;
 let cyTouchWorkspaceSaveClearTimer = null;
 let cyTouchWorkspaceSetupDone = false;
@@ -3344,7 +3290,7 @@ function setupTouchWorkspace() {
   setupTouchWorkspaceSearch();
   setupTouchWorkspaceSaveMessage();
   setupTouchWorkspaceEntrySecondaryAction();
-  setupTouchWorkspaceMobileEdit();
+  setupEntryTransactionEditing();
 }
 
 async function openMobileUtility(type) {
@@ -3847,18 +3793,24 @@ function setupTouchWorkspaceSaveMessage() {
   const originalNext = message.nextSibling;
 
   const sync = () => {
-    if (usesEntryTransactionEditor()) {
+    const desktopSlot = document.querySelector('#confirmationMessageSlot');
+    const desktop = isDesktopInteractionWorkspace();
+    if (desktopSlot) desktopSlot.hidden = !desktop;
+    if (!desktop && usesEntryTransactionEditor()) {
       if (message.previousElementSibling !== saveButton) saveButton.insertAdjacentElement('afterend', message);
       message.classList.add('cy-mobile-save-message');
     } else {
       message.classList.remove('cy-mobile-save-message', 'is-visible', 'is-fading');
-      if (originalParent && message.parentElement !== originalParent) {
+      if (desktop && desktopSlot) {
+        if (message.parentElement !== desktopSlot) desktopSlot.append(message);
+      } else if (originalParent && message.parentElement !== originalParent) {
         if (originalNext && originalNext.parentNode === originalParent) originalParent.insertBefore(message, originalNext);
         else originalParent.append(message);
       }
     }
   };
 
+  window.addEventListener('cyacc:confirmation-ready', sync);
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
   window.addEventListener('resize', sync, { passive: true });
@@ -3866,7 +3818,7 @@ function setupTouchWorkspaceSaveMessage() {
 }
 
 function setupTouchWorkspaceEntrySecondaryAction() {
-  if (!usesEntryTransactionEditor()) return;
+  if (isDesktopInteractionWorkspace() || !usesEntryTransactionEditor()) return;
   const saveButton = document.querySelector('#saveButton');
   const message = document.querySelector('#saveMessage');
   if (!saveButton || !message) return;
@@ -3879,8 +3831,8 @@ function setupTouchWorkspaceEntrySecondaryAction() {
     button.type = 'button';
     button.textContent = '清空';
     button.addEventListener('click', () => {
-      if (cyTouchWorkspaceEdit) {
-        cancelTouchWorkspaceMobileEditAndReturn();
+      if (cyEntryTransactionEdit) {
+        cancelEntryTransactionEditAndReturn();
         return;
       }
       clearTouchWorkspaceEntryForm();
@@ -3892,13 +3844,16 @@ function setupTouchWorkspaceEntrySecondaryAction() {
 }
 
 function syncTouchWorkspaceEntrySecondaryAction() {
-  const button = document.querySelector('#mobileEntrySecondaryButton');
-  if (!button) return;
-  button.textContent = cyTouchWorkspaceEdit ? '取消' : '清空';
-  button.classList.toggle('is-cancel', Boolean(cyTouchWorkspaceEdit));
+  for (const id of ['mobileEntrySecondaryButton', 'desktopEntryClearButton']) {
+    const button = document.querySelector('#' + id);
+    if (!button) continue;
+    button.textContent = cyEntryTransactionEdit ? '取消' : '清空';
+    button.classList.toggle('is-cancel', Boolean(cyEntryTransactionEdit));
+  }
 }
 
 function clearTouchWorkspaceEntryForm() {
+  window.dispatchEvent(new CustomEvent('cyacc:entry-draft-reset'));
   showMessage('');
   const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
   els.txDate.value = today;
@@ -3911,10 +3866,14 @@ function clearTouchWorkspaceEntryForm() {
   els.amount.blur();
 }
 
-function cancelTouchWorkspaceMobileEditAndReturn() {
-  const context = cyTouchWorkspaceEdit?.returnContext;
+function cancelEntryTransactionEditAndReturn() {
+  const context = cyEntryTransactionEdit?.returnContext;
   if (!context) return false;
-  cancelTouchWorkspaceMobileEdit();
+  cancelEntryTransactionEdit();
+  if (isDesktopInteractionWorkspace()) {
+    els.summary?.focus();
+    return true;
+  }
   switchTouchWorkspaceMobilePage('ledger');
   restoreTouchWorkspaceLedgerContext(context, false);
   return true;
@@ -3940,58 +3899,58 @@ function handleTouchWorkspaceSaveMessage(message, text, isError) {
   }, 2500);
 }
 
-function setupTouchWorkspaceMobileEdit() {
-  const rows = document.querySelector('#transactionRows');
+function setupEntryTransactionEditing() {
   const form = document.querySelector('#transactionForm');
   const nav = document.querySelector('#mobileMainNav');
-  if (!rows || !form || !nav) return;
-
-  rows.addEventListener('click', event => {
-    if (!usesEntryTransactionEditor()) return;
-    const edit = event.target.closest('[data-edit-id]');
-    if (!edit) return;
-    const id = Number(edit.dataset.editId || 0);
-    if (!Number.isInteger(id) || id <= 0 || edit.disabled) return;
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    beginTouchWorkspaceMobileEdit(id);
-  }, true);
+  if (!form || !nav) return;
 
   form.addEventListener('submit', event => {
-    if (!cyTouchWorkspaceEdit || !usesEntryTransactionEditor()) return;
+    if (!cyEntryTransactionEdit || !usesEntryTransactionEditor()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    saveTouchWorkspaceMobileEdit();
+    saveEntryTransactionEdit();
   }, true);
 
   nav.addEventListener('click', event => {
-    if (!cyTouchWorkspaceEdit || !usesEntryTransactionEditor()) return;
+    if (!cyEntryTransactionEdit || !usesEntryTransactionEditor()) return;
     const button = event.target.closest('[data-mobile-page]');
     if (!button || button.dataset.mobilePage === 'entry') return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    cancelTouchWorkspaceMobileEditAndReturn();
+    cancelEntryTransactionEditAndReturn();
   }, true);
 
-  const phone = window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE);
-  phone.addEventListener?.('change', () => {
-    if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+  document.addEventListener('keydown', event => {
+    if (!isDesktopInteractionWorkspace() || !cyEntryTransactionEdit || event.key !== 'Escape' || event.isComposing) return;
+    event.preventDefault();
+    cancelEntryTransactionEditAndReturn();
   });
+  document.addEventListener('click', event => {
+    if (!isDesktopInteractionWorkspace() || !cyEntryTransactionEdit) return;
+    const navigation = event.target.closest('#settingsButton, #headerAccountManagerButton, #headerCategoryManagerButton, #logoutButton, [data-statistics-open], #ledgerOpeningBalanceButton, #ledgerQuickLockButton, #ledgerExcelExport, [data-delete-id]');
+    if (navigation) cancelEntryTransactionEdit({ restoreDraftOnly: true });
+  }, true);
+  let desktop = isDesktopInteractionWorkspace();
+  window.addEventListener('resize', () => {
+    const nextDesktop = isDesktopInteractionWorkspace();
+    if (desktop !== nextDesktop && cyEntryTransactionEdit) cancelEntryTransactionEdit({ restoreDraftOnly: true });
+    desktop = nextDesktop;
+  }, { passive: true });
 
   els.monthFilter?.addEventListener('change', () => {
-    if (cyTouchWorkspaceEdit && usesEntryTransactionEditor()) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+    if (cyEntryTransactionEdit && usesEntryTransactionEditor()) cancelEntryTransactionEdit({ restoreDraftOnly: true });
   });
 
   window.addEventListener('pagehide', () => {
-    if (!cyTouchWorkspaceEdit) return;
-    cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+    if (!cyEntryTransactionEdit) return;
+    cancelEntryTransactionEdit({ restoreDraftOnly: true });
   });
 }
 
-function beginTouchWorkspaceMobileEdit(id) {
-  if (cyTouchWorkspaceEdit?.id === id) {
+function beginEntryTransactionEdit(id) {
+  if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
+  if (cyEntryTransactionEdit?.id === id) {
     if (isTabletWorkspace()) setTabletEntryExpanded(true);
     els.summary?.focus();
     return;
@@ -3999,13 +3958,13 @@ function beginTouchWorkspaceMobileEdit(id) {
   const tx = state.transactions.find(item => Number(item.id) === id);
   if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
 
-  if (cyTouchWorkspaceEdit) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+  if (cyEntryTransactionEdit) cancelEntryTransactionEdit({ restoreDraftOnly: true });
   const row = document.querySelector('#transactionRows tr[data-transaction-id="' + id + '"]');
-  cyTouchWorkspaceEdit = {
+  cyEntryTransactionEdit = {
     id,
     kind: tx.kind,
     originalMonth: String(tx.tx_date || '').slice(0, 7),
-    draft: captureTouchWorkspaceEntryDraft(),
+    draft: captureEntryTransactionDraft(),
     returnContext: {
       month: els.monthFilter?.value || '',
       search: document.querySelector('#ledgerSummarySearch')?.value || '',
@@ -4017,9 +3976,9 @@ function beginTouchWorkspaceMobileEdit(id) {
   };
 
   setEntryKind(tx.kind);
-  ensureTouchWorkspaceOption(els.accountName, tx.account_name);
+  ensureEntryTransactionOption(els.accountName, tx.account_name);
   els.accountName.value = tx.account_name;
-  ensureTouchWorkspaceOption(els.categoryName, tx.category_name);
+  ensureEntryTransactionOption(els.categoryName, tx.category_name);
   els.categoryName.value = tx.category_name;
   els.txDate.value = tx.tx_date;
   els.summary.value = tx.summary || '';
@@ -4028,16 +3987,26 @@ function beginTouchWorkspaceMobileEdit(id) {
   els.kindButtons.forEach(button => { button.disabled = true; });
   els.saveButton.textContent = '儲存修改';
   syncTouchWorkspaceEntrySecondaryAction();
-  document.querySelector('.entry-card')?.classList.add('cy-mobile-editing');
+  document.querySelector('.entry-card')?.classList.add(isDesktopInteractionWorkspace() ? 'is-entry-editing' : 'cy-mobile-editing');
   showMessage('');
   updateEntryLockState();
 
-  switchTouchWorkspaceMobilePage('entry');
-  window.scrollTo({ top: 0, behavior: 'auto' });
+  if (isDesktopInteractionWorkspace()) {
+    els.txDate.dispatchEvent(new Event('change', { bubbles: true }));
+    syncEntryUiAccountChoices();
+    void window.cyPrepareQuickEntryUi?.();
+    document.querySelector('.entry-card')?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    els.summary.focus();
+  } else {
+    switchTouchWorkspaceMobilePage('entry');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
 }
 
-async function saveTouchWorkspaceMobileEdit() {
-  const edit = cyTouchWorkspaceEdit;
+window.cyBeginEntryTransactionEdit = beginEntryTransactionEdit;
+
+async function saveEntryTransactionEdit() {
+  const edit = cyEntryTransactionEdit;
   if (!edit) return;
 
   const month = String(els.txDate.value || '').slice(0, 7);
@@ -4062,40 +4031,51 @@ async function saveTouchWorkspaceMobileEdit() {
       txDate: els.txDate.value, accountName: els.accountName.value,
       categoryName: els.categoryName.value, summary: els.summary.value, amount
     }, () => {
-      cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+      cancelEntryTransactionEdit({ restoreDraftOnly: true });
       const searchInput = document.querySelector('#ledgerSummarySearch');
       if (searchInput) searchInput.value = context.search || '';
       if (typeof cyLedgerSearch !== 'undefined') cyLedgerSearch = context.search || '';
-      switchTouchWorkspaceMobilePage('ledger');
-      restoreTouchWorkspaceLedgerContext(context, destinationMonth === context.month ? editedId : false);
+      if (!isDesktopInteractionWorkspace()) {
+        switchTouchWorkspaceMobilePage('ledger');
+        restoreTouchWorkspaceLedgerContext(context, destinationMonth === context.month ? editedId : false);
+      }
     });
-    showTouchWorkspaceLedgerNotice(destinationMonth === context.month ? '修改成功。' : '修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
+    const result = destinationMonth === context.month ? '修改成功。' : '修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。';
+    if (isDesktopInteractionWorkspace()) {
+      showMessage(result);
+      els.summary.focus();
+    } else showTouchWorkspaceLedgerNotice(result);
 
   } catch (error) {
     showMessage(error.message || '修改失敗。', true);
-    showTouchWorkspaceLedgerNotice((error.message || '修改失敗。') + ' 已還原原資料。');
+    if (!isDesktopInteractionWorkspace()) showTouchWorkspaceLedgerNotice((error.message || '修改失敗。') + ' 已還原原資料。');
     updateEntryLockState();
   }
 }
 
-function cancelTouchWorkspaceMobileEdit(options = {}) {
-  const edit = cyTouchWorkspaceEdit;
+function cancelEntryTransactionEdit(options = {}) {
+  const edit = cyEntryTransactionEdit;
   if (!edit) return;
-  cyTouchWorkspaceEdit = null;
+  cyEntryTransactionEdit = null;
 
-  clearTouchWorkspaceTemporaryOptions();
-  restoreTouchWorkspaceEntryDraft(edit.draft);
+  clearEntryTransactionTemporaryOptions();
+  restoreEntryTransactionDraft(edit.draft);
   els.kindButtons.forEach(button => { button.disabled = false; });
   els.saveButton.textContent = '儲存';
   syncTouchWorkspaceEntrySecondaryAction();
-  document.querySelector('.entry-card')?.classList.remove('cy-mobile-editing');
+  document.querySelector('.entry-card')?.classList.remove('cy-mobile-editing', 'is-entry-editing');
+  if (isDesktopInteractionWorkspace()) {
+    els.txDate.dispatchEvent(new Event('change', { bubbles: true }));
+    syncEntryUiAccountChoices();
+    void window.cyPrepareQuickEntryUi?.();
+  }
   showMessage('');
   updateEntryLockState();
 
   if (!options.restoreDraftOnly) window.cyCloseLedgerBalancePopover?.();
 }
 
-function captureTouchWorkspaceEntryDraft() {
+function captureEntryTransactionDraft() {
   return {
     kind: state.kind,
     txDate: els.txDate.value,
@@ -4106,19 +4086,19 @@ function captureTouchWorkspaceEntryDraft() {
   };
 }
 
-function restoreTouchWorkspaceEntryDraft(draft) {
+function restoreEntryTransactionDraft(draft) {
   if (!draft) return;
   setEntryKind(draft.kind);
-  ensureTouchWorkspaceOption(els.accountName, draft.accountName);
+  ensureEntryTransactionOption(els.accountName, draft.accountName);
   els.accountName.value = draft.accountName || els.accountName.value;
-  ensureTouchWorkspaceOption(els.categoryName, draft.categoryName);
+  ensureEntryTransactionOption(els.categoryName, draft.categoryName);
   els.categoryName.value = draft.categoryName || els.categoryName.value;
   els.txDate.value = draft.txDate || els.txDate.value;
   els.summary.value = draft.summary || '';
   els.amount.value = draft.amount || '';
 }
 
-function ensureTouchWorkspaceOption(select, value) {
+function ensureEntryTransactionOption(select, value) {
   const text = String(value || '').trim();
   if (!select || !text) return;
   if ([...select.options].some(option => option.value === text)) return;
@@ -4129,9 +4109,9 @@ function ensureTouchWorkspaceOption(select, value) {
   select.append(option);
 }
 
-function clearTouchWorkspaceTemporaryOptions() {
+function clearEntryTransactionTemporaryOptions() {
   for (const select of [els.accountName, els.categoryName]) {
-    select?.querySelectorAll('[data-cy-edit-temporary="1"]').forEach(option => option.remove());
+    select?.querySelectorAll('[data-entry-edit-temporary="1"]').forEach(option => option.remove());
   }
 }
 
@@ -4215,16 +4195,13 @@ function showTouchWorkspaceLedgerNotice(text) {
 
 /* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
 function isTabletWorkspace() {
-  const preview = window.__cyaccTabletPreviewEnabled === true ||
-    document.documentElement?.dataset?.tabletPreview === 'true';
-  if (preview) return true;
   const width = window.innerWidth;
   return width >= 768 && (width < 1024 ||
     (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));
 }
 
 function usesEntryTransactionEditor() {
-  return window.matchMedia('(max-width: 767px)').matches || isTabletWorkspace();
+  return isDesktopInteractionWorkspace() || window.matchMedia('(max-width: 767px)').matches || isTabletWorkspace();
 }
 window.cyUsesEntryTransactionEditor = usesEntryTransactionEditor;
 
@@ -4254,7 +4231,7 @@ function syncTabletPickerOwnership(orientation) {
   const tablet = isTabletWorkspace();
 
   if (tablet) {
-    document.querySelectorAll('.desktopUi-date-picker').forEach(root => root.remove());
+    document.querySelectorAll('.desktopUi-date-picker').forEach(root => { root.cyDisposeDatePicker?.(); root.remove(); });
     document.querySelectorAll('input[type="date"]').forEach(input => {
       input.classList.remove('desktopUi-native-date-source');
       delete input.dataset.desktopUiDatePicker;
@@ -4337,8 +4314,8 @@ function setupTabletWorkspace() {
       document.querySelectorAll('.desktopUi-date-popover, .cy-month-picker-popover').forEach(node => { node.hidden = true; });
     } else {
       if (controls.parentElement !== entry) entry.prepend(controls);
-      if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
-        cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+      if (!usesEntryTransactionEditor() && cyEntryTransactionEdit) {
+        cancelEntryTransactionEdit({ restoreDraftOnly: true });
       }
     }
     if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
@@ -4375,6 +4352,7 @@ function syncLedgerToolbarPlacement(orientation = tabletWorkspaceOrientation()) 
   if (exportButton.getAttribute('aria-busy') !== 'true') exportButton.textContent = desktop ? '匯出' : '匯出 Excel';
   const target = desktop || orientation === 'portrait' ? summaryActions : viewTools;
   window.cySyncLedgerQuickLock?.();
+  window.cySyncLedgerPresentation?.();
   if (exportButton.parentElement !== target) target.append(exportButton);
   if (status.parentElement !== target) target.append(status);
 }

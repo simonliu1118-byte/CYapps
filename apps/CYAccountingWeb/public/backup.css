@@ -110,31 +110,6 @@
   margin-left: auto;
 }
 
-.backup-security-note,
-.backup-restore-note {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 9px;
-  padding: 9px 10px;
-  border: 1px solid #d8e4eb;
-  border-radius: 6px;
-  background: #f6f9fb;
-  color: #526371;
-  font-size: 11.5px;
-  line-height: 1.55;
-}
-
-.backup-security-note strong,
-.backup-restore-note strong {
-  color: #304654;
-}
-
-.backup-restore-note {
-  margin-top: 10px;
-  border-color: #e1ddd2;
-  background: #fbfaf6;
-}
-
 .backup-history-block {
   margin-top: 11px;
 }
@@ -407,3 +382,37 @@
 .mobile-backup-error {
   color: #a54b45 !important;
 }
+
+/* Recovery presentation; the existing backup UI owns the single form/action state. */
+.backup-recovery-launcher { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; border-top: 1px solid #dce2e8; padding-top: 12px; margin-top: 12px; }
+.backup-recovery-action { min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 6px; }
+.backup-recovery-action .hint { margin: 0; }
+.backup-emergency-link { display: flex; align-items: center; gap: 10px; margin-top: 0; padding: 12px; border: 1px solid #cbddeb; border-radius: 8px; background: #f2f7fc; color: #2e5e87; text-decoration: none; }
+.backup-emergency-link svg { width: 27px; height: 27px; flex: 0 0 auto; }
+.backup-emergency-link > span:nth-child(2) { display: grid; gap: 3px; flex: 1; }
+.backup-emergency-link strong { font-size: 13px; }
+.backup-emergency-link small { font-size: 11px; color: #647b90; }
+.backup-emergency-link:hover { border-color: #91b3d0; background: #eaf3fc; }
+.backup-emergency-link:focus-visible { outline: 2px solid #2f6db2; outline-offset: 2px; }
+.backup-recovery-dialog { width: min(580px, calc(100% - 32px)); }
+.backup-recovery-dialog .modal-header { padding: 16px 20px; border-bottom: 1px solid #dce2e8; align-items: center; }
+.backup-recovery-dialog .modal-header h2 { font-size: 18px; }
+.backup-recovery-body { padding: 16px 20px; }
+.backup-recovery-notice { margin: 0 0 14px; padding: 10px 12px; border-radius: 7px; background: #fff8ea; color: #786040; font-size: 12px; line-height: 1.6; }
+.backup-recovery-body label { display: grid; gap: 6px; margin: 12px 0; font-size: 13px; }
+.backup-recovery-body select, .backup-recovery-body input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; }
+.backup-recovery-body .hint { font-size: 12px; margin: 12px 0; }
+.backup-recovery-body .backup-recovery-review { display: flex; align-items: center; gap: 8px; }
+.backup-recovery-review input { width: auto; }
+.backup-recovery-footer { padding: 12px 20px; border-top: 1px solid #dce2e8; text-align: right; }
+#backupRecoveryConfirm { margin-top: 14px; padding-top: 4px; border-top: 1px solid #dce2e8; }
+
+html[data-viewport="desktop"] #settingsDialog .backup-policy-row { display: none; }
+
+@media (max-width: 540px) { .backup-recovery-launcher { grid-template-columns: minmax(0, 1fr); } }
+
+.backup-health-dialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
+.backup-health-dialog p { line-height: 1.6; }
+.backup-health-dialog .modal-header { color: #9b2c21; }
+.backup-health-delivery:empty { display: none; }
+.backup-health-actions { display: flex; justify-content: flex-end; margin-top: 16px; }

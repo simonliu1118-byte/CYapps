@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.4`
+> **Contract version:** `1.0.6`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -397,6 +397,33 @@ existing login/resolve/logout and App Access contracts. Registering an applicati
 does not configure service bindings, enable a consumer's CYID flag, merge identity
 and business Workspaces, or authorize a production rollout.
 
+### 17.2 Temporary testing account deletion — 2026-10-15
+
+Contract 1.0.5 adds optional `testingAccountDeletionAllowed: boolean` to the admin
+snapshot. An absent/false field retains the pending-only delete UI. During the
+explicitly approved testing period the existing `DELETE
+/v1/admin/identity/employees/{employeeId}` also accepts previously verified
+accounts, but only for the current Super Admin's core account application Session.
+Self-deletion, the protected Super Admin and foreign-Workspace targets remain
+forbidden. Normal ADMIN/Identity Admin retain only their existing pending-account
+management permissions. The server rechecks target revision and live core Super
+Admin Session/authority transactionally before deleting a verified account.
+
+Deletion removes the Employee and its provider-owned credentials, first-login
+material, Sessions and direct App Access by existing FK cascades; scoped Email
+verification/password-reset challenges are removed in the same transaction.
+Consumer-owned business history/member projections are retained and must never
+be rebound by employee number or email. Recreating the same number/email receives
+a fresh employeeId, no inherited Session or App/Module Access.
+
+For this testing exception only, new-account creation (including its initial
+Email delivery result) and account deletion do not append Identity audit events.
+Existing audit history and other events, including password/verification, resend,
+role/access changes and application registration, remain intact. The source-owned
+`ACCOUNT_LIFECYCLE_TESTING` defaults must be restored to verified deletion=false
+and create/delete audit=true before the first business release. Root project TODO
+tracks restoration and actual acceptance; this is not a permanent rules change.
+
 ## 18. Consumer adoption and update procedure
 
 When an application begins CYID integration:
@@ -460,3 +487,13 @@ Consumer-specific handoffs contain only migration/app differences and may never 
 - Initial Email verification re-send uses `/v1/admin/identity/employees/{employeeId}/email-verification/resend-initial`; activated-account re-verification retains `/email-verification/resend`. Initial delivery results use `emailVerificationDelivery`; the old `activationDelivery` alias and `/activation/resend` route are retired.
 - Consumer Impact: **CONSUMER_UPDATE_REQUIRED** for consumers of these obsolete fields/routes. CY Web adopts 1.0.2 and must deploy before provider retirement reaches production. CYACC direct-principal/session integration does not use these fields/routes and remains compatible with its declared 1.0.1. Minimum compatible remains 1.0.0; it is not raised across unaffected consumers.
 - Daily production deployment requires the deployed core consumer to report adopted contract 1.0.2 and does not import development authority.
+
+## 20. Private operational notification capability
+
+Contract 1.0.6 optionally exports the named private RPC entrypoint `ConsumerNotifications`. A trusted server consumer may bind it to the same canonical Identity provider as its `IDENTITY` Fetcher, with an app-local binding name such as `BACKUP_NOTIFICATIONS`. There is no public HTTP route. Existing consumers and minimum 1.0.0 remain supported.
+
+`notifySuperAdmin({workspaceId, applicationId, type: "backup_health_failed", eventId})` accepts only a deployment-derived scope and an opaque UUID incident ID. The consumer owns backup checks, incident state and local business authorization; it must not expose a browser-callable relay or allow browser-selected scope. No recipient, subject, message, finance data, backup contents, resource identifiers or Session is accepted.
+
+The provider revalidates active Workspace, registered/enabled Application and the current protected Super Admin pointer with an enabled Employee and verified Email. It sends fixed generic text using the canonical Email adapter and shared global/Workspace budget. No Email address is returned or copied into app storage. A bounded delivery slot per Workspace/Application/type coalesces concurrent requests; successful incident IDs are idempotent while current, and new incidents are rate-limited to one delivery per hour. Return status is `delivered`, `already_delivered` or `deferred`; failures expose stable codes only. Consumer retries deferred/failed delivery with the same active incident ID, and keeps its login warning until its checks recover. An ambiguous transport failure can cause a repeated alert; it cannot authorize any account or business action.
+
+This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.

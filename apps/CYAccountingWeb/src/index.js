@@ -86,12 +86,14 @@ async function handleBootstrap(db) {
     `),
     db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'")
   ]);
+  const bookEpoch=await db.prepare("SELECT value FROM meta WHERE key='accounting_epoch'").first();
   const lockedValue = String(lockSetting.results?.[0]?.value || '').trim();
   const lockedThrough = isMonth(lockedValue) ? lockedValue : null;
   return json({
     ok: true,
     accounts: accounts.results || [],
     archivedAccounts: archivedAccounts.results || [],
+    accountingEpoch:String(bookEpoch?.value||''),
     groups: groups.results || [],
     categories: categories.results || [],
     lockedThrough
@@ -128,7 +130,12 @@ async function handleCreateTransaction(request, db) {
     INSERT INTO transactions(tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(values.txDate, values.accountName, values.kind, values.categoryName, values.summary, values.amount, now, now).run();
-  return json({ ok: true, id: result.meta?.last_row_id ?? null }, 201);
+  const id = Number(result.meta?.last_row_id);
+  return json({ ok: true, id, transaction: {
+    id, tx_date: values.txDate, account_name: values.accountName, kind: values.kind,
+    category_name: values.categoryName, summary: values.summary, amount: values.amount,
+    created_at: now, updated_at: now
+  } }, 201);
 }
 
 async function handleUpdateTransaction(id, request, db) {

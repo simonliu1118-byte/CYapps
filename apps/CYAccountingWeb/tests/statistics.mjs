@@ -81,6 +81,8 @@ const synthetic = structuredClone(classified); synthetic.groups[0].subjects[0].n
 synthetic.groups.find(group => group.kind === 'expense').subjects[0].name = '<script>bad</script>';
 assert.ok(ui.renderStatistics(synthetic).includes('&lt;script&gt;bad&lt;/script&gt;'));
 assert.ok(ui.renderStatistics(synthetic).includes('均排除指定移轉科目'));
+assert.ok(!ui.renderStatistics(synthetic, { compactScope: true }).includes('（設定 → 統計／損益）'));
+assert.ok(ui.renderStatistics(synthetic).includes('（設定 → 統計／損益）'), 'touch and report reference remains unchanged');
 assert.ok(!ui.renderStatistics(classified).includes('data-statistics-group="income:'));
 assert.ok(ui.renderStatistics(classified).includes('非移轉記帳共 2 筆'));
 assert.equal(ui.statisticsItems(period,'income').reduce((sum,item)=>sum+item.amount,0),1651);
@@ -137,3 +139,13 @@ for (const page of ['entry','ledger','statistics']) {
 }
 assert.equal(refreshes,1); context.applyMobileWorkspacePage('statistics',false); assert.equal(shell.dataset.mobilePage,''); assert.ok(!entry.classList.contains('cy-mobile-page-hidden')); assert.ok(!ledger.classList.contains('cy-mobile-page-hidden'));
 console.log('Statistics SQL, authorization, transfer settings, backup, rendering and mobile navigation checks passed.');
+
+for(const [net,label] of [[1,'淨利'],[-1,'淨損'],[0,'損益']]) {
+  const data=structuredClone(classified);data.operating.net=net;
+  for(const options of [{id:'single',compactScope:true},{id:'period'}]) {
+    const html=ui.renderStatistics(data,options);
+    assert.match(html,new RegExp('<span>'+label+'</span>'));
+    assert.ok(!html.includes('淨利損'));
+  }
+  assert.match(ui.renderIncomeStatement(data),new RegExp('本月'+label));
+}

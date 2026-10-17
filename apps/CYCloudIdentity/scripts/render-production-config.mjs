@@ -61,6 +61,11 @@ function cli() {
   const database = JSON.parse(fs.readFileSync(databasePath, 'utf8'));
   if (settings.success !== true || database.success !== true || !database.result) throw new Error('PRODUCTION_RESOURCE_READ_FAILED');
   const config = buildProductionConfig({ settings: settings.result, database: database.result, workerName: process.env.PROD_CYID_WORKER_NAME, developmentDatabaseId: process.env.DEV_CYID_D1_DATABASE_ID });
+  // Wrangler prints bindings/vars during dry-run and deploy. Mask existing
+  // production metadata before either command; secret_text values stay absent.
+  const mask = value => console.log('::add-mask::' + String(value).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  for (const value of [config.name, ...Object.values(config.vars), config.d1_databases[0].database_name,
+    config.d1_databases[0].database_id, ...config.ratelimits.map(rate => rate.namespace_id)]) mask(value);
   fs.writeFileSync(outputPath, JSON.stringify(config, null, 2)+'\n', { mode: 0o600 });
   const health = new URL('/api/health', config.vars.ACCOUNT_PORTAL_URL).href;
   console.log(`::add-mask::${health}`);

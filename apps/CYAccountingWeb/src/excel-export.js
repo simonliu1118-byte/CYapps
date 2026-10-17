@@ -147,7 +147,7 @@ function ledgerSheetXml({ month, locked, generatedAt, openingTotal, income, expe
     inlineCell('A3', '期初', 3), numberCell('B3', openingTotal, 4),
     inlineCell('C3', '收入', 3), numberCell('D3', income, 4),
     inlineCell('E3', '支出', 3), numberCell('F3', expense, 4),
-    inlineCell('G3', '淨利損', 3), formulaNumberCell('H3', 'D3-F3', net, 4)
+    inlineCell('G3', net > 0 ? '淨利' : net < 0 ? '淨損' : '損益', 3), formulaNumberCell('H3', 'D3-F3', net, 4)
   ]));
   rows.push(rowXml(4, [inlineCell('A4', '期末', 3), formulaNumberCell('B4', 'B3+D3-F3', ending, 4)]));
   rows.push(rowXml(6, [

@@ -8,6 +8,8 @@ import { renderWrangler } from '../scripts/render-wrangler.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
 const TEMPLATE = path.join(PROJECT_ROOT, 'wrangler.template.jsonc');
+const workflow = fs.readFileSync(path.resolve(PROJECT_ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
+assert.match(workflow, /node scripts\/resolve-cyid-production-runtime\.mjs --require-account-portal/, 'portal navigation deployment must enforce the live authority gate');
 const CYID_DEV_TEMPLATE = path.join(PROJECT_ROOT, 'wrangler.cyid-development.template.jsonc');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cyaccounting-wrangler-'));
 const output = path.join(tempDir, 'wrangler.ci.generated.jsonc');
@@ -21,6 +23,7 @@ try {
     CF_IDENTITY_SERVICE: 'cyidentity-ci-placeholder',
     CF_CYID_APPLICATION_ID: 'CYACC_CI',
     CF_CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
+    CF_CYWEB_PORTAL_URL: 'https://portal.example.test/',
     CF_R2_BACKUP_BUCKET: 'cyaccounting-backup-ci',
     CF_BACKUP_TOPOLOGY: 'legacy_gcs',
     CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'acc.example.com'
@@ -43,7 +46,8 @@ try {
   assert.equal(rendered.vars.BACKUP_TOPOLOGY, 'legacy_gcs');
   assert.equal(rendered.vars.CYID_APPLICATION_ID, env.CF_CYID_APPLICATION_ID);
   assert.equal(rendered.vars.CYID_WORKSPACE_ID, env.CF_CYID_WORKSPACE_ID);
-  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/', '/index.html', '/login', '/login.html']);
+  assert.equal(rendered.vars.CYWEB_PORTAL_URL, env.CF_CYWEB_PORTAL_URL);
+  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/recovery', '/', '/index.html', '/login', '/login.html']);
   assert.equal(rendered.triggers.crons[0], '30 19 * * *');
   assert.equal(/__CF_[A-Z0-9_]+__/.test(renderedText), false);
 
@@ -52,6 +56,9 @@ try {
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_APPLICATION_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_APPLICATION_ID: 'bad app' }, templatePath: TEMPLATE, outputPath: output }), /CF_CYID_APPLICATION_ID has an invalid format/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_WORKSPACE_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
+  for (const portal of ['', 'http://portal.example.test/', 'https://portal.example.test/?employee=1234', 'https://portal.example.test/path']) {
+    assert.throws(() => renderWrangler({ env: { ...env, CF_CYWEB_PORTAL_URL: portal }, templatePath: TEMPLATE, outputPath: output }), /Missing required|plain HTTPS/);
+  }
   assert.throws(() => renderWrangler({ env: { ...env, CF_R2_BACKUP_BUCKET: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_BACKUP_TOPOLOGY: 'r2_only' }, templatePath: TEMPLATE, outputPath: output }), /legacy_gcs or parallel_dual_provider/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
@@ -86,6 +93,10 @@ try {
     templatePath: CYID_DEV_TEMPLATE,
     outputPath: devOutput
   }), /Missing required deployment variable/);
+
+  renderWrangler({env:{...env,CF_RECOVERY_D1_DATABASE_NAME:'test-recovery',CF_RECOVERY_D1_DATABASE_ID:'22222222-2222-4222-8222-222222222222'},templatePath:TEMPLATE,outputPath:output});
+  assert.equal(JSON.parse(fs.readFileSync(output,'utf8')).d1_databases[1].binding,'RECOVERY_DB');
+  assert.throws(()=>renderWrangler({env:{...env,CF_RECOVERY_D1_DATABASE_NAME:'test-recovery',CF_RECOVERY_D1_DATABASE_ID:env.CF_D1_DATABASE_ID},templatePath:TEMPLATE,outputPath:output}),/must differ/);
 
   const template = fs.readFileSync(TEMPLATE, 'utf8');
   const devTemplate = fs.readFileSync(CYID_DEV_TEMPLATE, 'utf8');

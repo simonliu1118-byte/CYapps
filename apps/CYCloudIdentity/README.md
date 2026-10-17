@@ -42,3 +42,9 @@ Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete 
 ## Cost mode
 
 架構以可用免費額度為預設，不自動啟用付費方案。實際 quota、deployment state 與 rollout gate 只記錄在 `TODO.md`／deployment docs。
+
+### 0.3.10 備份異常通知
+
+新增選用的 private `ConsumerNotifications` RPC entrypoint，供程式背景備份檢查異常時通知目前超管。沿用既有 Email provider／Workspace 額度，不向 consumer 提供信箱或寄信憑證；固定通知內容、事件去重及冷卻由同一 provider 實作。契約見 consumer standard §20。既有登入、Email 驗證、Session 與 App Access 不變。
+
+0.3.10 Build 1：正式部署 readiness 沿原 canonical portal／authority／Workspace／core App／health guard，consumer version 依官方 minimum..current 支援範圍判斷；不再把 backward-compatible 新能力誤當所有 consumer 必須同版。範圍外、宣告與實際 health 不一致仍拒絕。

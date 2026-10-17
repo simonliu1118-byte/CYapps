@@ -145,3 +145,56 @@ assert.match(source181, /colspan=\"6\"/);
 assert.match(css181, /overflow-x:\s*hidden/);
 assert.match(css181, /\.backup-history-table\s*\{[\s\S]*?min-width:\s*850px;[\s\S]*?\}[\s\S]*?\.backup-history-table\s*\{[\s\S]*?min-width:\s*0;/);
 console.log('Tiered backup UI, compact history, and Phase C acceptance progress tests passed.');
+
+const phaseD = context.backupUiModel({provider:'tiered',topology:'parallel_dual_provider',configured:true,policy:{phase:'phase_d'},providers:{cloudflare_r2:{retentionDays:30},google_cloud_storage:{retentionDays:182,role:'cross_cloud_long_term'}},schedule:{localTime:'R2 每日；GCS 週三、週日 03:30（台灣時間）'},logicalBackups:[]});
+assert.match(phaseD.retention,/GCS 182 天（Phase D）/);
+assert.match(phaseD.schedule,/週三、週日/);
+const nodes = new Map([['#backupHistoryRows',{}],['#backupRestoreTools',{}],['#backupRestoreStatus',{}],['#backupVerifyRestore',{}],['#backupActivatePhaseD',{}]]);
+context.document.querySelector = selector => nodes.get(selector) || null;
+context.renderTieredBackupHistory([{gcsExpected:false,copies:[{provider:'cloudflare_r2',status:'success'}],status:'success'}]);
+assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML,/本日未排程/);
+assert.match(nodes.get('#backupHistoryRows').innerHTML, /<td class="backup-copy-cell"><\/td>/, 'unscheduled GCS stays an empty cell');
+assert.doesNotMatch(renderedHtml, /backupVerifyRestore|backupRestoreStatus|backupActivatePhaseD|檢查備份可還原性|試還原並核對/);
+assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);
+
+// Only the launcher remains in settings; the single restore form is dialog-owned.
+assert.ok(renderedHtml.indexOf('id="backupRunNow"') < renderedHtml.indexOf('id="backupMessage"'));
+assert.equal((renderedHtml.match(/id="backupRunNow"/g)||[]).length,1);
+assert.ok(renderedHtml.includes('id="backupOpenRecovery"'));
+assert.ok(!renderedHtml.includes('id="backupRecoverySource"'));
+assert.ok(renderedHtml.includes('backup-emergency-link'));
+const confirmPanel={hidden:false}, reviewed={checked:true}, text={value:'重建獨立帳本'}, commit={disabled:false};
+nodes.set('#backupRecoveryConfirm',confirmPanel);nodes.set('#backupRecoveryReviewed',reviewed);nodes.set('#backupRecoveryConfirmation',text);nodes.set('#backupRecoveryCommit',commit);
+vm.runInContext('backupRecoveryPreview={id:"TEST_PREVIEW"}',context);
+context.cancelBackupRecoveryPreview();
+assert.equal(confirmPanel.hidden,true);assert.equal(reviewed.checked,false);assert.equal(text.value,'');assert.equal(commit.disabled,true);
+vm.runInContext('backupRecoveryPreview={id:"TEST_PREVIEW"}',context);
+reviewed.checked=true;text.value='wrong';context.syncBackupRecoveryConfirmation();assert.equal(commit.disabled,true);
+text.value='重建獨立帳本';context.syncBackupRecoveryConfirmation();assert.equal(commit.disabled,false);
+// A completed asynchronous preview cannot revive a closed/cancelled dialog.
+const previewButton={disabled:false}, recoveryDialog={open:true};
+nodes.set('#backupRecoveryPreview',previewButton);nodes.set('#backupRecoveryDialog',recoveryDialog);
+for(const [id,value] of [['Source','TEST_BACKUP'],['Provider','google_cloud_storage'],['Reason','TEST_REASON']])nodes.set('#backupRecovery'+id,{value});
+let resolvePreview;context.api=()=>new Promise(resolve=>{resolvePreview=resolve;});
+context.jsonHeaders=()=>({'content-type':'application/json'});
+const pendingPreview=context.previewBackupRecovery();
+recoveryDialog.open=false;context.cancelBackupRecoveryPreview();
+resolvePreview({preview:{id:'TEST_LATE',counts:{transactions:1}}});await pendingPreview;
+assert.equal(confirmPanel.hidden,true);assert.equal(commit.disabled,true);
+console.log('Backup launcher/dialog boundary, cancellation, typed confirmation and late-preview discard passed.');
+
+// Healthy boots stay silent; failed health opens one accessible warning, without
+// exposing operational identifiers or making any restore request.
+let warningCreated=0,shown=0,closed=0;
+const textNodes=new Map([['#backupHealthWarningText',{}],['.backup-health-delivery',{}]]);
+const warning={open:false,setAttribute(){},querySelector(selector){return selector==='button'?{addEventListener(name,fn){this.close=fn;}}:textNodes.get(selector);},showModal(){shown++;this.open=true;},close(){closed++;this.open=false;}};
+context.document.createElement=()=>{warningCreated++;return warning;};
+context.document.body={append(node){nodes.set('#backupHealthWarning',node);}};
+context.api=async()=>({health:{status:'healthy'}});
+await context.showBackupHealthWarning();assert.equal(warningCreated,0);
+context.api=async()=>({health:{status:'failed',issues:[{provider:'google_cloud_storage',code:'RESTORE_SIZE_OR_SOURCE'}],emailPending:true}});
+await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS.*自動檢查未通過/);
+assert.match(textNodes.get('.backup-health-delivery').textContent,/下次排程重試/);
+await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
+console.log('Healthy boot silence and single accessible Super Admin incident warning passed.');
