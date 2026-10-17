@@ -80,6 +80,18 @@
 | 一般發票官方不明、手動補登／同 OrderID 受控重送 | **3.3**；更新原列、有 Audit、不得重複成功 | 原 Invoice Sync／Upload Issue 保留 |
 | 其餘非折讓同步／PDF／UI／文件技術債 | **3.3**；全版回歸且無未知 blocker | 以前版為基礎，不新造 core |
 
+### 2026-10-17 分版二次複查：跨版相依與尚未寫透的發行阻塞（在所屬版處理）
+
+此節補充「目前 Source 有什麼」與「當版能獨立驗收」的差距，**不新增一套資料庫、管理員權限或重寫既有核心**。這些是實際程式與 SQL 對照結果；後續按下列版本接回，沒有驗收證據就不得直接打勾。
+
+- [ ] **3.0：公司卡不能只有存取 UI，必須真正供現有開票與 MO 匯入使用。**現有 `cloud/src/company-settings.ts`、`company-settings-route.ts`、`CloudCompanySettingsClient.cs`／`SettingsForm.cs` 只讓管理員讀**安全狀態**／超管寫加密欄位；`loadAmegoCompanySettingsForGateway` 是 Worker 內部 helper，**尚無完成的 Windows DPAPI 加密憑證授權同步／變更時快取失效**。現有 `AmegoClient` 仍由呼叫端傳入統編／App Key；必須選定單一合法取用流程，測試 D1 存的公司卡真的影響 CYID 開票及 MO 匯入、一般 ADMIN 不會取得密文或明文，且**Cloud 失聯時既有安全開票降級不退步**；禁止為了通過 UI 測試把秘密未授權下發。
+- [ ] **3.0：公司卡 migration 可與 Work Item 拆，但現有 Draft 測試順序不能直接照搬。**`cloud/drafts/0017_company_settings.sql` 註解寫「等待 0015 Work Item」，實際兩張表的 FK 對象是既有 `workspaces`／`devices`／自身公司設定，**未直接引用 `work_items`**。先獨立審視並選定 3.0 正式公司卡 migration 的連續版本與 SHA；3.1／3.2 的舊 Draft 0015～0019 依正式版次接續調整，不得使已套的 D1 migration 重號／改寫已執行檔；`cloud/tests/v3-migration-rehearsal.test.mjs` 目前直接 assert 0014 最後、0015～0019 全部草稿順序，**必須改為可逐版跑**的 3.0→3.1→3.2/rollback 合成測試。
+- [ ] **3.0：Worker 端點／用戶端版次隔離。**現有 `cloud/src/app.ts` 同時掛載 `handleWorkItems`、`handleAllowanceApplications`、`handleAllowanceVoidApplications`、`handleCompanySettings`、`handleRecoveryRoutes`。3.0 必須只包含已驗收的公司卡／復原端點，不可僅依靠 3.1／3.2 資料表還不存在來保護提前啟用的路由；逐步核對舊 Windows V2.6.19／新 3.0 對原 Worker 的協議及功能相容，不能先撤舊模式就讓現有 Device 失聯。無須新增第二個環境或測試 Worker。
+- [ ] **3.0：發行／資料回復順序的獨立門檻。**必要 D1 備份與完整性／FK／現有裝置稽核核對→加法 schema 與可向後相容 Worker→CYWEB private Binding／Recovery → Windows 3.0 版；執行前明列舊 Windows／新 Windows 能否連到新 Worker、復原邀請已簽發但未完成如何停用／回退、D1 時點回復會否丟失 migration 後新事務。0014 會重建 `security_audit_events`，**合成 SQLite 成功不等於真 D1 與真 Email 已驗收**。原 Worker／D1 操作及 Release 仍須當次另外批准。
+- [ ] **3.1：跨機管理員拿不到必要的作廢業務資料。**`cloud/drafts/0015_work_items.sql`、`CloudWorkItemClient.cs` 目前以 `reference_hash`、工作單狀態、錯誤碼／時間為主，`EmployeeVoidWorkflowService.ApproveManualReviewAsync` 仍查**本機** `InvoiceRecord`；B 機沒有 A 機 SQLite 時不能直接取得原發票號碼、作廢原因、紙本收回狀態或安全查官方的憑證。須在**既有** Work Item 下增補經授權的必要例外業務摘要／遠端官方唯讀查驗（不複製正常發票總表），讓 B 機可操作且 A 機安全回寫；不能把「D1 工作單列表看得到」當作跨機作廢完成。上傳問題 B 機也須能看到足以判斷／封存的錯誤上下文，不是只有錯誤碼。
+- [ ] **3.2：Cloud 斷線降級的授權／唯一性不可因 3.0 公司卡而被錯誤視為已解決。**本機可讀到 App Key ≠ 能合法進行原本 CYID 跨機 Work Item 的 g0401；另須處理裝置已明確撤銷與單純斷線的區分、最後可信管理員核准、同一申請競爭、跨裝置不重疊號段、離線發送固定號碼與重連 D1 稽核合併。以正式 3.1 Work Item 作基礎；不安全不可開放。
+- [ ] **每版安全回歸規則（3.0～3.3）**：雖將「一般發票結果不明」完整管理員新功能排在 3.3，**任何在較早版發現會造成重複開票、官方未知當成功、資料遺失或已撤銷 Device 繼續動作的重大缺陷，都不可因「排在 3.3」而照常發布**；須在發現版先阻擋或修復既有流程，3.3 只延後非阻斷的新 UI／進階管理功能。3.0、3.1 附帶的 V2 人工折讓／作廢、AutoInput/IPC 現有相容不可因功能切片消失。
+
 **續作 SOP**：開始該版本→讀本節及 [CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md)／`PROJECT_RULES.md`→取得前版正式 source／latest `main` 與 #440/#151 定錨→逐檔核對差異、保留既有 tests→只在該版移植及修補缺口→新 exact-head CI→真設備／安全資料驗收→更新本節 checkbox、來源/目標 commit、待辦與驗收證據→另經使用者授權才部署／發布。舊 `[x]` **只代表 Draft 工程做過，不代表任何版別已發行**。
 
 ## 2026-10-17 V3 人工選號 UI 退役／斷線新版需求（Draft）
