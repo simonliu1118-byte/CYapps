@@ -110,6 +110,49 @@ assert.equal(auth.body.workspaceId, 'ws_invoice');
 assert.equal(auth.body.principal.workspaceId, 'ws_identity');
 assert.equal(auth.body.principal.employeeId, 'emp_owner');
 assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
+
+// A V3.0 company card never activates just because the Worker contains its
+// source. It needs an explicit flag AND installed schema 0014+0015.
+// No real D1/Worker is modified by this synthetic exercise.
+const companyCredentials = credentials;
+const disabledCard = await call('/v1/company-settings/get',companyCredentials);
+assert.equal(disabledCard.status,503);
+assert.equal(disabledCard.body.error.code,'COMPANY_SETTINGS_NOT_READY');
+assert.equal((await call('/v1/company-settings/get',companyCredentials,tokens[0],
+  {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'13'})).status,503);
+consumer.db.exec(readFileSync('drafts/0015_company_settings.sql','utf8'));
+const companyEnabled = {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'15',
+  COMPANY_SETTINGS_KEY_HEX:'ab'.repeat(32)};
+const initialCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);
+assert.equal(initialCard.status,200);
+assert.equal(initialCard.body.company,null);
+const companyEdit = {...companyCredentials,expectedRevision:0,sellerInvoice:'12345678',
+  amegoAppKey:{action:'replace',value:'SYNTHETIC_APP_KEY_FOR_TEST_ONLY'},
+  moExcelPassword:{action:'replace',value:'SYNTHETIC_MO_TEST_ONLY'}};
+const createdCard = await call('/v1/company-settings/update',companyEdit,tokens[0],companyEnabled);
+assert.equal(createdCard.status,200,JSON.stringify(createdCard.body));
+assert.deepEqual(createdCard.body.company,{sellerInvoice:'12345678',revision:1,
+  hasAmegoAppKey:true,hasMoExcelPassword:true});
+const retrievedCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);
+assert.equal(retrievedCard.status,200);
+assert.deepEqual(retrievedCard.body.company,createdCard.body.company);
+for(const reply of [createdCard,retrievedCard]){
+  for(const forbidden of ['SYNTHETIC_APP_KEY_FOR_TEST_ONLY','SYNTHETIC_MO_TEST_ONLY','v1:'])
+    assert.equal(JSON.stringify(reply).includes(forbidden),false,
+      'company-card HTTP must never return credentials or encrypted envelopes');
+}
+assert.equal((await call('/v1/company-settings/update',companyEdit,tokens[0],companyEnabled)).status,409,
+  'stale revision must not re-run a company-card mutation');
+provider.db.prepare("UPDATE employees SET role_key='ADMIN' WHERE employee_id='emp_user'").run();
+assert.equal((await call('/v1/company-settings/get',{employeeNo:'0002',password:pass},
+  tokens[0],companyEnabled)).status,200);
+assert.equal((await call('/v1/company-settings/update',{...companyEdit,employeeNo:'0002',password:pass,
+  expectedRevision:1},tokens[0],companyEnabled)).status,403);
+provider.db.prepare("UPDATE employees SET role_key='USER' WHERE employee_id='emp_user'").run();
+assert.equal((await call('/v1/company-settings/get',{employeeNo:'0002',password:pass},
+  tokens[0],companyEnabled)).status,403);
+assert.equal(consumer.db.prepare('SELECT COUNT(*) AS n FROM company_settings_audit_events').get().n,1);
+
 // Private background synchronization invalidates existing authority only; no login/session writes.
 const cachedUser = { employeeId: 'emp_user', credentialVersion: 1, employeeRevision: 1,
   workspaceRole: 'USER', isIdentityAdmin: false, emailVerified: true };

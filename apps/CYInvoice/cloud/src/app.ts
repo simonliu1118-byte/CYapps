@@ -3,12 +3,16 @@ import baseWorker from "./worker";
 import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
+import { handleCompanySettings } from "./company-settings-route";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
+  // Feature remains disabled until the original D1 was safely upgraded.
+  COMPANY_SETTINGS_ENABLED?: string;
+  COMPANY_SETTINGS_KEY_HEX?: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
   WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT: RateLimit;
@@ -44,10 +48,21 @@ export default {
         || path.startsWith("/v1/super-admin") || path.startsWith("/v1/onboarding/bootstrap")
         || path === "/v1/bootstrap")
       return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
+    const companySettingsPath = path === "/v1/company-settings/get" ||
+      path === "/v1/company-settings/update";
+    // Exposing the route requires BOTH an explicit opt-in and the reviewed
+    // recovery+company migration marker. Schema 13 is the existing D1.
+    // Do not probe missing tables or silently fall back to local credentials.
+    if (companySettingsPath && (env.COMPANY_SETTINGS_ENABLED !== "true" ||
+        !/^[0-9]+$/.test(env.SCHEMA_VERSION) || Number(env.SCHEMA_VERSION) < 15))
+      return Response.json({ok:false,error:{code:"COMPANY_SETTINGS_NOT_READY"}}, {
+        status:503,headers:{"cache-control":"no-store"}
+      });
     const needsEmployee = request.method === "POST" && [
       "/v1/devices/revoke", "/v1/devices/rename", "/v1/device-pairings/authorization-email",
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
+      "/v1/company-settings/get", "/v1/company-settings/update",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -72,6 +87,9 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const deviceLifecycleResponse = await handleDeviceLifecycle(request, env);
     if (deviceLifecycleResponse) return deviceLifecycleResponse;
+
+    const companySettingsResponse = await handleCompanySettings(request, env);
+    if (companySettingsResponse) return companySettingsResponse;
 
     return baseWorker.fetch(request, env);
 }
