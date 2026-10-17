@@ -32,20 +32,22 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     // ERP 供應商查詢 (PURI01, user 2026-10-17).
     public const string SupplierQuery = "SUPPLIER_NO";
     public const string SupplierSearch = "SUPPLIER_NAME";
+    /// <summary>A supplier's 進貨單 (PURR18, user 2026-10-18).</summary>
+    public const string PurchaseQueryType = "PURCHASES";
     public const string SalesQueryType = "SALES";
     public const string ReceivableQueryType = "RECEIVABLE";
     /// <summary>One 銷貨單／銷退單 by number (a 未收款 憑證, user 2026-10-17).</summary>
     public const string OrderQueryType = "ORDER";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, SalesQueryType, ReceivableQueryType, OrderQueryType];
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType];
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
     /// <summary>A customer, supplier, 銷貨銷退 or 未收款 job (not the item queries).</summary>
     public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SupplierQuery or SupplierSearch
-        or SalesQueryType or ReceivableQueryType or OrderQueryType;
+        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType;
 
     /// <summary>CUSTOMER_*／SUPPLIER_*: whose form is queried.</summary>
     public ErpParty Party => QueryType is SupplierQuery or SupplierSearch ? ErpParty.Supplier : ErpParty.Customer;
@@ -54,11 +56,11 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public bool IncludeCost { get; init; }
     /// <summary>CUSTOMER_NO／SALES: the customer.</summary>
     public string? CustomerCode { get; init; }
-    /// <summary>SUPPLIER_NO: the supplier.</summary>
+    /// <summary>SUPPLIER_NO／PURCHASES: the supplier.</summary>
     public string? SupplierCode { get; init; }
     /// <summary>The code of a CUSTOMER_NO／SUPPLIER_NO job.</summary>
     public string? PartyCode => QueryType == SupplierQuery ? SupplierCode : CustomerCode;
-    /// <summary>SALES: the 單據日期 range CY Web resolved (yyyy-MM-dd), echoed back unchanged.</summary>
+    /// <summary>SALES／PURCHASES: the 單據日期 range CY Web resolved (yyyy-MM-dd), echoed back unchanged.</summary>
     public string? DateFrom { get; init; }
     public string? DateTo { get; init; }
     /// <summary>RECEIVABLE: CUSTOMER／SALESPERSON／ALL and the code (null for ALL).</summary>
@@ -75,6 +77,7 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         CustomerSearch => $"客戶名稱「{Keyword}」",
         SupplierQuery => $"廠商 {SupplierCode}",
         SupplierSearch => $"廠商名稱「{Keyword}」",
+        PurchaseQueryType => $"廠商 {SupplierCode} 進貨退貨單（{DateFrom}～{DateTo}）",
         SalesQueryType => $"客戶 {CustomerCode} 銷貨銷退單（{DateFrom}～{DateTo}）",
         ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
         OrderQueryType => $"單號 {OrderNo}",
@@ -87,6 +90,14 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         DateOnly Date(string? text, string what) =>
             HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的單據日期{what}日缺少或格式不正確。");
         return SalesQuery.Resolve(CustomerCode ?? string.Empty, Date(DateFrom, "起"), Date(DateTo, "迄"), today);
+    }
+
+    /// <summary>The PURCHASES request; a bad code or date throws <see cref="ArgumentException"/> (reported as FAILED).</summary>
+    public PurchaseQuery Purchases(DateOnly today)
+    {
+        DateOnly Date(string? text, string what) =>
+            HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的單據日期{what}日缺少或格式不正確。");
+        return PurchaseQuery.Resolve(SupplierCode ?? string.Empty, Date(DateFrom, "起"), Date(DateTo, "迄"), today);
     }
 
     /// <summary>The RECEIVABLE request; an unknown scope or bad code throws <see cref="ArgumentException"/>.</summary>
@@ -162,6 +173,12 @@ internal static class ErpAgentProtocol
                 return new ErpAgentJob(id!, string.Empty)
                 {
                     QueryType = type, CustomerCode = Required("customerCode"),
+                    DateFrom = OptionalString(job["dateFrom"]), DateTo = OptionalString(job["dateTo"])
+                };
+            case ErpAgentJob.PurchaseQueryType:
+                return new ErpAgentJob(id!, string.Empty)
+                {
+                    QueryType = type, SupplierCode = Required("supplierCode"),
                     DateFrom = OptionalString(job["dateFrom"]), DateTo = OptionalString(job["dateTo"])
                 };
             case ErpAgentJob.ReceivableQueryType:
@@ -264,6 +281,38 @@ internal static class ErpAgentProtocol
             (long)result.Elapsed.TotalMilliseconds, agentVersion);
         if (job.QueryType == ErpAgentJob.SupplierQuery) body["supplierCode"] = job.SupplierCode;
         else body["customerCode"] = job.CustomerCode;
+        return body.ToJsonString(JsonOptions);
+    }
+
+    /// <summary>
+    /// PURCHASES: the 進貨單 and 退貨單 (kind 進貨／退貨) newest first (at most <see cref="MaxOrders"/>, each at most
+    /// <see cref="MaxOrderLines"/> lines); the job's supplier and dates echoed. Amounts are 原幣.
+    /// </summary>
+    public static string PurchaseBody(ErpAgentJob job, PurchaseQueryResult result, string agentVersion)
+    {
+        var orders = result.Orders.Take(MaxOrders).Select(o => (JsonNode)new JsonObject
+        {
+            ["kind"] = o.Kind, ["orderNo"] = o.OrderNo, ["date"] = Iso(o.Date), ["supplierCode"] = o.SupplierCode, ["supplierName"] = o.SupplierName,
+            ["supplierOrderNo"] = o.SupplierOrderNo, ["invoiceNo"] = o.InvoiceNo, ["invoiceType"] = o.InvoiceType,
+            ["taxType"] = o.TaxType, ["currency"] = o.Currency, ["totalQuantity"] = Text(o.TotalQuantity),
+            ["amount"] = Text(o.Amount), ["deduction"] = Text(o.Deduction), ["tax"] = Text(o.Tax), ["total"] = Text(o.Total),
+            ["settled"] = o.Settled,
+            ["lines"] = new JsonArray(o.Lines.Take(MaxOrderLines).Select(l => (JsonNode)new JsonObject
+            {
+                ["seq"] = l.Seq, ["itemCode"] = l.ItemCode, ["itemName"] = l.ItemName, ["specification"] = l.Specification,
+                ["acceptDate"] = l.AcceptDate is { } d ? Iso(d) : string.Empty, ["warehouse"] = l.Warehouse,
+                ["quantity"] = Text(l.Quantity), ["acceptedQuantity"] = Text(l.AcceptedQuantity), ["returnedQuantity"] = Text(l.ReturnedQuantity),
+                ["unit"] = l.Unit, ["unitPrice"] = Text(l.UnitPrice), ["amount"] = Text(l.Amount), ["tax"] = Text(l.Tax),
+                ["batch"] = l.Batch, ["purchaseOrderNo"] = l.PurchaseOrderNo, ["note"] = l.Note, ["sourceOrder"] = l.SourceOrder
+            }).ToArray())
+        }).ToArray();
+        var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["supplierCode"] = job.SupplierCode;
+        body["dateFrom"] = job.DateFrom;
+        body["dateTo"] = job.DateTo;
+        body["orders"] = new JsonArray(orders);
+        body["total"] = result.Orders.Count;
+        body["truncated"] = result.Orders.Count > MaxOrders;
         return body.ToJsonString(JsonOptions);
     }
 

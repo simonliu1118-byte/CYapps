@@ -213,8 +213,7 @@ internal sealed partial class ItemQueryService
 
     /// <summary>
     /// 基本選項: 客戶代號 起 and 迄 both the customer (區間選擇 is ticked by default, user 2026-10-16),
-    /// then 單據日期 typed as in INVQ01. An unasked date must be empty: a date left in the box
-    /// would narrow the report without anyone noticing.
+    /// then 單據日期 (<see cref="FillReportDatesAsync"/>).
     /// </summary>
     private async Task FillReportBasicAsync(nint dialog, ErpReport report, SalesQuery query, CancellationToken cancellationToken)
     {
@@ -222,21 +221,29 @@ internal sealed partial class ItemQueryService
         var customer = GroupBoxes(dialog, report, SalesReportLayout.CustomerGroup);
         await SetReportTextAsync(dialog, customer[0], query.CustomerCode, $"{report.Title}的客戶代號起", cancellationToken);
         await SetReportTextAsync(dialog, customer[1], query.CustomerCode, $"{report.Title}的客戶代號迄", cancellationToken);
+        await FillReportDatesAsync(dialog, report, query.Dates, cancellationToken);
+    }
 
+    /// <summary>
+    /// 選擇單據日期 typed as in INVQ01 (COPR15／COPR16／PURR18). An unasked date must be empty: a date
+    /// left in the box would narrow the report without anyone noticing.
+    /// </summary>
+    private async Task FillReportDatesAsync(nint dialog, ErpReport report, HistoryRange range, CancellationToken cancellationToken)
+    {
         var dates = GroupBoxes(dialog, report, SalesReportLayout.DateGroup);
         for (var i = 0; i < 2; i++)
         {
-            var asked = i == 0 ? query.From : query.To;
+            var asked = i == 0 ? range.From : range.To;
             var shown = NativeMethods.ControlText(dates[i].Handle) ?? string.Empty;
             if (asked is null && shown.Any(char.IsAsciiDigit))
                 throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
                     $"{report.Title}的單據日期{(i == 0 ? "起" : "迄")}已有日期「{shown.Trim()}」，但這次沒有指定。\n請在 ERP 清空後再查詢。");
         }
-        foreach (var action in Invq01Layout.DateActions(query.Dates))
+        foreach (var action in Invq01Layout.DateActions(range))
             await SetDateAsync(dialog, dates[action.BoxIndex], action.Date, action.BoxIndex == 0 ? "起" : "迄",
                 click: action.Click, enterAfter: action.EnterAfter, cancellationToken: cancellationToken, field: $"{report.Title}單據日期");
         for (var i = 0; i < 2; i++)
-            if ((i == 0 ? query.From : query.To) is { } expected && !Invq01Layout.ShowsDate(NativeMethods.ControlText(dates[i].Handle), expected))
+            if ((i == 0 ? range.From : range.To) is { } expected && !Invq01Layout.ShowsDate(NativeMethods.ControlText(dates[i].Handle), expected))
                 throw new InvalidOperationException($"{report.Title}的單據日期{(i == 0 ? "起" : "迄")}讀回不一致，已停止。");
     }
 

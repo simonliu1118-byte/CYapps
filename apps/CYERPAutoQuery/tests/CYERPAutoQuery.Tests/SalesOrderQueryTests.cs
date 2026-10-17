@@ -49,7 +49,7 @@ public class SalesOrderQueryTests
 
     private static IReadOnlyList<(string Name, List<string[]> Rows)> Export(params string[][] rows) => ExportWith(Titles, rows);
 
-    private static IReadOnlyList<(string Name, List<string[]> Rows)> ExportWith(string[] titles, params string[][] rows)
+    internal static IReadOnlyList<(string Name, List<string[]> Rows)> ExportWith(string[] titles, params string[][] rows)
     {
         string Cell(int col, int row, string value) =>
             $"<c r=\"{Col(col)}{row}\" t=\"inlineStr\"><is><t xml:space=\"preserve\">{System.Security.SecurityElement.Escape(value)}</t></is></c>";

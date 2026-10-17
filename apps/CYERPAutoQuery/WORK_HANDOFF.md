@@ -1,10 +1,10 @@
 # CYERPAutoQuery Work Handoff
 
-## 供應廠商查詢（V0.9.0 Build 1，2026/10/17）
+## 供應廠商與進貨退貨單查詢（V0.9.0 Build 1，2026/10/18）
 
 - 新增 PURI01 供應廠商查詢，與 COPI01 共用 `PartyQuery.cs`（`ErpParty.Customer`／`ErpParty.Supplier`：表、簡稱／全名欄、顯示欄位、名稱清單欄位）與 `ItemQueryService.QueryPartyAsync`／`SearchPartiesAsync`。CY Web 類型 `SUPPLIER_NO`（`supplierCode`）／`SUPPLIER_NAME`（`keyword`）；CY Web 端尚未實作（claim 會送出這兩個類型，CY Web 不認識的類型不會派工）。
 - 尚未實機：PURI01 視窗類別（猜 TfrmPuri01，不符時以標題辨識）、頁籤座標沿用 COPI01（不符時 OCR）、資料瀏覽「轉出全部」的欄位名稱（名稱清單讀 廠商代號、簡稱、公司全名、TEL、FAXNO、統一編號）。
-- 下一步：進貨單（等使用者提供作業代號、條件畫面與匯出檔）。
+- 進貨退貨單（同版）：`PurchaseQuery.cs`（PURR18／PURR22 解析）、`ItemQueryService.Purchases.cs`、`MainForm.Purchases.cs`；CY Web 類型 `PURCHASES`。尚未實機：PURR18／PURR22 頁籤座標（量自截圖，不符時 OCR）、PURR22 進階選項內容、「驗收日」選項與「僅列印…」勾選狀態能否以 BM_GETCHECK 讀到（LOG 有記錄）。
 
 ## 現況（V0.4.0 Build 1，2026/10/16）
 

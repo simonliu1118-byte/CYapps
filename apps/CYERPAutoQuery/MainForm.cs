@@ -27,8 +27,9 @@ internal sealed partial class MainForm : Form
     // customer list first (user, 2026-10-16: nobody remembers 客戶代號).
     // 未收款 (ACRR18, user 2026-10-17): one customer (code, or name through the customer list), all
     // customers when left empty; 業務未收款: one 業務員's.
+    // 進貨單 (PURR18, user 2026-10-18): a supplier's 進貨單, by code or by name like 銷貨銷退單.
     private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SupplierMode = 4,
-        SupplierNameMode = 5, SalesMode = 6, ReceivableMode = 7, SalespersonReceivableMode = 8;
+        SupplierNameMode = 5, PurchaseMode = 6, SalesMode = 7, ReceivableMode = 8, SalespersonReceivableMode = 9;
     private readonly Label[] _headerLabels = new Label[3];
     private GroupBox? _detailBox;
     /// <summary>Whose list the search tab shows: items (null), customers or suppliers (a double-click then queries that code).</summary>
@@ -123,7 +124,7 @@ internal sealed partial class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "廠商代號", "廠商名稱", "銷貨銷退單", "未收款", "業務未收款"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "廠商代號", "廠商名稱", "進貨退貨單", "銷貨銷退單", "未收款", "業務未收款"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -221,6 +222,7 @@ internal sealed partial class MainForm : Form
         _salesPage.Padding = new Padding(4);
         _salesPage.Controls.Add(salesSplit);
         _details.TabPages.Add(_salesPage);
+        AddPurchasePage();
         // 未收款: the 結帳單 above, the picked one's 憑證 below.
         var receivableSplit = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
         foreach (var grid in new[] { _bills, _vouchers })
@@ -267,7 +269,7 @@ internal sealed partial class MainForm : Form
         // History belongs to one item; a 品名 search only lists items. 銷貨單 uses the same two
         // dates as its 單據日期 range.
         var itemQuery = _mode.SelectedIndex == ItemMode;
-        var sales = _mode.SelectedIndex == SalesMode;
+        var sales = _mode.SelectedIndex is SalesMode or PurchaseMode;
         _includeHistory.Enabled = itemQuery;
         _historyFrom.Enabled = (_includeHistory.Checked && itemQuery) || sales;
         _historyTo.Enabled = (_includeHistory.Checked && itemQuery) || sales;
@@ -364,6 +366,21 @@ internal sealed partial class MainForm : Form
                 return;
             case SalespersonReceivableMode:
                 await StartReceivableQueryAsync(ReceivableScope.Salesperson);
+                return;
+            case PurchaseMode:
+                // As 銷貨銷退單: a name lists the suppliers first, one match is queried at once.
+                if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, ErpParty.Supplier.CodeName) &&
+                    ItemNameRules.TryNormalize(_code.Text, out _, out _))
+                {
+                    if (await StartSearchAsync(ErpParty.Supplier) is { Items.Count: 1 } supplier &&
+                        ItemSearchResult.Value(supplier.Items[0], ErpParty.Supplier.CodeName) is { Length: > 0 } supplierCode)
+                    {
+                        _code.Text = supplierCode;
+                        await StartPurchaseQueryAsync();
+                    }
+                }
+                else
+                    await StartPurchaseQueryAsync();
                 return;
             case SalesMode:
                 // A name instead of a 客戶代號 lists the customers first; a double-click then queries
@@ -743,8 +760,9 @@ internal sealed partial class MainForm : Form
         var column = _searchParty?.CodeName ?? "品號";
         var code = Convert.ToString(_search.Rows[rowIndex].Cells[column].Value) ?? string.Empty;
         if (code.Length == 0) return;
-        // A customer picked for 銷貨銷退單 or 未收款 stays in that mode.
-        if (!(_searchParty == ErpParty.Customer && _mode.SelectedIndex is SalesMode or ReceivableMode))
+        // A customer picked for 銷貨銷退單 or 未收款, or a supplier for 進貨單, stays in that mode.
+        if (!(_searchParty == ErpParty.Customer && _mode.SelectedIndex is SalesMode or ReceivableMode) &&
+            !(_searchParty == ErpParty.Supplier && _mode.SelectedIndex == PurchaseMode))
             _mode.SelectedIndex = _searchParty == ErpParty.Customer ? CustomerMode : _searchParty == ErpParty.Supplier ? SupplierMode : ItemMode;
         _code.Text = code;
         await StartQueryAsync();
@@ -835,6 +853,14 @@ internal sealed partial class MainForm : Form
                 _code.Text = query.CustomerCode;
                 var result = await ExecuteSalesAsync(query, cancellationToken);
                 return (result.Found, ErpAgentProtocol.SalesBody(job, result, version));
+            }
+            case ErpAgentJob.PurchaseQueryType:
+            {
+                var query = job.Purchases(DateOnly.FromDateTime(DateTime.Today));
+                _mode.SelectedIndex = PurchaseMode;
+                _code.Text = query.SupplierCode;
+                var result = await ExecutePurchasesAsync(query, cancellationToken);
+                return (result.Found, ErpAgentProtocol.PurchaseBody(job, result, version));
             }
             case ErpAgentJob.OrderQueryType:
             {

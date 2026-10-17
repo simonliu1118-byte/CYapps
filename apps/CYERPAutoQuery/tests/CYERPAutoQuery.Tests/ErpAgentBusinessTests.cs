@@ -13,7 +13,7 @@ public class ErpAgentBusinessTests
     public void ClaimListsEverySupportedQueryType()
     {
         var body = JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!;
-        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SUPPLIER_NO", "SUPPLIER_NAME", "SALES", "RECEIVABLE", "ORDER"],
+        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SUPPLIER_NO", "SUPPLIER_NAME", "PURCHASES", "SALES", "RECEIVABLE", "ORDER"],
             body["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 
@@ -115,5 +115,26 @@ public class ErpAgentBusinessTests
         Assert.Equal("232A-20260101001", none["orderNo"]!.GetValue<string>());
         Assert.Null(none["customerCode"]);
         Assert.Contains("ORDER", JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void PurchaseJobEchoesSupplierAndDates()
+    {
+        var job = Claim("""{"id":"j1","queryType":"PURCHASES","supplierCode":"SU0001","dateFrom":"2026-01-01","dateTo":"2026-10-18"}""");
+        Assert.True(job.IsBusiness);
+        var query = job.Purchases(new DateOnly(2026, 10, 18));
+        Assert.Equal(("SU0001", new DateOnly(2026, 1, 1)), (query.SupplierCode, query.From!.Value));
+        Assert.Throws<InvalidDataException>(() => Claim("""{"id":"j2","queryType":"PURCHASES","customerCode":"SU0001"}"""));
+        var line = new PurchaseLine(1, "X0001", "假品名", "", new DateOnly(2026, 2, 12), "假倉", 10m, 10m, 0m, "個", 23m, 230m, 11.5m, "", "", "");
+        var order = new PurchaseOrder("進貨", "341A-20260212001", new DateOnly(2026, 2, 12), "SU0001", "假廠商", "FAKE01", "", "三聯式發票", "應稅外加", "NTD",
+            10m, 230m, 0m, 11.5m, 241.5m, "N", [line]);
+        var body = JsonNode.Parse(ErpAgentProtocol.PurchaseBody(job, new PurchaseQueryResult(query, [order], TimeSpan.Zero), "v"))!;
+        Assert.Equal(["FOUND", "SU0001", "2026-01-01", "2026-10-18"], new[] { "outcome", "supplierCode", "dateFrom", "dateTo" }.Select(k => body[k]!.GetValue<string>()));
+        var o = body["orders"]![0]!;
+        Assert.Equal(["進貨", "2026-02-12", "241.5", "FAKE01"], new[] { "kind", "date", "total", "supplierOrderNo" }.Select(k => o[k]!.GetValue<string>()));
+        Assert.Equal(["23", "230", "2026-02-12"], new[] { "unitPrice", "amount", "acceptDate" }.Select(k => o["lines"]![0]![k]!.GetValue<string>()));
+        var none = JsonNode.Parse(ErpAgentProtocol.PurchaseBody(job, new PurchaseQueryResult(query, [], TimeSpan.Zero), "v"))!;
+        Assert.Equal("NOT_FOUND", none["outcome"]!.GetValue<string>());
+        Assert.Empty(none["orders"]!.AsArray());
     }
 }
