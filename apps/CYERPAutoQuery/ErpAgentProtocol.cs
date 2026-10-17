@@ -29,24 +29,35 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     // ERP 客戶查詢 and ERP 未收款查詢 (CY Web, user 2026-10-17).
     public const string CustomerQuery = "CUSTOMER_NO";
     public const string CustomerSearch = "CUSTOMER_NAME";
+    // ERP 供應商查詢 (PURI01, user 2026-10-17).
+    public const string SupplierQuery = "SUPPLIER_NO";
+    public const string SupplierSearch = "SUPPLIER_NAME";
     public const string SalesQueryType = "SALES";
     public const string ReceivableQueryType = "RECEIVABLE";
     /// <summary>One 銷貨單／銷退單 by number (a 未收款 憑證, user 2026-10-17).</summary>
     public const string OrderQueryType = "ORDER";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SalesQueryType, ReceivableQueryType, OrderQueryType];
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, SalesQueryType, ReceivableQueryType, OrderQueryType];
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
-    /// <summary>A customer, 銷貨銷退 or 未收款 job (not the item queries).</summary>
-    public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SalesQueryType or ReceivableQueryType or OrderQueryType;
+    /// <summary>A customer, supplier, 銷貨銷退 or 未收款 job (not the item queries).</summary>
+    public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SupplierQuery or SupplierSearch
+        or SalesQueryType or ReceivableQueryType or OrderQueryType;
+
+    /// <summary>CUSTOMER_*／SUPPLIER_*: whose form is queried.</summary>
+    public ErpParty Party => QueryType is SupplierQuery or SupplierSearch ? ErpParty.Supplier : ErpParty.Customer;
 
     /// <summary>ITEM_NO: the member may see 標準進價 (ERP 商品成本); not sent means not allowed.</summary>
     public bool IncludeCost { get; init; }
     /// <summary>CUSTOMER_NO／SALES: the customer.</summary>
     public string? CustomerCode { get; init; }
+    /// <summary>SUPPLIER_NO: the supplier.</summary>
+    public string? SupplierCode { get; init; }
+    /// <summary>The code of a CUSTOMER_NO／SUPPLIER_NO job.</summary>
+    public string? PartyCode => QueryType == SupplierQuery ? SupplierCode : CustomerCode;
     /// <summary>SALES: the 單據日期 range CY Web resolved (yyyy-MM-dd), echoed back unchanged.</summary>
     public string? DateFrom { get; init; }
     public string? DateTo { get; init; }
@@ -62,6 +73,8 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         NameSearch => $"品名「{Keyword}」",
         CustomerQuery => $"客戶 {CustomerCode}",
         CustomerSearch => $"客戶名稱「{Keyword}」",
+        SupplierQuery => $"廠商 {SupplierCode}",
+        SupplierSearch => $"廠商名稱「{Keyword}」",
         SalesQueryType => $"客戶 {CustomerCode} 銷貨銷退單（{DateFrom}～{DateTo}）",
         ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
         OrderQueryType => $"單號 {OrderNo}",
@@ -138,10 +151,12 @@ internal static class ErpAgentProtocol
             : value;
         switch (type)
         {
-            case ErpAgentJob.NameSearch or ErpAgentJob.CustomerSearch:
+            case ErpAgentJob.NameSearch or ErpAgentJob.CustomerSearch or ErpAgentJob.SupplierSearch:
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, Keyword = Required("keyword") };
             case ErpAgentJob.CustomerQuery:
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, CustomerCode = Required("customerCode") };
+            case ErpAgentJob.SupplierQuery:
+                return new ErpAgentJob(id!, string.Empty) { QueryType = type, SupplierCode = Required("supplierCode") };
             case ErpAgentJob.SalesQueryType:
                 // Dates are checked when the job runs, so a bad one is reported as FAILED, not lost.
                 return new ErpAgentJob(id!, string.Empty)
@@ -235,19 +250,20 @@ internal static class ErpAgentProtocol
         };
     }
 
-    // ---- ERP 客戶查詢／未收款查詢 (CY Web, user 2026-10-17) -------------------------------
+    // ---- ERP 客戶／供應商／未收款查詢 (CY Web, user 2026-10-17) ---------------------------
 
     public const int MaxOrders = 1000, MaxOrderLines = 500, MaxBills = 3000, MaxVouchers = 500;
 
     private static string Text(decimal value) => value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
     private static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>CUSTOMER_NO: the customer's fields, or NOT_FOUND; the code is echoed either way.</summary>
-    public static string CustomerBody(ErpAgentJob job, CustomerQueryResult result, string agentVersion)
+    /// <summary>CUSTOMER_NO／SUPPLIER_NO: the fields, or NOT_FOUND; customerCode／supplierCode is echoed either way.</summary>
+    public static string PartyBody(ErpAgentJob job, PartyQueryResult result, string agentVersion)
     {
         var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", result.Found ? Fields(result.Fields) : [], [], null,
             (long)result.Elapsed.TotalMilliseconds, agentVersion);
-        body["customerCode"] = job.CustomerCode;
+        if (job.QueryType == ErpAgentJob.SupplierQuery) body["supplierCode"] = job.SupplierCode;
+        else body["customerCode"] = job.CustomerCode;
         return body.ToJsonString(JsonOptions);
     }
 

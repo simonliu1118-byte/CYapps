@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.53 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入供應廠商查詢：使用 PURI01 供應廠商資料建立作業，規則同 COPI01；廠商名稱只可貼上程式固定產生的簡稱 OR 公司全名條件（PURMA.MA002／MA003），結果每筆須含關鍵字否則不採用；廠商代號只接受英數。不改其他 App 規則。
+
 ## 2.3.52 — 2026/10/17
 
 - CYERPAutoQuery 依使用者要求比照 CYERPAutoInput 加入自動更新與正式 Release：新增 `.github/workflows/cyerp-auto-query-release.yml`（只由 main 手動啟動、BUILD=0、tag 不覆寫）；PROJECT_RULES 加入自動更新與 Release 規則。不改其他 App 規則。

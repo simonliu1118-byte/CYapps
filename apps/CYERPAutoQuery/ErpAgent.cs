@@ -132,8 +132,8 @@ internal sealed class ErpAgentLoop(
         {
             if (job.IsBusiness)
             {
-                // Customer, 銷貨銷退 and 未收款 jobs build their own complete body (ErpAgentProtocol).
-                if (runBusiness is null) throw new NotSupportedException("客戶／銷貨銷退／未收款查詢未接上。");
+                // Customer, supplier, 銷貨銷退 and 未收款 jobs build their own complete body (ErpAgentProtocol).
+                if (runBusiness is null) throw new NotSupportedException("客戶／廠商／銷貨銷退／未收款查詢未接上。");
                 var reply = await runBusiness(job, cancellationToken);
                 body = reply.Body;
                 outcome = reply.Found ? "FOUND" : "NOT_FOUND";

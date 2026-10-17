@@ -16,7 +16,7 @@
     <Compile Include="..\..\ItemQueryModels.cs" Link="Linked\ItemQueryModels.cs" />
     <Compile Include="..\..\Invq01Layout.cs" Link="Linked\Invq01Layout.cs" />
     <Compile Include="..\..\ItemNameSearch.cs" Link="Linked\ItemNameSearch.cs" />
-    <Compile Include="..\..\CustomerQuery.cs" Link="Linked\CustomerQuery.cs" />
+    <Compile Include="..\..\PartyQuery.cs" Link="Linked\PartyQuery.cs" />
     <Compile Include="..\..\SalesOrderQuery.cs" Link="Linked\SalesOrderQuery.cs" />
     <Compile Include="..\..\ErpReport.cs" Link="Linked\ErpReport.cs" />
     <Compile Include="..\..\ReceivableQuery.cs" Link="Linked\ReceivableQuery.cs" />

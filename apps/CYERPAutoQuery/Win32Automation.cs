@@ -62,6 +62,7 @@ internal static class Win32Automation
                     Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd) &&
                     !Invi02Layout.IsInvi02Title(NativeMethods.WindowText(hwnd)) &&
                     !ErpForm.Copi01.IsTitle(NativeMethods.WindowText(hwnd)) &&
+                    !ErpForm.Puri01.IsTitle(NativeMethods.WindowText(hwnd)) &&
                     !Invq01Layout.IsInvq01Title(NativeMethods.WindowText(hwnd)) &&
                     NativeMethods.GetWindowRect(hwnd, out var r))
                     candidates.Add((hwnd, NativeMethods.IsIconic(hwnd) ? 0 : (long)r.Width * r.Height));

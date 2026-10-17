@@ -31,7 +31,7 @@ internal sealed partial class ItemQueryService
     private readonly AppLogger _log;
     private readonly PaddleOcrService _ocr;
     /// <summary>
-    /// The ERP form the running query drives (INVI02 or COPI01). Set by each public query under the
+    /// The ERP form the running query drives (INVI02, COPI01 or PURI01). Set by each public query under the
     /// automation gate, so only one query uses it at a time.
     /// </summary>
     private ErpForm _form = ErpForm.Invi02;
@@ -93,7 +93,7 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>
-    /// The query part every form shares (INVI02, COPI01): find the form (opening it through 作業速查
+    /// The query part every form shares (INVI02, COPI01, PURI01): find the form (opening it through 作業速查
     /// when needed), maximize, F6 → 一般選項 code = value → 確定, wait for the record, then show
     /// the export tab. Null when ERP has no such code.
     /// </summary>
@@ -1194,28 +1194,29 @@ internal sealed partial class ItemQueryService
         return text.Length > 0 ? text : NativeMethods.WindowText(box).Trim();
     }
 
-    // ---- 客戶 (COPI01) ----------------------------------------------------------------
+    // ---- 客戶 (COPI01)／廠商 (PURI01) ----------------------------------------------------
 
     /// <summary>
-    /// One customer from COPI01 (user, 2026-10-16): the same flow as a 品號 — F6 → 一般選項 客戶代號
-    /// = code → 確定 → 基本資料 → 轉出至 Excel. COPI01 exports one sheet (單頭資料) only.
+    /// One customer from COPI01 or supplier from PURI01 (user, 2026-10-16／17): the same flow as a
+    /// 品號 — F6 → 一般選項 代號 = code → 確定 → 基本資料 → 轉出至 Excel. Both export one sheet
+    /// (單頭資料) only.
     /// </summary>
-    public Task<CustomerQueryResult> QueryCustomerAsync(string input, IProgress<string> progress, CancellationToken cancellationToken) =>
-        GuardErpMessagesAsync(() => QueryCustomerCoreAsync(input, progress, cancellationToken));
+    public Task<PartyQueryResult> QueryPartyAsync(ErpParty party, string input, IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(() => QueryPartyCoreAsync(party, input, progress, cancellationToken));
 
-    private async Task<CustomerQueryResult> QueryCustomerCoreAsync(string input, IProgress<string> progress, CancellationToken cancellationToken)
+    private async Task<PartyQueryResult> QueryPartyCoreAsync(ErpParty party, string input, IProgress<string> progress, CancellationToken cancellationToken)
     {
-        if (!ItemCodeRules.TryNormalize(input, out var code, out var error, CustomerRules.CodeName))
+        if (!ItemCodeRules.TryNormalize(input, out var code, out var error, party.CodeName))
             throw new InvalidOperationException(error);
 
         using var gate = ErpAutomationGate.Enter();
-        _form = ErpForm.Copi01;
+        _form = party.Form;
         ExportFiles.CleanUp(_log);
         var watch = Stopwatch.StartNew();
-        _log.Info("customer", $"start code={_log.Value(code)}");
+        _log.Info("party", $"start form={_form.Code} code={_log.Value(code)}");
 
         if (await FindRecordAsync(code, watch, progress, cancellationToken) is not { } found)
-            return CustomerQueryResult.NotFound(code, watch.Elapsed);
+            return PartyQueryResult.NotFound(party, code, watch.Elapsed);
         var (root, header) = found;
 
         progress.Report("ERP：轉出 Excel…");
@@ -1227,12 +1228,12 @@ internal sealed partial class ItemQueryService
                 throw new InvalidOperationException($"轉出前 ERP 不在「{_form.ExportTab}」頁籤，已停止。");
             await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true);
             if (!ItemCodeRules.SameCode(NativeMethods.ControlText(header.ItemCode.Handle), code))
-                throw new InvalidOperationException("轉出途中 ERP 顯示的客戶代號改變了；結果不採用，請重新查詢。");
+                throw new InvalidOperationException($"轉出途中 ERP 顯示的{party.CodeName}改變了；結果不採用，請重新查詢。");
             progress.Report("讀取匯出資料…");
             var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
-            var fields = CustomerExport.Parse(sheets, code);
-            _log.Info("customer", $"done code={_log.Value(code)} fields={fields.Count} elapsed_ms={watch.ElapsedMilliseconds}");
-            return new CustomerQueryResult(code, fields, watch.Elapsed);
+            var fields = PartyExport.Parse(sheets, party, code);
+            _log.Info("party", $"done form={_form.Code} code={_log.Value(code)} fields={fields.Count} elapsed_ms={watch.ElapsedMilliseconds}");
+            return new PartyQueryResult(party, code, fields, watch.Elapsed);
         }
         catch (InvalidOperationException ex) when (ex is not QueryFailure)
         {
@@ -1256,11 +1257,12 @@ internal sealed partial class ItemQueryService
         SearchAsync(ErpForm.Invi02, keywordInput, ItemNameRules.Condition, ItemSearchExport.Parse, progress, cancellationToken);
 
     /// <summary>
-    /// Customers whose 簡稱 or 全名 contains the keyword (user, 2026-10-16: always both, so a name
-    /// written in either is found), from COPI01 the same way as the 品名 search.
+    /// Customers or suppliers whose 簡稱 or 全名 contains the keyword (user, 2026-10-16: always
+    /// both, so a name written in either is found), from COPI01／PURI01 the same way as the 品名 search.
     /// </summary>
-    public Task<ItemSearchResult> SearchCustomersAsync(string keywordInput, IProgress<string> progress, CancellationToken cancellationToken) =>
-        SearchAsync(ErpForm.Copi01, keywordInput, CustomerRules.NameCondition, CustomerExport.ParseList, progress, cancellationToken);
+    public Task<ItemSearchResult> SearchPartiesAsync(ErpParty party, string keywordInput, IProgress<string> progress, CancellationToken cancellationToken) =>
+        SearchAsync(party.Form, keywordInput, party.NameCondition, (sheets, keyword) => PartyExport.ParseList(sheets, party, keyword),
+            progress, cancellationToken);
 
     private Task<ItemSearchResult> SearchAsync(ErpForm form, string keywordInput, Func<string, string> condition,
         Func<IReadOnlyList<(string Name, List<string[]> Rows)>, string, IReadOnlyList<IReadOnlyList<ErpField>>> parse,

@@ -30,7 +30,7 @@ internal sealed record ReceivableQuery(ReceivableScope Scope, string Code)
     public static ReceivableQuery Resolve(ReceivableScope scope, string input)
     {
         if (scope == ReceivableScope.All) return All;
-        var name = scope == ReceivableScope.Customer ? CustomerRules.CodeName : ReceivableLayout.SalespersonName;
+        var name = scope == ReceivableScope.Customer ? ErpParty.Customer.CodeName : ReceivableLayout.SalespersonName;
         if (!ItemCodeRules.TryNormalize(input, out var code, out var error, name))
             throw new ArgumentException(error);
         return new ReceivableQuery(scope, code);
@@ -89,12 +89,12 @@ internal static class ReceivableExport
         if (missing.Count > 0)
             throw new InvalidDataException($"ERP 匯出的{what}缺少欄位：{string.Join("、", missing)}。");
 
-        var bills = new List<(string No, List<CustomerRow> Rows)>();
+        var bills = new List<(string No, List<ExportRow> Rows)>();
         decimal? total = null;
         foreach (var values in rows.Skip(titleIndex + 1))
         {
             if (values.All(string.IsNullOrWhiteSpace)) continue;
-            var r = new CustomerRow(titles, values);
+            var r = new ExportRow(titles, values);
             if (r["客戶代號"].Trim().Length == 0)
             {
                 if (IsSubtotal(values)) continue;
@@ -116,7 +116,7 @@ internal static class ReceivableExport
     }
 
     /// <summary>A row of another customer or 業務員 means ERP did not apply the condition.</summary>
-    private static void Check(ReceivableQuery query, CustomerRow r, string no)
+    private static void Check(ReceivableQuery query, ExportRow r, string no)
     {
         var (column, name) = query.Scope switch
         {
@@ -130,7 +130,7 @@ internal static class ReceivableExport
             throw new InvalidDataException($"ERP 匯出的結帳單「{no}」是{name}「{shown.Trim()}」，不是查詢的「{query.Code}」，查詢條件可能沒有套用，結果不採用。");
     }
 
-    private static ReceivableBill ToBill(string no, List<CustomerRow> rows)
+    private static ReceivableBill ToBill(string no, List<ExportRow> rows)
     {
         var h = rows[0];
         var unpaid = Number(h["原幣未收帳款"]);

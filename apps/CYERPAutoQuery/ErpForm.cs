@@ -6,7 +6,7 @@ namespace CYERPAutoQuery;
 /// a detail tab → 轉出至 Excel (or 資料瀏覽 → 轉出全部 for a name search). Pure data.
 /// </summary>
 /// <param name="ExportTab">The tab shown before 轉出至 Excel (資料瀏覽 would export without detail).</param>
-/// <param name="HeaderRows">Input rows above the tabs: INVI02 has 品號／品名／規格, COPI01 代號＋簡稱／全名.</param>
+/// <param name="HeaderRows">Input rows above the tabs: INVI02 has 品號／品名／規格, COPI01／PURI01 代號＋簡稱／全名.</param>
 /// <param name="CodeName">What the 一般選項 code is called, for messages.</param>
 /// <param name="HasDetailSheet">The export also has a 單身資料 sheet whose fields are all selected.</param>
 internal sealed record ErpForm(
@@ -32,6 +32,14 @@ internal sealed record ErpForm(
         new TabStrip(["基本資料", "基本資料(二)", "地址資料", "交易資料(一)", "交易資料(二)", "客戶描述", BrowseTab],
             Origin: 72 - 99 / 2.0, Pitch: 99),
         HeaderRows: 2, CodeName: "客戶代號", HasDetailSheet: false);
+
+    // PURI01 (user's screenshots 2026-10-17): the same tab style as COPI01, so the same geometry;
+    // header 廠商代號＋簡稱, then 公司全名.
+    public static readonly ErpForm Puri01 = new(
+        "PURI01", "供應廠商資料建立作業", "TfrmPuri01", "基本資料",
+        new TabStrip(["基本資料", "基本資料(二)", "交易資料", "地址資料", "廠商描述", BrowseTab],
+            Origin: 72 - 99 / 2.0, Pitch: 99),
+        HeaderRows: 2, CodeName: "廠商代號", HasDetailSheet: false);
 
     /// <summary>The form's own window: 「客戶資料建立作業(COPI01)[公司]」.</summary>
     public bool IsTitle(string title) =>

@@ -20,18 +20,19 @@ internal sealed partial class MainForm : Form
     private readonly TextBox _code = new() { MaxLength = Math.Max(ItemCodeRules.MaxLength, ItemNameRules.MaxLength) };
     // 品號: one item with all its data; 品名: the list of items whose 品名 contains the text
     // (user, 2026-10-16), from which one is picked and queried by 品號.
-    // 客戶代號／客戶名稱 query COPI01 the same way (user, 2026-10-16).
+    // 客戶代號／客戶名稱 query COPI01 the same way (user, 2026-10-16); 廠商代號／廠商名稱 PURI01
+    // (user, 2026-10-17).
     private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     // 銷貨銷退單: a customer's 銷貨單 and 銷退單 (COPR15/COPR16) by 客戶代號, or by name through the
     // customer list first (user, 2026-10-16: nobody remembers 客戶代號).
     // 未收款 (ACRR18, user 2026-10-17): one customer (code, or name through the customer list), all
     // customers when left empty; 業務未收款: one 業務員's.
-    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SalesMode = 4,
-        ReceivableMode = 5, SalespersonReceivableMode = 6;
+    private const int ItemMode = 0, ItemNameMode = 1, CustomerMode = 2, CustomerNameMode = 3, SupplierMode = 4,
+        SupplierNameMode = 5, SalesMode = 6, ReceivableMode = 7, SalespersonReceivableMode = 8;
     private readonly Label[] _headerLabels = new Label[3];
     private GroupBox? _detailBox;
-    /// <summary>Whether the list on the search tab is customers (a double-click then queries 客戶代號).</summary>
-    private bool _searchIsCustomer;
+    /// <summary>Whose list the search tab shows: items (null), customers or suppliers (a double-click then queries that code).</summary>
+    private ErpParty? _searchParty;
     private readonly DataGridView _search = new();
     private readonly TabPage _searchPage = new("品名查詢");
     private readonly CyPrimaryButton _start = new();
@@ -122,7 +123,7 @@ internal sealed partial class MainForm : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 4, 0, 2), Margin = Padding.Empty };
         toolbar.Controls.Add(actions, 0, 0);
         actions.Controls.Add(new Label { Text = "查詢：", AutoSize = true, Padding = new Padding(0, 11, 0, 0), Margin = new Padding(4, 0, 2, 0) });
-        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "銷貨銷退單", "未收款", "業務未收款"]);
+        _mode.Items.AddRange(["品號", "品名", "客戶代號", "客戶名稱", "廠商代號", "廠商名稱", "銷貨銷退單", "未收款", "業務未收款"]);
         _mode.SelectedIndex = 0;
         _mode.Font = new Font(Font.FontFamily, 10.5F);
         _mode.Margin = new Padding(4, 7, 0, 1);
@@ -292,13 +293,13 @@ internal sealed partial class MainForm : Form
         return caption;
     }
 
-    /// <summary>The header and detail captions follow what is shown: an item or a customer.</summary>
-    private void SetHeaderCaptions(bool customer)
+    /// <summary>The header and detail captions follow what is shown: an item (null), a customer or a supplier.</summary>
+    private void SetHeaderCaptions(ErpParty? party)
     {
-        string[] captions = customer ? ["客戶代號", "客戶簡稱", "客戶全名"] : ["品號", "品名", "規格"];
+        string[] captions = party is null ? ["品號", "品名", "規格"] : [party.CodeName, party.ShortLabel, party.FullLabel];
         for (var i = 0; i < 3; i++) _headerLabels[i].Text = captions[i];
         if (_detailBox is not null)
-            _detailBox.Text = customer ? "客戶資料（ERP 轉出 Excel 的單頭資料）" : "品號資料（ERP 轉出 Excel 的單頭資料）";
+            _detailBox.Text = $"{(party is null ? "品號" : party.Kind)}資料（ERP 轉出 Excel 的單頭資料）";
     }
 
     private static void ConfigureGrid(DataGridView grid)
@@ -330,22 +331,28 @@ internal sealed partial class MainForm : Form
         switch (_mode.SelectedIndex)
         {
             case ItemNameMode:
-                await StartSearchAsync(customers: false);
+                await StartSearchAsync(null);
                 return;
             case CustomerNameMode:
-                await StartSearchAsync(customers: true);
+                await StartSearchAsync(ErpParty.Customer);
+                return;
+            case SupplierNameMode:
+                await StartSearchAsync(ErpParty.Supplier);
                 return;
             case CustomerMode:
-                await StartCustomerQueryAsync();
+                await StartPartyQueryAsync(ErpParty.Customer);
+                return;
+            case SupplierMode:
+                await StartPartyQueryAsync(ErpParty.Supplier);
                 return;
             case ReceivableMode:
                 // Empty: every customer. A name lists the customers first (one match is queried at once).
                 if (_code.Text.Trim().Length == 0)
                     await StartReceivableQueryAsync(ReceivableScope.All);
-                else if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, CustomerRules.CodeName) &&
+                else if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, ErpParty.Customer.CodeName) &&
                          ItemNameRules.TryNormalize(_code.Text, out _, out _))
                 {
-                    if (await StartSearchAsync(customers: true) is { Items.Count: 1 } match &&
+                    if (await StartSearchAsync(ErpParty.Customer) is { Items.Count: 1 } match &&
                         ItemSearchResult.Value(match.Items[0], "客戶代號") is { Length: > 0 } matched)
                     {
                         _code.Text = matched;
@@ -361,11 +368,11 @@ internal sealed partial class MainForm : Form
             case SalesMode:
                 // A name instead of a 客戶代號 lists the customers first; a double-click then queries
                 // that customer's 銷貨單.
-                if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, CustomerRules.CodeName) &&
+                if (!ItemCodeRules.TryNormalize(_code.Text, out _, out _, ErpParty.Customer.CodeName) &&
                     ItemNameRules.TryNormalize(_code.Text, out _, out _))
                 {
                     // Only one customer matches: query that one at once (user, 2026-10-17).
-                    if (await StartSearchAsync(customers: true) is { Items.Count: 1 } one &&
+                    if (await StartSearchAsync(ErpParty.Customer) is { Items.Count: 1 } one &&
                         ItemSearchResult.Value(one.Items[0], "客戶代號") is { Length: > 0 } only)
                     {
                         _log.Info("sales", "one customer matched; querying it");
@@ -411,17 +418,17 @@ internal sealed partial class MainForm : Form
         _code.SelectAll();
     }
 
-    /// <summary>客戶代號 mode: one customer from COPI01; failures shown in a message box.</summary>
-    private async Task StartCustomerQueryAsync()
+    /// <summary>客戶代號／廠商代號 mode: one customer (COPI01) or supplier (PURI01); failures shown in a message box.</summary>
+    private async Task StartPartyQueryAsync(ErpParty party)
     {
-        if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error, CustomerRules.CodeName))
+        if (!ItemCodeRules.TryNormalize(_code.Text, out var code, out var error, party.CodeName))
         {
             MessageBox.Show(this, error, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         try
         {
-            await ExecuteCustomerAsync(code, CancellationToken.None);
+            await ExecutePartyAsync(party, code, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -429,27 +436,27 @@ internal sealed partial class MainForm : Form
         catch (Exception ex)
         {
             Activate();
-            MessageBox.Show(this, ex.Message, "ERP 客戶查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, $"ERP {party.Kind}查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         Activate();
         _code.Focus();
         _code.SelectAll();
     }
 
-    /// <summary>One customer from COPI01, shown; local and Web queries both run here. Failures are rethrown.</summary>
-    private async Task<CustomerQueryResult> ExecuteCustomerAsync(string code, CancellationToken external)
+    /// <summary>One customer or supplier, shown; local and Web queries both run here. Failures are rethrown.</summary>
+    private async Task<PartyQueryResult> ExecutePartyAsync(ErpParty party, string code, CancellationToken external)
     {
         ShowResult(null);
-        ShowCustomer(null);
-        return await RunAutomationAsync(external, (progress, ct) => _service.QueryCustomerAsync(code, progress, ct), result =>
+        ShowParty(party, null);
+        return await RunAutomationAsync(external, (progress, ct) => _service.QueryPartyAsync(party, code, progress, ct), result =>
         {
             if (!result.Found)
             {
-                SetStatus($"ERP：查無客戶代號 {code}");
+                SetStatus($"ERP：查無{party.CodeName} {code}");
                 return AutomationOutcome.NotFound;
             }
-            ShowCustomer(result);
-            SetStatus($"ERP：客戶 {result.Code} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
+            ShowParty(party, result);
+            SetStatus($"ERP：{party.Kind} {result.Code} 查詢完成，共 {result.Fields.Count} 欄（{result.Elapsed.TotalSeconds:0.0} 秒）");
             return AutomationOutcome.Done;
         });
     }
@@ -598,7 +605,7 @@ internal sealed partial class MainForm : Form
     private void ShowReceivables(ReceivableResult? result)
     {
         _receivableResult = result;
-        SetHeaderCaptions(customer: true);
+        SetHeaderCaptions(ErpParty.Customer);
         _headerLabels[2].Text = "未收合計";
         if (_detailBox is not null) _detailBox.Text = "結帳單（點選下方結帳單）";
         var single = result?.Query.Scope == ReceivableScope.Customer;
@@ -647,7 +654,7 @@ internal sealed partial class MainForm : Form
     private void ShowSales(SalesQueryResult? result)
     {
         _salesResult = result;
-        SetHeaderCaptions(customer: true);
+        SetHeaderCaptions(ErpParty.Customer);
         _headerLabels[2].Text = "查詢範圍";
         if (_detailBox is not null) _detailBox.Text = "單頭（點選下方單據）";
         _itemCode.Text = result?.Query.CustomerCode ?? string.Empty;
@@ -690,20 +697,20 @@ internal sealed partial class MainForm : Form
                 Num(l.Amount), l.GiftType, Num(l.GiftQuantity), l.Warehouse, l.Batch, l.Note, l.SourceOrder);
     }
 
-    private void ShowCustomer(CustomerQueryResult? result)
+    private void ShowParty(ErpParty party, PartyQueryResult? result)
     {
-        SetHeaderCaptions(customer: true);
+        SetHeaderCaptions(party);
         _itemCode.Text = result?.Code ?? string.Empty;
-        _itemName.Text = result?.Value("客戶簡稱") ?? string.Empty;
-        _specification.Text = result?.Value("客戶全名") ?? string.Empty;
+        _itemName.Text = result?.Value(party.ShortLabel) ?? string.Empty;
+        _specification.Text = result?.Value(party.FullLabel) ?? string.Empty;
         _fields.Rows.Clear();
         if (result is not null)
             foreach (var f in result.Fields)
                 _fields.Rows.Add(f.Name, f.Value);
     }
 
-    /// <summary>品名／客戶名稱 mode: lists the matches on the search tab; failures shown in a message box.</summary>
-    private async Task<ItemSearchResult?> StartSearchAsync(bool customers)
+    /// <summary>品名／客戶名稱／廠商名稱 mode: lists the matches on the search tab; failures shown in a message box.</summary>
+    private async Task<ItemSearchResult?> StartSearchAsync(ErpParty? party)
     {
         if (!ItemNameRules.TryNormalize(_code.Text, out var keyword, out var error))
         {
@@ -713,7 +720,7 @@ internal sealed partial class MainForm : Form
         ItemSearchResult? result = null;
         try
         {
-            result = await ExecuteSearchAsync(keyword, CancellationToken.None, customers);
+            result = await ExecuteSearchAsync(keyword, CancellationToken.None, party);
         }
         catch (OperationCanceledException)
         {
@@ -721,7 +728,7 @@ internal sealed partial class MainForm : Form
         catch (Exception ex)
         {
             Activate();
-            MessageBox.Show(this, ex.Message, customers ? "ERP 客戶名稱查詢失敗" : "ERP 品名查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, party is null ? "ERP 品名查詢失敗" : $"ERP {party.Kind}名稱查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         Activate();
         _code.Focus();
@@ -729,28 +736,29 @@ internal sealed partial class MainForm : Form
         return result;
     }
 
-    /// <summary>Double-click on a search row: that item (品號) or customer (客戶代號) is queried (user, 2026-10-16).</summary>
+    /// <summary>Double-click on a search row: that item (品號), customer or supplier (代號) is queried (user, 2026-10-16).</summary>
     private async Task QueryPickedItemAsync(int rowIndex)
     {
         if (_queryCts is not null || rowIndex < 0 || rowIndex >= _search.Rows.Count) return;
-        var column = _searchIsCustomer ? "客戶代號" : "品號";
+        var column = _searchParty?.CodeName ?? "品號";
         var code = Convert.ToString(_search.Rows[rowIndex].Cells[column].Value) ?? string.Empty;
         if (code.Length == 0) return;
-        if (!(_searchIsCustomer && _mode.SelectedIndex is SalesMode or ReceivableMode))
-            _mode.SelectedIndex = _searchIsCustomer ? CustomerMode : ItemMode;
+        // A customer picked for 銷貨銷退單 or 未收款 stays in that mode.
+        if (!(_searchParty == ErpParty.Customer && _mode.SelectedIndex is SalesMode or ReceivableMode))
+            _mode.SelectedIndex = _searchParty == ErpParty.Customer ? CustomerMode : _searchParty == ErpParty.Supplier ? SupplierMode : ItemMode;
         _code.Text = code;
         await StartQueryAsync();
     }
 
-    private async Task<ItemSearchResult> ExecuteSearchAsync(string keyword, CancellationToken external, bool customers = false)
+    private async Task<ItemSearchResult> ExecuteSearchAsync(string keyword, CancellationToken external, ErpParty? party = null)
     {
-        ShowSearch(null, customers);
-        var what = customers ? "客戶簡稱或全名" : "品名";
-        return await RunAutomationAsync(external, (progress, ct) => customers
-            ? _service.SearchCustomersAsync(keyword, progress, ct)
-            : _service.SearchByNameAsync(keyword, progress, ct), result =>
+        ShowSearch(null, party);
+        var what = party is null ? "品名" : $"{party.Kind}簡稱或全名";
+        return await RunAutomationAsync(external, (progress, ct) => party is null
+            ? _service.SearchByNameAsync(keyword, progress, ct)
+            : _service.SearchPartiesAsync(party, keyword, progress, ct), result =>
         {
-            ShowSearch(result, customers);
+            ShowSearch(result, party);
             _details.SelectedTab = _searchPage;
             if (result.Items.Count == 0)
             {
@@ -763,19 +771,19 @@ internal sealed partial class MainForm : Form
         });
     }
 
-    private void ShowSearch(ItemSearchResult? result, bool customers)
+    private void ShowSearch(ItemSearchResult? result, ErpParty? party)
     {
-        _searchIsCustomer = customers;
-        var labels = customers
-            ? CustomerFieldCatalog.SearchList.Select(f => f.Label).ToList()
-            : ItemFieldCatalog.SearchList.Select(c => c.Label).ToList();
+        _searchParty = party;
+        var labels = party is null
+            ? ItemFieldCatalog.SearchList.Select(c => c.Label).ToList()
+            : party.SearchList.Select(f => f.Label).ToList();
         _search.Rows.Clear();
         _search.Columns.Clear();
         foreach (var label in labels) _search.Columns.Add(label, label);
         if (result is not null)
             foreach (var row in result.Items)
                 _search.Rows.Add(labels.Select(l => (object)ItemSearchResult.Value(row, l)).ToArray());
-        var title = customers ? "客戶查詢" : "品名查詢";
+        var title = party is null ? "品名查詢" : $"{party.Kind}查詢";
         _searchPage.Text = result is null ? title : $"{title}（{result.Items.Count}{(result.Truncated ? "+" : string.Empty)}）";
     }
 
@@ -791,7 +799,7 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// A customer, 銷貨銷退 or 未收款 job from CY Web (user, 2026-10-17): the same path as the local
+    /// A customer, supplier, 銷貨銷退 or 未收款 job from CY Web (user, 2026-10-17): the same path as the local
     /// query, shown in the window; the complete body goes back to Web.
     /// </summary>
     private async Task<(bool Found, string Body)> RunWebBusinessAsync(ErpAgentJob job, CancellationToken cancellationToken)
@@ -800,22 +808,24 @@ internal sealed partial class MainForm : Form
         _log.Info("agent", $"web {job.QueryType} job");
         switch (job.QueryType)
         {
-            case ErpAgentJob.CustomerQuery:
+            case ErpAgentJob.CustomerQuery or ErpAgentJob.SupplierQuery:
             {
-                if (!ItemCodeRules.TryNormalize(job.CustomerCode ?? string.Empty, out var code, out var error, CustomerRules.CodeName))
+                var party = job.Party;
+                if (!ItemCodeRules.TryNormalize(job.PartyCode ?? string.Empty, out var code, out var error, party.CodeName))
                     throw new ArgumentException(error);
-                _mode.SelectedIndex = CustomerMode;
+                _mode.SelectedIndex = party == ErpParty.Customer ? CustomerMode : SupplierMode;
                 _code.Text = code;
-                var result = await ExecuteCustomerAsync(code, cancellationToken);
-                return (result.Found, ErpAgentProtocol.CustomerBody(job, result, version));
+                var result = await ExecutePartyAsync(party, code, cancellationToken);
+                return (result.Found, ErpAgentProtocol.PartyBody(job, result, version));
             }
-            case ErpAgentJob.CustomerSearch:
+            case ErpAgentJob.CustomerSearch or ErpAgentJob.SupplierSearch:
             {
                 if (!ItemNameRules.TryNormalize(job.Keyword, out var keyword, out var error))
                     throw new ArgumentException(error);
-                _mode.SelectedIndex = CustomerNameMode;
+                var party = job.Party;
+                _mode.SelectedIndex = party == ErpParty.Customer ? CustomerNameMode : SupplierNameMode;
                 _code.Text = keyword;
-                var result = await ExecuteSearchAsync(keyword, cancellationToken, customers: true);
+                var result = await ExecuteSearchAsync(keyword, cancellationToken, party);
                 return (result.Items.Count > 0, ErpAgentProtocol.SearchBody(result, version));
             }
             case ErpAgentJob.SalesQueryType:
@@ -928,7 +938,7 @@ internal sealed partial class MainForm : Form
 
     private void ShowResult(ItemQueryResult? result)
     {
-        SetHeaderCaptions(customer: false);
+        SetHeaderCaptions(null);
         _itemCode.Text = result?.ItemCode ?? string.Empty;
         _itemName.Text = result?.ItemName ?? string.Empty;
         _specification.Text = result?.Specification ?? string.Empty;

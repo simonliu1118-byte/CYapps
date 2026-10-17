@@ -3,7 +3,7 @@ using Xunit;
 
 namespace CYERPAutoQuery.Tests;
 
-/// <summary>CY Web customer／銷貨銷退／未收款 jobs and the 標準進價 grant (contract 2026-10-17), fake values only.</summary>
+/// <summary>CY Web customer／supplier／銷貨銷退／未收款 jobs and the 標準進價 grant (contract 2026-10-17), fake values only.</summary>
 public class ErpAgentBusinessTests
 {
     private static ErpAgentJob Claim(string job) =>
@@ -13,7 +13,7 @@ public class ErpAgentBusinessTests
     public void ClaimListsEverySupportedQueryType()
     {
         var body = JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!;
-        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SALES", "RECEIVABLE", "ORDER"],
+        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SUPPLIER_NO", "SUPPLIER_NAME", "SALES", "RECEIVABLE", "ORDER"],
             body["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 
@@ -24,6 +24,14 @@ public class ErpAgentBusinessTests
         Assert.True(customer.IsBusiness);
         Assert.Equal("CU0001", customer.CustomerCode);
         Assert.Equal("假", Claim("""{"id":"j2","queryType":"CUSTOMER_NAME","keyword":"假"}""").Keyword);
+        var supplier = Claim("""{"id":"j9","queryType":"SUPPLIER_NO","supplierCode":"SU0001"}""");
+        Assert.True(supplier.IsBusiness);
+        Assert.Same(ErpParty.Supplier, supplier.Party);
+        Assert.Equal("SU0001", supplier.PartyCode);
+        var supplierName = Claim("""{"id":"j10","queryType":"SUPPLIER_NAME","keyword":"假"}""");
+        Assert.Equal(("假", ErpParty.Supplier), (supplierName.Keyword, supplierName.Party));
+        Assert.Same(ErpParty.Customer, customer.Party);
+        Assert.Throws<InvalidDataException>(() => Claim("""{"id":"j11","queryType":"SUPPLIER_NO","customerCode":"SU0001"}"""));
         var sales = Claim("""{"id":"j3","queryType":"SALES","customerCode":"CU0001","dateFrom":"2026-01-01","dateTo":"2026-10-17"}""");
         var query = sales.Sales(new DateOnly(2026, 10, 17));
         Assert.Equal((new DateOnly(2026, 1, 1), new DateOnly(2026, 10, 17)), (query.From!.Value, query.To!.Value));
@@ -71,7 +79,7 @@ public class ErpAgentBusinessTests
     }
 
     [Fact]
-    public void ReceivableAndCustomerBodies()
+    public void ReceivableAndPartyBodies()
     {
         var all = Claim("""{"id":"j1","queryType":"RECEIVABLE","scope":"ALL","code":null}""");
         var bill = new ReceivableBill("CU0001", "假客戶", new DateOnly(2026, 9, 30), "903A-20260930001", "SP01", "假業務", "", "NTD",
@@ -83,10 +91,18 @@ public class ErpAgentBusinessTests
         Assert.Equal("", body["bills"]![0]!["vouchers"]![0]!["date"]!.GetValue<string>());
 
         var customer = Claim("""{"id":"j2","queryType":"CUSTOMER_NO","customerCode":"CU0009"}""");
-        var none = JsonNode.Parse(ErpAgentProtocol.CustomerBody(customer, CustomerQueryResult.NotFound("CU0009", TimeSpan.Zero), "v"))!;
+        var none = JsonNode.Parse(ErpAgentProtocol.PartyBody(customer, PartyQueryResult.NotFound(ErpParty.Customer, "CU0009", TimeSpan.Zero), "v"))!;
         Assert.Equal("NOT_FOUND", none["outcome"]!.GetValue<string>());
         Assert.Equal("CU0009", none["customerCode"]!.GetValue<string>());
         Assert.Empty(none["fields"]!.AsArray());
+
+        var supplier = Claim("""{"id":"j3","queryType":"SUPPLIER_NO","supplierCode":"SU0001"}""");
+        var found = JsonNode.Parse(ErpAgentProtocol.PartyBody(supplier,
+            new PartyQueryResult(ErpParty.Supplier, "SU0001", [new ErpField("廠商代號", "SU0001"), new ErpField("廠商簡稱", "假廠商")], TimeSpan.Zero), "v"))!;
+        Assert.Equal("FOUND", found["outcome"]!.GetValue<string>());
+        Assert.Equal("SU0001", found["supplierCode"]!.GetValue<string>());
+        Assert.Null(found["customerCode"]);
+        Assert.Equal("假廠商", found["fields"]![1]!["value"]!.GetValue<string>());
     }
 
     [Fact]

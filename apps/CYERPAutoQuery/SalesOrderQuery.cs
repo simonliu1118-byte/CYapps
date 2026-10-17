@@ -86,7 +86,7 @@ internal sealed record SalesQuery(string CustomerCode, DateOnly? From, DateOnly?
 
     public static SalesQuery Resolve(string customerInput, DateOnly? from, DateOnly? to, DateOnly today)
     {
-        if (!ItemCodeRules.TryNormalize(customerInput, out var code, out var error, CustomerRules.CodeName))
+        if (!ItemCodeRules.TryNormalize(customerInput, out var code, out var error, ErpParty.Customer.CodeName))
             throw new ArgumentException(error);
         if (from is { } start && start > today) throw new ArgumentException("單據日期的起日不可晚於今天。");
         if (from is { } a && to is { } b && a > b) throw new ArgumentException("單據日期的起日不可晚於迄日。");
@@ -201,11 +201,11 @@ internal static class SalesExport
             throw new InvalidDataException($"ERP 匯出的{what}缺少欄位：{string.Join("、", missing)}{hint}。");
         }
 
-        var orders = new List<(string No, List<CustomerRow> Rows)>();
+        var orders = new List<(string No, List<ExportRow> Rows)>();
         foreach (var values in rows.Skip(titleIndex + 1))
         {
             if (values.All(string.IsNullOrWhiteSpace)) continue;
-            var r = new CustomerRow(titles, values);
+            var r = new ExportRow(titles, values);
             var no = r[report.NoColumn].Trim();
             if (no.Length == 0)
             {
@@ -242,10 +242,10 @@ internal static class SalesExport
     private static bool IsSubtotal(string[] values) =>
         values.Any(v => v.Trim().StartsWith("小計", StringComparison.Ordinal));
 
-    private static SalesOrder ToOrder(SalesReport report, string no, List<CustomerRow> rows)
+    private static SalesOrder ToOrder(SalesReport report, string no, List<ExportRow> rows)
     {
         var h = rows[0];
-        string Opt(CustomerRow r, string? column) => column is null ? string.Empty : r[column].Trim();
+        string Opt(ExportRow r, string? column) => column is null ? string.Empty : r[column].Trim();
         var lines = rows.Select((r, i) => new SalesLine(
             i + 1, r["品號"].Trim(), r["品名"].Trim(), r["規格"].Trim(), JoinCode(r["庫別代號"], r["庫別名稱"]),
             Number(r[report.QuantityColumn]), r["單位"].Trim(), Number(r["單價"]), Number(r[report.AmountColumn]),
