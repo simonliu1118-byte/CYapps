@@ -1,4 +1,5 @@
 using CYInvoice.Core.Storage;
+using CYInvoice.Core.AutoInput;
 
 namespace CYInvoice.WinForms;
 
@@ -36,6 +37,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (AutoInputCommandLine.IsAutoInputInvocation(args))
+        {
+            // Headless commands must never enter the WinForms startup or show modal prompts.
+            Environment.ExitCode = RunAutoInputCommandAsync(args).GetAwaiter().GetResult();
+            return;
+        }
         var smokeTest = args.Contains("--startup-smoke-test", StringComparer.Ordinal);
         try
         {
@@ -80,6 +87,75 @@ internal static class Program
                 "CYInvoice 啟動失敗",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
+        }
+    }
+
+    private static async Task<int> RunAutoInputCommandAsync(string[] args)
+    {
+        AutoInputCommand command;
+        AutoInputRequest request;
+        string requestJson;
+        try
+        {
+            command = AutoInputCommandLine.Parse(args);
+            if (File.Exists(command.ResultPath))
+                return 2; // never overwrite a previous outcome; caller must reconcile it.
+            var length = new FileInfo(command.RequestPath).Length;
+            if (length > AutoInputContract.MaxRequestBytes)
+                return 2;
+            requestJson = await File.ReadAllTextAsync(command.RequestPath).ConfigureAwait(false);
+            request = AutoInputContract.ParseRequest(requestJson);
+            if (command.Pdf) request.ValidatePdf();
+        }
+        catch (Exception error) when (error is InvalidDataException or IOException or
+            UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return 2;
+        }
+
+        if (LocalResetCoordinator.HasPendingReset(AppContext.BaseDirectory) ||
+            LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            return 3;
+
+        try
+        {
+            var directoryKey = AutoInputPipe.DirectoryKey(AppContext.BaseDirectory);
+            using var instance = new Mutex(false, @"Local\CYInvoice-" + directoryKey);
+            bool acquired;
+            try { acquired = instance.WaitOne(0); }
+            catch (AbandonedMutexException) { acquired = true; }
+
+            AutoInputResult result;
+            if (acquired)
+            {
+                var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
+                var processor = new AutoInputProcessor(repository, new CYInvoice.Core.Invoicing.InvoiceService(repository));
+                result = command.Pdf
+                    ? await processor.ExecutePdfAsync(request).ConfigureAwait(false)
+                    : await processor.ExecuteAsync(request, command.Issue).ConfigureAwait(false);
+            }
+            else
+            {
+                // Secondary process does not open SQLite; only the primary instance issues.
+                var reply = await AutoInputPipe.ForwardAsync(command.Issue, requestJson, CancellationToken.None, command.Pdf)
+                    .ConfigureAwait(false);
+                if (reply.Result is null) return reply.ExitCode == 2 ? 2 : 3;
+                result = reply.Result;
+            }
+            if (result.RequestId != request.RequestId || result.Schema != AutoInputContract.ResultSchema ||
+                result.Orders is null) return 3;
+            await AutoInputResultFile.WriteAtomicAsync(command.ResultPath, result).ConfigureAwait(false);
+            return AutoInputPipe.ExitCode(result);
+        }
+        catch (Exception error) when (error is InvalidDataException or IOException or
+            UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return 2;
+        }
+        catch (Exception error)
+        {
+            WriteStartupError(error);
+            return 3;
         }
     }
 

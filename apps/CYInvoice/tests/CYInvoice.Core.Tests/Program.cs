@@ -1,4 +1,5 @@
 using CYInvoice.Core;
+using CYInvoice.Core.AutoInput;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Imports;
@@ -14,6 +15,150 @@ using System.Text.Json;
 
 var tests = new (string Name, Action Run)[]
 {
+    ("autoinput request accepts subset and rejects duplicate orders", () =>
+    {
+        var requestId = Guid.NewGuid().ToString("D");
+        var file = Path.Combine(Path.GetTempPath(), "synthetic-orders.xls");
+        var valid = JsonSerializer.Serialize(new {
+            schema = AutoInputContract.RequestSchema, requestId, source = "mo", file,
+            orderIds = new[] { "ORDER-A", "ORDER-B" }
+        });
+        var parsed = AutoInputContract.ParseRequest(valid);
+        Equal("mo", parsed.Source);
+        Equal(2, parsed.OrderIds!.Count);
+        Throws<InvalidDataException>(() => AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+            schema = AutoInputContract.RequestSchema, requestId, source = "mo", file,
+            orderIds = new[] { "ORDER-A", "ORDER-A" }
+        })));
+        Throws<InvalidDataException>(() => AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+            schema = "cyinvoice-autoinput-request/999", requestId, source = "mo", file
+        })));
+    }),
+    ("autoinput PDF request validates style, folder and required order IDs", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var request = new {
+            schema = AutoInputContract.RequestSchema, requestId = Guid.NewGuid().ToString("D"),
+            source = "mo", file = Path.Combine(temp.Path, "before.xls"),
+            orderIds = new[] { "90000000000001" }, pdfFolder = temp.Path, pdfStyle = 5
+        };
+        var parsed = AutoInputContract.ParseRequest(JsonSerializer.Serialize(request));
+        parsed.ValidatePdf();
+        Equal(5, parsed.PdfStyle);
+        Equal(temp.Path, parsed.PdfFolder);
+        Throws<InvalidDataException>(() =>
+            (parsed with { OrderIds = null }).ValidatePdf());
+        Throws<InvalidDataException>(() =>
+            (parsed with { PdfStyle = 4 }).ValidatePdf());
+        Throws<InvalidDataException>(() =>
+            AutoInputContract.ParseRequest(JsonSerializer.Serialize(new {
+                request.schema, request.requestId, request.source, request.file,
+                request.orderIds, request.pdfFolder, pdfStyle = 4 })));
+        Equal(true, AutoInputCommandLine.IsAutoInputInvocation(["--autoinput-pdf"]));
+        Equal(true, AutoInputCommandLine.IsAutoInputInvocation(["--autoinput-unsupported"]));
+        Equal(true, AutoInputCommandLine.Parse([
+            "--autoinput-pdf", request.file, "--result", Path.Combine(temp.Path,"out.json")]).Pdf);
+        Throws<InvalidDataException>(() => AutoInputCommandLine.Parse([
+            "--autoinput-invalid", request.file, "--result", Path.Combine(temp.Path,"out.json")]));
+    }),
+    ("autoinput PDF never issues and safely returns ready, pending or skipped", () =>
+        TestAutoInputPdfAsync().GetAwaiter().GetResult()),
+    ("autoinput blocks prior unresolved and mismatched invoice", () =>
+    {
+        var record = new InvoiceRecord {
+            Source = InvoiceSources.Mo, OriginalOrderId = "ORDER-A", OrderId = "ORDER-A",
+            Environment = Environments.Production, InvoiceState = InvoiceStates.Opened,
+            InvoiceNumber = "AA12345678", InvoiceDate = "2026/10/14", Amount = 725
+        };
+        Equal("existing", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 700, "", Environments.Production)!.Status);
+        record.InvoiceState = InvoiceStates.Unknown;
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        record.InvoiceState = InvoiceStates.Failed;
+        Equal("failed", AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal("unknown", AutoInputRecordDecision.Classify(
+            [record, record], InvoiceSources.Mo, "ORDER-A", 725, "", Environments.Production)!.Status);
+        Equal<AutoInputOrderResult?>(null, AutoInputRecordDecision.Classify(
+            [record], InvoiceSources.Mo, "ORDER-Z", 725, "", Environments.Production));
+    }),
+    ("autoinput serialized issue replay guard prevents duplicate AMEGO call", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        const string id = "MO-AUTOINPUT-SAFE";
+        var fake = new FakeGateway {
+            IssueResponse = new IssueResponse(0, "", "AB12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(TestApiOrderId(id), "AB12345678", 105, 0, 105, 1)
+        };
+        var (service, _) = TestService(temp.Path, fake);
+        MoOrder Order()
+        {
+            var order = new MoOrder { OrderId = id, TotalAmount = 105 };
+            order.Items.Add(new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 });
+            return order;
+        }
+        service.IssueMoAsync(Order(), replaySafe: true, expectedEnvironment: Environments.Test)
+            .GetAwaiter().GetResult();
+        Throws<InvalidOperationException>(() => service.IssueMoAsync(
+            Order(), replaySafe: true, expectedEnvironment: Environments.Test)
+            .GetAwaiter().GetResult());
+        Equal(1, fake.IssueCalls);
+    }),
+    ("autoinput refuses environment switch before issuing", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var fake = new FakeGateway();
+        var (service, _) = TestService(temp.Path, fake);
+        var order = new MoOrder { OrderId = "MO-ENV-BLOCK", TotalAmount = 105 };
+        order.Items.Add(new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 });
+        Throws<InvalidOperationException>(() => service.IssueMoAsync(
+            order, replaySafe: true, expectedEnvironment: Environments.Production)
+            .GetAwaiter().GetResult());
+        Equal(0, fake.IssueCalls);
+    }),
+    ("autoinput query strictly reconciles unknown invoice without issuing", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        const string id = "MO-AI-QUERY";
+        var response = ConfirmedQuery(TestApiOrderId(id), "AB87654321", 105, 0, 105, 1);
+        var fake = new FakeGateway { QueryResponse = response with {
+            Data = response.Data with { InvoiceDate = "2026/10/14" }
+        } };
+        var (service, repository) = TestService(temp.Path, fake);
+        repository.Invoices.Append(new InvoiceRecord {
+            Id = "autoinput-query-test", Source = InvoiceSources.Mo,
+            OriginalOrderId = id, OrderId = id, ApiOrderId = TestApiOrderId(id),
+            Environment = Environments.Test, InvoiceState = InvoiceStates.Unknown,
+            Amount = 105, BuyerIdentifier = "0000000000",
+            Items = [new InvoiceItem { Description = "測試品項", Quantity = 1, UnitPrice = 105, Amount = 105 }],
+            DetailVat = 1
+        });
+        var updated = service.ReconcileForAutoInputAsync(
+            "autoinput-query-test", Environments.Test).GetAwaiter().GetResult();
+        Equal(InvoiceStates.Opened, updated.InvoiceState);
+        Equal("AB87654321", updated.InvoiceNumber);
+        Equal("existing", AutoInputRecordDecision.Classify(
+            [updated], InvoiceSources.Mo, id, 105, "", Environments.Test)!.Status);
+        Equal(0, fake.IssueCalls);
+        Equal(1, fake.QueryCalls);
+    }),
+    ("autoinput result is atomic and cannot replace an existing file", () =>
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "result.json");
+        var envelope = new AutoInputResult(AutoInputContract.ResultSchema, Guid.NewGuid().ToString("D"),
+            "2.6.19+0", "test", "2026-10-14T10:00:00Z",
+            [new AutoInputOrderResult("ORDER-A", "unknown", Message: "synthetic")]);
+        AutoInputResultFile.WriteAtomicAsync(path, envelope).GetAwaiter().GetResult();
+        using var output = JsonDocument.Parse(File.ReadAllText(path));
+        Equal("unknown", output.RootElement.GetProperty("orders")[0].GetProperty("status").GetString());
+        Throws<IOException>(() => AutoInputResultFile.WriteAtomicAsync(path, envelope)
+            .GetAwaiter().GetResult());
+        Equal(0, Directory.GetFiles(temp.Path, "*.tmp").Length);
+    }),
     ("seven-place inclusive round trip", () =>
     {
         var inclusive = FixedDecimal.Parse("200");
@@ -1359,6 +1504,123 @@ static async Task TestImportedLookupBlockAsync()
     order.Items.Add(new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 });
     await ThrowsAsync<InvalidOperationException>(() => service.IssueCoupangWithLookupAsync(order, new NameLookup()));
     Equal(0, fake.IssueCalls);
+}
+
+static async Task TestAutoInputPdfAsync()
+{
+    using var temp = new TemporaryDirectory();
+    var fake = new FakeGateway { PdfBytes = TestPdfBytes() };
+    var (service, repository) = TestService(temp.Path, fake);
+    const string orderId = "90000000000001";
+    var record = PdfReadyRecord("AX12345678");
+    record.Source = InvoiceSources.Mo;
+    record.OriginalOrderId = orderId;
+    record.OrderId = orderId;
+    record.InvoiceDate = "2026/10/15";
+    record.BuyerIdentifier = "12345675";
+    record.BuyerName = "範例股份有限公司";
+    repository.Invoices.Append(record);
+    var folder = Path.Combine(temp.Path,"paper");
+    Directory.CreateDirectory(folder);
+    var exporter = new AutoInputPdfExport(repository,service);
+    var ready = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("ready",ready.Status);
+    Equal(record.InvoiceNumber,ready.InvoiceNumber);
+    Equal(record.Amount,ready.TotalAmount);
+    Equal(record.BuyerIdentifier,ready.BuyerBan);
+    Equal(Path.Combine(folder,"AX12345678_style5.pdf"),ready.PdfFile);
+    Equal(true,File.Exists(ready.PdfFile));
+    Equal(1,fake.PdfCalls);
+    Equal(0,fake.IssueCalls);
+    var second = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("ready",second.Status);
+    Equal(1,fake.PdfCalls);
+    File.WriteAllText(ready.PdfFile,"conflicting file");
+    var clash = await exporter.ExportAsync(orderId,InvoiceSources.Mo,Environments.Test,folder,5);
+    Equal("unknown",clash.Status);
+    Equal("conflicting file",File.ReadAllText(ready.PdfFile));
+    Equal(0,fake.IssueCalls);
+    Equal("unknown",(await exporter.ExportAsync(orderId,InvoiceSources.Coupang,
+        Environments.Test,folder,5)).Status);
+    Equal("skipped",(await exporter.ExportAsync("NOT-IN-LOCAL",InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+
+    record = repository.Invoices.LoadOrCreate().Single();
+    record.UploadStatus = UploadStatuses.Pending;
+    repository.Invoices.Save([record]);
+    fake.PdfException = new AmegoApiException(99, "PDF 尚未產生");
+    Equal("pending",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,0)).Status);
+    Equal(2,fake.PdfCalls);
+    // Once the real official PDF becomes available it must work even before
+    // the local upload status has been refreshed by the GUI timer.
+    fake.PdfException = null;
+    Equal("ready",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,0)).Status);
+    Equal(3,fake.PdfCalls);
+    Equal(0,fake.IssueCalls);
+
+    record.UploadStatus = UploadStatuses.Complete;
+    record.BuyerIdentifier = "0000000000";
+    repository.Invoices.Save([record]);
+    var paperConsumer = await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5);
+    Equal("ready",paperConsumer.Status);
+    Equal(string.Empty,paperConsumer.BuyerBan);
+    Equal(Path.Combine(folder,"AX12345678_style0.pdf"),paperConsumer.PdfFile);
+    Equal(true,paperConsumer.Message.Contains("pdfStyle=0",StringComparison.Ordinal));
+    Equal(0,fake.LastPdfStyle);
+    Equal(0,fake.IssueCalls);
+
+    record.Delivery = "會員載具";
+    repository.Invoices.Save([record]);
+    Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+    record.Delivery = "捐贈";
+    repository.Invoices.Save([record]);
+    Equal("skipped",(await exporter.ExportAsync(orderId,InvoiceSources.Mo,
+        Environments.Test,folder,5)).Status);
+
+    // Coupang B2C has no company BAN but MUST be paper and downloadable.
+    var coupangRecord = PdfReadyRecord("AY12345678");
+    coupangRecord.Source = InvoiceSources.Coupang;
+    coupangRecord.OriginalOrderId = "COUPANG-ORDER-01";
+    coupangRecord.OrderId = "COUPANG-ORDER-01";
+    coupangRecord.InvoiceDate = "2026/10/15";
+    coupangRecord.BuyerIdentifier = string.Empty;
+    coupangRecord.BuyerName = "消費者";
+    repository.Invoices.Save([record,coupangRecord]);
+    var coupangPaper = await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,3);
+    Equal("ready",coupangPaper.Status);
+    Equal("COUPANG-ORDER-01",coupangPaper.OrderId);
+    Equal(coupangRecord.Amount,coupangPaper.TotalAmount);
+    Equal(string.Empty,coupangPaper.BuyerBan);
+    Equal(Path.Combine(folder,"AY12345678_style0.pdf"),coupangPaper.PdfFile);
+    Equal(true,coupangPaper.Message.Contains("A4",StringComparison.Ordinal));
+    Equal(0,fake.LastPdfStyle);
+    Equal(0,fake.IssueCalls);
+    // A replay reads the original safe PDF without calling Issue or replacing it.
+    var coupangAgain = await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,5);
+    Equal("ready",coupangAgain.Status);
+    Equal(coupangPaper.PdfFile,coupangAgain.PdfFile);
+    Equal(0,fake.IssueCalls);
+    var collision = coupangRecord;
+    collision.BuyerIdentifier = "12AB5678";
+    repository.Invoices.Save([record,collision]);
+    Equal("unknown",(await exporter.ExportAsync("COUPANG-ORDER-01",
+        InvoiceSources.Coupang,Environments.Test,folder,5)).Status);
+    Equal(0,fake.IssueCalls);
+
+    var output = Path.Combine(temp.Path,"result.json");
+    var envelope = new AutoInputResult(AutoInputContract.ResultSchema,Guid.NewGuid().ToString("D"),
+        "2.6.21+0","test",DateTimeOffset.UtcNow.ToString("O"),[ready]);
+    await AutoInputResultFile.WriteAtomicAsync(output,envelope);
+    using var document = JsonDocument.Parse(File.ReadAllText(output));
+    Equal("ready",document.RootElement.GetProperty("orders")[0].GetProperty("status").GetString());
+    Equal(ready.PdfFile,document.RootElement.GetProperty("orders")[0].GetProperty("pdfFile").GetString());
+    await ThrowsAsync<IOException>(() => AutoInputResultFile.WriteAtomicAsync(output,envelope));
 }
 
 static async Task TestConsumerPdfCacheAsync()

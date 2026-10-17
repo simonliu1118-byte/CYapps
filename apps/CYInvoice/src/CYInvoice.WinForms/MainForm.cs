@@ -22,6 +22,7 @@ internal sealed class MainForm : Form
     private const int BannerSideWidth = 450;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly AutoInputPipeServer autoInputPipe;
     private readonly InvoiceSyncCoordinator syncCoordinator;
     private readonly HttpClient cloudHealthHttpClient = new();
     private readonly CancellationTokenSource syncLifetime = new();
@@ -84,6 +85,11 @@ internal sealed class MainForm : Form
 
         repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         service = new InvoiceService(repository);
+        autoInputPipe = new AutoInputPipeServer(new AutoInputProcessor(repository, service), () =>
+        {
+            if (!IsDisposed && IsHandleCreated)
+                BeginInvoke((Action)(() => { if (!IsDisposed) recordsPage?.Reload(); }));
+        });
         var syncService = new InvoiceSyncService(repository);
         var automaticSyncService = new InvoiceAutomaticSyncService(repository, syncService);
         syncCoordinator = new InvoiceSyncCoordinator(syncService, automaticService: automaticSyncService);
@@ -91,7 +97,19 @@ internal sealed class MainForm : Form
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
         connectionTimer.Tick += async (_, _) => await RefreshConnectionsAsync();
-        FormClosing += (_, _) => StopBackgroundSync();
+        FormClosing += (_, eventArgs) =>
+        {
+            if (autoInputPipe.IsProcessing &&
+                !LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            {
+                eventArgs.Cancel = true;
+                MessageBox.Show(this, "外部批次發票尚在處理中，為避免遺失開立結果，請完成後再關閉。",
+                    "AutoInput 開立中", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            autoInputPipe.Dispose();
+            StopBackgroundSync();
+        };
         BuildShell();
         SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
         UpdateEnvironment();
@@ -119,6 +137,7 @@ internal sealed class MainForm : Form
                 recordsPage.Visible = true;
             }
             if (!EnsureInitialSetup()) return;
+            autoInputPipe.Start();
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
             connectionTimer.Start();
@@ -1018,6 +1037,7 @@ internal sealed class MainForm : Form
     {
         if (disposing)
         {
+            autoInputPipe.Dispose();
             StopBackgroundSync();
             syncTimer.Dispose();
             connectionTimer.Dispose();

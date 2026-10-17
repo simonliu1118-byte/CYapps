@@ -217,21 +217,23 @@ public sealed class InvoiceService
             lookup,
             cancellationToken);
 
-    public async Task<IssueResult> IssueMoAsync(MoOrder order, CancellationToken cancellationToken = default)
+    public async Task<IssueResult> IssueMoAsync(MoOrder order, CancellationToken cancellationToken = default, bool replaySafe = false, string expectedEnvironment = "")
     {
         if (IsMoCompany(order))
         {
             var lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
             if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
-            return await IssueMoWithLookupAsync(order, lookup, cancellationToken).ConfigureAwait(false);
+            return await IssueMoWithLookupAsync(order, lookup, cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
         }
-        return await IssueMoWithLookupAsync(order, new NameLookup(), cancellationToken).ConfigureAwait(false);
+        return await IssueMoWithLookupAsync(order, new NameLookup(), cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
     }
 
     public Task<IssueResult> IssueMoWithLookupAsync(
         MoOrder order,
         NameLookup lookup,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool replaySafe = false,
+        string expectedEnvironment = "")
     {
         var company = IsMoCompany(order);
         ResolveImportedBuyerName(company, lookup, order.BuyerName, value => order.BuyerName = value);
@@ -285,12 +287,14 @@ public sealed class InvoiceService
                 CarrierId2: order.CarrierId2,
                 NpoBan: order.NpoBan,
                 ApiBuyerName: testPrivacy ? "測試消費者" : string.Empty,
-                TestPrivacy: testPrivacy),
+                TestPrivacy: testPrivacy,
+                AutoInputReplaySafe: replaySafe,
+                ExpectedEnvironment: expectedEnvironment),
             lookup,
             cancellationToken);
     }
 
-    public async Task<IssueResult> IssueCoupangAsync(CoupangOrder order, CancellationToken cancellationToken = default)
+    public async Task<IssueResult> IssueCoupangAsync(CoupangOrder order, CancellationToken cancellationToken = default, bool replaySafe = false, string expectedEnvironment = "")
     {
         var company = order.BuyerBan.Trim().Length != 0;
         var lookup = new NameLookup();
@@ -299,13 +303,15 @@ public sealed class InvoiceService
             lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
             if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
         }
-        return await IssueCoupangWithLookupAsync(order, lookup, cancellationToken).ConfigureAwait(false);
+        return await IssueCoupangWithLookupAsync(order, lookup, cancellationToken, replaySafe, expectedEnvironment).ConfigureAwait(false);
     }
 
     public Task<IssueResult> IssueCoupangWithLookupAsync(
         CoupangOrder order,
         NameLookup lookup,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool replaySafe = false,
+        string expectedEnvironment = "")
     {
         var company = order.BuyerBan.Trim().Length != 0;
         ResolveImportedBuyerName(company, lookup, order.BuyerName, value => order.BuyerName = value);
@@ -331,7 +337,9 @@ public sealed class InvoiceService
                 Delivery: DeliveryPaper,
                 BuyerName: order.BuyerName,
                 ApiBuyerName: testPrivacy ? "測試消費者" : string.Empty,
-                TestPrivacy: testPrivacy),
+                TestPrivacy: testPrivacy,
+                AutoInputReplaySafe: replaySafe,
+                ExpectedEnvironment: expectedEnvironment),
             lookup,
             cancellationToken);
     }
@@ -366,6 +374,42 @@ public sealed class InvoiceService
                 BuyerName: company ? name : string.Empty),
             lookup,
             cancellationToken);
+    }
+
+    // Query-only reconciliation for external automation. Never submits IssueAsync.
+    // It uses the same strict remote comparison and serialized local status save
+    // as the interactive refresh path; a missing/ambiguous response is not permission to reissue.
+    public async Task<InvoiceRecord> ReconcileForAutoInputAsync(
+        string recordId, string expectedEnvironment, CancellationToken cancellationToken = default)
+    {
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
+        await issueGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var record = repository.Invoices.LoadOrCreate()
+                .Single(item => item.Id == recordId);
+            if (!SameEnvironment(record.Environment, expectedEnvironment))
+                throw new InvalidOperationException("AutoInput 歷史紀錄環境不符");
+            if (record.InvoiceState is not (InvoiceStates.Unknown or InvoiceStates.Changing or InvoiceStates.Opened))
+                return record;
+            if (record.InvoiceState == InvoiceStates.Opened && record.InvoiceNumber.Trim().Length != 0 &&
+                record.ErrorMessage.Trim().Length == 0 && record.InvoiceDate.Trim().Length != 0)
+                return record;
+
+            var (gateway, environment) = GetGateway();
+            if (environment != expectedEnvironment)
+                throw new InvalidOperationException("AutoInput 查詢期間環境已切換");
+            using var queryTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            queryTimeout.CancelAfter(RecoveryQueryTimeout);
+            var query = record.InvoiceNumber.Trim().Length != 0
+                ? await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, queryTimeout.Token).ConfigureAwait(false)
+                : await gateway.QueryByOrderIdAsync(EffectiveRecordOrderId(record), queryTimeout.Token).ConfigureAwait(false);
+            VerifyStoredQueryResult(record, query.Data);
+            ApplyQueryResult(record, query.Data, record.UploadStatus, record.UploadStatusText);
+            SaveStatus(record.Id, CreateStatusUpdate(record));
+            return record;
+        }
+        finally { issueGate.Release(); }
     }
 
     public async Task<IReadOnlyList<InvoiceRecord>> RefreshAllAsync(
@@ -526,6 +570,8 @@ public sealed class InvoiceService
         };
 
         var (gateway, environment) = GetGateway();
+        if (options.AutoInputReplaySafe && options.ExpectedEnvironment != environment)
+            throw new InvalidOperationException("AutoInput 開立期間環境已切換，未送出");
         var createdAt = now();
         var apiOrderId = RequestOrderId(draft, options);
         if (environment == Environments.Test)
@@ -545,6 +591,11 @@ public sealed class InvoiceService
             try
             {
                 var records = repository.Invoices.LoadOrCreate();
+                if (options.AutoInputReplaySafe && records.Any(prior =>
+                    SameEnvironment(prior.Environment, environment) &&
+                    (string.Equals(EffectiveRecordOrderId(prior), apiOrderId, StringComparison.Ordinal) ||
+                     string.Equals(prior.OriginalOrderId, options.OriginalOrderId, StringComparison.Ordinal))))
+                    throw new InvalidOperationException("AutoInput 訂單已有開立紀錄或未確認的嘗試，禁止重複開立");
                 var uncertain = FindUncertainRecord(records, apiOrderId, environment);
                 if (uncertain is not null)
                 {
@@ -1211,7 +1262,9 @@ public sealed class InvoiceService
         string NpoBan = "",
         string ApiOrderId = "",
         string ApiBuyerName = "",
-        bool TestPrivacy = false);
+        bool TestPrivacy = false,
+        bool AutoInputReplaySafe = false,
+        string ExpectedEnvironment = "");
 }
 
 public sealed class UnknownInvoiceResultException(InvoiceRecord record, Exception? innerException = null)
