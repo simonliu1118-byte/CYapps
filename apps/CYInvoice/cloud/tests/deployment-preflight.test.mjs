@@ -58,6 +58,25 @@ assert.throws(() => checkMigrations(migrations.slice(0, 11), migrations), /UNREV
 assert.throws(() => checkMigrations([...migrations, '0014_unreviewed.sql'], migrations), /MIGRATION_HISTORY_NOT_CANONICAL_PREFIX/);
 assert.throws(() => checkMigrations(migrations.slice(1), migrations), /MIGRATION_HISTORY_NOT_CANONICAL_PREFIX/);
 assert.throws(() => checkMigrations(migrations.slice(0, 12), migrations, true), /MIGRATION_NOT_COMPLETE/);
+// 3.0's additive D1 SQL may be present in source while the original D1
+// is still at storage13. Read-only preflight can inspect it, but a deploy
+// or CYID_ONLY run must NEVER pass with an unapplied migration.
+const v30Canonical = migrations.concat(
+  '0014_invitation_recovery_metadata.sql','0015_company_settings.sql');
+assert.deepEqual(checkMigrations(v30Canonical.slice(0, 12), v30Canonical),
+  v30Canonical.slice(12));
+assert.deepEqual(checkMigrations(v30Canonical.slice(0, 13), v30Canonical),
+  v30Canonical.slice(13));
+assert.deepEqual(checkMigrations(v30Canonical.slice(0, 14), v30Canonical),
+  ['0015_company_settings.sql']);
+assert.throws(() => checkMigrations(v30Canonical.slice(0, 13), v30Canonical, true),
+  /MIGRATION_NOT_COMPLETE/);
+assert.deepEqual(checkMigrations(v30Canonical,v30Canonical,true),[]);
+assert.throws(() => checkMigrations(v30Canonical.slice(0, 12),
+  [...v30Canonical,'0016_unreviewed.sql']),/UNREVIEWED_PENDING_MIGRATIONS/);
+assert.throws(() => checkMigrations(migrations.slice(0, 12),
+  [...migrations,'0014_unreviewed.sql','0015_company_settings.sql']),
+  /UNREVIEWED_PENDING_MIGRATIONS/);
 
 const fingerprints = fingerprintRows([{ id: 'device_synthetic', token_hash: 'synthetic_hash', status: 'active' }], 'id');
 assert.equal(JSON.stringify(fingerprints).includes('device_synthetic'), false);

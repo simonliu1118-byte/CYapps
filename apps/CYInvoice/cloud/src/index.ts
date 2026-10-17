@@ -22,6 +22,11 @@ interface Env extends CyIdEnv {
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
 }
 
+// Existing CYID_ONLY D1 storage13 remains fully usable during 3.0 rollout.
+// Recovery-only schema columns appear in the additive 0014 migration.
+function hasRecoveryColumns(env: Env): boolean {
+  return /^\d+$/.test(env.SCHEMA_VERSION) && Number(env.SCHEMA_VERSION) >= 14;
+}
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 type DeviceIdentity = {
@@ -513,16 +518,30 @@ async function createPairing(request: Request, env: Env, requestId: string): Pro
   const now = new Date();
   const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS).toISOString();
   const pairingId = `pair_${crypto.randomUUID()}`;
-  await env.DB.batch([
+  const pairingWrites = await env.DB.batch([
+    // A recovery may revoke this issuer after earlier Device/CYID checks.
+    // Only an active issuer can commit a new pairing grant.
     env.DB.prepare(
       `INSERT INTO device_pairing_codes (
         pairing_id, workspace_id, created_by_device_id, code_hash, expires_at, created_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+      )
+      SELECT ?1, ?2, ?3, ?4, ?5, ?6 FROM devices d
+      JOIN workspaces w ON w.workspace_id = d.workspace_id AND w.status = 'active'
+      WHERE d.device_id = ?3 AND d.workspace_id = ?2 AND d.status = 'active'`
     ).bind(pairingId, device.workspaceId, device.deviceId, codeHash, expiresAt, now.toISOString()),
-    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "pairing_issued",
-      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
-      pairingId, requestId }),
+    env.DB.prepare(`INSERT INTO security_audit_events
+      (event_id, workspace_id, event_type, outcome, actor_device_id, actor_employee_id,
+       pairing_id, request_id, occurred_at)
+      SELECT ?1, ?2, 'pairing_issued', 'success', ?3, ?4, ?5, ?6, ?7
+      FROM device_pairing_codes p WHERE p.pairing_id = ?5
+        AND p.workspace_id = ?2 AND p.created_by_device_id = ?3
+        AND EXISTS (SELECT 1 FROM devices d WHERE d.device_id = ?3 AND d.status = 'active')`)
+      .bind(`evt_${crypto.randomUUID()}`, device.workspaceId, device.deviceId,
+        owner.employee_id, pairingId, requestId, now.toISOString()),
   ]);
+  if (pairingWrites.some(result => result.meta.changes !== 1))
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "The issuing Device is no longer active.");
   return json(env, requestId, 201, { pairing: { pairingId, code, expiresAt } });
 }
 
@@ -550,7 +569,9 @@ async function previewPairing(request: Request, env: Env, requestId: string): Pr
   const hash = await sha256Hex(body.code.trim().toLowerCase());
   const pairing = await env.DB.prepare(
     `SELECT pairing_id, workspace_id FROM device_pairing_codes
-      WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2 LIMIT 1`
+      WHERE code_hash = ?1 AND used_at IS NULL
+      ${hasRecoveryColumns(env) ? "AND revoked_at IS NULL" : ""}
+      AND expires_at > ?2 LIMIT 1`
   ).bind(hash, new Date().toISOString()).first<{ pairing_id: string; workspace_id: string }>();
   const workspace = pairing && await directJoinWorkspace(env, pairing.workspace_id);
   if (!workspace) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid or Workspace is not ready.");
@@ -606,11 +627,14 @@ function newInvitationCode(): string {
 type InvitationRow = {
   invitation_id: string; workspace_id: string; delivery_state: string; expires_at: string;
   revoked_at: string | null; consumed_at: string | null; consumed_by_device_id: string | null;
+  issuer_channel: string; purpose: string;
 };
 
 async function findInvitation(env: Env, code: string): Promise<InvitationRow | null> {
   return env.DB.prepare(`SELECT invitation_id, workspace_id, delivery_state, expires_at,
-      revoked_at, consumed_at, consumed_by_device_id FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
+      revoked_at, consumed_at, consumed_by_device_id,
+      ${hasRecoveryColumns(env) ? "issuer_channel, purpose" : "'DEVICE' AS issuer_channel, 'JOIN' AS purpose"}
+      FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
     .bind(await sha256Hex(code.trim().toLowerCase())).first<InvitationRow>();
 }
 
@@ -636,11 +660,18 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
   const invitationId = `inv_${crypto.randomUUID()}`;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS).toISOString();
-  await env.DB.prepare(`INSERT INTO device_invitations (
+  const issued = await env.DB.prepare(`INSERT INTO device_invitations (
     invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id, issued_by_cyid_employee_id,
-    delivery_state, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?8, 'pending', ?6, ?7)`)
+    delivery_state, expires_at, created_at)
+    SELECT ?1, ?2, ?3, ?4, ?5, ?8, 'pending', ?6, ?7 FROM devices d
+    JOIN workspaces w ON w.workspace_id = d.workspace_id AND w.status = 'active'
+    WHERE d.device_id = ?4 AND d.workspace_id = ?2 AND d.status = 'active'`)
     .bind(invitationId, device.workspaceId, await sha256Hex(code), device.deviceId,
-      usesCyId(env) ? null : owner.employee_id, expiresAt, now.toISOString(), usesCyId(env) ? owner.employee_id : null).run();
+      usesCyId(env) ? null : owner.employee_id, expiresAt, now.toISOString(),
+      usesCyId(env) ? owner.employee_id : null).run();
+  if (issued.meta.changes !== 1)
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "The issuing Device is no longer active.");
   try {
     await sender.send({ to: owner.email_normalized, subject: "CYInvoice 新裝置邀請",
       text: `CYInvoice 新裝置連線設定\nCloud API 網址：${new URL(request.url).origin}\n開通碼：${code}\n有效至：${expiresAt}\n僅限使用一次。若非本人操作，請通知管理員撤銷邀請。`,
@@ -671,14 +702,31 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
       .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
         requestId, sentAt, row.invitation_id),
   ]);
-  await env.DB.batch([
+  const sentWrites = await env.DB.batch([
     ...superseded,
-    env.DB.prepare("UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1 WHERE invitation_id = ?2")
+    env.DB.prepare(`UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1
+      WHERE invitation_id = ?2 AND delivery_state = 'pending' AND revoked_at IS NULL
+        AND consumed_at IS NULL AND expires_at > ?1
+        AND EXISTS (SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
+          WHERE d.device_id = issued_by_device_id AND d.workspace_id = device_invitations.workspace_id
+            AND d.status = 'active' AND w.status = 'active')`)
       .bind(sentAt, invitationId),
-    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "invitation_issued",
-      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
-      invitationId, requestId }),
+    env.DB.prepare(`INSERT INTO security_audit_events
+      (event_id, workspace_id, event_type, outcome, actor_device_id, actor_employee_id,
+       invitation_id, request_id, occurred_at)
+      SELECT ?1, i.workspace_id, 'invitation_issued', 'success', ?2, ?3,
+        i.invitation_id, ?4, ?5
+      FROM device_invitations i
+      JOIN devices d ON d.device_id = i.issued_by_device_id AND d.workspace_id = i.workspace_id
+      WHERE i.invitation_id = ?6 AND i.delivery_state = 'sent' AND i.sent_at = ?5
+        AND i.revoked_at IS NULL AND d.status = 'active'`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, sentAt, invitationId),
   ]);
+  const sentResult = sentWrites.slice(-2);
+  if (sentResult.some(result => result.meta.changes !== 1))
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE",
+      "Invitation could not be enabled because the issuing Device is no longer active.");
   return json(env, requestId, 201, { invitation: { invitationId, expiresAt, deliveryState: "sent" } });
 }
 
@@ -687,6 +735,8 @@ async function previewInvitation(request: Request, env: Env, requestId: string):
   if (!invitationCode(body?.code)) return errorResponse(env, requestId, 400, "INVALID_INVITATION", "Invitation code is invalid.");
   const invitation = await findInvitation(env, body.code);
   if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  if (invitation.issuer_channel !== "DEVICE" || invitation.purpose !== "JOIN")
+    return errorResponse(env, requestId, 409, "INVITATION_PURPOSE_MISMATCH", "Use the dedicated recovery flow.");
   const problem = invitationProblem(invitation, new Date().toISOString());
   if (problem) {
     await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
@@ -713,12 +763,16 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
     return errorResponse(env, requestId, 400, "INVALID_INVITATION_CLAIM", "Invitation claim is invalid.");
   const invitation = await findInvitation(env, body.code);
   if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  if (invitation.issuer_channel !== "DEVICE" || invitation.purpose !== "JOIN")
+    return errorResponse(env, requestId, 409, "INVITATION_PURPOSE_MISMATCH", "Use the dedicated recovery flow.");
   const tokenHash = await sha256Hex(normalizeDeviceToken(body.deviceToken));
   const existing = await env.DB.prepare(`SELECT device_id, workspace_id, display_name AS device_display_name,
-    invitation_id FROM devices WHERE token_hash = ?1 LIMIT 1`).bind(tokenHash)
-    .first<PairingDeviceRow & { invitation_id: string | null }>();
+    invitation_id, status FROM devices WHERE token_hash = ?1 LIMIT 1`).bind(tokenHash)
+    .first<PairingDeviceRow & { invitation_id: string | null; status: string }>();
   if (existing) {
-    if (existing.invitation_id !== invitation.invitation_id)
+    if (existing.invitation_id !== invitation.invitation_id || existing.status !== "active"
+        || existing.workspace_id !== invitation.workspace_id
+        || invitation.consumed_by_device_id !== existing.device_id)
       return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to another claim.");
     return json(env, requestId, 200, { recovered: true,
       workspace: { workspaceId: existing.workspace_id },
@@ -746,8 +800,14 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
         client_version, status, invitation_id, employee_authority_state,
         employee_transition_completed_at, paired_at, created_at, updated_at)
         SELECT ?1, ?2, ?3, ?4, ?5, 'active', ?6, 'cloud', ?7, ?7, ?7, ?7
-        FROM device_invitations WHERE invitation_id = ?6 AND delivery_state = 'sent'
-          AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?7`)
+        FROM device_invitations i
+        JOIN devices issuer ON issuer.device_id = i.issued_by_device_id
+          AND issuer.workspace_id = i.workspace_id AND issuer.status = 'active'
+        JOIN workspaces w ON w.workspace_id = i.workspace_id AND w.status = 'active'
+        WHERE i.invitation_id = ?6 AND i.delivery_state = 'sent'
+          AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'
+          AND i.consumed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?7`.replace("AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'",
+          hasRecoveryColumns(env) ? "AND i.issuer_channel = 'DEVICE' AND i.purpose = 'JOIN'" : ""))
         .bind(deviceId, invitation.workspace_id, body.deviceDisplayName.trim(), tokenHash,
           body.clientVersion.trim(), invitation.invitation_id, now),
       env.DB.prepare(`UPDATE device_invitations SET consumed_at = ?1, consumed_by_device_id = ?2
@@ -783,8 +843,11 @@ async function revokeInvitation(request: Request, env: Env, requestId: string): 
   const now = new Date().toISOString();
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
-      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL`)
-      .bind(now, invitationId, device.workspaceId),
+      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL
+        ${hasRecoveryColumns(env) ? "AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'" : ""}
+        AND EXISTS (SELECT 1 FROM devices issuer WHERE issuer.device_id = ?4
+          AND issuer.workspace_id = device_invitations.workspace_id AND issuer.status = 'active')`)
+      .bind(now, invitationId, device.workspaceId, device.deviceId),
     env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
       outcome, actor_device_id, actor_employee_id, invitation_id, request_id, occurred_at)
       SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3,
@@ -807,7 +870,9 @@ async function onboardingTicketStatus(request: Request, env: Env, requestId: str
   const creatorColumn = kind === "pairing" ? "created_by_device_id" : "issued_by_device_id";
   const usedColumn = kind === "pairing" ? "used_at" : "consumed_at";
   const claimedColumn = kind === "pairing" ? "claimed_device_id" : "consumed_by_device_id";
-  const stateColumns = kind === "invitation" ? "t.revoked_at, t.delivery_state" : "NULL AS revoked_at, 'sent' AS delivery_state";
+  const stateColumns = kind === "invitation" ? "t.revoked_at, t.delivery_state"
+    : hasRecoveryColumns(env) ? "t.revoked_at, 'sent' AS delivery_state"
+      : "NULL AS revoked_at, 'sent' AS delivery_state";
   const row = await env.DB.prepare(`SELECT t.expires_at, t.${usedColumn} AS used_at, ${stateColumns},
     t.${claimedColumn} AS joined_device_id, d.display_name AS joined_device_name
     FROM ${table} t LEFT JOIN devices d ON d.device_id = t.${claimedColumn}
@@ -826,7 +891,8 @@ async function recentJoinTickets(request: Request, env: Env, requestId: string):
   const device = await authenticateDevice(request, env);
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
   const now = new Date().toISOString();
-  const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at, p.used_at AS joined_at,
+  const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at,
+    ${hasRecoveryColumns(env) ? "p.revoked_at" : "NULL AS revoked_at"}, p.used_at AS joined_at,
     d.display_name AS joined_device_name FROM device_pairing_codes p
     LEFT JOIN devices d ON d.device_id = p.claimed_device_id
     WHERE p.workspace_id = ?1 AND p.created_by_device_id = ?2 ORDER BY p.created_at DESC LIMIT 1`)
@@ -872,7 +938,7 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
   const tokenHash = await sha256Hex(normalizedToken);
 
   const byToken = await env.DB.prepare(
-    `SELECT device_id, workspace_id, display_name AS device_display_name
+    `SELECT device_id, workspace_id, display_name AS device_display_name, status
        FROM devices WHERE token_hash = ?1 LIMIT 1`
   ).bind(tokenHash).first<PairingDeviceRow>();
   if (byToken) {
@@ -881,8 +947,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
         WHERE code_hash = ?1 AND claimed_device_id = ?2
         LIMIT 1`
     ).bind(codeHash, byToken.device_id).first<{ pairing_id: string }>();
-    if (!matchingConsumed)
-      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token already belongs to another device claim.");
+    if (!matchingConsumed || (byToken as PairingDeviceRow & { status?: string }).status !== "active")
+      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to a revoked or unrelated claim.");
     return json(env, requestId, 200, {
       recovered: true,
       workspace: { workspaceId: byToken.workspace_id },
@@ -892,7 +958,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
 
   const now = new Date().toISOString();
   const pairing = await env.DB.prepare(
-    `SELECT pairing_id, workspace_id, used_at, claimed_device_id, expires_at
+    `SELECT pairing_id, workspace_id, used_at, claimed_device_id, expires_at,
+         ${hasRecoveryColumns(env) ? "revoked_at" : "NULL AS revoked_at"}
        FROM device_pairing_codes
       WHERE code_hash = ?1
       LIMIT 1`
@@ -902,8 +969,10 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
     used_at: string | null;
     claimed_device_id: string | null;
     expires_at: string;
+    revoked_at: string | null;
   }>();
   if (!pairing) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid.");
+  if (pairing.revoked_at) return errorResponse(env, requestId, 409, "PAIRING_REVOKED", "Pairing authorization was revoked.");
   if (pairing.used_at) {
     await recordSecurityEvent(env.DB, { workspaceId: pairing.workspace_id, type: "pairing_claim_denied",
       outcome: "denied", pairingId: pairing.pairing_id, reasonCode: "PAIRING_ALREADY_USED", requestId });
@@ -919,38 +988,60 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
 
   const deviceId = `dev_${crypto.randomUUID()}`;
   try {
-    await env.DB.batch([
+    // Recheck authorization *inside* the SQLite/D1 write transaction.
+    // A recovery cutover may have revoked the issuer or pairing grant after
+    // the initial SELECT. INSERT ... SELECT then creates zero rows instead of
+    // allowing an old grant to establish another active Device.
+    const writes = await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO devices (
           device_id, workspace_id, display_name, token_hash, client_version,
           status, pairing_id, employee_authority_state, employee_transition_completed_at,
           paired_at, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?8, ?9, ?7, ?7, ?7)`
+        )
+        SELECT ?1, p.workspace_id, ?3, ?4, ?5, 'active', p.pairing_id,
+          ?8, ?9, ?7, ?7, ?7
+        FROM device_pairing_codes p
+        JOIN workspaces w ON w.workspace_id = p.workspace_id AND w.status = 'active'
+        JOIN devices issuer ON issuer.device_id = p.created_by_device_id
+          AND issuer.workspace_id = p.workspace_id AND issuer.status = 'active'
+        WHERE p.pairing_id = ?6 AND p.workspace_id = ?2
+          AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > ?7`.replace("AND p.revoked_at IS NULL",
+          hasRecoveryColumns(env) ? "AND p.revoked_at IS NULL" : "")
       ).bind(
-        deviceId,
-        pairing.workspace_id,
-        (body.deviceDisplayName as string).trim(),
-        tokenHash,
-        (body.clientVersion as string).trim(),
-        pairing.pairing_id,
+        deviceId, pairing.workspace_id, (body.deviceDisplayName as string).trim(),
+        tokenHash, (body.clientVersion as string).trim(), pairing.pairing_id,
         now, directJoin ? "cloud" : "transitioning", directJoin ? now : null),
       env.DB.prepare(
         `UPDATE device_pairing_codes
             SET used_at = ?1, claimed_device_id = ?2
-          WHERE pairing_id = ?3 AND used_at IS NULL`
+          WHERE pairing_id = ?3 AND used_at IS NULL
+            ${hasRecoveryColumns(env) ? "AND revoked_at IS NULL" : ""}
+            AND EXISTS (SELECT 1 FROM devices d
+              WHERE d.device_id = ?2 AND d.pairing_id = device_pairing_codes.pairing_id)`
       ).bind(now, deviceId, pairing.pairing_id),
-      securityEventStatement(env.DB, { workspaceId: pairing.workspace_id, type: "device_joined",
-        outcome: "success", targetDeviceId: deviceId, pairingId: pairing.pairing_id, requestId }),
+      env.DB.prepare(
+        `INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+          outcome, target_device_id, pairing_id, request_id, occurred_at)
+        SELECT ?1, ?2, 'device_joined', 'success', ?3, ?4, ?5, ?6
+        FROM device_pairing_codes p WHERE p.pairing_id = ?4
+          AND p.claimed_device_id = ?3 AND p.used_at = ?6`
+      ).bind(`evt_${crypto.randomUUID()}`, pairing.workspace_id, deviceId,
+        pairing.pairing_id, requestId, now),
     ]);
+    if (writes.some(result => result.meta.changes !== 1))
+      return errorResponse(env, requestId, 409, "PAIRING_CLAIM_CONFLICT",
+        "Pairing authorization is no longer active.");
   } catch (error) {
     const recovered = await env.DB.prepare(
-      `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name
+      `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name,
+          d.status
          FROM devices d
          JOIN device_pairing_codes p ON p.claimed_device_id = d.device_id
         WHERE d.token_hash = ?1 AND p.code_hash = ?2
         LIMIT 1`
-    ).bind(tokenHash, codeHash).first<PairingDeviceRow>();
-    if (recovered) {
+    ).bind(tokenHash, codeHash).first<PairingDeviceRow & { status: string }>();
+    if (recovered?.status === "active") {
       return json(env, requestId, 200, {
         recovered: true,
         workspace: { workspaceId: recovered.workspace_id },

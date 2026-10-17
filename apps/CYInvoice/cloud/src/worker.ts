@@ -3,6 +3,7 @@ import baseWorker from "./index";
 interface Env {
   DB: D1Database;
   APP_ENV: string;
+  CYID_ENABLED?: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
   BOOTSTRAP_KEY?: string;
@@ -105,6 +106,9 @@ async function compatibilityHealth(request: Request, env: Env): Promise<Response
   // V2.6.5 Build 4 clients gate on exact value 8. D1 migration progress is exposed
   // separately so a storage migration does not disconnect an otherwise compatible client.
   body.cloudVersion = CLOUD_VERSION;
+  // Additive onboarding diagnostic. Old API 1 clients still see marker8,
+  // but V3 refuses to create Devices on an old Built-in-only Worker.
+  body.identityProvider = env.CYID_ENABLED === "true" ? "CYID" : "BUILT_IN";
   body.schemaVersion = LEGACY_SCHEMA_COMPATIBILITY_VERSION;
   body.storageSchemaVersion = actualSchemaVersion;
   body.capabilities = [...CAPABILITIES];

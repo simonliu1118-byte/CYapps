@@ -10,6 +10,7 @@ internal static class CompatibilityRegression
         NewClientRejectsApiContractMismatch();
         Build4AcceptsNewWorkerCompatibilityHealth();
         WorkerKeepsCompatibilityAndStorageVersionsSeparate();
+        SensitiveCyIdWindowsOperationsRefuseHttpRedirects();
         Console.WriteLine("PASS cross-version Cloud compatibility regression");
     }
 
@@ -50,6 +51,42 @@ internal static class CompatibilityRegression
             "Worker health must not expose D1 migration progress as a client hard gate");
         Contains(worker, "CLIENT_UPDATE_REQUIRED",
             "retired security-sensitive onboarding shapes must fail with an explicit client update requirement");
+    }
+
+    private static void SensitiveCyIdWindowsOperationsRefuseHttpRedirects()
+    {
+        // These three flows send CYID passwords; company-card provision also
+        // installs business secrets, and recovery claim includes a Device Token.
+        // HttpClient's default automatic 307/308 redirect would replay the POST
+        // body to Location, even when that host is not the configured Cloud.
+        foreach (var (source, guard) in new[] {
+            ("SettingsForm.cs", "new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })"),
+            ("CloudRecoveryForm.cs", "new(new HttpClientHandler { AllowAutoRedirect = false })"),
+            ("CloudDirectJoinForm.cs", "new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })")
+        })
+            Contains(File.ReadAllText(FindWinFormsSource(source)), guard,
+                $"V3 CYID credential-bearing {source} must disable automatic HTTP redirects");
+    }
+
+    private static string FindWinFormsSource(string fileName)
+    {
+        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+        {
+            var directory = new DirectoryInfo(start);
+            while (directory is not null)
+            {
+                foreach (var relative in new[] {
+                    Path.Combine("src", "CYInvoice.WinForms", fileName),
+                    Path.Combine("apps", "CYInvoice", "src", "CYInvoice.WinForms", fileName)
+                })
+                {
+                    var candidate = Path.Combine(directory.FullName, relative);
+                    if (File.Exists(candidate)) return candidate;
+                }
+                directory = directory.Parent;
+            }
+        }
+        throw new InvalidOperationException($"Could not locate CYInvoice WinForms source {fileName}.");
     }
 
     private static CloudHealthResult Healthy(string schemaVersion, string apiVersion) => new(

@@ -1,8 +1,8 @@
 # CYInvoice V3 多機協同與 CYWEB 裝置復原設計
 
-更新日期：2026-10-13（Asia/Taipei）。
+更新日期：2026-10-18（Asia/Taipei）。
 
-**狀態：產品方向已依使用者要求併入 V3，以下為待實作設計。** 本文件描述 CYInvoice 的業務裝置信任與資料回復，不建立新的永久規則或 CYID shared contract。尚未增加 CYWEB 介面、private RPC、D1 migration、復原 API 或可攜備份工具，也未進行遠端復原。唯一未完成清單仍為 [TODO.md](TODO.md)。
+**V3.0 現行狀態**：CYWEB 復原介面／private route 已在 #192 合併 Source；CYInvoice #476 已有 private named RPC、issuer／claim、Windows Pending Token、0014／0015 canonical migration、10 分鐘有效期及 `AUTO_EXPIRED` 的下一次簽發自動結清。**原 D1／Worker／CYWEB binding 尚未完成本機 MCP 上線；真 Email／雙機／DR-01～13 未驗收。** 原本含 Work Item／折讓的 V3 規劃已分配至 3.1／3.2／3.3，不屬 3.0 的開發阻塞。唯一未完成清單仍為 [TODO.md](TODO.md)，本機 Cloudflare 步驟見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。
 
 ## 1. 本次決策與範圍
 
@@ -87,9 +87,9 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 ## 7. 舊裝置管理與 V3 協同
 
-D1 中仍 active 的遺失裝置不自動全部撤銷。CYWEB 管理頁顯示該次邀請 ID、到期與狀態，不將原碼放 URL／log；碼寄到當下由 CYID 確認的超管 Email。超管在新裝置連通後看到原 Device registry，明確選擇失聯裝置撤銷；LAST_ACTIVE_DEVICE 保護保持，新 Device 正常加入後才可處理最後一個失聯舊 Device。revoked 歷史與 Invitation／Audit actor 留存，不覆寫成新 Device。
+**V3.0 實作採一次性的公司級裝置復原**：CYWEB 超管以當次密碼授權短效邀請；只有新 Device 完成經 SQL guard 的單次 claim 後，才在同一交易內撤銷**同 Workspace 所有其他舊 active Device**，並保留原 Device registry、Token hash／撤銷及安全 Audit 歷史。發碼、寄信、Preview、過期、自動 `AUTO_EXPIRED` 清理、未完成或失敗 claim **均不可提前撤銷舊 Device**。這是復原專用、可明確確認的不可逆權限切換，與正常裝置管理的 `LAST_ACTIVE_DEVICE` 禁止撤銷最後裝置是不同流程；絕不可對仍在業務中的唯一可信裝置進行未核准測試。
 
-若是疑似 Token 外洩而需緊急全撤銷，屬另一個明確的事件處理範圍；不能偷偷借災復 UI 刪掉全部 active 或將其標為已恢復。
+CYWEB 管理頁只顯示 invitation ID、到期與狀態，不將原碼放 URL／log；密碼／復原碼只用於當次操作或發給 CYID 當前已驗證的超管 Email。懷疑 Token 外洩但不打算新 Device 全面接管時，應依獨立事件維運流程處理，不能拿災復邀請替代一般 Device revoke。
 
 V3 Work Item、revision／原子狀態轉移、跨機 OrderID 防撞、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
 
@@ -141,11 +141,11 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-06 | 兩台／兩個 Token 同時兌換只有一台成功；失敗無 orphan Device、無成功 Audit；Device registry、issuer 與 actor 正確 |
 | DR-07 | claim 已提交但 response 遺失、Windows 重啟／settings 寫入失敗，沿用同 Pending Token 找回；原安裝遺失 Token 保留同 Workspace 的本地資料，revoked wipe／外 scope 不旁路 |
 | DR-08 | 簽發 response 遺失可查同一次 request 結果，不盲目重簽；過期／撤銷／重寄及雙重提交按同一 lifecycle 收斂 |
-| DR-09 | 成功後保留原 Workspace／資料／Device history；舊裝置只有經超管明確選擇才撤銷，LAST_ACTIVE_DEVICE 維持 |
+| DR-09 | **成功 claim** 後保留原 Workspace／業務資料／Device history，同一原子 D1 transaction 撤銷所有其他舊 active Device；未成功 claim、僅過期或錯碼一律不得撤銷；正常管理路徑仍維持 LAST_ACTIVE_DEVICE |
 | DR-10 | 正常 Device issuer、配對／邀請與獨立 Built-in fixture 可升級；audit／history fingerprint／migration readback 仍成立 |
 | DR-11 | 無帳密、provider token、原邀請碼或 Device Token 明文進入 D1／public source／logs；CSRF／rate/body limits 與 private capability 防濫用 |
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
-| DR-13 | V3 新機 pending／revision／官方結果重整不自動重送 AMEGO；未上雲的原機資料遺失有明確界線 |
+| DR-13 | 3.0 新機復原不得重送任何 AMEGO 開票／作廢／人工折讓；未上雲的舊機資料遺失有明確提示。Work Item／跨機 revision／新折讓 API 的完整重整驗收**延至 3.1／3.2**，不得誤列為 3.0 未完工開發 |
 
 以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
 

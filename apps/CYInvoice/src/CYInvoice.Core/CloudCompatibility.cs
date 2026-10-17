@@ -28,6 +28,18 @@ public static class CloudCompatibility
         return string.Empty;
     }
 
+    // V3 join must not create an orphan Device on an old Built-in service.
+    // Never infer CYID from schema/API version: those stay compatible with
+    // previously released Windows clients. Require the new explicit marker.
+    public static string CyIdEnrollmentProblem(CloudHealthResult health)
+    {
+        var problem = Problem(health);
+        if (problem.Length != 0) return problem;
+        return health.IdentityProvider == "CYID"
+            ? string.Empty
+            : "目前 Cloud 尚未提供 CYID-only 裝置加入，請先更新雲端服務；不會建立裝置或覆蓋原設定。";
+    }
+
     public static string SuccessSummary(CloudHealthResult health) =>
         $"連線正常｜API {health.ApiVersion}｜相容層 {health.SchemaVersion}｜{Math.Max(0, health.RoundTripMilliseconds)} ms";
 

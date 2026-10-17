@@ -25,6 +25,7 @@ internal sealed partial class CloudDirectJoinForm : Form
     private readonly Panel inputPage = new() { Dock = DockStyle.Fill };
     private readonly Panel confirmationPage = new() { Dock = DockStyle.Fill, Visible = false };
     private readonly Button next = UiControls.StandardButton("下一步");
+    private readonly Button recovery = UiControls.StandardButton("災難復原");
     private readonly Button confirmJoin = UiControls.StandardButton("確認加入");
     private readonly Button back = UiControls.StandardButton("上一步");
     private readonly Button inputCancel = UiControls.StandardButton("取消");
@@ -54,7 +55,7 @@ internal sealed partial class CloudDirectJoinForm : Form
     private bool resourcesDisposed;
 
     public CloudDirectJoinForm(LocalRepository repository)
-        : this(repository, new HttpClient(), null)
+        : this(repository, new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }), null)
     {
     }
 
@@ -95,11 +96,17 @@ internal sealed partial class CloudDirectJoinForm : Form
         deviceName.TextChanged += (_, _) => ResetAuthorization();
 
         next.Click += async (_, _) => await NextAsync();
+        recovery.Click += (_, _) => OpenRecovery();
         confirmJoin.Click += async (_, _) => await JoinAsync();
         back.Click += (_, _) => ShowInputPage(focus: true);
 
         ChangeMethod();
         ShowInputPage(focus: false);
+        if (repository.Settings.CloudPendingRecovery(settings) is not null)
+        {
+            recovery.Text = "繼續災難復原";
+            status.Text = "已找到未完成的復原憑證，請選擇繼續災難復原，不要重新產生 Token。";
+        }
         Shown += async (_, _) =>
         {
             FocusFirstInput();
@@ -114,6 +121,7 @@ internal sealed partial class CloudDirectJoinForm : Form
         inputCancel.DialogResult = DialogResult.Cancel;
         confirmCancel.DialogResult = DialogResult.Cancel;
         next.Width = 110;
+        recovery.Width = 110;
         confirmJoin.Width = 120;
         back.Width = 100;
         inputCancel.Width = confirmCancel.Width = 90;
@@ -156,6 +164,7 @@ internal sealed partial class CloudDirectJoinForm : Form
 
         inputActions.Controls.Add(inputCancel);
         inputActions.Controls.Add(next);
+        inputActions.Controls.Add(recovery);
         root.Controls.Add(inputActions, 1, 9);
         inputPage.Controls.Add(root);
     }
@@ -216,7 +225,7 @@ internal sealed partial class CloudDirectJoinForm : Form
             throw new InvalidOperationException("雲端加入視窗尺寸異常");
         VerifyActions(inputActions, "input");
         VerifyActions(confirmationActions, "confirmation");
-        if (next.Text != "下一步" || inputCancel.Text != "取消"
+        if (next.Text != "下一步" || (recovery.Text != "災難復原" && recovery.Text != "繼續災難復原") || inputCancel.Text != "取消"
             || confirmJoin.Text != "確認加入" || back.Text != "上一步" || confirmCancel.Text != "取消")
             throw new InvalidOperationException("雲端加入流程按鈕文字異常");
     }
@@ -372,7 +381,7 @@ internal sealed partial class CloudDirectJoinForm : Form
             ValidateInput();
             var client = Client();
             var health = await client.CheckHealthAsync(lifetime.Token);
-            var problem = CloudCompatibility.Problem(health);
+            var problem = CloudCompatibility.CyIdEnrollmentProblem(health);
             if (problem.Length != 0) throw new InvalidOperationException(problem);
 
             preview = pairingMethod.Checked
@@ -488,44 +497,34 @@ internal sealed partial class CloudDirectJoinForm : Form
             throw new InvalidDataException("裝置身分驗證結果不一致。");
 
         var binding = await CyIdGateway.DiscoverAsync(http, new Uri(endpoint), token, workspaceId, deviceId, lifetime.Token);
-        if (binding is not null)
-        {
-            settings.CloudBaseUrl = endpoint;
-            settings.CloudWorkspaceId = workspaceId;
-            settings.CloudDeviceId = deviceId;
-            repository.Settings.SetCloudDeviceToken(settings, token);
-            repository.Settings.ConfirmCyIdConfiguration(settings, binding);
-            repository.Settings.ClearCloudPendingDeviceJoin(settings);
-            repository.Settings.Save(settings);
-            IdentityCompleted = true;
-            showMessage("裝置已加入，員工驗證由 CYID 提供。", "加入完成", MessageBoxIcon.Information);
-            DialogResult = DialogResult.OK;
-            Close();
-            return;
-        }
+        if (binding is null)
+            throw new InvalidDataException("目前 Cloud 未提供 CYID 身分綁定；不會回退使用舊 Built-in 帳號。未完成的裝置憑證仍保留供原服務查回。");
 
-        var authorityClient = new CloudEmployeeAuthorityClient(http, new Uri(endpoint), token);
-        var authority = await authorityClient.GetStatusAsync(lifetime.Token);
-        if (authority.State != "cloud" || authority.WorkspaceId != workspaceId || authority.DeviceId != deviceId)
-            throw new InvalidDataException("中央帳號尚未準備好直接加入。");
-
-        var snapshot = await authorityClient.GetSnapshotAsync(lifetime.Token);
-        if (snapshot.WorkspaceId != workspaceId)
-            throw new InvalidDataException("中央帳號 Workspace 不一致。");
-
-        repository.CloudEmployees.ReplaceSnapshot(workspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
         settings.CloudBaseUrl = endpoint;
         settings.CloudWorkspaceId = workspaceId;
         settings.CloudDeviceId = deviceId;
         repository.Settings.SetCloudDeviceToken(settings, token);
+        repository.Settings.ConfirmCyIdConfiguration(settings, binding);
         repository.Settings.ClearCloudPendingDeviceJoin(settings);
-        repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
-
         IdentityCompleted = true;
-        showMessage("裝置已加入，雲端員工帳號已同步。", "加入完成", MessageBoxIcon.Information);
+        showMessage("裝置已加入，員工驗證由 CYID 提供。", "加入完成", MessageBoxIcon.Information);
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    // Company-wide recovery is separate from ordinary JOIN. Old devices are
+    // revoked by the server only after this new Device is fully claimed.
+    private void OpenRecovery()
+    {
+        if (busy) return;
+        using var form = new CloudRecoveryForm(repository);
+        if (form.ShowDialog(this) == DialogResult.OK && form.IdentityCompleted)
+        {
+            IdentityCompleted = true;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
     }
 
     private async Task RunAsync(Func<Task> work)

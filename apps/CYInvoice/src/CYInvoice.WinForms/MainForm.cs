@@ -50,6 +50,8 @@ internal sealed class MainForm : Form
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
     private bool ownsAccountManagement = true;
+    // V3 allows app-owned account management only in Local mode.
+    // A historical Built-in Cloud setting is preserved but cannot revive its retired account UI.
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
@@ -313,7 +315,10 @@ internal sealed class MainForm : Form
 
     private void OpenAccountManagement()
     {
-        if (!repository.IdentityProvider.OwnsAccountManagement) return;
+        // A retained V2 Built-in Cloud profile is data, not a supported V3
+        // authority. Do not open account-management mutation UI for it.
+        if (!AllowsLocalAccountManagement(repository.Settings.LoadOrCreate())
+            || !repository.IdentityProvider.OwnsAccountManagement) return;
         if (!repository.HasAuthorityEmployees())
         {
             MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", "密碼驗證",
@@ -341,6 +346,14 @@ internal sealed class MainForm : Form
         {
             MessageBox.Show(this, "CYID 帳號的密碼復原與帳號設定請至 CY Web 辦理。", "忘記密碼",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (repository.Settings.LoadOrCreate() is { CloudMode: not CloudModes.LocalOnly })
+        {
+            MessageBox.Show(this,
+                "CYInvoice 3.0 已停用舊 Built-in Cloud 密碼復原。既有設定與歷史資料會保留，" +
+                "請由管理員確認 CYID 雲端加入；程式不會將舊雲端帳密當成 CYID 帳密。",
+                "不支援的舊雲端模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (repository.UsesCloudEmployeeAuthority())
@@ -420,6 +433,20 @@ internal sealed class MainForm : Form
 
     internal void VerifySmokeLayout()
     {
+        // V3 retains historical Built-in settings without exposing any old
+        // Cloud Employee account mutation entrypoint.
+        if (!AllowsLocalAccountManagement(new Settings { CloudMode = CloudModes.LocalOnly })
+            || AllowsLocalAccountManagement(new Settings {
+                CloudMode = CloudModes.CloudPreferred, CloudIdentityProvider = "BUILT_IN"
+            })
+            || AllowsLocalAccountManagement(new Settings {
+                CloudMode = CloudModes.CloudTransition, CloudIdentityProvider = "BUILT_IN"
+            })
+            || AllowsLocalAccountManagement(new Settings {
+                CloudMode = CloudModes.CloudPreferred, CloudIdentityProvider = "CYID"
+            }))
+            throw new InvalidOperationException("V3 account management must be Local-only.");
+
         if (tabs.TabPages.Count != 2 || tabs.TabPages[0] != invoiceTab || tabs.TabPages[1] != recordsTab ||
             tabs.DrawMode != TabDrawMode.Normal || tabs.TabStop)
             throw new InvalidOperationException("主頁籤未使用無焦點虛線的原生 TabControl");
@@ -602,9 +629,12 @@ internal sealed class MainForm : Form
         }
     }
 
+    private static bool AllowsLocalAccountManagement(Settings settings) =>
+        settings.CloudMode == CloudModes.LocalOnly && settings.CloudIdentityProvider != "CYID";
+
     private void UpdateRuntimeModeInitial(Settings settings)
     {
-        ownsAccountManagement = settings.CloudIdentityProvider != "CYID";
+        ownsAccountManagement = AllowsLocalAccountManagement(settings);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();
         if (settings.CloudMode == CloudModes.LocalOnly)
@@ -613,6 +643,19 @@ internal sealed class MainForm : Form
                 "單機模式",
                 SystemColors.ControlText,
                 "CYInvoice 目前使用單機模式，不會呼叫 CYInvoice Cloud API。");
+            return;
+        }
+
+        // Old CYInvoice Cloud company accounts were retired in 3.0. Never
+        // mistake a preserved V2 profile for another supported online mode.
+        if (settings.CloudIdentityProvider != "CYID")
+        {
+            SetRuntimeModeState(
+                "不支援的舊雲端模式",
+                Color.FromArgb(180, 0, 0),
+                "CYInvoice 3.0 只支援 Local／CYID Cloud。舊 Built-in Cloud 帳號已停用；" +
+                "裝置資料與歷史紀錄會保留，請先確認 CYID 裝置加入與帳號授權。",
+                showToolTip: true);
             return;
         }
 
@@ -647,13 +690,13 @@ internal sealed class MainForm : Form
     private async Task RefreshRuntimeModeAsync()
     {
         var requested = repository.Settings.LoadOrCreate();
-        ownsAccountManagement = requested.CloudIdentityProvider != "CYID";
+        ownsAccountManagement = AllowsLocalAccountManagement(requested);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();
         var requestedMode = requested.CloudMode;
         var requestedUrl = requested.CloudBaseUrl.Trim();
 
-        if (requestedMode == CloudModes.LocalOnly)
+        if (requestedMode == CloudModes.LocalOnly || requested.CloudIdentityProvider != "CYID")
         {
             UpdateRuntimeModeInitial(requested);
             return;
@@ -898,7 +941,7 @@ internal sealed class MainForm : Form
             return;
         }
         var identitySettings = repository.Settings.LoadOrCreate();
-        ownsAccountManagement = identitySettings.CloudIdentityProvider != "CYID";
+        ownsAccountManagement = AllowsLocalAccountManagement(identitySettings);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();
         ApplyConnectionControls(state);

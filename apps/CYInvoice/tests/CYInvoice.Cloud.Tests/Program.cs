@@ -12,6 +12,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("CYID gateway, protected offline authority and invalidation", CyIdIdentityProviderTests.RunAsync),
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
+    ("cloud company-card status does not replace Windows business credentials", CloudCompanySettingsUsageTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
@@ -177,7 +178,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.5","apiVersion":"1","schemaVersion":"9","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.5","apiVersion":"1","schemaVersion":"9","environment":"test","storage":"ok","identityProvider":"CYID"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -188,6 +189,8 @@ static async Task TestHealthAsync()
     Equal("0.8.5", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("9", health.SchemaVersion, "schema version");
+    Equal("CYID", health.IdentityProvider, "explicit CYID enrollment marker");
+    Equal(string.Empty, CloudCompatibility.CyIdEnrollmentProblem(health), "CYID-only cloud permits enrollment");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
 }
 
@@ -224,6 +227,12 @@ static Task TestCompatibilityAsync()
         string.Empty);
     True(CloudCompatibility.Problem(health).Contains("不是相容的 CYInvoice Cloud API", StringComparison.Ordinal),
         "non-CYInvoice service must be rejected");
+    var builtIn = health with { ServiceName = "cyinvoice-cloud", IdentityProvider = "BUILT_IN" };
+    True(CloudCompatibility.Problem(builtIn).Length == 0, "old API compatibility remains available");
+    True(CloudCompatibility.CyIdEnrollmentProblem(builtIn).Contains("CYID-only", StringComparison.Ordinal),
+        "Built-in Cloud must be denied before a new Device is claimed");
+    True(CloudCompatibility.CyIdEnrollmentProblem(builtIn with { IdentityProvider = "" }).Contains("CYID-only", StringComparison.Ordinal),
+        "missing legacy health marker must be denied, not inferred from schema");
     return Task.CompletedTask;
 }
 
