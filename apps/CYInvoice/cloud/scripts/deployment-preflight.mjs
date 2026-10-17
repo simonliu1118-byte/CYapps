@@ -265,7 +265,18 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
 export function checkMigrations(applied, canonical, requireComplete = false) {
   check(applied.every((name, i) => canonical[i] === name), 'MIGRATION_HISTORY_NOT_CANONICAL_PREFIX');
   const pending = canonical.slice(applied.length);
-  check(pending.length === 0 || (pending.length === 1 && pending[0] === '0013_cyid_invitation_actor.sql'),
+  // Source allowlist for read-only preflight only. V3.0 adds exactly the
+  // reviewed 0014 recovery and 0015 company migrations after existing 0013.
+  // This does NOT authorize remote schema mutation or Worker deployment:
+  // requireComplete still refuses any pending migration (including V3.0).
+  const v30 = ['0013_cyid_invitation_actor.sql',
+    '0014_invitation_recovery_metadata.sql','0015_company_settings.sql'];
+  const knownV30 = canonical.slice(-3).join('|') === v30.join('|');
+  const suffix = options => pending.length === options.length &&
+    options.every((name,i) => pending[i] === name);
+  check(pending.length === 0 ||
+    suffix(['0013_cyid_invitation_actor.sql']) ||
+    (knownV30 && (suffix(v30) || suffix(v30.slice(1)) || suffix(v30.slice(2)))),
     'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;
