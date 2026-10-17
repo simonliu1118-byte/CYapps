@@ -258,7 +258,7 @@ internal static class AllowanceWorkflowTests
         }
     ];
 
-    public static async Task LocalReservedNumberBlocksManualChangesAfterInterruptedMarkerAsync()
+    public static async Task LocalApprovalPersistedBeforeLedgerFailureAsync()
     {
         using var temporary = new AllowanceTemporaryDirectory();
         var setup = CreateSetup(temporary.Path);
@@ -266,41 +266,44 @@ internal static class AllowanceWorkflowTests
         await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
             "部分退款", 50, editedItems: EditedAllowances);
         var issue = AllowanceIssue(setup.Repository);
-
-        // Simulate a crash after SQLite number reservation commits but before
-        // the invoice's pending marker and manager approval are persisted.
-        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
         var workId = issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var reserved = ledger.Reserve(AmegoDefaults.TestInvoice, Environments.Test,
-            workId, new DateOnly(2026, 9, 19), new AllowanceIssueRequest
+
+        // Force Reserve to fail after the approval write but before the
+        // invoice pending marker. The business state must remain approved.
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        ledger.Reserve(AmegoDefaults.TestInvoice, Environments.Test, workId,
+            new DateOnly(2026, 9, 19), new AllowanceIssueRequest
             {
                 AllowanceDate = "20260919",
                 BuyerIdentifier = "0000000000",
                 BuyerName = "消費者",
                 ProductItem = EditedAllowances,
-                TotalAmount = 47m,
-                TaxAmount = 3m,
+                TotalAmount = 1m,
+                TaxAmount = 0m,
             });
-        Equal("reserved", reserved.Status);
-        Equal(false, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
+        setup.Gateway.Queries.Enqueue(Query());
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.IssueApprovedLocalAsync(issue, "2000", "AdminPass1"));
 
-        // Neither the employee nor the manager may erase the unconfirmed
-        // Work Item or take the legacy manual-completion path.
+        var stored = setup.Repository.Invoices.LoadOrCreate().Single();
+        var approved = setup.Workflow.ManualReviewFor(stored);
+        Equal(true, approved?.ApprovedAt is not null);
+        Equal("2000", approved?.HandlerEmployeeNo);
+        Equal(false, approved?.AwaitingConfirmation);
+        Equal(false, HasPending(stored));
         Throws<InvalidOperationException>(() =>
             setup.Workflow.WithdrawManualReview(setup.Record, "3015", "Employee1"));
         Throws<InvalidOperationException>(() =>
             setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
         await ThrowsAsync<InvalidOperationException>(() =>
             setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1"));
-
-        Equal("reserved", ledger.FindLatest(AmegoDefaults.TestInvoice,
-            Environments.Test, workId)?.Status);
         Equal(true, setup.Workflow.ManualReviewFor(
             setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
         Equal(null, new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
             .All(AccountKey()).Single(item => item.Id == issue.Id).ResolvedUtc);
+        Equal("reserved", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, workId)?.Status);
         Equal(0, setup.Gateway.AllowanceIssueCalls);
-        Equal(1, setup.Gateway.QueryCalls);
     }
 
     public static async Task LocalManagerSendsOnceAndConfirmsAsync()
@@ -326,6 +329,10 @@ internal static class AllowanceWorkflowTests
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
                 issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Equal("confirmed", reservation?.Status);
+        var handledReview = setup.Workflow.HandledReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single());
+        Equal(true, handledReview?.ApprovedAt is not null);
+        Equal("2000", handledReview?.HandlerEmployeeNo);
         Equal(null, setup.Workflow.ManualReviewFor(
             setup.Repository.Invoices.LoadOrCreate().Single()));
         Equal(true, new InvoiceSyncIssueStore(setup.Repository.DataDirectory)

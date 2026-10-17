@@ -22,7 +22,8 @@ public sealed record InvoiceAllowanceManualReview(
     string HandlerEmployeeNo = "",
     bool? ConfirmationProblem = null,
     IReadOnlyList<AllowanceProductItem>? DraftItems = null,
-    long? LocalLedgerWorkItemId = null);
+    long? LocalLedgerWorkItemId = null,
+    DateTimeOffset? ApprovedAt = null);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -114,7 +115,9 @@ public sealed class EmployeeAllowanceWorkflowService
                 AlreadyQueued: true,
                 Message: existing.AwaitingConfirmation
                     ? "這張發票的折讓已在等待光貿確認"
-                    : "這張發票已有折讓申請等待管理員處理");
+                    : existing.ApprovedAt is not null
+                        ? "這張發票的折讓已由管理員核准，請沿用原工作單完成送出或查回"
+                        : "這張發票已有折讓申請等待管理員處理");
         }
         if (issueStore.HasUnresolved(accountKey, number, orderId, InvoiceAllowanceIssueTypes.ManualReview))
             throw new InvalidDataException("折讓人工處理待辦存在，但申請資料遺失，已停止重複建立");
@@ -189,7 +192,8 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
         if (review.AwaitingConfirmation)
             return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
-        RequireNoLocalReservationForManualChange(issue);
+        if (review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准，不能切換成網站人工完成；請沿用原工作單。");
 
         review = review with
         {
@@ -265,7 +269,16 @@ public sealed class EmployeeAllowanceWorkflowService
             ? AmegoDefaults.TestAppKey : repository.Settings.ProductionAppKey(settings);
         if (string.IsNullOrWhiteSpace(appKey))
             throw new InvalidOperationException("缺少光貿 App Key，不能配號送出");
-        var approvedAt = now();
+        // Approval is the irrevocable business boundary: commit it before
+        // allocation so a crash cannot restore a withdrawable request.
+        var approvedAt = review.ApprovedAt ?? now();
+        if (review.ApprovedAt is null)
+        {
+            review = review with { ApprovedAt = approvedAt, HandlerEmployeeNo = manager.EmployeeNo };
+            WriteManualReview(fresh, review);
+            syncRepository.UpsertMany([fresh]);
+        }
+        // Retain the approval calendar date even after a restart.
         var allowanceDate = DateOnly.FromDateTime(approvedAt.Date);
         var template = new AllowanceIssueRequest {
             AllowanceNumber = "",
@@ -285,9 +298,8 @@ public sealed class EmployeeAllowanceWorkflowService
         // This step MUST be durable before the ledger moves to 'sending'.
         review = review with {
             AwaitingConfirmation = true,
-            ManualCompletedUtc = approvedAt.ToUniversalTime(),
+            ManualCompletedUtc = now().ToUniversalTime(),
             ConfirmedAllowanceNumber = reservation.AllowanceNumber,
-            HandlerEmployeeNo = manager.EmployeeNo,
             LocalLedgerWorkItemId = issue.Id
         };
         WriteManualReview(fresh, review);
@@ -348,6 +360,8 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
         if (!review.AwaitingConfirmation || !HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓尚未進入官方確認階段");
+        if (review.LocalLedgerWorkItemId is not null || review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准並固定原號，不能改選其他折讓單號；只能查回原號。");
 
         InvoiceRecord fresh;
         try
@@ -398,9 +412,8 @@ public sealed class EmployeeAllowanceWorkflowService
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
-        if (review.AwaitingConfirmation || HasPendingMarker(record))
-            throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
-        RequireNoLocalReservationForManualChange(issue);
+        if (review.AwaitingConfirmation || HasPendingMarker(record) || review.ApprovedAt is not null)
+            throw new InvalidOperationException("這筆折讓已由管理員核准或進入光貿確認，不能取消退回；官方開立成功後請走折讓作廢。");
 
         ClearManualReview(record);
         ClearPending(record);
@@ -424,9 +437,9 @@ public sealed class EmployeeAllowanceWorkflowService
         if(!string.Equals(review.RequesterEmployeeNo,employee.EmployeeNo,
             StringComparison.Ordinal))
             throw new UnauthorizedAccessException("只有原申請員工本人可以撤銷折讓申請");
-        if(review.AwaitingConfirmation||HasPendingMarker(record))
+        if(review.AwaitingConfirmation||HasPendingMarker(record)||review.ApprovedAt is not null)
             throw new InvalidOperationException(
-                "管理員已完成折讓操作並等待光貿確認，不能由員工撤銷");
+                "管理員已核准或已進入光貿確認，不能撤回折讓申請；官方開立成功後請走折讓作廢。");
         var invoiceNumber=record.InvoiceNumber.Trim();
         var orderId=EffectiveOrderId(record);
         var issues=issueStore.Unresolved(CurrentAccountKey())
@@ -439,7 +452,6 @@ public sealed class EmployeeAllowanceWorkflowService
             .ToArray();
         if(issues.Length!=1)
             throw new InvalidDataException("折讓待辦紀錄不唯一，不能自行撤銷");
-        RequireNoLocalReservationForManualChange(issues[0]);
         record.ExtensionData??=new Dictionary<string,JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[WithdrawnReviewMetadataKey]=JsonSerializer.SerializeToElement(new{
             Review=review,WithdrawnByEmployeeNo=employee.EmployeeNo,
@@ -696,23 +708,6 @@ public sealed class EmployeeAllowanceWorkflowService
         if (record.SellerInvoice.Trim().Length != 0 &&
             !string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
             throw new InvalidOperationException("這筆發票屬於其他公司統編，已停止折讓作業");
-    }
-
-    // The local ledger can commit before the invoice pending marker is persisted.
-    // After a crash in that window, the old manual buttons must not discard
-    // the original Work Item or silently switch it to a second workflow.
-    private void RequireNoLocalReservationForManualChange(InvoiceSyncIssue issue)
-    {
-        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
-            return;
-        var account = CurrentAccount();
-        var existing = new LocalAllowanceNumberStore(repository.DataDirectory)
-            .FindLatest(account.SellerInvoice, account.Environment,
-                issue.Id.ToString(CultureInfo.InvariantCulture));
-        if (existing is not null)
-            throw new InvalidOperationException(
-                "這筆折讓已有永久配號 " + existing.AllowanceNumber +
-                "，即使待確認標記尚未保存，也不能取消、撤回或改成人工完成；請保留原工作單並查回原號。");
     }
 
     private void RequireManualReviewIssue(InvoiceSyncIssue issue)

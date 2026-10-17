@@ -842,13 +842,16 @@ internal sealed class SyncIssuesForm : Form
                     {
                         if (!review.AwaitingConfirmation)
                         {
-                            primaryText = "已人工處理";
-                            allowCancel = true;
+                            primaryText = review.ApprovedAt is not null
+                                ? "繼續已核准折讓" : review.DraftItems is { Count: > 0 }
+                                    ? "核准並送出折讓" : "已人工處理";
+                            allowCancel = review.ApprovedAt is null;
                         }
                         else
                         {
                             var candidates = NewAllowanceCandidates(record, review);
-                            if (candidates.Count > 1 && candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus)))
+                            if (review.LocalLedgerWorkItemId is null && review.ApprovedAt is null &&
+                                candidates.Count > 1 && candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus)))
                                 primaryText = "確認折讓單號";
                         }
                     }
@@ -1219,6 +1222,9 @@ internal sealed class SyncIssuesForm : Form
         rows.Add(new("處理管理員", EmployeeDisplay(review?.HandlerEmployeeNo ?? "")));
         rows.Add(new("人工處理時間", review?.ManualCompletedUtc is { } completed
             ? completed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
+        if (review?.DraftItems is { Count: > 0 })
+            rows.Add(new("管理員核准時間", review.ApprovedAt is { } approved
+                ? approved.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
         if (review is not null)
         {
             var taxInclusive = review.TaxInclusiveAmount;
@@ -1240,7 +1246,9 @@ internal sealed class SyncIssuesForm : Form
         }
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null
             ? "已人工處理"
-            : review?.AwaitingConfirmation == true ? "等待光貿確認" : "等待管理員人工處理"));
+            : review?.AwaitingConfirmation == true ? "等待光貿確認"
+            : review?.ApprovedAt is not null ? "管理員已核准，待完成原工作單送出"
+            : "等待管理員人工處理"));
         if (record is not null)
         {
             rows.Add(new("官方折讓資料", FormatAllowances(InvoiceAllowanceMetadata.ReadOfficial(record))));

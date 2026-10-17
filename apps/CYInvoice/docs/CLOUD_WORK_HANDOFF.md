@@ -3,9 +3,9 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
-## 2026-10-17 Local 永久配號與待確認標記間的中斷保護（Draft）
+## 2026-10-17 Local 核准持久化先於配號（Draft）
 
-沿用既有 SQLite `LocalAllowanceNumberStore`，在管理員「人工完成」、「取消」及原申請人「撤回」三條現有 Local 操作入口，額外核對原 `sync_issues.local_id` 是否已有永久配號。即使進程在 ledger `Reserve` 提交成功、發票 metadata `pending` 寫入之前中止，也不得取消申請、撤銷或切換舊人工流程，避免留下孤兒配號卻將同一申請視為未處理；提示保留原號進行人工查回。合成測試直接建立 `reserved` 卻無 pending 的情境，確認三條入口均拒絕且原申請、ledger 和待辦保留。仍待精確 HEAD Windows／Cloud CI；本步不新增 DB schema／發光貿請求／部署。此步只封住可觀察的中斷後手動繞過，不宣稱對所有同時寫入／崩潰交錯提供跨表原子性，也不自動解鎖未知結果。
+依使用者最新定案：**僅管理員核准之後才會配號與送出**，核准就是取消／撤回截止點，不以配號推測權限。沿用同一筆 Local Work Item，通過管理員驗證、官方可折剩餘額及固定明細檢查後，先保存 `InvoiceAllowanceManualReview.ApprovedAt` 和原核准人，再用既有 SQLite `LocalAllowanceNumberStore` 配號，寫入待確認標記及固定原號，CAS 取得唯一首次發送權後送一次 g0401。核准後即使尚未成功配號或保存 pending，也不能由原申請人／管理員撤回、取消或變成舊人工完成；續作沿用原工作單與核准日。已送出結果不明只能原號查回，確認已開立後所有角色若要取消均走既有折讓作廢 g0501。取消候選單號人工覆寫已固定配號的可能；UI 顯示核准與不可撤回。移除前一筆 `cfcc7b29` 以 ledger 狀態充當撤回權限的額外 helper，回到一個明確的核准業務狀態。已補 Reserve 異常後核准仍存在的隔離回歸測試；尚待精確 HEAD Windows/Cloud/Governance CI、真實中斷與官方驗收，正式 D1／Worker／Release 不變。
 
 ## 2026-10-17 階段一：Local 管理員 g0401 單次送出接線（Draft）
 

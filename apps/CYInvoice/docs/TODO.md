@@ -8,9 +8,9 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-## 2026-10-17 Local 配號中斷後禁止撤回／取消（Draft Source）
+## 2026-10-17 Local 管理員核准持久化先於配號（Draft Source）
 
-在同一筆 Local 折讓 Work Item 已有 SQLite 永久配號、但 invoice metadata 尚未成功寫入 pending 的中斷區間，既有管理員「取消」、「人工完成」和原申請人「撤回」不能繞過 ledger。三個既有入口均先查原 Work Item 的永久配號，有號就保留申請並停止操作，要求原號查回／人工復原；不新增表、狀態、第二套流程或任何光貿操作。新增合成測試，模擬配號已持久化但 pending 尚不存在，證明三個入口均不會結案、清除申請或對光貿送出。**這是 crash-window fail-closed 補強，不代表任意並行交錯已具備跨資料表原子交易，也未完成中斷後的自動修復；CI 以本次精確 HEAD 為準，正式資源不變。**
+依使用者更正，折讓撤回／取消的業務界線是**管理員核准**，不是「是否已有配號」。Local 管理員驗證、官方額度與凍結明細核對後，先將 `ApprovedAt`、原核准管理員和含時區核准時間持久化到既有折讓申請 metadata，再以原 `sync_issues.local_id` 配號及單次送出 g0401。已核准案件本人與管理員都不能撤回／取消或走「網站人工完成」。核准後到配號前中斷仍保留原 Work Item，續作沿用同一核准日期；已配號／結果不明只能原號查回，確認成功後如要取消只能另走原折讓作廢 g0501。原 `cfcc7b29` 基於 ledger 判斷撤回資格的額外 helper 已移除，WinForms 依已核准狀態隱藏撤回並鎖定候選折讓號碼改選。合成回歸測試以 Reserve 異常驗證核准先持久化、不能撤回且不送光貿；**不聲稱跨 SQLite 寫入具完整原子性或所有崩潰交錯均已實測**。新 HEAD CI、實機中斷恢復與真光貿驗收仍待驗，不部署、不 Release。
 
 ## 2026-10-16 V3 逐項交付索引（最新權威快照）
 

@@ -547,7 +547,7 @@ internal sealed class RecordDetailForm : Form
              cfg.CloudIdentityProvider=="CYID" &&
              CloudAllowanceSubmissionService.HasPending(record)) ||
             (cfg.CloudMode==CloudModes.LocalOnly &&
-             allowanceReview is {AwaitingConfirmation:false});
+             allowanceReview is {AwaitingConfirmation:false, ApprovedAt:null});
         withdrawAllowance.Enabled=withdrawAllowance.Visible && !operationBusy;
         if (allowanceBusy)
         {
@@ -558,7 +558,8 @@ internal sealed class RecordDetailForm : Form
         {
             allowanceInvoice.Text = allowanceReview is null
                 ? "折讓"
-                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
+                : allowanceReview.AwaitingConfirmation ? "折讓待確認"
+                    : allowanceReview.ApprovedAt is not null ? "折讓已核准" : "折讓處理中";
             allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
         }
     }
