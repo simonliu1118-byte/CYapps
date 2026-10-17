@@ -89,6 +89,7 @@ internal sealed partial class MainForm : Form
         Shown += (_, _) => ApplyBrowserHotkey();
         // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
         Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
+        Shown += (_, _) => StartUpdateChecks();
     }
 
     protected override void WndProc(ref Message m)

@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## 版本
 
-目前版本見 `VERSION`／`BUILD`（開發中 `V0.3.0`；最新正式 Release 為 `V0.2.9`，tag `cyerp-auto-input-v0.2.9`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V0.2.9.zip`，解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
+目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V0.3.1`，tag `cyerp-auto-input-v0.3.1`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V0.3.1.zip`，解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
 
 ## 主要流程
 
@@ -247,6 +247,10 @@ CYERPAutoInput 使用 AITeam 本程式App Icon Family 的正式 `Auto` 資產：
 - 下拉欄位、F2 單位／批號選取後都會讀回或確認視窗關閉，不以「看起來點到了」當作成功。
 - LOG 一律記錄實際內容，僅供工程排查；只存本機 `logs/`，不提交 Git、不自動上傳，由使用者主動提供分析（PROJECT_RULES §3、§4；使用者 2026-10-11 確認）。
 - 真實 ERP 代碼、客戶／品號／訂單／發票資料、runtime log 不得提交 Public source（課稅別、發票聯數的標準選項為核准例外）。
+
+## 自動更新
+
+V0.3.1 起，程式開啟約 20 秒後及每 4 小時檢查 GitHub 上本專案（tag `cyerp-auto-input-vX.Y.Z`）較新的正式 Release；草稿、預先發行與 Actions 測試包都不算。有較新版就自動下載 zip 與 `.sha256`，核對 SHA-256 後解壓到 `Temp\update-V版本`。沒有工作進行時（沒有自動輸入、全自動、紙本發票佇列或其他視窗）直接關閉程式、以背景 PowerShell 把新版檔案覆蓋到程式資料夾並重新開啟；正在工作時等空閒，或在程式關閉時替換（不自動重開）。`Data`、`Temp`、`logs` 不在下載包內，保持不變。測試包（`VX.Y.Z Build N`）只會更新到更高的 `X.Y.Z` 正式版。檢查或下載失敗只記 LOG，不影響使用。
 
 ## 本機資料與下載包
 
