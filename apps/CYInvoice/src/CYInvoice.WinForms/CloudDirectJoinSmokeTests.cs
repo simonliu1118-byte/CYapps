@@ -212,26 +212,8 @@ internal sealed partial class CloudDirectJoinForm
                         deviceId = "dev_smoke", identityWorkspaceId = "ws_identity_smoke", applicationId = "CYINVOICE", consumerVersion = "1.0.2" });
                 return Json(new { ok = true, provider = "BUILT_IN", workspaceId = "ws_smoke", deviceId = "dev_smoke" });
             }
-            if (path == "/v1/employee-authority/status")
-                return Json(new { authority = new { deviceId = "dev_smoke", workspaceId = "ws_smoke",
-                    state = "cloud", transitionSnapshotHash = "", transitionItemCount = 0, unresolvedCount = 0,
-                    invalidCentralEmployeeCount = 0, readyForCutover = false, completedAt = (string?)null,
-                    workspaceRevision = 1 } });
-            if (path == "/v1/employee-authority/snapshot")
-            {
-                server.Snapshots++;
-                if (server.FailSnapshotOnce)
-                {
-                    server.FailSnapshotOnce = false;
-                    throw new HttpRequestException("Synthetic interruption after successful claim");
-                }
-                return Json(new { employeeSnapshot = new { workspaceId = "ws_smoke", workspaceRevision = 1,
-                    employees = new[] { new { employeeId = "emp_smoke", employeeNo = "0001", name = "Synthetic Owner",
-                        email = "owner@example.test", role = "SUPER_ADMIN", enabled = true, emailVerified = true,
-                        credentialAlgorithm = "pbkdf2-sha256",
-                        credentialVerifier = "pbkdf2-sha256$210000$00112233445566778899aabbccddeeff$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                        credentialVersion = 1, revision = 1 } } } });
-            }
+            // A CYID-only Windows client must never read Built-in Employee
+            // authority endpoints. Any accidental request fails this smoke.
             throw new InvalidOperationException("Unexpected synthetic join request: " + path);
         }
 
