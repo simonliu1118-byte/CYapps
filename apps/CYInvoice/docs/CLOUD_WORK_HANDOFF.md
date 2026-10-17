@@ -3,6 +3,12 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-17 V3 折讓入口退役與最新連線決議（Draft）
+
+V3 正常折讓只能是「編輯原發票→管理員核准→CYInvoice 自動配號→單次 g0401→原號唯讀查回」；舊 2026/9/19 V2 方案的「管理員光貿網站人工開立→已人工完成」與「候選單號人工挑選」不再對新案提供 UI。此次由 `SyncIssuesForm` 移除手選候選及人工完成呼叫，保留對已送出／舊 pending 的查回；物理刪除 `AllowanceCandidateForm`。歷史 Core API／合成舊紀錄測試暫保留避免破壞過往相容性，不代表重新開啟人工送出。Local `g0501` 舊流程待完成等價 API 後另行退役。
+
+**最新使用者決議（取代 2026/10/15 斷線規則）**：雲端不可連、光貿正常時，本機降級仍可用折讓 API；光貿不可連時程式內不執行光貿業務操作，管理員可在光貿網站操作，恢復後程式低呼叫量 `invoice_list`＋`allowance_list` 自動回補官方紀錄。現行 CYID g0401 依賴 Cloud D1 核准與配號，跨機安全離線 fallback **尚未實作**；沒有每裝置不重疊號段和同一工作單執行權，就不能直接讓各機以 Local SQLite 同時配 `AyyyyMMddXXX`。外部網站折讓自動回補也仍缺本機同期／跨期對帳與快取更新，不能宣稱完成。必須保持已知 CYID/Device 拒絕不可降級、官方回覆不明不可重送。本輪只退役 UI 和記錄新需求；不動真光貿、D1／Worker、發行。
+
 ## 2026-10-17 Local 核准持久化先於配號（Draft）
 
 依使用者最新定案：**僅管理員核准之後才會配號與送出**，核准就是取消／撤回截止點，不以配號推測權限。沿用同一筆 Local Work Item，通過管理員驗證、官方可折剩餘額及固定明細檢查後，先保存 `InvoiceAllowanceManualReview.ApprovedAt` 和原核准人，再用既有 SQLite `LocalAllowanceNumberStore` 配號，寫入待確認標記及固定原號，CAS 取得唯一首次發送權後送一次 g0401。核准後即使尚未成功配號或保存 pending，也不能由原申請人／管理員撤回、取消或變成舊人工完成；續作沿用原工作單與核准日。已送出結果不明只能原號查回，確認已開立後所有角色若要取消均走既有折讓作廢 g0501。取消候選單號人工覆寫已固定配號的可能；UI 顯示核准與不可撤回。移除前一筆 `cfcc7b29` 以 ledger 狀態充當撤回權限的額外 helper，回到一個明確的核准業務狀態。已補 Reserve 異常後核准仍存在的隔離回歸測試；尚待精確 HEAD Windows/Cloud/Governance CI、真實中斷與官方驗收，正式 D1／Worker／Release 不變。

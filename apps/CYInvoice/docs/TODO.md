@@ -8,6 +8,14 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-17 V3 人工選號 UI 退役／斷線新版需求（Draft）
+
+- [x] **Local 正常 UI 切換為 API**：新增的凍結折讓明細只允許管理員核准後由 `IssueApprovedLocalAsync` 配號及單次 g0401；舊「已人工處理」及人工候選號碼選擇入口從 `SyncIssuesForm` 移除，未凍結明細的歷史申請不會透過 UI 建立新官方操作。已有 pending 的舊案仍可使用唯讀官方查回。移除原 `AllowanceCandidateForm`；保留既有 Core 歷史相容方法／測試待安全資料遷移再清理。
+- [ ] **Cloud 斷線本機 g0401 降級**：2026-10-17 最新使用者決議取代 10/15 舊禁止方案。現 CYID Cloud 使用 D1 Work Item 與配號 CAS，Local `IssueApprovedLocalAsync` 明確限 `LocalOnly`；需要確保失聯期間不同裝置不分配重號、同 Work Item 不雙送、已知 CYID/Device 拒絕不降級、連回 D1 時保留稽核。未確立跨機唯一序號權利前，不可直接改動 g0401 送出 gate。
+- [ ] **光貿斷線→網站人工操作→恢復自動同步**：光貿失聯時程式不執行光貿操作；網站操作屬外部官方事實，應回到原 SQLite（`invoice_list.cancel_date`＋`allowance_list`）；待實作完整定期雙清單、跨期回掃、快照差異持久化／PDF Cache 失效，不新增正常發票 D1 表，不杜撰管理員 Audit。
+- [ ] **須確認降級配號範圍**：若多台 CYID 裝置同時雲端失聯，無中央 D1 不能靠各機自動從 `001` 配號保證不重複；需事前唯一號段或等效安全機制，不能以光貿拒絕撞號取代本機跨 Work Item 鎖。
+- 本輪不動原 D1／Worker、不呼叫真光貿、不部署、不 Release；CI 看新 HEAD。
+
 ## 2026-10-17 Local 管理員核准持久化先於配號（Draft Source）
 
 依使用者更正，折讓撤回／取消的業務界線是**管理員核准**，不是「是否已有配號」。Local 管理員驗證、官方額度與凍結明細核對後，先將 `ApprovedAt`、原核准管理員和含時區核准時間持久化到既有折讓申請 metadata，再以原 `sync_issues.local_id` 配號及單次送出 g0401。已核准案件本人與管理員都不能撤回／取消或走「網站人工完成」。核准後到配號前中斷仍保留原 Work Item，續作沿用同一核准日期；已配號／結果不明只能原號查回，確認成功後如要取消只能另走原折讓作廢 g0501。原 `cfcc7b29` 基於 ledger 判斷撤回資格的額外 helper 已移除，WinForms 依已核准狀態隱藏撤回並鎖定候選折讓號碼改選。合成回歸測試以 Reserve 異常驗證核准先持久化、不能撤回且不送光貿；**不聲稱跨 SQLite 寫入具完整原子性或所有崩潰交錯均已實測**。新 HEAD CI、實機中斷恢復與真光貿驗收仍待驗，不部署、不 Release。

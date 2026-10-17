@@ -840,19 +840,19 @@ internal sealed class SyncIssuesForm : Form
                     var review = allowanceWorkflow.ManualReviewFor(record);
                     if (review is not null)
                     {
-                        if (!review.AwaitingConfirmation)
+                        if (review.AwaitingConfirmation)
                         {
-                            primaryText = review.ApprovedAt is not null
-                                ? "繼續已核准折讓" : review.DraftItems is { Count: > 0 }
-                                    ? "核准並送出折讓" : "已人工處理";
-                            allowCancel = review.ApprovedAt is null;
+                            // V3 never allows a person to select or change
+                            // an allowance number. Keep official readback.
+                            primaryText = "查詢官方折讓狀態";
                         }
                         else
                         {
-                            var candidates = NewAllowanceCandidates(record, review);
-                            if (review.LocalLedgerWorkItemId is null && review.ApprovedAt is null &&
-                                candidates.Count > 1 && candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus)))
-                                primaryText = "確認折讓單號";
+                            primaryText = review.DraftItems is { Count: > 0 }
+                                ? review.ApprovedAt is not null
+                                    ? "繼續已核准折讓" : "核准並送出折讓"
+                                : string.Empty;
+                            allowCancel = review.ApprovedAt is null;
                         }
                     }
                 }
@@ -987,8 +987,20 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
 
-        if (!review.AwaitingConfirmation) await CompleteAllowanceAsync(issue, review);
-        else await ConfirmAllowanceCandidateAsync(issue, record, review);
+        if (review.AwaitingConfirmation)
+        {
+            await ReadbackAllowanceAsync(record);
+            return;
+        }
+        if (review.DraftItems is not { Count: > 0 })
+        {
+            MessageBox.Show(this,
+                "這是沒有固定 g0401 明細的舊版申請；舊人工開立／人工選號已退役。\n" +
+                "原紀錄仍保留，可在官方資料恢復後唯讀核對。",
+                "舊折讓流程已退役", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        await CompleteAllowanceAsync(issue, review);
     }
 
     private void CompleteAllowanceVoid(InvoiceSyncIssue issue)
@@ -1059,17 +1071,15 @@ internal sealed class SyncIssuesForm : Form
     private async Task CompleteAllowanceAsync(
         InvoiceSyncIssue issue, InvoiceAllowanceManualReview review)
     {
-        var useApi = review.DraftItems is { Count: > 0 };
-        var prompt = useApi
-            ? "確認核准並向光貿送出這筆折讓？\n\n" +
-              $"含稅總額：{review.TaxInclusiveAmount} 元\n" +
-              $"保留明細：{review.DraftItems!.Count} 筆\n\n" +
-              "系統會重新查剩餘折讓額、固定原單號與內容後只送一次 g0401。" +
-              "如遇逾時或結果不明，只能查回原單號，不得重送。"
-            : "這是沒有編輯明細的舊人工折讓申請。\n\n" +
-              "請先確認已在光貿網站人工完成折讓；本次僅查回官方結果，不送出 API。";
+        if (review.DraftItems is not { Count: > 0 })
+            throw new InvalidOperationException("舊版人工開立流程已退役，沒有凍結明細不能送出 g0401。");
+        var prompt = "確認核准並向光貿送出這筆折讓？\\n\\n" +
+            $"含稅總額：{review.TaxInclusiveAmount} 元\\n" +
+            $"保留明細：{review.DraftItems.Count} 筆\\n\\n" +
+            "系統會重新查剩餘折讓額、固定原單號與內容後只送一次 g0401。" +
+            "如遇逾時或結果不明，只能查回原單號，不得重送。";
         if (MessageBox.Show(this, prompt,
-            useApi ? "核准並送出折讓（單次）" : "折讓已人工處理",
+            "核准並送出折讓（單次）",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1078,11 +1088,8 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            var result = useApi
-                ? await allowanceWorkflow.IssueApprovedLocalAsync(
-                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword)
-                : await allowanceWorkflow.MarkManualCompletedAsync(
-                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.IssueApprovedLocalAsync(
+                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
@@ -1094,30 +1101,19 @@ internal sealed class SyncIssuesForm : Form
         finally { SetManualReviewBusy(false); }
     }
 
-    private async Task ConfirmAllowanceCandidateAsync(InvoiceSyncIssue issue, InvoiceRecord record, InvoiceAllowanceManualReview review)
+    private async Task ReadbackAllowanceAsync(InvoiceRecord record)
     {
-        var candidates = NewAllowanceCandidates(record, review);
-        if (candidates.Count <= 1)
-        {
-            MessageBox.Show(this, "目前沒有多筆可供人工選擇的折讓候選。系統會在每次正常同步時繼續查詢。", "等待折讓確認",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        using var login = new EmployeeAdminLoginForm(repository, "折讓單號確認－管理員驗證", collectCredentialsOnly: true);
-        if (login.ShowDialog(this) != DialogResult.OK) return;
-        using var selector = new AllowanceCandidateForm(candidates);
-        if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedAllowanceNumber.Length == 0) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.ConfirmCandidateAsync(issue, selector.SelectedAllowanceNumber,
-                login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.ReconcilePendingAsync(record);
             ShowAllowanceResult(result);
             ReloadAll();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "折讓單號確認未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, error.Message, "官方折讓狀態無法查回",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally { SetManualReviewBusy(false); }
     }
@@ -1419,9 +1415,6 @@ internal sealed class SyncIssuesForm : Form
             .ToArray();
     }
 
-    private static bool IsPendingAllowanceStatus(int status) => status is
-        UploadStatuses.Pending or UploadStatuses.Uploading or UploadStatuses.Uploaded or UploadStatuses.Processing or UploadStatuses.Confirming;
-
     private void UpdateFailedButtons()
     {
         if (IsDisposed) return;
@@ -1596,7 +1589,7 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
-            DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理" ||
+            DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓申請覆核" ||
             DisplayType(InvoiceAllowanceVoidIssueTypes.ManualReview) != "折讓作廢人工處理")
             throw new InvalidOperationException("人工確認問題類型顯示不正確");
     }
@@ -1621,7 +1614,7 @@ internal sealed class SyncIssuesForm : Form
         InvoiceSyncIssueTypes.LocalWriteFailed => "本機資料庫寫入失敗",
         InvoiceVoidIssueTypes.ManualReview => "紙本作廢確認",
         InvoiceVoidSyncIssueTypes.PendingConfirmation => "作廢結果待確認",
-        InvoiceAllowanceIssueTypes.ManualReview => "折讓人工處理",
+        InvoiceAllowanceIssueTypes.ManualReview => "折讓申請覆核",
         InvoiceAllowanceVoidIssueTypes.ManualReview => "折讓作廢人工處理",
         _ => type,
     };
