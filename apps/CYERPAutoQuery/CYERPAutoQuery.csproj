@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\AutoQ.ico</ApplicationIcon>
+    <AssemblyName>CYERPAutoQuery</AssemblyName>
+    <RootNamespace>CYERPAutoQuery</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Unit tests are a separate project (tests/CYERPAutoQuery.Tests). -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same OCR stack and versions as CYERPAutoInput (OCR is the tab-click fallback). -->
+    <PackageReference Include="RapidOCRSharpOnnx" Version="1.3.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+    <!-- DPAPI for the CY Web Agent token (config/agent.json). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- AITeam CY Icon Family AutoQ, fetched by tools/fetch-canonical-icon.ps1 (not in Git). -->
+    <EmbeddedResource Include="assets\AutoQ.ico" LogicalName="CYERPAutoQuery.AutoQ.ico" />
+    <EmbeddedResource Include="VERSION" LogicalName="CYERPAutoQuery.VERSION" />
+    <EmbeddedResource Include="BUILD" LogicalName="CYERPAutoQuery.BUILD" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="runtime\ocr\*.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="ReadCanonicalVersion" BeforeTargets="GenerateAssemblyInfo">
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\VERSION">
+      <Output TaskParameter="Lines" PropertyName="Version" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <FileVersion>$(Version).0</FileVersion>
+      <AssemblyVersion>$(Version).0</AssemblyVersion>
+    </PropertyGroup>
+  </Target>
+</Project>

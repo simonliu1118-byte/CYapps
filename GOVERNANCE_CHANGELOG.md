@@ -1,5 +1,53 @@
 # CYApps Governance Changelog
 
+## 2.3.53 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入供應廠商查詢：使用 PURI01 供應廠商資料建立作業，規則同 COPI01；廠商名稱只可貼上程式固定產生的簡稱 OR 公司全名條件（PURMA.MA002／MA003），結果每筆須含關鍵字否則不採用；廠商代號只接受英數。並加入進貨退貨單查詢（PURR18 依廠商與單據日期；PURR22 無廠商條件，同日期整份轉出後只留該廠商，小計須符合）。不改其他 App 規則。
+
+## 2.3.52 — 2026/10/17
+
+- CYERPAutoQuery 依使用者要求比照 CYERPAutoInput 加入自動更新與正式 Release：新增 `.github/workflows/cyerp-auto-query-release.yml`（只由 main 手動啟動、BUILD=0、tag 不覆寫）；PROJECT_RULES 加入自動更新與 Release 規則。不改其他 App 規則。
+
+## 2.3.51 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入單筆銷貨／銷退單查詢（未收款憑證）：23 開頭 COPR15、24 開頭 COPR16，起迄點選後 Home＋貼上單號並讀回，客戶與日期群組須為空，轉出單號須相符。不改其他 App 規則。
+
+## 2.3.50 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：「標準進價」送往 CY Web 只在工作帶 includeCost（員工有 ERP 商品成本權限）時才送出，本機顯示不變。不改其他 App 規則。
+
+## 2.3.49 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入未收款查詢（ACRR18 未結案應收明細表）：流程同 COPR15；可查單一客戶、單一業務員或全部，單一時勾區間選擇並讀回代號、其他群組須為空，全部時兩群組皆須為空；轉出須符合查詢代號且結帳單未收加總等於報表合計。不改其他 App 規則。
+
+## 2.3.48 — 2026/10/17
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：加入銷貨單查詢（COPR15 銷貨單明細表、COPR16 銷退單明細表：只設客戶代號、單據日期與進階選項狀態，只按即時報表與 XLSX 匯出，ERP 匯出資料夾的檔案立即移到 TEMP 讀完即刪，報表與條件視窗用完關閉）；新增「Agent 與 CY Web 分工」：本程式只當中介層，關聯、呈現與業務規則交給 CY Web，判斷放 Web 更好時必須告知使用者。不改其他 App 規則。
+
+## 2.3.47 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入客戶查詢：使用 COPI01 客戶資料建立作業，規則同 INVI02；客戶名稱只可貼上程式固定產生的簡稱 OR 全名條件（COPMA.MA002／MA003），結果每筆須含關鍵字否則不採用；客戶代號只接受英數。不改其他 App 規則。
+
+## 2.3.46 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求：INVQ01 歷史異動起迄範圍不再由 Agent 限制最多三年，改由 CY Web 查詢模組負責；Agent 只提供開放的查詢功能。不改其他 App 規則。
+
+## 2.3.45 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入：ERP 每個動作之後的畫面讀取一律以有上限的輪詢等待，不得只看一次就判定失敗（多次實機失敗皆因太早讀取）。不改其他 App 規則。
+
+## 2.3.44 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入品名查詢：只在 INVI02「設定查詢條件 → 進階設定」貼上程式固定產生的品名條件（欄位 INVMB.MB002 寫在程式、關鍵字拒收引號與萬用字元並讀回確認），結果每筆品名須含關鍵字否則不採用；品號查詢前清除進階設定殘留條件、品名查詢前清空一般選項品號。不改其他 App 規則。
+
+## 2.3.43 — 2026/10/16
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求加入 INVQ01 庫存狀況查詢作業：只從 INVI02「串查」開啟並核對品號、只設頁籤與歷史異動起迄日（未填最近一年、最多三年）、「開始查詢」與「轉出到Excel」比照只讀與暫存檔即刪規則、成本與金額欄位解析後即丟棄、INVQ01 用完一律關閉；不改其他 App 規則。
+
+## 2.3.42 — 2026/10/16
+
+- 依使用者要求新增 `apps/CYERPAutoQuery/`（SMART ERP 自動查詢工具）：最小 `PROJECT_RULES.md`、VERSION／BUILD 與 PR／手動 Build workflow；REPO_POLICY 正式維護專案與 CY 桌面視覺採用清單加入本專案。
+- PROJECT_RULES 記錄對 ERP 只讀、INVI02 定位（多個時用檢視狀態者、沒有時從主視窗作業速查開啟）、介面與 CYERPAutoInput 一致、查詢期間鎖滑鼠＋中央提示、頁籤「固定座標為主、未切換才 OCR」單一備援、品號資料以 ERP「轉出至 Excel」取得（匯出前單頭／單身各按全選、暫存檔只放程式旁 TEMP、讀完即刪、Ribbon 以 OCR 點擊）、以及使用者核准先由 CYERPAutoInput 複製必要程式碼、日後收斂為共用庫；不改其他 App 規則。
 ## 2.3.41 — 2026/10/17
 
 - 依使用者新指示，CYAccountingWeb 改採合併與發布分離：PR 自動驗證，main 合併不自動部署；只有 `deploy/cyaccountingweb-production` 發布分支 push 或 main workflow_dispatch 可部署，來源須與當前 main 完整 SHA 相同。
