@@ -227,9 +227,9 @@ assert.equal(row(expiredDb).revoked_at,null,"Readback must remain strictly read-
 assert.equal((await issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender)).status,"sent");
 assert.equal(retryMailbox.sent.length,1,"Only a fresh operation may send another code");
 assert.ok(row(expiredDb).revoked_at,"Fresh issue must invalidate the expired code");
-assert.equal(row(expiredDb).delivery_state,"failed","Auto-expired is not admin-revoked");
-assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"failed"},
-  "Readback must retain expired status rather than impersonate admin cancellation");
+assert.equal(row(expiredDb).delivery_state,"failed","Auto-expired code remains unclaimable");
+assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"revoked"},
+  "Readback reflects the committed automatic revoke; Audit distinguishes AUTO_EXPIRED");
 assert.equal(count(expiredDb,"security_audit_events"),3);
 assert.equal(expiredDb.prepare("SELECT reason_code FROM security_audit_events WHERE reason_code='AUTO_EXPIRED'").get().reason_code,
   "AUTO_EXPIRED");

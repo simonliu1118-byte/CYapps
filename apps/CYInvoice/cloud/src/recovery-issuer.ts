@@ -81,11 +81,11 @@ function publicState(row: RecoveryRow): RecoveryIssueResult {
   // A consumed invitation is not an administrative revocation. Only a
   // persisted revoked_at is proof that CYWEB may report "revoked".
   if (row.consumed_at) return { status: "failed" };
-  // Automatic expiry marks delivery_state=failed + revoked_at for the
-  // uniqueness slot, but must remain "failed", not a human "revoked" action.
-  if (row.delivery_state === "failed") return { status: "failed" };
+  // An automatic expiry is a persisted server-side revoke with a distinct
+  // AUTO_EXPIRED Audit reason, not an administrator action. Only the absence
+  // of any committed revoke keeps the status "failed" for mere expiry.
   if (row.revoked_at) return { status: "revoked" };
-  if (row.expires_at <= new Date().toISOString())
+  if (row.expires_at <= new Date().toISOString() || row.delivery_state === "failed")
     return { status: "failed" };
   if (row.delivery_state === "sent")
     return { status: "sent", invitationId: row.invitation_id, expiresAt: row.expires_at };
