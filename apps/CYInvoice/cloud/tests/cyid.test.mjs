@@ -115,6 +115,9 @@ assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/
 // source. It needs an explicit flag AND installed schema 0014+0015.
 // No real D1/Worker is modified by this synthetic exercise.
 const companyCredentials = credentials;
+const disabledProvision = await call('/v1/company-settings/provision',companyCredentials);
+assert.equal(disabledProvision.status,503);
+assert.equal(disabledProvision.body.error.code,'COMPANY_SETTINGS_NOT_READY');
 const disabledCard = await call('/v1/company-settings/get',companyCredentials);
 assert.equal(disabledCard.status,503);
 assert.equal(disabledCard.body.error.code,'COMPANY_SETTINGS_NOT_READY');
@@ -138,6 +141,13 @@ const createdCard = await call('/v1/company-settings/update',companyEdit,tokens[
 assert.equal(createdCard.status,200,JSON.stringify(createdCard.body));
 assert.deepEqual(createdCard.body.company,{sellerInvoice:'12345678',revision:1,
   hasAmegoAppKey:true,hasMoExcelPassword:true});
+const liveCredentials = await call('/v1/company-settings/provision',
+  companyCredentials,tokens[0],companyEnabled);
+assert.equal(liveCredentials.status,200);
+assert.deepEqual(liveCredentials.body.credentials,{
+  sellerInvoice:'12345678',revision:1,
+  amegoAppKey:'SYNTHETIC_APP_KEY_FOR_TEST_ONLY',moExcelPassword:'SYNTHETIC_MO_TEST_ONLY'
+});
 const retrievedCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);
 assert.equal(retrievedCard.status,200);
 assert.deepEqual(retrievedCard.body.company,createdCard.body.company);
@@ -151,6 +161,8 @@ assert.equal((await call('/v1/company-settings/update',companyEdit,tokens[0],com
 provider.db.prepare("UPDATE employees SET role_key='ADMIN' WHERE employee_id='emp_user'").run();
 assert.equal((await call('/v1/company-settings/get',{employeeNo:'0002',password:pass},
   tokens[0],companyEnabled)).status,200);
+assert.equal((await call('/v1/company-settings/provision',
+  {employeeNo:'0002',password:pass},tokens[0],companyEnabled)).status,403);
 assert.equal((await call('/v1/company-settings/update',{...companyEdit,employeeNo:'0002',password:pass,
   expectedRevision:1},tokens[0],companyEnabled)).status,403);
 provider.db.prepare("UPDATE employees SET role_key='USER' WHERE employee_id='emp_user'").run();

@@ -85,7 +85,8 @@ export default {
         status:503,headers:{"cache-control":"no-store"}
       });
     const companySettingsPath = path === "/v1/company-settings/get" ||
-      path === "/v1/company-settings/update";
+      path === "/v1/company-settings/update" ||
+      path === "/v1/company-settings/provision";
     // Exposing the route requires BOTH an explicit opt-in and the reviewed
     // recovery+company migration marker. Schema 13 is the existing D1.
     // Do not probe missing tables or silently fall back to local credentials.
@@ -100,6 +101,7 @@ export default {
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
       "/v1/company-settings/get", "/v1/company-settings/update",
+      "/v1/company-settings/provision",
     ].includes(path);
     try {
       if (usesCyId(env)) {

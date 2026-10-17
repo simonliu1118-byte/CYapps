@@ -148,6 +148,15 @@ assert.deepEqual(created.data.company,{sellerInvoice:"12345678",revision:1,
   hasAmegoAppKey:true,hasMoExcelPassword:true});
 const read=await call("get",credentials);
 assert.equal(read.status,200);
+const provision=await call("provision",credentials);
+assert.equal(provision.status,200);
+assert.deepEqual(provision.data.credentials,{
+  sellerInvoice:"12345678",revision:1,amegoAppKey:"SYNTHETIC_ONLY_KEY",
+  moExcelPassword:"SYNTHETIC_ONLY_MO"});
+assert.equal(provision.data.credentials.amegoAppKey.includes("v1:"),false);
+assert.equal((await call("provision",credentials,{...env,
+  COMPANY_SETTINGS_KEY_HEX:"bb".repeat(32)})).status,503,
+  "Wrong Worker KEK must never return partially decrypted credentials");
 for (const result of [created,read]){
   const serialized=JSON.stringify(result);
   for(const secret of ["SYNTHETIC_ONLY_KEY","SYNTHETIC_ONLY_MO","v1:"])
@@ -155,6 +164,8 @@ for (const result of [created,read]){
 }
 actor={...actor,workspaceRole:"ADMIN",isWorkspaceSuperAdmin:false};
 assert.equal((await call("get",credentials)).status,200);
+assert.equal((await call("provision",credentials)).status,403,
+  "ADMIN must see status only, never retrieve plaintext credentials");
 assert.equal((await call("update",{...req,expectedRevision:1})).status,403);
 actor={...actor,workspaceRole:"USER"};
 assert.equal((await call("get",credentials)).status,403);
@@ -162,6 +173,8 @@ actor={...actor,workspaceRole:"SUPER_ADMIN",isWorkspaceSuperAdmin:true};
 assert.equal((await call("update",{...req,expectedRevision:0})).status,409);
 assert.equal((await call("update",{...req,expectedRevision:1,
   amegoAppKey:{action:"keep"},moExcelPassword:{action:"clear"}})).status,200);
+assert.equal((await call("provision",credentials)).status,409,
+  "Cannot install a half-configured company card into Windows");
 assert.equal(g.sql.prepare("SELECT revision FROM company_settings").get().revision,2);
 assert.equal(g.sql.prepare("SELECT COUNT(*) n FROM company_settings_audit_events").get().n,2);
 actor={...actor,workspaceId:"other_identity_workspace"};
@@ -170,6 +183,7 @@ actor={...actor,workspaceId:"identity_synthetic"};
 assert.equal((await call("get",credentials,env,"wrong")).status,401);
 g.sql.prepare("UPDATE devices SET status='revoked'").run();
 assert.equal((await call("get",credentials)).status,401);
+assert.equal((await call("provision",credentials)).status,401);
 assert.deepEqual(g.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 g.sql.close();
 console.log("Draft company settings: AES-GCM, atomic audit, exact CYID scope, role-separated HTTP transport passed");

@@ -177,6 +177,44 @@ export async function changeCompanySettings(db: D1Database,
   return {sellerInvoice:input.sellerInvoice,revision:input.expectedRevision+1,
     hasAmegoAppKey:!!appKey,hasMoExcelPassword:!!moPassword};
 }
+// Explicit SUPER_ADMIN action from an authenticated, active CYID Device only.
+// This is the one controlled transport used to install credentials into
+// Windows DPAPI; never call it from status/get or an ordinary USER session.
+export async function provisionCompanySettingsToDevice(
+  db:D1Database, workspaceId:string,deviceId:string,
+  authority:CompanySettingsAuthority, encryptionKeyHex:string) {
+  assertScope(workspaceId,deviceId);
+  const before=await authority.revalidate();
+  if(!superAdmin(before,workspaceId))throw new Error("COMPANY_SUPER_ADMIN_REQUIRED");
+  const row=await state(db,workspaceId);
+  if(!row?.amego_app_key_ciphertext||!row.mo_excel_password_ciphertext)
+    throw new Error("COMPANY_PROVISION_INCOMPLETE");
+  const key=await keyFromSecret(encryptionKeyHex);
+  const amegoAppKey=await open(key,workspaceId,"amego",row.amego_app_key_ciphertext);
+  const moExcelPassword=await open(key,workspaceId,"mo",row.mo_excel_password_ciphertext);
+  if(!amegoAppKey.trim()||!moExcelPassword.trim())
+    throw new Error("COMPANY_PROVISION_INCOMPLETE");
+  const after=await authority.revalidate();
+  if(!superAdmin(after,workspaceId)||after.employeeId!==before.employeeId)
+    throw new Error("COMPANY_AUTHORITY_CHANGED");
+  // Recheck original active Device and card revision after decryption;
+  // revoked Devices or concurrently edited cards cannot receive old secrets.
+  const active=await db.prepare("SELECT 1 AS permitted FROM devices d JOIN workspaces w"+
+    " ON w.workspace_id=d.workspace_id WHERE d.device_id=?1 AND d.workspace_id=?2"+
+    " AND d.status='active' AND d.employee_authority_state='cloud'"+
+    " AND w.status='active' LIMIT 1").bind(deviceId,workspaceId)
+      .first<{permitted:number}>();
+  if(!active?.permitted)throw new Error("COMPANY_DEVICE_REVOKED");
+  const latest=await state(db,workspaceId);
+  if(!latest||latest.revision!==row.revision||
+    latest.seller_invoice!==row.seller_invoice||
+    latest.amego_app_key_ciphertext!==row.amego_app_key_ciphertext||
+    latest.mo_excel_password_ciphertext!==row.mo_excel_password_ciphertext)
+    throw new Error("COMPANY_PROVISION_CHANGED");
+  return {sellerInvoice:row.seller_invoice,revision:row.revision,
+    amegoAppKey,moExcelPassword};
+}
+
 // INTERNAL trusted Worker gateway only, never a browser-facing response.
 export async function loadAmegoCompanySettingsForGateway(db: D1Database,workspaceId: string,
   encryptionKeyHex: string) {

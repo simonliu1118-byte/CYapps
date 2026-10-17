@@ -1,11 +1,13 @@
-// V3.0 source-only CYID company card route (not registered in app.ts).
-// No browser/HTTP response contains a
-// secret or ciphertext. Windows DPAPI cache transfer is a separate unbuilt API.
+// CYID company settings. Status/Update never disclose secret values;
+// provisioning is an explicit SUPER_ADMIN-only Device-scoped action that
+// returns decrypted values once over HTTPS for immediate Windows DPAPI storage.
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,
   type CyIdEnv,type CyIdPrincipal} from "./cyid";
-import {getCompanySettingsStatus,changeCompanySettings,type SecretChange} from "./company-settings";
+import {getCompanySettingsStatus,changeCompanySettings,provisionCompanySettingsToDevice,
+  type SecretChange} from "./company-settings";
 interface Env extends CyIdEnv { DB:D1Database; COMPANY_SETTINGS_KEY_HEX?:string }
-const paths=new Set(["/v1/company-settings/get","/v1/company-settings/update"]);
+const paths=new Set(["/v1/company-settings/get","/v1/company-settings/update",
+  "/v1/company-settings/provision"]);
 const response=(status:number,body:Record<string,unknown>)=>Response.json(
   {ok:status<300,...body},{status,headers:{"cache-control":"no-store",
   "x-content-type-options":"nosniff"}});
@@ -18,7 +20,7 @@ function change(v:unknown):v is SecretChange{
       !/[\u0000-\u001f\u007f]/u.test(q.value);
   return (q.action==="clear"||q.action==="keep")&&keys.length===1;
 }
-async function parse(request:Request,action:"get"|"update"):Promise<Record<string,unknown>|null>{
+async function parse(request:Request,action:"get"|"update"|"provision"):Promise<Record<string,unknown>|null>{
   if(Number(request.headers.get("content-length")||"0")>4096)return null;
   const raw=await request.text();
   if(raw.length>4096)return null;
@@ -26,7 +28,7 @@ async function parse(request:Request,action:"get"|"update"):Promise<Record<strin
   try{data=JSON.parse(raw);}catch{return null;}
   if(!data||typeof data!=="object"||Array.isArray(data))return null;
   const obj=data as Record<string,unknown>;
-  const keys=action==="get" ? ["employeeNo","password"] :
+  const keys=action!=="update" ? ["employeeNo","password"] :
     ["employeeNo","password","expectedRevision","sellerInvoice","amegoAppKey","moExcelPassword"];
   if(!Object.keys(obj).every(k=>keys.includes(k)))return null;
   if(action==="update"&&(!Number.isSafeInteger(obj.expectedRevision)||
@@ -52,7 +54,8 @@ export async function handleCompanySettings(request:Request,env:Env):Promise<Res
   if(!usesCyId(env))return response(409,{error:{code:"CYID_REQUIRED"}});
   if(request.method!=="POST")return response(405,{error:{code:"METHOD_NOT_ALLOWED"}});
   if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
-  const action=url.endsWith("/update")?"update":"get";
+  const action=url.endsWith("/update")?"update":
+    url.endsWith("/provision")?"provision":"get";
   const input=await parse(request,action);
   if(!input)return response(400,{error:{code:"INVALID_REQUEST"}});
   try {
@@ -76,6 +79,16 @@ export async function handleCompanySettings(request:Request,env:Env):Promise<Res
     }
     if(!/^[a-f0-9]{64}$/i.test(env.COMPANY_SETTINGS_KEY_HEX??""))
       return response(503,{error:{code:"COMPANY_ENCRYPTION_NOT_CONFIGURED"}});
+    if(action==="provision"){
+      const result=await provisionCompanySettingsToDevice(env.DB,b.workspaceId,
+        d.device_id,auth(env),env.COMPANY_SETTINGS_KEY_HEX!);
+      // Fetch current Device proof again after Worker crypto/auth operations.
+      await cyIdDevice(request,env);
+      return Response.json({ok:true,credentials:result},{status:200,headers:{
+        "cache-control":"no-store, private","pragma":"no-cache",
+        "referrer-policy":"no-referrer","x-content-type-options":"nosniff"
+      }});
+    }
     const result=await changeCompanySettings(env.DB,{
       workspaceId:b.workspaceId,deviceId:d.device_id,
       expectedRevision:input.expectedRevision as number,
@@ -91,6 +104,12 @@ export async function handleCompanySettings(request:Request,env:Env):Promise<Res
         return response(403,{error:{code:"COMPANY_AUTH_REQUIRED"}});
       if(["COMPANY_SCOPE_INVALID","COMPANY_SETTINGS_INVALID"].includes(error.message))
         return response(400,{error:{code:"INVALID_COMPANY_SETTINGS"}});
+      if(error.message==="COMPANY_PROVISION_INCOMPLETE")
+        return response(409,{error:{code:"COMPANY_PROVISION_INCOMPLETE"}});
+      if(error.message==="COMPANY_DEVICE_REVOKED")
+        return response(401,{error:{code:"DEVICE_INVALID"}});
+      if(error.message==="COMPANY_PROVISION_CHANGED")
+        return response(409,{error:{code:"COMPANY_CONFLICT_READBACK_REQUIRED"}});
       if(["COMPANY_NO_CHANGES","COMPANY_SETTINGS_STALE_REVISION","COMPANY_SETTINGS_CONFLICT_OR_DEVICE_REVOKED"].includes(error.message))
         return response(409,{error:{code:"COMPANY_CONFLICT_READBACK_REQUIRED"}});
       if(error.message==="COMPANY_MUTATION_UNKNOWN_READBACK_REQUIRED")
