@@ -189,6 +189,7 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
         if (review.AwaitingConfirmation)
             return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+        RequireNoLocalReservationForManualChange(issue);
 
         review = review with
         {
@@ -399,6 +400,7 @@ public sealed class EmployeeAllowanceWorkflowService
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
         if (review.AwaitingConfirmation || HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
+        RequireNoLocalReservationForManualChange(issue);
 
         ClearManualReview(record);
         ClearPending(record);
@@ -437,6 +439,7 @@ public sealed class EmployeeAllowanceWorkflowService
             .ToArray();
         if(issues.Length!=1)
             throw new InvalidDataException("折讓待辦紀錄不唯一，不能自行撤銷");
+        RequireNoLocalReservationForManualChange(issues[0]);
         record.ExtensionData??=new Dictionary<string,JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[WithdrawnReviewMetadataKey]=JsonSerializer.SerializeToElement(new{
             Review=review,WithdrawnByEmployeeNo=employee.EmployeeNo,
@@ -693,6 +696,23 @@ public sealed class EmployeeAllowanceWorkflowService
         if (record.SellerInvoice.Trim().Length != 0 &&
             !string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
             throw new InvalidOperationException("這筆發票屬於其他公司統編，已停止折讓作業");
+    }
+
+    // The local ledger can commit before the invoice pending marker is persisted.
+    // After a crash in that window, the old manual buttons must not discard
+    // the original Work Item or silently switch it to a second workflow.
+    private void RequireNoLocalReservationForManualChange(InvoiceSyncIssue issue)
+    {
+        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            return;
+        var account = CurrentAccount();
+        var existing = new LocalAllowanceNumberStore(repository.DataDirectory)
+            .FindLatest(account.SellerInvoice, account.Environment,
+                issue.Id.ToString(CultureInfo.InvariantCulture));
+        if (existing is not null)
+            throw new InvalidOperationException(
+                "這筆折讓已有永久配號 " + existing.AllowanceNumber +
+                "，即使待確認標記尚未保存，也不能取消、撤回或改成人工完成；請保留原工作單並查回原號。");
     }
 
     private void RequireManualReviewIssue(InvoiceSyncIssue issue)

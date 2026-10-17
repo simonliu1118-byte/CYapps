@@ -258,6 +258,51 @@ internal static class AllowanceWorkflowTests
         }
     ];
 
+    public static async Task LocalReservedNumberBlocksManualChangesAfterInterruptedMarkerAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退款", 50, editedItems: EditedAllowances);
+        var issue = AllowanceIssue(setup.Repository);
+
+        // Simulate a crash after SQLite number reservation commits but before
+        // the invoice's pending marker and manager approval are persisted.
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        var workId = issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var reserved = ledger.Reserve(AmegoDefaults.TestInvoice, Environments.Test,
+            workId, new DateOnly(2026, 9, 19), new AllowanceIssueRequest
+            {
+                AllowanceDate = "20260919",
+                BuyerIdentifier = "0000000000",
+                BuyerName = "消費者",
+                ProductItem = EditedAllowances,
+                TotalAmount = 47m,
+                TaxAmount = 3m,
+            });
+        Equal("reserved", reserved.Status);
+        Equal(false, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
+
+        // Neither the employee nor the manager may erase the unconfirmed
+        // Work Item or take the legacy manual-completion path.
+        Throws<InvalidOperationException>(() =>
+            setup.Workflow.WithdrawManualReview(setup.Record, "3015", "Employee1"));
+        Throws<InvalidOperationException>(() =>
+            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1"));
+
+        Equal("reserved", ledger.FindLatest(AmegoDefaults.TestInvoice,
+            Environments.Test, workId)?.Status);
+        Equal(true, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
+        Equal(null, new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
+            .All(AccountKey()).Single(item => item.Id == issue.Id).ResolvedUtc);
+        Equal(0, setup.Gateway.AllowanceIssueCalls);
+        Equal(1, setup.Gateway.QueryCalls);
+    }
+
     public static async Task LocalManagerSendsOnceAndConfirmsAsync()
     {
         using var temporary = new AllowanceTemporaryDirectory();

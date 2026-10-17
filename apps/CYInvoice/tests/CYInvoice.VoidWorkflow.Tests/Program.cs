@@ -22,6 +22,7 @@ var tests = new (string Name, Action Run)[]
     ("reviewed cancel reason format uses reviewer requester and reason", TestReviewedCancelReasonFormat),
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
+    ("Local reserved g0401 number blocks cancellation withdrawal and manual fallback after crash", () => AllowanceWorkflowTests.LocalReservedNumberBlocksManualChangesAfterInterruptedMarkerAsync().GetAwaiter().GetResult()),
     ("Local manager sends frozen g0401 once and official readback closes ledger", () => AllowanceWorkflowTests.LocalManagerSendsOnceAndConfirmsAsync().GetAwaiter().GetResult()),
     ("Local g0401 accepted reply remains pending without official confirmation", () => AllowanceWorkflowTests.LocalAcceptedResponseWaitsForOfficialConfirmationAsync().GetAwaiter().GetResult()),
     ("Local g0401 timeout never resends and official original-number readback confirms", () => AllowanceWorkflowTests.LocalManagerTimeoutNeverResendsAsync().GetAwaiter().GetResult()),

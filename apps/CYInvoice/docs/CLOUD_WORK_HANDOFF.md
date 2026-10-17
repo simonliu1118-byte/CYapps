@@ -3,6 +3,10 @@
 > **這一份是下一個 CYInvoice 對話的唯一現況入口，不另建立重複交接文件。**
 > 永久開發規範：根目錄 `REPOSITORY_RULES.md`／`REPO_POLICY.md`／`apps/CYInvoice/PROJECT_RULES.md`；未完成 checklist 統一 [TODO](TODO.md)，業務規格見 [REQUIREMENTS](REQUIREMENTS.md)，災難復原設計見 [CLOUD_DISASTER_RECOVERY](CLOUD_DISASTER_RECOVERY.md)，人工驗收見 [RC_TEST](RC_TEST.md)。不要根據本檔推定任何正式環境狀態。
 
+## 2026-10-17 Local 永久配號與待確認標記間的中斷保護（Draft）
+
+沿用既有 SQLite `LocalAllowanceNumberStore`，在管理員「人工完成」、「取消」及原申請人「撤回」三條現有 Local 操作入口，額外核對原 `sync_issues.local_id` 是否已有永久配號。即使進程在 ledger `Reserve` 提交成功、發票 metadata `pending` 寫入之前中止，也不得取消申請、撤銷或切換舊人工流程，避免留下孤兒配號卻將同一申請視為未處理；提示保留原號進行人工查回。合成測試直接建立 `reserved` 卻無 pending 的情境，確認三條入口均拒絕且原申請、ledger 和待辦保留。仍待精確 HEAD Windows／Cloud CI；本步不新增 DB schema／發光貿請求／部署。此步只封住可觀察的中斷後手動繞過，不宣稱對所有同時寫入／崩潰交錯提供跨表原子性，也不自動解鎖未知結果。
+
 ## 2026-10-17 階段一：Local 管理員 g0401 單次送出接線（Draft）
 
 本輪在原 `EmployeeAllowanceWorkflowService` 與 `SyncIssuesForm` 上延伸既有 Local 待辦：管理員重新輸入帳密，完整保留使用者編輯的正負品項，先透過 `InvoiceDetailRefreshService` 更新官方原發票及有效歷史折讓的**整張含稅剩餘額**；額度變少就拒絕，不推算逐商品餘量。使用原 `LocalAllowanceNumberStore` 以本機 `sync_issues.local_id` 為固定 Work Item ID、審核當日為折讓日，原子配號、保存完整 g0401 固定內容，先將管理員／原號／pending 持久化，再經 `MarkSending` CAS 改為 sending 才向光貿送**一次**。結果不明與重按按鈕只能原號查回，不再送出；只有 `invoice_query` 真正確認同號、同含稅金額、完成狀態才標記 SQLite confirmed 並結案。明確外部撞號記 occupied_external 並停止盲換號；舊無品項的待辦維持網站人工流程。測試注入合成 IAmegoGateway，不向光貿真實操作。新增多個 VoidWorkflow isolated test 及原 UI 接線，無 D1／Worker／CYWEB 修改、未部署、未 Release。

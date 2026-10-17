@@ -8,6 +8,10 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## 2026-10-17 Local 配號中斷後禁止撤回／取消（Draft Source）
+
+在同一筆 Local 折讓 Work Item 已有 SQLite 永久配號、但 invoice metadata 尚未成功寫入 pending 的中斷區間，既有管理員「取消」、「人工完成」和原申請人「撤回」不能繞過 ledger。三個既有入口均先查原 Work Item 的永久配號，有號就保留申請並停止操作，要求原號查回／人工復原；不新增表、狀態、第二套流程或任何光貿操作。新增合成測試，模擬配號已持久化但 pending 尚不存在，證明三個入口均不會結案、清除申請或對光貿送出。**這是 crash-window fail-closed 補強，不代表任意並行交錯已具備跨資料表原子交易，也未完成中斷後的自動修復；CI 以本次精確 HEAD 為準，正式資源不變。**
+
 ## 2026-10-16 V3 逐項交付索引（最新權威快照）
 
 > **新對話與後續工作先看本節，再看舊歷史紀錄。** 精確基準：CYapps Draft PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440)，分支 `cyinvoice/v3-recovery-invitation-schema`，前次已驗證**功能** HEAD `a1e6090c28fcd85e0ab0fffaf88cafb31be28111`；該 HEAD 的 Cloud Validate ×2、Windows Client、Windows x64、Governance CI **全部通過**，Cloud 部署作業為 **skipped**。這是 **source／synthetic CI**，絕不代表正式 D1、真光貿、WinForms 全流程或 DR 已驗收。每次新 commit 後必須以**新的 exact HEAD** CI 重新判定，不能沿用這筆綠燈。
