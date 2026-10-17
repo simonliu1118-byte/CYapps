@@ -4,11 +4,11 @@
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
-- 本公司使用 CYID；其他公司 Built-in／Self-hosted 用自己的新 D1 與原 migrations。Built-in 是正式支援模式，不是 CYID 故障 fallback；不能復活本公司已退役的舊帳號表。
+- 本公司已使用 CYID。**以下為歷史 V2 註記**：其他公司舊 Built-in／Self-hosted 如需留存須用各自原 V2 相容配置；**V3.0 新版只支援 Local／CYID Cloud**，不再提供 Built-in／Self-hosted 現役模式，也不能復活本公司已退役的舊帳號表。
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-## 2026-10-17 V3.0 版本切片與接續（最新；僅此分支）
+## 2026-10-17 V3.0 版本切片與接續（3.0 已合併 main；以下為正式切換追蹤）
 
 ### 2026-10-18 最新停點：Cloudflare 改由本機 MCP，其他 GitHub 工程先收斂
 
@@ -16,14 +16,14 @@
 - [x] **CYWEB Source 已完成並合併**：復原整合 [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已以 commit `7ba87b8b30b58af935fef316bd61cfb3d55792ec` 進 CYWEB `main`，Governance／Runtime Check／deployment-config CI 通過；但 `CF_CYINVOICE_RECOVERY_SERVICE` 預設未連線，不能宣稱新的 Recovery UI 已部署或可使用。舊 #151 不再是待合併工作。
 - [x] **復原過期自動結清**：10 分鐘失效；新 `operationId` 的已授權簽發，先在相同 D1 batch 中將已過期尚未消耗的邀請標成 revoked／delivery failed，寫 `AUTO_EXPIRED` Audit，再創建新 pending 邀請；read-only status 不更動 D1、舊 Device 不因到期被撤銷，防止永久佔用邀請名額；舊 operation 不自動重送。
 - [x] **3.0-A 雙模式安全收斂**：舊 Built-in Worker 沒有明確 `identityProvider=CYID` health 標記時，Windows 在建立 Device 前拒絕加入，不回退舊 Employee authority／Snapshot；CI smoke 涵蓋 CYID 正常 JOIN／斷線後原 Pending Token 找回／舊 Worker 拒絕。既有 API 1 相容層 marker8 不被誤認為 D1 schema。
-- [ ] **本輪精確 head CI**：以 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) 最後一筆 SHA 核對 Governance、Cloud Check（含 SQLite 過期競態／0014+0015）、Windows x64 Build 全部綠燈；未通過不得合併。工程包不是正式 Release。
+- [x] **Source／CI 已合併交付**：PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) exact head `e0c35b38038f8df73866228716e590d1e119afb8` 的 Governance、Cloud Check（SQLite／0014+0015／過期自動結清與回滾）、Development Cloud Validate、Windows x64 Build／可攜套件／敏感資訊掃描**四項全成功**；Source merge `f546b2a550be21fd1b49583c8343d1ca8e599d52` 已進 `main`。**Cloudflare 遠端部署步驟跳過**，工程包不是正式 Release。
 - [ ] **本機 MCP 與真人驗收**：按新交接逐步處理原業務 D1 的 0014／0015、獨立 issuer profile 維護、Worker 私有 RPC/flags、CYWEB 可選 Binding，及真 Email、雙 Windows、DR-01～13、Local／CYID／現有 V2 業務回歸；完成前 V3.0 **未上線**。原 2026-10-13 `CYID_ONLY` 退役已完成，不要重跑。
 
 
-### 2026-10-18 CYWEB V0.9.0 已部署：復原整合已恢復（最新）
+### 2026-10-18 CYWEB V0.9.0 介面重整／恢復整合（歷史來源，已由上段更新）
 
 - [x] 已核對 CYWEB `main` `a46f5666`：UI 重整 #191 合併，正式 CY Web Deploy run `39062483770` 成功；不覆寫新設計系統或重新合併 0.7 版舊程式。
-- [x] CYWEB 新版復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)（`cyweb/cyinvoice-recovery-v30-current-ui`）以 V0.9.0 主幹重新移植 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的 SUPER_ADMIN 復原 Panel、checkpoint、同源／Origin／CYID 驗證、私有 named RPC `CyInvoiceRecoveryEntrypoint`、readback 和測試；exact head `ac9cfdeea65eac9b302ddc84240ac18cd8ffe34e` 的 Governance／Runtime Check／部署設定驗證 **全通過**。PR 仍 Draft、沒有合併或部署；CYWEB 0.9 的 ERP、備份及介面主幹保持原樣。
+- [x] CYWEB 新版復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)（`cyweb/cyinvoice-recovery-v30-current-ui`）以 V0.9.0 主幹重新移植 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的 SUPER_ADMIN 復原 Panel、checkpoint、同源／Origin／CYID 驗證、私有 named RPC `CyInvoiceRecoveryEntrypoint`、readback 和測試；exact head `ac9cfdeea65eac9b302ddc84240ac18cd8ffe34e` 的 Governance／Runtime Check／部署設定驗證 **全通過**。該 PR 後續已合併至 CYWEB `main`（`7ba87b8`），原本這個來源階段尚未開啟實際 Recovery Service Binding；CYWEB 0.9 的 ERP、備份及介面主幹保持原樣。
 - [x] CYInvoice `cloud/src/app.ts` 已有 `CyInvoiceRecoveryEntrypoint` 的私有 RPC 三方法（issue/status/revoke）與 `RECOVERY_ENABLED`、schema >= 15 的 fail-closed gate；**不必重寫或另建 RPC**。#192 的 `CF_CYINVOICE_RECOVERY_SERVICE` binding **預設未啟用**，現行 CYWEB 正式服務沒有新 Recovery RPC。
 - [x] CYInvoice V3.0 當前來源 `e4390290` 的 Governance、Development Cloud 預檢、Cloud Check（含 0014/0015 隔離 SQLite 演練）、Windows Build **四項全部通過**；發版與真實接線仍尚未發生。
 - [ ] **唯一剩餘跨系統上線收尾**：先做好原 CYInvoice D1 的獨立私有備份與回復驗證，經核准逐項執行 0014／0015 Migration 及必要的 CYWEB_RECOVERY issuer profile；更新原 Worker 並驗證功能旗標、保留現有 ID/Token/history；再經獨立檢核部署新 CYWEB（只新增命名 RPC binding）及新 Windows，執行真 Email、兩台 Windows、DR-01～13、舊/新 Windows 與 V2 業務回歸。

@@ -4,7 +4,7 @@
 
 ## 責任界線與來源
 
-- **GitHub 程式交付**：CYInvoice [PR #476](https://github.com/simonliu1118-byte/CYapps/pull/476)；CYWEB 復原 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 CYWEB `main`（source-only）。CYWEB 舊 #151 僅供追溯，**不可再合併整個舊分支**。
+- **GitHub 原始碼已交付**：CYInvoice [PR #476](https://github.com/simonliu1118-byte/CYapps/pull/476)（CI exact head `e0c35b38`，已合併 `main` → `f546b2a5`）；CYWEB 復原 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 CYWEB `main`（`7ba87b8`）。**兩者只合併 Source，沒有據此啟用正式 Recovery/Company Card 或建立 3.0 Release。**CYWEB 舊 #151 僅供追溯，**不可再合併整個舊分支**。
 - **本機 Cloudflare MCP 負責**：唯一原 CYInvoice 業務 D1 的唯讀查核、私有備份／還原演練、0014／0015 forward migrations、獨立的復原 issuer 維護 SQL、保留原 bindings/secrets 的受控 Worker 切換，以及 CYWEB `CYINVOICE_RECOVERY` named RPC binding 與服務啟用。這些步驟**未因程式合併或 CI 綠燈自動完成**。
 - **禁止**建立 Cloudflare 測試 Worker／handler，重跑 2026-10-13 已完成的 CYID-only 帳號表退役，遷移 CYID 身分 D1，或為測試撤銷最後一台真實授權裝置。
 - **明確區分**：原 Worker 0.9.3／API1／marker8／schema13／`CYID_ENABLED=true`／`CYID_ONLY` 是 3.0 升級前的已知歷史基準，**不是即時遠端查詢結果**；以本機 MCP 當次的原始憑據／Worker active deployment 為準，不得將其他資料庫認成原 D1。
