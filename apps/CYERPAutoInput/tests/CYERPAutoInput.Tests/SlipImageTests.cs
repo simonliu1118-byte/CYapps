@@ -54,6 +54,26 @@ public class SlipImageTests
     }
 
     [Fact]
+    public void Slips_side_by_side_are_not_cut_at_their_own_dotted_dividers()
+    {
+        // MO店+ 全家 (user, 2026-10-17): two slips in the top cells; their dotted dividers
+        // (寄件專用｜物流專用 …) line up across the page and must not count as the cut.
+        const int w = 800, h = 1100;
+        var p = GrayImage.Blank(w, h).Pixels;
+        for (var y = 0; y < h; y += 12) Fill(p, w, 399, y, 2, 6);
+        for (var x = 0; x < w; x += 12) Fill(p, w, x, 549, 6, 2);
+        foreach (var left in new[] { 30, 430 })
+        {
+            Slip(p, w, left, 60);
+            foreach (var y in new[] { 180, 420 })
+                for (var x = left + 10; x < left + 330; x += 8) Fill(p, w, x, y, 4, 2);
+        }
+        var slips = SlipImage.FindSlips(new GrayImage(w, h, p));
+        Assert.Equal(2, slips.Count);
+        Assert.All(slips, s => Assert.True(s.Top <= 60 && s.Bottom >= 500 && s.Bottom < 549));
+    }
+
+    [Fact]
     public void A_page_without_cut_lines_is_one_slip()
     {
         const int w = 420, h = 520;

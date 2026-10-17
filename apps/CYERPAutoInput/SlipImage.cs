@@ -41,8 +41,8 @@ internal static class SlipImage
         var ink = new bool[w * h];
         for (var i = 0; i < ink.Length; i++) ink[i] = page.Pixels[i] < Dark;
 
-        var cutColumns = DashedLines(ink, w, h, vertical: true);
-        var cutRows = DashedLines(ink, w, h, vertical: false);
+        var cutColumns = NearMiddle(DashedLines(ink, w, h, vertical: true), w);
+        var cutRows = NearMiddle(DashedLines(ink, w, h, vertical: false), h);
         // Four cells have cut lines both ways; a single slip's own dotted divider (between its
         // frame's sides, as wide as the picture) is one way only.
         if (cutColumns.Count == 0 || cutRows.Count == 0) { cutColumns.Clear(); cutRows.Clear(); }
@@ -139,6 +139,20 @@ internal static class SlipImage
     /// 80 % of it), a quarter or more inked, broken into many dashes, and thin. A slip's own
     /// dotted divider is only as long as the slip and is not taken.
     /// </summary>
+    /// <summary>
+    /// The page is cut in half each way, so of the dashed lines found only the one nearest the
+    /// middle (its few pixel rows) is the cut. Two MO店+ 全家 slips side by side (user,
+    /// 2026-10-17) carry their own dotted dividers (寄件專用｜物流專用, inside 取件專用) across
+    /// the page; taken for the cut, they printed each slip in pieces.
+    /// </summary>
+    private static List<int> NearMiddle(List<int> lines, int size)
+    {
+        if (lines.Count == 0) return lines;
+        var middle = lines.MinBy(l => Math.Abs(l - size / 2));
+        if (Math.Abs(middle - size / 2) > size / 6) return [];
+        return lines.Where(l => Math.Abs(l - middle) <= 8).ToList();
+    }
+
     private static List<int> DashedLines(bool[] ink, int w, int h, bool vertical)
     {
         var lines = new List<int>();
