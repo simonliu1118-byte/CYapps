@@ -22,7 +22,7 @@ function fixture(){
     "status TEXT NOT NULL DEFAULT 'active',employee_authority_state TEXT NOT NULL DEFAULT 'cloud',token_hash TEXT);");
   sql.prepare("INSERT INTO workspaces(workspace_id) VALUES(?),(?)").run(ws,other);
   sql.prepare("INSERT INTO devices(device_id,workspace_id) VALUES(?,?)").run(dev,ws);
-  sql.exec(readFileSync("drafts/0015_company_settings.sql","utf8"));
+  sql.exec(readFileSync("migrations/0015_company_settings.sql","utf8"));
   class Statement {
     constructor(q){this.q=q;this.args=[];}
     bind(...args){this.args=args;return this;}

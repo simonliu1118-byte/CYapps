@@ -5,7 +5,12 @@ import { DatabaseSync } from "node:sqlite";
 // Use real migrations and isolated SQLite, not any Cloudflare Worker, remote D1,
 // application secret, or historical live Identity/Device data.
 const migrations = readdirSync("migrations").filter(name => /^[0-9]{4}_.*[.]sql$/.test(name)).sort();
-assert.equal(migrations.at(-1), "0013_cyid_invitation_actor.sql");
+assert.equal(migrations.at(-1), "0015_company_settings.sql");
+assert.deepEqual(migrations.slice(-3), [
+  "0013_cyid_invitation_actor.sql",
+  "0014_invitation_recovery_metadata.sql",
+  "0015_company_settings.sql"
+]);
 // The Work Item 0015 proposal remains outside canonical migrations.
 const optionalScript = readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8");
 const retireScript = readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8");
@@ -67,7 +72,7 @@ function historical(db) {
 // Canonical forward migration keeps existing Built-in/self-hosted integrity.
 const builtIn = seed();
 const historicalBuiltIn = historical(builtIn);
-apply(builtIn, readFileSync("drafts/0014_invitation_recovery_metadata.sql", "utf8"));
+apply(builtIn, readFileSync("migrations/0014_invitation_recovery_metadata.sql", "utf8"));
 assert.deepEqual(historical(builtIn), historicalBuiltIn);
 assert.equal(count(builtIn, "device_invitations"), 2);
 assert.equal(builtIn.prepare("SELECT issuer_channel,purpose,recovery_operation_id FROM device_invitations WHERE invitation_id='inv_legacy'").get().issuer_channel, "DEVICE");
@@ -91,7 +96,7 @@ const cyidOnly = seed();
 apply(cyidOnly, retireScript);
 const historicalCyid = historical(cyidOnly);
 assert.equal(count(cyidOnly, "cyid_storage_profile"), 1);
-apply(cyidOnly, readFileSync("drafts/0014_invitation_recovery_metadata.sql", "utf8"));
+apply(cyidOnly, readFileSync("migrations/0014_invitation_recovery_metadata.sql", "utf8"));
 assert.deepEqual(historical(cyidOnly), historicalCyid);
 assert.equal(cyidOnly.prepare("PRAGMA foreign_key_list('device_invitations')").all().some(r => r.table === "cloud_employees"), false);
 apply(cyidOnly, optionalScript);

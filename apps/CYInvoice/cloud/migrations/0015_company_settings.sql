@@ -1,4 +1,4 @@
--- CYInvoice V3.0-only candidate; source-only, not a deployed D1 migration.
+-- CYInvoice V3.0 canonical additive migration; not deployed until explicitly approved.
 -- Stage after existing storage13 and recovery 0014. V3.1/3.2 Draft
 -- identifiers in legacy PR #440 must be rebased around this 0015 slot.
 -- Existing company/Device/CYID_ONLY history is never rebuilt or dropped.

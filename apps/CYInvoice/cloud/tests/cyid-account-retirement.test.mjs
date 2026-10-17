@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const migrations = fs.readdirSync('migrations').filter(name => /^\d{4}_.*\.sql$/.test(name)).sort();
-assert.equal(migrations.at(-1), '0013_cyid_invitation_actor.sql',
+assert.equal(migrations.at(-1), '0015_company_settings.sql',
   'CYID-only retirement is opt-in maintenance, not an automatic Built-in migration');
 const maintenance = fs.readFileSync('maintenance/retire-built-in-for-cyid-only.sql', 'utf8');
 assert.match(maintenance, /CREATE TABLE cyid_storage_profile/);
@@ -11,7 +11,9 @@ assert.doesNotMatch(maintenance, /DROP TABLE (workspaces|devices|device_pairing_
 
 function makeDatabase({ secondWorkspace = false, transitioning = false, pending = false } = {}) {
   const db = new DatabaseSync(':memory:');
-  for (const migration of migrations)
+  // Rehearse the original, already-completed CYID_ONLY retirement at the
+  // original storage13 checkpoint, before newly proposed V3.0 additions.
+  for (const migration of migrations.filter(name => name < '0014'))
     db.exec(fs.readFileSync('migrations/' + migration, 'utf8'));
   db.exec(`
     INSERT INTO workspaces (workspace_id, display_name, recovery_email, recovery_email_verified_at)

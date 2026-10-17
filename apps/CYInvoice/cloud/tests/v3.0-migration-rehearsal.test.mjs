@@ -5,12 +5,18 @@ import {join} from 'node:path';
 import {DatabaseSync,backup} from 'node:sqlite';
 
 // V3.0 schema checkpoint ONLY: original storage13 -> CYID_ONLY retired
-// business D1 -> recovery draft 0014 -> company card draft 0015.
+// business D1 -> recovery canonical 0014 -> company card canonical 0015.
 // No remote D1, deploy, real Device Token, customer data or Worker.
 const migrationFiles=readdirSync('migrations').filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
-assert.equal(migrationFiles.at(-1),'0013_cyid_invitation_actor.sql');
-const drFile='drafts/0014_invitation_recovery_metadata.sql';
-const cardFile='drafts/0015_company_settings.sql';
+assert.equal(migrationFiles.at(-1),'0015_company_settings.sql');
+assert.deepEqual(migrationFiles.slice(-3), [
+  '0013_cyid_invitation_actor.sql',
+  '0014_invitation_recovery_metadata.sql',
+  '0015_company_settings.sql'
+]);
+const originalMigrations = migrationFiles.filter(file => file < '0014');
+const drFile='migrations/0014_invitation_recovery_metadata.sql';
+const cardFile='migrations/0015_company_settings.sql';
 const scripts=[drFile,cardFile].map(x=>readFileSync(x,'utf8'));
 const expectedTables=['company_settings','company_settings_audit_events'];
 
@@ -42,7 +48,7 @@ try {
   const originalPath=join(temp,'before-v30.sqlite');
   const db=new DatabaseSync(originalPath);
   try {
-    for(const file of migrationFiles) db.exec(readFileSync('migrations/'+file,'utf8'));
+    for(const file of originalMigrations) db.exec(readFileSync('migrations/'+file,'utf8'));
     db.exec(
       "INSERT INTO workspaces(workspace_id,display_name) VALUES ('synthetic_ws','Historical test workspace');"+
       "INSERT INTO devices(device_id,workspace_id,display_name,token_hash,status,employee_authority_state)"+
@@ -68,7 +74,7 @@ try {
     try {assert.deepEqual(schema(snap),before);assert.deepEqual(oldFacts(snap),facts);validate(snap);}
     finally {snap.close();}
 
-    // Each draft step must be fully atomic if an error occurs mid-migration.
+    // Each canonical 3.0 migration must be atomic if it fails partway.
     for(let fail=0;fail<scripts.length;fail++){
       const trialPath=join(temp,'failure-'+fail+'.sqlite');
       copyFileSync(safeSnapshot,trialPath);
@@ -129,4 +135,4 @@ try {
     } finally {restored.close();}
   } finally {db.close();}
 } finally {rmSync(temp,{recursive:true,force:true});}
-console.log('CYInvoice 3.0: CYID_ONLY storage13 + recovery/company-only drafts, rollback/restore, historic data and FK passed');
+console.log('CYInvoice 3.0: CYID_ONLY storage13 + recovery/company canonical migrations, rollback/restore, historic data and FK passed');
