@@ -1,10 +1,12 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-13（Asia/Taipei）
+更新日期：2026-10-18（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
 ## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
+
+- **2026-10-18 最新、取代下方舊停點**：Cloudflare 交由使用者本機 MCP，CI 與程式碼由 GitHub 繼續收斂；CYWEB [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) **已合併** `main`（merge `7ba87b8`），不是未合併 Draft，Service Binding 尚未啟用也不是已部署新 Recovery；CYInvoice #476 已接回自動過期 `AUTO_EXPIRED`＋CYID-only JOIN 防舊 Built-in 降級。正式 schema/Worker/Secret/真 Email 與雙機驗收詳見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。**不重做原 CYID_ONLY D1 退役**。正式 Release 仍需獨立授權。
 
 - **2026-10-18 最新交接**：CYWEB Claude UI 重整已部署（`main` `a46f5666`，#191，Deploy `39062483770` success）；使用者已恢復 CYWEB 整合順序。沿用 #151 成果、在最新 CYWEB V0.9.0 主幹另建復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)，精確 head `ac9cfde` 的 Governance／Runtime／部署預檢全通過；PR 草稿、未合併、未部署，保留原正式 UI／ERP／備份。CYInvoice 3.0 `cloud/src/app.ts` **已經有**私有 `CyInvoiceRecoveryEntrypoint`，不需重造。現階段剩下原 D1 正式 0014／0015 和 issuer gate 的備份／回復、Worker feature flag、實際 named RPC binding 接線、真 Email／兩機 DR-01～13 與 V2 相容實機驗收。不可因 CI 綠燈宣稱完成部署；本項取代舊「暫緩 CYWEB」停點，詳見 TODO 最新區段。
 - 當前開發 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) `cyinvoice/v3.0-mode-setup`；3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機、3.2 折讓 API／跨機、3.3 其餘。不要將下方 2026-10-13 歷史階段重新當成待實作清單。

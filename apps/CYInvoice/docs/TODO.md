@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-13（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-18（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -9,6 +9,16 @@
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
 ## 2026-10-17 V3.0 版本切片與接續（最新；僅此分支）
+
+### 2026-10-18 最新停點：Cloudflare 改由本機 MCP，其他 GitHub 工程先收斂
+
+- **使用者決定**：Cloudflare 原 D1、Worker、Binding、Secret 與實際部署**只在本機 MCP** 執行；GitHub 端可繼續程式、測試、合併程式碼與文件，但本項不暗示授權任何正式 D1 寫入／部署或 Windows 正式 Release。唯讀／操作順序和必要證據集中於 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。
+- [x] **CYWEB Source 已完成並合併**：復原整合 [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已以 commit `7ba87b8b30b58af935fef316bd61cfb3d55792ec` 進 CYWEB `main`，Governance／Runtime Check／deployment-config CI 通過；但 `CF_CYINVOICE_RECOVERY_SERVICE` 預設未連線，不能宣稱新的 Recovery UI 已部署或可使用。舊 #151 不再是待合併工作。
+- [x] **復原過期自動結清**：10 分鐘失效；新 `operationId` 的已授權簽發，先在相同 D1 batch 中將已過期尚未消耗的邀請標成 revoked／delivery failed，寫 `AUTO_EXPIRED` Audit，再創建新 pending 邀請；read-only status 不更動 D1、舊 Device 不因到期被撤銷，防止永久佔用邀請名額；舊 operation 不自動重送。
+- [x] **3.0-A 雙模式安全收斂**：舊 Built-in Worker 沒有明確 `identityProvider=CYID` health 標記時，Windows 在建立 Device 前拒絕加入，不回退舊 Employee authority／Snapshot；CI smoke 涵蓋 CYID 正常 JOIN／斷線後原 Pending Token 找回／舊 Worker 拒絕。既有 API 1 相容層 marker8 不被誤認為 D1 schema。
+- [ ] **本輪精確 head CI**：以 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) 最後一筆 SHA 核對 Governance、Cloud Check（含 SQLite 過期競態／0014+0015）、Windows x64 Build 全部綠燈；未通過不得合併。工程包不是正式 Release。
+- [ ] **本機 MCP 與真人驗收**：按新交接逐步處理原業務 D1 的 0014／0015、獨立 issuer profile 維護、Worker 私有 RPC/flags、CYWEB 可選 Binding，及真 Email、雙 Windows、DR-01～13、Local／CYID／現有 V2 業務回歸；完成前 V3.0 **未上線**。原 2026-10-13 `CYID_ONLY` 退役已完成，不要重跑。
+
 
 ### 2026-10-18 CYWEB V0.9.0 已部署：復原整合已恢復（最新）
 
@@ -38,7 +48,7 @@
 - [x] **3.0-C 復原的舊裝置競爭防護**：沿用 #440 的 `cloud/src/index.ts`，新增配對碼、邀請發送、普通 JOIN 的提交當下 Device 狀態保護；舊裝置一旦因災難復原撤銷，不得以稍早的請求再建立授權。原 `recovery-cutover.test.mjs` 為不可降低的安全門檻，未通過不得發行。只調整既有 Device 安全性，不新增資料庫或跨機／折讓功能。
 - [x] **3.0-C 復原 Windows UI／Pending Token 從 #440 接回**：`SettingsStore`、`SettingsModels` 的 DPAPI Pending Recovery／同 scope 原 Token 保存，以及原 `CloudRecoveryClient`／`CloudRecoveryForm`、從直接加入雲端開啟復原、WinForms 預設禁用不可逆接管的 smoke；延用 #440 程式，不重寫 CYID 或 D1。尚未部署，不能宣稱真 Email／雙機驗收完成。
 - [x] **3.0-C migration 升級為正式來源（尚未遠端執行）**：沿用隔離 SQLite 已驗證的復原 0014／公司設定 0015 原 SQL，納入 `cloud/migrations/` 單一版本化來源，移除 `drafts` 重複副本；更新退役 CYID_ONLY、復原邀請／公司卡與 3.0 可回復演練測試，確保先以舊 0013 建模，再追加 0014→0015。**仍未連線或修改遠端 D1**、Worker `SCHEMA_VERSION` 仍為13、兩項功能預設停用；部署稽核的現有 pending-migration gate 未開放，須有私有備份及獨立上線授權才可解開。此 PR 僅為可審查的發行程式來源。
-- [ ] **3.0-C 待續**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、SettingsStore DPAPI Pending Token **均已接回原始碼**；下一步是對接 CYWEB #151、真 Email／兩台 Windows／DR-01～13，核對原 D1 備份、schema、復原能力並於實際執行前另行授權。
+- [ ] **3.0-C 待續（本機 MCP＋實機）**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、DPAPI Pending Token **均已接回**，CYWEB #192 **已合併 Source**；剩下本機 Cloudflare D1 備份／0014+0015／issuer profile／Worker Binding／flag 與真 Email、雙 Windows、DR-01～13，詳見 [本機 MCP 交接](V3_0_LOCAL_MCP_CUTOVER.md)。
 - [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
 - **禁止提前帶入** #440 的 0015 Work Item、0016／0018／0019 折讓 D1、g0401／g0501、`0d651688` 舊人工折讓 UI 退役；3.0／3.1 保留 V2 人工折讓與作廢。
 - [x] **3.0-A/B/C Windows 敏感 Cloud HTTP 防轉址（Source＋回歸）**：CYID 公司卡查詢／更新／手動套用、直接加入、災難復原 Preview／Claim 均不自動跟隨 HTTP 307／308 等重新導向；避免含 CYID 帳密、邀請碼、Device Token 或業務密鑰的 POST 被原 Cloud URL 的 Location 轉送其他網域。只在既有 Windows 呼叫端設置 `HttpClientHandler.AllowAutoRedirect=false`，不改 API、設備加入資料或正式雲端；在既有 Cloud client compatibility regression 加防回歸源碼檢查。仍需最新 head CI 與真實環境驗證。
