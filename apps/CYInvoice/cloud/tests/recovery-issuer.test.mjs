@@ -218,22 +218,24 @@ assert.equal((await issueCyWebRecoveryInvitation(expired.env,input,senderHarness
 expiredDb.prepare("UPDATE device_invitations SET expires_at=? WHERE recovery_operation_id=?")
   .run("2026-01-01T00:00:00.000Z",operationId);
 assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"failed"});
-// A read-only expiry cannot release the unique open-grant index.
+// A read-only expiry cannot release the unique open-grant index by itself.
 const afterExpiry={...input,operationId:"33333333-3333-4333-8333-333333333333"};
 const retryMailbox=senderHarness();
-await assert.rejects(()=>issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender),
-  /RECOVERY_ALREADY_PENDING/);
-assert.equal(retryMailbox.sent.length,0);
-assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"revoked"},
-  "Explicit cancellation after expiry must release the outstanding Workspace slot");
-assert.ok(row(expiredDb).revoked_at,"Expiry requires an actual persisted revoke proof");
-assert.equal(count(expiredDb,"security_audit_events"),2);
-assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"revoked"});
-assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"revoked"});
-assert.equal(count(expiredDb,"security_audit_events"),2,"Idempotent expired cancellation");
+assert.equal(row(expiredDb).revoked_at,null,"Readback must remain strictly read-only");
+// A fresh, separately authorized operation automatically expires the old
+// invitation and creates a new one in the same D1 transaction.
 assert.equal((await issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender)).status,"sent");
 assert.equal(retryMailbox.sent.length,1,"Only a fresh operation may send another code");
-assert.equal(count(expiredDb,"devices"),1,"Cancelling expiry never revokes a Device");
+assert.ok(row(expiredDb).revoked_at,"Fresh issue must invalidate the expired code");
+assert.equal(row(expiredDb).delivery_state,"failed","Auto-expired is not admin-revoked");
+assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"failed"},
+  "Readback must retain expired status rather than impersonate admin cancellation");
+assert.equal(count(expiredDb,"security_audit_events"),3);
+assert.equal(expiredDb.prepare("SELECT reason_code FROM security_audit_events WHERE reason_code='AUTO_EXPIRED'").get().reason_code,
+  "AUTO_EXPIRED");
+assert.equal((await issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender)).status,"sent");
+assert.equal(retryMailbox.sent.length,1,"Same operation is still read-only");
+assert.equal(count(expiredDb,"devices"),1,"Auto-expiry never revokes a Device");
 expiredDb.close();
 
 // Explicit cancellation must also release a delivery-failed but not consumed

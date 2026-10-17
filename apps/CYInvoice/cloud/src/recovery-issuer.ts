@@ -81,8 +81,11 @@ function publicState(row: RecoveryRow): RecoveryIssueResult {
   // A consumed invitation is not an administrative revocation. Only a
   // persisted revoked_at is proof that CYWEB may report "revoked".
   if (row.consumed_at) return { status: "failed" };
+  // Automatic expiry marks delivery_state=failed + revoked_at for the
+  // uniqueness slot, but must remain "failed", not a human "revoked" action.
+  if (row.delivery_state === "failed") return { status: "failed" };
   if (row.revoked_at) return { status: "revoked" };
-  if (row.expires_at <= new Date().toISOString() || row.delivery_state === "failed")
+  if (row.expires_at <= new Date().toISOString())
     return { status: "failed" };
   if (row.delivery_state === "sent")
     return { status: "sent", invitationId: row.invitation_id, expiresAt: row.expires_at };
@@ -127,31 +130,56 @@ export async function issueCyWebRecoveryInvitation(
     const createdAt = new Date().toISOString();
     const expiresAt = new Date(Date.parse(createdAt) + TEN_MINUTES_MS).toISOString();
 
-    // No client-supplied Workspace/issuer/device. The second profile and active
-    // workspace are verified by the same execution-time SQL that writes.
-    // Unique(workspace, operationId) and unique(open RECOVERY grant/workspace)
-    // prevent retries and concurrent different operations from emailing twice.
+    // An expired CYWEB invitation still occupies the unique open-grant slot.
+    // Release it automatically during a *new* authorized issue, in the SAME
+    // atomic D1 batch as the new pending code. Read-only status never mutates.
+    // This never revokes a Device, and never replaces an unexpired ambiguous
+    // provider result. If the new INSERT fails, expiry/audit roll back too.
+    // A previously issued operation ID is always handled read-only above.
     let inserted: D1Result;
     try {
-      inserted = await env.DB.prepare(`INSERT INTO device_invitations (
-          invitation_id, workspace_id, code_hash, issued_by_device_id,
-          issued_by_employee_id, issued_by_cyid_employee_id, delivery_state,
-          expires_at, created_at, issuer_channel, purpose,
-          issuer_credential_version, issuer_employee_revision, recovery_operation_id
-        )
-        SELECT ?1, w.workspace_id, ?2, NULL, NULL, ?3, 'pending', ?4, ?5,
-          'CYWEB', 'RECOVERY', ?6, ?7, ?8
-        FROM workspaces w
-        JOIN cyid_storage_profile cp ON cp.workspace_id = w.workspace_id
-          AND cp.profile = 'CYID_ONLY'
-        JOIN cyweb_recovery_storage_profile rp ON rp.workspace_id = w.workspace_id
-          AND rp.profile = 'CYWEB_RECOVERY'
-        WHERE w.workspace_id = ?9 AND w.status = 'active'`)
-        .bind(invitationId, codeHash, actor.employeeId, expiresAt, createdAt,
-          actor.credentialVersion, actor.employeeRevision, actor.operationId,
-          actor.workspaceId).run();
+      const results = await env.DB.batch([
+        env.DB.prepare(`INSERT INTO security_audit_events (
+            event_id, workspace_id, event_type, outcome, actor_employee_id,
+            invitation_id, reason_code, request_id, occurred_at,
+            actor_provider, issuer_channel, purpose
+          )
+          SELECT ?1, i.workspace_id, 'recovery_invitation_revoked', 'success',
+            ?2, i.invitation_id, 'AUTO_EXPIRED', ?3, ?4,
+            'CYID', 'CYWEB', 'RECOVERY'
+          FROM device_invitations i
+          WHERE i.workspace_id=?5 AND i.issuer_channel='CYWEB'
+            AND i.purpose='RECOVERY' AND i.consumed_at IS NULL
+            AND i.revoked_at IS NULL AND i.expires_at <= ?4`)
+          .bind(`evt_${crypto.randomUUID()}`, actor.employeeId,
+            actor.operationId, createdAt, actor.workspaceId),
+        env.DB.prepare(`UPDATE device_invitations
+          SET revoked_at=?1, delivery_state='failed'
+          WHERE workspace_id=?2 AND issuer_channel='CYWEB' AND purpose='RECOVERY'
+            AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at <= ?1`)
+          .bind(createdAt, actor.workspaceId),
+        env.DB.prepare(`INSERT INTO device_invitations (
+            invitation_id, workspace_id, code_hash, issued_by_device_id,
+            issued_by_employee_id, issued_by_cyid_employee_id, delivery_state,
+            expires_at, created_at, issuer_channel, purpose,
+            issuer_credential_version, issuer_employee_revision, recovery_operation_id
+          )
+          SELECT ?1, w.workspace_id, ?2, NULL, NULL, ?3, 'pending', ?4, ?5,
+            'CYWEB', 'RECOVERY', ?6, ?7, ?8
+          FROM workspaces w
+          JOIN cyid_storage_profile cp ON cp.workspace_id = w.workspace_id
+            AND cp.profile = 'CYID_ONLY'
+          JOIN cyweb_recovery_storage_profile rp ON rp.workspace_id = w.workspace_id
+            AND rp.profile = 'CYWEB_RECOVERY'
+          WHERE w.workspace_id = ?9 AND w.status = 'active'`)
+          .bind(invitationId, codeHash, actor.employeeId, expiresAt, createdAt,
+            actor.credentialVersion, actor.employeeRevision, actor.operationId,
+            actor.workspaceId),
+      ]);
+      inserted = results[2];
     } catch {
-      // Concurrent same-op caller may have won. Never auto-send a second email.
+      // A concurrent same-operation winner may have committed; never resend
+      // its code or create a second invitation after an uncertain DB outcome.
       const concurrent = await existingOperation(env.DB, actor);
       if (concurrent) {
         sameIssuer(concurrent, actor);
