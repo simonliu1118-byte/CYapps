@@ -92,6 +92,25 @@ public sealed class ShopeePageScanTests
     }
 
     [Fact]
+    public void Never_takes_the_buyer_card_into_the_table()
+    {
+        // 隱藏入帳明細 not read (user's PC, 2026-10-13): the end must not fall through to the
+        // 訂單金額 of the 買家實付金額 card, which made the table the amounts part.
+        List<OcrBox> page =
+        [
+            new("訂單編號", 360, 520, 75, 28), new("2610100TEST01", 363, 560, 126, 17), new("共1個商品", 416, 682, 78, 21),
+            new("編", 358, 1170, 19, 17), new("單價", 1000, 1182, 36, 22), new("數量", 1066, 1182, 36, 22), new("小計", 1145, 1182, 35, 22),
+            new("1", 362, 1300, 8, 12), new("120", 1010, 1280, 31, 18), new("2", 1098, 1282, 9, 14), new("240", 1150, 1280, 31, 18),
+            new("商品選項貨號：X00009", 458, 1310, 126, 16),
+            new("買家實付金額", 360, 2000, 100, 22), new("訂單金額", 670, 2040, 60, 18), new("NT$240", 860, 2040, 55, 18),
+            new("買家總支付金額", 630, 2160, 107, 18), new("NT$240", 830, 2150, 84, 26)
+        ];
+        var items = ShopeePageScan.Sections(page, []).Single(s => s.Kind == ShopeeShotKind.Items);
+        Assert.DoesNotContain(items.Lines, l => l.Text.Contains("買家", StringComparison.Ordinal));
+        Assert.Equal(ShopeeShotKind.Items, ShopeeScreenshot.Classify(items.Lines));
+    }
+
+    [Fact]
     public void Finds_the_table_when_a_header_glyph_is_missing()
     {
         // The PC read 「小計」 as 「小」 (diagnostic log, 2026-10-11); a stray icon digit sits far right.

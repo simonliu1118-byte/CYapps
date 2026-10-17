@@ -86,6 +86,7 @@ internal sealed class PaddleOcrService
     private readonly AppLogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private RapidOCRSharp? _engine;
+    private RapidOCRSharp? _lineEngine;
 
     public PaddleOcrService(AppLogger log) => _log = log;
 
@@ -136,6 +137,53 @@ internal sealed class PaddleOcrService
                 .ToArray();
 
             _log.Info("vision", $"PaddleOCR completed engine=PP-OCRv5_mobile_rec tokens={ordered.Length} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} require_chinese={requireChinese}");
+            return ordered;
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Whole text lines, one box per detected line (蝦皮全自動, user's PC 2026-10-13): the word
+    /// boxes of <see cref="RecognizeAsync"/> fail inside the OCR library on whole browser
+    /// windows (IndexOutOfRangeException in its word split) and split labels such as
+    /// 「訂單編號 2610…」 apart. A second engine without word boxes, same models.
+    /// </summary>
+    public async Task<IReadOnlyList<OcrToken>> RecognizeLinesAsync(Bitmap bitmap, CancellationToken cancellationToken, double maxScale = 1.0)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoInput_paddle_{Guid.NewGuid():N}.png");
+        try
+        {
+            using var prepared = PrepareForOcr(bitmap, maxScale, out var scale);
+            prepared.Save(temp, ImageFormat.Png);
+            cancellationToken.ThrowIfCancellationRequested();
+            var engine = _lineEngine ??= CreateEngine(wordBoxes: false);
+            var result = await Task.Run(() => engine.RecognizeText(temp), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var items = result.WordResults is { Length: > 0 } words
+                ? words.Select(w => (w.Box, Text: w.Word)).ToList()
+                : (result.DetResult?.Data?.DetItems ?? []).Select((d, i) => (d.Box, Text: result.RecResult?.Data is { } rec && i < rec.Length ? rec[i].Label : d.Word)).ToList();
+            var tokens = new List<OcrToken>();
+            foreach (var (box, text) in items)
+            {
+                if (box is null || box.Length == 0 || string.IsNullOrWhiteSpace(text)) continue;
+                var minX = box.Min(p => p.X);
+                var minY = box.Min(p => p.Y);
+                var maxX = box.Max(p => p.X);
+                var maxY = box.Max(p => p.Y);
+                tokens.Add(new OcrToken(text.Trim(), new Rectangle(
+                    Math.Max(0, (int)Math.Floor(minX / scale)),
+                    Math.Max(0, (int)Math.Floor(minY / scale)),
+                    Math.Max(1, (int)Math.Ceiling((maxX - minX) / scale)),
+                    Math.Max(1, (int)Math.Ceiling((maxY - minY) / scale)))));
+            }
+            var ordered = tokens.OrderBy(t => t.Rect.Top).ThenBy(t => t.Rect.Left).ToArray();
+            _log.Info("vision", $"PaddleOCR lines completed lines={ordered.Length} image={bitmap.Width}x{bitmap.Height} scale={scale:0.##}");
             return ordered;
         }
         finally
@@ -243,10 +291,10 @@ internal sealed class PaddleOcrService
         return (_lineSession, _lineCharacters);
     }
 
-    private RapidOCRSharp EnsureEngine()
-    {
-        if (_engine is not null) return _engine;
+    private RapidOCRSharp EnsureEngine() => _engine ??= CreateEngine(wordBoxes: true);
 
+    private RapidOCRSharp CreateEngine(bool wordBoxes)
+    {
         var modelDir = Path.Combine(AppContext.BaseDirectory, "runtime", "ocr");
         var detector = Path.Combine(modelDir, "ch_PP-OCRv5_det_mobile.onnx");
         var recognizer = Path.Combine(modelDir, "ch_PP-OCRv5_rec_mobile.onnx");
@@ -260,7 +308,7 @@ internal sealed class PaddleOcrService
             MinHeight = 4,
             MinSideLen = 8,
             MaxSideLen = 3200,
-            ReturnWordBox = true
+            ReturnWordBox = wordBoxes
         };
         config.DetectorConfig.LimitType = LimitType.Max;
         config.DetectorConfig.LimitSideLen = 1800;
@@ -271,9 +319,9 @@ internal sealed class PaddleOcrService
         config.RecognizerConfig.TextScore = 0.30f;
         config.RecognizerConfig.RecBatchNum = 6;
 
-        _engine = new RapidOCRSharp(new ExecutionProviderCPU(config));
-        _log.Info("vision", "PaddleOCR initialized model=PP-OCRv5_mobile_rec provider=CPU detector=PP-OCRv5_mobile classifier=PP-LCNet_mobile");
-        return _engine;
+        var engine = new RapidOCRSharp(new ExecutionProviderCPU(config));
+        _log.Info("vision", $"PaddleOCR initialized model=PP-OCRv5_mobile_rec provider=CPU detector=PP-OCRv5_mobile classifier=PP-LCNet_mobile word_boxes={wordBoxes}");
+        return engine;
     }
 
     private static Bitmap PrepareForOcr(Bitmap source, double maxScale, out double scale)
@@ -352,7 +400,37 @@ internal sealed class GridVisionService
         _log = log;
     }
 
-    internal static bool TryGetLogicalOrder(int erpColumn, out int order) => LogicalColumnOrder.TryGetValue(erpColumn, out order);
+    /// <summary>The order learned from this ERP's header (<see cref="LearnColumnOrder"/>), else the usual one.</summary>
+    internal static bool TryGetLogicalOrder(int erpColumn, out int order)
+    {
+        lock (LearnedOrder)
+            if (LearnedOrder.TryGetValue(erpColumn, out order)) return true;
+        return LogicalColumnOrder.TryGetValue(erpColumn, out order);
+    }
+
+    private static readonly Dictionary<int, int> LearnedOrder = [];
+
+    /// <summary>
+    /// Columns seen side by side in one header read keep their order slots but take them in
+    /// the order they stand on screen (user, 2026-10-13: the column layout differs between
+    /// users, e.g. 批號 after 庫別名稱). Columns not seen keep their usual slot.
+    /// </summary>
+    internal static void LearnColumnOrder(IReadOnlyDictionary<int, int> columnX, AppLogger? log = null)
+    {
+        var seen = columnX.Where(p => LogicalColumnOrder.ContainsKey(p.Key)).OrderBy(p => p.Value).Select(p => p.Key).ToList();
+        if (seen.Count < 2) return;
+        lock (LearnedOrder)
+        {
+            var slots = seen.Select(c => LearnedOrder.TryGetValue(c, out var o) ? o : LogicalColumnOrder[c]).OrderBy(o => o).ToList();
+            var changed = false;
+            for (var i = 0; i < seen.Count; i++)
+            {
+                changed |= !LearnedOrder.TryGetValue(seen[i], out var old) || old != slots[i];
+                LearnedOrder[seen[i]] = slots[i];
+            }
+            if (changed) log?.Info("vision", "detail column order learned " + string.Join(",", seen.Select(c => $"{c}:{LearnedOrder[c]}")));
+        }
+    }
 
     public async Task<GridGeometry> AnalyzeDetailGridAsync(nint gridHwnd, CancellationToken cancellationToken)
     {
@@ -367,7 +445,7 @@ internal sealed class GridVisionService
         var headerBottom = 0;
         foreach (var pair in ColumnAliases)
         {
-            var match = FindPhrase(tokens, pair.Value);
+            var match = FastDetailGridVisionService.FindExactPhrase(tokens, pair.Value);
             if (match is null)
             {
                 _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=false");
@@ -378,6 +456,7 @@ internal sealed class GridVisionService
             _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=true rect={match.Value.Left},{match.Value.Top},{match.Value.Width},{match.Value.Height}");
         }
 
+        LearnColumnOrder(geometry.ColumnX, _log);
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
             if (!TryInferColumnsFromGridLines(image, tokens, geometry, out var inferredHeaderBottom))

@@ -4,26 +4,144 @@ namespace CYERPAutoInput;
 
 internal static class Win32Automation
 {
+    /// <summary>
+    /// Every visible COPI08 window, top of the z-order first, whatever else ERP has open (as
+    /// CYERPAutoQuery finds its forms; user, 2026-10-17: the two tools behave alike). A hidden
+    /// one is a form the user closed and Delphi kept in memory, or one hidden with ERP
+    /// minimized; the caller restores ERP or opens COPI08 again through 作業速查.
+    /// </summary>
     public static IReadOnlyList<nint> FindCopi08Windows()
     {
-        var visible = new List<nint>();
-        var hidden = new List<nint>();
+        var found = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
-            var title = NativeMethods.WindowText(hwnd);
-            if (title.Contains("銷貨單建立作業", StringComparison.Ordinal) &&
-                title.Contains("COPI08", StringComparison.OrdinalIgnoreCase) &&
+            if (NativeMethods.IsWindowVisible(hwnd) && IsCopi08Title(NativeMethods.WindowText(hwnd)) &&
                 !IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
-            {
-                (NativeMethods.IsWindowVisible(hwnd) ? visible : hidden).Add(hwnd);
-            }
+                found.Add(hwnd);
             return true;
         }, 0);
-        var found = visible.Count > 0 ? visible : hidden;
         // ERP message boxes (e.g. 是否放棄本次新增) reuse the COPI08 caption; when the real
         // form class is present, only that class counts as a COPI08 window.
-        var forms = found.Where(h => NativeMethods.ClassName(h).Equals("TfrmCopi08", StringComparison.OrdinalIgnoreCase)).ToList();
+        var forms = found.Where(h => NativeMethods.ClassName(h).Equals(Copi08FormClass, StringComparison.OrdinalIgnoreCase)).ToList();
         return forms.Count > 0 ? forms : found;
+    }
+
+    public const string Copi08Code = "COPI08";
+    private const string Copi08FormClass = "TfrmCopi08";
+
+    private static bool IsCopi08Title(string title) =>
+        title.Contains("銷貨單建立作業", StringComparison.Ordinal) && title.Contains(Copi08Code, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>An ERP program form's caption carries its code (COPI08, INVI02 …).</summary>
+    private static readonly System.Text.RegularExpressions.Regex ProgramCode =
+        new(@"[A-Z]{4}\d{2}", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Another ERP program form (INVI02 …, not a message box over one): not a dialog of COPI08.</summary>
+    private static bool IsProgramForm(nint hwnd) =>
+        ProgramCode.IsMatch(NativeMethods.WindowText(hwnd)) && !IsMessageDialogClass(NativeMethods.ClassName(hwnd));
+
+    /// <summary>The SMART ERP main window: 「鼎新電腦Conductor [user]」 (CYERPAutoQuery).</summary>
+    private static bool IsErpMainTitle(string title) =>
+        title.Contains("Conductor", StringComparison.OrdinalIgnoreCase) && !ProgramCode.IsMatch(title);
+
+    /// <summary>SMART ERP's main form class; its caption is 「DSForm」, not Conductor (CYERPAutoQuery).</summary>
+    private const string ErpMainFormClass = "SmartERP_iSM_MainMenu";
+
+    private static bool IsErpMainClass(string className) =>
+        !IsMessageDialogClass(className) && !className.Equals("TApplication", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Visible SMART ERP main windows, top of the z-order first (copied from CYERPAutoQuery).
+    /// Delphi's hidden TApplication window carries the Conductor caption but can never come to
+    /// the front, so it is skipped; when only it says Conductor, the main form is the largest
+    /// visible window of that process that is not a program form or a message box.
+    /// </summary>
+    public static IReadOnlyList<nint> FindErpMainWindows()
+    {
+        var found = new List<nint>();
+        var applications = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (!IsErpMainTitle(NativeMethods.WindowText(hwnd))) return true;
+            if (NativeMethods.ClassName(hwnd).Equals("TApplication", StringComparison.OrdinalIgnoreCase)) applications.Add(hwnd);
+            else if (NativeMethods.IsWindowVisible(hwnd) && IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd))
+                found.Add(hwnd);
+            return true;
+        }, 0);
+        if (found.Count > 0) return found;
+
+        foreach (var app in applications)
+        {
+            var pid = ProcessId(app);
+            var candidates = new List<(nint Handle, long Area)>();
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (hwnd != app && ProcessId(hwnd) == pid && NativeMethods.IsWindowVisible(hwnd) &&
+                    IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd) &&
+                    !ProgramCode.IsMatch(NativeMethods.WindowText(hwnd)) &&
+                    NativeMethods.GetWindowRect(hwnd, out var r))
+                    candidates.Add((hwnd, NativeMethods.IsIconic(hwnd) ? 0 : (long)r.Width * r.Height));
+                return true;
+            }, 0);
+            found.AddRange(candidates.OrderByDescending(c => c.Area).Select(c => c.Handle));
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Minimized ERP: Delphi hides its main form and leaves the iconic TApplication window
+    /// (CYERPAutoQuery). That window and the hidden main form, or nothing.
+    /// </summary>
+    public static (nint Application, nint Main)? FindMinimizedErp()
+    {
+        var applications = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (IsErpMainTitle(NativeMethods.WindowText(hwnd)) &&
+                NativeMethods.ClassName(hwnd).Equals("TApplication", StringComparison.OrdinalIgnoreCase))
+                applications.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var app in applications)
+        {
+            var pid = ProcessId(app);
+            nint main = 0;
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (ProcessId(hwnd) == pid && NativeMethods.ClassName(hwnd).Equals(ErpMainFormClass, StringComparison.OrdinalIgnoreCase))
+                {
+                    main = hwnd;
+                    return false;
+                }
+                return true;
+            }, 0);
+            if (main != 0) return (app, main);
+        }
+        return null;
+    }
+
+    private static bool IsMainSized(nint hwnd) =>
+        NativeMethods.IsIconic(hwnd) || NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 300 && r.Height >= 200;
+
+    public static uint ProcessId(nint hwnd)
+    {
+        if (hwnd == 0) return 0;
+        NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+        return pid;
+    }
+
+    /// <summary>Every visible top-level window of <paramref name="root"/>'s process except root itself (for the LOG).</summary>
+    public static IReadOnlyList<nint> VisibleProcessWindows(nint root)
+    {
+        var pid = ProcessId(root);
+        var list = new List<nint>();
+        if (pid == 0) return list;
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (hwnd != root && NativeMethods.IsWindowVisible(hwnd) && ProcessId(hwnd) == pid) list.Add(hwnd);
+            return true;
+        }, 0);
+        return list;
     }
 
     /// <summary>
@@ -143,6 +261,9 @@ internal static class Win32Automation
             if (pid != processId) return true;
             if (!NativeMethods.GetWindowRect(hwnd, out var rect)) return true;
             if (rect.Width is < 140 or > 1200 || rect.Height is < 70 or > 800) return true;
+            // Another program form (INVI02 left open by CYERPAutoQuery …) is not a dialog of
+            // COPI08 and does not stop the run (user, 2026-10-17: behave like CYERPAutoQuery).
+            if (IsProgramForm(hwnd)) return true;
             peers.Add(hwnd);
             return true;
         }, 0);
@@ -258,6 +379,13 @@ internal static class InputSender
             Key(key, 0),
             Key(key, NativeMethods.KEYEVENTF_KEYUP)
         };
+        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    /// <summary>Keys held together, pressed in order and released in reverse (Ctrl+W).</summary>
+    public static void Chord(params ushort[] keys)
+    {
+        var inputs = keys.Select(k => Key(k, 0)).Concat(keys.Reverse().Select(k => Key(k, NativeMethods.KEYEVENTF_KEYUP))).ToArray();
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 

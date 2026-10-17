@@ -26,6 +26,16 @@
     <Compile Include="..\..\ShopeeScreenshot.cs" Link="Linked\ShopeeScreenshot.cs" />
     <Compile Include="..\..\RibbonPrintLocator.cs" Link="Linked\RibbonPrintLocator.cs" />
     <Compile Include="..\..\ShopeePageScan.cs" Link="Linked\ShopeePageScan.cs" />
+    <Compile Include="..\..\ShopeeBatchScreens.cs" Link="Linked\ShopeeBatchScreens.cs" />
+    <Compile Include="..\..\ChatRules.cs" Link="Linked\ChatRules.cs" />
+    <Compile Include="..\..\GiftRules.cs" Link="Linked\GiftRules.cs" />
+    <Compile Include="..\..\SlipImage.cs" Link="Linked\SlipImage.cs" />
+    <Compile Include="..\..\MoBatchScreens.cs" Link="Linked\MoBatchScreens.cs" />
+    <Compile Include="..\..\MoPickupSummary.cs" Link="Linked\MoPickupSummary.cs" />
+    <Compile Include="..\..\CyInvoiceLink.cs" Link="Linked\CyInvoiceLink.cs" />
+    <Compile Include="..\..\BatchSummary.cs" Link="Linked\BatchSummary.cs" />
+    <Compile Include="..\..\CoupangScreens.cs" Link="Linked\CoupangScreens.cs" />
+    <Compile Include="..\..\UpdateCheck.cs" Link="Linked\UpdateCheck.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +44,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />

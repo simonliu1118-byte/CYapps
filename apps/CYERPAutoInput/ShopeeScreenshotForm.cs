@@ -29,18 +29,21 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
     private readonly AutomationSession? _session;
+    private readonly nint _browser;
 
     public ShopeeShotResult? Result { get; private set; }
 
     /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
     /// <param name="session">Shopee full auto: keeps the mouse locked from the scan on (user, 2026-10-12).</param>
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, AutomationSession? session = null)
+    /// <param name="browser">蝦皮全自動 (batch): its own Chrome window, instead of looking for one.</param>
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, AutomationSession? session = null, nint browser = 0)
     {
+        _browser = browser;
         _ocr = ocr;
         _mapping = mapping;
         _log = log;
         _session = session;
-        Text = "蝦皮訂單光學辨識輸入";
+        Text = "蝦皮訂單自動擷取輸入";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
@@ -206,13 +209,17 @@ internal sealed class ShopeeScreenshotForm : Form
     private async Task AutoScanAsync()
     {
         if (_capturing) return;
-        var browser = ShopeePageScanner.FindBrowser();
+        var browser = _browser != 0 ? _browser : ShopeePageScanner.FindBrowser();
         if (browser == 0)
         {
             MessageBox.Show(this, "找不到開著蝦皮訂單頁的瀏覽器視窗。\n請先在瀏覽器開好訂單明細頁，再按「自動擷取」；也可以用「框選截圖」或 Ctrl+V 貼上。",
                 Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+        // The page's own text first (user, 2026-10-13: exact and in a fraction of a second, no
+        // scrolling); the screenshots and OCR only when Chrome does not give the whole order.
+        if (await TryPageTextAsync(browser)) return;
+
         _capturing = true;
         var owner = Owner;
         var ownerOpacity = owner?.Opacity ?? 1;
@@ -280,7 +287,7 @@ internal sealed class ShopeeScreenshotForm : Form
 
         ShowProgress("判讀中…", 1, 1);
         foreach (var section in result.Sections)
-            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
+            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines, section.Kind);
         DisposeCaptures(result);
         HideProgress();
         if (result.Cancelled) _session?.End(AutomationOutcome.Cancelled);
@@ -299,6 +306,34 @@ internal sealed class ShopeeScreenshotForm : Form
             if (r is null) return;
             foreach (var c in r.Captures) c.Image.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Reads the order from Chrome's page text (<see cref="ChromePageText"/>) and, when its three
+    /// parts are all there, brings it back as the scan would. False sends the caller to the
+    /// screenshot scan.
+    /// </summary>
+    private async Task<bool> TryPageTextAsync(nint browser)
+    {
+        ShopeePageScanner.Result? result;
+        try { result = await Task.Run(() => ShopeePageScanner.ReadPageText(browser, _log)); }
+        catch (Exception ex)
+        {
+            _log.Error("page-text", ex);
+            return false;
+        }
+        if (result is null || result.Problems.Count > 0 || result.Sections.Count < 3)
+        {
+            _log.Info("page-text", $"order page text not complete sections={result?.Sections.Count ?? 0} problems={result?.Problems.Count ?? -1}; scanning the screen");
+            return false;
+        }
+        // In full auto the mouse stays locked from here, as after a scan (user, 2026-10-12).
+        _session?.Begin(AutomationSession.FullAutoTitle);
+        foreach (var section in result.Sections)
+            await AddAsync(ShopeePageScanner.TextImage(section), section.Lines, section.Kind, fromText: true);
+        _log.Info("page-text", "order read from the page text");
+        Apply(automatic: true);
+        return true;
     }
 
     private void ShowProgress(string text, int value, int maximum)
@@ -328,7 +363,9 @@ internal sealed class ShopeeScreenshotForm : Form
     /// Adds one screenshot; <paramref name="lines"/> are given when the auto scan already read
     /// it, so only the classification and the re-read of missing cells run here.
     /// </summary>
-    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null)
+    /// <param name="kind">The part the page scan cut this as; its text alone does not decide then.</param>
+    /// <param name="fromText">Lines are the page's own text: nothing to re-read from the pixels.</param>
+    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null, ShopeeShotKind? kind = null, bool fromText = false)
     {
         var shot = new Shot { Image = image };
         _shots.Add(shot);
@@ -342,9 +379,9 @@ internal sealed class ShopeeScreenshotForm : Form
                 var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
                 shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
             }
-            shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
-            if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
-            if (shot.Kind == ShopeeShotKind.Order) ResolveOrderSnZeroO(shot);
+            shot.Kind = kind ?? ShopeeScreenshot.Classify(shot.Lines);
+            if (shot.Kind == ShopeeShotKind.Items && !fromText) await ReadMissingCellsAsync(shot);
+            if (shot.Kind == ShopeeShotKind.Order && !fromText) ResolveOrderSnZeroO(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
             // Diagnostic mode only (local log): what the OCR read and where, to explain a misparse.
             if (_log.Diagnostic)

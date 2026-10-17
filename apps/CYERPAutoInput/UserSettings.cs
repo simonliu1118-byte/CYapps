@@ -12,13 +12,62 @@ internal sealed class UserSettings
     public bool AutoPrint { get; set; }
     /// <summary>A document CY saved clears the form for the next order (user, 2026-10-12).</summary>
     public bool ClearAfterSave { get; set; } = true;
-    /// <summary>F8 in the browser opens Shopee 光學辨識 and starts the scan (user, 2026-10-12).</summary>
-    public bool BrowserHotkey { get; set; } = true;
     /// <summary>
-    /// Shopee screenshots end to end (user, 2026-10-11): after 開始, scan, bring back, enter
-    /// into ERP, save and print. Shopee only: MO店+ and Coupang need invoice details first.
+    /// 蝦皮全自動 (batch, user 2026-10-12): Chrome's print dialog must show this printer and
+    /// scale before the label is printed; otherwise the batch stops. Blank until ticked in
+    /// 設定 › 印表機 among this PC's printers (user, 2026-10-15: no built-in name).
     /// </summary>
-    public bool ShopeeFullAuto { get; set; }
+    public string ShopeeLabelPrinter { get; set; } = string.Empty;
+    public int ShopeeLabelScale { get; set; } = 110;
+    /// <summary>
+    /// A4 印表機 (user, 2026-10-14: the Brother) for MO店+ 新竹物流 寄件單 and 到廠取貨總表, printed
+    /// after a prompt to load that paper. Blank = not set.
+    /// </summary>
+    public string A4Printer { get; set; } = string.Empty;
+    /// <summary>
+    /// CYInvoice.exe, chosen with a file picker (user, 2026-10-14: never typed); blank = not set.
+    /// MO店+ 發票 goes through its AutoInput interface (README「MO店+ 發票（CYInvoice）」).
+    /// </summary>
+    public string CyInvoicePath { get; set; } = string.Empty;
+    /// <summary>紙本發票 PDF style (CYInvoice's company styles; user, 2026-10-15: chosen beforehand), printed on the A4 printer.</summary>
+    public int PaperInvoiceStyle { get; set; }
+    /// <summary>7-ELEVEN 交貨便服務單 print at 100 % (user, 2026-10-13).</summary>
+    public int SevenLabelScale { get; set; } = 100;
+    /// <summary>全家 FamilyMart寄取貨單: 頁面 自訂 2, 縮放比例 165 % (user, 2026-10-13).</summary>
+    public int FamilyLabelScale { get; set; } = 165;
+    public string FamilyLabelPages { get; set; } = "2";
+    /// <summary>新竹物流 (安排取件) labels print at 95 % (user, 2026-10-14).</summary>
+    public int HctLabelScale { get; set; } = 95;
+    /// <summary>
+    /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
+    /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.
+    /// </summary>
+    public string HctPickupAddress { get; set; } = string.Empty;
+    /// <summary>
+    /// 設定 › 發送訊息 (user, 2026-10-14): per platform, rules of words looked for in the buyer's
+    /// note and the message sent for them. 蝦皮 is used by 全自動 (聊聊, before the order is
+    /// shipped as usual); MO店+ and 酷澎 are kept for later.
+    /// </summary>
+    public List<ChatRule> ShopeeChatRules { get; set; } = [];
+    public List<ChatRule> MoChatRules { get; set; } = [];
+    public List<ChatRule> CoupangChatRules { get; set; } = [];
+    /// <summary>設定 › 滿件贈送 (user, 2026-10-14): free quantity into 贈/備品量 for imported orders.</summary>
+    public List<GiftRule> GiftRules { get; set; } = [];
+
+    // Build 25 kept one 蝦皮 rule as two strings; read once and moved into ShopeeChatRules.
+    private string _legacyChatKeywords = "發票,收據,統編,統一編號,抬頭";
+    private string _legacyChatMessage = string.Empty;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShopeeChatKeywords { get => null; set { if (!string.IsNullOrWhiteSpace(value)) _legacyChatKeywords = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ShopeeChatMessage { get => null; set { if (!string.IsNullOrWhiteSpace(value)) _legacyChatMessage = value; } }
+
+    internal void MigrateLegacyChat()
+    {
+        if (ShopeeChatRules.Count == 0 && _legacyChatMessage.Trim().Length > 0)
+            ShopeeChatRules.Add(new ChatRule { Keywords = _legacyChatKeywords, Message = _legacyChatMessage });
+        _legacyChatMessage = string.Empty;
+    }
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;
@@ -80,6 +129,11 @@ internal sealed class UserSettingsStore
             loaded.Defaults ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             loaded.Defaults = new Dictionary<string, string>(loaded.Defaults, StringComparer.OrdinalIgnoreCase);
             loaded.FreightTypes = new Dictionary<string, string>(loaded.FreightTypes ?? [], StringComparer.OrdinalIgnoreCase);
+            loaded.ShopeeChatRules ??= [];
+            loaded.MoChatRules ??= [];
+            loaded.CoupangChatRules ??= [];
+            loaded.GiftRules ??= [];
+            loaded.MigrateLegacyChat();
             return loaded;
         }
         catch (Exception ex)

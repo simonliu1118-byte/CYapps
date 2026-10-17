@@ -164,6 +164,75 @@ internal static class MoOrderImport
         return order;
     }
 
+    /// <summary>
+    /// 物流單號 per 訂單編號 of an export, read straight from the rows (an old order whose amounts
+    /// do not reconcile still gives its number). Null when the rows are not an MO店+ export.
+    /// </summary>
+    public static Dictionary<string, HashSet<string>>? ReadTracking(IReadOnlyList<string[]> rows)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var orderColumn = Array.FindIndex(rows[i], c => c.Trim() == "訂單編號");
+            var trackingColumn = Array.FindIndex(rows[i], c => c.Trim() == "物流單號");
+            if (orderColumn < 0 || trackingColumn < 0) continue;
+            var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            for (var r = i + 1; r < rows.Count; r++)
+            {
+                var row = rows[r];
+                var orderSn = orderColumn < row.Length ? row[orderColumn].Trim() : string.Empty;
+                if (orderSn.Length == 0) continue;
+                if (!result.TryGetValue(orderSn, out var numbers)) result[orderSn] = numbers = new HashSet<string>(StringComparer.Ordinal);
+                var tracking = trackingColumn < row.Length ? row[trackingColumn].Trim() : string.Empty;
+                if (tracking.Length > 0) numbers.Add(tracking);
+            }
+            return result;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A shipped export (after MO店+ 批次出貨, user 2026-10-13) has a 物流單號 on most orders; the
+    /// export the invoices are made from has none. Decided by the content, never the file name.
+    /// </summary>
+    public static bool IsShippedExport(IReadOnlyDictionary<string, HashSet<string>> tracking) =>
+        tracking.Count > 0 && tracking.Values.Count(v => v.Count > 0) * 2 >= tracking.Count;
+
+    /// <summary>
+    /// Fills the batch's tracking numbers from the shipped export by 訂單編號. Orders of other
+    /// days in the shipped export are ignored. Only a single number is filled; anything else is
+    /// listed and left blank for the user, never guessed. A number the batch already has stays.
+    /// </summary>
+    public static (List<MoOrder> Orders, List<string> Notes) FillTracking(IReadOnlyList<MoOrder> orders,
+        IReadOnlyDictionary<string, HashSet<string>> shipped)
+    {
+        var notes = new List<string>();
+        var result = new List<MoOrder>();
+        foreach (var order in orders)
+        {
+            shipped.TryGetValue(order.OrderSn, out var numbers);
+            if (numbers is null || numbers.Count == 0)
+            {
+                if (order.TrackingNumber.Length == 0)
+                    notes.Add(numbers is null
+                        ? $"訂單 {order.OrderSn}：出貨後訂單檔裡沒有這張訂單，物流單號空白。"
+                        : $"訂單 {order.OrderSn}：出貨後訂單檔裡還沒有物流單號，物流單號空白。");
+                result.Add(order);
+            }
+            else if (numbers.Count > 1)
+            {
+                notes.Add($"訂單 {order.OrderSn}：出貨後訂單檔裡有不同的物流單號（{string.Join("、", numbers)}），請自行填寫。");
+                result.Add(order);
+            }
+            else if (order.TrackingNumber.Length > 0 && order.TrackingNumber != numbers.First())
+            {
+                notes.Add($"訂單 {order.OrderSn}：物流單號 {order.TrackingNumber} 與出貨後訂單檔的 {numbers.First()} 不同，保留原本的。");
+                result.Add(order);
+            }
+            else result.Add(order with { TrackingNumber = numbers.First() });
+        }
+        return (result, notes);
+    }
+
     /// <summary>Converts a parsed order with the local settings into a form-ready order.</summary>
     public static ImportedOrder ToImported(MoOrder order, MoMapping mapping)
     {

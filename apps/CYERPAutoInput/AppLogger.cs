@@ -42,7 +42,8 @@ internal sealed class AppLogger : IDisposable
 
     public void Info(string area, string message) => Write("INFO", area, message);
     public void Warn(string area, string message) => Write("WARN", area, message);
-    public void Error(string area, Exception ex) => Write("ERROR", area, $"{ex.GetType().Name}: {ex.Message}");
+    /// <summary>With the stack (local log only), so a failure deep in a library can be traced.</summary>
+    public void Error(string area, Exception ex) => Write("ERROR", area, $"{ex.GetType().Name}: {ex.Message} | {ex.StackTrace}");
     public void Error(string area, string message) => Write("ERROR", area, message);
 
     private void Write(string level, string area, string message)

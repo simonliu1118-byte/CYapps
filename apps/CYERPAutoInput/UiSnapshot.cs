@@ -44,7 +44,8 @@ internal static class UiSnapshot
                 Capture(form, Path.Combine(folder, "main-advanced.png"), new Size(1600, 900));
             }
 
-            using (var settings = new SettingsForm(new UserSettings()))
+            // A sample 滿件贈送 card so the card's layout shows (made-up codes).
+            using (var settings = new SettingsForm(new UserSettings { GiftRules = [new GiftRule { ItemCodes = "A001,A002,B010", Every = 10, Gift = 1, Platforms = [ShopeeOrderImport.Source] }] }))
             {
                 Capture(settings, Path.Combine(folder, "settings.png"), settings.Size);
                 var tabs = AllControls(settings).OfType<TabControl>().First();
@@ -76,6 +77,17 @@ internal static class UiSnapshot
 
             using (var help = new ShopeeScreenshotHelpForm())
                 Capture(help, Path.Combine(folder, "shopee-help.png"), help.Size);
+
+            using (var files = new MoImportForm(_ => []))
+                Capture(files, Path.Combine(folder, "mo-files.png"), files.Size);
+
+            using (var summary = new BatchSummaryForm("MO店+批次結果", "已儲存 2 / 3 張。",
+                       [new("已完成 2 張：", ["90000000000001 → T01-20260101001", "90000000000002 → T01-20260101002"]),
+                        new("需人工處理 1 張（未輸入 ERP）：", ["90000000000003：物流商「測試物流」沒有設定貨運別"])]))
+                Capture(summary, Path.Combine(folder, "batch-summary.png"), summary.Size);
+
+            using (var moHelp = new MoImportHelpForm())
+                Capture(moHelp, Path.Combine(folder, "mo-help.png"), moHelp.Size);
 
             Console.WriteLine($"ui snapshots written to {folder}");
             return 0;

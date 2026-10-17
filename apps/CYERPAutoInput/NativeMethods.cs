@@ -20,6 +20,7 @@ internal static class NativeMethods
     internal const uint WM_CHAR = 0x0102;
     internal const uint WM_SETTEXT = 0x000C;
     internal const uint WM_COPY = 0x0301;
+    internal const uint WM_PASTE = 0x0302;
     internal const uint EM_SETSEL = 0x00B1;
 
     internal const uint INPUT_KEYBOARD = 1;
@@ -28,8 +29,11 @@ internal static class NativeMethods
 
     internal const ushort VK_BACK = 0x08;
     internal const ushort VK_TAB = 0x09;
+    internal const ushort VK_CONTROL = 0x11;
     internal const ushort VK_RETURN = 0x0D;
     internal const ushort VK_ESCAPE = 0x1B;
+    internal const ushort VK_MENU = 0x12;
+    internal const ushort VK_LEFT = 0x25;
     internal const ushort VK_HOME = 0x24;
     internal const ushort VK_END = 0x23;
     internal const ushort VK_UP = 0x26;
@@ -160,6 +164,14 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindow(nint hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool ShowWindow(nint hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
@@ -194,6 +206,25 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern short GetAsyncKeyState(int vKey);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FLASHWINFO
+    {
+        public uint cbSize;
+        public nint hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    /// <summary>FLASHW_ALL | FLASHW_TIMERNOFG: caption and taskbar button flash until the window comes to the front.</summary>
+    internal const uint FLASHW_UNTIL_FRONT = 0x3 | 0xC;
+
+    [DllImport("user32.dll")]
+    internal static extern bool FlashWindowEx(ref FLASHWINFO info);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetDlgCtrlID(nint hWnd);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     internal static extern int SetCurrentProcessExplicitAppUserModelID(string appID);

@@ -3,7 +3,8 @@ namespace CYERPAutoInput;
 
 internal sealed class ErpAutomationService
 {
-    private const int ProvenDetailRowPitch = 24;
+    /// <summary>COPI08 detail rows are 22 px high (user, 2026-10-13: it does not change).</summary>
+    private const int ProvenDetailRowPitch = FastDetailGridVisionService.ErpDetailRowHeight;
     private const ushort VkLeft = 0x25;
     private const ushort VkRight = 0x27;
 
@@ -43,13 +44,140 @@ internal sealed class ErpAutomationService
         return mode;
     }
 
+    /// <summary>The COPI08 the last run filled (to abandon that one only).</summary>
+    private nint _lastRoot;
+
+    /// <summary>
+    /// The COPI08 to use, as CYERPAutoQuery picks its forms (user, 2026-10-17): the only one;
+    /// with several, the first (top of the z-order) in 檢視 with no dialog over it; 0 when none
+    /// is open or none of several is usable. <paramref name="count"/> is how many are open.
+    /// </summary>
+    public nint SelectCopi08(out int count)
+    {
+        var windows = Win32Automation.FindCopi08Windows();
+        count = windows.Count;
+        if (windows.Count <= 1) return windows.Count == 1 ? windows[0] : 0;
+        return windows.FirstOrDefault(w => NativeMethods.IsWindowEnabled(w) && ReadModeSignal(w).Mode == ErpMode.Browse);
+    }
+
+    /// <summary>
+    /// The COPI08 to fill: <see cref="SelectCopi08"/>; ERP minimized is restored first, and
+    /// with no COPI08 open it is opened from the ERP main window through 作業速查 (user,
+    /// 2026-10-17, as CYERPAutoQuery opens INVI02).
+    /// </summary>
+    private async Task<nint> ResolveCopi08Async(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        var root = SelectCopi08(out var count);
+        if (count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
+        {
+            await RestoreErpAsync(app, hidden, cancellationToken);
+            root = SelectCopi08(out count);
+        }
+        if (count == 0)
+        {
+            progress.Report("ERP：開啟銷貨單建立作業（作業速查）…");
+            await OpenCopi08Async(cancellationToken);
+            root = SelectCopi08(out count);
+            if (count == 0) throw new InvalidOperationException("已從作業速查開啟 COPI08，但找不到銷貨單建立作業視窗。");
+        }
+        if (root == 0)
+            throw new InvalidOperationException($"開著 {count} 個銷貨單建立作業（COPI08），但沒有一個在檢視狀態。\n請把其中一個儲存或取消後再開始。");
+        _log.Info("window", $"COPI08 found windows={count} class={NativeMethods.ClassName(root)}");
+        return root;
+    }
+
+    /// <summary>Minimized ERP: restore its TApplication (then the hidden main form) and wait for the main form to show.</summary>
+    private async Task RestoreErpAsync(nint app, nint hidden, CancellationToken cancellationToken)
+    {
+        _log.Info("window", $"ERP minimized; restoring app_iconic={NativeMethods.IsIconic(app)} main_visible={NativeMethods.IsWindowVisible(hidden)}");
+        NativeMethods.ShowWindow(app, NativeMethods.SW_RESTORE);
+        if (!await WaitUntilAsync(() => NativeMethods.IsWindowVisible(hidden) && !NativeMethods.IsIconic(hidden), 3000, cancellationToken))
+            NativeMethods.ShowWindow(hidden, NativeMethods.SW_RESTORE);
+        var shown = await WaitUntilAsync(() => NativeMethods.IsWindowVisible(hidden) && !NativeMethods.IsIconic(hidden), 5000, cancellationToken);
+        _log.Info("window", $"ERP main form restored={shown}");
+        await Delay(500, cancellationToken); // let the main form finish painting
+    }
+
+    /// <summary>
+    /// ERP main window → Ribbon 作業速查 (found by OCR) → COPI08 into the search box, read back
+    /// from the focused ERP control → Enter; waits up to 30 s for the form (CYERPAutoQuery's
+    /// OpenFormAsync).
+    /// </summary>
+    private async Task OpenCopi08Async(CancellationToken cancellationToken)
+    {
+        var mains = Win32Automation.FindErpMainWindows();
+        if (mains.Count == 0)
+            throw new InvalidOperationException("找不到 SMART ERP 主視窗（鼎新電腦Conductor），也沒有開著銷貨單建立作業（COPI08）。\n請先登入 ERP。");
+        var main = mains[0];
+        _log.Info("window", $"opening COPI08 from main window class={NativeMethods.ClassName(main)} title={_log.Value(NativeMethods.WindowText(main))} count={mains.Count}");
+        if (!NativeMethods.IsWindowEnabled(main))
+            throw new InvalidOperationException("ERP 主視窗目前有對話框開著，無法開啟銷貨單建立作業。");
+        if (!Win32Automation.PrepareForeground(main, _log))
+            throw new InvalidOperationException("無法把 ERP 主視窗帶到前景。");
+        if (!NativeMethods.GetWindowRect(main, out var window))
+            throw new InvalidOperationException("讀不到 ERP 主視窗位置。");
+
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        IReadOnlyList<OcrToken> tokens;
+        using (var image = ScreenCapture.Capture(ribbon))
+            tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "作業速查") is not { } label)
+        {
+            _log.Warn("window", $"OCR did not find 作業速查 tokens={_log.Value(string.Join(" ", tokens.Select(t => t.Text)))}");
+            throw new InvalidOperationException("ERP 主視窗找不到「作業速查」。請確認 Ribbon 停在「我的ERP」。");
+        }
+        var point = new Point(ribbon.Left + label.Left + label.Width / 2, ribbon.Top + label.Top + label.Height / 2);
+        if (!Win32Automation.IsAreaShownBy(main, new Rectangle(point.X - 8, point.Y - 8, 16, 16)))
+            throw new InvalidOperationException("ERP 主視窗的「作業速查」被其他視窗遮住，已停止。");
+        InputSender.Click(point);
+        await Delay(600, cancellationToken);
+
+        var focus = NativeMethods.FocusedControlOfForeground();
+        if (focus == 0 || Win32Automation.ProcessId(focus) != Win32Automation.ProcessId(main))
+            throw new InvalidOperationException("按「作業速查」後游標不在 ERP 的搜尋框，已停止。");
+        InputSender.UnicodeText(Win32Automation.Copi08Code);
+        await Delay(800, cancellationToken); // let ERP list the matching programs
+        var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        if (!typed.Equals(Win32Automation.Copi08Code, StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
+            throw new InvalidOperationException("作業速查的搜尋框讀回內容不是 COPI08，已停止。");
+        }
+        InputSender.Press(NativeMethods.VK_RETURN);
+        _log.Info("window", "作業速查 COPI08 + Enter sent");
+
+        // Opening a program form can take a while on the first run.
+        var started = Environment.TickCount64;
+        if (!await WaitUntilAsync(() => Win32Automation.FindCopi08Windows().Count > 0, 30000, cancellationToken))
+        {
+            foreach (var h in Win32Automation.VisibleProcessWindows(main))
+            {
+                NativeMethods.GetWindowRect(h, out var r);
+                _log.Warn("window", $"after-作業速查 window class={NativeMethods.ClassName(h)} title={_log.Value(NativeMethods.WindowText(h))} size={r.Width}x{r.Height}");
+            }
+            throw new InvalidOperationException("從作業速查開啟銷貨單建立作業逾時（30 秒）。");
+        }
+        _log.Info("window", $"COPI08 opened after_ms={Environment.TickCount64 - started}");
+        await Delay(1500, cancellationToken); // let the new form load its first record
+    }
+
+    private async Task<bool> WaitUntilAsync(Func<bool> condition, int timeoutMs, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Delay(60, cancellationToken);
+            if (condition()) return true;
+        }
+        return false;
+    }
+
     /// <summary>Read-only status probe for the UI status tag; never writes to ERP and never logs.</summary>
     public ErpStatusProbe ProbeStatus()
     {
-        var windows = Win32Automation.FindCopi08Windows();
-        if (windows.Count != 1) return new ErpStatusProbe(windows.Count, 0, ErpMode.Unknown, ErpOwnerFields.Unreadable);
+        var root = SelectCopi08(out var count);
+        if (root == 0) return new ErpStatusProbe(count, 0, ErpMode.Unknown, ErpOwnerFields.Unreadable);
 
-        var root = windows[0];
         var (mode, _, _, _) = ReadModeSignal(root);
         var owner = mode == ErpMode.Input ? ReadOwnerFields(root) : ErpOwnerFields.Unreadable;
         return new ErpStatusProbe(1, root, mode, owner);
@@ -101,16 +229,26 @@ internal sealed class ErpAutomationService
     public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken,
         bool autoPrint = false)
     {
+        try
+        {
+            return await FillDocumentAsync(snapshot, autoSave, progress, cancellationToken, autoPrint);
+        }
+        finally
+        {
+            RestoreClipboard();
+        }
+    }
+
+    private async Task<AutomationRunResult> FillDocumentAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken,
+        bool autoPrint)
+    {
         var result = new AutomationRunResult();
         LastSalesOrderNumber = string.Empty;
         _noBatchItemCodes = snapshot.NoBatchItemCodes;
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
             result.SalesOrderType = orderType.Trim();
-        var windows = Win32Automation.FindCopi08Windows();
-        if (windows.Count == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
-        if (windows.Count > 1)
-            throw new InvalidOperationException($"偵測到 {windows.Count} 個 COPI08 視窗。\n請只保留一個銷貨單建立作業後再開始，避免輸入到錯誤的視窗。");
-        var root = windows[0];
+        var root = await ResolveCopi08Async(progress, cancellationToken);
+        _lastRoot = root;
 
         // Automation uses one stable ERP geometry: always maximize COPI08 instead of
         // maintaining a second windowed coordinate/viewport path.
@@ -383,9 +521,10 @@ internal sealed class ErpAutomationService
     /// </summary>
     public async Task AbandonInputAsync(string? expectedSalesOrderNumber, CancellationToken cancellationToken)
     {
+        // The COPI08 this program just filled; otherwise (a user-confirmed restart) the only one.
         var windows = Win32Automation.FindCopi08Windows();
-        if (windows.Count != 1) throw new InvalidOperationException("放棄前必須只有一個 COPI08 視窗。");
-        var root = windows[0];
+        var root = windows.Contains(_lastRoot) ? _lastRoot : windows.Count == 1 ? windows[0] : 0;
+        if (root == 0) throw new InvalidOperationException("找不到要放棄的那個 COPI08 視窗；未執行放棄，請人工處理。");
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("放棄前無法把 COPI08 帶到前景。");
         if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
@@ -681,6 +820,79 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException($"已點擊 ERP 頁籤「{group}」，但頁籤沒有穩定進入可用狀態。");
     }
 
+    /// <summary>The clipboard's own content, copied before the first pasted field and put back after the document.</summary>
+    private DataObject? _clipboardBefore;
+    private bool _clipboardSaved;
+
+    /// <summary>
+    /// <paramref name="value"/> pasted into the ERP field or detail cell <paramref name="box"/>
+    /// (EM_SETSEL + WM_PASTE, as CYERPAutoQuery fills ERP boxes) — faster than typing it and
+    /// past any IME (user, 2026-10-16: 銷貨單別 … 金額). The clipboard is put back once the
+    /// document is done; an empty value or a busy clipboard is typed as before.
+    /// </summary>
+    private async Task PasteTextAsync(nint box, string value, string key, CancellationToken cancellationToken)
+    {
+        // Keys sent just before (Backspace through SendInput) are still queued while WM_PASTE
+        // goes straight in, and cleared what was pasted: 銷貨單別 came out empty and ERP gave
+        // no sales order number (user LOG 2026-10-17). So the queue drains first.
+        await Delay(120, cancellationToken);
+        if (value.Length > 0)
+        {
+            try
+            {
+                SaveClipboard();
+                Clipboard.SetText(value);
+                NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
+                NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, nint.Zero, nint.Zero);
+                await Delay(80, cancellationToken);
+                var shown = (NativeMethods.ControlText(box) ?? string.Empty).Trim();
+                if (shown == value.Trim()) return;
+                // Not taken as it is (or shown formatted): typed over the selection instead.
+                _log.Info("field", $"paste read back differs; typed instead key={key} expected_len={value.Length} shown_len={shown.Length}");
+                NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException)
+            {
+                _log.Info("field", $"clipboard busy ({ex.GetType().Name}); typed instead key={key}");
+            }
+        }
+        InputSender.UnicodeText(value);
+    }
+
+    /// <summary>A copy of every format on the clipboard (the live object would follow later changes).</summary>
+    private void SaveClipboard()
+    {
+        if (_clipboardSaved) return;
+        _clipboardSaved = true;
+        if (Clipboard.GetDataObject() is not { } live) return;
+        var copy = new DataObject();
+        foreach (var format in live.GetFormats(autoConvert: false))
+        {
+            try
+            {
+                if (live.GetData(format, autoConvert: false) is { } data) copy.SetData(format, data);
+            }
+            catch (Exception) { } // a format another program renders lazily may refuse; the rest is kept
+        }
+        _clipboardBefore = copy;
+    }
+
+    private void RestoreClipboard()
+    {
+        if (!_clipboardSaved) return;
+        try
+        {
+            if (_clipboardBefore is { } saved && saved.GetFormats().Length > 0) Clipboard.SetDataObject(saved, copy: true, retryTimes: 5, retryDelay: 50);
+            else Clipboard.Clear();
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException)
+        {
+            _log.Info("field", "clipboard not restored");
+        }
+        _clipboardBefore = null;
+        _clipboardSaved = false;
+    }
+
     private async Task SetFieldAsync(nint root, WindowControl target, FieldDefinition field, string value, CancellationToken cancellationToken, IReadOnlyList<string>? options = null)
     {
         Win32Automation.PrepareForeground(root, _log);
@@ -731,7 +943,7 @@ internal sealed class ErpAutomationService
 
         if (field.Key is "cod" or "freight_fee")
         {
-            InputSender.UnicodeText(value, 105);
+            await PasteTextAsync(focus, value, field.Key, cancellationToken);
             await Delay(140, cancellationToken);
             InputSender.Press(NativeMethods.VK_TAB);
             await Delay(180, cancellationToken);
@@ -778,7 +990,7 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        InputSender.UnicodeText(value);
+        await PasteTextAsync(focus, value, field.Key, cancellationToken);
         if (InputSender.ImeClosedCount != imeClosedBefore) _log.Info("field", $"ERP IME was open; switched off before typing key={field.Key}");
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);
@@ -917,7 +1129,7 @@ internal sealed class ErpAutomationService
         await PrimeDetailGridAsync(root, grid, cancellationToken);
         (grid, var geometry) = await AnalyzePrimedDetailGridAsync(root, grid, cancellationToken);
         if (geometry.RowCenterY.Count == 0)
-            throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
+            throw new InvalidOperationException("辨識沒有找到任何可輸入的明細列。");
 
         // Bundles (user, 2026-10-12): their parts take ERP's own list price, read back here, and
         // the gap to what each bundle sold for goes to the 促銷組合 line after them.
@@ -998,15 +1210,19 @@ internal sealed class ErpAutomationService
         if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 45)
             throw new InvalidOperationException("商品明細區目前沒有有效畫面位置。");
 
-        var relativeX = (int)Math.Round(rect.Width * 0.052);
-        relativeX = Math.Clamp(relativeX, 28, Math.Max(28, rect.Width - 24));
-        var relativeY = Math.Clamp(33, 24, Math.Max(24, rect.Height - 12));
+        // The 品號 cell of the first row, found from the header (user, 2026-10-13: a fixed
+        // spot missed on another user's layout). The old spot only when the header is not read.
+        var cell = await _gridVision.FindFirstItemCellAsync(grid.Handle, cancellationToken);
+        var relativeX = cell?.X ?? Math.Clamp((int)Math.Round(rect.Width * 0.052), 28, Math.Max(28, rect.Width - 24));
+        var relativeY = Math.Clamp(cell?.Y ?? 33, 24, Math.Max(24, rect.Height - 12));
         var point = new Point(rect.Left + relativeX, rect.Top + relativeY);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("啟用商品明細區前無法把 ERP 帶到前景。");
         InputSender.Click(point);
         await Delay(320, cancellationToken);
 
         var focus = NativeMethods.FocusedControlOfForeground(root);
-        _log.Info("detail", $"first-row prime click once point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+        _log.Info("detail", $"first-row prime click once from_header={cell.HasValue} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
     }
 
     private async Task<(WindowControl Grid, GridGeometry Geometry)> AnalyzePrimedDetailGridAsync(
@@ -1071,9 +1287,13 @@ internal sealed class ErpAutomationService
         if (string.IsNullOrWhiteSpace(value)) return geometry;
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, column, cancellationToken);
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        // A third, later try (user's PC, 2026-10-13: after 品號 + Enter the 數量 cell twice did
+        // not open while ERP was still busy with the item; the same order went through when run
+        // again), each retry waiting longer first.
+        for (var attempt = 1; attempt <= 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (attempt > 1) await Delay(500 * attempt, cancellationToken);
             if (!Win32Automation.PrepareForeground(root, _log))
                 throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
 
@@ -1103,7 +1323,7 @@ internal sealed class ErpAutomationService
 
             _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
             await Delay(90, cancellationToken);
-            InputSender.UnicodeText(value, 35);
+            await PasteTextAsync(editor, value, $"detail col={column}", cancellationToken);
             await Delay(140, cancellationToken);
             // Every detail cell is committed by physical Enter. This is the validated
             // grid behavior and is intentionally different from the upper form fields.
@@ -1113,7 +1333,7 @@ internal sealed class ErpAutomationService
             return geometry;
         }
 
-        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續兩次都沒有進入編輯模式。");
+        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續三次都沒有進入編輯模式。");
     }
 
     /// <summary>
@@ -1599,7 +1819,7 @@ internal sealed class ErpAutomationService
         if (known.Count < 2) return ProvenDetailRowPitch;
         var (first, last) = (known[0], known[^1]);
         var pitch = (last.Value - first.Value) / (double)(last.Key - first.Key);
-        // Outside a sane range the measurement is wrong (an editor in another row); keep 24.
+        // Outside a sane range the measurement is wrong (an editor in another row); keep 22.
         return pitch is >= 16 and <= 36 ? pitch : ProvenDetailRowPitch;
     }
 

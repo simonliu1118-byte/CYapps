@@ -36,10 +36,32 @@ internal sealed class AutomationSession : IDisposable
     /// <summary>Cancelled the moment the user presses Esc during this run.</summary>
     public CancellationToken EscapeToken => _escape.Token;
 
-    public const string FullAutoTitle = "全自動運轉中";
+    /// <summary>Shopee 光學辨識 that goes on into ERP (F8 or 開始 with the setting on).</summary>
+    public const string FullAutoTitle = "自動擷取輸入中";
     public const string InputTitle = "自動輸入中";
+    /// <summary>蝦皮全自動: shown for the whole batch, its scans and ERP inputs too, with a timer.</summary>
+    public const string BatchTitle = "全自動運轉中";
+
+    private string? _pinned;
+    private DateTime _since;
+
+    /// <summary>
+    /// Holds the notice on <paramref name="title"/> with a running timer until <see cref="Unpin"/>
+    /// (user, 2026-10-13: 蝦皮全自動 shows 全自動運轉中 throughout, with 分:秒); the steps' own
+    /// titles and their passing ends are not shown meanwhile.
+    /// </summary>
+    public void Pin(string title)
+    {
+        _pinned = title;
+        _since = DateTime.Now;
+    }
+
+    public void Unpin() => _pinned = null;
 
     public AutomationSession(AppLogger log) => _log = log;
+
+    /// <summary>Esc was pressed (raised on the UI thread): everything of the run stops, background work too.</summary>
+    public event Action? Escaped;
 
     public bool Active => _mouseLock is not null;
 
@@ -56,7 +78,7 @@ internal sealed class AutomationSession : IDisposable
         try
         {
             _overlay ??= new AutomationOverlay();
-            _overlay.ShowNotice(title, _log);
+            _overlay.ShowNotice(_pinned ?? title, _log, _pinned is null ? null : _since);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ExternalException)
         {
@@ -73,6 +95,8 @@ internal sealed class AutomationSession : IDisposable
         if (_mouseLock is null) return;
         _mouseLock.Dispose();
         _mouseLock = null;
+        // Inside 蝦皮全自動 a step's end is not the batch's: the notice stays, unless stopped.
+        if (_pinned is not null && outcome is not (AutomationOutcome.Cancelled or AutomationOutcome.Stopped)) return;
         try { _overlay?.ShowOutcome(outcome); }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ExternalException)
         {
@@ -86,7 +110,7 @@ internal sealed class AutomationSession : IDisposable
     {
         _log.Info("automation", "Esc pressed: stopping");
         try { _escape.Cancel(); } catch (ObjectDisposedException) { }
-        _ui?.Post(_ => End(AutomationOutcome.Cancelled), null);
+        _ui?.Post(_ => { End(AutomationOutcome.Cancelled); Escaped?.Invoke(); }, null);
     }
 
     public void Dispose()
@@ -124,6 +148,7 @@ internal sealed class AutomationOverlay : Form
     private static readonly Font TitleFont = new("Microsoft JhengHei UI", 15F, FontStyle.Bold);
     private static readonly Font HintFont = new("Microsoft JhengHei UI", 10.5F);
     private string _hint = RunningHint;
+    private DateTime? _since;
     private const string RunningHint = "按 Esc 中止";
     private static readonly Color DoneGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color AttentionAmber = Color.FromArgb(245, 180, 0);
@@ -140,7 +165,12 @@ internal sealed class AutomationOverlay : Form
         Opacity = 0.9;
         Size = new Size(240, 92);
         DoubleBuffered = true;
-        _timer.Tick += (_, _) => { _angle = (_angle + 30) % 360; Invalidate(); };
+        _timer.Tick += (_, _) =>
+        {
+            _angle = (_angle + 30) % 360;
+            if (_since is { } since && _outcome is null) _hint = $"{RunningHint}　{Elapsed(DateTime.Now - since)}";
+            Invalidate();
+        };
         _linger.Tick += (_, _) => HideNotice();
     }
 
@@ -156,12 +186,18 @@ internal sealed class AutomationOverlay : Form
         }
     }
 
-    public void ShowNotice(string title, AppLogger log)
+    /// <summary>分:秒, with 時 only when needed (user, 2026-10-13).</summary>
+    private static string Elapsed(TimeSpan t) =>
+        t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
+
+    /// <param name="since">Shows the time since then beside the hint (蝦皮全自動).</param>
+    public void ShowNotice(string title, AppLogger log, DateTime? since = null)
     {
         _linger.Stop();
         _outcome = null;
         _title = title;
-        _hint = RunningHint;
+        _since = since;
+        _hint = since is { } s ? $"{RunningHint}　{Elapsed(DateTime.Now - s)}" : RunningHint;
         if (!IsHandleCreated) CreateHandle();
         if (!_excluded)
         {
@@ -173,7 +209,15 @@ internal sealed class AutomationOverlay : Form
             }
         }
         Place();
-        Show();
+        if (!Visible)
+        {
+            // Drawn before it is seen (user, 2026-10-13: it showed the last run's end for a moment).
+            Opacity = 0;
+            Show();
+            Refresh();
+            Opacity = 0.9;
+        }
+        else Invalidate();
         _timer.Start();
     }
 
@@ -210,13 +254,21 @@ internal sealed class AutomationOverlay : Form
     /// <summary>Just wide enough for the text (user, 2026-10-12: the box was too wide), centered.</summary>
     private void Place()
     {
-        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(_hint, HintFont).Width);
-        Size = new Size(86 + textWidth + 26, 92);
+        // A running timer is measured at its widest so the box does not jump.
+        var hint = _since is not null && _outcome is null ? $"{RunningHint}　0:00:00" : _hint;
+        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(hint, HintFont).Width);
+        var size = new Size(86 + textWidth + 36, 92);
+        // Growing the box while it is on screen (「自動輸入中」 → a longer outcome) left its right
+        // part cut off (CYERPAutoQuery, user's photo 2026-10-16): it is resized only while hidden.
+        var shown = Visible;
+        if (shown && size != Size) Hide();
+        Size = size;
         var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
         Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
         Region?.Dispose();
         using var path = Rounded(new Rectangle(Point.Empty, Size), 16);
         Region = new Region(path);
+        if (shown && !Visible) Show();
     }
 
     protected override void OnPaint(PaintEventArgs e)
