@@ -238,6 +238,30 @@ assert.equal(retryMailbox.sent.length,1,"Same operation is still read-only");
 assert.equal(count(expiredDb,"devices"),1,"Auto-expiry never revokes a Device");
 expiredDb.close();
 
+// A failed new operation must roll back BOTH the expiry cleanup and its
+// AUTO_EXPIRED audit. An expired code is already unclaimable by time guard,
+// but its history must not be half-written after a failed replacement.
+const failedReplaceDb=fixture();
+const failedReplace=envFor(failedReplaceDb);
+assert.equal((await issueCyWebRecoveryInvitation(failedReplace.env,input,senderHarness().sender)).status,"sent");
+failedReplaceDb.prepare("UPDATE device_invitations SET expires_at=? WHERE recovery_operation_id=?")
+  .run("2026-01-01T00:00:00.000Z",operationId);
+failedReplaceDb.exec(`CREATE TRIGGER reject_recovery_replacement
+  BEFORE INSERT ON device_invitations
+  WHEN NEW.recovery_operation_id='33333333-3333-4333-8333-333333333333'
+  BEGIN SELECT RAISE(ABORT, 'synthetic replacement failure'); END;`);
+const failedReplaceMailbox=senderHarness();
+await assert.rejects(
+  ()=>issueCyWebRecoveryInvitation(failedReplace.env,afterExpiry,failedReplaceMailbox.sender),
+  /RECOVERY_ALREADY_PENDING/);
+assert.equal(row(failedReplaceDb).revoked_at,null,
+  "Failed new operation must not commit auto-expiry of old invitation");
+assert.equal(count(failedReplaceDb,"security_audit_events"),1,
+  "AUTO_EXPIRED audit must roll back together with failed new invitation");
+assert.equal(failedReplaceDb.prepare("SELECT COUNT(*) n FROM device_invitations").get().n,1);
+assert.equal(failedReplaceMailbox.sent.length,0,"Replacement failure cannot send an Email");
+failedReplaceDb.close();
+
 // Explicit cancellation must also release a delivery-failed but not consumed
 // operation; it cannot silently recreate or send a code from that operation.
 const deliveryFailedDb=fixture();
