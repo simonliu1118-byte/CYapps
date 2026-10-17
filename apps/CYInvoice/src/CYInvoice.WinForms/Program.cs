@@ -266,6 +266,10 @@ internal static class Program
             directJoin.VerifySmokeLayout();
             directJoin.Close();
 
+            // Validate default-safe DR UI without network or side effects.
+            using var recovery = new CloudRecoveryForm(repository);
+            recovery.VerifySmokeLayout();
+
             // Device Join deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
             // The startup smoke validates static layout without displaying the form so CI
             // never bypasses or blocks on the real runtime authorization gate.
