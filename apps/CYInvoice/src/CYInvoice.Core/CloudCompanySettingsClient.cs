@@ -22,6 +22,20 @@ public sealed record CloudCompanySettingsEdit(
     int ExpectedRevision, string SellerInvoice,
     CloudCompanySecretChange AmegoAppKey, CloudCompanySecretChange MoExcelPassword);
 
+// Decrypted credentials are held in memory only until they are sealed by
+// SettingsStore into the current Windows user's existing DPAPI settings.
+public sealed record CloudCompanyProvision(
+    string SellerInvoice, int Revision, string AmegoAppKey, string MoExcelPassword)
+{
+    public bool Matches(CloudCompanySettingsStatus card) =>
+        Revision == card.Revision && SellerInvoice == card.SellerInvoice &&
+        card.HasAmegoAppKey && card.HasMoExcelPassword &&
+        !string.IsNullOrWhiteSpace(AmegoAppKey) && AmegoAppKey.Length <= 512 &&
+        !AmegoAppKey.Any(char.IsControl) &&
+        !string.IsNullOrWhiteSpace(MoExcelPassword) && MoExcelPassword.Length <= 256 &&
+        !MoExcelPassword.Any(char.IsControl);
+}
+
 public sealed class CloudCompanySettingsClient
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
@@ -83,6 +97,32 @@ public sealed class CloudCompanySettingsClient
             card.SellerInvoice != edit.SellerInvoice)
             throw new InvalidDataException("Company settings update reply disagrees with request.");
         return card;
+    }
+
+    public async Task<CloudCompanyProvision> ProvisionAsync(
+        string employeeNo, string password, CancellationToken cancellationToken = default)
+    {
+        Credentials(employeeNo, password);
+        using var response = await SendAsync("provision",
+            new {employeeNo, password}, cancellationToken).ConfigureAwait(false);
+        if (!response.RootElement.TryGetProperty("credentials", out var value) ||
+            value.ValueKind != JsonValueKind.Object ||
+            !value.TryGetProperty("sellerInvoice", out var seller) ||
+            seller.ValueKind != JsonValueKind.String || !Invoice(seller.GetString()) ||
+            !value.TryGetProperty("revision", out var revision) ||
+            revision.ValueKind != JsonValueKind.Number ||
+            !revision.TryGetInt32(out var rev) || rev < 1 ||
+            !value.TryGetProperty("amegoAppKey", out var amego) ||
+            amego.ValueKind != JsonValueKind.String ||
+            !value.TryGetProperty("moExcelPassword", out var mo) ||
+            mo.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException("Invalid company provision response.");
+        var credentials = new CloudCompanyProvision(
+            seller.GetString()!, rev, amego.GetString()!, mo.GetString()!);
+        if (!credentials.Matches(new CloudCompanySettingsStatus(
+            credentials.SellerInvoice, credentials.Revision, true, true)))
+            throw new InvalidDataException("Incomplete company provision response.");
+        return credentials;
     }
 
     private async Task<JsonDocument> SendAsync(

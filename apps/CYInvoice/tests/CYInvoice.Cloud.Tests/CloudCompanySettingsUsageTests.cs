@@ -34,6 +34,19 @@ internal static class CloudCompanySettingsUsageTests
             new CloudCompanySettingsStatus("12345678", 4, true, true), local);
         Check(!noLocalSeller.HasLocalSellerInvoice && !noLocalSeller.SellerInvoiceMatches,
             "A missing Windows seller number must not be treated as ready.");
+        var card = new CloudCompanySettingsStatus("12345678", 5, true, true);
+        var credentials = new CloudCompanyProvision("12345678", 5,
+            "TEST_SYNTHETIC_APPKEY", "TEST_SYNTHETIC_MO_PASSWORD");
+        Check(credentials.Matches(card), "Fresh complete credentials match exact status.");
+        Check(!credentials.Matches(card with {Revision=6}), "Stale revision rejected.");
+        Check(!credentials.Matches(card with {SellerInvoice="87654321"}), "Wrong seller rejected.");
+        Check(!credentials.Matches(card with {HasAmegoAppKey=false}), "Unconfigured App Key rejected.");
+        Check(!new CloudCompanyProvision("12345678",5,string.Empty,"TEST_MO").Matches(card),
+            "Missing AMEGO key cannot be installed.");
+        Check(!new CloudCompanyProvision("12345678",5,"TEST_KEY",string.Empty).Matches(card),
+            "Missing MO password cannot be installed.");
+        Check(!new CloudCompanyProvision("12345678",5,"TEST_KEY", "TEST_BAD\u0001MO").Matches(card),
+            "Control characters cannot enter Windows DPAPI settings.");
         return Task.CompletedTask;
     }
 

@@ -285,12 +285,19 @@ internal sealed class SettingsForm : Form
                   $"光貿 App Key：{(card.HasAmegoAppKey ? "已設定" : "尚未設定")}\n"+
                   $"MO店+ 密碼：{(card.HasMoExcelPassword ? "已設定" : "尚未設定")}";
             message += CompanyCardLocalUsageMessage(card, current);
-            if(MessageBox.Show(this,message+
-                "\n\n雲端金鑰不會顯示，也不會自動改寫本機憑證。"+
-                "\n\n是否開啟編輯？只有 CYID 超級管理員有權修改。",
-                "CYID 公司卡",MessageBoxButtons.YesNo,MessageBoxIcon.Information,
-                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            var action = MessageBox.Show(this,message+
+                "\n\n【是】編輯雲端公司卡（超管）"+
+                "\n【否】將雲端公司卡套用到此電腦（超管）"+
+                "\n【取消】關閉；不修改本機憑證。",
+                "CYID 公司卡",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Information,
+                MessageBoxDefaultButton.Button3);
+            if(action==DialogResult.Cancel)return;
+            if(action==DialogResult.No)
+            {
+                await InstallCompanyCardAsync(client,card,current,
+                    login.EnteredEmployeeNo,login.AuthenticatedPassword);
                 return;
+            }
             var edit=PromptCompanyCardEdit(card);
             if(edit is null)return;
             if(MessageBox.Show(this,
@@ -346,6 +353,73 @@ internal sealed class SettingsForm : Form
         }
     }
 
+    // Explicit super-admin provisioning only; normal CYID status read never
+    // receives secrets. Existing local AMEGO/MO credentials are untouched on
+    // any failure, denial, timeout or stale cloud revision.
+    private async Task InstallCompanyCardAsync(
+        CloudCompanySettingsClient client,CloudCompanySettingsStatus? card,
+        Settings original,string employeeNo,string password)
+    {
+        if(card is null||!card.HasAmegoAppKey||!card.HasMoExcelPassword)
+        {
+            MessageBox.Show(this,
+                "雲端公司卡的統編、光貿 App Key 與 MO店+ 密碼尚未全部設定；請先由超級管理員補齊。",
+                "公司卡尚未就緒",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            return;
+        }
+        if(MessageBox.Show(this,
+            $"確定以 CYID 公司卡（版次 {card.Revision}）覆寫這台電腦的正式開票與 MO店+ 憑證？"+
+            $"\n雲端統編：{card.SellerInvoice}\n本機統編：{original.ProductionInvoice}"+
+            "\n\n本機憑證將使用 Windows 原本的 DPAPI 加密。"+
+            "\n其他電腦不受影響；雲端中斷時仍沿用本機既有憑證。",
+            "確認套用本機",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            return;
+        try
+        {
+            var received=await client.ProvisionAsync(employeeNo,password);
+            if(!received.Matches(card))
+                throw new InvalidOperationException("公司卡版次或設定已改變；請重新讀取雲端狀態。");
+            var latest=repository.Settings.LoadOrCreate();
+            if(latest.CloudMode!=CloudModes.CloudPreferred||
+               latest.CloudIdentityProvider!="CYID"||!latest.CloudEmployeeAuthorityReady||
+               latest.CloudWorkspaceId!=original.CloudWorkspaceId||
+               latest.CloudDeviceId!=original.CloudDeviceId||
+               latest.CloudBaseUrl!=original.CloudBaseUrl||
+               latest.CloudDeviceTokenEncrypted!=original.CloudDeviceTokenEncrypted)
+                throw new InvalidOperationException("雲端裝置狀態已改變，沒有覆寫本機設定。");
+            if(latest.ProductionInvoice!=original.ProductionInvoice||
+               latest.ProductionAppKeyEncrypted!=original.ProductionAppKeyEncrypted||
+               latest.MoPasswordEncrypted!=original.MoPasswordEncrypted)
+                throw new InvalidOperationException("本機憑證在確認期間已變更，請重新開啟設定。");
+            // Prepare a fresh detached settings object; Save is a single
+            // atomic JSON replace. Failed DPAPI/Save leaves originals intact.
+            repository.Settings.SetProductionAppKey(latest,received.AmegoAppKey);
+            repository.Settings.SetMoPassword(latest,received.MoExcelPassword);
+            latest.ProductionInvoice=received.SellerInvoice;
+            repository.Settings.Save(latest);
+            settings.ProductionInvoice=latest.ProductionInvoice;
+            settings.ProductionAppKeyEncrypted=latest.ProductionAppKeyEncrypted;
+            settings.MoPasswordEncrypted=latest.MoPasswordEncrypted;
+            LoadValues();
+            MessageBox.Show(this,
+                $"已將公司卡版次 {received.Revision} 套用這台電腦；"+
+                "\n本機 App Key／MO店+ 密碼已使用 DPAPI 保存。"+
+                "\n其他電腦需各自經超級管理員授權套用。",
+                "公司卡已套用",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
+        catch
+        {
+            // No exception details / stack trace / server response may include
+            // a secret; never format exception into a UI or telemetry log.
+            MessageBox.Show(this,
+                "未能確認超管授權、公司卡版次、裝置或本機儲存狀態。"+
+                "\n本機原有憑證不會因未確認的同步而自動清除或重試。"+
+                "\n請重新查閱公司卡狀態後再操作。",
+                "公司卡套用未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+    }
+
     private static string CompanyCardLocalUsageMessage(
         CloudCompanySettingsStatus? card, Settings local)
     {
@@ -362,7 +436,7 @@ internal sealed class SettingsForm : Form
         if (card is not null && card.HasMoExcelPassword && !state.LocalMoPasswordConfigured)
             message+="\n注意：雲端已有 MO 密碼，但本機尚無可用密碼。";
         return message+"\n雲端「已設定」不代表兩邊密碼內容相同。"+
-            "\n本版本尚未自動派送雲端密鑰；本機憑證不會被覆寫。";
+            "\n如需使用雲端公司卡，超管可在此明確確認後套用本機；不會自動覆寫。";
     }
 
     // Temporary editor under the existing Settings menu; no new settings
