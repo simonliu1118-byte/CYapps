@@ -6,7 +6,7 @@ namespace CYERPAutoQuery;
 /// badge, data groups, status strip. The query itself is <see cref="ItemQueryService"/>,
 /// which the planned Web entry will call as well.
 /// </summary>
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private static readonly Size StandardWindowSize = new(1160, 720);
     private const int ToolbarButtonHeight = 38;
@@ -95,6 +95,7 @@ internal sealed class MainForm : Form
             UpdateDpiHint();
             RefreshErpState();
             _statePoll.Start();
+            StartUpdateChecks();
             _code.Focus();
             if (_agentSettings.Enabled) StartAgent();
         };

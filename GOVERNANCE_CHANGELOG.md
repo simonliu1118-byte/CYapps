@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.52 — 2026/10/17
+
+- CYERPAutoQuery 依使用者要求比照 CYERPAutoInput 加入自動更新與正式 Release：新增 `.github/workflows/cyerp-auto-query-release.yml`（只由 main 手動啟動、BUILD=0、tag 不覆寫）；PROJECT_RULES 加入自動更新與 Release 規則。不改其他 App 規則。
+
 ## 2.3.51 — 2026/10/17
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求加入單筆銷貨／銷退單查詢（未收款憑證）：23 開頭 COPR15、24 開頭 COPR16，起迄點選後 Home＋貼上單號並讀回，客戶與日期群組須為空，轉出單號須相符。不改其他 App 規則。

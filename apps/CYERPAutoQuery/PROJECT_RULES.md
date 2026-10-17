@@ -31,17 +31,22 @@
 - 任一自動流程必須支援 `Esc` 緊急停止；停止只中止本程式後續動作，不得替使用者按 ERP「取消」。
 - 操作 ERP 期間持有機器層級鎖 `Local\Chihyuan.SmartErp.UiAutomation`，避免與其他 CY ERP 自動化程式同時送出鍵盤滑鼠。
 
-## 3. Agent 與 CY Web 分工
+## 3. 自動更新與正式 Release
+
+- 比照 CYERPAutoInput（使用者 2026-10-17）：程式只認本專案的正式 GitHub Release（tag `cyerp-auto-query-vX.Y.Z`，非 draft／pre-release，附 `CYERPAutoQuery_VX.Y.Z.zip` 與 `.sha256`）；Actions 測試包不算。啟動後與每 4 小時檢查一次，只有更高的 X.Y.Z 才更新；下載後核對 SHA-256，沒有查詢進行中、也沒有其他視窗時自動套用並重新開啟，否則在關閉程式時套用。`config`、`TEMP`、`logs` 不在套件內，更新後保留。
+- 正式 Release 只由 `main` 手動啟動 `CYERPAutoQuery Release` workflow，`BUILD` 必須為 0、CHANGELOG 須有該版摘要，tag 不覆寫。
+
+## 4. Agent 與 CY Web 分工
 
 - 本程式是 ERP 與 CY Web 之間的中介層（使用者 2026-10-17）：只負責把 ERP 資料正確取出、驗證（查詢條件確實套用、欄位齊全）並整理成結構化資料；查詢範圍限制、資料之間的關聯與呈現（例如銷退單連到原銷貨單、排序分組）、業務規則交給 CY Web。
 - 之後做任何功能時，若判斷某部分放在 CY Web 處理更好，必須主動告知使用者並說明理由，由使用者決定（使用者 2026-10-17）。
 
-## 4. Public source 與本機資料
+## 5. Public source 與本機資料
 
 - Source、README、測試、workflow 與 Release note 不得包含 ERP 營運資料（價格、成本、庫存、倉別、客戶、人員、公司內部路徑或帳密）。測試只使用假資料，或使用者在需求截圖中示範的單一品號代碼。
 - `logs/`、`TEMP/`（ERP 匯出檔，含成本與庫存金額）、診斷輸出只屬本機資料，不得提交 Git；測試只用程式產生的假匯出檔，不得提交真實匯出檔。LOG 預設只記錄長度，不記錄實際品號與欄位內容。
 
-## 5. 共用程式碼
+## 6. 共用程式碼
 
 - 介面與 CYERPAutoInput 保持一致（使用者 2026-10-16：未來合併為微服務）。
 - Win32 視窗／輸入、滑鼠鎖、中央提示、OCR 與視覺主題目前由 CYERPAutoInput 複製必要部分（使用者 2026-10-16 決定）；複製處需註明來源。兩支程式穩定後應收斂為共用函式庫，屆時移除複本。

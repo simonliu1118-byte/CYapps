@@ -61,6 +61,11 @@
 -> 列出結果
 ```
 
+## 自動更新
+
+- 比照 CYERPAutoInput：程式會自己到 GitHub 找更新的正式 Release（測試包不算），下載並核對 SHA-256 後，在沒有查詢進行中時自動換新版並重新開啟；有工作時改在關閉程式時更新。Web 連線設定、TEMP 與 LOG 會保留。
+- 第一次請手動安裝含自動更新的版本（V0.8.0 以上），之後的正式 Release 會自動更新。
+
 ## CY Web 查詢（Agent）
 
 - 主視窗「Web 連線」：填 CY Web 網址、CY Web 超級管理員在「ERP 查詢」頁產生的 Token（只顯示一次），勾選「啟用 Web 查詢」。Token 以 Windows DPAPI 加密存在 `config/agent.json`（換電腦或換 Windows 帳號需重新設定）。
