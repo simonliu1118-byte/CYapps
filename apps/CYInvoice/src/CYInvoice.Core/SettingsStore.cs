@@ -32,6 +32,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
     {
         if (string.IsNullOrWhiteSpace(password)) throw new InvalidOperationException("MO店+ Excel 密碼不可空白");
         settings.MoPasswordEncrypted = protector.Protect(Encoding.UTF8.GetBytes(password));
+        ClearCloudCompanyStamp(settings);
     }
 
     public string MoPassword(Settings settings)
@@ -58,9 +59,37 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
     {
         appKey = appKey.Trim();
         settings.ProductionAppKeyEncrypted = appKey.Length == 0 ? string.Empty : protector.Protect(Encoding.UTF8.GetBytes(appKey));
+        ClearCloudCompanyStamp(settings);
     }
 
     public string ProductionAppKey(Settings settings) => Unprotect(settings.ProductionAppKeyEncrypted);
+
+    // Called only after explicit CYID SUPER_ADMIN provisioning and successful
+    // DPAPI encryption of both credentials. The marker never grants authority.
+    public void StampCloudCompanyProvision(Settings settings, int revision)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (revision < 1 || settings.CloudMode != CloudModes.CloudPreferred ||
+            settings.CloudIdentityProvider != "CYID" || !settings.CloudEmployeeAuthorityReady ||
+            settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0 ||
+            !EightDigits(settings.ProductionInvoice) ||
+            settings.ProductionAppKeyEncrypted.Length == 0 ||
+            settings.MoPasswordEncrypted.Length == 0)
+            throw new InvalidOperationException("無法確認已授權的 CYID 公司卡與本機憑證。");
+        settings.CloudCompanyAppliedRevision = revision;
+        settings.CloudCompanyAppliedWorkspaceId = settings.CloudWorkspaceId;
+        settings.CloudCompanyAppliedDeviceId = settings.CloudDeviceId;
+        settings.CloudCompanyAppliedSellerInvoice = settings.ProductionInvoice;
+    }
+
+    public void ClearCloudCompanyStamp(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.CloudCompanyAppliedRevision = 0;
+        settings.CloudCompanyAppliedWorkspaceId = string.Empty;
+        settings.CloudCompanyAppliedDeviceId = string.Empty;
+        settings.CloudCompanyAppliedSellerInvoice = string.Empty;
+    }
 
     public void SetCloudDeviceToken(Settings settings, string token)
     {
@@ -320,6 +349,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudWorkspaceId = string.Empty;
         settings.CloudDeviceId = string.Empty;
         settings.CloudDeviceTokenEncrypted = string.Empty;
+        ClearCloudCompanyStamp(settings);
         settings.CloudEmployeeAuthorityReady = false;
         settings.CloudIdentityProvider = "BUILT_IN";
         settings.CyIdBindingEncrypted = string.Empty;
@@ -372,6 +402,22 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException("Cloud API URL 必須是有效的 HTTPS 網址");
         if (settings.CloudWorkspaceId.Length > 80 || settings.CloudDeviceId.Length > 80)
             throw new InvalidDataException("Cloud workspace/device ID 格式無效");
+        if (settings.CloudCompanyAppliedRevision < 0)
+            throw new InvalidDataException("公司卡套用版次無效。");
+        if (settings.CloudCompanyAppliedRevision == 0)
+        {
+            if (settings.CloudCompanyAppliedWorkspaceId.Length != 0 ||
+                settings.CloudCompanyAppliedDeviceId.Length != 0 ||
+                settings.CloudCompanyAppliedSellerInvoice.Length != 0)
+                throw new InvalidDataException("公司卡套用紀錄不完整。");
+        }
+        else if (settings.CloudMode != CloudModes.CloudPreferred ||
+            settings.CloudIdentityProvider != "CYID" ||
+            settings.CloudCompanyAppliedWorkspaceId != settings.CloudWorkspaceId ||
+            settings.CloudCompanyAppliedDeviceId != settings.CloudDeviceId ||
+            settings.CloudCompanyAppliedSellerInvoice != settings.ProductionInvoice ||
+            settings.ProductionAppKeyEncrypted.Length == 0 || settings.MoPasswordEncrypted.Length == 0)
+            throw new InvalidDataException("公司卡套用來源已改變，必須重新授權。");
         if (settings.CloudEmployeeAuthorityReady && !HasCloudIdentity(settings))
             throw new InvalidDataException("中央帳號主資料狀態缺少 Cloud Device identity。");
         if (settings.CloudMode == CloudModes.CloudTransition

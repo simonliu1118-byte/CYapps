@@ -47,6 +47,52 @@ internal static class CloudCompanySettingsUsageTests
             "Missing MO password cannot be installed.");
         Check(!new CloudCompanyProvision("12345678",5,"TEST_KEY", "TEST_BAD\u0001MO").Matches(card),
             "Control characters cannot enter Windows DPAPI settings.");
+
+        // Non-secret provenance prevents silent "synced" claims after a cloud
+        // update, manual override, or a different Device binding.
+        var dir = Path.Combine(Path.GetTempPath(), "cyinvoice-v30-card-source-",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var store = new SettingsStore(dir, new TestProtector());
+            var stored = store.LoadOrCreate();
+            stored.CloudMode = CloudModes.CloudPreferred;
+            stored.CloudIdentityProvider = "CYID";
+            stored.CloudEmployeeAuthorityReady = true;
+            stored.CyIdBindingEncrypted = "TEST_SYNTHETIC_DPAPI_BINDING";
+            stored.CloudBaseUrl = "https://cloud.example.test/";
+            stored.CloudWorkspaceId = "ws_synthetic";
+            stored.CloudDeviceId = "dev_synthetic";
+            store.SetCloudDeviceToken(stored, "cydev_" + new string('a', 64));
+            stored.ProductionInvoice = "12345678";
+            store.SetProductionAppKey(stored, "TEST_SYNTHETIC_APPKEY");
+            store.SetMoPassword(stored, "TEST_SYNTHETIC_MO_PASSWORD");
+            store.StampCloudCompanyProvision(stored, 5);
+            store.Save(stored);
+            var persisted = store.LoadOrCreate();
+            Check(CloudCompanySettingsUsage.Inspect(card, persisted).CompanyCardAppliedToCurrentDevice,
+                "Matching DPAPI settings, company revision and Device ID are remembered.");
+            Check(CloudCompanySettingsUsage.Inspect(card with {Revision=6}, persisted).CompanyCardNeedsReview,
+                "Cloud revision changes invalidate the remembered synchronisation claim.");
+            persisted.CloudDeviceId = "dev_other";
+            Check(CloudCompanySettingsUsage.Inspect(card, persisted).CompanyCardNeedsReview,
+                "Company provenance cannot be reused by another Device.");
+            persisted.CloudDeviceId = "dev_synthetic";
+            store.SetProductionAppKey(persisted, "TEST_LOCAL_OVERRIDE");
+            Check(persisted.CloudCompanyAppliedRevision == 0,
+                "A manual App Key edit must erase company source metadata.");
+            store.StampCloudCompanyProvision(persisted, 6);
+            store.SetMoPassword(persisted, "TEST_LOCAL_MO_OVERRIDE");
+            Check(persisted.CloudCompanyAppliedRevision == 0,
+                "A manual MO password edit must erase company source metadata.");
+            store.StampCloudCompanyProvision(persisted, 7);
+            store.ClearCloudIdentity(persisted);
+            Check(persisted.CloudCompanyAppliedRevision == 0 &&
+                  persisted.CloudCompanyAppliedDeviceId.Length == 0,
+                "Cloud identity removal must discard former Device provenance.");
+        }
+        finally { Directory.Delete(dir, recursive:true); }
         return Task.CompletedTask;
     }
 

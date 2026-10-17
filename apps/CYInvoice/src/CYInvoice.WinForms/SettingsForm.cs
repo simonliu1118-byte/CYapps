@@ -397,10 +397,15 @@ internal sealed class SettingsForm : Form
             repository.Settings.SetProductionAppKey(latest,received.AmegoAppKey);
             repository.Settings.SetMoPassword(latest,received.MoExcelPassword);
             latest.ProductionInvoice=received.SellerInvoice;
+            repository.Settings.StampCloudCompanyProvision(latest,received.Revision);
             repository.Settings.Save(latest);
             settings.ProductionInvoice=latest.ProductionInvoice;
             settings.ProductionAppKeyEncrypted=latest.ProductionAppKeyEncrypted;
             settings.MoPasswordEncrypted=latest.MoPasswordEncrypted;
+            settings.CloudCompanyAppliedRevision=latest.CloudCompanyAppliedRevision;
+            settings.CloudCompanyAppliedWorkspaceId=latest.CloudCompanyAppliedWorkspaceId;
+            settings.CloudCompanyAppliedDeviceId=latest.CloudCompanyAppliedDeviceId;
+            settings.CloudCompanyAppliedSellerInvoice=latest.CloudCompanyAppliedSellerInvoice;
             LoadValues();
             MessageBox.Show(this,
                 $"已將公司卡版次 {received.Revision} 套用這台電腦；"+
@@ -435,6 +440,12 @@ internal sealed class SettingsForm : Form
             message+="\n注意：雲端已有 App Key，但本機尚無可用金鑰。";
         if (card is not null && card.HasMoExcelPassword && !state.LocalMoPasswordConfigured)
             message+="\n注意：雲端已有 MO 密碼，但本機尚無可用密碼。";
+        if(state.CompanyCardNeedsReview)
+            message+="\n注意：本機套用的公司卡版次已與目前雲端狀態不同；請由超管確認後重新套用。";
+        else if(state.CompanyCardAppliedToCurrentDevice)
+            message+=$"\n本機已套用這台 Device 的雲端公司卡版次 {card!.Revision}。";
+        else
+            message+="\n本機設定並無與目前雲端公司卡相同版次的套用紀錄。";
         return message+"\n雲端「已設定」不代表兩邊密碼內容相同。"+
             "\n如需使用雲端公司卡，超管可在此明確確認後套用本機；不會自動覆寫。";
     }
@@ -704,6 +715,14 @@ internal sealed class SettingsForm : Form
             if (latest.CloudIdentityProvider != settings.CloudIdentityProvider
                 || latest.CyIdBindingEncrypted != settings.CyIdBindingEncrypted)
                 throw new InvalidOperationException("雲端驗證設定已更新，請重新開啟設定視窗後儲存。");
+            // The company card may have been applied from another window.
+            // Never overwrite its credentials using this old Settings snapshot.
+            if (latest.ProductionInvoice != settings.ProductionInvoice ||
+                latest.ProductionAppKeyEncrypted != settings.ProductionAppKeyEncrypted ||
+                latest.MoPasswordEncrypted != settings.MoPasswordEncrypted ||
+                latest.CloudCompanyAppliedRevision != settings.CloudCompanyAppliedRevision ||
+                latest.CloudCompanyAppliedDeviceId != settings.CloudCompanyAppliedDeviceId)
+                throw new InvalidOperationException("本機公司憑證已在其他視窗更新，請重新開啟設定。");
 
             if (cloudMode.Checked)
             {
@@ -717,7 +736,9 @@ internal sealed class SettingsForm : Form
             }
 
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
+            var manuallyChangedSeller = settings.ProductionInvoice != invoice.Text.Trim();
             settings.ProductionInvoice = invoice.Text.Trim();
+            if (manuallyChangedSeller) repository.Settings.ClearCloudCompanyStamp(settings);
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
             if (moPassword.Text.Length != 0) repository.Settings.SetMoPassword(settings, moPassword.Text);
             repository.Settings.Save(settings);

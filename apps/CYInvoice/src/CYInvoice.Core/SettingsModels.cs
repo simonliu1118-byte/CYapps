@@ -39,6 +39,11 @@ public sealed class Settings
     [JsonPropertyName("prod_invoice")] public string ProductionInvoice { get; set; } = string.Empty;
     [JsonPropertyName("prod_app_key_enc")] public string ProductionAppKeyEncrypted { get; set; } = string.Empty;
     [JsonPropertyName("mo_password_enc")] public string MoPasswordEncrypted { get; set; } = string.Empty;
+    // Source metadata only: no plaintext, ciphertext or CYID session stored here.
+    [JsonPropertyName("cloud_company_applied_revision")] public int CloudCompanyAppliedRevision { get; set; }
+    [JsonPropertyName("cloud_company_applied_workspace_id")] public string CloudCompanyAppliedWorkspaceId { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_company_applied_device_id")] public string CloudCompanyAppliedDeviceId { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_company_applied_seller")] public string CloudCompanyAppliedSellerInvoice { get; set; } = string.Empty;
     [JsonPropertyName("invoice_printer_name")] public string InvoicePrinterName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_mode")] public string CloudMode { get; set; } = CloudModes.LocalOnly;
     [JsonPropertyName("cloud_base_url")] public string CloudBaseUrl { get; set; } = string.Empty;
