@@ -118,6 +118,11 @@ const companyCredentials = credentials;
 const disabledCard = await call('/v1/company-settings/get',companyCredentials);
 assert.equal(disabledCard.status,503);
 assert.equal(disabledCard.body.error.code,'COMPANY_SETTINGS_NOT_READY');
+assert.equal((await call('/v1/device-recovery/preview',credentials)).status,503,
+  'recovery preview cannot run without rollout');
+assert.equal((await call('/v1/device-recovery/claim',credentials,tokens[0],
+  {RECOVERY_ENABLED:'true',SCHEMA_VERSION:'13'})).status,503,
+  'schema13 must reject recovery even with flag set');
 assert.equal((await call('/v1/company-settings/get',companyCredentials,tokens[0],
   {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'13'})).status,503);
 consumer.db.exec(readFileSync('drafts/0015_company_settings.sql','utf8'));

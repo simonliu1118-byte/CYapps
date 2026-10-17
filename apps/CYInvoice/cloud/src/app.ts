@@ -4,6 +4,10 @@ import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleCompanySettings } from "./company-settings-route";
+import { handleRecoveryRoutes } from "./recovery-routes";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation, type RecoveryIssueResult } from "./recovery-issuer";
+import type { CyWebRecoveryRequest } from "./recovery-authority";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
@@ -12,6 +16,7 @@ interface Env extends CyIdEnv {
   SCHEMA_VERSION: string;
   // Feature remains disabled until the original D1 was safely upgraded.
   COMPANY_SETTINGS_ENABLED?: string;
+  RECOVERY_ENABLED?: string;
   COMPANY_SETTINGS_KEY_HEX?: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
@@ -25,6 +30,31 @@ interface Env extends CyIdEnv {
   EMAIL_FROM?: string;
 }
 
+// No public issuance URL: named CYWEB private Service Binding only.
+// Remains disabled until 3.0 D1 migration and recovery maintenance are approved.
+function recoveryEnabled(env: Env): boolean {
+  return env.RECOVERY_ENABLED === "true" && /^[0-9]+$/.test(env.SCHEMA_VERSION)
+    && Number(env.SCHEMA_VERSION) >= 15;
+}
+export class CyInvoiceRecoveryEntrypoint extends WorkerEntrypoint<Env> {
+  private checkReady(): void {
+    if (!recoveryEnabled(this.env) || !usesCyId(this.env))
+      throw new CyIdError(503, "RECOVERY_NOT_READY");
+    cyIdBinding(this.env);
+  }
+  async issueRecoveryInvitation(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    this.checkReady();
+    return issueCyWebRecoveryInvitation(this.env, input);
+  }
+  async getRecoveryInvitationStatus(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    this.checkReady();
+    return recoveryInvitationStatus(this.env, input);
+  }
+  async revokeRecoveryInvitation(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    this.checkReady();
+    return revokeRecoveryInvitation(this.env, input);
+  }
+}
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // CYInvoice V3.0 has exactly one online Employee authority: CYID.
@@ -48,6 +78,12 @@ export default {
         || path.startsWith("/v1/super-admin") || path.startsWith("/v1/onboarding/bootstrap")
         || path === "/v1/bootstrap")
       return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
+    const recoveryPath = path === "/v1/device-recovery/preview" ||
+      path === "/v1/device-recovery/claim";
+    if (recoveryPath && !recoveryEnabled(env))
+      return Response.json({ok:false,error:{code:"RECOVERY_NOT_READY"}},{
+        status:503,headers:{"cache-control":"no-store"}
+      });
     const companySettingsPath = path === "/v1/company-settings/get" ||
       path === "/v1/company-settings/update";
     // Exposing the route requires BOTH an explicit opt-in and the reviewed
@@ -59,6 +95,7 @@ export default {
         status:503,headers:{"cache-control":"no-store"}
       });
     const needsEmployee = request.method === "POST" && [
+      "/v1/device-recovery/preview", "/v1/device-recovery/claim",
       "/v1/devices/revoke", "/v1/devices/rename", "/v1/device-pairings/authorization-email",
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
@@ -69,7 +106,7 @@ export default {
         cyIdBinding(env);
         if (path === "/v1/bootstrap") return cyIdErrorResponse(new CyIdError(409, "IDENTITY_PROVIDER_MISMATCH"));
         if (needsEmployee) {
-          if (!["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
+          if (!recoveryPath && !["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
             await cyIdDevice(request, env);
           const body = await request.clone().json<Record<string, unknown>>().catch(() => null);
           return await withCyIdSession(env, body?.employeeNo, body?.password, async (_, revalidate, verifiedEmail) =>
@@ -82,6 +119,9 @@ export default {
 };
 
 async function dispatchRequest(request: Request, env: Env): Promise<Response> {
+    const recoveryResponse = await handleRecoveryRoutes(request, env);
+    if (recoveryResponse) return recoveryResponse;
+
     const deviceSelfStatusResponse = await handleDeviceSelfStatus(request, env);
     if (deviceSelfStatusResponse) return deviceSelfStatusResponse;
 
