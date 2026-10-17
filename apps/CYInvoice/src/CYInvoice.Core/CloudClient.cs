@@ -16,7 +16,8 @@ public sealed record CloudHealthResult(
     string SchemaVersion,
     string Environment,
     long RoundTripMilliseconds,
-    string ErrorCode);
+    string ErrorCode,
+    string IdentityProvider = "");
 
 public sealed record CloudOnboardingStatus(bool WorkspaceInitialized, string State);
 
@@ -109,7 +110,8 @@ public sealed class CloudClient
                 ReadString(root, "schemaVersion"),
                 ReadString(root, "environment"),
                 timer.ElapsedMilliseconds,
-                ReadErrorCode(root));
+                ReadErrorCode(root),
+                ReadString(root, "identityProvider"));
         }
         catch (CloudApiException error)
         {

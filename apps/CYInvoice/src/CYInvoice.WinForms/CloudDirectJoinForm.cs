@@ -381,7 +381,7 @@ internal sealed partial class CloudDirectJoinForm : Form
             ValidateInput();
             var client = Client();
             var health = await client.CheckHealthAsync(lifetime.Token);
-            var problem = CloudCompatibility.Problem(health);
+            var problem = CloudCompatibility.CyIdEnrollmentProblem(health);
             if (problem.Length != 0) throw new InvalidOperationException(problem);
 
             preview = pairingMethod.Checked
@@ -497,42 +497,18 @@ internal sealed partial class CloudDirectJoinForm : Form
             throw new InvalidDataException("裝置身分驗證結果不一致。");
 
         var binding = await CyIdGateway.DiscoverAsync(http, new Uri(endpoint), token, workspaceId, deviceId, lifetime.Token);
-        if (binding is not null)
-        {
-            settings.CloudBaseUrl = endpoint;
-            settings.CloudWorkspaceId = workspaceId;
-            settings.CloudDeviceId = deviceId;
-            repository.Settings.SetCloudDeviceToken(settings, token);
-            repository.Settings.ConfirmCyIdConfiguration(settings, binding);
-            repository.Settings.ClearCloudPendingDeviceJoin(settings);
-            repository.Settings.Save(settings);
-            IdentityCompleted = true;
-            showMessage("裝置已加入，員工驗證由 CYID 提供。", "加入完成", MessageBoxIcon.Information);
-            DialogResult = DialogResult.OK;
-            Close();
-            return;
-        }
+        if (binding is null)
+            throw new InvalidDataException("目前 Cloud 未提供 CYID 身分綁定；不會回退使用舊 Built-in 帳號。未完成的裝置憑證仍保留供原服務查回。");
 
-        var authorityClient = new CloudEmployeeAuthorityClient(http, new Uri(endpoint), token);
-        var authority = await authorityClient.GetStatusAsync(lifetime.Token);
-        if (authority.State != "cloud" || authority.WorkspaceId != workspaceId || authority.DeviceId != deviceId)
-            throw new InvalidDataException("中央帳號尚未準備好直接加入。");
-
-        var snapshot = await authorityClient.GetSnapshotAsync(lifetime.Token);
-        if (snapshot.WorkspaceId != workspaceId)
-            throw new InvalidDataException("中央帳號 Workspace 不一致。");
-
-        repository.CloudEmployees.ReplaceSnapshot(workspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
         settings.CloudBaseUrl = endpoint;
         settings.CloudWorkspaceId = workspaceId;
         settings.CloudDeviceId = deviceId;
         repository.Settings.SetCloudDeviceToken(settings, token);
+        repository.Settings.ConfirmCyIdConfiguration(settings, binding);
         repository.Settings.ClearCloudPendingDeviceJoin(settings);
-        repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
-
         IdentityCompleted = true;
-        showMessage("裝置已加入，雲端員工帳號已同步。", "加入完成", MessageBoxIcon.Information);
+        showMessage("裝置已加入，員工驗證由 CYID 提供。", "加入完成", MessageBoxIcon.Information);
         DialogResult = DialogResult.OK;
         Close();
     }

@@ -160,7 +160,7 @@ internal sealed class CloudSetupForm : Form
         var normalized = NormalizeBaseUrl(baseUrl.Text);
         var client = new CloudClient(httpClient, new Uri(normalized, UriKind.Absolute));
         var health = await client.CheckHealthAsync(lifetime.Token);
-        var problem = CloudCompatibility.Problem(health);
+        var problem = CloudCompatibility.CyIdEnrollmentProblem(health);
         if (problem.Length != 0) throw new InvalidOperationException(problem);
 
         var onboarding = await client.GetOnboardingStatusAsync(lifetime.Token);
