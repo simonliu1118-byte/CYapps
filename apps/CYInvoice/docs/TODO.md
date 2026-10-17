@@ -10,14 +10,14 @@
 
 ## 2026-10-17 V3.0 版本切片與接續（最新；僅此分支）
 
-### 2026-10-18 執行順序調整：CYWEB 介面重整期間暫緩跨 Repo 接線
+### 2026-10-18 CYWEB V0.9.0 已部署：復原整合已恢復（最新）
 
-- **當次使用者決定**：Claude 正在重整 CYWEB 介面；先不修改／合併／部署 CYWEB PR #151，也不在 CYWEB 插入復原 UI、router、Service Binding 或共用樣式。**延後的是 CYWEB 跨 Repo 串接，不是取消 V3.0 災難復原需求**；已有 CYWEB #151／CYInvoice #476 程式碼與驗證契約保留。
-- **先做（CYInvoice 單 Repo）**：完成最新 head CI 問題排除、3.0-A 已退役 Built-in／Self-hosted 執行入口盤點與安全收斂、舊 Windows ↔ 新 CYID-only Worker 相容性；3.0-B 公司卡開票／MO 匯入憑證來源、每 Device DPAPI 套用／撤銷、離線／版本衝突安全性與必要隔離回歸。
-- **接著做（仍不碰 CYWEB）**：3.0-C 已有 recovery issuer／claim 的回歸與狀態契約審查、0014／0015 的資料保留／rollback／FK 隔離驗證、原 D1 升級／Cloud deployment 的私有備份與 read-only preflight 準備。**不憑這項排序自行執行原 D1 migration、Worker deployment 或 feature flag 啟用**；均須獨立安全門檻及當次授權。
-- **後段再接 CYWEB**：等 Claude 介面重整完成、CYWEB 新基準確認後，才核對 #151 的 UI／權限／Origin／CSRF、私有 Service Binding 與 CYInvoice 的明確 revoked／pending／failed readback 契約，做兩 Repo 整合、真 Email／雙 Windows／DR-01～13。
-- **3.0 最終發行門檻不變**：CYWEB 的復原串接如仍屬 3.0 承諾範圍，未驗收前不能宣稱 3.0 全部完成或正式上線；不提前帶入 3.1／3.2 工作。不重做已完成的 CYID／CYID_ONLY D1。
-
+- [x] 已核對 CYWEB `main` `a46f5666`：UI 重整 #191 合併，正式 CY Web Deploy run `39062483770` 成功；不覆寫新設計系統或重新合併 0.7 版舊程式。
+- [x] CYWEB 新版復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)（`cyweb/cyinvoice-recovery-v30-current-ui`）以 V0.9.0 主幹重新移植 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的 SUPER_ADMIN 復原 Panel、checkpoint、同源／Origin／CYID 驗證、私有 named RPC `CyInvoiceRecoveryEntrypoint`、readback 和測試；exact head `ac9cfdeea65eac9b302ddc84240ac18cd8ffe34e` 的 Governance／Runtime Check／部署設定驗證 **全通過**。PR 仍 Draft、沒有合併或部署；CYWEB 0.9 的 ERP、備份及介面主幹保持原樣。
+- [x] CYInvoice `cloud/src/app.ts` 已有 `CyInvoiceRecoveryEntrypoint` 的私有 RPC 三方法（issue/status/revoke）與 `RECOVERY_ENABLED`、schema >= 15 的 fail-closed gate；**不必重寫或另建 RPC**。#192 的 `CF_CYINVOICE_RECOVERY_SERVICE` binding **預設未啟用**，現行 CYWEB 正式服務沒有新 Recovery RPC。
+- [x] CYInvoice V3.0 當前來源 `e4390290` 的 Governance、Development Cloud 預檢、Cloud Check（含 0014/0015 隔離 SQLite 演練）、Windows Build **四項全部通過**；發版與真實接線仍尚未發生。
+- [ ] **唯一剩餘跨系統上線收尾**：先做好原 CYInvoice D1 的獨立私有備份與回復驗證，經核准逐項執行 0014／0015 Migration 及必要的 CYWEB_RECOVERY issuer profile；更新原 Worker 並驗證功能旗標、保留現有 ID/Token/history；再經獨立檢核部署新 CYWEB（只新增命名 RPC binding）及新 Windows，執行真 Email、兩台 Windows、DR-01～13、舊/新 Windows 與 V2 業務回歸。
+- **安全界線**：不要因 CI 綠燈直接在原 D1 上批次遷移、合併／部署 PR 或撤銷現有裝置；正式資料操作需先有可核對的實際備份／回復證據及部署授權。3.1／3.2 的工作流程、折讓 API 不提前塞進 3.0。
 
 > 新規劃：3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機；3.2 完整折讓 API／折讓跨機；3.3 其餘。舊段落的「V3.0 折讓」是過時版本分類。**完整已做程式、延後問題與來源索引仍在 [#440 TODO](https://github.com/simonliu1118-byte/CYapps/blob/cyinvoice/v3-recovery-invitation-schema/apps/CYInvoice/docs/TODO.md)**，來源 SHA `fe0220c567a5a481daf44ee13c6898340b4d1bd1`；CYWEB Recovery 草稿 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151)。按版回接，勿重寫。
 

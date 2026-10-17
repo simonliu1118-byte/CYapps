@@ -6,7 +6,7 @@
 
 ## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
 
-- **2026-10-18 最新優先序（使用者指定）**：CYWEB 正由 Claude 進行介面重整，**暫不修改 CYWEB repo／#151、不合併、不部署、不處理介面串接**；目前專注 CYInvoice 單 Repo 的 CI、3.0-A 退役入口與舊版相容、3.0-B 公司卡 DPAPI／撤銷與實際業務憑證來源、3.0-C Worker Recovery 契約與隔離 D1 migration／rollback。CYWEB 復原串接排後段，等新介面基準穩定才核對 #151 並做真 Email／雙機／DR-01～13。此為**排程調整，不取消 3.0 Recovery 驗收門檻或開啟生產部署權限**；詳見 TODO 最前段。
+- **2026-10-18 最新交接**：CYWEB Claude UI 重整已部署（`main` `a46f5666`，#191，Deploy `39062483770` success）；使用者已恢復 CYWEB 整合順序。沿用 #151 成果、在最新 CYWEB V0.9.0 主幹另建復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)，精確 head `ac9cfde` 的 Governance／Runtime／部署預檢全通過；PR 草稿、未合併、未部署，保留原正式 UI／ERP／備份。CYInvoice 3.0 `cloud/src/app.ts` **已經有**私有 `CyInvoiceRecoveryEntrypoint`，不需重造。現階段剩下原 D1 正式 0014／0015 和 issuer gate 的備份／回復、Worker feature flag、實際 named RPC binding 接線、真 Email／兩機 DR-01～13 與 V2 相容實機驗收。不可因 CI 綠燈宣稱完成部署；本項取代舊「暫緩 CYWEB」停點，詳見 TODO 最新區段。
 - 當前開發 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) `cyinvoice/v3.0-mode-setup`；3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機、3.2 折讓 API／跨機、3.3 其餘。不要將下方 2026-10-13 歷史階段重新當成待實作清單。
 - 3.0-B 新增公司卡 App Key 精確值防護：Cloud 更新拒絕前後空白、Windows Provision 精確檢查，避免 SettingsStore Trim 後錯誤標示雲端同版；MO 密碼不正規化；D1 隔離測試覆蓋解密中 Device 被撤銷時不返回明文。CYWEB／原 D1／Worker 無變更。
 - 3.0-A 新增 MainForm 退役入口 fail-closed：在歷史 Built-in Cloud 舊設定下隱藏帳號管理、阻止舊 Cloud 密碼復原 API，顯示 Local／CYID-only 提示且不刪歷史或資料；加 WinForms smoke。Local 帳號管理、CYID 外部權威不變。
