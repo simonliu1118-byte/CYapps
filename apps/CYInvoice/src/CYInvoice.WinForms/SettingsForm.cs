@@ -274,7 +274,9 @@ internal sealed class SettingsForm : Form
             var token = repository.Settings.CloudDeviceToken(current);
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("找不到有效的 CYID Cloud Device 身分。");
-            using var http = new HttpClient();
+            // POST carries CYID credentials (and potentially App Key / MO password).
+            // Do not forward it to any Location redirect, even another HTTPS host.
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
             var client = new CloudCompanySettingsClient(http,
                 new Uri(current.CloudBaseUrl, UriKind.Absolute), token);
             var card = await client.GetAsync(login.EnteredEmployeeNo,

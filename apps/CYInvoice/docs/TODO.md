@@ -39,6 +39,7 @@
 - [ ] **3.0-C 待續**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、SettingsStore DPAPI Pending Token **均已接回原始碼**；下一步是對接 CYWEB #151、真 Email／兩台 Windows／DR-01～13，核對原 D1 備份、schema、復原能力並於實際執行前另行授權。
 - [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
 - **禁止提前帶入** #440 的 0015 Work Item、0016／0018／0019 折讓 D1、g0401／g0501、`0d651688` 舊人工折讓 UI 退役；3.0／3.1 保留 V2 人工折讓與作廢。
+- [x] **3.0-A/B/C Windows 敏感 Cloud HTTP 防轉址（Source＋回歸）**：CYID 公司卡查詢／更新／手動套用、直接加入、災難復原 Preview／Claim 均不自動跟隨 HTTP 307／308 等重新導向；避免含 CYID 帳密、邀請碼、Device Token 或業務密鑰的 POST 被原 Cloud URL 的 Location 轉送其他網域。只在既有 Windows 呼叫端設置 `HttpClientHandler.AllowAutoRedirect=false`，不改 API、設備加入資料或正式雲端；在既有 Cloud client compatibility regression 加防回歸源碼檢查。仍需最新 head CI 與真實環境驗證。
 - [x] **3.0 安全收尾：請求前置容量限制**：公司卡 4096 bytes、復原 Preview/Claim 2048 bytes；Worker 在登入 CYID 與查 Device 前已依實際串流位元組數拒絕超量請求（含無 Content-Length），並補合成測試，避免只依靠路由後段的 body cap。這僅是 Source／CI 變更。
 - 目前已完成 3.0-A/B/C 的多個工程切片，但**不是整個 3.0，也不是正式部署**；Worker／原 D1／CYWEB／真光貿未變更。
 

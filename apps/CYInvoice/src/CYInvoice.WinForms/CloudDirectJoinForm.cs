@@ -55,7 +55,7 @@ internal sealed partial class CloudDirectJoinForm : Form
     private bool resourcesDisposed;
 
     public CloudDirectJoinForm(LocalRepository repository)
-        : this(repository, new HttpClient(), null)
+        : this(repository, new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }), null)
     {
     }
 

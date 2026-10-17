@@ -9,6 +9,7 @@
 - **2026-10-18 最新優先序（使用者指定）**：CYWEB 正由 Claude 進行介面重整，**暫不修改 CYWEB repo／#151、不合併、不部署、不處理介面串接**；目前專注 CYInvoice 單 Repo 的 CI、3.0-A 退役入口與舊版相容、3.0-B 公司卡 DPAPI／撤銷與實際業務憑證來源、3.0-C Worker Recovery 契約與隔離 D1 migration／rollback。CYWEB 復原串接排後段，等新介面基準穩定才核對 #151 並做真 Email／雙機／DR-01～13。此為**排程調整，不取消 3.0 Recovery 驗收門檻或開啟生產部署權限**；詳見 TODO 最前段。
 - 當前開發 PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) `cyinvoice/v3.0-mode-setup`；3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機、3.2 折讓 API／跨機、3.3 其餘。不要將下方 2026-10-13 歷史階段重新當成待實作清單。
 - 3.0-A Windows CYID-only 入口與 Worker fail-closed；3.0-B 公司卡 API／Windows DPAPI 手動套用與版本標記；3.0-C 復原 Worker／Windows Pending Token／UI、0014/0015 canonical migrations 均已有工程實作。已完成／未完成逐項只看 `TODO.md` 最前段與最新精確 head CI。
+- 3.0-A/B/C 新增 Windows 防重新導向收尾：SettingsForm 公司卡、CloudDirectJoinForm 加入及 CloudRecoveryForm 復原的敏感 CYID HTTP POST 禁止自動 307／308 轉送，防止密碼／復原碼／Device Token／業務密鑰外洩；既有 Cloud client regression 加 Source guard。只動 CYInvoice；CYWEB 仍暫緩，原 Worker／D1 不動。
 - 本輪安全收尾：公司卡／復原帶 CYID 密碼的輸入在 Worker 開始 Session／Device 核對**之前**執行串流實際位元組容量限制，不以可能缺少的 Content-Length 判斷；僅新增隔離回歸，原 V2 發票、人工折讓和 Local 不改。
 - **遠端不動**：原 CYID activation／CYID_ONLY D1 已完成，不重做；3.0 的 0014/0015 目前只在 Git source，正式原 D1 schema 13、Cloud Worker 0.9.3 保留。兩項功能 feature flag 預設關閉；需獨立核准備份、受控 migration、Worker/CYWEB 接線及真實 DR-01～13／兩模式驗收，不能憑 CI 綠燈宣稱上線。
 - 保留前期完整版程式 [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 作後續分版來源；CYWEB 復原草稿 [#151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 尚未合併。不要重寫既有 CYID、Device、D1。正式 Release 必須另有當次授權。

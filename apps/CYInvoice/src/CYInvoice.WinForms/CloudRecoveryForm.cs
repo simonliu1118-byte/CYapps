@@ -13,7 +13,8 @@ internal sealed class CloudRecoveryForm : Form
 {
     private readonly LocalRepository repository;
     private readonly Settings settings;
-    private readonly HttpClient http = new();
+    // CYID password, recovery code and pending Device Token must never follow a 307/308 redirect.
+    private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false });
     private readonly CancellationTokenSource lifetime = new();
     private readonly TextBox endpoint = UiControls.TextBox(240);
     private readonly TextBox code = UiControls.TextBox(40);
