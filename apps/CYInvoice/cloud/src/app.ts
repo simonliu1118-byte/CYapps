@@ -47,7 +47,10 @@ async function boundedEmployeeBody(request: Request, maxBytes: number): Promise<
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
+        // Request.clone() tees the stream. Awaiting cancellation here
+        // deadlocks while the original request branch is still unread.
+        // Stop reading immediately and reject; cancellation is best-effort.
+        void reader.cancel().catch(() => undefined);
         throw new CyIdError(413, "REQUEST_TOO_LARGE");
       }
       chunks.push(value);
