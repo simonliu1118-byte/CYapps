@@ -252,10 +252,9 @@ internal sealed class SettingsForm : Form
         UpdateCloudControls();
     }
 
-    // CYID Cloud card is authoritative in D1, not the local invoice/AppKey
-    // textboxes. Only safe metadata is returned; secrets never leave Cloud.
-    // CYID Cloud card is authoritative in D1, not the local invoice/AppKey
-    // textboxes. Only safe metadata is returned; secrets never leave Cloud.
+    // The D1 company card is distinct from local DPAPI AMEGO/MO settings;
+    // until secure per-Device provisioning is implemented, invoice operations
+    // still use the original local credentials. Never conflate them.
     private async Task ShowCompanyCardAsync()
     {
         if (resetFlowBusy || !companyCard.Enabled) return;
@@ -285,8 +284,9 @@ internal sealed class SettingsForm : Form
                 : $"公司統編：{card.SellerInvoice}\n設定版次：{card.Revision}\n"+
                   $"光貿 App Key：{(card.HasAmegoAppKey ? "已設定" : "尚未設定")}\n"+
                   $"MO店+ 密碼：{(card.HasMoExcelPassword ? "已設定" : "尚未設定")}";
+            message += CompanyCardLocalUsageMessage(card, current);
             if(MessageBox.Show(this,message+
-                "\n\n雲端金鑰不會顯示，本機欄位不會覆蓋雲端資料。"+
+                "\n\n雲端金鑰不會顯示，也不會自動改寫本機憑證。"+
                 "\n\n是否開啟編輯？只有 CYID 超級管理員有權修改。",
                 "CYID 公司卡",MessageBoxButtons.YesNo,MessageBoxIcon.Information,
                 MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
@@ -312,7 +312,7 @@ internal sealed class SettingsForm : Form
                     $"版次：{updated.Revision}\n"+
                     $"光貿 App Key：{(updated.HasAmegoAppKey?"已設定":"尚未設定")}\n"+
                     $"MO店+ 密碼：{(updated.HasMoExcelPassword?"已設定":"尚未設定")}\n\n"+
-                    "本機設定不受影響。","公司卡已更新",
+                    CompanyCardLocalUsageMessage(updated, current),"公司卡已更新",
                     MessageBoxButtons.OK,MessageBoxIcon.Information);
             }
             catch(Exception error)
@@ -344,6 +344,25 @@ internal sealed class SettingsForm : Form
         {
             if (!IsDisposed && !Disposing) UpdateCloudControls();
         }
+    }
+
+    private static string CompanyCardLocalUsageMessage(
+        CloudCompanySettingsStatus? card, Settings local)
+    {
+        var state=CloudCompanySettingsUsage.Inspect(card, local);
+        var seller=state.HasLocalSellerInvoice?local.ProductionInvoice:"尚未設定";
+        var message="\n\n目前 Windows 實際開票仍使用本機設定："+
+            $"\n統編：{seller}"+
+            $"\nApp Key：{(state.LocalAmegoKeyConfigured?"本機已有加密設定":"本機尚未設定")}"+
+            $"\nMO店+ 密碼：{(state.LocalMoPasswordConfigured?"本機已有加密設定":"本機尚未設定")}";
+        if (state.HasCloudCard && !state.SellerInvoiceMatches)
+            message+="\n注意：雲端公司卡與本機開票統編不一致，請管理員核對。";
+        if (card is not null && card.HasAmegoAppKey && !state.LocalAmegoKeyConfigured)
+            message+="\n注意：雲端已有 App Key，但本機尚無可用金鑰。";
+        if (card is not null && card.HasMoExcelPassword && !state.LocalMoPasswordConfigured)
+            message+="\n注意：雲端已有 MO 密碼，但本機尚無可用密碼。";
+        return message+"\n雲端「已設定」不代表兩邊密碼內容相同。"+
+            "\n本版本尚未自動派送雲端密鑰；本機憑證不會被覆寫。";
     }
 
     // Temporary editor under the existing Settings menu; no new settings

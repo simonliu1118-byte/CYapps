@@ -12,6 +12,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("CYID gateway, protected offline authority and invalidation", CyIdIdentityProviderTests.RunAsync),
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
+    ("cloud company-card status does not replace Windows business credentials", CloudCompanySettingsUsageTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
