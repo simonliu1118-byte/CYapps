@@ -7,8 +7,8 @@ internal static class CloudCompanySettingsUsageTests
     {
         var local = new Settings {
             ProductionInvoice = "12345678",
-            ProductionAppKeyEncrypted = "SYNTHETIC_DPAPI_CIPHERTEXT_ONLY",
-            MoPasswordEncrypted = "SYNTHETIC_MO_CIPHERTEXT_ONLY"
+            ProductionAppKeyEncrypted = "TEST_FAKE_PROTECTED_APPKEY",
+            MoPasswordEncrypted = "TEST_FAKE_PROTECTED_MO"
         };
         var before = (local.ProductionInvoice, local.ProductionAppKeyEncrypted, local.MoPasswordEncrypted);
         var missing = CloudCompanySettingsUsage.Inspect(null, local);
