@@ -198,8 +198,9 @@ assert.equal(count(uncertainDb,"security_audit_events"),1);
 assert.equal(uncertain.sessions().logins,uncertain.sessions().logouts);
 uncertainDb.close();
 
-// Consumed and expired are NOT administrative revocation and must never
-// unlock CYWEB's operation checkpoint by reporting explicit "revoked".
+// Consumed and expired are NOT automatically an administrative revoke.
+// A still-consumed invitation cannot be cancelled, but an expired or failed
+// delivery remains an outstanding unique grant until explicitly cancelled.
 const consumedDb=fixture();
 const consumed=envFor(consumedDb);
 assert.equal((await issueCyWebRecoveryInvitation(consumed.env,input,senderHarness().sender)).status,"sent");
@@ -217,10 +218,37 @@ assert.equal((await issueCyWebRecoveryInvitation(expired.env,input,senderHarness
 expiredDb.prepare("UPDATE device_invitations SET expires_at=? WHERE recovery_operation_id=?")
   .run("2026-01-01T00:00:00.000Z",operationId);
 assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"failed"});
-assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"failed"});
-assert.equal(row(expiredDb).revoked_at,null);
-assert.equal(count(expiredDb,"security_audit_events"),1);
+// A read-only expiry cannot release the unique open-grant index.
+const afterExpiry={...input,operationId:"33333333-3333-4333-8333-333333333333"};
+const retryMailbox=senderHarness();
+await assert.rejects(()=>issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender),
+  /RECOVERY_ALREADY_PENDING/);
+assert.equal(retryMailbox.sent.length,0);
+assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"revoked"},
+  "Explicit cancellation after expiry must release the outstanding Workspace slot");
+assert.ok(row(expiredDb).revoked_at,"Expiry requires an actual persisted revoke proof");
+assert.equal(count(expiredDb,"security_audit_events"),2);
+assert.deepEqual(await recoveryInvitationStatus(expired.env,input),{status:"revoked"});
+assert.deepEqual(await revokeRecoveryInvitation(expired.env,input),{status:"revoked"});
+assert.equal(count(expiredDb,"security_audit_events"),2,"Idempotent expired cancellation");
+assert.equal((await issueCyWebRecoveryInvitation(expired.env,afterExpiry,retryMailbox.sender)).status,"sent");
+assert.equal(retryMailbox.sent.length,1,"Only a fresh operation may send another code");
+assert.equal(count(expiredDb,"devices"),1,"Cancelling expiry never revokes a Device");
 expiredDb.close();
+
+// Explicit cancellation must also release a delivery-failed but not consumed
+// operation; it cannot silently recreate or send a code from that operation.
+const deliveryFailedDb=fixture();
+const deliveryFailed=envFor(deliveryFailedDb);
+assert.equal((await issueCyWebRecoveryInvitation(deliveryFailed.env,input,senderHarness().sender)).status,"sent");
+deliveryFailedDb.prepare("UPDATE device_invitations SET delivery_state='failed' WHERE recovery_operation_id=?")
+  .run(operationId);
+assert.deepEqual(await recoveryInvitationStatus(deliveryFailed.env,input),{status:"failed"});
+assert.deepEqual(await revokeRecoveryInvitation(deliveryFailed.env,input),{status:"revoked"});
+assert.equal(row(deliveryFailedDb).delivery_state,"failed");
+assert.equal(count(deliveryFailedDb,"security_audit_events"),2);
+assert.equal((await issueCyWebRecoveryInvitation(deliveryFailed.env,afterExpiry,senderHarness().sender)).status,"sent");
+deliveryFailedDb.close();
 
 // D1 can COMMIT the revoke and then lose the response. Caller must keep
 // the original operation ID and use read-only status, not revoke/reissue.

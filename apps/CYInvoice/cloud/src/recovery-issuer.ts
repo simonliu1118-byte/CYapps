@@ -257,9 +257,11 @@ export async function revokeRecoveryInvitation(
     if (row.revoked_at) return { status: "revoked" };
     const fresh = await recheckActor(verifyNow, actor);
     const now = new Date().toISOString();
-    // Expired invitations are not renamed "revoked" merely to unlock another
-    // operation. A fresh status lookup must preserve their distinct meaning.
-    if (row.expires_at <= now) return { status: "failed" };
+    // Expiry and delivery failure make the code unclaimable, but they do
+    // NOT release the unique outstanding Workspace grant. Allow an explicit
+    // SUPER_ADMIN cancellation of the original operation after expiry, with
+    // the same SQL-time consumed/revoked guard and append-only Audit.
+    // Read-only status remains "failed" until this explicit revoke commits.
     try {
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO cyweb_recovery_issuer_guard(passed)
@@ -271,15 +273,13 @@ export async function revokeRecoveryInvitation(
             WHERE i.invitation_id=?1 AND i.workspace_id=?2 AND i.recovery_operation_id=?3
               AND i.issuer_channel='CYWEB' AND i.purpose='RECOVERY'
               AND i.revoked_at IS NULL AND i.consumed_at IS NULL
-              AND i.expires_at > ?4
           ) THEN 1 ELSE 0 END`)
-          .bind(row.invitation_id, actor.workspaceId, actor.operationId, now),
+          .bind(row.invitation_id, actor.workspaceId, actor.operationId),
         env.DB.prepare(`UPDATE device_invitations SET revoked_at=?1
           WHERE invitation_id=?2 AND workspace_id=?3
             AND issuer_channel='CYWEB' AND purpose='RECOVERY'
-            AND consumed_at IS NULL AND revoked_at IS NULL
-            AND expires_at > ?4`)
-          .bind(now, row.invitation_id, fresh.workspaceId, now),
+            AND consumed_at IS NULL AND revoked_at IS NULL`)
+          .bind(now, row.invitation_id, fresh.workspaceId),
         env.DB.prepare(`INSERT INTO security_audit_events (
             event_id,workspace_id,event_type,outcome,actor_employee_id,
             invitation_id,reason_code,request_id,occurred_at,
