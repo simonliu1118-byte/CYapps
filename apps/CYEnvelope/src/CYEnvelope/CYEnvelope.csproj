@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>../../assets/ENV.ico</ApplicationIcon>
+    <ApplicationManifest>../../assets/app.manifest</ApplicationManifest>
+    <AssemblyName>CYEnvelope</AssemblyName>
+    <RootNamespace>CYEnvelope</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="../../VERSION" Link="VERSION" CopyToOutputDirectory="Always" />
+    <Content Include="../../BUILD" Link="BUILD" CopyToOutputDirectory="Always" />
+    <Resource Include="../../assets/ENV.ico" Link="ENV.ico" />
+    <EmbeddedResource Include="postal.tsv" />
+    <Content Include="Fonts/FONT_LICENSES.txt" Link="FONT_LICENSES.txt" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+  <!-- Bundled fonts are fetched by tools/fetch-fonts.ps1 (pinned URL + SHA-256) and are not stored in Git.
+       Without them the build still works and the Settings list marks them as not included. -->
+  <ItemGroup>
+    <Resource Include="Fonts/NotoSansTC-Regular.otf" Condition="Exists('Fonts/NotoSansTC-Regular.otf')" />
+    <Resource Include="Fonts/NotoSerifTC-Regular.otf" Condition="Exists('Fonts/NotoSerifTC-Regular.otf')" />
+    <Resource Include="Fonts/LXGWWenKaiTC-Regular.ttf" Condition="Exists('Fonts/LXGWWenKaiTC-Regular.ttf')" />
+  </ItemGroup>
+</Project>

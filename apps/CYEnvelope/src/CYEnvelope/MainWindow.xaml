@@ -1,0 +1,103 @@
+<Window x:Class="CYEnvelope.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:CYEnvelope"
+        Title="CYEnvelope" Width="1120" Height="800" MinWidth="960" MinHeight="720"
+        WindowStartupLocation="CenterScreen" Icon="/CYEnvelope;component/ENV.ico"
+        Background="#F8FAFC" Foreground="#1F2937" FontFamily="Microsoft JhengHei UI, Microsoft JhengHei, Segoe UI" FontSize="14"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <DockPanel>
+    <Border KeyboardNavigation.TabIndex="30" DockPanel.Dock="Top" Background="White" BorderBrush="#E5E8EC" BorderThickness="0,0,0,1" Padding="20,12">
+      <StackPanel Orientation="Horizontal">
+        <Button Content="聯絡人資料" Style="{StaticResource ToolbarButton}" Click="ContactsClick"/>
+        <Button Content="列印設定" Style="{StaticResource ToolbarButton}" Click="PrinterClick"/>
+        <Button Content="校正列印" Style="{StaticResource ToolbarButton}" Click="CalibrationClick"/>
+        <Button Content="格式設定" Style="{StaticResource ToolbarButton}" Click="FormatClick"/>
+        <Button Content="方框文字" Style="{StaticResource ToolbarButton}" Click="FrameClick"/>
+        <Button Content="設定" Style="{StaticResource ToolbarButton}" Click="SettingsClick"/>
+      </StackPanel>
+    </Border>
+    <Border KeyboardNavigation.TabIndex="20" DockPanel.Dock="Bottom" Background="White" BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="20,12">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="StatusText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" Text="請核對收件資料，再列印至預印信封。"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal">
+          <Button x:Name="ReprintButton" Content="重印上一筆" MinWidth="104" Margin="0,0,8,0" IsEnabled="False" Click="ReprintClick"
+                  ToolTip="帶回剛才列印的資料；仍需自己按「列印信封」（Ctrl+R）"/>
+          <Button x:Name="ClearButton" Content="清空" MinWidth="84" Margin="0,0,8,0" Click="ClearClick"/>
+          <Button x:Name="PrintButton" Content="列印信封" MinWidth="120" Style="{StaticResource PrimaryButton}" Click="PrintClick" ToolTip="列印（Ctrl+P）"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid KeyboardNavigation.TabIndex="10" Margin="20,16">
+      <Grid.ColumnDefinitions><ColumnDefinition x:Name="EntryColumn" Width="400"/><ColumnDefinition x:Name="EntryGap" Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+      <Border x:Name="EntryPanel" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+            <TextBlock Text="收件資料" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="輸入後同步更新信封預覽" Style="{StaticResource SecondaryText}" Margin="0,4,0,0"/>
+          </StackPanel>
+          <ScrollViewer x:Name="EntryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+              <StackPanel Margin="0,0,0,12"><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
+                <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
+              </StackPanel>
+              <Grid><ListBox x:Name="Suggestions" MaxHeight="108" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
+                       KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,12" AutomationProperties.Name="符合的聯絡人"/></Grid>
+              <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition Width="64"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <TextBlock x:Name="PostalLabel" Text="郵遞區號（3碼）" VerticalAlignment="Center"/>
+                <TextBox x:Name="PostalBox" Grid.Column="2" MaxLength="3" TextChanged="PostalChanged" KeyDown="PostalKeyDown" HorizontalContentAlignment="Center" AutomationProperties.Name="郵遞區號"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <TextBlock Text="地址" VerticalAlignment="Center"/>
+                <Grid Grid.Column="2">
+                  <ComboBox x:Name="AddressChoice" DisplayMemberPath="Label" SelectionChanged="AddressChoiceChanged" AutomationProperties.Name="已存地址" ToolTip="選取已存地址" IsEnabled="{Binding HasItems, RelativeSource={RelativeSource Self}}"/>
+                  <TextBlock Text="已存地址" Margin="8,0,28,0" VerticalAlignment="Center" Foreground="#98A2B3" IsHitTestVisible="False">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                      <DataTrigger Binding="{Binding HasItems, ElementName=AddressChoice}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                  </TextBlock>
+                </Grid>
+              </Grid>
+              <Grid><TextBox x:Name="AddressBox" TextChanged="AddressTextChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
+                       AcceptsReturn="False" TextWrapping="Wrap" MinHeight="48" Margin="0,0,0,12" AutomationProperties.Name="地址"/></Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <TextBlock Text="電話（選填）" VerticalAlignment="Center"/>
+                <Grid Grid.Column="2">
+                  <ComboBox x:Name="PhoneChoice" DisplayMemberPath="Display" SelectionChanged="PhoneChoiceChanged" AutomationProperties.Name="已存電話" ToolTip="選取已存電話" IsEnabled="{Binding HasItems, RelativeSource={RelativeSource Self}}"/>
+                  <TextBlock Text="已存電話" Margin="8,0,28,0" VerticalAlignment="Center" Foreground="#98A2B3" IsHitTestVisible="False">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                      <DataTrigger Binding="{Binding HasItems, ElementName=PhoneChoice}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                  </TextBlock>
+                </Grid>
+              </Grid>
+              <Grid><TextBox x:Name="PhoneBox" TextChanged="InputChanged" KeyDown="PhoneKeyDown" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,14" AutomationProperties.Name="電話"/></Grid>
+              <Border BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="0,14,0,0">
+                <StackPanel>
+                  <TextBlock Margin="0,0,0,10"><Run Text="郵件種類" FontWeight="SemiBold"/><Run Text="　也可直接點右側信封的表格" Foreground="#667085" FontSize="13"/></TextBlock>
+                  <WrapPanel x:Name="DeliveryPanel"/>
+                  <CheckBox x:Name="ShowFrameBox" Content="印出方框文字" Margin="0,0,0,8" Checked="InputChanged" Unchecked="InputChanged"/>
+                  <ComboBox x:Name="FrameChoice" SelectionChanged="InputChanged" AutomationProperties.Name="方框文字"
+                            IsEnabled="{Binding IsChecked, ElementName=ShowFrameBox}"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+      <DockPanel Grid.Column="2">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+          <TextBlock Text="信封預覽" Style="{StaticResource SectionTitle}"/>
+          <TextBlock x:Name="FormatName" Style="{StaticResource SecondaryText}" Margin="0,4,0,0"/>
+        </StackPanel>
+        <TextBlock x:Name="PreviewHint" DockPanel.Dock="Bottom" Text="紅線為信封底圖，僅套印黑色內容。" Style="{StaticResource SecondaryText}" Margin="0,10,0,0"/>
+        <Border Background="#EEF1F5" BorderBrush="#DDE1E6" BorderThickness="1" Padding="16,12">
+          <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid><local:VisualHost x:Name="PreviewHost"/><Canvas x:Name="DirectLayer"/></Grid>
+          </Viewbox>
+        </Border>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</Window>
