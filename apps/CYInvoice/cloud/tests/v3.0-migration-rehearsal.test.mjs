@@ -89,9 +89,18 @@ try {
         }
         assert.equal(trial.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='cloud_employees'").get().n,0);
         const newSchema=schema(trial);
-        for(const item of before)
-          assert.deepEqual(newSchema.find(x=>x.type===item.type&&x.name===item.name),
-            item,'existing schema must remain unchanged for original data');
+        const intentionallyExtended=new Set([
+          'device_pairing_codes','device_invitations','security_audit_events'
+        ]);
+        for(const item of before) {
+          const actual=newSchema.find(x=>x.type===item.type&&x.name===item.name);
+          assert.ok(actual,'pre-existing schema objects must not disappear: '+item.name);
+          if (!intentionallyExtended.has(item.name))
+            assert.deepEqual(actual,item,'unrelated schema objects must remain unchanged');
+        }
+        // Recovery 0014 intentionally ADDs columns to pairing/invites and
+        // widens security Audit event types; historical rows remain identical.
+        // These three table DDLs must change, not remain byte-for-byte equal.
         for(const table of expectedTables)
           assert.ok(trial.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table));
         assert.ok(trial.prepare("PRAGMA table_info(device_pairing_codes)").all().some(x=>x.name==='revoked_at'));
