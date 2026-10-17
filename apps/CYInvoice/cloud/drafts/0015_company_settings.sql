@@ -1,7 +1,7 @@
--- Draft-only CYID company configuration. Not a production migration.
--- Source-only candidate for V3.0. Not included under migrations/.
--- The final 3.0 migration number, compatibility and rollback must be reviewed
--- independently of the 3.1 Work Item and 3.2 allowance D1 schemas.
+-- CYInvoice V3.0-only candidate; source-only, not a deployed D1 migration.
+-- Stage after existing storage13 and recovery 0014. V3.1/3.2 Draft
+-- identifiers in legacy PR #440 must be rebased around this 0015 slot.
+-- Existing company/Device/CYID_ONLY history is never rebuilt or dropped.
 -- Secrets are AES-GCM ciphertext. KEK is an independently injected Worker secret,
 -- NEVER this database, Git, any Audit, or a public artifact.
 CREATE TABLE company_settings (
