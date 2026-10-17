@@ -8,6 +8,7 @@ import {createHash} from "node:crypto";
 const output=await build({entryPoints:["src/company-settings.ts"],bundle:true,write:false,
   platform:"node",format:"esm",target:"node24"});
 const {changeCompanySettings:change,getCompanySettingsStatus:getStatus,
+  provisionCompanySettingsToDevice:provision,
   loadAmegoCompanySettingsForGateway:loadGateway}=await import("data:text/javascript;base64,"+
     Buffer.from(output.outputFiles[0].text).toString("base64"));
 const ws="ws_synthetic";
@@ -45,7 +46,26 @@ const authority={revalidate:async()=>principal};
 const input={workspaceId:ws,deviceId:dev,expectedRevision:0,sellerInvoice:"12345678",
   amegoAppKey:{action:"replace",value:"SYNTHETIC_APP_KEY_DO_NOT_USE"},
   moExcelPassword:{action:"replace",value:"SYNTHETIC_MO_PASSWORD"}};
+// AMEGO App Key is trimmed by the existing Windows SettingsStore. A cloud
+// value with spaces cannot safely receive an "applied revision" stamp.
+await assert.rejects(()=>change(f.db,{
+  ...input,amegoAppKey:{action:"replace",value:" PADDED_TEST_KEY "}
+},authority,key),/COMPANY_SETTINGS_INVALID/);
+assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM company_settings").get().n,0,
+  "Rejected App Key must not create a card or audit event");
 assert.equal((await change(f.db,input,authority,key)).revision,1);
+const provisioned=await provision(f.db,ws,dev,authority,key);
+assert.equal(provisioned.amegoAppKey,input.amegoAppKey.value);
+// Revoke a Device during the decryption/authentication window; a previously
+// authenticated caller must not receive already decrypted company secrets.
+let revokedDuringProvisionCalls=0;
+const revokeDuringProvision={async revalidate(){
+  if(++revokedDuringProvisionCalls===2)
+    f.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(dev);
+  return principal;
+}};
+await assert.rejects(()=>provision(f.db,ws,dev,revokeDuringProvision,key),/COMPANY_DEVICE_REVOKED/);
+f.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(dev);
 const row=f.sql.prepare("SELECT * FROM company_settings").get();
 assert.equal(row.seller_invoice,"12345678");
 assert.equal(row.amego_app_key_ciphertext.includes("SYNTHETIC"),false);
@@ -142,6 +162,11 @@ assert.equal((await call("get",credentials)).data.company,null);
 const req={...credentials,expectedRevision:0,sellerInvoice:"12345678",
   amegoAppKey:{action:"replace",value:"SYNTHETIC_ONLY_KEY"},
   moExcelPassword:{action:"replace",value:"SYNTHETIC_ONLY_MO"}};
+const padded=await call("update",{...req,amegoAppKey:{
+  action:"replace",value:" SYNTHETIC_ONLY_KEY "
+}});
+assert.equal(padded.status,400,"HTTP must reject App Keys that Windows would trim");
+assert.equal(g.sql.prepare("SELECT COUNT(*) n FROM company_settings").get().n,0);
 const created=await call("update",req);
 assert.equal(created.status,200,JSON.stringify(created));
 assert.deepEqual(created.data.company,{sellerInvoice:"12345678",revision:1,

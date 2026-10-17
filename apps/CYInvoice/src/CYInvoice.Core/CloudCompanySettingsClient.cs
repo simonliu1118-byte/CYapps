@@ -32,6 +32,9 @@ public sealed record CloudCompanyProvision(
         card.HasAmegoAppKey && card.HasMoExcelPassword &&
         !string.IsNullOrWhiteSpace(AmegoAppKey) && AmegoAppKey.Length <= 512 &&
         !AmegoAppKey.Any(char.IsControl) &&
+        // Local SettingsStore trims App Keys. Never stamp a cloud revision if
+        // the protected Windows value would differ from the cloud secret.
+        AmegoAppKey == AmegoAppKey.Trim() &&
         !string.IsNullOrWhiteSpace(MoExcelPassword) && MoExcelPassword.Length <= 256 &&
         !MoExcelPassword.Any(char.IsControl);
 }

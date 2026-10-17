@@ -1,7 +1,7 @@
-// V3.0 source-only CYID company settings authority; no HTTP route is installed.
-// Company tables are draft SQL and are NOT deployed or applied by CI.
-// Callers must NOT forward decrypted values to clients. A separate, explicitly
-// authorized Windows DPAPI cache contract is needed before exposing credentials.
+// Staged V3.0 CYID company settings. The HTTP route is disabled by default
+// until an explicitly approved original-D1 migration and feature enablement.
+// Decrypted credentials are returned only by explicit SUPER_ADMIN provisioning
+// to the same authenticated Device; normal reads never include secrets.
 export type SecretChange =
   | { action: "keep" }
   | { action: "clear" }
@@ -85,11 +85,14 @@ function assertScope(workspaceId: string, deviceId: string): void {
       || !/^dev_[0-9a-f-]{36}$/.test(deviceId))
     throw new Error("COMPANY_SCOPE_INVALID");
 }
-function validChange(value: SecretChange, maxLength: number): boolean {
+function validChange(value: SecretChange, maxLength: number, preserveExactValue = false): boolean {
   if (!value || !["keep","clear","replace"].includes(value.action)) return false;
   if (value.action === "replace")
     return typeof value.value === "string" && value.value.length>0
-      && value.value.length<=maxLength && !/[\u0000-\u001f\u007f]/u.test(value.value);
+      && value.value.length<=maxLength && !/[\u0000-\u001f\u007f]/u.test(value.value)
+      // SettingsStore.SetProductionAppKey trims the AMEGO key before DPAPI.
+      // Reject input that would be changed silently after provisioning.
+      && (!preserveExactValue || value.value === value.value.trim());
   return !("value" in value);
 }
 function superAdmin(p: CurrentCyIdSuperAdmin | null, workspaceId: string): p is CurrentCyIdSuperAdmin {
@@ -122,7 +125,7 @@ export async function changeCompanySettings(db: D1Database,
   assertScope(input.workspaceId,input.deviceId);
   if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision<0
     || !/^[0-9]{8}$/.test(input.sellerInvoice)
-    || !validChange(input.amegoAppKey,512) || !validChange(input.moExcelPassword,256))
+    || !validChange(input.amegoAppKey,512,true) || !validChange(input.moExcelPassword,256))
     throw new Error("COMPANY_SETTINGS_INVALID");
   const before=await authority.revalidate();
   if (!superAdmin(before,input.workspaceId)) throw new Error("COMPANY_SUPER_ADMIN_REQUIRED");

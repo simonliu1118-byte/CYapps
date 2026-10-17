@@ -45,6 +45,10 @@ internal static class CloudCompanySettingsUsageTests
             "Missing AMEGO key cannot be installed.");
         Check(!new CloudCompanyProvision("12345678",5,"TEST_KEY",string.Empty).Matches(card),
             "Missing MO password cannot be installed.");
+        Check(!new CloudCompanyProvision("12345678",5," TEST_KEY ", "TEST_MO").Matches(card),
+            "A padded AMEGO key must not be silently trimmed and stamped as synchronized.");
+        Check(new CloudCompanyProvision("12345678",5,"TEST_KEY", " TEST_MO ").Matches(card),
+            "MO password spaces can be intentional and must not be normalized.");
         Check(!new CloudCompanyProvision("12345678",5,"TEST_KEY", "TEST_BAD\u0001MO").Matches(card),
             "Control characters cannot enter Windows DPAPI settings.");
 
