@@ -8,7 +8,7 @@ import {createHash} from "node:crypto";
 const output=await build({entryPoints:["src/company-settings.ts"],bundle:true,write:false,
   platform:"node",format:"esm",target:"node24"});
 const {changeCompanySettings:change,getCompanySettingsStatus:getStatus,
-  provisionCompanySettingsToDevice:provision,
+  provisionCompanySettingsToDevice:provisionToDevice,
   loadAmegoCompanySettingsForGateway:loadGateway}=await import("data:text/javascript;base64,"+
     Buffer.from(output.outputFiles[0].text).toString("base64"));
 const ws="ws_synthetic";
@@ -54,7 +54,7 @@ await assert.rejects(()=>change(f.db,{
 assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM company_settings").get().n,0,
   "Rejected App Key must not create a card or audit event");
 assert.equal((await change(f.db,input,authority,key)).revision,1);
-const provisioned=await provision(f.db,ws,dev,authority,key);
+const provisioned=await provisionToDevice(f.db,ws,dev,authority,key);
 assert.equal(provisioned.amegoAppKey,input.amegoAppKey.value);
 // Revoke a Device during the decryption/authentication window; a previously
 // authenticated caller must not receive already decrypted company secrets.
@@ -64,7 +64,7 @@ const revokeDuringProvision={async revalidate(){
     f.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(dev);
   return principal;
 }};
-await assert.rejects(()=>provision(f.db,ws,dev,revokeDuringProvision,key),/COMPANY_DEVICE_REVOKED/);
+await assert.rejects(()=>provisionToDevice(f.db,ws,dev,revokeDuringProvision,key),/COMPANY_DEVICE_REVOKED/);
 f.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(dev);
 const row=f.sql.prepare("SELECT * FROM company_settings").get();
 assert.equal(row.seller_invoice,"12345678");
