@@ -100,11 +100,12 @@ export function readCyIdPreparation(env) {
 }
 
 // Read deployment metadata only. This is not CYID registry/App Access authority.
-export function providerConfiguration(settings) {
+export function providerConfiguration(settings, environment = 'development') {
+  check(['development','production'].includes(environment), 'CYID_PROVIDER_ENVIRONMENT_INVALID');
   const bindings = settings?.bindings;
   check(Array.isArray(bindings) && new Set(bindings.map(b => b.name)).size === bindings.length, 'CYID_PROVIDER_SETTINGS_INVALID');
   const plain = name => bindings.find(b => b.name === name && b.type === 'plain_text')?.text;
-  check(plain('APP_ENV') === 'development' && plain('API_VERSION') === 'v1', 'CYID_PROVIDER_ENVIRONMENT_INVALID');
+  check(plain('APP_ENV') === environment && plain('API_VERSION') === 'v1', 'CYID_PROVIDER_ENVIRONMENT_INVALID');
   const databases = bindings.filter(b => b.type === 'd1');
   check(databases.length === 1 && databases[0].name === 'DB' && uuid(databases[0].id), 'CYID_PROVIDER_DATABASE_BINDING_INVALID');
   const scope = {applicationId:plain('CYINVOICE_APPLICATION_ID'), workspaceId:plain('CYINVOICE_WORKSPACE_ID')};
@@ -123,6 +124,29 @@ export function resolveCyIdPreparation(provider, worker, originalWorkspaces) {
     'SINGLE_ORIGINAL_WORKSPACE_REQUIRED');
   return readCyIdPreparation({CYID_WORKER_NAME:worker, IDENTITY_APPLICATION_ID:scope.applicationId,
     IDENTITY_WORKSPACE_ID:scope.workspaceId, IDENTITY_CYINVOICE_WORKSPACE_ID:originalWorkspaces[0].workspace_id});
+}
+
+// An already activated consumer owns its fixed scope bindings. Provider metadata
+// is not an App registry: absence of legacy static vars must not retarget it.
+export function resolveActiveCyId(settings, worker, originalWorkspaces) {
+  check(Array.isArray(originalWorkspaces) && originalWorkspaces.length === 1 && originalWorkspaces[0].status === 'active',
+    'SINGLE_ORIGINAL_WORKSPACE_REQUIRED');
+  const plain = name => settings.bindings.find(b => b.name === name && b.type === 'plain_text')?.text;
+  const input = readCyIdPreparation({CYID_WORKER_NAME:worker,
+    ...Object.fromEntries(identityScopeNames.map(name => [name,plain(name)]))});
+  check(input.IDENTITY_CYINVOICE_WORKSPACE_ID === originalWorkspaces[0].workspace_id,
+    'CYID_ORIGINAL_WORKSPACE_REQUIRED');
+  return input;
+}
+
+export function preservedDeployConfig(config, settings, activating = false) {
+  const vars = Object.fromEntries(settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
+  const services = serviceBindings(settings.bindings).map(({name,type,...b}) => ({binding:name,...b}));
+  // Code updates preserve every active runtime var, including schema, feature
+  // gates and fixed scopes. First-time preparation still uses source defaults.
+  const merged = vars.CYID_ENABLED === 'true' ? {...config.vars,...vars} : {...vars,...config.vars};
+  return {...config, vars:{...merged,CYID_ENABLED:activating?'true':vars.CYID_ENABLED??'false'},
+    ...(services.length ? {services} : {})};
 }
 
 // Configuration preparation only: no CYID authority lookup, registration or switch.
@@ -190,6 +214,13 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     (activating || activeCyId ? config.vars?.CYID_ENABLED === 'true' : config.vars?.CYID_ENABLED !== 'true'),
     'BUILT_IN_AUTHORITY_REQUIRED');
   const enabled = activating || activeCyId ? 'true' : 'false';
+  if (activeCyId) {
+    for (const name of ['SCHEMA_VERSION','COMPANY_SETTINGS_ENABLED','RECOVERY_ENABLED']) {
+      const original = audit.settings.bindings.find(b => b.name === name && b.type === 'plain_text');
+      check(!original || !Object.hasOwn(config.vars, name) || config.vars[name] === original.text,
+        'ACTIVE_RUNTIME_SETTING_CHANGE');
+    }
+  }
   const vars = { ...Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text])),
     ...config.vars, CYID_ENABLED:enabled };
   const preserved = audit.settings.bindings.filter(b => b.type !== 'plain_text');
@@ -258,8 +289,8 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
   const active = await activeDeployment(request, config.name);
   check(active.versionId === created.id && digest(bindingState(active.settings.bindings)) === digest(audit.expectedBindings),
     'DEPLOYED_VERSION_MISMATCH');
-  console.log(activating ? 'Reviewed development business code deployed at 100% with CYID enabled; original Workspace retained. Live Employee/Device acceptance remains pending.' :
-    'Reviewed development business code deployed at 100% with CYID disabled. Expired test history retained; no cleanup retry or Secret replacement.');
+  console.log(enabled === 'true' ? 'Reviewed business code deployed at 100% with CYID retained; live Employee/Device acceptance remains separate.' :
+    'Reviewed business code deployed at 100% with CYID disabled. Expired test history retained; no cleanup retry or Secret replacement.');
 }
 
 export function checkMigrations(applied, canonical, requireComplete = false) {
@@ -359,6 +390,10 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   check(['preflight','deploy','prepare-cyid','activate-cyid'].includes(operation), 'DEPLOYMENT_MODE_INVALID');
   check(typeof env.CYID_WORKER_NAME === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(env.CYID_WORKER_NAME),
     'SHARED_CYID_PROVIDER_SETTING_REQUIRED');
+  const providerEnvironment = env.CYINVOICE_CYID_ENVIRONMENT ?? 'development';
+  check(['development','production'].includes(providerEnvironment), 'CYID_PROVIDER_ENVIRONMENT_INVALID');
+  const retainedProbeProvider = env.CYINVOICE_RETAINED_PROBE_WORKER_NAME || env.CYID_WORKER_NAME;
+  check(/^[a-z0-9][a-z0-9-]{0,62}$/.test(retainedProbeProvider), 'RETAINED_PROBE_SCOPE_INVALID');
   const config = JSON.parse(fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8'));
   const canonical = fs.readdirSync(path.join(root, 'migrations')).filter(n => /^\d{4}_.*\.sql$/.test(n)).sort();
   const expectedVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
@@ -384,6 +419,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     check(Boolean(audit.cyIdPreparation) === (operation === 'prepare-cyid'), 'AUDIT_DEPLOYMENT_MODE_MISMATCH');
     check(Boolean(audit.cyIdActivation) === (operation === 'activate-cyid'), 'AUDIT_DEPLOYMENT_MODE_MISMATCH');
     check(audit.provider?.worker === env.CYID_WORKER_NAME, 'AUDIT_SCOPE_MISMATCH');
+    check(audit.provider.environment === providerEnvironment, 'AUDIT_SCOPE_MISMATCH');
     check(audit.sourceIdentity === sourceIdentity, 'AUDIT_SCOPE_MISMATCH');
     check(audit.worker === config.name && uuid(audit.databaseId) && audit.databaseId !== audit.provider.databaseId, 'AUDIT_SCOPE_MISMATCH');
     const deployConfig = JSON.parse(fs.readFileSync(path.join(root, 'wrangler.deploy.generated.jsonc'), 'utf8'));
@@ -392,16 +428,17 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
       {sql:'SELECT name FROM d1_migrations ORDER BY id'});
     check(Array.isArray(results) && results.length === 1 && results[0].success === true, 'D1_READ_RESULT_INVALID');
     checkMigrations(results[0].results.map(r => r.name), canonical, true);
+    check(String(deployConfig.vars?.SCHEMA_VERSION) === String(canonical.length), 'DEPLOYMENT_SCHEMA_MARKER_MISMATCH');
     await deployReviewedVersion(audit, deployConfig, fs.readFileSync(bundlePath, 'utf8'), request,
       value => fs.writeFileSync(statePath, JSON.stringify(value), {mode:0o600}));
     return;
   }
   check(env.CYID_WORKER_NAME !== config.name, 'CYID_PROVIDER_TARGET_INVALID');
   const provider = await activeDeployment(request, env.CYID_WORKER_NAME);
-  const providerConfig = providerConfiguration(provider.settings);
+  const providerConfig = providerConfiguration(provider.settings, providerEnvironment);
   const providerCheckpoint = {worker:env.CYID_WORKER_NAME, versionId:provider.versionId,
-    databaseId:providerConfig.databaseId, bindingDigest:digest(bindingState(provider.settings.bindings))};
-  console.log(`CYID development configuration read from its active version; CYInvoice scope configured: ${providerConfig.scope !== null}. No Identity D1 accessed.`);
+    environment:providerEnvironment, databaseId:providerConfig.databaseId, bindingDigest:digest(bindingState(provider.settings.bindings))};
+  console.log(`CYID provider metadata read from its active version; legacy static scope configured: ${providerConfig.scope !== null}. No Identity D1 accessed.`);
   const {settings, deployments, versionId} = await activeDeployment(request, config.name);
   const routing = `/workers/scripts/${encodeURIComponent(config.name)}`;
   const routes = await request(routing+'/routes');
@@ -422,7 +459,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     check(version?.id === probe.id && version.annotations?.['workers/message'] === probe.annotations['workers/message'] &&
       probe.annotations['workers/message'] === `CYID_BINDING_PROBE_${plain('PROBE_OWNER_NONCE')}` &&
       bindings.every(b => ['plain_text','secret_text','service'].includes(b.type)) && services.length === 2 && env.CYID_WORKER_NAME &&
-      services.every(b => b.service === env.CYID_WORKER_NAME) &&
+      services.every(b => b.service === retainedProbeProvider) &&
       services.some(b => b.name === 'IDENTITY' && (!b.entrypoint || b.entrypoint === 'default')) &&
       services.some(b => b.name === 'IDENTITY_AUTHORITY' && b.entrypoint === 'ConsumerAuthoritySync') &&
       bindings.filter(b => b.type === 'secret_text').every(b => b.name === 'PROBE_AUTH_KEY') &&
@@ -441,6 +478,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   const runtimeConfig = { ...config, d1_databases: [{ ...config.d1_databases[0], database_id: databaseId }] };
   const cyidAlreadyActive = settings.bindings.some(b =>
     b.name === 'CYID_ENABLED' && b.type === 'plain_text' && b.text === 'true');
+  check(providerEnvironment !== 'production' || cyidAlreadyActive, 'PRODUCTION_PROVIDER_REQUIRES_ACTIVE_CYID');
   const vars = checkSettings(settings, runtimeConfig, {
     allowCyId:operation === 'preflight' || (mode === 'after' && operation === 'activate-cyid') ||
       (operation === 'deploy' && cyidAlreadyActive),
@@ -464,7 +502,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   const cyIdActivation = activating ? resolveCyIdPreparation(provider, env.CYID_WORKER_NAME,
     await query("SELECT workspace_id, status FROM workspaces WHERE status = 'active' ORDER BY workspace_id LIMIT 2")) : undefined;
   if (activating || vars.CYID_ENABLED === 'true') {
-    const input = cyIdActivation ?? resolveCyIdPreparation(provider, env.CYID_WORKER_NAME,
+    const input = cyIdActivation ?? resolveActiveCyId(settings, env.CYID_WORKER_NAME,
       await query("SELECT workspace_id, status FROM workspaces WHERE status = 'active' ORDER BY workspace_id LIMIT 2"));
     verifyPreparedCyId(runtimeConfig, settings, input, state.workspaces);
   }
@@ -485,13 +523,8 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     const capturedAt = new Date().toISOString();
     const bookmark = await request(databasePath + '/time_travel/bookmark?timestamp=' + encodeURIComponent(capturedAt));
     check(typeof bookmark?.bookmark === 'string' && bookmark.bookmark.length > 0, 'RESTORE_BOOKMARK_REQUIRED');
-    const services = settings.bindings.filter(b => b.type === 'service').map(b => ({
-      binding: b.name, service: b.service, ...(b.environment ? { environment: b.environment } : {}),
-      ...(b.entrypoint ? { entrypoint: b.entrypoint } : {}),
-    }));
     // Preserve runtime vars/services rather than deleting them with a static template.
-    let deployConfig = { ...runtimeConfig, vars: { ...vars, ...config.vars,
-      CYID_ENABLED:activating ? 'true' : vars.CYID_ENABLED ?? 'false' }, ...(services.length ? { services } : {}) };
+    let deployConfig = preservedDeployConfig(runtimeConfig, settings, activating);
     if (cyIdPreparation) deployConfig = prepareCyIdConfig(deployConfig, settings, cyIdPreparation, state.workspaces);
     const configPath = path.join(root, 'wrangler.deploy.generated.jsonc');
     fs.writeFileSync(configPath, JSON.stringify(deployConfig, null, 2), { mode: 0o600 });
@@ -507,9 +540,9 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
         { signal: AbortSignal.timeout(15000) });
       const identity = await response.json();
       check(response.ok && identity.ok === true && identity.service === 'cycloud-identity' &&
-        identity.environment === 'development' && identity.status === 'ok' && identity.identity === 'ready',
-        'CYID_DEVELOPMENT_HEALTH_INVALID');
-      console.log(`CYID development provider health: ${identity.serviceVersion ?? 'unknown'}; private binding and Application/Workspace readiness still require staging acceptance.`);
+        identity.environment === providerEnvironment && identity.status === 'ok' && identity.identity === 'ready',
+        'CYID_PROVIDER_HEALTH_INVALID');
+      console.log(`CYID provider health: ${identity.serviceVersion ?? 'unknown'}; App access acceptance is separate from deployment metadata.`);
     }
   } else {
     const before = JSON.parse(fs.readFileSync(statePath, 'utf8'));

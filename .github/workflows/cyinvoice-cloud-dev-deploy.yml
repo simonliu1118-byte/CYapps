@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Read-only preflight, Built-in deployment/preparation, or approved development CYID activation'
+        description: 'Read-only preflight, preserved code deployment, or approved development CYID preparation/activation'
         type: choice
         options: [preflight, deploy, prepare-cyid, activate-cyid]
         default: preflight
@@ -61,7 +61,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
+      CYID_WORKER_NAME: ${{ secrets.CYINVOICE_CYID_WORKER_NAME || secrets.CYID_WORKER_NAME }}
+      CYINVOICE_CYID_ENVIRONMENT: ${{ vars.CYINVOICE_CYID_ENVIRONMENT || 'development' }}
+      CYINVOICE_RETAINED_PROBE_WORKER_NAME: ${{ secrets.CYINVOICE_RETAINED_PROBE_WORKER_NAME }}
       CYINVOICE_DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.ref == 'refs/heads/cyinvoice/cloud-dev-activate-cyid' && 'activate-cyid' || github.ref == 'refs/heads/cyinvoice/cloud-dev-prepare-cyid' && 'prepare-cyid' || github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy' && 'deploy' || 'preflight') }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
@@ -93,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-migration.log" 2>&1; then
-            echo 'Development migration failed. Keep CYID disabled and inspect the protected recovery checkpoint; do not restore D1 automatically.'
+            echo 'Migration failed. Preserve the current authority and inspect the protected recovery checkpoint; do not restore D1 automatically.'
             exit 1
           fi
           echo 'Reviewed forward migrations applied to the original development D1.'
