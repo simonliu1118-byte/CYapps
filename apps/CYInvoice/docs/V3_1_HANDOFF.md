@@ -36,4 +36,4 @@
 
 - 3.1 的 SQL **仍在 `cloud/drafts/0016_non_allowance_work_items.sql`，沒有進 `cloud/migrations/`**；`WORK_ITEMS_ENABLED` 預設關閉。正式 D1 未因 GitHub 合併變更；CI 不需要本機 MCP，更不准另外建立 Cloudflare 測試 Worker。
 - 僅處理例外 metadata／雜湊：買方、發票號碼、OrderID、秘密與未授權資料不得傳給 Work Item 清單。Work Item `closed` 是人工封存，不是官方成功。
-- 不刪舊歷史文件／PR；現行唯一待辦以 [TODO.md](TODO.md) 最新 3.1 章節為準。
+- 2026-10-18：依使用者指示，已過時的單次對話交接／3.0 切換待辦文件自工作樹移除，Git 歷史仍可追溯；保留已合併 PR、稽核依據、正式 migration 與本設計文件。現行唯一待辦以 [TODO.md](TODO.md) 最新 3.1 章節為準。
