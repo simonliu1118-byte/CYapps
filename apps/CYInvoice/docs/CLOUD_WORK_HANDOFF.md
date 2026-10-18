@@ -4,6 +4,12 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
+## 2026-10-18 CYInvoice 3.1 開發接續（最新）
+
+- 正式 V3.0.0 Build 0 已發行。使用者確認先前 Cloudflare 3.0 安全升級已完成；真 Email／雙機 DR 留後續驗收，**不阻塞 3.1**。此輪未遠端讀回驗證，不重做 CYID、0014／0015、公司卡或 Recovery。
+- 3.1-A 第一片已在 `cyinvoice/v3.1-nonallowance-workitems` Source-only 分支：從 #440 精準接回資料層及隔離 Node SQLite tests，範圍僅 `VOID`／`UPLOAD_ISSUE`；`cloud/drafts/0016_non_allowance_work_items.sql` 還不在正式 migrations、Worker route 未接入、Windows UI 未改。請以 PR exact-head CI 證據驗收。
+- 下一步依序 3.1-B CYID-only Manager/User API → 3.1-C Windows 上傳問題／作廢覆核 → 3.1-D 本機 Cloudflare MCP 安全遷移與跨機實測。折讓 API／折讓跨機全部保留 3.2。詳見 [唯一 TODO](TODO.md)、[3.1 交接](V3_1_HANDOFF.md)。
+
 ## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
 
 - **2026-10-18 Source 交付完成、取代下方舊停點**：Cloudflare 交由使用者本機 MCP；CYWEB [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 `main`（`7ba87b8`）；CYInvoice [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) **exact head `e0c35b38` 四項 CI 全通過、Source 已合併 `main`（`f546b2a5`）**。這**不代表** Company Settings／Recovery 的 Worker flag、原 D1 Migration 或 CYWEB 私有 Service Binding 已啟用。CI 包含 `AUTO_EXPIRED` 自動清理與失敗交易完整回滾，以及 CYID-only JOIN 防舊 Built-in 降級。正式 schema/Worker/Secret/真 Email 與雙機驗收詳見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。**不重做原 CYID_ONLY D1 退役**。正式 Release 仍需獨立授權。
