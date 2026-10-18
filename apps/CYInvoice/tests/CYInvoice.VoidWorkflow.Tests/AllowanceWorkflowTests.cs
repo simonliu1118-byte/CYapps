@@ -351,7 +351,7 @@ internal static class AllowanceWorkflowTests
         Equal(reserved, same);
         Equal(4, setup.Gateway.QueryCalls);
         var recovered = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
-            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id);
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Equal(reserved, recovered);
         Equal(0, setup.Gateway.VoidCalls);
         Throws<InvalidOperationException>(() =>
@@ -382,7 +382,7 @@ internal static class AllowanceWorkflowTests
             setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "0001", "SuperPass1"));
         Equal(3, setup.Gateway.QueryCalls);
         var noReservation = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
-            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id);
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Equal(null, noReservation);
     }
 
@@ -406,7 +406,7 @@ internal static class AllowanceWorkflowTests
             setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "2000", "AdminPass1"));
         Equal(4, setup.Gateway.QueryCalls);
         Equal(null, new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
-            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id));
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     private static IReadOnlyList<AllowanceProductItem> DraftItems() => [
