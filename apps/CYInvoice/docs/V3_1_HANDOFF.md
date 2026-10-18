@@ -4,7 +4,7 @@
 
 ## 現行狀態（以 GitHub main 為準）
 
-- **已合併的原始碼基準**：`CYapps/main` `c69dc912e3e555f7420c6a0358f0aff41e4f13fd`（2026-10-18 Source 審查與文件清理完成；[#493](https://github.com/simonliu1118-byte/CYapps/pull/493)／[#494](https://github.com/simonliu1118-byte/CYapps/pull/494)／[#495](https://github.com/simonliu1118-byte/CYapps/pull/495) 均已合併）；正式 Windows Release 仍是 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；工程 Source 已按 Patch 規則推進至 **V3.0.1 Build 0**（`VERSION=3.0.1`、`BUILD=0`），與正式發布分離。**3.1 並未發布**。
+- **已合併的原始碼基準**：`CYapps/main` `0d26805646e5b3a2f2a7ef20d4734c9e79cee692`（2026-10-18 版號補正前的最新已合併 main；[#497](https://github.com/simonliu1118-byte/CYapps/pull/497) 亦已合併；[#493](https://github.com/simonliu1118-byte/CYapps/pull/493)／[#494](https://github.com/simonliu1118-byte/CYapps/pull/494)／[#495](https://github.com/simonliu1118-byte/CYapps/pull/495) 均已合併）；正式 Windows Release 仍是 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；工程 Source 已按 Patch 規則推進至 **V3.0.1 Build 0**（`VERSION=3.0.1`、`BUILD=0`），與正式發布分離。**3.1 並未發布**。
 - **來源與避免重工**：沿用舊 Draft [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 的可用片段，但不可整包合併。原本重複的 #481、#484 已關閉，#488 未合併；已驗證的正式 Source 以 #482／#483／#485／#486／#487／#489／#490／#491／#493／#494 合併後的 `main` 為準。
 - **3.0 前置**：使用者明確回報 3.0 Cloudflare 安全升級已完成（本對話沒有實際本機 MCP readback）；真 Email 與雙 Windows 復原 DR 實測往後安排，不阻擋 3.1 Source。**不可重跑 3.0 migrations／CYID 裝置帳號清理**。
 - **3.1 僅非折讓**：`VOID` 紙本未收回的人工覆核、`UPLOAD_ISSUE` 上傳問題／官方狀態不明的例外通報、管理員跨機待辦／人工封存／Audit。Work Item 並非官方 AMEGO 發票／作廢狀態；不自動重送或批量複製發票、買方資訊。3.2 才處理 g0401/g0501 與折讓 API，3.3 其他延後。
