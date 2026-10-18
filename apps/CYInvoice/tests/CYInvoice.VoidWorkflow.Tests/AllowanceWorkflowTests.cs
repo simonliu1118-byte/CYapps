@@ -208,6 +208,123 @@ internal static class AllowanceWorkflowTests
         Equal(0, setup.Gateway.VoidCalls);
     }
 
+    public static async Task LocalManagerMustAuthenticateBeforeOfficialPreviewAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        Equal(1, setup.Gateway.QueryCalls);
+        await ThrowsAsync<UnauthorizedAccessException>(() =>
+            setup.Workflow.PreviewLocalDraftAsync(issue, "3015", "Employee1"));
+        await ThrowsAsync<UnauthorizedAccessException>(() =>
+            setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "wrong"));
+        Equal(1, setup.Gateway.QueryCalls);
+        Equal(null, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())?.LocalApprovedUtc);
+    }
+
+    public static async Task LocalManagerApprovesFreshLockedDraftAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(issue,
+            "2000", "AdminPass1");
+        Equal("100", preview.OfficialRemainingGross);
+        Equal(50L, preview.RequestedGross);
+        Equal(0, preview.OfficialHistory.Count);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var approved = await setup.Workflow.ApproveLocalDraftAsync(issue,
+            "2000", "AdminPass1", preview.OfficialSnapshotHash);
+        Equal("2000", approved.LocalApproverEmployeeNo);
+        Equal(true, approved.LocalApprovedUtc is not null);
+        Equal(3, setup.Gateway.QueryCalls);
+        var stored = setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())!;
+        Equal(approved.LocalApprovedUtc, stored.LocalApprovedUtc);
+        Equal(approved.LocalApprovalOfficialHash, stored.LocalApprovalOfficialHash);
+        Throws<InvalidOperationException>(() =>
+            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1"));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1"));
+        Equal(3, setup.Gateway.QueryCalls);
+        // B2 approval must never call a live provider issue API.
+        Equal(0, setup.Gateway.VoidCalls);
+    }
+
+    public static async Task LocalOfficialChangedBeforeApprovalMustRePreviewAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var first = await setup.Workflow.PreviewLocalDraftAsync(issue,
+            "2000", "AdminPass1");
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "NEW-001", "5", "45")
+        ], summaryPresent: true));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.ApproveLocalDraftAsync(issue, "2000", "AdminPass1",
+                first.OfficialSnapshotHash));
+        var stored = setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())!;
+        Equal(null, stored.LocalApprovedUtc);
+        Equal(3, setup.Gateway.QueryCalls);
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "NEW-001", "5", "45")
+        ], summaryPresent: true));
+        var rePreview = await setup.Workflow.PreviewLocalDraftAsync(issue,
+            "2000", "AdminPass1");
+        Equal("50", rePreview.OfficialRemainingGross);
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "NEW-001", "5", "45")
+        ], summaryPresent: true));
+        var approved = await setup.Workflow.ApproveLocalDraftAsync(issue,
+            "2000", "AdminPass1", rePreview.OfficialSnapshotHash);
+        Equal(true, approved.LocalApprovedUtc is not null);
+    }
+
+    public static async Task LocalIncompleteOfficialSummaryPreventsApprovalAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: false));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1"));
+        Equal(null, setup.Workflow.ManualReviewFor(
+            setup.Repository.Invoices.LoadOrCreate().Single())?.LocalApprovedUtc);
+    }
+
+    private static IReadOnlyList<AllowanceProductItem> DraftItems() => [
+        new AllowanceProductItem
+        {
+            OriginalInvoiceNumber = "AA12345678",
+            OriginalInvoiceDate = 20260919,
+            OriginalDescription = "部分折讓",
+            Quantity = 1m,
+            UnitPrice = 50m,
+            Amount = 50m,
+            Tax = 0m,
+            TaxType = 3
+        }
+    ];
+
     private static AllowanceSetup CreateSetup(string path)
     {
         var repository = TestRepository.Open(path, new AllowanceTestProtector());
@@ -254,7 +371,8 @@ internal static class AllowanceWorkflowTests
         string total) =>
         new(type, status, 2, number, "20260919", tax, total);
 
-    private static QueryResponse Query(IReadOnlyList<InvoiceAllowanceResult>? allowances = null)
+    private static QueryResponse Query(IReadOnlyList<InvoiceAllowanceResult>? allowances = null,
+        bool summaryPresent = false)
     {
         using var productsDocument = JsonDocument.Parse("[]");
         var data = new QueryResult(
@@ -280,6 +398,7 @@ internal static class AllowanceWorkflowTests
             DetailVatPresent: true)
         {
             Allowances = allowances ?? [],
+            AllowanceSummaryPresent = summaryPresent,
         };
         return new QueryResponse(0, "", data);
     }
