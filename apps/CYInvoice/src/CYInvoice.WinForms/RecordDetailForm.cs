@@ -394,7 +394,8 @@ internal sealed class RecordDetailForm : Form
                 request.EmployeeNo,
                 request.Password,
                 request.Reason,
-                request.TaxInclusiveAmount);
+                request.TaxInclusiveAmount,
+                editedItems: request.EditedItems);
             MessageBox.Show(
                 this,
                 result.AlreadyQueued
@@ -1209,6 +1210,25 @@ internal sealed class RecordDetailForm : Form
         using var allowance = new AllowanceRequestForm();
         allowance.PerformLayout();
         allowance.VerifySmokeLayout();
+        var editable = new InvoiceRecord
+        {
+            InvoiceNumber = "AA12345678", InvoiceDate = "2026/09/16",
+            Amount = 400, DetailVat = 0,
+            Items = [
+                new InvoiceItem { Description = "原商品", Quantity = 1, QuantityDecimal = "1",
+                    UnitPrice = 200, UnitPriceDecimal = "200", TaxType = "1" },
+                new InvoiceItem { Description = "負數折扣", Quantity = 1, QuantityDecimal = "1",
+                    UnitPrice = -10, UnitPriceDecimal = "-10", TaxType = "1" },
+            ]
+        };
+        InvoiceAllowanceMetadata.ApplyQuery(editable, [
+            new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                "PREVIOUS-001", "20260916", "5", "100")
+        ], summaryPresent: true);
+        using var editor = new AllowanceRequestForm(editable);
+        editor.PerformLayout();
+        editor.VerifySmokeLayout();
+        editor.VerifySmokeOriginalInvoiceEditing();
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)

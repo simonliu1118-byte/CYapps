@@ -9,6 +9,9 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("V3.2 remaining cap fails closed on unknown status and excludes voided allowances", () => RunSync(TestOfficialRemainingGross)),
+    ("V3.2 net draft lines keep seven-decimal precision and reject client tampering", () => RunSync(TestDraftLineValidation)),
+    ("V3.2 gross input safely converts to net AMEGO fields and rejects altered prices", () => RunSync(TestGrossPriceInput)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -44,6 +47,116 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static void TestOfficialRemainingGross()
+{
+    var record = new InvoiceRecord { Amount = 1000 };
+    var active = new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+        "A20261019001", "20261019", "10", "190");
+    var voided = new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+        "A20261019002", "20261019", "10", "190", CancelDate: 20261019);
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active, voided], summaryPresent: true);
+    Equal("800", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: true);
+    Equal("1000", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active], summaryPresent: false);
+    Equal(1, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: false);
+    Equal(0, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        active with { InvoiceStatus = UploadStatuses.Processing }
+    ], summaryPresent: true);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active, active], summaryPresent: true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        active with { TaxAmount = "bad" }
+    ], summaryPresent: true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+}
+
+static void TestDraftLineValidation()
+{
+    var lines = new[]
+    {
+        new AllowanceProductItem {
+            OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+            OriginalDescription = "原商品", Quantity = 2m, UnitPrice = 100.1234567m,
+            Amount = 200m, Tax = 10m, TaxType = 1
+        },
+        new AllowanceProductItem {
+            OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+            OriginalDescription = "負數折扣", Quantity = 1m, UnitPrice = -10m,
+            Amount = -10m, Tax = -1m, TaxType = 1
+        }
+    };
+    AllowanceDraftValidator.Validate(lines, "AA12345678", "2026/10/19", 199);
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate(lines, "AA12345678", "2026/10/19", 200));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { Tax = 0m }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
+    Throws<InvalidOperationException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { OriginalInvoiceNumber = "OTHER" }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
+    Throws<FormatException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { UnitPrice = 100.12345678m }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
+}
+
+static void TestGrossPriceInput()
+{
+    var netPrice = FixedDecimal.MultiplyRatio(FixedDecimal.Parse("105"), 100, 105);
+    Equal("100", netPrice.ToString());
+    var grossLine = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅輸入商品", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = 105m, UnitPrice = 100m, Amount = 100m, Tax = 5m,
+    };
+    AllowanceDraftValidator.Validate([grossLine], "AA12345678", "2026/10/19", 105);
+    // Gross unit price from a real employee input must be preserved so
+    // gross-line-first rounding is independently reproducible at the Core.
+    var fractionalGross = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅七位小數", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = 100.1234567m,
+        UnitPrice = 95.3556730m, // seven-decimal rounded 100.1234567 / 1.05
+        Amount = 95m, Tax = 5m,
+    };
+    AllowanceDraftValidator.Validate([fractionalGross], "AA12345678", "2026/10/19", 100);
+    var grossDiscount = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅負折扣", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = -10.5m, UnitPrice = -10m,
+        Amount = -10m, Tax = -1m,
+    };
+    AllowanceDraftValidator.Validate([grossLine, grossDiscount],
+        "AA12345678", "2026/10/19", 94);
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { UnitPrice = 105m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { Tax = 4m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<FormatException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { GrossUnitPrice = 105.12345678m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { TaxType = 3 }
+        ], "AA12345678", "2026/10/19", 105));
 }
 
 static void TestOfficialStyles()

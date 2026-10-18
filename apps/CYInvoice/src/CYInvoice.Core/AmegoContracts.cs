@@ -95,7 +95,8 @@ public sealed record InvoiceAllowanceResult(
     string AllowanceNumber,
     string AllowanceDate,
     string TaxAmount,
-    string TotalAmount);
+    string TotalAmount,
+    long CancelDate = 0);
 
 public sealed record QueryResult(
     string InvoiceNumber,
@@ -121,6 +122,8 @@ public sealed record QueryResult(
     bool VoidPending = false)
 {
     public IReadOnlyList<InvoiceAllowanceResult> Allowances { get; init; } = [];
+    // An omitted/null allowance[] is not evidence of zero remaining used.
+    public bool AllowanceSummaryPresent { get; init; }
 }
 
 public sealed record QueryResponse(int Code, string Message, QueryResult Data);
