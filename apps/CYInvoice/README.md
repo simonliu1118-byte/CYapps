@@ -6,6 +6,8 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
+- **目前工程 Source／測試包：V3.1.1 Build 0**（engineering，非正式 Release）：V3.2-00 第一項折讓前官方查詢增強。使用者開啟折讓申請時先從光貿查詢已存在折讓，視窗顯示當次折讓紀錄；提交時再次查回。已有合法折讓不自動阻止新申請；此工程版未開通正式 g0401/g0501 或新的 Cloudflare 功能。詳見 [V3.1.1 工程版內容](release-notes/V3.1.1.txt) 與 [3.2 實作計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。
+
 - **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
 
 - V3.0.3 歷史工程基準：修正「回報跨機」按鈕僅允許尚未結案且支援的非折讓例外，排除折讓與未知類型；Windows 功能於本批維持不變。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。[V3.0.3 工程版內容](release-notes/V3.0.3.txt) 保留當時的部署前狀態。
