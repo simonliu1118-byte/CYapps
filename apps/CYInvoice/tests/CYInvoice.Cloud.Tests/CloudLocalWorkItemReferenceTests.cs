@@ -34,13 +34,40 @@ internal static class CloudLocalWorkItemReferenceTests
         var paper=CloudLocalWorkItemReferences.FromLocalIssue(
             issue with {IssueType=InvoiceVoidIssueTypes.ManualReview},token);
         Check(paper.Kind=="VOID" && paper.IssueCode is null,"manual void cannot imply official provider void");
-        foreach(var unsupported in new[]{"allowance_manual_review","allowance_void_manual_review"})
+        var allowed = new[]
         {
+            InvoiceVoidIssueTypes.ManualReview,
+            InvoiceSyncIssueTypes.InvoiceListFailed,
+            InvoiceSyncIssueTypes.QueryFailed,
+            InvoiceSyncIssueTypes.RemoteNotFound,
+            InvoiceSyncIssueTypes.UnknownRemoteNotFound,
+            InvoiceSyncIssueTypes.ReconciliationFailed,
+            InvoiceSyncIssueTypes.AmbiguousMatch,
+            InvoiceSyncIssueTypes.LocalWriteFailed
+        };
+        foreach (var supported in allowed)
+        {
+            Check(CloudLocalWorkItemReferences.IsSupportedIssueType(supported),
+                "supported non-allowance issue must enable the cross-device report button");
+            var item = CloudLocalWorkItemReferences.FromLocalIssue(
+                issue with { IssueType = supported }, token);
+            Check(item.Kind == (supported == InvoiceVoidIssueTypes.ManualReview ? "VOID" : "UPLOAD_ISSUE"),
+                "UI eligibility must match the Work Item mapper");
+        }
+        foreach (var unsupported in new[]{
+            "allowance_manual_review","allowance_void_manual_review",
+            InvoiceVoidSyncIssueTypes.PendingConfirmation,"unknown_future_issue",string.Empty
+        })
+        {
+            Check(!CloudLocalWorkItemReferences.IsSupportedIssueType(unsupported),
+                "allowance, in-flight and unknown issues must disable the cross-device report");
             var rejected=false;
             try { CloudLocalWorkItemReferences.FromLocalIssue(issue with {IssueType=unsupported},token); }
             catch(ArgumentException) { rejected=true; }
-            Check(rejected,"V3.2 allowance cases must fail closed");
+            Check(rejected,"unsupported work item must fail closed");
         }
+        Check(!CloudLocalWorkItemReferences.IsSupportedIssueType(null),
+            "null issue type must not enable cross-device report");
     }
     private static void Check(bool valid,string reason)
     {

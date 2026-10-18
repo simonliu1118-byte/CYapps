@@ -13,6 +13,18 @@ public sealed record CloudLocalWorkItemReference(string ItemId, string Reference
 
 public static class CloudLocalWorkItemReferences
 {
+    // Shared predicate for the UI and the source mapper. Allowance and any
+    // future/unrecognized issue type must be excluded from the V3.1 button.
+    public static bool IsSupportedIssueType(string? issueType) => issueType is
+        InvoiceVoidIssueTypes.ManualReview or
+        InvoiceSyncIssueTypes.InvoiceListFailed or
+        InvoiceSyncIssueTypes.QueryFailed or
+        InvoiceSyncIssueTypes.RemoteNotFound or
+        InvoiceSyncIssueTypes.UnknownRemoteNotFound or
+        InvoiceSyncIssueTypes.ReconciliationFailed or
+        InvoiceSyncIssueTypes.AmbiguousMatch or
+        InvoiceSyncIssueTypes.LocalWriteFailed;
+
     public static CloudLocalWorkItemReference FromLocalIssue(InvoiceSyncIssue issue, string deviceToken)
     {
         ArgumentNullException.ThrowIfNull(issue);
@@ -20,6 +32,8 @@ public static class CloudLocalWorkItemReferences
             deviceToken is null ||
             !Regex.IsMatch(deviceToken, @"^cydev_[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant))
             throw new ArgumentException("Invalid local Work Item source or Device credential.");
+        if (!IsSupportedIssueType(issue.IssueType))
+            throw new ArgumentException("Only V3.1 non-allowance local exceptions are supported.", nameof(issue));
         var code = issue.IssueType switch
         {
             InvoiceVoidIssueTypes.ManualReview => null,

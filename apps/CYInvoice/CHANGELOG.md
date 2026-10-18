@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.0.3 — 2026/10/18（僅允許合格非折讓例外回報跨機；engineering）
+
+- 本批是**新的獨立** Windows 介面安全與操作修正，推進 **Patch +1、BUILD=0**，不視為 V3.0.2 欄寬工作的返修。
+- 原「上傳問題」視窗的「回報跨機」對任何未結案清單項目都可能呈現可按；選到折讓、折讓作廢或未知項目時，按下才會出現「V3.1 不支援」。現在直接以同一個 Core 非折讓類型判定限制按鈕，只允許紙本尚未收回的作廢人工覆核及七種支持的同步／回查技術例外，不讓折讓或未知類型誤進 3.1。缺 CYID Employee Authority／Workspace／Device 時也不啟用。
+- Core mapper 仍再次嚴格檢查來源，並新增各合法／非法 issue type 的契約測試。行為仍為使用者明確確認、當次 CYID 登入及匿名 metadata；不處理 AMEGO 官方作廢或折讓。
+- 同步 V3.0.3 工程說明、包內使用說明、README、TODO、V3.1 handoff。原 D1／Worker 沒有操作，schema16 仍為草稿且 feature flag 預設停用，未宣稱實體雙機／DPI 驗收。上一個正式 Release **V3.0.0** 不變。
+
 ## V3.0.2 — 2026/10/18（跨機待辦視窗尺寸適應；engineering）
 
 - 完成下一個**獨立** WinForms 顯示修正，故由 V3.0.1 推進 **Patch +1、BUILD=0**；不是 V3.0.1 同項返修，也不是 3.1 正式 Minor。
