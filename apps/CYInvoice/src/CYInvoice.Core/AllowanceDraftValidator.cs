@@ -40,10 +40,29 @@ public static class AllowanceDraftValidator
             var declaredTax = FixedDecimal.Parse(item.Tax.ToString(CultureInfo.InvariantCulture));
             if (quantity.ScaledValue <= 0)
                 throw new InvalidOperationException("折讓數量必須大於 0");
-            var net = FixedDecimal.FromInt64(FixedDecimal.Multiply(quantity, unitPrice).RoundInt64());
-            var tax = item.TaxType == 1
-                ? FixedDecimal.FromInt64(FixedDecimal.MultiplyRatio(net, 5, 100).RoundInt64())
+            var grossMode = item.GrossUnitPrice is not null;
+            if (grossMode && item.TaxType != 1)
+                throw new InvalidDataException("免稅／零稅率折讓不可將含稅單價標記為應稅");
+            var grossInput = grossMode
+                ? FixedDecimal.Parse(item.GrossUnitPrice!.Value.ToString(CultureInfo.InvariantCulture))
                 : new FixedDecimal(0);
+            var expectedNetUnit = grossMode
+                ? FixedDecimal.MultiplyRatio(grossInput, 100, 105)
+                : unitPrice;
+            if (unitPrice != expectedNetUnit)
+                throw new InvalidDataException("含稅折讓原單價換算的未稅單價不符");
+            // For gross input the entire gross line is rounded first, then
+            // split into its tax-exclusive net and tax amounts. Reproducing
+            // this method prevents quantity-dependent 7-digit discrepancies.
+            var gross = grossMode
+                ? FixedDecimal.FromInt64(FixedDecimal.Multiply(quantity, grossInput).RoundInt64())
+                : new FixedDecimal(0);
+            var net = grossMode
+                ? FixedDecimal.FromInt64(FixedDecimal.MultiplyRatio(gross, 100, 105).RoundInt64())
+                : FixedDecimal.FromInt64(FixedDecimal.Multiply(quantity, unitPrice).RoundInt64());
+            var tax = item.TaxType != 1 ? new FixedDecimal(0) : grossMode
+                ? FixedDecimal.Add(gross, new FixedDecimal(checked(-net.ScaledValue)))
+                : FixedDecimal.FromInt64(FixedDecimal.MultiplyRatio(net, 5, 100).RoundInt64());
             if (declaredNet != net || declaredTax != tax)
                 throw new InvalidDataException("折讓單價、金額或稅額與重新計算結果不符");
             total = FixedDecimal.Add(total, FixedDecimal.Add(net, tax));
