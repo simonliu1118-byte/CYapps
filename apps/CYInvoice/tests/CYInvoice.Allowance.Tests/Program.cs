@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("V3.2 remaining cap fails closed on unknown status and excludes voided allowances", () => RunSync(TestOfficialRemainingGross)),
     ("V3.2 net draft lines keep seven-decimal precision and reject client tampering", () => RunSync(TestDraftLineValidation)),
+    ("V3.2 gross input safely converts to net AMEGO fields and rejects altered prices", () => RunSync(TestGrossPriceInput)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -103,6 +104,55 @@ static void TestDraftLineValidation()
         AllowanceDraftValidator.Validate([
             lines[0] with { UnitPrice = 100.12345678m }, lines[1]
         ], "AA12345678", "2026/10/19", 199));
+}
+
+static void TestGrossPriceInput()
+{
+    var netPrice = FixedDecimal.MultiplyRatio(FixedDecimal.Parse("105"), 100, 105);
+    Equal("100", netPrice.ToString());
+    var grossLine = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅輸入商品", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = 105m, UnitPrice = 100m, Amount = 100m, Tax = 5m,
+    };
+    AllowanceDraftValidator.Validate([grossLine], "AA12345678", "2026/10/19", 105);
+    // Gross unit price from a real employee input must be preserved so
+    // gross-line-first rounding is independently reproducible at the Core.
+    var fractionalGross = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅七位小數", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = 100.1234567m,
+        UnitPrice = 95.3556721m, // rounded 100.1234567 / 1.05
+        Amount = 95m, Tax = 5m,
+    };
+    AllowanceDraftValidator.Validate([fractionalGross], "AA12345678", "2026/10/19", 100);
+    var grossDiscount = new AllowanceProductItem
+    {
+        OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+        OriginalDescription = "含稅負折扣", TaxType = 1, Quantity = 1m,
+        GrossUnitPrice = -10.5m, UnitPrice = -10m,
+        Amount = -10m, Tax = -1m,
+    };
+    AllowanceDraftValidator.Validate([grossLine, grossDiscount],
+        "AA12345678", "2026/10/19", 94);
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { UnitPrice = 105m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { Tax = 4m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<FormatException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { GrossUnitPrice = 105.12345678m }
+        ], "AA12345678", "2026/10/19", 105));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            grossLine with { TaxType = 3 }
+        ], "AA12345678", "2026/10/19", 105));
 }
 
 static void TestOfficialStyles()
