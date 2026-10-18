@@ -4,6 +4,7 @@ import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleCompanySettings } from "./company-settings-route";
+import {handleWorkItems} from "./work-items-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation, type RecoveryIssueResult } from "./recovery-issuer";
@@ -17,6 +18,7 @@ interface Env extends CyIdEnv {
   // Feature remains disabled until the original D1 was safely upgraded.
   COMPANY_SETTINGS_ENABLED?: string;
   RECOVERY_ENABLED?: string;
+  WORK_ITEMS_ENABLED?: string;
   COMPANY_SETTINGS_KEY_HEX?: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
@@ -120,6 +122,12 @@ export default {
       return Response.json({ok:false,error:{code:"RECOVERY_NOT_READY"}},{
         status:503,headers:{"cache-control":"no-store"}
       });
+    const workItemsPath=path==="/v1/work-items/get" || path==="/v1/work-items/list";
+    if(workItemsPath&&(env.WORK_ITEMS_ENABLED!=="true"||
+       !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<16))
+      return Response.json({ok:false,error:{code:"WORK_ITEMS_NOT_READY"}},{
+        status:503,headers:{"cache-control":"no-store"}
+      });
     const companySettingsPath = path === "/v1/company-settings/get" ||
       path === "/v1/company-settings/update" ||
       path === "/v1/company-settings/provision";
@@ -138,6 +146,7 @@ export default {
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
       "/v1/company-settings/get", "/v1/company-settings/update",
       "/v1/company-settings/provision",
+      "/v1/work-items/get", "/v1/work-items/list",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -146,7 +155,7 @@ export default {
         if (needsEmployee) {
           // Company card: 4096 bytes; recovery: 2048 bytes. This bounded read
           // runs before Device/CYID authorization, including missing-length bodies.
-          const bounded = companySettingsPath || recoveryPath;
+          const bounded = companySettingsPath || recoveryPath || workItemsPath;
           const boundedBody = bounded
             ? await boundedEmployeeBody(request, recoveryPath ? 2048 : 4096) : null;
           if (!recoveryPath && !["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
@@ -174,6 +183,8 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const companySettingsResponse = await handleCompanySettings(request, env);
     if (companySettingsResponse) return companySettingsResponse;
+    const workItemsResponse=await handleWorkItems(request,env);
+    if(workItemsResponse)return workItemsResponse;
 
     return baseWorker.fetch(request, env);
 }
