@@ -1,6 +1,6 @@
 # CYInvoice Windows 候選版驗證清單
 
-> **2026-10-18 V3.0 接續提醒**：原 V2.6.19 正式 Release 驗收保留歷史意義；3.0 開發僅 Local／CYID、公司卡及災難復原。CYWEB #192 已合併 Source、Cloudflare 正式 D1／Worker／私有 Binding 由本機 MCP 處理，切換步驟請用 [V3.0 本機 MCP 交接](V3_0_LOCAL_MCP_CUTOVER.md)。復原新 Device **成功 claim** 會原子撤銷 Workspace 內其他舊 Device；未成功與單純過期不撤銷。DR-01～13 真機證據未驗收，不能沿用 V2.6.19 的 CI 放行決策。
+> **2026-10-18 V3.0 接續提醒**：原 V2.6.19 正式 Release 驗收保留歷史意義；3.0 開發僅 Local／CYID、公司卡及災難復原。CYWEB #192 已合併 Source、Cloudflare 正式 D1／Worker／私有 Binding 由本機 MCP 處理，3.0 本機 MCP 切換已由使用者確認完成（本輪未遠端 readback）；舊操作清單已自現行文件移除，以免誤執行。復原新 Device **成功 claim** 會原子撤銷 Workspace 內其他舊 Device；未成功與單純過期不撤銷。DR-01～13 真機證據未驗收，不能沿用 V2.6.19 的 CI 放行決策。
 
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。**2026-10-13 本批 V2.6.19 驗收決策：使用者批准其餘項目由 AI 以本地／隔離測試及已完成精確 source CI 核對即可，不要求再次逐項真人實機驗收；已知人工折讓逐筆歷史缺欄位併入 V3.0 重做，不當作本批阻塞，也不得標示修復。** 這是本批發行判斷，不是實機／雲端行為已全部驗證。**禁止建立、上傳、部署任何 Cloudflare 測試 Worker／版本／handler；不可重試刪除先前刪不掉的測試 Worker，也不得以新的測試 Worker 取代。** 不更動既有 Workspace／Device／Token／D1／真實帳號；撤銷會完整清除 portable folder，不以真實裝置代替測試。

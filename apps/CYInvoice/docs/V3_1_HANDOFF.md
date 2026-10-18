@@ -25,6 +25,12 @@
 - Cloud Check／隔離 SQLite／CYID 合成測試已通過；[#490](https://github.com/simonliu1118-byte/CYapps/pull/490) 的 Windows x64 Build、Governance／Cloud Check 全通過，[#491](https://github.com/simonliu1118-byte/CYapps/pull/491) 的精確 head Cloud／Governance／部署預檢通過，合併 `main` 的 [Cloud Check #39112276145](https://github.com/simonliu1118-byte/CYapps/actions/runs/39112276145) 通過。
 - 部分舊交接曾寫「3.1-B2 待 CI」「WinForms 尚無操作按鈕」「B1 只有 get/list」「SQL 沒有 Audit」，**已被後續合併取代**；請勿據此重寫 Work Item 程式。
 
+## 2026-10-18 Source 審查補修（PR [#493](https://github.com/simonliu1118-byte/CYapps/pull/493)）
+
+- 沿既有 C1／C2／C3 實際程式核對本機非折讓回報、匿名摘要、雙次 CYID 身分重驗、Device SQL 防撤銷、Workspace 隔離、主管 CAS 流程與回覆不明不重送，保留原本 SQLite／Cloud contract 測試。
+- Windows 跨機待辦 smoke 改為真正控制項（不讀正式環境設定、Token 或網路），並在失去權限、查詢失敗或覆核結果不明後清除舊清單及操作狀態；完整 WinForms／Cloud／Governance exact-head CI 仍以 PR 檢查結果為準。
+- 此批只改原始碼和文件，沒有改 SQL 草稿／Cloud Worker／正式發行。真人角色、雙 Windows 和 DPI 實測仍是後續驗收。
+
 ## 接下來（先 Source；D1 一律排最後）
 
 1. **先完成 Source review 與跨模組回歸**：核對使用者本機手動回報→管理員遠端待辦→兩次 CAS 覆核／封存的端到端契約；確認每次 CYID/Device 重新驗權、使用者不能替管理員核准、HTTP redirect 不洩漏密碼、重複 ID／網路回覆不明只查回、不重送 AMEGO、原 Local 發票／人工折讓不回歸。有缺口再建立單一短期 branch／PR 修正；沒有缺口勿重新做一套。
@@ -36,4 +42,4 @@
 
 - 3.1 的 SQL **仍在 `cloud/drafts/0016_non_allowance_work_items.sql`，沒有進 `cloud/migrations/`**；`WORK_ITEMS_ENABLED` 預設關閉。正式 D1 未因 GitHub 合併變更；CI 不需要本機 MCP，更不准另外建立 Cloudflare 測試 Worker。
 - 僅處理例外 metadata／雜湊：買方、發票號碼、OrderID、秘密與未授權資料不得傳給 Work Item 清單。Work Item `closed` 是人工封存，不是官方成功。
-- 不刪舊歷史文件／PR；現行唯一待辦以 [TODO.md](TODO.md) 最新 3.1 章節為準。
+- 2026-10-18：依使用者指示，已過時的單次對話交接／3.0 切換待辦文件自工作樹移除，Git 歷史仍可追溯；保留已合併 PR、稽核依據、正式 migration 與本設計文件。現行唯一待辦以 [TODO.md](TODO.md) 最新 3.1 章節為準。

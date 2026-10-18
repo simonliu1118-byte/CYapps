@@ -26,7 +26,25 @@ internal sealed class CloudWorkItemsForm : Form
     private CloudWorkItemCursor? nextCursor;
     private bool busy;
 
-    public CloudWorkItemsForm(LocalRepository repository)
+    // Shared actual presentation path: the layout smoke uses this constructor
+    // without loading settings, Device credentials, CYID, or making HTTP calls.
+    private CloudWorkItemsForm()
+    {
+        repository = null!;
+        client = null!;
+        Text = "跨機待辦（非折讓）";
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(920, 500);
+        MinimumSize = new Size(740, 400);
+        Font = new Font("Microsoft JhengHei UI", 10F);
+        BackColor = Color.White;
+        ShowIcon = false;
+        BuildLayout();
+        FormClosing += (_, _) => lifetime.Cancel();
+        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
+    }
+
+    public CloudWorkItemsForm(LocalRepository repository) : this()
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         var setting = repository.Settings.LoadOrCreate();
@@ -37,26 +55,15 @@ internal sealed class CloudWorkItemsForm : Form
         var token = repository.Settings.CloudDeviceToken(setting);
         client = new CloudWorkItemClient(http, new Uri(setting.CloudBaseUrl, UriKind.Absolute),
             token, setting.CloudWorkspaceId);
-
-        Text = "跨機待辦（非折讓）";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(920, 500);
-        MinimumSize = new Size(740, 400);
-        Font = new Font("Microsoft JhengHei UI", 10F);
-        BackColor = Color.White;
-        ShowIcon = false;
-        BuildLayout();
         Shown += async (_, _) => await LoadPageAsync(reset: true);
-        FormClosing += (_, _) => lifetime.Cancel();
-        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
     }
 
     private void BuildLayout()
     {
         filter.Items.AddRange(["待處理與覆核中", "待處理", "覆核中", "已封存"]);
         filter.SelectedIndex = 0;
-        filter.SelectedIndexChanged += (_, _) => { cursor = null; nextCursor = null;
-            entries.Items.Clear(); status.Text = "請按重新整理載入。"; UpdateActions(); };
+        filter.SelectedIndexChanged += (_, _) => { ClearView();
+            status.Text = "請按重新整理載入。"; UpdateActions(); };
         entries.Columns.Add("建立時間", 155);
         entries.Columns.Add("種類", 110);
         entries.Columns.Add("上傳問題代碼", 160);
@@ -99,6 +106,15 @@ internal sealed class CloudWorkItemsForm : Form
         root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
         UpdateActions();
+    }
+
+    // Never retain an actionable manager queue after a failed fresh CYID read,
+    // uncertain mutation result or concurrency conflict.
+    private void ClearView()
+    {
+        entries.Items.Clear();
+        cursor = null;
+        nextCursor = null;
     }
 
     private CloudWorkItemSummary? Selected => entries.SelectedItems.Count == 1
@@ -172,6 +188,7 @@ internal sealed class CloudWorkItemsForm : Form
         catch (Exception error)
         {
             if (IsDisposed) return;
+            ClearView();
             status.Text = error is CloudApiException api && api.Code == "WORK_ITEMS_NOT_READY"
                 ? "跨機待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
                 : "查詢失敗，請檢查 CYID 權限、裝置狀態及連線；未變更工作項目。";
@@ -203,6 +220,7 @@ internal sealed class CloudWorkItemsForm : Form
             var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
             if (current is null || current.Revision != chosen.Revision || current.Status != chosen.Status)
             {
+                ClearView();
                 status.Text = "工作項目已由其他裝置變更，請重新整理；未送出覆核。";
                 return;
             }
@@ -215,16 +233,15 @@ internal sealed class CloudWorkItemsForm : Form
             await client.TransitionManualAsync(current, to, employeeNo, password,
                 resolutionCode, lifetime.Token);
             status.Text = "人工狀態已更新；請重新整理最新清單。";
-            nextCursor = null;
-            entries.Items.Clear();
+            ClearView();
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
             // A lost D1 reply may follow a successful commit. Readback with the
             // same item ID rather than resubmitting a mutating request.
+            ClearView();
             status.Text = "結果不明或權限變更，請以相同工作項目 ID 查回後再處理；不會自動重送。";
-            nextCursor = null;
         }
         finally
         {
@@ -264,12 +281,24 @@ internal sealed class CloudWorkItemsForm : Form
 
     internal static void VerifySmokeLayout(Form owner)
     {
-        // Smoke-only: do not construct the network client or touch user secrets.
-        using var sample = new Form { Text = "跨機待辦", ClientSize = new Size(920, 500) };
+        // Exercise the SAME controls and layout as production, not an empty
+        // placeholder Form. No repository settings, credentials, or network.
+        using var sample = new CloudWorkItemsForm();
         sample.Show(owner);
         sample.PerformLayout();
-        if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500)
-            throw new InvalidOperationException("跨機待辦容器尺寸異常");
+        if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500 ||
+            sample.Controls.Count != 1 ||
+            sample.Controls[0] is not TableLayoutPanel root || root.RowCount != 4 ||
+            root.GetControlFromPosition(0, 0) is not FlowLayoutPanel ||
+            root.GetControlFromPosition(0, 1) != sample.entries ||
+            root.GetControlFromPosition(0, 2) != sample.status ||
+            root.GetControlFromPosition(0, 3) is not FlowLayoutPanel ||
+            sample.entries.Columns.Count != 7 ||
+            sample.filter.Items.Count != 4 ||
+            sample.entries.Width <= 0 || sample.entries.Height <= 0 ||
+            !sample.refresh.Enabled || sample.nextPage.Enabled ||
+            sample.takeReview.Enabled || sample.archive.Enabled)
+            throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
         sample.Close();
     }
 }

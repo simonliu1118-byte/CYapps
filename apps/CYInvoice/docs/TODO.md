@@ -22,6 +22,7 @@
 - [x] **3.1-C2 本機例外回報已合併** [#490](https://github.com/simonliu1118-byte/CYapps/pull/490)：原上傳問題視窗需使用者明確確認才回報，HMAC-SHA256 穩定 opaque Work Item ID／referenceHash，禁止外傳發票／OrderID／買方／錯誤原文，回覆不明顯示同 ID 查回。
 - [x] **3.1-C3 稽核草稿已合併** [#491](https://github.com/simonliu1118-byte/CYapps/pull/491)：`work_item_audit_events` append-only，同筆 SQLite transaction 記錄 actor／Device／revision／封存原因，阻止異常轉態與修改／刪除；隔離測試已通過，**並非正式 D1 已套用**。
 - [x] **已合併 Source 的 CI 基準**：[#487](https://github.com/simonliu1118-byte/CYapps/pull/487)、[#489](https://github.com/simonliu1118-byte/CYapps/pull/489)、[#490](https://github.com/simonliu1118-byte/CYapps/pull/490) 的 Windows／Cloud／Governance 檢查成功；[#491](https://github.com/simonliu1118-byte/CYapps/pull/491) 的 Cloud／Governance／預檢成功，合併 main [Cloud Check #39112276145](https://github.com/simonliu1118-byte/CYapps/actions/runs/39112276145) 成功。**CI 不是雙機實測，也不是 Cloudflare 部署證據**。
+- [x] **3.1 Source 收尾第 1 批（PR [#493](https://github.com/simonliu1118-byte/CYapps/pull/493)，依 CI 結果更新）**：逐段核對本機匿名 HMAC 來源→Worker CYID／Device／Workspace 驗權→管理員 open/review/closed CAS→append-only Audit 的既有隔離測試；WinForms smoke 改用真正跨機待辦介面，查詢權限失效／結果不明清除舊管理員清單。過時 9/29 對話交接與已完成 3.0 MCP 操作清單移出現行文件，歷史留 Git。
 - [ ] **3.1 Source 收尾／真裝置前準備**：以已合併功能做完整跨模組安全與回歸檢視，核對 WinForms 元件密度／可操作性、Local／CYID 分流、ADMIN／USER 角色、已撤銷 Device、重複 Work Item、回覆不明、離線與人工覆核來源，必要時補修並取得最新 exact-head CI。不要重建 A／B／C 已合併的東西。
 - [ ] **3.1-D 最後階段（只由本機 Cloudflare MCP）**：開發收斂後才核對**原業務 D1** 的備份／還原、版本與 Workspace／Device 連續性；另行審核 `drafts/0016_non_allowance_work_items.sql` 轉 canonical migration 並受控套用，更新原 Worker、schema16 與 `WORK_ITEMS_ENABLED`，**最後**才做跨 Windows 真機／異常回覆／稽核驗收。不建立測試 Worker，不誤改 CYID D1。
 - [ ] **3.1 正式發行**：待最後的遠端操作與必要實機驗收、使用者**當次明確 Release 授權**及新的精確版本測試後再決定；目前沒有 V3.1 ZIP／tag／正式 Release。
@@ -34,7 +35,7 @@
 
 ### 2026-10-18 最新停點：Cloudflare 改由本機 MCP，其他 GitHub 工程先收斂
 
-- **使用者決定**：Cloudflare 原 D1、Worker、Binding、Secret 與實際部署**只在本機 MCP** 執行；GitHub 端可繼續程式、測試、合併程式碼與文件，但本項不暗示授權任何正式 D1 寫入／部署或 Windows 正式 Release。唯讀／操作順序和必要證據集中於 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。
+- **使用者決定**：Cloudflare 原 D1、Worker、Binding、Secret 與實際部署**只在本機 MCP** 執行；GitHub 端可繼續程式、測試、合併程式碼與文件，但本項不暗示授權任何正式 D1 寫入／部署或 Windows 正式 Release。3.0 的舊本機切換清單已歸檔於 Git 歷史，勿重跑已完成升級；現行待辦與必要私有 readback 門檻以本檔最新 3.1 章節為準。
 - [x] **CYWEB Source 已完成並合併**：復原整合 [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已以 commit `7ba87b8b30b58af935fef316bd61cfb3d55792ec` 進 CYWEB `main`，Governance／Runtime Check／deployment-config CI 通過；但 `CF_CYINVOICE_RECOVERY_SERVICE` 預設未連線，不能宣稱新的 Recovery UI 已部署或可使用。舊 #151 不再是待合併工作。
 - [x] **復原過期自動結清**：10 分鐘失效；新 `operationId` 的已授權簽發，先在相同 D1 batch 中將已過期尚未消耗的邀請標成 revoked／delivery failed，寫 `AUTO_EXPIRED` Audit，再創建新 pending 邀請；read-only status 不更動 D1、舊 Device 不因到期被撤銷，防止永久佔用邀請名額；舊 operation 不自動重送。
 - [x] **3.0-A 雙模式安全收斂**：舊 Built-in Worker 沒有明確 `identityProvider=CYID` health 標記時，Windows 在建立 Device 前拒絕加入，不回退舊 Employee authority／Snapshot；CI smoke 涵蓋 CYID 正常 JOIN／斷線後原 Pending Token 找回／舊 Worker 拒絕。既有 API 1 相容層 marker8 不被誤認為 D1 schema。
@@ -70,7 +71,7 @@
 - [x] **3.0-C 復原的舊裝置競爭防護**：沿用 #440 的 `cloud/src/index.ts`，新增配對碼、邀請發送、普通 JOIN 的提交當下 Device 狀態保護；舊裝置一旦因災難復原撤銷，不得以稍早的請求再建立授權。原 `recovery-cutover.test.mjs` 為不可降低的安全門檻，未通過不得發行。只調整既有 Device 安全性，不新增資料庫或跨機／折讓功能。
 - [x] **3.0-C 復原 Windows UI／Pending Token 從 #440 接回**：`SettingsStore`、`SettingsModels` 的 DPAPI Pending Recovery／同 scope 原 Token 保存，以及原 `CloudRecoveryClient`／`CloudRecoveryForm`、從直接加入雲端開啟復原、WinForms 預設禁用不可逆接管的 smoke；延用 #440 程式，不重寫 CYID 或 D1。尚未部署，不能宣稱真 Email／雙機驗收完成。
 - [x] **3.0-C migration 升級為正式來源（尚未遠端執行）**：沿用隔離 SQLite 已驗證的復原 0014／公司設定 0015 原 SQL，納入 `cloud/migrations/` 單一版本化來源，移除 `drafts` 重複副本；更新退役 CYID_ONLY、復原邀請／公司卡與 3.0 可回復演練測試，確保先以舊 0013 建模，再追加 0014→0015。**仍未連線或修改遠端 D1**、Worker `SCHEMA_VERSION` 仍為13、兩項功能預設停用；部署稽核的現有 pending-migration gate 未開放，須有私有備份及獨立上線授權才可解開。此 PR 僅為可審查的發行程式來源。
-- [ ] **3.0-C 待續（本機 MCP＋實機）**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、DPAPI Pending Token **均已接回**，CYWEB #192 **已合併 Source**；剩下本機 Cloudflare D1 備份／0014+0015／issuer profile／Worker Binding／flag 與真 Email、雙 Windows、DR-01～13，詳見 [本機 MCP 交接](V3_0_LOCAL_MCP_CUTOVER.md)。
+- [ ] **3.0-C 待續（本機 MCP＋實機）**：Windows `CloudRecoveryClient`、`CloudRecoveryForm`、DPAPI Pending Token **均已接回**，CYWEB #192 **已合併 Source**；本行為 3.0 發布前歷史停點：當時剩下本機 Cloudflare D1 備份／0014+0015／issuer profile／Worker Binding／flag 與真 Email、雙 Windows、DR-01～13。使用者現已確認 3.0 Cloudflare 升級完成，勿據此重做遷移；未完成的真人驗收仍見 [RC_TEST.md](RC_TEST.md)。
 - [ ] **3.0 驗收／發行**：新 HEAD CI、Local/CYID 原功能及 Windows 實機確認；僅在明確授權後合併／部署／正式 Release。
 - **禁止提前帶入** #440 的 0015 Work Item、0016／0018／0019 折讓 D1、g0401／g0501、`0d651688` 舊人工折讓 UI 退役；3.0／3.1 保留 V2 人工折讓與作廢。
 - [x] **3.0-A/B/C Windows 敏感 Cloud HTTP 防轉址（Source＋回歸）**：CYID 公司卡查詢／更新／手動套用、直接加入、災難復原 Preview／Claim 均不自動跟隨 HTTP 307／308 等重新導向；避免含 CYID 帳密、邀請碼、Device Token 或業務密鑰的 POST 被原 Cloud URL 的 Location 轉送其他網域。只在既有 Windows 呼叫端設置 `HttpClientHandler.AllowAutoRedirect=false`，不改 API、設備加入資料或正式雲端；在既有 Cloud client compatibility regression 加防回歸源碼檢查。仍需最新 head CI 與真實環境驗證。

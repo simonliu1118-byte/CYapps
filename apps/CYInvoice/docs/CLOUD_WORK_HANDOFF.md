@@ -16,7 +16,7 @@
 > **以下 3.0 段落保留發布前歷史快照。** 使用者已表示 3.0 Cloudflare 升級完成；本輪只確認 GitHub，未重新查核本機 MCP。現行 3.1 進度以本檔上段為準，不把下方「schema13、未部署」舊語句重新當成待執行指令。
 
 
-- **2026-10-18 Source 交付完成、取代下方舊停點**：Cloudflare 交由使用者本機 MCP；CYWEB [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 `main`（`7ba87b8`）；CYInvoice [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) **exact head `e0c35b38` 四項 CI 全通過、Source 已合併 `main`（`f546b2a5`）**。這**不代表** Company Settings／Recovery 的 Worker flag、原 D1 Migration 或 CYWEB 私有 Service Binding 已啟用。CI 包含 `AUTO_EXPIRED` 自動清理與失敗交易完整回滾，以及 CYID-only JOIN 防舊 Built-in 降級。正式 schema/Worker/Secret/真 Email 與雙機驗收詳見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。**不重做原 CYID_ONLY D1 退役**。正式 Release 仍需獨立授權。
+- **2026-10-18 Source 交付完成、取代下方舊停點**：Cloudflare 交由使用者本機 MCP；CYWEB [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 `main`（`7ba87b8`）；CYInvoice [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) **exact head `e0c35b38` 四項 CI 全通過、Source 已合併 `main`（`f546b2a5`）**。這**不代表** Company Settings／Recovery 的 Worker flag、原 D1 Migration 或 CYWEB 私有 Service Binding 已啟用。CI 包含 `AUTO_EXPIRED` 自動清理與失敗交易完整回滾，以及 CYID-only JOIN 防舊 Built-in 降級。3.0 切換的歷史操作清單已退役；現行未完成工作以 [TODO.md](TODO.md) 最新章節及 [RC_TEST.md](RC_TEST.md) 為準，避免重跑 0014／0015。**不重做原 CYID_ONLY D1 退役**。正式 Release 仍需獨立授權。
 
 - **2026-10-18 最新交接**：CYWEB Claude UI 重整已部署（`main` `a46f5666`，#191，Deploy `39062483770` success）；使用者已恢復 CYWEB 整合順序。沿用 #151 成果、在最新 CYWEB V0.9.0 主幹另建復原整合 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192)，精確 head `ac9cfde` 的 Governance／Runtime／部署預檢全通過；後續已**合併 Source**（merge `7ba87b8`），但未接通或驗證正式 Recovery Private RPC，保留原正式 UI／ERP／備份。CYInvoice 3.0 `cloud/src/app.ts` **已經有**私有 `CyInvoiceRecoveryEntrypoint`，不需重造。現階段剩下原 D1 正式 0014／0015 和 issuer gate 的備份／回復、Worker feature flag、實際 named RPC binding 接線、真 Email／兩機 DR-01～13 與 V2 相容實機驗收。不可因 CI 綠燈宣稱完成部署；本項取代舊「暫緩 CYWEB」停點，詳見 TODO 最新區段。
 - 已合併工程來源 [PR #476](https://github.com/simonliu1118-byte/CYapps/pull/476)（原 `cyinvoice/v3.0-mode-setup`）；3.0 僅 Local／CYID 雙模式、公司卡、災難復原、必要 D1；3.1 非折讓跨機、3.2 折讓 API／跨機、3.3 其餘。不要將下方 2026-10-13 歷史階段重新當成待實作清單。
@@ -337,7 +337,7 @@ Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.
 
 Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **12**；forward migrations 0001～0012。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
-最新 development 遠端證據為本文件上方 2026-10-11 [Run #12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550)：Cloud 0.9.2／storage 13／CYID disabled。先前 Run #8 attempt 2／Cloud 0.8.9／storage 12 保留 V2.6.14 歷史；9/29 Run #7／Cloud 0.8.8／storage 11 為 [歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)。
+最新 development 遠端證據為本文件上方 2026-10-11 [Run #12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550)：Cloud 0.9.2／storage 13／CYID disabled。先前 Run #8 attempt 2／Cloud 0.8.9／storage 12 保留 V2.6.14 歷史；9/29 Run #7／Cloud 0.8.8／storage 11 為歷史遠端快照；過時的單次對話交接已移除，必要時仍可從 Git 歷史查核。
 
 以下四包已合併進 main，不再列為未實作：
 
