@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.5 — 2026/10/19（3.2-B2b Local 已核准折讓配號與固定 g0401 草稿；engineering）
+
+- 新獨立 Patch VERSION=3.1.5、BUILD=0，上一正式 Release 仍 V3.1.0。
+- 新增 Local 已核准折讓的「預留折讓單號（不送出）」：同一位主管重驗身分、配號前再查光貿，官方資料與核准當下不同或不足額一律停止。核准時新增草稿摘要，原發票、買方或草稿品項在核准後變動也停止配號。
+- 依 V3.1.3 Local SQLite ledger 保存原號與完整不可變含未稅 Amount／Tax 的 Frozen request，支援重開／重按原號回查，不會盲目新增號碼；輸入含稅單價時仍保留原 UI 切換並轉成後續 API 需用的未稅請求。
+- 本 Patch **只 reserve，絕不標 sending、也不觸發 g0401/g0501**。正式單次送出／官方原號查回、結果不明防重送及明確撞號處理待 B2c。Cloudflare 不動，既有 V3.0+V3.1 真人驗收清單不改。
+
 ## V3.1.4 — 2026/10/19（3.2-B2a Local 管理員官方即時覆核與草稿核准；engineering）
 
 - 獨立 Patch `VERSION=3.1.4`、`BUILD=0`，上個正式 Release 仍是 V3.1.0。
