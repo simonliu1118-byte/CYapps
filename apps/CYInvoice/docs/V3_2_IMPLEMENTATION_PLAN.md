@@ -10,6 +10,12 @@
 - **Cloudflare 安全邊界**：repo 只做原始碼、可回復的新 migration 草稿、SQLite 合成升級與完整 CI。任何**原 CYInvoice D1／原 Worker／Bindings／Secrets 實際操作**須先告知使用者，交由另開的**本機 Work + MCP**；不重跑 0014～0016、不操作 CYID D1、不建立替代 D1／Worker。
 - **版號**：每一項獨立修改由已發布 V3.1.0 依序推 V3.1.1、V3.1.2……；同項返修才增加 Build。V3.2-A～H 全部完成且取得當次明確發行授權才可發布 V3.2.0，不能沿用 V3.1.0 的發布批准。V3.0／V3.1 真人延期驗收繼續由 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 唯一追蹤，不能篡改為已通過。
 
+## 3.2-A 工程交付（V3.1.2 Build 0）
+
+- 選擇性移植 #440 的折讓 DataGridView，只保留未稅單價模式；原發票來源 DetailVat 含稅欄位載入時轉為未稅單價。允許負單價折扣，採固定七位小數及逐行整元稅額。
+- 本次官方查詢 allowance 陣列必須完整，已完成／已作廢狀態須核對後才能算有效剩餘額。對無摘要、重號、未知狀態採 fail-closed，不把未知誤算成零折讓。
+- 3.2-A 只保存本機人工折讓申請的編輯明細，由 Core 再算並重新查光貿。下一階段 3.2-B 才接 Local 管理員二次官方核對及單次正式 g0401；Cloudflare 最後交本機 MCP。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
