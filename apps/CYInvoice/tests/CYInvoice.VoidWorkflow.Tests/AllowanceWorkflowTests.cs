@@ -311,6 +311,104 @@ internal static class AllowanceWorkflowTests
             setup.Repository.Invoices.LoadOrCreate().Single())?.LocalApprovedUtc);
     }
 
+    public static async Task LocalApprovedDraftReservesFrozenPayloadWithoutSendingAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1");
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var approval = await setup.Workflow.ApproveLocalDraftAsync(issue, "2000",
+            "AdminPass1", preview.OfficialSnapshotHash);
+        Equal(true, approval.LocalApprovalDraftHash.Length > 0);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var reserved = await setup.Workflow.ReserveLocalApprovedDraftAsync(
+            issue, "2000", "AdminPass1");
+        Equal("A20260919001", reserved.AllowanceNumber);
+        Equal("reserved", reserved.Status);
+        Equal("2000", reserved.ApproverEmployeeNo);
+        Equal(approval.LocalApprovedUtc, reserved.ApprovedAtUtc);
+        Equal(4, setup.Gateway.QueryCalls);
+        using (var json = JsonDocument.Parse(reserved.PayloadJson))
+        {
+            var obj = json.RootElement;
+            Equal("A20260919001", obj.GetProperty("AllowanceNumber").GetString());
+            Equal("20260919", obj.GetProperty("AllowanceDate").GetString());
+            Equal(50m, obj.GetProperty("TotalAmount").GetDecimal());
+            Equal(0m, obj.GetProperty("TaxAmount").GetDecimal());
+            Equal(50m, obj.GetProperty("ProductItem")[0].GetProperty("UnitPrice").GetDecimal());
+            Equal(false, obj.GetProperty("ProductItem")[0].TryGetProperty(
+                "GrossUnitPrice", out _));
+        }
+        // A second manager action or app restart gets the identical number
+        // without another AMEGO query or allocation.
+        var same = await setup.Workflow.ReserveLocalApprovedDraftAsync(
+            issue, "2000", "AdminPass1");
+        Equal(reserved, same);
+        Equal(4, setup.Gateway.QueryCalls);
+        var recovered = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id);
+        Equal(reserved, recovered);
+        Equal(0, setup.Gateway.VoidCalls);
+        Throws<InvalidOperationException>(() =>
+            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+    }
+
+    public static async Task LocalReservationRequiresApprovalAndSameManagerAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        await ThrowsAsync<UnauthorizedAccessException>(() =>
+            setup.Workflow.ReserveLocalApprovedDraftAsync(
+                issue, "3015", "Employee1"));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.ReserveLocalApprovedDraftAsync(
+                issue, "2000", "AdminPass1"));
+        Equal(1, setup.Gateway.QueryCalls);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1");
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.ApproveLocalDraftAsync(issue, "2000", "AdminPass1",
+            preview.OfficialSnapshotHash);
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "0001", "SuperPass1"));
+        Equal(3, setup.Gateway.QueryCalls);
+        var noReservation = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id);
+        Equal(null, noReservation);
+    }
+
+    public static async Task LocalOfficialChangeAfterApprovalBlocksFirstReservationAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1");
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.ApproveLocalDraftAsync(issue, "2000", "AdminPass1",
+            preview.OfficialSnapshotHash);
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "OTHER-001", "1", "19")
+        ], summaryPresent: true));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "2000", "AdminPass1"));
+        Equal(4, setup.Gateway.QueryCalls);
+        Equal(null, new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id));
+    }
+
     private static IReadOnlyList<AllowanceProductItem> DraftItems() => [
         new AllowanceProductItem
         {
