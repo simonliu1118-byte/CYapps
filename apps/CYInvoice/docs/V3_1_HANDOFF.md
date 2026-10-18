@@ -2,68 +2,38 @@
 
 更新日期：2026-10-18（Asia/Taipei）
 
-## 基準與範圍
+## 現行狀態（以 GitHub main 為準）
 
-- 正式產品仍為 CYInvoice V3.0.0 Build 0，開發基準 `CYapps/main` SHA `71463bbdff43269a12869611bc7ce86d26457974`；3.1 開發分支 `cyinvoice/v3.1-nonallowance-workitems`。
-- 舊 PR #440 (`cyinvoice/v3-recovery-invitation-schema`) 只作**精準復用**來源；不得整包合併，也不得把舊 0015_work_items.sql 直接套到已有 3.0 schema15 的 D1。
-- 3.1 只有非折讓：未收回紙本作廢管理員覆核、上傳問題與官方狀態不明、管理員跨機審查與可稽核封存。業務正常發票仍在 Windows 原清單，不把整套發票資料建成 D1 表；來源只用代碼／SHA256 避免買方個資與 Secret。
-- 3.2 才有 AMEGO g0401/g0501、折讓配號／核准／跨機；3.3 其餘。原 3.0 公司卡／CYID／Device／Recovery 不重寫。
-- 使用者說明 Cloudflare 3.0 安全升級已完成，真 Email／雙機 DR 驗收後做；本工作不從 GitHub CI 推定 Cloudflare 狀態，也不新增 Worker／D1 部署。本機 MCP 是遠端更動唯一執行途徑。
+- **已合併的原始碼基準**：`CYapps/main` `d3ce35560bc9168ff38ca176397d49e796d49fa9`，最後一筆為 3.1-C3 [#491](https://github.com/simonliu1118-byte/CYapps/pull/491) 的稽核草稿合併；正式 Windows Release 仍是 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)（`VERSION=3.0.0`, `BUILD=0`）。**3.1 並未發布**。
+- **來源與避免重工**：沿用舊 Draft [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 的可用片段，但不可整包合併。原本重複的 #481、#484 已關閉，#488 未合併；已驗證的正式 Source 請只看 #482／#483／#485／#486／#487／#489／#490／#491 的 `main` 結果。
+- **3.0 前置**：使用者明確回報 3.0 Cloudflare 安全升級已完成（本對話沒有實際本機 MCP readback）；真 Email 與雙 Windows 復原 DR 實測往後安排，不阻擋 3.1 Source。**不可重跑 3.0 migrations／CYID 裝置帳號清理**。
+- **3.1 僅非折讓**：`VOID` 紙本未收回的人工覆核、`UPLOAD_ISSUE` 上傳問題／官方狀態不明的例外通報、管理員跨機待辦／人工封存／Audit。Work Item 並非官方 AMEGO 發票／作廢狀態；不自動重送或批量複製發票、買方資訊。3.2 才處理 g0401/g0501 與折讓 API，3.3 其他延後。
 
-## 已實作（3.1-A，尚非正式環境）
+## GitHub 已交付並合併（全部 Source／CI，不代表 Cloudflare 已啟用）
 
-- `cloud/src/work-items.ts`：僅 `VOID`／`UPLOAD_ISSUE` 的建立、匿名來源 SHA256 防重、查詢、管理員預設未結工作分頁和 `open→review→closed` revision CAS；SQL 隔離 active Device／Workspace、阻擋過期 revision 與關閉後再開。
-- `cloud/drafts/0016_non_allowance_work_items.sql`：隔離 SQL 草案，沒有進 canonical migrations；有事件代碼白名單、原報告人／審查者／封存者、無 Delete／關閉後 Update，沒有 ALLOWANCE 種類。保持與 3.0 migrations 0014/0015 不互相覆蓋。
-- `cloud/tests/v3.1-work-items.test.mjs`：在記憶體 SQLite 載入真 0014/0015 後隔離建立草案、驗證資料保留、revoked Device fencing、重複來源／Workspace CAS、敏感欄位不在管理員列表、封存 immutable 與折讓不能混入。
-- `cloud/package.json` 已加入此測試到 `npm test`。尚未建立／註冊 Worker HTTP 入口、任何 WinForms UI 或正式 0016 migration；**目前不可直接部署這片**。
+| 片段 | 已合併 PR | 內容 |
+| --- | --- | --- |
+| 3.1-A | [#482](https://github.com/simonliu1118-byte/CYapps/pull/482) | `cloud/src/work-items.ts`、非折讓 D1 0016 草稿、Workspace／Device fencing、revision CAS 與隔離 SQLite |
+| 3.1-B1 | [#483](https://github.com/simonliu1118-byte/CYapps/pull/483) | CYID SUPER_ADMIN／ADMIN 唯讀管理員 API；schema16／flag 預設關閉，讀後重驗權限 |
+| Windows 唯讀 | [#485](https://github.com/simonliu1118-byte/CYapps/pull/485) | `CloudWorkItemClient` Get／List、分頁及合成契約 |
+| 3.1-B2 API | [#486](https://github.com/simonliu1118-byte/CYapps/pull/486) | USER 作廢申請／上傳問題報告、ADMIN／SUPER_ADMIN 管理 CAS 覆核／封存 |
+| Windows 寫入 | [#487](https://github.com/simonliu1118-byte/CYapps/pull/487) | VOID／UPLOAD_ISSUE 回報、管理 transition、嚴格非官方 receipt 與結果不明處理 |
+| 3.1-C1 | [#489](https://github.com/simonliu1118-byte/CYapps/pull/489) | WinForms「跨機待辦」管理員視窗與 Local／CYID 模式隔離 |
+| 3.1-C2 | [#490](https://github.com/simonliu1118-byte/CYapps/pull/490) | 原「上傳問題」視窗明確回報、穩定 HMAC opaque ID、保護本機識別資訊 |
+| 3.1-C3 | [#491](https://github.com/simonliu1118-byte/CYapps/pull/491) | 0016 草稿內 append-only `work_item_audit_events` 與 DB trigger，角色／Device／revision／人工處理原因 |
 
-## 3.1-B1 追加完成的程式（待 CI 驗收）
+- Cloud Check／隔離 SQLite／CYID 合成測試已通過；[#490](https://github.com/simonliu1118-byte/CYapps/pull/490) 的 Windows x64 Build、Governance／Cloud Check 全通過，[#491](https://github.com/simonliu1118-byte/CYapps/pull/491) 的精確 head Cloud／Governance／部署預檢通過，合併 `main` 的 [Cloud Check #39112276145](https://github.com/simonliu1118-byte/CYapps/actions/runs/39112276145) 通過。
+- 部分舊交接曾寫「3.1-B2 待 CI」「WinForms 尚無操作按鈕」「B1 只有 get/list」「SQL 沒有 Audit」，**已被後續合併取代**；請勿據此重寫 Work Item 程式。
 
-- `cloud/src/work-items-route.ts` 目前僅管理員／超管 `get/list`，其他 API 尚未新增；Worker `app.ts` 需 `WORK_ITEMS_ENABLED=true` 且 `SCHEMA_VERSION>=16` 才會在完成請求位元組上限檢查後啟動 CYID Session。官方發票或客戶詳細資料不進列表。
-- `cloud/tests/v3.1-work-items-route.test.mjs` 以隔離 SQL 驗證 disabled／schema15 拒絕、User 不能查、被撤銷裝置拒絕、權限在讀取期間下降不返回資料，以及分頁欄位隱私。
-- 尚未開啟旗標、正式 D1 沒有 0016 migration。User 建立及管理員寫入仍須 3.1-B2。
+## 接下來（先 Source；D1 一律排最後）
 
-## 2026-10-18 V3.1-B2 非折讓寫入 API（Source，待 CI）
+1. **先完成 Source review 與跨模組回歸**：核對使用者本機手動回報→管理員遠端待辦→兩次 CAS 覆核／封存的端到端契約；確認每次 CYID/Device 重新驗權、使用者不能替管理員核准、HTTP redirect 不洩漏密碼、重複 ID／網路回覆不明只查回、不重送 AMEGO、原 Local 發票／人工折讓不回歸。有缺口再建立單一短期 branch／PR 修正；沒有缺口勿重新做一套。
+2. **Windows 實際 UI 檢視**：確認緊湊版面、按鈕／列表密度及可操作性；必要時做已知差異修正。CI 的 WinForms smoke 不等同使用者真機 UI 驗收。
+3. **最後才執行 3.1-D D1／Cloudflare 操作**：由使用者**本機 MCP** 核對原 CYInvoice 業務 D1 的備份可回復性、既有 schema15/CYID_ONLY、同一 Workspace／Device，審核 `cloud/drafts/0016_non_allowance_work_items.sql` 後才升成 canonical migration，受控 apply；再更新原 Worker、`SCHEMA_VERSION>=16` 與 `WORK_ITEMS_ENABLED=true`，核對私人 readback。**此批文件變更不執行任何一步**。
+4. **最後真人跨機驗收與 Release 判定**：本機報告、兩台 Windows／不同 CYID 角色、網路中斷／Token 撤銷／CAS 競態、Audit 不可篡改與 AMEGO 不重送。正式發行須使用者**當次明確授權**，不得把 V3.0.0 的授權沿用到 V3.1。
 
-- USER、ADMIN、SUPER_ADMIN 可建立 VOID 待覆核 Work Item 或回報 UPLOAD_ISSUE 本機異常；只有 ADMIN／SUPER_ADMIN 能進行 open→review→closed 的版次 CAS 處理。
-- 僅記錄例外人工流程，**不呼叫 AMEGO、不代表官方上傳／作廢成功、不自動重試、不允許折讓**。只允許雜湊的來源識別，禁止任意業務明細。
-- 路由仍由獨立 `WORK_ITEMS_ENABLED`／schema16 gate 保護，CYID Login 之前 4096 bytes 限制；每次寫入再次驗權及 Device，D1 SQL 以 active CYID Cloud Device／Workspace 拒絕競態。
-- **所有 D1 相關作業（migration、備份／還原、SQL、Worker 旗標和遠端部署）一律最後由使用者本機 MCP 處理。此批沒有觸及正式 Cloudflare。**
+## 安全界線
 
-- B2 已加上隔離 SQLite 端點回歸：USER 建立 VOID、上傳問題、角色分權、作廢覆核、重複來源／revision CAS、Device 在 SQL 執行前撤銷、D1 回覆遺失但已提交的 UNKNOWN 安全處理、折讓禁止與不呼叫 AMEGO。所有測試都是合成資料，**未執行正式 D1**。
-
-## 2026-10-18 Windows B2 寫入契約（待 CI）
-
-- Windows Core `CloudWorkItemClient` 精準增加 VOID 申請、UPLOAD_ISSUE 本機異常回報與管理員 CAS 人工覆核；不在此 client 自動執行 AMEGO 或重送業務命令。原 Work Item ID 保留作失敗查回，回覆僅接受 `recorded=true`、`officialVerified=false`、`providerActionPerformed=false`，嚴格拒絕假造官方成功的資料。
-- 合成 HttpClient 測試驗證 request 只送 SHA256、無任何 Workspace 覆寫或買方資訊，錯誤時不自動重試。**還未接 WinForms 操作按鈕；所有正式 D1 處理繼續保留最後由本機 MCP 完成。**
-
-## 2026-10-18 3.1-C2 本機例外明確回報（Source-only）
-
-- Windows「上傳問題」視窗新增「回報跨機」，僅未解決的 VOID 紙本作廢覆核及非折讓 UPLOAD_ISSUE 白名單。必須使用者確認及當次 CYID 驗證，**不在背景同步、不變更本機發票／光貿官方狀態、不重送 AMEGO**。
-- 以原 Device DPAPI 保護 Token 做 HMAC-SHA256，對本機來源產生穩定 Work Item ID／referenceHash，不外傳 invoice number／order ID／買方／錯誤原文；重複或網路回覆不明請管理員以同一 ID 查回，不能自動再送。
-- 本片僅 Windows Source／Core 合成測試。**3.1 D1 0016、Worker 旗標與 Cloudflare 的操作一律留最後，由使用者本機 MCP 處理。**
-
-## 2026-10-18 3.1-C3 逐版稽核資料（僅 0016 草稿與隔離測試）
-
-- `cloud/drafts/0016_non_allowance_work_items.sql` 新增 append-only `work_item_audit_events`，建立／`open→review→closed` 每次 revision 由同一 SQLite transaction 記錄 Workspace、actor、Device、前後狀態、時間、上傳問題封存原因；不存發票、買方或官方狀態。
-- SQL trigger 同時禁止事後竄改／刪除事件及非法狀態倒退；隔離 SQLite 測試要求重複 CAS 不產生事件、不同裝置封存的 actor 保留、官方 status 不能由手工流程冒充。
-- **本段 SQL 仍是草稿，不在 canonical migrations，沒有觸碰真實 D1。** 3.1 所有 D1 schema migration 和 Worker 啟用最後統一由本機 MCP 安全處理。
-
-## 下一片開發順序
-
-1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。
-2. 3.1-C 復用 #440 `CloudWorkItemClient.cs` 的非折讓操作並整合原 Windows 上傳問題／作廢 UI，不新增獨立帳號權威，不改既有 Local 發票開立與人工折讓。
-3. 3.1-D 在獨立本機 MCP 核對原 D1／schema15 的私有備份＋還原後，經核准把草案 0016 升為 canonical，再部署原 Worker 及啟用旗標、用第二台 Windows 真實覆核並檢驗失敗情境。遠端資料庫不用 Cloud CI 綠燈代替。
-4. 未獲當次明確同意不得建立 V3.1 正式 Release；測試包須標示 engineering，不與 V3.0.0 正式版本混淆。
-
-
-## 2026-10-18 Windows B1 唯讀客戶端（待當次 CI）
-
-- 從 #440 的 Windows `CloudWorkItemClient` 精準摘取 **Get／List**、有限分頁與敏感欄位防洩漏；不把尚未在 main 開放的 Create／Report／Transition 寫入方法提早帶進 Windows 客戶端。搭配既有 CYID Login/Device Token 的 HTTPS POST（呼叫端須建立 `AllowAutoRedirect=false` 的 HttpClient，不能將帳密送到重新導向網址）。
-- 在現有 Windows Cloud Tests 加上 list/get／錯誤資料／跨 Workspace 偽造回覆合成測試。**尚未接入 WinForms UI、未啟用 Worker Work Items 旗標，不宣稱可從 Windows 遠端覆核**。
-
-## 2026-10-18 3.1-C1 Windows 管理員跨機待辦 UI（Source-only）
-
-- 主畫面在 CYID Cloud 模式新增「跨機待辦」入口，Local 不顯示，沿用原本的兩個發票頁籤；獨立精簡 WinForms 清單顯示 VOID／UPLOAD_ISSUE 例外、狀態、revision、時間與受限分頁。每次查詢、接手覆核或人工封存都收集當次員工編號／密碼，實際角色和 Device 由 CYID Worker 判定。HTTP 自動重新導向禁用，憑證不存入新檔案。
-- 提交人工覆核前先用原 Work Item ID 讀回最新 revision，僅送單次 transition；若發生競態、逾時或權限失效，顯示『結果不明』要求查回，不自動重送。人工封存不代表光貿官方作廢或上傳成功，3.2 折讓不在此 UI。
-- **D1 一律最後由本機 MCP**：本變更只做 Windows Source/CI，不遷移 0016、不部署 Worker、不啟用 WORK_ITEMS_ENABLED、不建立正式 3.1 Release。Windows 真實跨機 UI 驗收亦留待完成 Cloudflare 的 3.1 最後階段。
+- 3.1 的 SQL **仍在 `cloud/drafts/0016_non_allowance_work_items.sql`，沒有進 `cloud/migrations/`**；`WORK_ITEMS_ENABLED` 預設關閉。正式 D1 未因 GitHub 合併變更；CI 不需要本機 MCP，更不准另外建立 Cloudflare 測試 Worker。
+- 僅處理例外 metadata／雜湊：買方、發票號碼、OrderID、秘密與未授權資料不得傳給 Work Item 清單。Work Item `closed` 是人工封存，不是官方成功。
+- 不刪舊歷史文件／PR；現行唯一待辦以 [TODO.md](TODO.md) 最新 3.1 章節為準。
