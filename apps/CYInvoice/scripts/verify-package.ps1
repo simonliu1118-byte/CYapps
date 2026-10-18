@@ -76,6 +76,7 @@ $RequiredEntries = @(
     "CYInvoice/package-files.json",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
+    "CYInvoice/發行後待驗收.md",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll"
