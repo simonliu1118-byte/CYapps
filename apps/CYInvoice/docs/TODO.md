@@ -10,7 +10,7 @@
 
 ## CYInvoice 3.1：非折讓跨機工作項目（最新；2026-10-18）
 
-- **正式版基準**：已發布 [CYInvoice V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；目前**工程 Source** `VERSION=3.0.1`、`BUILD=0`，**3.1 尚未 Release**。截至 2026-10-18 Source 合併盤點，`CYapps/main` 為 `c69dc912e3e555f7420c6a0358f0aff41e4f13fd`（[#495](https://github.com/simonliu1118-byte/CYapps/pull/495) 已合併），後續仍以 GitHub 當下最新 `main` 為準。
+- **正式版基準**：已發布 [CYInvoice V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；目前**工程 Source** `VERSION=3.0.1`、`BUILD=0`，**3.1 尚未 Release**。截至 2026-10-18 Source 合併盤點，`CYapps/main` 為 `0d26805646e5b3a2f2a7ef20d4734c9e79cee692`（已合併 [#497](https://github.com/simonliu1118-byte/CYapps/pull/497)），後續以 GitHub 最新 `main` 為準。
 - **使用者確認**：3.0 Cloudflare 安全升級已在本機處理；本次沒有本機 MCP 遠端 readback，因此標記「使用者確認」，**不冒充這輪重新驗證**。3.0 真 Email／雙 Windows 災復實測留後續，不作為 3.1 Source 開發的阻塞。
 - **固定 3.1 範圍**：僅 `VOID`（未收紙本作廢的人工覆核）、`UPLOAD_ISSUE`（上傳／官方結果不明的本機例外）、跨 Device 管理員待辦、人工審查及 Audit。Work Item `closed` 只表示人工流程封存，**不表示 AMEGO 官方作廢、上傳成功或允許重送**；一般正常發票／買方細節不進 D1。折讓與 g0401/g0501 **全部在 3.2**，其他延後 3.3。
 - [x] **3.1-A 已合併** [#482](https://github.com/simonliu1118-byte/CYapps/pull/482)：CYID-only Work Item 資料層、Workspace／active Device SQL fencing、來源匿名雜湊、修訂版 CAS、隔離 SQLite 測試；`cloud/drafts/0016_non_allowance_work_items.sql` **仍是草稿，未加入 canonical migrations**。
