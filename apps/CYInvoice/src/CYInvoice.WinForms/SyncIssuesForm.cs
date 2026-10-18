@@ -387,9 +387,20 @@ internal sealed class SyncIssuesForm : Form
                     var review = allowanceWorkflow.ManualReviewFor(record);
                     if (review is not null)
                     {
-                        if (!review.AwaitingConfirmation)
+                        if (review.LocalApprovedUtc is not null)
                         {
-                            primaryText = "已人工處理";
+                            // Approved source is frozen: no manual completion,
+                            // reapproval, cancel, or implicit g0401 call.
+                            primaryText = string.Empty;
+                            allowCancel = false;
+                        }
+                        else if (!review.AwaitingConfirmation)
+                        {
+                            var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                                repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
+                            primaryText = local && review.DraftItems is { Count: > 0 }
+                                ? "核准折讓草稿（不送出）"
+                                : "已人工處理";
                             allowCancel = true;
                         }
                         else
@@ -531,7 +542,14 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
 
-        if (!review.AwaitingConfirmation) await CompleteAllowanceAsync(issue);
+        if (!review.AwaitingConfirmation)
+        {
+            if (repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly &&
+                review.DraftItems is { Count: > 0 })
+                await ApproveLocalAllowanceDraftAsync(issue);
+            else await CompleteAllowanceAsync(issue);
+        }
         else await ConfirmAllowanceCandidateAsync(issue, record, review);
     }
 
@@ -598,6 +616,52 @@ internal sealed class SyncIssuesForm : Form
             MessageBox.Show(this, error.Message, "人工確認未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
+    }
+
+    private async Task ApproveLocalAllowanceDraftAsync(InvoiceSyncIssue issue)
+    {
+        if (manualReviewBusy || issue.ResolvedUtc is not null) return;
+        using var login = new EmployeeAdminLoginForm(repository,
+            "Local 折讓核准－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        SetManualReviewBusy(true);
+        try
+        {
+            // The manager sees a fresh official snapshot before signing off.
+            var preview = await allowanceWorkflow.PreviewLocalDraftAsync(issue,
+                login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            if (IsDisposed) return;
+            var message =
+                $"原發票：{preview.InvoiceNumber}\n" +
+                $"本次折讓含稅金額：{MoneyFormatter.Integer(preview.RequestedGross)}\n" +
+                $"光貿當下剩餘可折金額：{preview.OfficialRemainingGross}\n\n" +
+                "光貿目前已有折讓（包含已作廢與歷史紀錄）：\n" +
+                FormatAllowances(preview.OfficialHistory) +
+                "\n\n核准只會鎖定本機折讓草稿，不會呼叫光貿 g0401、" +
+                "不會開出折讓單。核准後不可撤回；待後續正式送出功能完成。" +
+                "\n\n是否確認核准？";
+            if (MessageBox.Show(this, message, "Local 折讓覆核－光貿即時查回",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            var approved = await allowanceWorkflow.ApproveLocalDraftAsync(issue,
+                login.EnteredEmployeeNo, login.AuthenticatedPassword,
+                preview.OfficialSnapshotHash);
+            if (IsDisposed) return;
+            MessageBox.Show(this,
+                $"已記錄 Local 管理員 {approved.LocalApproverEmployeeNo} 核准。" +
+                "\n本次沒有向光貿開立折讓，後續正式送出功能完成前不可取消。",
+                "核准草稿完成（未送出）", MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            if (!IsDisposed)
+                MessageBox.Show(this, error.Message,
+                    "Local 折讓核准未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
     private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue)
@@ -831,6 +895,12 @@ internal sealed class SyncIssuesForm : Form
         rows.Add(new("申請員工", EmployeeDisplay(review?.RequesterEmployeeNo ?? "")));
         rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("折讓原因", review?.Reason ?? "－"));
+        if (review?.LocalApprovedUtc is { } approved)
+        {
+            rows.Add(new("Local 核准管理員", EmployeeDisplay(review.LocalApproverEmployeeNo)));
+            rows.Add(new("Local 核准時間", approved.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
+            rows.Add(new("正式送出", "尚未呼叫 g0401；草稿已鎖定，不可取消"));
+        }
         rows.Add(new("處理管理員", EmployeeDisplay(review?.HandlerEmployeeNo ?? "")));
         rows.Add(new("人工處理時間", review?.ManualCompletedUtc is { } completed
             ? completed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
@@ -850,6 +920,7 @@ internal sealed class SyncIssuesForm : Form
         }
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null
             ? "已人工處理"
+            : review?.LocalApprovedUtc is not null ? "Local 已核准，待正式送出功能"
             : review?.AwaitingConfirmation == true ? "等待光貿確認" : "等待管理員人工處理"));
         if (record is not null)
         {
