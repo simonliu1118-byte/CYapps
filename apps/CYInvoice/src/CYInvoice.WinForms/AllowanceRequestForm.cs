@@ -17,6 +17,9 @@ internal sealed class AllowanceRequestForm : Form
     private readonly TextBox reason = UiControls.TextBox(100);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(128);
+    private readonly CheckBox grossPrices = new() {
+        Text = "以含稅單價輸入", AutoSize = true
+    };
     private readonly TextBox officialHistory = new() {
         ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
         TabStop = false, Dock = DockStyle.Fill,
@@ -61,6 +64,7 @@ internal sealed class AllowanceRequestForm : Form
         officialHistory.Text = DescribeOfficialSnapshot(invoice);
         BuildLayout();
         if(invoice is not null)LoadOriginal(invoice);
+        grossPrices.CheckedChanged += (_, _) => ConvertPrices();
         products.CellEndEdit+=(_,_)=>UpdateTotals();
         products.CellValueChanged+=(_,_)=>UpdateTotals();
         products.CurrentCellDirtyStateChanged+=(_,_)=>{
@@ -119,16 +123,20 @@ internal sealed class AllowanceRequestForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,50));
         var header=new TableLayoutPanel {
-            Dock=DockStyle.Fill,ColumnCount=1,RowCount=2
+            Dock=DockStyle.Fill,ColumnCount=2,RowCount=2
         };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,75));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
         balance.Text=remaining is null
             ?"請選擇要折讓的商品並修改數量或單價。"
             :$"原發票 {original!.Amount:N0} 元｜剩餘可折讓 {remaining.Value} 元";
         header.Controls.Add(balance,0,0);
+        header.Controls.Add(grossPrices,1,0);
         header.Controls.Add(new Label {
-            Text="單價一律輸入未稅；負單價可作折扣，數量最多 7 位小數。金額與稅額自動重算。",
+            Text="可切換含稅／未稅單價，負單價可作折扣；程式自動換算未稅金額、稅額與總額。",
             Dock=DockStyle.Fill,ForeColor=Color.DimGray
         },0,1);
+        header.SetColumnSpan(header.GetControlFromPosition(0,1)!,2);
         root.Controls.Add(header,0,0);
         root.Controls.Add(officialHistory,0,1);
         root.Controls.Add(products,0,2);
@@ -178,16 +186,16 @@ internal sealed class AllowanceRequestForm : Form
 
     private void LoadOriginal(InvoiceRecord invoice)
     {
-        // invoice_query has already refreshed these official items before the
-        // detail window is shown. Leave discounts as editable negative lines.
+        // Use the invoice's original input convention. Source DetailVat=1
+        // prices are already gross, so do not silently convert on first load.
+        grossPrices.Checked = invoice.DetailVat == 1;
+        products.Columns["unit_price"]!.HeaderText =
+            grossPrices.Checked ? "含稅單價" : "未稅單價";
         foreach(var item in invoice.Items){
             var qty=item.QuantityDecimal.Length>0
                 ?item.QuantityDecimal:item.Quantity.ToString(CultureInfo.InvariantCulture);
             var price=item.UnitPriceDecimal.Length>0
                 ?item.UnitPriceDecimal:item.UnitPrice.ToString(CultureInfo.InvariantCulture);
-            // invoice_query DetailVat=1 means taxable source prices include VAT.
-            if (invoice.DetailVat == 1 && item.TaxType == "1")
-                price = FixedDecimal.MultiplyRatio(FixedDecimal.Parse(price), 100, 105).ToString();
             AddProduct(item.Description,qty,price,item.TaxType);
         }
         UpdateTotals();
@@ -201,6 +209,40 @@ internal sealed class AllowanceRequestForm : Form
         }
         var kind=taxKind switch {"2"=>"零稅率","3"=>"免稅",_=>"應稅"};
         products.Rows.Add(name,quantity,price,kind,"","","");
+        UpdateTotals();
+    }
+
+    private void ConvertPrices()
+    {
+        // Complete editing before switching. The visible taxable unit prices
+        // change convention; zero-rated/exempt unit prices are unchanged.
+        products.EndEdit();
+        if (calculating) return;
+        calculating = true;
+        try
+        {
+            foreach (DataGridViewRow row in products.Rows)
+            {
+                if (Convert.ToString(row.Cells["tax_type"].Value) != "應稅")
+                    continue;
+                var value = Convert.ToString(row.Cells["unit_price"].Value) ?? "";
+                try
+                {
+                    var price = FixedDecimal.Parse(value);
+                    row.Cells["unit_price"].Value = FixedDecimal.MultiplyRatio(
+                        price, grossPrices.Checked ? 105 : 100,
+                        grossPrices.Checked ? 100 : 105).ToString();
+                }
+                catch (Exception error) when (error is FormatException or OverflowException)
+                {
+                    // Keep invalid text for user correction; submitting will
+                    // fail validation rather than quietly resetting the price.
+                }
+            }
+            products.Columns["unit_price"]!.HeaderText =
+                grossPrices.Checked ? "含稅單價" : "未稅單價";
+        }
+        finally { calculating = false; }
         UpdateTotals();
     }
 
@@ -227,13 +269,27 @@ internal sealed class AllowanceRequestForm : Form
             var kind=Convert.ToString(row.Cells["tax_type"].Value);
             var taxType=kind switch {"零稅率"=>2,"免稅"=>3,"應稅"=>1,
                 _=>throw new InvalidOperationException("請選擇課稅別")};
-            // Tax-exclusive price is the ONLY editable mode. Exact
-            // seven-place arithmetic also handles negative discount lines.
-            var itemNet=FixedDecimal.FromInt64(
-                FixedDecimal.Multiply(quantity,price).RoundInt64());
-            var itemTax=taxType!=1?new FixedDecimal(0):
-                FixedDecimal.FromInt64(
-                    FixedDecimal.MultiplyRatio(itemNet,5,100).RoundInt64());
+            // Gross-entry mode: keep the exact typed gross unit price so the
+            // Core validator can reproduce the gross-first rounding. DTOs
+            // still carry a net unit price and net/tax amounts to AMEGO.
+            var grossMode = grossPrices.Checked && taxType == 1;
+            var netPrice = grossMode
+                ? FixedDecimal.MultiplyRatio(price, 100, 105) : price;
+            var lineGross = grossMode
+                ? FixedDecimal.FromInt64(
+                    FixedDecimal.Multiply(quantity, price).RoundInt64())
+                : new FixedDecimal(0);
+            var itemNet = grossMode
+                ? FixedDecimal.FromInt64(
+                    FixedDecimal.MultiplyRatio(lineGross, 100, 105).RoundInt64())
+                : FixedDecimal.FromInt64(
+                    FixedDecimal.Multiply(quantity, netPrice).RoundInt64());
+            var itemTax = taxType != 1 ? new FixedDecimal(0) :
+                grossMode
+                    ? FixedDecimal.Add(lineGross,
+                        new FixedDecimal(checked(-itemNet.ScaledValue)))
+                    : FixedDecimal.FromInt64(
+                        FixedDecimal.MultiplyRatio(itemNet, 5, 100).RoundInt64());
             row.Cells["amount"].Value=itemNet.ToString();
             row.Cells["tax"].Value=itemTax.ToString();
             net=FixedDecimal.Add(net,itemNet);
@@ -242,7 +298,10 @@ internal sealed class AllowanceRequestForm : Form
                 OriginalInvoiceNumber=original.InvoiceNumber,
                 OriginalInvoiceDate=date,OriginalDescription=description,
                 Quantity=decimal.Parse(quantity.ToString(),CultureInfo.InvariantCulture),
-                UnitPrice=decimal.Parse(price.ToString(),CultureInfo.InvariantCulture),
+                UnitPrice=decimal.Parse(netPrice.ToString(),CultureInfo.InvariantCulture),
+                GrossUnitPrice=grossMode
+                    ?decimal.Parse(price.ToString(),CultureInfo.InvariantCulture)
+                    :null,
                 Amount=decimal.Parse(itemNet.ToString(),CultureInfo.InvariantCulture),
                 Tax=decimal.Parse(itemTax.ToString(),CultureInfo.InvariantCulture),
                 TaxType=taxType
@@ -331,13 +390,31 @@ internal sealed class AllowanceRequestForm : Form
             throw new InvalidOperationException("折讓視窗未帶入原發票及官方剩餘額");
         var initial = Calculate().Gross;
         products.Rows.RemoveAt(1);
-        products.Rows[0].Cells["unit_price"].Value = "100";
-        if (initial.ScaledValue <= 0 || Calculate().Gross.ToString() != "105" ||
-            Calculate().Gross.ScaledValue > remaining.Value.ScaledValue)
-            throw new InvalidOperationException("未稅單價／折扣刪除／5%稅額計算失敗");
         products.Rows[0].Cells["unit_price"].Value = "100.1234567";
-        if (Calculate().Gross.ToString() != "105")
-            throw new InvalidOperationException("七位小數精度失敗");
+        var net = Calculate();
+        if (initial.ScaledValue <= 0 || net.Gross.ToString() != "105" ||
+            net.Gross.ScaledValue > remaining.Value.ScaledValue ||
+            net.Lines[0].GrossUnitPrice is not null)
+            throw new InvalidOperationException("未稅輸入／七位小數／額度計算失敗");
+        grossPrices.Checked = true;
+        var gross = Calculate();
+        if (products.Columns["unit_price"]?.HeaderText != "含稅單價" ||
+            gross.Gross != net.Gross || gross.Lines[0].GrossUnitPrice is null)
+            throw new InvalidOperationException("未稅轉含稅單價未同步明細與總額");
+        products.Rows[0].Cells["unit_price"].Value = "105";
+        gross = Calculate();
+        if (gross.Gross.ToString() != "105" ||
+            gross.Lines[0].UnitPrice != 100m ||
+            gross.Lines[0].Amount != 100m ||
+            gross.Lines[0].Tax != 5m ||
+            gross.Lines[0].GrossUnitPrice != 105m)
+            throw new InvalidOperationException("含稅輸入沒有正確自動換算未稅送出內容");
+        grossPrices.Checked = false;
+        var backToNet = Calculate();
+        if (products.Columns["unit_price"]?.HeaderText != "未稅單價" ||
+            backToNet.Gross.ToString() != "105" ||
+            backToNet.Lines[0].GrossUnitPrice is not null)
+            throw new InvalidOperationException("含稅轉未稅單價或總額計算失敗");
     }
 
     internal void VerifySmokeLayout()
@@ -346,7 +423,9 @@ internal sealed class AllowanceRequestForm : Form
            ClientSize.Height!=WindowHeight||CancelButton!=cancel||
            !password.UseSystemPasswordChar||products.Columns.Count!=7||
             !officialHistory.ReadOnly || officialHistory.Text.Length == 0 ||
-            products.Columns["unit_price"]?.HeaderText != "未稅單價")
+            (products.Columns["unit_price"]?.HeaderText != "未稅單價" &&
+             products.Columns["unit_price"]?.HeaderText != "含稅單價") ||
+            grossPrices.Parent is null)
             throw new InvalidOperationException("折讓編輯視窗基本配置不正確");
     }
 }
