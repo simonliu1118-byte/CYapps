@@ -54,6 +54,7 @@ internal sealed class MainForm : Form
     // A historical Built-in Cloud setting is preserved but cannot revive its retired account UI.
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
+    private readonly Button workItemsButton = UiControls.StandardButton("跨機待辦");
     private readonly Label copyrightLabel = new()
     {
         Text = "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.",
@@ -223,10 +224,12 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(forgotPasswordButton, OpenPasswordRecovery);
         ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
         ConfigureHeaderButton(settingsButton, OpenSettings);
+        ConfigureHeaderButton(workItemsButton, OpenCloudWorkItems);
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
         tabHost.Controls.Add(accountManagementButton);
         tabHost.Controls.Add(settingsButton);
+        tabHost.Controls.Add(workItemsButton);
         tabHost.Resize += (_, _) => PositionHeaderButtons();
         tabHost.Layout += (_, _) => PositionHeaderButtons();
         root.Controls.Add(banner, 0, 0);
@@ -283,6 +286,10 @@ internal sealed class MainForm : Form
             top,
             forgotPasswordButton.Width,
             forgotPasswordButton.Height);
+        workItemsButton.SetBounds(
+            Math.Max(0, forgotPasswordButton.Left - workItemsButton.Width - HeaderButtonGap),
+            top, workItemsButton.Width, workItemsButton.Height);
+        workItemsButton.BringToFront();
         forgotPasswordButton.BringToFront();
         accountManagementButton.BringToFront();
         settingsButton.BringToFront();
@@ -311,6 +318,36 @@ internal sealed class MainForm : Form
         recordsPage.Reload();
         _ = RefreshRuntimeModeAsync();
         _ = RefreshApiAsync();
+    }
+
+    private void OpenCloudWorkItems()
+    {
+        var current=repository.Settings.LoadOrCreate();
+        if(current.CloudMode!=CloudModes.CloudPreferred ||
+           current.CloudIdentityProvider!="CYID" ||
+           !current.CloudEmployeeAuthorityReady ||
+           string.IsNullOrWhiteSpace(current.CloudBaseUrl) ||
+           string.IsNullOrWhiteSpace(current.CloudWorkspaceId))
+        {
+            MessageBox.Show(this,"請先完成 CYID 雲端裝置設定。","跨機待辦",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            var token=repository.Settings.CloudDeviceToken(current);
+            if(string.IsNullOrWhiteSpace(token))
+                throw new InvalidOperationException("找不到可用的 Device Token。");
+            using var form=new CloudWorkQueueForm(repository,current.CloudBaseUrl,
+                token,current.CloudWorkspaceId);
+            form.ShowDialog(this);
+        }
+        catch
+        {
+            // Never expose a Device Token, credential or Cloud response body.
+            MessageBox.Show(this,"無法確認此裝置的 CYID 雲端身分，本機資料未變更。",
+                "跨機待辦尚未就緒",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
     }
 
     private void OpenAccountManagement()
@@ -636,6 +673,10 @@ internal sealed class MainForm : Form
     {
         ownsAccountManagement = AllowsLocalAccountManagement(settings);
         accountManagementButton.Visible = ownsAccountManagement;
+        workItemsButton.Visible = settings.CloudMode==CloudModes.CloudPreferred &&
+            settings.CloudIdentityProvider=="CYID" &&
+            settings.CloudEmployeeAuthorityReady &&
+            !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
         PositionHeaderButtons();
         if (settings.CloudMode == CloudModes.LocalOnly)
         {
@@ -943,6 +984,10 @@ internal sealed class MainForm : Form
         var identitySettings = repository.Settings.LoadOrCreate();
         ownsAccountManagement = AllowsLocalAccountManagement(identitySettings);
         accountManagementButton.Visible = ownsAccountManagement;
+        workItemsButton.Visible = identitySettings.CloudMode==CloudModes.CloudPreferred &&
+            identitySettings.CloudIdentityProvider=="CYID" &&
+            identitySettings.CloudEmployeeAuthorityReady &&
+            !string.IsNullOrWhiteSpace(identitySettings.CloudBaseUrl);
         PositionHeaderButtons();
         ApplyConnectionControls(state);
         foreach (var detail in Application.OpenForms.OfType<RecordDetailForm>().ToArray()) detail.ApplyServiceState();
@@ -977,6 +1022,8 @@ internal sealed class MainForm : Form
         accountManagementButton.Enabled = !state.BlockAll && (!state.CloudRequired || state.CloudAvailable);
         forgotPasswordButton.Enabled = accountManagementButton.Enabled;
         settingsButton.Enabled = !state.BlockAll;
+        workItemsButton.Enabled = workItemsButton.Visible && !state.BlockAll &&
+            state.CloudRequired && state.CloudAvailable;
     }
 
     private async Task RunStartupSyncAsync()

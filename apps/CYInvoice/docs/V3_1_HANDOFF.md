@@ -49,3 +49,9 @@
 
 - 從 #440 的 Windows `CloudWorkItemClient` 精準摘取 **Get／List**、有限分頁與敏感欄位防洩漏；不把尚未在 main 開放的 Create／Report／Transition 寫入方法提早帶進 Windows 客戶端。搭配既有 CYID Login/Device Token 的 HTTPS POST（呼叫端須建立 `AllowAutoRedirect=false` 的 HttpClient，不能將帳密送到重新導向網址）。
 - 在現有 Windows Cloud Tests 加上 list/get／錯誤資料／跨 Workspace 偽造回覆合成測試。**尚未接入 WinForms UI、未啟用 Worker Work Items 旗標，不宣稱可從 Windows 遠端覆核**。
+
+## 2026-10-18 3.1-C Windows 跨機待辦操作入口（待最新 CI）
+
+- CYID CloudPreferred Device ready 才顯示主畫面的「跨機待辦」按鈕；Local/尚未完成身分綁定的裝置不顯示，原本三個主畫面按鈕位置不變。
+- 獨立精簡 WinForms 視窗，管理員當次輸入 CYID 憑證查詢／開始覆核／人工封存，API 再次確認角色與 Device，HTTP 禁止自動 redirect；列表只顯示最少欄位。要修改前以 GET 查回最新 revision，失敗／回覆遺失僅提示查回，不盲目重試，絕不呼叫光貿。
+- 本切片不改原本上傳問題／已開立發票資料表或既有 Local 流程；原本上傳問題來源事件自動報告尚待連接。3.1 原 D1 的 0016 Migration、Worker Flag/部署、完整實機驗收 **全部留到最後由使用者本機 MCP 進行**。

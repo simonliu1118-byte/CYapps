@@ -18,6 +18,7 @@
 - [x] **3.1-B2 非折讓 API Source（待 CI）**：提交 VOID 待覆核、上傳問題與管理員狀態 CAS，僅元資料，不操作官方 API；正式 D1／Worker 一律最後交本機 MCP。
 - [ ] **3.1-B**：接 CYID-only 最小 REST API（使用者回報與管理員覆核嚴格分權、schema16＋功能旗標預設關閉、逾時後以相同 Work Item ID 查回，不能自動重送官方開票或作廢）。
 - [x] **3.1-B2 Windows 寫入契約（待 CI）**：Core 客戶端新增 VOID 申請、上傳問題回報、管理員版次覆核及嚴格 receipt 檢查，僅元資料、無 AMEGO 呼叫；配合合成 HTTP 契約測試。
+- [x] **3.1-C 管理員 WinForms 跨機待辦入口（待 CI）**：CYID 綁定裝置才顯示主畫面按鈕，獨立 50 筆有界分頁／最新 revision 覆核／上傳問題封存原因選擇，伺服器權限、Client 回覆檢查均沿用主路徑，不改 Local 功能。
 - [ ] **3.1-C**：從 #440 精準接回 `CloudWorkItemClient` 的非折讓部分，與現有 Windows 上傳問題／未收紙本作廢操作整合；Local 保持原有流程，管理員在自己電腦查清單、寫入理由並封存。
 - [ ] **3.1-D 本機 MCP／實機**：0016 經完整 D1 備份／還原驗證後方可正式遷移、部署原 Worker 並實測跨機與稽核；不建立 Cloudflare 測試 Worker。3.1 不經使用者當次授權自行正式 Release。
 - 當前交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)。
