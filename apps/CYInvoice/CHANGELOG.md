@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.0 — 2026/10/19（正式 Minor；非折讓跨機人工待辦）
+
+- Minor 升版理由：已完成 CYID 非折讓跨機 Work Item 工作流及原 D1／Worker schema16 受控切換，不是單純 UI 修正。VERSION 3.0.4→3.1.0、BUILD=0；正式 Release 當次由使用者明確批准，從 main 重新執行安全／Windows／封裝／SHA-256。
+- 員工對未收回紙本作廢、非折讓同步例外可手動建立匿名跨機待辦；CYID 管理員跨 Device 查詢、ID 唯讀查回、open→review→closed 覆核、revision CAS、append-only 稽核。權限撤銷、Workspace／Device 隔離、來源摘要資料最小化與結果不明不重送保護保留。人工封存不等於 AMEGO 官方成功；3.2 折讓不納入。
+- 使用者本機 MCP 已回報：原 CYInvoice D1 僅一次性套用 canonical 0016，原 Worker 受控啟用 schema16／Work Items，備份、還原演練及前後資料一致性通過。本 repo 只記錄交接摘要，不聲稱本輪獨立連線核對；私人證據留本機。
+- **發行後仍待真人驗收**：使用者明確批准將 V3.0 的真 Email、異機不同金鑰災復／邀請、角色／撤銷／中斷／公司卡／UI 等與 V3.1 的雙 Windows、CYID 角色、CAS、斷線及 DPI 一併延後。**全部集中在 [唯一合併待驗收檔](docs/POST_RELEASE_ACCEPTANCE.md)**，正式 ZIP 同時附「發行後待驗收.md」；不以 CI 代替真人操作，也不勾成通過。
+- 此版本不重做 D1／Worker 或操作 CYID D1，不擅自簽發復原邀請。V3.0.0 舊 tag／Git 歷史用於追溯；依使用者另項要求，V3.1.0 新 Release 成功後再處理 V3.0.0 發行頁的移除，絕不提前刪除舊版下載。
+
 ## V3.0.4 — 2026/10/18（V3.1-D canonical schema16；engineering）
 
 - 新獨立維運準備項目，依規則 Patch +1、BUILD=0；不是 V3.1.0 正式發行。上一正式 Release V3.0.0 保留。

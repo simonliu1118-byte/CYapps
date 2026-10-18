@@ -1,6 +1,16 @@
 # CYInvoice V3.1：非折讓跨機協作交接
 
-更新日期：2026-10-18（Asia/Taipei）
+更新日期：2026-10-19（Asia/Taipei）
+
+## V3.1.0 正式發布與延期驗收（最新狀態）
+
+- 使用者已批准 V3.1.0 Build 0 正式 Release。只有正式 workflow 成功並出現 tag、ZIP、SHA-256 時，才代表已發行。
+- PR #501 已合併 main ebc7b874d5d2fc091122943aa3b19729da5b7006；canonical 0016 可執行 SQL 與原草稿相同，0014、0015 未變。
+- V3.1-D 原 D1 schema16 與原 Worker 功能啟用由使用者本機 MCP 回報完成，私有還原及讀回證據不在公開 repository，本對話不宣稱獨立遠端確認。
+- V3.0 原待驗收及 V3.1 新待驗收已由使用者允許發行後補驗，唯一清單為 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)，正式 ZIP 同附「發行後待驗收.md」。不得把尚未實測項目標示為通過。
+- 使用者另要求 V3.1.0 新 Release 確認成功後才移除 V3.0.0 舊發行頁，保留舊 tag 及 Git 歷史。3.2 折讓功能不包含在 3.1。下面較舊版本狀態均為歷史 checkpoint。
+
+
 
 ## V3.1-D 最新 Source（V3.0.4 Build 0；不等同正式發行）
 

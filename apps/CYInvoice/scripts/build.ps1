@@ -72,6 +72,8 @@ foreach ($AssemblyName in @(
     if (Test-Path -LiteralPath $PublishedAssembly -PathType Leaf) { Remove-Item -LiteralPath $PublishedAssembly -Force }
 }
 Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
+# Ship the same single V3.0/V3.1 acceptance checklist as a user-visible package file.
+Copy-Item (Join-Path $ProjectRoot "docs/POST_RELEASE_ACCEPTANCE.md") (Join-Path $ReleaseDir "發行後待驗收.md") -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePreview") -ItemType Directory -Force | Out-Null

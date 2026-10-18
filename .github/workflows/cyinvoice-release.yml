@@ -217,3 +217,32 @@ jobs:
             --title "CYInvoice V$env:CYINVOICE_VERSION" `
             --notes-file ./dist/release-notes.md `
             --latest
+
+      # Explicit one-time user instruction for V3.1.0 only. Never remove the
+      # previous download until this run published AND verified the new assets.
+      # Deliberately retain the historical cyinvoice-v3.0.0 Git tag.
+      - name: Retire V3.0.0 release after verifying V3.1.0 assets
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true' && env.CYINVOICE_VERSION == '3.1.0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $newTag = 'cyinvoice-v3.1.0'
+          $oldTag = 'cyinvoice-v3.0.0'
+          $expectedZip = 'CYInvoice_V3.1.0.zip'
+          $expectedChecksum = 'CYInvoice_V3.1.0.zip.sha256'
+          $assets = @(gh release view $newTag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or $assets -notcontains $expectedZip -or $assets -notcontains $expectedChecksum) {
+            throw "New formal release assets not yet verified; do NOT retire V3.0.0."
+          }
+          gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "V3.0.0 Release already absent; preserving the historic Git tag."
+            exit 0
+          }
+          gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --yes
+          if ($LASTEXITCODE -ne 0) { throw "Could not retire V3.0.0 release." }
+          $historicTag = (& git ls-remote --tags origin 'refs/tags/cyinvoice-v3.0.0')
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($historicTag)) {
+            throw "Historical V3.0.0 Git tag must remain after deleting its Release."
+          }
+          Write-Host "V3.1.0 assets verified. Retired V3.0.0 Release; kept historical tag."

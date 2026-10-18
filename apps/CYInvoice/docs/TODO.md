@@ -1,19 +1,19 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-18（Asia/Taipei）。本檔為唯一未完成工作清單。**目前正式 Windows Release 是 V3.0.0 Build 0**；3.1 為尚未正式發布的非折讓跨機 Source 開發。以下 V2.6.19／Cloud 0.9.3／schema13 段落均為 2026-10-13 歷史基準，**不得當成現行正式版本或即時遠端 Cloudflare 狀態**。
+更新日期：2026-10-19（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
 - 本公司已使用 CYID。**以下為歷史 V2 註記**：其他公司舊 Built-in／Self-hosted 如需留存須用各自原 V2 相容配置；**V3.0 新版只支援 Local／CYID Cloud**，不再提供 Built-in／Self-hosted 現役模式，也不能復活本公司已退役的舊帳號表。
-- 現行交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
+- 現行交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)；**V3.0／V3.1 發行後待驗收唯一清單**：[POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)。[RC_TEST.md](RC_TEST.md) 保留詳細歷史案例供操作參考，不另做第二份未驗收統計；私人資料不能放入公開 repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-## CYInvoice 3.1：非折讓跨機工作項目（最新；2026-10-18）
+## CYInvoice 3.1：非折讓跨機工作項目（Minor V3.1.0；2026-10-19）
 
 - [x] **V3.1-D Source／V3.0.4 Build 0**：0016 由草稿提升為 canonical migration，SQL 行為不變；schema source marker 為 16，Work Item 隔離測試從正式 migration 恰好執行一次，V3.0 歷史測試仍鎖在 schema15。尚未因 source 提交啟用遠端功能，實際本機 MCP 結果以私有 readback 為準。以下草稿／V3.0.3 狀態保留為歷史，不覆蓋此項。
-- [ ] **V3.1-D 遠端驗收證據**：由本機 MCP 驗證原庫、加密備份／本地還原、僅套用 0016、保留原 Bindings／Secrets 更新原 Worker 及 schema16／WORK_ITEMS_ENABLED；私人目標、資料指紋與 Time Travel bookmark 不進公開文件。不得重跑 0014／0015 或建立測試 Worker、新 D1。
+- [x] **V3.1-D 本機 MCP 遠端切換（使用者完成回報，不是本對話獨立遠端 readback）**：原 CYInvoice D1 先核對原 schema15/CYID_ONLY 與 15 筆 migration、加密備份還原及回滾演練，再只套用 canonical 0016 一次，更新原 Worker schema16／WORK_ITEMS_ENABLED=true；前後資料與約束回查通過，私有證據保留本機、不含於 GitHub。禁止重跑 0014／0015、建立新 Worker／D1 或操作 CYID D1。
 
-- **正式版基準**：已發布 [CYInvoice V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；目前**工程 Source** `VERSION=3.0.3`、`BUILD=0`，**3.1 尚未 Release**。截至 2026-10-18 Source 合併盤點，`CYapps/main` 為 `0d26805646e5b3a2f2a7ef20d4734c9e79cee692`（已合併 [#497](https://github.com/simonliu1118-byte/CYapps/pull/497)），後續以 GitHub 最新 `main` 為準。
+- **3.1 正式發行基準**：`VERSION=3.1.0`、`BUILD=0`，使用者 2026-10-19 明確批准先發布、雙 Windows／CYID 角色等留發行後。發行工作流程必須從 main 重驗並產 ZIP／SHA-256；上一正式版 V3.0.0 的 Release 只在新版本發布成功後才依使用者要求另行移除，tag／Git 歷史不受影響。
 - **使用者確認**：3.0 Cloudflare 安全升級已在本機處理；本次沒有本機 MCP 遠端 readback，因此標記「使用者確認」，**不冒充這輪重新驗證**。3.0 真 Email／雙 Windows 災復實測留後續，不作為 3.1 Source 開發的阻塞。
 - **固定 3.1 範圍**：僅 `VOID`（未收紙本作廢的人工覆核）、`UPLOAD_ISSUE`（上傳／官方結果不明的本機例外）、跨 Device 管理員待辦、人工審查及 Audit。Work Item `closed` 只表示人工流程封存，**不表示 AMEGO 官方作廢、上傳成功或允許重送**；一般正常發票／買方細節不進 D1。折讓與 g0401/g0501 **全部在 3.2**，其他延後 3.3。
 - [x] **3.1-A 已合併** [#482](https://github.com/simonliu1118-byte/CYapps/pull/482)：CYID-only Work Item 資料層、Workspace／active Device SQL fencing、來源匿名雜湊、修訂版 CAS、隔離 SQLite 測試；`cloud/drafts/0016_non_allowance_work_items.sql` **仍是草稿，未加入 canonical migrations**。
@@ -34,9 +34,9 @@
 - [x] **3.1 單筆管理員查回資料最小化**：[#497](https://github.com/simonliu1118-byte/CYapps/pull/497) 已完成 Worker `get` 僅需七欄，Windows client 拒絕多餘員工／Device／audit 欄位，完整 D1 Audit 原樣保留。Cloud／Windows／Governance CI 全通過，無 Cloudflare 部署。
 - [x] **V3.0.2／跨機待辦視窗欄寬**：獨立 Patch（非 V3.0.1 返修），將七欄舊固定寬度改為按 ListView 實際寬度配置；WinForms 真實控制項 smoke 驗證預設 920×500 和最小 740×400 視窗、保留 ID 欄與捲軸空間。僅工程 CI，不冒充 DPI 或真人驗收。
 - [x] **V3.0.3／非折讓跨機回報按鈕資格判定**：檢視紙本未收回作廢／上傳技術異常的實際本機流程，兩者已接入「上傳問題」需使用者明確確認的跨機回報。修正 Cloud 模式下不支援的折讓／已結案／未知項目曾能誤按「回報跨機」的 UI 缺口，只讓 V3.1 支援的未結案非折讓例外且 Device／Workspace／CYID 員工權限準備好時啟用；Core 契約測試涵蓋所有允許／拒絕類型。獨立 Patch V3.0.3 Build 0。
-- [ ] **3.1 真 Windows／實際 UI 與情境預驗收**：由實機檢視控制項密度、最小尺寸、100%／125%／150% DPI、角色與撤銷後 UI、離線／雙機／不明回覆查回（本機多機測試不可冒充 Cloudflare 正式 D1 操作）。需要的 Source 問題再開短 PR 補修；不重建 A／B／C。
-- [ ] **3.1-D 最後階段（只由本機 Cloudflare MCP）**：開發收斂後才核對**原業務 D1** 的備份／還原、版本與 Workspace／Device 連續性；另行審核 `drafts/0016_non_allowance_work_items.sql` 轉 canonical migration 並受控套用，更新原 Worker、schema16 與 `WORK_ITEMS_ENABLED`，**最後**才做跨 Windows 真機／異常回覆／稽核驗收。不建立測試 Worker，不誤改 CYID D1。
-- [ ] **3.1 正式發行**：待最後的遠端操作與必要實機驗收、使用者**當次明確 Release 授權**及新的精確版本測試後再決定；目前沒有 V3.1 ZIP／tag／正式 Release。
+- [ ] **3.1 真人驗收（使用者批准發行後續補）**：統一由 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 管理；不要因正式發行而勾成完成。
+- [x] **3.1-D 已由本機 MCP 回報完成**：原資料庫升至 schema16／原 Worker 功能受控啟用；本段是完工摘要，細節只留私有證據，不重做遷移。真人跨機驗收留 [合併清單](POST_RELEASE_ACCEPTANCE.md)。
+- [x] **V3.1.0 正式發行已獲當次明確授權，開始發布準備**：從 `main` 重驗 VERSION／BUILD、Windows／Cloud／治理／正式封裝和 SHA-256，`cyinvoice-v3.1.0` tag／Release 由正式 workflow 建立；成功事實以該 run 為準，不因打勾就宣稱 Release 已存在。
 - **歷史分支處理**：來源 [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 仍是未合併 Draft，僅供選擇性復用，**不得整包合併**；重疊試作 [#481](https://github.com/simonliu1118-byte/CYapps/pull/481)／[#484](https://github.com/simonliu1118-byte/CYapps/pull/484) 均已關閉未合併。
 
 ## 2026-10-17 V3.0 版本切片與接續（3.0 已合併 main；以下為正式切換追蹤）
