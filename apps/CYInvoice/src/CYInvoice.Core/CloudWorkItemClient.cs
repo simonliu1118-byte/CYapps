@@ -326,8 +326,10 @@ public sealed class CloudWorkItemClient
 
     private CloudWorkItem ReadItem(JsonElement root, string expectedId)
     {
-        if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("Cloud Work Item reply is missing item.");
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object ||
+            item.EnumerateObject().Count() != 7)
+            throw new InvalidDataException("Cloud Work Item reply must have the approved seven fields.");
         string Required(string key)
         {
             if (!item.TryGetProperty(key, out var field) || field.ValueKind != JsonValueKind.String)

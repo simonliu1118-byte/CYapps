@@ -13,6 +13,20 @@ const response=(status:number,body:Record<string,unknown>)=>Response.json(
 const validId=(x:unknown)=>typeof x==="string"&&/^[A-Za-z0-9_-]{10,100}$/.test(x);
 const validHash=(x:unknown)=>typeof x==="string"&&/^[a-f0-9]{64}$/.test(x);
 const validEnvironment=(x:unknown)=>x==="production"||x==="test";
+// Only the seven fields needed for a manager's revision-CAS readback may
+// leave the Worker. Full actor/Device identities and the append-only audit
+// remain in D1 and must never be serialized by the Work Item GET API.
+function managerReadbackItem(item: Record<string,unknown>) {
+  return {
+    work_item_id:item.work_item_id,
+    workspace_id:item.workspace_id,
+    environment:item.environment,
+    kind:item.kind,
+    reference_hash:item.reference_hash,
+    status:item.status,
+    revision:item.revision
+  };
+}
 const allowedFields:{[path:string]:readonly string[]}={
   "/v1/work-items/get":["itemId","employeeNo","password"],
   "/v1/work-items/list":["employeeNo","password","kind","status","limit","cursor"],
@@ -151,7 +165,8 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
       return response(409,{error:{code:"AUTHORITY_CHANGED"}});
     await cyIdDevice(req,env); // revoked while query was in flight
     return path.endsWith("/get")
-      ?(result?response(200,{item:result}):response(404,{error:{code:"NOT_FOUND"}}))
+      ?(result?response(200,{item:managerReadbackItem(result as Record<string,unknown>)})
+        :response(404,{error:{code:"NOT_FOUND"}}))
       :response(200,result as Record<string,unknown>);
   }catch(error){
     if(error instanceof CyIdError)
