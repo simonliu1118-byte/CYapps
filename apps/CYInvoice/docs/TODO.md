@@ -21,7 +21,7 @@
 - [x] **V3.1-D Source／V3.0.4 Build 0**：0016 由草稿提升為 canonical migration，SQL 行為不變；schema source marker 為 16，Work Item 隔離測試從正式 migration 恰好執行一次，V3.0 歷史測試仍鎖在 schema15。尚未因 source 提交啟用遠端功能，實際本機 MCP 結果以私有 readback 為準。以下草稿／V3.0.3 狀態保留為歷史，不覆蓋此項。
 - [x] **V3.1-D 本機 MCP 遠端切換（使用者完成回報，不是本對話獨立遠端 readback）**：原 CYInvoice D1 先核對原 schema15/CYID_ONLY 與 15 筆 migration、加密備份還原及回滾演練，再只套用 canonical 0016 一次，更新原 Worker schema16／WORK_ITEMS_ENABLED=true；前後資料與約束回查通過，私有證據保留本機、不含於 GitHub。禁止重跑 0014／0015、建立新 Worker／D1 或操作 CYID D1。
 
-- **3.1 正式發行基準**：`VERSION=3.1.0`、`BUILD=0`，使用者 2026-10-19 明確批准先發布、雙 Windows／CYID 角色等留發行後。發行工作流程必須從 main 重驗並產 ZIP／SHA-256；上一正式版 V3.0.0 的 Release 只在新版本發布成功後才依使用者要求另行移除，tag／Git 歷史不受影響。
+- **3.1 正式發行基準**：`VERSION=3.1.0`、`BUILD=1`，使用者 2026-10-19 明確批准先發布、雙 Windows／CYID 角色等留發行後。發行工作流程必須從 main 重驗並產 ZIP／SHA-256；上一正式版 V3.0.0 的 Release 只在新版本發布成功後才依使用者要求另行移除，tag／Git 歷史不受影響。
 - **使用者確認**：3.0 Cloudflare 安全升級已在本機處理；本次沒有本機 MCP 遠端 readback，因此標記「使用者確認」，**不冒充這輪重新驗證**。3.0 真 Email／雙 Windows 災復實測留後續，不作為 3.1 Source 開發的阻塞。
 - **固定 3.1 範圍**：僅 `VOID`（未收紙本作廢的人工覆核）、`UPLOAD_ISSUE`（上傳／官方結果不明的本機例外）、跨 Device 管理員待辦、人工審查及 Audit。Work Item `closed` 只表示人工流程封存，**不表示 AMEGO 官方作廢、上傳成功或允許重送**；一般正常發票／買方細節不進 D1。折讓與 g0401/g0501 **全部在 3.2**，其他延後 3.3。
 - [x] **3.1-A 已合併** [#482](https://github.com/simonliu1118-byte/CYapps/pull/482)：CYID-only Work Item 資料層、Workspace／active Device SQL fencing、來源匿名雜湊、修訂版 CAS、隔離 SQLite 測試；`cloud/drafts/0016_non_allowance_work_items.sql` **仍是草稿，未加入 canonical migrations**。
