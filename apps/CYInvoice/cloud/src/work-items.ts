@@ -1,5 +1,5 @@
 // V3.1 non-allowance Work Item storage, not a public route or AMEGO operation.
-// Source-only: the new D1 table is draft and no Worker route calls this module.
+// Canonical schema16; routes require the explicit WORK_ITEMS_ENABLED gate.
 // Calling route must revalidate employee authority. Every write independently
 // fences the Device and Workspace at SQL execution time.
 export type WorkItemKind = "VOID" | "UPLOAD_ISSUE";

@@ -23,7 +23,6 @@ try{
   db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
   for(const name of migrations.filter(x=>x>="0014"))
     db.exec(readFileSync("migrations/"+name,"utf8"));
-  db.exec(readFileSync("drafts/0016_non_allowance_work_items.sql","utf8"));
   const createdAt=new Date().toISOString();
   db.prepare(`INSERT INTO work_items(work_item_id,workspace_id,opened_by_device_id,
     updated_by_device_id,environment,kind,reference_hash,actor_id,created_at,updated_at)

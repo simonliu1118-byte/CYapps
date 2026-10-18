@@ -10,6 +10,9 @@
 
 ## CYInvoice 3.1：非折讓跨機工作項目（最新；2026-10-18）
 
+- [x] **V3.1-D Source／V3.0.4 Build 0**：0016 由草稿提升為 canonical migration，SQL 行為不變；schema source marker 為 16，Work Item 隔離測試從正式 migration 恰好執行一次，V3.0 歷史測試仍鎖在 schema15。尚未因 source 提交啟用遠端功能，實際本機 MCP 結果以私有 readback 為準。以下草稿／V3.0.3 狀態保留為歷史，不覆蓋此項。
+- [ ] **V3.1-D 遠端驗收證據**：由本機 MCP 驗證原庫、加密備份／本地還原、僅套用 0016、保留原 Bindings／Secrets 更新原 Worker 及 schema16／WORK_ITEMS_ENABLED；私人目標、資料指紋與 Time Travel bookmark 不進公開文件。不得重跑 0014／0015 或建立測試 Worker、新 D1。
+
 - **正式版基準**：已發布 [CYInvoice V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；目前**工程 Source** `VERSION=3.0.3`、`BUILD=0`，**3.1 尚未 Release**。截至 2026-10-18 Source 合併盤點，`CYapps/main` 為 `0d26805646e5b3a2f2a7ef20d4734c9e79cee692`（已合併 [#497](https://github.com/simonliu1118-byte/CYapps/pull/497)），後續以 GitHub 最新 `main` 為準。
 - **使用者確認**：3.0 Cloudflare 安全升級已在本機處理；本次沒有本機 MCP 遠端 readback，因此標記「使用者確認」，**不冒充這輪重新驗證**。3.0 真 Email／雙 Windows 災復實測留後續，不作為 3.1 Source 開發的阻塞。
 - **固定 3.1 範圍**：僅 `VOID`（未收紙本作廢的人工覆核）、`UPLOAD_ISSUE`（上傳／官方結果不明的本機例外）、跨 Device 管理員待辦、人工審查及 Audit。Work Item `closed` 只表示人工流程封存，**不表示 AMEGO 官方作廢、上傳成功或允許重送**；一般正常發票／買方細節不進 D1。折讓與 g0401/g0501 **全部在 3.2**，其他延後 3.3。

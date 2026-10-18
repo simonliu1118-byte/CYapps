@@ -2,6 +2,14 @@
 
 更新日期：2026-10-18（Asia/Taipei）
 
+## V3.1-D 最新 Source（V3.0.4 Build 0；不等同正式發行）
+
+- 以 #500 合併後的 `39554bb` 為本批起點，僅處理 canonical schema16 與受控部署準備；不整包合併 #440、不帶入 3.2／3.3。
+- `0016_non_allowance_work_items.sql` 已從 `cloud/drafts/` 移到 `cloud/migrations/`，只修改註解，SQL 行為不變。既有 Work Item／route 測試改由 canonical migration 套用一次；歷史 V3.0 回復演練固定 schema15。source marker 為 16，未加預設 WORK_ITEMS_ENABLED=true。
+- 本機 MCP 先核對原 schema15／CYID_ONLY、0014／0015 各一次、Workspace／Device 連續性及備份可還原，再只套用 0016；之後保留原設定受控更新原 Worker，明確啟用 schema16／WORK_ITEMS_ENABLED。GitHub source／CI 不代替上述遠端查核，私有 readback 與備份不進公開 repo。
+- 不新增 D1／Worker、不重跑 0014／0015、不操作 CYID D1、不簽發或兌換復原碼。完整真人雙 Windows／CYID 角色／DPI 驗收仍獨立列待辦；正式 Release 另外取得當次授權。
+- 下列「0016 仍是草稿」是 #500 及以前的歷史 Source checkpoint；本節為目前 canonical 狀態，不能用舊段落重建 SQL。
+
 ## 現行狀態（以 GitHub main 為準）
 
 - **已合併的原始碼基準**：`CYapps/main` `71c1ac9b042b7ebb1ea00f65e9fed380a4b88c87`（2026-10-18 V3.0.2 [#499](https://github.com/simonliu1118-byte/CYapps/pull/499) 合併後、V3.0.3 Patch 前基準；[#497](https://github.com/simonliu1118-byte/CYapps/pull/497) 亦已合併；[#493](https://github.com/simonliu1118-byte/CYapps/pull/493)／[#494](https://github.com/simonliu1118-byte/CYapps/pull/494)／[#495](https://github.com/simonliu1118-byte/CYapps/pull/495) 均已合併）；正式 Windows Release 仍是 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)；工程 Source 已按 Patch 規則推進至 **V3.0.3 Build 0**（`VERSION=3.0.3`、`BUILD=0`），與正式發布分離。**3.1 並未發布**。
