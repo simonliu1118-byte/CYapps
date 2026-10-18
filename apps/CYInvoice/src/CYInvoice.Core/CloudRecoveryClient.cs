@@ -192,7 +192,7 @@ public sealed class CloudRecoveryClient
         if (employeeNo is null || employeeNo.Length != 4
             || !employeeNo.All(c => c is >= '0' and <= '9'))
             throw new ArgumentException("Employee number must be four digits.", nameof(employeeNo));
-        if (password is null || password.Length is < 8 or > 16)
+        if (password is null || password.EnumerateRunes().Count() is < 8 or > 16)
             throw new ArgumentException("CYID recovery confirmation is invalid.", nameof(password));
     }
 }

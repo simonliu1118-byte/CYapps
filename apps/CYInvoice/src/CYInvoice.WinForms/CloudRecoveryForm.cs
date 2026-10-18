@@ -19,7 +19,7 @@ internal sealed class CloudRecoveryForm : Form
     private readonly TextBox endpoint = UiControls.TextBox(240);
     private readonly TextBox code = UiControls.TextBox(40);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
-    private readonly TextBox password = UiControls.TextBox(16);
+    private readonly TextBox password = UiControls.TextBox(32);
     private readonly TextBox deviceName = UiControls.TextBox(120);
     private readonly Label status = new()
     {
@@ -267,6 +267,7 @@ internal sealed class CloudRecoveryForm : Form
     {
         if (!Text.Contains("災難復原", StringComparison.Ordinal)
             || confirmButton.Enabled
+            || password.MaxLength != 32 || !password.UseSystemPasswordChar
             || !confirmButton.Text.Contains("撤銷所有舊裝置", StringComparison.Ordinal))
             throw new InvalidOperationException("復原介面必須預設關閉不可逆接管動作。");
     }
