@@ -2,6 +2,8 @@
 
 更新日期：2026-10-18（Asia/Taipei）
 
+> **3.0 歷史切換作業表，不可不經查核重跑**：V3.0.0 Build 0 已由 GitHub 正式發布，使用者後續確認 3.0 的 Cloudflare 安全升級已在本機完成。此輪沒有接入本機 MCP 查驗私人證據，因此下方未勾的 0014／0015、issuer、Worker 步驟只保留為**當時操作順序與查核參考**，**不是現在必須重新執行的待辦**。3.0 的真 Email／雙機災復實測另行後驗；3.1 新的 0016／Worker 升級仍全部留到最後由使用者本機 MCP。最新進度見 [V3_1_HANDOFF.md](V3_1_HANDOFF.md) 與 [TODO.md](TODO.md)。
+
 ## 責任界線與來源
 
 - **GitHub 原始碼已交付**：CYInvoice [PR #476](https://github.com/simonliu1118-byte/CYapps/pull/476)（CI exact head `e0c35b38`，已合併 `main` → `f546b2a5`）；CYWEB 復原 [PR #192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 CYWEB `main`（`7ba87b8`）。**兩者只合併 Source，沒有據此啟用正式 Recovery/Company Card 或建立 3.0 Release。**CYWEB 舊 #151 僅供追溯，**不可再合併整個舊分支**。

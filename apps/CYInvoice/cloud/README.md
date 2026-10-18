@@ -1,5 +1,7 @@
 # CYInvoice Cloud Reference Backend
 
+> **2026-10-18 最新 Source 狀態**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
+
 Cloudflare Worker + D1 reference implementation for CYInvoice coordination. **V3.0 source supports CYID-only online Employee authority; Local requires no Worker.** Requests with missing or disabled CYID authority fail closed before any Device or legacy account mutation. Built-in/self-hosted deployments are historical and are no longer available as current V3.0 Worker operation. Prior releases, migrations and historical records remain preserved; this code change does not delete any D1 tables.
 
 AMEGO remains authoritative for invoice / void / allowance business state. Existing Windows business calls still use the original local DPAPI-protected App Key. V3.0 introduces a staged encrypted CYID company-card store, but the Worker API is DISABLED by default and requires COMPANY_SETTINGS_ENABLED=true and a reviewed schema >=15; the company-card GET/UPDATE API only returns safe status, never secrets. Secure use of the new card by Windows AMEGO/MO paths is not yet shipped and must not be inferred from this route.
