@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CYInvoice.Core.Amego;
 
 // Immutable snapshot of the user's edited allowance detail. At V3.1.2 this
@@ -14,6 +16,7 @@ public sealed record AllowanceProductItem
     // Exact original gross-unit input for taxable lines, if the user chose
     // gross-entry mode. Preserves gross-first rounding for Core revalidation.
     // Null means the entered unit price was already tax-exclusive.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public decimal? GrossUnitPrice { get; init; }
     public decimal Amount { get; init; }
     public decimal Tax { get; init; }
