@@ -29,7 +29,7 @@ internal sealed partial class ItemQueryService
             EnsureNotChecked(dialog, report, c => c.StartsWith(PurchaseReportLayout.OnlyPrintPrefix, StringComparison.Ordinal));
             await VerifyReportAdvancedAsync(dialog, report, ct);
         }, progress, cancellationToken);
-        var orders = PurchaseExport.Parse(sheets, query).ToList();
+        var orders = sheets is null ? [] : PurchaseExport.Parse(sheets, query).ToList();
         _log.Info("purchase", $"PURR18 supplier={query.SupplierCode} orders={orders.Count} lines={orders.Sum(o => o.Lines.Count)}");
 
         var returns = PurchaseReportLayout.Returns;
@@ -40,7 +40,7 @@ internal sealed partial class ItemQueryService
             await FillReportDatesAsync(dialog, returns, query.Dates, ct);
             await FillOptionalStatusAsync(dialog, returns, ct);
         }, progress, cancellationToken);
-        var returned = PurchaseExport.ParseReturns(returnSheets, query);
+        var returned = returnSheets is null ? [] : PurchaseExport.ParseReturns(returnSheets, query);
         _log.Info("purchase", $"PURR22 supplier={query.SupplierCode} returns={returned.Count} ms={watch.ElapsedMilliseconds}");
         orders.AddRange(returned);
         return new PurchaseQueryResult(query, orders.OrderBy(o => o, PurchaseExport.Newest).ToList(), watch.Elapsed);

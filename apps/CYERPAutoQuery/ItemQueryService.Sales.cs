@@ -55,7 +55,7 @@ internal sealed partial class ItemQueryService
                 await FillReportAdvancedAsync(dialog, report, ct);
                 await VerifyReportAdvancedAsync(dialog, report, ct);
             }, progress, cancellationToken);
-        var orders = SalesExport.Parse(sheets, sales, query);
+        var orders = sheets is null ? [] : SalesExport.Parse(sheets, sales, query);
         _log.Info("sales", $"{report.Code} orders={orders.Count} lines={orders.Sum(o => o.Lines.Count)}");
         return orders;
     }
@@ -63,9 +63,9 @@ internal sealed partial class ItemQueryService
     /// <summary>
     /// One report run: close leftovers → open through 作業速查 → <paramref name="fill"/> the conditions
     /// → 即時報表 → XLSX export → read → close the report and condition windows (also after a
-    /// failure or Esc). The export is deleted from TEMP once read.
+    /// failure or Esc). The export is deleted from TEMP once read. Null when ERP said nothing matched.
     /// </summary>
-    private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>> RunReportAsync(ErpReport report, string conditions,
+    private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>?> RunReportAsync(ErpReport report, string conditions,
         Func<nint, CancellationToken, Task> fill, IProgress<string> progress, CancellationToken cancellationToken)
     {
         await CloseReportWindowsAsync(report, progress, leftover: true);
@@ -90,6 +90,12 @@ internal sealed partial class ItemQueryService
             await ClickButtonAsync(dialog, SalesReportLayout.RunButton, $"{report.Title}的「即時報表」", cancellationToken);
             _log.Info("report", $"{report.Code} 即時報表 clicked");
             var viewer = await WaitReportViewerAsync(dialog, report, before, cancellationToken);
+            if (viewer == 0)
+            {
+                closed = await CloseReportWindowsAsync(report, null, leftover: false);
+                if (!closed) throw new InvalidOperationException($"{report.Title}的視窗沒有全部關閉，請人工確認 ERP 畫面。");
+                return null;
+            }
 
             progress.Report($"ERP：{report.Title}轉出 Excel…");
             var path = ExportFiles.NewPath(report.Code);
@@ -363,7 +369,8 @@ internal sealed partial class ItemQueryService
     // ---- report and export -------------------------------------------------------------
 
     /// <summary>
-    /// The report window opened by 即時報表 (「銷貨單明細表(COPR15)[A]」), looked for among all
+    /// The report window opened by 即時報表 (「銷貨單明細表(COPR15)[A]」), or 0 when ERP said nothing
+    /// matched (<see cref="SalesReportLayout.IsNoData"/>, the box is closed), looked for among all
     /// top-level windows: V0.6.0 Build 2 LOG (2026-10-17) never found it among the ERP process's
     /// own windows although it was on screen. An ERP message instead stops with that message.
     /// </summary>
@@ -384,7 +391,16 @@ internal sealed partial class ItemQueryService
                 return viewer;
             }
             if (FindErpMessageBox(dialog) is var box && box != 0)
-                await ThrowErpMessageAsync(box, $"{report.Title}按「即時報表」後，");
+            {
+                // Nothing matched: ERP says so in a box instead of opening a report.
+                var text = await ReadErpMessageAsync(box);
+                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)}");
+                if (!SalesReportLayout.IsNoData(text))
+                    await ThrowErpMessageAsync(box, $"{report.Title}按「即時報表」後，");
+                await DismissMessageAsync(box, cancellationToken);
+                _log.Info("sales", $"{report.Code} no data; message closed");
+                return 0;
+            }
             if (!logged && Environment.TickCount64 - started > 10000)
             {
                 logged = true;

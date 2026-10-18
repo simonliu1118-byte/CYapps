@@ -20,7 +20,7 @@ internal sealed partial class ItemQueryService
         var report = ReceivableLayout.Report;
         var sheets = await RunReportAsync(report, query.Describe(), (dialog, ct) => FillReceivableConditionsAsync(dialog, report, query, ct),
             progress, cancellationToken);
-        var bills = ReceivableExport.Parse(sheets, query);
+        var bills = sheets is null ? [] : ReceivableExport.Parse(sheets, query);
         var result = new ReceivableResult(query, bills, watch.Elapsed);
         _log.Info("receivable", $"scope={query.Scope} bills={bills.Count} customers={result.CustomerCount} ms={watch.ElapsedMilliseconds}");
         return result;

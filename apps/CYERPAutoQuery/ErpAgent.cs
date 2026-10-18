@@ -168,8 +168,7 @@ internal sealed class ErpAgentLoop(
         try
         {
             // Reported even when the Agent is being stopped, so the Web user is not left waiting.
-            using var reportTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            await client.CompleteAsync(job.Id, body, reportTimeout.Token);
+            await CompleteWithRetryAsync(job.Id, body);
             report(ErpAgentState.Online, $"Web 查詢 {job.Display} 已回報（{outcome}）。");
         }
         catch (ErpAgentHttpException ex) when (ex.Status == HttpStatusCode.BadRequest && outcome != ErpAgentErrorCode.INTERNAL.ToString())
@@ -194,6 +193,31 @@ internal sealed class ErpAgentLoop(
             report(ErpAgentState.Offline, $"Web 查詢 {job.Display} 回報失敗（{Describe(ex)}）。");
         }
     }
+
+    /// <summary>
+    /// The result after a query that may have taken minutes: a network error or timeout is tried
+    /// twice more (V0.9.0 Build 1 LOG: a result was lost to a brief outage). CY Web's own answers
+    /// (4xx) are not retried.
+    /// </summary>
+    private async Task CompleteWithRetryAsync(string jobId, string body)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var reportTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await client.CompleteAsync(jobId, body, reportTimeout.Token);
+                return;
+            }
+            catch (Exception ex) when (attempt < CompleteAttempts && ex is HttpRequestException or TaskCanceledException)
+            {
+                report(ErpAgentState.Offline, $"Web 查詢結果回報失敗（{Describe(ex)}），{attempt * 3} 秒後重試。");
+                await _delay(TimeSpan.FromSeconds(attempt * 3), CancellationToken.None);
+            }
+        }
+    }
+
+    private const int CompleteAttempts = 3;
 
     private static string Describe(Exception ex) => ex switch
     {

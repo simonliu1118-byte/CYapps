@@ -223,4 +223,15 @@ public class SalesOrderQueryTests
         Assert.Throws<InvalidDataException>(() => SalesExport.Parse(Export(
             Line("2026/10/14", "232A-20261014003", "AC0001", "X00001", "1", "2000", "2000")), SalesReport.Sales, order));
     }
+
+    [Fact]
+    public void NoDataNoticeIsRecognisedOnlyByItsWords()
+    {
+        Assert.True(SalesReportLayout.IsNoData("查無資料"));
+        Assert.True(SalesReportLayout.IsNoData("無 符 合 條 件 的 資 料 !"));
+        Assert.True(SalesReportLayout.IsNoData("No Data"));
+        Assert.False(SalesReportLayout.IsNoData("銷退單明細表[假公司]"));
+        Assert.False(SalesReportLayout.IsNoData("匯出失敗"));
+        Assert.False(SalesReportLayout.IsNoData(""));
+    }
 }

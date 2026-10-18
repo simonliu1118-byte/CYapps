@@ -48,6 +48,18 @@ internal static class SalesReportLayout
     public static bool IsExportFailed(string message) =>
         message.Contains("匯出失敗", StringComparison.Ordinal) || IsMissingFolder(message);
 
+    /// <summary>
+    /// ERP's notice after 即時報表 that nothing matched (user's LOG 2026-10-18: COPR16 for a customer
+    /// without 銷退單 shows a small box with only OK instead of a report). Only these words count;
+    /// any other message still stops the query.
+    /// </summary>
+    public static bool IsNoData(string message)
+    {
+        var text = new string(message.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        return new[] { "無資料", "查無", "沒有資料", "無符合", "沒有符合", "無可列印", "沒有可列印", "Nodata", "NoData", "nodata" }
+            .Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>The workbook path named in ERP's message, or null.</summary>
     public static string? PathIn(string message)
     {

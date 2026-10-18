@@ -113,6 +113,8 @@ public class ErpAgentLoopTests
         public HttpStatusCode CompleteStatus = HttpStatusCode.OK;
         /// <summary>Completes refused with 400 before CompleteStatus applies.</summary>
         public int RejectCompletes;
+        /// <summary>Completes lost to the network before CY Web answers.</summary>
+        public int DropCompletes;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -120,6 +122,7 @@ public class ErpAgentLoopTests
             Requests.Add((request.RequestUri!.AbsolutePath, body, request.Headers.Authorization?.ToString()));
             if (request.RequestUri.AbsolutePath.EndsWith("/claim"))
                 return Claims.Count > 0 ? Claims.Dequeue()() : Json(HttpStatusCode.OK, """{"ok":true,"data":{"job":null},"requestId":"r"}""");
+            if (DropCompletes > 0 && DropCompletes-- > 0) throw new HttpRequestException("down");
             if (RejectCompletes > 0 && RejectCompletes-- > 0)
                 return Json(HttpStatusCode.BadRequest, """{"ok":false,"error":{"code":"INVALID_AGENT_RESULT","message":"進貨明細note 不符合格式"},"requestId":"r"}""");
             return Json(CompleteStatus, CompleteStatus == HttpStatusCode.OK
@@ -261,5 +264,19 @@ public class ErpAgentLoopTests
         h.Web.Claims.Enqueue(() => FakeCyWeb.Job("T0001"));
         await h.RunAsync();
         Assert.Equal(2, h.Web.Requests.Count(r => r.Path.EndsWith("/complete")));
+    }
+
+    [Fact]
+    public async Task ResultLostToTheNetworkIsSentAgain()
+    {
+        var h = new Harness { StopAfterDelays = 5 };
+        h.Web.DropCompletes = 2;
+        h.Web.Claims.Enqueue(() => FakeCyWeb.Job("T0001"));
+        await h.RunAsync();
+
+        var completes = h.Web.Requests.Where(r => r.Path.EndsWith("/complete")).ToList();
+        Assert.Equal(3, completes.Count);
+        Assert.All(completes, c => Assert.Equal("FOUND", JsonNode.Parse(c.Body)!["outcome"]!.GetValue<string>()));
+        Assert.Equal([TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(6)], h.Delays.Take(2));
     }
 }

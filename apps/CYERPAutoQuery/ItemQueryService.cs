@@ -1174,13 +1174,16 @@ internal sealed partial class ItemQueryService
             .Where(c => c.Visible && !IsButtonClass(c.ClassName) && c.Text.Trim().Length > 0)
             .Select(c => c.Text.Trim())
             .ToList();
-        if (texts.Count == 0 && NativeMethods.GetWindowRect(box, out var r))
+        // A box just shown may not have painted its text yet (V0.9.0 Build 2 LOG: 0 tokens), so
+        // OCR is tried again after a pause, the second time without requiring Chinese.
+        for (var attempt = 0; texts.Count == 0 && attempt < 3 && NativeMethods.GetWindowRect(box, out var r); attempt++)
         {
             try
             {
+                if (attempt > 0) await Task.Delay(350);
                 IReadOnlyList<OcrToken> tokens;
                 using (var image = ScreenCapture.Capture(r.ToRectangle()))
-                    tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
+                    tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: attempt < 2);
                 texts = tokens.Where(t => !IsButtonWord(t.Text))
                     .OrderBy(t => t.Rect.Top / 12).ThenBy(t => t.Rect.Left)
                     .Select(t => t.Text.Trim()).Where(t => t.Length > 0).ToList();
@@ -1188,6 +1191,7 @@ internal sealed partial class ItemQueryService
             catch (Exception ex) when (ex is InvalidOperationException or ExternalException)
             {
                 _log.Warn("erp-message", $"OCR failed: {ex.GetType().Name}");
+                break;
             }
         }
         var text = string.Join(" ", texts);
