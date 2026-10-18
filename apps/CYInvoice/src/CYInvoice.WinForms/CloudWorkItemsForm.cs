@@ -62,8 +62,8 @@ internal sealed class CloudWorkItemsForm : Form
     {
         filter.Items.AddRange(["待處理與覆核中", "待處理", "覆核中", "已封存"]);
         filter.SelectedIndex = 0;
-        filter.SelectedIndexChanged += (_, _) => { cursor = null; nextCursor = null;
-            entries.Items.Clear(); status.Text = "請按重新整理載入。"; UpdateActions(); };
+        filter.SelectedIndexChanged += (_, _) => { ClearView();
+            status.Text = "請按重新整理載入。"; UpdateActions(); };
         entries.Columns.Add("建立時間", 155);
         entries.Columns.Add("種類", 110);
         entries.Columns.Add("上傳問題代碼", 160);
@@ -106,6 +106,15 @@ internal sealed class CloudWorkItemsForm : Form
         root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
         UpdateActions();
+    }
+
+    // Never retain an actionable manager queue after a failed fresh CYID read,
+    // uncertain mutation result or concurrency conflict.
+    private void ClearView()
+    {
+        entries.Items.Clear();
+        cursor = null;
+        nextCursor = null;
     }
 
     private CloudWorkItemSummary? Selected => entries.SelectedItems.Count == 1
@@ -179,6 +188,7 @@ internal sealed class CloudWorkItemsForm : Form
         catch (Exception error)
         {
             if (IsDisposed) return;
+            ClearView();
             status.Text = error is CloudApiException api && api.Code == "WORK_ITEMS_NOT_READY"
                 ? "跨機待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
                 : "查詢失敗，請檢查 CYID 權限、裝置狀態及連線；未變更工作項目。";
@@ -210,6 +220,7 @@ internal sealed class CloudWorkItemsForm : Form
             var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
             if (current is null || current.Revision != chosen.Revision || current.Status != chosen.Status)
             {
+                ClearView();
                 status.Text = "工作項目已由其他裝置變更，請重新整理；未送出覆核。";
                 return;
             }
@@ -222,16 +233,15 @@ internal sealed class CloudWorkItemsForm : Form
             await client.TransitionManualAsync(current, to, employeeNo, password,
                 resolutionCode, lifetime.Token);
             status.Text = "人工狀態已更新；請重新整理最新清單。";
-            nextCursor = null;
-            entries.Items.Clear();
+            ClearView();
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
             // A lost D1 reply may follow a successful commit. Readback with the
             // same item ID rather than resubmitting a mutating request.
+            ClearView();
             status.Text = "結果不明或權限變更，請以相同工作項目 ID 查回後再處理；不會自動重送。";
-            nextCursor = null;
         }
         finally
         {
