@@ -9,6 +9,8 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("V3.2 remaining cap fails closed on unknown status and excludes voided allowances", () => RunSync(TestOfficialRemainingGross)),
+    ("V3.2 net draft lines keep seven-decimal precision and reject client tampering", () => RunSync(TestDraftLineValidation)),
     ("allowance PDF official styles are exact", () => RunSync(TestOfficialStyles)),
     ("allowance PDF signs request caches and fingerprints official data", TestPdfCacheAndFingerprintAsync),
     ("allowance PDF code 15 synchronizes time once", TestPdfTimeSyncAsync),
@@ -44,6 +46,63 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static void TestOfficialRemainingGross()
+{
+    var record = new InvoiceRecord { Amount = 1000 };
+    var active = new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+        "A20261019001", "20261019", "10", "190");
+    var voided = new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+        "A20261019002", "20261019", "10", "190", CancelDate: 20261019);
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active, voided], summaryPresent: true);
+    Equal("800", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: true);
+    Equal("1000", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: false);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        active with { InvoiceStatus = UploadStatuses.Processing }
+    ], summaryPresent: true);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active, active], summaryPresent: true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    InvoiceAllowanceMetadata.ApplyQuery(record, [
+        active with { TaxAmount = "bad" }
+    ], summaryPresent: true);
+    Throws<InvalidDataException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+}
+
+static void TestDraftLineValidation()
+{
+    var lines = new[]
+    {
+        new AllowanceProductItem {
+            OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+            OriginalDescription = "原商品", Quantity = 2m, UnitPrice = 100.1234567m,
+            Amount = 200m, Tax = 10m, TaxType = 1
+        },
+        new AllowanceProductItem {
+            OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
+            OriginalDescription = "負數折扣", Quantity = 1m, UnitPrice = -10m,
+            Amount = -10m, Tax = -1m, TaxType = 1
+        }
+    };
+    AllowanceDraftValidator.Validate(lines, "AA12345678", "2026/10/19", 199);
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate(lines, "AA12345678", "2026/10/19", 200));
+    Throws<InvalidDataException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { Tax = 0m }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
+    Throws<InvalidOperationException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { OriginalInvoiceNumber = "OTHER" }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
+    Throws<FormatException>(() =>
+        AllowanceDraftValidator.Validate([
+            lines[0] with { UnitPrice = 100.12345678m }, lines[1]
+        ], "AA12345678", "2026/10/19", 199));
 }
 
 static void TestOfficialStyles()
