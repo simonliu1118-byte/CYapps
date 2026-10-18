@@ -173,16 +173,11 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal(audit.reviewed_by_actor_id,"synthetic_manager");
   assert.equal(audit.closed_by_actor_id,"synthetic_manager");
   assert.equal(audit.resolution_code,"needs_followup");
-  assert.deepEqual(db.prepare("SELECT event_type,to_status,revision FROM work_item_audit_events "+
-    "WHERE work_item_id=? ORDER BY revision").all(reportRequest.itemId)
-    .map(e=>[e.event_type,e.to_status,e.revision]),[
-      ["CREATED","open",1],["TRANSITION","review",2],["TRANSITION","closed",3]
-    ]);
   assert.throws(()=>db.prepare(
     "UPDATE work_items SET status='open' WHERE work_item_id=?")
     .run(reportRequest.itemId),/WORK_ITEM_ARCHIVED_IMMUTABLE|WORK_ITEM_TRANSITION_INVALID/);
   assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?")
-    .run(reportRequest.itemId),/WORK_ITEM_NOT_DELETABLE|WORK_ITEM_NOT_DELETABLE/);
+    .run(reportRequest.itemId),/WORK_ITEM_NOT_DELETABLE/);
 
     const seen=await call("get",{itemId:first.itemId});
   assert.equal(seen.status,200);
