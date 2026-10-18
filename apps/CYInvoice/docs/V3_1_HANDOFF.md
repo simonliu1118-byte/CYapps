@@ -32,6 +32,11 @@
 
 - B2 已加上隔離 SQLite 端點回歸：USER 建立 VOID、上傳問題、角色分權、作廢覆核、重複來源／revision CAS、Device 在 SQL 執行前撤銷、D1 回覆遺失但已提交的 UNKNOWN 安全處理、折讓禁止與不呼叫 AMEGO。所有測試都是合成資料，**未執行正式 D1**。
 
+## 2026-10-18 Windows B2 寫入契約（待 CI）
+
+- Windows Core `CloudWorkItemClient` 精準增加 VOID 申請、UPLOAD_ISSUE 本機異常回報與管理員 CAS 人工覆核；不在此 client 自動執行 AMEGO 或重送業務命令。原 Work Item ID 保留作失敗查回，回覆僅接受 `recorded=true`、`officialVerified=false`、`providerActionPerformed=false`，嚴格拒絕假造官方成功的資料。
+- 合成 HttpClient 測試驗證 request 只送 SHA256、無任何 Workspace 覆寫或買方資訊，錯誤時不自動重試。**還未接 WinForms 操作按鈕；所有正式 D1 處理繼續保留最後由本機 MCP 完成。**
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。

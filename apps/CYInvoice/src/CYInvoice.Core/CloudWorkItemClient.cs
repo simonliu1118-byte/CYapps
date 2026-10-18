@@ -24,6 +24,11 @@ public sealed record CloudWorkItemCursor(string CreatedAt, string ItemId);
 public sealed record CloudWorkItemPage(
     IReadOnlyList<CloudWorkItemSummary> Items, CloudWorkItemCursor? NextCursor);
 
+// These payloads carry only identifiers and hashes, never invoice or buyer data.
+public sealed record CloudVoidReviewRequest(string ItemId,string Environment,string ReferenceHash);
+public sealed record CloudUploadIssueReport(string ItemId,string Environment,string ReferenceHash,string IssueCode);
+public sealed record CloudWorkItemReceipt(string ItemId);
+
 public sealed class CloudWorkItemClient
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
@@ -50,8 +55,101 @@ public sealed class CloudWorkItemClient
     }
 
 
-    // Read-only manager queue. No create/report/transition methods are exposed
-    // until the V3.1-B2 Worker routes pass their own gates and tests.
+    // The same caller-selected ID is kept for readback when a reply is lost.
+    // Neither HTTP retries nor official AMEGO operations occur in this client.
+    public async Task<CloudWorkItemReceipt> SubmitVoidReviewAsync(
+        CloudVoidReviewRequest draft,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        ValidateCredentials(employeeNo,password);
+        ValidateId(draft.ItemId);
+        ValidateReference(draft.Environment,draft.ReferenceHash);
+        using var document=await SendAsync("create",new {
+            itemId=draft.ItemId,environment=draft.Environment,kind="VOID",
+            referenceHash=draft.ReferenceHash,employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        return ReadReceipt(document.RootElement,draft.ItemId);
+    }
+
+    public async Task<CloudWorkItemReceipt> ReportUploadIssueAsync(
+        CloudUploadIssueReport report,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ValidateCredentials(employeeNo,password);
+        ValidateId(report.ItemId);
+        ValidateReference(report.Environment,report.ReferenceHash);
+        if(report.IssueCode is not (
+           "invoice_list_failed" or "query_failed" or "remote_not_found" or
+           "unknown_remote_not_found" or "reconciliation_failed" or
+           "ambiguous_match" or "local_write_failed" or "upload_failed" or
+           "duplicate_order_id"))
+            throw new ArgumentException("Upload issue code is invalid.",nameof(report));
+        using var document=await SendAsync("report-upload-issue",new {
+            itemId=report.ItemId,environment=report.Environment,
+            referenceHash=report.ReferenceHash,issueCode=report.IssueCode,
+            employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        return ReadReceipt(document.RootElement,report.ItemId);
+    }
+
+    // This changes a MANUAL review stage only, not an invoice's official
+    // provider status. The caller must use the latest GET revision.
+    public async Task<CloudWorkItemReceipt> TransitionManualAsync(
+        CloudWorkItem current,string to,string employeeNo,string password,
+        string? resolutionCode=null,CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ValidateCredentials(employeeNo,password);
+        ValidateId(current.ItemId);
+        ValidateReference(current.Environment,current.ReferenceHash);
+        if(current.WorkspaceId!=workspaceId||current.Revision<1||
+           current.Kind is not ("VOID" or "UPLOAD_ISSUE")||
+           !((current.Status=="open"&&to=="review")||
+             (current.Status=="review"&&to=="closed")))
+            throw new ArgumentException("Work Item transition is invalid.",nameof(current));
+        if(current.Kind=="UPLOAD_ISSUE"&&to=="closed"&&
+           resolutionCode is not (
+              "resolved_locally" or "checked_official" or "duplicate_report" or
+              "not_actionable" or "needs_followup"))
+            throw new ArgumentException("Upload issue closure requires a reason.",nameof(resolutionCode));
+        if((current.Kind!="UPLOAD_ISSUE"||to!="closed")&&resolutionCode is not null)
+            throw new ArgumentException("Reason only belongs to upload issue closure.",nameof(resolutionCode));
+        var request=new Dictionary<string,object?>{
+            ["itemId"]=current.ItemId,["expectedRevision"]=current.Revision,
+            ["from"]=current.Status,["to"]=to,
+            ["employeeNo"]=employeeNo,["password"]=password
+        };
+        if(resolutionCode is not null)request["resolutionCode"]=resolutionCode;
+        using var document=await SendAsync("transition",request,cancellationToken).ConfigureAwait(false);
+        return ReadReceipt(document.RootElement,current.ItemId);
+    }
+
+    private static CloudWorkItemReceipt ReadReceipt(JsonElement root,string itemId)
+    {
+        // Strongly validate server semantics: recorded is not official success.
+        if(root.ValueKind!=JsonValueKind.Object||root.EnumerateObject().Count()!=5||
+           !root.TryGetProperty("ok",out var ok)||ok.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("itemId",out var id)||id.ValueKind!=JsonValueKind.String||
+           id.GetString()!=itemId||
+           !root.TryGetProperty("recorded",out var saved)||saved.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("officialVerified",out var official)||
+           official.ValueKind!=JsonValueKind.False||
+           !root.TryGetProperty("providerActionPerformed",out var provider)||
+           provider.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud Work Item receipt is not a local-only confirmation.");
+        return new CloudWorkItemReceipt(itemId);
+    }
+
+    private static void ValidateReference(string environment,string referenceHash)
+    {
+        if(environment is not ("production" or "test")||
+           referenceHash is null||
+           !Regex.IsMatch(referenceHash,@"^[a-f0-9]{64}$",RegexOptions.CultureInvariant))
+            throw new ArgumentException("Work Item local reference is invalid.");
+    }
+
 
     public async Task<CloudWorkItem?> GetAsync(
         string itemId, string employeeNo, string password, CancellationToken cancellationToken = default)
