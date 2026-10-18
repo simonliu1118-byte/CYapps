@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -45,6 +46,7 @@ internal sealed class SyncIssuesForm : Form
     };
     private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
     private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
+    private readonly Button reportCrossDevice = UiControls.StandardButton("回報跨機");
 
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
@@ -88,6 +90,7 @@ internal sealed class SyncIssuesForm : Form
         ConfigureList();
         var reload = UiControls.StandardButton("重新整理");
         reload.Click += (_, _) => ReloadAll();
+        reportCrossDevice.Click += async (_, _) => await ReportCrossDeviceAsync();
         list.DoubleClick += async (_, _) => await ShowSelectedIssueDetailsAsync();
         list.ItemCheck += (_, eventArgs) =>
         {
@@ -96,6 +99,7 @@ internal sealed class SyncIssuesForm : Form
                 eventArgs.NewValue = CheckState.Unchecked;
         };
         list.ItemChecked += (_, _) => BeginInvoke((Action)UpdateFailedButtons);
+        list.SelectedIndexChanged += (_, _) => UpdateCrossDeviceButton();
         list.ClientSizeChanged += (_, _) => LayoutColumns();
         list.ColumnWidthChanging += (_, eventArgs) =>
         {
@@ -114,12 +118,15 @@ internal sealed class SyncIssuesForm : Form
         var close = UiControls.StandardButton("關閉");
         close.Click += (_, _) => Close();
 
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(summary, 0, 0);
+        reportCrossDevice.Margin = new Padding(0, 0, 6, 0);
+        header.Controls.Add(reportCrossDevice, 1, 0);
         reload.Anchor = AnchorStyles.Right | AnchorStyles.Top;
-        header.Controls.Add(reload, 1, 0);
+        header.Controls.Add(reload, 2, 0);
 
         var bottom = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -258,6 +265,7 @@ internal sealed class SyncIssuesForm : Form
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
             summary.Text = processing ? $"處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
             UpdateFailedButtons();
+            UpdateCrossDeviceButton();
             FitToRows();
             LayoutColumns();
         }
@@ -699,6 +707,86 @@ internal sealed class SyncIssuesForm : Form
             MessageBox.Show(this, error.Message, "取消退回失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
+    }
+
+    private void UpdateCrossDeviceButton()
+    {
+        if (IsDisposed) return;
+        var settings = repository.Settings.LoadOrCreate();
+        reportCrossDevice.Visible = !processing && settings.CloudMode != CloudModes.LocalOnly &&
+            settings.CloudIdentityProvider == "CYID";
+        reportCrossDevice.Enabled = reportCrossDevice.Visible && !manualReviewBusy &&
+            SelectedIssue() is { ResolvedUtc: null };
+    }
+
+    private async Task ReportCrossDeviceAsync()
+    {
+        var issue = SelectedIssue();
+        if (manualReviewBusy || processing || issue is null || issue.ResolvedUtc is not null) return;
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.CloudMode == CloudModes.LocalOnly || settings.CloudIdentityProvider != "CYID" ||
+            !settings.CloudEmployeeAuthorityReady || settings.CloudWorkspaceId.Length == 0 ||
+            settings.CloudDeviceId.Length == 0 || string.IsNullOrWhiteSpace(settings.CloudBaseUrl)) return;
+        if (!issueStore.Unresolved(accountKey).Any(x => x.Id == issue.Id && x.IssueType == issue.IssueType))
+        {
+            MessageBox.Show(this, "這筆異常已更新或結案，請重新整理。", "回報跨機",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var token = repository.Settings.CloudDeviceToken(settings);
+        CloudLocalWorkItemReference source;
+        try { source = CloudLocalWorkItemReferences.FromLocalIssue(issue, token); }
+        catch (ArgumentException)
+        {
+            MessageBox.Show(this, "此筆不是 3.1 支援的非折讓例外，無法回報跨機。", "回報跨機",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var purpose = source.Kind == "VOID" ? "未收回紙本作廢覆核" : "上傳問題";
+        if (MessageBox.Show(this,
+                $"是否回報「{purpose}」給其他 CYID 管理員？\n\n" +
+                "僅傳問題類型與不可反查的摘要，不傳發票、買方或訂單資料。\n" +
+                "不會執行光貿作廢、重送上傳或變更官方狀態。",
+                "回報跨機", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        using var login = new EmployeeAdminLoginForm(repository,
+            "回報跨機－CYID 當次驗證", administratorRequired: false, collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        SetManualReviewBusy(true);
+        UpdateCrossDeviceButton();
+        try
+        {
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var client = new CloudWorkItemClient(http,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute), token, settings.CloudWorkspaceId);
+            var environment = settings.Environment == Environments.Test ? "test" : "production";
+            if (source.Kind == "VOID")
+                await client.SubmitVoidReviewAsync(new CloudVoidReviewRequest(
+                    source.ItemId, environment, source.ReferenceHash),
+                    login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            else
+                await client.ReportUploadIssueAsync(new CloudUploadIssueReport(
+                    source.ItemId, environment, source.ReferenceHash, source.IssueCode!),
+                    login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            MessageBox.Show(this,
+                "已建立跨機人工待辦（非官方作廢／上傳成功）。\n工作項目 ID：" + source.ItemId,
+                "回報完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            // Network/DB reply unknown: do NOT send another mutation.
+            // The same HMAC-derived ID is available for manager readback.
+            var notReady = error is CloudApiException cloud && cloud.Code == "WORK_ITEMS_NOT_READY";
+            MessageBox.Show(this,
+                notReady ? "3.1 跨機功能尚未啟用，等待本機 MCP 最後升級。"
+                    : "結果尚未確認或來源重複，請由管理員依原 ID 查回，勿重送：\n" + source.ItemId,
+                "回報跨機", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            SetManualReviewBusy(false);
+            UpdateCrossDeviceButton();
+        }
     }
 
     private InvoiceSyncIssue? SelectedIssue() =>
