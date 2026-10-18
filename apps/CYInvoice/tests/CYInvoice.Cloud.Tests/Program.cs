@@ -823,6 +823,7 @@ sealed class TestProtector : ISecretProtector
 sealed class QueueHandler : HttpMessageHandler
 {
     private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> responses = new();
+    public int PendingCount => responses.Count;
 
     public void Enqueue(Func<HttpRequestMessage, HttpResponseMessage> response) => responses.Enqueue(response);
 
