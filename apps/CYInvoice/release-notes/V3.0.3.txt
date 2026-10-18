@@ -1,0 +1,14 @@
+CYInvoice V3.0.3 工程測試版內容（未正式 Release）
+
+V3.1 非折讓跨機回報入口防誤操作
+- 本批為獨立 UI／安全性修正，依規則由 V3.0.2 推進至 V3.0.3 Build 0，而非將上一項修正改為 Build 1。
+- CYID 模式「上傳問題」視窗中的「回報跨機」僅對目前未結案、確實支援的紙本作廢人工審核 VOID，或七種非折讓同步／回查技術例外 UPLOAD_ISSUE 開放；折讓、折讓作廢、已結案、作廢已在光貿確認中、開立失敗或未知類型不能誤按。
+- 如尚未取得 CYID Cloud Employee Authority 或缺 Workspace／Device 身分，也不會開放回報按鈕；原來的當次 CYID 員工驗證、權限、防重複回報與匿名 HMAC 來源安全性維持不變。
+- 單一 Core eligibility 判定與 Work Item mapper 共用，Windows 契約測試逐一涵蓋允許的非折讓類型與不支援的折讓／未知類型；失敗時不送出網路請求。
+
+現階段的 V3.1 原始碼預覽（沿用前版）
+- 異常由員工手動確認後回報，遠端管理員可跨機檢視匿名工作項目、人工覆核／封存、依 ID 只讀查回結果不明；所有 Work Item 人工結案都不代表光貿 AMEGO 已作廢或上傳成功。
+- cloud/drafts/0016_non_allowance_work_items.sql 尚未轉正式 migration；WORK_ITEMS_ENABLED 預設關閉，既有 Cloudflare D1、Worker、Bindings／Secrets 沒有由此工程版更動。
+- 本版不包含 3.2 正式折讓 API，不會因操作待辦重送光貿發票；原 Local／CYID 基礎功能維持。
+- CI／工程包不等於實體雙 Windows、100／125／150% DPI 或真 Email 災復驗收；仍待本機 MCP 最後操作原 D1 及 Worker，並完成真人實機驗收。
+- 工程包 Channel: engineering；CYInvoice 上一正式 Release 仍為 V3.0.0。本版無正式 tag／Release。Minor V3.1.0 及正式發行依最終驗收與使用者當次授權。
