@@ -388,5 +388,19 @@ try {
   assert.equal(saved.issued_by_cyid_employee_id, 'emp_owner');
 } finally { globalThis.fetch = previousFetch; }
 assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
+// V3.1 optional Work Items must remain unavailable on the already deployed
+// V3.0 schema, and oversized JSON must be denied before CYID Login.
+const noWorkItems = await call('/v1/work-items/list',credentials,tokens[0]);
+assert.equal(noWorkItems.status,503);
+assert.equal(noWorkItems.body.error.code,'WORK_ITEMS_NOT_READY');
+const oldSchemaWorkItems = await call('/v1/work-items/list',credentials,tokens[0],
+  {WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'15'});
+assert.equal(oldSchemaWorkItems.status,503);
+assert.equal(oldSchemaWorkItems.body.error.code,'WORK_ITEMS_NOT_READY');
+const oversizedWorkItems=await call('/v1/work-items/list',
+  {...credentials,padding:'x'.repeat(8192)},tokens[0],
+  {WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'16'});
+assert.equal(oversizedWorkItems.status,413);
+assert.equal(oversizedWorkItems.body.error.code,'REQUEST_TOO_LARGE');
 console.log('PASS CYID real-provider authentication, runtime sync, device rename and invitations after physical Built-in table removal');
 
