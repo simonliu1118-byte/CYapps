@@ -159,6 +159,14 @@ try{
   const item=await call("get",{itemId:"wi_synthetic_read"});
   assert.equal(item.status,200,JSON.stringify(item));
   assert.equal(item.body.item.work_item_id,"wi_synthetic_read");
+  assert.deepEqual(Object.keys(item.body.item).sort(), [
+    "work_item_id","workspace_id","environment","kind","reference_hash",
+    "status","revision"
+  ].sort(),"manager ID readback must not expose actor, Device, audit or full source data");
+  assert.equal(JSON.stringify(item.body.item).includes("synthetic_actor"),false,
+    "internal employee identity stays in the original D1 audit only");
+  assert.equal(JSON.stringify(item.body.item).includes(deviceId),false,
+    "Device ID stays in the original D1 audit only");
   assert.equal((await call("get",{itemId:"wi_other_missing"})).status,404);
   assert.equal((await call("get",{itemId:"wi_synthetic_read",workspaceId:"wrong"})).status,400);
   flips=true;revalidations=0;
