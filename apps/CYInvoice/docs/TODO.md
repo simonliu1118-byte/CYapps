@@ -8,6 +8,17 @@
 - 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## CYInvoice 3.1：非折讓跨機工作項目（2026-10-18 開始）
+
+- 已發布 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)。使用者確認 3.0 Cloudflare 安全升級已完成；真 Email／雙機災難復原另行驗收，不拿來阻塞 3.1。**此輪未以本機 MCP 再核對遠端部署狀態，也未執行任何 Cloudflare 寫入。**
+- 3.1 只負責**未收回紙本作廢覆核、上傳問題與官方狀態不明通報、管理員跨機審查與封存紀錄**，不將一般發票完整清單寫進 D1。正式光貿折讓 API／折讓跨機歸 3.2，其餘歸 3.3。
+- [x] **3.1-A 第一片 Source-only**：精準沿用保留的 [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) Work Item 資料邏輯，收斂成 `VOID`／`UPLOAD_ISSUE`，移除折讓種類。隔離 SQL 依正式 schema15 接續命名 `cloud/drafts/0016_non_allowance_work_items.sql`，**沒有加入 migrations、沒有新 Worker route，也沒有改原 D1**；驗證 Workspace／Device 防護、事件防重、CAS 覆核、已封存記錄不可改／刪、主管列表不洩露業務資料。
+- [ ] **3.1-A CI**：以上程式已加入 `cloud/package.json` 的 `npm test`，以開發 PR 的 exact-head Governance／Cloud／Windows CI 判斷通過，不用前版的綠燈代替。
+- [ ] **3.1-B**：接 CYID-only 最小 REST API（使用者回報與管理員覆核嚴格分權、schema16＋功能旗標預設關閉、逾時後以相同 Work Item ID 查回，不能自動重送官方開票或作廢）。
+- [ ] **3.1-C**：從 #440 精準接回 `CloudWorkItemClient` 的非折讓部分，與現有 Windows 上傳問題／未收紙本作廢操作整合；Local 保持原有流程，管理員在自己電腦查清單、寫入理由並封存。
+- [ ] **3.1-D 本機 MCP／實機**：0016 經完整 D1 備份／還原驗證後方可正式遷移、部署原 Worker 並實測跨機與稽核；不建立 Cloudflare 測試 Worker。3.1 不經使用者當次授權自行正式 Release。
+- 當前交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)。
+
 ## 2026-10-17 V3.0 版本切片與接續（3.0 已合併 main；以下為正式切換追蹤）
 
 ### 2026-10-18 最新停點：Cloudflare 改由本機 MCP，其他 GitHub 工程先收斂
