@@ -15,6 +15,7 @@
 - [x] **3.1-A 第一片 Source-only**：精準沿用保留的 [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) Work Item 資料邏輯，收斂成 `VOID`／`UPLOAD_ISSUE`，移除折讓種類。隔離 SQL 依正式 schema15 接續命名 `cloud/drafts/0016_non_allowance_work_items.sql`，**沒有加入 migrations、沒有新 Worker route，也沒有改原 D1**；驗證 Workspace／Device 防護、事件防重、CAS 覆核、已封存記錄不可改／刪、主管列表不洩露業務資料。
 - [ ] **3.1-A CI**：以上程式已加入 `cloud/package.json` 的 `npm test`，以開發 PR 的 exact-head Governance／Cloud／Windows CI 判斷通過，不用前版的綠燈代替。
 - [x] **3.1-B1 唯讀管理員 API（Source-only）**：`/v1/work-items/get|list` 已接入 CYID Device／Employee Session；`WORK_ITEMS_ENABLED=true` 且 schema>=16 才能進入，預設 503；ADMIN/SUPER_ADMIN 管理員唯讀、有界游標分頁及最少資料 projection，拒絕 USER／折讓 kind／任意 Workspace、讀取後再驗角色與 Device。已加入隔離 API／SQL 測試；正式 Worker 旗標未啟用且 D1 0016 仍在 drafts。
+- [x] **3.1-B2 非折讓 API Source（待 CI）**：提交 VOID 待覆核、上傳問題與管理員狀態 CAS，僅元資料，不操作官方 API；正式 D1／Worker 一律最後交本機 MCP。
 - [ ] **3.1-B**：接 CYID-only 最小 REST API（使用者回報與管理員覆核嚴格分權、schema16＋功能旗標預設關閉、逾時後以相同 Work Item ID 查回，不能自動重送官方開票或作廢）。
 - [ ] **3.1-C**：從 #440 精準接回 `CloudWorkItemClient` 的非折讓部分，與現有 Windows 上傳問題／未收紙本作廢操作整合；Local 保持原有流程，管理員在自己電腦查清單、寫入理由並封存。
 - [ ] **3.1-D 本機 MCP／實機**：0016 經完整 D1 備份／還原驗證後方可正式遷移、部署原 Worker 並實測跨機與稽核；不建立 Cloudflare 測試 Worker。3.1 不經使用者當次授權自行正式 Release。

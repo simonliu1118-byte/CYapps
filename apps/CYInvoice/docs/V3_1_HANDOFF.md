@@ -23,6 +23,13 @@
 - `cloud/tests/v3.1-work-items-route.test.mjs` 以隔離 SQL 驗證 disabled／schema15 拒絕、User 不能查、被撤銷裝置拒絕、權限在讀取期間下降不返回資料，以及分頁欄位隱私。
 - 尚未開啟旗標、正式 D1 沒有 0016 migration。User 建立及管理員寫入仍須 3.1-B2。
 
+## 2026-10-18 V3.1-B2 非折讓寫入 API（Source，待 CI）
+
+- USER、ADMIN、SUPER_ADMIN 可建立 VOID 待覆核 Work Item 或回報 UPLOAD_ISSUE 本機異常；只有 ADMIN／SUPER_ADMIN 能進行 open→review→closed 的版次 CAS 處理。
+- 僅記錄例外人工流程，**不呼叫 AMEGO、不代表官方上傳／作廢成功、不自動重試、不允許折讓**。只允許雜湊的來源識別，禁止任意業務明細。
+- 路由仍由獨立 `WORK_ITEMS_ENABLED`／schema16 gate 保護，CYID Login 之前 4096 bytes 限制；每次寫入再次驗權及 Device，D1 SQL 以 active CYID Cloud Device／Workspace 拒絕競態。
+- **所有 D1 相關作業（migration、備份／還原、SQL、Worker 旗標和遠端部署）一律最後由使用者本機 MCP 處理。此批沒有觸及正式 Cloudflare。**
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。
