@@ -43,6 +43,12 @@
 - 以原 Device DPAPI 保護 Token 做 HMAC-SHA256，對本機來源產生穩定 Work Item ID／referenceHash，不外傳 invoice number／order ID／買方／錯誤原文；重複或網路回覆不明請管理員以同一 ID 查回，不能自動再送。
 - 本片僅 Windows Source／Core 合成測試。**3.1 D1 0016、Worker 旗標與 Cloudflare 的操作一律留最後，由使用者本機 MCP 處理。**
 
+## 2026-10-18 3.1-C3 逐版稽核資料（僅 0016 草稿與隔離測試）
+
+- `cloud/drafts/0016_non_allowance_work_items.sql` 新增 append-only `work_item_audit_events`，建立／`open→review→closed` 每次 revision 由同一 SQLite transaction 記錄 Workspace、actor、Device、前後狀態、時間、上傳問題封存原因；不存發票、買方或官方狀態。
+- SQL trigger 同時禁止事後竄改／刪除事件及非法狀態倒退；隔離 SQLite 測試要求重複 CAS 不產生事件、不同裝置封存的 actor 保留、官方 status 不能由手工流程冒充。
+- **本段 SQL 仍是草稿，不在 canonical migrations，沒有觸碰真實 D1。** 3.1 所有 D1 schema migration 和 Worker 啟用最後統一由本機 MCP 安全處理。
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。

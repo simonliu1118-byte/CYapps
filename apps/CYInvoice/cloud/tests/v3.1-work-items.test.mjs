@@ -57,6 +57,8 @@ function fixture() {
     expectedRevision:1,from:"open",to:"review"};
   assert.equal(await transitionWorkItem(env,review),true);
   assert.equal(await transitionWorkItem(env,review),false,"stale concurrent editor must not override");
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM work_item_audit_events WHERE work_item_id=?")
+    .get(itemId).n,2,"stale CAS cannot append a second event");
   state=await getWorkItem(env,ws,itemId);
   assert.equal(state.status,"review");assert.equal(state.revision,2);
   await assert.rejects(()=>transitionWorkItem(env,{...review,expectedRevision:2,
@@ -74,6 +76,20 @@ function fixture() {
   assert.equal(state.updated_by_device_id,devB);
   assert.equal(state.reviewed_by_actor_id,"synthetic_actor");
   assert.equal(state.closed_by_actor_id,"synthetic_other");
+  const history=db.prepare(
+    "SELECT event_type,from_status,to_status,revision,actor_id,device_id "+
+    "FROM work_item_audit_events WHERE work_item_id=? ORDER BY revision").all(itemId);
+  assert.deepEqual(history.map(e=>[
+    e.event_type,e.from_status,e.to_status,e.revision,e.actor_id,e.device_id
+  ]),[
+    ["CREATED",null,"open",1,"synthetic_actor",devA],
+    ["TRANSITION","open","review",2,"synthetic_actor",devA],
+    ["TRANSITION","review","closed",3,"synthetic_other",devB]
+  ]);
+  assert.throws(()=>db.prepare("UPDATE work_item_audit_events SET actor_id='forged'").run(),
+    /WORK_ITEM_AUDIT_APPEND_ONLY/);
+  assert.throws(()=>db.prepare("DELETE FROM work_item_audit_events").run(),
+    /WORK_ITEM_AUDIT_APPEND_ONLY/);
   assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?").run(itemId),
     /WORK_ITEM_NOT_DELETABLE/);
   assert.throws(()=>db.prepare("UPDATE work_items SET status='open' WHERE work_item_id=?").run(itemId),
@@ -126,6 +142,14 @@ console.log("V3 Work Item storage: CYID_ONLY, source de-dup, CAS revision and re
   assert.equal(item.reviewed_by_actor_id,"synthetic_manager");
   assert.equal(item.closed_by_actor_id,"synthetic_manager");
   assert.equal(item.resolution_code,"needs_followup");
+  assert.deepEqual(db.prepare(
+    "SELECT event_type,revision,from_status,to_status,resolution_code "+
+    "FROM work_item_audit_events WHERE work_item_id=? ORDER BY revision").all(issue.itemId)
+    .map(e=>[e.event_type,e.revision,e.from_status,e.to_status,e.resolution_code]),[
+      ["CREATED",1,null,"open",null],
+      ["TRANSITION",2,"open","review",null],
+      ["TRANSITION",3,"review","closed","needs_followup"]
+    ],"upload issue closure reason and reviewer must be auditable");
   assert.throws(()=>db.prepare("DELETE FROM work_items").run(),/WORK_ITEM_NOT_DELETABLE/);
   assert.throws(()=>db.prepare("UPDATE work_items SET status='open' WHERE work_item_id=?")
     .run(issue.itemId),/WORK_ITEM_ARCHIVED_IMMUTABLE/);
