@@ -279,7 +279,7 @@ public sealed class EmployeeAllowanceWorkflowService
 
         // Read-only idempotent restart path: do not mint another number or
         // re-send, even when today's local date has advanced since approval.
-        var existing = ledger.FindLatest(account.SellerInvoice, account.Environment, issue.Id);
+        var existing = ledger.FindLatest(account.SellerInvoice, account.Environment, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (existing is not null)
         {
             if (existing.Status != "reserved" ||
@@ -330,7 +330,7 @@ public sealed class EmployeeAllowanceWorkflowService
         };
         var date = DateOnly.ParseExact(template.AllowanceDate, "yyyyMMdd",
             System.Globalization.CultureInfo.InvariantCulture);
-        return ledger.Reserve(account.SellerInvoice, account.Environment, issue.Id,
+        return ledger.Reserve(account.SellerInvoice, account.Environment, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
             date, template, manager.EmployeeNo, review.LocalApprovedUtc!.Value);
     }
 
