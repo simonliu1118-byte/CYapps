@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Storage;
 
@@ -20,7 +22,17 @@ public sealed record InvoiceAllowanceManualReview(
     string ConfirmedAllowanceNumber = "",
     string HandlerEmployeeNo = "",
     bool? ConfirmationProblem = null,
-    IReadOnlyList<AllowanceProductItem>? DraftItems = null);
+    IReadOnlyList<AllowanceProductItem>? DraftItems = null,
+    DateTimeOffset? LocalApprovedUtc = null,
+    string LocalApproverEmployeeNo = "",
+    string LocalApprovalOfficialHash = "");
+
+public sealed record LocalAllowanceApprovalPreview(
+    string InvoiceNumber,
+    long RequestedGross,
+    string OfficialRemainingGross,
+    IReadOnlyList<InvoiceAllowanceResult> OfficialHistory,
+    string OfficialSnapshotHash);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -177,6 +189,104 @@ public sealed class EmployeeAllowanceWorkflowService
         catch (JsonException error) { throw new InvalidDataException("折讓人工處理紀錄格式錯誤", error); }
     }
 
+    // B2 pre-send approval only: this NEVER calls g0401 or allocates a
+    // number. The manager must see this live official snapshot and explicitly
+    // confirm it before invoking ApproveLocalDraftAsync. If AMEGO changes in
+    // between, the approval is rejected and must be previewed again.
+    public async Task<LocalAllowanceApprovalPreview> PreviewLocalDraftAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        RequireManualReviewIssue(issue);
+        if (!issueStore.HasUnresolved(CurrentAccountKey(), issue.InvoiceNumber,
+                issue.OrderId, InvoiceAllowanceIssueTypes.ManualReview))
+            throw new InvalidOperationException("本機折讓待辦已不在有效清單");
+        var selected = FindIssueRecord(issue);
+        var review = ReadManualReview(selected)
+            ?? throw new InvalidDataException("折讓申請資料遺失");
+        ValidateUnapprovedDraft(review);
+        var fresh = await detailRefreshService.RefreshAsync(selected, cancellationToken)
+            .ConfigureAwait(false);
+        ValidateCurrentAccount(fresh);
+        review = ReadManualReview(fresh)
+            ?? throw new InvalidDataException("光貿回查後折讓申請資料遺失");
+        ValidateUnapprovedDraft(review);
+        ValidateEligible(fresh, review.TaxInclusiveAmount);
+        var remaining = InvoiceAllowanceMetadata.RemainingGross(fresh);
+        if (FixedDecimal.FromInt64(review.TaxInclusiveAmount).ScaledValue > remaining.ScaledValue)
+            throw new InvalidOperationException("光貿最新剩餘可折額不足，不能核准");
+        AllowanceDraftValidator.Validate(review.DraftItems!, fresh.InvoiceNumber,
+            fresh.InvoiceDate, review.TaxInclusiveAmount);
+        var official = InvoiceAllowanceMetadata.ReadOfficial(fresh);
+        return new LocalAllowanceApprovalPreview(fresh.InvoiceNumber,
+            review.TaxInclusiveAmount, remaining.ToString(), official,
+            OfficialApprovalHash(fresh, official, remaining));
+    }
+
+    public async Task<InvoiceAllowanceManualReview> ApproveLocalDraftAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        string previewOfficialSnapshotHash,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(previewOfficialSnapshotHash))
+            throw new InvalidOperationException("請先查看最新光貿折讓資料");
+        // Authentication and an independent, fresh AMEGO readback happen
+        // AGAIN after the human confirmation, never accept an old UI cache.
+        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        var preview = await PreviewLocalDraftAsync(issue, actorEmployeeNo,
+            actorPassword, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(preview.OfficialSnapshotHash, previewOfficialSnapshotHash,
+                StringComparison.Ordinal))
+            throw new InvalidOperationException("光貿折讓紀錄或可折餘額已變更，請重新查看後再核准");
+        var record = FindIssueRecord(issue);
+        var review = ReadManualReview(record)
+            ?? throw new InvalidDataException("核准時折讓申請資料遺失");
+        ValidateUnapprovedDraft(review);
+        review = review with {
+            LocalApprovedUtc = now().ToUniversalTime(),
+            LocalApproverEmployeeNo = manager.EmployeeNo,
+            LocalApprovalOfficialHash = preview.OfficialSnapshotHash
+        };
+        WriteManualReview(record, review);
+        syncRepository.UpsertMany([record]);
+        UpdateIssueMessage(record, "Local 管理員已核准並鎖定草稿；正式 g0401 尚未執行，等待後續送出功能。");
+        return review;
+    }
+
+    private EmployeeAccount RequireLocalAllowanceManager(string actorEmployeeNo, string actorPassword)
+    {
+        if (repository.IdentityProvider.Kind != IdentityProviderKind.Local ||
+            repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            throw new InvalidOperationException("這個核准功能只限 Local 模式，CYID 折讓另走跨機授權");
+        return EmployeeOperationAuthentication.AuthenticateManager(
+            repository, actorEmployeeNo, actorPassword);
+    }
+
+    private static void ValidateUnapprovedDraft(InvoiceAllowanceManualReview review)
+    {
+        if (review.LocalApprovedUtc is not null || review.AwaitingConfirmation ||
+            review.ManualCompletedUtc is not null)
+            throw new InvalidOperationException("折讓已核准或進入人工處理，不能再次核准");
+        if (review.DraftItems is not { Count: > 0 })
+            throw new InvalidOperationException("舊人工折讓沒有完整商品明細，不能使用新的自動核准");
+    }
+
+    private static string OfficialApprovalHash(InvoiceRecord record,
+        IReadOnlyList<InvoiceAllowanceResult> official, FixedDecimal remaining)
+    {
+        // Correlate the exact live display to approval without logging the
+        // buyer or official details. Snapshot hash is not an authorization
+        // token: fresh employee authentication is always mandatory.
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {
+            record.InvoiceNumber, record.InvoiceDate, record.InvoiceState,
+            record.UploadStatus, record.Amount, record.SellerInvoice,
+            record.Environment, Remaining = remaining.ToString(), Official = official
+        }));
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
     public async Task<InvoiceAllowanceReconcileResult> MarkManualCompletedAsync(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
@@ -190,6 +300,8 @@ public sealed class EmployeeAllowanceWorkflowService
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
+        if (review.LocalApprovedUtc is not null)
+            throw new InvalidOperationException("本筆已由 Local 管理員核准並鎖定，不能改用舊人工完成入口");
         if (review.AwaitingConfirmation)
             return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
 
@@ -278,6 +390,8 @@ public sealed class EmployeeAllowanceWorkflowService
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
+        if (review.LocalApprovedUtc is not null)
+            throw new InvalidOperationException("本筆已經 Local 管理員核准，不能取消或退回");
         if (review.AwaitingConfirmation || HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
 
