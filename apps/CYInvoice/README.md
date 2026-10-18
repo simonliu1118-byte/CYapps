@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source／測試包：V3.1.2 Build 0**（engineering）：3.2-A 已接回原發票品項編輯，固定未稅單價、負數折扣、七位 FixedDecimal；完整官方折讓紀錄決定有效剩餘額，申請 Core 再驗算。仍只建立本機人工折讓待辦，尚不呼叫 g0401/g0501、不操作 Cloudflare。詳細見 [V3.1.2 工程說明](release-notes/V3.1.2.txt) 與 [V3.2 實作計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式發行仍是 V3.1.0。
+- **目前工程 Source／測試包：V3.1.2 Build 0**（engineering）：3.2-A 已接回原發票品項編輯，可切換含稅／未稅單價（輸入含稅時自動換算未稅送出明細與稅額）、負數折扣、七位 FixedDecimal；完整官方折讓紀錄決定有效剩餘額，申請 Core 再驗算。仍只建立本機人工折讓待辦，尚不呼叫 g0401/g0501、不操作 Cloudflare。詳細見 [V3.1.2 工程說明](release-notes/V3.1.2.txt) 與 [V3.2 實作計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式發行仍是 V3.1.0。
 
 - **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
 
