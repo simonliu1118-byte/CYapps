@@ -30,6 +30,8 @@
 - 路由仍由獨立 `WORK_ITEMS_ENABLED`／schema16 gate 保護，CYID Login 之前 4096 bytes 限制；每次寫入再次驗權及 Device，D1 SQL 以 active CYID Cloud Device／Workspace 拒絕競態。
 - **所有 D1 相關作業（migration、備份／還原、SQL、Worker 旗標和遠端部署）一律最後由使用者本機 MCP 處理。此批沒有觸及正式 Cloudflare。**
 
+- B2 已加上隔離 SQLite 端點回歸：USER 建立 VOID、上傳問題、角色分權、作廢覆核、重複來源／revision CAS、Device 在 SQL 執行前撤銷、D1 回覆遺失但已提交的 UNKNOWN 安全處理、折讓禁止與不呼叫 AMEGO。所有測試都是合成資料，**未執行正式 D1**。
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。
