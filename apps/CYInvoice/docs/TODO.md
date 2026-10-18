@@ -6,6 +6,7 @@
 - **3.0 延後驗收**：使用者確認本機 Cloudflare 安全升級已處理完畢，真 Email／兩台 Windows 實機 DR 延後，不阻塞本 3.1 Source 開發。不重做 3.0 D1/Worker/CYID；正式部署狀況待本機 MCP 留存私密證據。
 - [x] **3.1-A Work Item Source（第一批）**：擷取 #440 `cloud/src/work-items.ts`／`work-items-route.ts`／`tests/work-items.test.mjs`，沿用跨 Device CAS revision、Workspace fencing、原 Device Token／CYID 角色驗證、上傳問題人工覆核與封存 Audit；SQL 由草稿 `0015_work_items.sql` **重新編號為 `cloud/drafts/0016_work_items.sql`**，0015 已屬 3.0 公司卡。只含 VOID／UPLOAD_ISSUE，完全不存一般發票明細、不呼叫官方 AMEGO、不帶入折讓。
 - [x] **3.1-A Worker fail-closed gate（第一批）**：`/v1/work-items/*` 必須 `WORK_ITEMS_ENABLED=true` 且 `SCHEMA_VERSION>=16`，預設 503；正式 CYID Login/Resolve/Logout 及 Device 檢查照用原系統。Worker 身分驗證前以實際串流 bytes 限制請求 8192，不依賴可省略的 Content-Length；沒有新 D1 migration／Worker 部署或正式 Release。
+- [x] **3.1-A 審核歷史**：草稿 D1 同交易觸發 INSERT／轉態的 append-only Audit，保留每次 Work Item revision、actor、Device、時間、前後狀態；禁止任意刪除、狀態倒退及篡改 Audit，並有隔離回歸。不涉及真 Cloudflare D1。
 - [ ] **3.1-B 待續**：沿用 #440 Windows `CloudWorkItemClient`，只回接 VOID／UPLOAD_ISSUE；上傳問題本機與 D1 的回報不得當作開票成功，失敗查回同 Work Item 不盲目重送。紙本未收回作廢須保留原有 Local 覆核流程，D1 只存例外 Audit，不假造官方作廢。
 - [ ] **3.1-C 待續**：管理員跨機待辦 WinForms UI、上傳問題來源紀錄、稽核／封存／權限撤銷與離線競態安全回歸、真雙機驗收。未完成前不可稱 3.1 上線。
 - [ ] **3.1 D1 安全門檻**：本機 Cloudflare MCP 以原 D1 實際 schema、備份與回復證據確認後，獨立核准將 `drafts/0016_work_items.sql` 轉正並受控 apply；Worker flag 另受控啟用。不在這批 Source CI 操作遠端 Cloudflare。

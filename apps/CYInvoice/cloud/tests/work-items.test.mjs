@@ -73,6 +73,20 @@ function fixture() {
   assert.equal(await transitionWorkItem(env,{...close,deviceId:devB}),false);
   state=await getWorkItem(env,ws,itemId);
   assert.equal(state.status,"closed");assert.equal(state.revision,3);
+  const events=db.prepare("SELECT event_type,from_status,to_status,revision,actor_id,device_id "+
+    "FROM work_item_audit_events WHERE work_item_id=? ORDER BY revision").all(itemId);
+  assert.deepEqual(events.map(e=>[e.event_type,e.from_status,e.to_status,e.revision,e.device_id]),[
+    ["CREATED",null,"open",1,devA],
+    ["TRANSITION","open","review",2,devA],
+    ["TRANSITION","review","closed",3,devB]
+  ]);
+  assert.equal(events[2].actor_id,"synthetic_other");
+  assert.throws(()=>db.prepare("UPDATE work_item_audit_events SET actor_id=? WHERE work_item_id=?")
+    .run("forged",itemId),/WORK_ITEM_AUDIT_APPEND_ONLY/);
+  assert.throws(()=>db.prepare("DELETE FROM work_item_audit_events WHERE work_item_id=?")
+    .run(itemId),/WORK_ITEM_AUDIT_APPEND_ONLY/);
+  assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?")
+    .run(itemId),/WORK_ITEM_NOT_DELETABLE/);
   assert.equal(state.updated_by_device_id,devB);
   assert.equal(await getWorkItem(env,"other_workspace",itemId),null);
   assert.equal(await createWorkItem(env,{...fresh,itemId:"wi_revoked_creator",
@@ -212,11 +226,16 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
   assert.equal(audit.reviewed_by_actor_id,"synthetic_manager");
   assert.equal(audit.closed_by_actor_id,"synthetic_manager");
   assert.equal(audit.resolution_code,"needs_followup");
+  assert.deepEqual(db.prepare("SELECT event_type,to_status,revision FROM work_item_audit_events "+
+    "WHERE work_item_id=? ORDER BY revision").all(reportRequest.itemId)
+    .map(e=>[e.event_type,e.to_status,e.revision]),[
+      ["CREATED","open",1],["TRANSITION","review",2],["TRANSITION","closed",3]
+    ]);
   assert.throws(()=>db.prepare(
     "UPDATE work_items SET status='open' WHERE work_item_id=?")
     .run(reportRequest.itemId),/UPLOAD_ISSUE_ARCHIVED_IMMUTABLE/);
   assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?")
-    .run(reportRequest.itemId),/UPLOAD_ISSUE_NOT_DELETABLE/);
+    .run(reportRequest.itemId),/UPLOAD_ISSUE_NOT_DELETABLE|WORK_ITEM_NOT_DELETABLE/);
 
     const seen=await call("get",{itemId:first.itemId});
   assert.equal(seen.status,200);

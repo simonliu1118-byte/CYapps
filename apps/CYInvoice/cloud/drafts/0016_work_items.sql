@@ -57,3 +57,50 @@ CREATE TRIGGER upload_issue_no_delete
 BEFORE DELETE ON work_items
 WHEN OLD.kind='UPLOAD_ISSUE'
 BEGIN SELECT RAISE(ABORT,'UPLOAD_ISSUE_NOT_DELETABLE'); END;
+
+-- V3.1 audit: same-transaction insert/transition events. D1 source draft only.
+CREATE TABLE work_item_audit_events (
+  event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_item_id TEXT NOT NULL REFERENCES work_items(work_item_id) ON DELETE RESTRICT,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
+  event_type TEXT NOT NULL CHECK(event_type IN ('CREATED','TRANSITION')),
+  from_status TEXT CHECK(from_status IS NULL OR from_status IN ('open','review','closed')),
+  to_status TEXT NOT NULL CHECK(to_status IN ('open','review','closed')),
+  revision INTEGER NOT NULL CHECK(revision>0),
+  actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 100),
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE RESTRICT,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_item_id,revision)
+);
+CREATE INDEX idx_work_item_audit_workspace
+  ON work_item_audit_events(workspace_id,work_item_id,revision);
+CREATE TRIGGER work_item_audit_created AFTER INSERT ON work_items
+BEGIN
+  INSERT INTO work_item_audit_events
+    (work_item_id,workspace_id,event_type,from_status,to_status,revision,actor_id,device_id,created_at)
+  VALUES
+    (NEW.work_item_id,NEW.workspace_id,'CREATED',NULL,NEW.status,NEW.revision,
+     NEW.actor_id,NEW.updated_by_device_id,NEW.created_at);
+END;
+CREATE TRIGGER work_item_audit_transition AFTER UPDATE ON work_items
+BEGIN
+  INSERT INTO work_item_audit_events
+    (work_item_id,workspace_id,event_type,from_status,to_status,revision,actor_id,device_id,created_at)
+  VALUES
+    (NEW.work_item_id,NEW.workspace_id,'TRANSITION',OLD.status,NEW.status,NEW.revision,
+     NEW.actor_id,NEW.updated_by_device_id,NEW.updated_at);
+END;
+CREATE TRIGGER work_item_status_guard BEFORE UPDATE ON work_items
+WHEN NEW.revision<>OLD.revision+1 OR
+     NOT ((OLD.status='open' AND NEW.status='review') OR
+          (OLD.status='review' AND NEW.status='closed')) OR
+     NEW.work_item_id<>OLD.work_item_id OR NEW.workspace_id<>OLD.workspace_id OR
+     NEW.environment<>OLD.environment OR NEW.kind<>OLD.kind OR
+     NEW.reference_hash<>OLD.reference_hash OR NEW.created_at<>OLD.created_at
+BEGIN SELECT RAISE(ABORT,'WORK_ITEM_TRANSITION_INVALID'); END;
+CREATE TRIGGER work_item_delete_guard BEFORE DELETE ON work_items
+BEGIN SELECT RAISE(ABORT,'WORK_ITEM_NOT_DELETABLE'); END;
+CREATE TRIGGER work_item_audit_no_update BEFORE UPDATE ON work_item_audit_events
+BEGIN SELECT RAISE(ABORT,'WORK_ITEM_AUDIT_APPEND_ONLY'); END;
+CREATE TRIGGER work_item_audit_no_delete BEFORE DELETE ON work_item_audit_events
+BEGIN SELECT RAISE(ABORT,'WORK_ITEM_AUDIT_APPEND_ONLY'); END;
