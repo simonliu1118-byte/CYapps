@@ -1,6 +1,6 @@
 // CYInvoice V3.1-B1: read-only manager work queue, no AMEGO actions.
 // Both the schema16 and feature flag gates are OFF in the existing Worker.
-import {cyIdDevice,cyIdBinding,usesCyId,type CyIdEnv} from "./cyid";
+import {cyIdDevice,cyIdBinding,usesCyId,CyIdError,type CyIdEnv} from "./cyid";
 import {getWorkItem,listWorkItems} from "./work-items";
 interface Env extends CyIdEnv { DB:D1Database; SCHEMA_VERSION:string; WORK_ITEMS_ENABLED?:string }
 const paths=new Set(["/v1/work-items/get","/v1/work-items/list"]);
@@ -80,6 +80,8 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
       ?(result?response(200,{item:result}):response(404,{error:{code:"NOT_FOUND"}}))
       :response(200,result as Record<string,unknown>);
   }catch(error){
+    if(error instanceof CyIdError)
+      return response(error.status,{error:{code:error.code}});
     if(error instanceof Error&&/no such table: work_items/i.test(error.message))
       return response(503,{error:{code:"WORK_ITEMS_NOT_READY"}});
     // Cloud/CYID result unknown: never send partial sensitive manager data.
