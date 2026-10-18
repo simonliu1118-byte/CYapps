@@ -91,7 +91,7 @@ V2.6.2 Build 0 已通過 Windows engineering CI；仍需實機／光貿驗證，
 - 四包已整合至 main：provider-neutral authority、Online freshness、Device inventory／revoke、crash-safe Cloud → Local reset。
 - 正式 role 改為 SUPER_ADMIN／ADMIN／USER；舊 Local employees／Cloud cache 用一次性 transaction migration，Cloud 用 0010 forward migration，無 active EMPLOYEE alias。0011 增加 revoked-device lifecycle。
 - API 1 的 compatibility marker 8 與 storage Schema 11 分開；9/29 staged development Run #7 沒有未套用 migration，不重跑已套用 migration。
-- 人工作業與 CI／deployment 分別記錄於 CLOUD_WORK_HANDOFF.md／TODO.md；沒有新的正式 Release。
+- 人工作業與 CI／deployment 分別記錄於 V3_1_HANDOFF.md／TODO.md；沒有新的正式 Release。
 
 ## V2.6.11 Build 2：處理中投影
 
