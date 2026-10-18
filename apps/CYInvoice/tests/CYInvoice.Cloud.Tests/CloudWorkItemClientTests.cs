@@ -15,6 +15,7 @@ internal static class CloudWorkItemClientTests
         RejectInvalidTransport();
         await ListPagesAndRejectUnsafeRepliesAsync();
         await RejectUntrustedResponseAsync();
+        await MutationsAreManualRecordsOnlyAsync();
     }
 
     private static void RejectInvalidTransport()
@@ -122,6 +123,77 @@ internal static class CloudWorkItemClientTests
         {
             await client.GetAsync(ItemId, "0001", "synthetic-pass");
         });
+    }
+
+    private static async Task MutationsAreManualRecordsOnlyAsync()
+    {
+        object Receipt(string id,bool official=false)=>new {
+            ok=true,itemId=id,recorded=true,officialVerified=official,providerActionPerformed=false
+        };
+        var handler=new QueueHandler();
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"create");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var root=body.RootElement;
+            Equal("VOID",root.GetProperty("kind").GetString(),"create only paper-void manual item");
+            Equal("test",root.GetProperty("environment").GetString(),"environment");
+            Equal(ReferenceHash,root.GetProperty("referenceHash").GetString(),"hashed local reference");
+            True(!root.TryGetProperty("workspaceId",out _)&&
+                 !root.TryGetProperty("invoiceNumber",out _)&&
+                 !root.TryGetProperty("recipient",out _),"no business data/Workspace override");
+            return Json(HttpStatusCode.OK,Receipt(ItemId));
+        });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"report-upload-issue");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var root=body.RootElement;
+            Equal("query_failed",root.GetProperty("issueCode").GetString(),"local issue code");
+            True(!root.TryGetProperty("officialStatus",out _),"not AMEGO authority");
+            return Json(HttpStatusCode.OK,Receipt("wi_upload_report_001"));
+        });
+        handler.Enqueue(request=>{
+            ValidateRequest(request,"transition");
+            using var body=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var root=body.RootElement;
+            Equal(2,root.GetProperty("expectedRevision").GetInt32(),"manager CAS");
+            Equal("review",root.GetProperty("from").GetString(),"from state");
+            Equal("closed",root.GetProperty("to").GetString(),"to state");
+            True(!root.TryGetProperty("resolutionCode",out _),"VOID has no upload reason");
+            return Json(HttpStatusCode.OK,Receipt(ItemId));
+        });
+        handler.Enqueue(_=>Json(HttpStatusCode.OK,Receipt(ItemId,official:true)));
+        handler.Enqueue(_=>Json(HttpStatusCode.Conflict,new {
+            ok=false,error=new{code="WORK_ITEM_CONFLICT"}
+        }));
+        using var http=new HttpClient(handler);
+        var client=new CloudWorkItemClient(http,new Uri("https://cloud.example.test/"),
+            Token,Workspace);
+        var created=await client.SubmitVoidReviewAsync(
+            new CloudVoidReviewRequest(ItemId,"test",ReferenceHash),"0001","synthetic-pass");
+        Equal(ItemId,created.ItemId,"successful local receipt");
+        var reported=await client.ReportUploadIssueAsync(
+            new CloudUploadIssueReport("wi_upload_report_001","test",new string('c',64),"query_failed"),
+            "0001","synthetic-pass");
+        Equal("wi_upload_report_001",reported.ItemId,"reported local problem");
+        var review=new CloudWorkItem(ItemId,Workspace,"test","VOID",ReferenceHash,"review",2);
+        var closed=await client.TransitionManualAsync(review,"closed","0001","synthetic-pass");
+        Equal(ItemId,closed.ItemId,"manual archive receipt");
+        await ThrowsAsync<ArgumentException>(()=>client.SubmitVoidReviewAsync(
+            new CloudVoidReviewRequest(ItemId,"test","not-a-hash"),"0001","synthetic-pass"));
+        await ThrowsAsync<ArgumentException>(()=>client.ReportUploadIssueAsync(
+            new CloudUploadIssueReport("wi_bad_report_001","test",ReferenceHash,"official_success"),
+            "0001","synthetic-pass"));
+        await ThrowsAsync<ArgumentException>(()=>client.TransitionManualAsync(
+            review,"open","0001","synthetic-pass"));
+        await ThrowsAsync<ArgumentException>(()=>client.TransitionManualAsync(
+            review,"closed","0001","synthetic-pass","checked_official"));
+        // Server may record an event, but it must never advertise official success.
+        await ThrowsAsync<InvalidDataException>(()=>client.SubmitVoidReviewAsync(
+            new CloudVoidReviewRequest(ItemId,"test",ReferenceHash),"0001","synthetic-pass"));
+        await ThrowsAsync<CloudApiException>(()=>client.SubmitVoidReviewAsync(
+            new CloudVoidReviewRequest(ItemId,"test",ReferenceHash),"0001","synthetic-pass"),
+            "WORK_ITEM_CONFLICT");
+        Equal(0,handler.PendingCount,"no retry, no extra network requests");
     }
 
     private static void ValidateRequest(HttpRequestMessage request, string action)
