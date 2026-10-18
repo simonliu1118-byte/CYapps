@@ -1,5 +1,17 @@
 # CYInvoice 待辦與驗證
 
+## 2026-10-18 V3.1 逐片開發（最新；3.0 正式 Release 已完成）
+
+- **版本基準**：CYInvoice 正式 [V3.0.0 Build 0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0) 的 CYapps `main` `71463bbd`。開發分支 `cyinvoice/v3.1-work-items-foundation`，僅非折讓 Work Item：作廢（VOID）、上傳問題（UPLOAD_ISSUE）的例外索引與人工覆核／封存。3.2 的光貿 g0401/g0501 與 ALLOWANCE／ALLOWANCE_VOID 不提前；舊 #440 只能選擇性重用，不整包合併。
+- **3.0 延後驗收**：使用者確認本機 Cloudflare 安全升級已處理完畢，真 Email／兩台 Windows 實機 DR 延後，不阻塞本 3.1 Source 開發。不重做 3.0 D1/Worker/CYID；正式部署狀況待本機 MCP 留存私密證據。
+- [x] **3.1-A Work Item Source（第一批）**：擷取 #440 `cloud/src/work-items.ts`／`work-items-route.ts`／`tests/work-items.test.mjs`，沿用跨 Device CAS revision、Workspace fencing、原 Device Token／CYID 角色驗證、上傳問題人工覆核與封存 Audit；SQL 由草稿 `0015_work_items.sql` **重新編號為 `cloud/drafts/0016_work_items.sql`**，0015 已屬 3.0 公司卡。只含 VOID／UPLOAD_ISSUE，完全不存一般發票明細、不呼叫官方 AMEGO、不帶入折讓。
+- [x] **3.1-A Worker fail-closed gate（第一批）**：`/v1/work-items/*` 必須 `WORK_ITEMS_ENABLED=true` 且 `SCHEMA_VERSION>=16`，預設 503；正式 CYID Login/Resolve/Logout 及 Device 檢查照用原系統。Worker 身分驗證前以實際串流 bytes 限制請求 8192，不依賴可省略的 Content-Length；沒有新 D1 migration／Worker 部署或正式 Release。
+- [ ] **3.1-B 待續**：沿用 #440 Windows `CloudWorkItemClient`，只回接 VOID／UPLOAD_ISSUE；上傳問題本機與 D1 的回報不得當作開票成功，失敗查回同 Work Item 不盲目重送。紙本未收回作廢須保留原有 Local 覆核流程，D1 只存例外 Audit，不假造官方作廢。
+- [ ] **3.1-C 待續**：管理員跨機待辦 WinForms UI、上傳問題來源紀錄、稽核／封存／權限撤銷與離線競態安全回歸、真雙機驗收。未完成前不可稱 3.1 上線。
+- [ ] **3.1 D1 安全門檻**：本機 Cloudflare MCP 以原 D1 實際 schema、備份與回復證據確認後，獨立核准將 `drafts/0016_work_items.sql` 轉正並受控 apply；Worker flag 另受控啟用。不在這批 Source CI 操作遠端 Cloudflare。
+- **安全語意**：Work Item `closed` 僅表示人工流程已封存，非光貿官方作廢、上傳完成、覆核批准、允許重發或發票狀態已確認。只稽核需要處理的例外，正常已開立發票不進 D1。
+
+
 更新日期：2026-10-18（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。

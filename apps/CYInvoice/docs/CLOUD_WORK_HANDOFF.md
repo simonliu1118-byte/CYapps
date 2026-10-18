@@ -1,3 +1,5 @@
+> **2026-10-18 V3.1 最新接續**：V3.0.0 已發布；使用者確認本機 Cloudflare 安全升級已做，真 Email／雙 Windows DR 後續實機驗收，不阻塞 3.1。3.1 僅 VOID／UPLOAD_ISSUE 非折讓跨機 Work Item；舊 #440 只精準回接。當前 `drafts/0016_work_items.sql` 只在 Source；新 API 由 `WORK_ITEMS_ENABLED=true` 與 schema>=16 双條件才啟用，原 Cloudflare 尚未做 3.1 遷移。見最新 TODO，勿重跑 CYID/D1 3.0 遷移，勿把 source CI 稱為部署。
+
 # CYInvoice 現行工作交接
 
 更新日期：2026-10-18（Asia/Taipei）
