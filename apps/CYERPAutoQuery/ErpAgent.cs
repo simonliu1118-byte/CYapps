@@ -38,18 +38,21 @@ internal sealed class ErpAgentClient : IDisposable
         using var response = await _http.PostAsync(path, content, cancellationToken);
         var text = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new ErpAgentHttpException(response.StatusCode, ErpAgentProtocol.ErrorCode(text, (int)response.StatusCode));
+            throw new ErpAgentHttpException(response.StatusCode, ErpAgentProtocol.ErrorCode(text, (int)response.StatusCode),
+                ErpAgentProtocol.ErrorMessage(text));
         return text;
     }
 
     public void Dispose() => _http.Dispose();
 }
 
-internal sealed class ErpAgentHttpException(HttpStatusCode status, string code)
+internal sealed class ErpAgentHttpException(HttpStatusCode status, string code, string detail = "")
     : Exception($"CY Web 回應 {(int)status} {code}")
 {
     public HttpStatusCode Status { get; } = status;
     public string Code { get; } = code;
+    /// <summary>CY Web's message, e.g. which field of a result it refused.</summary>
+    public string Detail { get; } = detail;
 }
 
 /// <summary>
@@ -169,16 +172,32 @@ internal sealed class ErpAgentLoop(
             await client.CompleteAsync(job.Id, body, reportTimeout.Token);
             report(ErpAgentState.Online, $"Web 查詢 {job.Display} 已回報（{outcome}）。");
         }
+        catch (ErpAgentHttpException ex) when (ex.Status == HttpStatusCode.BadRequest && outcome != ErpAgentErrorCode.INTERNAL.ToString())
+        {
+            // CY Web refused the result (contract drift, or ERP data it does not accept): report the
+            // job FAILED instead, so the Web user is not left waiting until it times out.
+            report(ErpAgentState.Offline, $"Web 查詢 {job.Display} 回報被 CY Web 拒絕（{Describe(ex)}），改回報查詢失敗。");
+            try
+            {
+                using var failedTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await client.CompleteAsync(job.Id, ErpAgentProtocol.FailedBody(ErpAgentErrorCode.INTERNAL, watch.ElapsedMilliseconds, agentVersion), failedTimeout.Token);
+                report(ErpAgentState.Online, $"Web 查詢 {job.Display} 已回報查詢失敗。");
+            }
+            catch (Exception again) when (again is HttpRequestException or ErpAgentHttpException or TaskCanceledException)
+            {
+                report(ErpAgentState.Offline, $"Web 查詢 {job.Display} 回報失敗（{Describe(again)}）。");
+            }
+        }
         catch (Exception ex) when (ex is HttpRequestException or ErpAgentHttpException or TaskCanceledException)
         {
-            // 409 QUERY_NOT_RUNNING: CY Web already timed the job out. 400: contract drift.
+            // 409 QUERY_NOT_RUNNING: CY Web already timed the job out.
             report(ErpAgentState.Offline, $"Web 查詢 {job.Display} 回報失敗（{Describe(ex)}）。");
         }
     }
 
     private static string Describe(Exception ex) => ex switch
     {
-        ErpAgentHttpException http => $"{(int)http.Status} {http.Code}",
+        ErpAgentHttpException http => $"{(int)http.Status} {http.Code}{(http.Detail.Length > 0 ? "：" + http.Detail : string.Empty)}",
         TaskCanceledException => "逾時",
         _ => ex.GetType().Name
     };

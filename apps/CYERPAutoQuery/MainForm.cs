@@ -1089,6 +1089,9 @@ internal sealed partial class MainForm : Form
         _agentCts = null;
     }
 
+    /// <summary>The last problem text logged, so a long outage (retrying every 30 s) logs it once.</summary>
+    private string? _agentWarned;
+
     private void SetAgentStatus(ErpAgentState state, string text)
     {
         _agentStatus.Text = text.StartsWith("Web", StringComparison.Ordinal) ? text : $"Web：{text}";
@@ -1098,7 +1101,9 @@ internal sealed partial class MainForm : Form
             ErpAgentState.Offline or ErpAgentState.Unauthorized => CyVisualTheme.Warning,
             _ => CyVisualTheme.TextSecondary
         };
-        // Only state changes go to the log: the idle poll repeats every few seconds.
+        // Problems are logged with their text (e.g. which field CY Web refused); otherwise only
+        // state changes go to the log: the idle poll repeats every few seconds.
+        if (state is ErpAgentState.Offline or ErpAgentState.Unauthorized && text != _agentWarned) _log.Warn("agent", _agentWarned = text);
         if (state == _agentState) return;
         _agentState = state;
         _log.Info("agent", $"state {state}");

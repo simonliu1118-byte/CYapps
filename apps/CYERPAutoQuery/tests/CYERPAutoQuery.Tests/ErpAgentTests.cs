@@ -111,6 +111,8 @@ public class ErpAgentLoopTests
         public readonly Queue<Func<HttpResponseMessage>> Claims = new();
         public readonly List<(string Path, string Body, string? Auth)> Requests = [];
         public HttpStatusCode CompleteStatus = HttpStatusCode.OK;
+        /// <summary>Completes refused with 400 before CompleteStatus applies.</summary>
+        public int RejectCompletes;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -118,6 +120,8 @@ public class ErpAgentLoopTests
             Requests.Add((request.RequestUri!.AbsolutePath, body, request.Headers.Authorization?.ToString()));
             if (request.RequestUri.AbsolutePath.EndsWith("/claim"))
                 return Claims.Count > 0 ? Claims.Dequeue()() : Json(HttpStatusCode.OK, """{"ok":true,"data":{"job":null},"requestId":"r"}""");
+            if (RejectCompletes > 0 && RejectCompletes-- > 0)
+                return Json(HttpStatusCode.BadRequest, """{"ok":false,"error":{"code":"INVALID_AGENT_RESULT","message":"進貨明細note 不符合格式"},"requestId":"r"}""");
             return Json(CompleteStatus, CompleteStatus == HttpStatusCode.OK
                 ? $$"""{"ok":true,"data":{"id":"{{JobId}}","status":"DONE","completedAt":"x"},"requestId":"r"}"""
                 : """{"ok":false,"error":{"code":"QUERY_NOT_RUNNING","message":"m"},"requestId":"r"}""");
@@ -135,6 +139,7 @@ public class ErpAgentLoopTests
         public readonly FakeCyWeb Web = new();
         public readonly List<TimeSpan> Delays = [];
         public readonly List<ErpAgentState> States = [];
+        public readonly List<string> Texts = [];
         public readonly List<string> Queried = [];
         public readonly List<ErpAgentJob> Jobs = [];
         public Func<string, ItemQueryResult> Query = code => new ItemQueryResult(code, [new ErpField("品號", code)], [], TimeSpan.FromSeconds(1));
@@ -147,7 +152,7 @@ public class ErpAgentLoopTests
             using var client = new ErpAgentClient(new Uri("https://cyweb.example.test/"), "secret-token-0123456789-abcdefghijklmnop", Web);
             var loop = new ErpAgentLoop(client, "V0.1.0 Build 4", () => "BROWSE", () => LocalBusy,
                 (job, _) => { Queried.Add(job.ItemNo); Jobs.Add(job); return Task.FromResult(Query(job.ItemNo)); },
-                (state, _) => States.Add(state),
+                (state, text) => { States.Add(state); Texts.Add(text); },
                 (span, _) =>
                 {
                     Delays.Add(span);
@@ -231,5 +236,30 @@ public class ErpAgentLoopTests
 
         Assert.Contains(ErpAgentState.Offline, h.States);
         Assert.True(h.Web.Requests.Count(r => r.Path.EndsWith("/claim")) >= 2);
+    }
+
+    [Fact]
+    public async Task RefusedResultIsReportedFailedWithCyWebsReason()
+    {
+        var h = new Harness();
+        h.Web.RejectCompletes = 1;
+        h.Web.Claims.Enqueue(() => FakeCyWeb.Job("T0001"));
+        await h.RunAsync();
+
+        var completes = h.Web.Requests.Where(r => r.Path.EndsWith("/complete")).Select(r => JsonNode.Parse(r.Body)!).ToList();
+        Assert.Equal(["FOUND", "FAILED"], completes.Select(c => c["outcome"]!.GetValue<string>()));
+        Assert.Equal("INTERNAL", completes[1]["errorCode"]!.GetValue<string>());
+        // The status text (logged) names what CY Web refused.
+        Assert.Contains(h.Texts, t => t.Contains("400 INVALID_AGENT_RESULT：進貨明細note 不符合格式"));
+    }
+
+    [Fact]
+    public async Task FailedFallbackIsNotRetriedForever()
+    {
+        var h = new Harness();
+        h.Web.RejectCompletes = 5;
+        h.Web.Claims.Enqueue(() => FakeCyWeb.Job("T0001"));
+        await h.RunAsync();
+        Assert.Equal(2, h.Web.Requests.Count(r => r.Path.EndsWith("/complete")));
     }
 }

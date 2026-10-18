@@ -394,6 +394,19 @@ internal static class ErpAgentProtocol
     };
 
     /// <summary>The error code of a failed CY Web response envelope, or the HTTP status when unreadable.</summary>
+    /// <summary>CY Web's error message (it names the rejected field), or empty.</summary>
+    public static string ErrorMessage(string json)
+    {
+        try
+        {
+            return JsonNode.Parse(json)?["error"]?["message"]?.GetValue<string>() ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return string.Empty;
+        }
+    }
+
     public static string ErrorCode(string json, int httpStatus)
     {
         try
