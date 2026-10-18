@@ -60,7 +60,11 @@ static void TestOfficialRemainingGross()
     Equal("800", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
     InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: true);
     Equal("1000", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
+    InvoiceAllowanceMetadata.ApplyQuery(record, [active], summaryPresent: false);
+    Equal(1, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
+    Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
     InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: false);
+    Equal(0, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
     Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
     InvoiceAllowanceMetadata.ApplyQuery(record, [
         active with { InvoiceStatus = UploadStatuses.Processing }
