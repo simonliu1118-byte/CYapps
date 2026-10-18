@@ -715,8 +715,12 @@ internal sealed class SyncIssuesForm : Form
         var settings = repository.Settings.LoadOrCreate();
         reportCrossDevice.Visible = !processing && settings.CloudMode != CloudModes.LocalOnly &&
             settings.CloudIdentityProvider == "CYID";
+        var selected = SelectedIssue();
         reportCrossDevice.Enabled = reportCrossDevice.Visible && !manualReviewBusy &&
-            SelectedIssue() is { ResolvedUtc: null };
+            settings.CloudEmployeeAuthorityReady &&
+            settings.CloudWorkspaceId.Length > 0 && settings.CloudDeviceId.Length > 0 &&
+            selected is { ResolvedUtc: null } &&
+            CloudLocalWorkItemReferences.IsSupportedIssueType(selected.IssueType);
     }
 
     private async Task ReportCrossDeviceAsync()
