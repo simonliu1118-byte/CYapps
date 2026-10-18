@@ -26,7 +26,25 @@ internal sealed class CloudWorkItemsForm : Form
     private CloudWorkItemCursor? nextCursor;
     private bool busy;
 
-    public CloudWorkItemsForm(LocalRepository repository)
+    // Shared actual presentation path: the layout smoke uses this constructor
+    // without loading settings, Device credentials, CYID, or making HTTP calls.
+    private CloudWorkItemsForm()
+    {
+        repository = null!;
+        client = null!;
+        Text = "跨機待辦（非折讓）";
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(920, 500);
+        MinimumSize = new Size(740, 400);
+        Font = new Font("Microsoft JhengHei UI", 10F);
+        BackColor = Color.White;
+        ShowIcon = false;
+        BuildLayout();
+        FormClosing += (_, _) => lifetime.Cancel();
+        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
+    }
+
+    public CloudWorkItemsForm(LocalRepository repository) : this()
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         var setting = repository.Settings.LoadOrCreate();
@@ -37,18 +55,7 @@ internal sealed class CloudWorkItemsForm : Form
         var token = repository.Settings.CloudDeviceToken(setting);
         client = new CloudWorkItemClient(http, new Uri(setting.CloudBaseUrl, UriKind.Absolute),
             token, setting.CloudWorkspaceId);
-
-        Text = "跨機待辦（非折讓）";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(920, 500);
-        MinimumSize = new Size(740, 400);
-        Font = new Font("Microsoft JhengHei UI", 10F);
-        BackColor = Color.White;
-        ShowIcon = false;
-        BuildLayout();
         Shown += async (_, _) => await LoadPageAsync(reset: true);
-        FormClosing += (_, _) => lifetime.Cancel();
-        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
     }
 
     private void BuildLayout()
@@ -264,12 +271,24 @@ internal sealed class CloudWorkItemsForm : Form
 
     internal static void VerifySmokeLayout(Form owner)
     {
-        // Smoke-only: do not construct the network client or touch user secrets.
-        using var sample = new Form { Text = "跨機待辦", ClientSize = new Size(920, 500) };
+        // Exercise the SAME controls and layout as production, not an empty
+        // placeholder Form. No repository settings, credentials, or network.
+        using var sample = new CloudWorkItemsForm();
         sample.Show(owner);
         sample.PerformLayout();
-        if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500)
-            throw new InvalidOperationException("跨機待辦容器尺寸異常");
+        if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500 ||
+            sample.Controls.Count != 1 ||
+            sample.Controls[0] is not TableLayoutPanel root || root.RowCount != 4 ||
+            root.GetControlFromPosition(0, 0) is not FlowLayoutPanel ||
+            root.GetControlFromPosition(0, 1) != sample.entries ||
+            root.GetControlFromPosition(0, 2) != sample.status ||
+            root.GetControlFromPosition(0, 3) is not FlowLayoutPanel ||
+            sample.entries.Columns.Count != 7 ||
+            sample.filter.Items.Count != 4 ||
+            sample.entries.Width <= 0 || sample.entries.Height <= 0 ||
+            !sample.refresh.Enabled || sample.nextPage.Enabled ||
+            sample.takeReview.Enabled || sample.archive.Enabled)
+            throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
         sample.Close();
     }
 }
