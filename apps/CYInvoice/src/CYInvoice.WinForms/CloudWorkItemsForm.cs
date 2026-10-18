@@ -276,8 +276,9 @@ internal sealed class CloudWorkItemsForm : Form
             var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
             if (current is null || current.Revision != chosen.Revision || current.Status != chosen.Status)
             {
+                itemIdLookup.Text = chosen.ItemId;
                 ClearView();
-                status.Text = "工作項目已由其他裝置變更，請重新整理；未送出覆核。";
+                status.Text = "工作項目已變更，請使用「依 ID 查回」核對最新狀態。";
                 return;
             }
             string? resolutionCode = null;
@@ -294,10 +295,12 @@ internal sealed class CloudWorkItemsForm : Form
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // A lost D1 reply may follow a successful commit. Readback with the
-            // same item ID rather than resubmitting a mutating request.
+            // A lost D1 reply may follow a successful commit. Preserve the
+            // exact ID for the read-only lookup, not a second mutation.
+            if (IsDisposed) return;
+            itemIdLookup.Text = chosen.ItemId;
             ClearView();
-            status.Text = "結果不明或權限變更，請以相同工作項目 ID 查回後再處理；不會自動重送。";
+            status.Text = "結果不明或權限變更；已保留原 ID，按「依 ID 查回」核對，不會自動重送。";
         }
         finally
         {
@@ -358,6 +361,12 @@ internal sealed class CloudWorkItemsForm : Form
             sample.itemIdLookup.Width <= 0 ||
             sample.takeReview.Enabled || sample.archive.Enabled)
             throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
+        sample.itemIdLookup.Text = "wi_synthetic_readback";
+        if (!sample.lookup.Enabled)
+            throw new InvalidOperationException("跨機待辦 ID 查回按鈕應隨有效輸入啟用");
+        sample.itemIdLookup.Clear();
+        if (sample.lookup.Enabled)
+            throw new InvalidOperationException("跨機待辦空白 ID 不得送出查回");
         sample.Close();
     }
 }
