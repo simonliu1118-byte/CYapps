@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.2 — 2026/10/19（3.2-A 折讓品項編輯與有效餘額；engineering）
+
+- 新獨立 Patch，VERSION=3.1.2、BUILD=0，正式 Release 仍為 V3.1.0。
+- 表格帶入原發票商品，允許新增、刪除、修改數量與課稅別；**僅未稅單價**，支持負單價折扣及 FixedDecimal 七位小數，逐行整元稅額，自動計算整張含稅折讓額。
+- 官方 invoice_query 必須有完整的 allowance 陣列才能確定剩餘額；已完成且未作廢的折讓才計扣。缺摘要、號碼重複、未確認狀態或資料錯誤一律拒絕，不禁止在有效餘額內再次人工核准合法折讓。
+- 員工提交前重新查光貿，Core 重算編輯草稿每筆金額、原發票關聯及累計總額，納入現有人工折讓待辦。現階段仍未呼叫 g0401/g0501，Cloudflare 原 D1／Worker 不變。合成測試涵蓋負折扣、作廢及超額，WinForms smoke 驗證實際表格。
+- 既有 V3.0／V3.1 真人延期驗收仍在唯一 POST_RELEASE_ACCEPTANCE.md，後續正式 Cloudflare 操作交使用者本機 Work MCP。
+
 ## V3.1.1 — 2026/10/19（V3.2-00 光貿即時折讓歷史；engineering）
 
 - 3.2 工作的第一個獨立 Patch，依規則 `VERSION=3.1.1`、`BUILD=0`。**上一個正式 Release 仍是 V3.1.0**，本版只產工程包，不新建 tag／Release。
