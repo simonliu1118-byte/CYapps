@@ -14,6 +14,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
     ("cloud company-card status does not replace Windows business credentials", CloudCompanySettingsUsageTests.RunAsync),
     ("V3 recovery transport, Unicode credentials and durable pending restart", CloudRecoveryClientTests.RunAsync),
+    ("V3.1 non-allowance Work Item client, upload issues and manager CAS", CloudWorkItemClientTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
@@ -822,6 +823,7 @@ sealed class TestProtector : ISecretProtector
 sealed class QueueHandler : HttpMessageHandler
 {
     private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> responses = new();
+    public int PendingCount => responses.Count;
 
     public void Enqueue(Func<HttpRequestMessage, HttpResponseMessage> response) => responses.Enqueue(response);
 

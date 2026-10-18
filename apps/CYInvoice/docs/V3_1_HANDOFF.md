@@ -20,7 +20,7 @@
 ## 3.1-B 開發進度
 
 - 已開始獨立 PR：從最新 main 的 3.1-A 延續，精準沿用 #440 的非折讓 CYID Manager REST route，新增 Worker schema16＋feature flag 雙重 fail-closed、身分驗證前的 8192-byte JSON 限制，並把路由合成測試加入 Cloud CI。**此為 Source，不代表本機 Cloudflare 已執行新的 0016 草稿 migration 或啟用 API**。
-- Windows Client 與覆核 UI 尚須另驗收；作廢 Work Item 流程狀態不能當成 AMEGO 官方作廢或已開票結果。
+- Windows CloudWorkItemClient 已從 #440 精準回接（僅 VOID／UPLOAD_ISSUE），Core 合成測試包括跨機列表、User 異常回報、revision CAS、拒絕不可信伺服器回覆；**Windows WinForms 管理員待辦 UI／本機原流程連接尚未完成**。實際取用須使用禁用 HTTP 自動重新導向的 HttpClient。覆核 UI 尚須另驗收；作廢 Work Item 流程狀態不能當成 AMEGO 官方作廢或已開票結果。
 
 ## 下一片開發順序
 
