@@ -1,0 +1,12 @@
+CYInvoice V3.1.3 Build 0 — 3.2-B1 Local 配號持久化與一次送出防護（工程預覽）
+
+本次只完成一個中等大小的安全基礎切片，不接正式光貿 g0401、不更動管理員畫面、Cloudflare D1／Worker，也不是正式 Release。上一正式 Release 仍為 V3.1.0。
+
+- 以現有 CYInvoice 本機 SQLite 建立獨立 allowance_number_ledger（首次使用才 additive 建表）；以公司賣方帳號／環境／日期配發 AyyyyMMdd001 起的本地序號。同一 Work Item、同一主管核准與固定 API template，再次取得 reserved 只回同一原號與原始 payload，不另配號。
+- 凍結管理員員工編號與 UTC 核准時間、不可變請求 template、完整已配號送出 payload、建表時間與每次嘗試狀態。對同一工作項目更換核准者／時間／交易內容一律拒絕。
+- 狀態從 reserved 經 SQLite 條件更新轉 sending，必須先持久化才允許下一階段送 API；一旦 sending，重開程式、重複 MarkSending／Reserve 都不得自動重送。正式查回成功才可由 sending 轉 confirmed。
+- 只有已知光貿 4040161／4040162 明確撞號才允許從 sending 記錄 occupied_external；但此 B1 **刻意不自動分配下一號**，等 B2 完成原號唯讀查回與「不是本次已成功」驗證後才能加入受控換號。逾時、失去回覆、code=0 未確認時保持原號、不可換號。
+- SQLite 合成測試涵蓋同一號重開保持、固定核准資料、防止改稿、重入拒絕、撞號只記錄、已確認不得重送、每筆序號唯一與環境隔離。所有測試使用合成資料，不碰真員工帳密或光貿。
+- 本批只新增 Core 的 Local 持久儲存與合成測試，尚無 UI 或其他正式服務 caller；因此還不能執行真正折讓。3.2-B2 才接主管實際身分驗證／二次官方折讓查詢／HTTP g0401 原號唯讀查回。
+- 保留 3.2-A 含稅／未稅單價切換與七位小數；不變更 V3.0＋V3.1 統一延期驗收文件，不新建 Release tag。
+- VERSION=3.1.3 BUILD=0，工程包 Channel=engineering；Cloudflare 正式操作最後另由使用者的本機 Work MCP 完成。
