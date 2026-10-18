@@ -1,6 +1,6 @@
-CYInvoice V3.1.2 Build 0 — 3.2-A 折讓品項編輯與剩餘額守門（engineering／preview）
+CYInvoice V3.1.2 Build 1 — 3.2-A 折讓品項編輯與剩餘額守門（engineering／preview）
 
-本版是由 V3.1.1 往下一個獨立 Patch，僅提供工程測試包；上一正式 Release 仍為 V3.1.0。
+本版是由 V3.1.1 往下一個獨立 Patch，第一次 CI 測試發現既有人工折讓對帳回歸，依規則同一 Patch 返修為 Build 1；修正歷史查回相容性但維持新官方餘額判定 fail-closed。僅提供工程測試包；上一正式 Release 仍為 V3.1.0。
 
 使用者在發票詳情按「折讓」，程式先執行 AMEGO invoice_query，接著以表格帶入原發票商品。品項可刪除、新增，調整數量、單價與課稅別，保留先前已設計的「以含稅單價輸入」勾選切換；使用者能輸入含稅或未稅單價，不必自己反算，負單價可表達折扣。依原發票 DetailVat 自動帶入正確輸入模式，切換時應稅單價自動換算，免稅／零稅率單價不亂換。含稅輸入由程式用 FixedDecimal 七位小數及整行含稅金額先算未稅金額、稅額，後續 DTO 一律保存光貿所需未稅 UnitPrice／Amount／Tax 並保留原始含稅輸入以供 Core 再驗證。整張含稅折讓總額需為正整數。
 
@@ -10,4 +10,4 @@ invoice_query 的 allowance[] 必須確實出現且為陣列，才能把官方�
 
 Windows WinForms smoke 與 Core 合成測試涵蓋已折／取消／處理中／資料缺失、含稅↔未稅來回切換、含稅 105→未稅 100＋稅 5、負數折扣、七位小數及偽造金額拒絕；不以這些隔離結果當作真實光貿折讓成功。原 Cloudflare D1/Worker/Secrets、CYID D1 不操作；需要遷移時須由使用者開本機 Work MCP。V3.0+V3.1 待真人驗收仍沿用 docs/POST_RELEASE_ACCEPTANCE.md。
 
-工程包 Channel: engineering。VERSION=3.1.2、BUILD=0，不建立正式 tag／Release。
+工程包 Channel: engineering。VERSION=3.1.2、BUILD=1，不建立正式 tag／Release。
