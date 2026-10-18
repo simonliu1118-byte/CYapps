@@ -184,6 +184,10 @@ jobs:
           $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $zipName" | Set-Content -Path "$zipPath.sha256" -Encoding ascii
           $year = (Get-Date).Year
+          $summaryPath = "./release-notes/V$env:CYINVOICE_VERSION.txt"
+          if (!(Test-Path -LiteralPath $summaryPath -PathType Leaf)) { throw "Version-specific release summary is required." }
+          $summary = (Get-Content -LiteralPath $summaryPath -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($summary)) { throw "Release summary cannot be empty." }
           @"
           CYInvoice V$env:CYINVOICE_VERSION
 
@@ -195,8 +199,9 @@ jobs:
           - 完整版本內容請參閱發行包內的 V$env:CYINVOICE_VERSION.txt 與專案 CHANGELOG。
           - 下載 $zipName 後解壓縮，直接執行 CYInvoice.exe。
           - 發行包與 SHA-256 由本次正式 Release workflow 重新建置與驗證。
-          - 已知限制：人工折讓逐筆申請／處理歷史與結案狀態可能不完整，依使用者 2026-10-13 決定於 V3.0 重做，V$env:CYINVOICE_VERSION 並未修復此項。
-          - Go／Win32 V1.1.0 保留為上一個回退版本。
+          - 既有 V2.6.19 與歷史 Go／Win32 V1.1.0 Release 保留，不覆寫。
+
+          $summary
           "@ | Set-Content -Path ./dist/release-notes.md -Encoding utf8
 
       - name: Publish GitHub Release

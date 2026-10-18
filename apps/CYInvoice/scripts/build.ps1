@@ -89,6 +89,12 @@ CYInvoice $DisplayVersion，Windows 10/11 x64。
 C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 
+$SummaryPath = Join-Path $ProjectRoot ("release-notes/V{0}.txt" -f $Version)
+if (Test-Path -LiteralPath $SummaryPath -PathType Leaf) {
+    Add-Content -LiteralPath (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) `
+        -Value ([Environment]::NewLine + (Get-Content -LiteralPath $SummaryPath -Raw)) -Encoding UTF8
+}
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Original package files are preserved by automatic revoked-device recovery.
 # Empty Data/Cache/Logs folders have no entries; runtime files cannot enter this list.

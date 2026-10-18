@@ -116,4 +116,12 @@ if ($Channel -eq "formal" -and $VersionText -notmatch '(?m)^Channel: formal\r?$'
     throw "Formal ZIP must contain formal channel metadata."
 }
 
+$SummaryPath = Join-Path (Split-Path -Parent $PSScriptRoot) ("release-notes/V{0}.txt" -f $Version)
+if (Test-Path -LiteralPath $SummaryPath -PathType Leaf) {
+    $Summary = (Get-Content -LiteralPath $SummaryPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($Summary) -or -not $VersionText.Contains($Summary)) {
+        throw "Package version TXT must contain the source release summary and known limitations."
+    }
+}
+
 Write-Host "Package layout and $Channel channel verified for CYInvoice $ArtifactVersion."
