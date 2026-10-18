@@ -67,13 +67,14 @@ internal sealed class CloudWorkItemsForm : Form
         filter.SelectedIndex = 0;
         filter.SelectedIndexChanged += (_, _) => { ClearView();
             status.Text = "請按重新整理載入。"; UpdateActions(); };
-        entries.Columns.Add("建立時間", 155);
-        entries.Columns.Add("種類", 110);
-        entries.Columns.Add("上傳問題代碼", 160);
-        entries.Columns.Add("人工狀態", 95);
-        entries.Columns.Add("版次", 55);
-        entries.Columns.Add("環境", 75);
-        entries.Columns.Add("工作項目 ID", 245);
+        entries.Columns.Add("建立時間", 120);
+        entries.Columns.Add("種類", 80);
+        entries.Columns.Add("上傳問題代碼", 110);
+        entries.Columns.Add("人工狀態", 75);
+        entries.Columns.Add("版次", 48);
+        entries.Columns.Add("環境", 52);
+        entries.Columns.Add("工作項目 ID", 190);
+        entries.Resize += (_, _) => FitColumnsToViewport();
         entries.SelectedIndexChanged += (_, _) => UpdateActions();
         refresh.Click += async (_, _) => await LoadPageAsync(reset: true);
         lookup.Click += async (_, _) => await LookupByIdAsync();
@@ -121,6 +122,29 @@ internal sealed class CloudWorkItemsForm : Form
         root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
         UpdateActions();
+    }
+
+    // Seven fixed legacy widths totaled 895px, which overflowed the 740px
+    // minimum-size window even before allowing for the vertical scrollbar.
+    // Share the actual viewport between columns, reserving an ID area,
+    // without affecting Work Item state, selection or CYID authorization.
+    private void FitColumnsToViewport()
+    {
+        if (entries.Columns.Count != 7 || entries.ClientSize.Width <= 0) return;
+        const int scrollbarReserve = 4;
+        var available = entries.ClientSize.Width -
+            SystemInformation.VerticalScrollBarWidth - scrollbarReserve;
+        if (available <= 0) return;
+        // Fixed-point proportions preserve consistent density at 100/125/150% DPI.
+        ReadOnlySpan<int> widthsPerThousand = [178, 112, 158, 111, 69, 76];
+        var used = 0;
+        for (var index = 0; index < widthsPerThousand.Length; index++)
+        {
+            var width = available * widthsPerThousand[index] / 1000;
+            entries.Columns[index].Width = width;
+            used += width;
+        }
+        entries.Columns[6].Width = available - used;
     }
 
     // Never retain an actionable manager queue after a failed fresh CYID read,
@@ -361,6 +385,22 @@ internal sealed class CloudWorkItemsForm : Form
             sample.itemIdLookup.Width <= 0 ||
             sample.takeReview.Enabled || sample.archive.Enabled)
             throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
+        static void AssertViewportColumns(CloudWorkItemsForm form)
+        {
+            form.FitColumnsToViewport();
+            var used = form.entries.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
+            var room = form.entries.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
+            if (room <= 0 || used > room || form.entries.Columns[6].Width < 160)
+                throw new InvalidOperationException(
+                    "跨機待辦欄寬超過視窗可用寬度，或工作項目 ID 欄過窄");
+        }
+        AssertViewportColumns(sample);
+        sample.ClientSize = new Size(740, 400);
+        sample.PerformLayout();
+        AssertViewportColumns(sample);
+        sample.ClientSize = new Size(920, 500);
+        sample.PerformLayout();
+        AssertViewportColumns(sample);
         sample.itemIdLookup.Text = "wi_synthetic_readback";
         if (!sample.lookup.Enabled)
             throw new InvalidOperationException("跨機待辦 ID 查回按鈕應隨有效輸入啟用");
