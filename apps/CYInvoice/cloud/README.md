@@ -48,6 +48,37 @@ Use the reviewed development workflow below. The default config has no runnable 
 
 Do not infer remote deployment state from source or CI alone.
 
+### Preserving an already activated installation
+
+The source storage template targets migration 0015. A code deployment of an
+already CYID-enabled installation preserves its active schema marker, company
+settings/recovery flags, fixed consumer scopes, service bindings and secrets.
+Changing those protected values requires a separate maintenance operation; the
+deployment audit rejects a stale generated configuration before upload.
+
+The protected `development` Deployment Environment can select the provider with
+the consumer-specific secret `CYINVOICE_CYID_WORKER_NAME` (falling back to the
+existing `CYID_WORKER_NAME` secret). `CYINVOICE_CYID_ENVIRONMENT` must explicitly
+select `production` when appropriate; otherwise it defaults to `development`.
+This selects the Identity provider environment, not the Invoice Worker's
+environment. Production selection requires an already activated consumer and
+does not perform an authority switch. Its two active service targets, scope and
+original business Workspace must still match. Provider metadata is not App
+Access authority: a missing legacy static scope does not imply a missing
+registry entry and does not authorize registration or direct Identity D1 reads.
+
+If retained, expired probe versions belong to an earlier provider, pin that
+provider separately with `CYINVOICE_RETAINED_PROBE_WORKER_NAME`. This input only
+checks historical inactive versions; it never changes the active service target,
+executes a probe, or deletes a version. Keep all actual service names and resource
+identifiers in protected deployment inputs, never in public source or artifacts.
+
+Use the workflow's default `preflight` mode for the first remote verification.
+It reads metadata and the original business D1, writes a private runner checkpoint,
+and performs health checks. It does not migrate, upload or deploy a Worker,
+issue/redeem invitations, or revoke Devices. Live role, Email and multi-device
+recovery acceptance are separate from deployment checks.
+
 ## Runtime secrets
 
 Secrets must be configured as Worker runtime secrets and never committed:
