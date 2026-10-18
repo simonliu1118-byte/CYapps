@@ -9,6 +9,7 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
     ("V3.2 remaining cap fails closed on unknown status and excludes voided allowances", () => RunSync(TestOfficialRemainingGross)),
     ("V3.2 net draft lines keep seven-decimal precision and reject client tampering", () => RunSync(TestDraftLineValidation)),
     ("V3.2 gross input safely converts to net AMEGO fields and rejects altered prices", () => RunSync(TestGrossPriceInput)),
