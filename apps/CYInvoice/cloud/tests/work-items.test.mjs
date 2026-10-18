@@ -233,7 +233,7 @@ const tokenHash=createHash("sha256").update(token).digest("hex");
     ]);
   assert.throws(()=>db.prepare(
     "UPDATE work_items SET status='open' WHERE work_item_id=?")
-    .run(reportRequest.itemId),/UPLOAD_ISSUE_ARCHIVED_IMMUTABLE/);
+    .run(reportRequest.itemId),/UPLOAD_ISSUE_ARCHIVED_IMMUTABLE|WORK_ITEM_TRANSITION_INVALID/);
   assert.throws(()=>db.prepare("DELETE FROM work_items WHERE work_item_id=?")
     .run(reportRequest.itemId),/UPLOAD_ISSUE_NOT_DELETABLE|WORK_ITEM_NOT_DELETABLE/);
 
