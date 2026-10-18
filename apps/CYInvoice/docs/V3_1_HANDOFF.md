@@ -30,3 +30,8 @@
 3. 3.1-D 在獨立本機 MCP 核對原 D1／schema15 的私有備份＋還原後，經核准把草案 0016 升為 canonical，再部署原 Worker 及啟用旗標、用第二台 Windows 真實覆核並檢驗失敗情境。遠端資料庫不用 Cloud CI 綠燈代替。
 4. 未獲當次明確同意不得建立 V3.1 正式 Release；測試包須標示 engineering，不與 V3.0.0 正式版本混淆。
 
+
+## 2026-10-18 Windows B1 唯讀客戶端（待當次 CI）
+
+- 從 #440 的 Windows `CloudWorkItemClient` 精準摘取 **Get／List**、有限分頁與敏感欄位防洩漏；不把尚未在 main 開放的 Create／Report／Transition 寫入方法提早帶進 Windows 客戶端。搭配既有 CYID Login/Device Token 的 HTTPS POST（呼叫端須建立 `AllowAutoRedirect=false` 的 HttpClient，不能將帳密送到重新導向網址）。
+- 在現有 Windows Cloud Tests 加上 list/get／錯誤資料／跨 Workspace 偽造回覆合成測試。**尚未接入 WinForms UI、未啟用 Worker Work Items 旗標，不宣稱可從 Windows 遠端覆核**。
