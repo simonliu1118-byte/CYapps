@@ -15,7 +15,7 @@
 
 本公司原 D1 已採 CYID_ONLY；員工帳號與權限由 CYID 管理。本清單 A／B 的 Local 初始設定及 Q／R 等 Built-in Employee、轉換、帳號 OTP、移交案例，僅適用對應的 Local 模式或其他公司獨立新建的 Built-in D1，不應在已退役的本公司 D1 重建舊帳號表來驗收。原 Device／Workspace 的 CYID、邀請、配對與業務案例仍適用。
 
-本次部署、備份及 D1 維護已完成，證據見 [交接](CLOUD_WORK_HANDOFF.md) 與 [TODO §7.7](TODO.md)。未執行的實機勾選仍代表待補證據；使用者接受本地／CI 證據發布 V2.6.19 的決定，以及折讓歷史改列 V3.0 的決定均維持。
+本次部署、備份及 D1 維護已完成，證據見 [交接](V3_1_HANDOFF.md) 與 [TODO §7.7](TODO.md)。未執行的實機勾選仍代表待補證據；使用者接受本地／CI 證據發布 V2.6.19 的決定，以及折讓歷史改列 V3.0 的決定均維持。
 
 ## A. 全新啟動、超級管理員與設定
 
@@ -212,7 +212,7 @@
 
 > 先做本節，再進行 R～U。既有 A/B 兩台都是目前 Workspace 的 recovery path，不應一開始就做破壞性動作。
 
-1. A、B 均使用目前 V2.6.14 通過 CI 的工程包啟動；來源／digest 見 CLOUD_WORK_HANDOFF.md，不使用已到期 Run343 Artifact。
+1. A、B 均使用目前 V2.6.14 通過 CI 的工程包啟動；來源／digest 見 V3_1_HANDOFF.md，不使用已到期 Run343 Artifact。
 2. 兩台都應能連上 development Cloud，既有 Workspace 不應被重新 bootstrap。
 3. `裝置管理` 應看到既有 active Device inventory；不應因升級產生重複 Device。
 4. 既有中央 Employees 應仍可登入，角色為 `SUPER_ADMIN / ADMIN / USER` vocabulary，不得出現 active `EMPLOYEE` role。
