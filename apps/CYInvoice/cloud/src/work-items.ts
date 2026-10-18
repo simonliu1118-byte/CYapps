@@ -81,7 +81,8 @@ export async function createWorkItem(db: D1Database, input: NewWorkItem): Promis
     WHERE EXISTS (
       SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
       WHERE d.device_id = ?3 AND d.workspace_id = ?2
-        AND d.status = 'active' AND w.status = 'active')
+        AND d.status = 'active' AND w.status = 'active'
+          AND d.employee_authority_state = 'cloud')
     `
   ).bind(input.itemId, input.workspaceId, input.deviceId, input.environment,
          input.kind, input.referenceHash, input.actorId, now).run();
@@ -116,7 +117,8 @@ export async function transitionWorkItem(db: D1Database, input: WorkItemTransiti
       AND EXISTS (
         SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
         WHERE d.device_id = ?2 AND d.workspace_id = ?6
-          AND d.status = 'active' AND w.status = 'active')
+          AND d.status = 'active' AND w.status = 'active'
+          AND d.employee_authority_state = 'cloud')
       `
   ).bind(input.to, input.deviceId, input.actorId, now, input.itemId,
          input.workspaceId, input.from, input.expectedRevision,

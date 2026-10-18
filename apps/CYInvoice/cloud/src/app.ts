@@ -122,7 +122,7 @@ export default {
       return Response.json({ok:false,error:{code:"RECOVERY_NOT_READY"}},{
         status:503,headers:{"cache-control":"no-store"}
       });
-    const workItemsPath=path==="/v1/work-items/get" || path==="/v1/work-items/list";
+    const workItemsPath=path.startsWith("/v1/work-items/");
     if(workItemsPath&&(env.WORK_ITEMS_ENABLED!=="true"||
        !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<16))
       return Response.json({ok:false,error:{code:"WORK_ITEMS_NOT_READY"}},{
@@ -147,6 +147,8 @@ export default {
       "/v1/company-settings/get", "/v1/company-settings/update",
       "/v1/company-settings/provision",
       "/v1/work-items/get", "/v1/work-items/list",
+      "/v1/work-items/create", "/v1/work-items/report-upload-issue",
+      "/v1/work-items/transition",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -185,6 +187,8 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
     if (companySettingsResponse) return companySettingsResponse;
     const workItemsResponse=await handleWorkItems(request,env);
     if(workItemsResponse)return workItemsResponse;
+    if(new URL(request.url).pathname.startsWith("/v1/work-items/"))
+      return Response.json({ok:false,error:{code:"NOT_FOUND"}},{status:404,headers:{"cache-control":"no-store"}});
 
     return baseWorker.fetch(request, env);
 }
