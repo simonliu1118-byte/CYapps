@@ -8,6 +8,14 @@
 - 現行交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)；**V3.0／V3.1 發行後待驗收唯一清單**：[POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)。[RC_TEST.md](RC_TEST.md) 保留詳細歷史案例供操作參考，不另做第二份未驗收統計；私人資料不能放入公開 repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
+## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
+
+- [ ] **3.2-A～H**：正式需求、相依階段、原始碼移植及驗收門檻見 [V3_2_IMPLEMENTATION_PLAN.md](V3_2_IMPLEMENTATION_PLAN.md)。僅使用既有光貿官方查詢判斷當時折讓事實；兩筆合法人為折讓不能只因發票相同被自動禁止；程式必須防止同一次送出遭盲目重送。
+- [x] **3.2-00／V3.1.1 Build 0 原始碼第一片**：開啟折讓申請前，新增光貿 `invoice_query` 新鮮回查，顯示官方折讓清單並保留 SubmitAsync 提交時二次查回；官方不可用時不開啟提交視窗，沒有 g0401／g0501 真交易。WinForms smoke 補官方摘要斷言。PR 與 exact-head CI 依本次工作結果登記。
+- [ ] **3.2-A 正式編輯與金額**：接回品項編輯、強制未稅單價、官方有效剩餘額；其中含稅總額上限仍需補官方摘要完整性／作廢排除，不能誤把含有舊折讓的發票鎖死。
+- [ ] **3.2-B～H 正式折讓執行**：Local 核准／原號 g0401、CYID Cloud 配號、確定撞號受控下一號、結果不明只查回、Local／Cloud g0501、雙清單官方回補、舊人工流程退役、光貿測試環境驗收。
+- **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
+
 ## CYInvoice 3.1：非折讓跨機工作項目（Minor V3.1.0；2026-10-19）
 
 - [x] **V3.1-D Source／V3.0.4 Build 0**：0016 由草稿提升為 canonical migration，SQL 行為不變；schema source marker 為 16，Work Item 隔離測試從正式 migration 恰好執行一次，V3.0 歷史測試仍鎖在 schema15。尚未因 source 提交啟用遠端功能，實際本機 MCP 結果以私有 readback 為準。以下草稿／V3.0.3 狀態保留為歷史，不覆蓋此項。

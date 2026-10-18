@@ -4,16 +4,22 @@ namespace CYInvoice.WinForms;
 
 internal sealed class AllowanceRequestForm : Form
 {
-    private const int WindowWidth = 390;
-    private const int WindowHeight = 250;
+    private const int WindowWidth = 560;
+    private const int WindowHeight = 412;
     private readonly TextBox reason = UiControls.TextBox(100);
     private readonly TextBox amount = UiControls.TextBox(12);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(128);
     private readonly Button submit = UiControls.StandardButton("提出申請");
     private readonly Button cancel = UiControls.StandardButton("取消");
+    private readonly TextBox officialHistory = new()
+    {
+        ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
+        TabStop = false, Dock = DockStyle.Fill,
+        AccessibleName = "光貿即時查回的折讓紀錄"
+    };
 
-    public AllowanceRequestForm()
+    public AllowanceRequestForm(InvoiceRecord? freshlyQueriedInvoice = null)
     {
         Text = "折讓申請";
         StartPosition = FormStartPosition.CenterParent;
@@ -30,6 +36,10 @@ internal sealed class AllowanceRequestForm : Form
         employeeNo.TextAlign = HorizontalAlignment.Left;
         password.TextAlign = HorizontalAlignment.Left;
         password.UseSystemPasswordChar = true;
+        // The caller must provide the result of an immediately successful
+        // invoice_query, never the old local cache. This display is NOT the
+        // monetary authorization; SubmitAsync fetches official state again.
+        officialHistory.Text = DescribeOfficialSnapshot(freshlyQueriedInvoice);
 
         BuildLayout();
         Shown += (_, _) => reason.Focus();
@@ -86,10 +96,12 @@ internal sealed class AllowanceRequestForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 5,
             Padding = new Padding(14, 12, 14, 10),
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         root.Controls.Add(new Label
@@ -100,11 +112,35 @@ internal sealed class AllowanceRequestForm : Form
             Margin = Padding.Empty,
             ForeColor = Color.DimGray,
         }, 0, 0);
-        root.Controls.Add(fields, 0, 1);
-        root.Controls.Add(buttons, 0, 2);
+        root.Controls.Add(new Label
+        {
+            Text = "已於開啟前向光貿重新查詢折讓紀錄。下列資訊僅供判斷；正式申請仍會再查官方資料。",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.DimGray,
+            Margin = Padding.Empty,
+        }, 0, 1);
+        root.Controls.Add(officialHistory, 0, 2);
+        root.Controls.Add(fields, 0, 3);
+        root.Controls.Add(buttons, 0, 4);
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    // Never infer "remaining balance" from the unqualified 3.1 history
+    // snapshot: it may include voided or in-flight allowances. V3.2 amount
+    // validation will use a separate complete official-status contract.
+    private static string DescribeOfficialSnapshot(InvoiceRecord? invoice)
+    {
+        if (invoice is null) return "尚未提供即時官方查詢資料。";
+        var history = InvoiceAllowanceMetadata.ReadOfficial(invoice);
+        if (history.Count == 0)
+            return "本次光貿回覆未列出折讓紀錄；不代表可折餘額已獲確認。";
+        return string.Join(Environment.NewLine, history.Select(item =>
+            $"折讓號碼：{item.AllowanceNumber}　日期：{item.AllowanceDate}　" +
+            $"官方狀態：{item.InvoiceStatus}　類型：{item.InvoiceType}　" +
+            $"未稅額：{item.TotalAmount}　稅額：{item.TaxAmount}"));
     }
 
     private static void AddField(TableLayoutPanel layout, int row, string label, Control field)
@@ -177,6 +213,19 @@ internal sealed class AllowanceRequestForm : Form
         if (Text != "折讓申請" || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             AcceptButton is not null || CancelButton != cancel || !password.UseSystemPasswordChar)
             throw new InvalidOperationException("折讓申請視窗基本配置不正確");
+        if (!officialHistory.ReadOnly || !officialHistory.Multiline ||
+            officialHistory.Text.Length == 0 ||
+            Controls.OfType<TableLayoutPanel>().Single().RowCount != 5)
+            throw new InvalidOperationException("折讓申請沒有官方資料核對區或誤允許修改");
+        var sample = new InvoiceRecord { Amount = 100 };
+        InvoiceAllowanceMetadata.ApplyQuery(sample, [
+            new CYInvoice.Core.Amego.InvoiceAllowanceResult(
+                "D0401", 99, 2, "SYNTHETIC-001", "20261019", "5", "95")
+        ]);
+        var summary = DescribeOfficialSnapshot(sample);
+        if (!summary.Contains("SYNTHETIC-001", StringComparison.Ordinal) ||
+            !summary.Contains("99", StringComparison.Ordinal))
+            throw new InvalidOperationException("折讓官方快照摘要未顯示測試折讓號及狀態");
         if (reason.TextAlign != HorizontalAlignment.Left || amount.TextAlign != HorizontalAlignment.Left ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left)
             throw new InvalidOperationException("折讓申請輸入欄位未保持靠左");

@@ -1,0 +1,14 @@
+CYInvoice V3.1.1 Build 0 — V3.2-00 開始：折讓前的光貿即時資料核對（engineering／preview）
+
+本版是由正式 V3.1.0 起算的第一項獨立 Patch，不是 V3.2.0 Release。
+- 在正式 Windows 「發票詳細資訊」點擊「折讓」時，先經既有 InvoiceDetailRefreshService 向光貿 AMEGO 執行最新 invoice_query，成功後才打開折讓申請視窗。
+- 申請視窗顯示本次查回的已有折讓號碼、日期、文件類型、官方狀態、未稅金額與稅額，不把「沒有列出的折讓」誤解為已證實零剩餘。
+- 當前正式線仍保留現有人工折讓申請及員工身分檢查；使用者提交時由 EmployeeAllowanceWorkflowService.SubmitAsync **再次執行光貿查詢**，避免開啟時的快照代替提交時的查核。
+- 光貿無法查詢或官方回覆錯誤，不開啟可送出的申請視窗，不因 D1 在線／離線與否切換來源。本版不執行任何 g0401/g0501，也不主張目前人工工作單已能自動折讓。
+- 新增真實 WinForms 申請表的摘要區 smoke，沿用 Local／CYID／發票、作廢、折讓的所有舊回歸；已知官方折讓不妨礙使用者與管理員決定另一張合法折讓，但正式金額驗證及雲端折讓接線在後續 3.2-A～H 完成。
+- 新工程路線圖 docs/V3_2_IMPLEMENTATION_PLAN.md 包含 g0401 明確 4040161/4040162 號碼占用可查回後改號、未知回覆禁止換號重送、多裝置技術重送保護和後續 schema16 延伸方案。
+
+安全與未完成項：
+- VERSION=3.1.1、BUILD=0，工程包 Channel: engineering；唯一正式 Release 繼續是 V3.1.0，本版不建立 tag/Release。
+- V3.0+3.1 延後真人驗收沿用 docs/POST_RELEASE_ACCEPTANCE.md，不修改通過狀態。
+- Cloudflare D1/Worker/migrations、CYID D1、Bindings/Secrets、真光貿生產交易均未操作；3.2 的 Cloudflare 操作須由使用者另開本機 Work 使用 MCP。

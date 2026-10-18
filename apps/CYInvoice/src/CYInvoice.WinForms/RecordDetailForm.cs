@@ -378,12 +378,17 @@ internal sealed class RecordDetailForm : Form
     private async Task StartAllowanceAsync()
     {
         if (allowanceBusy || voidBusy) return;
-        using var request = new AllowanceRequestForm();
-        if (request.ShowDialog(this) != DialogResult.OK) return;
-
         SetAllowanceBusy(true);
         try
         {
+            // Opening the request must not reuse a stale local invoice snapshot.
+            // D1 connectivity is irrelevant: query the existing AMEGO account
+            // directly, and keep SubmitAsync's second official readback.
+            record = await detailRefreshService.RefreshAsync(record);
+            if (IsDisposed) return;
+            PopulateDetails();
+            using var request = new AllowanceRequestForm(record);
+            if (request.ShowDialog(this) != DialogResult.OK) return;
             var result = await allowanceWorkflow.SubmitAsync(
                 record,
                 request.EmployeeNo,
