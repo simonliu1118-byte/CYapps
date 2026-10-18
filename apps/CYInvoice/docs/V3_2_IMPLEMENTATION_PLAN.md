@@ -10,7 +10,7 @@
 - **Cloudflare 安全邊界**：repo 只做原始碼、可回復的新 migration 草稿、SQLite 合成升級與完整 CI。任何**原 CYInvoice D1／原 Worker／Bindings／Secrets 實際操作**須先告知使用者，交由另開的**本機 Work + MCP**；不重跑 0014～0016、不操作 CYID D1、不建立替代 D1／Worker。
 - **版號**：每一項獨立修改由已發布 V3.1.0 依序推 V3.1.1、V3.1.2……；同項返修才增加 Build。V3.2-A～H 全部完成且取得當次明確發行授權才可發布 V3.2.0，不能沿用 V3.1.0 的發布批准。V3.0／V3.1 真人延期驗收繼續由 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 唯一追蹤，不能篡改為已通過。
 
-## 3.2-A 工程交付（V3.1.2 Build 1）
+## 3.2-A 工程交付（V3.1.2 Build 2）
 
 - 選擇性移植 #440 的折讓 DataGridView，保留原有含稅／未稅單價切換，依原發票 DetailVat 決定預設模式；使用者填含稅時，程式依七位固定小數換算成未稅 UnitPrice／Amount、Tax 與含稅總額，並保存原始含稅輸入供 Core 複核。允許負單價折扣，採固定七位小數及逐行整元稅額。
 - 本次官方查詢 allowance 陣列必須完整，已完成／已作廢狀態須核對後才能算有效剩餘額。對無摘要、重號、未知狀態採 fail-closed，不把未知誤算成零折讓。
