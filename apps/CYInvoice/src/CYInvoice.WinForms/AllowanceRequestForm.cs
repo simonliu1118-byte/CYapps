@@ -217,6 +217,15 @@ internal sealed class AllowanceRequestForm : Form
             officialHistory.Text.Length == 0 ||
             Controls.OfType<TableLayoutPanel>().Single().RowCount != 5)
             throw new InvalidOperationException("折讓申請沒有官方資料核對區或誤允許修改");
+        var sample = new InvoiceRecord { Amount = 100 };
+        InvoiceAllowanceMetadata.ApplyQuery(sample, [
+            new CYInvoice.Core.Amego.InvoiceAllowanceResult(
+                "D0401", 99, 2, "SYNTHETIC-001", "20261019", "5", "95")
+        ]);
+        var summary = DescribeOfficialSnapshot(sample);
+        if (!summary.Contains("SYNTHETIC-001", StringComparison.Ordinal) ||
+            !summary.Contains("99", StringComparison.Ordinal))
+            throw new InvalidOperationException("折讓官方快照摘要未顯示測試折讓號及狀態");
         if (reason.TextAlign != HorizontalAlignment.Left || amount.TextAlign != HorizontalAlignment.Left ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left)
             throw new InvalidOperationException("折讓申請輸入欄位未保持靠左");
