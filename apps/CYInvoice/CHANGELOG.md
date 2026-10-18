@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.0.1 — 2026/10/18（3.1 非折讓跨機 Source 階段；engineering，未正式發布）
+
+- 依共通版號規則恢復 **Patch +1、BUILD=0** 的工程版追蹤：V3.0.0 是上一個已發布版本，本版 V3.0.1 僅工程測試包，**不是 V3.1.0 正式發行，也不新增 Release／tag**。先前 #482～#497 已合併時仍使用 3.0.0 的漏升版事實保留在 Git；此版一次性對齊目前 Source，不補造不存在的中間 patch 或偽造歷史包。往後**每個獨立修改項目推下一 Patch、同一項返修改推 Build**。
+- 累積未逐版標識的 V3.1 Source：非折讓 `VOID`／`UPLOAD_ISSUE` 例外工作項目、CYID 管理員跨機唯讀待辦、人工 `open→review→closed` CAS、資料最小化及 append-only Audit；對應已合併的 #482／#483／#485～#487／#489～#491，及 #493／#494／#497 的 WinForms 版面 smoke、失權清空待辦、結果不明 ID 唯讀查回與 Worker／Windows 回覆最小化。前述為**Source／隔離測試**，不可冒充已啟用跨機服務或 AMEGO 官方成功。
+- #495／#496 已清理過時交接及同步單一 TODO／V3.1 交接；本工程版更新 VERSION、CHANGELOG、使用說明及工程包的 V3.0.1 內容。Work Item schema16 SQL 仍只在 `cloud/drafts/0016_non_allowance_work_items.sql`，功能旗標預設關閉；**沒有**連線／套用 Cloudflare D1 或部署 Worker，沒有真雙機／多 DPI 驗收。真實 Email／災復驗收仍依 TODO 與 V3.0.0 已知限制。
+- 發版門檻不變：V3.1 完整功能、最後由使用者本機 MCP 處理原 D1／Worker、真機驗收完成後，才能評估 Minor `V3.1.0 Build 0`；正式 Release 仍需使用者**當次明確授權**。
+
 ## V3.0.0 — 2026/10/18（Local／CYID、公司卡與裝置復原）
 
 - 依使用者本次明確發布授權升為 V3.0.0、BUILD=0。發行範圍鎖定已合併的 V3.0 與 Unicode 復原修正；不合併 PR #440，不帶入 3.1／3.2／3.3 的 Work Item、跨機審核或新折讓 API。

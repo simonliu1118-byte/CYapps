@@ -1,0 +1,16 @@
+CYInvoice V3.0.1 工程測試版內容（未正式 Release）
+
+版號與範圍
+- VERSION=3.0.1、BUILD=0。本版是從正式 V3.0.0 之後恢復日常 Patch 管理的第一個 engineering／preview 包，不是已發布的 V3.1.0。
+- 先前 V3.1 Source 各 PR #482～#497 已合併但當時漏升 Patch；以本版一次對齊 Git 中實際存在的累積成果，並未補造任何歷史版本。往後每項獨立修改推下一 Patch，同項返修則推 Build。
+
+工程內容（尚未啟用的 V3.1）
+- 非折讓 VOID／UPLOAD_ISSUE 的本機例外回報與匿名識別；CYID 管理員跨機待辦唯讀查詢／ID 查回、人工覆核與封存（open→review→closed）、CAS 修訂版衝突處理。
+- 結果不明只以原 Work Item ID 查回，禁止盲目重送與宣稱 AMEGO 官方作廢／上傳成功；撤銷權限／查詢失敗清空舊管理清單，API 回覆只包含必要欄位。
+- 原 D1 的 append-only Audit 與 schema16 只有 SQL 草稿及隔離合成測試證據；Cloudflare D1／Worker 旗標尚未更新，遠端跨機功能目前不可用。
+- 既有 V3.0.0 Local／CYID 身分、正式開票、作廢／折讓、PDF、同步與裝置復原功能維持原行為；沒有導入 3.2 的折讓 API。
+
+驗收與安全限制
+- 本包只能用於 Windows 工程預驗收，不代表跨機正式可用；需要原 CYInvoice D1 的受控 schema16／Worker 啟用後才能進行完整雙機驗收。Cloudflare 遠端修改只由使用者本機 MCP 最後執行。
+- 原 V3.0.0 真實 Email 送達、兩台實機及異機災難復原仍待補證據；不將隔離／CI 當成實際上線。
+- 工程包可由 Channel: engineering、VERSION／BUILD 驗證；尚無本版正式 tag／Release。未經使用者當次批准，不可當正式 V3.1 發布。
