@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.20 — 2026/10/18（V3 復原密碼相容修正，工程測試）
+
+- Windows 復原 Preview／Claim 改按 CYID canonical 的 8–16 個 Unicode 字元檢查密碼；復原密碼輸入框容納最多 32 個 UTF-16 code units，支援合法補充字元，不改 CYID 密碼規則或授權。
+- 新增只使用合成資料與注入 HTTP handler 的 Windows client 回歸：合法／不合法 Unicode 邊界、未帶舊 bearer、原 Pending Token 經重啟保留、遺失回覆不自動重送、禁止另建 Token、同一 attempt 讀回、錯 scope 在送出前拒絕、錯 App／過期／撤銷回覆與既有本機資料保留；WinForms smoke 核對密碼欄位容量及遮罩。
+- 獨立 bug 修正推進 Patch、BUILD 維持 0。Worker／CYID／D1 不變；工程驗證不等於真 Email 或異機還原驗收，不建立正式 Release。V3.0 的版本與發行仍依其正式驗收及明確發行授權處理。
+
 ## V2.6.19 — 2026/10/11（買方名稱查無資料可留空，工程測試）
 
 - 手動開立、MO／酷澎／鼎新匯入遇到光貿正常空結果／code 99，提示可人工輸入買方名稱；留空仍可開立，正式送出及本機紀錄以該張統編作為 BuyerName。API 技術／權限錯誤與未完成查詢仍擋下，不冒充查無資料。
