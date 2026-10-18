@@ -128,7 +128,7 @@ static void TestGrossPriceInput()
         OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261019,
         OriginalDescription = "含稅七位小數", TaxType = 1, Quantity = 1m,
         GrossUnitPrice = 100.1234567m,
-        UnitPrice = 95.3556721m, // rounded 100.1234567 / 1.05
+        UnitPrice = 95.3556730m, // seven-decimal rounded 100.1234567 / 1.05
         Amount = 95m, Tax = 5m,
     };
     AllowanceDraftValidator.Validate([fractionalGross], "AA12345678", "2026/10/19", 100);
