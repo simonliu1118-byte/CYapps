@@ -6,10 +6,10 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程基準：**Windows V2.6.19 Build 0 已發布；原 development Cloud 0.9.3／CYID_ENABLED=true／CYID_ONLY**。原 Windows CYID 帳密進設定已由使用者回報成功；其餘全角色／多裝置實機證據待補，折讓歷史缺欄位依使用者決定留待 V3.0 重做，不阻塞已接受的本批 Release。
+- 目前版本來源：**Windows V3.0.0 Build 0**。本版範圍為 Local／CYID 雙模式、公司卡與裝置災難復原；依使用者本次明確授權走正式 Release。隔離與虛擬機驗證已通過，真實 Email／實體雙機／獨立金鑰異機還原仍未實測，限制會一併放入發行包。
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
-- 最新公開正式 Release：[**CYInvoice V2.6.19**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19)（tag：`cyinvoice-v2.6.19`，包含 ZIP／SHA256）。本次文件整理不重新發版。
+- 本次發行頁：[**CYInvoice V3.0.0**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)（tag：`cyinvoice-v3.0.0`，ZIP／SHA-256 由正式 workflow 重新建置後提供）。既有 V2.6.19 Release 保留，不覆寫。
 - V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
@@ -44,7 +44,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 - 4 碼員工編號。
 - 角色：超級管理員、管理員、一般使用者。
-- Local／Built-in 密碼至少 8 碼 ASCII 英數；CYID 使用 canonical 的 8～16 個 Unicode code points，完成首次啟用後才可使用。
+- Local 密碼至少 8 碼 ASCII 英數；CYID 使用 canonical 的 8～16 個 Unicode code points，完成首次 Email 驗證後才可使用。新版不提供 Built-in 現役模式。
 - Local 首次使用建立唯一超級管理員；超級管理員支援一次性離線復原碼。
 - 帳號管理、密碼變更／重設、啟用／停用均依角色限制。
 - MO店+ Excel 密碼與員工／管理員登入分離，不再是首次設定必要欄位；未設定時點 MO店+ 會先提示設定，不開啟選檔視窗。
@@ -59,7 +59,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 作廢結果不明／等待官方確認時不盲目重送。
 - 超過目前＋上一個兩月期別的舊 pending，可由管理員在詳細待辦中手動結案；此動作只停止本機追蹤，不代表光貿已完成作廢。
 
-### 折讓（V2.6.x 暫行人工流程）
+### 折讓（保留既有人工流程）
 
 - 發票詳細資訊可提出人工折讓申請：原因、含稅折讓總額、員工帳密。
 - 申請建立後進入「上傳問題」，由管理員至光貿網站人工處理。
@@ -93,14 +93,16 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 
 「上傳問題」旁的「處理中」沿用相同清單與雙擊明細，顯示正常上傳等待、光貿明確確認處理中的作廢，以及人工操作完成且正常等待官方確認的折讓。資料由現有發票狀態與待辦投影，沒有第二套 pending 資料庫。完成後從處理中移除；回查失敗、折讓金額／候選衝突仍保留在上傳問題。處理中項目不能勾選刪除或直接標記成功；超過保留期的作廢／折讓仍保留管理員結案入口。舊折讓未保存明確確認分類時，先留在上傳問題，經正常回查後再分類。
 
-### Built-in Cloud 與身分基礎
+### Local／CYID Cloud 與裝置復原
 
 - Workspace／Device、配對碼／邀請碼、whole-device Employee Transition 與中央 Employee 管理已實作。
-- Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
+- 本版提供 Local／CYID Cloud；正式 role 為 SUPER_ADMIN / ADMIN / USER。歷史 Built-in／Self-hosted 原版本保留，新版不以舊帳號降級放行。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- Source 與原 development Worker 已為 **Cloud 0.9.3／API 1／compatibility marker 8／storage 13**；[2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 保留 CYID_ENABLED=true 與全部 bindings，另行批准的原 D1 CYID_ONLY 維護、私有備份／本機還原驗證及歷史／FK 核對完成。早期 Run #8 為歷史部署證據。接續 Recovery／V3 與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
-- CYID provider／gateway 與原降級已接線；actual development #42 已啟用並保留原 Workspace／Device／資料，使用者确认原機 CYID 帳密進設定成功。其餘角色／多裝置／刷新／斷線／撤銷驗收待完成；0-Device recovery 與跨機 Work Item 為後續項目。折讓人工歷史缺欄位已回報、尚未修正；詳見 [現行交接](docs/CLOUD_WORK_HANDOFF.md) 與 [TODO](docs/TODO.md)。
+- 本版相容後端為 **Cloud 0.9.3／API 1／compatibility marker 8／storage schema 15**；維運須先完成對應遷移與功能設定，Windows 發布不會部署 Worker 或變更 D1。歷史部署與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+- 公司卡以角色分離管理；超管確認後才將同版次憑證套用到單一授權 Windows 並以 DPAPI 保存，不自動覆寫其他電腦。
+- CYWEB 超管可重新驗證後簽發短效裝置復原邀請；新裝置接管原公司成功時，才撤銷所有其他舊裝置。Pending Token／scope 與遺失回覆讀回機制避免盲目重簽或重建裝置身分。
+- 本版採隔離／虛擬機軟體驗收，未將真實寄信或實際異機還原標為通過。跨機 Work Item／審核、正式折讓 API 與後續項目留待 3.1／3.2／3.3；不合併 PR #440。完整內容與限制見 [V3.0.0 發行摘要](release-notes/V3.0.0.txt)。
 
 ### 系統診斷（V2.6.3）
 
@@ -149,8 +151,8 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - 正式折讓作廢 API `/json/g0501`。
 - `allowance_query`／`allowance_status` 等獨立折讓同步模型；現階段仍共用 `invoice_query`。
 - 折讓單號自動產生與跨裝置防重。
-- Cloud Work Item、跨機原子結案、離線 OrderID 防撞、audit viewer 與 all-device-loss recovery；中央 Employee／權限、Device Token、裝置撤銷及本機重置已完成工程實作，A/B/C 實機驗收仍待完成。
-- Built-in Cloud Email 忘記密碼已接線，仍待實機驗收；MO 密碼雲端同步與小型營運摘要屬後續功能。
+- Cloud Work Item、跨機原子結案、離線 OrderID 防撞與 audit viewer 留待後續版本；本版裝置復原已完成隔離驗證，完整實體雙機與實際異機還原仍待實測。
+- CYID 真實 Email 送達仍待實測；公司卡已有 MO 密碼管理與單機授權套用，小型營運摘要仍屬後續功能。
 - 酷澎未出貨、公司統編、多商品／多數量、折扣等尚缺可靠實際樣本的格式。
 
 雲端上線需求見 [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)。詳細待辦見 [docs/TODO.md](docs/TODO.md)。
