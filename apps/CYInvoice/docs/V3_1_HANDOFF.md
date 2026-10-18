@@ -31,6 +31,12 @@
 - Windows 跨機待辦 smoke 改為真正控制項（不讀正式環境設定、Token 或網路），並在失去權限、查詢失敗或覆核結果不明後清除舊清單及操作狀態；完整 WinForms／Cloud／Governance exact-head CI 仍以 PR 檢查結果為準。
 - 此批只改原始碼和文件，沒有改 SQL 草稿／Cloud Worker／正式發行。真人角色、雙 Windows 和 DPI 實測仍是後續驗收。
 
+## V3.1 結果不明的 ID 查回（工程 PR [#494](https://github.com/simonliu1118-byte/CYapps/pull/494)）
+
+- 上傳問題回報及主管覆核若發生斷線／D1 回覆不明，既有程式會保留原工作項目 ID，不得再次送出業務 mutation。原管理員視窗只有分頁清單，難以查回已封存或不在目前篩選的項目；本 PR 加入直接輸入 ID 的**純查詢**入口。
+- 每次直接查回都走同一個 CYID 當次登入、active Device／Workspace 防護及後端 `get` 權限重驗；僅顯示人工狀態及 revision，不涉及正式發票查詢、重送或變更，禁止用清單快取充當最新權限。若是原視窗人工操作結果不明，會自動填入原 ID 供查回。
+- 3.1 的 schema16 原 D1、Worker feature flag、真雙 Windows／不同角色驗收一律留最後本機 MCP 與實機階段。本 PR 是否合併以精確 Windows／Cloud／Governance CI 為準。
+
 ## 接下來（先 Source；D1 一律排最後）
 
 1. **先完成 Source review 與跨模組回歸**：核對使用者本機手動回報→管理員遠端待辦→兩次 CAS 覆核／封存的端到端契約；確認每次 CYID/Device 重新驗權、使用者不能替管理員核准、HTTP redirect 不洩漏密碼、重複 ID／網路回覆不明只查回、不重送 AMEGO、原 Local 發票／人工折讓不回歸。有缺口再建立單一短期 branch／PR 修正；沒有缺口勿重新做一套。
