@@ -8,7 +8,7 @@
 
 - 正式 V3.0.0 Build 0 已發行。使用者確認先前 Cloudflare 3.0 安全升級已完成；真 Email／雙機 DR 留後續驗收，**不阻塞 3.1**。此輪未遠端讀回驗證，不重做 CYID、0014／0015、公司卡或 Recovery。
 - 3.1-A 第一片已在 `cyinvoice/v3.1-nonallowance-workitems` Source-only 分支：從 #440 精準接回資料層及隔離 Node SQLite tests，範圍僅 `VOID`／`UPLOAD_ISSUE`；`cloud/drafts/0016_non_allowance_work_items.sql` 還不在正式 migrations、Worker route 未接入、Windows UI 未改。請以 PR exact-head CI 證據驗收。
-- 下一步依序 3.1-B CYID-only Manager/User API → 3.1-C Windows 上傳問題／作廢覆核 → 3.1-D 本機 Cloudflare MCP 安全遷移與跨機實測。折讓 API／折讓跨機全部保留 3.2。詳見 [唯一 TODO](TODO.md)、[3.1 交接](V3_1_HANDOFF.md)。
+- 下一步依序 3.1-B 已加入 Source-only 的唯讀 Manager GET/LIST（schema16/WORK_ITEMS_ENABLED gated），User create/report 與 manager transition 待下一片；3.1-B CYID-only Manager/User API → 3.1-C Windows 上傳問題／作廢覆核 → 3.1-D 本機 Cloudflare MCP 安全遷移與跨機實測。折讓 API／折讓跨機全部保留 3.2。詳見 [唯一 TODO](TODO.md)、[3.1 交接](V3_1_HANDOFF.md)。
 
 ## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
 

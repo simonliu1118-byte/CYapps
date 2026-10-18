@@ -17,6 +17,12 @@
 - `cloud/tests/v3.1-work-items.test.mjs`：在記憶體 SQLite 載入真 0014/0015 後隔離建立草案、驗證資料保留、revoked Device fencing、重複來源／Workspace CAS、敏感欄位不在管理員列表、封存 immutable 與折讓不能混入。
 - `cloud/package.json` 已加入此測試到 `npm test`。尚未建立／註冊 Worker HTTP 入口、任何 WinForms UI 或正式 0016 migration；**目前不可直接部署這片**。
 
+## 3.1-B1 追加完成的程式（待 CI 驗收）
+
+- `cloud/src/work-items-route.ts` 目前僅管理員／超管 `get/list`，其他 API 尚未新增；Worker `app.ts` 需 `WORK_ITEMS_ENABLED=true` 且 `SCHEMA_VERSION>=16` 才會在完成請求位元組上限檢查後啟動 CYID Session。官方發票或客戶詳細資料不進列表。
+- `cloud/tests/v3.1-work-items-route.test.mjs` 以隔離 SQL 驗證 disabled／schema15 拒絕、User 不能查、被撤銷裝置拒絕、權限在讀取期間下降不返回資料，以及分頁欄位隱私。
+- 尚未開啟旗標、正式 D1 沒有 0016 migration。User 建立及管理員寫入仍須 3.1-B2。
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。
