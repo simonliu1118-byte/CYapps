@@ -18,10 +18,12 @@ public static class InvoiceAllowanceMetadata
         ArgumentNullException.ThrowIfNull(allowances);
         record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[SummaryPresentKey] = JsonSerializer.SerializeToElement(summaryPresent);
-        if (summaryPresent)
-            record.ExtensionData[OfficialAllowancesKey] = JsonSerializer.SerializeToElement(allowances);
-        else
-            record.ExtensionData.Remove(OfficialAllowancesKey);
+        // Always retain the returned history for existing read-only views
+        // and the V3.1 manual reconciliation workflow. Completeness is a
+        // separate signal: new V3.2 monetary caps MUST require the true
+        // SummaryPresentKey, even when an older/synthetic query has allowances.
+        record.ExtensionData[OfficialAllowancesKey] =
+            JsonSerializer.SerializeToElement(allowances);
     }
 
     public static IReadOnlyList<InvoiceAllowanceResult> ReadOfficial(InvoiceRecord record)
