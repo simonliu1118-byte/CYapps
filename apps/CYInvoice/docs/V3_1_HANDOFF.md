@@ -17,6 +17,11 @@
 - `cloud/tests/v3.1-work-items.test.mjs`：在記憶體 SQLite 載入真 0014/0015 後隔離建立草案、驗證資料保留、revoked Device fencing、重複來源／Workspace CAS、敏感欄位不在管理員列表、封存 immutable 與折讓不能混入。
 - `cloud/package.json` 已加入此測試到 `npm test`。尚未建立／註冊 Worker HTTP 入口、任何 WinForms UI 或正式 0016 migration；**目前不可直接部署這片**。
 
+## 3.1-B 開發進度
+
+- 已開始獨立 PR：從最新 main 的 3.1-A 延續，精準沿用 #440 的非折讓 CYID Manager REST route，新增 Worker schema16＋feature flag 雙重 fail-closed、身分驗證前的 8192-byte JSON 限制，並把路由合成測試加入 Cloud CI。**此為 Source，不代表本機 Cloudflare 已執行新的 0016 草稿 migration 或啟用 API**。
+- Windows Client 與覆核 UI 尚須另驗收；作廢 Work Item 流程狀態不能當成 AMEGO 官方作廢或已開票結果。
+
 ## 下一片開發順序
 
 1. 3.1-B 復用 #440 `work-items-route.ts`，只提供 VOID／UPLOAD_ISSUE；CYID Session/Device 每次重驗、USER 提交異常、ADMIN／SUPER_ADMIN 審核；schema>=16 + feature flag 預設關閉，請求上限在 CYID Login 前生效。
