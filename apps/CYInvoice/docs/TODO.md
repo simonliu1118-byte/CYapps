@@ -12,7 +12,7 @@
 
 - [ ] **3.2-A～H**：正式需求、相依階段、原始碼移植及驗收門檻見 [V3_2_IMPLEMENTATION_PLAN.md](V3_2_IMPLEMENTATION_PLAN.md)。僅使用既有光貿官方查詢判斷當時折讓事實；兩筆合法人為折讓不能只因發票相同被自動禁止；程式必須防止同一次送出遭盲目重送。
 - [x] **3.2-00／V3.1.1 Build 0 原始碼第一片**：開啟折讓申請前，新增光貿 `invoice_query` 新鮮回查，顯示官方折讓清單並保留 SubmitAsync 提交時二次查回；官方不可用時不開啟提交視窗，沒有 g0401／g0501 真交易。WinForms smoke 補官方摘要斷言。PR 與 exact-head CI 依本次工作結果登記。
-- [x] **3.2-A／V3.1.2 Build 1 Source**：原發票折讓商品編輯、含稅／未稅單價切換、含稅自動換算未稅送出明細與總額、負數折扣、七位固定小數、完整官方有效剩餘額 fail-closed，申請時重新查光貿並由 Core 核對草稿；尚不接 g0401/g0501，也不將 CI 當真人實機驗收。
+- [x] **3.2-A／V3.1.2 Build 2 Source**：原發票折讓商品編輯、含稅／未稅單價切換、含稅自動換算未稅送出明細與總額、負數折扣、七位固定小數、完整官方有效剩餘額 fail-closed，申請時重新查光貿並由 Core 核對草稿；尚不接 g0401/g0501，也不將 CI 當真人實機驗收。
 - [ ] **3.2-B～H 正式折讓執行**：Local 核准／原號 g0401、CYID Cloud 配號、確定撞號受控下一號、結果不明只查回、Local／Cloud g0501、雙清單官方回補、舊人工流程退役、光貿測試環境驗收。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
