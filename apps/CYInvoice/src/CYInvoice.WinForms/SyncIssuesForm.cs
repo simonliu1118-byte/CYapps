@@ -391,7 +391,11 @@ internal sealed class SyncIssuesForm : Form
                         {
                             // Approved source is frozen: no manual completion,
                             // reapproval, cancel, or implicit g0401 call.
-                            primaryText = string.Empty;
+                            // Safe to reserve and view the same immutable number;
+                            // reservation is not permission to call g0401.
+                            var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                                repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
+                            primaryText = local ? "預留折讓單號（不送出）" : string.Empty;
                             allowCancel = false;
                         }
                         else if (!review.AwaitingConfirmation)
@@ -542,7 +546,9 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
 
-        if (!review.AwaitingConfirmation)
+        if (review.LocalApprovedUtc is not null)
+            await ReserveLocalAllowanceDraftAsync(issue);
+        else if (!review.AwaitingConfirmation)
         {
             if (repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly &&
@@ -616,6 +622,35 @@ internal sealed class SyncIssuesForm : Form
             MessageBox.Show(this, error.Message, "人工確認未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
+    }
+
+    private async Task ReserveLocalAllowanceDraftAsync(InvoiceSyncIssue issue)
+    {
+        if (manualReviewBusy || issue.ResolvedUtc is not null) return;
+        using var login = new EmployeeAdminLoginForm(repository,
+            "Local 折讓預留單號－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        SetManualReviewBusy(true);
+        try
+        {
+            var reservation = await allowanceWorkflow.ReserveLocalApprovedDraftAsync(
+                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            if (IsDisposed) return;
+            MessageBox.Show(this,
+                $"已安全預留折讓號碼：{reservation.AllowanceNumber}\n" +
+                "完整請求內容已保存於本機 SQLite，程式重開後仍使用同一號碼。\n\n" +
+                "目前只有預留，**沒有**向光貿開立折讓。下一批完成正式 g0401 送出之前，" +
+                "請勿將此號碼當作已開立的折讓單。",
+                "已預留（未送出）", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            if (!IsDisposed)
+                MessageBox.Show(this, error.Message,
+                    "預留折讓單號失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
     private async Task ApproveLocalAllowanceDraftAsync(InvoiceSyncIssue issue)
