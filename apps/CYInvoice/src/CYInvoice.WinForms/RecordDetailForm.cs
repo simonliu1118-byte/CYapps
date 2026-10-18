@@ -394,7 +394,8 @@ internal sealed class RecordDetailForm : Form
                 request.EmployeeNo,
                 request.Password,
                 request.Reason,
-                request.TaxInclusiveAmount);
+                request.TaxInclusiveAmount,
+                editedItems: request.EditedItems);
             MessageBox.Show(
                 this,
                 result.AlreadyQueued
