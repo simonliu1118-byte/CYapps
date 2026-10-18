@@ -10,7 +10,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
 - 本次發行頁：[**CYInvoice V3.0.0**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)（tag：`cyinvoice-v3.0.0`，ZIP／SHA-256 由正式 workflow 重新建置後提供）。既有 V2.6.19 Release 保留，不覆寫。
-- V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+- V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/V3_1_HANDOFF.md)。
 - V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 版本來源為 `VERSION`／`BUILD`；正式 Release 必須由 `main` 重新建置與驗證。
@@ -99,7 +99,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - 本版提供 Local／CYID Cloud；正式 role 為 SUPER_ADMIN / ADMIN / USER。歷史 Built-in／Self-hosted 原版本保留，新版不以舊帳號降級放行。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- 本版相容後端為 **Cloud 0.9.3／API 1／compatibility marker 8／storage schema 15**；維運須先完成對應遷移與功能設定，Windows 發布不會部署 Worker 或變更 D1。歷史部署與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+- 本版相容後端為 **Cloud 0.9.3／API 1／compatibility marker 8／storage schema 15**；維運須先完成對應遷移與功能設定，Windows 發布不會部署 Worker 或變更 D1。歷史部署與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/V3_1_HANDOFF.md)。
 - 公司卡以角色分離管理；超管確認後才將同版次憑證套用到單一授權 Windows 並以 DPAPI 保存，不自動覆寫其他電腦。
 - CYWEB 超管可重新驗證後簽發短效裝置復原邀請；新裝置接管原公司成功時，才撤銷所有其他舊裝置。Pending Token／scope 與遺失回覆讀回機制避免盲目重簽或重建裝置身分。
 - 本版採隔離／虛擬機軟體驗收，未將真實寄信或實際異機還原標為通過。跨機 Work Item／審核、正式折讓 API 與後續項目留待 3.1／3.2／3.3；不合併 PR #440。完整內容與限制見 [V3.0.0 發行摘要](release-notes/V3.0.0.txt)。
@@ -194,7 +194,7 @@ apps/CYInvoice/
 
 ## 文件
 
-- [現行交接與 CI／測試包](docs/CLOUD_WORK_HANDOFF.md)
+- [現行 V3.1 原始碼交接](docs/V3_1_HANDOFF.md)
 - [Cloud 工程狀態](docs/CLOUD_ARCHITECTURE_STATUS.md)
 - [CY ID 整合差異](docs/CY_ID_INTEGRATION.md)
 - [功能基準](docs/REQUIREMENTS.md)

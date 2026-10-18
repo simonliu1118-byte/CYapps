@@ -5,7 +5,7 @@
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
 - 本公司已使用 CYID。**以下為歷史 V2 註記**：其他公司舊 Built-in／Self-hosted 如需留存須用各自原 V2 相容配置；**V3.0 新版只支援 Local／CYID Cloud**，不再提供 Built-in／Self-hosted 現役模式，也不能復活本公司已退役的舊帳號表。
-- 現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
+- 現行交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)；實機證據清單：[RC_TEST.md](RC_TEST.md)。歷史 checkpoint 不覆蓋本節。原始筆數、ID、row fingerprints、Token hashes、備份／Time Travel bookmark 與本機路徑留在私有紀錄，不進 Public repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
 ## CYInvoice 3.1：非折讓跨機工作項目（最新；2026-10-18）
@@ -147,7 +147,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 
 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258。Core／Void／Employee void workflow（29/29）／Allowance／SQLite／Sync／SyncCoordinator 與 Windows smoke／package 全綠；歷史行政結案契約已修正，source TODO／FIXME／NotImplementedException 盤點沒有另找到明確未實作 placeholder。
 
-人工折讓／折讓 PDF／人工折讓作廢／系統診斷已實作；Identity Foundation、Online Authority Freshness、Device inventory／revoke、crash-safe Cloud → Local reset 已合併。Built-in Cloud Email 忘記密碼已有 API／Windows UI／client，不再列為未實作，仍需 live 驗收。版本／CI／deployment 的精確證據與功能邊界見 CLOUD_WORK_HANDOFF.md。
+人工折讓／折讓 PDF／人工折讓作廢／系統診斷已實作；Identity Foundation、Online Authority Freshness、Device inventory／revoke、crash-safe Cloud → Local reset 已合併。Built-in Cloud Email 忘記密碼已有 API／Windows UI／client，不再列為未實作，仍需 live 驗收。版本／CI／deployment 的精確證據與功能邊界見 V3_1_HANDOFF.md。
 
 ## 4. V2.4.x／既有同步與 Cache 實機回歸
 

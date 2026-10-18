@@ -147,7 +147,7 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
 | DR-13 | 3.0 新機復原不得重送任何 AMEGO 開票／作廢／人工折讓；未上雲的舊機資料遺失有明確提示。Work Item／跨機 revision／新折讓 API 的完整重整驗收**延至 3.1／3.2**，不得誤列為 3.0 未完工開發 |
 
-以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)。
+以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)。
 
 ## 10. 原始碼與 canonical 參考
 

@@ -2,7 +2,7 @@
 
 此文件只記錄非敏感的 Email Provider 工程狀態與切換原則。不得寫入 API Key、SMTP 密碼、真實收件人 Email、OTP、Cloudflare Secret 或其他機密資料。
 
-更新日期：2026-10-09。最新工作停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，本文件不另維護進度清單。
+更新日期：2026-10-09。最新工作停點見 [現行交接](V3_1_HANDOFF.md)，本文件不另維護進度清單。
 
 ## 目前狀態
 
