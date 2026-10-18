@@ -118,12 +118,21 @@ internal static class CloudWorkItemClientTests
     {
         var handler = new QueueHandler();
         handler.Enqueue(_ => Json(HttpStatusCode.OK, Result("open", 1, workspace: "ws_other")));
+        handler.Enqueue(_ => Json(HttpStatusCode.OK, new { ok=true,
+            item=new {work_item_id=ItemId,workspace_id=Workspace,environment="test",
+                kind="VOID",reference_hash=ReferenceHash,status="open",revision=1,
+                actor_id="synthetic_actor"} }));
         using var http = new HttpClient(handler);
         var client = new CloudWorkItemClient(http, new Uri("https://cloud.example.test/"), Token, Workspace);
         await ThrowsAsync<InvalidDataException>(async () =>
         {
             await client.GetAsync(ItemId, "0001", "synthetic-pass");
         });
+        await ThrowsAsync<InvalidDataException>(async () =>
+        {
+            await client.GetAsync(ItemId, "0001", "synthetic-pass");
+        });
+        Equal(0,handler.PendingCount,"unexpected actor field rejected, never retried");
     }
 
     private static async Task IdReadbackIsPureAndRevalidatesErrorsAsync()
