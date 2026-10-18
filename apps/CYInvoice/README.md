@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前 **工程 Source／測試包 V3.0.1 Build 0**（`VERSION=3.0.1`、`BUILD=0`）；**上一個正式 Release 仍是 V3.0.0**。V3.0.1 將此前已合併但漏升版的 V3.1 非折讓跨機 Work Item 原始碼收斂為可追蹤 Patch，Cloudflare schema16／Worker flag 尚未啟用，尚無正式 V3.1。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。詳細範圍見 [V3.0.1 工程版內容](release-notes/V3.0.1.txt)。
+- 目前 **工程 Source／測試包 V3.0.2 Build 0**（`VERSION=3.0.2`、`BUILD=0`）；**上一個正式 Release 仍是 V3.0.0**。V3.0.1 已將此前漏升版的 V3.1 非折讓跨機 Work Item Source 納入 Patch 追蹤；本 V3.0.2 獨立修正管理員待辦視窗縮小時的欄寬溢出，並補最小尺寸 smoke，Cloudflare schema16／Worker flag 尚未啟用，尚無正式 V3.1。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。詳細範圍見 [V3.0.2 工程版內容](release-notes/V3.0.2.txt)。
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
 - 本次發行頁：[**CYInvoice V3.0.0**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)（tag：`cyinvoice-v3.0.0`，ZIP／SHA-256 由正式 workflow 重新建置後提供）。既有 V2.6.19 Release 保留，不覆寫。
