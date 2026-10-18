@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前 **工程 Source／測試包 V3.0.3 Build 0**（`VERSION=3.0.3`、`BUILD=0`）；**上一個正式 Release 仍是 V3.0.0**。V3.0.1 已將此前漏升版的 V3.1 非折讓跨機 Work Item Source 納入 Patch 追蹤；V3.0.2 已修正管理員待辦視窗最小尺寸欄寬；本 V3.0.3 獨立修正「回報跨機」按鈕僅允許尚未結案且支援的非折讓例外，排除折讓與未知類型，Cloudflare schema16／Worker flag 尚未啟用，尚無正式 V3.1。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。詳細範圍見 [V3.0.3 工程版內容](release-notes/V3.0.3.txt)。
+- **最新工程 Source：V3.0.4 Build 0（V3.1-D）**。0016 已由草稿轉為 `cloud/migrations/0016_non_allowance_work_items.sql`；不改 SQL 行為、0014／0015 或 Windows 功能，source schema marker 為 16。此提交不啟用遠端功能；須依本機 MCP 的私有備份／還原與連續性檢查受控操作原 D1／Worker。正式 Release 仍是 V3.0.0，真人雙 Windows／角色／DPI 驗收另行完成。詳見 [V3.0.4 工程版內容](release-notes/V3.0.4.txt)。
+
+- V3.0.3 歷史工程基準：修正「回報跨機」按鈕僅允許尚未結案且支援的非折讓例外，排除折讓與未知類型；Windows 功能於本批維持不變。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。[V3.0.3 工程版內容](release-notes/V3.0.3.txt) 保留當時的部署前狀態。
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
 - 本次發行頁：[**CYInvoice V3.0.0**](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.0.0)（tag：`cyinvoice-v3.0.0`，ZIP／SHA-256 由正式 workflow 重新建置後提供）。既有 V2.6.19 Release 保留，不覆寫。

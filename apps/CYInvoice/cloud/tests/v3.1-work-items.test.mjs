@@ -24,8 +24,7 @@ function fixture() {
     VALUES (?,?,'Synthetic','active','cloud')`).run(d,ws);
   db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
   for (const name of migrations.filter(n=>n>="0014")) db.exec(readFileSync("migrations/"+name,"utf8"));
-  // New table is draft-only; do not alter the reviewed canonical migration set.
-  db.exec(readFileSync("drafts/0016_non_allowance_work_items.sql","utf8"));
+  // Canonical 0016 is applied exactly once by the migration loop above.
   assert.equal(db.prepare(
     "SELECT COUNT(*) AS n FROM sqlite_master WHERE name='cloud_employees'").get().n,0);
   let beforeWrite;
@@ -104,7 +103,7 @@ console.log("V3 Work Item storage: CYID_ONLY, source de-dup, CAS revision and re
 {
   const {db,env}=fixture();
   assert.equal(readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort().at(-1),
-    "0015_company_settings.sql","V3.1 schema must remain only a draft");
+    "0016_non_allowance_work_items.sql","V3.1-D schema must be canonical");
   assert.throws(()=>db.prepare(`INSERT INTO work_items(
     work_item_id,workspace_id,opened_by_device_id,updated_by_device_id,
     environment,kind,reference_hash,actor_id,created_at,updated_at)

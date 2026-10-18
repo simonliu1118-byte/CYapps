@@ -7,7 +7,7 @@ import {DatabaseSync,backup} from 'node:sqlite';
 // V3.0 schema checkpoint ONLY: original storage13 -> CYID_ONLY retired
 // business D1 -> recovery canonical 0014 -> company card canonical 0015.
 // No remote D1, deploy, real Device Token, customer data or Worker.
-const migrationFiles=readdirSync('migrations').filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
+const migrationFiles=readdirSync('migrations').filter(x=>/^\d{4}_.*\.sql$/.test(x)&&x<'0016').sort();
 assert.equal(migrationFiles.at(-1),'0015_company_settings.sql');
 assert.deepEqual(migrationFiles.slice(-3), [
   '0013_cyid_invitation_actor.sql',

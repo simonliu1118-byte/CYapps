@@ -4,14 +4,14 @@ import { DatabaseSync } from "node:sqlite";
 
 // Use real migrations and isolated SQLite, not any Cloudflare Worker, remote D1,
 // application secret, or historical live Identity/Device data.
-const migrations = readdirSync("migrations").filter(name => /^[0-9]{4}_.*[.]sql$/.test(name)).sort();
+const migrations = readdirSync("migrations").filter(name => /^[0-9]{4}_.*[.]sql$/.test(name) && name < "0016").sort();
 assert.equal(migrations.at(-1), "0015_company_settings.sql");
 assert.deepEqual(migrations.slice(-3), [
   "0013_cyid_invitation_actor.sql",
   "0014_invitation_recovery_metadata.sql",
   "0015_company_settings.sql"
 ]);
-// The Work Item 0015 proposal remains outside canonical migrations.
+// This historical recovery fixture intentionally ends at storage15.
 const optionalScript = readFileSync("maintenance/enable-cyweb-recovery-issuer.sql", "utf8");
 const retireScript = readFileSync("maintenance/retire-built-in-for-cyid-only.sql", "utf8");
 

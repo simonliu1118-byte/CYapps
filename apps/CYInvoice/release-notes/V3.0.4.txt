@@ -1,0 +1,14 @@
+CYInvoice V3.0.4 工程測試版內容（未正式 Release）
+
+V3.1-D 遷移與受控部署準備
+- 新的獨立工作，依規則由 V3.0.3 推進至 V3.0.4 Build 0；不是 V3.1.0 正式發行。
+- cloud/migrations/0016_non_allowance_work_items.sql 正式收錄非折讓工作項目及不可修改／刪除的稽核事件，原 0014／0015 不修改、不重跑。
+- SQL 行為沿用已合併草稿；隔離測試透過 canonical migration 套用一次，保留 Workspace／Device、角色、CAS、結果不明先查回及人工封存不代表官方成功的限制。
+- source schema marker 為 16，WORK_ITEMS_ENABLED 仍須維運另行明確啟用；安裝工程包或 GitHub 合併不會變更 D1／Worker。
+- 只使用原業務 D1 與原 Worker；本機 MCP 須先驗證 schema15／CYID_ONLY、資料連續性、私有加密備份與本地還原，再單獨套用 0016、保留原設定受控部署。不得建立測試 Worker、新 D1 或操作 CYID 資料庫。
+- Windows 功能沿用 V3.0.3；不新增 3.2 折讓 API、不自動呼叫 AMEGO 或重送發票、不簽發或兌換復原碼。
+
+驗收界線
+- 工程 CI 與本機資料還原演練不等同真人雙 Windows、各 CYID 角色、DPI 或真實 Email／異機災復驗收。
+- 實際遠端結果以本機私有 readback 紀錄為準；資源識別、資料指紋、備份及 Time Travel bookmark 不放入公開工程包。
+- Channel: engineering；上一正式 Release 仍是 V3.0.0。本次沒有正式 tag／Release，正式發行另外授權。

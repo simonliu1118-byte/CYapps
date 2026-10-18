@@ -22,6 +22,8 @@ The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no long
 
 ## Current compatibility
 
+V3.1-D source now includes canonical `0016_non_allowance_work_items.sql` and storage marker 16. The SQL behavior is unchanged from the reviewed draft. Work Item routes remain opt-in; a source merge does not enable `WORK_ITEMS_ENABLED` or deploy resources. Apply only to the verified original schema15/CYID_ONLY database after a private recoverable backup and continuity checks; do not replay 0014/0015. Actual remote state is recorded in private local MCP readback. The storage13 deployment details below are historical checkpoints.
+
 - Service: `cyinvoice-cloud`
 - Cloud implementation source and original development Worker: `0.9.3`, CYID_ENABLED=true; company storage profile `CYID_ONLY`.
 - API: `1`

@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.0.4 — 2026/10/18（V3.1-D canonical schema16；engineering）
+
+- 新獨立維運準備項目，依規則 Patch +1、BUILD=0；不是 V3.1.0 正式發行。上一正式 Release V3.0.0 保留。
+- 非折讓 Work Item／append-only Audit 的 0016 由 drafts 提升為 canonical migration；只修改說明註解，SQL 行為沿用已審查草稿。隔離測試改為由正式 migrations 恰好套用一次，V3.0 歷史演練仍固定在 schema15。
+- source storage marker 對齊 16；唯讀 preflight 只辨識明確的 canonical 0016，未完成遷移仍禁止一般部署。原 Worker code-only 部署繼續保留線上 schema／feature flags；此變更本身不啟用 WORK_ITEMS_ENABLED。
+- 遠端處理只由另行授權的本機 MCP 核對原 schema15／CYID_ONLY、加密備份可還原、Workspace／Device 連續性後單獨執行 0016，再保留原 Bindings／Secrets 更新原 Worker。不得重跑 0014／0015 或新增 Worker／D1；私有目標與 readback 不進公開 source。
+- 本版不改 Windows 業務功能、不含 3.2 折讓 API、不簽發或兌換復原碼；真雙 Windows／角色／DPI 驗收及正式發行仍另行處理。
+
 ## V3.0.3 — 2026/10/18（僅允許合格非折讓例外回報跨機；engineering）
 
 - 本批是**新的獨立** Windows 介面安全與操作修正，推進 **Patch +1、BUILD=0**，不視為 V3.0.2 欄寬工作的返修。

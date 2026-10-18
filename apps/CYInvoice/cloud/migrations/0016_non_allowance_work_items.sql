@@ -1,5 +1,5 @@
--- V3.1 non-allowance exceptional Work Item schema. DRAFT ONLY.
--- Deliberately outside migrations/: original CYID-only business D1 is unchanged.
+-- V3.1-D non-allowance exceptional Work Item schema.
+-- Apply only after original schema15/CYID_ONLY, backup and continuity checks.
 -- Not a full invoice ledger or evidence of official AMEGO status.
 CREATE TABLE work_items (
   work_item_id TEXT PRIMARY KEY,
@@ -55,8 +55,8 @@ CREATE TRIGGER work_item_no_delete
 BEFORE DELETE ON work_items
 BEGIN SELECT RAISE(ABORT,'WORK_ITEM_NOT_DELETABLE'); END;
 
--- Append-only non-allowance manual workflow history, DRAFT for the eventual
--- original D1 schema16 review. Creation/transition+event share one SQLite
+-- Append-only non-allowance manual workflow history for schema16.
+-- Creation/transition+event share one SQLite
 -- transaction, so a lost HTTP response cannot leave partial audit history.
 -- Never store invoice/order/buyer data or provider confirmation here.
 CREATE TABLE work_item_audit_events (

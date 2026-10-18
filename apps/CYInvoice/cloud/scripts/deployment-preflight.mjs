@@ -296,18 +296,21 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
 export function checkMigrations(applied, canonical, requireComplete = false) {
   check(applied.every((name, i) => canonical[i] === name), 'MIGRATION_HISTORY_NOT_CANONICAL_PREFIX');
   const pending = canonical.slice(applied.length);
-  // Source allowlist for read-only preflight only. V3.0 adds exactly the
-  // reviewed 0014 recovery and 0015 company migrations after existing 0013.
+  // Source allowlist for read-only preflight only. V3.1-D adds reviewed 0016
+  // after the existing V3.0 recovery and company migrations.
   // This does NOT authorize remote schema mutation or Worker deployment:
   // requireComplete still refuses any pending migration (including V3.0).
   const v30 = ['0013_cyid_invitation_actor.sql',
     '0014_invitation_recovery_metadata.sql','0015_company_settings.sql'];
   const knownV30 = canonical.slice(-3).join('|') === v30.join('|');
+  const v31 = [...v30,'0016_non_allowance_work_items.sql'];
+  const knownV31 = canonical.slice(-4).join('|') === v31.join('|');
   const suffix = options => pending.length === options.length &&
     options.every((name,i) => pending[i] === name);
   check(pending.length === 0 ||
     suffix(['0013_cyid_invitation_actor.sql']) ||
-    (knownV30 && (suffix(v30) || suffix(v30.slice(1)) || suffix(v30.slice(2)))),
+    (knownV30 && (suffix(v30) || suffix(v30.slice(1)) || suffix(v30.slice(2)))) ||
+    (knownV31 && v31.some((_,i)=>suffix(v31.slice(i)))),
     'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;
