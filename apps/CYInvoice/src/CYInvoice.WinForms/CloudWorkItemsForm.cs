@@ -18,6 +18,9 @@ internal sealed class CloudWorkItemsForm : Form
     private readonly Label status = new() { AutoSize = false, Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DimGray };
     private readonly Button refresh = UiControls.StandardButton("重新整理");
+    private readonly TextBox itemIdLookup = new() { Width = 300, MaxLength = 100,
+        PlaceholderText = "wi_ 開頭的工作項目 ID" };
+    private readonly Button lookup = UiControls.StandardButton("依 ID 查回");
     private readonly Button nextPage = UiControls.StandardButton("下一頁");
     private readonly Button takeReview = UiControls.StandardButton("接手覆核");
     private readonly Button archive = UiControls.StandardButton("人工封存");
@@ -73,6 +76,8 @@ internal sealed class CloudWorkItemsForm : Form
         entries.Columns.Add("工作項目 ID", 245);
         entries.SelectedIndexChanged += (_, _) => UpdateActions();
         refresh.Click += async (_, _) => await LoadPageAsync(reset: true);
+        lookup.Click += async (_, _) => await LookupByIdAsync();
+        itemIdLookup.TextChanged += (_, _) => UpdateActions();
         nextPage.Click += async (_, _) => await LoadPageAsync(reset: false);
         takeReview.Click += async (_, _) => await TransitionAsync("review");
         archive.Click += async (_, _) => await TransitionAsync("closed");
@@ -80,17 +85,27 @@ internal sealed class CloudWorkItemsForm : Form
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
             RowCount = 4, Padding = new Padding(12) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
-        var heading = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false,
-            FlowDirection = FlowDirection.LeftToRight };
-        heading.Controls.Add(new Label { Text = "狀態", Width = 48, Height = 30,
+        var heading = new TableLayoutPanel { Dock = DockStyle.Fill,
+            ColumnCount = 1, RowCount = 2 };
+        heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        filters.Controls.Add(new Label { Text = "狀態", Width = 48, Height = 30,
             TextAlign = ContentAlignment.MiddleLeft });
-        heading.Controls.Add(filter);
-        heading.Controls.Add(refresh);
+        filters.Controls.Add(filter);
+        filters.Controls.Add(refresh);
+        heading.Controls.Add(filters, 0, 0);
+        var readback = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        readback.Controls.Add(new Label { Text = "ID 查回", Width = 75, Height = 30,
+            TextAlign = ContentAlignment.MiddleLeft });
+        readback.Controls.Add(itemIdLookup);
+        readback.Controls.Add(lookup);
+        heading.Controls.Add(readback, 0, 1);
         root.Controls.Add(heading, 0, 0);
         root.Controls.Add(entries, 0, 1);
 
@@ -124,6 +139,8 @@ internal sealed class CloudWorkItemsForm : Form
     {
         refresh.Enabled = !busy;
         filter.Enabled = !busy;
+        itemIdLookup.Enabled = !busy;
+        lookup.Enabled = !busy && !string.IsNullOrWhiteSpace(itemIdLookup.Text);
         nextPage.Enabled = !busy && nextCursor is not null;
         takeReview.Enabled = !busy && Selected?.Status == "open";
         archive.Enabled = !busy && Selected?.Status == "review";
@@ -147,6 +164,45 @@ internal sealed class CloudWorkItemsForm : Form
         employeeNo = login.EnteredEmployeeNo;
         password = login.AuthenticatedPassword;
         return true;
+    }
+
+    // Safe readback of an ambiguous report/transition: GET only, never replay
+    // a VOID/UPLOAD_ISSUE write or imply an official AMEGO provider result.
+    private async Task LookupByIdAsync()
+    {
+        if (busy) return;
+        var id = itemIdLookup.Text.Trim();
+        if (id.Length < 10 || id.Length > 100 ||
+            id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-')))
+        {
+            status.Text = "請輸入正確的工作項目 ID。";
+            return;
+        }
+        if (!CollectCredentials(out var employeeNo, out var password)) return;
+        busy = true;
+        ClearView(); // old list/selected actions must not be kept as fresh authority
+        UpdateActions();
+        try
+        {
+            var item = await client.GetAsync(id, employeeNo, password, lifetime.Token);
+            if (IsDisposed) return;
+            status.Text = item is null
+                ? "查無此工作項目；請確認 ID 與工作空間。"
+                : $"ID 查回：{(item.Status switch {
+                    "open" => "待處理", "review" => "覆核中", _ => "已封存"
+                })}，版次 {item.Revision}；非光貿官方狀態。";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            if (!IsDisposed)
+                status.Text = "依 ID 查回失敗；請檢查 CYID 權限、裝置與網路，不會重送操作。";
+        }
+        finally
+        {
+            busy = false;
+            if (!IsDisposed) UpdateActions();
+        }
     }
 
     private async Task LoadPageAsync(bool reset)
@@ -220,8 +276,9 @@ internal sealed class CloudWorkItemsForm : Form
             var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
             if (current is null || current.Revision != chosen.Revision || current.Status != chosen.Status)
             {
+                itemIdLookup.Text = chosen.ItemId;
                 ClearView();
-                status.Text = "工作項目已由其他裝置變更，請重新整理；未送出覆核。";
+                status.Text = "工作項目已變更，請使用「依 ID 查回」核對最新狀態。";
                 return;
             }
             string? resolutionCode = null;
@@ -238,10 +295,12 @@ internal sealed class CloudWorkItemsForm : Form
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // A lost D1 reply may follow a successful commit. Readback with the
-            // same item ID rather than resubmitting a mutating request.
+            // A lost D1 reply may follow a successful commit. Preserve the
+            // exact ID for the read-only lookup, not a second mutation.
+            if (IsDisposed) return;
+            itemIdLookup.Text = chosen.ItemId;
             ClearView();
-            status.Text = "結果不明或權限變更，請以相同工作項目 ID 查回後再處理；不會自動重送。";
+            status.Text = "結果不明或權限變更；已保留原 ID，按「依 ID 查回」核對，不會自動重送。";
         }
         finally
         {
@@ -289,16 +348,25 @@ internal sealed class CloudWorkItemsForm : Form
         if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500 ||
             sample.Controls.Count != 1 ||
             sample.Controls[0] is not TableLayoutPanel root || root.RowCount != 4 ||
-            root.GetControlFromPosition(0, 0) is not FlowLayoutPanel ||
+            root.GetControlFromPosition(0, 0) is not TableLayoutPanel heading ||
+            heading.RowCount != 2 ||
+            heading.GetControlFromPosition(0, 1) is not FlowLayoutPanel ||
             root.GetControlFromPosition(0, 1) != sample.entries ||
             root.GetControlFromPosition(0, 2) != sample.status ||
             root.GetControlFromPosition(0, 3) is not FlowLayoutPanel ||
             sample.entries.Columns.Count != 7 ||
             sample.filter.Items.Count != 4 ||
             sample.entries.Width <= 0 || sample.entries.Height <= 0 ||
-            !sample.refresh.Enabled || sample.nextPage.Enabled ||
+            !sample.refresh.Enabled || sample.nextPage.Enabled || sample.lookup.Enabled ||
+            sample.itemIdLookup.Width <= 0 ||
             sample.takeReview.Enabled || sample.archive.Enabled)
             throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
+        sample.itemIdLookup.Text = "wi_synthetic_readback";
+        if (!sample.lookup.Enabled)
+            throw new InvalidOperationException("跨機待辦 ID 查回按鈕應隨有效輸入啟用");
+        sample.itemIdLookup.Clear();
+        if (sample.lookup.Enabled)
+            throw new InvalidOperationException("跨機待辦空白 ID 不得送出查回");
         sample.Close();
     }
 }
