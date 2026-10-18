@@ -1,6 +1,8 @@
 # CYInvoice Windows 候選版驗證清單
 
-> **2026-10-18 V3.0 接續提醒**：原 V2.6.19 正式 Release 驗收保留歷史意義；3.0 開發僅 Local／CYID、公司卡及災難復原。CYWEB #192 已合併 Source、Cloudflare 正式 D1／Worker／私有 Binding 由本機 MCP 處理，切換步驟請用 [V3.0 本機 MCP 交接](V3_0_LOCAL_MCP_CUTOVER.md)。復原新 Device **成功 claim** 會原子撤銷 Workspace 內其他舊 Device；未成功與單純過期不撤銷。DR-01～13 真機證據未驗收，不能沿用 V2.6.19 的 CI 放行決策。
+> **2026-10-18 本機 MCP 更新**：原業務 D1 已完成 canonical 0014／0015 與獨立 issuer 維護，完整加密備份／本機還原及各階段舊資料比對通過；原 Worker 已切換至 storage15，兩項新功能仍關閉。CYWEB 與 Invoice 身分 provider 不同，使用者已批准先驗證再對齊，等待正式超管登入驗證 App 授權；尚未切換身分來源或接上 Recovery binding。真 Email／雙機／DR-01～13 與 Windows 業務回歸未驗收。詳見 [目前切換紀錄](V3_0_LOCAL_MCP_CUTOVER.md)。
+
+> **2026-10-18 Source 交付時的接續提醒（歷史）**：原 V2.6.19 正式 Release 驗收保留歷史意義；3.0 開發僅 Local／CYID、公司卡及災難復原。CYWEB #192 已合併 Source、Cloudflare 正式 D1／Worker／私有 Binding 由本機 MCP 處理，切換步驟請用 [V3.0 本機 MCP 交接](V3_0_LOCAL_MCP_CUTOVER.md)。復原新 Device **成功 claim** 會原子撤銷 Workspace 內其他舊 Device；未成功與單純過期不撤銷。DR-01～13 真機證據未驗收，不能沿用 V2.6.19 的 CI 放行決策。
 
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。**2026-10-13 本批 V2.6.19 驗收決策：使用者批准其餘項目由 AI 以本地／隔離測試及已完成精確 source CI 核對即可，不要求再次逐項真人實機驗收；已知人工折讓逐筆歷史缺欄位併入 V3.0 重做，不當作本批阻塞，也不得標示修復。** 這是本批發行判斷，不是實機／雲端行為已全部驗證。**禁止建立、上傳、部署任何 Cloudflare 測試 Worker／版本／handler；不可重試刪除先前刪不掉的測試 Worker，也不得以新的測試 Worker 取代。** 不更動既有 Workspace／Device／Token／D1／真實帳號；撤銷會完整清除 portable folder，不以真實裝置代替測試。

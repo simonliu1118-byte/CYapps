@@ -4,7 +4,17 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V3.0 分版工程（2026-10-18，僅 Source／CI）
+## 2026-10-18 本機 MCP 實際切換紀錄（取代較早的 Source-only 狀態）
+
+- 已完成原 CYInvoice 業務 D1 定址、CYID_ONLY 唯一 Workspace、完整原庫檢查；一致加密備份已在本機解密／隔離 SQLite 還原，所有應用 schema、完整舊欄位資料、索引／sequence／遷移歷史核對通過。這是同機維護備份驗證，**異機 DR-12 尚未完成**。
+- 2026-10-18 12:53（Asia/Taipei）前後，canonical `0014_invitation_recovery_metadata.sql`、`0015_company_settings.sql` 及獨立 `enable-cyweb-recovery-issuer.sql` 各執行一次；每階段在本機比對加密 readback，原 Device Token hashes／狀態／邀請／Audit 全部舊欄位一致、FK clean、quick_check=ok，結構與本機演練一致。
+- 原 Worker 已透過本機 MCP 切到 #476 exact-head CI 所驗證的業務 source（`e0c35b38`；合併後 cloud tree 相同），100% 流量 readback 通過；API1／compatibility marker8／storage15／`identityProvider=CYID`、原 D1／既有 service bindings／rate limits／Secret 名稱／路由保留。私有 named export `CyInvoiceRecoveryEntrypoint` 已從部署內容確認；跨服務實際 RPC 尚未驗證。
+- `COMPANY_SETTINGS_ENABLED=false`、`RECOVERY_ENABLED=false`；公司卡與 Recovery 公開路由均回 503、舊 Built-in 路由回 409、無 Device 的 protected request 回 401。公司卡 Secret 尚未設定，未產生／公開任何實際金鑰。
+- **新的對齊阻塞**：`sameIdentityProvider=false`。當次唯讀 metadata 顯示 CYWEB 使用正式 CYID，Invoice 仍保留原 development CYID；相同 Workspace 字串不代表相同權威資料。使用者已明確批准「先驗證再對齊正式 CYID」，但需先以正式 CYWEB SUPER_ADMIN 驗證 CYInvoice App enablement／角色／Session 與回退條件；**未直接讀寫 CYID D1，未切換身分來源**。正式 provider 的部署 metadata 沒有 Invoice-specific scope 設定，這本身**不能證明** App registry 是否已註冊，須由 canonical 管理介面驗證。
+- CYWEB 當次實際服務為 V0.9.1／`e8665d65`（#193，包含 #192 ancestry），不退回舊 UI；Recovery binding 仍不存在。待身分對齊、私密公司卡金鑰與各 flag gate 完成，再接既有最新 CYWEB 的 named RPC。
+- 全部原始識別資訊、指紋、bookmark、部署／回退憑據與備份留在本機加密紀錄；本頁只保存時間、版本與通過狀態。Windows 真機／真 Email／雙機競爭／DR-01～13、可攜異機還原均未勾選通過；Windows V2.6.19 Release 不變。
+
+## Source 交付停點（歷史）：V3.0 分版工程（2026-10-18）
 
 - **2026-10-18 Source 交付完成、取代下方舊停點**：Cloudflare 交由使用者本機 MCP；CYWEB [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已合併 `main`（`7ba87b8`）；CYInvoice [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) **exact head `e0c35b38` 四項 CI 全通過、Source 已合併 `main`（`f546b2a5`）**。這**不代表** Company Settings／Recovery 的 Worker flag、原 D1 Migration 或 CYWEB 私有 Service Binding 已啟用。CI 包含 `AUTO_EXPIRED` 自動清理與失敗交易完整回滾，以及 CYID-only JOIN 防舊 Built-in 降級。正式 schema/Worker/Secret/真 Email 與雙機驗收詳見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。**不重做原 CYID_ONLY D1 退役**。正式 Release 仍需獨立授權。
 

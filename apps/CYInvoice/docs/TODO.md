@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-18（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage13**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
+更新日期：2026-10-18（Asia/Taipei）。本檔為唯一未完成工作清單。Windows 正式版 **V2.6.19 Build 0** 已發布；原 development Cloud **0.9.3／API1／compatibility marker8／storage15**，**CYID_ENABLED=true／CYID_ONLY storage profile**。
 
 - [V2.6.19 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -10,14 +10,25 @@
 
 ## 2026-10-17 V3.0 版本切片與接續（3.0 已合併 main；以下為正式切換追蹤）
 
-### 2026-10-18 最新停點：Cloudflare 改由本機 MCP，其他 GitHub 工程先收斂
+## 2026-10-18 本機 MCP 實際切換紀錄（取代較早的 Source-only 狀態）
+
+- 已完成原 CYInvoice 業務 D1 定址、CYID_ONLY 唯一 Workspace、完整原庫檢查；一致加密備份已在本機解密／隔離 SQLite 還原，所有應用 schema、完整舊欄位資料、索引／sequence／遷移歷史核對通過。這是同機維護備份驗證，**異機 DR-12 尚未完成**。
+- 2026-10-18 12:53（Asia/Taipei）前後，canonical `0014_invitation_recovery_metadata.sql`、`0015_company_settings.sql` 及獨立 `enable-cyweb-recovery-issuer.sql` 各執行一次；每階段在本機比對加密 readback，原 Device Token hashes／狀態／邀請／Audit 全部舊欄位一致、FK clean、quick_check=ok，結構與本機演練一致。
+- 原 Worker 已透過本機 MCP 切到 #476 exact-head CI 所驗證的業務 source（`e0c35b38`；合併後 cloud tree 相同），100% 流量 readback 通過；API1／compatibility marker8／storage15／`identityProvider=CYID`、原 D1／既有 service bindings／rate limits／Secret 名稱／路由保留。私有 named export `CyInvoiceRecoveryEntrypoint` 已從部署內容確認；跨服務實際 RPC 尚未驗證。
+- `COMPANY_SETTINGS_ENABLED=false`、`RECOVERY_ENABLED=false`；公司卡與 Recovery 公開路由均回 503、舊 Built-in 路由回 409、無 Device 的 protected request 回 401。公司卡 Secret 尚未設定，未產生／公開任何實際金鑰。
+- **新的對齊阻塞**：`sameIdentityProvider=false`。當次唯讀 metadata 顯示 CYWEB 使用正式 CYID，Invoice 仍保留原 development CYID；相同 Workspace 字串不代表相同權威資料。使用者已明確批准「先驗證再對齊正式 CYID」，但需先以正式 CYWEB SUPER_ADMIN 驗證 CYInvoice App enablement／角色／Session 與回退條件；**未直接讀寫 CYID D1，未切換身分來源**。正式 provider 的部署 metadata 沒有 Invoice-specific scope 設定，這本身**不能證明** App registry 是否已註冊，須由 canonical 管理介面驗證。
+- CYWEB 當次實際服務為 V0.9.1／`e8665d65`（#193，包含 #192 ancestry），不退回舊 UI；Recovery binding 仍不存在。待身分對齊、私密公司卡金鑰與各 flag gate 完成，再接既有最新 CYWEB 的 named RPC。
+- 全部原始識別資訊、指紋、bookmark、部署／回退憑據與備份留在本機加密紀錄；本頁只保存時間、版本與通過狀態。Windows 真機／真 Email／雙機競爭／DR-01～13、可攜異機還原均未勾選通過；Windows V2.6.19 Release 不變。
+
+### 2026-10-18 Source 交付停點（歷史；以本頁最新本機 MCP 紀錄為準）
 
 - **使用者決定**：Cloudflare 原 D1、Worker、Binding、Secret 與實際部署**只在本機 MCP** 執行；GitHub 端可繼續程式、測試、合併程式碼與文件，但本項不暗示授權任何正式 D1 寫入／部署或 Windows 正式 Release。唯讀／操作順序和必要證據集中於 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。
 - [x] **CYWEB Source 已完成並合併**：復原整合 [#192](https://github.com/simonliu1118-byte/chihyuan-web/pull/192) 已以 commit `7ba87b8b30b58af935fef316bd61cfb3d55792ec` 進 CYWEB `main`，Governance／Runtime Check／deployment-config CI 通過；但 `CF_CYINVOICE_RECOVERY_SERVICE` 預設未連線，不能宣稱新的 Recovery UI 已部署或可使用。舊 #151 不再是待合併工作。
 - [x] **復原過期自動結清**：10 分鐘失效；新 `operationId` 的已授權簽發，先在相同 D1 batch 中將已過期尚未消耗的邀請標成 revoked／delivery failed，寫 `AUTO_EXPIRED` Audit，再創建新 pending 邀請；read-only status 不更動 D1、舊 Device 不因到期被撤銷，防止永久佔用邀請名額；舊 operation 不自動重送。
 - [x] **3.0-A 雙模式安全收斂**：舊 Built-in Worker 沒有明確 `identityProvider=CYID` health 標記時，Windows 在建立 Device 前拒絕加入，不回退舊 Employee authority／Snapshot；CI smoke 涵蓋 CYID 正常 JOIN／斷線後原 Pending Token 找回／舊 Worker 拒絕。既有 API 1 相容層 marker8 不被誤認為 D1 schema。
 - [x] **Source／CI 已合併交付**：PR [#476](https://github.com/simonliu1118-byte/CYapps/pull/476) exact head `e0c35b38038f8df73866228716e590d1e119afb8` 的 Governance、Cloud Check（SQLite／0014+0015／過期自動結清與回滾）、Development Cloud Validate、Windows x64 Build／可攜套件／敏感資訊掃描**四項全成功**；Source merge `f546b2a550be21fd1b49583c8343d1ca8e599d52` 已進 `main`。**Cloudflare 遠端部署步驟跳過**，工程包不是正式 Release。
-- [ ] **本機 MCP 與真人驗收**：按新交接逐步處理原業務 D1 的 0014／0015、獨立 issuer profile 維護、Worker 私有 RPC/flags、CYWEB 可選 Binding，及真 Email、雙 Windows、DR-01～13、Local／CYID／現有 V2 業務回歸；完成前 V3.0 **未上線**。原 2026-10-13 `CYID_ONLY` 退役已完成，不要重跑。
+- [x] **本機 MCP 基礎切換**：原 D1 0014／0015、獨立 issuer 維護、完整加密備份／本機還原與逐欄位 readback、原 Worker 業務程式切換及關閉 flag 的拒絕行為已通過；詳見本頁最新紀錄。
+- [ ] **正式 CYID 對齊／功能啟用／真人驗收**：使用者已批准先驗證再對齊，但需正式 CYWEB 超管 Session 驗證 App 授權；其後完成私密金鑰、兩項 flag、最新 CYWEB named binding、真 Email、雙 Windows、DR-01～13 與 Local／CYID／V2 業務回歸。V3.0 功能尚未上線，Release 未授權。
 
 
 ### 2026-10-18 CYWEB V0.9.0 介面重整／恢復整合（歷史來源，已由上段更新）
