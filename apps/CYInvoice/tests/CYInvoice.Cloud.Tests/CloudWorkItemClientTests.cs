@@ -15,6 +15,7 @@ internal static class CloudWorkItemClientTests
         RejectInvalidTransport();
         await ListPagesAndRejectUnsafeRepliesAsync();
         await RejectUntrustedResponseAsync();
+        await IdReadbackIsPureAndRevalidatesErrorsAsync();
         await MutationsAreManualRecordsOnlyAsync();
     }
 
@@ -123,6 +124,45 @@ internal static class CloudWorkItemClientTests
         {
             await client.GetAsync(ItemId, "0001", "synthetic-pass");
         });
+    }
+
+    private static async Task IdReadbackIsPureAndRevalidatesErrorsAsync()
+    {
+        // A mutating reply may be lost after D1 commits. A manual ID readback
+        // must use ONLY the manager GET contract, including archived items.
+        var handler = new QueueHandler();
+        handler.Enqueue(request => {
+            ValidateRequest(request, "get");
+            using var payload = JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var body = payload.RootElement;
+            Equal(ItemId, body.GetProperty("itemId").GetString(), "exact readback ID");
+            True(!body.TryGetProperty("expectedRevision", out _) &&
+                 !body.TryGetProperty("to", out _) &&
+                 !body.TryGetProperty("referenceHash", out _),
+                 "readback cannot mutate, replay or expose source");
+            return Json(HttpStatusCode.OK, Result("closed", 3));
+        });
+        handler.Enqueue(request => {
+            ValidateRequest(request, "get");
+            return Json(HttpStatusCode.NotFound, new { ok=false, error=new { code="NOT_FOUND" } });
+        });
+        handler.Enqueue(request => {
+            ValidateRequest(request, "get");
+            return Json(HttpStatusCode.Forbidden, new { ok=false, error=new { code="MANAGER_AUTH_REQUIRED" } });
+        });
+        using var http = new HttpClient(handler);
+        var client = new CloudWorkItemClient(http, new Uri("https://cloud.example.test/"),
+            Token, Workspace);
+        var archived = await client.GetAsync(ItemId, "0001", "synthetic-pass");
+        True(archived is { Status: "closed", Revision: 3 },
+            "archived item remains visible by explicit ID readback");
+        True(await client.GetAsync(ItemId, "0001", "synthetic-pass") is null,
+            "404 means no item, not a successful mutation");
+        await ThrowsAsync<CloudApiException>(() =>
+            client.GetAsync(ItemId, "0001", "synthetic-pass"),
+            "MANAGER_AUTH_REQUIRED");
+        Equal(0, handler.PendingCount, "ambiguous result must never trigger automatic retries");
     }
 
     private static async Task MutationsAreManualRecordsOnlyAsync()
