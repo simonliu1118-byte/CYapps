@@ -8,6 +8,7 @@ namespace CYInvoice.WinForms;
 // This form cannot issue, void, retry or acknowledge an AMEGO provider action.
 internal sealed class CloudWorkItemsForm : Form
 {
+    private readonly LocalRepository repository;
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false });
     private readonly CloudWorkItemClient client;
     private readonly CancellationTokenSource lifetime = new();
@@ -27,7 +28,7 @@ internal sealed class CloudWorkItemsForm : Form
 
     public CloudWorkItemsForm(LocalRepository repository)
     {
-        ArgumentNullException.ThrowIfNull(repository);
+        this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         var setting = repository.Settings.LoadOrCreate();
         if (setting.CloudMode == CloudModes.LocalOnly ||
             setting.CloudIdentityProvider != "CYID" || !setting.CloudEmployeeAuthorityReady ||
@@ -119,8 +120,8 @@ internal sealed class CloudWorkItemsForm : Form
 
     private bool CollectCredentials(out string employeeNo, out string password)
     {
-        using var login = new EmployeeAdminLoginForm(
-            new LocalIdentityProvider(new EmployeeStore(Path.GetTempPath())), "", true, true);
+        using var login = new EmployeeAdminLoginForm(repository,
+            "CYID 管理員當次驗證", administratorRequired: false, collectCredentialsOnly: true);
         // The actual CYID principal is always established by the Worker,
         // not by any local account/cache state.
         if (login.ShowDialog(this) != DialogResult.OK)
