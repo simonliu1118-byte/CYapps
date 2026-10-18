@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.1 — 2026/10/19（V3.2-00 光貿即時折讓歷史；engineering）
+
+- 3.2 工作的第一個獨立 Patch，依規則 `VERSION=3.1.1`、`BUILD=0`。**上一個正式 Release 仍是 V3.1.0**，本版只產工程包，不新建 tag／Release。
+- 「發票詳細資訊」點擊「折讓」前，先以既有 `InvoiceDetailRefreshService` 直接從光貿查回最新 `invoice_query`；只有成功且與本機 Workspace／公司／環境一致，才開啟員工申請視窗。視窗列出官方回覆的已有折讓號、日期、類型、狀態與未稅／稅額；資料不足不冒充可折餘額，申請提交仍由 `SubmitAsync` **重新向光貿查詢**。
+- 尚未啟用 g0401、g0501 或新增 D1／Worker 功能；歷史人工折讓與 Local／CYID 模式不退役。WinForms 版面 smoke 增加合成官方折讓摘要斷言。
+- [V3.2 分階段路線圖](docs/V3_2_IMPLEMENTATION_PLAN.md) 凍結使用者最新需求：合法已存在折讓可由人再次核准；明確 `4040161/4040162` 撞號須先查回並保留失敗號才能改下一號；timeout／不明回覆不能重送或換號；後續所有 Cloudflare 正式操作只交本機 Work MCP。
+
 ## V3.1.0 — 2026/10/19（正式 Minor；非折讓跨機人工待辦）
 
 - Minor 升版理由：已完成 CYID 非折讓跨機 Work Item 工作流及原 D1／Worker schema16 受控切換，不是單純 UI 修正。VERSION 3.0.4→3.1.0、BUILD=0；正式 Release 當次由使用者明確批准，從 main 重新執行安全／Windows／封裝／SHA-256。
