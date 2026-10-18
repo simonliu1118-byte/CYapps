@@ -19,7 +19,8 @@ public sealed record InvoiceAllowanceManualReview(
     DateTimeOffset? ManualCompletedUtc = null,
     string ConfirmedAllowanceNumber = "",
     string HandlerEmployeeNo = "",
-    bool? ConfirmationProblem = null);
+    bool? ConfirmationProblem = null,
+    IReadOnlyList<AllowanceProductItem>? DraftItems = null);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -68,7 +69,8 @@ public sealed class EmployeeAllowanceWorkflowService
         string password,
         string reason,
         long taxInclusiveAmount,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<AllowanceProductItem>? editedItems = null)
     {
         ArgumentNullException.ThrowIfNull(selected);
         reason = (reason ?? string.Empty).Trim();
@@ -84,6 +86,16 @@ public sealed class EmployeeAllowanceWorkflowService
         var fresh = await detailRefreshService.RefreshAsync(selected, cancellationToken).ConfigureAwait(false);
         ValidateCurrentAccount(fresh);
         ValidateEligible(fresh, taxInclusiveAmount);
+        if (editedItems is not null)
+        {
+            // Brand-new V3.2 editor payload: fail closed on missing/in-flight
+            // official allowance summary and recheck the full net/tax lines.
+            var remainder = InvoiceAllowanceMetadata.RemainingGross(fresh);
+            if (FixedDecimal.FromInt64(taxInclusiveAmount).ScaledValue > remainder.ScaledValue)
+                throw new InvalidOperationException("折讓金額不可超過光貿已確認的剩餘可折額");
+            AllowanceDraftValidator.Validate(editedItems, fresh.InvoiceNumber,
+                fresh.InvoiceDate, taxInclusiveAmount);
+        }
 
         var number = fresh.InvoiceNumber.Trim();
         var orderId = EffectiveOrderId(fresh);
@@ -121,7 +133,7 @@ public sealed class EmployeeAllowanceWorkflowService
             reason,
             taxInclusiveAmount,
             now().ToUniversalTime(),
-            baseline);
+            baseline) { DraftItems = editedItems?.ToArray() };
         WriteManualReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
