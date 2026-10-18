@@ -25,7 +25,8 @@ public sealed record InvoiceAllowanceManualReview(
     IReadOnlyList<AllowanceProductItem>? DraftItems = null,
     DateTimeOffset? LocalApprovedUtc = null,
     string LocalApproverEmployeeNo = "",
-    string LocalApprovalOfficialHash = "");
+    string LocalApprovalOfficialHash = "",
+    string LocalApprovalDraftHash = "");
 
 public sealed record LocalAllowanceApprovalPreview(
     string InvoiceNumber,
@@ -247,12 +248,121 @@ public sealed class EmployeeAllowanceWorkflowService
         review = review with {
             LocalApprovedUtc = now().ToUniversalTime(),
             LocalApproverEmployeeNo = manager.EmployeeNo,
-            LocalApprovalOfficialHash = preview.OfficialSnapshotHash
+            LocalApprovalOfficialHash = preview.OfficialSnapshotHash,
+            LocalApprovalDraftHash = ApprovalDraftHash(record, review)
         };
         WriteManualReview(record, review);
         syncRepository.UpsertMany([record]);
         UpdateIssueMessage(record, "Local 管理員已核准並鎖定草稿；正式 g0401 尚未執行，等待後續送出功能。");
         return review;
+    }
+
+    // B2b stores an immutable numbered draft only. Neither this path nor the
+    // UI may mark it "sending"; B2c must re-check AMEGO immediately before
+    // the first g0401 attempt, and persist the send transition first.
+    public async Task<LocalAllowanceReservation> ReserveLocalApprovedDraftAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        RequireManualReviewIssue(issue);
+        if (!issueStore.HasUnresolved(CurrentAccountKey(), issue.InvoiceNumber,
+                issue.OrderId, InvoiceAllowanceIssueTypes.ManualReview))
+            throw new InvalidOperationException("本機折讓待辦已失效，不能配號");
+        var original = FindIssueRecord(issue);
+        var review = ReadManualReview(original)
+            ?? throw new InvalidDataException("已核准折讓的申請資料遺失");
+        RequireFrozenApproval(original, review, manager.EmployeeNo);
+        var account = CurrentAccount();
+        var ledger = new LocalAllowanceNumberStore(repository.DataDirectory);
+
+        // Read-only idempotent restart path: do not mint another number or
+        // re-send, even when today's local date has advanced since approval.
+        var existing = ledger.FindLatest(account.SellerInvoice, account.Environment, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (existing is not null)
+        {
+            if (existing.Status != "reserved" ||
+                existing.ApprovedAtUtc != review.LocalApprovedUtc ||
+                existing.ApproverEmployeeNo != manager.EmployeeNo)
+                throw new InvalidOperationException(
+                    "折讓單號已進入送出或結果待查狀態，不能重新配號");
+            return existing;
+        }
+
+        // Prior to FIRST reservation, require live official history to still
+        // exactly match what this same manager approved. Do not update the
+        // old approval automatically when other devices have issued allowances.
+        var fresh = await detailRefreshService.RefreshAsync(original, cancellationToken)
+            .ConfigureAwait(false);
+        ValidateCurrentAccount(fresh);
+        review = ReadManualReview(fresh)
+            ?? throw new InvalidDataException("光貿查回後核准草稿遺失");
+        RequireFrozenApproval(fresh, review, manager.EmployeeNo);
+        ValidateEligible(fresh, review.TaxInclusiveAmount);
+        var remaining = InvoiceAllowanceMetadata.RemainingGross(fresh);
+        if (FixedDecimal.FromInt64(review.TaxInclusiveAmount).ScaledValue > remaining.ScaledValue)
+            throw new InvalidOperationException("光貿當前剩餘可折額已不足，不能配號");
+        AllowanceDraftValidator.Validate(review.DraftItems!, fresh.InvoiceNumber,
+            fresh.InvoiceDate, review.TaxInclusiveAmount);
+        var officialHash = OfficialApprovalHash(fresh,
+            InvoiceAllowanceMetadata.ReadOfficial(fresh), remaining);
+        if (!string.Equals(officialHash, review.LocalApprovalOfficialHash,
+                StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "光貿資料已異於管理員核准時；請先重新覆核，不得用舊核准配號");
+
+        var items = review.DraftItems!.Select(item => item with {
+            // Extra editor-only metadata must NOT leak into the eventual AMEGO
+            // product payload. Preserve only canonical untaxed unit prices.
+            GrossUnitPrice = null
+        }).ToArray();
+        var template = new AllowanceIssueRequest
+        {
+            AllowanceDate = now().ToOffset(TimeSpan.FromHours(8))
+                .ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture),
+            AllowanceType = 2,
+            BuyerIdentifier = fresh.BuyerIdentifier,
+            BuyerName = fresh.BuyerName,
+            ProductItem = items,
+            TotalAmount = items.Sum(item => item.Amount),
+            TaxAmount = items.Sum(item => item.Tax),
+        };
+        var date = DateOnly.ParseExact(template.AllowanceDate, "yyyyMMdd",
+            System.Globalization.CultureInfo.InvariantCulture);
+        return ledger.Reserve(account.SellerInvoice, account.Environment, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            date, template, manager.EmployeeNo, review.LocalApprovedUtc!.Value);
+    }
+
+    private static void RequireFrozenApproval(
+        InvoiceRecord record, InvoiceAllowanceManualReview review, string approver)
+    {
+        if (review.LocalApprovedUtc is null || review.AwaitingConfirmation ||
+            review.ManualCompletedUtc is not null ||
+            review.LocalApproverEmployeeNo != approver ||
+            review.DraftItems is not { Count: > 0 } ||
+            string.IsNullOrWhiteSpace(review.LocalApprovalOfficialHash) ||
+            string.IsNullOrWhiteSpace(review.LocalApprovalDraftHash))
+            throw new InvalidOperationException("折讓尚未由這位 Local 管理員完整核准");
+        if (!string.Equals(ApprovalDraftHash(record, review),
+                review.LocalApprovalDraftHash, StringComparison.Ordinal))
+            throw new InvalidDataException("核准後原發票或折讓明細已改動，不得配號");
+    }
+
+    private static string ApprovalDraftHash(
+        InvoiceRecord record, InvoiceAllowanceManualReview review)
+    {
+        // Same reviewed request fields before and after the AMEGO refresh.
+        // The hash is a tamper-evident snapshot identifier, not a MAC or an
+        // authentication token; manager credentials are still mandatory.
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            record.InvoiceNumber, record.InvoiceDate, record.SellerInvoice,
+            record.Environment, record.BuyerIdentifier, record.BuyerName,
+            review.RequesterEmployeeNo, review.Reason, review.TaxInclusiveAmount,
+            Items = review.DraftItems
+        }));
+        return Convert.ToHexString(SHA256.HashData(bytes));
     }
 
     private EmployeeAccount RequireLocalAllowanceManager(string actorEmployeeNo, string actorPassword)

@@ -2,15 +2,24 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.5 Build 1 — 2026/10/19（3.2-B2b Local 已核准折讓配號與固定 g0401 草稿；engineering）
+
+- 新獨立 Patch VERSION=3.1.5、BUILD=1，上一正式 Release 仍 V3.1.0。
+- 新增 Local 已核准折讓的「預留折讓單號（不送出）」：同一位主管重驗身分、配號前再查光貿，官方資料與核准當下不同或不足額一律停止。核准時新增草稿摘要，原發票、買方或草稿品項在核准後變動也停止配號。
+- 依 V3.1.3 Local SQLite ledger 保存原號與完整不可變含未稅 Amount／Tax 的 Frozen request，支援重開／重按原號回查，不會盲目新增號碼；輸入含稅單價時仍保留原 UI 切換並轉成後續 API 需用的未稅請求。
+- 本 Patch **只 reserve，絕不標 sending、也不觸發 g0401/g0501**。正式單次送出／官方原號查回、結果不明防重送及明確撞號處理待 B2c。Cloudflare 不動，既有 V3.0+V3.1 真人驗收清單不改。
+
+- Build 1：首輪 exact-head CI 編譯發現 SQLite Work Item ID 需要 invariant 字串，但現有待辦 issue.Id 是 long。統一轉成 CultureInfo.InvariantCulture 字串後重跑 CI；本次只修此 Patch，版本 Patch 不另加。
+
 ## V3.1.4 — 2026/10/19（3.2-B2a Local 管理員官方即時覆核與草稿核准；engineering）
 
-- 獨立 Patch `VERSION=3.1.4`、`BUILD=0`，上個正式 Release 仍是 V3.1.0。
+- 獨立 Patch `VERSION=3.1.4`、`BUILD=1`，上個正式 Release 仍是 V3.1.0。
 - 主管在現有 Local 折讓待辦點「核准折讓草稿（不送出）」後須當次登入；先向光貿重查完整折讓清單與剩餘額供主管確認，按確定時再重驗主管及重查官方資料，結果變化／缺明細／超額拒絕核准。核准資訊含 UTC 時間、主管員編和本次官方查詢摘要雜湊持久化；核准後禁止舊人工完成或取消。
 - 僅限 Local、已有完整編輯明細的新申請；舊人工流程、3.1 Cloud 協作不變。不呼叫 g0401／g0501，也未使用 B1 ledger 進行實際配號或交易；下一批再將正式核准和 B1 配號／單次送出連線。無正式 Cloudflare MCP 或 Release 操作。
 
 ## V3.1.3 — 2026/10/19（3.2-B1 Local 配號與核准快照持久化；engineering）
 
-- 新獨立 Patch **VERSION=3.1.3、BUILD=0**。從歷史 #440 **只選擇性移植** Local SQLite 配號與狀態鎖（不導入未經驗證的正式 g0401/g0501 連線與舊 Cloud schema）。本工程版無新的正式 Release，上一正式版仍 V3.1.0。
+- 新獨立 Patch **VERSION=3.1.3、BUILD=1**。從歷史 #440 **只選擇性移植** Local SQLite 配號與狀態鎖（不導入未經驗證的正式 g0401/g0501 連線與舊 Cloud schema）。本工程版無新的正式 Release，上一正式版仍 V3.1.0。
 - 本機 SQLite additive 建立配號 ledger：以賣方／環境／日期隔離序號，保存管理員員編與核准 UTC 時間、不可變原請求及完整帶號的 payload。重開程式後同一工作項目與同一主管核准只取回原號，修改核准／明細一律拒絕。
 - reserved→sending 的條件更新先於任何未來網路送出，sending／confirmed 禁止重入；明確 4040161／4040162 只標記占號、**本階段不自動重配**，須等下一片完成原號官方只讀回查確認後才設受控改號。SQLite 合成測試覆蓋同工單、防竄改、撞號與重開、編號唯一及環境分隔。
 - 尚未在 WinForms 接上正式主管核准或 g0401；本批 ledger 只是不可繞過的底層安全前置。沒有動 Cloudflare D1／Worker／Secrets、真實光貿或 V3.0＋V3.1 唯一延後驗收清單。
@@ -27,14 +36,14 @@
 
 ## V3.1.1 — 2026/10/19（V3.2-00 光貿即時折讓歷史；engineering）
 
-- 3.2 工作的第一個獨立 Patch，依規則 `VERSION=3.1.1`、`BUILD=0`。**上一個正式 Release 仍是 V3.1.0**，本版只產工程包，不新建 tag／Release。
+- 3.2 工作的第一個獨立 Patch，依規則 `VERSION=3.1.1`、`BUILD=1`。**上一個正式 Release 仍是 V3.1.0**，本版只產工程包，不新建 tag／Release。
 - 「發票詳細資訊」點擊「折讓」前，先以既有 `InvoiceDetailRefreshService` 直接從光貿查回最新 `invoice_query`；只有成功且與本機 Workspace／公司／環境一致，才開啟員工申請視窗。視窗列出官方回覆的已有折讓號、日期、類型、狀態與未稅／稅額；資料不足不冒充可折餘額，申請提交仍由 `SubmitAsync` **重新向光貿查詢**。
 - 尚未啟用 g0401、g0501 或新增 D1／Worker 功能；歷史人工折讓與 Local／CYID 模式不退役。WinForms 版面 smoke 增加合成官方折讓摘要斷言。
 - [V3.2 分階段路線圖](docs/V3_2_IMPLEMENTATION_PLAN.md) 凍結使用者最新需求：合法已存在折讓可由人再次核准；明確 `4040161/4040162` 撞號須先查回並保留失敗號才能改下一號；timeout／不明回覆不能重送或換號；後續所有 Cloudflare 正式操作只交本機 Work MCP。
 
 ## V3.1.0 — 2026/10/19（正式 Minor；非折讓跨機人工待辦）
 
-- Minor 升版理由：已完成 CYID 非折讓跨機 Work Item 工作流及原 D1／Worker schema16 受控切換，不是單純 UI 修正。VERSION 3.0.4→3.1.0、BUILD=0；正式 Release 當次由使用者明確批准，從 main 重新執行安全／Windows／封裝／SHA-256。
+- Minor 升版理由：已完成 CYID 非折讓跨機 Work Item 工作流及原 D1／Worker schema16 受控切換，不是單純 UI 修正。VERSION 3.0.4→3.1.0、BUILD=1；正式 Release 當次由使用者明確批准，從 main 重新執行安全／Windows／封裝／SHA-256。
 - 員工對未收回紙本作廢、非折讓同步例外可手動建立匿名跨機待辦；CYID 管理員跨 Device 查詢、ID 唯讀查回、open→review→closed 覆核、revision CAS、append-only 稽核。權限撤銷、Workspace／Device 隔離、來源摘要資料最小化與結果不明不重送保護保留。人工封存不等於 AMEGO 官方成功；3.2 折讓不納入。
 - 使用者本機 MCP 已回報：原 CYInvoice D1 僅一次性套用 canonical 0016，原 Worker 受控啟用 schema16／Work Items，備份、還原演練及前後資料一致性通過。本 repo 只記錄交接摘要，不聲稱本輪獨立連線核對；私人證據留本機。
 - **發行後仍待真人驗收**：使用者明確批准將 V3.0 的真 Email、異機不同金鑰災復／邀請、角色／撤銷／中斷／公司卡／UI 等與 V3.1 的雙 Windows、CYID 角色、CAS、斷線及 DPI 一併延後。**全部集中在 [唯一合併待驗收檔](docs/POST_RELEASE_ACCEPTANCE.md)**，正式 ZIP 同時附「發行後待驗收.md」；不以 CI 代替真人操作，也不勾成通過。
@@ -42,7 +51,7 @@
 
 ## V3.0.4 — 2026/10/18（V3.1-D canonical schema16；engineering）
 
-- 新獨立維運準備項目，依規則 Patch +1、BUILD=0；不是 V3.1.0 正式發行。上一正式 Release V3.0.0 保留。
+- 新獨立維運準備項目，依規則 Patch +1、BUILD=1；不是 V3.1.0 正式發行。上一正式 Release V3.0.0 保留。
 - 非折讓 Work Item／append-only Audit 的 0016 由 drafts 提升為 canonical migration；只修改說明註解，SQL 行為沿用已審查草稿。隔離測試改為由正式 migrations 恰好套用一次，V3.0 歷史演練仍固定在 schema15。
 - source storage marker 對齊 16；唯讀 preflight 只辨識明確的 canonical 0016，未完成遷移仍禁止一般部署。原 Worker code-only 部署繼續保留線上 schema／feature flags；此變更本身不啟用 WORK_ITEMS_ENABLED。
 - 遠端處理只由另行授權的本機 MCP 核對原 schema15／CYID_ONLY、加密備份可還原、Workspace／Device 連續性後單獨執行 0016，再保留原 Bindings／Secrets 更新原 Worker。不得重跑 0014／0015 或新增 Worker／D1；私有目標與 readback 不進公開 source。
@@ -50,28 +59,28 @@
 
 ## V3.0.3 — 2026/10/18（僅允許合格非折讓例外回報跨機；engineering）
 
-- 本批是**新的獨立** Windows 介面安全與操作修正，推進 **Patch +1、BUILD=0**，不視為 V3.0.2 欄寬工作的返修。
+- 本批是**新的獨立** Windows 介面安全與操作修正，推進 **Patch +1、BUILD=1**，不視為 V3.0.2 欄寬工作的返修。
 - 原「上傳問題」視窗的「回報跨機」對任何未結案清單項目都可能呈現可按；選到折讓、折讓作廢或未知項目時，按下才會出現「V3.1 不支援」。現在直接以同一個 Core 非折讓類型判定限制按鈕，只允許紙本尚未收回的作廢人工覆核及七種支持的同步／回查技術例外，不讓折讓或未知類型誤進 3.1。缺 CYID Employee Authority／Workspace／Device 時也不啟用。
 - Core mapper 仍再次嚴格檢查來源，並新增各合法／非法 issue type 的契約測試。行為仍為使用者明確確認、當次 CYID 登入及匿名 metadata；不處理 AMEGO 官方作廢或折讓。
 - 同步 V3.0.3 工程說明、包內使用說明、README、TODO、V3.1 handoff。原 D1／Worker 沒有操作，schema16 仍為草稿且 feature flag 預設停用，未宣稱實體雙機／DPI 驗收。上一個正式 Release **V3.0.0** 不變。
 
 ## V3.0.2 — 2026/10/18（跨機待辦視窗尺寸適應；engineering）
 
-- 完成下一個**獨立** WinForms 顯示修正，故由 V3.0.1 推進 **Patch +1、BUILD=0**；不是 V3.0.1 同項返修，也不是 3.1 正式 Minor。
+- 完成下一個**獨立** WinForms 顯示修正，故由 V3.0.1 推進 **Patch +1、BUILD=1**；不是 V3.0.1 同項返修，也不是 3.1 正式 Minor。
 - 「跨機待辦」既有七欄固定合計 895px，超過最小視窗 740px 的實際 ListView 可用寬度。改用單一正式版面路徑，在視窗 Resize 時按清單可用寬度分配欄寬，保留垂直捲軸槽與工作項目 ID 欄，不動待辦選取、角色、狀態或 AMEGO 業務邏輯。
 - 真的 WinForms form smoke 覆蓋 920×500 與 740×400 兩個視窗尺寸的欄寬／ID 區域，並沿用按鈕及安全清單狀態 smoke。此為 Source／合成驗證，DPI 100／125／150% 與真雙機仍待使用者實機驗收。
 - 隨工程版同步 VERSION、當版工程包內容、使用說明、README／單一 TODO／3.1 handoff。Cloudflare 原 D1／Worker、schema16 草稿及功能旗標完全不動，**上一個正式 Release 仍是 V3.0.0**。
 
 ## V3.0.1 — 2026/10/18（3.1 非折讓跨機 Source 階段；engineering，未正式發布）
 
-- 依共通版號規則恢復 **Patch +1、BUILD=0** 的工程版追蹤：V3.0.0 是上一個已發布版本，本版 V3.0.1 僅工程測試包，**不是 V3.1.0 正式發行，也不新增 Release／tag**。先前 #482～#497 已合併時仍使用 3.0.0 的漏升版事實保留在 Git；此版一次性對齊目前 Source，不補造不存在的中間 patch 或偽造歷史包。往後**每個獨立修改項目推下一 Patch、同一項返修改推 Build**。
+- 依共通版號規則恢復 **Patch +1、BUILD=1** 的工程版追蹤：V3.0.0 是上一個已發布版本，本版 V3.0.1 僅工程測試包，**不是 V3.1.0 正式發行，也不新增 Release／tag**。先前 #482～#497 已合併時仍使用 3.0.0 的漏升版事實保留在 Git；此版一次性對齊目前 Source，不補造不存在的中間 patch 或偽造歷史包。往後**每個獨立修改項目推下一 Patch、同一項返修改推 Build**。
 - 累積未逐版標識的 V3.1 Source：非折讓 `VOID`／`UPLOAD_ISSUE` 例外工作項目、CYID 管理員跨機唯讀待辦、人工 `open→review→closed` CAS、資料最小化及 append-only Audit；對應已合併的 #482／#483／#485～#487／#489～#491，及 #493／#494／#497 的 WinForms 版面 smoke、失權清空待辦、結果不明 ID 唯讀查回與 Worker／Windows 回覆最小化。前述為**Source／隔離測試**，不可冒充已啟用跨機服務或 AMEGO 官方成功。
 - #495／#496 已清理過時交接及同步單一 TODO／V3.1 交接；本工程版更新 VERSION、CHANGELOG、使用說明及工程包的 V3.0.1 內容。Work Item schema16 SQL 仍只在 `cloud/drafts/0016_non_allowance_work_items.sql`，功能旗標預設關閉；**沒有**連線／套用 Cloudflare D1 或部署 Worker，沒有真雙機／多 DPI 驗收。真實 Email／災復驗收仍依 TODO 與 V3.0.0 已知限制。
 - 發版門檻不變：V3.1 完整功能、最後由使用者本機 MCP 處理原 D1／Worker、真機驗收完成後，才能評估 Minor `V3.1.0 Build 0`；正式 Release 仍需使用者**當次明確授權**。
 
 ## V3.0.0 — 2026/10/18（Local／CYID、公司卡與裝置復原）
 
-- 依使用者本次明確發布授權升為 V3.0.0、BUILD=0。發行範圍鎖定已合併的 V3.0 與 Unicode 復原修正；不合併 PR #440，不帶入 3.1／3.2／3.3 的 Work Item、跨機審核或新折讓 API。
+- 依使用者本次明確發布授權升為 V3.0.0、BUILD=1。發行範圍鎖定已合併的 V3.0 與 Unicode 復原修正；不合併 PR #440，不帶入 3.1／3.2／3.3 的 Work Item、跨機審核或新折讓 API。
 - 新版僅提供 Local 與 CYID Cloud；舊 Built-in／Self-hosted 不作現役模式，遇到舊身分後端明確拒絕，不以舊帳號降級放行。保留原發票、人工作廢／折讓、匯入、同步與結果不明處理。
 - CYID 公司卡提供角色分離的狀態／修改及超管明確確認後套用本機憑證；雲端已設定不等於每台 Windows 已套用。App Key／MO 密碼仍以本機 DPAPI 保護，不自動覆寫其他裝置。
 - 裝置災難復原由 CYWEB 超管重新驗證後簽發短效邀請，新機確認原公司、保存 Pending Token 後接管；只有成功接管才撤銷原公司其他舊裝置，結果不明沿用同一 attempt 讀回，不盲目重簽或建立第二個 Token。
@@ -311,7 +320,7 @@
 
 ## V2.0.0 — 2026/09/15
 
-- C#／WinForms 完成 Windows 實機驗收並正式取代 Go／Win32，成為 `main` 唯一產品線；版本來源統一為 `VERSION=2.0.0`、`BUILD=0`。
+- C#／WinForms 完成 Windows 實機驗收並正式取代 Go／Win32，成為 `main` 唯一產品線；版本來源統一為 `VERSION=2.0.0`、`BUILD=1`。
 - 正式環境主標題改由 AMEGO API 顯示公司名稱與統編；測試環境仍清楚標示光貿測試公司。
 - 修正發票基本資料 Radio 與欄位垂直對齊、統編／買方名稱下緣裁切、商品與已開立清單 scrollbar 及欄界線。
 - 匯入確認按鈕移至中間並避免下緣裁切；移除確認按鈕的張數文字，摘要列放大並以紅色強調已選張數。

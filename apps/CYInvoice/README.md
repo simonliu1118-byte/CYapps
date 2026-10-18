@@ -6,14 +6,14 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source／測試包：V3.1.4 Build 0**（engineering，尚非正式 Release）：3.2-B2a 已接上 Local 主管以帳密登入、光貿折讓即時預覽、第二次官方查詢與含稅餘額驗證、核准快照持久化；核准後不可取消或轉回舊人工完成流程。**此版本只鎖定主管核准草稿，不配號、不向光貿 g0401／g0501 送出**。仍保留 3.2-A 含稅／未稅單價切換、七位小數、負折扣。詳 [V3.1.4 工程說明](release-notes/V3.1.4.txt) 及 [3.2 實作計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
+- **目前工程 Source／測試包：V3.1.5 Build 1**（engineering，非正式 Release）：Local 主管核准草稿後，可再次驗證身分、確認光貿與核准時資料一致，並在 SQLite **預留固定折讓單號及不可變 Frozen request**。主管核准後原發票／買方／品項變更則拒絕配號；重開及重按只回同一預留號碼。**沒有向光貿 g0401/g0501 送出，預留號碼不代表已開立折讓**；含稅／未稅單價切換不變。見 [V3.1.5](release-notes/V3.1.5.txt) 與 [V3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍 V3.1.0。
 
 - **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
 
 - V3.0.3 歷史工程基準：修正「回報跨機」按鈕僅允許尚未結案且支援的非折讓例外，排除折讓與未知類型；Windows 功能於本批維持不變。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。[V3.0.3 工程版內容](release-notes/V3.0.3.txt) 保留當時的部署前狀態。
 - V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
-- 正式版將由 `CYapps/main` 的 `VERSION=3.1.0`／`BUILD=0` 重新建置並提供 ZIP／SHA-256；V3.0.0 舊 tag／commit 歷史供追溯，依使用者要求僅在 V3.1.0 新 Release 成功後處理舊發行頁。V2.6.19 Release 不受影響。
+- 正式版將由 `CYapps/main` 的 `VERSION=3.1.0`／`BUILD=1` 重新建置並提供 ZIP／SHA-256；V3.0.0 舊 tag／commit 歷史供追溯，依使用者要求僅在 V3.1.0 新 Release 成功後處理舊發行頁。V2.6.19 Release 不受影響。
 - V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/V3_1_HANDOFF.md)。
 - V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。

@@ -13,7 +13,7 @@
 - [ ] **3.2-A～H**：正式需求、相依階段、原始碼移植及驗收門檻見 [V3_2_IMPLEMENTATION_PLAN.md](V3_2_IMPLEMENTATION_PLAN.md)。僅使用既有光貿官方查詢判斷當時折讓事實；兩筆合法人為折讓不能只因發票相同被自動禁止；程式必須防止同一次送出遭盲目重送。
 - [x] **3.2-00／V3.1.1 Build 0 原始碼第一片**：開啟折讓申請前，新增光貿 `invoice_query` 新鮮回查，顯示官方折讓清單並保留 SubmitAsync 提交時二次查回；官方不可用時不開啟提交視窗，沒有 g0401／g0501 真交易。WinForms smoke 補官方摘要斷言。PR 與 exact-head CI 依本次工作結果登記。
 - [x] **3.2-A／V3.1.2 Build 2 Source**：原發票折讓商品編輯、含稅／未稅單價切換、含稅自動換算未稅送出明細與總額、負數折扣、七位固定小數、完整官方有效剩餘額 fail-closed，申請時重新查光貿並由 Core 核對草稿；尚不接 g0401/g0501，也不將 CI 當真人實機驗收。
-- [ ] **3.2-B2b～H 正式折讓執行**：3.2-B2a/V3.1.4 已完成 Local 管理員帳密核准、即時光貿已有折讓與剩餘額預覽、核准後二次查回、快照凍結、禁止舊人工完成／取消；目前僅鎖定草稿，**尚未呼叫 g0401、尚未配號送出**。下一片 B2b 接 B1 ledger、Frozen Payload 與原號單次送出／唯讀查回。其他 Cloud 折讓、g0501、同步、遷移和發行仍按計畫分批。
+- [ ] **3.2-B2c～H 正式折讓執行**：3.2-B2b／V3.1.5 已完成 Local 已核准草稿固定摘要、配號前光貿最新查回、Frozen request SQLite reserve、同工單重按／重開不重新配號。**尚未 g0401 真送出或原號查回，預留並非正式開立**。下一批 B2c 接單次 g0401、逾時不重送及原號核對；Cloud 跨機、g0501、正式切換與發行仍分階段進行。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
 ## CYInvoice 3.1：非折讓跨機工作項目（Minor V3.1.0；2026-10-19）
@@ -21,7 +21,7 @@
 - [x] **V3.1-D Source／V3.0.4 Build 0**：0016 由草稿提升為 canonical migration，SQL 行為不變；schema source marker 為 16，Work Item 隔離測試從正式 migration 恰好執行一次，V3.0 歷史測試仍鎖在 schema15。尚未因 source 提交啟用遠端功能，實際本機 MCP 結果以私有 readback 為準。以下草稿／V3.0.3 狀態保留為歷史，不覆蓋此項。
 - [x] **V3.1-D 本機 MCP 遠端切換（使用者完成回報，不是本對話獨立遠端 readback）**：原 CYInvoice D1 先核對原 schema15/CYID_ONLY 與 15 筆 migration、加密備份還原及回滾演練，再只套用 canonical 0016 一次，更新原 Worker schema16／WORK_ITEMS_ENABLED=true；前後資料與約束回查通過，私有證據保留本機、不含於 GitHub。禁止重跑 0014／0015、建立新 Worker／D1 或操作 CYID D1。
 
-- **3.1 正式發行基準**：`VERSION=3.1.0`、`BUILD=0`，使用者 2026-10-19 明確批准先發布、雙 Windows／CYID 角色等留發行後。發行工作流程必須從 main 重驗並產 ZIP／SHA-256；上一正式版 V3.0.0 的 Release 只在新版本發布成功後才依使用者要求另行移除，tag／Git 歷史不受影響。
+- **3.1 正式發行基準**：`VERSION=3.1.0`、`BUILD=1`，使用者 2026-10-19 明確批准先發布、雙 Windows／CYID 角色等留發行後。發行工作流程必須從 main 重驗並產 ZIP／SHA-256；上一正式版 V3.0.0 的 Release 只在新版本發布成功後才依使用者要求另行移除，tag／Git 歷史不受影響。
 - **使用者確認**：3.0 Cloudflare 安全升級已在本機處理；本次沒有本機 MCP 遠端 readback，因此標記「使用者確認」，**不冒充這輪重新驗證**。3.0 真 Email／雙 Windows 災復實測留後續，不作為 3.1 Source 開發的阻塞。
 - **固定 3.1 範圍**：僅 `VOID`（未收紙本作廢的人工覆核）、`UPLOAD_ISSUE`（上傳／官方結果不明的本機例外）、跨 Device 管理員待辦、人工審查及 Audit。Work Item `closed` 只表示人工流程封存，**不表示 AMEGO 官方作廢、上傳成功或允許重送**；一般正常發票／買方細節不進 D1。折讓與 g0401/g0501 **全部在 3.2**，其他延後 3.3。
 - [x] **3.1-A 已合併** [#482](https://github.com/simonliu1118-byte/CYapps/pull/482)：CYID-only Work Item 資料層、Workspace／active Device SQL fencing、來源匿名雜湊、修訂版 CAS、隔離 SQLite 測試；`cloud/drafts/0016_non_allowance_work_items.sql` **仍是草稿，未加入 canonical migrations**。
