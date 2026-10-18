@@ -1,6 +1,6 @@
 # CYInvoice Cloud Architecture Status
 
-此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。若由新的長時間工作階段／ChatGPT Work 接手，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
+此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。若由新的長時間工作階段／ChatGPT Work 接手，先依 `AGENTS.md` 讀永久規則，再讀 `V3_1_HANDOFF.md`。
 
 > 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
 
@@ -15,7 +15,7 @@
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
-GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](CLOUD_WORK_HANDOFF.md)。不等同 live deployment 或人工驗收。
+GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](V3_1_HANDOFF.md)。不等同 live deployment 或人工驗收。
 
 目前原 development 遠端部署證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。未執行的 Windows 全角色／多裝置實機矩陣仍待 RC 證據，不以 health 冒充人工通過。
 
