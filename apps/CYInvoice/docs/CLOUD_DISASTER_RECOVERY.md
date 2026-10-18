@@ -2,7 +2,7 @@
 
 更新日期：2026-10-18（Asia/Taipei）。
 
-**V3.0 現行狀態**：CYWEB 復原介面／private route 已在 #192 合併 Source；CYInvoice #476 已有 private named RPC、issuer／claim、Windows Pending Token、0014／0015 canonical migration、10 分鐘有效期及 `AUTO_EXPIRED` 的下一次簽發自動結清。**原 D1／Worker／CYWEB binding 尚未完成本機 MCP 上線；真 Email／雙機／DR-01～13 未驗收。** 原本含 Work Item／折讓的 V3 規劃已分配至 3.1／3.2／3.3，不屬 3.0 的開發阻塞。唯一未完成清單仍為 [TODO.md](TODO.md)，本機 Cloudflare 步驟見 [V3_0_LOCAL_MCP_CUTOVER.md](V3_0_LOCAL_MCP_CUTOVER.md)。
+**V3.0 現行狀態**：Windows V3.0.0 Build 0 已正式發布；使用者確認 3.0 原 Cloudflare 安全升級已由本機 MCP 完成，這一輪未從本機 MCP 重新 readback，**不得依本文重跑 0014／0015／CYID_ONLY 退役**。CYWEB #192 復原 Source 已合併，私有 Binding 的實際可用性尚未在本輪查驗；真 Email／雙 Windows／DR-01～13 尚待實測。3.1 只做非折讓跨機 Work Item，3.2 才做折讓，其餘在 3.3。現行待辦以 [TODO.md](TODO.md) 最新章節、3.1 工程以 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)、真人驗收以 [RC_TEST.md](RC_TEST.md) 為準。
 
 ## 1. 本次決策與範圍
 
@@ -10,7 +10,7 @@
 
 V3 的裝置管理與復原共用同一份 Device registry、邀請 lifecycle 與 audit owner。CYInvoice 的相關協同資料可以上自己的業務 D1；不將 CYID Credential、Session authority 或身分資料庫合併進來，也不以 Employee No 推定兩種 Workspace 是同一筆資料。
 
-本公司現行基準為 Windows V2.6.19、Cloud0.9.3、CYID_ENABLED=true、CYID_ONLY。其他公司 Local／獨立 Built-in D1 的既有功能保留，這項 CYWEB 復原入口不套用於 Built-in 模式。
+本段設計當時採用的歷史基準為 Windows V2.6.19、Cloud0.9.3、CYID_ENABLED=true、CYID_ONLY；現行正式 Windows 版本已升為 V3.0.0。其他公司 Local／獨立 Built-in D1 的既有功能保留，這項 CYWEB 復原入口不套用於 Built-in 模式。
 
 ## 2. 現有能力與真正缺口
 
