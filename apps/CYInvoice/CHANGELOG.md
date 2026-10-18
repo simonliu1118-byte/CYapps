@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.3 — 2026/10/19（3.2-B1 Local 配號與核准快照持久化；engineering）
+
+- 新獨立 Patch **VERSION=3.1.3、BUILD=0**。從歷史 #440 **只選擇性移植** Local SQLite 配號與狀態鎖（不導入未經驗證的正式 g0401/g0501 連線與舊 Cloud schema）。本工程版無新的正式 Release，上一正式版仍 V3.1.0。
+- 本機 SQLite additive 建立配號 ledger：以賣方／環境／日期隔離序號，保存管理員員編與核准 UTC 時間、不可變原請求及完整帶號的 payload。重開程式後同一工作項目與同一主管核准只取回原號，修改核准／明細一律拒絕。
+- reserved→sending 的條件更新先於任何未來網路送出，sending／confirmed 禁止重入；明確 4040161／4040162 只標記占號、**本階段不自動重配**，須等下一片完成原號官方只讀回查確認後才設受控改號。SQLite 合成測試覆蓋同工單、防竄改、撞號與重開、編號唯一及環境分隔。
+- 尚未在 WinForms 接上正式主管核准或 g0401；本批 ledger 只是不可繞過的底層安全前置。沒有動 Cloudflare D1／Worker／Secrets、真實光貿或 V3.0＋V3.1 唯一延後驗收清單。
+
 ## V3.1.2 Build 2 — 2026/10/19（3.2-A 折讓品項編輯與有效餘額；engineering）
 
 - 新獨立 Patch，VERSION=3.1.2、BUILD=2，正式 Release 仍為 V3.1.0。
