@@ -260,8 +260,12 @@ internal sealed partial class MainForm
         _paperTimer.Start();
     }
 
-    /// <summary>Nobody is typing into ERP or driving Chrome: a paper prompt may come now.</summary>
-    private bool PaperMayPrompt => _paperHold == 0 && _automationCts is null && !_shopeeBatchRunning;
+    /// <summary>
+    /// Nobody is typing into ERP or driving Chrome, and no run holds the mouse: a paper prompt may
+    /// come now (it gives the mouse back, a person loads paper). Between a run's steps the session
+    /// stays on, so the prompt never cuts a run in two.
+    /// </summary>
+    private bool PaperMayPrompt => _paperHold == 0 && _automationCts is null && !_shopeeBatchRunning && _automationSession?.Active != true;
 
     private async Task PaperTickAsync()
     {
@@ -353,7 +357,13 @@ internal sealed partial class MainForm
         var styleName = CyInvoiceLink.PaperStyles.FirstOrDefault(p => p.Code == _settings.PaperInvoiceStyle).Name ?? string.Empty;
         _log.Info("cyinvoice", $"paper invoices wait for paper count={ready.Count}");
         Alarm(needsPerson: true);
-        using (var prompt = new PaperPromptForm("A4 白紙（紙本發票）", printer, $"共 {ready.Count} 張發票（有統編抬頭的訂單，{styleName}）"))
+        // Which kinds are in the pile (user, 2026-10-19: a 酷澎 consumer's invoice was described as
+        // 有統編): with 統編 in the set style; without (酷澎) always A4, both sides.
+        var withBan = ready.Count(j => j.Invoice.BuyerBan.Length > 0);
+        var kinds = new List<string>();
+        if (withBan > 0) kinds.Add($"有統編 {withBan} 張（{styleName}）");
+        if (ready.Count > withBan) kinds.Add($"無統編 {ready.Count - withBan} 張（A4 雙面）");
+        using (var prompt = new PaperPromptForm("A4 白紙（紙本發票）", printer, $"共 {ready.Count} 張發票：{string.Join("、", kinds)}"))
             if (prompt.ShowDialog(Form.ActiveForm ?? this) != DialogResult.OK)
             {
                 foreach (var j in ready) Drop(j, "在放紙提醒按了停止，沒有印");

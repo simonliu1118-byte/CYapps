@@ -212,7 +212,7 @@ internal sealed class SettingsForm : Form
         page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
             ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
         // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
-        var invoiceBox = new GroupBox { Text = "MO店+ 紙本發票（有統編抬頭的訂單，印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
+        var invoiceBox = new GroupBox { Text = "紙本發票樣式（有統編的發票；酷澎無統編一律 A4 雙面；印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
         var invoiceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         foreach (var (code, name) in CyInvoiceLink.PaperStyles) _paperInvoiceStyle.Items.Add(new PaperStyleItem(code, name));
         _paperInvoiceStyle.SelectedItem = _paperInvoiceStyle.Items.Cast<PaperStyleItem>().FirstOrDefault(i => i.Code == _settings.PaperInvoiceStyle) ?? _paperInvoiceStyle.Items[0];
