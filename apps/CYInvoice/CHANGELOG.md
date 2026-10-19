@@ -2,13 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.15 — 2026/10/19（3.2-C3c2 Cloud reserved→sending 原子 CAS，工程版）
+## V3.1.15 Build 1 — 2026/10/19（3.2-C3c2 Cloud reserved→sending 原子 CAS，工程版）
 
 - 從 #440 的單次折讓執行安全邏輯擷取狀態護欄，新增 `cloud/src/allowance-sending-claim.ts`，依 schema16＋C1/C2 draft17/18 的正式獨立折讓申請／核准／Ledger，**不使用舊 work_items.ALLOWANCE**。
 - Internal-only 執行入口：讀回原 application_id 的 AES-GCM Frozen request／已預留號碼，核對主管與核准 Device、active Workspace、公司卡版次、approved revision、不可變 Grant 和同一 RequestHash；執行前重新以唯讀 `invoice_query`＋逐號 `allowance_query` 查完整官方原發票有效餘額，並對照先前主管核准的官方證據 Hash，不直接信任前端傳來的金額或成功旗標。
 - 通過後以單一 SQL UPDATE CAS 競爭 `reserved → sending`，查核 SQL 時有效 Grant、主管／Device、公司版次、官方 Hash 和同張來源發票尚無另一筆 sending。失敗、官方狀態異動、撤權、逾時或 D1 回覆遺失都只能讀回原號，不可再次 CLAIM、不得更換號碼；即使 CAS 成功本批也**不連接任何 g0401**（`providerPostPerformed=false`）。
 - 真 TypeScript＋schema16/drafts17/18 Synthetic SQLite 與假光貿官方 HTTP 測試：首次 CAS、重入拒絕、Grant 過期／官方狀態變動、角色撤銷、公司異動、相同來源發票兩案的發送互斥、CAS 時 Device 撤權、寫入成功但回覆遺失及發送後再次撤權。
 - 未修改正式 `cloud/migrations`；沒有 Cloudflare D1／Worker 操作、沒有真 AMEGO g0401/g0501、沒有公開 HTTP route，正式 Release 仍 V3.1.0。
+
+- Build 1：首輪 CI 指出新合成測試 D1.batch adapter 錯將 Statement 的 `.q` 欄位讀成 `.sql`；已修正測試接線，不更動 Cloud 執行／SQL CAS 邏輯。
 
 ## V3.1.14 — 2026/10/19（3.2-C3c1 Cloud 核准後首次配號 Ledger，工程版）
 
