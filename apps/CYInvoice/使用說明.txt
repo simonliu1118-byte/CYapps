@@ -1,5 +1,5 @@
 CYInvoice 使用說明
-適用版本：V3.1.5（工程測試版，非正式 Release；上一個正式版 V3.1.0）
+適用版本：V3.1.6（工程測試版，非正式 Release；上一個正式版 V3.1.0）
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 本程式與原始碼之使用、修改與散布權利以 repository 根目錄 LICENSE 為準。
