@@ -13,7 +13,7 @@
 - [ ] **3.2-A～H**：正式需求、相依階段、原始碼移植及驗收門檻見 [V3_2_IMPLEMENTATION_PLAN.md](V3_2_IMPLEMENTATION_PLAN.md)。僅使用既有光貿官方查詢判斷當時折讓事實；兩筆合法人為折讓不能只因發票相同被自動禁止；程式必須防止同一次送出遭盲目重送。
 - [x] **3.2-00／V3.1.1 Build 0 原始碼第一片**：開啟折讓申請前，新增光貿 `invoice_query` 新鮮回查，顯示官方折讓清單並保留 SubmitAsync 提交時二次查回；官方不可用時不開啟提交視窗，沒有 g0401／g0501 真交易。WinForms smoke 補官方摘要斷言。PR 與 exact-head CI 依本次工作結果登記。
 - [x] **3.2-A／V3.1.2 Build 2 Source**：原發票折讓商品編輯、含稅／未稅單價切換、含稅自動換算未稅送出明細與總額、負數折扣、七位固定小數、完整官方有效剩餘額 fail-closed，申請時重新查光貿並由 Core 核對草稿；尚不接 g0401/g0501，也不將 CI 當真人實機驗收。
-- [ ] **3.2-B2c～H 正式折讓執行**：3.2-B2b／V3.1.5 已完成 Local 已核准草稿固定摘要、配號前光貿最新查回、Frozen request SQLite reserve、同工單重按／重開不重新配號。**尚未 g0401 真送出或原號查回，預留並非正式開立**。下一批 B2c 接單次 g0401、逾時不重送及原號核對；Cloud 跨機、g0501、正式切換與發行仍分階段進行。
+- [ ] **3.2-B2d～H 正式折讓執行**：B2c／V3.1.6 已在 Core 實作 g0401 單次簽名傳輸、ledger reserved→sending 先落盤、原號 allowance_query 讀回，逾時與 4040161／4040162 不重送或加號；僅凍結品項與官網完成狀態完整吻合才 confirmed。**尚未將單次交易編排接 Windows 正式按鈕，也沒有真光貿交易**。下一批 B2d 串 Local 管理員當次驗權與官方 preflight 的正式 caller／安全操作提示；Cloud、g0501、同步、MCP 正式切換及 V3.2 Release 仍須分階段完成。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
 ## CYInvoice 3.1：非折讓跨機工作項目（Minor V3.1.0；2026-10-19）
