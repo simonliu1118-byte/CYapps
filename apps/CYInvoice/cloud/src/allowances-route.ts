@@ -126,9 +126,20 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
     status:result.status,revision:result.revision,officialActionPerformed:false});
   }
   if(action==="get"){
+   // Authorization is checked BEFORE decrypting the frozen request. Same
+   // Workspace alone never entitles another USER to inspect a colleague's
+   // financial allowance; managers can inspect the queue.
+   const visible=await env.DB.prepare(`SELECT application_id
+    FROM allowance_applications WHERE workspace_id=?1
+     AND application_id=?2 AND (?3=1 OR requester_actor_id=?4)
+     LIMIT 1`)
+    .bind(binding.workspaceId,target.applicationId,manager(actor)?1:0,
+      actor.employeeId).first<{application_id:string}>();
+   if(!visible)return reply(404,{error:{code:"NOT_FOUND"}});
    const result=await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
    const fresh=await authority.revalidate();
    if(!fresh||actor.employeeId!==fresh.employeeId||
+      actor.workspaceRole!==fresh.workspaceRole||
       !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
     return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
    return reply(200,{application:{
@@ -185,6 +196,11 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
   }
   if(action==="withdraw"){
    // Applicant may withdraw ONLY while open, never after manager claims it.
+   const fresh=await authority.revalidate();
+   if(!fresh||fresh.employeeId!==actor.employeeId||
+      fresh.workspaceRole!==actor.workspaceRole||
+      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
+    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
    const r=await env.DB.prepare(`UPDATE allowance_applications SET
     status='withdrawn',revision=revision+1,actor_id=?1,
     updated_by_device_id=?2,updated_at=?3
