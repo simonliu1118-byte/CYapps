@@ -119,8 +119,9 @@ const ledger=sql=>sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_ledger
   assert.equal(grants(sql),1);
   assert.equal(ledger(sql),0);
   assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM work_items").get().n,0);
-  assert.deepEqual(sql.prepare("SELECT status,revision FROM allowance_applications").get(),
-   {status:"approved",revision:3});
+  const state=sql.prepare("SELECT status,revision FROM allowance_applications").get();
+  assert.equal(state.status,"approved");
+  assert.equal(state.revision,3);
   assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM allowance_application_audit_events").get().n,3);
   const saved=sql.prepare("SELECT * FROM allowance_execution_approvals").get();
   assert.equal(saved.official_snapshot_hash,grant.officialEvidenceHash);
