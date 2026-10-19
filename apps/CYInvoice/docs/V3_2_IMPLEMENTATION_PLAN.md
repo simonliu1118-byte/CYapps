@@ -95,7 +95,7 @@
 - 以 Synthetic SQLite 檢查同張發票合法不同申請、跨裝置搶當日序號、字母尾號界線、Grant 過期/公司變更/Device 撤權/不同主管拒絕與失去寫入回覆時 readback。預留**不是實際送出授權**，下階段需先重新查最新官方餘額、重新驗權後 CAS `reserved→sending`，再單次 g0401 和原號證據查回。
 - 暫不安裝 HTTP route、正式 D1 Migration、任何 AMEGO transaction、Cloudflare Worker／Secrets 變更；真環境 H 驗收與 V3.2.0 Release 另行批准。
 
-## 3.2-C3c2 單次送出 CAS 工程切片（V3.1.15 Build 0）
+## 3.2-C3c2 單次送出 CAS 工程切片（V3.1.15 Build 1）
 
 - 此批完成的是內部、**不能獨立呼叫 g0401** 的 Cloud Ledger 狀態閘門；從 #440 借用一次性 claim 的防重送模式，改接現行 `schema16 → drafts/0017 → drafts/0018`，不恢復舊 `work_items.ALLOWANCE`。
 - 以原申請 AES-GCM Frozen request＋C3b2b immutable Grant／核准官方 evidence hash 為唯一來源；再次查 `invoice_query` 與既有折讓每個號碼的 `allowance_query` 全項明細，若官方變動、仍待定或任何金額超額則拒絕；主管／Device、公司卡與 revision 皆前後驗證。
