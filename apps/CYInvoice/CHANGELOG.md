@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.20 — 2026/10/20（3.2-C4c Windows CYID Cloud 跨機折讓主管待辦畫面，工程版）
+
+- 新增 `CloudAllowanceManagerForm`，使用既有 CYID Device 和每次輸入員工帳密，呈現跨機申請清單、同申請 ID 查回、主管接手覆核、唯讀官方資料預覽、核准與單號預留；**沒有 g0401 發送或失敗時重試按鈕**。不輸出買方資訊、客戶私密資料或 AppKey；請求結果不明只告知以原 ID 查回。
+- `CloudAllowanceClient.PreviewAsync` 對 preview-only／`canApprove=false`／必須另做官方結算等否定旗標嚴格驗證，不能將 invoice_query 摘要誤當作可送出授權。
+- 主視窗原「跨機待辦」按鈕改為選單，保留原非折讓待辦並新增折讓主管介面，不改既有 Work Items 或帳務核准範圍；加入 100%+ DPI startup smoke 靜態版面檢查與 Windows fake HTTP official preview regression。
+- 原 Cloud Worker flag／D1 schema16 沒有變更；新畫面在後端尚未部署時顯示 503，不改真光貿與 Release。下一批需銜接員工從原折讓編輯器送出 Frozen Request、原 ID 本機持久化、真實跨裝置端到端驗收。
+
 ## V3.1.19 Build 1 — 2026/10/19（3.2-C4b Windows CYID 折讓客戶端；工程版）
 
 - Windows Core `CloudAllowanceClient` 以現行 Device bearer、HTTPS、CYID 本次帳密與 no redirect 契約使用新 Cloud Allowance API，提供 Create/List/Review/Approve/Reserve/Status 的分機操作；失去任何 HTTP／D1 回覆只允許以**同一 applicationId** 狀態查回，不自動重建申請、不盲目重送。
