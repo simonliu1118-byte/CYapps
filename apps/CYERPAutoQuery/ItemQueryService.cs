@@ -665,6 +665,27 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>Clicks only when the point really shows <paramref name="root"/> (nothing covers it).</summary>
+    /// <summary>
+    /// Clicks <paramref name="point"/> until <paramref name="box"/> has the focus. ERP checks the
+    /// field being left before focus moves (V0.9.0 Build 3／4 LOG: right after 客戶代號起, the
+    /// 客戶代號迄 and 單據日期 clicks found focus still on the previous TYenMaskEdit), so each try
+    /// waits for the focus, longer every time; up to three clicks, each miss logged.
+    /// </summary>
+    private async Task<nint> ClickUntilFocusedAsync(nint root, WindowControl box, Point point, string what, CancellationToken cancellationToken)
+    {
+        bool Focused(nint f) => f == box.Handle || Win32Automation.IsInside(f, box.Handle);
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            if (attempt > 1) Win32Automation.PrepareForeground(root, _log);
+            SafeClick(root, point);
+            nint focus = 0;
+            if (await WaitUntilAsync(() => Focused(focus = NativeMethods.FocusedControlOfForeground()), 400 * attempt, cancellationToken))
+                return focus;
+            _log.Warn("focus", $"{what} attempt={attempt} focus class={(focus != 0 ? NativeMethods.ClassName(focus) : "-")} same_root={(focus != 0 && Win32Automation.IsInside(focus, root))} foreground=\"{NativeMethods.WindowText(NativeMethods.GetForegroundWindow())}\"");
+        }
+        throw new InvalidOperationException($"{what}點了三次都沒有取得焦點，已停止，避免輸入到錯誤欄位。");
+    }
+
     private static void SafeClick(nint root, Point point)
     {
         if (!Win32Automation.IsPointShownBy(root, point))
@@ -1726,12 +1747,13 @@ internal sealed partial class ItemQueryService
                 throw new InvalidOperationException($"{field}的{what}日欄位寬度不正確，已停止。");
             var yearPoint = new Point(targetBox.Rect.Left + Math.Min(12, width / 10),
                 (targetBox.Rect.Top + targetBox.Rect.Bottom) / 2);
-            SafeClick(invq, yearPoint);
-            await Pace.Delay(150, cancellationToken);
+            await ClickUntilFocusedAsync(invq, targetBox, yearPoint, $"{field}的{what}日", cancellationToken);
         }
-
+        // Without a click (Enter moved here from 起) ERP may still be checking the field it left.
         var focus = NativeMethods.FocusedControlOfForeground();
-        if (focus != targetBox.Handle && !Win32Automation.IsInside(focus, targetBox.Handle))
+        if (focus != targetBox.Handle && !Win32Automation.IsInside(focus, targetBox.Handle) &&
+            !await WaitUntilAsync(() => (focus = NativeMethods.FocusedControlOfForeground()) == targetBox.Handle ||
+                Win32Automation.IsInside(focus, targetBox.Handle), 1500, cancellationToken))
             throw new InvalidOperationException($"{field}的{what}日沒有取得焦點，已停止，避免日期打到錯誤欄位。");
 
         if (NativeMethods.CloseImeFor(focus))

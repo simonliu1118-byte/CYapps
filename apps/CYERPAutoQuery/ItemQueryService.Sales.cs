@@ -268,11 +268,7 @@ internal sealed partial class ItemQueryService
         {
             var what = $"{report.Title}的{sales.NoColumn}{(i == 0 ? "起" : "迄")}";
             var box = boxes[i];
-            SafeClick(dialog, new Point(box.Rect.Left + 8, (box.Rect.Top + box.Rect.Bottom) / 2));
-            await Pace.Delay(150, cancellationToken);
-            var focus = NativeMethods.FocusedControlOfForeground();
-            if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
-                throw new InvalidOperationException($"{what}沒有取得焦點，已停止。");
+            var focus = await ClickUntilFocusedAsync(dialog, box, new Point(box.Rect.Left + 8, (box.Rect.Top + box.Rect.Bottom) / 2), what, cancellationToken);
             InputSender.Press(NativeMethods.VK_HOME);
             await Pace.Delay(60, cancellationToken);
             await PasteIntoAsync(focus, query.OrderKeys, cancellationToken, selectAll: false);
@@ -292,23 +288,7 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task SetReportTextAsync(nint dialog, WindowControl box, string text, string what, CancellationToken cancellationToken)
     {
-        nint focus = 0;
-        for (var attempt = 1; attempt <= 3; attempt++)
-        {
-            if (attempt > 1)
-            {
-                await Pace.Delay(300 * attempt, cancellationToken);
-                Win32Automation.PrepareForeground(dialog, _log);
-            }
-            SafeClick(dialog, Win32Automation.Center(box.Rect));
-            await Pace.Delay(150 * attempt, cancellationToken);
-            focus = NativeMethods.FocusedControlOfForeground();
-            if (focus == box.Handle || Win32Automation.IsInside(focus, box.Handle)) break;
-            _log.Warn("sales", $"{what} focus attempt={attempt} got class={(focus != 0 ? NativeMethods.ClassName(focus) : "-")} foreground=\"{NativeMethods.WindowText(NativeMethods.GetForegroundWindow())}\"");
-            focus = 0;
-        }
-        if (focus == 0)
-            throw new InvalidOperationException($"{what}點了三次都沒有取得焦點，已停止。");
+        var focus = await ClickUntilFocusedAsync(dialog, box, Win32Automation.Center(box.Rect), what, cancellationToken);
         await PasteIntoAsync(focus, text, cancellationToken);
         var shown = (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
         if (!ItemCodeRules.SameCode(shown, text))
