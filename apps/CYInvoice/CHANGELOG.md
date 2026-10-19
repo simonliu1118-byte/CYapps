@@ -2,13 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.10 — 2026/10/19（3.2-C3a Cloud 加密折讓申請封存／安全讀回；engineering）
+## V3.1.10 Build 1 — 2026/10/19（3.2-C3a Cloud 加密折讓申請封存／安全讀回；engineering）
 
 - 從 #440 舊 `allowance-applications.ts` 選擇性重接，新增 `cloud/src/allowance-frozen-store.ts`，採現行 schema16＋drafts/0017/0018 的獨立 application_id；**不帶回** `work_items.kind='ALLOWANCE'`。
 - 後端使用既有公司卡 AES-GCM helper 與 application_id＋HMAC requestHash 專屬 AAD；原發票關聯／來源 fingerprint 由 Worker 金鑰 HKDF domain-separated HMAC 製作，避免僅對低熵發票號直接 SHA256 洩漏推測。
 - 僅可信內部 service 可用：建立前／後重新比對 CYID actor 與 active Device；讀取僅原申請員工或管理員且再次驗權，Workspace、environment、公司卡 revision、加密明細與 requestHash 跨欄綁定。透過 D1.batch 在單一交易內寫入申請與 Frozen Request，失敗回滾；原 ID 供不明結果唯讀查回，不盲目另建 ID。
 - 新增合成 SQLite／esbuild 回歸：加密不含買方明文、跨 Workspace／身分／環境拒絕、裝置撤銷中止讀回、金鑰錯誤、原號第二份獨立申請、公司版次競爭原子回滾、時間與格式檢查。
 - **未掛 Cloud API routes、未執行 AMEGO、未操作 Cloudflare、未轉成正式 migration，也未聲稱完成 Cloud 主管核准／發送。** 正式 Release 仍為 V3.1.0。
+
+- Build 1：首輪 Cloud CI 偵測 3.0 原始 D1 schema 帶有 `idx_single_workspace`，C3a 測試插入第二個 Workspace 違反既有單一 Workspace 約束；已調整跨 Workspace 越權測試只查詢不存在的其他 Workspace，不修改正式 schema 或業務行為。
 
 ## V3.1.9 — 2026/10/19（3.2-C2 Cloud 加密申請、核准快照與單次配號 Ledger；engineering）
 
