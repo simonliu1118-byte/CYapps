@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.21 — 2026/10/20（3.2-C5 schema16→17/18 安全升級／備份演練；工程版）
+
+- 新增完全隔離的非空 CYID-only schema16 SQLite 演練：在任何 DDL 前保存 DB 備份、驗證 D1 來源表／Device／Workspace 不變，依序套用仍屬審查草稿的 C1 0017 與 C2 0018，確保加密 Frozen、不可變 Grant、Ledger、append-only reconciliation 表和觸發器齊全。
+- 人為注入 0017／0018 中途 SQL 失敗，證明 transaction 回滾沒有半套遷移；再驗證外鍵與 integrity、還原備份、原資料及已存在的 schema16 完全一致。明確禁止把離線 SQLite 的成功冒稱為遠端真 D1 升級或隨意用反向 SQL 刪表復原。
+- 正式 `cloud/migrations` **仍以 schema16 結尾**，schema17／18 留在 `cloud/drafts`，不變更原 Cloudflare Worker、D1、Secrets 或 Bindings；用戶本機 MCP 實際操作會另有正式工作單和人工批准。
+
 ## V3.1.20 — 2026/10/20（3.2-C4c Windows CYID Cloud 跨機折讓主管待辦畫面，工程版）
 
 - 新增 `CloudAllowanceManagerForm`，使用既有 CYID Device 和每次輸入員工帳密，呈現跨機申請清單、同申請 ID 查回、主管接手覆核、唯讀官方資料預覽、核准與單號預留；**沒有 g0401 發送或失敗時重試按鈕**。不輸出買方資訊、客戶私密資料或 AppKey；請求結果不明只告知以原 ID 查回。
