@@ -409,6 +409,92 @@ internal static class AllowanceWorkflowTests
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
+    // Full Local workflow + temporary SQLite + fake official gateway (no real HTTP).
+    public static async Task LocalFirstSendAuthenticatesAndNeverRepostsAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        var (issue, reserved) = await PrepareReservedAsync(setup);
+        var gateway = new FakeLocalIssueGateway();
+        await ThrowsAsync<UnauthorizedAccessException>(() =>
+            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "wrong", gateway));
+        Equal(4, setup.Gateway.QueryCalls);
+        Equal(0, gateway.IssueCalls);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var first = await setup.Workflow.SendLocalReservedDraftAsync(
+            issue, "2000", "AdminPass1", gateway);
+        Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, first.Outcome);
+        Equal(reserved.AllowanceNumber, first.AllowanceNumber);
+        Equal(5, setup.Gateway.QueryCalls);
+        Equal(1, gateway.IssueCalls);
+        Equal("sending", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())!.Status);
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "AdminPass1", gateway));
+        var readback = await setup.Workflow.ReconcileLocalReservedDraftAsync(
+            issue, "2000", "AdminPass1", gateway);
+        Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, readback.Outcome);
+        Equal(1, gateway.IssueCalls);
+        Equal(2, gateway.QueryCalls); // one after first acceptance and one after restart
+        Equal(5, setup.Gateway.QueryCalls);
+    }
+
+    public static async Task LocalSendRejectsChangedOfficialHistoryBeforePostAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        var (issue, reserved) = await PrepareReservedAsync(setup);
+        var gateway = new FakeLocalIssueGateway();
+        setup.Gateway.Queries.Enqueue(Query([
+            Allowance("D0401", UploadStatuses.Complete, "OTHER-001", "1", "19")
+        ], summaryPresent: true));
+        await ThrowsAsync<InvalidOperationException>(() =>
+            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "AdminPass1", gateway));
+        Equal(0, gateway.IssueCalls);
+        Equal("reserved", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
+            .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())!.Status);
+        Equal(reserved.AllowanceNumber,
+            setup.Workflow.LocalReservationFor(issue)!.AllowanceNumber);
+    }
+
+    private static async Task<(InvoiceSyncIssue Issue, LocalAllowanceReservation Reservation)>
+        PrepareReservedAsync(AllowanceSetup setup)
+    {
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(
+            issue, "2000", "AdminPass1");
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.ApproveLocalDraftAsync(issue, "2000",
+            "AdminPass1", preview.OfficialSnapshotHash);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var reserved = await setup.Workflow.ReserveLocalApprovedDraftAsync(
+            issue, "2000", "AdminPass1");
+        return (issue, reserved);
+    }
+
+    private sealed class FakeLocalIssueGateway : IAmegoAllowanceGateway
+    {
+        public int IssueCalls { get; private set; }
+        public int QueryCalls { get; private set; }
+        public Task<AllowanceIssueResponse> IssueAllowanceOnceAsync(
+            AllowanceIssueRequest request, CancellationToken cancellationToken = default)
+        {
+            IssueCalls++;
+            return Task.FromResult(new AllowanceIssueResponse(0, "accepted, not complete"));
+        }
+        public Task<AllowanceQueryResponse> QueryAllowanceAsync(
+            string allowanceNumber, CancellationToken cancellationToken = default)
+        {
+            QueryCalls++;
+            return Task.FromException<AllowanceQueryResponse>(
+                new HttpRequestException("synthetic official readback unavailable"));
+        }
+    }
+
     private static IReadOnlyList<AllowanceProductItem> DraftItems() => [
         new AllowanceProductItem
         {
