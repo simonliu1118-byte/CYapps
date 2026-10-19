@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-17（V0.3.1 正式 Release，tag `cyerp-auto-input-v0.3.1`，由 PR #424 合併進 `main` 後發布；含自動更新 `AppUpdater`／`UpdateCheck`／`MainForm.Update`）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
+> 更新：2026-10-19（V0.3.3 正式 Release，tag `cyerp-auto-input-v0.3.3`：酷澎全自動、酷澎／MO店+ 匯入改完整流程；V0.3.1 起的程式會自動更新到此版）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -17,7 +17,7 @@
 - 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：`SelectCopi08` 選得到 COPI08 或沒開（開始時 `ResolveCopi08Async` 從作業速查開），ERP 不能有對話框；其他作業視窗不算）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice 開發票（一律，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
 - 已實機通過：到「列印標籤」存 PDF（2026-10-14）；存標籤後關「注意」、配送中匯出、帶入兩檔（2026-10-15，停在當時的提示，該提示已拿掉）。
 - 待實測：整條全自動（含 CYInvoice、不開預覽、列印、批次 ERP、表格完成清單）；新竹／7-11 的批次出貨與 PDF；多種配送方式同批；7-11 熱感實印（`SlipImage.FindFramedSlips`，實檔外框 83×122 mm，原尺寸）。
-- 選單：全自動／匯入訂單匯出檔、重新列印寄件單／測試：發票。
+- 選單：全自動／匯入訂單匯出檔、重新列印寄件單。「匯入訂單匯出檔」自 V0.3.2 起就是原「測試：發票」（`ImportMoAsync`，兩檔 → CYInvoice 查詢／開立 → 紙本背景 → 預覽 → ERP；使用者 2026-10-19）。
 
 **B. CYInvoice 發票整合**（功能與呼叫介面見 README「MO店+ 發票（CYInvoice）」；原本三份 docs/CYINVOICE_*_HANDOFF.md 已於 2026-10-15 依使用者要求彙整回 README／本文件／CHANGELOG 並刪除，原文在 Git 歷史 commit `d5244bad` 以前）
 - CYInvoice：V2.6.21 Build 0（Draft PR #445，branch `cyinvoice/feat-autoinput-interface`，commit `283e9f26`），工程測試版、未合併發行；工程包 Artifact 2026-10-18 過期（過期請 CYInvoice 端重出，不可換用正式 V2.6.19）。契約要改時在本專案寫需求交 CYInvoice（PR #445），對方做完出工程包；不在 AUTO 另寫開票。
@@ -30,6 +30,7 @@
 **D. 酷澎全自動（使用者 2026-10-15 先口述流程與截圖，未開始；等真的有酷澎訂單再逐步核對實作）**
 1. 後台 Coupang Wing（wing.coupang.com）。首頁可能隨機出現彈窗（2026-10-15 樣本：「出貨管理升級！設定更方便、期限更清楚」，下方有「今天不再顯示此內容」勾選與「關閉」）。使用者實測：可以不理會，直接點左側「訂單/出貨 › 我的訂單」即可。實作時先照此直接點；若點不到（被遮住、頁面沒換），再按彈窗的「關閉」。
 2. 左側「訂單/出貨 › 我的訂單」，預設在「訂單確認」分頁，訂單列在下方表格：全選 → 右下角「確認訂單」（確認後狀態變為待安排配送）。
+2b. 已實作並實機通過到列印寄件單（V0.3.3，2026-10-19）：入口「酷澎商城 › 全自動」（`MainForm.RunCoupangBatchAsync` → `ShopeeBatchRunner.RunCoupangAsync`：`ConfirmCoupangOrdersAsync`、`ArrangeCoupangShippingAsync`／`ChooseShipMethodAsync`（原生 select 用鍵盤 Home／Down＋Enter，讀 ComboBox 值核對）／`ArrangeChannelAsync`（發票提醒、`ArrangeDialog` 取貨地址＝`HctPickupAddress`、`PickupDetails` 全部成功 → `PrintCoupangSlipsAsync` 熱感 宅配 `CoupangHctLabelScale` 22%／超商 100%，`PrintDialogAsync(sheetsAllowed)`）、配送指示 `DownloadListExcelAsync`）→ `CoupangToErpAsync`（已在 ledger 的略過、CYInvoice 酷澎、非正式環境開預覽）。使用者 2026-10-19 截圖：確認接受訂單／配送處理完成／配送準備下拉（宅配-嘉里、宅配-新竹物流、便利商店-全家、便利商店-7-11）／請確認發票開立需求／安排出貨（取貨地址）／取貨詳情（列印寄件單）／配送指示（待出貨清單、下載Excel）。超商的安排出貨與寄件單畫面尚未看過。
 3. 「配送準備」分頁：每筆有「安排配送」，也可右下角選配送方式（例：宅配 - 嘉里）後「批次安排配送」。細節等有訂單時使用者帶著做再告知。
 4. 「配送指示」分頁：全選 → 「下載Excel」→ 存 Temp → CYInvoice 開發票 → 帶回發票 → ERP 輸入（同 MO店+）。此頁另有右下角「批次列印寄件單」（選配送方式），寄件單列印方式待確認。
 - 發票：紙本或載具是 CYInvoice 依開立入口的既有規則（使用者 2026-10-15）：MO店+ 入口開會員載具，沒統編的不印；酷澎入口一律開紙本，沒統編印無統編版本、有統編印有統編版本。AUTO 目前只對有統編的訂單取 PDF（`CyInvoiceLink.IsPaper` 看 `buyerBan`，是照 MO店+ 寫的）；做酷澎時改為依來源（酷澎全部取 PDF），並先向 CYInvoice 確認 `--autoinput-pdf` 對酷澎無統編的紙本發票也回 `ready`（2026-10-15 的回報寫的是只輸出有公司統編的紙本，B2C 回 `skipped`）。

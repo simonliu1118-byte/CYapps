@@ -613,8 +613,20 @@ internal sealed class ErpAutomationService
     /// one: CY pressed 新增 (F5) itself, or ERP was already in input mode with 部門代號 and
     /// 業務人員 both empty (an existing document always has both).
     /// </summary>
+    /// <summary>
+    /// This run opened the document itself with F5 (a brand-new one): no field of it can hold a
+    /// person's data yet, so text read in a field is replaced instead of stopping. ERP's control
+    /// text can be stale: 發票號碼 read as filled while blank on screen, and every MO店+ order
+    /// of the run failed on it (user LOG and screenshot 2026-10-19).
+    /// </summary>
+    private bool _createdByF5;
+
+    /// <summary>銷貨單別 typed instead of pasted (the retry when ERP gave no sales order number).</summary>
+    private bool _typeOrderType;
+
     private async Task<bool> EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
     {
+        _createdByF5 = false;
         var mode = DetectMode(root);
         if (mode == ErpMode.Input)
         {
@@ -629,6 +641,7 @@ internal sealed class ErpAutomationService
 
         // ERP's own 新增 shortcut in browse mode; no Ribbon coordinates involved.
         InputSender.Press(NativeMethods.VK_F5);
+        _createdByF5 = true;
         _log.Info("state", "new document requested by F5");
 
         var deadline = Environment.TickCount64 + 3500;
@@ -674,7 +687,22 @@ internal sealed class ErpAutomationService
         }
 
         if (string.IsNullOrWhiteSpace(result.SalesOrderNumber))
-            result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+        {
+            try
+            {
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            }
+            catch (InvalidOperationException) when (snapshot.Values.TryGetValue("order_type", out var orderType) && !string.IsNullOrWhiteSpace(orderType))
+            {
+                // No number after a pasted 銷貨單別: typed once more, then waited again.
+                _log.Warn("document", "no sales order number after the pasted order type; typing it again");
+                var field = FieldCatalog.All.First(f => f.Key == "order_type");
+                _typeOrderType = true;
+                try { await SetFieldAsync(root, ErpLayoutResolver.ResolveHeader(root, field.Key), field, orderType, cancellationToken); }
+                finally { _typeOrderType = false; }
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            }
+        }
         LastSalesOrderNumber = result.SalesOrderNumber;
     }
 
@@ -979,7 +1007,7 @@ internal sealed class ErpAutomationService
             if (!sameValue && !string.IsNullOrWhiteSpace(before))
             {
                 // ERP fills these from the customer master; the form value is meant to replace it.
-                if (!CustomerDerivedKeys.Contains(field.Key))
+                if (!CustomerDerivedKeys.Contains(field.Key) && !_createdByF5)
                     throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
                 InputSender.EndBackspace(before.Length + 2);
                 await Delay(80, cancellationToken);
@@ -990,7 +1018,14 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        await PasteTextAsync(focus, value, field.Key, cancellationToken);
+        if (field.Key == "order_type" && _typeOrderType)
+        {
+            // The retry typed: a paste that read back right once left ERP without a sales order
+            // number (user LOG 2026-10-19; pasting works otherwise, so it stays the first try).
+            await Delay(120, cancellationToken);
+            InputSender.UnicodeText(value);
+        }
+        else await PasteTextAsync(focus, value, field.Key, cancellationToken);
         if (InputSender.ImeClosedCount != imeClosedBefore) _log.Info("field", $"ERP IME was open; switched off before typing key={field.Key}");
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);

@@ -1626,80 +1626,36 @@ internal sealed partial class MainForm : Form
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("mo-batch", $"temp folder left: {ex.Message}"); }
     }
 
-    private async Task ImportMoAsync()
-    {
-        if (_automationCts is not null) return;
-        if (!ErpWindowReady()) return;
-        var missing = new[]
-        {
-            _settings.MoOrderType.Length == 0 ? "銷貨單別" : null,
-            _settings.MoCustomerCode.Length == 0 ? "客戶代號" : null,
-            _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
-            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null
-        }.Where(x => x is not null).ToList();
-        if (missing.Count > 0)
-        {
-            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
-        List<string[]> Read(string path)
-        {
-            using var stream = File.OpenRead(path);
-            return Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
-                ? XlsxReader.ReadFirstSheet(stream)
-                : XlsReader.ReadFirstSheet(stream, password);
-        }
-        // Two exports, before and after 批次出貨 (user, 2026-10-13): the batch, and its tracking numbers.
-        using var files = new MoImportForm(Read);
-        if (files.ShowDialog(this) != DialogResult.OK) return;
-        _log.Info("mo", $"exports orders={files.Orders.Count} errors={files.Errors.Count} tracking_filled={files.Orders.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
-
-        var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
-            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, files.Notes);
-    }
-
+    /// <summary>
+    /// 酷澎 › 匯入訂單匯出檔 (user, 2026-10-19: the former 測試 after its download, now the import):
+    /// a DeliveryList → CYInvoice's 酷澎 entry issues (always paper, printed in the background) →
+    /// every order clean (and CYInvoice in production) straight into ERP, otherwise the preview.
+    /// </summary>
     private async Task ImportCoupangAsync()
     {
-        if (_automationCts is not null) return;
+        const string title = "酷澎訂單匯入";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.CoupangOrderType.Length == 0 ? "酷澎銷貨單別" : null,
             _settings.CoupangCustomerCode.Length == 0 ? "酷澎客戶代號" : null,
             _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
-            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
+            _settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath) ? "CYInvoice.exe" : null,
+            _settings.A4Printer.Length == 0 ? "A4 印表機（紙本發票）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
         var path = PickExportFile("選擇酷澎訂單匯出檔（DeliveryList）", "Excel 活頁簿 (*.xlsx)|*.xlsx");
         if (path is null) return;
-
-        CoupangImportResult parsed;
-        try
-        {
-            await using var stream = File.OpenRead(path);
-            parsed = CoupangOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
-        {
-            _log.Warn("coupang", $"export read failed: {ex.GetType().Name}");
-            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        _log.Info("coupang", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
-
-        var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
-            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
-        await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
+        _log.Info("coupang", "import picked a DeliveryList");
+        Session.Begin(AutomationSession.BatchTitle);
+        await CoupangToErpAsync(title, path, []);
     }
 
     private string? PickExportFile(string title, string filter)
@@ -2200,22 +2156,21 @@ internal sealed partial class MainForm : Form
         else if (text == "MO店+")
         {
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            // 全自動 / 匯入＋重印 / 測試 (user, 2026-10-15).
+            // 全自動 / 匯入＋重印 (user, 2026-10-15); the import is the former 測試：發票 (user, 2026-10-19).
             menu.Items.Add("全自動（匯出＋批次出貨＋發票＋列印＋ERP）", null, async (_, _) => await RunMoBatchAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("匯入訂單匯出檔（兩個 .xls）", null, async (_, _) => await ImportMoAsync());
+            menu.Items.Add("匯入訂單匯出檔（兩個 .xls → 發票 → 預覽 → ERP）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試：發票（訂單檔 → CYInvoice 開立 → 紙本 → 預覽）", null, async (_, _) => await TestMoInvoiceAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")
         {
-            // 匯入 / 測試 (user, 2026-10-15); 全自動 waits for real orders to walk through.
+            // 全自動 / 匯入 (user, 2026-10-19: 全自動 from the Wing screenshots).
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
+            menu.Items.Add("全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）", null, async (_, _) => await RunCoupangBatchAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試：正在配送全選下載 Excel → 發票 → 列印 → ERP", null, async (_, _) => await TestCoupangAsync());
+            menu.Items.Add("匯入訂單匯出檔（.xlsx → 發票 → 列印 → ERP）", null, async (_, _) => await ImportCoupangAsync());
+
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         return button;

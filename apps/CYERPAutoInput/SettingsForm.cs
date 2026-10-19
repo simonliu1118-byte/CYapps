@@ -19,6 +19,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _familyLabelScale = new();
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
+    private readonly TextBox _coupangHctLabelScale = new();
     private readonly TextBox _hctPickupAddress = new();
     private ChatRuleEditor? _shopeeChat;
     private ChatRuleEditor? _moChat;
@@ -207,8 +208,11 @@ internal sealed class SettingsForm : Form
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        // 酷澎 宅配 寄件單 on the thermal printer (user, 2026-10-19: 22 %; 超商 print at 100 %).
+        page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
+            ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
         // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
-        var invoiceBox = new GroupBox { Text = "MO店+ 紙本發票（有統編抬頭的訂單，印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
+        var invoiceBox = new GroupBox { Text = "紙本發票樣式（有統編的發票；酷澎無統編一律 A4 雙面；印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
         var invoiceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         foreach (var (code, name) in CyInvoiceLink.PaperStyles) _paperInvoiceStyle.Items.Add(new PaperStyleItem(code, name));
         _paperInvoiceStyle.SelectedItem = _paperInvoiceStyle.Items.Cast<PaperStyleItem>().FirstOrDefault(i => i.Code == _settings.PaperInvoiceStyle) ?? _paperInvoiceStyle.Items[0];
@@ -510,7 +514,15 @@ internal sealed class SettingsForm : Form
             _hctLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_coupangHctLabelScale.Text.Trim(), out var coupangHctScale) || coupangHctScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "酷澎宅配縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 2;
+            _coupangHctLabelScale.Focus();
+            return;
+        }
         _settings.HctLabelScale = hctScale;
+        _settings.CoupangHctLabelScale = coupangHctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
         _settings.GiftRules = GiftRules.Clean(_gifts!.Rules());
         _settings.ShopeeChatRules = ChatRules.Clean(_shopeeChat!.Rules());
