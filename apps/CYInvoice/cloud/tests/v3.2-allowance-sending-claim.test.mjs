@@ -108,7 +108,7 @@ async function fixture(){
   sql.exec("BEGIN IMMEDIATE");
   try{
    const result=parts.map(p=>({meta:{
-    changes:sql.prepare(p.sql).run(...p.args).changes}}));
+    changes:sql.prepare(p.q).run(...p.args).changes}}));
    sql.exec("COMMIT");return result;
   }catch(e){sql.exec("ROLLBACK");throw e;}
  }};
