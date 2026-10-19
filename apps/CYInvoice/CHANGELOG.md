@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.17 — 2026/10/19（3.2-C3c3b Cloud 唯一 g0401 單次發送協調器；工程版）
+
+- 只新增 **internal-only** `allowance-one-shot-coordinator.ts`，沿用 C3c2 的完整官方前查＋`reserved→sending` CAS。CAS 成功後僅允許本次一次 `g0401` 簽名 POST，隨後最多一次原折讓號唯讀 `allowance_query` 查回；沒有額外 Worker route、沒有任意開放低階傳輸器。
+- 即使官方 code=0 且全品項、買方、日期、稅額吻合，也先標記 `full_match_unattributed`，**不**憑相同號碼當作本次送出歸因、不改 Ledger 為 confirmed、不自動重試或換號；逾時／Crash／撤權／撞號全都只允許原號唯讀調查。
+- 覆核查回證據透過 C2 `allowance_reconciliation_checks` 以 SQL active Device／Workspace 約束寫入 append-only Hash 紀錄，避免把原始發票/買方個資放到 Ledger。寫入 Audit 不明一律回未記錄，不影響發送防重試旗標。
+- 使用真 Cloud 原始服務配合 schema16＋未升格 0017/0018 的隔離 SQLite／Fake signed HTTP，覆蓋成功接受但不能確認、回覆遺失、外部占號、撤銷、D1 CAS 回覆遺失及第二次絕對零 POST。
+- 本片不接真 CYID HTTP route、WinForms、Cloudflare D1/Worker、正式 AMEGO 或 Release。後續 C3d 要正式規劃可信歸因與人工安全復核，再做 CYID HTTP 和 Windows；正式版仍 V3.1.0。
+
 ## V3.1.16 — 2026/10/19（3.2-C3c3a Cloud g0401 單次傳輸與完整原號查回；工程版）
 
 - 從 #440 選擇性移植 `cloud/src/amego-allowance-issue.ts` 及隔離測試：只能透過單一簽名 form POST `/json/g0401` 送已凍結且配號的 payload；不自動重試，`code=0` 只表示 accepted_unconfirmed，4040161/4040162 只標示本次明確號碼衝突，不代表允許換號；timeout、傳輸中斷、回覆異常一律 unknown。
