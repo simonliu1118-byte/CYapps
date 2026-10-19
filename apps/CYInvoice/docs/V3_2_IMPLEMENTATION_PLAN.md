@@ -81,7 +81,7 @@
 - **本批不做主管核准授權**：Evidence 不含核准位元，回傳 `approvalRecorded=false`、`numberReserved=false`；下一批 C3b2b 以受控 Worker 端 CYID Admin／active Device 前後驗權，合併 evidence、原本 review revision CAS 與 immutable Grant，確認再進 C3c 單次配號／發送。
 - `drafts/0017`／`0018` 仍不是 canonical migrations，正式 D1 原 schema16、原 Worker、Secrets、Bindings 不動；沒有真光貿財務交易。真環境驗收留 H。
 
-## 3.2-C3b2b 主管核准 CAS（V3.1.13 Build 0）
+## 3.2-C3b2b 主管核准 CAS（V3.1.13 Build 1）
 
 - 使用 #440 主管決策模式，改接 schema16＋`drafts/0017`／`0018` 的獨立 `allowance_applications`、`allowance_execution_approvals`，**絕不把舊 work_items.ALLOWANCE 帶回來**。
 - Manager 需由未來 Worker 真實 CYID Consumer session + verified Device 組成可信 authority；內部 service 前後重驗同一 ADMIN/SUPER_ADMIN 員工、active Device、Workspace、公司卡修訂及當前 review revision。官方核對直接重執行 C3b2a 完整逐原發票核算（不是接受前端 evidence 或 C3b1 預覽作成功旗標），失敗／逾時／待確認則不得寫 Grant。
