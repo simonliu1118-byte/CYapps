@@ -103,6 +103,13 @@
 - **下一批 C3c3** 才將 CAS 和簽名 `g0401` 的單次 POST 合成同一個受控 Worker owner（不能把 C3c2 回傳的 flag 當通用送出許可），並在成功／未知／已知撞號時使用官方原號查詢＋證據逐項確認，繼續 Synthetic Fake HTTP 和不明結果測試。未獲批准不得真送。
 - 正式 `cloud/migrations` 仍以 schema16 為末筆，所有 Cloudflare Worker／D1／Bindings／Secrets 操作待使用者本機 MCP 另行逐步批准，正式 AMEGO 測試與 Release 保留 H。
 
+## 3.2-C3c3a 單次官方傳輸＋完整原號讀回（V3.1.16 Build 0）
+
+- 直接移植 #440 的單次簽名 g0401 transport 與 synthetic contract tests，但**尚不掛 Cloud Worker 路由、不呼叫 C3c2 claim、不觸碰真光貿**。強制已封存、已配號的單筆請求；timeout／斷線／bad response 永遠 unknown，沒有 built-in retry；即使 code=0 仍只算 accepted pending。
+- 新增與 Local B2c 語意一致的 full-frozen readback 檢查：簽名唯讀 allowance_query 以原折讓號讀回 buyer identifier/name、status、日期、正式稅別、所有商品原發票／日期／描述／數量／單價／金額／稅別／稅額，任何缺漏都不視為已完成。保守地視全項吻合為 **unattributed**（相同號碼可能被外部使用），單獨查回結果一律 `safeToAutoConfirm=false`、`canReallocateNumber=false`。
+- **C3c3b 下一批**：設計唯一的受控 Cloud Coordinator，將 C3c2 `reserved→sending` 成功權限與單次 g0401 POST 原子語意耦合；保存 append-only official reconciliation，對 timeout/crash 等未知結果只讀回不重送。已知碰撞與 full-payload match 不可單靠編號自動結案，需具可信發送 attempt 證據。仍不得新增公開路由、改正式 Migration 或真光貿驗證，除非另經批准。
+- 原 schema16、draft0017/0018、CYID Consumer contract、Local 既有入口與正式 Release 均維持原狀；正式 Cloudflare Worker／D1 改動需使用者本機 MCP 獨立工作單。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
