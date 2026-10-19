@@ -134,6 +134,12 @@
 - Cloud preview 一律標記不代表可核准／發送，不將 `invoice_query` 摘要當成官方逐原發票剩餘額。WinForms 不發送 g0401、不修改已 confirmed／sending，timeout／lost reply 提示同申請 ID 查回。
 - 補 WinForms startup smoke (不連線) + Windows Core Fake HTTP preview 測試；正式 Cloud 尚未 schema18/feature opt-in，因此畫面只供工程驗證。C4d 後續從 AllowanceRequestForm 建立 Frozen Request、在提交網路前本機持久化 applicationId 以處理回覆遺失；C Migration 與真實 API 驗收需本機 MCP。
 
+## 3.2-C5 Migration 演練（V3.1.21 Build 0）
+
+- CI 在**有實際資料**的 schema16 CYID_ONLY SQLite 上，先記錄原資料表／觸發器／工作區／裝置，寫入不可變備份，再依序套用 C1 `drafts/0017` + C2 `drafts/0018`，確認原物件不被修改、所有 C1/C2 新表齊全與外鍵／integrity 一致。
+- 模擬 0017／0018 各自半途出錯並 rollback，必須與錯誤前 schema 完全一致。復原方式為獨立備份還原；正式 D1 不能自行以 DROP TABLE 倒退使用者帳務資料。
+- 此次仍**不**放到 `cloud/migrations`，不變更正式 schema 或部署設定；待 C4 UI/Source 版完成、Migration 清單經審核、現有測試改成同時允許 canonical18 後，才另 PR 提交升格。正式操作交使用者本機 Cloudflare MCP；需確認原 database ID、schema16、完整遠端備份、測試環境驗證、維護時段與回退計畫，不能新增替代 Worker/D1。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
