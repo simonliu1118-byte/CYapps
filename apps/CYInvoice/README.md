@@ -6,10 +6,12 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **V3.1.8 Build 0（工程草稿，非正式 Release）**：3.2-C1 先從正式 schema16 建立折讓申請及不可變稽核的 SQL 草稿與隔離測試，未新增 canonical migration、未操作正式 Cloudflare。正式 Release 仍是 V3.1.0。
+- **目前工程 Source／測試包：V3.1.9 Build 0（非正式 Release）**：3.2-C2 以 #440 草稿為來源，加上 `cloud/drafts/0018_allowance_frozen_ledger.sql` 與 schema16 隔離測試。無正式 Cloudflare Migration、官方 AMEGO 操作或 Cloud API 上線；正式 Release 仍為 V3.1.0。
+
+- **V3.1.8 Build 0（前一工程切片，非正式 Release）**：3.2-C1 先從正式 schema16 建立折讓申請及不可變稽核的 SQL 草稿與隔離測試，未新增 canonical migration、未操作正式 Cloudflare。正式 Release 仍是 V3.1.0。
 
 
-- **目前工程 Source／測試包：V3.1.7 Build 1**（engineering，非正式 Release）：3.2-B2d 已把 Local 折讓草稿核准／原號預留接到 Windows 一次性 g0401 操作入口。每次正式送出須由原核准管理員重新登入、明確確認，再由 Core 重驗凍結核准與光貿最新折讓及有效餘額；SQLite 先鎖定 sending，網路逾時／回覆不明僅能原號唯讀查回，不重新發送／換號；confirmed 不自動結案。**Windows 真人驗收、光貿正式測試環境及正式發行尚未完成**。詳見 [V3.1.7 工程說明](release-notes/V3.1.7.txt) 與 [3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
+- **V3.1.7 Build 1 歷史工程版本**（engineering，非正式 Release）：3.2-B2d 已把 Local 折讓草稿核准／原號預留接到 Windows 一次性 g0401 操作入口。每次正式送出須由原核准管理員重新登入、明確確認，再由 Core 重驗凍結核准與光貿最新折讓及有效餘額；SQLite 先鎖定 sending，網路逾時／回覆不明僅能原號唯讀查回，不重新發送／換號；confirmed 不自動結案。**Windows 真人驗收、光貿正式測試環境及正式發行尚未完成**。詳見 [V3.1.7 工程說明](release-notes/V3.1.7.txt) 與 [3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
 
 - **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
 
