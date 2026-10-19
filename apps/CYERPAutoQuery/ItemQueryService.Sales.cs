@@ -285,14 +285,30 @@ internal sealed partial class ItemQueryService
         }
     }
 
-    /// <summary>Clicks the box, pastes the text and reads it back.</summary>
+    /// <summary>
+    /// Clicks the box, pastes the text and reads it back. A click that does not give the box focus
+    /// is tried again (V0.9.0 Build 3 LOG: 客戶代號迄 right after 起, on a condition window opened a
+    /// moment before): the window is brought to the front and the box clicked up to three times.
+    /// </summary>
     private async Task SetReportTextAsync(nint dialog, WindowControl box, string text, string what, CancellationToken cancellationToken)
     {
-        SafeClick(dialog, Win32Automation.Center(box.Rect));
-        await Pace.Delay(150, cancellationToken);
-        var focus = NativeMethods.FocusedControlOfForeground();
-        if (focus != box.Handle && !Win32Automation.IsInside(focus, box.Handle))
-            throw new InvalidOperationException($"{what}沒有取得焦點，已停止。");
+        nint focus = 0;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            if (attempt > 1)
+            {
+                await Pace.Delay(300 * attempt, cancellationToken);
+                Win32Automation.PrepareForeground(dialog, _log);
+            }
+            SafeClick(dialog, Win32Automation.Center(box.Rect));
+            await Pace.Delay(150 * attempt, cancellationToken);
+            focus = NativeMethods.FocusedControlOfForeground();
+            if (focus == box.Handle || Win32Automation.IsInside(focus, box.Handle)) break;
+            _log.Warn("sales", $"{what} focus attempt={attempt} got class={(focus != 0 ? NativeMethods.ClassName(focus) : "-")} foreground=\"{NativeMethods.WindowText(NativeMethods.GetForegroundWindow())}\"");
+            focus = 0;
+        }
+        if (focus == 0)
+            throw new InvalidOperationException($"{what}點了三次都沒有取得焦點，已停止。");
         await PasteIntoAsync(focus, text, cancellationToken);
         var shown = (NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim();
         if (!ItemCodeRules.SameCode(shown, text))
