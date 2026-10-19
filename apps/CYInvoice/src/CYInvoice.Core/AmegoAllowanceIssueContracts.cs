@@ -92,3 +92,29 @@ public sealed class AllowanceIssueRequest
     public decimal TotalAmount { get; init; }
 }
 
+
+// g0401 is a one-shot write; /allowance_query is read-only.
+// The caller must durably mark 'sending' before IssueAllowanceOnceAsync.
+public interface IAmegoAllowanceGateway
+{
+    Task<AllowanceIssueResponse> IssueAllowanceOnceAsync(
+        AllowanceIssueRequest request, CancellationToken cancellationToken = default);
+    Task<AllowanceQueryResponse> QueryAllowanceAsync(
+        string allowanceNumber, CancellationToken cancellationToken = default);
+}
+
+public sealed record AllowanceIssueResponse(int Code, string Message);
+
+public sealed record AllowanceQueryItem(
+    string AllowanceNumber,
+    string InvoiceType,
+    int InvoiceStatus,
+    string AllowanceDate,
+    int AllowanceType,
+    string BuyerIdentifier,
+    string BuyerName,
+    string TaxAmount,
+    string TotalAmount,
+    long CancelDate,
+    JsonElement ProductItems);
+public sealed record AllowanceQueryResponse(int Code, string Message, AllowanceQueryItem Data);

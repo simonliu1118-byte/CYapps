@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.6 — 2026/10/19（3.2-B2c Core 單次 g0401 HTTP 與原號唯讀查回；engineering）
+
+- 獨立 Patch `VERSION=3.1.6`／`BUILD=0`，正式 Release 仍是 V3.1.0。
+- 光貿 `g0401` 正式格式的簽名傳輸已加入 Core `IAmegoAllowanceGateway`；**一次性直接 POST，禁用通用 PostAsync 在 code 15 後的自動重試**。code=0 不等於官方已完成。加入 `allowance_query` 原號唯讀查回。
+- 新增尚未接 Windows UI 的 `LocalAllowanceOneShotService`：由後續 caller 提供真 Local 管理員與光貿 preflight，先執行 SQLite reserved→sending CAS，才送最多一次官方請求。逾時、未知回覆或程式重開只讀查原號，不盲重送、不換號；確定 4040161／4040162 僅記錄碰撞。官方回查完成且凍結買方、日期、原發票品項、未稅與稅額完整一致才轉 confirmed。
+- SQLite／模擬 HTTP 回歸涵蓋簽名表單、零重試、帳務重入拒絕、超時回復、明確撞號與原號查回；尚未執行真 g0401、Cloudflare 遷移或正式 Release。下一批才接有權限的主管正式操作與實機驗證。
+
 ## V3.1.5 Build 1 — 2026/10/19（3.2-B2b Local 已核准折讓配號與固定 g0401 草稿；engineering）
 
 - 新獨立 Patch VERSION=3.1.5、BUILD=1，上一正式 Release 仍 V3.1.0。

@@ -1,0 +1,12 @@
+CYInvoice V3.1.6 Build 0 — V3.2-B2c Local 折讓單次 g0401 傳輸與原號唯讀查回（工程預覽）
+
+本批是中等大小的一張獨立工程 Patch，上一正式 Release 仍為 V3.1.0。沒有任何正式 Cloudflare D1／Worker／Secrets 變更，也沒有執行真實光貿折讓交易。
+
+- 新增 IAmegoAllowanceGateway／AmegoClient 的 g0401 單次簽名傳輸與 allowance_query 原號唯讀查回契約。g0401 直接發送一次 POST，不使用原本會因 code=15 時間誤差而重試的通用 PostAsync。code=0 只代表 API 已接受，不代表折讓已由光貿完成。
+- 新增 LocalAllowanceOneShotService（Core，**未接入可操作的 Windows 正式送出 UI**），使用既有本機 SQLite ledger：發送前先執行外部授權與即時官方 preflight，再 CAS 將 reserved 持久切為 sending，之後最多呼叫一次 g0401。逾時、HTTP 異常、取消、回覆缺資料或官方結果不明，均維持原號 sending，不准重新 POST 或換號。
+- g0401 明確回覆 4040161／4040162 時，只記錄 occupied_external，不自動分配下一號；受控遞增需在後續批次先查清原號是否為本次成功結果。對非重號 API 拒絕也不自動再次呼叫。
+- 原號 allowance_query 只在官方 D0401/B0401 已完成（status=99）、折讓單號、日期、買方、含稅／未稅金額與各品項均與本地不可變凍結內容相符後，將 sending CAS 轉 confirmed。官方缺品項、不同買方、金額、狀態或查不到，維持 pending；程式重開可以執行**純唯讀**回查，但不會補發交易。
+- 隔離測試使用假 AMEGO HTTP 與臨時 SQLite，覆蓋一次 POST、code 15 不重試、超時不重送、重開後拒絕重入、明確撞號、權限 preflight 失敗零 POST、完整官方一致才 confirmed。正式光貿測試環境驗收後續另做。
+- 目前尚未將經員工／主管核准的 Windows 正式操作接入新 Core 流程；這是刻意的安全上線邊界。下一批 B2d 要將主管身分／光貿即時查詢完整串至正式 UI，並在光貿測試環境驗證後才允許真實開立，不能把僅有 Core 能力稱為已上線。
+
+VERSION=3.1.6、BUILD=0；正式 Release V3.1.0 不變。延後驗收繼續使用 docs/POST_RELEASE_ACCEPTANCE.md 唯一檔案。Cloudflare 一律由使用者本機 Work MCP，在需要正式 D1／Worker 時另給工作單。
