@@ -60,6 +60,16 @@ internal static class SalesReportLayout
             .Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Whether a box shown after 即時報表 is ERP's 「nothing matched」 notice rather than an error.
+    /// V0.9.0 Build 6 LOG (COPR16 for a customer without 銷退單): caption 「銷退單明細表[公司]」,
+    /// body 「報表沒有資料」, one OK button. The words may be in the body (read apart from the
+    /// caption) or in the whole box's text; a body with nothing in it on a box captioned with the
+    /// report and a single button counts too. Any other text is a real message.
+    /// </summary>
+    public static bool IsNoDataNotice(string text, string body, int buttons, bool captionIsReport) =>
+        IsNoData(body) || IsNoData(text) || (body.Length == 0 && buttons == 1 && captionIsReport);
+
     /// <summary>The workbook path named in ERP's message, or null.</summary>
     public static string? PathIn(string message)
     {

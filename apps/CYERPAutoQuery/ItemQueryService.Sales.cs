@@ -150,6 +150,23 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task<bool> CloseReportWindowsAsync(ErpReport report, IProgress<string>? progress, bool leftover)
     {
+        // ERP message boxes captioned with the report, left by an earlier stop (V0.9.0 Build 6 LOG:
+        // three hidden ones after three failures), are closed first.
+        var boxes = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            // Any 明細表's box (COPR16's left behind would cover COPR15's report too).
+            if (Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)) &&
+                (report.IsTitle(NativeMethods.WindowText(hwnd)) || NativeMethods.WindowText(hwnd).Contains("明細表", StringComparison.Ordinal)))
+                boxes.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var box in boxes)
+        {
+            _log.Info("sales", $"closing {report.Code} message box visible={NativeMethods.IsWindowVisible(box)}");
+            NativeMethods.PostMessage(box, NativeMethods.WM_CLOSE, 0, 0);
+        }
+        if (boxes.Count > 0) await Task.Delay(300);
         var open = FindReportWindows(report).OrderBy(IsReportConditions).ToList();
         if (open.Count == 0) return true;
         if (leftover) progress?.Report($"ERP：關閉開著的{report.Title}…");
@@ -394,10 +411,17 @@ internal sealed partial class ItemQueryService
                 var text = await ReadErpMessageAsync(box);
                 var body = await ReadMessageBodyAsync(box);
                 var buttons = Win32Automation.EnumerateChildren(box).Count(c => c.Visible && IsButtonClass(c.ClassName));
-                var emptyNotice = body.Length == 0 && buttons == 1 && report.IsTitle(NativeMethods.WindowText(box));
-                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)} body={_log.Value(body)} buttons={buttons} empty_notice={emptyNotice}");
-                if (!emptyNotice && !SalesReportLayout.IsNoData(text))
-                    await ThrowErpMessageAsync(box, $"{report.Title}按「即時報表」後，");
+                var noData = SalesReportLayout.IsNoDataNotice(text, body, buttons, report.IsTitle(NativeMethods.WindowText(box)));
+                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)} body={_log.Value(body)} buttons={buttons} no_data={noData}");
+                if (!noData)
+                {
+                    // Close it before stopping: a box left behind (V0.9.0 Build 6 LOG) covered the next
+                    // report window and the next query could not click it.
+                    var shown = string.Join(" ", new[] { body, text }.Where(t => t.Length > 0 && t != "?"));
+                    await DismissMessageAsync(box, cancellationToken);
+                    throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
+                        $"{report.Title}按「即時報表」後，ERP 顯示了訊息：「{shown}」\n查詢已停止（訊息已按 OK 關閉）。");
+                }
                 await DismissMessageAsync(box, cancellationToken);
                 _log.Info("sales", $"{report.Code} no data; message closed");
                 return 0;

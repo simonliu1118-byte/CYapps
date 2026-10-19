@@ -234,4 +234,18 @@ public class SalesOrderQueryTests
         Assert.False(SalesReportLayout.IsNoData("匯出失敗"));
         Assert.False(SalesReportLayout.IsNoData(""));
     }
+
+    [Fact]
+    public void NoDataNoticeFromTheUsersLog()
+    {
+        // V0.9.0 Build 6 LOG, COPR16 for a customer without 銷退單: the whole-box read only caught
+        // the caption, the body read the notice.
+        Assert.True(SalesReportLayout.IsNoDataNotice("劉 退 單 明 細 表 [ 志 遺 醫 )", "0 報 表 沒 有 資 料 ;", 1, captionIsReport: true));
+        Assert.True(SalesReportLayout.IsNoDataNotice("銷 退 單 明 細 表 [ 志 遺 器 . X 報 表 沒 有 資 料 ;", "?", 1, captionIsReport: true));
+        Assert.True(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "", 1, captionIsReport: true));
+        // Real messages still stop.
+        Assert.False(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "連線逾時", 1, captionIsReport: true));
+        Assert.False(SalesReportLayout.IsNoDataNotice("其他程式", "", 1, captionIsReport: false));
+        Assert.False(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "", 2, captionIsReport: true));
+    }
 }
