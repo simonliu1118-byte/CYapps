@@ -29,7 +29,7 @@ function obj(x:unknown):Record<string,unknown>{
  return x as Record<string,unknown>;
 }
 function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
- let request:Record<string,unknown>;
+ let request:Record<string,unknown>={};
  try{request=obj(JSON.parse(f.unnumberedTemplateJson));}
  catch{fail("TEMPLATE_INVALID");}
  if(request.AllowanceNumber!==""||String(request.AllowanceType)!=="2"||
@@ -37,7 +37,7 @@ function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
      !Array.isArray(request.ProductItem)||request.ProductItem.length<1||
      request.ProductItem.length>50)fail("TEMPLATE_INVALID");
  let net=0n,tax=0n;
- for(const raw of request.ProductItem){
+ for(const raw of request.ProductItem as unknown[]){
   const line=obj(raw);
   if(line.OriginalInvoiceNumber!==f.originalInvoiceNumber||
      day(line.OriginalInvoiceDate)!==originDay||
@@ -45,7 +45,7 @@ function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
      line.OriginalDescription.length<1||line.OriginalDescription.length>256||
      !["1","2","3"].includes(String(line.TaxType)))
    fail("SOURCE_ITEM_INVALID");
-  let quantity:bigint,amount:bigint,itemTax:bigint;
+  let quantity=0n,amount=0n,itemTax=0n;
   try{
    quantity=fixed7(line.Quantity);
    fixed7(line.UnitPrice,true);
@@ -109,14 +109,14 @@ export async function reconcileOfficialAllowanceForOriginal(
     history.taxAmount===null||history.cancelDate===null||
     seen.has(history.allowanceNumber))
     fail("ALLOWANCE_SUMMARY_INCOMPLETE");
-  seen.add(history.allowanceNumber);
+  seen.add(history.allowanceNumber!);
   const row=await queryOfficialAllowanceDetail(
-   credentials.sellerInvoice,credentials.appKey,history.allowanceNumber,
+   credentials.sellerInvoice,credentials.appKey,history.allowanceNumber!,
    transport,clock);
   checkedAt(row.checkedAtUtc,clock());
-  if(row.allowanceDay!==history.allowanceDate)
+  if(row.allowanceDay!==history.allowanceDate!)
    fail("ALLOWANCE_DATE_MISMATCH");
-  let summaryNet:bigint,summaryTax:bigint;
+  let summaryNet=0n,summaryTax=0n;
   try{
    summaryNet=fixed7(history.totalAmount);
    summaryTax=fixed7(history.taxAmount);
