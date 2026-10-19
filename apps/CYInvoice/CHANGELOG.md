@@ -2,7 +2,7 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.12 Build 1 — 2026/10/19（3.2-C3b2a 官方逐原發票折讓證據，工程測試）
+## V3.1.12 Build 2 — 2026/10/19（3.2-C3b2a 官方逐原發票折讓證據，工程測試）
 
 - 以 #440 唯讀 `allowance_query` 邏輯與光貿現行公開 API 文件為依據，新增 `amego-allowance-detail.ts`：簽名唯讀 POST、不重試、最多 256 KiB、逐商品原發票號／原發票日期／未稅金額與稅額嚴格驗證。正式折讓號碼與每筆明細嚴格核對；待辦或結果不明拒絕當作完成證據。
 - 新增內部 `allowance-official-proof.ts`：先取 `invoice_query` 最新官方折讓編號摘要，再逐號 `allowance_query` 查完整商品；使用 7 位整數固定小數只計入**本原發票**品項，累積有效已折額，明確且完整作廢才釋放額度。要求官方各筆明細總額與摘要相符，來源或凍結品項／日期不符、待處理／漏欄／超額一律 fail-closed。
@@ -10,6 +10,8 @@
 - 本批沒有修改 `cloud/migrations`，正式環境仍 schema16；沒有 Cloudflare 修改、真光貿呼叫、g0401/g0501 或正式 Release。
 
 - Build 1：第一輪 Cloud Validate／tsc 嚴格型別檢查發現新 evidence 模組的 nullable 及 definitely assigned 註記不完整；已在同一切片修正來源型別，不改計算與網路安全語意。
+
+- Build 2：CI 在前一輪只剩 invoiceDate nullable 型別未收斂（TS2345），來源已明確在日期驗證後套用非空型別，不改官方查詢、數值或權限語意。
 
 ## V3.1.11 — 2026/10/19（3.2-C3b1 Cloud 主管光貿唯讀預覽；engineering）
 
