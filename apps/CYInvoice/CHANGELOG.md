@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.19 — 2026/10/19（3.2-C4b Windows CYID 折讓客戶端；工程版）
+
+- Windows Core `CloudAllowanceClient` 以現行 Device bearer、HTTPS、CYID 本次帳密與 no redirect 契約使用新 Cloud Allowance API，提供 Create/List/Review/Approve/Reserve/Status 的分機操作；失去任何 HTTP／D1 回覆只允許以**同一 applicationId** 狀態查回，不自動重建申請、不盲目重送。
+- 所有回覆嚴格限制欄位、狀態、revision、Approved vs 真光貿確認旗標；預留單號不視為可自行呼叫 g0401。雲端申請內容與明文帳密不在客戶端持久化，仍沿用既有 DPAPI Device token。
+- 新 `CloudAllowanceClientTests` 使用假 HttpClient Response 驗證 HTTPS、Device bearer、無 Workspace 偽造、同一申請 ID／狀態、錯誤不重試及不得以假官方 confirmed 騙過 UI；併入正式 Windows Cloud regression。
+- 此批尚未把新的跨機操作入口整合到正式 WinForms 表單；另批 C4c 接 UI 和真 Windows DPI/雙裝置測試。原 Worker flag 未開啟、原 schema16／正式發行不變。
+
 ## V3.1.18 — 2026/10/19（3.2-C4 Cloud CYID 折讓申請／主管覆核 API；工程版）
 
 - 新增 opt-in `/v1/allowances/{create,get,list,review,withdraw,preview,approve,reserve,status}`，安全綁現行 `withCyIdSession` 登入、合法 Device bearer、活動 Workspace、CYID 主管身份重新驗證及 D1 原 C1/C2 獨立資料表，保留專案單一身份來源；一般 USER 僅查自己申請，經授權主管可列出／認領覆核、重新查官方資料、核准並預留號碼。
