@@ -74,6 +74,13 @@
 - **C3b2 下一片**：仍利用 #440 官方驗證來源，但要先建立每筆原號／原發票配對的完整安全證據，再對 frozen items、含稅有效餘額及 manager review 作 CAS 授權與 immutable Grant；必須由 Worker trusted gateway 綁現行 CYID/Device，不能直接相信前端 supplied evidence。
 - **C3c** 才可接 Ledger `reserved→sending`／單次傳輸與原號唯讀查回；C4 接 Windows 跨機 UI；Cloudflare D1／Worker 操作另經本機 MCP 批准。
 
+## 3.2-C3b2a 官方逐原發票驗證（V3.1.12 Build 0）
+
+- 依 #440 舊 `amego-allowance-query.ts`、最新光貿文件新增可解析官方折讓完整明細的**唯讀**介面。對同一 `invoice_query` 列出各折讓號逐一執行 `allowance_query`，按每筆原發票號與日期取未稅金額／稅額；不可將可能混合多張原發票的摘要總額直接當本發票的有效已折額。
+- 原申請 frozen 資料要核對原發票日期、所有編輯行、七位數金額及合計；官方折讓編號、日期、全部行合計、狀態與已作廢／待處理都須嚴格核對，才產出內部 evidence hash。未知歷史、pending、不同來源或超過可折上限一律 fail-closed；最多查詢 16 筆歷史以限制每次執行成本，超出需另設受控批次，不得默默忽略。
+- **本批不做主管核准授權**：Evidence 不含核准位元，回傳 `approvalRecorded=false`、`numberReserved=false`；下一批 C3b2b 以受控 Worker 端 CYID Admin／active Device 前後驗權，合併 evidence、原本 review revision CAS 與 immutable Grant，確認再進 C3c 單次配號／發送。
+- `drafts/0017`／`0018` 仍不是 canonical migrations，正式 D1 原 schema16、原 Worker、Secrets、Bindings 不動；沒有真光貿財務交易。真環境驗收留 H。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
