@@ -440,6 +440,55 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
+    /// 酷澎 › 測試：確認訂單 (user, 2026-10-19, the first part of 酷澎 全自動): Wing 我的訂單 › 訂單確認
+    /// in a Chrome window of its own, every order accepted, then 配送準備 opened and logged. 安排配送
+    /// and what follows wait for the user's next screenshots.
+    /// </summary>
+    private async Task TestCoupangConfirmAsync()
+    {
+        const string title = "酷澎 確認訂單測試";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (MessageBox.Show(this,
+                "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）。\n\n" +
+                "1. 訂單確認：全選 → 確認訂單 → 核對「確認接受訂單」列出的訂單編號 → 確認 → 配送處理完成 › 確認\n" +
+                "2. 重新整理，還有訂單就再做一輪（一頁 10 筆）\n" +
+                "3. 打開「配送準備」，把畫面記進 LOG 後停下（安排配送之後的步驟還沒做）\n\n" +
+                "確認訂單後訂單會變成待安排配送，無法自動復原。網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
+                title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        List<string>? accepted = null;
+        string? stopped = null;
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+        try { accepted = await runner.ConfirmCoupangOrdersAsync(SetStatus); }
+        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
+        catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
+        finally
+        {
+            Session.Unpin();
+            Session.End(stopped is null ? AutomationOutcome.Done : AutomationOutcome.Stopped);
+            _shopeeBatchRunning = false;
+            SetStatus(string.Empty);
+        }
+        if (stopped is not null)
+        {
+            _log.Warn("coupang-batch", $"confirm stopped: {stopped}");
+            Alarm(needsPerson: true);
+            MessageBox.Show(this, $"酷澎確認訂單停止：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        MessageBox.Show(this, accepted!.Count == 0
+                ? "訂單確認沒有訂單；已打開配送準備。"
+                : $"已確認 {accepted.Count} 筆訂單：\n{string.Join("\n", accepted)}\n\n已打開配送準備（畫面已記進 LOG）。",
+            title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>
     /// 酷澎 › 測試 (user, 2026-10-15): on the 酷澎 page the user opened (配送指示), 「下載Excel」 →
     /// Temp → CYInvoice's 酷澎 entry issues (always paper) → printing in the background → ERP,
     /// whatever CYInvoice's environment (the user switches it). Every order clean → straight to ERP;

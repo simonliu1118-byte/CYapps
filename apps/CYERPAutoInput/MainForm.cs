@@ -2177,6 +2177,7 @@ internal sealed partial class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試：確認訂單 → 配送準備", null, async (_, _) => await TestCoupangConfirmAsync());
             menu.Items.Add("測試：正在配送全選下載 Excel → 發票 → 列印 → ERP", null, async (_, _) => await TestCoupangAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

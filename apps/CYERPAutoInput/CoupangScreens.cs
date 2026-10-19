@@ -39,4 +39,65 @@ internal static class CoupangScreens
         static int? Read(string t, string pattern) => Regex.Match(t, pattern) is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
         return (Read(text, @"共(\d+)筆"), Read(text, @"已選(\d+)筆"));
     }
+
+    /// <summary>
+    /// A 訂單狀態 card (訂單確認／配送準備／配送指示／正在配送／配送完成, user's screenshots
+    /// 2026-10-19): its caption and the count shown large to its right; null when not read.
+    /// </summary>
+    public static (OcrBox Label, int Count)? StatusCard(IReadOnlyList<OcrBox> boxes, string name)
+    {
+        var label = boxes.Where(b => C(b).TrimEnd('?', '？', 'ⓘ') == name).OrderBy(b => b.Top).FirstOrDefault();
+        if (label is null) return null;
+        var mid = label.Top + label.Height / 2;
+        var count = boxes.Where(b => Regex.IsMatch(C(b), @"^\d{1,4}$") && b.Left > label.Right && b.Left - label.Right < 340 &&
+                                     b.Top <= mid + 30 && b.Bottom >= mid - 30)
+            .OrderBy(b => b.Left).FirstOrDefault();
+        return count is null ? null : (label, int.Parse(C(count)));
+    }
+
+    /// <summary>The 訂單編號 column header under a list title (「待確認訂單清單」, 「待安排配送清單」…).</summary>
+    public static OcrBox? ListHeader(IReadOnlyList<OcrBox> boxes, string title)
+    {
+        var heading = boxes.Where(b => C(b).StartsWith(title, StringComparison.Ordinal)).OrderBy(b => b.Top).FirstOrDefault();
+        return heading is null ? null : boxes.Where(b => C(b) == "訂單編號" && b.Top > heading.Bottom).OrderBy(b => b.Top).FirstOrDefault();
+    }
+
+    private static readonly Regex OrderNumber = new(@"^[•·‧\-]?(\d{12,16})$", RegexOptions.CultureInvariant);
+
+    /// <summary>The 訂單編號 shown in the list's column, top to bottom.</summary>
+    public static List<string> ListedOrders(IReadOnlyList<OcrBox> boxes, OcrBox header) =>
+        boxes.Where(b => b.Top > header.Bottom && b.CenterX > header.Left - 80 && b.CenterX < header.Right + 80 && OrderNumber.IsMatch(C(b)))
+            .OrderBy(b => b.Top).Select(b => OrderNumber.Match(C(b)).Groups[1].Value).Distinct().ToList();
+
+    /// <summary>The 「確認訂單」 button at the bottom right (not the hint 「點擊確認訂單後…」).</summary>
+    public static OcrBox? ConfirmOrdersButton(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Where(b => C(b) == "確認訂單").OrderByDescending(b => b.Top).ThenByDescending(b => b.Left).FirstOrDefault();
+
+    /// <summary>A dialog under <paramref name="title"/>: the boxes below it within its width.</summary>
+    private static List<OcrBox> Dialog(IReadOnlyList<OcrBox> boxes, OcrBox title) =>
+        boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 420 && b.Left >= title.Left - 40 && b.Right <= title.Left + 520).ToList();
+
+    /// <summary>
+    /// 「確認接受訂單」 (after 確認訂單): how many orders it names (「您想接受以下n個訂單…」), the
+    /// 訂單編號 it lists, and its 確認 button; null when not shown.
+    /// </summary>
+    public static (int? Count, List<string> Orders, OcrBox Confirm)? AcceptDialog(IReadOnlyList<OcrBox> boxes)
+    {
+        var title = boxes.FirstOrDefault(b => C(b) == "確認接受訂單");
+        if (title is null) return null;
+        var inside = Dialog(boxes, title);
+        var confirm = inside.Where(b => C(b) == "確認").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (confirm is null) return null;
+        var text = string.Concat(inside.OrderBy(b => b.Top / 12).ThenBy(b => b.Left).Select(C));
+        int? count = Regex.Match(text, @"接受以下(\d+)個訂單") is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
+        var orders = inside.Where(b => OrderNumber.IsMatch(C(b))).OrderBy(b => b.Top).Select(b => OrderNumber.Match(C(b)).Groups[1].Value).Distinct().ToList();
+        return (count, orders, confirm);
+    }
+
+    /// <summary>The 確認 of 「配送處理完成。」 (shown after accepting); null when not shown.</summary>
+    public static OcrBox? DoneDialogConfirm(IReadOnlyList<OcrBox> boxes)
+    {
+        var title = boxes.FirstOrDefault(b => C(b).StartsWith("配送處理完成", StringComparison.Ordinal));
+        return title is null ? null : Dialog(boxes, title).Where(b => C(b) == "確認").OrderByDescending(b => b.Top).FirstOrDefault();
+    }
 }

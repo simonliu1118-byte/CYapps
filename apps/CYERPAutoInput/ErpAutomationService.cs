@@ -621,6 +621,9 @@ internal sealed class ErpAutomationService
     /// </summary>
     private bool _createdByF5;
 
+    /// <summary>銷貨單別 typed instead of pasted (the retry when ERP gave no sales order number).</summary>
+    private bool _typeOrderType;
+
     private async Task<bool> EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
     {
         _createdByF5 = false;
@@ -684,7 +687,22 @@ internal sealed class ErpAutomationService
         }
 
         if (string.IsNullOrWhiteSpace(result.SalesOrderNumber))
-            result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+        {
+            try
+            {
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            }
+            catch (InvalidOperationException) when (snapshot.Values.TryGetValue("order_type", out var orderType) && !string.IsNullOrWhiteSpace(orderType))
+            {
+                // No number after a pasted 銷貨單別: typed once more, then waited again.
+                _log.Warn("document", "no sales order number after the pasted order type; typing it again");
+                var field = FieldCatalog.All.First(f => f.Key == "order_type");
+                _typeOrderType = true;
+                try { await SetFieldAsync(root, ErpLayoutResolver.ResolveHeader(root, field.Key), field, orderType, cancellationToken); }
+                finally { _typeOrderType = false; }
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            }
+        }
         LastSalesOrderNumber = result.SalesOrderNumber;
     }
 
@@ -1000,10 +1018,10 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        if (field.Key == "order_type")
+        if (field.Key == "order_type" && _typeOrderType)
         {
-            // Typed, not pasted: ERP makes the sales order number from 銷貨單別's keystrokes. A
-            // paste that read back right still left ERP without a number (user LOG 2026-10-19).
+            // The retry typed: a paste that read back right once left ERP without a sales order
+            // number (user LOG 2026-10-19; pasting works otherwise, so it stays the first try).
             await Delay(120, cancellationToken);
             InputSender.UnicodeText(value);
         }
