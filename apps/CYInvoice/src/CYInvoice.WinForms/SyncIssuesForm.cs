@@ -1031,7 +1031,7 @@ internal sealed class SyncIssuesForm : Form
                 "confirmed" => "已依官方原號及完整明細核對完成",
                 "occupied_external" => "官方明確占號，已鎖定；不得自動換號",
                 _ => "未知狀態，禁止操作"
-            });
+            }));
         }
         rows.Add(new("處理管理員", EmployeeDisplay(review?.HandlerEmployeeNo ?? "")));
         rows.Add(new("人工處理時間", review?.ManualCompletedUtc is { } completed

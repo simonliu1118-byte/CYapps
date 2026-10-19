@@ -39,7 +39,7 @@
 - **本片的 Core 發送能力尚未接 Windows 可操作入口，也沒有真光貿交易**。下一批 3.2-B2d 實作主管原權限＋AM EGO 最新官方 preflight 的正式 caller 接線／可取消前後控制、原號安全狀態提示；真測試環境必須明確批准並隔離，不在一般工程 CI 操作正式帳務。
 - Cloudflare 仍最後由使用者本機 Work MCP，未動正式 D1／Worker／Secrets。
 
-## 3.2-B2d 工程交付（V3.1.7 Build 0）
+## 3.2-B2d 工程交付（V3.1.7 Build 1）
 
 - WinForms 沿原 Local 核准待辦入口，按 SQLite ledger 的 reserved 進入「正式送出折讓（單次）」、sending 只開放原號唯讀查回；未預留仍可預留，confirmed／occupied_external 不開放再次送出。
 - 同一位原核准管理員重新輸入帳密並明確確認實際交易後，Core 再檢查同一未結案工作項目／公司／環境／主管／核准時間與不可變草稿；發送前另以光貿 invoice_query 查官方完整折讓及餘額。凡摘要、明細或帳務事實不同即在 reserved 停下，禁止 POST。

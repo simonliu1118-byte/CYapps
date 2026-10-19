@@ -1,4 +1,6 @@
-CYInvoice V3.1.7 Build 0 — V3.2-B2d Local Windows 單次折讓正式入口（工程預覽）
+CYInvoice V3.1.7 Build 1 — V3.2-B2d Local Windows 單次折讓正式入口（工程預覽）
+
+Build 1：首次 Windows CI 找到待辦詳情 switch 表達式未關閉 rows.Add，已補上右括號，按同項返修規則維持 Patch 3.1.7。
 
 上一正式 Release 為 V3.1.0。本批只修改 Windows／Core、隔離測試與工程文件，沒有執行真實光貿交易，也沒有 Cloudflare D1／Worker／Bindings／Secrets 正式操作。
 
@@ -9,4 +11,4 @@ CYInvoice V3.1.7 Build 0 — V3.2-B2d Local Windows 單次折讓正式入口（�
 - 新隔離回歸測試驗證錯誤主管身分零官方 preflight／零 POST、官方折讓歷史變動零 POST、首次 g0401 未確認後不可再 POST，原號回查仍保留待確認。
 - 本工程版本仍待 Windows 真機、100%／125%／150% DPI、光貿測試環境真 g0401、後續占號受控恢復、Cloud 與 g0501；不可把合成 CI 視為正式帳務成功。
 
-VERSION=3.1.7、BUILD=0。正式 Release 保持 V3.1.0；V3.0／V3.1 唯一延期驗收檔案 docs/POST_RELEASE_ACCEPTANCE.md 不變。
+VERSION=3.1.7、BUILD=1。正式 Release 保持 V3.1.0；V3.0／V3.1 唯一延期驗收檔案 docs/POST_RELEASE_ACCEPTANCE.md 不變。
