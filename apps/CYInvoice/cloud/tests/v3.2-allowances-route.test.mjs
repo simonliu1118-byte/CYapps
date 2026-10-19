@@ -90,6 +90,7 @@ async function fixture(){
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}
   async first(){return sql.prepare(this.q).get(...this.args)??null;}
+  async all(){return {results:sql.prepare(this.q).all(...this.args)};}
   async run(){
    if(this.q.includes("UPDATE allowance_number_ledger")&&beforeSend){
     const cb=beforeSend;beforeSend=null;cb();
