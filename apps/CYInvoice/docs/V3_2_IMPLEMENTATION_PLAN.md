@@ -88,6 +88,13 @@
 - 核准 Grant 使用 `D1.batch` 交易內的 `INSERT SELECT` CAS 約束，後續 `UPDATE application status=approved, revision+1` 必須看到同筆 immutable grant，失敗不重送；對不確定結果只進入原 ID readback，禁止產生額外配號／g0401。SQLite／合成 HTTP 測試覆蓋角色、revocation、公司卡輪替與稽核不可變。
 - **這還不是公開 Cloud API**：C3c 再回收 #440 受控 Ledger／單次送出，HTTP route 必須待 trusted CYID/Device 驗證相容並另批測試；正式 schema17／18 升格與 Cloudflare 原 D1/Worker 由使用者本機 MCP 受控分開完成。真實 AMEGO 驗收留 H。
 
+## 3.2-C3c1 首次 Cloud Ledger 預留（V3.1.14 Build 0）
+
+- 使用歷史 #440 的每日序號編碼（999 後以 A00 到 ZZZ 繼續），重接正式 schema16＋review `drafts/0017`／`0018` 的 `allowance_number_ledger`，僅允許已 approved revision＋有效且相同 CYID 主管/Device 的 Grant 進行第一次 attempt=1，使用 D1 單 statement INSERT SELECT + SQL-time MAX(sequence)+1 + UNIQUE 做跨申請序號 CAS。
+- 保存相同 application_id 的首次 reserved 只可回讀原號；`sending`、`confirmed`、`occupied_external` 及其他未確認結果在本片全部不得另配新號。只有後續受控撞號確認、官方原號唯讀查回與再次核准證據全部成立時，C3c2+ 才能研究 attempt2；絕不自動換號。
+- 以 Synthetic SQLite 檢查同張發票合法不同申請、跨裝置搶當日序號、字母尾號界線、Grant 過期/公司變更/Device 撤權/不同主管拒絕與失去寫入回覆時 readback。預留**不是實際送出授權**，下階段需先重新查最新官方餘額、重新驗權後 CAS `reserved→sending`，再單次 g0401 和原號證據查回。
+- 暫不安裝 HTTP route、正式 D1 Migration、任何 AMEGO transaction、Cloudflare Worker／Secrets 變更；真環境 H 驗收與 V3.2.0 Release 另行批准。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
