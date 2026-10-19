@@ -236,16 +236,20 @@ public class SalesOrderQueryTests
     }
 
     [Fact]
-    public void NoDataNoticeFromTheUsersLog()
+    public void NoticeAfterRunFromTheUsersLog()
     {
+        const SalesReportLayout.ReportNotice NoData = SalesReportLayout.ReportNotice.NoData, Again = SalesReportLayout.ReportNotice.RunAgain, Error = SalesReportLayout.ReportNotice.Error;
         // V0.9.0 Build 6 LOG, COPR16 for a customer without 銷退單: the whole-box read only caught
-        // the caption, the body read the notice.
-        Assert.True(SalesReportLayout.IsNoDataNotice("劉 退 單 明 細 表 [ 志 遺 醫 )", "0 報 表 沒 有 資 料 ;", 1, captionIsReport: true));
-        Assert.True(SalesReportLayout.IsNoDataNotice("銷 退 單 明 細 表 [ 志 遺 器 . X 報 表 沒 有 資 料 ;", "?", 1, captionIsReport: true));
-        Assert.True(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "", 1, captionIsReport: true));
-        // Real messages still stop.
-        Assert.False(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "連線逾時", 1, captionIsReport: true));
-        Assert.False(SalesReportLayout.IsNoDataNotice("其他程式", "", 1, captionIsReport: false));
-        Assert.False(SalesReportLayout.IsNoDataNotice("銷退單明細表[假公司]", "", 2, captionIsReport: true));
+        // the caption, the body read 「報表沒有資料；」 (user's screenshot).
+        Assert.Equal(NoData, SalesReportLayout.ClassifyNotice("劉 退 單 明 細 表 [ 志 遺 醫 )", "0 報 表 沒 有 資 料 ;", 1, captionIsReport: true));
+        Assert.Equal(NoData, SalesReportLayout.ClassifyNotice("銷 退 單 明 細 表 [ 志 遺 器 . X 報 表 沒 有 資 料 ;", "?", 1, captionIsReport: true));
+        // Only 「E」, or a body that could not be read: run the report again, never 「no data」.
+        Assert.Equal(Again, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "E", 1, captionIsReport: true));
+        Assert.Equal(Again, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "0 E", 1, captionIsReport: true));
+        Assert.Equal(Again, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "", 1, captionIsReport: true));
+        // Real messages stop.
+        Assert.Equal(Error, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "連線逾時", 1, captionIsReport: true));
+        Assert.Equal(Error, SalesReportLayout.ClassifyNotice("其他程式", "", 1, captionIsReport: false));
+        Assert.Equal(Error, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "E", 2, captionIsReport: true));
     }
 }

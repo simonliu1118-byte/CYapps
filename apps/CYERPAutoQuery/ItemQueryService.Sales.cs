@@ -16,6 +16,8 @@ internal sealed partial class ItemQueryService
     private const int ReportRunWaitMs = 180000;
     private const int SaveDialogWaitMs = 5000;
     private const int ReportCloseWaitMs = 10000;
+    /// <summary><see cref="WaitReportViewerAsync"/>'s answer when ERP's box asks for the report to be run again.</summary>
+    private const nint RunAgain = -1;
 
     public Task<SalesQueryResult> QuerySalesAsync(SalesQuery query, IProgress<string> progress, CancellationToken cancellationToken) =>
         GuardErpMessagesAsync(() => QuerySalesCoreAsync(query, progress, cancellationToken));
@@ -86,10 +88,18 @@ internal sealed partial class ItemQueryService
             await fill(dialog, cancellationToken);
 
             progress.Report($"ERP：產生{report.Title}（即時報表）…");
-            var before = FindReportWindows(report).ToHashSet();
-            await ClickButtonAsync(dialog, SalesReportLayout.RunButton, $"{report.Title}的「即時報表」", cancellationToken);
-            _log.Info("report", $"{report.Code} 即時報表 clicked");
-            var viewer = await WaitReportViewerAsync(dialog, report, before, cancellationToken);
+            // ERP sometimes answers 即時報表 with a box holding only 「E」 (user, 2026-10-19): then the
+            // report is run again, up to three times in all.
+            nint viewer = RunAgain;
+            for (var run = 1; run <= 3 && viewer == RunAgain; run++)
+            {
+                var before = FindReportWindows(report).ToHashSet();
+                await ClickButtonAsync(dialog, SalesReportLayout.RunButton, $"{report.Title}的「即時報表」", cancellationToken);
+                _log.Info("report", $"{report.Code} 即時報表 clicked run={run}");
+                viewer = await WaitReportViewerAsync(dialog, report, before, cancellationToken);
+            }
+            if (viewer == RunAgain)
+                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"{report.Title}按了三次「即時報表」都只出現「E」訊息，查詢已停止。");
             if (viewer == 0)
             {
                 closed = await CloseReportWindowsAsync(report, null, leftover: false);
@@ -411,9 +421,14 @@ internal sealed partial class ItemQueryService
                 var text = await ReadErpMessageAsync(box);
                 var body = await ReadMessageBodyAsync(box);
                 var buttons = Win32Automation.EnumerateChildren(box).Count(c => c.Visible && IsButtonClass(c.ClassName));
-                var noData = SalesReportLayout.IsNoDataNotice(text, body, buttons, report.IsTitle(NativeMethods.WindowText(box)));
-                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)} body={_log.Value(body)} buttons={buttons} no_data={noData}");
-                if (!noData)
+                var notice = SalesReportLayout.ClassifyNotice(text, body, buttons, report.IsTitle(NativeMethods.WindowText(box)));
+                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)} body={_log.Value(body)} buttons={buttons} notice={notice}");
+                if (notice == SalesReportLayout.ReportNotice.RunAgain)
+                {
+                    await DismissMessageAsync(box, cancellationToken);
+                    return RunAgain;
+                }
+                if (notice == SalesReportLayout.ReportNotice.Error)
                 {
                     // Close it before stopping: a box left behind (V0.9.0 Build 6 LOG) covered the next
                     // report window and the next query could not click it.

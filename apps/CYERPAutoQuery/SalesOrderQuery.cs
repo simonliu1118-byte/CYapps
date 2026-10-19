@@ -60,15 +60,25 @@ internal static class SalesReportLayout
             .Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>What a box shown after 即時報表 means.</summary>
+    public enum ReportNotice { NoData, RunAgain, Error }
+
     /// <summary>
-    /// Whether a box shown after 即時報表 is ERP's 「nothing matched」 notice rather than an error.
-    /// V0.9.0 Build 6 LOG (COPR16 for a customer without 銷退單): caption 「銷退單明細表[公司]」,
-    /// body 「報表沒有資料」, one OK button. The words may be in the body (read apart from the
-    /// caption) or in the whole box's text; a body with nothing in it on a box captioned with the
-    /// report and a single button counts too. Any other text is a real message.
+    /// ERP's box after 即時報表 (user, 2026-10-19): 「報表沒有資料；」 when nothing matched (V0.9.0
+    /// Build 6 LOG: caption 「銷退單明細表[公司]」, one OK); sometimes only 「E」, and then the report
+    /// is simply run again. The words may be in the body (read apart from the caption) or in the
+    /// whole box. A box captioned with the report, one button and a body that could not be read is
+    /// also run again (it may have been the 「E」), never taken as no data. Anything else is an error.
     /// </summary>
-    public static bool IsNoDataNotice(string text, string body, int buttons, bool captionIsReport) =>
-        IsNoData(body) || IsNoData(text) || (body.Length == 0 && buttons == 1 && captionIsReport);
+    public static ReportNotice ClassifyNotice(string text, string body, int buttons, bool captionIsReport)
+    {
+        if (IsNoData(body) || IsNoData(text)) return ReportNotice.NoData;
+        // The box's ⓘ icon reads as 「0」／「i」／「O」 (V0.9.0 Build 6 LOG: 「0 報表沒有資料」), so those are left out.
+        var letters = new string(body.Where(c => char.IsLetterOrDigit(c) && !char.IsDigit(c) && c is not ('i' or 'I' or 'o' or 'O')).ToArray());
+        if (buttons == 1 && captionIsReport && (letters.Equals("E", StringComparison.OrdinalIgnoreCase) || body.Length == 0 || body == "?"))
+            return ReportNotice.RunAgain;
+        return ReportNotice.Error;
+    }
 
     /// <summary>The workbook path named in ERP's message, or null.</summary>
     public static string? PathIn(string message)
