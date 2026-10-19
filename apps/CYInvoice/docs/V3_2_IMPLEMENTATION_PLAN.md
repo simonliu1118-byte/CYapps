@@ -122,6 +122,12 @@
 - Cloud app.ts 在 Login/Device 驗證前加 36KiB 建立申請／4KiB 其他查詢的請求長度保護。任何 App Key、加密 request 明文與官方帳務交易內容不傳到 list/status。原 V3.1 Work Items 不移動、不合併。
 - **本批未公開 g0401**：C3c3b coordinator 只能內部執行，必須先制定安全可歸因與人工監督的受控 POST 路由策略，不能直接開放低階 transport。後續 C4b Windows 路由/DTO UI、schema17/18 migration 升格的隔離驗證、本機 MCP Cloudflare 部署仍是 C 完成必要條件。
 
+## 3.2-C4b Windows CYID Cloud Client（V3.1.19 Build 1）
+
+- 建立 `CYInvoice.Core.Cloud.CloudAllowanceClient`，沿用 `CloudWorkItemClient` 既有 HTTPS + cydev Device + 每次 CYID employeeNo/password + RedirectDisabled HttpClient 模式，僅支援 C4a 白名單 application API。建立 request 的 applicationId 由呼叫者事先固定，若網路回覆遺失只能 StatusAsync 讀回同一 ID；不存在自動重新建立、g0401 或重配號。
+- 非折讓 Work Item、Local 核准流程與 DPAPI Device secret 來源均不變；客戶端確認 `officialActionPerformed=false` 和 `maySendWithoutFreshOfficialCheck=false` 才接受 create/approve/reserve 回覆。所有敏感 JSON 不寫入 Logs。
+- 下一批 C4c WinForms 跨機待辦介面和實機 smoke，以及正式 0017/0018 Migration 隔離合成/回退與用戶本機 MCP。真跨機／光貿測試需獨立人工驗收。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
