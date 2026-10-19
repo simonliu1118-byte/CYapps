@@ -392,13 +392,13 @@ internal sealed class SyncIssuesForm : Form
                             var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                             var reservation = local ? allowanceWorkflow.LocalReservationFor(issue) : null;
-                            primaryText = !local ? string.Empty : reservation?.Status switch
+                            primaryText = !local ? string.Empty : (reservation?.Status switch
                             {
                                 null => "預留折讓單號（不送出）",
                                 "reserved" => "正式送出折讓（單次）",
                                 "sending" => "依原折讓號碼唯讀查回",
                                 _ => string.Empty
-                            };
+                            });
                             primaryDanger = reservation?.Status == "reserved";
                             allowCancel = false;
                         }
@@ -1020,7 +1020,8 @@ internal sealed class SyncIssuesForm : Form
         {
             rows.Add(new("Local 核准管理員", EmployeeDisplay(review.LocalApproverEmployeeNo)));
             rows.Add(new("Local 核准時間", approved.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
-            var reservation = allowanceWorkflow.LocalReservationFor(issue);
+            var reservation = issue.ResolvedUtc is null
+                ? allowanceWorkflow.LocalReservationFor(issue) : null;
             rows.Add(new("折讓單號", reservation?.AllowanceNumber ?? "尚未預留"));
             rows.Add(new("正式送出", reservation?.Status switch
             {
