@@ -116,7 +116,7 @@
 - 原號全項吻合也保留 `full_match_unattributed`，因為完全相同號碼和內容仍不足以判斷是否由此次 POST 建立；append-only Audit 只保存官方快照 Hash、原號、稽核人／裝置，不把同號回讀視為正式核准。外部撞號與結果不明永遠禁止自動換號／重送。
 - **後續 C 階段仍待完成**：正式 CYID Employee / Device 可信 HTTP route、跨裝置申請／主管覆核、Windows UI、安全歸因/人工覆核政策、draft0017/0018 升格並完成 schema16 升級／回退測試；真 Cloudflare 更新必須交使用者本機 MCP，另需真 Windows／AMEGO 測試批准。
 
-## 3.2-C4a 跨裝置 CYID Cloud API（V3.1.18 Build 0）
+## 3.2-C4a 跨裝置 CYID Cloud API（V3.1.18 Build 1）
 
 - 新 `allowances-route.ts` 跟隨 CYID Session 的 `revalidate` 與原 Device bearer 驗證，把 C1/C2/C3 的內部服務接成受 `ALLOWANCE_API_ENABLED`＋schema18 控制的使用者／主管 API。create 僅存 AES-GCM Frozen Request；本人只列出自己的申請，經 CYID 驗證主管可 claim open→review、官方預覽、immutable grant approve、單號 reserve；全部重入以單 ID／revision CAS 處理。
 - Cloud app.ts 在 Login/Device 驗證前加 36KiB 建立申請／4KiB 其他查詢的請求長度保護。任何 App Key、加密 request 明文與官方帳務交易內容不傳到 list/status。原 V3.1 Work Items 不移動、不合併。
