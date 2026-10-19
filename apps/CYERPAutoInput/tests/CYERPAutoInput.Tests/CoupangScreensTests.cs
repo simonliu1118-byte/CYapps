@@ -83,4 +83,29 @@ public class CoupangScreensTests
         var done = new List<OcrBox> { B("配送處理完成。", 772, 373, 116), B("您選擇的物品已完成配送處理。", 738, 430, 180), B("確認", 1107, 518, 32), B("確認訂單", 1785, 873, 72, 24) };
         Assert.Equal(1107, CoupangScreens.DoneDialogConfirm(done)!.Left);
     }
+
+    [Fact]
+    public void Reads_the_ship_channels_bar_and_invoice_reminder()
+    {
+        var page = new List<OcrBox>
+        {
+            B("待安排配送清單", 245, 400, 126), B("共 1 筆", 386, 403, 42), B("已選 0 筆", 461, 403, 55),
+            B("訂單編號", 350, 626, 52), B("配送通路", 649, 626, 52), B("寄件單號", 784, 626, 52),
+            B("900000000000001", 323, 749, 106), B("宅配 - 新竹物流", 629, 749, 92), B("安排出貨", 783, 740, 52),
+            B("選擇商品後，點擊安排配送即可生成配送貨運單號。", 1158, 873, 314), B("宅配 - 新竹物流", 1513, 873, 190, 26), B("批次安排配送", 1729, 870, 150, 30)
+        };
+        var header = CoupangScreens.ListHeader(page, "待安排配送清單")!;
+        Assert.Equal(["宅配-新竹物流"], CoupangScreens.ColumnValues(page, header, "配送通路"));
+        var (select, arrange) = CoupangScreens.ShipBar(page)!.Value;
+        Assert.Equal((1513, 1729), (select.Left, arrange.Left));
+
+        var reminder = new List<OcrBox>
+        {
+            B("請確認發票開立需求", 358, 343, 162), B("宅配：下午3點前下單者適用當日取件服務。", 346, 463, 280),
+            B(ShopeeBatchScreens.NamelessCheckBox, 330, 550, 16, 16), B("不用再提醒我", 354, 550, 84), B("確認", 1536, 547, 30)
+        };
+        var (dont, confirm) = CoupangScreens.InvoiceReminder(reminder)!.Value;
+        Assert.Equal((330, 1536), (dont.Left, confirm.Left));
+        Assert.Null(CoupangScreens.InvoiceReminder(page));
+    }
 }

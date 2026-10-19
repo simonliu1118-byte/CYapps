@@ -100,4 +100,50 @@ internal static class CoupangScreens
         var title = boxes.FirstOrDefault(b => C(b).StartsWith("配送處理完成", StringComparison.Ordinal));
         return title is null ? null : Dialog(boxes, title).Where(b => C(b) == "確認").OrderByDescending(b => b.Top).FirstOrDefault();
     }
+
+    /// <summary>
+    /// A column's text in the list rows (配送通路 「宅配 - 新竹物流」…), compacted, top to bottom,
+    /// one per row of <paramref name="header"/>'s 訂單編號.
+    /// </summary>
+    public static List<string> ColumnValues(IReadOnlyList<OcrBox> boxes, OcrBox header, string column)
+    {
+        var mid = header.Top + header.Height / 2;
+        var head = boxes.FirstOrDefault(b => C(b) == column && b.Top <= mid + 12 && b.Bottom >= mid - 12);
+        if (head is null) return [];
+        return boxes.Where(b => b.Top > head.Bottom && Math.Abs(b.CenterX - head.CenterX) <= 70 && C(b).Contains('-') && C(b).Length <= 20)
+            .OrderBy(b => b.Top).Select(C).ToList();
+    }
+
+    /// <summary>
+    /// 配送準備's bottom bar (user, 2026-10-19): 「批次安排配送」 and, left of it, the 配送方式 drop-down
+    /// (its shown option, 「請選擇配送方式」 when none); null when not read.
+    /// </summary>
+    public static (OcrBox Select, OcrBox Arrange)? ShipBar(IReadOnlyList<OcrBox> boxes)
+    {
+        var arrange = boxes.Where(b => C(b) == "批次安排配送").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (arrange is null) return null;
+        var mid = arrange.Top + arrange.Height / 2;
+        var select = boxes.Where(b => b.Right <= arrange.Left + 4 && arrange.Left - b.Right < 120 && b.Top <= mid + 14 && b.Bottom >= mid - 14 &&
+                                      (C(b) == "請選擇配送方式" || C(b).Contains('-')))
+            .OrderByDescending(b => b.Left).FirstOrDefault();
+        return select is null ? null : (select, arrange);
+    }
+
+    /// <summary>
+    /// 「請確認發票開立需求」 (after 批次安排配送, not every time; user, 2026-10-19): its 「不用再提醒我」
+    /// (the check box, else the label) and 確認; null when not shown.
+    /// </summary>
+    public static (OcrBox DontRemind, OcrBox Confirm)? InvoiceReminder(IReadOnlyList<OcrBox> boxes)
+    {
+        var title = boxes.FirstOrDefault(b => C(b).Contains("請確認發票開立需求", StringComparison.Ordinal));
+        if (title is null) return null;
+        var inside = boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 320 && b.Left >= title.Left - 60).ToList();
+        var label = inside.FirstOrDefault(b => C(b) == "不用再提醒我");
+        var confirm = inside.Where(b => C(b) == "確認").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (label is null || confirm is null) return null;
+        var mid = label.Top + label.Height / 2;
+        var box = inside.Where(b => C(b) == ShopeeBatchScreens.NamelessCheckBox && b.Right <= label.Left + 4 && label.Left - b.Right < 40 && b.Top <= mid + 12 && b.Bottom >= mid - 12)
+            .OrderByDescending(b => b.Left).FirstOrDefault();
+        return (box ?? label, confirm);
+    }
 }

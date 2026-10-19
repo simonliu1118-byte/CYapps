@@ -441,8 +441,8 @@ internal sealed partial class MainForm
 
     /// <summary>
     /// 酷澎 › 測試：確認訂單 (user, 2026-10-19, the first part of 酷澎 全自動): Wing 我的訂單 › 訂單確認
-    /// in a Chrome window of its own, every order accepted, then 配送準備 opened and logged. 安排配送
-    /// and what follows wait for the user's next screenshots.
+    /// in a Chrome window of its own, every order accepted, 配送準備 arranged per 配送通路, then 配送指示
+    /// opened and logged. What follows waits for the user's next screenshots.
     /// </summary>
     private async Task TestCoupangConfirmAsync()
     {
@@ -452,8 +452,9 @@ internal sealed partial class MainForm
                 "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）。\n\n" +
                 "1. 訂單確認：全選 → 確認訂單 → 核對「確認接受訂單」列出的訂單編號 → 確認 → 配送處理完成 › 確認\n" +
                 "2. 重新整理，還有訂單就再做一輪（一頁 10 筆）\n" +
-                "3. 打開「配送準備」，把畫面記進 LOG 後停下（安排配送之後的步驟還沒做）\n\n" +
-                "確認訂單後訂單會變成待安排配送，無法自動復原。網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
+                "3. 配送準備：依「配送通路」逐一在右下選配送方式 → 全選 → 批次安排配送（跳出發票提醒就勾不用再提醒我 → 確認）\n" +
+                "4. 打開「配送指示」，把畫面記進 LOG 後停下（之後的步驟還沒做）\n\n" +
+                "確認訂單、安排配送後無法自動復原。網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
                 title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
@@ -483,8 +484,8 @@ internal sealed partial class MainForm
             return;
         }
         MessageBox.Show(this, accepted!.Count == 0
-                ? "訂單確認沒有訂單；已打開配送準備。"
-                : $"已確認 {accepted.Count} 筆訂單：\n{string.Join("\n", accepted)}\n\n已打開配送準備（畫面已記進 LOG）。",
+                ? "訂單確認沒有訂單；配送準備已處理，已打開配送指示（畫面已記進 LOG）。"
+                : $"已確認 {accepted.Count} 筆訂單：\n{string.Join("\n", accepted)}\n\n配送準備已安排配送，已打開配送指示（畫面已記進 LOG）。",
             title, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
