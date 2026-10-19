@@ -10,6 +10,8 @@ using CYInvoice.Core.Storage;
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
+    ("V3.2-B2c one-shot Local sending CAS, ambiguous readback and official collision", LocalAllowanceOneShotTests.RunAsync),
+    ("V3.2-B2c signed g0401 transport has exactly one POST even on time error", TestG0401SinglePostAsync),
     ("V3.2 remaining cap fails closed on unknown status and excludes voided allowances", () => RunSync(TestOfficialRemainingGross)),
     ("V3.2 net draft lines keep seven-decimal precision and reject client tampering", () => RunSync(TestDraftLineValidation)),
     ("V3.2 gross input safely converts to net AMEGO fields and rejects altered prices", () => RunSync(TestGrossPriceInput)),
@@ -48,6 +50,49 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static async Task TestG0401SinglePostAsync()
+{
+    var handler = new RecordingHttpHandler((request, _, _) =>
+        JsonResponse("{\"code\":15,\"msg\":\"time error\"}"));
+    using var http = new HttpClient(handler);
+    var gateway = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http);
+    var frozen = new AllowanceIssueRequest
+    {
+        AllowanceNumber = "A20261019001", AllowanceDate = "20261019",
+        AllowanceType = 2, BuyerIdentifier = "12345678", BuyerName = "Synthetic",
+        ProductItem = [new AllowanceProductItem
+        {
+            OriginalInvoiceNumber = "AA12345678", OriginalInvoiceDate = 20261018,
+            OriginalDescription = "Synthetic item", Quantity = 1m, UnitPrice = 100m,
+            Amount = 100m, Tax = 5m, TaxType = 1,
+        }], TotalAmount = 100m, TaxAmount = 5m
+    };
+    await ThrowsAsync<AmegoApiException>(() => gateway.IssueAllowanceOnceAsync(frozen));
+    Equal(1, handler.Requests.Count);
+    Equal("/json/g0401", handler.Requests[0].Uri.AbsolutePath);
+    var form = ParseForm(handler.Requests[0].Body);
+    Equal(AmegoDefaults.TestInvoice, form["invoice"]);
+    using var payload = JsonDocument.Parse(form["data"]);
+    Equal(JsonValueKind.Array, payload.RootElement.ValueKind);
+    Equal("A20261019001", payload.RootElement[0].GetProperty("AllowanceNumber").GetString());
+    Equal(100m, payload.RootElement[0].GetProperty("TotalAmount").GetDecimal());
+    var accepted = new RecordingHttpHandler((request, _, _) => request.RequestUri?.AbsolutePath switch
+    {
+        "/json/g0401" => JsonResponse("{\"code\":0,\"msg\":\"\"}"),
+        "/json/allowance_query" => JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"allowance_number\":\"A20261019001\",\"invoice_type\":\"D0401\",\"invoice_status\":99,\"allowance_date\":\"20261019\",\"allowance_type\":2,\"buyer_identifier\":\"12345678\",\"tax_amount\":5,\"total_amount\":100,\"product_item\":[]}}"),
+        _ => JsonResponse("{\"code\":71,\"msg\":\"not found\"}")
+    });
+    using var goodHttp = new HttpClient(accepted);
+    var normal = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, goodHttp);
+    var sent = await normal.IssueAllowanceOnceAsync(frozen);
+    Equal(0, sent.Code);
+    var query = await normal.QueryAllowanceAsync(frozen.AllowanceNumber);
+    Equal("A20261019001", query.Data.AllowanceNumber);
+    Equal("D0401", query.Data.InvoiceType);
+    Equal(2, accepted.Requests.Count);
+    Equal("/json/allowance_query", accepted.Requests[1].Uri.AbsolutePath);
 }
 
 static void TestOfficialRemainingGross()
