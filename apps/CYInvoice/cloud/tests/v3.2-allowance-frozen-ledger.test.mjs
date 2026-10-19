@@ -153,7 +153,7 @@ try {
  assert.equal(change("ledger_one","occupied_external",4040161).changes,1);
  assert.equal(change("ledger_two","sending").changes,1);
  assert.equal(change("ledger_two","confirmed").changes,1);
- assert.throws(()=>change("ledger_two","sending"),/ALLOWANCE_LEDGER_TRANSITION_INVALID/);
+ assert.throws(()=>db.prepare("UPDATE allowance_number_ledger SET status='sending' WHERE ledger_id='ledger_two'").run(),/ALLOWANCE_LEDGER_TRANSITION_INVALID/);
  // Only a definitive collision can unlock attempt #2; older number stays.
  reserve(first,3,"A20261019003",2,"ledger_three");
  assert.equal(db.prepare(`SELECT COUNT(*) n FROM allowance_number_ledger
