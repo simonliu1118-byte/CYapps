@@ -31,8 +31,8 @@ function fixture(){
  assert.equal(migrations.at(-1),"0016_non_allowance_work_items.sql");
  for(const name of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
- for(const id of [ws,other])sql.prepare(
-  "INSERT INTO workspaces(workspace_id,display_name) VALUES (?,'SYNTHETIC')").run(id);
+ sql.prepare(
+  "INSERT INTO workspaces(workspace_id,display_name) VALUES (?,'SYNTHETIC')").run(ws);
  for(const device of [devA,devB])sql.prepare(`INSERT INTO devices
  (device_id,workspace_id,display_name,status,employee_authority_state)
  VALUES (?,?,'SYNTHETIC','active','cloud')`).run(device,ws);
