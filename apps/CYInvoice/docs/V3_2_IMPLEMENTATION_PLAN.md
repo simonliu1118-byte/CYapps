@@ -46,6 +46,12 @@
 - B2c LocalAllowanceOneShotService 為唯一正式單次發送 owner：SQLite CAS reserved→sending 完成後才向光貿送出一次 g0401。回覆不明、斷線與重開只允許以原號 allowance_query 查回，不重送或自動加號。confirmed 只代表官方原號與凍結明細吻合，不自動結案人工待辦。
 - 新隔離測試覆蓋無權限、官方折讓歷史變動、未知結果重入禁止與原號查回。Windows 真機、光貿測試環境、占號後受控換號、CYID Cloud、g0501、正式部署／Release 留後續批次，沒有執行真實財務交易。
 
+## 3.2-C1 工程草稿（V3.1.8 Build 0）
+
+- 在正式 schema16 之上設計獨立 `allowance_applications` 和 append-only `allowance_application_audit_events`；不擴張非折讓 `work_items.kind`，不保留真發票、買方或密鑰。
+- 審查 SQL 暫置 `cloud/drafts/0017_allowance_applications.sql`，尚不升格 canonical migration。用 SQLite 合成升級、失敗回滾、CAS 和備份還原測試審查資料語意；原 Worker/D1 不變。
+- C2 再確認 Cloud app 層 CYID 角色／active Device／Workspace fencing、配號 Ledger 與正式 migration；B2e 的 Local 撞號、3.2-D～H 的業務驗收並未因本草稿完成。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
