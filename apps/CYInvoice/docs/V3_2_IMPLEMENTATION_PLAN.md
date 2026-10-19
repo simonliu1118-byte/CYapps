@@ -128,6 +128,12 @@
 - 非折讓 Work Item、Local 核准流程與 DPAPI Device secret 來源均不變；客戶端確認 `officialActionPerformed=false` 和 `maySendWithoutFreshOfficialCheck=false` 才接受 create/approve/reserve 回覆。所有敏感 JSON 不寫入 Logs。
 - 下一批 C4c WinForms 跨機待辦介面和實機 smoke，以及正式 0017/0018 Migration 隔離合成/回退與用戶本機 MCP。真跨機／光貿測試需獨立人工驗收。
 
+## 3.2-C4c Windows 跨機主管待辦 UI（V3.1.20 Build 0）
+
+- 新獨立 CloudAllowancesManagerForm；保留既有跨機非折讓 Work Items，原主畫面按鈕選單化。取得最新申請列表後才允許依現有 status／revision 執行 manager review CAS、官方唯讀 preview、immutable approved Grant、reserved 號碼；操作後清空 stale 列表要求刷新。帳密只在暫時 TextBox 存放，使用後立即 Clear，不寫 Local/Cloud 日誌。
+- Cloud preview 一律標記不代表可核准／發送，不將 `invoice_query` 摘要當成官方逐原發票剩餘額。WinForms 不發送 g0401、不修改已 confirmed／sending，timeout／lost reply 提示同申請 ID 查回。
+- 補 WinForms startup smoke (不連線) + Windows Core Fake HTTP preview 測試；正式 Cloud 尚未 schema18/feature opt-in，因此畫面只供工程驗證。C4d 後續從 AllowanceRequestForm 建立 Frozen Request、在提交網路前本機持久化 applicationId 以處理回覆遺失；C Migration 與真實 API 驗收需本機 MCP。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
