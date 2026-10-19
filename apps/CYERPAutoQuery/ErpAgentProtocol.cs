@@ -14,6 +14,9 @@ internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Excep
 
     /// <summary>The failure is ERP's own message box (its text is in the message).</summary>
     public bool FromErpMessage { get; init; }
+
+    /// <summary>ERP itself stopped responding; a restart of ERP may help (user, 2026-10-19).</summary>
+    public bool ErpUnresponsive { get; init; }
 }
 
 /// <summary>

@@ -188,6 +188,27 @@ internal static class NativeMethods
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     internal static extern nint SendMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+    /// <summary>Milliseconds since the last keyboard or mouse input on this PC (any program).</summary>
+    internal static long IdleMilliseconds()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        return GetLastInputInfo(ref info) ? (uint)Environment.TickCount - info.dwTime : 0;
+    }
+
+    internal const uint BM_CLICK = 0x00F5;
+    internal const uint CB_GETCOUNT = 0x0146;
+
     [DllImport("user32.dll", EntryPoint = "PostMessageW")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool PostMessage(nint hWnd, uint Msg, nint wParam, nint lParam);

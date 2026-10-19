@@ -196,6 +196,12 @@ internal sealed partial class ItemQueryService
     {
         await CloseLeftoverInvq01Async(progress, cancellationToken);
         var windows = Win32Automation.FindFormWindows(_form);
+        if (windows.Count > 0 && windows.All(w => !Responds(w)) && CanRestartErp)
+        {
+            // The kept form froze (user, 2026-10-19): restart ERP and open it again.
+            await RestartErpAsync($"{_form.Title}沒有回應", cancellationToken);
+            windows = Win32Automation.FindFormWindows(_form);
+        }
         if (windows.Count == 0)
         {
             progress.Report($"ERP：開啟{_form.Title}（作業速查）…");
@@ -243,7 +249,28 @@ internal sealed partial class ItemQueryService
     private Task OpenFormAsync(CancellationToken cancellationToken) =>
         OpenFormAsync(_form.Code, _form.Title, () => Win32Automation.FindFormWindows(_form).Count > 0, cancellationToken);
 
+    /// <summary>
+    /// Opens a program through 作業速查. ERP sometimes stops answering (user, 2026-10-19: 「呼叫主程式／
+    /// 建立作業沒反應，可以強制關閉掉重開」): a hung main window, or a program that does not open, is
+    /// answered by force-closing ERP, starting and logging in again, and trying once more — only when
+    /// 「ERP 登入」 is set, since ERP could not be logged in again otherwise.
+    /// </summary>
     private async Task OpenFormAsync(string code, string title, Func<bool> opened, CancellationToken cancellationToken)
+    {
+        if (Win32Automation.FindErpMainWindows() is { Count: > 0 } mains && !Responds(mains[0]) && CanRestartErp)
+            await RestartErpAsync("主視窗沒有回應", cancellationToken);
+        try
+        {
+            await OpenFormCoreAsync(code, title, opened, cancellationToken);
+        }
+        catch (QueryFailure ex) when (ex.ErpUnresponsive && CanRestartErp)
+        {
+            await RestartErpAsync(ex.Message, cancellationToken);
+            await OpenFormCoreAsync(code, title, opened, cancellationToken);
+        }
+    }
+
+    private async Task OpenFormCoreAsync(string code, string title, Func<bool> opened, CancellationToken cancellationToken)
     {
         var mains = Win32Automation.FindErpMainWindows();
         if (mains.Count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
@@ -259,6 +286,9 @@ internal sealed partial class ItemQueryService
             await Pace.Delay(500, cancellationToken); // let the main form finish painting its Ribbon
             mains = Win32Automation.FindErpMainWindows();
         }
+        // Not running (or at its login form): start it and log in when 「ERP 登入」 is set (user, 2026-10-19).
+        if (mains.Count == 0 && await StartAndLoginAsync(cancellationToken))
+            mains = Win32Automation.FindErpMainWindows();
         if (mains.Count == 0)
         {
             NativeMethods.EnumWindows((hwnd, _) =>
@@ -312,7 +342,7 @@ internal sealed partial class ItemQueryService
         if (!await WaitUntilAsync(() => opened(), 30000, cancellationToken))
         {
             LogProcessWindows(main, "after-作業速查");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"從作業速查開啟{title}逾時（30 秒）。");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"從作業速查開啟{title}逾時（30 秒）。") { ErpUnresponsive = true };
         }
         _log.Info("window", $"{code} opened after_ms={Environment.TickCount64 - started}");
         await Pace.Delay(1500, cancellationToken); // let the new form load its first record

@@ -79,6 +79,7 @@ internal sealed partial class MainForm : Form
         _log = log;
         _service = new ItemQueryService(log);
         _agentSettings = ErpAgentSettings.Load(log);
+        LoadErpLogin();
         // Same as CYERPAutoInput: the local log keeps what CY read, for troubleshooting.
         _log.Diagnostic = true;
 
@@ -98,6 +99,7 @@ internal sealed partial class MainForm : Form
             RefreshErpState();
             _statePoll.Start();
             StartUpdateChecks();
+            StartIdleChecks();
             _code.Focus();
             if (_agentSettings.Enabled) StartAgent();
         };
@@ -153,6 +155,9 @@ internal sealed partial class MainForm : Form
         var web = MakeButton("Web 連線", 120);
         web.Click += (_, _) => OpenAgentSettings();
         rightTools.Controls.Add(web);
+        var erpLogin = MakeButton("ERP 登入", 110);
+        erpLogin.Click += (_, _) => OpenErpLoginSettings();
+        rightTools.Controls.Add(erpLogin);
         _erpStateTag.Size = new Size(150, ToolbarButtonHeight);
         _erpStateTag.Margin = new Padding(4, 1, 12, 1);
         _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
@@ -955,6 +960,7 @@ internal sealed partial class MainForm : Form
         {
             // The mouse comes back before any message box is shown.
             Session.End(outcome);
+            _lastErpUse = DateTime.Now;
             _queryCts.Dispose();
             _queryCts = null;
             _start.Enabled = true;
