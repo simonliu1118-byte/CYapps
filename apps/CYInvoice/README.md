@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source／測試包：V3.1.6 Build 0**（engineering，非正式 Release）：V3.2-B2c 新增 Local Core 的光貿 g0401 一次性簽名 POST、SQLite 先記 sending、原號 allowance_query 唯讀查回、官方完整資料核對後才確認；網路逾時、code15、結果不明與明確撞號都不自動重送或加號。**本版尚未接 Windows 正式送出按鈕，不會主動對光貿開立折讓**；管理員核准與預留仍可使用既有工程路徑，含稅／未稅單價切換不變。詳見 [V3.1.6 工程說明](release-notes/V3.1.6.txt) 及 [3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
+- **目前工程 Source／測試包：V3.1.7 Build 1**（engineering，非正式 Release）：3.2-B2d 已把 Local 折讓草稿核准／原號預留接到 Windows 一次性 g0401 操作入口。每次正式送出須由原核准管理員重新登入、明確確認，再由 Core 重驗凍結核准與光貿最新折讓及有效餘額；SQLite 先鎖定 sending，網路逾時／回覆不明僅能原號唯讀查回，不重新發送／換號；confirmed 不自動結案。**Windows 真人驗收、光貿正式測試環境及正式發行尚未完成**。詳見 [V3.1.7 工程說明](release-notes/V3.1.7.txt) 與 [3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
 
 - **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
 

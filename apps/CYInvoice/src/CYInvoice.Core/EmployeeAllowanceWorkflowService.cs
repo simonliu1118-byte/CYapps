@@ -334,6 +334,114 @@ public sealed class EmployeeAllowanceWorkflowService
             date, template, manager.EmployeeNo, review.LocalApprovedUtc!.Value);
     }
 
+    // UI status reads are local-only. A reservation is never official proof.
+    public LocalAllowanceReservation? LocalReservationFor(InvoiceSyncIssue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        RequireManualReviewIssue(issue);
+        if (repository.IdentityProvider.Kind != IdentityProviderKind.Local ||
+            repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            return null;
+        var account = CurrentAccount();
+        return new LocalAllowanceNumberStore(repository.DataDirectory).FindLatest(
+            account.SellerInvoice, account.Environment,
+            issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    // The only WinForms-facing Local g0401 call. A fresh official snapshot,
+    // frozen approval, manager credentials and work item must all still agree.
+    public async Task<LocalAllowanceSendResult> SendLocalReservedDraftAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default)
+    {
+        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        var reservation = RequireReservedApproval(issue, manager.EmployeeNo);
+        var account = CurrentAccount();
+        var sender = new LocalAllowanceOneShotService(
+            new LocalAllowanceNumberStore(repository.DataDirectory),
+            gateway ?? CreateAllowanceGateway(account),
+            async (frozen, token) =>
+            {
+                var freshManager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+                RequireReservedApproval(issue, freshManager.EmployeeNo, frozen);
+                var original = FindIssueRecord(issue);
+                var currentInvoice = await detailRefreshService.RefreshAsync(original, token)
+                    .ConfigureAwait(false);
+                ValidateCurrentAccount(currentInvoice);
+                var review = ReadManualReview(currentInvoice)
+                    ?? throw new InvalidDataException("光貿回查後核准草稿遺失");
+                RequireFrozenApproval(currentInvoice, review, freshManager.EmployeeNo);
+                if (review.LocalApprovedUtc != frozen.ApprovedAtUtc)
+                    throw new InvalidOperationException("折讓主管核准版本已改變");
+                ValidateEligible(currentInvoice, review.TaxInclusiveAmount);
+                var remaining = InvoiceAllowanceMetadata.RemainingGross(currentInvoice);
+                if (FixedDecimal.FromInt64(review.TaxInclusiveAmount).ScaledValue > remaining.ScaledValue)
+                    throw new InvalidOperationException("光貿當前可折餘額不足，禁止送出");
+                AllowanceDraftValidator.Validate(review.DraftItems!, currentInvoice.InvoiceNumber,
+                    currentInvoice.InvoiceDate, review.TaxInclusiveAmount);
+                var hash = OfficialApprovalHash(currentInvoice,
+                    InvoiceAllowanceMetadata.ReadOfficial(currentInvoice), remaining);
+                if (!string.Equals(hash, review.LocalApprovalOfficialHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "光貿資料已不同於原主管核准，禁止送出；不會自動重新核准");
+            });
+        return await sender.SendFirstAsync(account.SellerInvoice, account.Environment,
+            reservation, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Restarts and unknown outcomes permit only readback of the original
+    // number; no send preflight or g0401 write can run on this path.
+    public Task<LocalAllowanceSendResult> ReconcileLocalReservedDraftAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
+        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default)
+    {
+        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        var reservation = RequireReservedApproval(issue, manager.EmployeeNo);
+        var account = CurrentAccount();
+        var sender = new LocalAllowanceOneShotService(
+            new LocalAllowanceNumberStore(repository.DataDirectory),
+            gateway ?? CreateAllowanceGateway(account),
+            (_, _) => throw new InvalidOperationException("唯讀查回不能變成正式送出"));
+        return sender.ReconcileAsync(account.SellerInvoice, account.Environment,
+            reservation, cancellationToken);
+    }
+
+    private LocalAllowanceReservation RequireReservedApproval(
+        InvoiceSyncIssue issue, string managerNo,
+        LocalAllowanceReservation? expected = null)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        RequireManualReviewIssue(issue);
+        if (!issueStore.HasUnresolved(CurrentAccountKey(), issue.InvoiceNumber,
+                issue.OrderId, InvoiceAllowanceIssueTypes.ManualReview))
+            throw new InvalidOperationException("本機折讓待辦已失效，禁止執行");
+        var record = FindIssueRecord(issue);
+        var review = ReadManualReview(record)
+            ?? throw new InvalidDataException("已核准折讓資料遺失");
+        RequireFrozenApproval(record, review, managerNo);
+        var account = CurrentAccount();
+        var reservation = new LocalAllowanceNumberStore(repository.DataDirectory)
+            .FindLatest(account.SellerInvoice, account.Environment,
+                issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            ?? throw new InvalidOperationException("請先由同一位管理員預留折讓單號");
+        if (reservation.ApproverEmployeeNo != managerNo ||
+            reservation.ApprovedAtUtc != review.LocalApprovedUtc ||
+            (expected is not null && reservation != expected))
+            throw new InvalidDataException("原配號與管理員核准版本不一致");
+        return reservation;
+    }
+
+    private IAmegoAllowanceGateway CreateAllowanceGateway(Account account)
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        var appKey = account.Environment == Environments.Test
+            ? AmegoDefaults.TestAppKey
+            : repository.Settings.ProductionAppKey(settings).Trim();
+        if (appKey.Length == 0)
+            throw new InvalidOperationException("目前環境尚未設定光貿 App Key");
+        return new AmegoClient(account.SellerInvoice, appKey);
+    }
+
     private static void RequireFrozenApproval(
         InvoiceRecord record, InvoiceAllowanceManualReview review, string approver)
     {

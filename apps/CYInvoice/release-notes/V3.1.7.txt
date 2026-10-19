@@ -1,0 +1,14 @@
+CYInvoice V3.1.7 Build 1 — V3.2-B2d Local Windows 單次折讓正式入口（工程預覽）
+
+Build 1：首次 Windows CI 找到待辦詳情 switch 表達式未關閉 rows.Add，已補上右括號，按同項返修規則維持 Patch 3.1.7。
+
+上一正式 Release 為 V3.1.0。本批只修改 Windows／Core、隔離測試與工程文件，沒有執行真實光貿交易，也沒有 Cloudflare D1／Worker／Bindings／Secrets 正式操作。
+
+- 原 Local 管理員先核准含完整編輯明細的草稿並預留單號，再由同一位管理員重新登入；只有經明確二次確認會向光貿執行真實 g0401，才可由 Windows 入口啟動單次送出。
+- Core 最後仍重驗當次 Local 主管、同一未結案工作項目、公司／環境／原核准時間／不可變草稿，並重新執行 invoice_query，核對完整官方已有折讓、有效可折剩餘額與原主管核准的官方摘要。任何變動在 reserved 階段就拒絕送出。
+- 正式 g0401 仍只由 B2c OneShotService 於 SQLite CAS reserved→sending 持久完成後呼叫最多一次；逾時、斷線、code15 與未知結果只允許原號 allowance_query 唯讀查回，絕不重新送出或改號。
+- 只有官方原號、日期、買方、未稅額／稅額及原發票全部凍結品項符合完成狀態才標記 confirmed。即使官方確認仍保留人工待辦，不假稱已人工結案；明確 occupied_external 也只鎖定，不自動配置下一號。
+- 新隔離回歸測試驗證錯誤主管身分零官方 preflight／零 POST、官方折讓歷史變動零 POST、首次 g0401 未確認後不可再 POST，原號回查仍保留待確認。
+- 本工程版本仍待 Windows 真機、100%／125%／150% DPI、光貿測試環境真 g0401、後續占號受控恢復、Cloud 與 g0501；不可把合成 CI 視為正式帳務成功。
+
+VERSION=3.1.7、BUILD=1。正式 Release 保持 V3.1.0；V3.0／V3.1 唯一延期驗收檔案 docs/POST_RELEASE_ACCEPTANCE.md 不變。

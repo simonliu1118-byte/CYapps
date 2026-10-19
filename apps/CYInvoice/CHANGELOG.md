@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.7 Build 1 — 2026/10/19（3.2-B2d Local Windows 單次折讓執行；engineering）
+
+- 獨立工程 Patch VERSION=3.1.7、BUILD=1；上一正式 Release 為 V3.1.0。
+- 原 Local 折讓待辦沿用已核准草稿與 SQLite ledger，由同一位管理員重新登入並確認後才可進行正式單次 g0401。Core 送前重新驗證權限、核准與凍結明細，取得光貿完整最新折讓紀錄、剩餘可折金額及核准摘要一致，才由原 B2c OneShotService 先 CAS 標記 sending 再發送一次。
+- 結果不明、斷線或重開只能依原號唯讀查回，不盲重送／換號；官方 confirmed 不會自動結案原人工待辦。新隔離測試涵蓋無權限、官方歷史變動零發送、未知結果防重入。無實際光貿交易、正式 Cloudflare 變更及正式 Release。
+
+- Build 1：首次精確 PR Windows CI 發現待辦詳情 rows.Add 的 switch 表達式缺少外層右括號，已修正 C# 編譯語法並重新驗證；沒有更動 B2d 業務範圍。
+
 ## V3.1.6 — 2026/10/19（3.2-B2c Core 單次 g0401 HTTP 與原號唯讀查回；engineering）
 
 - 獨立 Patch `VERSION=3.1.6`／`BUILD=0`，正式 Release 仍是 V3.1.0。
