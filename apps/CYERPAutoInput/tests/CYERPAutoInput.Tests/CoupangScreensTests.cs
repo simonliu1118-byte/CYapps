@@ -108,4 +108,31 @@ public class CoupangScreensTests
         Assert.Equal((330, 1536), (dont.Left, confirm.Left));
         Assert.Null(CoupangScreens.InvoiceReminder(page));
     }
+
+    [Fact]
+    public void Reads_the_arrange_dialog_and_pickup_details()
+    {
+        // Laid out like the user's 安排出貨 screenshot (2026-10-19); address made up.
+        var arrange = new List<OcrBox>
+        {
+            B("安排出貨", 584, 222, 76), B("安排出貨後將無法更改，請確認物流取件日期後再進行提交", 630, 304, 364),
+            B("配送方式", 584, 367, 56), B("宅配 - 新竹物流", 784, 367, 98), B("取貨日期", 584, 416, 56), B("2026-10-19 (星期一) * 當日取件", 784, 416, 208),
+            B("取貨地址", 584, 487, 56), B("(800) 高雄市 示範區 測試路1號", 796, 476, 230), B("王小明 0900-000-000", 796, 497, 140), B("編輯", 1282, 486, 28),
+            B("備註", 584, 557, 28), B("取消", 1167, 641, 32), B("提交", 1273, 641, 32),
+            B("安排出貨", 787, 727, 56), B("900000000000001", 328, 737, 106)
+        };
+        var (method, matches, submit) = CoupangScreens.ArrangeDialog(arrange, "高雄市示範區 測試路1號")!.Value;
+        Assert.Equal(("宅配-新竹物流", (bool?)true, 1273), (method, matches, submit.Left));
+        Assert.False(CoupangScreens.ArrangeDialog(arrange, "高雄市示範區測試路2號")!.Value.AddressMatches);
+
+        var details = new List<OcrBox>
+        {
+            B("取貨詳情", 500, 207, 80), B("訂單編號", 578, 293, 52), B("寄件單號", 1222, 293, 52), B("狀態", 1342, 293, 28),
+            B("900000000000001", 551, 375, 106), B("1800000000", 1208, 375, 80), B("成功", 1350, 375, 28),
+            B("關閉", 1207, 682, 32), B("列印寄件單", 1298, 682, 82), B("900000000000009", 323, 750, 106)
+        };
+        var (succeeded, rows, print, close) = CoupangScreens.PickupDetails(details)!.Value;
+        Assert.Equal(["900000000000001"], succeeded);
+        Assert.Equal((1, 1298, 1207), (rows, print.Left, close.Left));
+    }
 }

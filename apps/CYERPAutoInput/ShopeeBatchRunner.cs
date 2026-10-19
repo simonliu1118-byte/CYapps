@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "");
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -1152,7 +1152,7 @@ internal sealed partial class ShopeeBatchRunner
     /// read back — the set printer, the scale, the pages and 「1 張紙」 — before 列印 is pressed.
     /// What does not come right stops the batch without printing.
     /// </summary>
-    private async Task PrintDialogAsync(int wanted, string? pages)
+    private async Task PrintDialogAsync(int wanted, string? pages, int sheetsAllowed = 1)
     {
         // The settings are the right of the dialog: only that half is read (faster).
         var panel = new RectangleF(0.5f, 0, 0.5f, 1);
@@ -1262,7 +1262,7 @@ internal sealed partial class ShopeeBatchRunner
             last = $"目的地「{destination}」、頁面「{shownPages}{(pages is null ? string.Empty : " " + pages)}」、縮放 {scale}、{sheets?.ToString() ?? "?"} 張紙";
             if (!ShopeeBatchScreens.SamePrinter(destination, _printer))
                 throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是設定的「{_printer}」，未列印。", true);
-            if (sheets is > 1 || pages is not null && sheets is null) { await Task.Delay(800, _token); continue; }
+            if (sheets > sheetsAllowed || pages is not null && sheets is null) { await Task.Delay(800, _token); continue; }
             if (ShopeeBatchScreens.PrintButton(boxes) is not { } printButton) { await Task.Delay(600, _token); continue; }
             _log.Info("shopee-batch", $"print dialog set: {last}");
             Click(screen, printButton, "列印");

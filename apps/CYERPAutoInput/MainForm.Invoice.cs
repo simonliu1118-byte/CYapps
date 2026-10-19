@@ -440,64 +440,15 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
-    /// 酷澎 › 測試：確認訂單 (user, 2026-10-19, the first part of 酷澎 全自動): Wing 我的訂單 › 訂單確認
-    /// in a Chrome window of its own, every order accepted, 配送準備 arranged per 配送通路, then 配送指示
-    /// opened and logged. What follows waits for the user's next screenshots.
+    /// 酷澎 › 全自動 (user, 2026-10-19 screenshots): Wing in a Chrome window of its own — 訂單確認
+    /// accepted, 配送準備 arranged per 配送通路 with the 寄件單 printed on the thermal printer,
+    /// 配送指示's 下載Excel into Temp (<see cref="ShopeeBatchRunner.RunCoupangAsync"/>) — then
+    /// CYInvoice's 酷澎 entry issues (always paper; printed in the background), and every order
+    /// clean goes straight into ERP, otherwise the preview.
     /// </summary>
-    private async Task TestCoupangConfirmAsync()
+    private async Task RunCoupangBatchAsync()
     {
-        const string title = "酷澎 確認訂單測試";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
-        if (MessageBox.Show(this,
-                "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）。\n\n" +
-                "1. 訂單確認：全選 → 確認訂單 → 核對「確認接受訂單」列出的訂單編號 → 確認 → 配送處理完成 › 確認\n" +
-                "2. 重新整理，還有訂單就再做一輪（一頁 10 筆）\n" +
-                "3. 配送準備：依「配送通路」逐一在右下選配送方式 → 全選 → 批次安排配送（跳出發票提醒就勾不用再提醒我 → 確認）\n" +
-                "4. 打開「配送指示」，把畫面記進 LOG 後停下（之後的步驟還沒做）\n\n" +
-                "確認訂單、安排配送後無法自動復原。網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
-                title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-
-        _shopeeBatchRunning = true;
-        Session.Pin(AutomationSession.BatchTitle);
-        Session.Begin(AutomationSession.BatchTitle);
-        List<string>? accepted = null;
-        string? stopped = null;
-        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
-            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
-        try { accepted = await runner.ConfirmCoupangOrdersAsync(SetStatus); }
-        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
-        catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
-        finally
-        {
-            Session.Unpin();
-            Session.End(stopped is null ? AutomationOutcome.Done : AutomationOutcome.Stopped);
-            _shopeeBatchRunning = false;
-            SetStatus(string.Empty);
-        }
-        if (stopped is not null)
-        {
-            _log.Warn("coupang-batch", $"confirm stopped: {stopped}");
-            Alarm(needsPerson: true);
-            MessageBox.Show(this, $"酷澎確認訂單停止：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        MessageBox.Show(this, accepted!.Count == 0
-                ? "訂單確認沒有訂單；配送準備已處理，已打開配送指示（畫面已記進 LOG）。"
-                : $"已確認 {accepted.Count} 筆訂單：\n{string.Join("\n", accepted)}\n\n配送準備已安排配送，已打開配送指示（畫面已記進 LOG）。",
-            title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    /// <summary>
-    /// 酷澎 › 測試 (user, 2026-10-15): on the 酷澎 page the user opened (配送指示), 「下載Excel」 →
-    /// Temp → CYInvoice's 酷澎 entry issues (always paper) → printing in the background → ERP,
-    /// whatever CYInvoice's environment (the user switches it). Every order clean → straight to ERP;
-    /// otherwise the preview.
-    /// </summary>
-    private async Task TestCoupangAsync()
-    {
-        const string title = "酷澎 測試";
+        const string title = "酷澎全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
@@ -507,7 +458,9 @@ internal sealed partial class MainForm
             _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
             _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
             _settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath) ? "CYInvoice.exe" : null,
-            _settings.A4Printer.Length == 0 ? "A4 印表機（紙本發票）" : null
+            _settings.ShopeeLabelPrinter.Length == 0 ? "熱感標籤印表機（寄件單）" : null,
+            _settings.A4Printer.Length == 0 ? "A4 印表機（紙本發票）" : null,
+            ShopeeScreenshot.Compact(_settings.HctPickupAddress).Length < 6 ? "新竹物流取件地址（平台匯入 › 蝦皮）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
@@ -515,11 +468,13 @@ internal sealed partial class MainForm
             return;
         }
         if (MessageBox.Show(this,
-                "請先在 Chrome 打開酷澎「我的訂單 › 正在配送」頁面，並讓它在最前面（本程式以外）。\n\n" +
-                "1. 勾選全選、確認已選＝共幾筆，按「下載Excel」存到程式的 Temp 資料夾\n" +
-                "2. CYInvoice 開立發票（酷澎一律紙本；不論 CYInvoice 是測試或正式環境）並帶入\n" +
-                "3. 紙本發票拿到 PDF 後請你放 A4 白紙列印（不必等，打單照常進行）\n" +
-                "4. 全部沒問題就直接輸入 ERP，否則開預覽\n\n網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
+                "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）：\n\n" +
+                "1. 訂單確認：全選 → 確認訂單 → 核對訂單編號 → 確認\n" +
+                "2. 配送準備：依配送通路選配送方式 → 全選 → 批次安排配送 → 核對取貨地址 → 提交 → 列印寄件單（熱感機，宅配 " + _settings.CoupangHctLabelScale + "%、超商 100%）\n" +
+                "3. 配送指示：全選 → 下載 Excel\n" +
+                "4. CYInvoice 開立發票（酷澎一律紙本，拿到 PDF 後請你放 A4 白紙）\n" +
+                "5. 全部沒問題就直接輸入 ERP，否則開預覽\n\n" +
+                "確認訂單、安排配送後無法自動復原。網頁操作期間請勿操作電腦，按 Esc 可停止。要開始嗎？",
                 title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
@@ -528,29 +483,44 @@ internal sealed partial class MainForm
         _shopeeBatchRunning = true;
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
-        string? file = null;
+        CoupangBatchResult? result = null;
         string? stopped = null;
+        var shipped = false;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
-        try { file = await runner.DownloadCoupangExcelAsync(folder); }
-        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
+                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale), Session.EscapeToken);
+        try { result = await runner.RunCoupangAsync(folder, SetStatus); }
+        catch (ShopeeBatchStop stop) { stopped = stop.Message; shipped = stop.Shipped; }
         catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
         finally
         {
-            // Straight on to CYInvoice and ERP (user LOG 2026-10-15: no 「已暫停」 in between).
+            // Straight on to CYInvoice and ERP (no 「已暫停」 in between).
             Session.Unpin();
-            if (stopped is not null || file is null) Session.End(AutomationOutcome.Stopped);
+            if (stopped is not null || result?.Excel is null) Session.End(stopped is null ? AutomationOutcome.Done : AutomationOutcome.Stopped);
             _shopeeBatchRunning = false;
         }
-        if (stopped is not null || file is null)
+        if (stopped is not null)
         {
             _log.Warn("coupang-batch", $"stopped: {stopped}");
             Alarm(needsPerson: true);
-            MessageBox.Show(this, $"酷澎測試停止：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"酷澎全自動停止：{stopped}" + (shipped ? "\n\n已確認或安排配送的訂單請到 Wing 確認；寄件單與打單可在配送指示下載 Excel 後用「匯入訂單匯出檔」接續。" : string.Empty),
+                title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+        if (result!.Excel is not { } file)
+        {
+            MessageBox.Show(this, $"已確認 {result.Accepted.Count} 筆、安排配送 {result.Arranged.Count} 筆；{string.Join(" ", result.Notes)}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var runNotes = new List<string>(result.Notes);
+        if (result.Accepted.Count > 0 || result.Arranged.Count > 0)
+            runNotes.Insert(0, $"Wing：確認訂單 {result.Accepted.Count} 筆、安排配送並列印寄件單 {result.Arranged.Count} 筆。");
+        await CoupangToErpAsync(title, file, runNotes);
+    }
 
+    /// <summary>A downloaded 酷澎 DeliveryList → CYInvoice (酷澎 entry, paper in the background) → ERP or the preview.</summary>
+    private async Task CoupangToErpAsync(string title, string file, List<string> runNotes)
+    {
         CoupangImportResult parsed;
         try
         {
@@ -574,20 +544,40 @@ internal sealed partial class MainForm
         var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
-        var expect = parsed.Orders.GroupBy(o => o.OrderSn).ToDictionary(g => g.Key, g => InvoiceExpectation.Of(g.First()), StringComparer.Ordinal);
-        var invoice = await InvoiceAsync(title, CyInvoiceLink.Coupang, file, expect, orders, fullAuto: true, testEntry: true);
-        QueuePaperInvoices(invoice);
-
         var ledger = LoadLedger();
         if (ledger is null) { Session.End(AutomationOutcome.Stopped); return; }
+        // 配送指示 keeps an order until the carrier picks it up, so an earlier run's orders come
+        // again: the ones already in ERP are left out (their invoice is not asked for again).
+        var entered = orders.Where(o => ledger.Find(o.LedgerKey) is not null).ToList();
+        if (entered.Count > 0)
+        {
+            orders = orders.Except(entered).ToList();
+            runNotes.Add($"{entered.Count} 筆先前已輸入 ERP（配送指示仍列著），這次略過：{string.Join("、", entered.Select(o => o.OrderSn))}");
+            _log.Info("coupang-batch", $"already entered skipped={entered.Count}");
+        }
+        if (orders.Count == 0 && parsed.Errors.Count == 0)
+        {
+            Session.End(AutomationOutcome.Done);
+            MessageBox.Show(this, string.Join("\n", runNotes), title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var keep = orders.Select(o => o.OrderSn).ToHashSet(StringComparer.Ordinal);
+        var expect = parsed.Orders.Where(o => keep.Contains(o.OrderSn)).GroupBy(o => o.OrderSn)
+            .ToDictionary(g => g.Key, g => InvoiceExpectation.Of(g.First()), StringComparer.Ordinal);
+        var invoice = await InvoiceAsync(title, CyInvoiceLink.Coupang, file, expect, orders, fullAuto: true, testEntry: true);
+        QueuePaperInvoices(invoice);
+        // A test environment's invoices are not entered without a look (the preview opens).
+        var production = invoice.Environment == CyInvoiceLink.Production;
+        if (!production && invoice.Environment.Length > 0)
+            runNotes.Add($"CYInvoice 是{CyInvoiceLink.EnvironmentName(invoice.Environment)}：不直接輸入 ERP，請在預覽確認。");
         if (EscPressed)
         {
             CancelPaperInvoices("已按 Esc 停止");
             MessageBox.Show(this, $"已按 Esc 停止：發票已處理，尚未輸入 ERP。檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        var notes = new List<string>(invoice.Notes);
-        var clean = _settings.AutoSave && orders.Count > 0 && parsed.Errors.Count == 0 &&
+        var notes = new List<string>([.. runNotes, .. invoice.Notes]);
+        var clean = production && _settings.AutoSave && orders.Count > 0 && parsed.Errors.Count == 0 &&
                     orders.All(o => o.HandoffReason.Length == 0 && o.InvoiceNo.Trim().Length > 0 && o.ValidationError().Length == 0 &&
                                     !o.MissingInvoiceName && ledger.Find(o.LedgerKey) is null);
         if (clean)
@@ -597,7 +587,7 @@ internal sealed partial class MainForm
             try { if (await RunImportBatchAsync(CoupangOrderImport.Source, orders, ledger, notes)) return; }
             finally { _paperHold--; }
         }
-        SetStatus("酷澎測試：請在預覽確認");
+        SetStatus($"{title}：請在預覽確認");
         Alarm(needsPerson: true);
         await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(file), orders, parsed.Errors, notes);
     }

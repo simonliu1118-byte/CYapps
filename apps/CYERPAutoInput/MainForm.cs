@@ -2173,12 +2173,12 @@ internal sealed partial class MainForm : Form
         }
         else if (text == "酷澎商城")
         {
-            // 匯入 / 測試 (user, 2026-10-15); 全自動 waits for real orders to walk through.
+            // 全自動 / 匯入 (user, 2026-10-19: 全自動 from the Wing screenshots).
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
+            menu.Items.Add("全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）", null, async (_, _) => await RunCoupangBatchAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("測試：確認訂單 → 安排配送 → 配送指示", null, async (_, _) => await TestCoupangConfirmAsync());
-            menu.Items.Add("測試：正在配送全選下載 Excel → 發票 → 列印 → ERP", null, async (_, _) => await TestCoupangAsync());
+            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
+
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         return button;

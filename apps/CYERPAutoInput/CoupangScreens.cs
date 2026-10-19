@@ -146,4 +146,52 @@ internal static class CoupangScreens
             .OrderByDescending(b => b.Left).FirstOrDefault();
         return (box ?? label, confirm);
     }
+
+    /// <summary>
+    /// 「安排出貨」 after 批次安排配送 (user, 2026-10-19: 配送方式, 取貨日期, 取貨地址 with 編輯, 備註,
+    /// 取消／提交): the 配送方式 shown, whether 取貨地址 holds <paramref name="pickupAddress"/>
+    /// (spaces ignored; null when the dialog has no 取貨地址) and 提交; null when not shown.
+    /// </summary>
+    public static (string Method, bool? AddressMatches, OcrBox Submit)? ArrangeDialog(IReadOnlyList<OcrBox> boxes, string pickupAddress)
+    {
+        var submit = boxes.Where(b => C(b) == "提交").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (submit is null) return null;
+        // The topmost: the rows' own 「安排出貨」 buttons behind the dialog sit lower.
+        var title = boxes.Where(b => C(b) == "安排出貨" && b.Bottom < submit.Top && submit.Top - b.Bottom < 520 && b.Left < submit.Left)
+            .OrderBy(b => b.Top).FirstOrDefault();
+        if (title is null) return null;
+        // 取貨地址 is two lines (address, then name and phone) around its label; 配送方式 one.
+        string RowValue(string name, int reach)
+        {
+            var label = boxes.FirstOrDefault(b => C(b) == name && b.Top > title.Bottom && b.Bottom < submit.Top);
+            if (label is null) return string.Empty;
+            var mid = label.Top + label.Height / 2;
+            return string.Concat(boxes.Where(b => b.Left > label.Right + 20 && b.Top < mid + reach && b.Bottom > mid - reach && b.Right < submit.Right + 10)
+                .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C).Where(t => t != "編輯"));
+        }
+        var address = RowValue("取貨地址", 30);
+        var wanted = ShopeeScreenshot.Compact(pickupAddress);
+        bool? matches = address.Length == 0 ? null : wanted.Length >= 6 && address.Contains(wanted, StringComparison.Ordinal);
+        return (RowValue("配送方式", 10), matches, submit);
+    }
+
+    /// <summary>
+    /// 「取貨詳情」 after 提交 (user, 2026-10-19): the 訂單編號 listed with 成功, how many rows there
+    /// are, and 列印寄件單／關閉; null when not shown.
+    /// </summary>
+    public static (List<string> Succeeded, int Rows, OcrBox Print, OcrBox Close)? PickupDetails(IReadOnlyList<OcrBox> boxes)
+    {
+        var title = boxes.FirstOrDefault(b => C(b) == "取貨詳情");
+        if (title is null) return null;
+        var below = boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 700).ToList();
+        var print = below.Where(b => C(b) == "列印寄件單").OrderByDescending(b => b.Top).FirstOrDefault();
+        var close = below.Where(b => C(b) == "關閉").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (print is null || close is null) return null;
+        // Only the dialog: the list behind it has its own 訂單編號 further left.
+        below = below.Where(b => b.Left >= title.Left - 40 && b.Right <= print.Right + 40).ToList();
+        var rows = below.Where(b => b.Bottom < print.Top && OrderNumber.IsMatch(C(b))).OrderBy(b => b.Top).ToList();
+        var succeeded = rows.Where(r => below.Any(b => C(b) == "成功" && b.Left > r.Right && b.Top < r.Bottom + 16 && b.Bottom > r.Top - 16))
+            .Select(r => OrderNumber.Match(C(r)).Groups[1].Value).ToList();
+        return (succeeded, rows.Count, print, close);
+    }
 }
