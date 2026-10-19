@@ -26,6 +26,7 @@
 - [x] **3.2-C3c3b／V3.1.17 Build 0 Source**：Cloud 內部唯一 coordinator 串 C3c2 fresh AMEGO 預檢／CAS→單次 g0401→原號唯讀查回與 append-only reconciliation Hash Audit。全面驗證斷網/撞號/撤權/Crash 結果不明只讀原號，保守地不將 readback full match 直接寫成 confirmed（外部同號歸因不足）。合成 SQLite＋Fake HTTP 全跑；無正式 Worker route／D1 操作／真 g0401。
 - [x] **3.2-C4a／V3.1.18 Build 0 Source**：新 Cloud Allowance API（申請建立、本人／主管查詢、主管 review CAS／官方唯讀 preview／正式 Grant 核准／Ledger reserve）與現有 CYID + 活動 Device 身份閘門相接，對 schema18／`ALLOWANCE_API_ENABLED` 雙重上鎖；入口大小上限及錯誤不洩漏 Buyer/AppKey/Frozen 明文。用合成 SQLite、假 CYID 與簽名假 AMEGO 測試。原 D1 schema16／Worker flag 仍未更動，沒有任何公開 g0401 路由。C4b 繼續 Windows 跨裝置 UI，C4c 才評估可歸因發送入口及正式 D1 升格。
 - [x] **3.2-C4b／V3.1.19 Build 1 Source**：Windows Core 完成有安全回覆語意的 CYID Cloud 折讓傳輸客戶端，含建立、跨機 list、管理員認領、核准、配號、狀態回讀；用假 HttpClient 跑回歸，Device 與員工帳密不可被偽造，結果不明不自動重試；仍未掛入正式 WinForms UI，也無任何 g0401 直接呼叫。C4c 後續 UI。
+- [x] **3.2-C4c／V3.1.20 Build 0 Source**：Windows Cloud 主介面可開啟跨機折讓主管待辦：List/Readback/Review/官方 preview/Approve/Reserve，僅 manager 可在雲端實際核准；跨機失敗不重試，支持同 ID readback。官方 preview 永遠不是 g0401 送出授權。UI/WinCore smoke 與 fake HTTP contract 已納入 CI。申請建立仍需從現有折讓編輯器正式串入，另批 C4d；正式 D1 schema16／Worker 沒有部署。
 - [ ] **3.2-B2e～H 正式折讓執行**：B2d Source 入口已完成；接下來保留占號後受控換號、安全並發／斷電矩陣、Cloud／g0501／同步、實機與光貿測試環境驗收及正式發行，依 V3.2 計畫分批處理。不得以 CI 冒充真業務驗收。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
