@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.9 — 2026/10/19（3.2-C2 Cloud 加密申請、核准快照與單次配號 Ledger；engineering）
+
+- 獨立工程 Patch `VERSION=3.1.9`／`BUILD=0`；正式 Release 仍是 V3.1.0。
+- 選擇性移植 #440 的加密折讓 Frozen Request／官方核准 Grant／永久配號 Ledger 與唯讀原號核對 Audit 概念，重新接到 C1 新的 `allowance_applications.application_id`，不重建 schema16 `work_items` 或覆寫 migration0016。
+- `cloud/drafts/0018_allowance_frozen_ledger.sql` 為**審查用草稿**，不是 canonical migration：原請求明細以未來 Worker AES-GCM 加密 envelope 存放、請求及原發票關聯使用 opaque hash；D1 限制 Workspace／Device／公司卡版次、核准版本、狀態單向 CAS、單次 sending 及已知撞號歷史；不同合法申請保留多次部分折讓能力。
+- 隔離 SQLite 以既有 schema16 套草稿0017→0018，驗證失敗回滾／還原、Frozen/Grant/Audit append-only、兩筆相同來源發票在未定結果時互斥 sending、確認撞號後新 attempt，以及不改舊 Work Items。
+- 尚**沒有**移植 Worker 加解密 caller、CYID 管理員角色執行驗證、實際配號交易、官方 AMEGO 請求或正式 D1/Worker。SQL 結構不能替代實際 AES-GCM／官方證據／即時權限驗證；以上留後續 C3 與 H。
+
 ## V3.1.8 — 2026/10/19（3.2-C1 Cloud 折讓申請儲存結構草稿；engineering）
 
 - 從正式 schema16 出發，新增 drafts/0017_allowance_applications.sql 作審查用草稿，尚非 canonical migration，不會隨一般 D1 migration 自動套用。
