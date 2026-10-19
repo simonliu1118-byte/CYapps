@@ -24,42 +24,17 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>Wing 我的訂單 (user's screenshot, 2026-10-19).</summary>
     public const string CoupangUrl = "https://wing.coupang.com/tenants/sfl-portal/delivery/management";
 
-    /// <param name="fromArrange">
-    /// 測試 (user, 2026-10-19): carry on from 配送準備 in the Wing page already in front (訂單確認 skipped).
-    /// </param>
-    public async Task<CoupangBatchResult> RunCoupangAsync(string folder, Action<string> status, bool fromArrange = false)
+    public async Task<CoupangBatchResult> RunCoupangAsync(string folder, Action<string> status)
     {
         Directory.CreateDirectory(folder);
         if (ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
             throw new ShopeeBatchStop("請先在「設定 › 平台匯入 › 蝦皮」填新竹物流取件地址：酷澎「安排出貨」的取貨地址要和它相同才提交。");
         _pageTabs = true;
         var result = new CoupangBatchResult();
-        if (fromArrange)
-        {
-            _window = ChromeWindows().FirstOrDefault();
-            if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗：請先在 Chrome 打開酷澎 Wing「我的訂單」。");
-            Front();
-            await Task.Delay(500, _token);
-            _shippedHint = true; // orders were accepted before
-            // Taken up at 「取貨詳情」 when it is open (user, 2026-10-19: the test goes on from the screen in front).
-            using (var shown = await ReadAsync())
-                if (CoupangScreens.PickupDetails(shown.Boxes) is { } open)
-                {
-                    var channel = open.Method.Length > 0 ? open.Method : throw new ShopeeBatchStop("「取貨詳情」讀不到配送方式，請人工列印寄件單。", true);
-                    _log.Info("coupang-batch", $"resume at 取貨詳情 orders={open.Orders.Count} channel={channel}");
-                    status($"酷澎全自動：從取貨詳情接續 {channel}…");
-                    result.Arranged.AddRange(await FinishArrangeAsync(channel, open.Orders, submitted: true));
-                    Keys("F5", NativeMethods.VK_F5);
-                    await Task.Delay(1500, _token);
-                }
-        }
-        else
-        {
-            status("酷澎全自動：開啟 Chrome…");
-            await OpenWindowAsync(CoupangUrl);
-            await ConfirmCoupangOrdersAsync(result, status);
-            _shippedHint = result.Accepted.Count > 0;
-        }
+        status("酷澎全自動：開啟 Chrome…");
+        await OpenWindowAsync(CoupangUrl);
+        await ConfirmCoupangOrdersAsync(result, status);
+        _shippedHint = result.Accepted.Count > 0;
         await ArrangeCoupangShippingAsync(result, status);
 
         status("酷澎全自動：配送指示下載 Excel…");
@@ -264,11 +239,7 @@ internal sealed partial class ShopeeBatchRunner
         return await FinishArrangeAsync(channel, orders, submitted: false);
     }
 
-    /// <summary>
-    /// What Wing shows after 批次安排配送 until the orders leave the list (see
-    /// <see cref="ArrangeChannelAsync"/>); <paramref name="submitted"/> when it is taken up at
-    /// 「取貨詳情」 (測試 from the screen in front).
-    /// </summary>
+    /// <summary>What Wing shows after 批次安排配送, until 取貨詳情 is closed (see <see cref="ArrangeChannelAsync"/>).</summary>
     private async Task<List<string>> FinishArrangeAsync(string channel, List<string> orders, bool submitted)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
