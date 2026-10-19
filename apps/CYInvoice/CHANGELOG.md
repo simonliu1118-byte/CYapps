@@ -2,6 +2,16 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.13 Build 1 — 2026/10/19（3.2-C3b2b Cloud 主管正式核准 CAS；工程版）
+
+- 選擇性參照 #440 的主管決策記錄與狀態 CAS，改接現行 C1／C2 獨立 `allowance_applications` 與 `allowance_execution_approvals`，不復活 `work_items.ALLOWANCE`。
+- 以 C3a AES-GCM 凍結資料載入、C3b2a 光貿 `invoice_query` 加逐原發票 `allowance_query` 的**最新官方完整核對**作為唯一證據來源；本次決策先檢查 CYID ADMIN／SUPER_ADMIN、active Device/Workspace、公司卡版次及 review revision，核對後重新驗權並確認官方證據仍新鮮。
+- 單一 `D1.batch` 內以 INSERT SELECT 條件柵欄寫入不可修改 Grant，接著 CAS 更新 review→approved（revision +1），使用現有 SQL trigger 保持稽核 append-only；裝置失效、公司卡異動、不同主管、重入、舊 revision、未完成官方核對皆 fail-closed。
+- 結果不明時回報需按**原 application_id 唯讀查回**，不能把失敗當成重試或另配號權限。隔離測試：真 schema16＋兩份未升格 draft SQL、假 CYID、假官方回覆、兩步原子性、撤權、競態、不可變核准／稽核。
+- **只有內部核准 service，沒有公開路由、正式 D1 Migration、Cloudflare 部署、g0401/g0501 或正式 Release**；C3c 再分批處理 Ledger／單次送出；正式 Release 維持 V3.1.0。
+
+- Build 1：首次 Cloud CI 在 SQLite 合成測試發現 DatabaseSync 回傳 null-prototype row，改採逐欄斷言；核准 CAS 與業務實作無需改動。
+
 ## V3.1.12 Build 2 — 2026/10/19（3.2-C3b2a 官方逐原發票折讓證據，工程測試）
 
 - 以 #440 唯讀 `allowance_query` 邏輯與光貿現行公開 API 文件為依據，新增 `amego-allowance-detail.ts`：簽名唯讀 POST、不重試、最多 256 KiB、逐商品原發票號／原發票日期／未稅金額與稅額嚴格驗證。正式折讓號碼與每筆明細嚴格核對；待辦或結果不明拒絕當作完成證據。

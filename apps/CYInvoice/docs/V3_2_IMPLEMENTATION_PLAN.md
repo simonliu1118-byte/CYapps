@@ -81,6 +81,13 @@
 - **本批不做主管核准授權**：Evidence 不含核准位元，回傳 `approvalRecorded=false`、`numberReserved=false`；下一批 C3b2b 以受控 Worker 端 CYID Admin／active Device 前後驗權，合併 evidence、原本 review revision CAS 與 immutable Grant，確認再進 C3c 單次配號／發送。
 - `drafts/0017`／`0018` 仍不是 canonical migrations，正式 D1 原 schema16、原 Worker、Secrets、Bindings 不動；沒有真光貿財務交易。真環境驗收留 H。
 
+## 3.2-C3b2b 主管核准 CAS（V3.1.13 Build 1）
+
+- 使用 #440 主管決策模式，改接 schema16＋`drafts/0017`／`0018` 的獨立 `allowance_applications`、`allowance_execution_approvals`，**絕不把舊 work_items.ALLOWANCE 帶回來**。
+- Manager 需由未來 Worker 真實 CYID Consumer session + verified Device 組成可信 authority；內部 service 前後重驗同一 ADMIN/SUPER_ADMIN 員工、active Device、Workspace、公司卡修訂及當前 review revision。官方核對直接重執行 C3b2a 完整逐原發票核算（不是接受前端 evidence 或 C3b1 預覽作成功旗標），失敗／逾時／待確認則不得寫 Grant。
+- 核准 Grant 使用 `D1.batch` 交易內的 `INSERT SELECT` CAS 約束，後續 `UPDATE application status=approved, revision+1` 必須看到同筆 immutable grant，失敗不重送；對不確定結果只進入原 ID readback，禁止產生額外配號／g0401。SQLite／合成 HTTP 測試覆蓋角色、revocation、公司卡輪替與稽核不可變。
+- **這還不是公開 Cloud API**：C3c 再回收 #440 受控 Ledger／單次送出，HTTP route 必須待 trusted CYID/Device 驗證相容並另批測試；正式 schema17／18 升格與 Cloudflare 原 D1/Worker 由使用者本機 MCP 受控分開完成。真實 AMEGO 驗收留 H。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |

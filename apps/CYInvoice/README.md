@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.12 Build 2（非正式 Release）**：3.2-C3b2a 按真光貿查詢協定逐張折讓號核對每筆原發票金額／稅額，產生內部安全證據但不核准、不配號、不送出；正式 Cloudflare 與正式 D1 未改，正式 Release 仍 V3.1.0。
+- **目前工程 Source：V3.1.13 Build 1（非正式 Release）**：3.2-C3b2b 把凍結折讓、官方逐原發票餘額證據與 CYID 管理員安全檢查整合成原子 Grant＋revision CAS 內部服務。尚未接公開 Cloud API、正式 D1、配號或 g0401/g0501；正式 Release 仍是 V3.1.0。
+
+- **前一工程 Source：V3.1.12 Build 2（非正式 Release）**：3.2-C3b2a 按真光貿查詢協定逐張折讓號核對每筆原發票金額／稅額，產生內部安全證據但不核准、不配號、不送出；正式 Cloudflare 與正式 D1 未改，正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.11 Build 0（非正式 Release）**：3.2-C3b1 以 #440 的光貿 `invoice_query` 唯讀 adapter 與測試，安全串接 C3a 加密折讓資料供 CYID 主管內部預覽。官方摘要不能當作完整餘額或核准證據；沒有 Cloud route／正式 D1／g0401／g0501，正式 Release 仍為 V3.1.0。
 
