@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.11 Build 0（非正式 Release）**：3.2-C3b1 以 #440 的光貿 `invoice_query` 唯讀 adapter 與測試，安全串接 C3a 加密折讓資料供 CYID 主管內部預覽。官方摘要不能當作完整餘額或核准證據；沒有 Cloud route／正式 D1／g0401／g0501，正式 Release 仍為 V3.1.0。
+- **目前工程 Source：V3.1.12 Build 0（非正式 Release）**：3.2-C3b2a 按真光貿查詢協定逐張折讓號核對每筆原發票金額／稅額，產生內部安全證據但不核准、不配號、不送出；正式 Cloudflare 與正式 D1 未改，正式 Release 仍 V3.1.0。
+
+- **前一工程 Source：V3.1.11 Build 0（非正式 Release）**：3.2-C3b1 以 #440 的光貿 `invoice_query` 唯讀 adapter 與測試，安全串接 C3a 加密折讓資料供 CYID 主管內部預覽。官方摘要不能當作完整餘額或核准證據；沒有 Cloud route／正式 D1／g0401／g0501，正式 Release 仍為 V3.1.0。
 
 - **前一工程 Source：V3.1.10 Build 1（非正式 Release）**：3.2-C3a Cloud 折讓 Frozen template 真正使用現有 AES-GCM 加密 helper 加以封存，並提供內部、雙重驗權的原 ID 安全讀回；仍未安裝任何公開 Cloud route、未動正式 D1/Worker、未發送 g0401/g0501。正式 Release 仍為 V3.1.0。
 
