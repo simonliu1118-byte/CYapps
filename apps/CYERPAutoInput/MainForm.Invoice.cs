@@ -479,7 +479,7 @@ internal sealed partial class MainForm
         }
         if (MessageBox.Show(this,
                 (fromArrange
-                    ? "測試：從配送準備接續。請先在 Chrome 打開酷澎 Wing「我的訂單」並讓它在最前面（本程式以外）；不做訂單確認，從第 2 步開始：\n\n"
+                    ? "測試：從目前的 Wing 畫面接續。請讓 Chrome 的酷澎 Wing「我的訂單」在最前面（本程式以外）；不做訂單確認。「取貨詳情」開著時從列印寄件單接著做，否則從配送準備開始：\n\n"
                     : "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）：\n\n") +
                 "1. 訂單確認：全選 → 確認訂單 → 核對訂單編號 → 確認\n" +
                 "2. 配送準備：依配送通路選配送方式 → 全選 → 批次安排配送 → 核對取貨地址 → 提交 → 列印寄件單（熱感機，宅配 " + _settings.CoupangHctLabelScale + "%、超商 100%）\n" +

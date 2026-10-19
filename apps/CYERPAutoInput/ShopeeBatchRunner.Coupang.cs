@@ -41,6 +41,17 @@ internal sealed partial class ShopeeBatchRunner
             Front();
             await Task.Delay(500, _token);
             _shippedHint = true; // orders were accepted before
+            // Taken up at 「取貨詳情」 when it is open (user, 2026-10-19: the test goes on from the screen in front).
+            using (var shown = await ReadAsync())
+                if (CoupangScreens.PickupDetails(shown.Boxes) is { } open)
+                {
+                    var channel = open.Method.Length > 0 ? open.Method : throw new ShopeeBatchStop("「取貨詳情」讀不到配送方式，請人工列印寄件單。", true);
+                    _log.Info("coupang-batch", $"resume at 取貨詳情 orders={open.Orders.Count} channel={channel}");
+                    status($"酷澎全自動：從取貨詳情接續 {channel}…");
+                    result.Arranged.AddRange(await FinishArrangeAsync(channel, open.Orders, submitted: true));
+                    Keys("F5", NativeMethods.VK_F5);
+                    await Task.Delay(1500, _token);
+                }
         }
         else
         {
@@ -250,9 +261,19 @@ internal sealed partial class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"按「批次安排配送」前配送方式不是「{channel}」，已停止。", _shippedHint);
             Click(ticked, bar.Arrange, $"批次安排配送 {channel}");
         }
+        return await FinishArrangeAsync(channel, orders, submitted: false);
+    }
 
+    /// <summary>
+    /// What Wing shows after 批次安排配送 until the orders leave the list (see
+    /// <see cref="ArrangeChannelAsync"/>); <paramref name="submitted"/> when it is taken up at
+    /// 「取貨詳情」 (測試 from the screen in front).
+    /// </summary>
+    private async Task<List<string>> FinishArrangeAsync(string channel, List<string> orders, bool submitted)
+    {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        bool reminded = false, submitted = false, printed = false;
+        System.Diagnostics.Stopwatch? detailsSeen = null;
+        bool reminded = false, printed = false;
         while (true)
         {
             await Task.Delay(700, _token);
@@ -284,14 +305,29 @@ internal sealed partial class ShopeeBatchRunner
             {
                 if (!printed)
                 {
-                    _log.Info("coupang-batch", $"取貨詳情 rows={details.Rows} succeeded={details.Succeeded.Count}");
-                    if (details.Rows == 0 || details.Succeeded.Count != details.Rows || !orders.All(details.Succeeded.Contains))
-                        throw new ShopeeBatchStop($"「取貨詳情」不是全部成功（{details.Succeeded.Count}/{details.Rows}），沒有列印寄件單，請人工確認。", true);
+                    detailsSeen ??= System.Diagnostics.Stopwatch.StartNew();
+                    var allDone = details.Orders.Count > 0 && details.Succeeded.Count == details.Orders.Count && orders.All(details.Succeeded.Contains);
+                    _log.Info("coupang-batch", $"取貨詳情 orders={details.Orders.Count} succeeded={details.Succeeded.Count} method={details.Method}");
+                    if (!allDone)
+                    {
+                        // 狀態 is still loading right after 提交 (user LOG 2026-10-19): wait for 成功.
+                        if (detailsSeen.Elapsed < TimeSpan.FromSeconds(30)) continue;
+                        _log.Info("coupang-batch", $"取貨詳情 page: {string.Join(" | ", screen.Boxes.Select(b => $"{ShopeeScreenshot.Compact(b.Text)}@{b.Left},{b.Top}").Take(150))}");
+                        throw new ShopeeBatchStop($"「取貨詳情」30 秒內不是全部成功（{details.Succeeded.Count}/{details.Orders.Count}），沒有列印寄件單，請人工確認。", true);
+                    }
                     printed = true;
                     Click(screen, details.Print, "列印寄件單");
                     await PrintCoupangSlipsAsync(channel, orders.Count);
                 }
-                else Click(screen, details.Close, "取貨詳情 關閉");
+                else
+                {
+                    // 取貨詳情 already showed every order 成功; the list behind it is not reloaded
+                    // by Wing (user, 2026-10-19), so closing it ends the channel.
+                    Click(screen, details.Close, "取貨詳情 關閉");
+                    await Task.Delay(800, _token);
+                    _log.Info("coupang-batch", $"arranged {orders.Count} order(s) channel={channel} reminder={reminded}");
+                    return orders;
+                }
                 continue;
             }
             if (CoupangScreens.DoneDialogConfirm(screen.Boxes) is { } ok) { Click(screen, ok, "配送處理完成 確認"); continue; }
@@ -301,7 +337,7 @@ internal sealed partial class ShopeeBatchRunner
                 _log.Info("coupang-batch", $"arranged {orders.Count} order(s) channel={channel} reminder={reminded}");
                 return orders;
             }
-            if (watch.Elapsed > TimeSpan.FromSeconds(90))
+            if (watch.Elapsed > TimeSpan.FromSeconds(120))
             {
                 _log.Info("coupang-batch", $"after 批次安排配送: {string.Join(" | ", screen.Boxes.Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 30).Take(150))}");
                 throw new ShopeeBatchStop($"按「批次安排配送」（{channel}）後沒有走完（提交 {submitted}、列印 {printed}），請人工確認。", true);

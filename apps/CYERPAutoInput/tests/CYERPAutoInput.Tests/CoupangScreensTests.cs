@@ -125,15 +125,21 @@ public class CoupangScreensTests
         Assert.Equal(("宅配-新竹物流", (bool?)true, 1273), (method, matches, submit.Left));
         Assert.False(CoupangScreens.ArrangeDialog(arrange, "高雄市示範區測試路2號")!.Value.AddressMatches);
 
+        // The cell and its link both read the 訂單編號 (user LOG 2026-10-19: counted as 2 rows).
         var details = new List<OcrBox>
         {
-            B("取貨詳情", 500, 207, 80), B("訂單編號", 578, 293, 52), B("寄件單號", 1222, 293, 52), B("狀態", 1342, 293, 28),
-            B("900000000000001", 551, 375, 106), B("1800000000", 1208, 375, 80), B("成功", 1350, 375, 28),
-            B("關閉", 1207, 682, 32), B("列印寄件單", 1298, 682, 82), B("900000000000009", 323, 750, 106)
+            B("取貨詳情", 72, 64, 80), B("訂單編號", 74, 132, 205, 52), B("寄件單號", 755, 132, 130, 52), B("狀態", 886, 132, 80, 52),
+            B("900000000000001", 74, 184, 205, 113), B("900000000000001", 122, 233, 106, 18), B("1800000000", 755, 184, 130, 113), B("成功", 886, 184, 80, 113),
+            B("配送方式", 85, 392, 56), B("宅配 - 新竹物流", 85, 410, 98),
+            B("關閉", 748, 528, 92, 38), B("列印寄件單", 855, 528, 112, 38)
         };
-        var (succeeded, rows, print, close) = CoupangScreens.PickupDetails(details)!.Value;
+        var (orders, succeeded, shipMethod, print, close) = CoupangScreens.PickupDetails(details)!.Value;
+        Assert.Equal(["900000000000001"], orders);
         Assert.Equal(["900000000000001"], succeeded);
-        Assert.Equal((1, 1298, 1207), (rows, print.Left, close.Left));
+        Assert.Equal(("宅配-新竹物流", 855, 748), (shipMethod, print.Left, close.Left));
+        // Still loading: no 成功 yet.
+        var loading = details.Where(b => b.Text != "成功").ToList();
+        Assert.Empty(CoupangScreens.PickupDetails(loading)!.Value.Succeeded);
     }
 
     [Fact]

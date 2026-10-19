@@ -197,10 +197,11 @@ internal static class CoupangScreens
     }
 
     /// <summary>
-    /// 「取貨詳情」 after 提交 (user, 2026-10-19): the 訂單編號 listed with 成功, how many rows there
-    /// are, and 列印寄件單／關閉; null when not shown.
+    /// 「取貨詳情」 after 提交 (user, 2026-10-19): the 訂單編號 it lists (each once: the cell and its
+    /// link both read), those whose 狀態 reads 成功 (not at once: it was still loading a second after
+    /// 提交, user LOG 2026-10-19), its 配送方式, and 列印寄件單／關閉; null when not shown.
     /// </summary>
-    public static (List<string> Succeeded, int Rows, OcrBox Print, OcrBox Close)? PickupDetails(IReadOnlyList<OcrBox> boxes)
+    public static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close)? PickupDetails(IReadOnlyList<OcrBox> boxes)
     {
         var title = boxes.FirstOrDefault(b => C(b) == "取貨詳情");
         if (title is null) return null;
@@ -211,8 +212,14 @@ internal static class CoupangScreens
         // Only the dialog: the list behind it has its own 訂單編號 further left.
         below = below.Where(b => b.Left >= title.Left - 40 && b.Right <= print.Right + 40).ToList();
         var rows = below.Where(b => b.Bottom < print.Top && OrderNumber.IsMatch(C(b))).OrderBy(b => b.Top).ToList();
-        var succeeded = rows.Where(r => below.Any(b => C(b) == "成功" && b.Left > r.Right && b.Top < r.Bottom + 16 && b.Bottom > r.Top - 16))
-            .Select(r => OrderNumber.Match(C(r)).Groups[1].Value).ToList();
-        return (succeeded, rows.Count, print, close);
+        string Number(OcrBox b) => OrderNumber.Match(C(b)).Groups[1].Value;
+        var orders = rows.Select(Number).Distinct().ToList();
+        var succeeded = rows.Where(r => below.Any(b => C(b).Contains("成功", StringComparison.Ordinal) && b.Left > r.Right && b.Top < r.Bottom + 16 && b.Bottom > r.Top - 16))
+            .Select(Number).Distinct().ToList();
+        var methodLabel = below.FirstOrDefault(b => C(b) == "配送方式");
+        var method = methodLabel is null ? string.Empty
+            : below.Where(b => b.Top >= methodLabel.Bottom - 2 && b.Top < methodLabel.Bottom + 40 && Math.Abs(b.Left - methodLabel.Left) < 40)
+                .Select(b => Channel(C(b))).FirstOrDefault(c => c is not null) ?? string.Empty;
+        return (orders, succeeded, method, print, close);
     }
 }
