@@ -182,6 +182,17 @@ async function call(env,action,body={},token=rawDevA){
   assert.equal(got.body.application.status,"open");
   assert.ok(!JSON.stringify(got.body).includes("unnumberedTemplateJson"));
   assert.ok(!JSON.stringify(got.body).includes("NOT_A_REAL_APP"));
+  // A different employee of the SAME Workspace and Device may never
+  // discover or decrypt the applicant's allowance application.
+  const other=config(db,principal("USER","other_employee"));
+  const hidden=await call(other,"get",{applicationId:app1});
+  assert.equal(hidden.status,404);
+  assert.equal(hidden.body.error.code,"NOT_FOUND");
+  const otherList=await call(other,"list");
+  assert.equal(otherList.status,200);
+  assert.equal(otherList.body.items.length,0);
+  const hiddenStatus=await call(other,"status",{applicationId:app1});
+  assert.equal(hiddenStatus.status,404);
   const employeeList=await call(employee,"list");
   assert.equal(employeeList.body.items.length,1);
   assert.equal((await call(employee,"review",{applicationId:app1,
