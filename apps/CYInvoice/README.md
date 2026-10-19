@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.16 Build 0（非正式 Release）**：3.2-C3c3a 回收 #440 光貿 g0401 單次簽名 transport，另實作官方原號完整 Frozen 明細查回驗證；仍未接到 C3c2 CAS 或公開路由，不呼叫真光貿、不更新 D1／Worker，不可將單獨查回當作正式核准或可再次送出。正式 Release 仍是 V3.1.0。
+- **目前工程 Source：V3.1.17 Build 0（非正式 Release）**：C3c3b 已有 Cloud 內部單次發送 coordinator；正式 CYID HTTP API、WinForms、D1 migration 未接，且原號全項吻合仍無法自動推論正式交易歸因。禁止正式 g0401 或 D1／Worker 操作，正式 Release 仍 V3.1.0。
+
+- **前一工程 Source：V3.1.16 Build 0（非正式 Release）**：3.2-C3c3a 回收 #440 光貿 g0401 單次簽名 transport，另實作官方原號完整 Frozen 明細查回驗證；仍未接到 C3c2 CAS 或公開路由，不呼叫真光貿、不更新 D1／Worker，不可將單獨查回當作正式核准或可再次送出。正式 Release 仍是 V3.1.0。
 
 - **前一工程 Source：V3.1.15 Build 1（非正式 Release）**：3.2-C3c2 內部 Cloud Ledger 完整官方 preflight 與 reserved→sending 單次 CAS，阻擋重入／撤權／官方變動；未接任何 g0401 POST、未動正式 D1／Worker 或正式 Release。
 

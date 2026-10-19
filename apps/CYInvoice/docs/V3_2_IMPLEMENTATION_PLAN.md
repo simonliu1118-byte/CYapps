@@ -110,6 +110,12 @@
 - **C3c3b 下一批**：設計唯一的受控 Cloud Coordinator，將 C3c2 `reserved→sending` 成功權限與單次 g0401 POST 原子語意耦合；保存 append-only official reconciliation，對 timeout/crash 等未知結果只讀回不重送。已知碰撞與 full-payload match 不可單靠編號自動結案，需具可信發送 attempt 證據。仍不得新增公開路由、改正式 Migration 或真光貿驗證，除非另經批准。
 - 原 schema16、draft0017/0018、CYID Consumer contract、Local 既有入口與正式 Release 均維持原狀；正式 Cloudflare Worker／D1 改動需使用者本機 MCP 獨立工作單。
 
+## 3.2-C3c3b Cloud 單次送出協調器（V3.1.17 Build 0）
+
+- 內部 `allowance-one-shot-coordinator.ts` 是唯一 **Cloud service** 封裝 C3c2 `reserved→sending` 和 C3c3a g0401 及原號查回的執行路徑，沒有掛 app.ts 路由。CAS 成功後若斷電，Ledger 已是 sending，下一次只能唯讀原號查回；即使 g0401 code=0，仍需可歸因的證據才允許 confirmed。
+- 原號全項吻合也保留 `full_match_unattributed`，因為完全相同號碼和內容仍不足以判斷是否由此次 POST 建立；append-only Audit 只保存官方快照 Hash、原號、稽核人／裝置，不把同號回讀視為正式核准。外部撞號與結果不明永遠禁止自動換號／重送。
+- **後續 C 階段仍待完成**：正式 CYID Employee / Device 可信 HTTP route、跨裝置申請／主管覆核、Windows UI、安全歸因/人工覆核政策、draft0017/0018 升格並完成 schema16 升級／回退測試；真 Cloudflare 更新必須交使用者本機 MCP，另需真 Windows／AMEGO 測試批准。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
