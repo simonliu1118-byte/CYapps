@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.11 — 2026/10/19（3.2-C3b1 Cloud 主管光貿唯讀預覽；engineering）
+
+- 從 #440 精選回收正式 `invoice_query` **唯讀簽名 adapter** 及其 synthetic transport 測試；code=0 與官方折讓摘要不直接等同可開立／可折餘額。缺漏、未知、跨原發票的摘要金額不估成可折上限。
+- 新增 `allowance-manager-preview.ts` 作 C3a Frozen 申請的內部主管預覽：使用 Worker 專屬公司卡 AppKey、同一 Workspace／active Device、CYID ADMIN/SUPER_ADMIN 前後重新驗權、requestHash／revision／review 狀態二次比對、公司卡版本與 AppKey 改動防護。預覽只回官方摘要與資料完整度，不回傳金鑰或原加密請求本文。
+- 明確固定 `canApprove=false`／`canAllocateNumber=false`／`safeToInferRemainingBalance=false`，禁止把純 `invoice_query` 摘要誤用為已完成正式折讓核准。尚未接 Cloud HTTP route 或任何官方 mutation；完整原發票逐項與有效餘額核對、主管核准 Grant CAS 留下一批 C3b2。
+- 隔離 SQLite＋合成官方 HTTP 測試覆蓋簽章、零重試、未授權／撤銷零網路呼叫、官方 pending／不完整／91、跨 Workspace、公司改版、身分切換、申請 revision race。正式 Release 仍為 V3.1.0。
+
 ## V3.1.10 Build 1 — 2026/10/19（3.2-C3a Cloud 加密折讓申請封存／安全讀回；engineering）
 
 - 從 #440 舊 `allowance-applications.ts` 選擇性重接，新增 `cloud/src/allowance-frozen-store.ts`，採現行 schema16＋drafts/0017/0018 的獨立 application_id；**不帶回** `work_items.kind='ALLOWANCE'`。

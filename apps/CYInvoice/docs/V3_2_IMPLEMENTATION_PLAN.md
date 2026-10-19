@@ -67,6 +67,13 @@
 - 只做內部儲存／讀取 service；不執行任何光貿 official claim、配號、g0401/g0501，不能將 callback/SQL 保護誤當已驗證正式 CYID 身分。維持 SQL draft，正式 D1/Worker 須待本機 Work MCP 受控批准。
 - **C3b 待做**：#440 Cloud manager review/official verifier + scoped routes，對齊現行 app/Device/CYID consumer contract，完整 fail-closed 官方餘額與授權；另拆 C3c 配號/one-shot 和 C4 Windows UI。
 
+## 3.2-C3b1 工程切片（V3.1.11 Build 0）
+
+- 從 #440 移植現有唯讀 `amego-invoice-query.ts`（含測試），不抄舊 `work_items.ALLOWANCE` 路由；新 `allowance-manager-preview.ts` 只在內部對 C3a encrypted application／C2 review+revision 實作 CYID 管理員、active Device 與公司卡前後檢查。
+- `invoice_query` 的 `allowance[]` 是可顯示的官方摘要，可能跨原發票且來源摘要不完整，**不**當成單張原發票確切已折金額。管理員預覽必須 `canApprove=false`、`canAllocateNumber=false`、`safeToInferRemainingBalance=false`，不存核准、不配號，也不執行 g0401/g0501。
+- **C3b2 下一片**：仍利用 #440 官方驗證來源，但要先建立每筆原號／原發票配對的完整安全證據，再對 frozen items、含稅有效餘額及 manager review 作 CAS 授權與 immutable Grant；必須由 Worker trusted gateway 綁現行 CYID/Device，不能直接相信前端 supplied evidence。
+- **C3c** 才可接 Ledger `reserved→sending`／單次傳輸與原號唯讀查回；C4 接 Windows 跨機 UI；Cloudflare D1／Worker 操作另經本機 MCP 批准。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
