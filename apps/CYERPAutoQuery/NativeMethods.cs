@@ -110,6 +110,12 @@ internal static class NativeMethods
     internal static extern nint WindowFromPoint(POINT point);
 
     [DllImport("user32.dll")]
+    internal static extern bool GetClientRect(nint hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    internal static extern bool ClientToScreen(nint hWnd, ref POINT point);
+
+    [DllImport("user32.dll")]
     internal static extern nint GetAncestor(nint hWnd, uint flags);
 
     [DllImport("user32.dll")]

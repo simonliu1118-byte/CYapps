@@ -1219,6 +1219,44 @@ internal sealed partial class ItemQueryService
         return text.Length > 0 ? text : NativeMethods.WindowText(box).Trim();
     }
 
+    /// <summary>
+    /// The text in a message box's body: its client area above the buttons, so the caption (ERP puts
+    /// the report's name there) is left out. Read as windows first, then by OCR twice (the second
+    /// time without requiring Chinese). Empty when the body shows nothing.
+    /// </summary>
+    private async Task<string> ReadMessageBodyAsync(nint box)
+    {
+        var statics = Win32Automation.EnumerateChildren(box)
+            .Where(c => c.Visible && !IsButtonClass(c.ClassName) && c.Text.Trim().Length > 0).Select(c => c.Text.Trim()).ToList();
+        if (statics.Count > 0) return string.Join(" ", statics);
+        if (!NativeMethods.GetClientRect(box, out var client)) return "?";
+        var origin = new NativeMethods.POINT();
+        if (!NativeMethods.ClientToScreen(box, ref origin)) return "?";
+        var bottom = origin.Y + client.Height;
+        var buttonTops = Win32Automation.EnumerateChildren(box).Where(c => c.Visible && IsButtonClass(c.ClassName)).Select(c => c.Rect.Top).ToList();
+        if (buttonTops.Count > 0) bottom = Math.Min(bottom, buttonTops.Min() - 2);
+        var region = new Rectangle(origin.X, origin.Y, client.Width, bottom - origin.Y);
+        if (region.Width < 8 || region.Height < 8) return string.Empty;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                if (attempt > 0) await Task.Delay(300);
+                IReadOnlyList<OcrToken> tokens;
+                using (var image = ScreenCapture.Capture(region))
+                    tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: attempt == 0);
+                var text = string.Join(" ", tokens.Select(t => t.Text.Trim()).Where(t => t.Length > 0));
+                if (text.Length > 0) return text;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ExternalException)
+            {
+                _log.Warn("erp-message", $"body OCR failed: {ex.GetType().Name}");
+                return "?";
+            }
+        }
+        return string.Empty;
+    }
+
     // ---- 客戶 (COPI01)／廠商 (PURI01) ----------------------------------------------------
 
     /// <summary>

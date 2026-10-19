@@ -388,10 +388,15 @@ internal sealed partial class ItemQueryService
             }
             if (FindErpMessageBox(dialog) is var box && box != 0)
             {
-                // Nothing matched: ERP says so in a box instead of opening a report.
+                // Nothing matched: ERP says so in a box instead of opening a report. V0.9.0 Build 5
+                // LOG (COPR16 without 銷退單): the box holds no text at all, only the report's title
+                // in its caption and one OK button; any text in its body is a real message.
                 var text = await ReadErpMessageAsync(box);
-                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)}");
-                if (!SalesReportLayout.IsNoData(text))
+                var body = await ReadMessageBodyAsync(box);
+                var buttons = Win32Automation.EnumerateChildren(box).Count(c => c.Visible && IsButtonClass(c.ClassName));
+                var emptyNotice = body.Length == 0 && buttons == 1 && report.IsTitle(NativeMethods.WindowText(box));
+                _log.Info("sales", $"{report.Code} message after 即時報表 text={_log.Value(text)} body={_log.Value(body)} buttons={buttons} empty_notice={emptyNotice}");
+                if (!emptyNotice && !SalesReportLayout.IsNoData(text))
                     await ThrowErpMessageAsync(box, $"{report.Title}按「即時報表」後，");
                 await DismissMessageAsync(box, cancellationToken);
                 _log.Info("sales", $"{report.Code} no data; message closed");
