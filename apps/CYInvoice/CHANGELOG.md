@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.8 — 2026/10/19（3.2-C1 Cloud 折讓申請儲存結構草稿；engineering）
+
+- 從正式 schema16 出發，新增 drafts/0017_allowance_applications.sql 作審查用草稿，尚非 canonical migration，不會隨一般 D1 migration 自動套用。
+- 分開保存折讓申請（不存發票號、買方或官方證據）與不可變審核 Audit，Workspace／Device 外鍵、revision CAS、唯一 application_id、終態不可變；同發票來源雜湊可有多筆獨立合法折讓。
+- 新增隔離 SQLite schema16 升級、失敗回滾、舊資料／schema 保留、CAS、Audit 不可修改及備份還原測試；未包含配號 ledger、正式 Cloud API／CYID 操作與部署。正式 Release 仍為 V3.1.0。
+
 ## V3.1.7 Build 1 — 2026/10/19（3.2-B2d Local Windows 單次折讓執行；engineering）
 
 - 獨立工程 Patch VERSION=3.1.7、BUILD=1；上一正式 Release 為 V3.1.0。
