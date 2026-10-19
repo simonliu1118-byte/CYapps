@@ -53,12 +53,12 @@ internal static class CloudAllowanceClientTests
         using(var http=new HttpClient(new FakeHandler()))
         {
             await Fail<ArgumentException>(async()=>{
-                using var _=new CloudAllowanceClient(http,
+                _=new CloudAllowanceClient(http,
                     new Uri("http://example.invalid"),Token);
                 await Task.CompletedTask;
             });
             await Fail<ArgumentException>(async()=>{
-                using var _=new CloudAllowanceClient(http,
+                _=new CloudAllowanceClient(http,
                     new Uri("https://example.invalid/?password=bad"),Token);
                 await Task.CompletedTask;
             });
