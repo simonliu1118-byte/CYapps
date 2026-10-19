@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.15 Build 0（非正式 Release）**：3.2-C3c2 內部 Cloud Ledger 完整官方 preflight 與 reserved→sending 單次 CAS，阻擋重入／撤權／官方變動；未接任何 g0401 POST、未動正式 D1／Worker 或正式 Release。
+- **目前工程 Source：V3.1.15 Build 1（非正式 Release）**：3.2-C3c2 內部 Cloud Ledger 完整官方 preflight 與 reserved→sending 單次 CAS，阻擋重入／撤權／官方變動；未接任何 g0401 POST、未動正式 D1／Worker 或正式 Release。
 
 - **前一工程 Source：V3.1.14 Build 0（非正式 Release）**：3.2-C3c1 從 #440 回收安全每日配號機制，接到 C1/C2 獨立折讓批准與 Ledger；只預留首次號碼，未進行任何正式光貿 g0401／g0501、Cloudflare 變更或 D1 migration。正式 Release 仍為 V3.1.0。
 
