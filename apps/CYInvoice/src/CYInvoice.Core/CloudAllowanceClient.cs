@@ -169,7 +169,8 @@ public sealed class CloudAllowanceClient
         foreach(var r in items.EnumerateArray()){
             if(r.ValueKind!=JsonValueKind.Object||r.EnumerateObject().Count()!=6)
                 throw new InvalidDataException("Cloud allowance list contains an unsafe field.");
-            var id=Required(r,"applicationId"),s=Required(r,"status");
+            var id=Required(r,"applicationId");
+            var s=Required(r,"status");
             ValidateId(id);EnsureStatus(s);
             if(!seen.Add(id)||r.GetProperty("revision").GetInt32()<1||
                !DateTimeOffset.TryParse(Required(r,"updatedAt"),out var when)||
@@ -220,7 +221,8 @@ public sealed class CloudAllowanceClient
            !root.TryGetProperty("maySendWithoutFreshOfficialCheck",out var b)||
            b.ValueKind!=JsonValueKind.False)
             throw new InvalidDataException("Cloud allowance reserve response is not a send authorization.");
-        var ledger=Required(root,"ledgerId"),number=Required(root,"allowanceNumber");
+        var ledger=Required(root,"ledgerId");
+        var number=Required(root,"allowanceNumber");
         if(!Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
            !Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$"))
             throw new InvalidDataException("Cloud allowance reserved ID is invalid.");
