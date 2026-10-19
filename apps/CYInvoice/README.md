@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.20 Build 0（非正式 Release）**：C4c 加入 WinForms 跨機折讓主管待辦畫面、獨立 readback 與官方 preview-only 合約；仍無公開 g0401 發送、真光貿、正式 D1/Worker 變更，Release 仍 V3.1.0。
+- **目前工程 Source：V3.1.21 Build 0（非正式 Release）**：C5 在非空 schema16 SQLite 執行 C1/C2 草稿升級、失敗 rollback、備份還原測試；正式 D1/Worker 仍未更新，schema17/18 尚未升格至 canonical migrations，正式 Release 仍 V3.1.0。
+
+- **前一工程 Source：V3.1.20 Build 0（非正式 Release）**：C4c 加入 WinForms 跨機折讓主管待辦畫面、獨立 readback 與官方 preview-only 合約；仍無公開 g0401 發送、真光貿、正式 D1/Worker 變更，Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.19 Build 1（非正式 Release）**：C4b 加入 Windows Core CYID 折讓 Cloud client 與 no-retry 安全回讀合成測試；正式 WinForms UI、schema17/18 與 Cloudflare 原 Worker/D1 仍未連接／部署，正式 Release 仍為 V3.1.0。
 
