@@ -52,6 +52,13 @@
 - 審查 SQL 暫置 `cloud/drafts/0017_allowance_applications.sql`，尚不升格 canonical migration。用 SQLite 合成升級、失敗回滾、CAS 和備份還原測試審查資料語意；原 Worker/D1 不變。
 - C2 再確認 Cloud app 層 CYID 角色／active Device／Workspace fencing、配號 Ledger 與正式 migration；B2e 的 Local 撞號、3.2-D～H 的業務驗收並未因本草稿完成。
 
+## 3.2-C2 工程草稿（V3.1.9 Build 0）
+
+- 使用 #440 的 `0016_allowance_number_ledger.sql`、`0018_allowance_applications.sql`、`allowance-number-ledger.ts` 及合成測試當作**設計來源**，接到現行 `schema16 → drafts/0017`，另增 `drafts/0018_allowance_frozen_ledger.sql`。不能搬回舊 `work_items.kind='ALLOWANCE'`、舊 migration 編號或明文發票細節。
+- 加密 Frozen Request、主管官方快照 Grant、原號永久 Ledger 和原號核對 Audit 為獨立表，使用 Request Hash 與 Workspace／Device／公司卡版次作護欄；正式 API 必須在 Worker 執行 AES-GCM、CYID 重驗與官方查回，不可信任 SQL 內任一摘要作為業務成功證據。
+- 以隔離 SQLite 驗證狀態單向、同一申請零重送、同張發票合法不同申請互斥不明 sending、確定撞號後下一 attempt、舊 schema16 完整保留、交易回滾及備份還原。C2 不掛 routes、不自動套正式 D1。
+- **C3 下一步**：審查 #440 服務端加解密／role／最新 AMEGO readback／ledger 執行 CAS，對照 C1/C2 最終定稿成 canonical migration，經 CI 及 Cloudflare 本機 Work MCP 另行審核後才考慮上線。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
