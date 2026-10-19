@@ -149,4 +149,24 @@ public class CoupangScreensTests
         Assert.Equal(["宅配-新竹物流", "便利商店-7-11"], CoupangScreens.ColumnValues(page, header, "配送通路"));
         Assert.Equal("宅配-嘉里", CoupangScreens.Channel(ShopeeScreenshot.Compact(CoupangScreens.ShipBar(page)!.Value.Select.Text)));
     }
+
+    [Fact]
+    public void Reads_rows_that_start_where_the_tall_header_cells_end()
+    {
+        // As the user's LOG read 配送準備 (2026-10-19): header cells 611–668, the row's cells from 668.
+        var page = new List<OcrBox>
+        {
+            B("待安排配送清單", 245, 400, 126), B("共 1 筆", 386, 403, 42), B("已選 0 筆", 461, 403, 55),
+            B("訂單編號", 311, 611, 140, 57), B("分箱出貨", 451, 611, 93, 57), B("配送通路", 617, 611, 124, 57), B("寄件單號", 741, 611, 148, 57),
+            B(ShopeeBatchScreens.NamelessCheckBox, 271, 630, 18, 18),
+            B("900000000000001", 311, 668, 140, 64), B("宅配-新竹物流", 617, 668, 124, 64), B("安排出貨發票種類:紙本發票", 741, 668, 148, 64),
+            B(ShopeeBatchScreens.NamelessCheckBox, 271, 732, 18, 18), B("900000000000001", 328, 732, 106, 18),
+            B("批次安排配送", 1729, 863, 150, 30), B("請選擇配送方式", 1513, 867, 190, 26), B("安排配送", 1275, 876, 56)
+        };
+        var header = CoupangScreens.ListHeader(page, "待安排配送清單")!;
+        Assert.Equal(["900000000000001"], CoupangScreens.ListedOrders(page, header));
+        Assert.Equal(["宅配-新竹物流"], CoupangScreens.ColumnValues(page, header, "配送通路"));
+        Assert.Equal(271, CoupangScreens.SelectAll(page, header).Left);
+        Assert.Equal("請選擇配送方式", CoupangScreens.ShipBar(page)!.Value.Select.Text);
+    }
 }

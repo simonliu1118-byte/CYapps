@@ -66,7 +66,7 @@ internal static class CoupangScreens
 
     /// <summary>The 訂單編號 shown in the list's column, top to bottom.</summary>
     public static List<string> ListedOrders(IReadOnlyList<OcrBox> boxes, OcrBox header) =>
-        boxes.Where(b => b.Top > header.Bottom && b.CenterX > header.Left - 80 && b.CenterX < header.Right + 80 && OrderNumber.IsMatch(C(b)))
+        boxes.Where(b => BelowHeader(b, header) && b.CenterX > header.Left - 80 && b.CenterX < header.Right + 80 && OrderNumber.IsMatch(C(b)))
             .OrderBy(b => b.Top).Select(b => OrderNumber.Match(C(b)).Groups[1].Value).Distinct().ToList();
 
     /// <summary>
@@ -115,12 +115,18 @@ internal static class CoupangScreens
         var head = boxes.FirstOrDefault(b => C(b).StartsWith(column, StringComparison.Ordinal) && b.Top <= mid + 24 && b.Bottom >= mid - 24);
         // Not above the bottom bar: its drop-down shows a channel too.
         var floor = boxes.Where(b => C(b) == "批次安排配送" || C(b) == "批次列印寄件單").Select(b => b.Top - 20).DefaultIfEmpty(int.MaxValue).Min();
-        var cells = boxes.Where(b => b.Top > header.Bottom && b.Top < floor && Channel(C(b)) is not null).ToList();
+        var cells = boxes.Where(b => BelowHeader(b, header) && b.Top < floor && Channel(C(b)) is not null).ToList();
         // In the column when its header is read (user LOG 2026-10-19: it was not), else any
         // channel-looking cell of the rows (「宅配 - 新竹物流」, 「便利商店 - 7-11」…).
         var inColumn = head is null ? [] : cells.Where(b => Math.Abs(b.CenterX - head.CenterX) <= 90).ToList();
         return (inColumn.Count > 0 ? inColumn : cells).OrderBy(b => b.Top).Select(b => Channel(C(b))!).ToList();
     }
+
+    /// <summary>
+    /// In a row under the header row. Wing's header cell is as tall as its row, so the first data
+    /// row starts exactly at its bottom (user LOG 2026-10-19: header 611–668, row at 668).
+    /// </summary>
+    private static bool BelowHeader(OcrBox b, OcrBox header) => b.Top >= header.Bottom - 2 && b.CenterY > header.Bottom;
 
     /// <summary>A 配送通路／配送方式 name as the drop-down shows it (「宅配-新竹物流」), dashes made plain; null when not one.</summary>
     public static string? Channel(string compact)
