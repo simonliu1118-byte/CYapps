@@ -1626,44 +1626,36 @@ internal sealed partial class MainForm : Form
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Warn("mo-batch", $"temp folder left: {ex.Message}"); }
     }
 
+    /// <summary>
+    /// 酷澎 › 匯入訂單匯出檔 (user, 2026-10-19: the former 測試 after its download, now the import):
+    /// a DeliveryList → CYInvoice's 酷澎 entry issues (always paper, printed in the background) →
+    /// every order clean (and CYInvoice in production) straight into ERP, otherwise the preview.
+    /// </summary>
     private async Task ImportCoupangAsync()
     {
-        if (_automationCts is not null) return;
+        const string title = "酷澎訂單匯入";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.CoupangOrderType.Length == 0 ? "酷澎銷貨單別" : null,
             _settings.CoupangCustomerCode.Length == 0 ? "酷澎客戶代號" : null,
             _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
-            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null,
+            _settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath) ? "CYInvoice.exe" : null,
+            _settings.A4Printer.Length == 0 ? "A4 印表機（紙本發票）" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
         var path = PickExportFile("選擇酷澎訂單匯出檔（DeliveryList）", "Excel 活頁簿 (*.xlsx)|*.xlsx");
         if (path is null) return;
-
-        CoupangImportResult parsed;
-        try
-        {
-            await using var stream = File.OpenRead(path);
-            parsed = CoupangOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
-        {
-            _log.Warn("coupang", $"export read failed: {ex.GetType().Name}");
-            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        _log.Info("coupang", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
-
-        var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
-            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
-        await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
+        _log.Info("coupang", "import picked a DeliveryList");
+        Session.Begin(AutomationSession.BatchTitle);
+        await CoupangToErpAsync(title, path, []);
     }
 
     private string? PickExportFile(string title, string filter)
@@ -2177,7 +2169,7 @@ internal sealed partial class MainForm : Form
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
             menu.Items.Add("全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）", null, async (_, _) => await RunCoupangBatchAsync());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportCoupangAsync());
+            menu.Items.Add("匯入訂單匯出檔（.xlsx → 發票 → 列印 → ERP）", null, async (_, _) => await ImportCoupangAsync());
 
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
