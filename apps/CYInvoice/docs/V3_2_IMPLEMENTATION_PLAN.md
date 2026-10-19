@@ -59,7 +59,7 @@
 - 以隔離 SQLite 驗證狀態單向、同一申請零重送、同張發票合法不同申請互斥不明 sending、確定撞號後下一 attempt、舊 schema16 完整保留、交易回滾及備份還原。C2 不掛 routes、不自動套正式 D1。
 - **C3 下一步**：審查 #440 服務端加解密／role／最新 AMEGO readback／ledger 執行 CAS，對照 C1/C2 最終定稿成 canonical migration，經 CI 及 Cloudflare 本機 Work MCP 另行審核後才考慮上線。
 
-## 3.2-C3a 工程切片（V3.1.10 Build 0）
+## 3.2-C3a 工程切片（V3.1.10 Build 1）
 
 - 保留 #440 舊 Cloud `allowance-applications.ts` 的加密封存／失敗回讀思路，改由獨立 `allowance-frozen-store.ts` 寫入 C1/C2 `allowance_applications`、`allowance_frozen_requests`，不增添第二個 owner，也不動 schema16 現有非折讓 Work Items。
 - 加密一律呼叫正式公司卡 AES-GCM owner，AAD 綁 Workspace／application_id／請求 hash；來源、原發票 serial fingerprint 用注入金鑰分域 HKDF-HMAC，禁止直接 SHA256 原發票號或明文存入 D1。
