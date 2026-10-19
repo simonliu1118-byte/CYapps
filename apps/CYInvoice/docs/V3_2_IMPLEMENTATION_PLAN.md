@@ -59,6 +59,14 @@
 - 以隔離 SQLite 驗證狀態單向、同一申請零重送、同張發票合法不同申請互斥不明 sending、確定撞號後下一 attempt、舊 schema16 完整保留、交易回滾及備份還原。C2 不掛 routes、不自動套正式 D1。
 - **C3 下一步**：審查 #440 服務端加解密／role／最新 AMEGO readback／ledger 執行 CAS，對照 C1/C2 最終定稿成 canonical migration，經 CI 及 Cloudflare 本機 Work MCP 另行審核後才考慮上線。
 
+## 3.2-C3a 工程切片（V3.1.10 Build 0）
+
+- 保留 #440 舊 Cloud `allowance-applications.ts` 的加密封存／失敗回讀思路，改由獨立 `allowance-frozen-store.ts` 寫入 C1/C2 `allowance_applications`、`allowance_frozen_requests`，不增添第二個 owner，也不動 schema16 現有非折讓 Work Items。
+- 加密一律呼叫正式公司卡 AES-GCM owner，AAD 綁 Workspace／application_id／請求 hash；來源、原發票 serial fingerprint 用注入金鑰分域 HKDF-HMAC，禁止直接 SHA256 原發票號或明文存入 D1。
+- 建立為單一 D1.batch、查回原 ID 不重建；建立和解密前後重驗內部 CYID actor 和 Device／Workspace，主管及本人僅以 server-owned 身分檢視、不得暴露原文於公開 endpoint。實際 request Device-token、CYID session 在後續 C3b route 層綁定。
+- 只做內部儲存／讀取 service；不執行任何光貿 official claim、配號、g0401/g0501，不能將 callback/SQL 保護誤當已驗證正式 CYID 身分。維持 SQL draft，正式 D1/Worker 須待本機 Work MCP 受控批准。
+- **C3b 待做**：#440 Cloud manager review/official verifier + scoped routes，對齊現行 app/Device/CYID consumer contract，完整 fail-closed 官方餘額與授權；另拆 C3c 配號/one-shot 和 C4 Windows UI。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
