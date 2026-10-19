@@ -95,6 +95,14 @@
 - 以 Synthetic SQLite 檢查同張發票合法不同申請、跨裝置搶當日序號、字母尾號界線、Grant 過期/公司變更/Device 撤權/不同主管拒絕與失去寫入回覆時 readback。預留**不是實際送出授權**，下階段需先重新查最新官方餘額、重新驗權後 CAS `reserved→sending`，再單次 g0401 和原號證據查回。
 - 暫不安裝 HTTP route、正式 D1 Migration、任何 AMEGO transaction、Cloudflare Worker／Secrets 變更；真環境 H 驗收與 V3.2.0 Release 另行批准。
 
+## 3.2-C3c2 單次送出 CAS 工程切片（V3.1.15 Build 0）
+
+- 此批完成的是內部、**不能獨立呼叫 g0401** 的 Cloud Ledger 狀態閘門；從 #440 借用一次性 claim 的防重送模式，改接現行 `schema16 → drafts/0017 → drafts/0018`，不恢復舊 `work_items.ALLOWANCE`。
+- 以原申請 AES-GCM Frozen request＋C3b2b immutable Grant／核准官方 evidence hash 為唯一來源；再次查 `invoice_query` 與既有折讓每個號碼的 `allowance_query` 全項明細，若官方變動、仍待定或任何金額超額則拒絕；主管／Device、公司卡與 revision 皆前後驗證。
+- 使用唯一 SQL-time `UPDATE allowance_number_ledger SET status='sending' WHERE status='reserved'` CAS 並關聯核准 Grant、source fingerprint 衝突、當下 active Device/Workspace 與公司卡 revision；成功仍只能回傳 `providerPostPerformed=false`／`mayPostG0401FromThisResponse=false`。一旦進入 sending，即使 D1 timeout／回覆遺失，也只能以原號查回，不能再次 CLAIM 或改配號。
+- **下一批 C3c3** 才將 CAS 和簽名 `g0401` 的單次 POST 合成同一個受控 Worker owner（不能把 C3c2 回傳的 flag 當通用送出許可），並在成功／未知／已知撞號時使用官方原號查詢＋證據逐項確認，繼續 Synthetic Fake HTTP 和不明結果測試。未獲批准不得真送。
+- 正式 `cloud/migrations` 仍以 schema16 為末筆，所有 Cloudflare Worker／D1／Bindings／Secrets 操作待使用者本機 MCP 另行逐步批准，正式 AMEGO 測試與 Release 保留 H。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
