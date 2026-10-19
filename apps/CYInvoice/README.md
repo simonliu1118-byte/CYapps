@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.13 Build 1（非正式 Release）**：3.2-C3b2b 把凍結折讓、官方逐原發票餘額證據與 CYID 管理員安全檢查整合成原子 Grant＋revision CAS 內部服務。尚未接公開 Cloud API、正式 D1、配號或 g0401/g0501；正式 Release 仍是 V3.1.0。
+- **目前工程 Source：V3.1.14 Build 0（非正式 Release）**：3.2-C3c1 從 #440 回收安全每日配號機制，接到 C1/C2 獨立折讓批准與 Ledger；只預留首次號碼，未進行任何正式光貿 g0401／g0501、Cloudflare 變更或 D1 migration。正式 Release 仍為 V3.1.0。
+
+- **前一工程 Source：V3.1.13 Build 1（非正式 Release）**：3.2-C3b2b 把凍結折讓、官方逐原發票餘額證據與 CYID 管理員安全檢查整合成原子 Grant＋revision CAS 內部服務。尚未接公開 Cloud API、正式 D1、配號或 g0401/g0501；正式 Release 仍是 V3.1.0。
 
 - **前一工程 Source：V3.1.12 Build 2（非正式 Release）**：3.2-C3b2a 按真光貿查詢協定逐張折讓號核對每筆原發票金額／稅額，產生內部安全證據但不核准、不配號、不送出；正式 Cloudflare 與正式 D1 未改，正式 Release 仍 V3.1.0。
 
