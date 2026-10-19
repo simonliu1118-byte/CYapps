@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.14 — 2026/10/19（3.2-C3c1 Cloud 核准後首次配號 Ledger，工程版）
+
+- 從 #440 選擇性回收單日 12 碼折讓號碼格式 `AyyyyMMdd001..999` 與 `AyyyyMMddA00..ZZZ`，最大 34695 號；新 `allowance-number-reservation.ts` 改接 C1/C2 獨立 `allowance_applications`、Frozen Request、5 分鐘 Grant 和原號 Ledger，**絕不使用舊 work_items.ALLOWANCE**。
+- Internal-only CYID manager／active Device、公司卡版次、申請 approved revision、核准管理員與 Device、requestHash 和核准有效期皆重新檢查；SQL 條件式 INSERT 原子確認 next sequence 與未配號的唯一 application。兩台合法申請競爭同號只允許一筆成功；同一申請重按只讀回保留的 reserved 原號，後續 sending／confirmed／occupied_external 不重新配號。
+- 以 canonical schema16＋review drafts17/18 執行 SQLite／Node 合成測試，驗證首筆、合法多次部分折讓分號、999/1000/34695 編碼、撤權、公司卡改版、過期核准、併發競爭、寫入後遺失回覆與唯讀復原。號碼保留不代表可送出：`maySendWithoutFreshOfficialCheck=false`，沒有公式化簽發成功欄位、沒有任何 g0401/g0501 或正式查詢路由。
+- `cloud/migrations` 不變，schema16 不動；正式 Cloudflare D1、Worker、Bindings、Secrets 尚未更新；正式 Release 仍 V3.1.0。
+
 ## V3.1.13 Build 1 — 2026/10/19（3.2-C3b2b Cloud 主管正式核准 CAS；工程版）
 
 - 選擇性參照 #440 的主管決策記錄與狀態 CAS，改接現行 C1／C2 獨立 `allowance_applications` 與 `allowance_execution_approvals`，不復活 `work_items.ALLOWANCE`。
