@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.16 — 2026/10/19（3.2-C3c3a Cloud g0401 單次傳輸與完整原號查回；工程版）
+
+- 從 #440 選擇性移植 `cloud/src/amego-allowance-issue.ts` 及隔離測試：只能透過單一簽名 form POST `/json/g0401` 送已凍結且配號的 payload；不自動重試，`code=0` 只表示 accepted_unconfirmed，4040161/4040162 只標示本次明確號碼衝突，不代表允許換號；timeout、傳輸中斷、回覆異常一律 unknown。
+- 新增 `cloud/src/amego-allowance-exact-readback.ts`：使用唯一原折讓號簽名 **唯讀** `/json/allowance_query`，嚴格比對官方正式狀態、折讓日期、買方統編／姓名、未稅額、稅額及**每一筆原發票、日期、品名、數量、單價、金額、稅別**；未知、缺欄、品項變動、其他買方或待處理都 fail-closed。即使全項吻合仍標記 `full_frozen_match_unattributed`、`safeToAutoConfirm=false`，不把號碼相同當作可證明由本次 POST 建立。
+- 隔離 Fake HTTP 測試覆蓋單次簽章、含稅金額與原始商品逐項比對、官方撞號、timeout、不合法凍結請求零連線、官方待處理與資料不一致拒絕；沒有正式 g0401 請求或真 D1 操作。
+- **尚未將上述兩個 transport 連到 C3c2 CAS 或 Cloud app.ts 路由**。下一片 C3c3b 才能以受控單一 owner 協調送出與 readback，不得把這兩個低階 transport 直接當作送出權限。正式 migration、Worker、Secrets、Release 都不變，正式發行仍 V3.1.0。
+
 ## V3.1.15 Build 1 — 2026/10/19（3.2-C3c2 Cloud reserved→sending 原子 CAS，工程版）
 
 - 從 #440 的單次折讓執行安全邏輯擷取狀態護欄，新增 `cloud/src/allowance-sending-claim.ts`，依 schema16＋C1/C2 draft17/18 的正式獨立折讓申請／核准／Ledger，**不使用舊 work_items.ALLOWANCE**。
