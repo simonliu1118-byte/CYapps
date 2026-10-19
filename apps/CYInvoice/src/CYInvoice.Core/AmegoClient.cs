@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace CYInvoice.Core.Amego;
 
-public sealed class AmegoClient : IAmegoGateway
+public sealed class AmegoClient : IAmegoGateway, IAmegoAllowanceGateway
 {
     private const int ApiResponseLimit = 8 * 1024 * 1024;
     private const int PdfResponseLimit = 20 * 1024 * 1024;
@@ -26,6 +26,76 @@ public sealed class AmegoClient : IAmegoGateway
     public string BaseUrl { get; set; } = AmegoDefaults.BaseUrl;
     public string Invoice { get; }
     public string AppKey { get; }
+
+    // NEVER use PostAsync for g0401: PostAsync can retry after time-sync
+    // error 15, and a mutation must not have any implicit second POST.
+    public async Task<AllowanceIssueResponse> IssueAllowanceOnceAsync(
+        AllowanceIssueRequest allowance, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(allowance);
+        if (allowance.AllowanceType != 2 || allowance.ProductItem is not { Count: > 0 } ||
+            allowance.ProductItem.Count > 9999 || allowance.TotalAmount <= 0 ||
+            allowance.TaxAmount < 0 ||
+            allowance.BuyerName.Trim().Length == 0 ||
+            allowance.BuyerIdentifier.Trim().Length == 0 ||
+            !DateOnly.TryParseExact(allowance.AllowanceDate, "yyyyMMdd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ||
+            !AllowanceNumberGenerator.TryReadSequence(allowance.AllowanceNumber, date, out _))
+            throw new ArgumentException("Invalid frozen seller allowance request", nameof(allowance));
+        decimal net = 0m, tax = 0m;
+        foreach (var line in allowance.ProductItem)
+        {
+            if (line.OriginalInvoiceNumber.Trim().Length != 10 ||
+                line.OriginalDescription.Trim().Length == 0 ||
+                !DateOnly.TryParseExact(line.OriginalInvoiceDate.ToString(CultureInfo.InvariantCulture),
+                    "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
+                line.Quantity <= 0 || line.TaxType is < 1 or > 3 ||
+                (line.TaxType != 1 && line.Tax != 0) || line.GrossUnitPrice is not null)
+                throw new ArgumentException("Invalid frozen allowance line", nameof(allowance));
+            net = checked(net + line.Amount);
+            tax = checked(tax + line.Tax);
+        }
+        if (net != allowance.TotalAmount || tax != allowance.TaxAmount)
+            throw new ArgumentException("Allowance header and frozen item totals disagree", nameof(allowance));
+
+        if (Invoice.Length == 0 || AppKey.Length == 0)
+            throw new InvalidOperationException("invoice and App Key are required");
+        // One signed HTTP request. A bad or missing envelope stays uncertain;
+        // caller must query the original number and never blindly resend.
+        var signedData = JsonSerializer.Serialize(new[] { allowance });
+        var body = await PostSignedAsync("/json/g0401", signedData, cancellationToken)
+            .ConfigureAwait(false);
+        using var response = JsonDocument.Parse(body);
+        var (code, message) = ReadEnvelope(response.RootElement);
+        ThrowResponseError(code, message);
+        return new AllowanceIssueResponse(code, message);
+    }
+
+    public async Task<AllowanceQueryResponse> QueryAllowanceAsync(
+        string allowanceNumber, CancellationToken cancellationToken = default)
+    {
+        allowanceNumber = (allowanceNumber ?? string.Empty).Trim();
+        if (allowanceNumber.Length is < 1 or > 16)
+            throw new ArgumentException("AllowanceNumber must be between 1 and 16 characters", nameof(allowanceNumber));
+        // This API is read-only. PostAsync's one-time time synchronization
+        // is safe on this path, unlike g0401.
+        using var response = await PostAsync("/json/allowance_query",
+            new Dictionary<string, string> { ["allowance_number"] = allowanceNumber },
+            cancellationToken).ConfigureAwait(false);
+        var root = response.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object ||
+            !string.Equals(Text(data, "allowance_number"), allowanceNumber, StringComparison.Ordinal))
+            throw new InvalidDataException("allowance_query missing or mismatched official allowance number");
+        var lineData = data.TryGetProperty("product_item", out var items) ? items.Clone() : default;
+        return new AllowanceQueryResponse(code, message, new AllowanceQueryItem(
+            allowanceNumber, Text(data, "invoice_type"), FlexibleInt32(data, "invoice_status"),
+            Scalar(data, "allowance_date"), FlexibleInt32(data, "allowance_type"),
+            Text(data, "buyer_identifier"), Text(data, "buyer_name"),
+            Scalar(data, "tax_amount"), Scalar(data, "total_amount"),
+            Int64(data, "cancel_date"), lineData));
+    }
 
     public async Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default)
     {
