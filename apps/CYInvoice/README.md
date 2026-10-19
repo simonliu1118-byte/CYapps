@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source／測試包：V3.1.9 Build 0（非正式 Release）**：3.2-C2 以 #440 草稿為來源，加上 `cloud/drafts/0018_allowance_frozen_ledger.sql` 與 schema16 隔離測試。無正式 Cloudflare Migration、官方 AMEGO 操作或 Cloud API 上線；正式 Release 仍為 V3.1.0。
+- **目前工程 Source：V3.1.10 Build 0（非正式 Release）**：3.2-C3a Cloud 折讓 Frozen template 真正使用現有 AES-GCM 加密 helper 加以封存，並提供內部、雙重驗權的原 ID 安全讀回；仍未安裝任何公開 Cloud route、未動正式 D1/Worker、未發送 g0401/g0501。正式 Release 仍為 V3.1.0。
+
+- **前一工程 Source／測試包：V3.1.9 Build 0（非正式 Release）**：3.2-C2 以 #440 草稿為來源，加上 `cloud/drafts/0018_allowance_frozen_ledger.sql` 與 schema16 隔離測試。無正式 Cloudflare Migration、官方 AMEGO 操作或 Cloud API 上線；正式 Release 仍為 V3.1.0。
 
 - **V3.1.8 Build 0（前一工程切片，非正式 Release）**：3.2-C1 先從正式 schema16 建立折讓申請及不可變稽核的 SQL 草稿與隔離測試，未新增 canonical migration、未操作正式 Cloudflare。正式 Release 仍是 V3.1.0。
 
