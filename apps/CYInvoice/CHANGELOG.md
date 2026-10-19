@@ -2,13 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.18 — 2026/10/19（3.2-C4 Cloud CYID 折讓申請／主管覆核 API；工程版）
+## V3.1.18 Build 1 — 2026/10/19（3.2-C4 Cloud CYID 折讓申請／主管覆核 API；工程版）
 
 - 新增 opt-in `/v1/allowances/{create,get,list,review,withdraw,preview,approve,reserve,status}`，安全綁現行 `withCyIdSession` 登入、合法 Device bearer、活動 Workspace、CYID 主管身份重新驗證及 D1 原 C1/C2 獨立資料表，保留專案單一身份來源；一般 USER 僅查自己申請，經授權主管可列出／認領覆核、重新查官方資料、核准並預留號碼。
 - App ingress 的 bounded authentication body 路徑登記，上限 36 KiB 只開在 AES-GCM 凍結資料建立入口，其餘 4 KiB；嚴格白名單與狀態 CAS、錯誤不吐出公司金鑰／Frozen 明細。維持舊非折讓 Work Items 分流。
 - 全部入口必須 `ALLOWANCE_API_ENABLED=true` 且 `SCHEMA_VERSION>=18` 才可用；**正式 Worker 未加入開啟旗標、正式 schema16 未改**，沒有公開 g0401/g0501 送出端點（C3c3b 繼續保持 internal-only）。
 - 新合成 SQLite schema16＋未升格 17/18、CYID Device token 與假官方 HTTP 端到端路由測試：feature gate、越權、USER 建立與查詢、主管 CAS 認領／官方預覽／核准／預留，確認完全沒有光貿正式交易。舊 #440 混合 Work Item 路由未移植。
 - 尚需 C4 Windows 跨機用戶端、C Migration 審核升格與本機 MCP，完成正式 C 前不得稱已上線。正式發行仍 V3.1.0。
+
+- Build 1：首輪 CI 發現 synthetic D1 adapter 遺漏 `.all()`，已補齊；加強 GET 本人／主管的讀取前權限檢查，避免同 Workspace 不同員工看到折讓資訊；撤回時追加最新 CYID 身分與 Device 複驗，並新增跨員工隱私測試。
 
 ## V3.1.17 — 2026/10/19（3.2-C3c3b Cloud 唯一 g0401 單次發送協調器；工程版）
 
