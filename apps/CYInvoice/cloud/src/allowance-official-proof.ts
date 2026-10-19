@@ -99,7 +99,7 @@ export async function reconcileOfficialAllowanceForOriginal(
  const originalDay=day(snapshot.invoiceDate);
  if(!originalDay||!Number.isSafeInteger(snapshot.totalAmount)||
     snapshot.totalAmount<=0)fail("INVOICE_DATE_OR_AMOUNT_INVALID");
- proveFrozenItems(frozen,originalDay);
+ proveFrozenItems(frozen,originalDay!);
  let effective=0n;
  const snapshots=[snapshot.snapshotSha256];
  const seen=new Set<string>();
