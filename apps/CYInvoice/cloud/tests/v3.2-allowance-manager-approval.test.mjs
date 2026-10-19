@@ -164,7 +164,7 @@ const ledger=sql=>sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_ledger
  const {sql,db,close}=await fixture();
  try{
   let count=0;
-  const changeRole={revalidate:async()=>++count>=5?employee:reviewer};
+  const changeRole={revalidate:async()=>++count>=4?employee:reviewer};
   const fake=fakeHttp();
   await assert.rejects(()=>approve(db,target,ctx,changeRole,fake.send,()=>now),
    /ALLOWANCE_APPROVAL_AUTH_OR_REVISION_CHANGED/);
