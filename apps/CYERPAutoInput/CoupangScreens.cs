@@ -69,9 +69,13 @@ internal static class CoupangScreens
         boxes.Where(b => b.Top > header.Bottom && b.CenterX > header.Left - 80 && b.CenterX < header.Right + 80 && OrderNumber.IsMatch(C(b)))
             .OrderBy(b => b.Top).Select(b => OrderNumber.Match(C(b)).Groups[1].Value).Distinct().ToList();
 
-    /// <summary>The 「確認訂單」 button at the bottom right (not the hint 「點擊確認訂單後…」).</summary>
+    /// <summary>
+    /// The 「確認訂單」 button at the bottom right. The hint left of it, 「點擊確認訂單後…」, carries its
+    /// own 「確認訂單」 piece on the same row (user LOG 2026-10-19: that one was clicked), so the
+    /// rightmost is the button.
+    /// </summary>
     public static OcrBox? ConfirmOrdersButton(IReadOnlyList<OcrBox> boxes) =>
-        boxes.Where(b => C(b) == "確認訂單").OrderByDescending(b => b.Top).ThenByDescending(b => b.Left).FirstOrDefault();
+        boxes.Where(b => C(b) == "確認訂單").OrderByDescending(b => b.Right).FirstOrDefault();
 
     /// <summary>A dialog under <paramref name="title"/>: the boxes below it within its width.</summary>
     private static List<OcrBox> Dialog(IReadOnlyList<OcrBox> boxes, OcrBox title) =>
