@@ -24,17 +24,31 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>Wing 我的訂單 (user's screenshot, 2026-10-19).</summary>
     public const string CoupangUrl = "https://wing.coupang.com/tenants/sfl-portal/delivery/management";
 
-    public async Task<CoupangBatchResult> RunCoupangAsync(string folder, Action<string> status)
+    /// <param name="fromArrange">
+    /// 測試 (user, 2026-10-19): carry on from 配送準備 in the Wing page already in front (訂單確認 skipped).
+    /// </param>
+    public async Task<CoupangBatchResult> RunCoupangAsync(string folder, Action<string> status, bool fromArrange = false)
     {
         Directory.CreateDirectory(folder);
         if (ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
             throw new ShopeeBatchStop("請先在「設定 › 平台匯入 › 蝦皮」填新竹物流取件地址：酷澎「安排出貨」的取貨地址要和它相同才提交。");
         _pageTabs = true;
         var result = new CoupangBatchResult();
-        status("酷澎全自動：開啟 Chrome…");
-        await OpenWindowAsync(CoupangUrl);
-        await ConfirmCoupangOrdersAsync(result, status);
-        _shippedHint = result.Accepted.Count > 0;
+        if (fromArrange)
+        {
+            _window = ChromeWindows().FirstOrDefault();
+            if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗：請先在 Chrome 打開酷澎 Wing「我的訂單」。");
+            Front();
+            await Task.Delay(500, _token);
+            _shippedHint = true; // orders were accepted before
+        }
+        else
+        {
+            status("酷澎全自動：開啟 Chrome…");
+            await OpenWindowAsync(CoupangUrl);
+            await ConfirmCoupangOrdersAsync(result, status);
+            _shippedHint = result.Accepted.Count > 0;
+        }
         await ArrangeCoupangShippingAsync(result, status);
 
         status("酷澎全自動：配送指示下載 Excel…");
@@ -167,6 +181,8 @@ internal sealed partial class ShopeeBatchRunner
             {
                 channels = CoupangScreens.ColumnValues(list.Boxes, header, "配送通路").Distinct().ToList();
                 _log.Info("coupang-batch", $"待安排 orders={CoupangScreens.ListedOrders(list.Boxes, header).Count} channels={string.Join("、", channels)}");
+                if (channels.Count == 0)
+                    _log.Info("coupang-batch", $"待安排 rows: {string.Join(" | ", list.Boxes.Where(b => b.Top >= header.Top - 10).OrderBy(b => b.Top).ThenBy(b => b.Left).Take(60).Select(b => $"{ShopeeScreenshot.Compact(b.Text)}@{b.Left},{b.Top}"))}");
             }
             if (channels.Count == 0) throw new ShopeeBatchStop("讀不到「配送通路」欄，請人工安排配送。", _shippedHint);
             foreach (var channel in channels)
@@ -192,7 +208,7 @@ internal sealed partial class ShopeeBatchRunner
         {
             var (bar, found) = await WaitAsync("「請選擇配送方式」與「批次安排配送」", 10, s => CoupangScreens.ShipBar(s.Boxes) is { } b ? (object)b : null, shipped: _shippedHint);
             var (select, _) = ((OcrBox, OcrBox))found;
-            var shown = ShopeeScreenshot.Compact(select.Text);
+            var shown = CoupangScreens.Channel(ShopeeScreenshot.Compact(select.Text)) ?? ShopeeScreenshot.Compact(select.Text);
             _log.Info("coupang-batch", $"配送方式 shows {shown} step={step}");
             using (bar)
             {
@@ -230,7 +246,7 @@ internal sealed partial class ShopeeBatchRunner
         var (ticked, _) = await WaitAsync("全選勾起來", 8, s => CoupangScreens.Counts(s.Boxes).Selected == orders.Count ? s : null, shipped: _shippedHint);
         using (ticked)
         {
-            if (CoupangScreens.ShipBar(ticked.Boxes) is not { } bar || ShopeeScreenshot.Compact(bar.Select.Text) != channel)
+            if (CoupangScreens.ShipBar(ticked.Boxes) is not { } bar || CoupangScreens.Channel(ShopeeScreenshot.Compact(bar.Select.Text)) != channel)
                 throw new ShopeeBatchStop($"按「批次安排配送」前配送方式不是「{channel}」，已停止。", _shippedHint);
             Click(ticked, bar.Arrange, $"批次安排配送 {channel}");
         }
@@ -253,7 +269,7 @@ internal sealed partial class ShopeeBatchRunner
             if (!submitted && CoupangScreens.ArrangeDialog(screen.Boxes, _print.HctPickupAddress) is { } arrange)
             {
                 _log.Info("coupang-batch", $"安排出貨 method={arrange.Method} address_matches={arrange.AddressMatches?.ToString() ?? "none"}");
-                if (arrange.Method.Length > 0 && arrange.Method != channel)
+                if (arrange.Method.Length > 0 && (CoupangScreens.Channel(arrange.Method) ?? arrange.Method) != channel)
                     throw new ShopeeBatchStop($"「安排出貨」的配送方式是「{arrange.Method}」，不是「{channel}」，沒有提交。", true);
                 // The pickup address must be the one set for 新竹物流 in 設定 (user, 2026-10-19: same as 蝦皮).
                 if (arrange.AddressMatches == false)

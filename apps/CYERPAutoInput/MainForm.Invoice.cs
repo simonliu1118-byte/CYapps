@@ -456,9 +456,9 @@ internal sealed partial class MainForm
     /// CYInvoice's 酷澎 entry issues (always paper; printed in the background), and every order
     /// clean goes straight into ERP, otherwise the preview.
     /// </summary>
-    private async Task RunCoupangBatchAsync()
+    private async Task RunCoupangBatchAsync(bool fromArrange = false)
     {
-        const string title = "酷澎全自動";
+        var title = fromArrange ? "酷澎全自動（從配送準備接續）" : "酷澎全自動";
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
@@ -478,7 +478,9 @@ internal sealed partial class MainForm
             return;
         }
         if (MessageBox.Show(this,
-                "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）：\n\n" +
+                (fromArrange
+                    ? "測試：從配送準備接續。請先在 Chrome 打開酷澎 Wing「我的訂單」並讓它在最前面（本程式以外）；不做訂單確認，從第 2 步開始：\n\n"
+                    : "程式會開自己的 Chrome 視窗到酷澎 Wing「我的訂單」（請先在 Chrome 登入 Wing）：\n\n") +
                 "1. 訂單確認：全選 → 確認訂單 → 核對訂單編號 → 確認\n" +
                 "2. 配送準備：依配送通路選配送方式 → 全選 → 批次安排配送 → 核對取貨地址 → 提交 → 列印寄件單（熱感機，宅配 " + _settings.CoupangHctLabelScale + "%、超商 100%）\n" +
                 "3. 配送指示：全選 → 下載 Excel\n" +
@@ -499,7 +501,7 @@ internal sealed partial class MainForm
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
                 _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale), Session.EscapeToken);
-        try { result = await runner.RunCoupangAsync(folder, SetStatus); }
+        try { result = await runner.RunCoupangAsync(folder, SetStatus, fromArrange); }
         catch (ShopeeBatchStop stop) { stopped = stop.Message; shipped = stop.Shipped; }
         catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
         finally

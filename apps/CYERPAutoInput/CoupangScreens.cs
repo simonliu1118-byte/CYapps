@@ -112,10 +112,21 @@ internal static class CoupangScreens
     public static List<string> ColumnValues(IReadOnlyList<OcrBox> boxes, OcrBox header, string column)
     {
         var mid = header.Top + header.Height / 2;
-        var head = boxes.FirstOrDefault(b => C(b) == column && b.Top <= mid + 12 && b.Bottom >= mid - 12);
-        if (head is null) return [];
-        return boxes.Where(b => b.Top > head.Bottom && Math.Abs(b.CenterX - head.CenterX) <= 70 && C(b).Contains('-') && C(b).Length <= 20)
-            .OrderBy(b => b.Top).Select(C).ToList();
+        var head = boxes.FirstOrDefault(b => C(b).StartsWith(column, StringComparison.Ordinal) && b.Top <= mid + 24 && b.Bottom >= mid - 24);
+        // Not above the bottom bar: its drop-down shows a channel too.
+        var floor = boxes.Where(b => C(b) == "批次安排配送" || C(b) == "批次列印寄件單").Select(b => b.Top - 20).DefaultIfEmpty(int.MaxValue).Min();
+        var cells = boxes.Where(b => b.Top > header.Bottom && b.Top < floor && Channel(C(b)) is not null).ToList();
+        // In the column when its header is read (user LOG 2026-10-19: it was not), else any
+        // channel-looking cell of the rows (「宅配 - 新竹物流」, 「便利商店 - 7-11」…).
+        var inColumn = head is null ? [] : cells.Where(b => Math.Abs(b.CenterX - head.CenterX) <= 90).ToList();
+        return (inColumn.Count > 0 ? inColumn : cells).OrderBy(b => b.Top).Select(b => Channel(C(b))!).ToList();
+    }
+
+    /// <summary>A 配送通路／配送方式 name as the drop-down shows it (「宅配-新竹物流」), dashes made plain; null when not one.</summary>
+    public static string? Channel(string compact)
+    {
+        var plain = compact.Replace('－', '-').Replace('–', '-').Replace('—', '-');
+        return Regex.IsMatch(plain, @"^(宅配|便利商店|超商)-\S{1,12}$") ? plain : null;
     }
 
     /// <summary>
@@ -128,7 +139,7 @@ internal static class CoupangScreens
         if (arrange is null) return null;
         var mid = arrange.Top + arrange.Height / 2;
         var select = boxes.Where(b => b.Right <= arrange.Left + 4 && arrange.Left - b.Right < 120 && b.Top <= mid + 14 && b.Bottom >= mid - 14 &&
-                                      (C(b) == "請選擇配送方式" || C(b).Contains('-')))
+                                      (C(b) == "請選擇配送方式" || Channel(C(b)) is not null))
             .OrderByDescending(b => b.Left).FirstOrDefault();
         return select is null ? null : (select, arrange);
     }

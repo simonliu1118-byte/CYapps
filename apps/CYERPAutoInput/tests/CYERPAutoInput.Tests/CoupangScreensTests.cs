@@ -135,4 +135,18 @@ public class CoupangScreensTests
         Assert.Equal(["900000000000001"], succeeded);
         Assert.Equal((1, 1298, 1207), (rows, print.Left, close.Left));
     }
+
+    [Fact]
+    public void Reads_channels_without_their_header_and_with_other_dashes()
+    {
+        var page = new List<OcrBox>
+        {
+            B("待安排配送清單", 245, 400, 126), B("訂單編號", 350, 626, 52),
+            B("900000000000001", 323, 749, 106), B("宅配 – 新竹物流", 629, 749, 92), B("900000000000002", 323, 900, 106), B("便利商店 - 7-11", 629, 900, 92),
+            B("宅配 - 嘉里", 1513, 1010, 190, 26), B("批次安排配送", 1729, 1007, 150, 30)
+        };
+        var header = CoupangScreens.ListHeader(page, "待安排配送清單")!;
+        Assert.Equal(["宅配-新竹物流", "便利商店-7-11"], CoupangScreens.ColumnValues(page, header, "配送通路"));
+        Assert.Equal("宅配-嘉里", CoupangScreens.Channel(ShopeeScreenshot.Compact(CoupangScreens.ShipBar(page)!.Value.Select.Text)));
+    }
 }
