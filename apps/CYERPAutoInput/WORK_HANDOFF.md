@@ -17,7 +17,7 @@
 - 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：`SelectCopi08` 選得到 COPI08 或沒開（開始時 `ResolveCopi08Async` 從作業速查開），ERP 不能有對話框；其他作業視窗不算）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice 開發票（一律，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
 - 已實機通過：到「列印標籤」存 PDF（2026-10-14）；存標籤後關「注意」、配送中匯出、帶入兩檔（2026-10-15，停在當時的提示，該提示已拿掉）。
 - 待實測：整條全自動（含 CYInvoice、不開預覽、列印、批次 ERP、表格完成清單）；新竹／7-11 的批次出貨與 PDF；多種配送方式同批；7-11 熱感實印（`SlipImage.FindFramedSlips`，實檔外框 83×122 mm，原尺寸）。
-- 選單：全自動／匯入訂單匯出檔、重新列印寄件單／測試：發票。
+- 選單：全自動／匯入訂單匯出檔、重新列印寄件單。「匯入訂單匯出檔」自 V0.3.2 起就是原「測試：發票」（`ImportMoAsync`，兩檔 → CYInvoice 查詢／開立 → 紙本背景 → 預覽 → ERP；使用者 2026-10-19）。
 
 **B. CYInvoice 發票整合**（功能與呼叫介面見 README「MO店+ 發票（CYInvoice）」；原本三份 docs/CYINVOICE_*_HANDOFF.md 已於 2026-10-15 依使用者要求彙整回 README／本文件／CHANGELOG 並刪除，原文在 Git 歷史 commit `d5244bad` 以前）
 - CYInvoice：V2.6.21 Build 0（Draft PR #445，branch `cyinvoice/feat-autoinput-interface`，commit `283e9f26`），工程測試版、未合併發行；工程包 Artifact 2026-10-18 過期（過期請 CYInvoice 端重出，不可換用正式 V2.6.19）。契約要改時在本專案寫需求交 CYInvoice（PR #445），對方做完出工程包；不在 AUTO 另寫開票。

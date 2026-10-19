@@ -385,14 +385,16 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
-    /// MO店+ › 測試：發票 (user, 2026-10-15): a real 訂單匯出檔 → CYInvoice (the user opens its test
-    /// environment) issues and answers → the paper invoices print → the preview, where it stops:
-    /// a test environment's invoices do not go into ERP.
+    /// MO店+ › 匯入訂單匯出檔 (user, 2026-10-19: the former 測試：發票 replaces the plain import, it
+    /// is the more complete one): the two 訂單匯出檔 → CYInvoice queries, and issues the orders
+    /// without an invoice after asking → the paper invoices print in the background → the preview
+    /// → ERP. Orders CYInvoice already issued keep their invoice number (a rerun issues nothing).
     /// </summary>
-    private async Task TestMoInvoiceAsync()
+    private async Task ImportMoAsync()
     {
-        const string title = "MO店+ 發票測試";
+        const string title = "MO店+ 訂單匯入";
         if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (!ErpWindowReady()) return;
         var missing = new[]
         {
             _settings.MoOrderType.Length == 0 ? "MO店+ 銷貨單別" : null,
@@ -412,15 +414,6 @@ internal sealed partial class MainForm
             _settings.CyInvoicePath = dialog.FileName;
             _settingsStore.Save(_settings);
         }
-        if (MessageBox.Show(this,
-                "請先開好 CYInvoice 的測試環境。\n\n" +
-                "1. 放入 MO店+ 訂單匯出檔（出貨前那份；出貨後那份可省略）\n" +
-                "2. 程式呼叫 CYInvoice 先查詢，再對查無發票的訂單開立（開立前會再問一次，並顯示 CYInvoice 的環境）\n" +
-                "3. 有統編抬頭的訂單印紙本發票：光貿開立完成、拿到 PDF 後才會請你放紙（A4 印表機，不必等，可以先看預覽）；一般消費者是會員載具，不印\n" +
-                "4. 停在預覽畫面，發票資料已帶入；按開始會輸入 ERP（不論 CYInvoice 是測試或正式環境）\n\n" +
-                $"CYInvoice：{_settings.CyInvoicePath}\n\n要開始嗎？",
-                title, MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
 
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
         List<string[]> Read(string path)
@@ -435,13 +428,14 @@ internal sealed partial class MainForm
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        _log.Info("cyinvoice", $"test orders={orders.Count}");
+        _log.Info("mo", $"exports orders={files.Orders.Count} errors={files.Errors.Count} tracking_filled={files.Orders.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
 
         var invoice = await InvoiceMoAsync(title, files.BatchPath, files.Orders, orders, fullAuto: false);
         // In the background: the paper prompt comes once 光貿 has the PDFs, over the preview.
         QueuePaperInvoices(invoice);
         SetStatus(string.Empty);
-        // A 測試 enters ERP whatever CYInvoice's environment (user, 2026-10-15: they switch it).
+        // ERP whatever CYInvoice's environment (user, 2026-10-15: they switch it); the
+        // environment is shown when asking before issuing and in the preview's notes.
         await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. files.Notes]);
     }
 

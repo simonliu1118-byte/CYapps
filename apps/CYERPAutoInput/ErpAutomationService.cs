@@ -1000,7 +1000,14 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        await PasteTextAsync(focus, value, field.Key, cancellationToken);
+        if (field.Key == "order_type")
+        {
+            // Typed, not pasted: ERP makes the sales order number from 銷貨單別's keystrokes. A
+            // paste that read back right still left ERP without a number (user LOG 2026-10-19).
+            await Delay(120, cancellationToken);
+            InputSender.UnicodeText(value);
+        }
+        else await PasteTextAsync(focus, value, field.Key, cancellationToken);
         if (InputSender.ImeClosedCount != imeClosedBefore) _log.Info("field", $"ERP IME was open; switched off before typing key={field.Key}");
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);
