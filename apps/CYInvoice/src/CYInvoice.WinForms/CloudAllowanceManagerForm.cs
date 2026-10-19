@@ -45,6 +45,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         queue.Columns.Add("環境",75);
         queue.Columns.Add("更新時間",170);
         queue.SelectedIndexChanged+=(_,_)=>Actions();
+        searchId.TextChanged+=(_,_)=>Actions();
         refresh.Click+=async(_,_)=>await ListAsync();
         readback.Click+=async(_,_)=>await StatusAsync();
         review.Click+=async(_,_)=>await ReviewAsync();
