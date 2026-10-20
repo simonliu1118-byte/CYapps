@@ -173,7 +173,7 @@ async function call(env,action,body={},token=rawDevA){
    requestedGross:50,reason:"Reason private",unnumberedTemplateJson:template,untrustedClaim:true})).status,400);
   const created=await call(employee,"create",{applicationId:app1,
    environment:"test",originalInvoiceNumber:invoice,allowanceDay:"20261019",
-   requestedGross:50,unnumberedTemplateJson:template});
+   requestedGross:50,reason:"Reason private",unnumberedTemplateJson:template});
   assert.equal(created.status,200);
   assert.equal(created.body.status,"open");
   assert.equal(created.body.officialActionPerformed,false);
