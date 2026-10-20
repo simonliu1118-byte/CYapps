@@ -9,8 +9,8 @@ import {DatabaseSync} from "node:sqlite";
 // No Worker, D1 network, credentials, official lookup or AMEGO g0401/g0501.
 const migrationFiles=readdirSync("migrations")
  .filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
-assert.equal(migrationFiles.at(-1),"0019_allowance_manual_review_audit.sql");
-assert.ok(migrationFiles.includes("0018_allowance_frozen_ledger.sql"));
+assert.equal(migrationFiles.at(-1),"0018_allowance_frozen_ledger.sql",
+ "canonical allowance migration order must end with 0018");
 const c1=readFileSync("migrations/0017_allowance_applications.sql","utf8");
 const c2=readFileSync("migrations/0018_allowance_frozen_ledger.sql","utf8");
 const temp=mkdtempSync(join(tmpdir(),"cyinvoice-c2-"));

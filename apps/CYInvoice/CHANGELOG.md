@@ -2,12 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.30 Build 0 — 2026/10/21（V3.2 Batch 1：Cloud 人工異常分類、稽核與 WinForms）
+## V3.1.30 Build 1 — 2026/10/21（V3.2 Batch 1：Cloud 人工異常分類、稽核與 WinForms）
 
-- **原始碼／合成 CI**：建立 canonical `0019_allowance_manual_review_audit.sql` 作為**待本機 MCP 受控套用**的下一筆遷移來源，沿用 schema18 原 Allowance Application／Ledger／官方查回，不覆寫也不重套 0017／0018。新表永久不可修改／刪除、主管裝置與原 Ledger 綁定、官方證據欄可追溯，禁止以人工作業冒充財務成功。
+- **原始碼／合成 CI**：建立待審核的 `cloud/drafts/0019_allowance_manual_review_audit.sql` 作為**待本機 MCP 受控套用**的下一筆遷移來源，沿用 schema18 原 Allowance Application／Ledger／官方查回，不覆寫也不重套 0017／0018。新表永久不可修改／刪除、主管裝置與原 Ledger 綁定、官方證據欄可追溯，禁止以人工作業冒充財務成功。
 - 新增 `manual-review`／`manual-history` 路徑與 Windows 主管查詢／分類介面。前者需 schema19＋**獨立預設關閉** `ALLOWANCE_MANUAL_REVIEW_ENABLED=true`、CYID 主管身份、原 Workspace／Device 有效、原核准申請、原 Ledger 為 sending／occupied_external。全項吻合分類須有同一 Ledger 的真實官方查回紀錄；其他分類只代表待查。
 - 人工稽核只可 **append-only**；不更動號碼、Ledger、官方成功狀態、Grant 或原單次 g0401 發送條件。網路回覆遺失時只從原申請 ID 查人工歷史，不能視為成功或盲重試。合成測試涵蓋未知 schema／旗標關閉、一般員工拒絕、稽核不變更及零額外 provider POST。
-- **尚未部署**：原 CYInvoice D1／Worker 仍依使用者先前回報為 schema18、`ALLOWANCE_API_ENABLED=false`，新 schema19 不得自行套用，須由使用者另一本機 Work＋Cloudflare MCP、確認私有備份／資源預算／回復路徑後再決定受控上線。真正光貿、雙 Windows、Cloud 可歸因成功政策與受控外部撞號下一號仍待驗收；正式 Release V3.1.0 未變。
+- **Build 1**：先前將待審 0019 放入正式 migrations/ 被既有部署護欄正確拒絕（UNREVIEWED_PENDING_MIGRATIONS）。移至 cloud/drafts/，維持 canonical 0001～0018 不變；只在合成記憶體庫試行 0019，不修改／繞過任何部署護欄。
+- **尚未提升為正式 Migration，更未部署**：原 CYInvoice D1／Worker 仍依使用者先前回報為 schema18、`ALLOWANCE_API_ENABLED=false`，草案 schema19 不得自行套用，須由使用者另一本機 Work＋Cloudflare MCP、確認私有備份／資源預算／回復路徑後再決定受控上線。真正光貿、雙 Windows、Cloud 可歸因成功政策與受控外部撞號下一號仍待驗收；正式 Release V3.1.0 未變。
 
 ## V3.1.29 Build 0 — 2026/10/21（V3.2 Batch 1：Local 外部占號人工覆核 UI 收斂）
 
