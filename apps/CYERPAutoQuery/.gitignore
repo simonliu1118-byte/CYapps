@@ -1,0 +1,21 @@
+# Runtime / local-only data
+logs/
+
+# .NET / IDE output
+bin/
+obj/
+.vs/
+*.user
+*.pdb
+
+# Build output
+package/
+publish-staging/
+*.exe
+*.zip
+ui-snapshots/
+runtime/ocr/*.onnx
+runtime/ocr/SHA256.txt
+TEMP/
+assets/*.ico
+config/
