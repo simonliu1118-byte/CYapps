@@ -344,7 +344,8 @@ function backupUiModel(data) {
         retentionDays: Number(gcs.retentionDays || 14),
         role: String(gcs.role || 'cross_cloud_validation')
       },
-      logicalBackups
+      logicalBackups,
+      scheduledAttempts: Array.isArray(data?.scheduledAttempts) ? data.scheduledAttempts : []
     };
   }
 
@@ -394,7 +395,8 @@ function renderBackupStatus(data) {
         : (model.configured ? '可立即備份並驗證 R2 與 GCS' : '完成兩個 provider 設定後即可測試');
     }
     renderBackupProviderHealth(model, latest);
-    renderTieredBackupHistory(model.logicalBackups);
+    renderTieredBackupHistory(model.logicalBackups, model.scheduledAttempts);
+    if (data.attemptLogAvailable === false) setBackupMessage('無法讀取自動備份的執行紀錄，以下清單可能不完整。', true);
   } else {
     const latest = model.latest;
     if (lastTime) lastTime.textContent = latest?.completedAt ? backupLocalDateTime(latest.completedAt) : '尚無';
@@ -479,15 +481,27 @@ function renderBackupHistory(runs) {
   }).join('');
 }
 
-function renderTieredBackupHistory(backups) {
+function renderTieredBackupHistory(backups, attempts = []) {
   const tbody = document.querySelector('#backupHistoryRows');
   if (!tbody) return;
-  const items = Array.isArray(backups) ? backups.slice(0, 8) : [];
+  const logical = Array.isArray(backups) ? backups : [];
+  const items = [...logical, ...attempts.filter(attempt => ['failed', 'pending'].includes(attempt.status)
+    && !logical.some(item => item.backupId === attempt.backupId)).map(attempt => ({ ...attempt, attemptOnly: true }))]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 8);
   if (!items.length) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty">尚無備份執行紀錄。</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(item => {
+    const slot = item.attemptOnly ? item.slot : attempts.find(attempt => attempt.backupId === item.backupId)?.slot;
+    const trigger = slot === 'retry' ? '補跑' : item.attemptOnly || item.trigger === 'scheduled' ? '自動' : '手動';
+    if (item.attemptOnly) {
+      const detail = item.status === 'pending' ? '執行未完成' : item.errorCode === 'D1_DAILY_LIMIT_EXCEEDED'
+        ? 'D1 每日額度已用完' : item.errorCode === 'BACKUP_DATABASE_UNAVAILABLE' ? '無法讀取資料庫' : '備份執行失敗';
+      return `<tr><td>${escapeBackupHtml(backupLocalDateTime(item.createdAt))}</td><td>${trigger}</td>
+        <td colspan="3" class="backup-run-detail" title="${escapeBackupHtml(item.errorCode || '')}">${escapeBackupHtml(detail)}</td>
+        <td class="backup-data-summary">—</td></tr>`;
+    }
     const copies = Array.isArray(item.copies) ? item.copies : [];
     const r2 = copies.find(copy => copy.provider === 'cloudflare_r2');
     const gcs = copies.find(copy => copy.provider === 'google_cloud_storage');
@@ -496,7 +510,7 @@ function renderTieredBackupHistory(backups) {
       : copies.filter(copy => copy.status !== 'success').map(copy => copy.lastError || `${copy.provider} failed`).join(' · ');
     return `<tr>
       <td>${escapeBackupHtml(backupLocalDateTime(item.createdAt))}</td>
-      <td>${item.trigger === 'scheduled' ? '自動' : '手動'}</td>
+      <td>${trigger}</td>
       <td class="backup-run-detail" title="${escapeBackupHtml(title)}">${escapeBackupHtml(item.backupId || '—')}</td>
       <td class="backup-copy-cell">${backupCopyBadgeBase(r2)}</td>
       <td class="backup-copy-cell">${item.gcsExpected === false && !gcs ? '' : backupCopyBadgeBase(gcs)}</td>

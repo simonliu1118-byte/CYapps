@@ -187,8 +187,8 @@ export default {
     }
   },
 
-  async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(runScheduledBackup(env));
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runScheduledBackup(env, { cron: controller.cron, now: new Date(controller.scheduledTime) }));
   }
 };
 

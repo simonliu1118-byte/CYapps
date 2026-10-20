@@ -154,6 +154,17 @@ context.document.querySelector = selector => nodes.get(selector) || null;
 context.renderTieredBackupHistory([{gcsExpected:false,copies:[{provider:'cloudflare_r2',status:'success'}],status:'success'}]);
 assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML,/本日未排程/);
 assert.match(nodes.get('#backupHistoryRows').innerHTML, /<td class="backup-copy-cell"><\/td>/, 'unscheduled GCS stays an empty cell');
+context.renderTieredBackupHistory([{backupId:'TEST_RETRY',createdAt:'2026-10-20T00:00:00Z',trigger:'scheduled',status:'success',copies:[]}], [
+  {slot:'retry',backupId:'TEST_RETRY',createdAt:'2026-10-20T00:00:00Z',status:'success'},
+  {slot:'primary',backupId:'',createdAt:'2026-10-19T19:30:00Z',status:'failed',errorCode:'D1_DAILY_LIMIT_EXCEEDED'}
+]);
+const retryHistory = nodes.get('#backupHistoryRows').innerHTML;
+assert.match(retryHistory, /補跑/);
+assert.match(retryHistory, /D1 每日額度已用完/);
+assert.equal((retryHistory.match(/<tr>/g) || []).length, 2, 'the failure remains beside the successful retry, without duplicating its logical backup');
+context.renderTieredBackupHistory([], [{slot:'primary',createdAt:'2026-10-19T19:30:00Z',status:'failed',errorCode:'<script>"'}]);
+assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML, /<script>/);
+assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML, /0 筆/, 'a failed pre-export attempt is not presented as an empty ledger');
 assert.doesNotMatch(renderedHtml, /backupVerifyRestore|backupRestoreStatus|backupActivatePhaseD|檢查備份可還原性|試還原並核對/);
 assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);
 

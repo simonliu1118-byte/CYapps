@@ -48,7 +48,7 @@ try {
   assert.equal(rendered.vars.CYID_WORKSPACE_ID, env.CF_CYID_WORKSPACE_ID);
   assert.equal(rendered.vars.CYWEB_PORTAL_URL, env.CF_CYWEB_PORTAL_URL);
   assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/recovery', '/', '/index.html', '/login', '/login.html']);
-  assert.equal(rendered.triggers.crons[0], '30 19 * * *');
+  assert.deepEqual(rendered.triggers.crons, ['30 19 * * *', '0 0 * * *']);
   assert.equal(/__CF_[A-Z0-9_]+__/.test(renderedText), false);
 
   assert.throws(() => renderWrangler({ env: { ...env, CF_D1_DATABASE_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);

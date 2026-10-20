@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { accountingFixture, memoryProvider, session, schemas } from './support/backup-fixtures.mjs';
+import { accountingFixture, memoryProvider, memoryR2Bucket, session, schemas } from './support/backup-fixtures.mjs';
 import { verify } from './support/restore-fixture.mjs';
 import { runTieredBackup, checkBackupHealth, readBackupHealth, handleBackupApi, runScheduledBackup, verifyStoredBackup } from '../src/backup-service.js';
 
@@ -20,7 +20,7 @@ try {
 const R2='cloudflare_r2',GCS='google_cloud_storage';
 const db=accountingFixture(),r2=memoryProvider(R2),gcs=memoryProvider(GCS);
 let notifications=[], failMail=false;
-const env={DB:db,BACKUP_TOPOLOGY:'parallel_dual_provider',CYID_WORKSPACE_ID:'workspace-test',CYID_APPLICATION_ID:'TEST_APP',
+const env={DB:db,BACKUP_R2:memoryR2Bucket(),BACKUP_TOPOLOGY:'parallel_dual_provider',CYID_WORKSPACE_ID:'workspace-test',CYID_APPLICATION_ID:'TEST_APP',
   BACKUP_NOTIFICATIONS:{async notifySuperAdmin(input){notifications.push(input);if(failMail)throw new Error('private diagnostic');return {status:'delivered'};}}};
 const options={r2Provider:r2,gcsProvider:gcs,verifyRestore:verify};
 const sunday=new Date('2026-10-18T19:30:00Z'); // Taipei Monday: R2 only after policy activation.
@@ -35,6 +35,10 @@ try {
   let result=await runScheduledBackup(env,{...options,now:sunday});
   assert.equal(result.gcsExpected,false);
   assert.equal(result.health.status,'healthy','unscheduled GCS validates its latest actual copy, never assumes a same-day pair');
+  const completeSets = db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n;
+  const catchUp = await runScheduledBackup(env,{...options,now:new Date(sunday.getTime()+4.5*3600000),cron:'0 0 * * *'});
+  assert.equal(catchUp.reason,'already_backed_up','Phase D R2-only days do not require a same-day GCS copy');
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n,completeSets);
   assert.equal(notifications.length,0,'healthy checks never send mail');
   const ledger=()=>JSON.stringify(db.db.prepare('SELECT * FROM transactions ORDER BY id').all());
   assert.equal(ledger(),accounting,'real isolated SQLite verification never modifies live transactions');
@@ -78,7 +82,7 @@ try {
   db.db.exec("INSERT INTO meta(key,value) VALUES('recovery_hold','1')");
   assert.equal((await runScheduledBackup(env,options)).reason,'recovery_workspace');
   assert.equal((await checkBackupHealth(env,options)).reason,'recovery_workspace');
-  const outage=await runScheduledBackup({...env,DB:{prepare(){throw new Error('private database diagnostic');}}},options);
+  const outage=await runScheduledBackup({...env,BACKUP_R2:memoryR2Bucket(),DB:{prepare(){throw new Error('private database diagnostic');}}},options);
   assert.equal(outage.error,'BACKUP_DATABASE_UNAVAILABLE');assert.equal(outage.emailSent,true,'independent Identity mail still works during an accounting DB outage');
   assert.match(readFileSync(new URL('../wrangler.template.jsonc',import.meta.url),'utf8'),/"entrypoint": "ConsumerNotifications"/);
 }finally{db.close();}
