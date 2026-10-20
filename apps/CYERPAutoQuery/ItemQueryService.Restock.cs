@@ -11,15 +11,21 @@ internal sealed partial class ItemQueryService
     /// <summary>After this many 庫存 lookups failing in a row the rest are not tried (ERP is likely in trouble).</summary>
     private const int RestockFailuresInRow = 3;
 
-    public async Task<RestockResult> QueryRestockAsync(RestockQuery query, IProgress<string> progress, CancellationToken cancellationToken)
+    /// <param name="stage">Told each step: REPORT with the 明細表 done of 2, then STOCK with the 品號 looked up of those to look up.</param>
+    public async Task<RestockResult> QueryRestockAsync(RestockQuery query, IProgress<string> progress, CancellationToken cancellationToken,
+        Action<string, int, int>? stage = null)
     {
         var watch = Stopwatch.StartNew();
         var sales = query.Sales;
         var orders = await GuardErpMessagesAsync(async () =>
         {
             var all = new List<SalesOrder>();
-            foreach (var report in SalesReport.All)
-                all.AddRange(await RunSalesReportAsync(report, sales, progress, cancellationToken));
+            stage?.Invoke("REPORT", 0, SalesReport.All.Count);
+            for (var r = 0; r < SalesReport.All.Count; r++)
+            {
+                all.AddRange(await RunSalesReportAsync(SalesReport.All[r], sales, progress, cancellationToken));
+                stage?.Invoke("REPORT", r + 1, SalesReport.All.Count);
+            }
             return all;
         });
         var items = Restock.Summarize(orders);
@@ -27,6 +33,8 @@ internal sealed partial class ItemQueryService
 
         var options = ItemQueryOptions.Default with { HeaderOnly = true };
         var failures = 0;
+        var lookups = Math.Min(items.Count, Restock.MaxStockLookups);
+        stage?.Invoke("STOCK", 0, lookups);
         for (var i = 0; i < items.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -48,6 +56,7 @@ internal sealed partial class ItemQueryService
                 _log.Warn("restock", $"stock item={_log.Value(item.ItemCode)} failed: {ex.GetType().Name}: {ex.Message}");
                 items[i] = item with { StockNote = "庫存查詢失敗" };
             }
+            stage?.Invoke("STOCK", i + 1, lookups);
         }
         _log.Info("restock", $"done items={items.Count} stock={items.Count(i => i.Stock is not null)} ms={watch.ElapsedMilliseconds}");
         return new RestockResult(query, items, watch.Elapsed);

@@ -141,6 +141,14 @@ internal static class ErpAgentProtocol
 {
     public const string ClaimPath = "api/erp-agent/item-queries/claim";
     public static string CompletePath(string jobId) => $"api/erp-agent/item-queries/{Uri.EscapeDataString(jobId)}/complete";
+    public static string ProgressPath(string jobId) => $"api/erp-agent/item-queries/{Uri.EscapeDataString(jobId)}/progress";
+
+    /// <summary>
+    /// A running job's progress (進貨輔助, user 2026-10-20: show 已查／總數): stage REPORT counts the two
+    /// 明細表 run, STOCK the 品號 whose 庫存 was looked up.
+    /// </summary>
+    public static string ProgressBody(string stage, int done, int total) =>
+        new JsonObject { ["stage"] = stage, ["done"] = done, ["total"] = total }.ToJsonString();
 
     public static string ErpState(Invi02Status status) => status switch
     {

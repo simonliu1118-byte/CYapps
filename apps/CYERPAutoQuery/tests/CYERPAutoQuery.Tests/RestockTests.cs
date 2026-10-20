@@ -82,4 +82,12 @@ public class RestockTests
     [InlineData("", null)]
     [InlineData("--", null)]
     public void StockIsSentAsAPlainNumber(string shown, string? sent) => Assert.Equal(sent, Restock.Quantity(shown));
+
+    [Fact]
+    public void ProgressIsPostedForTheJob()
+    {
+        Assert.Equal("api/erp-agent/item-queries/j%201/progress", ErpAgentProtocol.ProgressPath("j 1"));
+        var body = JsonNode.Parse(ErpAgentProtocol.ProgressBody("STOCK", 3, 40))!;
+        Assert.Equal(("STOCK", 3, 40), (body["stage"]!.GetValue<string>(), body["done"]!.GetValue<int>(), body["total"]!.GetValue<int>()));
+    }
 }

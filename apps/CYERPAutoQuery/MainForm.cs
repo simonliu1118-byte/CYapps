@@ -72,6 +72,8 @@ internal sealed partial class MainForm : Form
     private readonly ErpAgentSettings _agentSettings;
     private CancellationTokenSource? _agentCts;
     private Task? _agentTask;
+    /// <summary>The running Agent's client, for progress reports of a long job.</summary>
+    private ErpAgentClient? _agentClient;
     private ErpAgentState? _agentState;
 
     public MainForm(AppLogger log)
@@ -880,7 +882,8 @@ internal sealed partial class MainForm : Form
             case ErpAgentJob.RestockQueryType:
             {
                 var query = job.Restock(DateOnly.FromDateTime(DateTime.Today));
-                var result = await RunAutomationAsync(cancellationToken, (progress, ct) => _service.QueryRestockAsync(query, progress, ct), r =>
+                var report = WebProgress(job.Id, cancellationToken);
+                var result = await RunAutomationAsync(cancellationToken, (progress, ct) => _service.QueryRestockAsync(query, progress, ct, report), r =>
                 {
                     SetStatus($"ERP：進貨輔助 {query.From:yyyy/MM/dd}～{query.To:yyyy/MM/dd} 完成，{r.Items.Count} 個品號（{r.Elapsed.TotalSeconds:0} 秒）");
                     return r.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
@@ -898,6 +901,35 @@ internal sealed partial class MainForm : Form
             default:
                 throw new NotSupportedException($"不支援的查詢類型 {job.QueryType}。");
         }
+    }
+
+    /// <summary>
+    /// Tells CY Web how far a long job is (進貨輔助, user 2026-10-20): at most every 2 seconds, and
+    /// always the first and last step. Best effort: a failed report is logged once and the job goes on.
+    /// </summary>
+    private Action<string, int, int> WebProgress(string jobId, CancellationToken cancellationToken)
+    {
+        var last = DateTime.MinValue;
+        var warned = false;
+        return (stage, done, total) =>
+        {
+            if (_agentClient is not { } client) return;
+            var now = DateTime.UtcNow;
+            if (done != 0 && done != total && now - last < TimeSpan.FromSeconds(2)) return;
+            last = now;
+            _ = SendAsync();
+            async Task SendAsync()
+            {
+                try { await client.ProgressAsync(jobId, ErpAgentProtocol.ProgressBody(stage, done, total), cancellationToken); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+                catch (Exception ex)
+                {
+                    if (warned) return;
+                    warned = true;
+                    _log.Warn("agent", $"progress not sent: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        };
     }
 
     /// <summary>A query received from CY Web: same path as the local one, no message box (the outcome goes back to Web).</summary>
@@ -1073,6 +1105,7 @@ internal sealed partial class MainForm : Form
             SetAgentStatus,
             runSearch: RunWebSearchAsync,
             runBusiness: RunWebBusinessAsync);
+        _agentClient = client;
         _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
     }
 
@@ -1093,6 +1126,7 @@ internal sealed partial class MainForm : Form
         }
         finally
         {
+            if (_agentClient == client) _agentClient = null;
             client.Dispose();
             _agentTask = null;
         }
