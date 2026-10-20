@@ -167,7 +167,7 @@ internal static class LocalAllowanceOneShotTests
                 reader.GetString(1)==next.AllowanceNumber && reader.GetInt32(2)==64,
                 "audit must bind old/new numbers and official fingerprint");
         }
-        await ExpectAsync<InvalidOperationException>(()=>
+        await ExpectAsync<InvalidDataException>(()=>
             service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
         Check(CollisionReviewCount(temp.Path)==1,"cannot replay collision approval");
         Check(fake.SendCount==1,"manual reallocation never posts the new number");

@@ -2,11 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.28 Build 0 — 2026/10/21（V3.2 Batch 1：Local 外部占號人工覆核與唯一下一號預留）
+## V3.1.28 Build 1 — 2026/10/21（V3.2 Batch 1：Local 外部占號人工覆核與唯一下一號預留）
 
 - 從現有 Local `occupied_external` 出發，提供同一 Work Item 的**人工確認下一號預留**；僅允許已確定第一次 g0401 被光貿拒絕占號，且新的一次性原號唯讀查回顯示完整官方折讓由**不同買方、不同原發票**建立。逾時、查無資料、同買方、同原發票、號碼不符、未完成狀態或僅憑錯誤碼都禁止新配號。
 - 需主管再次驗權、原核准 Frozen 不變、正式原發票餘額／明細最新驗證及明確「確認外部占號並重新配號」文字；每次新分配在原 Local SQLite 原有 Ledger 以 `attempt=N+1` 追加，前一次 `occupied_external` 不變。同一 SQLite Transaction 同時存不可變的新號／舊號／主管／官方 SHA256 快照稽核，沒有第二個 business owner。
 - 新號只是 `reserved`，**不會自動呼叫 g0401**；必須另行受權限的既有唯一 send 首次 CAS。回讀結果不明仍維持 `sending`，禁止亂配號。合成測試覆蓋碰撞、配號、不同買方／原發票、撤權、重複確認與不可修改稽核。
+- Build 1：Windows CI 先前證明舊號於成功改配後遭更嚴格的凍結身份比對拒絕；修正合成測試預期為 `InvalidDataException`，不放寬安全檢查。
 - 不變更原 Cloudflare D1 schema18／Worker、公司卡、折讓旗標或真交易。Local 主管 UI 的人工第二次確認和跨機 Cloud 同等撞號流程、真實光貿驗收仍待整合完成；正式 Release V3.1.0。
 
 ## V3.1.27 Build 1 — 2026/10/21（V3.2 B/C：Local 原號回查與不可歸因 Audit 一致性）
