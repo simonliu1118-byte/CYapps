@@ -411,8 +411,21 @@ html[data-viewport="desktop"] #settingsDialog .backup-policy-row { display: none
 
 @media (max-width: 540px) { .backup-recovery-launcher { grid-template-columns: minmax(0, 1fr); } }
 
-.backup-health-dialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
-.backup-health-dialog p { line-height: 1.6; }
+.backup-health-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 20px;
+  overflow: auto;
+}
+.backup-health-dialog > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.backup-health-dialog p {
+  margin: 12px 0 0;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.backup-health-dialog .modal-header h2 { white-space: normal; overflow-wrap: anywhere; }
 .backup-health-dialog .modal-header { color: #9b2c21; }
 .backup-health-delivery:empty { display: none; }
 .backup-health-actions { display: flex; justify-content: flex-end; margin-top: 16px; }

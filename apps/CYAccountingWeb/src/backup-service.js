@@ -15,6 +15,9 @@ const GCS_PHASE_C_RETENTION_DAYS = 14;
 const PHASE_C_REQUIRED_SCHEDULED_BACKUPS = 14;
 const GCS_PHASE_D_RETENTION_DAYS = 182;
 const MAX_RESTORE_BYTES = 8 * 1024 * 1024;
+const PRIMARY_CRON = '30 19 * * *';
+const RETRY_CRON = '0 0 * * *';
+const ATTEMPT_PREFIX = 'CYAccountingWebOperations/scheduled-backups/';
 
 export function resolveTieredBackupTopology(env) {
   const value = String(env?.BACKUP_TOPOLOGY || '').trim();
@@ -76,20 +79,70 @@ export async function handleBackupApi(request, env, session, options = {}) {
 }
 
 export async function runScheduledBackup(env, options = {}) {
-  if (resolveTieredBackupTopology(env) === LEGACY_GCS) return runLegacyScheduledBackup(env);
+  const cron = options.cron || PRIMARY_CRON;
+  if (![PRIMARY_CRON, RETRY_CRON].includes(cron)) return { skipped: true, reason: 'unknown_schedule' };
+  if (resolveTieredBackupTopology(env) === LEGACY_GCS) return cron === PRIMARY_CRON
+    ? runLegacyScheduledBackup(env) : { skipped: true, reason: 'legacy_retry_not_enabled' };
   if (!env?.DB) return { skipped: true, reason: 'not_configured' };
-  let hold;
-  try { hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first(); }
-  catch {
-    const delivery = await notifyBackupIncident(env, crypto.randomUUID());
-    return { ok: false, error: 'BACKUP_DATABASE_UNAVAILABLE', emailSent: delivery.sent };
+  const now = options.now instanceof Date ? options.now : new Date();
+  const day = taipeiBackupDay(now), slot = cron === RETRY_CRON ? 'retry' : 'primary';
+  const hex = await recoveryDigest(`scheduled-backup:${day}:${slot}`);
+  const incident = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+  let databaseError;
+  try {
+    const hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
+    if (hold?.value === '1') return { skipped: true, reason: 'recovery_workspace' };
+  } catch (error) { databaseError = error; }
+  const key = `${ATTEMPT_PREFIX}${day}/${slot}.json`;
+  // This journal must survive a D1 quota outage. Each day has two atomic slots;
+  // a duplicate delivery cannot claim the same slot, even after a failure.
+  const attempt = { day, slot, createdAt: now.toISOString(), completedAt: null, status: 'pending', backupId: '', errorCode: '' };
+  let claim;
+  try {
+    claim = await env.BACKUP_R2.put(key, JSON.stringify(attempt), { onlyIf: { etagDoesNotMatch: '*' } });
+    if (!claim) return { skipped: true, reason: 'attempt_already_recorded' };
+  } catch {
+    console.error('cyaccounting_backup_attempt_log_unavailable');
+    // A journal outage must not suppress the other provider. The canonical D1
+    // backup ID is also unique for this ScheduledController timestamp.
   }
-  if (hold?.value === '1') return { skipped: true, reason: 'recovery_workspace' };
-  let backup;
-  try { backup = await runTieredBackup(env, 'scheduled', options); }
+  let backup, databaseReady = false;
+  try {
+    if (databaseError) throw databaseError;
+    databaseReady = true;
+    if (slot === 'retry' && await successfulBackupToday(env.DB, now)) backup = { skipped: true, reason: 'already_backed_up' };
+    else backup = await runTieredBackup(env, 'scheduled', { ...options, now });
+  }
   catch (error) {
-    console.error('cyaccounting_tiered_backup_failed', safeCode(error));
-    backup = { ok: false, error: safeCode(error) };
+    const quota = /exceeded D1's free tier daily|daily.*row.*limit/i.test(`${error?.message || ''} ${error?.cause?.message || ''}`);
+    const code = quota ? 'D1_DAILY_LIMIT_EXCEEDED' : !databaseReady ? 'BACKUP_DATABASE_UNAVAILABLE' : safeCode(error);
+    console.error('cyaccounting_tiered_backup_failed', /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : 'BACKUP_FAILED');
+    backup = { ok: false, error: code, backupId: error?.backupResult?.backupId || '' };
+    // Stop all further D1 work on a quota error; notification uses CYID instead.
+    if (quota) databaseReady = false;
+  }
+  Object.assign(attempt, { status: backup.skipped ? 'skipped' : backup.ok ? 'success' : 'failed',
+    completedAt: new Date().toISOString(), backupId: backup.backupId || '',
+    errorCode: /^[A-Z][A-Z0-9_]{0,63}$/.test(backup.error || '') ? backup.error : backup.ok || backup.skipped ? '' : 'BACKUP_FAILED',
+    reason: backup.reason || '' });
+  try {
+    if (!claim) throw new Error('attempt journal unavailable');
+    const saved = await env.BACKUP_R2.put(key, JSON.stringify(attempt), { onlyIf: { etagMatches: claim.etag } });
+    if (!saved) throw new Error('attempt changed');
+  } catch {
+    console.error('cyaccounting_backup_attempt_log_failed');
+    const delivery = await notifyBackupIncident(env, incident);
+    backup = { ...backup, attemptLogError: 'BACKUP_ATTEMPT_LOG_FAILED', emailSent: delivery.sent };
+  }
+  // Fixed-key cleanup only: never scan the bucket or remove backup packages.
+  try {
+    const expired = taipeiBackupDay(new Date(now.getTime() - 31 * 86400000));
+    await env.BACKUP_R2.delete(['primary', 'retry'].map(name => `${ATTEMPT_PREFIX}${expired}/${name}.json`));
+  } catch { console.warn('cyaccounting_backup_attempt_cleanup_failed'); }
+  if (backup.skipped) return backup;
+  if (!databaseReady) {
+    const delivery = await notifyBackupIncident(env, incident);
+    return { ...backup, emailSent: delivery.sent };
   }
   // A failed new backup must not suppress verification / incident notification.
   try { return { ...backup, health: await checkBackupHealth(env, { ...options, backupFailed: backup.ok === false }) }; }
@@ -98,6 +151,41 @@ export async function runScheduledBackup(env, options = {}) {
     const delivery = await notifyBackupIncident(env, crypto.randomUUID());
     return { ...backup, health: { status: 'failed', code: 'BACKUP_HEALTH_CHECK_FAILED', emailSent: delivery.sent } };
   }
+}
+
+function taipeiBackupDay(now) {
+  return new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+}
+
+async function successfulBackupToday(db, now) {
+  const day = taipeiBackupDay(now);
+  const start = new Date(`${day}T00:00:00+08:00`);
+  const end = new Date(start.getTime() + 86400000);
+  const policy = await readBackupPolicy(db);
+  const { gcsExpected } = backupExecutionPlan(policy.phase, 'scheduled', now);
+  return Boolean(await db.prepare(`SELECT bs.backup_id FROM backup_sets bs
+    WHERE bs.created_at >= ? AND bs.created_at < ?
+      AND EXISTS (SELECT 1 FROM backup_copies bc WHERE bc.backup_id = bs.backup_id
+        AND bc.provider = 'cloudflare_r2' AND bc.status = 'success' AND bc.verified_at IS NOT NULL)
+      AND (? = 0 OR EXISTS (SELECT 1 FROM backup_copies bc WHERE bc.backup_id = bs.backup_id
+        AND bc.provider = 'google_cloud_storage' AND bc.status = 'success' AND bc.verified_at IS NOT NULL))
+    ORDER BY bs.created_at DESC LIMIT 1`).bind(start.toISOString(), end.toISOString(), Number(gcsExpected)).first());
+}
+
+export async function readScheduledBackupAttempts(env, now = new Date()) {
+  const attempts = [];
+  // The existing history shows eight rows. Read at most eight days / 16 keys,
+  // independently of the number of historical objects in the bucket.
+  for (let age = 0; age < 8; age++) {
+    const day = taipeiBackupDay(new Date(now.getTime() - age * 86400000));
+    for (const slot of ['retry', 'primary']) {
+      const object = await env.BACKUP_R2.get(`${ATTEMPT_PREFIX}${day}/${slot}.json`);
+      if (!object) continue;
+      const record = JSON.parse(await object.text());
+      if (record.day === day && record.slot === slot && ['pending', 'failed', 'success', 'skipped'].includes(record.status)) attempts.push(record);
+    }
+  }
+  return attempts;
 }
 
 export async function runTieredBackup(env, triggerKind = 'scheduled', options = {}) {
@@ -293,6 +381,9 @@ export async function parallelBackupStatus(env) {
   const phaseCAcceptance = await readPhaseCAcceptance(env.DB);
   const restoreChecks = await recentRestoreChecks(env.DB);
   const latestSuccess = logicalBackups.find(item => item.status === 'success') || null;
+  let scheduledAttempts = [], attemptLogAvailable = true;
+  try { scheduledAttempts = await readScheduledBackupAttempts(env); }
+  catch { attemptLogAvailable = false; }
   const workspace = await recoveryWorkspace(env.RECOVERY_DB);
   return json({
     ok: true,
@@ -308,12 +399,15 @@ export async function parallelBackupStatus(env) {
       [R2_PROVIDER]: { configured: r2ConfigReady(env), retentionDays: R2_RETENTION_DAYS, role: 'operational' },
       [GCS_PROVIDER]: { configured: gcsConfigReady(env), retentionDays: policy.gcsRetentionDays, role: policy.phase === 'phase_d' ? 'cross_cloud_long_term' : 'cross_cloud_validation' }
     },
-    schedule: { cron: '30 19 * * *', localTime: policy.phase === 'phase_d' ? 'R2 每日；GCS 週三、週日 03:30（台灣時間）' : '每日 03:30（台灣時間）' },
+    schedule: { cron: PRIMARY_CRON, retryCron: RETRY_CRON, localTime: policy.phase === 'phase_d'
+      ? 'R2 每日；GCS 週三、週日 03:30；失敗於 08:00 補跑一次（台灣時間）'
+      : '每日 03:30；失敗於 08:00 補跑一次（台灣時間）' },
     retentionDays: policy.gcsRetentionDays,
     phaseCAcceptance,
     latestSuccess: latestSuccess ? logicalToLegacyRun(latestSuccess) : null,
     recentRuns: logicalBackups.map(logicalToLegacyRun),
     logicalBackups,
+    scheduledAttempts, attemptLogAvailable,
     restoreAvailable: false
   });
 }

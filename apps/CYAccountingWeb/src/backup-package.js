@@ -7,17 +7,17 @@ const PAGE_SIZE = 1000;
 const encoder = new TextEncoder();
 
 export async function buildBackupPackage(db, now = new Date()) {
-  const [schemaRow, accounts, groups, categories, transactions, openingOverrides, openingAudit, settings] = await Promise.all([
-    db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first(),
-    readPaged(db, 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount),
-    readPaged(db, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup),
-    readPaged(db, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory),
-    readPaged(db, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at FROM transactions ORDER BY id', mapTransaction),
-    readPaged(db, 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride),
-    readPaged(db, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit),
-    readPaged(db, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting)
-  ]);
-  const importRuns = Number(schemaRow?.value || 0) >= 8 ? await readPaged(db,
+  // A failed query stops the export; no parallel reads continue after quota exhaustion.
+  const budget = { remaining: 20000 };
+  const schemaRow = await db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first();
+  const accounts = await readPaged(db, budget, 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount);
+  const groups = await readPaged(db, budget, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup);
+  const categories = await readPaged(db, budget, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory);
+  const transactions = await readPaged(db, budget, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at FROM transactions ORDER BY id', mapTransaction);
+  const openingOverrides = await readPaged(db, budget, 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride);
+  const openingAudit = await readPaged(db, budget, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit);
+  const settings = await readPaged(db, budget, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting);
+  const importRuns = Number(schemaRow?.value || 0) >= 8 ? await readPaged(db, budget,
     'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', row => ({
       id: String(row.id), startDate: String(row.start_date), endExclusive: String(row.end_exclusive),
       reason: String(row.reason), sourceSha256: String(row.source_sha256), backupId: String(row.backup_id),
@@ -58,14 +58,21 @@ export async function buildBackupPackage(db, now = new Date()) {
   return { manifest, data, bytes, dataSha256, fileSha256, totalRowCount, fileName };
 }
 
-async function readPaged(db, selectSql, mapper) {
+async function readPaged(db, budget, selectSql, mapper) {
   const rows = [];
   let offset = 0;
-  while (true) {
-    const result = await db.prepare(`${selectSql} LIMIT ? OFFSET ?`).bind(PAGE_SIZE, offset).all();
+  for (let batch = 0; batch <= 20; batch++) {
+    const limit = Math.min(PAGE_SIZE, budget.remaining + 1);
+    const result = await db.prepare(`${selectSql} LIMIT ? OFFSET ?`).bind(limit, offset).all();
     const page = result.results || [];
+    if (page.length > budget.remaining) {
+      const error = new Error('備份資料超過本次讀取上限，請由維運人員評估額度後調整。');
+      error.code = 'BACKUP_EXPORT_ROW_LIMIT';
+      throw error;
+    }
+    budget.remaining -= page.length;
     for (const row of page) rows.push(mapper(row));
-    if (page.length < PAGE_SIZE) break;
+    if (page.length < limit) break;
     offset += page.length;
   }
   return rows;

@@ -46,3 +46,29 @@ export function memoryProvider(kind) {
     async deleteObject(key) { deleted.push(key); objects.delete(key); }
   };
 }
+
+export function memoryR2Bucket() {
+  const objects = new Map(), calls = []; let sequence = 0;
+  return { objects, calls,
+    async put(key, value, options = {}) {
+      calls.push(['put', key]);
+      const prior = objects.get(key), condition = options.onlyIf;
+      if (condition?.etagDoesNotMatch === '*' && prior) return null;
+      if (condition?.etagMatches && condition.etagMatches !== prior?.etag) return null;
+      const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+      const object = { key, etag: String(++sequence), version: String(sequence), size: bytes.length,
+        uploaded: new Date(), customMetadata: options.customMetadata || {}, bytes };
+      objects.set(key, object); return object;
+    },
+    async get(key) {
+      calls.push(['get', key]); const object = objects.get(key); if (!object) return null;
+      return { ...object, async text() { return new TextDecoder().decode(object.bytes); },
+        async arrayBuffer() { return object.bytes.slice().buffer; } };
+    },
+    async delete(keys) { for (const key of Array.isArray(keys) ? keys : [keys]) { calls.push(['delete', key]); objects.delete(key); } },
+    async list({ prefix = '', limit = 1000 } = {}) {
+      calls.push(['list', prefix]); const matching = [...objects.values()].filter(object => object.key.startsWith(prefix));
+      return { objects: matching.slice(0, limit), truncated: matching.length > limit };
+    }
+  };
+}

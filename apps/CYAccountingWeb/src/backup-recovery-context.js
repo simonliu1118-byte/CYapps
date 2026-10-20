@@ -9,9 +9,12 @@ export const RECOVERY_TABLES = {
 };
 export async function buildRecoveryContext(db) {
   const tables = {};
+  let remaining = 20000;
   for (const [table,columns] of Object.entries(RECOVERY_TABLES)) {
     const order = table==='backup_copies' ? 'backup_id,provider' : table==='backup_sets' ? 'backup_id' : table==='backup_restore_checks' ? 'sequence' : 'id';
-    const result=await db.prepare(`SELECT ${columns.join(',')} FROM ${table} ORDER BY ${order}`).all();
+    const result=await db.prepare(`SELECT ${columns.join(',')} FROM ${table} ORDER BY ${order} LIMIT ?`).bind(remaining + 1).all();
+    if ((result.results || []).length > remaining) throw recoveryError('BACKUP_RECOVERY_ROW_LIMIT');
+    remaining -= (result.results || []).length;
     tables[table]=(result.results||[]).map(row=>columns.map(column=>row[column]));
   }
   return { format:'CYAccountingRecoveryContext',formatVersion:1,tables };

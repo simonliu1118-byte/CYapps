@@ -102,6 +102,7 @@ jobs:
           node tests/backup-service.mjs
           node tests/backup-phase-d.mjs
           node tests/backup-health.mjs
+          node tests/backup-schedule.mjs
           node tests/backup-recovery.mjs
           node tests/backup-recovery-worker.mjs
           node tests/recovery-provision.mjs

@@ -1,6 +1,6 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/17（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/20（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 部署模式切換驗收
 
@@ -30,6 +30,7 @@
 
 ## 備份、復原與維運
 
+- [ ] 2026/10/20 排程缺件：以有 Cloudflare MCP 的環境限量讀 actual trigger、Scheduled event、backup catalog／copies／health，分辨未觸發、建包前中止與 provider 失敗；查明前不以手動成功取代排程驗收。詳細診斷見私人維運交接檔；V0.25.6 警告框修正另待 PR 驗證、明確發布指示及正式回讀。
 - [ ] V0.25.5 上線後首次每日自動可還原性檢查的正式排程回讀；異常寄信及登入警告已用 synthetic failure 驗證，不為驗收破壞正式備份或發假異常信。
 
 - [ ] 觀察 Phase D 首次 GCS 週三／週日排程：2026/10/15 已回讀首次 R2-only 自動備份成功、GCS 本日未排程；新政策後的 GCS 排程仍待實際驗收，不以手動雙副本成功代替。
