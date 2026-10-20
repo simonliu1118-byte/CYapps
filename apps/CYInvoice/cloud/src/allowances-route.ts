@@ -11,17 +11,21 @@ import {previewCloudAllowanceForManager} from "./allowance-manager-preview";
 import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-approval";
 import {reserveApprovedCloudAllowanceNumber} from "./allowance-number-reservation";
 import {executeCloudAllowanceExactlyOnce} from "./allowance-one-shot-coordinator";
+import {appendAllowanceManualReview,listAllowanceManualReviews,type TriageKind}
+ from "./allowance-manual-review";
 
 interface Env extends CyIdEnv {
  DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
  ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;
+ ALLOWANCE_MANUAL_REVIEW_ENABLED?:string;
  COMPANY_SETTINGS_KEY_HEX?:string;
 }
 const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
  "/v1/allowances/list","/v1/allowances/review","/v1/allowances/withdraw",
  "/v1/allowances/preview","/v1/allowances/approve",
  "/v1/allowances/reserve","/v1/allowances/status",
- "/v1/allowances/attempt","/v1/allowances/send-once"]);
+ "/v1/allowances/attempt","/v1/allowances/send-once",
+ "/v1/allowances/manual-review","/v1/allowances/manual-history"]);
 const keys:Record<string,readonly string[]>={
  create:["employeeNo","password","applicationId","environment",
   "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
@@ -34,7 +38,10 @@ const keys:Record<string,readonly string[]>={
  reserve:["employeeNo","password","applicationId","expectedRevision"],
  status:["employeeNo","password","applicationId"],
  attempt:["employeeNo","password","applicationId","expectedRevision"],
- "send-once":["employeeNo","password","applicationId","expectedRevision","confirmOnce"]
+ "send-once":["employeeNo","password","applicationId","expectedRevision","confirmOnce"],
+ "manual-review":["employeeNo","password","applicationId","expectedRevision",
+   "reviewId","disposition","confirmReview"],
+ "manual-history":["employeeNo","password","applicationId","expectedRevision"]
 };
 const reply=(status:number,data:Record<string,unknown>)=>Response.json(
  {ok:status<300,...data},{status,headers:{
@@ -91,7 +98,8 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  if(!input)return reply(400,{error:{code:"INVALID_REQUEST"}});
  if(action!=="list"&&!id(input.applicationId))
   return reply(400,{error:{code:"INVALID_APPLICATION_ID"}});
- if(["review","withdraw","preview","approve","reserve","attempt","send-once"].includes(action)&&
+ if(["review","withdraw","preview","approve","reserve","attempt","send-once",
+    "manual-review","manual-history"].includes(action)&&
     !rev(input.expectedRevision))
   return reply(400,{error:{code:"INVALID_REVISION"}});
  // The ability to review/create applications NEVER implicitly enables g0401.
@@ -100,6 +108,15 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  if(action==="send-once"&&
     (env.ALLOWANCE_G0401_SEND_ENABLED!=="true"||input.confirmOnce!==true))
   return reply(503,{error:{code:"OFFICIAL_SEND_DISABLED"}});
+ // The schema19 ledger annotation contract is entirely opt-in. Existing
+ // schema18 deployments continue to work unchanged with these routes disabled.
+ if((action==="manual-review"||action==="manual-history")&&
+   Number(env.SCHEMA_VERSION)<19)
+  return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_NOT_READY"}});
+ if(action==="manual-review"&&
+   (env.ALLOWANCE_MANUAL_REVIEW_ENABLED!=="true"||
+     input.confirmReview!==true))
+  return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_DISABLED"}});
  if(action==="list"&&
   ((input.status!==undefined&&!["open","review","approved","rejected","withdrawn"].includes(String(input.status)))||
    (input.limit!==undefined&&(!rev(input.limit)||(input.limit as number)>50))))
@@ -270,6 +287,20 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(200,{applicationId:result.applicationId,
     status:"approved",revision:result.approvedRevision,
     validUntilUtc:result.validUntilUtc,officialActionPerformed:false});
+  }
+  if(action==="manual-review"){
+   if(typeof input.reviewId!=="string"||
+      typeof input.disposition!=="string")
+     return reply(400,{error:{code:"INVALID_MANUAL_REVIEW"}});
+   const row=await appendAllowanceManualReview(env.DB,target,authority,
+      input.reviewId,input.disposition as TriageKind);
+   return reply(200,row);
+  }
+  if(action==="manual-history"){
+   const items=await listAllowanceManualReviews(env.DB,target,authority);
+   return reply(200,{applicationId:target.applicationId,items,
+    officiallyConfirmed:false,proofOfThisPost:false,
+    safeToAutoRetry:false,canAllocateAnotherNumber:false});
   }
   if(action==="attempt"||action==="send-once"){
    // A *single* authoritative source of the reserved number: clients

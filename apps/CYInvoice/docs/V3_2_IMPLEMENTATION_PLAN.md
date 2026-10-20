@@ -48,6 +48,8 @@
 
 **2026-10-21 Batch 1 Local 主管 UI 收斂**：沿原 SyncIssuesForm 雙擊待辦明細處理明確外部占號；只有管理員新登入與文字確認，且後端即時原號證據比對和凍結主管核准皆通過，才以原 SQLite append-only Audit 及下一 attempt 預留。原號查回即使全項吻合仍需保留 sending，不誤寫已正式完成。Cloud 持久人工 Audit、跨機改配號及測試公司卡的真光貿驗收仍是本批未完成門檻。
 
+**2026-10-21 Batch 1 Cloud 人工 Audit 工程進度**：在 schema18 之外另外提出 schema19 草案（append-only 主管裁決分類與原查回引用），以新 API 與 WinForms 讀寫、獨立預設關閉的手動功能旗標／schema19 閘門控制。此為 GitHub 工程來源與合成驗證，**不是**使用者本機 MCP 已套用；正式 Worker 與 D1 仍依使用者最近回報停在 schema18 且 ALLOWANCE_API_ENABLED=false。人工分類不代表可歸因成功，不得改 confirmed、重送或另配號。待本機有界預算／備份／回滾與真雙機實測後才可判定 C 完成。
+
 ## 5. 不可跳過的整合安全門檻
 
 - **所有交易權威來自光貿**：code=0、相同折讓號、同內容、Cloud 回覆或管理員「已處理」都不單獨代表本次 g0401／g0501 已正式完成。若光貿不提供可信 transaction attribution，就必須明確標示「無法歸因」、走人工查證，不創造假的 confirmed，也不為達標自動再送一次。

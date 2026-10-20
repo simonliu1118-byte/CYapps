@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.29 Build 0（非正式 Release，待 CI）**：V3.2 B/C Local 主管人工介面已接入原 `occupied_external` 安全改配號；需重新登入、正確文字確認及後端再驗光貿，成功僅原 Ledger 下一號 `reserved`。同號同內容仍不是本次成功證據；Cloudflare、真光貿與正式 Release 不變。
+- **目前工程 Source：V3.1.30 Build 1（非正式 Release，待精確 CI）**：V3.2 B/C Cloud 人工異常分類使用待審 schema19 草案的 append-only、CYID 主管專用 API 和 Windows 稽核介面，皆為待驗工程碼；正式 D1 仍 schema18、Worker 原旗標關閉，沒有真光貿或新正式發行。
+
+- **前一工程 Source：V3.1.29 Build 0（非正式 Release）**：V3.2 B/C Local 主管人工介面已接入原 `occupied_external` 安全改配號；需重新登入、正確文字確認及後端再驗光貿，成功僅原 Ledger 下一號 `reserved`。同號同內容仍不是本次成功證據；Cloudflare、真光貿與正式 Release 不變。
 
 - **前一工程 Source：V3.1.28 Build 1（非正式 Release）**：Local 僅在明確外部撞號、官方不同買方與不同原發票及同主管雙重即時覆核後，於原 SQLite 原 Ledger 保留舊號並追加下一號預留及不可變稽核；不自動重送。原 Cloudflare／光貿不變，正式 Release V3.1.0。
 
