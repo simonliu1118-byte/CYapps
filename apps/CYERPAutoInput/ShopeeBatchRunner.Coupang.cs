@@ -428,9 +428,7 @@ internal sealed partial class ShopeeBatchRunner
                 await Task.Delay(1500, _token);
                 continue;
             }
-            var cancel = boxes.Where(b => ShopeeScreenshot.Compact(b.Text) == "取消").OrderByDescending(b => b.Top).FirstOrDefault();
-            var save = cancel is null ? null : boxes.FirstOrDefault(b => ShopeeScreenshot.Compact(b.Text) == "儲存" && Math.Abs(b.CenterY - cancel.CenterY) < 14 && b.Right < cancel.Left);
-            if (save is null) { await Task.Delay(600, _token); continue; }
+            if (ShopeeBatchScreens.SaveButton(boxes) is not { } save) { await Task.Delay(600, _token); continue; }
             _log.Info("coupang-batch", "print dialog set to 另存為 PDF");
             Click(screen, save, "儲存");
             break;

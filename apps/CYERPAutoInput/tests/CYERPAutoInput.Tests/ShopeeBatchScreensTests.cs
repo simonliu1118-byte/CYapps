@@ -179,6 +179,18 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.IsPrintDialog(folded));
         Assert.Null(ShopeeBatchScreens.PrintScale(folded));
         Assert.Equal(324, ShopeeBatchScreens.MoreSettings(folded)!.Top);
+
+        // 目的地 另存為 PDF (酷澎 2026-10-20): no 縮放比例 or 更多設定, the button is 儲存.
+        List<OcrBox> pdf =
+        [
+            B("列印", 25, 52), B("1頁", 338, 54), B("目的地", 25, 110), B("另存為PDF", 200, 110), B("頁面", 25, 164), B("全部", 180, 164),
+            B("每張工作表頁數", 25, 218), B("邊界", 25, 272), B("最小值", 180, 272), B("選項", 25, 326), B("頁首及頁尾", 200, 326),
+            B("背景圖形", 200, 364), B("儲存", 238, 840), B("取消", 314, 840)
+        ];
+        Assert.True(ShopeeBatchScreens.IsPrintDialog(pdf));
+        Assert.True(ShopeeBatchScreens.SamePrinter(ShopeeBatchScreens.PrintDestination(pdf), "另存為 PDF"));
+        Assert.Equal(238, ShopeeBatchScreens.SaveButton(pdf)!.Left);
+        Assert.Null(ShopeeBatchScreens.PrintButton(pdf));
     }
 
     [Fact]
