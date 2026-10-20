@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## 版本
 
-目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V0.3.4`，tag `cyerp-auto-input-v0.3.4`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V0.3.4.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
+目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V1.0.0`，tag `cyerp-auto-input-v1.0.0`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V1.0.0.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
 
 ## 主要流程
 
@@ -190,7 +190,7 @@ CYInvoice.exe --autoinput-pdf   <request.json> --result <result.json>   只取�
 
 ### 酷澎
 
-「酷澎商城」按鈕選單：「全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）」／「匯入訂單匯出檔（.xlsx → 發票 → 列印 → ERP）」（自己選 DeliveryList，之後同全自動的發票與 ERP 段；下方欄位對照照舊）。「列印寄件單（Wing 先打開寄件詳情）」：在 Wing 配送指示打開某筆的寄件詳情，程式按列印寄件單並印出（全家和蝦皮全家一樣切圖後直送熱感機，宅配依設定縮放）。全自動開自己的 Chrome 視窗到 Wing 我的訂單（需先登入）：訂單確認全選 → 確認訂單 → 核對「確認接受訂單」的訂單編號 → 確認；配送準備依配送通路逐一在右下選配送方式 → 全選 → 批次安排配送（發票提醒勾「不用再提醒我」）→「安排出貨」取貨地址須與設定的新竹物流取件地址相同才提交 →「取貨詳情」全部成功才列印寄件單（熱感印表機，宅配 22%、超商 100%）；配送指示全選 → 下載 Excel 存到 Temp → CYInvoice 酷澎入口開立（一律紙本）→ 全部沒問題且 CYInvoice 為正式環境就直接輸入 ERP，否則開預覽。先前已輸入 ERP 的訂單略過。
+「酷澎商城」按鈕選單：「全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）」／「匯入訂單匯出檔（.xlsx → 發票 → 列印 → ERP）」（自己選 DeliveryList，之後同全自動的發票與 ERP 段；下方欄位對照照舊）。「列印寄件單（Wing 先打開寄件詳情）」：在 Wing 配送指示打開某筆的寄件詳情，程式按列印寄件單並印出（酷澎會強制跳出 Chrome 列印視窗：全家由程式把目的地換成「另存為 PDF」存到 Temp，從 PDF 切出寄取貨單、讀到寄件編號才直送熱感機，用完刪除；宅配依設定縮放）。全自動開自己的 Chrome 視窗到 Wing 我的訂單（需先登入）：訂單確認全選 → 確認訂單 → 核對「確認接受訂單」的訂單編號 → 確認；配送準備依配送通路逐一在右下選配送方式 → 全選 → 批次安排配送（發票提醒勾「不用再提醒我」）→「安排出貨」取貨地址須與設定的新竹物流取件地址相同才提交 →「取貨詳情」全部成功才列印寄件單（熱感印表機，宅配 22%、超商 100%）；配送指示全選 → 下載 Excel 存到 Temp → CYInvoice 酷澎入口開立（一律紙本）→ 全部沒問題且 CYInvoice 為正式環境就直接輸入 ERP，否則開預覽。先前已輸入 ERP 的訂單略過。
 
 讀取酷澎後台下載的 DeliveryList（`.xlsx`）。目前只看過一列一張訂單的範本（使用者 2026-10-11）；同一訂單編號的多列會合併為同一張單，多品項的實際格式待有訂單後確認，金額對不上的訂單不匯入。
 
