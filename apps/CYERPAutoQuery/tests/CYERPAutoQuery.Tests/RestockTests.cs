@@ -74,4 +74,12 @@ public class RestockTests
         var job = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j1","queryType":"RESTOCK","dateFrom":"2026-10-12"}},"requestId":"r"}""")!;
         Assert.Throws<ArgumentException>(() => job.Restock(new DateOnly(2026, 10, 20)));
     }
+
+    [Theory]
+    [InlineData("1,234.000", "1234")]
+    [InlineData(" -2.50 ", "-2.5")]
+    [InlineData("0", "0")]
+    [InlineData("", null)]
+    [InlineData("--", null)]
+    public void StockIsSentAsAPlainNumber(string shown, string? sent) => Assert.Equal(sent, Restock.Quantity(shown));
 }

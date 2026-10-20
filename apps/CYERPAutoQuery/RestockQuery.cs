@@ -44,6 +44,12 @@ internal static class Restock
     /// <summary>Items whose 庫存 is looked up, one INVI02 query each; past this the rest say so.</summary>
     public const int MaxStockLookups = 300;
 
+    /// <summary>ERP's 庫存數量 as a plain number (「1,234.000」 → 「1234」), or null when it is not one; CY Web takes digits only.</summary>
+    public static string? Quantity(string text) =>
+        decimal.TryParse(text.Trim(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+            : null;
+
     /// <summary>The orders' lines by 品號 (order of 品號) and by day; 品名／單位 from the first line seen.</summary>
     public static List<RestockItem> Summarize(IEnumerable<SalesOrder> orders)
     {

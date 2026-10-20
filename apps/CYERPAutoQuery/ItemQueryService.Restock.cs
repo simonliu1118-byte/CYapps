@@ -37,9 +37,9 @@ internal sealed partial class ItemQueryService
             try
             {
                 var result = await QueryAsync(item.ItemCode, options, progress, cancellationToken);
-                items[i] = result.Found
-                    ? item with { Stock = result.Value("庫存數量").Trim() }
-                    : item with { StockNote = "ERP 查無此品號" };
+                items[i] = !result.Found ? item with { StockNote = "ERP 查無此品號" }
+                    : Restock.Quantity(result.Value("庫存數量")) is { } stock ? item with { Stock = stock }
+                    : item with { StockNote = "庫存數量讀不到" };
                 failures = 0;
             }
             catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or ArgumentException)
