@@ -5,6 +5,7 @@ import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
 import { handleCompanySettings } from "./company-settings-route";
 import {handleWorkItems} from "./work-items-route";
+import {handleAllowances} from "./allowances-route";
 import { handleRecoveryRoutes } from "./recovery-routes";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { issueCyWebRecoveryInvitation, recoveryInvitationStatus, revokeRecoveryInvitation, type RecoveryIssueResult } from "./recovery-issuer";
@@ -19,6 +20,7 @@ interface Env extends CyIdEnv {
   COMPANY_SETTINGS_ENABLED?: string;
   RECOVERY_ENABLED?: string;
   WORK_ITEMS_ENABLED?: string;
+  ALLOWANCE_API_ENABLED?: string;
   COMPANY_SETTINGS_KEY_HEX?: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
@@ -122,6 +124,12 @@ export default {
       return Response.json({ok:false,error:{code:"RECOVERY_NOT_READY"}},{
         status:503,headers:{"cache-control":"no-store"}
       });
+    const allowancePath=path.startsWith("/v1/allowances/");
+    if(allowancePath&&(env.ALLOWANCE_API_ENABLED!=="true"||
+       !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<18))
+      return Response.json({ok:false,error:{code:"ALLOWANCES_NOT_READY"}},{
+        status:503,headers:{"cache-control":"no-store"}
+      });
     const workItemsPath=path.startsWith("/v1/work-items/");
     if(workItemsPath&&(env.WORK_ITEMS_ENABLED!=="true"||
        !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<16))
@@ -149,6 +157,10 @@ export default {
       "/v1/work-items/get", "/v1/work-items/list",
       "/v1/work-items/create", "/v1/work-items/report-upload-issue",
       "/v1/work-items/transition",
+      "/v1/allowances/create","/v1/allowances/get","/v1/allowances/list",
+      "/v1/allowances/review","/v1/allowances/withdraw",
+      "/v1/allowances/preview","/v1/allowances/approve",
+      "/v1/allowances/reserve","/v1/allowances/status",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -157,9 +169,10 @@ export default {
         if (needsEmployee) {
           // Company card: 4096 bytes; recovery: 2048 bytes. This bounded read
           // runs before Device/CYID authorization, including missing-length bodies.
-          const bounded = companySettingsPath || recoveryPath || workItemsPath;
+          const bounded = companySettingsPath || recoveryPath || workItemsPath || allowancePath;
           const boundedBody = bounded
-            ? await boundedEmployeeBody(request, recoveryPath ? 2048 : 4096) : null;
+            ? await boundedEmployeeBody(request, recoveryPath ? 2048 :
+               path==="/v1/allowances/create" ? 36864 : 4096) : null;
           if (!recoveryPath && !["/v1/device-pairings/claim", "/v1/device-invitations/claim", "/v1/device-invitations/preview"].includes(path))
             await cyIdDevice(request, env);
           const body = bounded ? boundedBody
@@ -185,6 +198,10 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const companySettingsResponse = await handleCompanySettings(request, env);
     if (companySettingsResponse) return companySettingsResponse;
+    const allowanceResponse=await handleAllowances(request,env);
+    if(allowanceResponse)return allowanceResponse;
+    if(new URL(request.url).pathname.startsWith("/v1/allowances/"))
+      return Response.json({ok:false,error:{code:"NOT_FOUND"}},{status:404,headers:{"cache-control":"no-store"}});
     const workItemsResponse=await handleWorkItems(request,env);
     if(workItemsResponse)return workItemsResponse;
     if(new URL(request.url).pathname.startsWith("/v1/work-items/"))
