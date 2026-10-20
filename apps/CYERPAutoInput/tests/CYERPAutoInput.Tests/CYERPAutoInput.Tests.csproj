@@ -30,6 +30,7 @@
     <Compile Include="..\..\ChatRules.cs" Link="Linked\ChatRules.cs" />
     <Compile Include="..\..\GiftRules.cs" Link="Linked\GiftRules.cs" />
     <Compile Include="..\..\SlipImage.cs" Link="Linked\SlipImage.cs" />
+    <Compile Include="..\..\SlipNote.cs" Link="Linked\SlipNote.cs" />
     <Compile Include="..\..\MoBatchScreens.cs" Link="Linked\MoBatchScreens.cs" />
     <Compile Include="..\..\MoPickupSummary.cs" Link="Linked\MoPickupSummary.cs" />
     <Compile Include="..\..\CyInvoiceLink.cs" Link="Linked\CyInvoiceLink.cs" />

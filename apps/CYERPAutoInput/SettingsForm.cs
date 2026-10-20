@@ -20,6 +20,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
     private readonly TextBox _coupangHctLabelScale = new();
+    private readonly TextBox _slipNote = new();
+    private readonly Label _slipNoteStatus = new();
     private readonly TextBox _hctPickupAddress = new();
     private ChatRuleEditor? _shopeeChat;
     private ChatRuleEditor? _moChat;
@@ -211,6 +213,7 @@ internal sealed class SettingsForm : Form
         // 酷澎 宅配 寄件單 on the thermal printer (user, 2026-10-19: 22 %; 超商 print at 100 %).
         page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
             ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        page.Controls.Add(SlipNoteSection());
         // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
         var invoiceBox = new GroupBox { Text = "紙本發票樣式（有統編的發票；酷澎無統編一律 A4 雙面；印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
         var invoiceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
@@ -226,6 +229,47 @@ internal sealed class SettingsForm : Form
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
         return page;
+    }
+
+    /// <summary>
+    /// 寄件單下方文字 (user, 2026-10-20): a box of the block's lines, checked as typed against
+    /// the width it is printed in (<see cref="SlipNote"/>).
+    /// </summary>
+    private GroupBox SlipNoteSection()
+    {
+        var box = new GroupBox
+        {
+            Text = "寄件單下方文字（只印在程式自己切的寄件單：蝦皮／酷澎全家、MO店+ 全家／7-11）",
+            Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 150
+        };
+        var column = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        column.Controls.Add(new Label
+        {
+            AutoSize = true, Margin = new Padding(0, 2, 0, 4),
+            Text = $"固定 {SlipNote.FontPoints:F0} pt 粗體，最多 {SlipNote.MaxLines} 行、每行約 27 個中文字（英數字約半格）；空白就不印。"
+        });
+        _slipNote.Multiline = true;
+        _slipNote.AcceptsReturn = true;
+        _slipNote.ScrollBars = ScrollBars.None;
+        _slipNote.Size = new Size(560, 66);
+        _slipNote.Text = _settings.SlipNote.Replace("\r\n", "\n").Replace("\n", "\r\n");
+        _slipNote.TextChanged += (_, _) => ShowSlipNoteStatus();
+        column.Controls.Add(_slipNote);
+        _slipNoteStatus.AutoSize = true;
+        _slipNoteStatus.Margin = new Padding(0, 4, 0, 0);
+        column.Controls.Add(_slipNoteStatus);
+        box.Controls.Add(column);
+        ShowSlipNoteStatus();
+        return box;
+    }
+
+    private void ShowSlipNoteStatus()
+    {
+        var error = SlipNote.Check(_slipNote.Text, SlipPrinter.NoteWidthMm);
+        var lines = SlipNote.Lines(_slipNote.Text);
+        _slipNoteStatus.ForeColor = error is null ? SystemColors.GrayText : Color.Firebrick;
+        _slipNoteStatus.Text = error ?? (lines.Count == 0 ? "不印文字。" :
+            string.Join("　", lines.Select((l, i) => $"第 {i + 1} 行 {SlipPrinter.NoteWidthMm(l):F0}/{SlipNote.BlockWidthMm:F0} mm")));
     }
 
     private TabPage ImportPage()
@@ -521,6 +565,14 @@ internal sealed class SettingsForm : Form
             _coupangHctLabelScale.Focus();
             return;
         }
+        if (SlipNote.Check(_slipNote.Text, SlipPrinter.NoteWidthMm) is { } slipNoteError)
+        {
+            MessageBox.Show(this, slipNoteError, "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 2;
+            _slipNote.Focus();
+            return;
+        }
+        _settings.SlipNote = string.Join("\n", SlipNote.Lines(_slipNote.Text));
         _settings.HctLabelScale = hctScale;
         _settings.CoupangHctLabelScale = coupangHctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();

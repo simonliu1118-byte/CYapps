@@ -1057,7 +1057,7 @@ internal sealed partial class MainForm : Form
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), token,
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
         var outcome = AutomationOutcome.Stopped;
         string? problem = null;
@@ -1157,7 +1157,8 @@ internal sealed partial class MainForm : Form
                 _log.Info("mo-slip", $"slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
                 if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
                 var slip = await Task.Run(() => SlipImage.Render(page, plan));
-                SlipPrinter.Print(printer, slip, "MO店+ 寄件單");
+                var done = SlipPrinter.Print(printer, slip, "MO店+ 寄件單", _settings.SlipNote);
+                if (!done.Noted && SlipNote.Lines(_settings.SlipNote).Count > 0) _log.Warn("mo-slip", "slip too tall for the note block; printed without it");
                 printed++;
                 notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");
             }
@@ -1357,7 +1358,7 @@ internal sealed partial class MainForm : Form
         Session.Begin(AutomationSession.BatchTitle);
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote), Session.EscapeToken);
         MoBatchResult? result = null;
         string? stopped = null;
         _log.Info("mo-batch", "started");

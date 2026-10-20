@@ -40,6 +40,8 @@ internal sealed class UserSettings
     public int HctLabelScale { get; set; } = 95;
     /// <summary>酷澎 新竹物流 寄件單 on the thermal printer, Chrome 縮放 (user, 2026-10-19: 22 %).</summary>
     public int CoupangHctLabelScale { get; set; } = 22;
+    /// <summary>Words printed under the slips the program cuts itself (<see cref="SlipNote"/>; user, 2026-10-20). Blank = none.</summary>
+    public string SlipNote { get; set; } = string.Empty;
     /// <summary>
     /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
     /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.

@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22);
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "");
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -874,8 +874,9 @@ internal sealed partial class ShopeeBatchRunner
     {
         try
         {
-            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + orderSn);
-            _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi)");
+            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + orderSn, _print.SlipNote);
+            _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
+            if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -498,7 +498,7 @@ internal sealed partial class MainForm
         var shipped = false;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale), Session.EscapeToken);
+                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale, _settings.SlipNote), Session.EscapeToken);
         try { result = await runner.RunCoupangAsync(folder, SetStatus); }
         catch (ShopeeBatchStop stop) { stopped = stop.Message; shipped = stop.Shipped; }
         catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
@@ -544,7 +544,7 @@ internal sealed partial class MainForm
         string? done = null, stopped = null;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale), Session.EscapeToken);
+                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale, _settings.SlipNote), Session.EscapeToken);
         try { done = await runner.PrintOpenCoupangSlipAsync(); }
         catch (ShopeeBatchStop stop) { stopped = stop.Message; }
         catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
