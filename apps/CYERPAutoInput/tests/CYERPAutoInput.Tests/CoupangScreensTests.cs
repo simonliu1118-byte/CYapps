@@ -133,7 +133,8 @@ public class CoupangScreensTests
             B("配送方式", 85, 392, 56), B("宅配 - 新竹物流", 85, 410, 98),
             B("關閉", 748, 528, 92, 38), B("列印寄件單", 855, 528, 112, 38)
         };
-        var (orders, succeeded, shipMethod, print, close) = CoupangScreens.PickupDetails(details)!.Value;
+        var (orders, succeeded, shipMethod, print, close, trackings) = CoupangScreens.PickupDetails(details)!.Value;
+        Assert.Equal(["1800000000"], trackings);
         Assert.Equal(["900000000000001"], orders);
         Assert.Equal(["900000000000001"], succeeded);
         Assert.Equal(("宅配-新竹物流", 855, 748), (shipMethod, print.Left, close.Left));
@@ -174,5 +175,53 @@ public class CoupangScreensTests
         Assert.Equal(["宅配-新竹物流"], CoupangScreens.ColumnValues(page, header, "配送通路"));
         Assert.Equal(271, CoupangScreens.SelectAll(page, header).Left);
         Assert.Equal("請選擇配送方式", CoupangScreens.ShipBar(page)!.Value.Select.Text);
+    }
+
+    [Fact]
+    public void Reads_the_convenience_store_dialog()
+    {
+        // 便利商店 (user's screenshot 2026-10-20): 「申請寄件編號」 with a 退貨超商, no 取貨地址.
+        var page = new List<OcrBox>
+        {
+            B("申請寄件編號", 584, 362, 120), B("Family Mart", 826, 520, 90), B("退貨超商", 584, 578, 56), B("全家示範店", 796, 568, 100),
+            B("編輯", 1040, 592, 28), B("取消", 1167, 776, 32), B("提交", 1273, 776, 32), B("安排出貨", 787, 836, 56)
+        };
+        var (method, matches, submit) = CoupangScreens.ArrangeDialog(page, "高雄市示範區測試路1號")!.Value;
+        Assert.Equal(("", (bool?)null, 1273), (method, matches, submit.Left));
+    }
+
+    [Fact]
+    public void Reads_the_convenience_store_details()
+    {
+        // As read after 申請寄件編號 (user LOG 2026-10-20): title 「便利商店」, 寄件資訊 instead of 取貨資訊.
+        var page = new List<OcrBox>
+        {
+            B("便利商店", 513, 312, 80), B("訂單編號", 514, 380, 147, 52), B("寄件單號", 1247, 380, 101, 52), B("狀態", 1349, 380, 57, 52),
+            B("900000000000001", 514, 432, 147, 93), B("900000000000001", 534, 470, 106, 18), B("0", 1138, 432, 108, 93),
+            B("16300000000", 1247, 432, 101, 93), B("成功", 1349, 432, 57, 93), B("寄件資訊", 525, 563, 64),
+            B("便利商店-全家", 1530, 1008, 190, 26), B("關閉", 1190, 817, 92, 38), B("列印寄件單", 1296, 817, 110, 38)
+        };
+        var (orders, succeeded, _, print, close, trackings) = CoupangScreens.PickupDetails(page)!.Value;
+        Assert.Equal(["16300000000"], trackings);
+        Assert.Equal(["900000000000001"], orders);
+        Assert.Equal(["900000000000001"], succeeded);
+        Assert.Equal((1296, 1190), (print.Left, close.Left));
+    }
+
+    [Fact]
+    public void Reads_the_shipping_details_opened_from_the_list()
+    {
+        // 配送指示 › 列印寄件單 on a row (user's screenshot 2026-10-20): 「寄件詳情」, the row's own button behind it.
+        var page = new List<OcrBox>
+        {
+            B("便利商店", 300, 120, 60), B("寄件詳情", 584, 180, 80), B("發票號碼", 852, 260, 48), B("16300000000", 852, 286, 136, 24), B("(訂單金額: $0)", 1019, 290, 104),
+            B("寄件資訊", 596, 372, 64), B("方式 1：透過 Famiport 在全家列印配送標籤：", 596, 417, 284),
+            B("關閉", 1118, 699, 94, 40), B("列印寄件單", 1224, 699, 112, 40), B("列印寄件單", 767, 758, 86, 26)
+        };
+        var (orders, _, method, print, close, trackings) = CoupangScreens.PickupDetails(page)!.Value;
+        Assert.Empty(orders);
+        Assert.Equal("便利商店-全家", method);
+        Assert.Equal(["16300000000"], trackings);
+        Assert.Equal((1224, 1118), (print.Left, close.Left));
     }
 }

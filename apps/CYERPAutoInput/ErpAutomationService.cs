@@ -624,6 +624,9 @@ internal sealed class ErpAutomationService
     /// <summary>銷貨單別 typed instead of pasted (the retry when ERP gave no sales order number).</summary>
     private bool _typeOrderType;
 
+    /// <summary>客戶代號 typed instead of pasted (the retry when ERP cleared the pasted one).</summary>
+    private bool _typeCustomer;
+
     private async Task<bool> EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
     {
         _createdByF5 = false;
@@ -704,6 +707,30 @@ internal sealed class ErpAutomationService
             }
         }
         LastSalesOrderNumber = result.SalesOrderNumber;
+        await EnsureCustomerCodeAsync(root, snapshot, cancellationToken);
+    }
+
+    /// <summary>
+    /// 客戶代號 read back once the sales order number is there. A pasted one read back right at
+    /// first and was blank later: ERP, still taking the 銷貨單別 typed after its paste failed,
+    /// cleared it (user's screenshot 2026-10-20, second MO店+ order). Typed once more; still not
+    /// there stops before anything else goes in.
+    /// </summary>
+    private async Task EnsureCustomerCodeAsync(nint root, FormSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        if (!snapshot.Values.TryGetValue("customer_code", out var code) || string.IsNullOrWhiteSpace(code)) return;
+        var field = FieldCatalog.All.First(f => f.Key == "customer_code");
+        for (var attempt = 1; ; attempt++)
+        {
+            await Delay(150, cancellationToken);
+            var shown = (NativeMethods.ControlText(ErpLayoutResolver.ResolveHeader(root, field.Key).Handle) ?? string.Empty).Trim();
+            if (string.Equals(shown, code.Trim(), StringComparison.OrdinalIgnoreCase)) return;
+            _log.Warn("field", $"customer code reads back differently after the order number attempt={attempt} shown_len={shown.Length}");
+            if (attempt >= 2) throw new InvalidOperationException("ERP「客戶代號」輸入後被清空或不同，重打一次仍不對；已停止，請確認 ERP。");
+            _typeCustomer = true;
+            try { await SetFieldAsync(root, ErpLayoutResolver.ResolveHeader(root, field.Key), field, code, cancellationToken); }
+            finally { _typeCustomer = false; }
+        }
     }
 
     private async Task<string> CaptureSalesOrderNumberAsync(nint root, string expectedDate, CancellationToken cancellationToken)
@@ -1018,7 +1045,7 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        if (field.Key == "order_type" && _typeOrderType)
+        if ((field.Key == "order_type" && _typeOrderType) || (field.Key == "customer_code" && _typeCustomer))
         {
             // The retry typed: a paste that read back right once left ERP without a sales order
             // number (user LOG 2026-10-19; pasting works otherwise, so it stays the first try).

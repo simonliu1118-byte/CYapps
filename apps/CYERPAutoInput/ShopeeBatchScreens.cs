@@ -511,7 +511,7 @@ internal static partial class ShopeeBatchScreens
     /// so the dialog is known by 目的地 with either.
     /// </summary>
     public static bool IsPrintDialog(IReadOnlyList<OcrBox> boxes) =>
-        Has(boxes, "目的地") && (Has(boxes, "縮放比例") || MoreSettings(boxes) is not null);
+        Has(boxes, "目的地") && (Has(boxes, "縮放比例") || MoreSettings(boxes) is not null || SaveButton(boxes) is not null);
 
     /// <summary>「顯示更多設定」, clicked only while 縮放比例 is not shown (a second click folds it again).</summary>
     public static OcrBox? MoreSettings(IReadOnlyList<OcrBox> boxes) =>
@@ -546,6 +546,17 @@ internal static partial class ShopeeBatchScreens
         var cancel = boxes.Where(b => C(b) == "取消").OrderByDescending(b => b.Top).FirstOrDefault();
         if (cancel is null) return null;
         return boxes.FirstOrDefault(b => C(b) == "列印" && SameRow(b, cancel) && b.Right < cancel.Left);
+    }
+
+    /// <summary>
+    /// 「儲存」 left of the bottom 取消: the print button while 目的地 is 另存為 PDF, whose panel has
+    /// neither 縮放比例 nor 更多設定 (user's screenshot and LOG, 2026-10-20).
+    /// </summary>
+    public static OcrBox? SaveButton(IReadOnlyList<OcrBox> boxes)
+    {
+        var cancel = boxes.Where(b => C(b) == "取消").OrderByDescending(b => b.Top).FirstOrDefault();
+        if (cancel is null) return null;
+        return boxes.FirstOrDefault(b => C(b) == "儲存" && SameRow(b, cancel) && b.Right < cancel.Left);
     }
 
     /// <summary>Whether the printer shown is the one set (spaces and case ignored, either way round).</summary>

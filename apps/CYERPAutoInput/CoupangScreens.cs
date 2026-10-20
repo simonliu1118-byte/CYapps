@@ -170,7 +170,7 @@ internal static class CoupangScreens
 
     /// <summary>
     /// 「安排出貨」 after 批次安排配送 (user, 2026-10-19: 配送方式, 取貨日期, 取貨地址 with 編輯, 備註,
-    /// 取消／提交): the 配送方式 shown, whether 取貨地址 holds <paramref name="pickupAddress"/>
+    /// 取消／提交); for 便利商店 it is 「申請寄件編號」 with a 退貨超商 instead (user, 2026-10-20): the 配送方式 shown, whether 取貨地址 holds <paramref name="pickupAddress"/>
     /// (spaces ignored; null when the dialog has no 取貨地址) and 提交; null when not shown.
     /// </summary>
     public static (string Method, bool? AddressMatches, OcrBox Submit)? ArrangeDialog(IReadOnlyList<OcrBox> boxes, string pickupAddress)
@@ -178,7 +178,7 @@ internal static class CoupangScreens
         var submit = boxes.Where(b => C(b) == "提交").OrderByDescending(b => b.Top).FirstOrDefault();
         if (submit is null) return null;
         // The topmost: the rows' own 「安排出貨」 buttons behind the dialog sit lower.
-        var title = boxes.Where(b => C(b) == "安排出貨" && b.Bottom < submit.Top && submit.Top - b.Bottom < 520 && b.Left < submit.Left)
+        var title = boxes.Where(b => C(b) is "安排出貨" or "申請寄件編號" && b.Bottom < submit.Top && submit.Top - b.Bottom < 520 && b.Left < submit.Left)
             .OrderBy(b => b.Top).FirstOrDefault();
         if (title is null) return null;
         // 取貨地址 is two lines (address, then name and phone) around its label; 配送方式 one.
@@ -201,14 +201,27 @@ internal static class CoupangScreens
     /// link both read), those whose 狀態 reads 成功 (not at once: it was still loading a second after
     /// 提交, user LOG 2026-10-19), its 配送方式, and 列印寄件單／關閉; null when not shown.
     /// </summary>
-    public static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close)? PickupDetails(IReadOnlyList<OcrBox> boxes)
+    public static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close, List<string> Trackings)? PickupDetails(IReadOnlyList<OcrBox> boxes)
     {
-        var title = boxes.FirstOrDefault(b => C(b) == "取貨詳情");
-        if (title is null) return null;
+        // 便利商店 shows the same table under the title 「便利商店」 (user's screenshot 2026-10-20).
+        // 配送指示's own 列印 on an order opens 「寄件詳情」 (user, 2026-10-20) with the 寄件單號 only.
+        // The same words can sit elsewhere on the page: the title is the one with the dialog's
+        // 關閉／列印寄件單 pair below it (user LOG 2026-10-20: 寄件詳情 open, not recognised).
+        foreach (var title in boxes.Where(b => C(b) is "取貨詳情" or "便利商店" or "寄件詳情").OrderByDescending(b => C(b) == "寄件詳情" || C(b) == "取貨詳情"))
+            if (Details(boxes, title) is { } found) return found;
+        return null;
+    }
+
+    private static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close, List<string> Trackings)? Details(IReadOnlyList<OcrBox> boxes, OcrBox title)
+    {
         var below = boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 700).ToList();
-        var print = below.Where(b => C(b) == "列印寄件單").OrderByDescending(b => b.Top).FirstOrDefault();
-        var close = below.Where(b => C(b) == "關閉").OrderByDescending(b => b.Top).FirstOrDefault();
-        if (print is null || close is null) return null;
+        // On one row, 列印寄件單 right of 關閉: 配送指示's rows behind the dialog have 列印寄件單 buttons of their own.
+        var pair = (from c in below.Where(b => C(b) == "關閉")
+                    from p in below.Where(b => C(b) == "列印寄件單" && b.Left > c.Left && Math.Abs(b.CenterY - c.CenterY) < 30)
+                    orderby c.Top descending, p.Left
+                    select (Close: c, Print: p)).FirstOrDefault();
+        if (pair.Close is null) return null;
+        var (close, print) = pair;
         // Only the dialog: the list behind it has its own 訂單編號 further left.
         below = below.Where(b => b.Left >= title.Left - 40 && b.Right <= print.Right + 40).ToList();
         var rows = below.Where(b => b.Bottom < print.Top && OrderNumber.IsMatch(C(b))).OrderBy(b => b.Top).ToList();
@@ -220,6 +233,13 @@ internal static class CoupangScreens
         var method = methodLabel is null ? string.Empty
             : below.Where(b => b.Top >= methodLabel.Bottom - 2 && b.Top < methodLabel.Bottom + 40 && Math.Abs(b.Left - methodLabel.Left) < 40)
                 .Select(b => Channel(C(b))).FirstOrDefault(c => c is not null) ?? string.Empty;
-        return (orders, succeeded, method, print, close);
+        // 寄件單號: 新竹物流 10 digits, 全家 11 (the 訂單編號 are longer).
+        var trackings = below.Where(b => b.Bottom < print.Top && Regex.IsMatch(C(b), @"^\d{8,11}$")).Select(C).Distinct().ToList();
+        // No 配送方式 row (便利商店, 寄件詳情): the store named in the dialog.
+        if (method.Length == 0)
+            method = below.Any(b => C(b).Contains("全家", StringComparison.Ordinal) || C(b).Contains("Famiport", StringComparison.OrdinalIgnoreCase) || C(b).Contains("FamilyMart", StringComparison.OrdinalIgnoreCase)) ? "便利商店-全家"
+                : below.Any(b => C(b).Contains("7-11", StringComparison.Ordinal) || C(b).Contains("統一超商", StringComparison.Ordinal) || C(b).Contains("交貨便", StringComparison.Ordinal)) ? "便利商店-7-11"
+                : string.Empty;
+        return (orders, succeeded, method, print, close, trackings);
     }
 }
