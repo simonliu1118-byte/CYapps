@@ -188,4 +188,21 @@ public class CoupangScreensTests
         var (method, matches, submit) = CoupangScreens.ArrangeDialog(page, "高雄市示範區測試路1號")!.Value;
         Assert.Equal(("", (bool?)null, 1273), (method, matches, submit.Left));
     }
+
+    [Fact]
+    public void Reads_the_convenience_store_details()
+    {
+        // As read after 申請寄件編號 (user LOG 2026-10-20): title 「便利商店」, 寄件資訊 instead of 取貨資訊.
+        var page = new List<OcrBox>
+        {
+            B("便利商店", 513, 312, 80), B("訂單編號", 514, 380, 147, 52), B("寄件單號", 1247, 380, 101, 52), B("狀態", 1349, 380, 57, 52),
+            B("900000000000001", 514, 432, 147, 93), B("900000000000001", 534, 470, 106, 18), B("0", 1138, 432, 108, 93),
+            B("16300000000", 1247, 432, 101, 93), B("成功", 1349, 432, 57, 93), B("寄件資訊", 525, 563, 64),
+            B("便利商店-全家", 1530, 1008, 190, 26), B("關閉", 1190, 817, 92, 38), B("列印寄件單", 1296, 817, 110, 38)
+        };
+        var (orders, succeeded, _, print, close) = CoupangScreens.PickupDetails(page)!.Value;
+        Assert.Equal(["900000000000001"], orders);
+        Assert.Equal(["900000000000001"], succeeded);
+        Assert.Equal((1296, 1190), (print.Left, close.Left));
+    }
 }

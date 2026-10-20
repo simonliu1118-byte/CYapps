@@ -203,7 +203,8 @@ internal static class CoupangScreens
     /// </summary>
     public static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close)? PickupDetails(IReadOnlyList<OcrBox> boxes)
     {
-        var title = boxes.FirstOrDefault(b => C(b) == "取貨詳情");
+        // 便利商店 shows the same table under the title 「便利商店」 (user's screenshot 2026-10-20).
+        var title = boxes.FirstOrDefault(b => C(b) is "取貨詳情" or "便利商店");
         if (title is null) return null;
         var below = boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 700).ToList();
         var print = below.Where(b => C(b) == "列印寄件單").OrderByDescending(b => b.Top).FirstOrDefault();
