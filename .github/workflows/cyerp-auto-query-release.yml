@@ -1,0 +1,183 @@
+name: CYERPAutoQuery Release
+
+# Formal release (REPOSITORY_RULES §9), the same as CYERPAutoInput's (user, 2026-10-17): started by hand from main only, rebuilt and re-verified
+# here rather than trusting an earlier CI run. BUILD must be 0; the tag is never overwritten.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cyerp-auto-query-release
+  cancel-in-progress: false
+
+jobs:
+  release-windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/CYERPAutoQuery
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate formal release identity
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -ne "main") { throw "Formal CYERPAutoQuery releases must run from main; got $env:GITHUB_REF_NAME" }
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYERPAutoQuery VERSION: $version" }
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^\d+$' -or [int]$build -ne 0) { throw "Formal release requires BUILD=0; got $build" }
+          if (-not (Select-String -Path ./CHANGELOG.md -Pattern ("^## V" + [regex]::Escape($version) + " ") -Quiet)) { throw "CHANGELOG.md has no V$version section" }
+          "CYERPAUTOQUERY_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYERPAUTOQUERY_TAG=cyerp-auto-query-v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Check release does not already exist
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:CYERPAUTOQUERY_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            "CYERPAUTOQUERY_SHOULD_RELEASE=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Release $env:CYERPAUTOQUERY_TAG already exists; nothing to publish."
+            exit 0
+          }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$env:CYERPAUTOQUERY_TAG"
+          if (![string]::IsNullOrWhiteSpace($remoteTag)) { throw "Tag $env:CYERPAUTOQUERY_TAG exists without a matching Release; refusing to overwrite it" }
+          "CYERPAUTOQUERY_SHOULD_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Fetch canonical CYERPAutoQuery icon
+        shell: pwsh
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        run: ./tools/fetch-ocr-models.ps1
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Unit tests
+        shell: pwsh
+        run: dotnet test tests/CYERPAutoQuery.Tests/CYERPAutoQuery.Tests.csproj -c Release
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Restore
+        shell: pwsh
+        run: dotnet restore CYERPAutoQuery.csproj -r win-x64
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Build
+        shell: pwsh
+        run: dotnet build CYERPAutoQuery.csproj -c Release -r win-x64 --no-restore -p:Version=$env:CYERPAUTOQUERY_VERSION -p:ContinuousIntegrationBuild=true
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Publish Windows x64 portable package
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoQuery"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
+          dotnet publish CYERPAutoQuery.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:CYERPAUTOQUERY_VERSION -o $staging
+          if (-not (Test-Path "$staging/CYERPAutoQuery.exe")) { throw "CYERPAutoQuery.exe was not produced" }
+
+          Copy-Item "$staging/CYERPAutoQuery.exe" "$outDir/CYERPAutoQuery.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Verify packaged executable and structure
+        shell: pwsh
+        run: |
+          $root = "package/CYERPAutoQuery"
+          $required = @(
+            "$root/CYERPAutoQuery.exe",
+            "$root/BUILD",
+            "$root/VERSION",
+            "$root/README.md",
+            "$root/THIRD_PARTY_NOTICES.md",
+            "$root/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
+            "$root/runtime/ocr/ch_PP-OCRv5_rec_mobile.onnx",
+            "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path $path)) { throw "Missing packaged file: $path" }
+          }
+
+          $unexpected = @(Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object { $_.Extension -in @('.pdb','.lib','.dll') -or $_.Name -match 'SHA256' })
+          if ($unexpected.Count -gt 0) {
+            throw "Unexpected engineering files in user package: $($unexpected.FullName -join ', ')"
+          }
+
+          $roots = @(Get-ChildItem -LiteralPath package -Force)
+          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYERPAutoQuery" -or -not $roots[0].PSIsContainer) {
+            throw "Download artifact must contain only the CYERPAutoQuery/ folder"
+          }
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Scan engineering package for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./package
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Zip, checksum and release notes
+        shell: pwsh
+        run: |
+          $zipName = "CYERPAutoQuery_V$env:CYERPAUTOQUERY_VERSION.zip"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path package/CYERPAutoQuery -DestinationPath "dist/$zipName" -Force
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" "dist/$zipName"
+          $hash = (Get-FileHash -Path "dist/$zipName" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $zipName" | Set-Content -Path "dist/$zipName.sha256" -Encoding ascii
+
+          # The version's own CHANGELOG section is the release summary.
+          $changelog = Get-Content ./CHANGELOG.md -Encoding utf8
+          $start = [Array]::FindIndex($changelog, [Predicate[string]]{ param($l) $l -match ("^## V" + [regex]::Escape($env:CYERPAUTOQUERY_VERSION) + " ") })
+          $section = @()
+          # Only the summary above the first 「- Build N」 entry: the per-build lines are engineering notes.
+          for ($i = $start + 1; $i -lt $changelog.Count -and $changelog[$i] -notmatch '^## ' -and $changelog[$i] -notmatch '^- Build \d'; $i++) { $section += $changelog[$i] }
+          if (-not ($section | Where-Object { $_.Trim().Length -gt 0 })) { throw "CHANGELOG.md V$env:CYERPAUTOQUERY_VERSION has no summary above its Build entries" }
+          $year = (Get-Date).Year
+          @(
+            "CYERPAutoQuery V$env:CYERPAUTOQUERY_VERSION",
+            "",
+            "Windows 10/11 x64 可攜版：下載 $zipName 解壓縮後執行 CYERPAutoQuery/CYERPAutoQuery.exe（內含 PaddleOCR 模型，不需另外安裝）。",
+            "SHA-256：$hash",
+            "",
+            "Copyright © $year C.C. Liu, Chihyuan Co. All Rights Reserved.",
+            "",
+            "## 本版變更"
+          ) + $section + @("", "完整歷程見 apps/CYERPAutoQuery/CHANGELOG.md。") | Set-Content -Path dist/release-notes.md -Encoding utf8
+
+      - if: env.CYERPAUTOQUERY_SHOULD_RELEASE == 'true'
+        name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $zipName = "CYERPAutoQuery_V$env:CYERPAUTOQUERY_VERSION.zip"
+          gh release create $env:CYERPAUTOQUERY_TAG "dist/$zipName" "dist/$zipName.sha256" `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "CYERPAutoQuery V$env:CYERPAUTOQUERY_VERSION" `
+            --notes-file dist/release-notes.md `
+            --latest=false
