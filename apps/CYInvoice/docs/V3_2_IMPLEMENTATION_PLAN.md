@@ -149,7 +149,7 @@
 - `/v1/allowances/create` 必須有 1～500 字、去前後空白、無控制字元的 reason；`get` 在 Device、Workspace、本人／主管角色及再次驗權通過後回傳原因。清單與狀態不含原因，D1 僅留密文。Windows Client 和管理員表單是 API 的 presentation-only，不重建 business/data owner。
 - 實際原 Worker/schema16 未變；新 Frozen Envelope 尚只存在工程合成測試，正式啟用前須本機 MCP 在安全合約已通過、schema17/18 升格與 Cloudflare 讀寫額度檢核後才部署。
 
-## 3.2-C6 Canonical migration 審核升格（V3.1.24 Build 0）
+## 3.2-C6 Canonical migration 審核升格（V3.1.24 Build 1）
 - 以已實際通過 #529 schema16→17→18 離線合成備份／錯誤注入交易回滾為依據，正式將 `0017_allowance_applications.sql`、`0018_allowance_frozen_ledger.sql` 放入 `cloud/migrations`，移除 review drafts 的重複 owner。**GitHub 原始碼升格不等於原 D1 migration 已套用。**
 - 工程 DDL 規模經逐 statement 檢查：0017=2 Table/2 Index/6 Trigger，0018=4 Table/2 Index/17 Trigger；合計 6 張**新的**折讓表、4 索引、23 觸發器，兩個檔案均沒有舊表的 `INSERT/UPDATE/DELETE` 語句。Windows Core 與 Cloud runtime 仍由 Worker 權限及獨立 application owner 維護，不搬回舊 `work_items.ALLOWANCE`。
 - 更新所有 CI 合成 fixture：需要 schema16 baseline 者限套 0014～0016 再做交易遷移；正常整套 schema18 fixture 不得重複跑 0017／0018；測試 D1 正式 migration history 的正確前綴、同名未知遷移拒絕、role/FK/immutability/備份還原。
