@@ -132,6 +132,12 @@
 - 固定原 application ID 避免未知結果重送，主管只能接手、預覽、核准、預留，不提供 g0401/g0501；所有 HttpClient 強制關閉 redirect。官方預覽固定 `canApprove=false`，不代表可執行實際扣抵。
 - 下一階段 C4d 將現行 AllowanceRequestForm 草稿轉成可跨裝置 Frozen 申請，先持久化 ID 與完整哈希／scope 後首次 POST，結果不明僅原 ID 查回；C5 與本機 Work MCP 升級仍需審核。
 
+## 3.2-C5 非空 schema16 備份與遷移隔離演練（V3.1.21 Build 0）
+- 只在 SQLite 合成資料執行；依 #524 先完成非空 Workspace/Device/舊非折讓 Work Item 與公司資料備份，再逐一交易套 C1 0017／C2 0018 審查草稿，驗證不可變 Frozen Ledger／Grant／Audit、索引、外鍵、觸發器與原資料不變。
+- 用錯誤 SQL 注入驗證每個階段 rollback，並從完整備份還原；這不是遠端 D1 測試，正式遷移不能自行 DROP 已含真實帳務資料的表。
+- 共通規則 §11.3：正式 D1 MCP 前先由本機 Work 只讀確認完整備份、當天 D1 已用讀寫額度及同 Cloudflare 帳號其他系統使用量；估計本次 schema DDL／實際涉及列數、受影響表/索引與 API 次數；設批次上限、索引查詢、停止條件，不能為趕進度耗盡 CYID/CYWEB 共用額度。提交 Migration 與部署需獨立審核及使用者現場執行。
+- 正式 0017/0018 canonical 升格、C4d 申請者編輯器/原 application ID 持久化仍是 C 後續必要工作，source 演練通過不得逕稱 C 完成。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |

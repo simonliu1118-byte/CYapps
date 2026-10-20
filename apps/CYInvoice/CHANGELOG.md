@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.21 Build 0 — 2026/10/20（V3.2-C5 非空 schema16 備份、Migration 與回復合成演練）
+- 選擇性取用 #524 的非空原 CYID-only schema16 SQLite Migration 演練，將 C1/C2 的 0017/0018 審查草稿在**獨立本機合成資料庫**依序執行，先完整備份再套 migration。
+- 驗證原 Workspace、Device、現有 work_items 與其他正式表仍在；各自注入 0017/0018 中途 SQL 錯誤，檢查回滾不留下半套 schema；外鍵、integrity、備份還原與 immutability 檢查納入 Cloud CI。
+- 本批**不將**草稿提升為正式 migrations，也不調整原 D1 schema16／Worker／Secrets／Bindings，不實際消耗 Cloudflare D1 額度。正式遠端部署依共通規則 2.9.0 §11.3，另列實際讀寫量估算、帳號共用額度、停損與備份驗收交使用者本機 Work。
+- 此為 Source-only 演練，正式 schema17/18 升格及 C4d 申請人入口仍未完成；不能稱為 C 階段正式驗收或正式 Release（仍 V3.1.0）。
+
 ## V3.1.20 Build 0 — 2026/10/20（V3.2-C4c Windows CYID 跨機折讓主管待辦；工程版）
 - 從舊 #523 選擇性重建 WinForms 折讓主管待辦，乾淨接在 #526 已合併 C4b 後；申請跨裝置 List、同 application ID Status 查回、Review、光貿官方唯讀 Preview、Approve、Reserve，每次操作重新輸入 CYID 身分，由 Worker 驗證。
 - 預覽只顯示匿名化必要資訊，嚴格拒絕 `canApprove=true` 等錯誤授權旗標；沒有公開 g0401/g0501，也不提供自動重送、調號、首次送出按鈕。HttpClient 明確關閉轉址、密碼不持久化。
