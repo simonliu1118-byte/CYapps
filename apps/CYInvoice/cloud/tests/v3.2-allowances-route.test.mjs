@@ -261,6 +261,7 @@ async function call(env,action,body={},token=rawDevA){
    assert.equal((await call(manager,"send-once",{applicationId:app1,
     expectedRevision:3,confirmOnce:true},rawDevB)).status,503);
    manager.ALLOWANCE_G0401_SEND_ENABLED="true";
+   employee.ALLOWANCE_G0401_SEND_ENABLED="true";
    assert.equal((await call(manager,"send-once",{applicationId:app1,
     expectedRevision:3},rawDevB)).status,503);
    assert.equal((await call(employee,"send-once",{applicationId:app1,

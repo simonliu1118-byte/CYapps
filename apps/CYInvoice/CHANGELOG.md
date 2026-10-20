@@ -2,12 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.26 Build 0 — 2026/10/21（V3.2 批次 1：Cloud g0401 受控單次送出與主管查證原始碼）
+## V3.1.26 Build 1 — 2026/10/21（V3.2 批次 1：Cloud g0401 受控單次送出與主管查證原始碼）
 
 - 原有唯一 Cloud coordinator 已具備官方最新可折額、主管 Grant、same-ID CAS、單次光貿 POST、原號唯讀查回的保守邏輯；本次只接唯一受權限保護的 `send-once` HTTP 路徑與 `attempt` 唯讀查證，絕不接受 client 傳入的 Ledger ID／折讓號。
 - `send-once` 除既有 `ALLOWANCE_API_ENABLED`（現為 false）外，仍須**獨立的 `ALLOWANCE_G0401_SEND_ENABLED=true`** 且傳入當次主管明確確認；預設不存在／false 一律禁止，權限、原 Workspace／Device、最新版次與首次 `reserved` 由伺服器再檢查。第二次點擊、結果不明、逾時或撞號均只回讀，不再次發送、不自動配號或宣告 confirmed。
 - Windows Cloud 主管畫面整合原申請 ID 的唯讀 attempt 證據、原 Ledger 發送前明確警告與單次送出；Core HttpClient 加入嚴格 fail-closed 契約驗證。合成 Cloud／Windows 測試覆蓋獨立旗標、越權、已送出禁止第二次 POST 與結果不得冒充光貿成功。
-- **本批仍未完結整個 B/C**：可稽核人工裁決和完整證據持久化、Local 撞號後受控下一號、真裝置／光貿測試需依 V3.2 計畫後續集中收斂，不能在旗標仍關閉時宣告實際可用。沒有原 Cloudflare 部署、D1 migration、真交易或新正式 Release；正式 Release 維持 V3.1.0。
+- Build 1：Cloud 合成測試將一般員工越權案例的獨立旗標明確設為 true，確保先進入 CYID 角色拒絕流程（403）；生產預設關閉行為不變。原工程碼未變。\n- **本批仍未完結整個 B/C**：可稽核人工裁決和完整證據持久化、Local 撞號後受控下一號、真裝置／光貿測試需依 V3.2 計畫後續集中收斂，不能在旗標仍關閉時宣告實際可用。沒有原 Cloudflare 部署、D1 migration、真交易或新正式 Release；正式 Release 維持 V3.1.0。
 
 ## V3.1.25 Build 0 — 2026/10/21（V3.2-C7a：保守的單次送出結果人工歸因分類；工程版）
 - 只擴充既有內部 `allowance-one-shot-coordinator.ts` 的回傳契約：將完整吻合無法歸因、完整吻合但 Audit 未成功寫入、號碼撞號、已接受但官方未能歸因、明確拒絕、結果不明六類列為人工審查，不把人工分類當作成功證明。
