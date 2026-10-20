@@ -1,6 +1,6 @@
--- V3.2-C1 REVIEW DRAFT ONLY. NOT A CANONICAL D1 MIGRATION.
+-- V3.2-C6 CANONICAL D1 MIGRATION 0017. Apply once after approved schema16 backup.
 -- Baseline: canonical 0016_non_allowance_work_items.sql (schema16).
--- This draft must not be placed under migrations/ or deployed.
+-- Deployment requires verified original D1, bounded budget and user-controlled MCP.
 -- No invoice numbers, buyer identifiers, official claims or credentials are stored.
 CREATE TABLE allowance_applications (
   application_id TEXT PRIMARY KEY CHECK(length(application_id) BETWEEN 8 AND 100),
