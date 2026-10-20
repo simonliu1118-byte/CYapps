@@ -392,13 +392,8 @@ internal sealed class SyncIssuesForm : Form
                             var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                             var reservation = local ? allowanceWorkflow.LocalReservationFor(issue) : null;
-                            primaryText = !local ? string.Empty : (reservation?.Status switch
-                            {
-                                null => "預留折讓單號（不送出）",
-                                "reserved" => "正式送出折讓（單次）",
-                                "sending" => "依原折讓號碼唯讀查回",
-                                _ => string.Empty
-                            });
+                            primaryText = !local ? string.Empty :
+                                LocalAllowancePrimaryAction(reservation?.Status);
                             primaryDanger = reservation?.Status == "reserved";
                             allowCancel = false;
                         }
@@ -559,6 +554,8 @@ internal sealed class SyncIssuesForm : Form
                 await SendLocalAllowanceDraftAsync(issue, reservation);
             else if (reservation.Status == "sending")
                 await ReconcileLocalAllowanceDraftAsync(issue);
+            else if (reservation.Status == "occupied_external")
+                await ReviewLocalAllowanceCollisionAsync(issue, reservation);
             return;
         }
         else if (!review.AwaitingConfirmation)
@@ -666,6 +663,112 @@ internal sealed class SyncIssuesForm : Form
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
+    // This is presentation-only: the actual authority and evidence gates
+    // remain in EmployeeAllowanceWorkflowService and the existing Local Ledger.
+    private static string LocalAllowancePrimaryAction(string? status) => status switch
+    {
+        null => "預留折讓單號（不送出）",
+        "reserved" => "正式送出折讓（單次）",
+        "sending" => "依原折讓號碼唯讀查回",
+        "occupied_external" => "主管覆核外部占號並預留下一號",
+        _ => string.Empty
+    };
+
+    private async Task ReviewLocalAllowanceCollisionAsync(
+        InvoiceSyncIssue issue, LocalAllowanceReservation previous)
+    {
+        if (manualReviewBusy || issue.ResolvedUtc is not null) return;
+        using var login = new EmployeeAdminLoginForm(repository,
+            "Local 外部占號重新配號－原核准管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        const string words = "確認外部占號並重新配號";
+        using var dialog = new Form
+        {
+            Text = "外部占號－人工覆核",
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(650, 256),
+            MinimumSize = new Size(590, 246),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            ShowIcon = false,
+            Font = new Font("Microsoft JhengHei UI", 10F),
+            BackColor = Color.White
+        };
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, Padding = new Padding(16),
+            ColumnCount = 1, RowCount = 3
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        var explanation = new Label
+        {
+            Dock = DockStyle.Fill, AutoSize = false,
+            Text = "原號：" + previous.AllowanceNumber +
+                "\n只有第一次 g0401 確認被光貿拒絕占號，且即時查回證明該號屬於" +
+                "不同買方與不同原發票、主管核准仍有效，才能預留新號。" +
+                "\n本次操作只預留新號，不會送出 g0401；舊號與稽核永久保留。" +
+                "\n請在下方完整輸入：「" + words + "」",
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        var typed = UiControls.TextBox(40);
+        typed.Dock = DockStyle.Fill;
+        typed.AccessibleName = "人工確認外部占號並重新配號";
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, Margin = Padding.Empty
+        };
+        var confirm = UiControls.StandardButton("確認預留");
+        confirm.Width = 112;
+        confirm.Enabled = false;
+        typed.TextChanged += (_, _) =>
+            confirm.Enabled = typed.Text == words;
+        confirm.DialogResult = DialogResult.OK;
+        var cancel = UiControls.StandardButton("取消");
+        cancel.Width = 96;
+        cancel.DialogResult = DialogResult.Cancel;
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(confirm);
+        panel.Controls.Add(explanation, 0, 0);
+        panel.Controls.Add(typed, 0, 1);
+        panel.Controls.Add(buttons, 0, 2);
+        dialog.Controls.Add(panel);
+        dialog.AcceptButton = confirm;
+        dialog.CancelButton = cancel;
+        if (dialog.ShowDialog(this) != DialogResult.OK ||
+            typed.Text != words) return;
+
+        SetManualReviewBusy(true);
+        try
+        {
+            var next = await allowanceWorkflow.ReserveLocalAfterExternalCollisionAsync(
+                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword, words);
+            if (IsDisposed) return;
+            MessageBox.Show(this,
+                "前次占號：" + previous.AllowanceNumber + "\n新預留號：" +
+                next.AllowanceNumber +
+                "\n已寫入原 Local Ledger 與不可修改的主管覆核紀錄。" +
+                "\n這不是官方成功紀錄，也沒有重新發送；後續必須由原核准管理員另行確認首次送出。",
+                "人工覆核完成（只預留）",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            if (!IsDisposed)
+                MessageBox.Show(this,
+                    error.Message + "\n\n新號未經驗證不可送出；請查看原 Ledger。",
+                    "未能安全改配號", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally { if (!IsDisposed) SetManualReviewBusy(false); }
+    }
+
     private async Task SendLocalAllowanceDraftAsync(
         InvoiceSyncIssue issue, LocalAllowanceReservation reservation)
     {
@@ -728,15 +831,13 @@ internal sealed class SyncIssuesForm : Form
 
     private void ShowLocalAllowanceSendResult(LocalAllowanceSendResult result)
     {
-        var verified = result.Outcome == LocalAllowanceSendOutcome.OfficiallyConfirmed;
         MessageBox.Show(this,
             $"原折讓單號：{result.AllowanceNumber}\n{result.Message}\n\n" +
-            (verified
-                ? "本機 ledger 已記錄官方完成；人工待辦仍保留，未自動結案。"
-                : "不得再次送出或自動換號；只有原號唯讀查回才能確認。"),
-            verified ? "光貿官方折讓已確認" : "折讓結果待核對",
-            MessageBoxButtons.OK,
-            verified ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            "原號及內容吻合仍無法證明由本次 POST 建立。" +
+            "不得再次送出或自動換號；請保留原 Ledger 與官方查回證據，" +
+            "依人工異常處置程序核對，不得視為正式確認。",
+            "折讓結果待人工核對", MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
     }
 
     private async Task ApproveLocalAllowanceDraftAsync(InvoiceSyncIssue issue)
@@ -1369,6 +1470,13 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
+        if (LocalAllowancePrimaryAction("occupied_external") !=
+                "主管覆核外部占號並預留下一號" ||
+            LocalAllowancePrimaryAction("sending") !=
+                "依原折讓號碼唯讀查回" ||
+            LocalAllowancePrimaryAction("confirmed") != string.Empty)
+            throw new InvalidOperationException(
+                "Local allowance must not bypass reviewed collision or ambiguous-send UI.");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
             DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理" ||

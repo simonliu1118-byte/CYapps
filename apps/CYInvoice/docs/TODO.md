@@ -14,7 +14,8 @@
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；#542 已綠燈合併，最新在開發 V3.1.27 Build 1（Local 原號歸因安全與 append-only Audit） | 不因規劃改寫升版；正式 V3.2.0 須另取得當次 Release 授權 |
+| 正式 Release／工程版 | 正式 V3.1.0；#542～#544 已合併，**V3.1.29 Build 0** 進行 Local 人工改配號 UI 收斂（待 CI） | 不因規劃改寫升版；正式 V3.2.0 須另取得當次 Release 授權 |
+| **V3.2 Batch 1 Local 主管 UI** | V3.1.29 Build 0：原折讓待辦明細對 occupied_external 顯示主管覆核新號入口；重新登入／輸入明確文字／後端再查，僅新預留不重送；sending 仍只可唯讀查回。Cloud UI／跨機裁決未完成 | 精確 head Windows／Cloud／Governance CI；Cloud 持久人工 Audit 與受控操作、實機驗收保留待辦 |
 | **V3.2 Batch 1 下一號受控操作** | V3.1.28 Build 1 Local 新號僅預留：原 g0401 回覆明確占號 + 官方查回為不同買方／不同原發票 + 主管即時雙重驗證 + append-only 重新配號稽核。此為新工程 Source／合成測試，無真光貿送出 | 待 Local 人工 UI／Cloud 同等受控流程、真正可歸因裁決與實機驗收；不可把預留當成功 |
 | **V3.2 B/C Local 安全修正** | Local g0401 唯讀查回「官方同號同內容」不再自動 confirmed；本機不可變 SHA256 稽核，只把完整吻合標記為無法歸因；本批待 CI | Cloud/D1 不動；後續再整合有證據、有主管權限的安全撞號後人工裁決 |
 | V3.2-A／B | 折讓編輯、Local 單次 g0401 與原號唯讀查回已有 Source／合成 CI；安全撞號後人工流程及真測待完成 | 與 C7 的送出安全整合為「批次 1」 |
