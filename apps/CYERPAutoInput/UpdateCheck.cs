@@ -75,3 +75,20 @@ internal static class UpdateCheck
     private static string Text(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? string.Empty : string.Empty;
 }
+
+/// <summary>What the update script left for the next start: put in place or not, and why.</summary>
+internal sealed record UpdateOutcome(bool Ok, string Version, string Detail)
+{
+    /// <summary>Releases page for a manual update.</summary>
+    public static string ReleasesPage => $"https://github.com/{UpdateCheck.Repository}/releases";
+
+    /// <summary>Lines 「ok｜failed」, version, detail; null for anything else.</summary>
+    public static UpdateOutcome? Parse(string text)
+    {
+        var lines = text.Replace("\r", string.Empty).Split('\n');
+        if (lines.Length < 2 || lines[1].Trim().Length == 0) return null;
+        var state = lines[0].Trim().TrimStart('﻿');
+        if (state != "ok" && state != "failed") return null;
+        return new UpdateOutcome(state == "ok", lines[1].Trim(), string.Join(" ", lines.Skip(2).Select(l => l.Trim()).Where(l => l.Length > 0)));
+    }
+}
