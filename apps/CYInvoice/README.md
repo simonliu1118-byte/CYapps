@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.21 Build 0（非正式 Release）**：C5 加入非空 schema16 SQLite→草稿17/18、失敗 rollback／備份還原演練；正式 migration 尚未升格，C4d 申請建立仍待接通，原 Cloudflare D1/Worker 不變，正式 Release 仍 V3.1.0。
+- **目前工程 Source：V3.1.22 Build 1（非正式 Release）**：C4d 從原折讓編輯器接 CYID Cloud 申請、先持久化原 application ID 再第一次寫入、未知結果唯讀查回；跨機原因加密展示、正式 schema17/18／Worker 與實際雙機仍待完成。正式 Release V3.1.0。
+
+- **前一工程 Source：V3.1.21 Build 0（非正式 Release）**：C5 加入非空 schema16 SQLite→草稿17/18、失敗 rollback／備份還原演練；正式 migration 尚未升格，C4d 申請建立仍待接通，原 Cloudflare D1/Worker 不變，正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.20 Build 0（非正式 Release）**：C4c 新增 WinForms 跨機主管折讓待辦與唯讀官方預覽；仍不提供 Cloud 官方送出，C4d 申請建立串接、正式 schema17/18 及 Cloudflare MCP 留後續安全審核，正式 Release V3.1.0。
 

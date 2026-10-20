@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -389,21 +390,38 @@ internal sealed class RecordDetailForm : Form
             PopulateDetails();
             using var request = new AllowanceRequestForm(record);
             if (request.ShowDialog(this) != DialogResult.OK) return;
-            var result = await allowanceWorkflow.SubmitAsync(
-                record,
-                request.EmployeeNo,
-                request.Password,
-                request.Reason,
-                request.TaxInclusiveAmount,
-                editedItems: request.EditedItems);
-            MessageBox.Show(
-                this,
-                result.AlreadyQueued
-                    ? result.Message
-                    : "折讓申請已建立。\n\n請通知管理員查看並完成操作。",
-                "折讓人工處理",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            var settings = repository.Settings.LoadOrCreate();
+            if (settings.CloudMode != CloudModes.LocalOnly)
+            {
+                if (settings.CloudIdentityProvider != "CYID")
+                    throw new InvalidOperationException(
+                        "跨機折讓必須使用 CYID；請先完成裝置與身份驗證設定");
+                var cloud = await new CloudAllowanceSubmissionService(repository)
+                    .SubmitAsync(record, request.EmployeeNo, request.Password,
+                        request.Reason, request.TaxInclusiveAmount, request.EditedItems);
+                MessageBox.Show(this,
+                    (cloud.AlreadySubmitted
+                        ? "已依原申請 ID 查回雲端狀態，沒有重送申請。"
+                        : "雲端折讓申請已建立，待主管查驗並核准。") +
+                    "\n\n申請 ID：" + cloud.ApplicationId +
+                    "\n狀態：" + cloud.Status +
+                    "\n不代表已開立折讓，光貿尚未接受任何本次交易。",
+                    "CYID 折讓申請", MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else
+            {
+                var result = await allowanceWorkflow.SubmitAsync(
+                    record, request.EmployeeNo, request.Password,
+                    request.Reason, request.TaxInclusiveAmount,
+                    editedItems: request.EditedItems);
+                MessageBox.Show(this,
+                    result.AlreadyQueued
+                        ? result.Message
+                        : "折讓申請已建立。\n\n請通知管理員查看並完成操作。",
+                    "折讓人工處理", MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
             DialogResult = DialogResult.OK;
             Close();
         }

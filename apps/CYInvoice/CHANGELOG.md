@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.22 Build 1 — 2026/10/20（V3.2-C4d CYID Cloud 折讓申請人入口／工程版）
+- 選擇性參照 #440 的申請前持久化 ID 思路，將現行 RecordDetailForm／AllowanceRequestForm 既有完整編輯與原發票二次官方查回接入新的 C4a CloudAllowanceClient，無第二套 Work Item owner 或舊 API。
+- CYID Cloud 模式先做 bounded list/readiness 預檢，再檢查光貿最新餘額及 7 位小數明細，固定新 application ID 與 SHA256 payload fingerprint 寫回原 Local SQLite 發票擴充資料，**成功持久化後才允許一次 Cloud create**。逾時／回覆遺失保留 ID，重入僅 status 唯讀查回，不自動重建、換 ID 或盲目送出；Local-only 舊人工流程不變。
+- 原始 Frozen template 只送 C4a AES-GCM Server-owned store，Local pending marker 不保存買方資料、明文模板或密碼。Windows Core 提供純合成草稿驗證，Cloudflare／光貿正式交易仍未實施。
+- **已知待修**：Cloud C4a 尚未提供跨機「申請原因」加密展示欄位，因此原因目前僅做本機輸入驗證；本批不宣告完整 UI/業務驗收，不得在正式 Worker 啟用功能旗標前忽略此缺口；後續須補齊加密 reason contract、正式 migration 與雙機測試。
+- Build 1：Windows 編譯抓出 application ID 非 Null 性警告，補上明確 ArgumentNullException 防衛；無業務功能或對外協定變動。
+- 正式 Release 維持 V3.1.0；C5 合成演練通過不等於 schema17/18 已升格。
+
 ## V3.1.21 Build 0 — 2026/10/20（V3.2-C5 非空 schema16 備份、Migration 與回復合成演練）
 - 選擇性取用 #524 的非空原 CYID-only schema16 SQLite Migration 演練，將 C1/C2 的 0017/0018 審查草稿在**獨立本機合成資料庫**依序執行，先完整備份再套 migration。
 - 驗證原 Workspace、Device、現有 work_items 與其他正式表仍在；各自注入 0017/0018 中途 SQL 錯誤，檢查回滾不留下半套 schema；外鍵、integrity、備份還原與 immutability 檢查納入 Cloud CI。

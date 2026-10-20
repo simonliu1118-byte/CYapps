@@ -28,6 +28,7 @@
 - [x] **3.2-C4b／V3.1.19 Build 1 Source**：由 #522 的安全 CloudAllowanceClient 與合成 HttpClient 測試於 #525 之後的乾淨 main 重建；復用 #440 保留原申請 ID／未知結果唯讀查回的思路，不帶回舊 Work Item 折讓 owner。Create/List/Review/Approve/Reserve/Status 均不直接發送 g0401；跨機 WinForms、正式 migration、本機 MCP 與真人雙機驗收後續批次處理。CI 仍須精確 head 驗證。
 - [x] **3.2-C4c／V3.1.20 Build 0 Source**：從 #523 選擇性接 WinForms CYID 跨機折讓主管清單、相同 ID 查回、覆核、官方唯讀預覽、核准、預留單號與無轉址 HTTPS；保留非折讓跨機待辦；以 WinForms smoke／Fake HTTP CI 驗證。不提供 g0401 送出或未知結果重試；C4d 申請編輯器與 C5 migration 後續分批，遠端 Cloudflare 未動。
 - [x] **3.2-C5／V3.1.21 Build 0 Source 演練**：選擇性回收 #524 獨立非空 CYID-only schema16 合成 SQLite 備份／17+18 草稿套用、各階段中途 SQL 失敗 rollback、FK／integrity／舊表不變與備份復原；不升格 migrations、不中斷原 Worker、不碰真 D1。下一步需正式 0017/0018 升格與 Cloudflare 專屬預算估算、C4d 申請編輯器本機安全持久化；實際遠端操作僅由使用者本機 Work + MCP 執行。
+- [x] **3.2-C4d／V3.1.22 Build 1 Source**：從原折讓編輯器加入 CYID Cloud 提交，先以 1 筆 bounded list 確認 API ready，光貿最新餘額及 Frozen 明細再驗算；本機僅持久化唯一 application ID／scope／payload SHA256，之後一次 HTTP create，結果不明只查原 ID。無非折讓 Work Items owner 混用、無 g0401 送出。**仍待** Cloud 申請原因加密展示、正式 0017/0018 升格與真實雙機端對端驗收，不能稱整個 C 完成。
 - [ ] **3.2-B2e～H 正式折讓執行**：B2d Source 入口已完成；接下來保留占號後受控換號、安全並發／斷電矩陣、Cloud／g0501／同步、實機與光貿測試環境驗收及正式發行，依 V3.2 計畫分批處理。不得以 CI 冒充真業務驗收。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
