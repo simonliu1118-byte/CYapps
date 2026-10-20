@@ -138,6 +138,12 @@
 - 共通規則 §11.3：正式 D1 MCP 前先由本機 Work 只讀確認完整備份、當天 D1 已用讀寫額度及同 Cloudflare 帳號其他系統使用量；估計本次 schema DDL／實際涉及列數、受影響表/索引與 API 次數；設批次上限、索引查詢、停止條件，不能為趕進度耗盡 CYID/CYWEB 共用額度。提交 Migration 與部署需獨立審核及使用者現場執行。
 - 正式 0017/0018 canonical 升格、C4d 申請者編輯器/原 application ID 持久化仍是 C 後續必要工作，source 演練通過不得逕稱 C 完成。
 
+## 3.2-C4d 員工原折讓編輯器進入 Cloud Frozen 申請（V3.1.22 Build 1）
+- 與既有 RecordDetailForm 唯一折讓入口整合，CloudMode=CYID 時使用 CloudAllowanceSubmissionService，LocalOnly 繼續既有人工待辦。建立前 bounded List(1) 的 feature/schema readiness、光貿最新原號 readback、有效餘額與 AllowanceDraftValidator 計算。
+- 先以 Local SQLite UpsertMany(1) 持久化 `application_id`、Workspace／Device／環境及模板 SHA256（不持久化 Frozen JSON／密碼），成功後**只一次** Cloud create；回覆不明時下次一律 `status` 查回同 ID，不重送，不會擅自開出第二筆折讓。Cloud 官方 g0401/g0501 仍不可由 Windows 直接調用。
+- 待解決：既有 Cloud C4a create 不包含「申請原因」安全欄位；正式啟用前須重新設計 reason 為 server-owned 加密 Frozen metadata，不能隨意加在 AMEGO g0401 JSON，避免破壞簽名與協定。舊申請人在單張原發票已有不可確認 pending 時也必須保守鎖住，不因人工重按開出另一 application ID。
+- 遵循 §11.3 單次預檢 list 上限 1、狀態原 ID 查回上限 1，無背景 polling／重試；後續 C5 canonical migration 部署前須由本機 Work MCP 先檢視當日 Cloudflare 共用 D1 額度、備份及索引，並有停止條件。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |
