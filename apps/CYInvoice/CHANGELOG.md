@@ -2,6 +2,11 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.20 Build 0 — 2026/10/20（V3.2-C4c Windows CYID 跨機折讓主管待辦；工程版）
+- 從舊 #523 選擇性重建 WinForms 折讓主管待辦，乾淨接在 #526 已合併 C4b 後；申請跨裝置 List、同 application ID Status 查回、Review、光貿官方唯讀 Preview、Approve、Reserve，每次操作重新輸入 CYID 身分，由 Worker 驗證。
+- 預覽只顯示匿名化必要資訊，嚴格拒絕 `canApprove=true` 等錯誤授權旗標；沒有公開 g0401/g0501，也不提供自動重送、調號、首次送出按鈕。HttpClient 明確關閉轉址、密碼不持久化。
+- 主視窗「跨機待辦」改選單，保留原非折讓待辦；WinForms startup smoke 與 Fake HTTP 契約測試。申請人 Cloud Frozen 建立入口仍待 C4d；schema17/18 尚未升格／Cloudflare 沒部署，正式 Release 維持 V3.1.0。
+
 ## V3.1.19 Build 1 — 2026/10/20（3.2-C4b Windows CYID Cloud 折讓客戶端；工程版）
 - 由 #522 原型以已合併 #525 的乾淨 main 重新整理，僅回收跨機 Client 與隔離 HttpClient 測試；沿用 #440 已驗證的「保留原申請 ID、結果不明只能回讀」設計，不帶回舊 work_items.ALLOWANCE。
 - Windows Core 新增 CloudAllowanceClient：HTTPS、CYID Device Bearer、每次員工帳密、create/list/review/approve/reserve/status 白名單；嚴格驗證回覆狀態、rev、號碼，禁止自動重試、換號、把 reserve 當成 g0401 交易許可，明文憑證與 Frozen 請求不持久化。
