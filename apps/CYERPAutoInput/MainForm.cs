@@ -1751,12 +1751,15 @@ internal sealed partial class MainForm : Form
             _details["BundleKey", i].Value = items[i].BundleTotal is not null || (items[i].SortKey is not null && items[i].UnitPrice.Length == 0) ? items[i].SortKey : null;
             _details["BundleTotal", i].Value = items[i].BundleTotal;
             _details["BundleGap", i].Value = items[i].TakesBundleGap ? "1" : null;
+            _details["GiftQuantity", i].Value = items[i].GiftQuantity.Length > 0 ? items[i].GiftQuantity : null;
         }
         // 滿件贈送 (user, 2026-10-14): the free quantity per the settings' cards.
         var giftMissing = new List<string>();
         foreach (var (row, gift) in GiftRules.Gifts(order.Source, items.Select(i => (i.ItemCode, i.Quantity)).ToList(), _settings.GiftRules, giftMissing))
         {
-            _details["GiftQuantity", row].Value = gift.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // Added to a 「(贈)」 quantity already on the row.
+            var marked = decimal.TryParse(items[row].GiftQuantity, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0;
+            _details["GiftQuantity", row].Value = (marked + gift).ToString(System.Globalization.CultureInfo.InvariantCulture);
             _log.Info("import", $"gift quantity row={row + 1} item={_log.Value(items[row].ItemCode)} gift={gift}");
         }
         foreach (var note in giftMissing) _log.Warn("import", _log.Value(note));

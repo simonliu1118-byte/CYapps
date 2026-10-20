@@ -25,7 +25,9 @@ internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string Tr
 /// shown). <see cref="Group"/> is the 編號 it is listed under (0 when no 編號 was visible).
 /// </summary>
 /// <param name="SortKey">For the parts of a bundle: the bundle's first code, so its lines stay together.</param>
-internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount, string? SortKey = null);
+/// <param name="Gift">A part marked 「(贈)」: free, its quantity goes to 贈／備品量 (user, 2026-10-20).</param>
+internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount, string? SortKey = null,
+    bool Gift = false);
 
 /// <summary>A 編號 of the detail: several products of one promotion share one 小計 (shown, and the struck-out original).</summary>
 internal sealed record ShopeeShotGroup(int Index, decimal Shown, decimal Original);
@@ -278,6 +280,20 @@ internal static partial class ShopeeScreenshot
         var noQuantity = new List<(int Group, string RawCode, decimal Unit)>();
         void AddItem(int group, string rawCode, decimal unit, decimal quantity)
         {
+            // A part marked 「(贈)」 (A00175+A00173(贈); user, 2026-10-20) is free: its quantity
+            // goes to 贈／備品量, and the rest is read as if listed alone.
+            var all = BundleParts(rawCode);
+            foreach (var free in all.Select(Bundles.SplitGift).Where(p => p.Gift))
+            {
+                var (freeCode, freeTimes) = SplitSet(free.Code);
+                items.Add(new ShopeeShotItem(group, freeCode, 0m, quantity * freeTimes, 0m, Gift: true));
+            }
+            if (all.Any(p => Bundles.SplitGift(p).Gift))
+            {
+                var sold = all.Where(p => !Bundles.SplitGift(p).Gift).ToList();
+                if (sold.Count == 0) return;
+                rawCode = string.Join("+", sold);
+            }
             // A bundle 「C00244+C00011」 (user, 2026-10-12): every part goes out as many times as
             // bundles were sold; the first part carries the bundle's price and the others are 0.
             var parts = BundleParts(rawCode);
@@ -680,8 +696,9 @@ internal static partial class ShopeeScreenshot
         }
 
         var formItems = new List<ImportedItem>();
-        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice, l.SortKey)))
+        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice, l.SortKey, l.Gift)))
         {
+            if (group.Key.Gift) { formItems.Add(Bundles.GiftLine(group.Key.ItemCode, group.Sum(l => l.Quantity))); continue; }
             var quantity = Number(group.Sum(l => l.Quantity));
             // A bundle's parts leave 單價 to ERP; the first part remembers what the bundle sold for.
             formItems.Add(group.Key.SortKey is { } bundle
@@ -692,6 +709,7 @@ internal static partial class ShopeeScreenshot
                 }
                 : new ImportedItem(group.Key.ItemCode, quantity, Number(group.Key.UnitPrice)));
         }
+        formItems = Bundles.MergeGifts(formItems);
         var hasBundles = lines.Any(l => l.SortKey is not null);
 
         var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
