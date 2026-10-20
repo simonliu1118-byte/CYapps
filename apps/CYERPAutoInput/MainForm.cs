@@ -2173,6 +2173,8 @@ internal sealed partial class MainForm : Form
             menu.Items.Add("全自動（確認訂單＋安排配送＋寄件單＋發票＋ERP）", null, async (_, _) => await RunCoupangBatchAsync());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("匯入訂單匯出檔（.xlsx → 發票 → 列印 → ERP）", null, async (_, _) => await ImportCoupangAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("列印寄件單（Wing 先打開寄件詳情）", null, async (_, _) => await PrintCoupangSlipAsync());
 
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

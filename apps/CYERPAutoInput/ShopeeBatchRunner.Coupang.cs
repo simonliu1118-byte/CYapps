@@ -288,7 +288,7 @@ internal sealed partial class ShopeeBatchRunner
                     }
                     printed = true;
                     Click(screen, details.Print, "列印寄件單");
-                    await PrintCoupangSlipsAsync(channel, orders.Count);
+                    await PrintCoupangSlipsAsync(channel, orders.Count, details.Trackings);
                 }
                 else
                 {
@@ -321,8 +321,13 @@ internal sealed partial class ShopeeBatchRunner
     /// instead), on the thermal printer at 宅配 22 % (設定), 便利商店 100 % (user, 2026-10-19);
     /// a tab opened for it is closed afterwards.
     /// </summary>
-    private async Task PrintCoupangSlipsAsync(string channel, int orders)
+    private async Task PrintCoupangSlipsAsync(string channel, int orders, IReadOnlyList<string> trackings)
     {
+        if (channel.Contains("全家", StringComparison.Ordinal))
+        {
+            await PrintCoupangFamilyAsync(trackings);
+            return;
+        }
         var (dialog, _) = await WaitOrNullAsync(12, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null);
         var ownTab = dialog is null;
         dialog?.Dispose();
@@ -341,5 +346,115 @@ internal sealed partial class ShopeeBatchRunner
             Keys("Ctrl+W (寄件單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
             await Task.Delay(800, _token);
         }
+    }
+
+    /// <summary>
+    /// 酷澎 全家 (user, 2026-10-20: 列印寄件單 opens the same FamilyMart寄取貨單 as 蝦皮; page 2 at
+    /// 165 % did not scan, the cut one did): the page is checked for every 寄件編號, saved, each
+    /// slip cut and printed dot for dot as for 蝦皮; the tab is closed after. A single slip that
+    /// cannot be cut goes through Chrome as for 蝦皮; several stop for a person.
+    /// </summary>
+    private async Task PrintCoupangFamilyAsync(IReadOnlyList<string> trackings)
+    {
+        if (trackings.Count == 0) throw new ShopeeBatchStop("「便利商店」讀不到寄件單號，沒有列印寄件單，請人工列印。", true);
+        using (var page = await WaitFamilyLabelPageAsync())
+            foreach (var tracking in trackings)
+                if (!ShopeeBatchScreens.ShowsNumber(page.Boxes, tracking))
+                    throw new ShopeeBatchStop($"全家寄取貨單上讀不到寄件編號 {tracking}，未列印。", true);
+        var (slips, printer, info) = await CutFamilySlipsAsync(trackings);
+        if (slips is not null)
+        {
+            foreach (var slip in slips) PrintCutSlip(printer, slip, "酷澎");
+            _log.Info("coupang-batch", $"family slips printed cut count={slips.Count} {info}");
+        }
+        else if (trackings.Count == 1)
+        {
+            _log.Info("coupang-batch", $"family cut: {info}; printing through Chrome");
+            Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+            await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);
+        }
+        else throw new ShopeeBatchStop($"全家寄取貨單 {trackings.Count} 張切不出來（{info}），未列印，請人工列印。", true);
+        await Task.Delay(1500, _token);
+        Keys("Ctrl+W (寄取貨單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
+        await Task.Delay(800, _token);
+    }
+
+    /// <summary>
+    /// <see cref="CutFamilySlipAsync"/> for several orders: one save of the page, as many slips
+    /// as 寄件編號, each cut slip read (OCR) and every 寄件編號 found once. Null with the reason
+    /// when anything is short.
+    /// </summary>
+    private async Task<(List<GrayImage>? Slips, string Printer, string Info)> CutFamilySlipsAsync(IReadOnlyList<string> trackings)
+    {
+        if (trackings.Count == 1)
+        {
+            var one = await CutFamilySlipAsync(trackings[0]);
+            return (one.Slip is null ? null : [one.Slip], one.Printer, one.Info);
+        }
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        try
+        {
+            var printer = SlipPrinter.Installed(_printer);
+            if (printer is null) return (null, string.Empty, $"找不到名稱符合「{_printer}」的印表機");
+            Directory.CreateDirectory(folder);
+            Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
+            if ((await SaveFromDialogAsync(folder, "Ctrl+S")).Error is { } failed) return (null, printer, failed);
+            if (SlipPrinter.LargestPicture(folder) is not { } picture) return (null, printer, "存下的網頁裡沒有寄取貨單圖片");
+            var page = picture.Image;
+            var areas = SlipImage.FindSlips(page);
+            var label = SlipPrinter.Label(printer, 100, 150);
+            _log.Info("coupang-batch", $"family cut: picture {page.Width}x{page.Height} slips={areas.Count} trackings={trackings.Count} dpi={label.Dpi}");
+            if (areas.Count != trackings.Count) return (null, printer, $"圖片裡找到 {areas.Count} 張寄取貨單，寄件編號 {trackings.Count} 個");
+            var slips = new List<GrayImage>();
+            var left = trackings.ToList();
+            foreach (var area in areas)
+            {
+                var plan = SlipImage.Plan(page, area, label.Width, label.Height);
+                if (plan.Module == 0 || plan.Width > label.Width || plan.Height > label.Height || plan.Width * 25.4 / label.Dpi < 50)
+                    return (null, printer, $"寄取貨單 {area} 量不到條碼或尺寸不合標籤");
+                var slip = SlipImage.Render(page, plan);
+                string? shown = null;
+                foreach (var t in left) if (await SlipShowsAsync(slip, t)) { shown = t; break; }
+                if (shown is null) return (null, printer, $"裁好的寄取貨單讀不到剩下的寄件編號（{string.Join("、", left)}）");
+                left.Remove(shown);
+                slips.Add(slip);
+            }
+            return (slips, printer, $"{slips.Count} 張，{label.Dpi} dpi");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not ShopeeBatchStop)
+        {
+            return (null, string.Empty, $"{ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>
+    /// 酷澎 › 列印寄件單 only (user, 2026-10-20): the Wing dialog the user opened in front
+    /// (寄件詳情 from 配送指示, or 取貨詳情／便利商店) — its 列印寄件單 pressed and the slips printed as
+    /// in 全自動 (全家 cut and printed dot for dot), then 關閉.
+    /// </summary>
+    public async Task<string> PrintOpenCoupangSlipAsync()
+    {
+        _window = ChromeWindows().FirstOrDefault();
+        if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗：請先在 Chrome 打開酷澎 Wing 的寄件詳情。");
+        _pageTabs = true;
+        _shippedHint = true;
+        Front();
+        await Task.Delay(500, _token);
+        var (shown, found) = await WaitOrNullAsync(8, s => CoupangScreens.PickupDetails(s.Boxes) is { } d ? (object)d : null);
+        if (shown is null || found is null)
+            throw new ShopeeBatchStop("畫面上沒有「寄件詳情」（或取貨詳情）視窗：請在 Wing 配送指示按該筆的「列印寄件單」打開後再試。");
+        var details = ((List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close, List<string> Trackings))found;
+        var channel = details.Method.Length > 0 ? details.Method : "宅配";
+        _log.Info("coupang-batch", $"print only channel={channel} trackings={details.Trackings.Count}");
+        using (shown) Click(shown, details.Print, "列印寄件單");
+        await PrintCoupangSlipsAsync(channel, Math.Max(1, details.Trackings.Count), details.Trackings);
+        await Task.Delay(800, _token);
+        using (var after = await ReadAsync())
+            if (CoupangScreens.PickupDetails(after.Boxes) is { } open) Click(after, open.Close, "關閉");
+        return $"{channel}：寄件單 {string.Join("、", details.Trackings)} 已送印。";
     }
 }

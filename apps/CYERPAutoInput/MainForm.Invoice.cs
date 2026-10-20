@@ -528,6 +528,42 @@ internal sealed partial class MainForm
         await CoupangToErpAsync(title, file, runNotes);
     }
 
+    /// <summary>酷澎 › 列印寄件單 (user, 2026-10-20): the Wing 寄件詳情 the user opened, printed.</summary>
+    private async Task PrintCoupangSlipAsync()
+    {
+        const string title = "酷澎列印寄件單";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (_settings.ShopeeLabelPrinter.Length == 0)
+        {
+            MessageBox.Show(this, "請先在「設定 › 印表機」勾選熱感標籤印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        string? done = null, stopped = null;
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
+                _settings.HctLabelScale, _settings.HctPickupAddress, _settings.CoupangHctLabelScale), Session.EscapeToken);
+        try { done = await runner.PrintOpenCoupangSlipAsync(); }
+        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
+        catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
+        finally
+        {
+            Session.Unpin();
+            Session.End(stopped is null ? AutomationOutcome.Done : AutomationOutcome.Stopped);
+            _shopeeBatchRunning = false;
+        }
+        if (stopped is not null)
+        {
+            _log.Warn("coupang-batch", $"print only stopped: {stopped}");
+            Alarm(needsPerson: true);
+            MessageBox.Show(this, $"酷澎列印寄件單停止：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        SetStatus(done!);
+    }
+
     /// <summary>A downloaded 酷澎 DeliveryList → CYInvoice (酷澎 entry, paper in the background) → ERP or the preview.</summary>
     private async Task CoupangToErpAsync(string title, string file, List<string> runNotes)
     {
