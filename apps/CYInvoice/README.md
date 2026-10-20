@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.27 Build 1（非正式 Release，待 CI）**：V3.2 B/C 修正 Local 原號回查不能證明本次 g0401 POST 的成功歸因，維持 Ledger `sending` 並寫入 Local append-only 官方完整內容快照雜湊 Audit；Cloudflare 原 D1／Worker 與兩道送出旗標不變、無真交易。正式 Release V3.1.0。
+- **目前工程 Source：V3.1.28 Build 1（非正式 Release）**：Local 僅在明確外部撞號、官方不同買方與不同原發票及同主管雙重即時覆核後，於原 SQLite 原 Ledger 保留舊號並追加下一號預留及不可變稽核；不自動重送。原 Cloudflare／光貿不變，正式 Release V3.1.0。
+
+- **前一工程 Source：V3.1.27 Build 1（非正式 Release，待 CI）**：V3.2 B/C 修正 Local 原號回查不能證明本次 g0401 POST 的成功歸因，維持 Ledger `sending` 並寫入 Local append-only 官方完整內容快照雜湊 Audit；Cloudflare 原 D1／Worker 與兩道送出旗標不變、無真交易。正式 Release V3.1.0。
 
 - **前一工程 Source：V3.1.26 Build 1（非正式 Release）**：V3.2 批次 1 接入 Cloud 主管單次 g0401 執行入口與 Ledger 原 ID 唯讀查證。既有折讓 API 閘門及新增獨立送出閘門預設都關閉；原 D1／Worker 未因本原始碼工作而修改，未做真光貿交易，正式 Release 仍 V3.1.0。
 
