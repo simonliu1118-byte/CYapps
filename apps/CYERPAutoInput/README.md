@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## 版本
 
-目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V0.3.3`，tag `cyerp-auto-input-v0.3.3`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V0.3.3.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
+目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V0.3.4`，tag `cyerp-auto-input-v0.3.4`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V0.3.4.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
 
 ## 主要流程
 
