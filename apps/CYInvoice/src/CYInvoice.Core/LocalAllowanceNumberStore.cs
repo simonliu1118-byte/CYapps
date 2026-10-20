@@ -70,6 +70,27 @@ public sealed class LocalAllowanceNumberStore
             CREATE TRIGGER IF NOT EXISTS allowance_local_readback_no_delete
             BEFORE DELETE ON allowance_local_readback_audit
             BEGIN SELECT RAISE(ABORT,'ALLOWANCE_READBACK_AUDIT_APPEND_ONLY'); END;
+            CREATE TABLE IF NOT EXISTS allowance_local_collision_reviews (
+                review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_invoice TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                work_item_id TEXT NOT NULL,
+                previous_number TEXT NOT NULL,
+                new_number TEXT NOT NULL,
+                previous_attempt INTEGER NOT NULL CHECK(previous_attempt>0),
+                official_snapshot_sha256 TEXT NOT NULL CHECK(
+                    length(official_snapshot_sha256)=64 AND
+                    official_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'),
+                manager_employee_no TEXT NOT NULL,
+                reviewed_at_utc TEXT NOT NULL,
+                UNIQUE(seller_invoice,environment,work_item_id,previous_attempt)
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_local_collision_review_no_update
+            BEFORE UPDATE ON allowance_local_collision_reviews
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_COLLISION_REVIEW_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_local_collision_review_no_delete
+            BEFORE DELETE ON allowance_local_collision_reviews
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_COLLISION_REVIEW_APPEND_ONLY'); END;
             """;
         command.ExecuteNonQuery();
     }
@@ -77,8 +98,31 @@ public sealed class LocalAllowanceNumberStore
     public LocalAllowanceReservation Reserve(
         string sellerInvoice, string environment, string workItemId,
         DateOnly date, AllowanceIssueRequest template,
-        string approverEmployeeNo, DateTimeOffset approvedAtUtc)
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc) =>
+        ReserveCore(sellerInvoice,environment,workItemId,date,template,
+            approverEmployeeNo,approvedAtUtc,null,null);
+
+    // This is deliberately INTERNAL: caller must revalidate the manager,
+    // immutable approval and exact provider-origin collision evidence.
+    // It never posts g0401 and cannot release a 'sending' Ledger.
+    internal LocalAllowanceReservation ReserveAfterVerifiedExternalCollision(
+        string sellerInvoice, string environment, string workItemId,
+        DateOnly date, AllowanceIssueRequest template,
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc,
+        LocalAllowanceReservation previous,string officialSnapshotSha256) =>
+        ReserveCore(sellerInvoice,environment,workItemId,date,template,
+            approverEmployeeNo,approvedAtUtc,previous,officialSnapshotSha256);
+
+    private LocalAllowanceReservation ReserveCore(
+        string sellerInvoice, string environment, string workItemId,
+        DateOnly date, AllowanceIssueRequest template,
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc,
+        LocalAllowanceReservation? reviewedCollision,string? officialSnapshotSha256)
     {
+        if (reviewedCollision is not null &&
+            (officialSnapshotSha256 is null || officialSnapshotSha256.Length!=64 ||
+             officialSnapshotSha256.Any(c=>c is not (>= '0' and <= '9' or >= 'a' and <= 'f'))))
+            throw new InvalidDataException("Verified official collision snapshot SHA256 required");
         sellerInvoice = Require(sellerInvoice, nameof(sellerInvoice));
         environment = Require(environment, nameof(environment));
         workItemId = Require(workItemId, nameof(workItemId));
@@ -132,18 +176,21 @@ public sealed class LocalAllowanceNumberStore
                 !string.Equals(latest.ApproverEmployeeNo, approverEmployeeNo, StringComparison.Ordinal) ||
                 latest.ApprovedAtUtc != approvedAtUtc)
                 throw new InvalidOperationException("Approved Work Item payload and manager identity are immutable");
-            if (latest.Status == "reserved")
+            if (latest.Status == "reserved" && reviewedCollision is null)
             {
                 transaction.Commit();
                 return latest; // same number and immutable payload; no allocation
             }
-            // B1 never allocates a second number after a sending attempt,
-            // including a known collision. B2 must first implement verified
-            // official readback before controlled re-numbering is allowed.
-            throw new InvalidOperationException(
-                "A prior allowance attempt exists; official-number readback is required before any retry");
+            // Only a distinct operation after a provider-confirmed collision.
+            // Never reallocate a sending/confirmed/unknown original attempt.
+            if (latest.Status!="occupied_external" ||
+                reviewedCollision is null || latest != reviewedCollision)
+                throw new InvalidOperationException(
+                    "Only a freshly revalidated external collision supports a new reservation");
         }
 
+        if (reviewedCollision is not null && latest is null)
+            throw new InvalidOperationException("Missing original collision attempt");
         int next;
         using (var sequence = connection.CreateCommand())
         {
@@ -200,6 +247,38 @@ public sealed class LocalAllowanceNumberStore
             insert.Parameters.AddWithValue("$approved", approvedAtUtc.ToString("O", CultureInfo.InvariantCulture));
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidDataException("Failed to reserve allowance number");
+        }
+        if (reviewedCollision is not null)
+        {
+            // One atomic transaction: the new immutable reservation cannot
+            // exist without a privacy-minimized, append-only manager review.
+            using var audit=connection.CreateCommand();
+            audit.Transaction=transaction;
+            audit.CommandText="""
+                INSERT INTO allowance_local_collision_reviews (
+                    seller_invoice,environment,work_item_id,previous_number,
+                    new_number,previous_attempt,official_snapshot_sha256,
+                    manager_employee_no,reviewed_at_utc)
+                SELECT seller_invoice,environment,work_item_id,allowance_number,
+                    $new,attempt,$hash,approver_employee_no,$now
+                FROM allowance_number_ledger
+                WHERE seller_invoice=$seller AND environment=$env
+                  AND work_item_id=$work AND allowance_number=$old
+                  AND attempt=$attempt AND status='occupied_external'
+                  AND approver_employee_no=$manager AND approved_at_utc=$approved;
+                """;
+            audit.Parameters.AddWithValue("$new",number);
+            audit.Parameters.AddWithValue("$hash",officialSnapshotSha256!);
+            audit.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O",CultureInfo.InvariantCulture));
+            audit.Parameters.AddWithValue("$seller",sellerInvoice);
+            audit.Parameters.AddWithValue("$env",environment);
+            audit.Parameters.AddWithValue("$work",workItemId);
+            audit.Parameters.AddWithValue("$old",reviewedCollision.AllowanceNumber);
+            audit.Parameters.AddWithValue("$attempt",previousAttempt);
+            audit.Parameters.AddWithValue("$manager",approverEmployeeNo);
+            audit.Parameters.AddWithValue("$approved",approvedAtUtc.ToString("O",CultureInfo.InvariantCulture));
+            if (audit.ExecuteNonQuery()!=1)
+                throw new InvalidOperationException("Collision review was not durably recorded");
         }
         transaction.Commit();
         return new LocalAllowanceReservation(workItemId, number, payloadJson, "reserved", next,
