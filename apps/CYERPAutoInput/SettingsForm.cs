@@ -246,7 +246,7 @@ internal sealed class SettingsForm : Form
         column.Controls.Add(new Label
         {
             AutoSize = true, Margin = new Padding(0, 2, 0, 4),
-            Text = $"固定 {SlipNote.FontPoints:F0} pt 粗體，最多 {SlipNote.MaxLines} 行、每行約 27 個中文字（英數字約半格）；空白就不印。"
+            Text = $"字少就大、字多自動折行變小（{SlipNote.MinPoints:F0}–{SlipNote.MaxPoints:F0} pt 粗體）；最小時約 3 行 × 27 個中文字。空白就不印。"
         });
         _slipNote.Multiline = true;
         _slipNote.AcceptsReturn = true;
@@ -266,10 +266,9 @@ internal sealed class SettingsForm : Form
     private void ShowSlipNoteStatus()
     {
         var error = SlipNote.Check(_slipNote.Text, SlipPrinter.NoteWidthMm);
-        var lines = SlipNote.Lines(_slipNote.Text);
+        var fit = SlipNote.Fit(_slipNote.Text, SlipPrinter.NoteWidthMm);
         _slipNoteStatus.ForeColor = error is null ? SystemColors.GrayText : Color.Firebrick;
-        _slipNoteStatus.Text = error ?? (lines.Count == 0 ? "不印文字。" :
-            string.Join("　", lines.Select((l, i) => $"第 {i + 1} 行 {SlipPrinter.NoteWidthMm(l):F0}/{SlipNote.BlockWidthMm:F0} mm")));
+        _slipNoteStatus.Text = error ?? (fit is { } f ? $"印出：{f.Points:0.#} pt，{f.Lines.Count} 行" : "不印文字。");
     }
 
     private TabPage ImportPage()

@@ -30,15 +30,25 @@ internal static partial class SlipPrinter
         PrinterSettings.InstalledPrinters.Cast<string>().FirstOrDefault(p => string.Equals(p, wanted, StringComparison.OrdinalIgnoreCase))
         ?? PrinterSettings.InstalledPrinters.Cast<string>().FirstOrDefault(p => ShopeeBatchScreens.SamePrinter(p, wanted));
 
-    /// <summary>The width of one <see cref="SlipNote"/> line in mm, in the type it is printed in.</summary>
-    public static double NoteWidthMm(string line)
+    /// <summary>The width of one <see cref="SlipNote"/> line in mm, in the type it is printed in at <paramref name="points"/>.</summary>
+    public static double NoteWidthMm(string line, float points)
     {
-        using var bmp = new Bitmap(1, 1);
-        using var g = Graphics.FromImage(bmp);
-        g.PageUnit = GraphicsUnit.Millimeter;
-        using var font = new Font(SlipNote.FontName, SlipNote.FontPoints, FontStyle.Bold, GraphicsUnit.Point);
-        return g.MeasureString(line, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+        // Fitting measures many trial lines per size (as typed in 設定): one surface, a font per size.
+        lock (NoteMeasure)
+        {
+            if (!NoteFonts.TryGetValue(points, out var font))
+                NoteFonts[points] = font = new Font(SlipNote.FontName, points, FontStyle.Bold, GraphicsUnit.Point);
+            return NoteMeasure.Value.MeasureString(line, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+        }
     }
+
+    private static readonly Lazy<Graphics> NoteMeasure = new(() =>
+    {
+        var g = Graphics.FromImage(new Bitmap(1, 1));
+        g.PageUnit = GraphicsUnit.Millimeter;
+        return g;
+    });
+    private static readonly Dictionary<float, Font> NoteFonts = [];
 
     /// <summary>
     /// The printer's resolution and the label in its dots: the set label size, or the driver's
@@ -225,7 +235,7 @@ internal static partial class SlipPrinter
 
         var used = (0, 0);
         var noted = false;
-        var lines = SlipNote.Lines(note);
+        var fit = SlipNote.Fit(note, NoteWidthMm);
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
         doc.DocumentName = documentName;
@@ -250,21 +260,23 @@ internal static partial class SlipPrinter
             var areaH = Math.Min(pageH, (float)SlipNote.LabelHeightMm * dotsPerMm);
             var blockH = (float)SlipNote.BlockHeightMm * dotsPerMm;
             var gap = (float)SlipNote.GapMm * dotsPerMm;
-            noted = lines.Count > 0 && bmp.Height + gap + blockH <= areaH;
+            noted = fit is not null && bmp.Height + gap + blockH <= areaH;
             var areaTop = (pageH - areaH) / 2 - marginY;
             if (noted) y = (int)Math.Round(areaTop + (areaH - blockH - gap - bmp.Height) / 2);
             g.DrawImage(bmp, new Rectangle(Math.Max(0, x), Math.Max(0, y), bmp.Width, bmp.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel);
-            if (noted)
+            if (noted && fit is { } f)
             {
-                using var font = new Font(SlipNote.FontName, SlipNote.FontPoints / 72f * g.DpiY, FontStyle.Bold, GraphicsUnit.Pixel);
-                var lineH = Math.Min(font.GetHeight(g), blockH / SlipNote.MaxLines);
-                var blockW = (float)SlipNote.BlockWidthMm * g.DpiX / 25.4f;
-                var left = (pageW - blockW) / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX;
-                var top = areaTop + areaH - blockH;
+                using var font = new Font(SlipNote.FontName, f.Points / 72f * g.DpiY, FontStyle.Bold, GraphicsUnit.Pixel);
+                var lineH = Math.Min((float)SlipNote.LineHeightMm(f.Points) * dotsPerMm, blockH / f.Lines.Count);
+                var centreX = pageW / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX;
+                // The lines centred in the block, each centred across it.
+                var top = areaTop + areaH - blockH + (blockH - lineH * f.Lines.Count) / 2;
+                using var centred = (StringFormat)StringFormat.GenericTypographic.Clone();
+                centred.Alignment = StringAlignment.Center;
                 // Pure black dots on the thermal head, no grey edges.
                 g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
-                for (var i = 0; i < lines.Count; i++)
-                    g.DrawString(lines[i], font, Brushes.Black, Math.Max(0, left), top + i * lineH, StringFormat.GenericTypographic);
+                for (var i = 0; i < f.Lines.Count; i++)
+                    g.DrawString(f.Lines[i], font, Brushes.Black, centreX, top + i * lineH, centred);
             }
             e.HasMorePages = false;
         };

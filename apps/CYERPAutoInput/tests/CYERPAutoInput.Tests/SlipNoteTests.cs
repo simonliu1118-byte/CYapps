@@ -5,8 +5,8 @@ namespace CYERPAutoInput.Tests;
 
 public sealed class SlipNoteTests
 {
-    // About 3.53 mm a Chinese character at 10 pt, half that otherwise.
-    private static double Width(string line) => line.Sum(c => c < 0x2E80 ? 1.76 : 3.53);
+    // A Chinese character one em wide, anything else half.
+    private static double Width(string line, float points) => line.Sum(c => c < 0x2E80 ? 0.5 : 1.0) * points * 25.4 / 72;
 
     [Fact]
     public void Lines_drop_blank_ends_and_trailing_spaces()
@@ -17,11 +17,33 @@ public sealed class SlipNoteTests
     }
 
     [Fact]
-    public void Check_limits_lines_and_width()
+    public void Few_words_are_large_many_wrap_smaller()
     {
-        Assert.Null(SlipNote.Check("", Width));
-        Assert.Null(SlipNote.Check(new string('好', 27) + "\n" + new string('A', 54) + "\n第三行", Width));
-        Assert.Contains("最多 3 行", SlipNote.Check("一\n二\n三\n四", Width));
-        Assert.Contains("第 2 行太長", SlipNote.Check("一\n" + new string('好', 28), Width));
+        Assert.Null(SlipNote.Fit("", Width));
+        var short_ = SlipNote.Fit("感謝您的購買", Width)!.Value;
+        Assert.Equal(SlipNote.MaxPoints, short_.Points);
+        Assert.Equal(["感謝您的購買"], short_.Lines);
+
+        var two = SlipNote.Fit("感謝您的購買\n有問題請聊聊", Width)!.Value;
+        Assert.True(two.Points < SlipNote.MaxPoints);
+        Assert.Equal(2, two.Lines.Count);
+
+        // 60 characters do not fit one line: wrapped, smaller, every line within the block.
+        var many = SlipNote.Fit(new string('好', 60), Width)!.Value;
+        Assert.True(many.Lines.Count >= 3);
+        Assert.True(many.Points >= SlipNote.MinPoints);
+        Assert.All(many.Lines, l => Assert.True(Width(l, many.Points) <= SlipNote.BlockWidthMm));
+        Assert.Equal(60, many.Lines.Sum(l => l.Length));
+        Assert.True(many.Lines.Count * SlipNote.LineHeightMm(many.Points) <= SlipNote.BlockHeightMm);
+    }
+
+    [Fact]
+    public void Latin_words_stay_whole_and_too_much_is_refused()
+    {
+        var fit = SlipNote.Fit(string.Join(' ', Enumerable.Repeat("thanks", 20)), Width)!.Value;
+        Assert.All(fit.Lines, l => Assert.DoesNotContain(l.Split(' '), w => w.Length > 0 && w != "thanks"));
+        Assert.Null(SlipNote.Check("感謝", Width));
+        Assert.Null(SlipNote.Fit(new string('好', 200), Width));
+        Assert.Contains("太多", SlipNote.Check(new string('好', 200), Width));
     }
 }
