@@ -175,4 +175,17 @@ public class CoupangScreensTests
         Assert.Equal(271, CoupangScreens.SelectAll(page, header).Left);
         Assert.Equal("請選擇配送方式", CoupangScreens.ShipBar(page)!.Value.Select.Text);
     }
+
+    [Fact]
+    public void Reads_the_convenience_store_dialog()
+    {
+        // 便利商店 (user's screenshot 2026-10-20): 「申請寄件編號」 with a 退貨超商, no 取貨地址.
+        var page = new List<OcrBox>
+        {
+            B("申請寄件編號", 584, 362, 120), B("Family Mart", 826, 520, 90), B("退貨超商", 584, 578, 56), B("全家示範店", 796, 568, 100),
+            B("編輯", 1040, 592, 28), B("取消", 1167, 776, 32), B("提交", 1273, 776, 32), B("安排出貨", 787, 836, 56)
+        };
+        var (method, matches, submit) = CoupangScreens.ArrangeDialog(page, "高雄市示範區測試路1號")!.Value;
+        Assert.Equal(("", (bool?)null, 1273), (method, matches, submit.Left));
+    }
 }

@@ -170,7 +170,7 @@ internal static class CoupangScreens
 
     /// <summary>
     /// 「安排出貨」 after 批次安排配送 (user, 2026-10-19: 配送方式, 取貨日期, 取貨地址 with 編輯, 備註,
-    /// 取消／提交): the 配送方式 shown, whether 取貨地址 holds <paramref name="pickupAddress"/>
+    /// 取消／提交); for 便利商店 it is 「申請寄件編號」 with a 退貨超商 instead (user, 2026-10-20): the 配送方式 shown, whether 取貨地址 holds <paramref name="pickupAddress"/>
     /// (spaces ignored; null when the dialog has no 取貨地址) and 提交; null when not shown.
     /// </summary>
     public static (string Method, bool? AddressMatches, OcrBox Submit)? ArrangeDialog(IReadOnlyList<OcrBox> boxes, string pickupAddress)
@@ -178,7 +178,7 @@ internal static class CoupangScreens
         var submit = boxes.Where(b => C(b) == "提交").OrderByDescending(b => b.Top).FirstOrDefault();
         if (submit is null) return null;
         // The topmost: the rows' own 「安排出貨」 buttons behind the dialog sit lower.
-        var title = boxes.Where(b => C(b) == "安排出貨" && b.Bottom < submit.Top && submit.Top - b.Bottom < 520 && b.Left < submit.Left)
+        var title = boxes.Where(b => C(b) is "安排出貨" or "申請寄件編號" && b.Bottom < submit.Top && submit.Top - b.Bottom < 520 && b.Left < submit.Left)
             .OrderBy(b => b.Top).FirstOrDefault();
         if (title is null) return null;
         // 取貨地址 is two lines (address, then name and phone) around its label; 配送方式 one.
