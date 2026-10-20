@@ -24,7 +24,8 @@ const template=JSON.stringify({AllowanceType:2,AllowanceNumber:"",
    Amount:"50",Tax:"0",TaxType:1}]});
 const input={workspaceId:ws,applicationId:"application_c3a_one",
   deviceId:devA,environment:"test",originalInvoiceNumber:original,
-  allowanceDay:"20261019",requestedGross:50,unnumberedTemplateJson:template};
+  allowanceDay:"20261019",requestedGross:50,reason:"Synthetic classified reason",
+  unnumberedTemplateJson:template};
 function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
@@ -83,12 +84,14 @@ const auth=(actor=owner)=>({revalidate:async()=>actor});
    createHash("sha256").update(original).digest("hex"),"fingerprint must be keyed");
   assert.equal(stored.template_ciphertext.includes(original),false);
   assert.equal(stored.template_ciphertext.includes("SYNTHETIC_NAME"),false);
+  assert.equal(stored.template_ciphertext.includes("Synthetic classified reason"),false);
   assert.match(stored.template_ciphertext,/^v1:/);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_application_audit_events").get().n,1);
   const ownerLoaded=await load(db,
    {workspaceId:ws,applicationId:input.applicationId,deviceId:devA},ctx,auth());
   assert.equal(ownerLoaded.unnumberedTemplateJson,template);
+  assert.equal(ownerLoaded.reason,"Synthetic classified reason");
   assert.equal(ownerLoaded.requestedGross,50);
   assert.equal(ownerLoaded.sellerInvoice,"12345678");
   assert.equal(ownerLoaded.revision,1);

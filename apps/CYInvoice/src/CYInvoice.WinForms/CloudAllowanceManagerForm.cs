@@ -24,6 +24,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         HideSelection=false};
     private readonly Button refresh=UiControls.StandardButton("重新整理");
     private readonly Button readback=UiControls.StandardButton("依 ID 查狀態");
+    private readonly Button details=UiControls.StandardButton("查看申請原因");
     private readonly Button review=UiControls.StandardButton("接手覆核");
     private readonly Button preview=UiControls.StandardButton("預覽官方資料");
     private readonly Button approve=UiControls.StandardButton("主管核准");
@@ -48,6 +49,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         searchId.TextChanged+=(_,_)=>Actions();
         refresh.Click+=async(_,_)=>await ListAsync();
         readback.Click+=async(_,_)=>await StatusAsync();
+        details.Click+=async(_,_)=>await DetailsAsync();
         review.Click+=async(_,_)=>await ReviewAsync();
         preview.Click+=async(_,_)=>await PreviewAsync();
         approve.Click+=async(_,_)=>await ApproveAsync();
@@ -85,6 +87,7 @@ internal sealed class CloudAllowanceManagerForm : Form
             FlowDirection=FlowDirection.LeftToRight,WrapContents=true,
             AutoScroll=true,Padding=new Padding(4)};
         actions.Controls.Add(searchId);actions.Controls.Add(readback);
+        actions.Controls.Add(details);
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
         actions.Controls.Add(close);
@@ -107,6 +110,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         bool ready=client is not null&&!busy;
         refresh.Enabled=ready;
         readback.Enabled=ready&&searchId.Text.Trim().Length>=8;
+        details.Enabled=ready&&selected is not null;
         review.Enabled=ready&&selected?.Status=="open";
         preview.Enabled=ready&&selected?.Status=="review";
         approve.Enabled=ready&&selected?.Status=="review";
@@ -164,6 +168,22 @@ internal sealed class CloudAllowanceManagerForm : Form
         status.Text=$"原 ID {current.ApplicationId}／{current.Status}／rev {current.Revision}"+
             $"／Ledger {current.LedgerStatus??"尚未配號"}／單號 {current.AllowanceNumber??"無"}；未代表官方已完成。";
     });
+    private async Task DetailsAsync()
+    {
+        var selected=Selected();if(selected is null)return;
+        await RunAsync(async(no,pass)=>{
+            var detail=await client!.GetAsync(selected.ApplicationId,no,pass,lifetime.Token);
+            searchId.Text=detail.ApplicationId;
+            MessageBox.Show(this,
+                "申請 ID：" + detail.ApplicationId +
+                "\n折讓日：" + detail.AllowanceDay +
+                "\n含稅金額：" + detail.RequestedGross +
+                "\n申請原因：" + detail.Reason +
+                "\n\n此資料不代表光貿已開立折讓。",
+                "CYID Cloud 折讓申請（受權限保護）",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+        });
+    }
     private async Task ReviewAsync()
     {
         var row=Selected();if(row is null)return;

@@ -144,6 +144,11 @@
 - 待解決：既有 Cloud C4a create 不包含「申請原因」安全欄位；正式啟用前須重新設計 reason 為 server-owned 加密 Frozen metadata，不能隨意加在 AMEGO g0401 JSON，避免破壞簽名與協定。舊申請人在單張原發票已有不可確認 pending 時也必須保守鎖住，不因人工重按開出另一 application ID。
 - 遵循 §11.3 單次預檢 list 上限 1、狀態原 ID 查回上限 1，無背景 polling／重試；後續 C5 canonical migration 部署前須由本機 Work MCP 先檢視當日 Cloudflare 共用 D1 額度、備份及索引，並有停止條件。
 
+## 3.2-C4e 加密業務原因單一來源（V3.1.23 Build 0）
+- `allowance-frozen-store.ts` AES-GCM 明文結構統一為 `{v:1,reason,templateJson}`，只有獲權限者在 Worker 端解密。HMAC requestHash 把原因一起綁定，排除將同一官方模板的申請理由偷換；解出給 C3 業務服務的 `unnumberedTemplateJson` 仍為**原始 AMEGO 標準 JSON**，不把 reason 塞進簽名交易內容。
+- `/v1/allowances/create` 必須有 1～500 字、去前後空白、無控制字元的 reason；`get` 在 Device、Workspace、本人／主管角色及再次驗權通過後回傳原因。清單與狀態不含原因，D1 僅留密文。Windows Client 和管理員表單是 API 的 presentation-only，不重建 business/data owner。
+- 實際原 Worker/schema16 未變；新 Frozen Envelope 尚只存在工程合成測試，正式啟用前須本機 MCP 在安全合約已通過、schema17/18 升格與 Cloudflare 讀寫額度檢核後才部署。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |

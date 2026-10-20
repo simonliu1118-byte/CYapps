@@ -36,7 +36,7 @@ const template=JSON.stringify({AllowanceNumber:"",AllowanceType:2,
 const app1="application_c3c2_one",app2="application_c3c2_two";
 const input=id=>({workspaceId:ws,applicationId:id,deviceId:devA,
  environment:"test",originalInvoiceNumber:invoice,allowanceDay:"20261019",
- requestedGross:50,unnumberedTemplateJson:template});
+ requestedGross:50,reason:"Reason private",unnumberedTemplateJson:template});
 const approvalTarget=id=>({workspaceId:ws,applicationId:id,
  deviceId:devB,expectedRevision:2});
 const reserveTarget=id=>({...approvalTarget(id),expectedRevision:3});
@@ -170,7 +170,7 @@ async function call(env,action,body={},token=rawDevA){
   assert.equal((await call(employee,"list",{},"cydev_"+"0".repeat(64))).status,401);
   assert.equal((await call(employee,"create",{applicationId:app1,
    environment:"test",originalInvoiceNumber:invoice,allowanceDay:"20261019",
-   requestedGross:50,unnumberedTemplateJson:template,untrustedClaim:true})).status,400);
+   requestedGross:50,reason:"Reason private",unnumberedTemplateJson:template,untrustedClaim:true})).status,400);
   const created=await call(employee,"create",{applicationId:app1,
    environment:"test",originalInvoiceNumber:invoice,allowanceDay:"20261019",
    requestedGross:50,unnumberedTemplateJson:template});
@@ -180,6 +180,7 @@ async function call(env,action,body={},token=rawDevA){
   const got=await call(employee,"get",{applicationId:app1});
   assert.equal(got.status,200);
   assert.equal(got.body.application.status,"open");
+  assert.equal(got.body.application.reason,"Reason private");
   assert.ok(!JSON.stringify(got.body).includes("unnumberedTemplateJson"));
   assert.ok(!JSON.stringify(got.body).includes("NOT_A_REAL_APP"));
   // A different employee of the SAME Workspace and Device may never
@@ -195,6 +196,7 @@ async function call(env,action,body={},token=rawDevA){
   assert.equal(hiddenStatus.status,404);
   const employeeList=await call(employee,"list");
   assert.equal(employeeList.body.items.length,1);
+  assert.ok(!JSON.stringify(employeeList.body).includes("Reason private"));
   assert.equal((await call(employee,"review",{applicationId:app1,
    expectedRevision:1})).status,403);
   const reviewed=await call(manager,"review",{applicationId:app1,

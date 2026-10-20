@@ -85,7 +85,8 @@ public sealed class CloudAllowanceSubmissionService
         };
         var environment = invoice.Environment is "production" ? "production" : "test";
         return new CloudAllowanceDraft(applicationId!, environment, invoice.InvoiceNumber,
-            payload.AllowanceDate, gross, JsonSerializer.Serialize(payload));
+            payload.AllowanceDate, gross, JsonSerializer.Serialize(payload),
+            reason.Trim());
     }
 
     public async Task<CloudAllowanceSubmissionResult> SubmitAsync(

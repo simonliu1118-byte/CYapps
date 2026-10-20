@@ -21,7 +21,7 @@ const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
  "/v1/allowances/reserve","/v1/allowances/status"]);
 const keys:Record<string,readonly string[]>={
  create:["employeeNo","password","applicationId","environment",
-  "originalInvoiceNumber","allowanceDay","requestedGross","unnumberedTemplateJson"],
+  "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
  get:["employeeNo","password","applicationId"],
  list:["employeeNo","password","status","limit"],
  review:["employeeNo","password","applicationId","expectedRevision"],
@@ -112,6 +112,9 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
      typeof input.originalInvoiceNumber!=="string"||
      typeof input.allowanceDay!=="string"||
      !Number.isSafeInteger(input.requestedGross)||
+     typeof input.reason!=="string"||input.reason.length<1||
+     input.reason.length>500||input.reason!==input.reason.trim()||
+     /[\x00-\x1f\x7f]/.test(input.reason)||
      typeof input.unnumberedTemplateJson!=="string")
     return reply(400,{error:{code:"INVALID_REQUEST"}});
    const result=await createEncryptedCloudAllowance(env.DB,{
@@ -120,6 +123,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
     originalInvoiceNumber:input.originalInvoiceNumber,
     allowanceDay:input.allowanceDay,
     requestedGross:input.requestedGross as number,
+    reason:input.reason,
     unnumberedTemplateJson:input.unnumberedTemplateJson
    },ctx,authority);
    return reply(200,{applicationId:result.applicationId,
@@ -145,7 +149,8 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(200,{application:{
     applicationId:result.applicationId,environment:result.environment,
     status:result.status,revision:result.revision,
-    requestedGross:result.requestedGross,allowanceDay:result.allowanceDay
+    requestedGross:result.requestedGross,allowanceDay:result.allowanceDay,
+    reason:result.reason
    },officialActionPerformed:false});
   }
   if(action==="list"){

@@ -36,6 +36,7 @@ internal static class CloudAllowanceSubmissionTests
         Equal("AB12345678", draft.OriginalInvoiceNumber);
         Equal("20261016", draft.AllowanceDay);
         Equal("test", draft.Environment);
+        Equal("Partial return", draft.Reason);
         using var doc = JsonDocument.Parse(draft.UnnumberedTemplateJson);
         var root = doc.RootElement;
         Equal("", root.GetProperty("AllowanceNumber").GetString());
