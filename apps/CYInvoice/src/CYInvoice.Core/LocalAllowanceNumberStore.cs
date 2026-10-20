@@ -48,6 +48,30 @@ public sealed class LocalAllowanceNumberStore
             );
             """;
         command.ExecuteNonQuery();
+        // This table records an exact official-number readback, NOT
+        // proof that this application's HTTP POST created the allowance.
+        // It is part of the existing Local SQLite database, not a second
+        // Ledger or any new Cloudflare schema.
+        command.CommandText = """
+            CREATE TABLE IF NOT EXISTS allowance_local_readback_audit (
+                audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_invoice TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                work_item_id TEXT NOT NULL,
+                allowance_number TEXT NOT NULL,
+                result_kind TEXT NOT NULL CHECK(result_kind='full_match_unattributed'),
+                snapshot_sha256 TEXT NOT NULL CHECK(length(snapshot_sha256)=64),
+                approver_employee_no TEXT NOT NULL,
+                checked_at_utc TEXT NOT NULL
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_local_readback_no_update
+            BEFORE UPDATE ON allowance_local_readback_audit
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_READBACK_AUDIT_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_local_readback_no_delete
+            BEFORE DELETE ON allowance_local_readback_audit
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_READBACK_AUDIT_APPEND_ONLY'); END;
+            """;
+        command.ExecuteNonQuery();
     }
 
     public LocalAllowanceReservation Reserve(
@@ -223,9 +247,56 @@ public sealed class LocalAllowanceNumberStore
         Move(sellerInvoice, environment, reservation, "sending", "occupied_external");
     }
 
+    // Record official *content* proof separately from transaction-origin proof.
+    // Even a complete match must remain 'sending' until an independently
+    // attributable financial confirmation policy is approved. No PII is
+    // written to the audit table, only a digest of the queried snapshot.
+    internal void RecordUnattributedFullMatch(string sellerInvoice,string environment,
+        LocalAllowanceReservation reservation,string snapshotSha256)
+    {
+        ArgumentNullException.ThrowIfNull(reservation);
+        if (snapshotSha256 is null || snapshotSha256.Length != 64 ||
+            snapshotSha256.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+            throw new ArgumentException("Exact readback SHA256 required",nameof(snapshotSha256));
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO allowance_local_readback_audit (
+                seller_invoice,environment,work_item_id,allowance_number,
+                result_kind,snapshot_sha256,approver_employee_no,checked_at_utc)
+            SELECT seller_invoice,environment,work_item_id,allowance_number,
+                'full_match_unattributed',$digest,approver_employee_no,$at
+            FROM allowance_number_ledger
+            WHERE seller_invoice=$seller AND environment=$env AND
+                work_item_id=$work AND allowance_number=$number AND
+                payload_json=$payload AND approver_employee_no=$approver AND
+                approved_at_utc=$approved AND status='sending'
+            ORDER BY attempt DESC LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$seller",Require(sellerInvoice,nameof(sellerInvoice)));
+        command.Parameters.AddWithValue("$env",Require(environment,nameof(environment)));
+        command.Parameters.AddWithValue("$work",reservation.WorkItemId);
+        command.Parameters.AddWithValue("$number",reservation.AllowanceNumber);
+        command.Parameters.AddWithValue("$payload",reservation.PayloadJson);
+        command.Parameters.AddWithValue("$approver",reservation.ApproverEmployeeNo);
+        command.Parameters.AddWithValue("$approved",reservation.ApprovedAtUtc.ToString("O",
+            CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$digest",snapshotSha256);
+        command.Parameters.AddWithValue("$at",DateTimeOffset.UtcNow.ToString("O",
+            CultureInfo.InvariantCulture));
+        if (command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException("Local allowance Ledger changed; no readback audit written");
+    }
+
+    // Reserved for a later independent, auditable origin-attribution flow.
+    // Neither code=0 nor a matching allowance_query authorizes calling this.
+    // No current Local API can establish attributable g0401 origin proof.
+    // Keep the historical entrypoint fail-closed rather than letting a
+    // caller treat code=0 or a matching number as success.
     public void MarkOfficiallyConfirmed(string sellerInvoice, string environment,
         LocalAllowanceReservation reservation) =>
-        Move(sellerInvoice, environment, reservation, "sending", "confirmed");
+        throw new InvalidOperationException(
+            "g0401 origin not attributable: preserve sending and seek audited human reconciliation");
 
     private void Move(string sellerInvoice, string environment,
         LocalAllowanceReservation reservation, string from, string to)
