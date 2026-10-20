@@ -45,4 +45,16 @@ public class UpdateCheckTests
         Assert.Null(UpdateCheck.ExpectedSha256($"{hash}  other.zip", "CYERPAutoQuery_V0.3.1.zip"));
         Assert.Null(UpdateCheck.ExpectedSha256("abc  CYERPAutoQuery_V0.3.1.zip", "CYERPAutoQuery_V0.3.1.zip"));
     }
+
+    [Theory]
+    [InlineData("ok\r\n0.10.0\r\n\r\n", true, "0.10.0", "")]
+    [InlineData("\uFEFFfailed\n0.10.0\n複製失敗：拒絕存取；已還原原本的版本\n", false, "0.10.0", "複製失敗：拒絕存取；已還原原本的版本")]
+    public void Reads_the_outcome_the_update_script_left(string text, bool ok, string version, string detail) =>
+        Assert.Equal(new UpdateOutcome(ok, version, detail), UpdateOutcome.Parse(text));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("ok")]
+    [InlineData("maybe\n0.10.0")]
+    public void Ignores_an_unreadable_outcome(string text) => Assert.Null(UpdateOutcome.Parse(text));
 }
