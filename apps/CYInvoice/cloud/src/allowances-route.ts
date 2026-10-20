@@ -10,15 +10,18 @@ import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext}
 import {previewCloudAllowanceForManager} from "./allowance-manager-preview";
 import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-approval";
 import {reserveApprovedCloudAllowanceNumber} from "./allowance-number-reservation";
+import {executeCloudAllowanceExactlyOnce} from "./allowance-one-shot-coordinator";
 
 interface Env extends CyIdEnv {
  DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
- ALLOWANCE_API_ENABLED?:string;COMPANY_SETTINGS_KEY_HEX?:string;
+ ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;
+ COMPANY_SETTINGS_KEY_HEX?:string;
 }
 const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
  "/v1/allowances/list","/v1/allowances/review","/v1/allowances/withdraw",
  "/v1/allowances/preview","/v1/allowances/approve",
- "/v1/allowances/reserve","/v1/allowances/status"]);
+ "/v1/allowances/reserve","/v1/allowances/status",
+ "/v1/allowances/attempt","/v1/allowances/send-once"]);
 const keys:Record<string,readonly string[]>={
  create:["employeeNo","password","applicationId","environment",
   "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
@@ -29,7 +32,9 @@ const keys:Record<string,readonly string[]>={
  preview:["employeeNo","password","applicationId","expectedRevision"],
  approve:["employeeNo","password","applicationId","expectedRevision"],
  reserve:["employeeNo","password","applicationId","expectedRevision"],
- status:["employeeNo","password","applicationId"]
+ status:["employeeNo","password","applicationId"],
+ attempt:["employeeNo","password","applicationId","expectedRevision"],
+ "send-once":["employeeNo","password","applicationId","expectedRevision","confirmOnce"]
 };
 const reply=(status:number,data:Record<string,unknown>)=>Response.json(
  {ok:status<300,...data},{status,headers:{
@@ -86,9 +91,15 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  if(!input)return reply(400,{error:{code:"INVALID_REQUEST"}});
  if(action!=="list"&&!id(input.applicationId))
   return reply(400,{error:{code:"INVALID_APPLICATION_ID"}});
- if(["review","withdraw","preview","approve","reserve"].includes(action)&&
+ if(["review","withdraw","preview","approve","reserve","attempt","send-once"].includes(action)&&
     !rev(input.expectedRevision))
   return reply(400,{error:{code:"INVALID_REVISION"}});
+ // The ability to review/create applications NEVER implicitly enables g0401.
+ // This separate off-by-default production gate must be enabled by the
+ // user's authorized Cloudflare MCP deployment and acceptance procedure.
+ if(action==="send-once"&&
+    (env.ALLOWANCE_G0401_SEND_ENABLED!=="true"||input.confirmOnce!==true))
+  return reply(503,{error:{code:"OFFICIAL_SEND_DISABLED"}});
  if(action==="list"&&
   ((input.status!==undefined&&!["open","review","approved","rejected","withdrawn"].includes(String(input.status)))||
    (input.limit!==undefined&&(!rev(input.limit)||(input.limit as number)>50))))
@@ -259,6 +270,53 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(200,{applicationId:result.applicationId,
     status:"approved",revision:result.approvedRevision,
     validUntilUtc:result.validUntilUtc,officialActionPerformed:false});
+  }
+  if(action==="attempt"||action==="send-once"){
+   // A *single* authoritative source of the reserved number: clients
+   // supply only the original application ID and optimistic revision.
+   // The DB stores both the first attempt and the bound reserving Device.
+   // Returning after CAS uncertainty is READBACK ONLY, never another POST.
+   const ledger=await env.DB.prepare(`SELECT l.ledger_id,
+     l.allowance_number,l.status,l.attempt,l.created_by_device_id,
+     EXISTS(SELECT 1 FROM allowance_reconciliation_checks c
+       WHERE c.workspace_id=l.workspace_id AND c.ledger_id=l.ledger_id
+       LIMIT 1) AS recorded_readback
+    FROM allowance_number_ledger l
+    JOIN allowance_applications a ON a.application_id=l.application_id
+      AND a.workspace_id=l.workspace_id
+    WHERE a.workspace_id=?1 AND a.application_id=?2
+      AND a.status='approved' AND a.revision=?3
+    ORDER BY l.attempt DESC LIMIT 1`)
+    .bind(binding.workspaceId,target.applicationId,target.expectedRevision)
+    .first<{ledger_id:string;allowance_number:string;status:string;
+      attempt:number;created_by_device_id:string;recorded_readback:number}>();
+   if(!ledger)return reply(409,{error:{code:"ALLOWANCE_ATTEMPT_NOT_FOUND"}});
+   const refreshed=await authority.revalidate();
+   if(!refreshed||refreshed.employeeId!==actor.employeeId||
+      refreshed.workspaceRole!==actor.workspaceRole||
+      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
+    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
+   if(action==="attempt")
+    return reply(200,{applicationId:target.applicationId,
+      ledgerId:ledger.ledger_id,allowanceNumber:ledger.allowance_number,
+      ledgerStatus:ledger.status,recordedExactReadback:!!ledger.recorded_readback,
+      manuallyUnattributed:ledger.status!=="reserved",
+      proofOfThisPost:false,officiallyConfirmed:false,
+      safeToAutoRetry:false,canAllocateAnotherNumber:false});
+   if(ledger.status!=="reserved"||ledger.attempt!==1||
+      ledger.created_by_device_id!==dev.device_id)
+    return reply(409,{error:{code:"ALLOWANCE_SEND_READBACK_ONLY"}});
+   const result=await executeCloudAllowanceExactlyOnce(env.DB,{
+     workspaceId:binding.workspaceId,applicationId:target.applicationId,
+     deviceId:dev.device_id,expectedRevision:target.expectedRevision,
+     ledgerId:ledger.ledger_id,allowanceNumber:ledger.allowance_number
+   },ctx,authority);
+   return reply(200,{applicationId:result.applicationId,
+      allowanceNumber:result.allowanceNumber,ledgerStatus:result.ledgerStatus,
+      issueKind:result.issueKind,manualDisposition:result.manualDisposition,
+      recordedReadback:result.recordedReadback,manualReviewRequired:true,
+      proofOfThisPost:false,officiallyConfirmed:false,
+      safeToAutoRetry:false,canAllocateAnotherNumber:false});
   }
   if(action==="reserve"){
    const result=await reserveApprovedCloudAllowanceNumber(

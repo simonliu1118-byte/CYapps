@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.25 Build 0（非正式 Release）**：C7a 補 Cloud 單次送出後不可歸因結果的六類人工審查狀態與合成測試。據 2026-10-21 使用者本機 MCP 驗收報告，原 D1 schema18／原 Worker 已受控更新，但 `ALLOWANCE_API_ENABLED=false`；無真 g0401/g0501，正式 Release 仍 V3.1.0。
+- **目前工程 Source：V3.1.26 Build 1（非正式 Release，待 CI）**：V3.2 批次 1 接入 Cloud 主管單次 g0401 執行入口與 Ledger 原 ID 唯讀查證。既有折讓 API 閘門及新增獨立送出閘門預設都關閉；原 D1／Worker 未因本原始碼工作而修改，未做真光貿交易，正式 Release 仍 V3.1.0。
+
+- **前一工程 Source：V3.1.25 Build 0（非正式 Release）**：C7a 補 Cloud 單次送出後不可歸因結果的六類人工審查狀態與合成測試。據 2026-10-21 使用者本機 MCP 驗收報告，原 D1 schema18／原 Worker 已受控更新，但 `ALLOWANCE_API_ENABLED=false`；無真 g0401/g0501，正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.24 Build 1（非正式 Release）**：C6 將正式 D1 migration 0017／0018 加入 GitHub canonical 來源，CI 覆蓋從 schema16 的備份／回滾與預檢；**原 Cloudflare D1 仍是 schema16（未由本回合查證），原 Worker 未部署**。本機 MCP 交接見 [V3.2-C Cloudflare 作業清單](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。正式 Release 仍 V3.1.0。
 

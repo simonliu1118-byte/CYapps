@@ -62,6 +62,37 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
+// Entirely synthetic transport: no Cloudflare, no AMEGO network access.
+function fakeOneShotProvider(allowanceNumber){
+ const calls=[];
+ const product={original_invoice_number:invoice,original_invoice_date:20261019,
+  original_description:"FAKE ITEM",quantity:1,unit_price:50,
+  amount:50,tax:0,tax_type:1};
+ const official={allowance_number:allowanceNumber,allowance_date:20261019,
+  invoice_type:"D0401",invoice_status:99,allowance_type:2,
+  buyer_identifier:"0000000000",buyer_name:"FAKE BUYER",
+  total_amount:50,tax_amount:0,cancel_date:0,wait:[],product_item:[product]};
+ return {calls,transport:async(url,options)=>{
+  calls.push(url);
+  assert.equal(options.method,"POST");
+  assert.equal(options.redirect,"error");
+  const form=new URLSearchParams(options.body);
+  assert.equal(form.get("sign"),
+   createHash("md5").update(form.get("data")+form.get("time")+
+    "SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+  if(url.endsWith("/invoice_query"))
+   return Response.json({code:0,data:[invoiceRecord]});
+  if(url.endsWith("/g0401")){
+   assert.equal(JSON.parse(form.get("data"))[0].AllowanceNumber,allowanceNumber);
+   return Response.json({code:0});
+  }
+  if(url.endsWith("/allowance_query")){
+   assert.equal(JSON.parse(form.get("data")).allowance_number,allowanceNumber);
+   return Response.json({code:0,data:official});
+  }
+  throw Error("Unexpected official URL");
+ }};
+}
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
@@ -226,6 +257,47 @@ async function call(env,action,body={},token=rawDevA){
    assert.equal(reserved.body.maySendWithoutFreshOfficialCheck,false);
    assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,1);
    assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0);
+   // A deploy with the application flag enabled still NEVER enables g0401.
+   assert.equal((await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB)).status,503);
+   manager.ALLOWANCE_G0401_SEND_ENABLED="true";
+   employee.ALLOWANCE_G0401_SEND_ENABLED="true";
+   assert.equal((await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3},rawDevB)).status,503);
+   assert.equal((await call(employee,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevA)).status,403);
+   const before=await call(manager,"attempt",{applicationId:app1,
+    expectedRevision:3},rawDevB);
+   assert.equal(before.status,200);
+   assert.equal(before.body.ledgerStatus,"reserved");
+   assert.equal(before.body.proofOfThisPost,false);
+   assert.equal(before.body.officiallyConfirmed,false);
+   const provider=fakeOneShotProvider(reserved.body.allowanceNumber);
+   globalThis.fetch=provider.transport;
+   const sent=await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB);
+   assert.equal(sent.status,200);
+   assert.equal(sent.body.ledgerStatus,"sending");
+   assert.equal(sent.body.manualReviewRequired,true);
+   assert.equal(sent.body.proofOfThisPost,false);
+   assert.equal(sent.body.officiallyConfirmed,false);
+   assert.equal(sent.body.safeToAutoRetry,false);
+   assert.equal(sent.body.manualDisposition,"full_match_unattributed");
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1);
+   assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger").get().status,
+    "sending");
+   const after=await call(manager,"attempt",{applicationId:app1,
+    expectedRevision:3},rawDevB);
+   assert.equal(after.status,200);
+   assert.equal(after.body.ledgerStatus,"sending");
+   assert.equal(after.body.recordedExactReadback,true);
+   assert.equal(after.body.manuallyUnattributed,true);
+   const again=await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB);
+   assert.equal(again.status,409);
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1,
+    "repeat confirmation must not send a second g0401");
+   assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
   } finally {globalThis.fetch=old;}
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
