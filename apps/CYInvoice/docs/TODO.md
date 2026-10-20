@@ -14,7 +14,7 @@
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；#542 已綠燈合併，最新在開發 V3.1.27 Build 0（Local 原號歸因安全與 append-only Audit） | 不因規劃改寫升版；正式 V3.2.0 須另取得當次 Release 授權 |
+| 正式 Release／工程版 | 正式 V3.1.0；#542 已綠燈合併，最新在開發 V3.1.27 Build 1（Local 原號歸因安全與 append-only Audit） | 不因規劃改寫升版；正式 V3.2.0 須另取得當次 Release 授權 |
 | **V3.2 B/C Local 安全修正** | Local g0401 唯讀查回「官方同號同內容」不再自動 confirmed；本機不可變 SHA256 稽核，只把完整吻合標記為無法歸因；本批待 CI | Cloud/D1 不動；後續再整合有證據、有主管權限的安全撞號後人工裁決 |
 | V3.2-A／B | 折讓編輯、Local 單次 g0401 與原號唯讀查回已有 Source／合成 CI；安全撞號後人工流程及真測待完成 | 與 C7 的送出安全整合為「批次 1」 |
 | **V3.2 批次 1 工程進行中** | **V3.1.26 Build 1**：沿唯一 Cloud Coordinator 接入獨立預設關閉的主管 send-once HTTP、attempt 唯讀查證及 Windows 操作（尚待精確 CI 與人工 Audit／Local 撞號整合） | 以同一個主要功能 PR 集中補測試修正；不啟用 Cloudflare 旗標，不做真光貿交易 |

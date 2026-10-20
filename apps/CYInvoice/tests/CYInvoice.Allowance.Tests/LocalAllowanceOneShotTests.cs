@@ -122,7 +122,8 @@ internal static class LocalAllowanceOneShotTests
     private static SqliteConnection OpenAudit(string directory)
     {
         var connection=new SqliteConnection(new SqliteConnectionStringBuilder{
-            DataSource=Path.Combine(directory,SqliteBootstrapper.DatabaseFileName)}.ToString());
+            DataSource=Path.Combine(directory,SqliteBootstrapper.DatabaseFileName),
+            Pooling=false,Cache=SqliteCacheMode.Private}.ToString());
         connection.Open();
         return connection;
     }

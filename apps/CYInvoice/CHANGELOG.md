@@ -2,11 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.27 Build 0 — 2026/10/21（V3.2 B/C：Local 原號回查與不可歸因 Audit 一致性）
+## V3.1.27 Build 1 — 2026/10/21（V3.2 B/C：Local 原號回查與不可歸因 Audit 一致性）
 
 - 修正 Local g0401 單次送出／唯讀查回：即使官方逐欄完全吻合，也**不能歸因到本次 POST**，回傳 `FullMatchUnattributed` 而不是自動 `OfficiallyConfirmed`；原號 Ledger 保留 `sending`，不可再次送出或換號。
 - 沿用原 Local SQLite 而非新交易來源，新增僅存不可逆 SHA-256 官方快照指紋、原折讓號、主管和查核時間的 `allowance_local_readback_audit`（INSERT-only trigger），不保存買方明文。只有真正在原號 `sending` 且匹配同一份凍結 payload 時允許記錄，任何比對失敗／未知都不得偽造成功。
 - 停用無可信 origin 證據的 Local `MarkOfficiallyConfirmed` 直接晉級能力，避免沿用舊測試將官方同號誤視為本次送出成功。合成測試涵蓋完全吻合、逾時後唯讀查回、稽核永久不可修改／刪除及零第二次 POST。
+- Build 1：Windows 合成測試讀取本機 Audit 採用與正式 Store 相同的非 pooled SQLite 連線，確保 Windows 測試完成後檔案可立即釋放；無額外業務變更。
 - 本次**只修改本機程式與 Local SQLite 新空表**；不套原 Cloudflare D1 migration、不變更原 Worker、CYID、公司卡或光貿。Local 撞號後受控再次配號與人工歸因判定仍需後續受權限、稽核及官方證據完整設計；正式 Release 仍 V3.1.0。
 
 ## V3.1.26 Build 1 — 2026/10/21（V3.2 批次 1：Cloud g0401 受控單次送出與主管查證原始碼）
