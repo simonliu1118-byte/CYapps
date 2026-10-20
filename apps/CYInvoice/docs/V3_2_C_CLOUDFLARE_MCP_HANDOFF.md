@@ -1,6 +1,10 @@
 # CYInvoice V3.2-C：原 Cloudflare D1／Worker 本機 Work + MCP 交接
 
-狀態：**原始碼工程交接稿，不表示已在 Cloudflare 執行。** 唯一部署者為使用者另開、有 Cloudflare MCP 的本機 Work 對話；本 GitHub 工作對話不操作原 D1／Worker／Bindings／Secrets。本文是一次性交接清單，非永久治理規則。
+**歷史一次性升級清單 — 已由使用者在 2026-10-21 本機 Work＋Cloudflare MCP 完成並回報。以下 0017／0018 步驟不得再執行！**
+
+依使用者提交的本機驗收報告，原 CYInvoice D1 已從 0016 受控升至 schema18（0017、0018 各一次）；原 Worker 已部署 SCHEMA_VERSION=18，保留 CYID、Secrets、Bindings，`ALLOWANCE_API_ENABLED=false`，九條折讓入口仍關閉。六張新表皆空；私有 DPAPI 備份／還原、FK、quick_check 與 runtime 驗證已報告通過。帳號層級 read +1711、write +55、Worker request +12，未超預算。**本文件記錄的是「本機 MCP 回報」，非本 GitHub 工作對話獨立遠端驗證。**
+
+下方舊步驟僅供稽核／回顧，**不得重套任何 0014～0018 Migration，也不得重建測試 D1／Worker**。C7 與 V3.2 其餘功能仍未通過真光貿／雙機驗收；任何新 D1／Worker／公司卡／光貿操作需另由使用者本機 Work 按共同規則重新評估與授權。最新交付範圍與順序見 [V3.2 完整計畫](V3_2_IMPLEMENTATION_PLAN.md)。
 
 ## 工作邊界與順序
 

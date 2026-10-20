@@ -1,10 +1,11 @@
 # CYInvoice 功能基準
 
-本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
+本文件保留 C#／WinForms 歷次**功能需求與行為基準**，永久治理仍以 `PROJECT_RULES.md` 為準。原 V2.6 時期的實作／部署陳述留作歷史，不得取代現行進度。
 
-- 目前工程測試基準：**V2.6.19 Build 0**。
-- 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
+- **現行工程 Source：V3.1.25 Build 0**；已發布的正式 Release 為 **V3.1.0**，未經使用者當次授權不得再發布。
+- **V3.2 不變的完成目標**：正式折讓 g0401、g0501、Local／CYID 跨機、離線、官方查回與同步、逐筆歷史／Audit、舊 UI 安全退役及雙機真測，詳見 [V3.2 唯一交付計畫](V3_2_IMPLEMENTATION_PLAN.md)；不能把這些未完成項移到 3.3。
+- **V3.3 與後續**：原一般多機／OrderID／Audit 與既定延期／大版本方向均保留，以 [TODO](TODO.md) 和 [Cloud 長期路線圖](CLOUD_ROADMAP.md) 分別確認，規劃重排不新增／刪除需求。
+- 2026-10-21 **依使用者本機 MCP 回報**：原 CYInvoice D1 與 Worker schema18 已受控升級，`ALLOWANCE_API_ENABLED=false`；工程／CI 與實際光貿驗收仍分別記錄，不以 schema18 或 Source 當成 g0401/g0501 已完成的證據。
 
 ## 1. 平台與基本開立
 
@@ -186,7 +187,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - App 自有子視窗不顯示多餘 title-bar icon；主程式仍保留應用程式 icon。
 - 使用者可見的帳號管理名稱統一為「帳號管理」；一般角色顯示「一般使用者」。
 
-## 13. Cloud／身分工程基準
+## 13. Cloud／身分工程基準（歷史 Source Snapshot；最新狀態見 TODO）
 
 - Local／Built-in Cloud 已透過 IIdentityProvider、AppPrincipal／AppRole 與集中 provider selection 驗證；Cloud cutover 後只有中央 authority。
 - Online execution-time authentication 先取最新 credential／role／enabled snapshot；只有 transport outage／timeout 可用 protected offline cache。HTTP error、revoked Device、malformed／Workspace mismatch 或 caller cancellation fail closed。
@@ -197,7 +198,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
 - V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
-## 14. 目前尚未完成
+## 14. V2.6 時期尚未完成清單（歷史 Snapshot；最新狀態見 V3.2 計畫與 TODO）
 
 - 正式折讓自動開立 `/json/g0401`。
 - 正式折讓作廢 `/json/g0501`。

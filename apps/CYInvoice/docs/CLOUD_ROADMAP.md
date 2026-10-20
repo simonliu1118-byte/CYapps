@@ -1,8 +1,8 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-18。本文保留 V2.6.19 時期的歷史產品藍圖；現行正式 Windows 為 V3.0.0 Build 0，V3.1 尚未正式發行；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](V3_1_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+更新日期：2026-10-21。本檔保留雲端長期產品與架構藍圖，**不再將歷史 Phase A～E 視為現行版本執行順序**。最新正式 Release 為 **V3.1.0**；最新工程 Source 為 **V3.1.25 Build 0**。2026-10-21 原 CYInvoice D1／Worker schema18 與折讓 API 仍關閉的事實，以使用者本機 MCP 驗收報告為依據；本 GitHub 對話沒有重新查 Cloudflare。
 
-本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `V3_1_HANDOFF.md`。
+版本與工作來源：**[V3.2 現行完整交付計畫](V3_2_IMPLEMENTATION_PLAN.md)** 唯一說明 A～H、合併後的四個交付批次與安全驗收；[TODO](TODO.md) 唯一保留跨版本待辦與工程狀態；[V3.0／V3.1 發行後真人驗收](POST_RELEASE_ACCEPTANCE.md) 仍獨立追蹤。永久規則以 `AGENTS.md` 指向的根與專案規則為準。
 
 目前定案的核心策略是：**V3.0 先解決志遠高雄單一公司的多機協同，不提前把尚未發生的多公司／SaaS需求做進產品；但底層不得把未來擴充路堵死。**
 
@@ -250,6 +250,18 @@ Cloud：
 
 ## 9. V3 後續實作順序
 
+**現行版本邊界（本次只調整做事方式，不更動完成目標）：**
+
+| 版本 | 原定產品目標 | 目前安排 |
+| --- | --- | --- |
+| V3.0／V3.1 | CYID／公司卡／災難復原與非折讓跨機 Work Item；真人延期驗收獨立追蹤 | 正式 V3.1.0 已發布，未驗的真人項在 POST_RELEASE_ACCEPTANCE，不重新開發已完成來源 |
+| **V3.2** | **完整折讓 A～H**：Local／CYID g0401、離線、g0501、官方同步、歷史／Audit、舊 UI 退役、真雙機驗收 | 依 V3_2_IMPLEMENTATION_PLAN 以 **4 個完整功能／驗收批次** 完成，禁止挪到 3.3 |
+| **V3.3** | 既定「其他未完成項目」：非折讓多機 OrderID、防撞與一般 Work Item／Audit viewer、同步收斂等舊待辦 | 保留原範圍；不把多公司／對外販售等長期選配自動拉成 V3.3 release gate。由 TODO 延續，在 V3.3 啟動時核對具體驗收 |
+| **後續大版本／延期** | 不同統編 Company／跨公司權限、對外相容／商業化與依需增強 | 原本延期或按需決策的目標不取消、不提前 |
+
+以下 Phase A～E 係歷史**概念分類與架構依賴**，包含 V3.0 早期描述；當前具體做事順序請以 V3.2 現行計畫與 TODO 為準，不依這些舊 Phase 名稱拆 PR。
+
+
 ### Phase A — Identity foundation
 
 目前已進入工程完成／驗證階段：
@@ -286,7 +298,7 @@ Cloud：
 
 ### Phase D — 正式折讓 API
 
-Cloud coordination 成熟後再完成 `/json/g0401` / `/json/g0501` 與 allowance number global uniqueness；目前仍依已定案的 interim `invoice_query`／人工流程。
+此處是原始歷史相依描述；現行 V3.2 的 g0401、g0501 與 allowance number global uniqueness **仍為同一個完整交付目標**。截至 2026-10-21，g0401 的內部安全原始碼與 schema18 已建立，但 Cloud 折讓 API 旗標尚關閉、真交易及人工歸因仍待驗收；g0501 在 V3.2 E 完成，不能以歷史暫行流程替代。
 
 2026-10-13 使用者決定：V2.6.19 已知的人工折讓逐筆歷史及狀態顯示缺陷，不再補修 V2 工作流程，待 V3.0 正式折讓與跨機 Work Item／Audit 一起重做。新流程需保存逐筆申請／處理 actor、時間、原因、含稅金額、官方結果／取消／行政結案等可稽核欄位，支援同發票多筆、跨裝置 revision／原子操作、未知結果保守處理、可驗證的舊資料遷移與 retention。此條為 V3 需求，不能把現行缺陷當作已修復，也不能以本地 resolved 狀態冒充光貿官方成功。
 
