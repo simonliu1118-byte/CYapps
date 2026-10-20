@@ -41,8 +41,8 @@ internal sealed record RestockResult(RestockQuery Query, IReadOnlyList<RestockIt
 
 internal static class Restock
 {
-    /// <summary>Items whose 庫存 is looked up, one INVI02 query each; past this the rest say so.</summary>
-    public const int MaxStockLookups = 300;
+    /// <summary>Items whose 庫存 is looked up (as many as are reported to CY Web); past this the rest say so.</summary>
+    public const int MaxStockLookups = ErpAgentProtocol.MaxRestockItems;
 
     /// <summary>ERP's 庫存數量 as a plain number (「1,234.000」 → 「1234」), or null when it is not one; CY Web takes digits only.</summary>
     public static string? Quantity(string text) =>
