@@ -1,0 +1,77 @@
+using System.Text.Json.Nodes;
+using Xunit;
+
+namespace CYERPAutoQuery.Tests;
+
+/// <summary>進貨輔助 (user 2026-10-20), fake values only.</summary>
+public class RestockTests
+{
+    private static SalesOrder Order(string kind, string no, DateOnly date, params (string Item, decimal Qty)[] lines) =>
+        new(kind, no, date, "CU0001", "假客戶", "", "", "", "", "", lines.Sum(l => l.Qty), 0m, 0m, 0m, "", "",
+            lines.Select((l, i) => new SalesLine(i + 1, l.Item, "假品名" + l.Item, "", "", l.Qty, "包", 0m, 0m, "", 5m, "", "", "")).ToList());
+
+    private static readonly DateOnly D12 = new(2026, 10, 12), D13 = new(2026, 10, 13);
+
+    [Fact]
+    public void SumsSoldAndReturnedByItemAndDay()
+    {
+        var items = Restock.Summarize(
+        [
+            Order("銷貨", "901A-1", D12, ("X00002", 3m), ("X00001", 1m)),
+            Order("銷貨", "901A-2", D12, ("X00002", 2m)),
+            Order("銷退", "902A-1", D13, ("X00002", 1m)),
+            Order("銷貨", "901A-3", D13, ("X00001", 4m)),
+        ]);
+        Assert.Equal(["X00001", "X00002"], items.Select(i => i.ItemCode));
+        var x2 = items[1];
+        Assert.Equal(("假品名X00002", "包"), (x2.ItemName, x2.Unit));
+        Assert.Equal([new RestockDay(D12, 5m, 0m), new RestockDay(D13, 0m, 1m)], x2.Days);
+        Assert.Equal((5m, 1m), (x2.Sold, x2.Returned));
+        Assert.Equal((5m, 0m), (items[0].Sold, items[0].Returned));
+    }
+
+    [Fact]
+    public void ResolveNeedsBothDatesWithinAMonth()
+    {
+        var today = new DateOnly(2026, 10, 20);
+        Assert.Equal(new RestockQuery(D12, today), RestockQuery.Resolve(D12, today, today));
+        Assert.Throws<ArgumentException>(() => RestockQuery.Resolve(null, today, today));
+        Assert.Throws<ArgumentException>(() => RestockQuery.Resolve(D12, null, today));
+        Assert.Throws<ArgumentException>(() => RestockQuery.Resolve(D13, D12, today));
+        Assert.Throws<ArgumentException>(() => RestockQuery.Resolve(D12, today.AddDays(1), today));
+        Assert.Throws<ArgumentException>(() => RestockQuery.Resolve(new DateOnly(2026, 9, 19), today, today));
+        RestockQuery.Resolve(new DateOnly(2026, 9, 20), today, today);
+    }
+
+    [Fact]
+    public void ClaimAndBodyCarryTheRangeItemsAndStock()
+    {
+        var job = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j1","queryType":"RESTOCK","dateFrom":"2026-10-12","dateTo":"2026-10-13"}},"requestId":"r"}""")!;
+        Assert.Equal("RESTOCK", job.QueryType);
+        Assert.True(job.IsBusiness);
+        var query = job.Restock(new DateOnly(2026, 10, 20));
+        var items = Restock.Summarize([Order("銷貨", "901A-1", D12, ("X00001", 2.5m)), Order("銷退", "902A-1", D13, ("X00002", 1m))]);
+        items[0] = items[0] with { Stock = "40" };
+        items[1] = items[1] with { StockNote = "ERP 查無此品號" };
+        var body = JsonNode.Parse(ErpAgentProtocol.RestockBody(job, new RestockResult(query, items, TimeSpan.FromSeconds(2)), "v"))!;
+        Assert.Equal("FOUND", body["outcome"]!.GetValue<string>());
+        Assert.Equal(["2026-10-12", "2026-10-13"], new[] { "dateFrom", "dateTo" }.Select(k => body[k]!.GetValue<string>()));
+        Assert.Equal(2, body["total"]!.GetValue<int>());
+        var first = body["items"]![0]!;
+        Assert.Equal(["X00001", "2.5", "0", "40"], new[] { "itemCode", "sold", "returned", "stock" }.Select(k => first[k]!.GetValue<string>()));
+        Assert.Equal(["2026-10-12", "2.5", "0"], new[] { "date", "sold", "returned" }.Select(k => first["days"]![0]![k]!.GetValue<string>()));
+        var second = body["items"]![1]!;
+        Assert.Null(second["stock"]);
+        Assert.Equal("ERP 查無此品號", second["stockNote"]!.GetValue<string>());
+
+        var none = JsonNode.Parse(ErpAgentProtocol.RestockBody(job, new RestockResult(query, [], TimeSpan.Zero), "v"))!;
+        Assert.Equal("NOT_FOUND", none["outcome"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ABadRangeFailsWhenRun()
+    {
+        var job = ErpAgentProtocol.ParseClaim("""{"ok":true,"data":{"job":{"id":"j1","queryType":"RESTOCK","dateFrom":"2026-10-12"}},"requestId":"r"}""")!;
+        Assert.Throws<ArgumentException>(() => job.Restock(new DateOnly(2026, 10, 20)));
+    }
+}

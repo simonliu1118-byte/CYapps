@@ -79,7 +79,7 @@ internal sealed partial class ItemQueryService
 
         // Batches when the item is batch managed; history only when asked (user, 2026-10-16).
         var batchManaged = Invq01Layout.IsBatchManaged(result.Value("批號管理"));
-        if (!batchManaged && options.History is null) return result;
+        if (options.HeaderOnly || (!batchManaged && options.History is null)) return result;
         try
         {
             result = await QueryInvq01Async(root, code, result, batchManaged, options.History, progress, cancellationToken);

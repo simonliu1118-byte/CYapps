@@ -252,8 +252,16 @@ internal sealed partial class ItemQueryService
     {
         await ShowReportTabAsync(dialog, report, SalesReportLayout.BasicTab, cancellationToken);
         var customer = GroupBoxes(dialog, report, SalesReportLayout.CustomerGroup);
-        await SetReportTextAsync(dialog, customer[0], query.CustomerCode, $"{report.Title}的客戶代號起", cancellationToken);
-        await SetReportTextAsync(dialog, customer[1], query.CustomerCode, $"{report.Title}的客戶代號迄", cancellationToken);
+        if (query.AllCustomers)
+        {
+            await ClearReportTextAsync(dialog, customer[0], $"{report.Title}的客戶代號起", cancellationToken);
+            await ClearReportTextAsync(dialog, customer[1], $"{report.Title}的客戶代號迄", cancellationToken);
+        }
+        else
+        {
+            await SetReportTextAsync(dialog, customer[0], query.CustomerCode, $"{report.Title}的客戶代號起", cancellationToken);
+            await SetReportTextAsync(dialog, customer[1], query.CustomerCode, $"{report.Title}的客戶代號迄", cancellationToken);
+        }
         await FillReportDatesAsync(dialog, report, query.Dates, cancellationToken);
     }
 
@@ -322,6 +330,22 @@ internal sealed partial class ItemQueryService
         {
             _log.Warn("sales", $"{what} read-back mismatch shown={_log.Value(shown)}");
             throw new InvalidOperationException($"{what}輸入後讀回不一致，已停止。");
+        }
+    }
+
+    /// <summary>
+    /// An empty box (every customer, 進貨輔助): a value left from an earlier query is selected and
+    /// deleted, and the box must read back empty (a code left there would narrow the report).
+    /// </summary>
+    private async Task ClearReportTextAsync(nint dialog, WindowControl box, string what, CancellationToken cancellationToken)
+    {
+        static bool Empty(WindowControl b) => !(NativeMethods.ControlText(b.Handle) ?? string.Empty).Any(char.IsLetterOrDigit);
+        if (Empty(box)) return;
+        await ReplaceTextAsync(dialog, box, string.Empty, what, cancellationToken);
+        if (!Empty(box))
+        {
+            _log.Warn("sales", $"{what} not cleared shown={_log.Value(NativeMethods.ControlText(box.Handle) ?? string.Empty)}");
+            throw new InvalidOperationException($"{what}清不掉原本的內容，已停止。");
         }
     }
 

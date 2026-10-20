@@ -41,16 +41,18 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public const string ReceivableQueryType = "RECEIVABLE";
     /// <summary>One 銷貨單／銷退單 by number (a 未收款 憑證, user 2026-10-17).</summary>
     public const string OrderQueryType = "ORDER";
+    /// <summary>進貨輔助: every customer's 銷貨／銷退 by 品號 and day, with 庫存 (user 2026-10-20).</summary>
+    public const string RestockQueryType = "RESTOCK";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType];
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType, RestockQueryType];
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
     /// <summary>A customer, supplier, 銷貨銷退 or 未收款 job (not the item queries).</summary>
     public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SupplierQuery or SupplierSearch
-        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType;
+        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType or RestockQueryType;
 
     /// <summary>CUSTOMER_*／SUPPLIER_*: whose form is queried.</summary>
     public ErpParty Party => QueryType is SupplierQuery or SupplierSearch ? ErpParty.Supplier : ErpParty.Customer;
@@ -84,6 +86,7 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         SalesQueryType => $"客戶 {CustomerCode} 銷貨銷退單（{DateFrom}～{DateTo}）",
         ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
         OrderQueryType => $"單號 {OrderNo}",
+        RestockQueryType => $"進貨輔助（{DateFrom}～{DateTo}）",
         _ => ItemNo
     };
 
@@ -94,6 +97,10 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
             HistoryRange.ParseIso(text) ?? throw new ArgumentException($"CY Web 的單據日期{what}日缺少或格式不正確。");
         return SalesQuery.Resolve(CustomerCode ?? string.Empty, Date(DateFrom, "起"), Date(DateTo, "迄"), today);
     }
+
+    /// <summary>The RESTOCK request; a missing or bad date throws <see cref="ArgumentException"/> (reported as FAILED).</summary>
+    public RestockQuery Restock(DateOnly today) =>
+        RestockQuery.Resolve(HistoryRange.ParseIso(DateFrom), HistoryRange.ParseIso(DateTo), today);
 
     /// <summary>The PURCHASES request; a bad code or date throws <see cref="ArgumentException"/> (reported as FAILED).</summary>
     public PurchaseQuery Purchases(DateOnly today)
@@ -188,6 +195,12 @@ internal static class ErpAgentProtocol
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, Scope = Required("scope"), Code = OptionalString(job["code"]) };
             case ErpAgentJob.OrderQueryType:
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, OrderNo = Required("orderNo") };
+            case ErpAgentJob.RestockQueryType:
+                // Dates are checked when the job runs, so a bad one is reported as FAILED, not lost.
+                return new ErpAgentJob(id!, string.Empty)
+                {
+                    QueryType = type, DateFrom = OptionalString(job["dateFrom"]), DateTo = OptionalString(job["dateTo"])
+                };
             case ErpAgentJob.ItemQuery:
                 break;
             default:
@@ -350,6 +363,33 @@ internal static class ErpAgentProtocol
         body["orders"] = new JsonArray(orders);
         body["total"] = result.Orders.Count;
         body["truncated"] = result.Orders.Count > MaxOrders;
+        return body.ToJsonString(JsonOptions);
+    }
+
+    public const int MaxRestockItems = 500;
+
+    /// <summary>
+    /// RESTOCK: the 品號 in 品號 order (at most <see cref="MaxRestockItems"/>), each with its days that had a
+    /// 銷貨 or 銷退, the range's totals and 庫存數量 (null with a note when not read); the dates echoed.
+    /// </summary>
+    public static string RestockBody(ErpAgentJob job, RestockResult result, string agentVersion)
+    {
+        var items = result.Items.Take(MaxRestockItems).Select(i => (JsonNode)new JsonObject
+        {
+            ["itemCode"] = i.ItemCode, ["itemName"] = i.ItemName, ["unit"] = i.Unit,
+            ["days"] = new JsonArray(i.Days.Select(d => (JsonNode)new JsonObject
+            {
+                ["date"] = Iso(d.Date), ["sold"] = Text(d.Sold), ["returned"] = Text(d.Returned)
+            }).ToArray()),
+            ["sold"] = Text(i.Sold), ["returned"] = Text(i.Returned),
+            ["stock"] = i.Stock, ["stockNote"] = i.StockNote
+        }).ToArray();
+        var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);
+        body["dateFrom"] = job.DateFrom;
+        body["dateTo"] = job.DateTo;
+        body["items"] = new JsonArray(items);
+        body["total"] = result.Items.Count;
+        body["truncated"] = result.Items.Count > MaxRestockItems;
         return body.ToJsonString(JsonOptions);
     }
 

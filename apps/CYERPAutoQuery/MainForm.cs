@@ -877,6 +877,16 @@ internal sealed partial class MainForm : Form
                 });
                 return (result.Found, ErpAgentProtocol.SalesBody(job, result, version));
             }
+            case ErpAgentJob.RestockQueryType:
+            {
+                var query = job.Restock(DateOnly.FromDateTime(DateTime.Today));
+                var result = await RunAutomationAsync(cancellationToken, (progress, ct) => _service.QueryRestockAsync(query, progress, ct), r =>
+                {
+                    SetStatus($"ERP：進貨輔助 {query.From:yyyy/MM/dd}～{query.To:yyyy/MM/dd} 完成，{r.Items.Count} 個品號（{r.Elapsed.TotalSeconds:0} 秒）");
+                    return r.Found ? AutomationOutcome.Done : AutomationOutcome.NotFound;
+                });
+                return (result.Found, ErpAgentProtocol.RestockBody(job, result, version));
+            }
             case ErpAgentJob.ReceivableQueryType:
             {
                 var query = job.Receivable();

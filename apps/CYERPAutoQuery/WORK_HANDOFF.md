@@ -2,6 +2,11 @@
 
 > 更新：2026-10-20（V0.10.1 第一個正式 Release，tag `cyerp-auto-query-v0.10.1`，由 PR #472 合併進 `main` 後以 Release workflow 發布）。之後的修改依規則升 Z 或 Build；V0.10.0 Build 2 起的程式自動更新時會顯示提示條、倒數與「正在更新」視窗。
 
+## 進貨輔助（V0.10.2 Build 1，2026/10/20）
+
+- CY Web 類型 `RESTOCK`（dateFrom／dateTo 必填）：`ItemQueryService.Restock.cs` 先以 `SalesQuery(string.Empty, …)`（`AllCustomers`）跑 COPR15／COPR16，`FillReportBasicAsync` 清空客戶代號起訖（`ClearReportTextAsync` 讀回確認），`SalesExport.Parse` 對全部客戶不核對客戶代號；`Restock.Summarize`（`RestockQuery.cs`，純邏輯、有測試）依品號／日期加總；再逐一 `QueryAsync(code, HeaderOnly)` 讀 INVI02 庫存數量。回報 `ErpAgentProtocol.RestockBody`。
+- 尚未實機：全部客戶的 COPR15／COPR16 清空客戶代號後是否照預期、一段期間的品號數與逐一查庫存所需時間（LOG `restock` 有記錄）。
+
 ## 供應廠商與進貨退貨單查詢（V0.9.0 Build 1，2026/10/18）
 
 - 新增 PURI01 供應廠商查詢，與 COPI01 共用 `PartyQuery.cs`（`ErpParty.Customer`／`ErpParty.Supplier`：表、簡稱／全名欄、顯示欄位、名稱清單欄位）與 `ItemQueryService.QueryPartyAsync`／`SearchPartiesAsync`。CY Web 類型 `SUPPLIER_NO`（`supplierCode`）／`SUPPLIER_NAME`（`keyword`）；CY Web 端尚未實作（claim 會送出這兩個類型，CY Web 不認識的類型不會派工）。

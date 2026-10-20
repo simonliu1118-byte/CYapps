@@ -93,9 +93,14 @@ internal static class SalesReportLayout
         fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>A customer's 銷貨單 in a date range; both dates optional (ERP then leaves that end open).</summary>
+/// <summary>
+/// A customer's 銷貨單 in a date range; both dates optional (ERP then leaves that end open). An empty
+/// <see cref="CustomerCode"/> without <see cref="OrderNo"/> is every customer (進貨輔助, user 2026-10-20).
+/// </summary>
 internal sealed record SalesQuery(string CustomerCode, DateOnly? From, DateOnly? To)
 {
+    public bool AllCustomers => CustomerCode.Length == 0 && OrderNo is null;
+
     /// <summary>
     /// One 銷貨單／銷退單 by its number (user, 2026-10-17: open the order behind a 未收款 憑證 without
     /// leaving the list). Then <see cref="CustomerCode"/> is empty and the dates are not used.
@@ -255,7 +260,7 @@ internal static class SalesExport
                 continue;
             }
             var code = r["客戶代號"];
-            if (!ItemCodeRules.SameCode(code, query.CustomerCode))
+            if (!query.AllCustomers && !ItemCodeRules.SameCode(code, query.CustomerCode))
                 throw new InvalidDataException($"ERP 匯出的{report.Kind}單「{no}」是客戶「{code.Trim()}」，不是查詢的「{query.CustomerCode}」，查詢條件可能沒有套用，結果不採用。");
             var date = ParseDate(r["單據日期"], no);
             if ((query.From is { } from && date < from) || (query.To is { } to && date > to))
