@@ -2,6 +2,11 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.25 Build 0 — 2026/10/21（V3.2-C7a：保守的單次送出結果人工歸因分類；工程版）
+- 只擴充既有內部 `allowance-one-shot-coordinator.ts` 的回傳契約：將完整吻合無法歸因、完整吻合但 Audit 未成功寫入、號碼撞號、已接受但官方未能歸因、明確拒絕、結果不明六類列為人工審查，不把人工分類當作成功證明。
+- 所有分類一律 `manualReviewRequired=true`、`proofOfThisPost=false`、`ledgerStatus=sending`、禁止自動確認／再次送出／改配號。補合成回歸測試；沒有新增 Public HTTP route、D1 schema、外部呼叫、正式 Release 或啟用 Cloudflare 旗標。
+- C7 仍待人工簽核可信發送歸因政策、真正可追溯的持久人工操作、雙機與真光貿**測試**環境；單憑官方全項吻合不可自動標記 `confirmed`。
+
 ## V3.1.24 Build 1 — 2026/10/20（V3.2-C6 正式 Migration 17／18 原始碼升格）
 - 將已由 #529 非空 schema16 備份／rollback 演練的兩份折讓 D1 Schema 正式列入 `cloud/migrations/0017_allowance_applications.sql`、`0018_allowance_frozen_ledger.sql`，並**移除**舊 `cloud/drafts` 同名 SQL，維持唯一 canonical owner；只新增折讓專屬 6 張表、4 個索引、23 個觸發器，不改動非折讓 Work Item／CYID 既有資料。
 - 調整 C1／C2／C3／C4／C5、CYID-only、非折讓與部署預檢測試：合成 fixture 先停在 schema16，再逐批執行正式 17/18；正常應用整套 canonical migrations 的 fixture 不得再重套。完整交易失敗回滾、FK、舊表／角色護欄與備份還原仍由 CI 驗證。

@@ -173,6 +173,9 @@ function providerFor(target,options={}){
   assert.equal(p.urls.filter(x=>x.endsWith("/allowance_query")).length,1);
   assert.equal(result.issueKind,"accepted_unconfirmed");
   assert.equal(result.originalNumberReadback,"full_match_unattributed");
+  assert.equal(result.manualDisposition,"full_match_unattributed");
+  assert.equal(result.manualReviewRequired,true);
+  assert.equal(result.proofOfThisPost,false);
   assert.equal(result.recordedReadback,true);
   assert.equal(result.safeToAutoConfirm,false);
   assert.equal(result.safeToAutoRetry,false);
@@ -197,6 +200,7 @@ function providerFor(target,options={}){
   const p=providerFor(target,{lostPost:true,unavailableReadback:true});
   const result=await execute(db,target,context,authority(),p.send,clock);
   assert.equal(result.issueKind,"unknown_result");
+  assert.equal(result.manualDisposition,"unknown_outcome_requires_investigation");
   assert.equal(result.originalNumberReadback,"unconfirmed");
   assert.equal(result.recordedReadback,false);
   assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,1);
@@ -215,6 +219,7 @@ function providerFor(target,options={}){
   const p=providerFor(target,{collision:true,otherBuyer:true});
   const result=await execute(db,target,context,authority(),p.send,clock);
   assert.equal(result.issueKind,"confirmed_number_collision");
+  assert.equal(result.manualDisposition,"number_collision_requires_investigation");
   assert.equal(result.originalNumberReadback,"unconfirmed");
   assert.equal(result.recordedReadback,false);
   assert.equal(status(sql,app1),"sending","collision alone never renumbers or confirms");

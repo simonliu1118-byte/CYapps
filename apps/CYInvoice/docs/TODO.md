@@ -32,6 +32,8 @@
 - [x] **3.2-C4e／V3.1.23 Build 0 Source**：員工折讓原因與純光貿 JSON 共同綁進 AES-GCM Frozen Envelope v1，HMAC 涵蓋原因；Cloud 端檢查 reason 非空且有界，通過 CYID 本人／主管驗權後 GET 才解封；主管介面可看原因，list/status 無原因或敏感模板。原正式 schema16／Worker 不變，仍需 canonical migration、受控首次送出策略與雙機真測。
 - [x] **3.2-C6／V3.1.24 Build 1 Source**：將審查完成的 0017／0018 唯一升格到 canonical migrations 並移除舊 drafts；全套 Cloud／Windows／Governance CI 須驗證 schema16→18 rollback、舊 Work Item／CYID 專屬護欄與 read-only preflight；`SCHEMA_VERSION=18` 僅是待部署原始碼設定，不代表遠端已改動。真正 D1/Worker 依 [V3.2-C 本機 MCP 交接清單](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md) 審核／執行。
 - [ ] **3.2-C7 Cloud 安全送出歸因／驗收**：C3c3b 既有單次 coordinator 不可把完整原號讀回誤當可歸因成功。仍需經安全審查的實際送出確認及 unknown 狀態人工歸因、跨裝置併發矩陣、真 Cloudflare／光貿測試環境和 WinForms 驗收才可完成 C；不得提前開放旗標。
+- [x] **3.2-C6 本機 MCP 遠端升級交接（2026-10-21 使用者驗收報告）**：原 CYInvoice D1 正規 0017、0018 一次套用、schema18、新六表皆空；原 Worker 繼承原 CYID 綁定和 Secret，`SCHEMA_VERSION=18`、`ALLOWANCE_API_ENABLED=false`。完整 SQL 備份／DPAPI、本機還原及 runtime 12 request 驗證皆依本機報告；本 GitHub 對話沒有自行連線 Cloudflare。帳號實際計量 D1 reads +1711、writes +55，Worker requests +12，未超預算。
+- [x] **3.2-C7a／V3.1.25 Build 0 Source**：現有 Cloud 單次協調器增加六種人工歸因分類，未知結果與全項吻合都維持 `sending`／不可重送／不可自動確認；沒有新增正式送出入口。合成測試與 exact-head CI 須驗證。真正的人工作業政策及可驗證歸因、公司卡、雙機光貿測試仍待獨立核准。
 - [ ] **3.2-B2e～H 正式折讓執行**：B2d Source 入口已完成；接下來保留占號後受控換號、安全並發／斷電矩陣、Cloud／g0501／同步、實機與光貿測試環境驗收及正式發行，依 V3.2 計畫分批處理。不得以 CI 冒充真業務驗收。
 - **Cloudflare MCP 停點**：正式 CYInvoice D1 已是 3.1 schema16，3.2 的新 migration 必須從此基準另設新序號並先做隔離回滾測試。需要套用原 D1／更新原 Worker／Bindings／Secrets 時，另通知使用者開本機 Work；目前**不需要**動 Cloudflare。V3.0+3.1 延後實機驗收仍只在 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 記錄，不在本節重設勾選狀態。
 
