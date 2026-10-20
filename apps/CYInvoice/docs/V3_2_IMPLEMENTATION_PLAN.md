@@ -127,6 +127,11 @@
 - Device Bearer 加本次 CYID 員工帳密呼叫 C4a 的 create/list/review/approve/reserve/status；JSON 嚴格核對 status、revision、官方結果旗標，結果不明不自動重送；reserve 絕非可送出 g0401 的授權。正式 WinForms 入口留 C4c。
 - C4c 必須由呼叫端使用明確禁用 redirect 的 HttpClient 並完成安全初始化及實際 WinForms smoke；真 Device／Cloudflare 遠端 migration、Worker 及光貿交易均留後續安全閘門。
 
+## 3.2-C4c CYID Windows 跨機主管待辦（V3.1.20 Build 0）
+- 選擇性回收 #523 的 CloudAllowanceManagerForm、C4b Client 唯讀官方 Preview 與 MainForm 選單整合。所有按鈕只是 C4a 可信 Application API 的呼叫，CYID 主管角色以 Cloud 端最新授權為準，不因 Windows UI 判斷取得任何新權限。
+- 固定原 application ID 避免未知結果重送，主管只能接手、預覽、核准、預留，不提供 g0401/g0501；所有 HttpClient 強制關閉 redirect。官方預覽固定 `canApprove=false`，不代表可執行實際扣抵。
+- 下一階段 C4d 將現行 AllowanceRequestForm 草稿轉成可跨裝置 Frozen 申請，先持久化 ID 與完整哈希／scope 後首次 POST，結果不明僅原 ID 查回；C5 與本機 Work MCP 升級仍需審核。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |

@@ -17,6 +17,10 @@ public sealed record CloudAllowanceReservation(string ApplicationId,string Ledge
     string AllowanceNumber);
 public sealed record CloudAllowanceStatus(string ApplicationId,string Status,int Revision,
     string? AllowanceNumber,string? LedgerStatus);
+public sealed record CloudAllowanceOfficialPreview(string ApplicationId,int Revision,
+    string OriginalInvoiceNumber,long RequestedGross,int OfficialUploadStatus,
+    bool OfficialSummaryComplete,int OfficialAllowanceCount,
+    bool OfficialMutationPending,bool OfficialInvoiceCancelled);
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson);
@@ -193,6 +197,47 @@ public sealed class CloudAllowanceClient
         using var doc=await SendAsync("review",new{applicationId=id,expectedRevision,
             employeeNo,password},cancellationToken).ConfigureAwait(false);
         return Receipt(doc.RootElement,id,"review",expectedRevision+1);
+    }
+    // Preliminary official read-only metadata is NOT a manager Grant, nor an
+    // authorization to call the provider or auto-mark a Ledger confirmed.
+    public async Task<CloudAllowanceOfficialPreview> PreviewAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<2)throw new ArgumentException("Invalid review revision.");
+        using var doc=await SendAsync("preview",new{applicationId=id,
+            expectedRevision,employeeNo,password},cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        if(!root.TryGetProperty("preview",out var preview)||
+            preview.ValueKind!=JsonValueKind.Object||
+            Required(preview,"applicationId")!=id||
+            RequiredRevision(preview)!=expectedRevision||
+            !preview.TryGetProperty("canApprove",out var claim)||
+            claim.ValueKind!=JsonValueKind.False||
+            !preview.TryGetProperty("canAllocateNumber",out var canNumber)||
+            canNumber.ValueKind!=JsonValueKind.False||
+            !preview.TryGetProperty("requiresIndependentOfficialReconciliation",out var independent)||
+            independent.ValueKind!=JsonValueKind.True)
+            throw new InvalidDataException("Official preview is not a valid authority grant.");
+        var original=Required(preview,"originalInvoiceNumber");
+        if(!Regex.IsMatch(original,@"^[A-Z]{2}\d{8}$")||
+            !preview.TryGetProperty("requestedGross",out var gross)||
+            !gross.TryGetInt64(out var amount)||amount<1||
+            !preview.TryGetProperty("officialUploadStatus",out var upload)||
+            !upload.TryGetInt32(out var uploadValue)||
+            !preview.TryGetProperty("officialSummaryComplete",out var complete)||
+            complete.ValueKind is not (JsonValueKind.True or JsonValueKind.False)||
+            !preview.TryGetProperty("officialMutationPending",out var pending)||
+            pending.ValueKind is not (JsonValueKind.True or JsonValueKind.False)||
+            !preview.TryGetProperty("officialInvoiceCancelled",out var cancelled)||
+            cancelled.ValueKind is not (JsonValueKind.True or JsonValueKind.False)||
+            !preview.TryGetProperty("officialAllowanceCount",out var count)||
+            !count.TryGetInt32(out var allowanceCount)||allowanceCount<0)
+            throw new InvalidDataException("Cloud allowance official preview incomplete.");
+        return new CloudAllowanceOfficialPreview(id,expectedRevision,original,amount,
+            uploadValue,complete.GetBoolean(),allowanceCount,
+            pending.GetBoolean(),cancelled.GetBoolean());
     }
     public async Task<CloudAllowanceReceipt> ApproveAsync(
         string id,int expectedRevision,string employeeNo,string password,

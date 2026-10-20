@@ -54,6 +54,7 @@ internal sealed class MainForm : Form
     // A historical Built-in Cloud setting is preserved but cannot revive its retired account UI.
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
+    private readonly ContextMenuStrip workQueueMenu = new();
     private readonly Button workQueueButton = UiControls.StandardButton("跨機待辦");
     private readonly Label copyrightLabel = new()
     {
@@ -225,6 +226,8 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
         ConfigureHeaderButton(settingsButton, OpenSettings);
         ConfigureHeaderButton(workQueueButton, OpenWorkQueue);
+        workQueueMenu.Items.Add("跨機待辦（非折讓）", null, (_, _) => OpenNonAllowanceQueue());
+        workQueueMenu.Items.Add("跨機折讓申請與主管覆核", null, (_, _) => OpenAllowanceQueue());
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
         tabHost.Controls.Add(accountManagementButton);
@@ -333,15 +336,34 @@ internal sealed class MainForm : Form
                 "跨機待辦", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+        workQueueMenu.Show(workQueueButton, new Point(0,workQueueButton.Height));
+    }
+
+    private void OpenNonAllowanceQueue()
+    {
         try
         {
-            using var form = new CloudWorkItemsForm(repository);
+            using var form=new CloudWorkItemsForm(repository);
             form.ShowDialog(this);
         }
-        catch (Exception)
+        catch(Exception)
         {
-            MessageBox.Show(this, "無法開啟跨機待辦，請確認裝置綁定與連線設定。",
-                "跨機待辦", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this,"無法開啟跨機待辦，請確認 CYID 裝置與連線設定。",
+                "跨機待辦",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+        }
+    }
+
+    private void OpenAllowanceQueue()
+    {
+        try
+        {
+            using var form=new CloudAllowanceManagerForm(repository);
+            form.ShowDialog(this);
+        }
+        catch(Exception)
+        {
+            MessageBox.Show(this,"無法開啟跨機折讓申請，請確認 CYID Cloud 裝置與連線設定。",
+                "跨機折讓",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
     }
 
@@ -554,6 +576,7 @@ internal sealed class MainForm : Form
         firstSetup.Close();
 
         CloudWorkItemsForm.VerifySmokeLayout(this);
+        CloudAllowanceManagerForm.VerifySmokeLayout();
 
         using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
         employeeLogin.Show(this);

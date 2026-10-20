@@ -92,6 +92,16 @@ internal static class CloudAllowanceClientTests
                 status="review",revision=2,officialActionPerformed=false});
         });
         fake.Add(r=>{
+            Check(r,"preview");
+            return Json(HttpStatusCode.OK,new{ok=true,preview=new{
+                applicationId=Id,revision=2,originalInvoiceNumber="AB12345678",
+                requestedGross=50,officialUploadStatus=99,
+                officialSummaryComplete=true,officialAllowanceCount=0,
+                officialMutationPending=false,officialInvoiceCancelled=false,
+                canApprove=false,canAllocateNumber=false,
+                requiresIndependentOfficialReconciliation=true}});
+        });
+        fake.Add(r=>{
             Check(r,"approve");
             return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
                 status="approved",revision=3,validUntilUtc="2026-10-19T08:05:00.000Z",
@@ -132,6 +142,9 @@ internal static class CloudAllowanceClientTests
         Equal(Id,page[0].ApplicationId);
         Equal("review",page[0].Status);
         Equal("review",(await api.ReviewAsync(Id,1,"0001","fake-password")).Status);
+        var preview=await api.PreviewAsync(Id,2,"0001","fake-password");
+        Equal("AB12345678",preview.OriginalInvoiceNumber);
+        Equal(0,preview.OfficialAllowanceCount);
         Equal("approved",(await api.ApproveAsync(Id,2,"0001","fake-password")).Status);
         var reserved=await api.ReserveAsync(Id,3,"0001","fake-password");
         Equal("A20261019001",reserved.AllowanceNumber);
@@ -139,12 +152,12 @@ internal static class CloudAllowanceClientTests
         Equal("reserved",status.LedgerStatus);
         await Fail<InvalidDataException>(()=>api.StatusAsync(Id,"0001","fake-password"));
         await Fail<CloudApiException>(()=>api.CreateAsync(draft,"0001","fake-password"));
-        Equal(8,fake.Calls);
+        Equal(9,fake.Calls);
         Equal(0,fake.Remaining);
         // Invalid IDs and data never reach network; failure never retries.
         await Fail<ArgumentException>(()=>api.ApproveAsync(Id,0,"0001","fake-password"));
         await Fail<ArgumentException>(()=>api.CreateAsync(draft with{
            Environment="evil"},"0001","fake-password"));
-        Equal(8,fake.Calls);
+        Equal(9,fake.Calls);
     }
 }

@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.19 Build 1（非正式 Release）**：C4b 在 Windows Core 加入 CYID Cloud 折讓 Client、原 application ID readback、安全不可自動重試契約與隔離測試；正式 WinForms、schema17/18 及原 Worker/D1 尚未更新。正式 Release 仍為 V3.1.0。
+- **目前工程 Source：V3.1.20 Build 0（非正式 Release）**：C4c 新增 WinForms 跨機主管折讓待辦與唯讀官方預覽；仍不提供 Cloud 官方送出，C4d 申請建立串接、正式 schema17/18 及 Cloudflare MCP 留後續安全審核，正式 Release V3.1.0。
+
+- **前一工程 Source：V3.1.19 Build 1（非正式 Release）**：C4b 在 Windows Core 加入 CYID Cloud 折讓 Client、原 application ID readback、安全不可自動重試契約與隔離測試；正式 WinForms、schema17/18 及原 Worker/D1 尚未更新。正式 Release 仍為 V3.1.0。
 
 - **前一工程 Source：V3.1.18 Build 1（非正式 Release）**：C4a 新增 feature-gated CYID Cloud 折讓申請及主管覆核 API，原 schema16 未更新時一律 503；不公開 g0401/g0501。Windows 跨機用戶端、migration 審核／本機 MCP 操作仍未完成，正式 Release 仍 V3.1.0。
 
