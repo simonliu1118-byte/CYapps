@@ -76,6 +76,16 @@ const v31Canonical=[...v30Canonical,'0016_non_allowance_work_items.sql'];
 assert.deepEqual(checkMigrations(v30Canonical,v31Canonical),['0016_non_allowance_work_items.sql']);
 assert.throws(()=>checkMigrations(v30Canonical,v31Canonical,true),/MIGRATION_NOT_COMPLETE/);
 assert.deepEqual(checkMigrations(v31Canonical,v31Canonical,true),[]);
+const v32Canonical=[...v31Canonical,'0017_allowance_applications.sql',
+  '0018_allowance_frozen_ledger.sql'];
+assert.deepEqual(checkMigrations(v31Canonical,v32Canonical),
+  ['0017_allowance_applications.sql','0018_allowance_frozen_ledger.sql']);
+assert.deepEqual(checkMigrations(v32Canonical.slice(0,-1),v32Canonical),
+  ['0018_allowance_frozen_ledger.sql']);
+assert.throws(()=>checkMigrations(v31Canonical,v32Canonical,true),/MIGRATION_NOT_COMPLETE/);
+assert.deepEqual(checkMigrations(v32Canonical,v32Canonical,true),[]);
+assert.throws(()=>checkMigrations(v31Canonical,[...v32Canonical,'0019_unreviewed.sql']),
+  /UNREVIEWED_PENDING_MIGRATIONS/);
 assert.throws(()=>checkMigrations(v30Canonical,[...v31Canonical,'0017_unreviewed.sql']),/UNREVIEWED_PENDING_MIGRATIONS/);
 assert.throws(() => checkMigrations(v30Canonical.slice(0, 12),
   [...v30Canonical,'0016_unreviewed.sql']),/UNREVIEWED_PENDING_MIGRATIONS/);
@@ -488,7 +498,7 @@ try {
   assert.equal(generated.d1_databases[0].database_id, currentDatabase);
   assert.equal(generated.vars.CYID_ENABLED, 'false');
   assert.equal(generated.vars.CUSTOM_POLICY, 'preserve-synthetic-policy');
-  assert.equal(generated.vars.SCHEMA_VERSION, '16');
+  assert.equal(generated.vars.SCHEMA_VERSION, '18');
   assert.equal(generated.services[1].entrypoint, 'ConsumerAuthoritySync');
   await assert.rejects(main('before',statePath,{...env,...preparation,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'}),/MIGRATION_NOT_COMPLETE/);
   // POSIX mode bits are enforced on the deployment's Linux runner. Windows

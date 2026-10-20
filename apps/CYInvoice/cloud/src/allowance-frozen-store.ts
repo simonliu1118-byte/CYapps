@@ -1,6 +1,6 @@
 // V3.2-C3a: INTERNAL ONLY. No Worker route, AMEGO mutation, or D1 deployment.
 // Derived from PR #440 allowance-applications.ts; NOT its legacy work_items kind.
-// Schema: canonical 0016 + review-only drafts 0017/0018.
+// Canonical schema16 + reviewed migrations 0017/0018 (deployment separately gated).
 // Caller must be a trusted withCyIdSession/active-Device handler; never pass
 // an untrusted caller-defined Principal, company key or official success bit.
 import {encryptCompanyBusinessData,decryptCompanyBusinessData} from "./company-settings";

@@ -12,8 +12,8 @@ const live=join(dir,"original-schema16.sqlite"),backup=join(dir,"backup-schema16
 const restored=join(dir,"restored-schema16.sqlite");
 const db=new DatabaseSync(live);
 const files=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
-assert.equal(files.at(-1),"0016_non_allowance_work_items.sql",
-  "C review must NOT unexpectedly promote pending migration files");
+assert.equal(files.at(-1),"0018_allowance_frozen_ledger.sql",
+  "canonical migrations must contain reviewed 0017 and 0018 in order");
 function tables(c){
  return c.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();
 }
@@ -34,7 +34,7 @@ try{
  ('dev_11111111-1111-4111-8111-111111111111','ws_c_migration',
  'synthetic','active','cloud')`).run();
  db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
- for(const f of files.filter(x=>x>="0014"))
+ for(const f of files.filter(x=>x>="0014"&&x<"0017"))
   db.exec(readFileSync("migrations/"+f,"utf8"));
  db.prepare(`INSERT INTO company_settings(
  workspace_id,seller_invoice,amego_app_key_ciphertext,revision,
@@ -55,8 +55,8 @@ try{
   assert.equal(scalar(original,"SELECT COUNT(*) n FROM devices"),1);
  }finally{original.close();}
  // A deliberate failure while executing 0017 rolls ALL its changes back.
- const d17=readFileSync("drafts/0017_allowance_applications.sql","utf8");
- const d18=readFileSync("drafts/0018_allowance_frozen_ledger.sql","utf8");
+ const d17=readFileSync("migrations/0017_allowance_applications.sql","utf8");
+ const d18=readFileSync("migrations/0018_allowance_frozen_ledger.sql","utf8");
  assert.throws(()=>{
   db.exec("BEGIN IMMEDIATE");
   try{db.exec(d17+"\nSELECT name FROM __missing_migration_audit_table;");
@@ -65,7 +65,7 @@ try{
  },/no such table/);
  assert.deepEqual(tables(db),before,"failed 0017 must not leak partial triggers/tables");
  // Verify sequential migration boundaries, including a failed 0018.
- migration(db,"drafts/0017_allowance_applications.sql");
+ migration(db,"migrations/0017_allowance_applications.sql");
  const after17=tables(db);
  assert.ok(after17.some(x=>x.name==="allowance_applications"));
  assert.ok(after17.some(x=>x.name==="allowance_application_audit_events"));
@@ -77,7 +77,7 @@ try{
   catch(e){db.exec("ROLLBACK");throw e;}
  },/no such table/);
  assert.deepEqual(tables(db),after17,"failed 0018 must not partially install Ledger");
- migration(db,"drafts/0018_allowance_frozen_ledger.sql");
+ migration(db,"migrations/0018_allowance_frozen_ledger.sql");
  const after18=tables(db);
  for(const name of ["allowance_applications","allowance_application_audit_events",
   "allowance_frozen_requests","allowance_execution_approvals",

@@ -5,14 +5,14 @@ import {join} from "node:path";
 import {randomBytes,createCipheriv,createDecipheriv} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
 
-// C2 synthetic source only. The canonical CYID_ONLY schema16 remains intact.
+// C2 synthetic canonical migration check from schema16; no remote D1 operations.
 // No Worker, D1 network, credentials, official lookup or AMEGO g0401/g0501.
 const migrationFiles=readdirSync("migrations")
  .filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
-assert.equal(migrationFiles.at(-1),"0016_non_allowance_work_items.sql",
- "review-only 0017/0018 cannot accidentally become a canonical migration");
-const c1=readFileSync("drafts/0017_allowance_applications.sql","utf8");
-const c2=readFileSync("drafts/0018_allowance_frozen_ledger.sql","utf8");
+assert.equal(migrationFiles.at(-1),"0018_allowance_frozen_ledger.sql",
+ "canonical allowance migration order must end with 0018");
+const c1=readFileSync("migrations/0017_allowance_applications.sql","utf8");
+const c2=readFileSync("migrations/0018_allowance_frozen_ledger.sql","utf8");
 const temp=mkdtempSync(join(tmpdir(),"cyinvoice-c2-"));
 const source=join(temp,"schema16.sqlite"),backup=join(temp,"schema16-backup.sqlite");
 const db=new DatabaseSync(source);
@@ -37,7 +37,7 @@ function setup() {
  db.prepare(`INSERT INTO devices(device_id,workspace_id,display_name,status,employee_authority_state)
  VALUES (?,?,'synthetic','active','cloud')`).run(dev,ws);
  db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
- for(const name of migrationFiles.filter(n=>n>="0014"))
+ for(const name of migrationFiles.filter(n=>n>="0014"&&n<"0017"))
   db.exec(readFileSync("migrations/"+name,"utf8"));
  db.prepare(`INSERT INTO company_settings
  (workspace_id,seller_invoice,amego_app_key_ciphertext,revision,changed_by_employee_id,

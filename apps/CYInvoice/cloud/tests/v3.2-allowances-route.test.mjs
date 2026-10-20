@@ -65,7 +65,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0016_non_allowance_work_items.sql");
+ assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -83,8 +83,7 @@ async function fixture(){
   changed_by_employee_id,changed_by_device_id,changed_at)
   VALUES(?,'12345678',?,1,'manager',?,'2026-10-19T07:40:00.000Z')`)
   .run(ws,appKey,devB);
- sql.exec(readFileSync("drafts/0017_allowance_applications.sql","utf8"));
- sql.exec(readFileSync("drafts/0018_allowance_frozen_ledger.sql","utf8"));
+ // Canonical 0017/0018 were applied in the migration loop above.
  let beforeSend=null,loseReply=false,afterSend=null;
  class Statement {
   constructor(q){this.q=q;this.args=[];}

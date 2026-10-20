@@ -29,7 +29,7 @@ const input={workspaceId:ws,applicationId:"application_c3a_one",
 function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0016_non_allowance_work_items.sql");
+ assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
  for(const name of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
  sql.prepare(
@@ -44,8 +44,7 @@ function fixture(){
  (workspace_id,seller_invoice,amego_app_key_ciphertext,revision,
  changed_by_employee_id,changed_by_device_id,changed_at)
  VALUES (?,'12345678','synthetic_no_credential',1,'admin',?,'now')`).run(ws,devA);
- sql.exec(readFileSync("drafts/0017_allowance_applications.sql","utf8"));
- sql.exec(readFileSync("drafts/0018_allowance_frozen_ledger.sql","utf8"));
+ // Canonical 0017/0018 were applied in the migration loop above.
  class Statement{
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}

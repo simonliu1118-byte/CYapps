@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.24 Build 1 — 2026/10/20（V3.2-C6 正式 Migration 17／18 原始碼升格）
+- 將已由 #529 非空 schema16 備份／rollback 演練的兩份折讓 D1 Schema 正式列入 `cloud/migrations/0017_allowance_applications.sql`、`0018_allowance_frozen_ledger.sql`，並**移除**舊 `cloud/drafts` 同名 SQL，維持唯一 canonical owner；只新增折讓專屬 6 張表、4 個索引、23 個觸發器，不改動非折讓 Work Item／CYID 既有資料。
+- 調整 C1／C2／C3／C4／C5、CYID-only、非折讓與部署預檢測試：合成 fixture 先停在 schema16，再逐批執行正式 17/18；正常應用整套 canonical migrations 的 fixture 不得再重套。完整交易失敗回滾、FK、舊表／角色護欄與備份還原仍由 CI 驗證。
+- Deployment preflight 對已審查的 schema16→17→18 僅允許**唯讀差異盤點**，正式 deploy／CYID activation 仍要求無 pending migration；`wrangler.jsonc` 的工程 `SCHEMA_VERSION` 改為 **18**，不表示原遠端 D1 已升級；`ALLOWANCE_API_ENABLED` 仍預設關閉。
+- 本批沒有操作原 Cloudflare D1／Worker／Bindings／Secrets、無真 g0401/g0501；實際遷移由使用者另開有 MCP 的本機 Work 依 `docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md` 執行，須按共通規則 2.9.1 §11.3 計量、備份、停損。
+- Build 1：移除剩餘 C5 回滾測試對已退役 drafts 路徑的依賴，所有 0017／0018 測試皆只讀唯一 canonical 來源。
+- C 的安全可歸因單次送出、真 Cloudflare、兩台 Windows／光貿測試環境未驗收，不得宣告 V3.2-C 全部完成或正式發布（正式 Release 仍 V3.1.0）。
+
 ## V3.1.23 Build 0 — 2026/10/20（V3.2-C4e Cloud 加密申請原因與主管查閱）
 - C4d 已保留的員工折讓原因現在於 C4a API 強制檢核並與原 `unnumberedTemplateJson` 一起放入唯一 AES-GCM Authenticated Frozen 封套；同一 request HMAC 同時綁定原因與官方模板，密文不含任何明文原因，無須改動 D1 欄位、Grant、Ledger 或額外引入第二資料 owner。
 - Cloud `/v1/allowances/get` 僅經 CYID、active Device 與本人／主管權限驗證後才解密並回傳原因；list/status/preview 永不回傳原因。Windows Cloud Client 補嚴格 GET DTO 與合成安全測試；跨機主管視窗提供受權限控制的「查看申請原因」，不提供真 g0401/g0501。

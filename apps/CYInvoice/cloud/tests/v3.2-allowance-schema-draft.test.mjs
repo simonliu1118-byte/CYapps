@@ -3,10 +3,10 @@ import {readFileSync,readdirSync,mkdtempSync,copyFileSync,rmSync} from "node:fs"
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-// No remote D1 or Worker. Canonical schema16 is replayed only in a disposable DB.
+// Canonical schema18 checked against a disposable schema16 baseline. No remote D1 or Worker.
 const files=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
-assert.equal(files.at(-1),"0016_non_allowance_work_items.sql");
-const draft=readFileSync("drafts/0017_allowance_applications.sql","utf8");
+assert.equal(files.at(-1),"0018_allowance_frozen_ledger.sql");
+const draft=readFileSync("migrations/0017_allowance_applications.sql","utf8");
 const root=mkdtempSync(join(tmpdir(),"cyinvoice-c1-"));
 const before=join(root,"schema16.sqlite"), after=join(root,"schema17-trial.sqlite");
 const db=new DatabaseSync(before);
@@ -15,7 +15,7 @@ try {
  db.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES ('ws_test','synthetic')").run();
  db.prepare("INSERT INTO devices(device_id,workspace_id,display_name,status,employee_authority_state) VALUES ('dev_test','ws_test','synthetic','active','cloud')").run();
  db.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
- for(const f of files.filter(x=>x>="0014"))db.exec(readFileSync("migrations/"+f,"utf8"));
+ for(const f of files.filter(x=>x>="0014"&&x<"0017"))db.exec(readFileSync("migrations/"+f,"utf8"));
  const oldObjects=()=>db.prepare("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();
  const beforeObjects=oldObjects();
  assert.throws(()=>{db.exec("BEGIN IMMEDIATE");try{db.exec(draft+"\nSELECT * FROM missing_c1_test;");db.exec("COMMIT");}catch(e){db.exec("ROLLBACK");throw e;}},/no such table/);

@@ -1,5 +1,5 @@
--- CYInvoice V3.2-C2 REVIEW DRAFT ONLY. NEVER apply to a real D1.
--- Requires canonical schema16 + review draft 0017, in this order.
+-- CYInvoice V3.2-C6 CANONICAL D1 MIGRATION 0018. Apply once after 0017.
+-- Requires canonical schema16 + canonical 0017, in this order.
 -- Selected and re-keyed from historical PR #440 (old 0016/0018 drafts).
 -- No legacy work_items.ALLOWANCE kind and no ordinary invoice mirror.
 -- Encrypted envelopes and opaque hashes must be constructed and authenticated
