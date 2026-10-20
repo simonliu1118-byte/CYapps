@@ -349,86 +349,96 @@ internal sealed partial class ShopeeBatchRunner
     }
 
     /// <summary>
-    /// 酷澎 全家 (user, 2026-10-20: 列印寄件單 opens the same FamilyMart寄取貨單 as 蝦皮; page 2 at
-    /// 165 % did not scan, the cut one did): the page is checked for every 寄件編號, saved, each
-    /// slip cut and printed dot for dot as for 蝦皮; the tab is closed after. A single slip that
-    /// cannot be cut goes through Chrome as for 蝦皮; several stop for a person.
+    /// 酷澎 全家 (user, 2026-10-20: 列印寄件單 opens the FamilyMart寄取貨單 and forces Chrome's print
+    /// dialog over it, 取消 closes the tab; page 2 at 165 % did not scan, the cut 蝦皮 one did):
+    /// the dialog's 目的地 is set to 另存為 PDF and the slips are saved into Temp, cut out of the
+    /// PDF dot for dot (<see cref="SlipImage"/>), each checked for a 寄件編號 by OCR and sent to
+    /// the thermal printer. Anything short of that stops before printing, the PDF left in Temp.
     /// </summary>
     private async Task PrintCoupangFamilyAsync(IReadOnlyList<string> trackings)
     {
-        if (trackings.Count == 0) throw new ShopeeBatchStop("「便利商店」讀不到寄件單號，沒有列印寄件單，請人工列印。", true);
-        using (var page = await WaitFamilyLabelPageAsync())
-            foreach (var tracking in trackings)
-                if (!ShopeeBatchScreens.ShowsNumber(page.Boxes, tracking))
-                    throw new ShopeeBatchStop($"全家寄取貨單上讀不到寄件編號 {tracking}，未列印。", true);
-        var (slips, printer, info) = await CutFamilySlipsAsync(trackings);
-        if (slips is not null)
-        {
-            foreach (var slip in slips) PrintCutSlip(printer, slip, "酷澎");
-            _log.Info("coupang-batch", $"family slips printed cut count={slips.Count} {info}");
-        }
-        else if (trackings.Count == 1)
-        {
-            _log.Info("coupang-batch", $"family cut: {info}; printing through Chrome");
-            Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
-            await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);
-        }
-        else throw new ShopeeBatchStop($"全家寄取貨單 {trackings.Count} 張切不出來（{info}），未列印，請人工列印。", true);
-        await Task.Delay(1500, _token);
-        Keys("Ctrl+W (寄取貨單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
-        await Task.Delay(800, _token);
-    }
-
-    /// <summary>
-    /// <see cref="CutFamilySlipAsync"/> for several orders: one save of the page, as many slips
-    /// as 寄件編號, each cut slip read (OCR) and every 寄件編號 found once. Null with the reason
-    /// when anything is short.
-    /// </summary>
-    private async Task<(List<GrayImage>? Slips, string Printer, string Info)> CutFamilySlipsAsync(IReadOnlyList<string> trackings)
-    {
-        if (trackings.Count == 1)
-        {
-            var one = await CutFamilySlipAsync(trackings[0]);
-            return (one.Slip is null ? null : [one.Slip], one.Printer, one.Info);
-        }
-        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
-        try
-        {
-            var printer = SlipPrinter.Installed(_printer);
-            if (printer is null) return (null, string.Empty, $"找不到名稱符合「{_printer}」的印表機");
-            Directory.CreateDirectory(folder);
-            Keys("Ctrl+S (save the slip's page)", NativeMethods.VK_CONTROL, 0x53 /* S */);
-            if ((await SaveFromDialogAsync(folder, "Ctrl+S")).Error is { } failed) return (null, printer, failed);
-            if (SlipPrinter.LargestPicture(folder) is not { } picture) return (null, printer, "存下的網頁裡沒有寄取貨單圖片");
-            var page = picture.Image;
-            var areas = SlipImage.FindSlips(page);
-            var label = SlipPrinter.Label(printer, 100, 150);
-            _log.Info("coupang-batch", $"family cut: picture {page.Width}x{page.Height} slips={areas.Count} trackings={trackings.Count} dpi={label.Dpi}");
-            if (areas.Count != trackings.Count) return (null, printer, $"圖片裡找到 {areas.Count} 張寄取貨單，寄件編號 {trackings.Count} 個");
-            var slips = new List<GrayImage>();
-            var left = trackings.ToList();
-            foreach (var area in areas)
+        if (trackings.Count == 0) throw new ShopeeBatchStop("讀不到寄件單號，沒有列印寄件單，請人工列印。", true);
+        var printer = SlipPrinter.Installed(_printer) ?? throw new ShopeeBatchStop($"找不到名稱符合「{_printer}」的印表機，未列印。", true);
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "coupang-slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        var pdf = await SavePrintToPdfAsync(folder);
+        var label = SlipPrinter.Label(printer, 100, 150);
+        // Drawn at twice the printer's resolution at least: the cut is then scaled down by a whole number.
+        var pages = await MoSlipPdf.PagesAsync(pdf, string.Empty, Math.Max(400, label.Dpi * 2));
+        var slips = new List<GrayImage>();
+        var left = trackings.ToList();
+        foreach (var (page, from) in pages)
+            foreach (var area in SlipImage.FindSlips(page))
             {
                 var plan = SlipImage.Plan(page, area, label.Width, label.Height);
-                if (plan.Module == 0 || plan.Width > label.Width || plan.Height > label.Height || plan.Width * 25.4 / label.Dpi < 50)
-                    return (null, printer, $"寄取貨單 {area} 量不到條碼或尺寸不合標籤");
+                _log.Info("coupang-batch", $"family pdf {from}: picture {page.Width}x{page.Height} area={area} module={plan.Module} size={plan.Width}x{plan.Height}");
+                if (plan.Module == 0 || plan.Width > label.Width || plan.Height > label.Height || plan.Width * 25.4 / label.Dpi < 50) continue;
                 var slip = SlipImage.Render(page, plan);
                 string? shown = null;
                 foreach (var t in left) if (await SlipShowsAsync(slip, t)) { shown = t; break; }
-                if (shown is null) return (null, printer, $"裁好的寄取貨單讀不到剩下的寄件編號（{string.Join("、", left)}）");
+                if (shown is null) continue;
                 left.Remove(shown);
                 slips.Add(slip);
             }
-            return (slips, printer, $"{slips.Count} 張，{label.Dpi} dpi");
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException and not ShopeeBatchStop)
+        if (left.Count > 0)
+            throw new ShopeeBatchStop($"全家寄取貨單 PDF 裡切不出寄件編號 {string.Join("、", left)} 的寄取貨單，未列印，請人工列印（PDF 在 {folder}）。", true);
+        foreach (var slip in slips) PrintCutSlip(printer, slip, "酷澎");
+        _log.Info("coupang-batch", $"family slips printed cut count={slips.Count} dpi={label.Dpi}");
+        try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        // Saving may leave the slip's tab open: closed when it is the one in front.
+        await Task.Delay(1500, _token);
+        using var after = await ReadAsync();
+        if (ShopeeBatchScreens.IsFamilyLabelPage(after.Boxes)) Keys("Ctrl+W (寄取貨單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
+    }
+
+    /// <summary>
+    /// Chrome's print dialog (opened by the page itself) with 目的地 set to 另存為 PDF › 儲存 › the
+    /// 另存新檔 dialog into <paramref name="folder"/>. The saved PDF.
+    /// </summary>
+    private async Task<string> SavePrintToPdfAsync(string folder)
+    {
+        const string pdfPrinter = "另存為 PDF";
+        var panel = new RectangleF(0.5f, 0, 0.5f, 1);
+        var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true, part: panel);
+        opened.Dispose();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var tries = 0;
+        while (true)
         {
-            return (null, string.Empty, $"{ex.GetType().Name}: {ex.Message}");
+            if (watch.Elapsed > TimeSpan.FromSeconds(40)) throw new ShopeeBatchStop("Chrome 列印視窗改不成「另存為 PDF」，未列印。", true);
+            using var screen = await ReadAsync(part: panel, ocr: tries > 0);
+            var boxes = screen.Boxes;
+            if (!ShopeeBatchScreens.IsPrintDialog(boxes)) { await Task.Delay(600, _token); continue; }
+            var shown = ShopeeBatchScreens.PrintDestination(boxes);
+            if (!ShopeeBatchScreens.SamePrinter(shown, pdfPrinter))
+            {
+                if (tries++ >= 2) throw new ShopeeBatchStop($"Chrome 列印的目的地是「{shown}」，換不成「{pdfPrinter}」，未列印。", true);
+                var value = ShopeeBatchScreens.PrintRowValue(boxes, "目的地") ?? throw new ShopeeBatchStop("讀不到 Chrome 列印的目的地。", true);
+                _log.Info("coupang-batch", $"print destination is {shown}; choosing {pdfPrinter}");
+                Click(screen, value, "目的地");
+                await Task.Delay(700, _token);
+                using var list = await ReadAsync(part: panel, ocr: true);
+                if (ShopeeBatchScreens.PrinterOption(list.Boxes, pdfPrinter) is not { } option)
+                {
+                    _inputs++;
+                    InputSender.Press(NativeMethods.VK_ESCAPE);
+                    throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{pdfPrinter}」，未列印。", true);
+                }
+                Click(list, option, pdfPrinter);
+                await Task.Delay(1500, _token);
+                continue;
+            }
+            var cancel = boxes.Where(b => ShopeeScreenshot.Compact(b.Text) == "取消").OrderByDescending(b => b.Top).FirstOrDefault();
+            var save = cancel is null ? null : boxes.FirstOrDefault(b => ShopeeScreenshot.Compact(b.Text) == "儲存" && Math.Abs(b.CenterY - cancel.CenterY) < 14 && b.Right < cancel.Left);
+            if (save is null) { await Task.Delay(600, _token); continue; }
+            _log.Info("coupang-batch", "print dialog set to 另存為 PDF");
+            Click(screen, save, "儲存");
+            break;
         }
-        finally
-        {
-            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        var (error, files) = await SaveFromDialogAsync(folder, "另存為 PDF", 30);
+        if (error is not null) throw new ShopeeBatchStop($"寄取貨單存成 PDF 時出錯：{error}，未列印。", true);
+        return files.FirstOrDefault(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            ?? throw new ShopeeBatchStop("寄取貨單存成 PDF 後找不到 .pdf 檔，未列印。", true);
     }
 
     /// <summary>
