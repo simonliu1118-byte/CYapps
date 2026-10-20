@@ -117,8 +117,17 @@ internal sealed partial class ShopeeBatchRunner
             if (MoBatchScreens.IsOrderManagement(page.Boxes)) return;
             if (MoBatchScreens.OrderManagement(page.Boxes) is { } entry) { Click(page, entry, "E001訂單管理"); await Task.Delay(1500, _token); continue; }
             if (MoBatchScreens.Text(page.Boxes, "訂單管理") is { } menu && attempt > 0) { Click(page, menu, "訂單管理"); await Task.Delay(800, _token); continue; }
-            var top = page.Boxes.Where(b => b.Text.Trim() == "訂單").OrderBy(b => b.Top).FirstOrDefault()
-                ?? throw new ShopeeBatchStop("MO店+ 後台找不到上方的「訂單」選單。");
+            var top = page.Boxes.Where(b => b.Text.Trim() == "訂單").OrderBy(b => b.Top).FirstOrDefault();
+            if (top is null)
+            {
+                // The header (店+管理系統, 登出) shows before the menu does (user LOG 2026-10-20: 18
+                // lines read 2 seconds after opening, 「訂單」 not there yet): the menu is waited for.
+                var (shown, menuTop) = await WaitAsync("MO店+ 後台上方的「訂單」選單", 30,
+                    s => s.Boxes.Where(b => b.Text.Trim() == "訂單").OrderBy(b => b.Top).FirstOrDefault());
+                using (shown) Click(shown, menuTop, "訂單");
+                await Task.Delay(1200, _token);
+                continue;
+            }
             Click(page, top, "訂單");
             await Task.Delay(1200, _token);
         }
