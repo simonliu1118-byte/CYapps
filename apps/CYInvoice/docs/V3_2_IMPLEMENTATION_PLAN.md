@@ -157,6 +157,10 @@
 - 使用 [專門交接清單](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md) 僅讓有 MCP 的本機 Work 在前置唯讀盤點、計量估算、備份與驗證後分段作業。Cloudflare 讀取 0、寫入 0、部署 0（GitHub 工程階段）；用量實值必須由本機 Work 的 Cloudflare dashboard／MCP 回報。
 - C3c3b 一次送出未能安全歸因：真 Cloud g0401 的確定成功／外部撞號不可僅憑同號完整讀回判斷；仍須設計可信送出 attempt 證據／unknown 人工決策、兩機身份撤權、真光貿測試環境驗證。本批只準備 canonical schema，不把 C 判定全部結案。
 
+## 3.2-C7a 保守的單次送出人工歸因分類（V3.1.25 Build 0）
+- 既有唯一內部單次送出協調器在收到 g0401 回覆與原號一次唯讀查回後，明確標記「完整內容吻合但不知此 POST 來源」、「吻合但 Audit 未寫入」、「外部號碼碰撞」、「接受但無歸因查回」、「明確拒絕」、「未知結果」六類。全部僅供後續受控管理員人工流程顯示，不能當官方完成證據或可再次 g0401 的授權。
+- 保留 `sending` 與 `safeToAutoRetry=false`、`safeToAutoConfirm=false`、`canAllocateAnotherNumber=false`；無第二資料來源、沒有新增 D1／公開路由或公司卡操作。後續需明確歸因政策、不可變持久人工 Audit 與兩裝置真測；不能因 UI 顯示「人工審查」而略過任何交易安全門檻。
+
 ## 工作切片與交付判準（由相依順序推進）
 
 | 階段 | 原始碼工作 | 交付判準 |

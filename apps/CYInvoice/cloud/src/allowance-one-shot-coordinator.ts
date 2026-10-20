@@ -12,7 +12,21 @@ import {postNumberedAllowanceOnce} from "./amego-allowance-issue";
 import type {OneShotAllowanceOutcome} from "./amego-allowance-issue";
 import {queryExactFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
 
+// C7a: operator triage is NOT official confirmation or authorization to resend.
+// Do not persist a manual success decision until a separately reviewed attempt-
+// attribution policy, durable audit and human approval mechanism exist.
+export type CloudAllowanceManualDisposition =
+ | "full_match_unattributed"
+ | "matched_readback_audit_unavailable"
+ | "number_collision_requires_investigation"
+ | "accepted_without_attributable_readback"
+ | "provider_rejected_requires_investigation"
+ | "unknown_outcome_requires_investigation";
+
 export interface OneShotCloudResult {
+ manualDisposition:CloudAllowanceManualDisposition;
+ manualReviewRequired:true;
+ proofOfThisPost:false;
  applicationId:string;ledgerId:string;allowanceNumber:string;
  issueKind:OneShotAllowanceOutcome["kind"];
  originalNumberReadback:"full_match_unattributed"|"unconfirmed";
@@ -22,6 +36,22 @@ export interface OneShotCloudResult {
  safeToAutoRetry:false;
  safeToAutoConfirm:false;
  canAllocateAnotherNumber:false;
+}
+function manualDisposition(
+ issueKind:OneShotAllowanceOutcome["kind"],
+ readback:"full_match_unattributed"|"unconfirmed",recorded:boolean
+):CloudAllowanceManualDisposition{
+ // A complete exact-number match proves content, not which POST originated it.
+ // A failed audit INSERT cannot become an implicit proof of completion.
+ if(readback==="full_match_unattributed")
+  return recorded?"full_match_unattributed":"matched_readback_audit_unavailable";
+ if(issueKind==="confirmed_number_collision")
+  return "number_collision_requires_investigation";
+ if(issueKind==="accepted_unconfirmed")
+  return "accepted_without_attributable_readback";
+ if(issueKind==="definite_rejection")
+  return "provider_rejected_requires_investigation";
+ return "unknown_outcome_requires_investigation";
 }
 function isSameManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolean{
  return !!a&&!!b&&a.workspaceId===ws&&b.workspaceId===ws&&
@@ -112,6 +142,8 @@ export async function executeCloudAllowanceExactlyOnce(
  return {applicationId:t.applicationId,ledgerId:t.ledgerId,
   allowanceNumber:t.allowanceNumber,issueKind:issued.kind,
   originalNumberReadback:readback,recordedReadback:recorded,
+  manualDisposition:manualDisposition(issued.kind,readback,recorded),
+  manualReviewRequired:true,proofOfThisPost:false,
   providerPostAttempted:true,ledgerStatus:"sending",
   safeToAutoRetry:false,safeToAutoConfirm:false,
   canAllocateAnotherNumber:false};
