@@ -84,7 +84,7 @@ public sealed class CloudAllowanceSubmissionService
             TaxAmount = tax
         };
         var environment = invoice.Environment is "production" ? "production" : "test";
-        return new CloudAllowanceDraft(applicationId, environment, invoice.InvoiceNumber,
+        return new CloudAllowanceDraft(applicationId!, environment, invoice.InvoiceNumber,
             payload.AllowanceDate, gross, JsonSerializer.Serialize(payload));
     }
 
