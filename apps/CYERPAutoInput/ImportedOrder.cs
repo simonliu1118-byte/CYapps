@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Globalization;
 namespace CYERPAutoInput;
 
@@ -13,6 +14,11 @@ internal sealed record ImportedItem(string ItemCode, string Quantity, string Uni
     public string? BundleTotal { get; init; }
     /// <summary>The 促銷組合 line that also takes the bundles' gap, worked out while ERP is filled in.</summary>
     public bool TakesBundleGap { get; init; }
+    /// <summary>
+    /// 贈／備品量: a part marked 「(贈)」 (A00175+A00173(贈); user, 2026-10-20) goes out free, in
+    /// that column; alone it is a line with 數量 0 and 單價 0.
+    /// </summary>
+    public string GiftQuantity { get; init; } = string.Empty;
 
     /// <summary>
     /// Products in item-code order, smallest first (user, 2026-10-12); the lines for the
@@ -85,7 +91,8 @@ internal sealed class ImportedOrder
     }
 
     public string ItemSummary() =>
-        string.Join("、", Items.Select(i => $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}"));
+        string.Join("、", Items.Select(i => i.GiftQuantity.Length == 0 ? $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}"
+            : i.Quantity == "0" ? $"{i.ItemCode} 贈×{i.GiftQuantity}" : $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}＋贈×{i.GiftQuantity}"));
 }
 
 /// <summary>
@@ -97,36 +104,67 @@ internal sealed class ImportedOrder
 /// Bundles 「A+B」 from any source (user, 2026-10-12): every part goes out as many times as
 /// bundles were sold, with no 單價 so ERP enters its own list price; the first part remembers
 /// what the bundle sold for, and the 促銷組合 line takes the gap while ERP is filled in.
+/// A part marked 「(贈)」 (A00175+A00173(贈); user, 2026-10-20) is no part of the price: its
+/// code goes out with the quantity in 贈／備品量, and the rest is entered as if sold alone.
 /// </summary>
-internal static class Bundles
+internal static partial class Bundles
 {
     public static List<string> Parts(string code) =>
         code.Replace('＋', '+').Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-    public static bool IsBundle(string code) => Parts(code).Count > 1;
+    public static bool IsBundle(string code) => Parts(code).Where(p => !IsGift(p)).Count() > 1;
+
+    /// <summary>A part 「A00173(贈)」 (half- or full-width brackets, 贈 or 赠): its code, and whether it is free.</summary>
+    public static (string Code, bool Gift) SplitGift(string part)
+    {
+        var match = GiftSuffix().Match(part.Trim());
+        return match.Success ? (match.Groups["code"].Value.Trim(), true) : (part.Trim(), false);
+    }
+
+    private static bool IsGift(string part) => SplitGift(part).Gift;
 
     /// <summary>The items with every bundle expanded, and the 促銷組合 line marked (added at 0 when missing).</summary>
     public static List<ImportedItem> Expand(IEnumerable<ImportedItem> items, string promotionCode, List<string> problems)
     {
         var result = new List<ImportedItem>();
         var any = false;
-        foreach (var item in items)
+        foreach (var source in items)
         {
+            var item = source;
+            var all = Parts(item.ItemCode);
+            if (all.Any(IsGift))
+            {
+                var quantity = decimal.Parse(item.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+                foreach (var gift in all.Where(IsGift))
+                {
+                    var (code, times) = ShopeeScreenshot.SplitSet(SplitGift(gift).Code);
+                    result.Add(GiftLine(code, quantity * times));
+                }
+                var sold = all.Where(p => !IsGift(p)).ToList();
+                if (sold.Count == 0)
+                {
+                    if (item.UnitPrice.Length > 0 && decimal.Parse(item.UnitPrice, NumberStyles.Number, CultureInfo.InvariantCulture) != 0)
+                        problems.Add($"「{item.ItemCode}」只有贈品卻有單價 {item.UnitPrice}，請核對。");
+                    continue;
+                }
+                item = item with { ItemCode = string.Join("+", sold) };
+            }
             var parts = Parts(item.ItemCode);
             if (parts.Count < 2) { result.Add(item); continue; }
             any = true;
-            var quantity = decimal.Parse(item.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+            var bundles = decimal.Parse(item.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
             var unit = decimal.Parse(item.UnitPrice.Length > 0 ? item.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
             for (var i = 0; i < parts.Count; i++)
             {
                 var (code, times) = ShopeeScreenshot.SplitSet(parts[i]);
-                result.Add(new ImportedItem(code, Number(quantity * times), string.Empty)
+                result.Add(new ImportedItem(code, Number(bundles * times), string.Empty)
                 {
                     SortKey = parts[0],
-                    BundleTotal = i == 0 ? Number(unit * quantity) : null
+                    BundleTotal = i == 0 ? Number(unit * bundles) : null
                 });
             }
         }
+        result = MergeGifts(result);
         if (!any) return result;
         if (promotionCode.Length == 0)
         {
@@ -139,7 +177,33 @@ internal static class Bundles
         return result;
     }
 
+    /// <summary>A free line: 數量 0, 單價 0, the quantity in 贈／備品量.</summary>
+    public static ImportedItem GiftLine(string code, decimal quantity) =>
+        new(code, "0", "0") { GiftQuantity = Number(quantity) };
+
+    /// <summary>
+    /// Free lines join a sold line of the same code (its 贈／備品量), else one line per code;
+    /// a sold line keeps its place.
+    /// </summary>
+    public static List<ImportedItem> MergeGifts(List<ImportedItem> items)
+    {
+        static bool FreeOnly(ImportedItem i) => i.GiftQuantity.Length > 0 && i.Quantity == "0";
+        static decimal Gift(ImportedItem i) => i.GiftQuantity.Length == 0 ? 0 : decimal.Parse(i.GiftQuantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+        var result = items.Where(i => !FreeOnly(i)).ToList();
+        foreach (var gifts in items.Where(FreeOnly).GroupBy(i => i.ItemCode, StringComparer.OrdinalIgnoreCase))
+        {
+            var quantity = gifts.Sum(Gift);
+            var sold = result.FindIndex(i => i.ItemCode.Equals(gifts.Key, StringComparison.OrdinalIgnoreCase));
+            if (sold >= 0) result[sold] = result[sold] with { GiftQuantity = Number(Gift(result[sold]) + quantity) };
+            else result.Add(GiftLine(gifts.First().ItemCode, quantity));
+        }
+        return result;
+    }
+
     private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    [GeneratedRegex(@"^(?<code>.*?[0-9A-Za-z])\s*[(（]\s*[贈赠]品?\s*[)）]$")]
+    private static partial Regex GiftSuffix();
 }
 
 internal static class FreightCarriers

@@ -74,6 +74,23 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void A_gift_part_goes_to_the_gift_quantity_and_the_rest_sells_alone()
+    {
+        // 「A00175+A00173(贈)」 (user's screenshot, 2026-10-20; codes replaced).
+        var items = PromoItemShot().Select(b => b.Text == "商品選項貨號：X00315-1" ? b with { Text = "商品選項貨號：X00315-1+X00173(贈)", Width = 260 } : b).ToList();
+        var result = Read(OrderShot(), [items], PromoAmountShot());
+        Assert.Empty(result.Problems);
+        var order = Assert.IsType<ImportedOrder>(result.Order);
+        Assert.Equal(
+        [
+            new ImportedItem("X00315-1", "5", "75"),
+            new ImportedItem("X00173", "0", "0") { GiftQuantity = "5" },
+            new ImportedItem("P900", "1", "-11"),
+            new ImportedItem("D901", "1", "-37")
+        ], order.Items);
+    }
+
+    [Fact]
     public void Shopee_coins_lower_the_collected_amount_without_a_line()
     {
         List<OcrBox> amounts =

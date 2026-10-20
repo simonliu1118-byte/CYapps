@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-19（V0.3.3 正式 Release，tag `cyerp-auto-input-v0.3.3`：酷澎全自動、酷澎／MO店+ 匯入改完整流程；V0.3.1 起的程式會自動更新到此版）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
+> 更新：2026-10-20（V0.3.4 正式 Release，tag `cyerp-auto-input-v0.3.4`：「(贈)」拆成贈/備品量、自動更新顯示提示／倒數／更新中視窗且失敗還原；V0.3.3 Release 已依使用者要求刪除，用來實測自動更新。V0.3.4 之前的版本以舊流程更新，沒有新畫面，下一次正式 Release 才看得到）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
