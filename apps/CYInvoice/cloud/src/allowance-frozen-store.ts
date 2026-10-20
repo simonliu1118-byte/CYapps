@@ -18,6 +18,8 @@ export interface NewCloudAllowance {
   environment:"production"|"test";
   originalInvoiceNumber:string;allowanceDay:string;
   requestedGross:number;
+  // Present on all new HTTP requests; optional only for isolated legacy source tests.
+  reason?:string;
   unnumberedTemplateJson:string;
 }
 export interface CloudAllowanceContext {
@@ -32,6 +34,7 @@ export interface StoredCloudAllowance {
   sellerInvoice:string;companyRevision:number;
   originalInvoiceNumber:string;allowanceDay:string;
   requestedGross:number;requestHash:string;
+  reason:string;
   unnumberedTemplateJson:string;
 }
 interface CompanyRow {
@@ -95,6 +98,10 @@ function checkInput(input:NewCloudAllowance,ctx:CloudAllowanceContext):void {
       !validDate(input.allowanceDay)||
       !Number.isSafeInteger(input.requestedGross)||input.requestedGross<=0)
     throw new Error("ALLOWANCE_REQUEST_INVALID");
+  if(input.reason!==undefined&&(
+      typeof input.reason!=="string"||input.reason.length>500||
+      input.reason!==input.reason.trim()||/[\x00-\x1f\x7f]/.test(input.reason)))
+    throw new Error("ALLOWANCE_REASON_INVALID");
   checkTemplate(input);
 }
 function sameActor(a:AllowanceActor|null,b:AllowanceActor|null,workspace:string):boolean{
@@ -130,7 +137,7 @@ async function hashes(input:NewCloudAllowance,ctx:CloudAllowanceContext,seller:s
   return {
     requestHash:await keyedHash(ctx.encryptionKeyHex,"request",[
       ...common,input.applicationId,input.allowanceDay,
-      input.requestedGross,input.unnumberedTemplateJson]),
+      input.requestedGross,input.reason??"",input.unnumberedTemplateJson]),
     referenceHash:await keyedHash(ctx.encryptionKeyHex,"reference",common),
     originalFingerprint:await keyedHash(ctx.encryptionKeyHex,"invoice-serialize",common)
   };
@@ -165,7 +172,7 @@ export async function createEncryptedCloudAllowance(db:D1Database,
   const values=await hashes(input,ctx,company.seller_invoice);
   const ciphertext=await encryptCompanyBusinessData(ctx.encryptionKeyHex,
     input.workspaceId,field(input.applicationId,values.requestHash),
-    input.unnumberedTemplateJson);
+    JSON.stringify({v:1,reason:input.reason??"",templateJson:input.unnumberedTemplateJson}));
   const second=await authority.revalidate();
   if(!sameActor(first,second,input.workspaceId))
     throw new Error("ALLOWANCE_ACTOR_CHANGED");
@@ -240,9 +247,20 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
   const plaintext=await decryptCompanyBusinessData(ctx.encryptionKeyHex,
     target.workspaceId,field(target.applicationId,row.request_hash),
     row.template_ciphertext);
-  let parsed:Record<string,unknown>;
+  let parsed:Record<string,unknown>,reason:string,templateJson:string;
   try {
-    const data:unknown=JSON.parse(plaintext);
+    // The AES-GCM ciphertext holds both business reason and AMEGO request
+    // in one authenticated envelope; AMEGO still receives ONLY templateJson.
+    const document:unknown=JSON.parse(plaintext);
+    if(!document||typeof document!=="object"||Array.isArray(document))
+      throw new Error();
+    const envelope=document as Record<string,unknown>;
+    if(Object.keys(envelope).sort().join(",")!=="reason,templateJson,v"||
+       envelope.v!==1||typeof envelope.reason!=="string"||
+       typeof envelope.templateJson!=="string")throw new Error();
+    reason=envelope.reason;
+    templateJson=envelope.templateJson;
+    const data:unknown=JSON.parse(templateJson);
     if(!data||typeof data!=="object"||Array.isArray(data))throw new Error();
     parsed=data as Record<string,unknown>;
   }catch{throw new Error("ALLOWANCE_FROZEN_INVALID");}
@@ -254,7 +272,7 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     workspaceId:row.workspace_id,applicationId:row.application_id,
     deviceId:row.opened_by_device_id,environment:row.environment,
     originalInvoiceNumber:original,allowanceDay:row.allowance_day,
-    requestedGross:Number(row.requested_gross),unnumberedTemplateJson:plaintext
+    requestedGross:Number(row.requested_gross),reason,unnumberedTemplateJson:templateJson
   };
   checkInput(request,ctx);
   const values=await hashes(request,ctx,row.seller_invoice);
@@ -276,5 +294,5 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     companyRevision:row.company_revision,
     originalInvoiceNumber:original,allowanceDay:row.allowance_day,
     requestedGross:request.requestedGross,requestHash:row.request_hash,
-    unnumberedTemplateJson:plaintext};
+    reason,unnumberedTemplateJson:templateJson};
 }

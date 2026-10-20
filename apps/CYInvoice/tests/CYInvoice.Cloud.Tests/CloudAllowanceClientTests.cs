@@ -76,8 +76,16 @@ internal static class CloudAllowanceClientTests
             Equal(Id,d.RootElement.GetProperty("applicationId").GetString());
             Equal("test",d.RootElement.GetProperty("environment").GetString());
             Equal(template,d.RootElement.GetProperty("unnumberedTemplateJson").GetString());
+            Equal("Synthetic reason",d.RootElement.GetProperty("reason").GetString());
             return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
                 status="open",revision=1,officialActionPerformed=false});
+        });
+        fake.Add(r=>{
+            Check(r,"get");
+            return Json(HttpStatusCode.OK,new{ok=true,application=new{
+                applicationId=Id,environment="test",status="open",
+                revision=1,requestedGross=50,allowanceDay="20261019",
+                reason="Synthetic reason"},officialActionPerformed=false});
         });
         fake.Add(r=>{
             Check(r,"list");
@@ -133,10 +141,13 @@ internal static class CloudAllowanceClientTests
         });
         using var httpClient=new HttpClient(fake);
         var api=new CloudAllowanceClient(httpClient,new Uri(Host),Token);
-        var draft=new CloudAllowanceDraft(Id,"test","AB12345678","20261019",50,template);
+        var draft=new CloudAllowanceDraft(Id,"test","AB12345678","20261019",50,template,"Synthetic reason");
         var created=await api.CreateAsync(draft,"0001","fake-password");
         Equal("open",created.Status);
         Equal(1,created.Revision);
+        var detail=await api.GetAsync(Id,"0001","fake-password");
+        Equal("Synthetic reason",detail.Reason);
+        Equal(50L,detail.RequestedGross);
         var page=await api.ListAsync("0001","fake-password");
         Equal(1,page.Count);
         Equal(Id,page[0].ApplicationId);
@@ -152,12 +163,12 @@ internal static class CloudAllowanceClientTests
         Equal("reserved",status.LedgerStatus);
         await Fail<InvalidDataException>(()=>api.StatusAsync(Id,"0001","fake-password"));
         await Fail<CloudApiException>(()=>api.CreateAsync(draft,"0001","fake-password"));
-        Equal(9,fake.Calls);
+        Equal(10,fake.Calls);
         Equal(0,fake.Remaining);
         // Invalid IDs and data never reach network; failure never retries.
         await Fail<ArgumentException>(()=>api.ApproveAsync(Id,0,"0001","fake-password"));
         await Fail<ArgumentException>(()=>api.CreateAsync(draft with{
            Environment="evil"},"0001","fake-password"));
-        Equal(9,fake.Calls);
+        Equal(10,fake.Calls);
     }
 }

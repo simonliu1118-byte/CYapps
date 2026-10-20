@@ -2,6 +2,11 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.23 Build 0 — 2026/10/20（V3.2-C4e Cloud 加密申請原因與主管查閱）
+- C4d 已保留的員工折讓原因現在於 C4a API 強制檢核並與原 `unnumberedTemplateJson` 一起放入唯一 AES-GCM Authenticated Frozen 封套；同一 request HMAC 同時綁定原因與官方模板，密文不含任何明文原因，無須改動 D1 欄位、Grant、Ledger 或額外引入第二資料 owner。
+- Cloud `/v1/allowances/get` 僅經 CYID、active Device 與本人／主管權限驗證後才解密並回傳原因；list/status/preview 永不回傳原因。Windows Cloud Client 補嚴格 GET DTO 與合成安全測試；跨機主管視窗提供受權限控制的「查看申請原因」，不提供真 g0401/g0501。
+- Frozen envelope v1 是尚未部署的 V3.2 合成契約；正式 D1 仍 schema16，Worker 折讓旗標未開。仍需獨立正式 schema17/18 升格、受控送出歸因策略、使用者本機 Work MCP 及兩台 Windows 真測。不得將此工程版當成正式 Release（仍 V3.1.0）。
+
 ## V3.1.22 Build 1 — 2026/10/20（V3.2-C4d CYID Cloud 折讓申請人入口／工程版）
 - 選擇性參照 #440 的申請前持久化 ID 思路，將現行 RecordDetailForm／AllowanceRequestForm 既有完整編輯與原發票二次官方查回接入新的 C4a CloudAllowanceClient，無第二套 Work Item owner 或舊 API。
 - CYID Cloud 模式先做 bounded list/readiness 預檢，再檢查光貿最新餘額及 7 位小數明細，固定新 application ID 與 SHA256 payload fingerprint 寫回原 Local SQLite 發票擴充資料，**成功持久化後才允許一次 Cloud create**。逾時／回覆遺失保留 ID，重入僅 status 唯讀查回，不自動重建、換 ID 或盲目送出；Local-only 舊人工流程不變。

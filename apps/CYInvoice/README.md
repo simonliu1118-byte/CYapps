@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.22 Build 1（非正式 Release）**：C4d 從原折讓編輯器接 CYID Cloud 申請、先持久化原 application ID 再第一次寫入、未知結果唯讀查回；跨機原因加密展示、正式 schema17/18／Worker 與實際雙機仍待完成。正式 Release V3.1.0。
+- **目前工程 Source：V3.1.23 Build 0（非正式 Release）**：C4e 補 AES-GCM 綁定 Cloud 折讓原因與官方模板、CYID 權限後 GET、主管查閱原因；正式 Cloud migration／Worker 與真光貿送出仍未啟用，正式 Release V3.1.0。
+
+- **前一工程 Source：V3.1.22 Build 1（非正式 Release）**：C4d 從原折讓編輯器接 CYID Cloud 申請、先持久化原 application ID 再第一次寫入、未知結果唯讀查回；跨機原因加密展示、正式 schema17/18／Worker 與實際雙機仍待完成。正式 Release V3.1.0。
 
 - **前一工程 Source：V3.1.21 Build 0（非正式 Release）**：C5 加入非空 schema16 SQLite→草稿17/18、失敗 rollback／備份還原演練；正式 migration 尚未升格，C4d 申請建立仍待接通，原 Cloudflare D1/Worker 不變，正式 Release 仍 V3.1.0。
 

@@ -21,9 +21,12 @@ public sealed record CloudAllowanceOfficialPreview(string ApplicationId,int Revi
     string OriginalInvoiceNumber,long RequestedGross,int OfficialUploadStatus,
     bool OfficialSummaryComplete,int OfficialAllowanceCount,
     bool OfficialMutationPending,bool OfficialInvoiceCancelled);
+public sealed record CloudAllowanceDetail(string ApplicationId,string Status,
+    int Revision,string Environment,long RequestedGross,string AllowanceDay,
+    string Reason);
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
-    string UnnumberedTemplateJson);
+    string UnnumberedTemplateJson,string Reason);
 
 public sealed class CloudAllowanceClient
 {
@@ -139,18 +142,55 @@ public sealed class CloudAllowanceClient
            draft.RequestedGross<=0||
            draft.UnnumberedTemplateJson is null||
            draft.UnnumberedTemplateJson.Length<2||
-           draft.UnnumberedTemplateJson.Length>32768)
+           draft.UnnumberedTemplateJson.Length>32768||
+           string.IsNullOrWhiteSpace(draft.Reason)||
+           draft.Reason!=draft.Reason.Trim()||draft.Reason.Length>500||
+           draft.Reason.Any(char.IsControl))
             throw new ArgumentException("Cloud allowance draft is invalid.",nameof(draft));
         using var doc=await SendAsync("create",new{
             applicationId=draft.ApplicationId,environment=draft.Environment,
             originalInvoiceNumber=draft.OriginalInvoiceNumber,
             allowanceDay=draft.AllowanceDay,requestedGross=draft.RequestedGross,
             unnumberedTemplateJson=draft.UnnumberedTemplateJson,
-            employeeNo,password},cancellationToken).ConfigureAwait(false);
+            reason=draft.Reason,employeeNo,password},cancellationToken).ConfigureAwait(false);
         if(!doc.RootElement.TryGetProperty("officialActionPerformed",out var v)||
            v.ValueKind!=JsonValueKind.False)
             throw new InvalidDataException("Cloud allowance create must not issue an official transaction.");
         return Receipt(doc.RootElement,draft.ApplicationId,"open",1);
+    }
+
+    // GET is a CYID/Device scoped POST; only owner or verified manager sees
+    // the encrypted reason. Do not expose buyer/PDF/template or provider secrets.
+    public async Task<CloudAllowanceDetail> GetAsync(
+        string id,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        using var doc=await SendAsync("get",new{applicationId=id,
+            employeeNo,password},cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        if(!root.TryGetProperty("officialActionPerformed",out var performed)||
+           performed.ValueKind!=JsonValueKind.False||
+           !root.TryGetProperty("application",out var item)||
+           item.ValueKind!=JsonValueKind.Object||
+           item.EnumerateObject().Count()!=7)
+            throw new InvalidDataException("Cloud allowance detail response is invalid.");
+        var replyId=Required(item,"applicationId");
+        var status=Required(item,"status");
+        var environment=Required(item,"environment");
+        var day=Required(item,"allowanceDay");
+        var reason=Required(item,"reason");
+        if(replyId!=id||environment is not ("production" or "test")||
+           !Regex.IsMatch(day,@"^\d{8}$")||reason.Length>500||
+           reason.Any(char.IsControl))
+            throw new InvalidDataException("Cloud allowance detail scope is invalid.");
+        EnsureStatus(status);
+        if(!item.TryGetProperty("requestedGross",out var requested)||
+           requested.ValueKind!=JsonValueKind.Number||
+           !requested.TryGetInt64(out var gross)||gross<=0)
+            throw new InvalidDataException("Cloud allowance amount is invalid.");
+        return new CloudAllowanceDetail(id,status,RequiredRevision(item),
+            environment,gross,day,reason);
     }
     public async Task<IReadOnlyList<CloudAllowanceSummary>> ListAsync(
         string employeeNo,string password,string? status=null,int limit=20,
