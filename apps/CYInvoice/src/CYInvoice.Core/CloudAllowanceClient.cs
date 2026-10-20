@@ -31,6 +31,8 @@ public sealed record CloudAllowanceSendReceipt(string ApplicationId,
     string AllowanceNumber,string LedgerStatus,string IssueKind,
     string ManualDisposition,bool RecordedReadback);
 
+public sealed record CloudAllowanceManualReview(string ReviewId,string LedgerId,
+    string LedgerStatus,string Disposition);
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
@@ -400,6 +402,80 @@ public sealed class CloudAllowanceClient
             throw new InvalidDataException("Cloud send response has unknown review state.");
         return new CloudAllowanceSendReceipt(id,number,"sending",kind,
             disposition,RequiredBoolean(root,"recordedReadback"));
+    }
+    private static readonly HashSet<string> TriageCodes=new(StringComparer.Ordinal)
+    {
+        "full_match_unattributed","unknown_outcome",
+        "number_collision_investigation","provider_rejection_investigation"
+    };
+    // Manual classification is an append-only human annotation; never a
+    // success claim, another number grant or permission to send a second POST.
+    public async Task<CloudAllowanceManualReview> RecordManualReviewAsync(
+        string id,int expectedRevision,string reviewId,string disposition,
+        string employeeNo,string password,CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3||!Regex.IsMatch(reviewId,
+            @"^[A-Za-z0-9_-]{12,100}$")||!TriageCodes.Contains(disposition))
+            throw new ArgumentException("Invalid manual review classification.");
+        using var doc=await SendAsync("manual-review",new{
+            applicationId=id,expectedRevision,reviewId,disposition,
+            confirmReview=true,employeeNo,password},cancellationToken)
+            .ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id||
+           Required(root,"reviewId")!=reviewId||
+           Required(root,"disposition")!=disposition)
+            throw new InvalidDataException("Manual review identity changed.");
+        var ledger=Required(root,"ledgerId");
+        var status=Ledger(Required(root,"ledgerStatus"));
+        if(!Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+           status is not ("sending" or "occupied_external"))
+            throw new InvalidDataException("Manual review ledger is not an attempted transaction.");
+        return new CloudAllowanceManualReview(reviewId,ledger,status,disposition);
+    }
+    public async Task<IReadOnlyList<CloudAllowanceManualReview>> ManualHistoryAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        using var doc=await SendAsync("manual-history",new{
+            applicationId=id,expectedRevision,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id||
+           !root.TryGetProperty("items",out var items)||
+           items.ValueKind!=JsonValueKind.Array||items.GetArrayLength()>30)
+            throw new InvalidDataException("Cloud manual review history is invalid.");
+        var result=new List<CloudAllowanceManualReview>();
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var r in items.EnumerateArray())
+        {
+            RequireFalse(r,"proofOfThisPost");
+            RequireFalse(r,"officiallyConfirmed");
+            RequireFalse(r,"safeToAutoRetry");
+            RequireFalse(r,"canAllocateAnotherNumber");
+            var review=Required(r,"reviewId");
+            var ledger=Required(r,"ledgerId");
+            var status=Ledger(Required(r,"ledgerStatus"));
+            var disposition=Required(r,"disposition");
+            if(!seen.Add(review)||!Regex.IsMatch(review,@"^[A-Za-z0-9_-]{12,100}$")||
+               !Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+               status is not ("sending" or "occupied_external")||
+               !TriageCodes.Contains(disposition))
+                throw new InvalidDataException("Cloud manual review history entry is invalid.");
+            result.Add(new CloudAllowanceManualReview(review,ledger,status,disposition));
+        }
+        return result;
     }
     public async Task<CloudAllowanceStatus> StatusAsync(
         string id,string employeeNo,string password,

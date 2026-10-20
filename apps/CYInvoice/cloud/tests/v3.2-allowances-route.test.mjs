@@ -96,7 +96,7 @@ function fakeOneShotProvider(allowanceNumber){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
+ assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -298,6 +298,50 @@ async function call(env,action,body={},token=rawDevA){
    assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1,
     "repeat confirmation must not send a second g0401");
    assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
+   // Schema19 remains opt-in even if old allowance endpoints work.
+   assert.equal((await call(manager,"manual-history",{applicationId:app1,
+    expectedRevision:3},rawDevB)).status,503);
+   const triageManager=config(db,principal("ADMIN","manager"),"true","19");
+   const triageEmployee=config(db,principal("USER","employee"),"true","19");
+   assert.equal((await call(triageManager,"manual-review",{applicationId:app1,
+    expectedRevision:3,reviewId:"synthetic_review_001",
+    disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,503);
+   triageManager.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+   triageEmployee.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+   assert.equal((await call(triageEmployee,"manual-history",{
+     applicationId:app1,expectedRevision:3},rawDevA)).status,403);
+   assert.equal((await call(triageEmployee,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevA)).status,403);
+   assert.equal((await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:false},rawDevB)).status,503);
+   const manual=await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevB);
+   assert.equal(manual.status,200);
+   assert.equal(manual.body.officiallyConfirmed,false);
+   assert.equal(manual.body.canAllocateAnotherNumber,false);
+   assert.equal(manual.body.proofOfThisPost,false);
+   assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger").get().status,"sending");
+   assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_manual_review_audit").get().n,1);
+   assert.equal((await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,503);
+   const history=await call(triageManager,"manual-history",{
+     applicationId:app1,expectedRevision:3},rawDevB);
+   assert.equal(history.status,200);
+   assert.equal(history.body.items.length,1);
+   assert.equal(history.body.items[0].disposition,"full_match_unattributed");
+   assert.equal(history.body.items[0].recordedReadback,true);
+   assert.ok(!JSON.stringify(history.body).includes("FAKE BUYER"));
+   assert.throws(()=>sql.prepare("UPDATE allowance_manual_review_audit SET "+
+     "disposition='unknown_outcome'").run(),/ALLOWANCE_MANUAL_REVIEW_APPEND_ONLY/);
+   assert.throws(()=>sql.prepare("DELETE FROM allowance_manual_review_audit").run(),
+     /ALLOWANCE_MANUAL_REVIEW_APPEND_ONLY/);
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1,
+    "manual review never re-sends g0401");
+
   } finally {globalThis.fetch=old;}
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);

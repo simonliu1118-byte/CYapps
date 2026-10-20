@@ -31,6 +31,8 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button reserve=UiControls.StandardButton("預留號碼");
     private readonly Button inspect=UiControls.StandardButton("查單次送出證據");
     private readonly Button sendOnce=UiControls.StandardButton("單次送出 g0401（受控）");
+    private readonly Button manualReview=UiControls.StandardButton("記錄人工異常分類");
+    private readonly Button manualHistory=UiControls.StandardButton("查人工覆核稽核");
     private readonly Button close=UiControls.StandardButton("關閉");
     private bool busy;
 
@@ -58,6 +60,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         reserve.Click+=async(_,_)=>await ReserveAsync();
         inspect.Click+=async(_,_)=>await InspectAttemptAsync();
         sendOnce.Click+=async(_,_)=>await SendOnceAsync();
+        manualReview.Click+=async(_,_)=>await RecordManualReviewAsync();
+        manualHistory.Click+=async(_,_)=>await ShowManualHistoryAsync();
         close.Click+=(_,_)=>Close();
         FormClosing+=(_,_)=>lifetime.Cancel();
         FormClosed+=(_,_)=>{http.Dispose();lifetime.Dispose();};
@@ -95,6 +99,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
         actions.Controls.Add(inspect);actions.Controls.Add(sendOnce);
+        actions.Controls.Add(manualReview);actions.Controls.Add(manualHistory);
         actions.Controls.Add(close);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,
             ColumnCount=1,RowCount=4,Padding=new Padding(12)};
@@ -122,6 +127,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         reserve.Enabled=ready&&selected?.Status=="approved";
         inspect.Enabled=ready&&selected?.Status=="approved";
         sendOnce.Enabled=ready&&selected?.Status=="approved";
+        manualReview.Enabled=ready&&selected?.Status=="approved";
+        manualHistory.Enabled=ready&&selected?.Status=="approved";
         close.Enabled=!busy;
     }
     private async Task RunAsync(Func<string,string,Task> action)
@@ -283,6 +290,91 @@ internal sealed class CloudAllowanceManagerForm : Form
             queue.Items.Clear();
         });
     }
+    private async Task RecordManualReviewAsync()
+    {
+        var row=Selected();if(row is null)return;
+        await RunAsync(async(no,pass)=>{
+            var attempt=await client!.InspectAttemptAsync(row.ApplicationId,
+                row.Revision,no,pass,lifetime.Token);
+            searchId.Text=attempt.ApplicationId;
+            if(attempt.LedgerStatus is not ("sending" or "occupied_external"))
+            {
+                status.Text="只有已執行的原號可加入人工覆核稽核；未送出的預留不能標記。";
+                return;
+            }
+            using var dialog=new Form{
+                Text="原號人工覆核（只記錄，不確認財務完成）",
+                ClientSize=new Size(630,240),MinimumSize=new Size(590,230),
+                StartPosition=FormStartPosition.CenterParent,
+                FormBorderStyle=FormBorderStyle.FixedDialog,
+                MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
+                Font=new Font("Microsoft JhengHei UI",10F)
+            };
+            var root=new TableLayoutPanel{
+                Dock=DockStyle.Fill,Padding=new Padding(14),ColumnCount=1,RowCount=3
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute,38));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+            var info=new Label{
+                Dock=DockStyle.Fill,
+                Text="申請："+attempt.ApplicationId+"\n原號："+attempt.AllowanceNumber+
+                    "／"+attempt.LedgerStatus+
+                    "\n本次僅記錄主管對既有證據的分類，不會變更 Ledger、" +
+                    "確認光貿成功、重送 g0401 或改配新號。"
+            };
+            var choices=new ComboBox{
+                Dock=DockStyle.Fill,DropDownStyle=ComboBoxStyle.DropDownList
+            };
+            var allowed=new List<(string Code,string Name)>{
+                ("unknown_outcome","結果不明／待調查"),
+                ("number_collision_investigation","外部占號／待查證"),
+                ("provider_rejection_investigation","光貿拒絕／待查證")
+            };
+            if(attempt.RecordedExactReadback)
+                allowed.Insert(0,("full_match_unattributed","全項吻合，但本次送出無法歸因"));
+            choices.Items.AddRange(allowed.Select(x=>x.Name).ToArray());
+            choices.SelectedIndex=0;
+            var buttons=new FlowLayoutPanel{
+                Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft
+            };
+            var record=UiControls.StandardButton("確認寫入不可變稽核");
+            record.Width=190;record.DialogResult=DialogResult.OK;
+            var cancel=UiControls.StandardButton("取消");
+            cancel.DialogResult=DialogResult.Cancel;
+            buttons.Controls.Add(cancel);buttons.Controls.Add(record);
+            root.Controls.Add(info,0,0);root.Controls.Add(choices,0,1);
+            root.Controls.Add(buttons,0,2);dialog.Controls.Add(root);
+            dialog.CancelButton=cancel;
+            if(dialog.ShowDialog(this)!=DialogResult.OK||
+               choices.SelectedIndex<0)return;
+            var code=allowed[choices.SelectedIndex].Code;
+            // One original, non-reused ID for the user's single audit action.
+            // A lost response is checked with manual-history, never resubmitted.
+            var reviewId=Guid.NewGuid().ToString("N");
+            var receipt=await client!.RecordManualReviewAsync(
+                row.ApplicationId,row.Revision,reviewId,code,no,pass,lifetime.Token);
+            status.Text="人工分類已留存："+receipt.ReviewId+"；原 Ledger "+
+                receipt.LedgerStatus+" 不變。不代表本次交易成功。";
+        });
+    }
+    private async Task ShowManualHistoryAsync()
+    {
+        var row=Selected();if(row is null)return;
+        await RunAsync(async(no,pass)=>{
+            var records=await client!.ManualHistoryAsync(row.ApplicationId,
+                row.Revision,no,pass,lifetime.Token);
+            searchId.Text=row.ApplicationId;
+            MessageBox.Show(this,records.Count==0?"目前沒有人工覆核紀錄。":
+                string.Join("\n",records.Select(r=>r.ReviewId+"／"+
+                    r.LedgerStatus+"／"+r.Disposition)),
+                "Cloud 人工覆核稽核（唯讀）",MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            status.Text="已依原申請 ID 查回 "+records.Count+
+                " 筆人工覆核分類；所有紀錄都不代表光貿官方完成。";
+        });
+    }
     internal static void VerifySmokeLayout()
     {
         using var form=new CloudAllowanceManagerForm();
@@ -290,7 +382,8 @@ internal sealed class CloudAllowanceManagerForm : Form
            form.ClientSize.Width<790||form.queue.Columns.Count!=6||
            !form.password.UseSystemPasswordChar||
            form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
-           form.sendOnce.Enabled||form.inspect.Enabled)
+           form.sendOnce.Enabled||form.inspect.Enabled||
+           form.manualReview.Enabled||form.manualHistory.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
 }
