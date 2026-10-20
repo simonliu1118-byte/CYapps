@@ -65,7 +65,7 @@ try{
  },/no such table/);
  assert.deepEqual(tables(db),before,"failed 0017 must not leak partial triggers/tables");
  // Verify sequential migration boundaries, including a failed 0018.
- migration(db,"drafts/0017_allowance_applications.sql");
+ migration(db,"migrations/0017_allowance_applications.sql");
  const after17=tables(db);
  assert.ok(after17.some(x=>x.name==="allowance_applications"));
  assert.ok(after17.some(x=>x.name==="allowance_application_audit_events"));
@@ -77,7 +77,7 @@ try{
   catch(e){db.exec("ROLLBACK");throw e;}
  },/no such table/);
  assert.deepEqual(tables(db),after17,"failed 0018 must not partially install Ledger");
- migration(db,"drafts/0018_allowance_frozen_ledger.sql");
+ migration(db,"migrations/0018_allowance_frozen_ledger.sql");
  const after18=tables(db);
  for(const name of ["allowance_applications","allowance_application_audit_events",
   "allowance_frozen_requests","allowance_execution_approvals",
