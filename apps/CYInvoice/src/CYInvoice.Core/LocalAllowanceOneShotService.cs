@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Net.Http;
 using System.Text.Json;
 using CYInvoice.Core.Amego;
@@ -8,6 +10,7 @@ namespace CYInvoice.Core.Invoicing;
 public enum LocalAllowanceSendOutcome
 {
     OfficiallyConfirmed,
+    FullMatchUnattributed,
     PendingOfficialReadback,
     ConfirmedNumberCollision,
     ReservedNotSent
@@ -79,8 +82,8 @@ public sealed class LocalAllowanceOneShotService
             return Pending(saved, "g0401 回覆不明或遭拒絕，鎖定原號供唯讀查回；禁止重新送出");
         }
 
-        // Even code=0 is NOT an upload confirmation; read-only verification
-        // must positively match the original frozen operation.
+        // Even code=0 and an exact official readback do NOT attribute this
+        // transaction to the present POST, so no automatic confirmed state.
         return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -107,9 +110,14 @@ public sealed class LocalAllowanceOneShotService
                 .ConfigureAwait(false);
             if (official.Code != 0 || !MatchesFrozen(ReadFrozen(saved), official.Data))
                 return Pending(saved, "光貿尚未提供可唯一比對的已完成折讓，保持原號等待查回");
-            ledger.MarkOfficiallyConfirmed(sellerInvoice, environment, saved);
-            return new(LocalAllowanceSendOutcome.OfficiallyConfirmed, saved.AllowanceNumber,
-                "已以原號和凍結明細核對官方已完成折讓");
+            // Hash exact official evidence but retain no raw buyer or item PII.
+            // The readback and matching number are never origin evidence.
+            var digest = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(official.Data))))
+                .ToLowerInvariant();
+            ledger.RecordUnattributedFullMatch(sellerInvoice,environment,saved,digest);
+            return new(LocalAllowanceSendOutcome.FullMatchUnattributed,saved.AllowanceNumber,
+                "原號及全部官方明細吻合，但無法證明為本次送出；保留 sending，須人工查證，不得重送");
         }
         catch (Exception error) when (
             error is AmegoApiException or HttpRequestException or TaskCanceledException or

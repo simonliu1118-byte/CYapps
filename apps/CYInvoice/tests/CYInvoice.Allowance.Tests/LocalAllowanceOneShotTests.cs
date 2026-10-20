@@ -3,6 +3,7 @@ using System.Text.Json;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
+using Microsoft.Data.Sqlite;
 
 internal static class LocalAllowanceOneShotTests
 {
@@ -29,10 +30,16 @@ internal static class LocalAllowanceOneShotTests
             return Task.CompletedTask;
         });
         var first = await service.SendFirstAsync(Seller, Environment, saved);
-        Check(first.Outcome == LocalAllowanceSendOutcome.OfficiallyConfirmed,
-            "code 0 alone is not enough: exact official readback must confirm");
-        Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "confirmed",
-            "confirmed status must be committed");
+        Check(first.Outcome == LocalAllowanceSendOutcome.FullMatchUnattributed,
+            "even complete readback is not proof that this POST created the allowance");
+        Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
+            "exact readback must NOT promote the ledger to confirmed");
+        Check(ReadbackAuditCount(temp.Path)==1,
+            "one immutable exact-readback evidence entry must be persisted");
+        Check(AuditHashLength(temp.Path)==64,"snapshot hash, not raw buyer, is recorded");
+        AssertReadbackAuditImmutable(temp.Path);
+        Expect<InvalidOperationException>(()=>
+            ledger.MarkOfficiallyConfirmed(Seller,Environment,saved));
         Check(fake.SendCount == 1 && fake.QueryCount == 1 && checkedCount == 1,
             "one preflight, one g0401, one official query");
         await ExpectAsync<InvalidOperationException>(() =>
@@ -65,8 +72,12 @@ internal static class LocalAllowanceOneShotTests
             "mismatch never clears sending");
         fake.Official = ValidOfficial(saved);
         var verified = await service.ReconcileAsync(Seller, Environment, saved);
-        Check(verified.Outcome == LocalAllowanceSendOutcome.OfficiallyConfirmed,
-            "original number readback can complete without another send");
+        Check(verified.Outcome == LocalAllowanceSendOutcome.FullMatchUnattributed,
+            "readback of the original number is still not attributable to this POST");
+        Check(ledger.FindLatest(Seller,Environment,Work)!.Status=="sending",
+            "repeated exact readback cannot silently confirm");
+        Check(ReadbackAuditCount(temp.Path)==1,
+            "only the full exact match can append a readback audit");
         Check(fake.SendCount == 1 && fake.QueryCount == 2,
             "readback only, no second write");
     }
@@ -106,6 +117,44 @@ internal static class LocalAllowanceOneShotTests
             service.SendFirstAsync(Seller, Environment, saved));
         Check(fake.SendCount == 0 && ledger.FindLatest(Seller, Environment, Work)!.Status == "reserved",
             "failed auth/preflight must not touch official g0401");
+    }
+
+    private static SqliteConnection OpenAudit(string directory)
+    {
+        var connection=new SqliteConnection(new SqliteConnectionStringBuilder{
+            DataSource=Path.Combine(directory,SqliteBootstrapper.DatabaseFileName),
+            Pooling=false,Cache=SqliteCacheMode.Private}.ToString());
+        connection.Open();
+        return connection;
+    }
+    private static int ReadbackAuditCount(string directory)
+    {
+        using var db=OpenAudit(directory);
+        using var cmd=db.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM allowance_local_readback_audit";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+    private static int AuditHashLength(string directory)
+    {
+        using var db=OpenAudit(directory);
+        using var cmd=db.CreateCommand();
+        cmd.CommandText="SELECT length(snapshot_sha256) FROM allowance_local_readback_audit LIMIT 1";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+    private static void AssertReadbackAuditImmutable(string directory)
+    {
+        using var db=OpenAudit(directory);
+        using var update=db.CreateCommand();
+        update.CommandText="UPDATE allowance_local_readback_audit SET result_kind='full_match_unattributed'";
+        Expect<SqliteException>(()=>update.ExecuteNonQuery());
+        using var delete=db.CreateCommand();
+        delete.CommandText="DELETE FROM allowance_local_readback_audit";
+        Expect<SqliteException>(()=>delete.ExecuteNonQuery());
+    }
+    private static void Expect<T>(Action action) where T:Exception
+    {
+        try{action();}catch(T){return;}
+        throw new InvalidOperationException("Expected "+typeof(T).Name);
     }
 
     private static LocalAllowanceReservation Reserve(LocalAllowanceNumberStore ledger) =>
