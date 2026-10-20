@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.19 Build 1 — 2026/10/20（3.2-C4b Windows CYID Cloud 折讓客戶端；工程版）
+- 由 #522 原型以已合併 #525 的乾淨 main 重新整理，僅回收跨機 Client 與隔離 HttpClient 測試；沿用 #440 已驗證的「保留原申請 ID、結果不明只能回讀」設計，不帶回舊 work_items.ALLOWANCE。
+- Windows Core 新增 CloudAllowanceClient：HTTPS、CYID Device Bearer、每次員工帳密、create/list/review/approve/reserve/status 白名單；嚴格驗證回覆狀態、rev、號碼，禁止自動重試、換號、把 reserve 當成 g0401 交易許可，明文憑證與 Frozen 請求不持久化。
+- 新增模擬 HttpClient 回覆、遺失與不安全狀態測試，登記進 Windows Cloud regression。Worker feature flag 未啟用，D1 保持 schema16，真折讓呼叫仍不存在。
+- Build 1 保留原 #522 同項 C# 宣告修正身分；C4c WinForms 與 C5 migration、真人雙機驗收另批進行。正式 Release 仍 V3.1.0。
+
 ## V3.1.18 Build 1 — 2026/10/19（3.2-C4 Cloud CYID 折讓申請／主管覆核 API；工程版）
 
 - 新增 opt-in `/v1/allowances/{create,get,list,review,withdraw,preview,approve,reserve,status}`，安全綁現行 `withCyIdSession` 登入、合法 Device bearer、活動 Workspace、CYID 主管身份重新驗證及 D1 原 C1/C2 獨立資料表，保留專案單一身份來源；一般 USER 僅查自己申請，經授權主管可列出／認領覆核、重新查官方資料、核准並預留號碼。

@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud company-card status does not replace Windows business credentials", CloudCompanySettingsUsageTests.RunAsync),
     ("V3 recovery transport, Unicode credentials and durable pending restart", CloudRecoveryClientTests.RunAsync),
     ("V3.1 manager read-only cloud Work Item list/get and strict server reply", CloudWorkItemClientTests.RunAsync),
+    ("V3.2 CYID allowance client create/list/review/approve/reserve and no retry", CloudAllowanceClientTests.RunAsync),
     ("V3.1 opaque local issue references and allowance separation", () => { CloudLocalWorkItemReferenceTests.Run(); return Task.CompletedTask; }),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
