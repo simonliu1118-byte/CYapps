@@ -205,14 +205,23 @@ internal static class CoupangScreens
     {
         // 便利商店 shows the same table under the title 「便利商店」 (user's screenshot 2026-10-20).
         // 配送指示's own 列印 on an order opens 「寄件詳情」 (user, 2026-10-20) with the 寄件單號 only.
-        var title = boxes.FirstOrDefault(b => C(b) is "取貨詳情" or "便利商店" or "寄件詳情");
-        if (title is null) return null;
+        // The same words can sit elsewhere on the page: the title is the one with the dialog's
+        // 關閉／列印寄件單 pair below it (user LOG 2026-10-20: 寄件詳情 open, not recognised).
+        foreach (var title in boxes.Where(b => C(b) is "取貨詳情" or "便利商店" or "寄件詳情").OrderByDescending(b => C(b) == "寄件詳情" || C(b) == "取貨詳情"))
+            if (Details(boxes, title) is { } found) return found;
+        return null;
+    }
+
+    private static (List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close, List<string> Trackings)? Details(IReadOnlyList<OcrBox> boxes, OcrBox title)
+    {
         var below = boxes.Where(b => b.Top > title.Bottom && b.Top < title.Bottom + 700).ToList();
-        var close = below.Where(b => C(b) == "關閉").OrderByDescending(b => b.Top).FirstOrDefault();
-        if (close is null) return null;
-        // On 關閉's row: 配送指示's rows behind the dialog have 列印寄件單 buttons of their own.
-        var print = below.Where(b => C(b) == "列印寄件單" && b.Left > close.Left && Math.Abs(b.CenterY - close.CenterY) < 16).OrderBy(b => b.Left).FirstOrDefault();
-        if (print is null) return null;
+        // On one row, 列印寄件單 right of 關閉: 配送指示's rows behind the dialog have 列印寄件單 buttons of their own.
+        var pair = (from c in below.Where(b => C(b) == "關閉")
+                    from p in below.Where(b => C(b) == "列印寄件單" && b.Left > c.Left && Math.Abs(b.CenterY - c.CenterY) < 30)
+                    orderby c.Top descending, p.Left
+                    select (Close: c, Print: p)).FirstOrDefault();
+        if (pair.Close is null) return null;
+        var (close, print) = pair;
         // Only the dialog: the list behind it has its own 訂單編號 further left.
         below = below.Where(b => b.Left >= title.Left - 40 && b.Right <= print.Right + 40).ToList();
         var rows = below.Where(b => b.Bottom < print.Top && OrderNumber.IsMatch(C(b))).OrderBy(b => b.Top).ToList();

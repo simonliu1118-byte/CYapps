@@ -446,7 +446,12 @@ internal sealed partial class ShopeeBatchRunner
         await Task.Delay(500, _token);
         var (shown, found) = await WaitOrNullAsync(8, s => CoupangScreens.PickupDetails(s.Boxes) is { } d ? (object)d : null);
         if (shown is null || found is null)
+        {
+            using (var page = await ReadAsync())
+                _log.Info("coupang-batch", $"print only page: {string.Join(" | ", page.Boxes.Where(b => b.Text.Trim().Length is > 0 and <= 30).Take(200).Select(b => $"{ShopeeScreenshot.Compact(b.Text)}@{b.Left},{b.Top},{b.Width}x{b.Height}"))}");
+            shown?.Dispose();
             throw new ShopeeBatchStop("畫面上沒有「寄件詳情」（或取貨詳情）視窗：請在 Wing 配送指示按該筆的「列印寄件單」打開後再試。");
+        }
         var details = ((List<string> Orders, List<string> Succeeded, string Method, OcrBox Print, OcrBox Close, List<string> Trackings))found;
         var channel = details.Method.Length > 0 ? details.Method : "宅配";
         _log.Info("coupang-batch", $"print only channel={channel} trackings={details.Trackings.Count}");
