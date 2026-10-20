@@ -29,12 +29,14 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button preview=UiControls.StandardButton("預覽官方資料");
     private readonly Button approve=UiControls.StandardButton("主管核准");
     private readonly Button reserve=UiControls.StandardButton("預留號碼");
+    private readonly Button inspect=UiControls.StandardButton("查單次送出證據");
+    private readonly Button sendOnce=UiControls.StandardButton("單次送出 g0401（受控）");
     private readonly Button close=UiControls.StandardButton("關閉");
     private bool busy;
 
     private CloudAllowanceManagerForm()
     {
-        Text="CYID 跨機折讓（尚未開放發送）";
+        Text="CYID 跨機折讓（送出須獨立授權）";
         Font=new Font("Microsoft JhengHei UI",10F);
         StartPosition=FormStartPosition.CenterParent;
         ClientSize=new Size(990,580);MinimumSize=new Size(790,430);
@@ -54,6 +56,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         preview.Click+=async(_,_)=>await PreviewAsync();
         approve.Click+=async(_,_)=>await ApproveAsync();
         reserve.Click+=async(_,_)=>await ReserveAsync();
+        inspect.Click+=async(_,_)=>await InspectAttemptAsync();
+        sendOnce.Click+=async(_,_)=>await SendOnceAsync();
         close.Click+=(_,_)=>Close();
         FormClosing+=(_,_)=>lifetime.Cancel();
         FormClosed+=(_,_)=>{http.Dispose();lifetime.Dispose();};
@@ -90,6 +94,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         actions.Controls.Add(details);
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
+        actions.Controls.Add(inspect);actions.Controls.Add(sendOnce);
         actions.Controls.Add(close);
         var root=new TableLayoutPanel{Dock=DockStyle.Fill,
             ColumnCount=1,RowCount=4,Padding=new Padding(12)};
@@ -115,6 +120,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         preview.Enabled=ready&&selected?.Status=="review";
         approve.Enabled=ready&&selected?.Status=="review";
         reserve.Enabled=ready&&selected?.Status=="approved";
+        inspect.Enabled=ready&&selected?.Status=="approved";
+        sendOnce.Enabled=ready&&selected?.Status=="approved";
         close.Enabled=!busy;
     }
     private async Task RunAsync(Func<string,string,Task> action)
@@ -228,13 +235,62 @@ internal sealed class CloudAllowanceManagerForm : Form
             queue.Items.Clear();
         });
     }
+    private async Task InspectAttemptAsync()
+    {
+        var row=Selected();if(row is null)return;
+        await RunAsync(async(no,pass)=>{
+            var evidence=await client!.InspectAttemptAsync(row.ApplicationId,
+                row.Revision,no,pass,lifetime.Token);
+            searchId.Text=evidence.ApplicationId;
+            status.Text=$"折讓 {evidence.AllowanceNumber}／Ledger {evidence.LedgerStatus}；"+
+                $"官方內容回查紀錄：{(evidence.RecordedExactReadback?"有（不可歸因）":"尚無")}。"+
+                "本次送出未獲官方歸因，禁止以此宣稱成功或重送。";
+        });
+    }
+    private async Task SendOnceAsync()
+    {
+        var row=Selected();if(row is null)return;
+        await RunAsync(async(no,pass)=>{
+            // Read ONLY before presenting the irreversible, one-shot action.
+            // Missing or uncertain prior evidence never authorizes another POST.
+            var evidence=await client!.InspectAttemptAsync(row.ApplicationId,
+                row.Revision,no,pass,lifetime.Token);
+            if(evidence.LedgerStatus!="reserved")
+            {
+                searchId.Text=evidence.ApplicationId;
+                status.Text="原折讓單號 "+evidence.AllowanceNumber+
+                    " 已經處於 "+evidence.LedgerStatus+
+                    "；只能人工查回、不得自動或手動重送。";
+                return;
+            }
+            var yes=MessageBox.Show(this,
+                "即將以原申請 ID "+evidence.ApplicationId+
+                "、原折讓號 "+evidence.AllowanceNumber+
+                " 執行唯一一次光貿 g0401。\n"+
+                "這不是預覽。即使回覆代碼為 0 或官方內容完全吻合，"+
+                "系統仍將保留結果不明、須人工核對，並禁止再次發送／換號。\n\n"+
+                "請確認已取得本次測試／業務操作授權，且原 Cloudflare 正式送出閘門已獨立核准。",
+                "不可重複的折讓送出",
+                MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if(yes!=DialogResult.Yes)return;
+            // A single outbound mutation; neither UI nor HTTP client retries.
+            var result=await client!.SendOnceAsync(row.ApplicationId,row.Revision,
+                no,pass,lifetime.Token);
+            searchId.Text=result.ApplicationId;
+            status.Text="原號 "+result.AllowanceNumber+"／"+result.ManualDisposition+
+                "；Ledger 仍 sending。必須人工歸因與官方查回，不能重送或視為已完成。";
+            queue.Items.Clear();
+        });
+    }
     internal static void VerifySmokeLayout()
     {
         using var form=new CloudAllowanceManagerForm();
-        if(form.Text!="CYID 跨機折讓（尚未開放發送）"||
+        if(form.Text!="CYID 跨機折讓（送出須獨立授權）"||
            form.ClientSize.Width<790||form.queue.Columns.Count!=6||
            !form.password.UseSystemPasswordChar||
-           form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled)
+           form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
+           form.sendOnce.Enabled||form.inspect.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
 }

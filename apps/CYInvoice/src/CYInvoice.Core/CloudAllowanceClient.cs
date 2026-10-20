@@ -24,6 +24,13 @@ public sealed record CloudAllowanceOfficialPreview(string ApplicationId,int Revi
 public sealed record CloudAllowanceDetail(string ApplicationId,string Status,
     int Revision,string Environment,long RequestedGross,string AllowanceDay,
     string Reason);
+public sealed record CloudAllowanceAttempt(string ApplicationId,string LedgerId,
+    string AllowanceNumber,string LedgerStatus,bool RecordedExactReadback,
+    bool ManuallyUnattributed);
+public sealed record CloudAllowanceSendReceipt(string ApplicationId,
+    string AllowanceNumber,string LedgerStatus,string IssueKind,
+    string ManualDisposition,bool RecordedReadback);
+
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
@@ -312,6 +319,87 @@ public sealed class CloudAllowanceClient
            !Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$"))
             throw new InvalidDataException("Cloud allowance reserved ID is invalid.");
         return new CloudAllowanceReservation(id,ledger,number);
+    }
+    private static void RequireFalse(JsonElement root,string key)
+    {
+        if(!root.TryGetProperty(key,out var prop)||
+            prop.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud allowance operation cannot certify a financial transaction.");
+    }
+    private static bool RequiredBoolean(JsonElement root,string key)
+    {
+        if(!root.TryGetProperty(key,out var value)||
+           value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidDataException("Cloud allowance evidence flag missing.");
+        return value.ValueKind==JsonValueKind.True;
+    }
+    private static string Ledger(string number)
+    {
+        if(number is not ("reserved" or "sending" or "occupied_external" or "confirmed"))
+            throw new InvalidDataException("Unknown Cloud allowance Ledger status.");
+        return number;
+    }
+    public async Task<CloudAllowanceAttempt> InspectAttemptAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        using var doc=await SendAsync("attempt",new{
+            applicationId=id,expectedRevision,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id)
+            throw new InvalidDataException("Cloud allowance attempt identity changed.");
+        var ledger=Required(root,"ledgerId");
+        var number=Required(root,"allowanceNumber");
+        if(!Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+           !Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$"))
+            throw new InvalidDataException("Cloud allowance attempt has malformed Ledger.");
+        return new CloudAllowanceAttempt(id,ledger,number,
+            Ledger(Required(root,"ledgerStatus")),
+            RequiredBoolean(root,"recordedExactReadback"),
+            RequiredBoolean(root,"manuallyUnattributed"));
+    }
+    public async Task<CloudAllowanceSendReceipt> SendOnceAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        // This method never retries. A lost HTTP response means that the D1
+        // one-shot CAS may already have executed. Inspect the SAME ID only.
+        using var doc=await SendAsync("send-once",new{
+            applicationId=id,expectedRevision,confirmOnce=true,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(!RequiredBoolean(root,"manualReviewRequired")||
+           Required(root,"applicationId")!=id||
+           Required(root,"ledgerStatus")!="sending")
+            throw new InvalidDataException("Cloud send receipt cannot be trusted.");
+        var number=Required(root,"allowanceNumber");
+        var kind=Required(root,"issueKind");
+        var disposition=Required(root,"manualDisposition");
+        if(!Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$")||
+           kind is not ("accepted_unconfirmed" or "confirmed_number_collision" or
+             "definite_rejection" or "unknown_result")||
+           disposition is not ("full_match_unattributed" or
+             "matched_readback_audit_unavailable" or
+             "number_collision_requires_investigation" or
+             "accepted_without_attributable_readback" or
+             "provider_rejected_requires_investigation" or
+             "unknown_outcome_requires_investigation"))
+            throw new InvalidDataException("Cloud send response has unknown review state.");
+        return new CloudAllowanceSendReceipt(id,number,"sending",kind,
+            disposition,RequiredBoolean(root,"recordedReadback"));
     }
     public async Task<CloudAllowanceStatus> StatusAsync(
         string id,string employeeNo,string password,
