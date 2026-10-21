@@ -17,6 +17,7 @@
 | 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.34 Build 0：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
 | **V3.2 E Cloud 申請／核准／單次送出核心** | schema20 草案已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
 | **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
+| **V3.2 D／E Local→Cloud 權威封鎖** | 既有 SettingsStore.Save 已加入持續保留的 Cloud 曾參與標記（cloud_void_local_send_blocked），只要裝置曾切換 Cloud 或保留 Cloud/CYID 裝置／公司授權，Local g0501 預覽／核准／送出均 fail-closed；重新切 LocalOnly、舊設定覆寫與重啟測試已補 | 只能防本機模式回退，不能證明其他未連線裝置沒送；Cloud g0501 路由仍停用，完整跨機交接／原 D1 升級與真測未完成 |
 | **V3.2 D／E 回線唯讀查回** | 已補 Cloud 原 application ID 重讀永久 Claim，逐原號觀察 D0401／99、D0501／99 或離線／無法解析；任何狀態均不可自動重送／結案，無 Claim 也不能推定 Local 未送；合成測試含權限撤銷 | Cloud/Local 尚無可證明的全域互斥權威，Worker g0501 路由持續禁止，需完成受控 owner 移轉與回線衝突政策 |
 | **V3.2 E Cloud g0501 Transport** | 已具內部簽名單次傳輸、原 ID claim-first 協調器及唯讀官方查回；g0501 結果不歸因、不自動重送／結案 | 無外部路由與正式 D1，先完成 Cloud/Local 全域權威互斥及實機驗收 |
 | **V3.2 E Local 作廢** | 官方原號預覽、主管凍結核准／文字確認、唯一 g0501 及 D0501／99 觀察已有 Source／合成測試；另補原號 claim 防不同本機待辦 ID 繞過結案；原號未歸因不結案 | CYID g0501、D 離線／回線、跨多原發票流程與真測仍待完成；未操作 Cloudflare 或真光貿 |
