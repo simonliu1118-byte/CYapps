@@ -77,6 +77,12 @@ const db={prepare:q=>new Statement(q),async batch(parts){
 }};
 const active=(device,state)=>sql.prepare("UPDATE devices SET status=? WHERE device_id=?").run(state,device);
 async function rejects(code,run){await assert.rejects(run,new RegExp(code));}
+function assertReadonlyReconciliation(result){
+ assert.equal(result.requiresManualReview,true);
+ assert.equal(result.safeToAutoResend,false);
+ assert.equal(result.safeToAutoClose,false);
+ assert.equal(result.thisPostAttributed,false);
+}
 try{
  sql.exec("PRAGMA foreign_keys=ON");
  const names=readdirSync("migrations").filter(s=>/^\d{4}_.*\.sql$/.test(s)).sort();
@@ -206,9 +212,8 @@ try{
  const beforeClaim=await reconnect(db,target,ctx,authority(supervisor),
   async()=>{throw Error("readback must not call official without a claim");},()=>time);
  assert.equal(beforeClaim.state,"not_claimed_unverified");
+ assertReadonlyReconciliation(beforeClaim);
  assert.equal(beforeClaim.claimRecorded,false);
- assert.equal(beforeClaim.safeToAutoResend,false);
- assert.equal(beforeClaim.safeToAutoClose,false);
  assert.equal(beforeClaim.officiallyVoided,null);
  assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
   deviceId:employee},authority()),{applicationId:request.applicationId,
@@ -272,9 +277,8 @@ try{
  const pending=await reconnect(db,target,ctx,authority(supervisor),official,()=>time);
  assert.equal(pending.claimRecorded,true);
  assert.equal(pending.state,"official_void_unconfirmed");
+ assertReadonlyReconciliation(pending);
  assert.equal(pending.officiallyVoided,false);
- assert.equal(pending.safeToAutoResend,false);
- assert.equal(pending.safeToAutoClose,false);
  let statusCalls=0;
  const providerCancelled=async(url,options)=>{
   statusCalls++;
@@ -285,17 +289,14 @@ try{
   providerCancelled,()=>time);
  assert.equal(statusCalls,1);
  assert.equal(observed.state,"official_void_observed_unattributed");
+ assertReadonlyReconciliation(observed);
  assert.equal(observed.officiallyVoided,true);
- assert.equal(observed.thisPostAttributed,false);
- assert.equal(observed.requiresManualReview,true);
- assert.equal(observed.safeToAutoResend,false);
- assert.equal(observed.safeToAutoClose,false);
  assert.match(observed.officialSnapshotHash,/^[a-f0-9]{64}$/);
  const offline=await reconnect(db,target,ctx,authority(supervisor),
   async()=>{throw Error("offline during reconnection");},()=>time);
  assert.equal(offline.state,"official_unavailable_readback_only");
+ assertReadonlyReconciliation(offline);
  assert.equal(offline.officiallyVoided,null);
- assert.equal(offline.safeToAutoResend,false);
  let revokedDuringStatus=false;
  await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>reconnect(db,target,ctx,
   authority(supervisor),async(url,options)=>{
