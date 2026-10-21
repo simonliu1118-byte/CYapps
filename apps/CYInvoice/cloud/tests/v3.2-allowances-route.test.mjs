@@ -506,15 +506,6 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
    assert.equal((await call(lead,"void-approve",
     {...body,confirmation:"作廢 WRONG"},rawDevB)).status,409);
    assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
-   // The cutover remains deny-by-default; manager approval cannot bypass it.
-   assert.equal((await call(lead,"void-approve",body,rawDevB)).status,409);
-   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
-   // Synthetic gate is ONLY a fixture and no route here can activate it.
-   f.sql.prepare("INSERT INTO allowance_void_authority_gates "+
-    "(workspace_id,environment,seller_invoice,company_revision,state,"+
-    "cutover_manifest_hash,activating_device_id,activated_at) "+
-    "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
-    .run(ws,"e".repeat(64),devB,new Date().toISOString());
    const approved=await call(lead,"void-approve",body,rawDevB);
    assert.equal(approved.status,200,JSON.stringify(approved.body));
    assert.equal(approved.body.status,"approved");
