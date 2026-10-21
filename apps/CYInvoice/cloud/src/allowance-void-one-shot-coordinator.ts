@@ -177,8 +177,18 @@ export async function executeCloudVoidOnce(
    await cloudCutoverActive(db,t.workspaceId,frozen.environment,
     frozen.sellerInvoice,frozen.companyRevision);
  }catch{/* Any uncertain authority or D1 state is an irreversible no-POST hold. */}
- if(!stillAuthorized)
+ if(!stillAuthorized){
+  // Distinguish a claimed-but-suppressed POST from an unknown provider result.
+  // This audit is best effort: failure never releases a permanent claim.
+  try{
+   await db.prepare("INSERT INTO allowance_void_audit "+
+    "(application_id,workspace_id,kind,actor_id,device_id,recorded_at) "+
+    "VALUES(?1,?2,'post_claim_interlock_no_post',?3,?4,?5)")
+    .bind(t.applicationId,t.workspaceId,first.employeeId,t.deviceId,
+     now(clock).toISOString()).run();
+  }catch{/* Keep claim forever even if audit write fails. */}
   throw new Error("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST");
+ }
  // From here the permanent claim is irrevocable, even on exception.
  let result:OneShotAllowanceVoidOutcome;
  try{
