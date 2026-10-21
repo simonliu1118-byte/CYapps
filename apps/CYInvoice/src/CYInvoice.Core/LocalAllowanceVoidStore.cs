@@ -157,6 +157,21 @@ internal sealed class LocalAllowanceVoidStore
         if (sql.ExecuteNonQuery() != 1) throw new InvalidOperationException("作廢稽核找不到原送出紀錄");
     }
 
+    // An original g0501 claim fences the allowance number across local issue IDs.
+    // Never infer send permission from a new issue after an identity/mode switch.
+    public bool HasClaimForAllowance(string account, string allowanceNumber)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = """
+            SELECT EXISTS(SELECT 1 FROM allowance_void_local_claims
+                WHERE account_key=$account AND allowance_number=$number)
+            """;
+        sql.Parameters.AddWithValue("$account", account);
+        sql.Parameters.AddWithValue("$number", allowanceNumber);
+        return Convert.ToInt64(sql.ExecuteScalar()) == 1;
+    }
+
     public bool HasClaimForInvoice(string account, string invoice, string order)
     {
         using var db = Open();
