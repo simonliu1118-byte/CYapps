@@ -17,7 +17,7 @@
 - **遠端基線（依使用者先前本機 MCP 回報）**：原 D1 0017／0018 各套一次、schema18；原 Worker 保留 CYID／D1／Secrets，SCHEMA_VERSION=18、ALLOWANCE_API_ENABLED=false；新六表為空，私有備份與還原證據曾核對完成。本 GitHub 工程批次沒有重新查詢或操作 Cloudflare；不重套 0014～0018、不新增替代 Worker／D1。
 - **下一個操作停點**：依[本機 MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，先核共用帳號餘額、有界盤點及 schema18 私有備份，再另行授權套一次 0019／部署原 Worker marker19，四道折讓旗標保持關閉。
 - **B/C 尚未完成的驗收**：可歸因成功與未知結果人工處置政策、測試公司卡、真兩台 Windows／角色與 Device 撤權／併發／斷電／回覆遺失，以及真光貿測試。單靠 source、合成 CI、人工分類或原號吻合都不能結案。
-- **E Local 作廢工程來源**：既有待辦已接官方預覽／原主管 15 分鐘核准、原號文字確認及 SQLite 單次 g0501；送出鎖先於 HTTP，未知結果不重送。D0501／99 只記官方狀態，無本次 POST 歸因證據而不結案。既有網站流程在尚未送出前保留；跨多原發票折讓安全拒絕，真人／真光貿尚未驗收。CYID g0501 與 D 離線／回線仍待完成。
+- **E Local 作廢工程來源**：既有待辦已接官方預覽／原主管 15 分鐘核准、原號文字確認及 SQLite 單次 g0501；送出鎖先於 HTTP，未知結果不重送。D0501／99 只記官方狀態，無本次 POST 歸因證據而不結案。既有網站流程在尚未送出前保留；跨多原發票折讓安全拒絕，真人／真光貿尚未驗收。CYID g0501 的員工申請／主管預覽／核准／原 ID 查回已有 Source／合成 CI；Cloud 單次送出僅內部封鎖程式，無 HTTP 送出路由、遠端 schema20 未部署，D 離線／回線仍待真機驗收。
 - **後續範圍**：D 離線／回線、E g0501、F 官方對帳同步、G 舊介面退役、H 集中整合驗收，全部仍屬 V3.2。正式 Release 維持 V3.1.0；工程 source、遠端 schema／部署、真交易、真人驗收與正式發行分開記錄。
 
 ## 3. A～H 功能與完成門檻（範圍不刪減、不改版）
@@ -28,7 +28,7 @@
 | B Local 正式送出 | 主管二次驗權、Frozen／SQLite Ledger、單次 g0401、原號查回及明確外部占號後受控下一號 | 已有主管文字覆核及改配號 Source／合成測試；仍待 Local 斷電、實機與真光貿驗收 |
 | C CYID 跨機折讓 | 員工／主管多機操作、身份／Device 撤權、加密原因、Grant、D1 Ledger、Audit、受控單次 g0401、未知處置與主管占號改配號 | Source 已接通且 canonical 19 已備妥；遠端仍 schema18／flag 關閉，待受控升級、歸因政策與真雙機／光貿驗收 |
 | D Cloud 故障與回線 | Cloud 失聯、光貿可用時的安全授權降級、跨機競爭／撞號、復線對帳和安全衝突處理 | 雲端／光貿不同故障組合、撤權、斷電、同一申請零自動重送 |
-| E 折讓作廢 | g0501 Local／CYID：申請、核准、單次送出、官方逐號查回、D0501 狀態 | Local 有工程來源／合成測試；CYID 尚待實作。真測試 API、歸因政策及真人驗收未完成，未知只回查 |
+| E 折讓作廢 | g0501 Local／CYID：申請、核准、單次送出、官方逐號查回、D0501 狀態 | Local／CYID 均有申請、主管核准及原號查回 Source／合成測試；Cloud g0501 送出維持禁用且無 HTTP 路由。真測試 API、Local→Cloud 單一權威切換、歸因政策及真人驗收未完成，未知只回查 |
 | F 正式同步 | 低頻 invoice_list／allowance_list，加必要 invoice_query／allowance_status；外部修改、跨期與 PDF Cache | 原本光貿網站操作後，本機／跨機依官方資料更新，保留不可變稽核 |
 | G 舊流程退役 | 只有新功能經驗收才移除舊人工選號／已人工完成入口；歷史仍能唯讀 | 最後 caller／資料與回退檢查；unknown 不偽造 |
 | H 最終驗收 | Local／CYID、雙 Windows、測試公司卡、光貿 g0401/g0501、離線／競態、資料／身分／封裝與部署 | 真實測試授權、CI＋實機紀錄、正式 Release 另行授權，不以模擬 CI 代替 |
@@ -53,10 +53,11 @@
 - **本機回退防線（V3.1.34 Source）**：在既有 SettingsStore 的 settings.json 持續保存 Cloud 曾參與的 Local g0501 禁送標記，僅阻止本機切換回 LocalOnly 後重新核准／送出；已加入重啟及舊設定回寫測試。此記號不是全球租約，無法排除另一台未入網 Local 裝置，不能當作 D/E 全域互斥完成；Cloud Worker g0501 不得因此啟用。
 - **員工原號固定 ID（工程來源）**：在既有 CYID 跨機折讓 WinForms 以員工密碼申請作廢；`CloudAllowanceClient` 將 Workspace／環境／原折讓號映射為固定 SHA-256 申請 ID，先從原 ID 唯讀查回，僅在正式 `VOID_APPLICATION_NOT_FOUND` 時建立一次。斷線、回覆遺失、重啟或改用其他 Device，均不可產生新的申請 ID 補送；由原號重新產生 ID 查回。此設計不驗證全部舊 Local 安裝且不授權 g0501。
 - **主管與 WinForms 工程來源**：既有 `allowances-route` 新增 schema20 限定的 `void-preview`／`void-approve`，用原 CYID Device/主管驗權、雙次官方查證與 D1 原子 Grant；WinForms 主管視窗用原申請 ID 預覽並強制輸入「作廢 原號」，沒有 Cloud g0501 送出入口。此處僅代表 Source／Synthetic CI，遠端仍未升級或驗收。
-- **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。下一步直接完成主管預覽／核准、WinForms 與回線衝突驗收，不再建清冊平台。
+- **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。主管預覽／核准與 WinForms 已接好；A／B 裝置原 ID 查回、主管 B 撤權、公司卡換版及錯環境拒絕已通過合成 CI。下一步只做真人雙機／測試環境與 Local 停送切換驗收，不再建清冊平台。
 - **簡化後的單一控制權**：Cloud g0501 僅透過既有 CYID Workspace／Device 的 D1 唯一 Claim 與單一 Worker 協調器送出；斷線只能原 ID 查回，不進行離線 g0501。schema20 不再設無法驗證離線舊安裝的交接 Gate；單一 Cloud g0501 協調器預設禁用且**沒有** Worker 送出路由。待現有 Local 停送、舊 Claim 人工核對並另經使用者授權後，才可另審受控啟用；不採用設備報表雜湊，也不新增清冊平台。此批無 Cloudflare 變更、沒有正式路由。
 - **跨 Local／Cloud 作廢互斥是啟用前阻塞條件**：兩台裝置在網路分割時，僅靠各自的 SQLite／D1 claim 無法證明全域唯一送出。g0501 必須有同公司／環境／官方原號的可信單一 owner 與持久、可查證的控制權交接；已知撤權、Cloud 查詢失敗或原號未記 Claim 均不可推定其他裝置未送，回線只按原申請查回且不自動補發。跨模式 owner 無法證明互斥時，作廢送出須拒絕，不能為離線可用性放寬。Cloud g0501 路由及 schema20 升格留待該防線與獨立授權完成。
 - **D1 與 Worker 分離**：依使用者回報 schema18 已完成；以後任何新的原 D1／Worker／Bindings／Secret／公司卡操作均須先通知使用者，交由其有 Cloudflare MCP 的本機 Work；事前依共通規則 §11.3 說明預估 rows read/written、呼叫次數、備份／餘額／停止條件，完成後記錄真實計量。不建立試驗 Worker／D1，且不碰 CYID 專用 D1。
+- **D／E 最小真人驗收停點（尚未執行）**：① 各用一台真正 Windows 與不同 CYID Device／員工、主管身分，驗證申請、預覽、核准及原 ID 查回；② 測試斷網、丟失回覆、撤權／公司卡換版，核對沒有第二次建立或 g0501 送出；③ 受控檢查舊 Local 安裝是否全部停送及既有不明 Claim，未核對完就不啟用 Cloud 發送；④ 前三項與 schema／測試公司卡均另獲授權後，才在隔離測試環境評估真 g0501 與回復。這是既有 H 驗收的最小執行次序，非新系統或額外設備稽核平台。
 - **驗收分層**：Source＋CI、原 D1 schema／部署、測試公司卡與光貿真交易、雙機真人操作、正式 Release 各有獨立證據；任何一層未通過只能標為「待驗」或「不可啟用」，不把 CI 視為正式財務驗收。
 - **歷史資源**：PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 仍可逐檔回收 g0501、離線碰撞與測試程式；不能整包合併、帶回舊 migrations／第二套 Work Item owner，或重用不相容序號。
 
