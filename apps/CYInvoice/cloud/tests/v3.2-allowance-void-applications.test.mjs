@@ -22,6 +22,10 @@ const approveBundle=await build({entryPoints:["src/allowance-void-manager-approv
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {approveCloudVoidAfterOfficialProof:approve}=await import("data:text/javascript;base64,"+
  Buffer.from(approveBundle.outputFiles[0].text).toString("base64"));
+const executeBundle=await build({entryPoints:["src/allowance-void-one-shot-coordinator.ts"],
+ bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {executeCloudVoidOnce:executeVoid}=await import("data:text/javascript;base64,"+
+ Buffer.from(executeBundle.outputFiles[0].text).toString("base64"));
 const sql=new DatabaseSync(":memory:");
 const ws="ws_void_test",otherWs="ws_elsewhere";
 const employee="dev_11111111-1111-4111-8111-111111111111";
@@ -189,6 +193,44 @@ try{
  await rejects("VOID_PREVIEW_APPLICATION_NOT_OPEN",()=>approve(db,approval,
   ctx,authority(supervisor),official,()=>time));
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
+ const onceTarget={...target,expectedRevision:2,confirmation:"作廢 ALW-001"};
+ let posts=0;
+ const fakeOneShot=async(url,options)=>{
+  if(url.endsWith("/g0501")){
+   posts++;assert.equal(options.method,"POST");
+   assert.deepEqual(JSON.parse(new URLSearchParams(options.body).get("data")),
+    [{CancelAllowanceNumber:"ALW-001"}]);
+   return Response.json({code:0});
+  }
+  return official(url,options);
+ };
+ await rejects("VOID_EXEC_NOT_APPROVED_OR_CONFIRMATION_INVALID",()=>executeVoid(db,
+  {...onceTarget,confirmation:"作廢 OTHER"},ctx,authority(supervisor),
+  fakeOneShot,()=>time));
+ active(managerDevice,"revoked");
+ await rejects("VOID_EXEC_MANAGER_REQUIRED",()=>executeVoid(db,onceTarget,
+  ctx,authority(supervisor),fakeOneShot,()=>time));
+ active(managerDevice,"active");
+ assert.equal(posts,0);
+ const sent=await executeVoid(db,onceTarget,ctx,authority(supervisor),
+  fakeOneShot,()=>time);
+ assert.equal(sent.outcome,"accepted_unconfirmed");
+ assert.equal(sent.providerPostAttempted,true);
+ assert.equal(sent.auditRecorded,true);
+ assert.equal(sent.safeToAutoResend,false);
+ assert.equal(sent.safeToAutoClose,false);
+ assert.equal(sent.proofOfThisPost,false);
+ assert.equal(posts,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,4);
+ await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
+  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time));
+ assert.equal(posts,1,"Re-entry after a permanent claim must not POST again");
+ assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
+  deviceId:employee},authority()),{
+  applicationId:request.applicationId,status:"approved",revision:2,
+  claimed:true,readbackOnly:true
+ });
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
   ...request,applicationId:"void_application_duplicate"},ctx,authority()));
  assert.equal(count(),1,"same official number cannot gain another application ID");
