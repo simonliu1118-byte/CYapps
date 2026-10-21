@@ -14,6 +14,8 @@ import {reserveApprovedCloudAllowanceNumber,reserveCloudAllowanceAfterExternalCo
 import {executeCloudAllowanceExactlyOnce} from "./allowance-one-shot-coordinator";
 import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication}
  from "./allowance-void-applications";
+import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
+import {approveCloudVoidAfterOfficialProof} from "./allowance-void-manager-approval";
 import {appendAllowanceManualReview,listAllowanceManualReviews,type TriageKind}
  from "./allowance-manual-review";
 
@@ -31,11 +33,15 @@ const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
  "/v1/allowances/attempt","/v1/allowances/send-once",
  "/v1/allowances/manual-review","/v1/allowances/manual-history",
  "/v1/allowances/reserve-after-collision",
- "/v1/allowances/void-create","/v1/allowances/void-status"]);
+ "/v1/allowances/void-create","/v1/allowances/void-status",
+ "/v1/allowances/void-preview","/v1/allowances/void-approve"]);
 const keys:Record<string,readonly string[]>={
  "void-create":["employeeNo","password","applicationId","environment",
   "allowanceNumber","originalInvoiceNumber","reason"],
  "void-status":["employeeNo","password","applicationId"],
+ "void-preview":["employeeNo","password","applicationId","expectedRevision"],
+ "void-approve":["employeeNo","password","applicationId","expectedRevision",
+  "requestHash","expectedOfficialSnapshotHash","confirmation"],
  create:["employeeNo","password","applicationId","environment",
   "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
  get:["employeeNo","password","applicationId"],
@@ -120,7 +126,8 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  if(action!=="list"&&!id(input.applicationId))
   return reply(400,{error:{code:"INVALID_APPLICATION_ID"}});
  if(["review","withdraw","preview","approve","reserve","attempt","send-once",
-    "manual-review","manual-history","reserve-after-collision"].includes(action)&&
+    "manual-review","manual-history","reserve-after-collision",
+    "void-preview","void-approve"].includes(action)&&
     !rev(input.expectedRevision))
   return reply(400,{error:{code:"INVALID_REVISION"}});
  // The ability to review/create applications NEVER implicitly enables g0401.
@@ -141,7 +148,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    (env.ALLOWANCE_MANUAL_REVIEW_ENABLED!=="true"||
      input.confirmReview!==true))
   return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_DISABLED"}});
- if((action==="void-create"||action==="void-status")&&
+ if(["void-create","void-status","void-preview","void-approve"].includes(action)&&
     Number(env.SCHEMA_VERSION)<20)
   return reply(503,{error:{code:"VOID_SCHEMA_NOT_READY"}});
  if(action==="list"&&
@@ -181,6 +188,41 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(200,{applicationId:result.applicationId,status:result.status,
      revision:result.revision,claimed:result.claimed,readbackOnly:result.readbackOnly,
      officiallyConfirmed:false,officialActionPerformed:false});
+  }
+  if(action==="void-preview"){
+   if(input.expectedRevision!==1)return reply(400,{error:{code:"INVALID_REVISION"}});
+   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
+   const result=await previewCloudVoidForManager(env.DB,target,ctx,authority);
+   return reply(200,{preview:{
+      applicationId:result.applicationId,revision:result.revision,
+      requestHash:result.requestHash,officialSnapshotHash:result.officialSnapshotHash,
+      allowanceNumber:result.allowanceNumber,
+      originalInvoiceNumber:result.originalInvoiceNumber,reason:result.reason,
+      officialCheckedAtUtc:result.officialCheckedAtUtc,
+      canApproveWithoutFurtherReview:false,mayPostG0501:false
+   },officialActionPerformed:false});
+  }
+  if(action==="void-approve"){
+   if(input.expectedRevision!==1||typeof input.requestHash!=="string"||
+      !/^[a-f0-9]{64}$/.test(input.requestHash)||
+      typeof input.expectedOfficialSnapshotHash!=="string"||
+      !/^[a-f0-9]{64}$/.test(input.expectedOfficialSnapshotHash)||
+      typeof input.confirmation!=="string"||
+      input.confirmation.length>32)
+    return reply(400,{error:{code:"INVALID_REQUEST"}});
+   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
+   const result=await approveCloudVoidAfterOfficialProof(env.DB,{
+      workspaceId:binding.workspaceId,applicationId:target.applicationId,
+      deviceId:dev.device_id,expectedRevision:1,
+      requestHash:input.requestHash,
+      expectedOfficialSnapshotHash:input.expectedOfficialSnapshotHash,
+      confirmation:input.confirmation
+   },ctx,authority);
+   return reply(200,{applicationId:result.applicationId,
+      status:"approved",revision:result.approvedRevision,
+      validUntilUtc:result.validUntilUtc,
+      requiresFreshOfficialCheck:true,
+      mayPostG0501:false,officiallyConfirmed:false,officialActionPerformed:false});
   }
   if(action==="create"){
    if(!["production","test"].includes(String(input.environment))||
