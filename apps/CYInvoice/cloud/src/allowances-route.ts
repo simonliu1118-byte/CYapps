@@ -465,6 +465,12 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  }catch(e){
   if(e instanceof CyIdError)
    return reply(e.status,{error:{code:e.code}});
+  // Only this authenticated, scoped read is allowed to distinguish a
+  // missing original ID from a network/authority/ambiguous failure.
+  // Unknown and inaccessible IDs are identically NOT_FOUND to callers.
+  if(action==="void-status"&&e instanceof Error&&
+     e.message==="VOID_APPLICATION_NOT_FOUND")
+   return reply(404,{error:{code:"VOID_APPLICATION_NOT_FOUND"}});
   // Do not return API key, frozen content, official buyer data or SQL details.
   if(e instanceof Error&&/^(ALLOWANCE_|OFFICIAL_|VOID_)/.test(e.message))
    return reply(409,{error:{code:"ALLOWANCE_OPERATION_UNCONFIRMED"}});
