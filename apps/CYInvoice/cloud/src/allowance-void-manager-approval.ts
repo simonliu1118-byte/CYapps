@@ -2,6 +2,7 @@
 // This does not execute or authorize g0501. The public route and send gate
 // remain absent while cross-device and offline/Local coordination is unproven.
 import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
+import {freshVoidOfficialEvidence} from "./amego-allowance-void-proof";
 import {activeVoidDevice,isVoidManager,sameVoidManager}
  from "./allowance-void-applications";
 import type {AllowanceActorSource,CloudAllowanceContext}
@@ -47,9 +48,7 @@ export async function approveCloudVoidAfterOfficialProof(
  const date=clock();
  if(!(date instanceof Date)||!Number.isFinite(date.valueOf()))
   throw new Error("VOID_APPROVAL_CLOCK_INVALID");
- const checked=Date.parse(proof.officialCheckedAtUtc);
- if(!Number.isFinite(checked)||checked>date.valueOf()+1000||
-  date.valueOf()-checked>60_000)
+ if(!freshVoidOfficialEvidence(proof.officialCheckedAtUtc,date))
   throw new Error("VOID_APPROVAL_OFFICIAL_STALE");
  const approvedAtUtc=date.toISOString();
  const validUntilUtc=new Date(date.valueOf()+900_000).toISOString();
