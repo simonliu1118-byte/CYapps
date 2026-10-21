@@ -32,6 +32,9 @@ internal static class Program
             ("production sync discovers remote invoice and queries details", TestProductionDiscoveryAsync),
             ("production sync overwrites cache and re-infers source", TestProductionOverwriteAsync),
             ("unchanged production summary skips invoice query", TestUnchangedSkipsQueryAsync),
+            ("official allowance change survives list sync and invalidates old PDF", TestOfficialAllowanceListReconcileAsync),
+            ("detail refresh invalidates cache on allowance-only change", TestAllowanceOnlyDetailRefreshAsync),
+            ("unknown allowance summary is not official empty history", TestOfficialAllowanceSummaryPresenceAsync),
             ("test list discovers only CYInvoice-prefixed invoices", TestTestEnvironmentPrefixDiscoveryAsync),
             ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
@@ -444,6 +447,122 @@ internal static class Program
         Equal(0, result.Queried);
         Equal(0, fake.QueryCalls);
         Equal(1, result.Unchanged);
+    }
+
+    private static Task TestOfficialAllowanceSummaryPresenceAsync()
+    {
+        var record = MatchingRecord("DD12345678", "66091800222222");
+        var unknown = InvoiceAllowanceMetadata.OfficialFingerprint(record);
+        InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: false);
+        Equal(unknown, InvoiceAllowanceMetadata.OfficialFingerprint(record));
+        InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: true);
+        NotEqual(unknown, InvoiceAllowanceMetadata.OfficialFingerprint(record));
+        return Task.CompletedTask;
+    }
+
+    private static async Task TestOfficialAllowanceListReconcileAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("DD12345678", "66091800222222");
+        var active = new InvoiceAllowanceResult(
+            "D0401", UploadStatuses.Complete, 2, "A20260918001",
+            "20260918", "5", "95");
+        InvoiceAllowanceMetadata.ApplyQuery(original, [active], summaryPresent: true);
+        repository.Invoices.Append(original);
+        var pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        // Only a pre-existing failed detail query forces invoice_query when
+        // invoice_list summary is unchanged. Do not poll every old invoice.
+        new InvoiceSyncIssueStore(repository.DataDirectory).Record(
+            "prod|12345675", original.InvoiceNumber, original.ApiOrderId,
+            InvoiceSyncIssueTypes.QueryFailed, "synthetic earlier readback failure", FixedNow);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query(
+                original.InvoiceNumber, original.ApiOrderId, "100", "買受人",
+                description: "商品") with
+            {
+                Data = Query(original.InvoiceNumber, original.ApiOrderId,
+                    "100", "買受人", description: "商品").Data with
+                {
+                    Allowances = [active with { CancelDate = 1 }],
+                    AllowanceSummaryPresent = true,
+                },
+            },
+        };
+        fake.Pages[1] = ListResponse(1, [Remote(
+            original.InvoiceNumber, original.ApiOrderId, "100")]);
+        var result = await Sync(repository, fake).SyncRecentAsync();
+        Equal(1, result.Queried);
+        Equal(1, result.Updated);
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
+        var saved = repository.Invoices.LoadOrCreate().Single();
+        Equal(1L, InvoiceAllowanceMetadata.ReadOfficial(saved).Single().CancelDate);
+        Equal("100", InvoiceAllowanceMetadata.RemainingGross(saved).ToString());
+        // No extra provider queries after the failed-query issue resolves.
+        var next = await Sync(repository, fake).SyncRecentAsync();
+        Equal(0, next.Queried);
+        Equal(1, fake.QueryCalls);
+    }
+
+    private static async Task TestAllowanceOnlyDetailRefreshAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("EE12345678", "66091800333333");
+        var active = new InvoiceAllowanceResult(
+            "D0401", UploadStatuses.Complete, 2, "A20260918002",
+            "20260918", "5", "95");
+        InvoiceAllowanceMetadata.ApplyQuery(original, [active], summaryPresent: true);
+        repository.Invoices.Append(original);
+        var pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        var unchanged = Query(original.InvoiceNumber, original.ApiOrderId,
+            "100", "買受人", description: "商品");
+        var fake = new FakeGateway
+        {
+            QueryResponse = unchanged with
+            {
+                Data = unchanged.Data with
+                {
+                    Allowances = [active with { CancelDate = 1 }],
+                    AllowanceSummaryPresent = true,
+                },
+            },
+        };
+        var refreshed = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(1, fake.QueryCalls);
+        Equal(InvoiceStates.Opened, refreshed.InvoiceState);
+        Equal(1L, InvoiceAllowanceMetadata.ReadOfficial(refreshed).Single().CancelDate);
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
+        // Same official history causes no cache eviction on the next read.
+        pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        await DetailRefresh(repository, fake).RefreshAsync(refreshed);
+        Equal(2, fake.QueryCalls);
+        Equal(true, File.Exists(pdf));
+        Equal(true, File.Exists(preview));
+        // Official absence/unknown is never silently treated as known zero.
+        fake.QueryResponse = unchanged with
+        {
+            Data = unchanged.Data with
+            {
+                Allowances = [],
+                AllowanceSummaryPresent = false,
+            },
+        };
+        await DetailRefresh(repository, fake).RefreshAsync(refreshed);
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
+        var unknown = repository.Invoices.LoadOrCreate().Single();
+        try { InvoiceAllowanceMetadata.RemainingGross(unknown); }
+        catch (InvalidOperationException) { return; }
+        throw new InvalidOperationException("missing official allowance summary must fail closed");
     }
 
     private static async Task TestTestEnvironmentPrefixDiscoveryAsync()
