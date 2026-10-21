@@ -162,6 +162,7 @@ export default {
       "/v1/allowances/preview","/v1/allowances/approve",
       "/v1/allowances/reserve","/v1/allowances/status",
       "/v1/allowances/void-create","/v1/allowances/void-status",
+      "/v1/allowances/void-preview","/v1/allowances/void-approve",
     ].includes(path);
     try {
       if (usesCyId(env)) {
