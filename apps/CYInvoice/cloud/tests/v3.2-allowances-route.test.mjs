@@ -460,7 +460,75 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_requests").get().n,1);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
   assert.equal((await call(lead,"void-send",{applicationId},rawDevB)).status,404);
-  assert.equal((await call(lead,"void-approve",{applicationId},rawDevB)).status,404);
+  assert.equal((await call(older,"void-preview",{applicationId,expectedRevision:1},
+   rawDevB)).status,503);
+  assert.equal((await call(applicant,"void-preview",{applicationId,
+   expectedRevision:1})).status,403);
+  assert.equal((await call(applicant,"void-approve",{applicationId,
+   expectedRevision:1,requestHash:"a".repeat(64),
+   expectedOfficialSnapshotHash:"b".repeat(64),
+   confirmation:"作廢 ALW-001"})).status,403);
+  const originalProvider=globalThis.fetch;
+  let providerReads=0,providerPosts=0;
+  const record={allowance_number:"ALW-001",invoice_type:"D0401",
+   invoice_status:99,allowance_type:2,cancel_date:0,
+   buyer_identifier:"0000000000",buyer_name:"Synthetic buyer",wait:[],
+   product_item:[{original_invoice_number:"AB12345678"}]};
+  globalThis.fetch=async(url,options)=>{
+   assert.equal(options.method,"POST");
+   assert.equal(options.redirect,"error");
+   if(url.endsWith("/g0501")){providerPosts++;throw Error("g0501 route forbidden");}
+   providerReads++;
+   if(url.endsWith("/allowance_query"))return Response.json({code:0,data:record});
+   if(url.endsWith("/allowance_status"))
+    return Response.json({code:0,data:{"ALW-001":{type:"D0401",status:99}}});
+   throw Error("Unexpected provider request");
+  };
+  try{
+   const view=await call(lead,"void-preview",{applicationId,expectedRevision:1},rawDevB);
+   assert.equal(view.status,200,JSON.stringify(view.body));
+   assert.equal(view.body.preview.allowanceNumber,"ALW-001");
+   assert.equal(view.body.preview.originalInvoiceNumber,"AB12345678");
+   assert.equal(view.body.preview.reason,"Synthetic void request");
+   assert.equal(view.body.preview.mayPostG0501,false);
+   assert.equal(view.body.preview.canApproveWithoutFurtherReview,false);
+   assert.equal(view.body.officialActionPerformed,false);
+   assert.match(view.body.preview.officialSnapshotHash,/^[a-f0-9]{64}$/);
+   assert.match(view.body.preview.requestHash,/^[a-f0-9]{64}$/);
+   assert.equal(providerReads,2);
+   const body={applicationId,expectedRevision:1,
+    requestHash:view.body.preview.requestHash,
+    expectedOfficialSnapshotHash:view.body.preview.officialSnapshotHash,
+    confirmation:"作廢 ALW-001"};
+   assert.equal((await call(lead,"void-approve",
+    {...body,confirmation:"作廢 WRONG"},rawDevB)).status,409);
+   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+   // The cutover remains deny-by-default; manager approval cannot bypass it.
+   assert.equal((await call(lead,"void-approve",body,rawDevB)).status,409);
+   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+   // Synthetic gate is ONLY a fixture and no route here can activate it.
+   f.sql.prepare("INSERT INTO allowance_void_authority_gates "+
+    "(workspace_id,environment,seller_invoice,company_revision,state,"+
+    "cutover_manifest_hash,activating_device_id,activated_at) "+
+    "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
+    .run(ws,"e".repeat(64),devB,new Date().toISOString());
+   const approved=await call(lead,"void-approve",body,rawDevB);
+   assert.equal(approved.status,200,JSON.stringify(approved.body));
+   assert.equal(approved.body.status,"approved");
+   assert.equal(approved.body.revision,2);
+   assert.equal(approved.body.mayPostG0501,false);
+   assert.equal(approved.body.officialActionPerformed,false);
+   assert.equal(approved.body.officiallyConfirmed,false);
+   assert.equal(approved.body.requiresFreshOfficialCheck,true);
+   assert.equal((await call(lead,"void-approve",body,rawDevB)).status,409);
+   const updated=await call(applicant,"void-status",{applicationId});
+   assert.equal(updated.body.status,"approved");
+   assert.equal(updated.body.claimed,false);
+   assert.equal(updated.body.revision,2);
+   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
+   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
+   assert.equal(providerPosts,0);
+  }finally{globalThis.fetch=originalProvider;}
   assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
  }finally{f.close();}
 }
