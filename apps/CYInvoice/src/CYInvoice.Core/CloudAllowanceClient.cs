@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -174,6 +176,25 @@ public sealed class CloudAllowanceClient
            only.GetBoolean()!=claimed || (requireOpen&&(status!="open"||claimed)))
             throw new InvalidDataException("Cloud g0501 application state is inconsistent.");
         return new CloudAllowanceVoidState(id,status,revision,claimed,claimed);
+    }
+
+    // Stable across offline restarts and Windows Devices: the same original
+    // allowance gets one predictable, non-PII request ID per CYID workspace
+    // and environment. NEVER create a random replacement after a lost reply.
+    // Server still enforces original-number uniqueness and employee ACLs.
+    public static string OriginalVoidApplicationId(
+        string workspaceId,string environment,string allowanceNumber)
+    {
+        if(workspaceId is null||
+           !Regex.IsMatch(workspaceId,@"^ws_[A-Za-z0-9_-]{3,100}$")||
+           environment is not ("test" or "production")||
+           allowanceNumber is null||
+           !Regex.IsMatch(allowanceNumber,@"^[A-Z0-9-]{1,16}$"))
+            throw new ArgumentException("Invalid original Cloud g0501 identity.");
+        var canonical="CYInvoice/g0501/application/v1\n"+
+            workspaceId+"\n"+environment+"\n"+allowanceNumber;
+        return "void_"+Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
     public async Task<CloudAllowanceVoidState> CreateVoidApplicationAsync(
