@@ -361,6 +361,7 @@ internal sealed class SyncIssuesForm : Form
             var allowCancel = false;
             var allowAdministrativeClose = false;
             var primaryDanger = false;
+            var secondaryText = string.Empty;
 
             if (issue.ResolvedUtc is null)
             {
@@ -369,6 +370,8 @@ internal sealed class SyncIssuesForm : Form
                     try { allowAdministrativeClose = administrativeClosure.CanClose(issue); }
                     catch { allowAdministrativeClose = false; }
                 }
+                if (IsAllowanceVoidManualReview(issue) && allowanceVoidWorkflow.LocalApprovalFor(issue)?.Claimed == true)
+                    allowAdministrativeClose = false;
 
                 if (!allowAdministrativeClose && IsVoidManualReview(issue))
                 {
@@ -376,10 +379,21 @@ internal sealed class SyncIssuesForm : Form
                     primaryDanger = true;
                     allowCancel = true;
                 }
-                else if (!allowAdministrativeClose && IsAllowanceVoidManualReview(issue))
+                else if (IsAllowanceVoidManualReview(issue) && (!allowAdministrativeClose ||
+                    (repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                     repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)))
                 {
-                    primaryText = "已人工處理";
-                    allowCancel = true;
+                    var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                        repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
+                    var approval = local ? allowanceVoidWorkflow.LocalApprovalFor(issue) : null;
+                    primaryText = !local ? "已人工處理" : approval?.Claimed == true
+                        ? "查回作廢狀態" : approval is null || approval.ExpiresUtc <= DateTimeOffset.UtcNow
+                            ? "覆核作廢" : "單次送出作廢";
+                    primaryDanger = local && approval is { Claimed:false } && approval.ExpiresUtc > DateTimeOffset.UtcNow;
+                    allowCancel = !allowAdministrativeClose && approval?.Claimed != true;
+                    // The old website workflow remains available until the new
+                    // workflow has real acceptance. A claimed POST cannot use it.
+                    if (local && !allowAdministrativeClose && approval?.Claimed != true) secondaryText = "已人工處理";
                 }
                 else if (!allowAdministrativeClose && IsAllowanceManualReview(issue))
                 {
@@ -426,7 +440,8 @@ internal sealed class SyncIssuesForm : Form
                 primaryText,
                 allowCancel,
                 allowAdministrativeClose,
-                primaryDanger);
+                primaryDanger,
+                secondaryText);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
 
             switch (detail.SelectedAction)
@@ -440,6 +455,9 @@ internal sealed class SyncIssuesForm : Form
                 case ManualReviewDetailAction.Primary:
                     if (manual) await ProcessManualReviewAsync(issue);
                     else ResolveIssue(issue);
+                    break;
+                case ManualReviewDetailAction.Secondary:
+                    if (IsAllowanceVoidManualReview(issue)) CompleteAllowanceVoid(issue);
                     break;
             }
         }
@@ -527,7 +545,10 @@ internal sealed class SyncIssuesForm : Form
         }
         if (IsAllowanceVoidManualReview(issue))
         {
-            CompleteAllowanceVoid(issue);
+            if (repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
+                await ProcessLocalAllowanceVoidAsync(issue);
+            else CompleteAllowanceVoid(issue);
             return;
         }
 
@@ -567,6 +588,79 @@ internal sealed class SyncIssuesForm : Form
             else await CompleteAllowanceAsync(issue);
         }
         else await ConfirmAllowanceCandidateAsync(issue, record, review);
+    }
+
+    private async Task ProcessLocalAllowanceVoidAsync(InvoiceSyncIssue issue)
+    {
+        using var login = new EmployeeAdminLoginForm(repository, "折讓作廢－管理員驗證", collectCredentialsOnly:true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        SetManualReviewBusy(true);
+        try
+        {
+            var approval = allowanceVoidWorkflow.LocalApprovalFor(issue);
+            if (approval?.Claimed == true)
+            {
+                var observed = await allowanceVoidWorkflow.ReadbackLocalVoidAsync(issue,
+                    login.EnteredEmployeeNo, login.AuthenticatedPassword);
+                if (!IsDisposed) MessageBox.Show(this, observed.Message, "原號作廢查回", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else if (approval is null || approval.ExpiresUtc <= DateTimeOffset.UtcNow)
+            {
+                var preview = await allowanceVoidWorkflow.PreviewLocalVoidAsync(issue,
+                    login.EnteredEmployeeNo, login.AuthenticatedPassword);
+                if (IsDisposed) return;
+                if (MessageBox.Show(this, $"折讓單號：{preview.AllowanceNumber}\n原發票：{preview.OriginalInvoiceNumber}\n" +
+                    $"買受人：{preview.BuyerName}\n未稅金額：{preview.NetAmount}\n稅額：{preview.TaxAmount}\n\n" +
+                    "本次只核准作廢，尚不送出。核准後須由同一位管理員再次驗證及確認，才會單次送出。",
+                    "覆核官方折讓明細", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                await allowanceVoidWorkflow.ApproveLocalVoidAsync(issue, login.EnteredEmployeeNo,
+                    login.AuthenticatedPassword, preview.OfficialSnapshotHash);
+                if (!IsDisposed) MessageBox.Show(this, "已核准；15 分鐘內可由原管理員重新驗證後單次送出。",
+                    "核准完成（未送出）", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                var words = "作廢 " + approval.AllowanceNumber;
+                using var dialog = new Form {
+                    Text="確認單次折讓作廢", ClientSize=new Size(520,220),
+                    StartPosition=FormStartPosition.CenterParent, FormBorderStyle=FormBorderStyle.FixedDialog,
+                    MaximizeBox=false, MinimizeBox=false, ShowIcon=false, ShowInTaskbar=false, Font=Font
+                };
+                var panel = new TableLayoutPanel { Dock=DockStyle.Fill, Padding=new Padding(16), ColumnCount=1, RowCount=3 };
+                panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+                panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));
+                var typed = UiControls.TextBox(40);
+                typed.Dock=DockStyle.Fill;
+                typed.AccessibleName="確認作廢原折讓單號";
+                var confirm = UiControls.DangerButton("確認單次送出");
+                confirm.Width=140;
+                confirm.Enabled=false;
+                confirm.DialogResult=DialogResult.OK;
+                typed.TextChanged += (_,_) => confirm.Enabled=typed.Text==words;
+                var cancel = UiControls.StandardButton("取消");
+                cancel.DialogResult=DialogResult.Cancel;
+                var buttons = new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.RightToLeft };
+                buttons.Controls.Add(cancel); buttons.Controls.Add(confirm);
+                panel.Controls.Add(new Label { Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft,
+                    Text=$"將對光貿單次送出原折讓單 {approval.AllowanceNumber} 的作廢。\n" +
+                        "逾時或回覆遺失後只能查回，不可重送、取消或直接結案。\n請完整輸入：「" + words + "」" },0,0);
+                panel.Controls.Add(typed,0,1); panel.Controls.Add(buttons,0,2);
+                dialog.Controls.Add(panel); dialog.AcceptButton=null; dialog.CancelButton=cancel;
+                if (dialog.ShowDialog(this)!=DialogResult.OK || typed.Text!=words) return;
+                var result=await allowanceVoidWorkflow.SendLocalVoidOnceAsync(issue,
+                    login.EnteredEmployeeNo, login.AuthenticatedPassword, typed.Text);
+                if (!IsDisposed) MessageBox.Show(this,result.Message,"折讓作廢結果待查",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            }
+            if (!IsDisposed) ReloadAll();
+        }
+        catch (Exception error)
+        {
+            if (!IsDisposed) MessageBox.Show(this,error.Message,"折讓作廢未完成",MessageBoxButtons.OK,MessageBoxIcon.Error);
+        }
+        finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
     private void CompleteAllowanceVoid(InvoiceSyncIssue issue)
@@ -1173,7 +1267,16 @@ internal sealed class SyncIssuesForm : Form
         rows.Add(new("申請員工", review?.RequesterEmployeeNo ?? "－"));
         rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("折讓作廢原因", review?.Reason ?? "－"));
-        rows.Add(new("處理狀態", issue.ResolvedUtc is not null ? "已解決" : "等待管理員人工處理"));
+        var api = allowanceVoidWorkflow.LocalApprovalFor(issue);
+        rows.Add(new("處理狀態", api?.Claimed == true ? "已送出或結果待查；禁止重送／取消" :
+            issue.ResolvedUtc is not null ? "已解決" : api is not null ? "已覆核；送出前仍須重新驗證" : "等待管理員覆核"));
+        if (api is not null)
+        {
+            rows.Add(new("核准管理員", api.ManagerEmployeeNo));
+            rows.Add(new("核准有效至", api.ExpiresUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
+            rows.Add(new("官方作廢查回", api.LastObservation == "official_void_observed_unattributed"
+                ? "原號 D0501／99；尚無法歸因於本次送出" : api.Claimed ? "尚未取得可確認的官方作廢證據" : "尚未送出"));
+        }
         return rows;
     }
 

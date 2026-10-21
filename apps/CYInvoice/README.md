@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.32 Build 0（非正式 Release）**：將已驗證的 0019 升格為 canonical migration，補齊非空 schema18 備份／回復與明確 18→19 部署標記驗證。原 D1／Worker 仍依先前本機回報為 schema18；本批沒有操作 Cloudflare、啟用折讓旗標或真光貿。正式 Release 仍 V3.1.0。
+- **目前工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
+
+- **前一工程 Source：V3.1.32 Build 0（非正式 Release）**：將已驗證的 0019 升格為 canonical migration，補齊非空 schema18 備份／回復與明確 18→19 部署標記驗證。原 D1／Worker 仍依先前本機回報為 schema18；本批沒有操作 Cloudflare、啟用折讓旗標或真光貿。正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.31 Build 0（非正式 Release）**：Cloud 明確外部占號查證、主管文字覆核、原 Ledger 下一號預留及不可變前後號稽核已接通 Windows。沿用唯一 g0401 coordinator，不重送未知交易、不把原號吻合視為成功。schema19 仍為待審草案；原 D1／Worker／旗標與真光貿未變，正式 Release 仍 V3.1.0。
 
@@ -123,7 +125,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 已完成折讓會出現在發票詳細資訊的「作廢 / 折讓紀錄」。
 - 折讓詳細資訊可透過 `/json/allowance_file` 取得官方 PDF；支援 A4、A4 (地址+A5)、A5 三種官方版型，沿用既有版型選擇器與 WebView2 PDF Viewer。
 - 折讓 PDF Cache 以官方 `allowance[]` 資料指紋版本化；官方狀態、日期、類型或金額變更後不會誤用舊 PDF。
-- 已完成折讓可由一般使用者提出「折讓作廢」人工申請；目前不直接呼叫 `/json/g0501`，由管理員在光貿網站人工完成，再於「上傳問題」結案或取消退回。
+- 已完成折讓可由一般使用者提出「折讓作廢」申請。Local 管理員可在待辦明細預覽官方原號、核准後重新登入並輸入「作廢 原折讓單號」，單次送出 `/json/g0501`；核准有效 15 分鐘。已送出或結果不明時只可查回原號，不可重送、取消或人工／行政結案；D0501／99 僅證明官方原號已作廢，尚無本次 POST 歸因證據。尚未 API 送出時保留既有光貿網站人工路徑；CYID 的 g0501 與真實交易驗收仍待完成。
 - 發票作廢、折讓與折讓作廢的舊待辦超過兩期後，均可由管理員只在本機手動結案。
 
 ### PDF 與列印
