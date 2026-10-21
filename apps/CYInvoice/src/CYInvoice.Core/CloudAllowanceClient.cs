@@ -40,6 +40,13 @@ public sealed record CloudAllowanceVoidDraft(string ApplicationId,string Environ
     string AllowanceNumber,string OriginalInvoiceNumber,string Reason);
 public sealed record CloudAllowanceVoidState(string ApplicationId,string Status,int Revision,
     bool Claimed,bool ReadbackOnly);
+public sealed record CloudAllowanceVoidManagerPreview(
+    string ApplicationId,int Revision,string AllowanceNumber,
+    string OriginalInvoiceNumber,string Reason,string RequestHash,
+    string OfficialSnapshotHash,DateTimeOffset OfficialCheckedAtUtc);
+public sealed record CloudAllowanceVoidApproval(
+    string ApplicationId,int Revision,DateTimeOffset ValidUntilUtc);
+
 
 public sealed class CloudAllowanceClient
 {
@@ -199,6 +206,85 @@ public sealed class CloudAllowanceClient
             applicationId=id,employeeNo,password},cancellationToken)
             .ConfigureAwait(false);
         return ReadVoidState(doc.RootElement,id,false);
+    }
+
+    // Privileged CYID manager operations: official READ-ONLY preview and
+    // immutable D1 approval only. Neither method can request a g0501 POST.
+    private static string Sha256(JsonElement item,string key)
+    {
+        var value=Required(item,key);
+        if(!Regex.IsMatch(value,@"^[a-f0-9]{64}$"))
+            throw new InvalidDataException("Cloud g0501 proof hash invalid.");
+        return value;
+    }
+
+    public async Task<CloudAllowanceVoidManagerPreview> PreviewVoidForManagerAsync(
+        string id,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ValidateId(id);Credentials(employeeNo,password);
+        using var doc=await SendAsync("void-preview",new{
+            applicationId=id,expectedRevision=1,employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        if(!root.TryGetProperty("preview",out var preview)||
+           preview.ValueKind!=JsonValueKind.Object||
+           Required(preview,"applicationId")!=id||
+           RequiredRevision(preview)!=1||
+           !preview.TryGetProperty("mayPostG0501",out var canSend)||
+           canSend.ValueKind!=JsonValueKind.False||
+           !preview.TryGetProperty("canApproveWithoutFurtherReview",out var canFastApprove)||
+           canFastApprove.ValueKind!=JsonValueKind.False||
+           !root.TryGetProperty("officialActionPerformed",out var acted)||
+           acted.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud g0501 preview may not imply approval or POST.");
+        var number=Required(preview,"allowanceNumber");
+        var original=Required(preview,"originalInvoiceNumber");
+        var reason=Required(preview,"reason");
+        var timestamp=Required(preview,"officialCheckedAtUtc");
+        if(!Regex.IsMatch(number,@"^[A-Z0-9-]{1,16}$")||
+           !Regex.IsMatch(original,@"^[A-Z]{2}[0-9]{8}$")||
+           reason.Length>500||reason.Any(char.IsControl)||
+           !DateTimeOffset.TryParse(timestamp,out var checkedAt)||
+           checkedAt.Offset!=TimeSpan.Zero)
+            throw new InvalidDataException("Cloud g0501 official preview invalid.");
+        return new CloudAllowanceVoidManagerPreview(
+            id,1,number,original,reason,Sha256(preview,"requestHash"),
+            Sha256(preview,"officialSnapshotHash"),checkedAt);
+    }
+
+    public async Task<CloudAllowanceVoidApproval> ApproveVoidForManagerAsync(
+        CloudAllowanceVoidManagerPreview preview,string confirmation,
+        string employeeNo,string password,CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ValidateId(preview.ApplicationId);Credentials(employeeNo,password);
+        if(preview.Revision!=1||
+           !Regex.IsMatch(preview.RequestHash??"", @"^[a-f0-9]{64}$")||
+           !Regex.IsMatch(preview.OfficialSnapshotHash??"", @"^[a-f0-9]{64}$")||
+           confirmation!="作廢 "+preview.AllowanceNumber)
+            throw new ArgumentException("g0501 manager confirmation does not match preview.");
+        using var doc=await SendAsync("void-approve",new{
+            applicationId=preview.ApplicationId,expectedRevision=1,
+            requestHash=preview.RequestHash,
+            expectedOfficialSnapshotHash=preview.OfficialSnapshotHash,
+            confirmation,employeeNo,password
+        },cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        if(Required(root,"applicationId")!=preview.ApplicationId||
+           Required(root,"status")!="approved"||RequiredRevision(root)!=2||
+           !root.TryGetProperty("mayPostG0501",out var canPost)||
+           canPost.ValueKind!=JsonValueKind.False||
+           !root.TryGetProperty("requiresFreshOfficialCheck",out var needsRead)||
+           needsRead.ValueKind!=JsonValueKind.True||
+           !root.TryGetProperty("officialActionPerformed",out var acted)||
+           acted.ValueKind!=JsonValueKind.False||
+           !root.TryGetProperty("officiallyConfirmed",out var success)||
+           success.ValueKind!=JsonValueKind.False||
+           !DateTimeOffset.TryParse(Required(root,"validUntilUtc"),out var expires)||
+           expires.Offset!=TimeSpan.Zero)
+            throw new InvalidDataException("Cloud g0501 approval is not a financial send.");
+        return new CloudAllowanceVoidApproval(preview.ApplicationId,2,expires);
     }
 
     public async Task<CloudAllowanceReceipt> CreateAsync(CloudAllowanceDraft draft,
