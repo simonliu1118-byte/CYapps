@@ -306,4 +306,78 @@ internal static class CloudAllowanceClientTests
             "x","0001","fake-password"));
         Equal(4,fake.Calls);
     }
+
+    public static async Task RunVoidManagerAsync()
+    {
+        const string hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string official="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var fake=new FakeHandler();
+        fake.Add(req=>{
+            Check(req,"void-preview");
+            using var json=JsonDocument.Parse(req.Content!.ReadAsStringAsync()
+                .GetAwaiter().GetResult());
+            Equal(Id,json.RootElement.GetProperty("applicationId").GetString());
+            Equal(1,json.RootElement.GetProperty("expectedRevision").GetInt32());
+            return Json(HttpStatusCode.OK,new{ok=true,preview=new{
+                applicationId=Id,revision=1,allowanceNumber="ALW-001",
+                originalInvoiceNumber="AB12345678",reason="Synthetic reason",
+                requestHash=hash,officialSnapshotHash=official,
+                officialCheckedAtUtc="2026-10-21T09:00:00.000Z",
+                canApproveWithoutFurtherReview=false,mayPostG0501=false},
+                officialActionPerformed=false});
+        });
+        fake.Add(req=>{
+            Check(req,"void-approve");
+            using var json=JsonDocument.Parse(req.Content!.ReadAsStringAsync()
+                .GetAwaiter().GetResult());
+            Equal("作廢 ALW-001",json.RootElement.GetProperty("confirmation").GetString());
+            Equal(hash,json.RootElement.GetProperty("requestHash").GetString());
+            Equal(official,json.RootElement.GetProperty("expectedOfficialSnapshotHash").GetString());
+            Equal(false,json.RootElement.TryGetProperty("confirmOnce",out _));
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                status="approved",revision=2,
+                validUntilUtc="2026-10-21T09:15:00.000Z",
+                mayPostG0501=false,requiresFreshOfficialCheck=true,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        fake.Add(req=>{
+            Check(req,"void-preview");
+            return Json(HttpStatusCode.OK,new{ok=true,preview=new{
+                applicationId=Id,revision=1,allowanceNumber="ALW-001",
+                originalInvoiceNumber="AB12345678",reason="Synthetic reason",
+                requestHash=hash,officialSnapshotHash=official,
+                officialCheckedAtUtc="2026-10-21T09:00:00.000Z",
+                canApproveWithoutFurtherReview=false,mayPostG0501=true},
+                officialActionPerformed=false});
+        });
+        fake.Add(req=>{
+            Check(req,"void-approve");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                status="approved",revision=2,
+                validUntilUtc="2026-10-21T09:15:00.000Z",
+                mayPostG0501=true,requiresFreshOfficialCheck=true,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        using var http=new HttpClient(fake);
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        var preview=await api.PreviewVoidForManagerAsync(Id,"0001","fake-password");
+        Equal("ALW-001",preview.AllowanceNumber);
+        Equal("AB12345678",preview.OriginalInvoiceNumber);
+        Equal("Synthetic reason",preview.Reason);
+        Equal(hash,preview.RequestHash);
+        Equal(official,preview.OfficialSnapshotHash);
+        await Fail<ArgumentException>(()=>api.ApproveVoidForManagerAsync(
+            preview,"作廢 WRONG","0001","fake-password"));
+        Equal(1,fake.Calls);
+        var grant=await api.ApproveVoidForManagerAsync(preview,
+            "作廢 ALW-001","0001","fake-password");
+        Equal(2,grant.Revision);
+        Equal(Id,grant.ApplicationId);
+        await Fail<InvalidDataException>(()=>api.PreviewVoidForManagerAsync(
+            Id,"0001","fake-password"));
+        await Fail<InvalidDataException>(()=>api.ApproveVoidForManagerAsync(
+            preview,"作廢 ALW-001","0001","fake-password"));
+        Equal(4,fake.Calls);
+        Equal(0,fake.Remaining);
+    }
 }
