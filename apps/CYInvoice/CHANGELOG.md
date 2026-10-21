@@ -4,6 +4,9 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
 
+- 新增 Local→Cloud 作廢交接**唯讀預檢**及合成測試：完整裝置安裝清冊與獨立盤點必須具備，單機禁送、持久隔離、既有 Claim 核對及時效任一未通過即阻擋；所有預檢結果均不得啟用 Cloud g0501，雜湊僅供獨立人工審查，不能當作可信裝置簽章或 D1 Gate 交接證據。未操作原 D1／Worker／真光貿。
+
+
 - 新增 schema20 草案的 Cloud-exclusive cutover Gate（公司／環境／公司卡版次）；預設無正式交接證據時不允許主管 Grant 或 g0501 Claim，禁止 Gate 被靜默修改／刪除／恢復，緊急停用於 D1 永久 Claim 寫入瞬間生效。內部 g0501 owner 在 Claim 前後驗證 Gate／Device／CYID，Claim 已持久化但因後續撤權而停送，記錄 append-only `post_claim_interlock_no_post`，仍永久禁止重試；合成測試覆蓋無 Gate、變更公司卡、核准後停止、Claim 後停止、零 POST。未提供 Gate 啟用入口，不能宣稱知道所有離線 Local 裝置，原 D1／Worker 仍未升級或部署。
 
 
