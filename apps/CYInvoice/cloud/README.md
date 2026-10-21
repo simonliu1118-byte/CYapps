@@ -1,5 +1,7 @@
 # CYInvoice Cloud Reference Backend
 
+目前 canonical migration 為 0019；原始碼 SCHEMA_VERSION=19 僅為待部署目標。原 D1／Worker 仍依先前本機回報為 schema18。原 Worker 若需 18→19，必須先在另行授權的本機 MCP 完成原 D1 0019／備份及額度審核，再明確指定 CYINVOICE_SCHEMA_UPGRADE=18:19（workflow 的 schema_upgrade 選項）；四道折讓旗標必須全關，其他設定與 Secrets 保留。一般 code-only 部署不會默默改 runtime schema；未完成遷移或部署一律拒絕。操作清單見 ../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
+
 > **2026-10-18 最新 Source 狀態**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
 
 Cloudflare Worker + D1 reference implementation for CYInvoice coordination. **V3.0 source supports CYID-only online Employee authority; Local requires no Worker.** Requests with missing or disabled CYID authority fail closed before any Device or legacy account mutation. Built-in/self-hosted deployments are historical and are no longer available as current V3.0 Worker operation. Prior releases, migrations and historical records remain preserved; this code change does not delete any D1 tables.

@@ -48,13 +48,81 @@ public sealed class LocalAllowanceNumberStore
             );
             """;
         command.ExecuteNonQuery();
+        // This table records an exact official-number readback, NOT
+        // proof that this application's HTTP POST created the allowance.
+        // It is part of the existing Local SQLite database, not a second
+        // Ledger or any new Cloudflare schema.
+        command.CommandText = """
+            CREATE TABLE IF NOT EXISTS allowance_local_readback_audit (
+                audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_invoice TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                work_item_id TEXT NOT NULL,
+                allowance_number TEXT NOT NULL,
+                result_kind TEXT NOT NULL CHECK(result_kind='full_match_unattributed'),
+                snapshot_sha256 TEXT NOT NULL CHECK(length(snapshot_sha256)=64),
+                approver_employee_no TEXT NOT NULL,
+                checked_at_utc TEXT NOT NULL
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_local_readback_no_update
+            BEFORE UPDATE ON allowance_local_readback_audit
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_READBACK_AUDIT_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_local_readback_no_delete
+            BEFORE DELETE ON allowance_local_readback_audit
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_READBACK_AUDIT_APPEND_ONLY'); END;
+            CREATE TABLE IF NOT EXISTS allowance_local_collision_reviews (
+                review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_invoice TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                work_item_id TEXT NOT NULL,
+                previous_number TEXT NOT NULL,
+                new_number TEXT NOT NULL,
+                previous_attempt INTEGER NOT NULL CHECK(previous_attempt>0),
+                official_snapshot_sha256 TEXT NOT NULL CHECK(
+                    length(official_snapshot_sha256)=64 AND
+                    official_snapshot_sha256 NOT GLOB '*[^0-9a-f]*'),
+                manager_employee_no TEXT NOT NULL,
+                reviewed_at_utc TEXT NOT NULL,
+                UNIQUE(seller_invoice,environment,work_item_id,previous_attempt)
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_local_collision_review_no_update
+            BEFORE UPDATE ON allowance_local_collision_reviews
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_COLLISION_REVIEW_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_local_collision_review_no_delete
+            BEFORE DELETE ON allowance_local_collision_reviews
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_COLLISION_REVIEW_APPEND_ONLY'); END;
+            """;
+        command.ExecuteNonQuery();
     }
 
     public LocalAllowanceReservation Reserve(
         string sellerInvoice, string environment, string workItemId,
         DateOnly date, AllowanceIssueRequest template,
-        string approverEmployeeNo, DateTimeOffset approvedAtUtc)
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc) =>
+        ReserveCore(sellerInvoice,environment,workItemId,date,template,
+            approverEmployeeNo,approvedAtUtc,null,null);
+
+    // This is deliberately INTERNAL: caller must revalidate the manager,
+    // immutable approval and exact provider-origin collision evidence.
+    // It never posts g0401 and cannot release a 'sending' Ledger.
+    internal LocalAllowanceReservation ReserveAfterVerifiedExternalCollision(
+        string sellerInvoice, string environment, string workItemId,
+        DateOnly date, AllowanceIssueRequest template,
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc,
+        LocalAllowanceReservation previous,string officialSnapshotSha256) =>
+        ReserveCore(sellerInvoice,environment,workItemId,date,template,
+            approverEmployeeNo,approvedAtUtc,previous,officialSnapshotSha256);
+
+    private LocalAllowanceReservation ReserveCore(
+        string sellerInvoice, string environment, string workItemId,
+        DateOnly date, AllowanceIssueRequest template,
+        string approverEmployeeNo, DateTimeOffset approvedAtUtc,
+        LocalAllowanceReservation? reviewedCollision,string? officialSnapshotSha256)
     {
+        if (reviewedCollision is not null &&
+            (officialSnapshotSha256 is null || officialSnapshotSha256.Length!=64 ||
+             officialSnapshotSha256.Any(c=>c is not (>= '0' and <= '9' or >= 'a' and <= 'f'))))
+            throw new InvalidDataException("Verified official collision snapshot SHA256 required");
         sellerInvoice = Require(sellerInvoice, nameof(sellerInvoice));
         environment = Require(environment, nameof(environment));
         workItemId = Require(workItemId, nameof(workItemId));
@@ -108,18 +176,21 @@ public sealed class LocalAllowanceNumberStore
                 !string.Equals(latest.ApproverEmployeeNo, approverEmployeeNo, StringComparison.Ordinal) ||
                 latest.ApprovedAtUtc != approvedAtUtc)
                 throw new InvalidOperationException("Approved Work Item payload and manager identity are immutable");
-            if (latest.Status == "reserved")
+            if (latest.Status == "reserved" && reviewedCollision is null)
             {
                 transaction.Commit();
                 return latest; // same number and immutable payload; no allocation
             }
-            // B1 never allocates a second number after a sending attempt,
-            // including a known collision. B2 must first implement verified
-            // official readback before controlled re-numbering is allowed.
-            throw new InvalidOperationException(
-                "A prior allowance attempt exists; official-number readback is required before any retry");
+            // Only a distinct operation after a provider-confirmed collision.
+            // Never reallocate a sending/confirmed/unknown original attempt.
+            if (latest.Status!="occupied_external" ||
+                reviewedCollision is null || latest != reviewedCollision)
+                throw new InvalidOperationException(
+                    "Only a freshly revalidated external collision supports a new reservation");
         }
 
+        if (reviewedCollision is not null && latest is null)
+            throw new InvalidOperationException("Missing original collision attempt");
         int next;
         using (var sequence = connection.CreateCommand())
         {
@@ -177,6 +248,38 @@ public sealed class LocalAllowanceNumberStore
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidDataException("Failed to reserve allowance number");
         }
+        if (reviewedCollision is not null)
+        {
+            // One atomic transaction: the new immutable reservation cannot
+            // exist without a privacy-minimized, append-only manager review.
+            using var audit=connection.CreateCommand();
+            audit.Transaction=transaction;
+            audit.CommandText="""
+                INSERT INTO allowance_local_collision_reviews (
+                    seller_invoice,environment,work_item_id,previous_number,
+                    new_number,previous_attempt,official_snapshot_sha256,
+                    manager_employee_no,reviewed_at_utc)
+                SELECT seller_invoice,environment,work_item_id,allowance_number,
+                    $new,attempt,$hash,approver_employee_no,$now
+                FROM allowance_number_ledger
+                WHERE seller_invoice=$seller AND environment=$env
+                  AND work_item_id=$work AND allowance_number=$old
+                  AND attempt=$attempt AND status='occupied_external'
+                  AND approver_employee_no=$manager AND approved_at_utc=$approved;
+                """;
+            audit.Parameters.AddWithValue("$new",number);
+            audit.Parameters.AddWithValue("$hash",officialSnapshotSha256!);
+            audit.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O",CultureInfo.InvariantCulture));
+            audit.Parameters.AddWithValue("$seller",sellerInvoice);
+            audit.Parameters.AddWithValue("$env",environment);
+            audit.Parameters.AddWithValue("$work",workItemId);
+            audit.Parameters.AddWithValue("$old",reviewedCollision.AllowanceNumber);
+            audit.Parameters.AddWithValue("$attempt",previousAttempt);
+            audit.Parameters.AddWithValue("$manager",approverEmployeeNo);
+            audit.Parameters.AddWithValue("$approved",approvedAtUtc.ToString("O",CultureInfo.InvariantCulture));
+            if (audit.ExecuteNonQuery()!=1)
+                throw new InvalidOperationException("Collision review was not durably recorded");
+        }
         transaction.Commit();
         return new LocalAllowanceReservation(workItemId, number, payloadJson, "reserved", next,
             approverEmployeeNo, approvedAtUtc);
@@ -223,9 +326,56 @@ public sealed class LocalAllowanceNumberStore
         Move(sellerInvoice, environment, reservation, "sending", "occupied_external");
     }
 
+    // Record official *content* proof separately from transaction-origin proof.
+    // Even a complete match must remain 'sending' until an independently
+    // attributable financial confirmation policy is approved. No PII is
+    // written to the audit table, only a digest of the queried snapshot.
+    internal void RecordUnattributedFullMatch(string sellerInvoice,string environment,
+        LocalAllowanceReservation reservation,string snapshotSha256)
+    {
+        ArgumentNullException.ThrowIfNull(reservation);
+        if (snapshotSha256 is null || snapshotSha256.Length != 64 ||
+            snapshotSha256.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+            throw new ArgumentException("Exact readback SHA256 required",nameof(snapshotSha256));
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO allowance_local_readback_audit (
+                seller_invoice,environment,work_item_id,allowance_number,
+                result_kind,snapshot_sha256,approver_employee_no,checked_at_utc)
+            SELECT seller_invoice,environment,work_item_id,allowance_number,
+                'full_match_unattributed',$digest,approver_employee_no,$at
+            FROM allowance_number_ledger
+            WHERE seller_invoice=$seller AND environment=$env AND
+                work_item_id=$work AND allowance_number=$number AND
+                payload_json=$payload AND approver_employee_no=$approver AND
+                approved_at_utc=$approved AND status='sending'
+            ORDER BY attempt DESC LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$seller",Require(sellerInvoice,nameof(sellerInvoice)));
+        command.Parameters.AddWithValue("$env",Require(environment,nameof(environment)));
+        command.Parameters.AddWithValue("$work",reservation.WorkItemId);
+        command.Parameters.AddWithValue("$number",reservation.AllowanceNumber);
+        command.Parameters.AddWithValue("$payload",reservation.PayloadJson);
+        command.Parameters.AddWithValue("$approver",reservation.ApproverEmployeeNo);
+        command.Parameters.AddWithValue("$approved",reservation.ApprovedAtUtc.ToString("O",
+            CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$digest",snapshotSha256);
+        command.Parameters.AddWithValue("$at",DateTimeOffset.UtcNow.ToString("O",
+            CultureInfo.InvariantCulture));
+        if (command.ExecuteNonQuery()!=1)
+            throw new InvalidOperationException("Local allowance Ledger changed; no readback audit written");
+    }
+
+    // Reserved for a later independent, auditable origin-attribution flow.
+    // Neither code=0 nor a matching allowance_query authorizes calling this.
+    // No current Local API can establish attributable g0401 origin proof.
+    // Keep the historical entrypoint fail-closed rather than letting a
+    // caller treat code=0 or a matching number as success.
     public void MarkOfficiallyConfirmed(string sellerInvoice, string environment,
         LocalAllowanceReservation reservation) =>
-        Move(sellerInvoice, environment, reservation, "sending", "confirmed");
+        throw new InvalidOperationException(
+            "g0401 origin not attributable: preserve sending and seek audited human reconciliation");
 
     private void Move(string sellerInvoice, string environment,
         LocalAllowanceReservation reservation, string from, string to)

@@ -39,6 +39,7 @@ public sealed class InvoiceAdministrativeClosureService
         ArgumentNullException.ThrowIfNull(issue);
         if (issue.ResolvedUtc is not null || !IsActiveWorkIssue(issue)) return false;
         if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal)) return false;
+        if (new LocalAllowanceVoidStore(repository.DataDirectory).Find(issue.AccountKey, issue.Id)?.Claimed == true) return false;
 
         var record = TryFindIssueRecord(issue);
         if (record is null || (issue.IssueType == InvoiceSyncIssueTypes.QueryFailed && !HasActiveWork(record))) return false;
@@ -95,6 +96,9 @@ public sealed class InvoiceAdministrativeClosureService
 
     private void CloseRecord(InvoiceRecord record)
     {
+        if (new LocalAllowanceVoidStore(repository.DataDirectory).HasClaimForInvoice(
+                CurrentAccountKey(), record.InvoiceNumber.Trim(), EffectiveOrderId(record)))
+            throw new InvalidOperationException("折讓作廢已有送出紀錄，只能原號查回，不能行政結案");
         if (!IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime)))
             throw new InvalidOperationException("這筆資料仍在目前保留的兩期範圍內，不能手動結案");
 

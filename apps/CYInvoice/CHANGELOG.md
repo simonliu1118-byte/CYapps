@@ -2,6 +2,73 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.33 Build 0 — 2026/10/21（V3.2-E：Local 折讓作廢）
+
+- 既有折讓作廢待辦新增 Local 主管即時官方預覽、15 分鐘凍結核准及同一主管重新登入／輸入原號後單次 g0501。每次核准、送出均查官方原折讓明細與 allowance_status；買方、原發票、公司設定、申請及主管權限變更即拒絕。跨多張原發票的折讓目前拒絕由單張發票入口整張作廢。
+- 原 SQLite 保存 append-only 核准、公司／環境／折讓號唯一送出 claim 及具操作者的結果觀察。先 durable claim 再 POST，code 15、斷線、回覆遺失、程序重入或結果稽核寫入失敗都不釋放 claim；併發最多一個 g0501。送出後只能原號查回，取消、網站人工結案、行政結案與直接清除待辦皆受阻擋。
+- allowance_status 只把原號 D0501／99 記為「官方已作廢但本次 POST 無法歸因」；不把 code=0、D0501／91 或未知資料視為交易成功，不自動結案。真實交易歸因／人工處置政策及 Local 實機驗收仍未完成。既有網站人工流程在尚未送出 API 時保留，未提前完成 G 舊流程退役。
+- 合成測試涵蓋官方簽名與零重試、錯號／錯買方／錯原發票／未知狀態、預覽變更、主管撤權、核准過期、申請改動、帳號範圍、取消／併發競態、重啟不重送、append-only 與稽核失敗。沿用既有 workflow service／SQLite／待辦畫面，無新背景送出 owner。
+- 本批是獨立 Local 作廢工程功能，Patch 升為 3.1.33、Build 歸零；CYID g0501、D 離線／回線、遠端 schema19 升級及真交易仍待完成。Cloudflare 讀取／寫入／部署均 0，真光貿呼叫 0；不變更 Cloud schema、旗標或正式 Release（仍 V3.1.0）。
+
+## V3.1.32 Build 0 — 2026/10/21（V3.2 C：schema19 正式來源與受控部署準備）
+
+- 將 0019 人工稽核／外部占號證據的唯一來源從 drafts 移至 canonical migrations；既有 0001～0018 完全不變。新增 1 欄位、1 表、3 索引及 4 觸發器，原 Workspace／Device／身份與既有證據內容不改。原始碼 `SCHEMA_VERSION=19` 是待部署目標，不代表遠端已升級。
+- 非空 schema18 測試保留真實合成 Frozen／Ledger／官方讀回，先製作檔案備份，再演練 0019 中途失敗整筆回滾、成功一次套用、重套拒絕及舊備份還原；逐筆舊證據、舊表結構、FK 與 integrity 均驗證。
+- 部署仍由原唯一 preflight／version owner 執行；code-only 模式保留原 runtime marker。只有明確 `CYINVOICE_SCHEMA_UPGRADE=18:19`、deploy 模式、原 CYID／schema18、完整 canonical 19 遷移已套用且四道折讓旗標不存在或 false，才可只改 schema marker；其他 vars／Scopes／Services／Secrets／D1／限流設定不變。未完成遷移、未知升級、不同意圖／checkpoint、未真正部署或綁定讀回不同均拒絕；migration history 查詢上限 20 筆。
+- 本批是獨立的 schema19 來源升格／部署準備工作，Patch 升至 3.1.32、Build 歸零。未操作原 Cloudflare D1／Worker、未啟用任何折讓旗標、未呼叫真光貿或發布 Release。C7 歸因政策與雙機真測仍待完成；正式 Release V3.1.0 不變。
+
+## V3.1.31 Build 0 — 2026/10/21（V3.2 B/C：Cloud 主管外部占號覆核與下一號預留）
+
+- 只有第一次 g0401 明確拒絕占號，且同次官方原號查回為已完成、不同買方及不含任何相同原發票的完整折讓，才以同一交易原子保存 `occupied_external` 與外部證據；查無、同買方、同原發票、未完成、回覆遺失或稽核失敗均保留 `sending`，禁止新配號。
+- 原核准主管重新輸入當次 CYID 帳密與含原號的完整確認文字後，Worker 再驗官方原號、原發票餘額、原 Frozen／Grant、公司卡版次、Workspace／Device 及權限；同一 D1 batch 追加原 Ledger 下一 attempt 與不可變前後號稽核，只預留、不送出。新版 Windows 介面及原申請 ID 查回沿用同一流程。
+- 擴充**尚未套用的 schema19 草案**：區分官方全項吻合與外部占號證據、建立索引及下一號稽核連結。新增獨立、預設關閉 `ALLOWANCE_EXTERNAL_COLLISION_ENABLED`；需 schema19 且明確開啟才可查證外部占號／改配號／送出下一 attempt。原 `ALLOWANCE_API_ENABLED`／`ALLOWANCE_G0401_SEND_ENABLED` 仍各自獨立，人工分類旗標不能授權改配號。
+- 原號吻合始終不證明本次 POST 成功；新號要另行確認並通過原唯一 sending CAS／coordinator，且必須有不可變前後號稽核。合成測試涵蓋 ADMIN／SUPER_ADMIN 正向、USER 拒絕、旗標、併發、撤權／公司卡競態、稽核失敗原子回滾、回覆遺失不重配、schema18 非空升級／DDL 回滾及零盲目重送。
+- 新增受控操作是獨立工作項目，因此 Patch 升為 3.1.31、Build 歸零。canonical migrations 仍僅 0001～0018、部署預檢／原 D1／Worker／Secrets／公司卡與真光貿均未操作。C7 歸因政策、雙 Windows 及真測仍未完成；正式 Release 維持 V3.1.0。
+
+## V3.1.30 Build 1 — 2026/10/21（V3.2 Batch 1：Cloud 人工異常分類、稽核與 WinForms）
+
+- **原始碼／合成 CI**：建立待審核的 `cloud/drafts/0019_allowance_manual_review_audit.sql` 作為**待本機 MCP 受控套用**的下一筆遷移來源，沿用 schema18 原 Allowance Application／Ledger／官方查回，不覆寫也不重套 0017／0018。新表永久不可修改／刪除、主管裝置與原 Ledger 綁定、官方證據欄可追溯，禁止以人工作業冒充財務成功。
+- 新增 `manual-review`／`manual-history` 路徑與 Windows 主管查詢／分類介面。前者需 schema19＋**獨立預設關閉** `ALLOWANCE_MANUAL_REVIEW_ENABLED=true`、CYID 主管身份、原 Workspace／Device 有效、原核准申請、原 Ledger 為 sending／occupied_external。全項吻合分類須有同一 Ledger 的真實官方查回紀錄；其他分類只代表待查。
+- 人工稽核只可 **append-only**；不更動號碼、Ledger、官方成功狀態、Grant 或原單次 g0401 發送條件。網路回覆遺失時只從原申請 ID 查人工歷史，不能視為成功或盲重試。合成測試涵蓋未知 schema／旗標關閉、一般員工拒絕、稽核不變更及零額外 provider POST。
+- **Build 1**：先前將待審 0019 放入正式 migrations/ 被既有部署護欄正確拒絕（UNREVIEWED_PENDING_MIGRATIONS）。移至 cloud/drafts/，維持 canonical 0001～0018 不變；只在合成記憶體庫試行 0019，不修改／繞過任何部署護欄。
+- **尚未提升為正式 Migration，更未部署**：原 CYInvoice D1／Worker 仍依使用者先前回報為 schema18、`ALLOWANCE_API_ENABLED=false`，草案 schema19 不得自行套用，須由使用者另一本機 Work＋Cloudflare MCP、確認私有備份／資源預算／回復路徑後再決定受控上線。真正光貿、雙 Windows、Cloud 可歸因成功政策與受控外部撞號下一號仍待驗收；正式 Release V3.1.0 未變。
+
+## V3.1.29 Build 0 — 2026/10/21（V3.2 Batch 1：Local 外部占號人工覆核 UI 收斂）
+
+- 將既有 Local `occupied_external` 的安全下一號預留能力接入既有「折讓人工處理」待辦明細；主管必須重新登入、看到原號與明確警示並**完整輸入指定文字**後，後端才會再次驗證即時光貿證據與 Frozen 核准，最後僅預留新號。沒有增加新交易來源或額外 g0401 入口。
+- 不完整或不匹配的人工文字不能繼續；再次按同一舊號會被原 Ledger 的不可重複身份檢查拒絕。發送端仍只對新 `reserved` 狀態提供獨立且明確確認的第一次正式送出。
+- 修正 Local 查回提示：同號／同內容匹配**不能證明本次 POST 完成**，不得以原號唯讀查回直接視為可歸因成功；沿用 `sending`、不可再送和不可自動改配號。WinForms startup smoke 覆蓋 occupied_external → 主管人工覆核入口、sending → 唯讀查回、confirmed 不提供新送出操作。
+- Cloud schema18、Worker、旗標、公司卡與真交易**完全未動**。完整 Cloud 手動 Audit／跨機改配號與兩機真光貿驗收仍需後續獨立審核，不能藉此次 UI 收斂宣告 B／C 已完成。正式 Release 仍 V3.1.0。
+
+## V3.1.28 Build 1 — 2026/10/21（V3.2 Batch 1：Local 外部占號人工覆核與唯一下一號預留）
+
+- 從現有 Local `occupied_external` 出發，提供同一 Work Item 的**人工確認下一號預留**；僅允許已確定第一次 g0401 被光貿拒絕占號，且新的一次性原號唯讀查回顯示完整官方折讓由**不同買方、不同原發票**建立。逾時、查無資料、同買方、同原發票、號碼不符、未完成狀態或僅憑錯誤碼都禁止新配號。
+- 需主管再次驗權、原核准 Frozen 不變、正式原發票餘額／明細最新驗證及明確「確認外部占號並重新配號」文字；每次新分配在原 Local SQLite 原有 Ledger 以 `attempt=N+1` 追加，前一次 `occupied_external` 不變。同一 SQLite Transaction 同時存不可變的新號／舊號／主管／官方 SHA256 快照稽核，沒有第二個 business owner。
+- 新號只是 `reserved`，**不會自動呼叫 g0401**；必須另行受權限的既有唯一 send 首次 CAS。回讀結果不明仍維持 `sending`，禁止亂配號。合成測試覆蓋碰撞、配號、不同買方／原發票、撤權、重複確認與不可修改稽核。
+- Build 1：Windows CI 先前證明舊號於成功改配後遭更嚴格的凍結身份比對拒絕；修正合成測試預期為 `InvalidDataException`，不放寬安全檢查。
+- 不變更原 Cloudflare D1 schema18／Worker、公司卡、折讓旗標或真交易。Local 主管 UI 的人工第二次確認和跨機 Cloud 同等撞號流程、真實光貿驗收仍待整合完成；正式 Release V3.1.0。
+
+## V3.1.27 Build 1 — 2026/10/21（V3.2 B/C：Local 原號回查與不可歸因 Audit 一致性）
+
+- 修正 Local g0401 單次送出／唯讀查回：即使官方逐欄完全吻合，也**不能歸因到本次 POST**，回傳 `FullMatchUnattributed` 而不是自動 `OfficiallyConfirmed`；原號 Ledger 保留 `sending`，不可再次送出或換號。
+- 沿用原 Local SQLite 而非新交易來源，新增僅存不可逆 SHA-256 官方快照指紋、原折讓號、主管和查核時間的 `allowance_local_readback_audit`（INSERT-only trigger），不保存買方明文。只有真正在原號 `sending` 且匹配同一份凍結 payload 時允許記錄，任何比對失敗／未知都不得偽造成功。
+- 停用無可信 origin 證據的 Local `MarkOfficiallyConfirmed` 直接晉級能力，避免沿用舊測試將官方同號誤視為本次送出成功。合成測試涵蓋完全吻合、逾時後唯讀查回、稽核永久不可修改／刪除及零第二次 POST。
+- Build 1：Windows 合成測試讀取本機 Audit 採用與正式 Store 相同的非 pooled SQLite 連線，確保 Windows 測試完成後檔案可立即釋放；無額外業務變更。
+- 本次**只修改本機程式與 Local SQLite 新空表**；不套原 Cloudflare D1 migration、不變更原 Worker、CYID、公司卡或光貿。Local 撞號後受控再次配號與人工歸因判定仍需後續受權限、稽核及官方證據完整設計；正式 Release 仍 V3.1.0。
+
+## V3.1.26 Build 1 — 2026/10/21（V3.2 批次 1：Cloud g0401 受控單次送出與主管查證原始碼）
+
+- 原有唯一 Cloud coordinator 已具備官方最新可折額、主管 Grant、same-ID CAS、單次光貿 POST、原號唯讀查回的保守邏輯；本次只接唯一受權限保護的 `send-once` HTTP 路徑與 `attempt` 唯讀查證，絕不接受 client 傳入的 Ledger ID／折讓號。
+- `send-once` 除既有 `ALLOWANCE_API_ENABLED`（現為 false）外，仍須**獨立的 `ALLOWANCE_G0401_SEND_ENABLED=true`** 且傳入當次主管明確確認；預設不存在／false 一律禁止，權限、原 Workspace／Device、最新版次與首次 `reserved` 由伺服器再檢查。第二次點擊、結果不明、逾時或撞號均只回讀，不再次發送、不自動配號或宣告 confirmed。
+- Windows Cloud 主管畫面整合原申請 ID 的唯讀 attempt 證據、原 Ledger 發送前明確警告與單次送出；Core HttpClient 加入嚴格 fail-closed 契約驗證。合成 Cloud／Windows 測試覆蓋獨立旗標、越權、已送出禁止第二次 POST 與結果不得冒充光貿成功。
+- Build 1：Cloud 合成測試將一般員工越權案例的獨立旗標明確設為 true，確保先進入 CYID 角色拒絕流程（403）；生產預設關閉行為不變。原工程碼未變。
+- **本批仍未完結整個 B/C**：可稽核人工裁決和完整證據持久化、Local 撞號後受控下一號、真裝置／光貿測試需依 V3.2 計畫後續集中收斂，不能在旗標仍關閉時宣告實際可用。沒有原 Cloudflare 部署、D1 migration、真交易或新正式 Release；正式 Release 維持 V3.1.0。
+
+## V3.1.25 Build 0 — 2026/10/21（V3.2-C7a：保守的單次送出結果人工歸因分類；工程版）
+- 只擴充既有內部 `allowance-one-shot-coordinator.ts` 的回傳契約：將完整吻合無法歸因、完整吻合但 Audit 未成功寫入、號碼撞號、已接受但官方未能歸因、明確拒絕、結果不明六類列為人工審查，不把人工分類當作成功證明。
+- 所有分類一律 `manualReviewRequired=true`、`proofOfThisPost=false`、`ledgerStatus=sending`、禁止自動確認／再次送出／改配號。補合成回歸測試；沒有新增 Public HTTP route、D1 schema、外部呼叫、正式 Release 或啟用 Cloudflare 旗標。
+- C7 仍待人工簽核可信發送歸因政策、真正可追溯的持久人工操作、雙機與真光貿**測試**環境；單憑官方全項吻合不可自動標記 `confirmed`。
+
 ## V3.1.24 Build 1 — 2026/10/20（V3.2-C6 正式 Migration 17／18 原始碼升格）
 - 將已由 #529 非空 schema16 備份／rollback 演練的兩份折讓 D1 Schema 正式列入 `cloud/migrations/0017_allowance_applications.sql`、`0018_allowance_frozen_ledger.sql`，並**移除**舊 `cloud/drafts` 同名 SQL，維持唯一 canonical owner；只新增折讓專屬 6 張表、4 個索引、23 個觸發器，不改動非折讓 Work Item／CYID 既有資料。
 - 調整 C1／C2／C3／C4／C5、CYID-only、非折讓與部署預檢測試：合成 fixture 先停在 schema16，再逐批執行正式 17/18；正常應用整套 canonical migrations 的 fixture 不得再重套。完整交易失敗回滾、FK、舊表／角色護欄與備份還原仍由 CI 驗證。

@@ -62,10 +62,41 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
+// Entirely synthetic transport: no Cloudflare, no AMEGO network access.
+function fakeOneShotProvider(allowanceNumber,collision=false){
+ const calls=[];
+ const product={original_invoice_number:collision?"CD87654321":invoice,original_invoice_date:20261019,
+  original_description:"FAKE ITEM",quantity:1,unit_price:50,
+  amount:50,tax:0,tax_type:1};
+ const official={allowance_number:allowanceNumber,allowance_date:20261019,
+  invoice_type:"D0401",invoice_status:99,allowance_type:2,
+  buyer_identifier:collision?"87654321":"0000000000",buyer_name:"FAKE BUYER",
+  total_amount:50,tax_amount:0,cancel_date:0,wait:[],product_item:[product]};
+ return {calls,transport:async(url,options)=>{
+  calls.push(url);
+  assert.equal(options.method,"POST");
+  assert.equal(options.redirect,"error");
+  const form=new URLSearchParams(options.body);
+  assert.equal(form.get("sign"),
+   createHash("md5").update(form.get("data")+form.get("time")+
+    "SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+  if(url.endsWith("/invoice_query"))
+   return Response.json({code:0,data:[invoiceRecord]});
+  if(url.endsWith("/g0401")){
+   assert.equal(JSON.parse(form.get("data"))[0].AllowanceNumber,allowanceNumber);
+   return Response.json({code:collision?4040161:0});
+  }
+  if(url.endsWith("/allowance_query")){
+   assert.equal(JSON.parse(form.get("data")).allowance_number,allowanceNumber);
+   return Response.json({code:0,data:official});
+  }
+  throw Error("Unexpected official URL");
+ }};
+}
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
+ assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -76,6 +107,7 @@ async function fixture(){
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const f of migrations.filter(x=>x>="0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
+ // Canonical schema19 is included above; all fixtures remain in memory.
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
@@ -226,9 +258,164 @@ async function call(env,action,body={},token=rawDevA){
    assert.equal(reserved.body.maySendWithoutFreshOfficialCheck,false);
    assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,1);
    assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0);
+   // A deploy with the application flag enabled still NEVER enables g0401.
+   assert.equal((await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB)).status,503);
+   manager.ALLOWANCE_G0401_SEND_ENABLED="true";
+   employee.ALLOWANCE_G0401_SEND_ENABLED="true";
+   assert.equal((await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3},rawDevB)).status,503);
+   assert.equal((await call(employee,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevA)).status,403);
+   const before=await call(manager,"attempt",{applicationId:app1,
+    expectedRevision:3},rawDevB);
+   assert.equal(before.status,200);
+   assert.equal(before.body.ledgerStatus,"reserved");
+   assert.equal(before.body.proofOfThisPost,false);
+   assert.equal(before.body.officiallyConfirmed,false);
+   const provider=fakeOneShotProvider(reserved.body.allowanceNumber);
+   globalThis.fetch=provider.transport;
+   const sent=await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB);
+   assert.equal(sent.status,200);
+   assert.equal(sent.body.ledgerStatus,"sending");
+   assert.equal(sent.body.manualReviewRequired,true);
+   assert.equal(sent.body.proofOfThisPost,false);
+   assert.equal(sent.body.officiallyConfirmed,false);
+   assert.equal(sent.body.safeToAutoRetry,false);
+   assert.equal(sent.body.manualDisposition,"full_match_unattributed");
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1);
+   assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger").get().status,
+    "sending");
+   const after=await call(manager,"attempt",{applicationId:app1,
+    expectedRevision:3},rawDevB);
+   assert.equal(after.status,200);
+   assert.equal(after.body.ledgerStatus,"sending");
+   assert.equal(after.body.recordedExactReadback,true);
+   assert.equal(after.body.manuallyUnattributed,true);
+   const again=await call(manager,"send-once",{applicationId:app1,
+    expectedRevision:3,confirmOnce:true},rawDevB);
+   assert.equal(again.status,409);
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1,
+    "repeat confirmation must not send a second g0401");
+   assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
+   // Schema19 remains opt-in even if old allowance endpoints work.
+   assert.equal((await call(manager,"manual-history",{applicationId:app1,
+    expectedRevision:3},rawDevB)).status,503);
+   const triageManager=config(db,principal("ADMIN","manager"),"true","19");
+   const triageEmployee=config(db,principal("USER","employee"),"true","19");
+   assert.equal((await call(triageManager,"manual-review",{applicationId:app1,
+    expectedRevision:3,reviewId:"synthetic_review_001",
+    disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,503);
+   triageManager.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+   triageEmployee.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+   assert.equal((await call(triageEmployee,"manual-history",{
+     applicationId:app1,expectedRevision:3},rawDevA)).status,403);
+   assert.equal((await call(triageEmployee,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevA)).status,403);
+   assert.equal((await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:false},rawDevB)).status,503);
+   const manual=await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevB);
+   assert.equal(manual.status,200);
+   assert.equal(manual.body.officiallyConfirmed,false);
+   assert.equal(manual.body.canAllocateAnotherNumber,false);
+   assert.equal(manual.body.proofOfThisPost,false);
+   assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger").get().status,"sending");
+   assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_manual_review_audit").get().n,1);
+   assert.equal((await call(triageManager,"manual-review",{
+     applicationId:app1,expectedRevision:3,reviewId:"synthetic_review_001",
+     disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,503);
+   const history=await call(triageManager,"manual-history",{
+     applicationId:app1,expectedRevision:3},rawDevB);
+   assert.equal(history.status,200);
+   assert.equal(history.body.items.length,1);
+   assert.equal(history.body.items[0].disposition,"full_match_unattributed");
+   assert.equal(history.body.items[0].recordedReadback,true);
+   assert.ok(!JSON.stringify(history.body).includes("FAKE BUYER"));
+   assert.throws(()=>sql.prepare("UPDATE allowance_manual_review_audit SET "+
+     "disposition='unknown_outcome'").run(),/ALLOWANCE_MANUAL_REVIEW_APPEND_ONLY/);
+   assert.throws(()=>sql.prepare("DELETE FROM allowance_manual_review_audit").run(),
+     /ALLOWANCE_MANUAL_REVIEW_APPEND_ONLY/);
+   assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1,
+    "manual review never re-sends g0401");
+
   } finally {globalThis.fetch=old;}
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM work_items").get().n,0);
   assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
  }finally{close();}
 }
-console.log("CYInvoice C4: opt-in schema18 CYID Device scoped allowance create, manager CAS, preview, approve, reserve and no public financial send passed");
+{
+ const f=await fixture();
+ try{
+  f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(rawDevB),devB);
+  const request={applicationId:app1,expectedRevision:3,reviewId:"collision_review_test",
+   previousNumber:"A20261019001",confirmation:"確認外部占號 A20261019001 並預留下一號"};
+  const env=config(f.db,principal("ADMIN","manager"),"true","19");
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,503);
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  env.SCHEMA_VERSION="18";
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,503);
+  env.SCHEMA_VERSION="19";
+  const oversized=await handle(new Request("https://fake.invalid/v1/allowances/reserve-after-collision",{
+   method:"POST",headers:{authorization:"Bearer "+rawDevB},body:" ".repeat(5000)+JSON.stringify(request)}),env);
+  assert.equal(oversized.status,400,"headerless bodies are byte bounded before authentication or mutation");
+  assert.equal((await call(env,"reserve-after-collision",{...request,ledgerId:"client_override"},rawDevB)).status,400);
+  const user={...env,cyIdContext:config(f.db,principal("USER","employee")).cyIdContext};
+  assert.equal((await call(user,"reserve-after-collision",request,rawDevB)).status,403);
+  const before=f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n;
+  assert.equal((await call(env,"reserve-after-collision",{...request,confirmation:"確認"},rawDevB)).status,409);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,before);
+ }finally{f.close();}
+}
+for(const role of ["ADMIN","SUPER_ADMIN"]){
+ const f=await fixture(),oldFetch=globalThis.fetch;
+ try{
+  for(const [token,dev] of [[rawDevA,devA],[rawDevB,devB]])
+   f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(token),dev);
+  const env=config(f.db,principal(role,"manager"),"true","19");
+  const employee=config(f.db,principal("USER","employee"),"true","19");
+  const {workspaceId,deviceId,...draft}=input(app1);
+  assert.equal((await call(employee,"create",draft)).status,200);
+  assert.equal((await call(env,"review",{applicationId:app1,expectedRevision:1},rawDevB)).status,200);
+  globalThis.fetch=fakeOfficial().transport;
+  assert.equal((await call(env,"approve",{applicationId:app1,expectedRevision:2},rawDevB)).status,200);
+  const first=await call(env,"reserve",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(first.status,200);
+  env.ALLOWANCE_G0401_SEND_ENABLED="true";env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  env.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+  const provider=fakeOneShotProvider(first.body.allowanceNumber,true);
+  globalThis.fetch=provider.transport;
+  const sent=await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB);
+  assert.equal(sent.status,200);assert.equal(sent.body.ledgerStatus,"occupied_external");
+  const evidence=await call(env,"attempt",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(evidence.body.recordedExactReadback,false);
+  assert.equal((await call(env,"manual-review",{applicationId:app1,expectedRevision:3,
+   reviewId:"collision_fake_match",disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,409);
+  const request={applicationId:app1,expectedRevision:3,reviewId:"collision_positive_review",
+   previousNumber:first.body.allowanceNumber,
+   confirmation:`確認外部占號 ${first.body.allowanceNumber} 並預留下一號`};
+  const next=await call(env,"reserve-after-collision",request,rawDevB);
+  assert.equal(next.status,200);assert.notEqual(next.body.allowanceNumber,first.body.allowanceNumber);
+  assert.equal(next.body.status,"reserved");
+  assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1);
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,409);
+  const history=await call(env,"manual-history",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(history.status,200);assert.equal(history.body.items.length,1);
+  assert.equal(history.body.items[0].disposition,"external_collision_reserved");
+  assert.equal(history.body.items[0].nextAllowanceNumber,next.body.allowanceNumber);
+  assert.ok(!JSON.stringify(history.body).includes("FAKE BUYER"));
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="false";
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,503);
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  const second=fakeOneShotProvider(next.body.allowanceNumber);globalThis.fetch=second.transport;
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,200);
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,409);
+  assert.equal(second.calls.filter(url=>url.endsWith("/g0401")).length,1);
+  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{globalThis.fetch=oldFetch;f.close();}
+}
+console.log("CYInvoice Cloud routes: schema/flag gates, ADMIN/SUPER_ADMIN positive collision workflow, USER rejection, immutable audit and no blind repost passed");

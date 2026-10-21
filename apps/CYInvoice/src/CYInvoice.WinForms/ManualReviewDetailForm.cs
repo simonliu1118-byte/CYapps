@@ -4,6 +4,7 @@ internal enum ManualReviewDetailAction
 {
     None,
     Primary,
+    Secondary,
     CancelReturn,
     AdministrativeClose,
 }
@@ -25,7 +26,8 @@ internal sealed class ManualReviewDetailForm : Form
         string primaryActionText = "",
         bool allowCancelReturn = false,
         bool allowAdministrativeClose = false,
-        bool primaryDanger = false)
+        bool primaryDanger = false,
+        string secondaryActionText = "")
     {
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
@@ -88,6 +90,13 @@ internal sealed class ManualReviewDetailForm : Form
             primary.TabIndex = 0;
             primary.Click += (_, _) => Complete(ManualReviewDetailAction.Primary);
             actions.Controls.Add(primary);
+        }
+        if (!string.IsNullOrWhiteSpace(secondaryActionText))
+        {
+            var secondary = UiControls.StandardButton(secondaryActionText);
+            secondary.Width = 112;
+            secondary.Click += (_, _) => Complete(ManualReviewDetailAction.Secondary);
+            actions.Controls.Add(secondary);
         }
         actions.Controls.Add(close);
         actions.SizeChanged += (_, _) => CenterActions(actions);
