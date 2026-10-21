@@ -249,6 +249,25 @@ internal static class CloudAllowanceClientTests
 
     public static async Task RunVoidAsync()
     {
+        // Reopening the same draft, or entering its original number on a
+        // different CYID Device, must recover the SAME readback ID.
+        var stable=CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_synthetic","test","ALW-001");
+        Equal(stable,CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_synthetic","test","ALW-001"));
+        Equal(69,stable.Length);
+        Equal(true,stable.StartsWith("void_",StringComparison.Ordinal));
+        Equal(false,stable.Contains("ALW-001",StringComparison.Ordinal));
+        Equal(false,stable==CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_synthetic","production","ALW-001"));
+        Equal(false,stable==CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_other","test","ALW-001"));
+        Equal(false,stable==CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_synthetic","test","ALW-002"));
+        try{CloudAllowanceClient.OriginalVoidApplicationId("ws_synthetic","test","bad");}
+        catch(ArgumentException){goto ValidatedStableId;}
+        throw new InvalidOperationException("Invalid original number must fail closed.");
+        ValidatedStableId:
         var fake=new FakeHandler();
         fake.Add(r=>{
             Check(r,"void-create");
