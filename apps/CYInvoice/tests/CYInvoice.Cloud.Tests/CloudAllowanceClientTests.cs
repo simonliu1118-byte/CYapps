@@ -246,4 +246,64 @@ internal static class CloudAllowanceClientTests
            Environment="evil"},"0001","fake-password"));
         Equal(16,fake.Calls);
     }
+
+    public static async Task RunVoidAsync()
+    {
+        var fake=new FakeHandler();
+        fake.Add(r=>{
+            Check(r,"void-create");
+            using var payload=JsonDocument.Parse(r.Content!.ReadAsStringAsync()
+                .GetAwaiter().GetResult());
+            Equal(Id,payload.RootElement.GetProperty("applicationId").GetString());
+            Equal("ALW-001",payload.RootElement.GetProperty("allowanceNumber").GetString());
+            Equal("AB12345678",payload.RootElement.GetProperty("originalInvoiceNumber").GetString());
+            if(payload.RootElement.TryGetProperty("workspaceId",out _) ||
+               payload.RootElement.TryGetProperty("confirmOnce",out _))
+                throw new InvalidOperationException("Client must not create send authority.");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                status="open",revision=1,claimed=false,readbackOnly=false,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        fake.Add(r=>{
+            Check(r,"void-status");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                status="approved",revision=2,claimed=true,readbackOnly=true,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        fake.Add(r=>{
+            Check(r,"void-status");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                status="approved",revision=2,claimed=true,readbackOnly=true,
+                officiallyConfirmed=true,officialActionPerformed=false});
+        });
+        fake.Add(r=>{
+            Check(r,"void-create");
+            return Json(HttpStatusCode.ServiceUnavailable,new{
+                ok=false,error=new{code="VOID_SCHEMA_NOT_READY"}});
+        });
+        using var http=new HttpClient(fake);
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        var draft=new CloudAllowanceVoidDraft(Id,"test","ALW-001",
+            "AB12345678","Synthetic review");
+        var created=await api.CreateVoidApplicationAsync(draft,"0001","fake-password");
+        Equal("open",created.Status);
+        Equal(false,created.Claimed);
+        var reviewed=await api.ReadVoidApplicationAsync(Id,"0001","fake-password");
+        Equal("approved",reviewed.Status);
+        Equal(true,reviewed.Claimed);
+        Equal(true,reviewed.ReadbackOnly);
+        await Fail<InvalidDataException>(()=>api.ReadVoidApplicationAsync(
+            Id,"0001","fake-password"));
+        await Fail<CloudApiException>(()=>api.CreateVoidApplicationAsync(
+            draft,"0001","fake-password"));
+        Equal(4,fake.Calls);
+        Equal(0,fake.Remaining);
+        await Fail<ArgumentException>(()=>api.CreateVoidApplicationAsync(
+            draft with{AllowanceNumber="invalid lower-case"},"0001","fake-password"));
+        await Fail<ArgumentException>(()=>api.CreateVoidApplicationAsync(
+            draft with{Reason="bad\nreason"},"0001","fake-password"));
+        await Fail<ArgumentException>(()=>api.ReadVoidApplicationAsync(
+            "x","0001","fake-password"));
+        Equal(4,fake.Calls);
+    }
 }
