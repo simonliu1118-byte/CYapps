@@ -36,6 +36,10 @@ public sealed record CloudAllowanceManualReview(string ReviewId,string LedgerId,
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
+public sealed record CloudAllowanceVoidDraft(string ApplicationId,string Environment,
+    string AllowanceNumber,string OriginalInvoiceNumber,string Reason);
+public sealed record CloudAllowanceVoidState(string ApplicationId,string Status,int Revision,
+    bool Claimed,bool ReadbackOnly);
 
 public sealed class CloudAllowanceClient
 {
@@ -140,6 +144,63 @@ public sealed class CloudAllowanceClient
             throw new InvalidDataException("Cloud allowance receipt does not match original state.");
         return new CloudAllowanceReceipt(expectedId,expectedStatus,expectedRevision);
     }
+    // g0501 cross-device application and status only. No Cloud mutation sender
+    // is exposed by the Windows client. Keep the application ID on ambiguous
+    // responses and read it back rather than generating a second application.
+    private static CloudAllowanceVoidState ReadVoidState(JsonElement root,string id,
+        bool requireOpen)
+    {
+        if(Required(root,"applicationId")!=id ||
+           !root.TryGetProperty("claimed",out var claim) ||
+           claim.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+           !root.TryGetProperty("readbackOnly",out var only) ||
+           only.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+           !root.TryGetProperty("officiallyConfirmed",out var official) ||
+           official.ValueKind!=JsonValueKind.False ||
+           !root.TryGetProperty("officialActionPerformed",out var external) ||
+           external.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud g0501 status cannot imply official success.");
+        var status=Required(root,"status");
+        var revision=RequiredRevision(root);
+        var claimed=claim.GetBoolean();
+        if(status is not ("open" or "approved") || revision!=(status=="open"?1:2) ||
+           only.GetBoolean()!=claimed || (requireOpen&&(status!="open"||claimed)))
+            throw new InvalidDataException("Cloud g0501 application state is inconsistent.");
+        return new CloudAllowanceVoidState(id,status,revision,claimed,claimed);
+    }
+
+    public async Task<CloudAllowanceVoidState> CreateVoidApplicationAsync(
+        CloudAllowanceVoidDraft draft,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        Credentials(employeeNo,password);
+        ValidateId(draft.ApplicationId);
+        if(draft.Environment is not ("test" or "production") ||
+           !Regex.IsMatch(draft.AllowanceNumber??"",@"^[A-Z0-9-]{1,16}$") ||
+           !Regex.IsMatch(draft.OriginalInvoiceNumber??"",@"^[A-Z]{2}[0-9]{8}$") ||
+           string.IsNullOrWhiteSpace(draft.Reason)||draft.Reason.Length>500 ||
+           draft.Reason!=draft.Reason.Trim()||draft.Reason.Any(char.IsControl))
+            throw new ArgumentException("Invalid g0501 application.");
+        using var doc=await SendAsync("void-create",new{
+            applicationId=draft.ApplicationId,environment=draft.Environment,
+            allowanceNumber=draft.AllowanceNumber,
+            originalInvoiceNumber=draft.OriginalInvoiceNumber,reason=draft.Reason,
+            employeeNo,password},cancellationToken).ConfigureAwait(false);
+        return ReadVoidState(doc.RootElement,draft.ApplicationId,true);
+    }
+
+    public async Task<CloudAllowanceVoidState> ReadVoidApplicationAsync(
+        string id,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        using var doc=await SendAsync("void-status",new{
+            applicationId=id,employeeNo,password},cancellationToken)
+            .ConfigureAwait(false);
+        return ReadVoidState(doc.RootElement,id,false);
+    }
+
     public async Task<CloudAllowanceReceipt> CreateAsync(CloudAllowanceDraft draft,
         string employeeNo,string password,CancellationToken cancellationToken=default)
     {
