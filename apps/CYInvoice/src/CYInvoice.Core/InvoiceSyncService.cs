@@ -641,6 +641,7 @@ public sealed class InvoiceSyncService
         record.MainRemark,
         record.DetailVat,
         record.Items,
+        OfficialAllowances = InvoiceAllowanceMetadata.OfficialFingerprint(record),
     });
 
     private static bool IsInRange(InvoiceRecord record, DateOnly startDate, DateOnly endDate)

@@ -40,6 +40,24 @@ public static class InvoiceAllowanceMetadata
         }
     }
 
+    // Compare only the official allowance history, not unrelated extension
+    // values such as local/manual workflow markers. An absent summary is
+    // different from an authoritative empty summary: unknown is not zero.
+    // This signature is used for change detection/cache invalidation only,
+    // never to prove that our own g0401/g0501 POST succeeded.
+    public static string OfficialFingerprint(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        var complete = record.ExtensionData is not null &&
+            record.ExtensionData.TryGetValue(SummaryPresentKey, out var marker) &&
+            marker.ValueKind == JsonValueKind.True;
+        return JsonSerializer.Serialize(new
+        {
+            Complete = complete,
+            Allowances = ReadOfficial(record),
+        });
+    }
+
     public static FixedDecimal RemainingGross(InvoiceRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
