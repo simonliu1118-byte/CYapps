@@ -87,6 +87,11 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         }
 
         var accountKey = CurrentAccountKey();
+        // This fence survives completion/recreation of a local work item. It is
+        // deliberately keyed by the original official number, not the issue ID.
+        if (new LocalAllowanceVoidStore(repository.DataDirectory)
+            .HasClaimForAllowance(accountKey, allowanceNumber))
+            throw new InvalidOperationException("原折讓單號已有不可重送的作廢紀錄，請依原申請查回");
         var invoiceNumber = fresh.InvoiceNumber.Trim();
         var orderId = EffectiveOrderId(fresh);
         if (issueStore.HasUnresolved(accountKey, invoiceNumber, orderId, InvoiceAllowanceVoidIssueTypes.ManualReview))
