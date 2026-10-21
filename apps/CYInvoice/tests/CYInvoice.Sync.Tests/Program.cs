@@ -478,14 +478,13 @@ internal static class Program
         new InvoiceSyncIssueStore(repository.DataDirectory).Record(
             "prod|12345675", original.InvoiceNumber, original.ApiOrderId,
             InvoiceSyncIssueTypes.QueryFailed, "synthetic earlier readback failure", FixedNow);
+        var official = Query(original.InvoiceNumber, original.ApiOrderId,
+            "100", "買受人", description: "商品");
         var fake = new FakeGateway
         {
-            QueryResponse = Query(
-                original.InvoiceNumber, original.ApiOrderId, "100", "買受人",
-                description: "商品") with
+            QueryResponse = official with
             {
-                Data = Query(original.InvoiceNumber, original.ApiOrderId,
-                    "100", "買受人", description: "商品").Data with
+                Data = official.Data with
                 {
                     Allowances = [active with { CancelDate = 1 }],
                     AllowanceSummaryPresent = true,
