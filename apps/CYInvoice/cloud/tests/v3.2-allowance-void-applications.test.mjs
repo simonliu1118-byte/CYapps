@@ -58,7 +58,7 @@ try{
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,allowanceNumber:"alw-001"},ctx,authority()));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,reason:"contains\nbreak"},ctx,authority()));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,originalInvoiceNumber:"BAD"},ctx,authority()));
- await rejects("VOID_APPLICATION_SCOPE_INVALID",()=>create(db,{...request,workspaceId:otherWs},ctx,authority()));
+ await rejects("VOID_APPLICATION_AUTH_REQUIRED",()=>create(db,{...request,workspaceId:otherWs},ctx,authority()));
  await rejects("VOID_APPLICATION_AUTH_REQUIRED",()=>create(db,request,ctx,authority(null)));
  await rejects("VOID_APPLICATION_AUTH_REQUIRED",()=>create(db,request,ctx,authority({...applicant,workspaceId:otherWs})));
  let authCalls=0;
