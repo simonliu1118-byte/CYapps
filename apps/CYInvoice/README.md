@@ -6,6 +6,8 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
+- **目前工程 Source：V3.1.35 Build 0（V3.2-F，非正式 Release）**：既有 invoice_query 官方折讓歷史與摘要完整性加入清單同步／詳細回查的變更判斷；折讓變更能保存並清掉舊 PDF／預覽快取，相同資料不反覆刪除。沒有 allowance_list 主動發現、Cloudflare 更動或正式交易。此 F 工作 PR 從 main 獨立開發；V3.1.34 D/E Draft PR #550 尚未合併，合併前須確認順序及版本衝突。正式 Release V3.1.0 不變。
+
 - **目前工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.32 Build 0（非正式 Release）**：將已驗證的 0019 升格為 canonical migration，補齊非空 schema18 備份／回復與明確 18→19 部署標記驗證。原 D1／Worker 仍依先前本機回報為 schema18；本批沒有操作 Cloudflare、啟用折讓旗標或真光貿。正式 Release 仍 V3.1.0。
