@@ -218,6 +218,24 @@ public sealed class CloudAllowanceClient
         return ReadVoidState(doc.RootElement,draft.ApplicationId,true);
     }
 
+    // Employee workflow: one original-ID readback before any create.
+    // A timeout, revoked Device, ambiguous response or other error must
+    // NEVER turn into a second create. Only explicit NOT_FOUND permits it.
+    public async Task<CloudAllowanceVoidState> CreateOrReadVoidApplicationAsync(
+        CloudAllowanceVoidDraft draft,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        try{
+            return await ReadVoidApplicationAsync(draft.ApplicationId,
+                employeeNo,password,cancellationToken).ConfigureAwait(false);
+        }
+        catch(CloudApiException ex) when(ex.Code=="VOID_APPLICATION_NOT_FOUND"){
+            return await CreateVoidApplicationAsync(draft,
+                employeeNo,password,cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public async Task<CloudAllowanceVoidState> ReadVoidApplicationAsync(
         string id,string employeeNo,string password,
         CancellationToken cancellationToken=default)
