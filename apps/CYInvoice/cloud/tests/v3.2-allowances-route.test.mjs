@@ -418,4 +418,50 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
   assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
  }finally{globalThis.fetch=oldFetch;f.close();}
 }
+// V3.2 E: original CYID device/employee route accepts a void application and
+// permits same-ID status readback, but never exposes a financial g0501 POST.
+{
+ const f=await fixture();
+ try{
+  f.sql.exec(readFileSync("drafts/0020_allowance_void_coordination.sql","utf8"));
+  f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?")
+   .run(await hash(rawDevA),devA);
+  f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?")
+   .run(await hash(rawDevB),devB);
+  const applicant=config(f.db,principal("USER","employee"),"true","20");
+  const lead=config(f.db,principal("ADMIN","manager"),"true","20");
+  const older=config(f.db,principal("USER","employee"),"true","19");
+  const applicationId="void_route_synthetic_one";
+  const payload={applicationId,environment:"test",allowanceNumber:"ALW-001",
+   originalInvoiceNumber:"AB12345678",reason:"Synthetic void request"};
+  assert.equal((await call(older,"void-create",payload)).status,503);
+  assert.equal((await call(older,"void-status",{applicationId})).status,503);
+  assert.equal((await call(config(f.db,principal("USER","employee"),"false","20"),
+   "void-create",payload)).status,503);
+  assert.equal((await call(applicant,"void-create",
+   {...payload,untrustedClaim:true})).status,400);
+  const created=await call(applicant,"void-create",payload);
+  assert.equal(created.status,200);
+  assert.deepEqual(Object.keys(created.body).sort(),[
+   "applicationId","claimed","officialActionPerformed","officiallyConfirmed",
+   "ok","readbackOnly","revision","status"].sort());
+  assert.equal(created.body.status,"open");
+  assert.equal(created.body.claimed,false);
+  assert.equal(created.body.officiallyConfirmed,false);
+  const same=await call(applicant,"void-status",{applicationId});
+  assert.equal(same.status,200);
+  assert.equal(same.body.applicationId,applicationId);
+  assert.equal(same.body.readbackOnly,false);
+  const other=config(f.db,principal("USER","other_employee"),"true","20");
+  assert.notEqual((await call(other,"void-status",{applicationId})).status,200);
+  assert.equal((await call(lead,"void-status",{applicationId},rawDevB)).status,200);
+  assert.equal((await call(applicant,"void-create",
+   {...payload,applicationId:"void_route_synthetic_two"})).status,409);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_requests").get().n,1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
+  assert.equal((await call(lead,"void-send",{applicationId},rawDevB)).status,404);
+  assert.equal((await call(lead,"void-approve",{applicationId},rawDevB)).status,404);
+  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{f.close();}
+}
 console.log("CYInvoice Cloud routes: schema/flag gates, ADMIN/SUPER_ADMIN positive collision workflow, USER rejection, immutable audit and no blind repost passed");
