@@ -5,12 +5,13 @@
 // No D1 inventory hash can establish absent offline devices.
 // Claim first -> at most ONE provider POST. Lost claim reply = ZERO posts.
 // A provider code=0 or D0501/99 can never attribute this mutation.
-import {loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
+import {loadCloudAllowanceVoidForManager,activeVoidDevice,
+ isVoidManager,sameVoidManager} from "./allowance-void-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {queryOfficialVoidTarget} from "./amego-allowance-void-proof";
 import {postAllowanceVoidOnce} from "./amego-allowance-void";
 import type {OneShotAllowanceVoidOutcome} from "./amego-allowance-void";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext}
+import type {AllowanceActorSource,CloudAllowanceContext}
  from "./allowance-frozen-store";
 
 export interface VoidOnceTarget {
@@ -36,23 +37,6 @@ const ID=/^[A-Za-z0-9_-]{8,100}$/;
 const WS=/^ws_[A-Za-z0-9_-]{3,100}$/;
 const DEVICE=/^dev_[0-9a-f-]{36}$/;
 const HASH=/^[a-f0-9]{64}$/;
-function manager(a:AllowanceActor|null,ws:string):a is AllowanceActor{
- return !!a&&a.workspaceId===ws&&
-  (a.workspaceRole==="ADMIN"||a.workspaceRole==="SUPER_ADMIN")&&
-  typeof a.employeeId==="string"&&a.employeeId.length>0&&a.employeeId.length<=100;
-}
-function same(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolean{
- return manager(a,ws)&&manager(b,ws)&&
-  a.employeeId===b.employeeId&&a.workspaceRole===b.workspaceRole;
-}
-async function active(db:D1Database,ws:string,dev:string):Promise<boolean>{
- return !!await db.prepare("SELECT d.device_id FROM devices d "+
-  "JOIN workspaces w ON w.workspace_id=d.workspace_id "+
-  "WHERE w.workspace_id=?1 AND w.status='active' "+
-  "AND d.device_id=?2 AND d.status='active' "+
-  "AND d.employee_authority_state='cloud' LIMIT 1")
-  .bind(ws,dev).first<{device_id:string}>();
-}
 function now(clock:()=>Date):Date{
  const value=clock();
  if(!(value instanceof Date)||!Number.isFinite(value.valueOf()))
@@ -73,7 +57,7 @@ export async function executeCloudVoidOnce(
   typeof t.confirmation!=="string")
   throw new Error("VOID_EXEC_TARGET_INVALID");
  const first=await authority.revalidate();
- if(!manager(first,t.workspaceId)||!await active(db,t.workspaceId,t.deviceId))
+ if(!isVoidManager(first,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_EXEC_MANAGER_REQUIRED");
  const frozen=await loadCloudAllowanceVoidForManager(db,t,ctx,authority);
  if(frozen.status!=="approved"||frozen.revision!==2||
@@ -113,8 +97,8 @@ export async function executeCloudVoidOnce(
   timestamp.valueOf()>=Date.parse(grant.valid_until_utc))
   throw new Error("VOID_EXEC_OFFICIAL_CHANGED_OR_STALE");
  const second=await authority.revalidate();
- if(!same(first,second,t.workspaceId)||
-  !await active(db,t.workspaceId,t.deviceId))
+ if(!sameVoidManager(first,second,t.workspaceId)||
+  !await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_EXEC_AUTH_REVOKED");
  const current=await loadCloudAllowanceVoidForManager(db,t,ctx,authority);
  const companyAfter=await loadAmegoCompanySettingsForGateway(
@@ -166,8 +150,8 @@ export async function executeCloudVoidOnce(
  let stillAuthorized=false;
  try{
   const actor=await authority.revalidate();
-  stillAuthorized=same(first,actor,t.workspaceId)&&
-   await active(db,t.workspaceId,t.deviceId);
+  stillAuthorized=sameVoidManager(first,actor,t.workspaceId)&&
+   await activeVoidDevice(db,t.workspaceId,t.deviceId);
   if(stillAuthorized){
    const latestCompany=await loadAmegoCompanySettingsForGateway(
     db,t.workspaceId,ctx.encryptionKeyHex);
