@@ -3,9 +3,23 @@ import {build} from "esbuild";
 import {createHash} from "node:crypto";
 const bundle=await build({entryPoints:["src/amego-allowance-void-proof.ts"],
  write:false,bundle:true,platform:"node",format:"esm",target:"node24"});
-const {queryOfficialVoidTarget:read}=await import("data:text/javascript;base64,"+
+const {queryOfficialVoidTarget:read,freshVoidOfficialEvidence:fresh,
+ sameVoidCompanyCard:sameCard}=await import("data:text/javascript;base64,"+
  Buffer.from(bundle.outputFiles[0].text).toString("base64"));
 const at=new Date("2026-10-21T06:00:00.000Z"),now=()=>at;
+// Boundary checks for the shared predicates used before/after official IO.
+// These DO NOT replace the independent actor/Device and D1 checks.
+assert.equal(fresh(at.toISOString(),at),true);
+assert.equal(fresh(new Date(at.valueOf()-60_000).toISOString(),at),true);
+assert.equal(fresh(new Date(at.valueOf()-60_001).toISOString(),at),false);
+assert.equal(fresh(new Date(at.valueOf()+1000).toISOString(),at),true);
+assert.equal(fresh(new Date(at.valueOf()+1001).toISOString(),at),false);
+assert.equal(fresh("not-a-date",at),false);
+assert.equal(fresh(at.toISOString(),new Date(NaN)),false);
+const card={revision:1,sellerInvoice:"12345678",amegoAppKey:"synthetic-key"};
+assert.equal(sameCard(card,{...card}),true);
+for(const delta of [{revision:2},{sellerInvoice:"87654321"},{amegoAppKey:"other-key"}])
+ assert.equal(sameCard(card,{...card,...delta}),false);
 const request={sellerInvoice:"12345678",appKey:"SYNTHETIC_ONLY_NO_REAL_SECRET",
  allowanceNumber:"ALW-001",originalInvoiceNumber:"AB12345678"};
 const official={allowance_number:"ALW-001",invoice_type:"D0401",
