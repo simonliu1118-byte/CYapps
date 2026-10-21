@@ -44,8 +44,8 @@ CREATE TABLE allowance_void_approvals (
  manager_actor_id TEXT NOT NULL CHECK(length(manager_actor_id) BETWEEN 1 AND 100),
  manager_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE RESTRICT,
  approved_at TEXT NOT NULL, valid_until_utc TEXT NOT NULL,
- CHECK(julianday(approved_at) IS NOT NULL AND julianday(valid_until_utc) IS NOT NULL
- AND julianday(valid_until_utc)>julianday(approved_at))
+ CHECK(unixepoch(approved_at) IS NOT NULL AND unixepoch(valid_until_utc) IS NOT NULL
+ AND unixepoch(valid_until_utc)-unixepoch(approved_at) BETWEEN 1 AND 900)
 );
 CREATE TRIGGER allowance_void_approval_source_guard
 BEFORE INSERT ON allowance_void_approvals
