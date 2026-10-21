@@ -32,7 +32,7 @@ public sealed record CloudAllowanceSendReceipt(string ApplicationId,
     string ManualDisposition,bool RecordedReadback);
 
 public sealed record CloudAllowanceManualReview(string ReviewId,string LedgerId,
-    string LedgerStatus,string Disposition);
+    string LedgerStatus,string Disposition,string? NextLedgerId=null,string? NextAllowanceNumber=null);
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
@@ -309,7 +309,29 @@ public sealed class CloudAllowanceClient
         if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
         using var doc=await SendAsync("reserve",new{applicationId=id,
             expectedRevision,employeeNo,password},cancellationToken).ConfigureAwait(false);
-        var root=doc.RootElement;
+        return ReadReservation(doc.RootElement,id);
+    }
+    public async Task<CloudAllowanceReservation> ReserveAfterCollisionAsync(
+        string id,int expectedRevision,string reviewId,string previousNumber,string confirmation,
+        string employeeNo,string password,CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3||!Regex.IsMatch(reviewId,@"^[A-Za-z0-9_-]{12,100}$")||
+           !Regex.IsMatch(previousNumber,@"^A\d{8}[0-9A-Z]{3}$")||
+           confirmation!=$"確認外部占號 {previousNumber} 並預留下一號")
+            throw new ArgumentException("Explicit original-number collision review is required.");
+        // Never retry this mutation. Inspect the original application / audit
+        // after a lost response; a reserved number still requires a separate send.
+        using var doc=await SendAsync("reserve-after-collision",new{applicationId=id,
+            expectedRevision,reviewId,previousNumber,confirmation,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var result=ReadReservation(doc.RootElement,id);
+        if(result.AllowanceNumber==previousNumber)
+            throw new InvalidDataException("Collision reservation returned the old number.");
+        return result;
+    }
+    private static CloudAllowanceReservation ReadReservation(JsonElement root,string id)
+    {
         if(Required(root,"applicationId")!=id||
            Required(root,"status")!="reserved"||
            !root.TryGetProperty("maySendWithoutFreshOfficialCheck",out var b)||
@@ -385,7 +407,7 @@ public sealed class CloudAllowanceClient
         RequireFalse(root,"canAllocateAnotherNumber");
         if(!RequiredBoolean(root,"manualReviewRequired")||
            Required(root,"applicationId")!=id||
-           Required(root,"ledgerStatus")!="sending")
+           Required(root,"ledgerStatus") is not ("sending" or "occupied_external"))
             throw new InvalidDataException("Cloud send receipt cannot be trusted.");
         var number=Required(root,"allowanceNumber");
         var kind=Required(root,"issueKind");
@@ -400,7 +422,12 @@ public sealed class CloudAllowanceClient
              "provider_rejected_requires_investigation" or
              "unknown_outcome_requires_investigation"))
             throw new InvalidDataException("Cloud send response has unknown review state.");
-        return new CloudAllowanceSendReceipt(id,number,"sending",kind,
+        var ledgerStatus=Required(root,"ledgerStatus");
+        if(ledgerStatus=="occupied_external"&&
+           (kind!="confirmed_number_collision"||disposition!="number_collision_requires_investigation"||
+            RequiredBoolean(root,"recordedReadback")))
+            throw new InvalidDataException("External collision requires distinct official evidence.");
+        return new CloudAllowanceSendReceipt(id,number,ledgerStatus,kind,
             disposition,RequiredBoolean(root,"recordedReadback"));
     }
     private static readonly HashSet<string> TriageCodes=new(StringComparer.Ordinal)
@@ -471,9 +498,18 @@ public sealed class CloudAllowanceClient
             if(!seen.Add(review)||!Regex.IsMatch(review,@"^[A-Za-z0-9_-]{12,100}$")||
                !Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
                status is not ("sending" or "occupied_external")||
-               !TriageCodes.Contains(disposition))
+               (!TriageCodes.Contains(disposition)&&disposition!="external_collision_reserved"))
                 throw new InvalidDataException("Cloud manual review history entry is invalid.");
-            result.Add(new CloudAllowanceManualReview(review,ledger,status,disposition));
+            string? nextId=null,nextNumber=null;
+            if(disposition=="external_collision_reserved")
+            {
+                nextId=Required(r,"nextLedgerId");nextNumber=Required(r,"nextAllowanceNumber");
+                if(status!="occupied_external"||nextId==ledger||
+                   !Regex.IsMatch(nextId,@"^al_[0-9a-f-]{36}$")||
+                   !Regex.IsMatch(nextNumber,@"^A\d{8}[0-9A-Z]{3}$"))
+                    throw new InvalidDataException("Collision review has invalid next reservation identity.");
+            }
+            result.Add(new CloudAllowanceManualReview(review,ledger,status,disposition,nextId,nextNumber));
         }
         return result;
     }

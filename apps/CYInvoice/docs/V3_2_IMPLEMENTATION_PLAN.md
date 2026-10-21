@@ -50,6 +50,8 @@
 
 **2026-10-21 Batch 1 Cloud 人工 Audit 工程進度**：在 schema18 之外另外提出 schema19 草案（append-only 主管裁決分類與原查回引用），以新 API 與 WinForms 讀寫、獨立預設關閉的手動功能旗標／schema19 閘門控制。此為 GitHub 工程來源與合成驗證，**不是**使用者本機 MCP 已套用；正式 Worker 與 D1 仍依使用者最近回報停在 schema18 且 ALLOWANCE_API_ENABLED=false。人工分類不代表可歸因成功，不得改 confirmed、重送或另配號。待本機有界預算／備份／回滾與真雙機實測後才可判定 C 完成。
 
+**2026-10-21 Batch 1 Cloud 外部占號整合（V3.1.31 Build 0）**：首次 g0401 明確占號拒絕，且同次官方原號完整驗明不同買方與不同原發票時，才原子保存 occupied_external＋外部證據；主管重新登入並輸入含原號的完整文字後，再查官方原號／餘額及權限，以原 Ledger 追加下一 attempt 和不可變前後號 Audit。新號只有 reserved，後續另行確認才通過原唯一 coordinator。schema19 草案追加證據分類、索引及 next-ledger 連結，未升格／套用；新獨立旗標 ALLOWANCE_EXTERNAL_COLLISION_ENABLED 預設關閉，且下一 attempt 送出仍受其及原 g0401 旗標控制。原 D1／Worker、公司卡與真光貿不變；無法歸因成功政策、schema19 受控部署、雙機真測與 B/C 最終驗收仍未完成。
+
 ## 5. 不可跳過的整合安全門檻
 
 - **所有交易權威來自光貿**：code=0、相同折讓號、同內容、Cloud 回覆或管理員「已處理」都不單獨代表本次 g0401／g0501 已正式完成。若光貿不提供可信 transaction attribution，就必須明確標示「無法歸因」、走人工查證，不創造假的 confirmed，也不為達標自動再送一次。

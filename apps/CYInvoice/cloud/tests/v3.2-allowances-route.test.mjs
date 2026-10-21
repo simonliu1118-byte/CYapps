@@ -63,14 +63,14 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
  }};
 }
 // Entirely synthetic transport: no Cloudflare, no AMEGO network access.
-function fakeOneShotProvider(allowanceNumber){
+function fakeOneShotProvider(allowanceNumber,collision=false){
  const calls=[];
- const product={original_invoice_number:invoice,original_invoice_date:20261019,
+ const product={original_invoice_number:collision?"CD87654321":invoice,original_invoice_date:20261019,
   original_description:"FAKE ITEM",quantity:1,unit_price:50,
   amount:50,tax:0,tax_type:1};
  const official={allowance_number:allowanceNumber,allowance_date:20261019,
   invoice_type:"D0401",invoice_status:99,allowance_type:2,
-  buyer_identifier:"0000000000",buyer_name:"FAKE BUYER",
+  buyer_identifier:collision?"87654321":"0000000000",buyer_name:"FAKE BUYER",
   total_amount:50,tax_amount:0,cancel_date:0,wait:[],product_item:[product]};
  return {calls,transport:async(url,options)=>{
   calls.push(url);
@@ -84,7 +84,7 @@ function fakeOneShotProvider(allowanceNumber){
    return Response.json({code:0,data:[invoiceRecord]});
   if(url.endsWith("/g0401")){
    assert.equal(JSON.parse(form.get("data"))[0].AllowanceNumber,allowanceNumber);
-   return Response.json({code:0});
+   return Response.json({code:collision?4040161:0});
   }
   if(url.endsWith("/allowance_query")){
    assert.equal(JSON.parse(form.get("data")).allowance_number,allowanceNumber);
@@ -349,4 +349,74 @@ async function call(env,action,body={},token=rawDevA){
   assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
  }finally{close();}
 }
-console.log("CYInvoice C4: opt-in schema18 CYID Device scoped allowance create, manager CAS, preview, approve, reserve and no public financial send passed");
+{
+ const f=await fixture();
+ try{
+  f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(rawDevB),devB);
+  const request={applicationId:app1,expectedRevision:3,reviewId:"collision_review_test",
+   previousNumber:"A20261019001",confirmation:"確認外部占號 A20261019001 並預留下一號"};
+  const env=config(f.db,principal("ADMIN","manager"),"true","19");
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,503);
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  env.SCHEMA_VERSION="18";
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,503);
+  env.SCHEMA_VERSION="19";
+  const oversized=await handle(new Request("https://fake.invalid/v1/allowances/reserve-after-collision",{
+   method:"POST",headers:{authorization:"Bearer "+rawDevB},body:" ".repeat(5000)+JSON.stringify(request)}),env);
+  assert.equal(oversized.status,400,"headerless bodies are byte bounded before authentication or mutation");
+  assert.equal((await call(env,"reserve-after-collision",{...request,ledgerId:"client_override"},rawDevB)).status,400);
+  const user={...env,cyIdContext:config(f.db,principal("USER","employee")).cyIdContext};
+  assert.equal((await call(user,"reserve-after-collision",request,rawDevB)).status,403);
+  const before=f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n;
+  assert.equal((await call(env,"reserve-after-collision",{...request,confirmation:"確認"},rawDevB)).status,409);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,before);
+ }finally{f.close();}
+}
+for(const role of ["ADMIN","SUPER_ADMIN"]){
+ const f=await fixture(),oldFetch=globalThis.fetch;
+ try{
+  for(const [token,dev] of [[rawDevA,devA],[rawDevB,devB]])
+   f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(token),dev);
+  const env=config(f.db,principal(role,"manager"),"true","19");
+  const employee=config(f.db,principal("USER","employee"),"true","19");
+  const {workspaceId,deviceId,...draft}=input(app1);
+  assert.equal((await call(employee,"create",draft)).status,200);
+  assert.equal((await call(env,"review",{applicationId:app1,expectedRevision:1},rawDevB)).status,200);
+  globalThis.fetch=fakeOfficial().transport;
+  assert.equal((await call(env,"approve",{applicationId:app1,expectedRevision:2},rawDevB)).status,200);
+  const first=await call(env,"reserve",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(first.status,200);
+  env.ALLOWANCE_G0401_SEND_ENABLED="true";env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  env.ALLOWANCE_MANUAL_REVIEW_ENABLED="true";
+  const provider=fakeOneShotProvider(first.body.allowanceNumber,true);
+  globalThis.fetch=provider.transport;
+  const sent=await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB);
+  assert.equal(sent.status,200);assert.equal(sent.body.ledgerStatus,"occupied_external");
+  const evidence=await call(env,"attempt",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(evidence.body.recordedExactReadback,false);
+  assert.equal((await call(env,"manual-review",{applicationId:app1,expectedRevision:3,
+   reviewId:"collision_fake_match",disposition:"full_match_unattributed",confirmReview:true},rawDevB)).status,409);
+  const request={applicationId:app1,expectedRevision:3,reviewId:"collision_positive_review",
+   previousNumber:first.body.allowanceNumber,
+   confirmation:`確認外部占號 ${first.body.allowanceNumber} 並預留下一號`};
+  const next=await call(env,"reserve-after-collision",request,rawDevB);
+  assert.equal(next.status,200);assert.notEqual(next.body.allowanceNumber,first.body.allowanceNumber);
+  assert.equal(next.body.status,"reserved");
+  assert.equal(provider.calls.filter(url=>url.endsWith("/g0401")).length,1);
+  assert.equal((await call(env,"reserve-after-collision",request,rawDevB)).status,409);
+  const history=await call(env,"manual-history",{applicationId:app1,expectedRevision:3},rawDevB);
+  assert.equal(history.status,200);assert.equal(history.body.items.length,1);
+  assert.equal(history.body.items[0].disposition,"external_collision_reserved");
+  assert.equal(history.body.items[0].nextAllowanceNumber,next.body.allowanceNumber);
+  assert.ok(!JSON.stringify(history.body).includes("FAKE BUYER"));
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="false";
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,503);
+  env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED="true";
+  const second=fakeOneShotProvider(next.body.allowanceNumber);globalThis.fetch=second.transport;
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,200);
+  assert.equal((await call(env,"send-once",{applicationId:app1,expectedRevision:3,confirmOnce:true},rawDevB)).status,409);
+  assert.equal(second.calls.filter(url=>url.endsWith("/g0401")).length,1);
+  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{globalThis.fetch=oldFetch;f.close();}
+}
+console.log("CYInvoice Cloud routes: schema/flag gates, ADMIN/SUPER_ADMIN positive collision workflow, USER rejection, immutable audit and no blind repost passed");

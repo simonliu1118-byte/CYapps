@@ -29,6 +29,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button preview=UiControls.StandardButton("預覽官方資料");
     private readonly Button approve=UiControls.StandardButton("主管核准");
     private readonly Button reserve=UiControls.StandardButton("預留號碼");
+    private readonly Button reserveAfterCollision=UiControls.StandardButton("外部占號主管覆核");
     private readonly Button inspect=UiControls.StandardButton("查單次送出證據");
     private readonly Button sendOnce=UiControls.StandardButton("單次送出 g0401（受控）");
     private readonly Button manualReview=UiControls.StandardButton("記錄人工異常分類");
@@ -58,6 +59,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         preview.Click+=async(_,_)=>await PreviewAsync();
         approve.Click+=async(_,_)=>await ApproveAsync();
         reserve.Click+=async(_,_)=>await ReserveAsync();
+        reserveAfterCollision.Click+=async(_,_)=>await ReserveAfterCollisionAsync();
         inspect.Click+=async(_,_)=>await InspectAttemptAsync();
         sendOnce.Click+=async(_,_)=>await SendOnceAsync();
         manualReview.Click+=async(_,_)=>await RecordManualReviewAsync();
@@ -98,6 +100,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         actions.Controls.Add(details);
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
+        actions.Controls.Add(reserveAfterCollision);
         actions.Controls.Add(inspect);actions.Controls.Add(sendOnce);
         actions.Controls.Add(manualReview);actions.Controls.Add(manualHistory);
         actions.Controls.Add(close);
@@ -125,6 +128,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         preview.Enabled=ready&&selected?.Status=="review";
         approve.Enabled=ready&&selected?.Status=="review";
         reserve.Enabled=ready&&selected?.Status=="approved";
+        reserveAfterCollision.Enabled=ready&&selected?.Status=="approved";
         inspect.Enabled=ready&&selected?.Status=="approved";
         sendOnce.Enabled=ready&&selected?.Status=="approved";
         manualReview.Enabled=ready&&selected?.Status=="approved";
@@ -254,6 +258,55 @@ internal sealed class CloudAllowanceManagerForm : Form
                 "本次送出未獲官方歸因，禁止以此宣稱成功或重送。";
         });
     }
+    private async Task ReserveAfterCollisionAsync()
+    {
+        var row=Selected();if(row is null)return;
+        await RunAsync(async(no,pass)=>{
+            var attempt=await client!.InspectAttemptAsync(row.ApplicationId,
+                row.Revision,no,pass,lifetime.Token);
+            searchId.Text=attempt.ApplicationId;
+            if(attempt.LedgerStatus!="occupied_external")
+            {
+                status.Text="只有已確認的外部占號可由主管覆核；結果不明不能改配號。";
+                return;
+            }
+            var words=$"確認外部占號 {attempt.AllowanceNumber} 並預留下一號";
+            using var dialog=new Form{Text="Cloud 外部占號－主管覆核",
+                ClientSize=new Size(650,270),MinimumSize=new Size(590,260),
+                StartPosition=FormStartPosition.CenterParent,
+                FormBorderStyle=FormBorderStyle.FixedDialog,ShowIcon=false,
+                MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
+                Font=new Font("Microsoft JhengHei UI",10F),BackColor=Color.White};
+            var panel=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(16),
+                ColumnCount=1,RowCount=3};
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute,48));
+            panel.Controls.Add(new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
+                Text="原號："+attempt.AllowanceNumber+
+                "\n系統會再次向光貿查證：此號屬於不同買方與不同原發票，且原主管核准仍有效。"+
+                "\n只預留下一號，不送出折讓；舊號與查證稽核永久保留。"+
+                "\n請完整輸入：「"+words+"」"},0,0);
+            var typed=UiControls.TextBox(80);typed.Dock=DockStyle.Fill;
+            typed.AccessibleName="確認外部占號原號並預留下一號";
+            var confirm=UiControls.StandardButton("確認預留");
+            confirm.Width=112;confirm.Enabled=false;confirm.DialogResult=DialogResult.OK;
+            typed.TextChanged+=(_,_)=>confirm.Enabled=typed.Text==words;
+            var cancel=UiControls.StandardButton("取消");cancel.DialogResult=DialogResult.Cancel;
+            var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,
+                FlowDirection=FlowDirection.RightToLeft,WrapContents=false};
+            buttons.Controls.Add(cancel);buttons.Controls.Add(confirm);
+            panel.Controls.Add(typed,0,1);panel.Controls.Add(buttons,0,2);
+            dialog.Controls.Add(panel);dialog.AcceptButton=confirm;dialog.CancelButton=cancel;
+            if(dialog.ShowDialog(this)!=DialogResult.OK||typed.Text!=words)return;
+            var result=await client.ReserveAfterCollisionAsync(row.ApplicationId,row.Revision,
+                Guid.NewGuid().ToString("N"),attempt.AllowanceNumber,typed.Text,no,pass,lifetime.Token);
+            searchId.Text=result.ApplicationId;
+            status.Text="已預留 "+result.AllowanceNumber+"；尚未送出光貿。原號及主管稽核已保留。";
+            queue.Items.Clear();
+        });
+    }
     private async Task SendOnceAsync()
     {
         var row=Selected();if(row is null)return;
@@ -286,7 +339,7 @@ internal sealed class CloudAllowanceManagerForm : Form
                 no,pass,lifetime.Token);
             searchId.Text=result.ApplicationId;
             status.Text="原號 "+result.AllowanceNumber+"／"+result.ManualDisposition+
-                "；Ledger 仍 sending。必須人工歸因與官方查回，不能重送或視為已完成。";
+                "；Ledger："+result.LedgerStatus+"。須人工查證，不能重送或視為已完成。";
             queue.Items.Clear();
         });
     }
@@ -368,7 +421,8 @@ internal sealed class CloudAllowanceManagerForm : Form
             searchId.Text=row.ApplicationId;
             MessageBox.Show(this,records.Count==0?"目前沒有人工覆核紀錄。":
                 string.Join("\n",records.Select(r=>r.ReviewId+"／"+
-                    r.LedgerStatus+"／"+r.Disposition)),
+                    r.LedgerStatus+"／"+r.Disposition+
+                    (r.NextAllowanceNumber is null?"":"／下一號："+r.NextAllowanceNumber))),
                 "Cloud 人工覆核稽核（唯讀）",MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             status.Text="已依原申請 ID 查回 "+records.Count+
@@ -383,7 +437,7 @@ internal sealed class CloudAllowanceManagerForm : Form
            !form.password.UseSystemPasswordChar||
            form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
            form.sendOnce.Enabled||form.inspect.Enabled||
-           form.manualReview.Enabled||form.manualHistory.Enabled)
+           form.manualReview.Enabled||form.manualHistory.Enabled||form.reserveAfterCollision.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
 }

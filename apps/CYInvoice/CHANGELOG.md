@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.31 Build 0 — 2026/10/21（V3.2 B/C：Cloud 主管外部占號覆核與下一號預留）
+
+- 只有第一次 g0401 明確拒絕占號，且同次官方原號查回為已完成、不同買方及不含任何相同原發票的完整折讓，才以同一交易原子保存 `occupied_external` 與外部證據；查無、同買方、同原發票、未完成、回覆遺失或稽核失敗均保留 `sending`，禁止新配號。
+- 原核准主管重新輸入當次 CYID 帳密與含原號的完整確認文字後，Worker 再驗官方原號、原發票餘額、原 Frozen／Grant、公司卡版次、Workspace／Device 及權限；同一 D1 batch 追加原 Ledger 下一 attempt 與不可變前後號稽核，只預留、不送出。新版 Windows 介面及原申請 ID 查回沿用同一流程。
+- 擴充**尚未套用的 schema19 草案**：區分官方全項吻合與外部占號證據、建立索引及下一號稽核連結。新增獨立、預設關閉 `ALLOWANCE_EXTERNAL_COLLISION_ENABLED`；需 schema19 且明確開啟才可查證外部占號／改配號／送出下一 attempt。原 `ALLOWANCE_API_ENABLED`／`ALLOWANCE_G0401_SEND_ENABLED` 仍各自獨立，人工分類旗標不能授權改配號。
+- 原號吻合始終不證明本次 POST 成功；新號要另行確認並通過原唯一 sending CAS／coordinator，且必須有不可變前後號稽核。合成測試涵蓋 ADMIN／SUPER_ADMIN 正向、USER 拒絕、旗標、併發、撤權／公司卡競態、稽核失敗原子回滾、回覆遺失不重配、schema18 非空升級／DDL 回滾及零盲目重送。
+- 新增受控操作是獨立工作項目，因此 Patch 升為 3.1.31、Build 歸零。canonical migrations 仍僅 0001～0018、部署預檢／原 D1／Worker／Secrets／公司卡與真光貿均未操作。C7 歸因政策、雙 Windows 及真測仍未完成；正式 Release 維持 V3.1.0。
+
 ## V3.1.30 Build 1 — 2026/10/21（V3.2 Batch 1：Cloud 人工異常分類、稽核與 WinForms）
 
 - **原始碼／合成 CI**：建立待審核的 `cloud/drafts/0019_allowance_manual_review_audit.sql` 作為**待本機 MCP 受控套用**的下一筆遷移來源，沿用 schema18 原 Allowance Application／Ledger／官方查回，不覆寫也不重套 0017／0018。新表永久不可修改／刪除、主管裝置與原 Ledger 綁定、官方證據欄可追溯，禁止以人工作業冒充財務成功。
