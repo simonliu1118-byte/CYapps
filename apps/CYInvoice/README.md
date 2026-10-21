@@ -6,9 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.34 Build 0（非正式 Release）**：延伸既有 Local g0501 永久 claim，按原公司／環境＋折讓號阻擋新待辦 ID 繞過送出、取消或人工結案；Cloud g0501 單次 transport／官方狀態唯讀程式已回收並納入合成測試，但無對外路由／Cloud claim；跨實體裝置的 Cloud g0501／離線回線協調及真測仍待完成。正式 Release V3.1.0 不變。
-
-- **V3.2 E Cloud 申請原始碼（尚不可啟用）**：具加密 Frozen 申請／CYID 身分與 Device 防護、同號唯一性及原 ID 唯讀查回；只供可信 Worker 內部呼叫，已有可信主管原號文字核准與 D1.batch Grant 工程碼及合成測試；已有內部 g0501 先 Claim 後單次 POST 協調器與合成測試，但未接正式 Worker 路由；跨機／離線全域競爭、D1 升級及真交易驗收仍未完成。
+- **目前工程 Source：V3.1.34 Build 0（非正式 Release）**：Local g0501 跨待辦 ID 單次送出與 CYID→Local 回退防線；Cloud g0501 具原 ID 加密申請、主管核准、永久 Claim、單次 POST 與唯讀查回的內部工程碼及合成測試。已移除無法真正驗證裝置停送的清冊／快照輔助路徑，保留預設關閉的 Cloud 切換 Gate。**尚未接 Worker g0501 路由、未套用 schema20、未做真雙機／光貿驗收**；正式 Release V3.1.0 不變。
 
 - **前一工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
 
