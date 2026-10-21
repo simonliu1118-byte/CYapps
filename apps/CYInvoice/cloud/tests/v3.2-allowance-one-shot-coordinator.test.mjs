@@ -14,7 +14,8 @@ async function bundle(path){
 const {executeCloudAllowanceExactlyOnce:execute}=await bundle("allowance-one-shot-coordinator.ts");
 const {approveCloudAllowanceAfterOfficialProof:approve}=
  await bundle("allowance-manager-approval.ts");
-const {reserveApprovedCloudAllowanceNumber:reserve}=
+const {reserveApprovedCloudAllowanceNumber:reserve,
+ reserveCloudAllowanceAfterExternalCollision:reserveCollision}=
  await bundle("allowance-number-reservation.ts");
 const {createEncryptedCloudAllowance:create}=await bundle("allowance-frozen-store.ts");
 const {encryptCompanyBusinessData:seal}=await bundle("company-settings.ts");
@@ -62,7 +63,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
-async function fixture(){
+async function fixture(schema19=false){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
  assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
@@ -76,6 +77,7 @@ async function fixture(){
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const f of migrations.filter(x=>x>="0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
+ if(schema19)sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
@@ -84,7 +86,7 @@ async function fixture(){
   VALUES(?,'12345678',?,1,'manager',?,'2026-10-19T07:40:00.000Z')`)
   .run(ws,appKey,devB);
  // Canonical 0017/0018 are included in the preceding migration sequence.
- let beforeSend=null,loseReply=false,afterSend=null;
+ let beforeSend=null,loseReply=false,afterSend=null,beforeBatch=null,lostBatch=false;
  class Statement {
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}
@@ -104,12 +106,16 @@ async function fixture(){
   }
  }
  const db={prepare:q=>new Statement(q),async batch(parts){
+  if(beforeBatch){const f=beforeBatch;beforeBatch=null;f();}
   sql.exec("BEGIN IMMEDIATE");
+  let result;
   try{
-   const result=parts.map(p=>({meta:{
+   result=parts.map(p=>({meta:{
     changes:sql.prepare(p.q).run(...p.args).changes}}));
-   sql.exec("COMMIT");return result;
+   sql.exec("COMMIT");
   }catch(e){sql.exec("ROLLBACK");throw e;}
+  if(lostBatch){lostBatch=false;throw new Error("lost batch reply AFTER commit");}
+  return result;
  }};
  async function prepare(id){
   await create(db,input(id),context,authority(employee));
@@ -127,18 +133,18 @@ async function fixture(){
  }
  return {sql,db,prepare,close:()=>sql.close(),
   beforeSend:f=>beforeSend=f,afterSend:f=>afterSend=f,
-  lostReply:()=>loseReply=true};
+  lostReply:()=>loseReply=true,beforeBatch:f=>beforeBatch=f,lostBatch:()=>lostBatch=true};
 }
 
 const status=(sql,id)=>sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=?").get(id)?.status;
 function providerFor(target,options={}){
  const urls=[];
- const item={original_invoice_number:invoice,original_invoice_date:20261019,
+ const item={original_invoice_number:options.otherOriginal?"CD87654321":invoice,original_invoice_date:20261019,
   original_description:"FAKE ITEM",quantity:1,unit_price:50,
   amount:50,tax:0,tax_type:1};
  const full={allowance_number:target.allowanceNumber,allowance_date:20261019,
   invoice_type:"D0401",invoice_status:99,allowance_type:2,
-  buyer_identifier:"0000000000",buyer_name:options.otherBuyer?"EXTERNAL":"FAKE BUYER",
+  buyer_identifier:options.otherBuyer?"87654321":"0000000000",buyer_name:options.otherBuyer?"EXTERNAL":"FAKE BUYER",
   total_amount:50,tax_amount:0,cancel_date:0,wait:[],product_item:[item]};
  return {urls,send:async(url,opts)=>{
   urls.push(url);
@@ -250,4 +256,121 @@ function providerFor(target,options={}){
   assert.equal(status(sql,app1),"sending");
  }finally{close();}
 }
-console.log("CYInvoice C3c3b: one-shot coordinator, exact immutable readback audit, unknown/collision/revocation no-retry passed");
+// Cloud counterpart of the existing Local, explicitly reviewed collision flow.
+// A duplicate error alone, a lost POST, same buyer or any shared original must
+// never unlock a number, even with the independent collision feature enabled.
+for(const options of [
+ {collision:true,otherBuyer:true}, {collision:true,otherOriginal:true},
+ {collision:true,otherBuyer:true,otherOriginal:true,unavailableReadback:true},
+ {lostPost:true,otherBuyer:true,otherOriginal:true},
+ {otherBuyer:true,otherOriginal:true}
+]){
+ const f=await fixture(true);
+ try{
+  const target=await f.prepare(app1),p=providerFor(target,options);
+  const result=await execute(f.db,target,context,authority(),p.send,clock,true);
+  assert.equal(result.ledgerStatus,"sending");assert.equal(status(f.sql,app1),"sending");
+  const read=providerFor(target,{otherBuyer:true,otherOriginal:true});
+  await assert.rejects(()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
+   "collision_review_test",target.allowanceNumber,
+   `確認外部占號 ${target.allowanceNumber} 並預留下一號`,read.send,clock),/NOT_ELIGIBLE/);
+  assert.equal(read.urls.length,0);assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,1);
+ }finally{f.close();}
+}
+async function collided(){
+ const f=await fixture(true),t=await f.prepare(app1);
+ const p=providerFor(t,{collision:true,otherBuyer:true,otherOriginal:true});
+ const result=await execute(f.db,t,context,authority(),p.send,clock,true);
+ assert.equal(result.ledgerStatus,"occupied_external");
+ assert.equal(result.recordedReadback,false,"external evidence is NOT exact frozen match");
+ assert.equal(f.sql.prepare("SELECT evidence_kind FROM allowance_reconciliation_checks").get().evidence_kind,
+  "external_collision");
+ return {...f,t};
+}
+{
+ const f=await fixture();
+ try{
+  const target=await f.prepare(app1);
+  await execute(f.db,target,context,authority(),providerFor(target).send,clock);
+  const prior=f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get();
+  // A populated schema18 must retain its real exact-match evidence. Exercise
+  // transactional DDL rollback before applying the proposed migration once.
+  f.sql.exec("BEGIN IMMEDIATE");
+  try{
+   f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+   f.sql.exec("INSERT INTO nonexistent_migration_probe VALUES (1)");
+   assert.fail("expected synthetic migration failure");
+  }catch{f.sql.exec("ROLLBACK");}
+  assert.deepEqual(f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get(),prior);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='allowance_manual_review_audit'").get().n,0);
+  f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+  assert.equal(f.sql.prepare("SELECT evidence_kind FROM allowance_reconciliation_checks").get().evidence_kind,
+   "full_match_unattributed");
+  assert.equal(f.sql.prepare("SELECT official_snapshot_hash FROM allowance_reconciliation_checks").get().official_snapshot_hash,
+   prior.official_snapshot_hash);
+  assert.throws(()=>f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8")),/duplicate column/);
+  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{f.close();}
+}
+{
+ const f=await fixture(true);
+ try{
+  const target=await f.prepare(app1);
+  f.sql.exec(`CREATE TRIGGER reject_external_check BEFORE INSERT ON allowance_reconciliation_checks
+   WHEN NEW.evidence_kind='external_collision' BEGIN SELECT RAISE(ABORT,'fake unavailable audit'); END;`);
+  const p=providerFor(target,{collision:true,otherBuyer:true,otherOriginal:true});
+  const result=await execute(f.db,target,context,authority(),p.send,clock,true);
+  assert.equal(result.ledgerStatus,"sending");assert.equal(status(f.sql,app1),"sending");
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0);
+  assert.equal(p.urls.filter(url=>url.endsWith("/g0401")).length,1);
+ }finally{f.close();}
+}
+const words=t=>`確認外部占號 ${t.allowanceNumber} 並預留下一號`;
+for(const mode of ["success","lost_reply","audit_failure","company_race","device_race","parallel"]){
+ const f=await collided();
+ try{
+  const p=providerFor(f.t,{otherBuyer:true,otherOriginal:true});
+  const action=()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
+   "collision_review_test",f.t.allowanceNumber,words(f.t),p.send,clock);
+  if(mode==="lost_reply")f.lostBatch();
+  if(mode==="audit_failure")f.sql.exec(`CREATE TRIGGER fail_audit BEFORE INSERT
+   ON allowance_manual_review_audit BEGIN SELECT RAISE(ABORT,'fake audit failure'); END;`);
+  if(mode==="company_race")f.beforeBatch(()=>f.sql.prepare(
+   "UPDATE company_settings SET revision=revision+1 WHERE workspace_id=?").run(ws));
+  if(mode==="device_race")f.beforeBatch(()=>f.sql.prepare(
+   "UPDATE devices SET status='revoked' WHERE device_id=?").run(devB));
+  if(mode==="parallel"){
+   const outcomes=await Promise.allSettled([action(),action()]);
+   assert.equal(outcomes.filter(x=>x.status==="fulfilled").length,1);
+  }else if(mode!=="success")await assert.rejects(action,/READBACK_REQUIRED/);
+  else {
+   const next=await action();
+   assert.equal(next.attempt,2);assert.equal(next.status,"reserved");
+   assert.notEqual(next.allowanceNumber,f.t.allowanceNumber);
+   assert.equal(next.sentToAmego,false);
+   const reRead=await reserve(f.db,reserveTarget(app1),context,authority(),clock);
+   assert.equal(reRead.ledgerId,next.ledgerId,"first-reserve endpoint is read-only for existing next attempt");
+   const p2=providerFor(sendTarget(app1,next));
+   const sent=await execute(f.db,sendTarget(app1,next),context,authority(),p2.send,clock);
+   assert.equal(sent.ledgerStatus,"sending");
+   assert.equal(p2.urls.filter(x=>x.endsWith("/g0401")).length,1);
+   await assert.rejects(()=>execute(f.db,sendTarget(app1,next),context,authority(),p2.send,clock),/NOT_RESERVED/);
+   assert.equal(p2.urls.filter(x=>x.endsWith("/g0401")).length,1);
+  }
+  const committed=["success","lost_reply","parallel"].includes(mode);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,committed?2:1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_manual_review_audit").get().n,committed?1:0);
+  const old=f.sql.prepare("SELECT status,collision_code FROM allowance_number_ledger WHERE ledger_id=?").get(f.t.ledgerId);
+  assert.equal(old.status,"occupied_external");assert.equal(old.collision_code,4040161);
+  if(committed){
+   const replay=providerFor(f.t,{otherBuyer:true,otherOriginal:true});
+   await assert.rejects(()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
+    "collision_review_again",f.t.allowanceNumber,words(f.t),replay.send,clock),/NOT_ELIGIBLE/);
+   assert.equal(replay.urls.length,0);
+   assert.throws(()=>f.sql.exec("DELETE FROM allowance_manual_review_audit"),/APPEND_ONLY/);
+  }
+  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,0,"review does not post any financial mutation");
+  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ }finally{f.close();}
+}
+console.log("CYInvoice one-shot + reviewed external collision: immutable evidence, atomic next reservation, races/rollback/lost reply and zero blind repost passed");

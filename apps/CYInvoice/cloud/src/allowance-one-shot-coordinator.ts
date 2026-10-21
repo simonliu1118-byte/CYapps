@@ -10,7 +10,7 @@ import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {postNumberedAllowanceOnce} from "./amego-allowance-issue";
 import type {OneShotAllowanceOutcome} from "./amego-allowance-issue";
-import {queryExactFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
+import {queryFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
 
 // C7a: operator triage is NOT official confirmation or authorization to resend.
 // Do not persist a manual success decision until a separately reviewed attempt-
@@ -32,7 +32,7 @@ export interface OneShotCloudResult {
  originalNumberReadback:"full_match_unattributed"|"unconfirmed";
  recordedReadback:boolean;
  providerPostAttempted:true;
- ledgerStatus:"sending";
+ ledgerStatus:"sending"|"occupied_external";
  safeToAutoRetry:false;
  safeToAutoConfirm:false;
  canAllocateAnotherNumber:false;
@@ -96,7 +96,7 @@ async function recordReadback(
 export async function executeCloudAllowanceExactlyOnce(
  db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date()
+ clock:()=>Date=()=>new Date(),allowExternalCollision=false
 ):Promise<OneShotCloudResult>{
  const first=await authority.revalidate();
  if(!first||!await activeDevice(db,t.workspaceId,t.deviceId))
@@ -127,9 +127,10 @@ export async function executeCloudAllowanceExactlyOnce(
  // No conditional transport retries, even for code=15 or code=0.
  let readback:"full_match_unattributed"|"unconfirmed"="unconfirmed";
  let recorded=false;
+ let ledgerStatus:"sending"|"occupied_external"="sending";
  try {
-  const matching=await queryExactFrozenAllowanceByOriginalNumber(
-    input,transport,clock);
+  const matching=await queryFrozenAllowanceByOriginalNumber(
+    input,transport,clock,allowExternalCollision&&issued.kind==="confirmed_number_collision");
   if(matching.kind==="full_frozen_match_unattributed"){
    readback="full_match_unattributed";
    const latest=await authority.revalidate();
@@ -138,13 +139,48 @@ export async function executeCloudAllowanceExactlyOnce(
     recorded=await recordReadback(db,t,first.employeeId,
       matching.officialSnapshotHash,clock);
   }
+  if(matching.kind==="verified_external_collision"&&
+     issued.kind==="confirmed_number_collision"){
+   const latest=await authority.revalidate();
+   const current=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+   if(isSameManager(first,latest,t.workspaceId)&&
+      current.revision===company.revision&&current.sellerInvoice===company.sellerInvoice&&
+      current.amegoAppKey===company.amegoAppKey&&await activeDevice(db,t.workspaceId,t.deviceId)){
+    const at=clock().toISOString();
+    // Transactional CAS plus immutable evidence. If schema19 is absent or
+    // the audit fails, both statements roll back and sending stays locked.
+    const rows=await db.batch([
+     db.prepare(`UPDATE allowance_number_ledger SET status='occupied_external',
+      collision_code=?1,updated_at=?2 WHERE ledger_id=?3 AND application_id=?4
+      AND workspace_id=?5 AND allowance_number=?6 AND status='sending'
+      AND request_hash=?7 AND EXISTS(SELECT 1 FROM allowance_applications a
+       JOIN company_settings c ON c.workspace_id=a.workspace_id
+       JOIN devices d ON d.workspace_id=a.workspace_id AND d.device_id=?8
+       JOIN workspaces w ON w.workspace_id=a.workspace_id
+       WHERE a.application_id=?4 AND a.workspace_id=?5 AND a.status='approved'
+       AND a.revision=?9 AND a.manager_actor_id=?10 AND a.request_hash=?7
+       AND c.revision=?11 AND c.seller_invoice=?12
+       AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active')`)
+      .bind(issued.code,at,t.ledgerId,t.applicationId,t.workspaceId,t.allowanceNumber,
+       frozen.requestHash,t.deviceId,t.expectedRevision,first.employeeId,
+       company.revision,company.sellerInvoice),
+     db.prepare(`INSERT INTO allowance_reconciliation_checks
+      (check_id,ledger_id,application_id,workspace_id,allowance_number,
+       official_snapshot_hash,checked_by_device_id,checked_by_actor_id,checked_at,evidence_kind)
+      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,'external_collision')`)
+      .bind("chk_"+crypto.randomUUID(),t.ledgerId,t.applicationId,t.workspaceId,
+       t.allowanceNumber,matching.officialSnapshotHash,t.deviceId,first.employeeId,at)
+    ]);
+    if(rows.every(r=>r.meta.changes===1))ledgerStatus="occupied_external";
+   }
+  }
  }catch{/* unreadable/mismatched official response remains UNKNOWN */}
  return {applicationId:t.applicationId,ledgerId:t.ledgerId,
   allowanceNumber:t.allowanceNumber,issueKind:issued.kind,
   originalNumberReadback:readback,recordedReadback:recorded,
   manualDisposition:manualDisposition(issued.kind,readback,recorded),
   manualReviewRequired:true,proofOfThisPost:false,
-  providerPostAttempted:true,ledgerStatus:"sending",
+  providerPostAttempted:true,ledgerStatus,
   safeToAutoRetry:false,safeToAutoConfirm:false,
   canAllocateAnotherNumber:false};
 }

@@ -14,10 +14,10 @@
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；PR #545 已合併，**V3.1.30 Build 1** 為 Cloud 人工分類稽核工程碼（待 CI／未部署） | 草案 schema19 不得自行套用原 D1、不得啟用折讓 API 或正式 Release |
-| **V3.2 Batch 1 Cloud 人工 Audit** | schema19 草案的新不可變人工作業分類、主管身份及裝置綁定、原 Ledger／官方查回引用與兩道預設關閉閘門；Cloud／Windows 工程碼待 CI，原 D1/Worker 尚未套用 | 交本機 MCP 安排安全 schema19 升級／部署；真公司卡、光貿雙機驗收及可歸因成功政策未完成 |
-| **V3.2 Batch 1 Local 主管 UI** | V3.1.29 Build 0：原折讓待辦明細對 occupied_external 顯示主管覆核新號入口；重新登入／輸入明確文字／後端再查，僅新預留不重送；sending 仍只可唯讀查回。Cloud UI／跨機裁決未完成 | 精確 head Windows／Cloud／Governance CI；Cloud 持久人工 Audit 與受控操作、實機驗收保留待辦 |
-| **V3.2 Batch 1 下一號受控操作** | V3.1.28 Build 1 Local 新號僅預留：原 g0401 回覆明確占號 + 官方查回為不同買方／不同原發票 + 主管即時雙重驗證 + append-only 重新配號稽核。此為新工程 Source／合成測試，無真光貿送出 | 待 Local 人工 UI／Cloud 同等受控流程、真正可歸因裁決與實機驗收；不可把預留當成功 |
+| 正式 Release／工程版 | 正式 V3.1.0；目前工程 V3.1.31 Build 0：Cloud 主管外部占號查證、下一號預留與不可變稽核整合 | schema19 仍為草案、原 D1／Worker／旗標未變；真光貿與雙機仍待驗收 |
+| **V3.2 Batch 1 Cloud 主管覆核／改配號** | 明確首次占號拒絕＋完整不同買方／原發票證據；原主管文字確認後重新驗權及查證；原子追加下一 attempt／前後號 Audit，沿用唯一單次送出 | source／合成測試與 Windows 工程介面；schema19 審核／受控升級、正式歸因政策及真雙機光貿未完成，不可宣告 B/C 結案 |
+| **V3.2 Batch 1 Local 主管 UI** | V3.1.29 Build 0：原折讓待辦明細對 occupied_external 顯示主管覆核新號入口；重新登入／輸入明確文字／後端再查，僅新預留不重送；sending 仍只可唯讀查回。Cloud 主管改配號已有 V3.1.31 工程碼，實測未完成 | 精確 head Windows／Cloud／Governance CI；Cloud 持久人工 Audit 與受控操作、實機驗收保留待辦 |
+| **V3.2 Batch 1 下一號受控操作** | V3.1.28 Build 1 Local 新號僅預留：原 g0401 回覆明確占號 + 官方查回為不同買方／不同原發票 + 主管即時雙重驗證 + append-only 重新配號稽核。此為新工程 Source／合成測試，無真光貿送出 | Local／Cloud 人工 UI 與受控改配號已有工程碼；真正可歸因裁決與實機驗收仍待完成；不可把預留當成功 |
 | **V3.2 B/C Local 安全修正** | Local g0401 唯讀查回「官方同號同內容」不再自動 confirmed；本機不可變 SHA256 稽核，只把完整吻合標記為無法歸因；本批待 CI | Cloud/D1 不動；後續再整合有證據、有主管權限的安全撞號後人工裁決 |
 | V3.2-A／B | 折讓編輯、Local 單次 g0401 與原號唯讀查回已有 Source／合成 CI；安全撞號後人工流程及真測待完成 | 與 C7 的送出安全整合為「批次 1」 |
 | **V3.2 批次 1 工程進行中** | **V3.1.26 Build 1**：沿唯一 Cloud Coordinator 接入獨立預設關閉的主管 send-once HTTP、attempt 唯讀查證及 Windows 操作（尚待精確 CI 與人工 Audit／Local 撞號整合） | 以同一個主要功能 PR 集中補測試修正；不啟用 Cloudflare 旗標，不做真光貿交易 |
