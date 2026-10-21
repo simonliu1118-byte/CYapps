@@ -34,6 +34,9 @@ internal static class Program
             ("unchanged production summary skips invoice query", TestUnchangedSkipsQueryAsync),
             ("official allowance history survives invoice sync", TestAllowanceHistorySyncAsync),
             ("daily allowance discovery refreshes old invoice", TestHistoricalAllowanceDiscoveryAsync),
+            ("unmatched allowance restores official old invoice on demand", TestUnmatchedAllowanceRestoresOriginalAsync),
+            ("unmatched allowance not found stays visible and can recover", TestUnmatchedAllowanceNotFoundAsync),
+            ("mismatched official original never enters local history", TestUnmatchedAllowanceMismatchedOriginalAsync),
             ("allowance discovery overflow never starts unbounded queries", TestAllowanceDiscoveryLimitAsync),
             ("three allowance list pages of 50 are accepted", TestAllowanceListCapacityAsync),
             ("existing allowance cancellation is refreshed without creation event", TestExistingAllowanceCancellationAsync),
@@ -435,6 +438,103 @@ internal static class Program
         Equal("同步商品", record.Items.Single().Description);
         Equal(false, File.Exists(pdf));
         Equal(false, File.Exists(preview));
+    }
+
+    private static async Task TestUnmatchedAllowanceRestoresOriginalAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        const string number = "XO12345678";
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("A20260918008", [number])]);
+        var official = Query(number, "66091800234567", "100", "買受人");
+        fake.QueryByInvoice[number] = official with
+        {
+            Data = official.Data with
+            {
+                Allowances = [new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                    "A20260918008", "20260918", "0", "15")],
+                AllowanceSummaryPresent = true,
+            },
+        };
+        // No local invoice exists until the allowance discovers it.
+        Equal(0, repository.Invoices.LoadOrCreate().Count);
+        var result = await new InvoiceAutomaticSyncService(repository,
+            Sync(repository, fake), () => FixedNow).SyncAsync();
+        Equal(0, result.Problems.Count);
+        Equal(1, result.Queried);
+        Equal(1, fake.QueryByInvoiceCalls);
+        Equal(number, fake.LastInvoiceQuery);
+        var restored = repository.Invoices.LoadOrCreate().Single();
+        Equal(RecordOrigins.Sync, restored.RecordOrigin);
+        Equal(number, restored.InvoiceNumber);
+        Equal(100L, restored.Amount);
+        Equal(85L, InvoiceAllowanceMetadata.RemainingGross(restored).RoundInt64());
+        Equal(1, restored.Items.Count);
+        // Normal retention remains unchanged: the recovered old record is
+        // subject to the same cutoff on later days.
+    }
+
+    private static async Task TestUnmatchedAllowanceNotFoundAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        const string number = "XY12345678";
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("A20260918009", [number])]);
+        fake.QueryException = new AmegoApiException(71, "not found");
+        var clock = FixedNow;
+        var service = new InvoiceSyncService(repository, (_, _) => fake, () => clock);
+        var automatic = new InvoiceAutomaticSyncService(repository, service, () => clock);
+        var first = await automatic.SyncAsync();
+        Equal(true, first.Problems.Any(problem => problem.Contains("查無原發票", StringComparison.Ordinal)));
+        Equal(0, repository.Invoices.LoadOrCreate().Count);
+        var issues = new InvoiceSyncIssueStore(repository.DataDirectory);
+        Equal(true, issues.Unresolved(Environments.Production + "|12345675").Any(issue =>
+            issue.InvoiceNumber == number && issue.IssueType == InvoiceSyncIssueTypes.RemoteNotFound &&
+            issue.Message.Contains("查無原發票", StringComparison.Ordinal)));
+
+        // Next daily reconciliation reads the exact same official invoice;
+        // a valid response restores it and closes the old Upload Issues row.
+        fake.QueryException = null;
+        var official = Query(number, "66091800234568", "100", "買受人");
+        fake.QueryByInvoice[number] = official with
+        {
+            Data = official.Data with { AllowanceSummaryPresent = true },
+        };
+        clock = clock.AddDays(1);
+        var second = await automatic.SyncAsync();
+        Equal(0, second.Problems.Count);
+        Equal(1, repository.Invoices.LoadOrCreate().Count);
+        Equal(false, issues.Unresolved(Environments.Production + "|12345675")
+            .Any(issue => issue.InvoiceNumber == number && issue.IssueType == InvoiceSyncIssueTypes.RemoteNotFound));
+    }
+
+    private static async Task TestUnmatchedAllowanceMismatchedOriginalAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        const string target = "XZ12345678";
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("A20260918010", [target])]);
+        // AMEGO returned a different invoice: never adopt it as the requested original.
+        fake.QueryByInvoice[target] = Query("ZZ12345678", "66091800234569", "100", "買受人");
+        var result = await new InvoiceAutomaticSyncService(repository,
+            Sync(repository, fake), () => FixedNow).SyncAsync();
+        Equal(true, result.Problems.Any(problem => problem.Contains("原發票", StringComparison.Ordinal)));
+        Equal(0, repository.Invoices.LoadOrCreate().Count);
+        Equal(true, new InvoiceSyncIssueStore(repository.DataDirectory)
+            .Unresolved(Environments.Production + "|12345675").Any(issue =>
+                issue.InvoiceNumber == target && issue.IssueType == InvoiceSyncIssueTypes.QueryFailed));
     }
 
     private static async Task TestHistoricalAllowanceDiscoveryAsync()

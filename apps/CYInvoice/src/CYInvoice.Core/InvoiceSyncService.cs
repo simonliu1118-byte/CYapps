@@ -115,9 +115,37 @@ public sealed class InvoiceSyncService
         foreach (var number in numbers.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!current.TryGetValue(number, out var matches) || matches.Length != 1)
+            if (!current.TryGetValue(number, out var matches))
             {
-                problems.Add(number + ": 本機無唯一原發票紀錄，保留官方折讓待人工核對");
+                // The original may have been pruned by normal retention. Only
+                // this unmatched allowance triggers an exact official lookup.
+                attempted++;
+                try
+                {
+                    var restored = await RecoverMissingAllowanceOriginalAsync(
+                        gateway, account, number, cancellationToken).ConfigureAwait(false);
+                    queried++;
+                    current.Add(number, [restored]);
+                    ResolveIssues(problems, AccountKey(account),
+                        new IssueIdentity(number, restored.ApiOrderId),
+                        InvoiceSyncIssueTypes.RemoteNotFound, InvoiceSyncIssueTypes.QueryFailed);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception error)
+                {
+                    var absent = error is AmegoApiException { Code: 71 };
+                    var reason = absent
+                        ? "查無原發票（光貿依原發票號碼查詢無結果；未建立本機紀錄）"
+                        : "折讓原發票無法查回：" + error.Message;
+                    AddIssueProblem(problems, AccountKey(account), number, string.Empty,
+                        absent ? InvoiceSyncIssueTypes.RemoteNotFound : InvoiceSyncIssueTypes.QueryFailed, reason);
+                    problems.Add(number + ": " + reason);
+                }
+                continue;
+            }
+            if (matches.Length != 1)
+            {
+                problems.Add(number + ": 本機原發票有多筆相符紀錄，未自行覆寫");
                 continue;
             }
             try
@@ -173,6 +201,58 @@ public sealed class InvoiceSyncService
             }
         }
         return (queried, problems);
+    }
+
+    private async Task<InvoiceRecord> RecoverMissingAllowanceOriginalAsync(
+        IAmegoGateway gateway, Account account, string invoiceNumber,
+        CancellationToken cancellationToken)
+    {
+        var response = await gateway.QueryByInvoiceNumberAsync(invoiceNumber, cancellationToken)
+            .ConfigureAwait(false);
+        if (response.Code != 0 || response.Data is null)
+            throw new InvalidDataException("invoice_query 未提供可驗證的正式發票資料");
+        var query = response.Data;
+        if (!string.Equals(query.InvoiceNumber.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("官方查回的原發票號碼與折讓關聯號碼不同");
+        if (query.InvoiceStatus != UploadStatuses.Complete ||
+            query.OrderId.Trim().Length == 0 || query.TotalAmount.Trim().Length == 0 ||
+            query.InvoiceDate.Trim().Length == 0 || query.InvoiceTime.Trim().Length == 0 ||
+            query.ProductItems.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("官方原發票必要欄位不完整，未建立本機紀錄");
+
+        // AMEGO test credentials are shared: only adopt a CYInvoice test
+        // invoice whose order prefix matches its own issue date.
+        if (account.Environment == Environments.Test)
+        {
+            if (!DateOnly.TryParseExact(query.InvoiceDate.Trim(), "yyyyMMdd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var issueDate) ||
+                !TestOrderIdPrefix.TryStripForDate(query.OrderId, issueDate, out _))
+                throw new InvalidDataException("測試環境原發票不屬於 CYInvoice，禁止跨帳戶帶入");
+        }
+        var existing = AccountRecords(account).Where(record =>
+            record.InvoiceState != InvoiceStates.Failed &&
+            (string.Equals(record.InvoiceNumber.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase) ||
+             (query.OrderId.Trim().Length != 0 &&
+              string.Equals(EffectiveOrderId(record), query.OrderId.Trim(), StringComparison.Ordinal))))
+            .ToArray();
+        if (existing.Length != 0)
+            throw new InvalidDataException("原發票號碼或 OrderID 已有本機紀錄，停止自動補回避免重複");
+
+        var restored = new InvoiceRecord
+        {
+            Id = "sync-" + Guid.NewGuid().ToString("N"),
+            RecordOrigin = RecordOrigins.Sync,
+            SellerInvoice = account.SellerInvoice,
+            Environment = account.Environment,
+            InvoiceNumber = invoiceNumber,
+            Items = [],
+        };
+        ApplyQuery(restored, query, account);
+        if (restored.Items.Count == 0 || restored.Amount <= 0)
+            throw new InvalidDataException("官方原發票商品或金額不完整，未建立本機紀錄");
+        cancellationToken.ThrowIfCancellationRequested();
+        syncRepository.UpsertMany([restored], cancellationToken: cancellationToken);
+        return restored;
     }
 
     private async Task<InvoiceSyncResult> SyncListedAsync(
