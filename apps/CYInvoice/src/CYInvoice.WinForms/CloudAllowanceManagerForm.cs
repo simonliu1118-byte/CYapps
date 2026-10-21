@@ -323,21 +323,14 @@ internal sealed class CloudAllowanceManagerForm : Form
         await RunAsync(async(emp,pass)=>{
             // First read by a stable ID. Only an authoritative NOT_FOUND
             // permits the initial create, never a timeout/unknown reply.
-            try{
-                var existing=await client!.ReadVoidApplicationAsync(
-                    id,emp,pass,lifetime.Token);
-                status.Text="原申請 "+id+" 已存在／"+existing.Status+
-                    "；本次只查回，不會重複建立或送出。";
-                return;
-            }
-            catch(CloudApiException ex)when(ex.Code=="VOID_APPLICATION_NOT_FOUND"){
-                // An exact 404 from the authenticated original-ID readback.
-            }
-            var created=await client!.CreateVoidApplicationAsync(
+            var current=await client!.CreateOrReadVoidApplicationAsync(
                 new CloudAllowanceVoidDraft(id,cloudEnvironment,number,invoice,why),
                 emp,pass,lifetime.Token);
-            status.Text="作廢申請已建立："+created.ApplicationId+
-                "／"+created.Status+"；等待主管覆核，尚未送出 g0501。";
+            status.Text="原作廢申請："+current.ApplicationId+
+                "／"+current.Status+
+                (current.Claimed?"；已有永久 Claim，僅能查回":
+                    "；尚未送出 g0501，等待主管覆核")+
+                "。未建立重複申請。";
         });
     }
 
