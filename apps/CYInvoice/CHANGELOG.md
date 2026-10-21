@@ -2,37 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
+## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：折讓作廢整合工程）
 
-- Windows Core 新增 `LocalAllowanceVoidCutoverEvidenceReader.Capture` 原 SQLite 唯讀交接快照：缺表 fail-closed、全部舊 Claim 保守判為待追溯，另計未送出核准與 Cloud 隔離狀態；產生不含原號與密碼的摘要 SHA-256，但不是身分認證／真停機證據、不可自動取得 Gate／g0501 權限。增補 Cloud→Local 回退、重新開啟、原 Claim 及私密資訊缺漏合成回歸。
-
-
-- 新增 Local→Cloud 作廢交接**唯讀預檢**及合成測試：完整裝置安裝清冊與獨立盤點必須具備，單機禁送、持久隔離、既有 Claim 核對及時效任一未通過即阻擋；所有預檢結果均不得啟用 Cloud g0501，雜湊僅供獨立人工審查，不能當作可信裝置簽章或 D1 Gate 交接證據。未操作原 D1／Worker／真光貿。
-
-
-- 新增 schema20 草案的 Cloud-exclusive cutover Gate（公司／環境／公司卡版次）；預設無正式交接證據時不允許主管 Grant 或 g0501 Claim，禁止 Gate 被靜默修改／刪除／恢復，緊急停用於 D1 永久 Claim 寫入瞬間生效。內部 g0501 owner 在 Claim 前後驗證 Gate／Device／CYID，Claim 已持久化但因後續撤權而停送，記錄 append-only `post_claim_interlock_no_post`，仍永久禁止重試；合成測試覆蓋無 Gate、變更公司卡、核准後停止、Claim 後停止、零 POST。未提供 Gate 啟用入口，不能宣稱知道所有離線 Local 裝置，原 D1／Worker 仍未升級或部署。
-
-
-- 防止已經經歷 Cloud／CYID 的本機環境單靠設定切回 LocalOnly 就重新開放 g0501：SettingsStore 原來源持續保存單調 Cloud 曾參與記號，Local 主管預覽／核准／送出須無 Cloud 綁定、沒有曾參與記號才允許；本機重新開啟、舊設定覆寫、零 POST 合成驗證。該標記非 Cloud 租約，**不宣稱**跨機互斥完成，Cloud g0501 路由仍封閉。
-
-
-- D/E 回線查回新增 Cloud 原申請 ID 的只讀重建：有 Claim 時僅按原號確認官方 D0401／D0501 或離線未知狀態，保持不可自動重送／結案／歸因；無 Claim 不代表另一 Local 裝置未曾送出。角色／Device 與公司卡需再次驗證，失敗時 fail-closed。新增 isolated SQLite／Fake Provider 回歸及 CI 護欄，禁止 schema20 未核准升格及 Cloud g0501 HTTP 路由提前暴露。跨模式全域互斥未完成，正式 g0501 保持停用。
-
-- 新增未對外曝露的 Cloud g0501 單一交易協調器：再驗原主管、Device、Frozen、公司卡與官方狀態後，原號 D1 claim 必須先持久化成功才呼叫一次 g0501；claim 回覆不明或重入均不 POST。POST code=0、結果不明／稽核失敗仍永久保留 claim，回應不宣稱成功或允許重送／結案；附加合成網路與重入回歸。Local／Cloud 全域競爭尚未安全串接，故 Worker 路由／旗標仍關閉。
-
-
-- Cloud E 加入可信主管核准 owner：每次核准重查官方原號與 D0401 狀態、核對申請 SHA 與原號文字、雙次 CYID/Device 重新驗權；在單一 D1.batch 內存入 immutable Grant 並 CAS 狀態 approved，核准有效期 15 分鐘。該模組沒有 g0501 發送能力；核准結果不代表可發送或已完成。整合 Synthetic SQL/Provider 測試，未操作遠端 D1。
-- Cloud g0501 加入簽名的官方原號／原發票與 allowance_status 雙查詢唯讀前置驗證；整合 CYID 主管解密及再次驗權。官方 D0401／99 僅表示可進入完整人工覆核，不代表核准或 g0501 可送出，任何 D0501／99 仍不歸因為本次成功。
-- Cloud g0501 加入內部原申請與查回服務：由可信 CYID authority 經兩次 Role／Device 核對，按公司／環境／折讓號 HMAC 防重，Frozen 原始明細只存 AES-GCM；結果不明依原 ID 查回，不生成新 ID。整合測試用隔離 SQLite 與假身分，不觸及真 Worker／AMEGO。主管正式覆核、全域 Cloud/Local 競爭與真人驗收仍未完成。
-
-
-- 新增 Cloud **draft** `0020_allowance_void_coordination.sql`：分離 g0501 申請與 g0401 開立的業務狀態，保存不含原號明文的 HMAC 識別與加密 Frozen 欄位；D1 保護單一申請、主管核准、15 分鐘有效期、公司卡版次、Device 撤權、唯一永久送出 claim 及 append-only 稽核。僅草案與合成測試，尚無可執行 Cloud g0501 路由及官方前置核對，不代表 D/E 整合或 schema20 升級完成。
-
-
-- 修正 Local g0501 已有永久送出紀錄時，重新建立的另一個待辦 ID 可能略過取消／人工結案的檢查；改用公司／環境＋原折讓號查同一個既有 SQLite claim。
-- 新申請及主管處理也查原號 claim；同號不得再次申請送出，已送出者只能從原 ID 唯讀查回。新增跨待辦 ID、重啟、回覆遺失、不得繞過人工結案的合成回歸。
-- 從歷史 Draft 選擇性回收 Cloud g0501 單次簽名傳輸與 allowance_status 原號唯讀查回，加入隔離 Fake HTTP 回歸；僅內部 transport，未建立任何允許送出交易的 Worker HTTP route。D0501／99 仍不可歸因本次 POST，不授權自動結案／重送。
-- 只補既有 Local 安全防線，不宣稱已解決跨實體裝置的 Cloud/Local 全域競爭；CYID g0501 仍待 Cloud 統一協調與驗收。無遠端部署／真光貿；正式 Release 維持 V3.1.0。
+- **Local**：同一公司／環境＋原折讓號共用永久 g0501 Claim；跨待辦 ID、結果不明及回線重入均不得第二次送出。曾參與 CYID Cloud 的裝置不得僅切回 LocalOnly 即恢復本機 g0501。
+- **CYID Cloud（未對外開放）**：原申請 ID、加密 Frozen、主管重新驗權與官方原號／原發票唯讀驗證、原子核准、永久唯一 Claim、最多一次 g0501、結果不明時原 ID 唯讀查回；保留不可變稽核。
+- **簡化**：移除無法證實實際停機的 Local 設備快照與 Cloud 清冊預檢兩條平行路徑。保留單一 Cloud 控制權啟用門檻（預設拒絕）；舊 Local 裝置停送與舊交易核對在正式切換前人工確認，不另建日常盤點平台。
+- **驗證／限制**：SQLite／Fake HTTP／Windows CI 覆蓋單次送出、撤權、斷線與回覆遺失；schema20 僅 draft，無 g0501 Worker 路由或真實 AMEGO 操作。真雙機／Local 切 Cloud、正式交易歸因與受控升級尚待驗收；正式 Release 仍 V3.1.0。
 
 ## V3.1.33 Build 0 — 2026/10/21（V3.2-E：Local 折讓作廢）
 
