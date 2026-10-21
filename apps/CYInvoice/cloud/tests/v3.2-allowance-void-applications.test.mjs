@@ -37,13 +37,17 @@ const authority=(a=applicant)=>({revalidate:async()=>a});
 const request={workspaceId:ws,deviceId:employee,applicationId:"void_application_first",
  environment:"test",allowanceNumber:"ALW-001",originalInvoiceNumber:"AB12345678",
  reason:"Synthetic review request"};
-let throwAfterWrite=false;
+let throwAfterWrite=false,loseClaimAcknowledgement=false;
 class Statement{
  constructor(q){this.q=q;this.args=[];}
  bind(...args){this.args=args;return this;}
  async first(){return sql.prepare(this.q).get(...this.args)??null;}
  async run(){
   const result=sql.prepare(this.q).run(...this.args);
+  if(loseClaimAcknowledgement&&this.q.includes("INSERT INTO allowance_void_send_claims")){
+   loseClaimAcknowledgement=false;
+   throw Error("simulated D1 claim ACK lost AFTER durable write");
+  }
   if(throwAfterWrite&&this.q.includes("INSERT INTO allowance_void_requests")){
    throwAfterWrite=false;
    throw Error("simulated lost D1 response AFTER write");
@@ -274,5 +278,32 @@ try{
  assert.equal(checked.claimed,false);
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,second,ctx,authority()));
  assert.equal(count(),3);
+ // A successful D1 claim with a LOST ACK permanently fences this application.
+ // No g0501 may be attempted, even if the caller repeats the exact same ID.
+ const target2={workspaceId:ws,applicationId:second.applicationId,deviceId:managerDevice};
+ const officialSecond=async(url,options)=>{
+  if(url.endsWith("/g0501"))throw Error("FORBIDDEN g0501 after lost claim response");
+  if(url.endsWith("/allowance_query"))
+   return Response.json({code:0,data:{...officialRecord,allowance_number:"ALW-003"}});
+  return Response.json({code:0,data:{"ALW-003":{type:"D0401",status:99}}});
+ };
+ const previewSecond=await preview(db,target2,ctx,authority(supervisor),
+  officialSecond,()=>time);
+ await approve(db,{...target2,expectedRevision:1,
+  requestHash:previewSecond.requestHash,
+  expectedOfficialSnapshotHash:previewSecond.officialSnapshotHash,
+  confirmation:"作廢 ALW-003"},ctx,authority(supervisor),officialSecond,()=>time);
+ loseClaimAcknowledgement=true;
+ await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
+  ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
+  ctx,authority(supervisor),officialSecond,()=>time));
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,2);
+ const lost=await read(db,{...target2,deviceId:employee},authority());
+ assert.equal(lost.claimed,true);
+ assert.equal(lost.readbackOnly,true);
+ await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
+  ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
+  ctx,authority(supervisor),officialSecond,()=>time));
+ assert.equal(posts,1,"Lost claim acknowledgement must not create a second POST");
  console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
 }finally{sql.close();}
