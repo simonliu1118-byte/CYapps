@@ -493,7 +493,7 @@ internal static class Program
             when (error.Message.Contains("20 張查詢上限", StringComparison.Ordinal)) { }
         Equal(0, fake.QueryByInvoiceCalls);
         Equal(null, new InvoiceSyncStateStore(repository.DataDirectory)
-            .LastSuccess(Environments.Production + "|12345675", InvoiceAutomaticSyncService.DailyReconcileScope));
+            .LastSuccess(Environments.Production + "|12345675", "daily-two-period"));
     }
 
     private static async Task TestAllowanceHistorySyncAsync()
