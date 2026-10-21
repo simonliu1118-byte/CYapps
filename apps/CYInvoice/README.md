@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.34 Build 0（非正式 Release）**：延伸既有 Local g0501 永久 claim，按原公司／環境＋折讓號阻擋新待辦 ID 繞過送出、取消或人工結案；跨實體裝置的 Cloud g0501／離線回線協調及真測仍待完成。正式 Release V3.1.0 不變。
+- **目前工程 Source：V3.1.34 Build 0（非正式 Release）**：延伸既有 Local g0501 永久 claim，按原公司／環境＋折讓號阻擋新待辦 ID 繞過送出、取消或人工結案；Cloud g0501 單次 transport／官方狀態唯讀程式已回收並納入合成測試，但無對外路由／Cloud claim；跨實體裝置的 Cloud g0501／離線回線協調及真測仍待完成。正式 Release V3.1.0 不變。
 
 - **前一工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
 
