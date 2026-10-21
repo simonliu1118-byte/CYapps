@@ -40,6 +40,28 @@ public static class InvoiceAllowanceMetadata
         }
     }
 
+    // Fingerprint ONLY the two official invoice_query allowance fields.
+    // The summary-presence marker is independent of the returned history:
+    // absent/unknown must not be mistaken for an authoritative empty list.
+    // Used by both normal sync and detail refresh to persist external
+    // allowance changes and invalidate stale invoice PDFs/previews.
+    public static string OfficialSnapshot(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return JsonSerializer.Serialize(new
+        {
+            SummaryPresent = Raw(record, SummaryPresentKey),
+            History = Raw(record, OfficialAllowancesKey),
+        });
+    }
+
+    private static string? Raw(InvoiceRecord record, string key) =>
+        record.ExtensionData is not null &&
+        record.ExtensionData.TryGetValue(key, out var value) &&
+        value.ValueKind != JsonValueKind.Undefined
+            ? value.GetRawText()
+            : null;
+
     public static FixedDecimal RemainingGross(InvoiceRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
