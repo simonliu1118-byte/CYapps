@@ -18,6 +18,10 @@ const previewBundle=await build({entryPoints:["src/allowance-void-manager-previe
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {previewCloudVoidForManager:preview}=await import("data:text/javascript;base64,"+
  Buffer.from(previewBundle.outputFiles[0].text).toString("base64"));
+const approveBundle=await build({entryPoints:["src/allowance-void-manager-approval.ts"],
+ bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {approveCloudVoidAfterOfficialProof:approve}=await import("data:text/javascript;base64,"+
+ Buffer.from(approveBundle.outputFiles[0].text).toString("base64"));
 const sql=new DatabaseSync(":memory:");
 const ws="ws_void_test",otherWs="ws_elsewhere";
 const employee="dev_11111111-1111-4111-8111-111111111111";
@@ -43,7 +47,14 @@ class Statement{
   return {meta:{changes:result.changes}};
  }
 }
-const db={prepare:q=>new Statement(q)};
+const db={prepare:q=>new Statement(q),async batch(parts){
+ sql.exec("BEGIN IMMEDIATE");
+ try{
+  const results=parts.map(p=>({meta:{changes:sql.prepare(p.q).run(...p.args).changes}}));
+  sql.exec("COMMIT");
+  return results;
+ }catch(e){sql.exec("ROLLBACK");throw e;}
+}};
 const active=(device,state)=>sql.prepare("UPDATE devices SET status=? WHERE device_id=?").run(state,device);
 async function rejects(code,run){await assert.rejects(run,new RegExp(code));}
 try{
@@ -145,6 +156,30 @@ try{
  await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>preview(db,target,ctx,
   authority(supervisor),revokeDuringProof,()=>time));
  active(managerDevice,"active");
+ const approval={...target,expectedRevision:1,requestHash:row.request_hash,
+  expectedOfficialSnapshotHash:previewResult.officialSnapshotHash,
+  confirmation:"作廢 ALW-001"};
+ await rejects("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID",()=>approve(db,{
+  ...approval,confirmation:"作廢 OTHER"},ctx,authority(supervisor),official,()=>time));
+ await rejects("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID",()=>approve(db,{
+  ...approval,expectedOfficialSnapshotHash:"d".repeat(64)},
+  ctx,authority(supervisor),official,()=>time));
+ await rejects("VOID_APPROVAL_MANAGER_REQUIRED",()=>approve(db,approval,ctx,
+  authority(applicant),official,()=>time));
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+ const approved=await approve(db,approval,ctx,authority(supervisor),official,()=>time);
+ assert.equal(approved.approvedRevision,2);
+ assert.equal(approved.mayPostG0501,false);
+ assert.equal(approved.requiresFreshOfficialCheck,true);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,2);
+ assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
+  deviceId:employee},authority()),{applicationId:request.applicationId,
+  status:"approved",revision:2,claimed:false,readbackOnly:false});
+ await rejects("VOID_PREVIEW_APPLICATION_NOT_OPEN",()=>approve(db,approval,
+  ctx,authority(supervisor),official,()=>time));
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
   ...request,applicationId:"void_application_duplicate"},ctx,authority()));
  assert.equal(count(),1,"same official number cannot gain another application ID");
