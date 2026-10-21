@@ -3,55 +3,10 @@
 -- Separate g0501 ownership is required: the canonical g0401 Ledger has a different
 -- business mutation. No buyer, invoice, allowance number or App Key in plaintext.
 -- Callers must store authenticated AES-GCM frozen requests and keyed HMAC evidence.
--- No Cloud g0501 may be claimed until EVERY legacy Local sender for this
--- company/environment has been inventoried, disabled and independently audited.
--- D1 cannot detect unknown offline Local installations. This cutover evidence
--- is therefore a manual external prerequisite, never an inferred zero count.
--- There is intentionally NO application/HTTP source method to activate a gate.
--- Absence of an approved cutover => NO Cloud g0501, even with manager Grant.
-CREATE TABLE allowance_void_authority_gates (
- workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
- environment TEXT NOT NULL CHECK(environment IN ('test','production')),
- seller_invoice TEXT NOT NULL CHECK(length(seller_invoice)=8 AND seller_invoice NOT GLOB '*[^0-9]*'),
- company_revision INTEGER NOT NULL CHECK(company_revision>0),
- state TEXT NOT NULL CHECK(state IN ('blocked','cloud_exclusive')),
- cutover_manifest_hash TEXT,
- activating_device_id TEXT REFERENCES devices(device_id) ON DELETE RESTRICT,
- activated_at TEXT,
- PRIMARY KEY(workspace_id,environment,seller_invoice,company_revision),
- CHECK((state='blocked' AND cutover_manifest_hash IS NULL AND
-       activating_device_id IS NULL AND activated_at IS NULL) OR
-       (state='cloud_exclusive' AND cutover_manifest_hash IS NOT NULL AND
-        length(cutover_manifest_hash)=64 AND
-        cutover_manifest_hash NOT GLOB '*[^0-9a-f]*' AND
-        activating_device_id IS NOT NULL AND
-        unixepoch(activated_at) IS NOT NULL))
-);
-CREATE TRIGGER allowance_void_gate_activation_source_guard
-BEFORE INSERT ON allowance_void_authority_gates
-WHEN NEW.state='cloud_exclusive' AND NOT EXISTS (
- SELECT 1 FROM workspaces w JOIN devices d ON d.workspace_id=w.workspace_id
- JOIN company_settings c ON c.workspace_id=w.workspace_id
- WHERE w.workspace_id=NEW.workspace_id AND w.status='active'
- AND c.seller_invoice=NEW.seller_invoice AND c.revision=NEW.company_revision
- AND d.device_id=NEW.activating_device_id AND d.status='active'
- AND d.employee_authority_state='cloud')
-BEGIN SELECT RAISE(ABORT,'VOID_GATE_CUTOVER_SCOPE_INVALID'); END;
--- Emergency stop is one-way for this row. No silent re-activation, edit or
--- deletion; a new operational migration/reconciliation is required.
-CREATE TRIGGER allowance_void_gate_no_reactivation
-BEFORE UPDATE ON allowance_void_authority_gates
-WHEN OLD.state<>'cloud_exclusive' OR NEW.state<>'blocked' OR
- NEW.workspace_id<>OLD.workspace_id OR NEW.environment<>OLD.environment OR
- NEW.seller_invoice<>OLD.seller_invoice OR
- NEW.company_revision<>OLD.company_revision OR
- NEW.cutover_manifest_hash IS NOT NULL OR NEW.activating_device_id IS NOT NULL OR
- NEW.activated_at IS NOT NULL
-BEGIN SELECT RAISE(ABORT,'VOID_GATE_REACTIVATION_FORBIDDEN'); END;
-CREATE TRIGGER allowance_void_gate_no_delete
-BEFORE DELETE ON allowance_void_authority_gates
-BEGIN SELECT RAISE(ABORT,'VOID_GATE_HISTORY_REQUIRED'); END;
-
+-- Cloud g0501 is OFF by default at the sole internal sender and has NO
+-- Worker route. Enable only after an explicit, separately authorized Local
+-- shutdown/cutover; no D1 inventory attestation table can prove that all
+-- offline legacy installations have stopped. Claim and audit are permanent.
 CREATE TABLE allowance_void_requests (
  application_id TEXT PRIMARY KEY CHECK(length(application_id) BETWEEN 8 AND 100),
  workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
@@ -107,10 +62,7 @@ WHEN NOT EXISTS (
  AND r.application_id=NEW.application_id AND r.workspace_id=NEW.workspace_id
  AND r.request_hash=NEW.request_hash AND r.status='open' AND r.revision=1
  AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active'
- AND EXISTS(SELECT 1 FROM allowance_void_authority_gates g
-  WHERE g.workspace_id=r.workspace_id AND g.environment=r.environment
-  AND g.seller_invoice=r.seller_invoice AND g.company_revision=r.company_revision
-  AND g.state='cloud_exclusive'))
+)
 BEGIN SELECT RAISE(ABORT,'VOID_APPROVAL_SOURCE_INVALID'); END;
 CREATE TRIGGER allowance_void_request_transition_guard
 BEFORE UPDATE ON allowance_void_requests
@@ -165,10 +117,7 @@ WHEN NOT EXISTS (
  AND julianday(NEW.claimed_at)<julianday(a.valid_until_utc)
  AND d.status='active' AND d.employee_authority_state='cloud'
  AND w.status='active'
- AND EXISTS(SELECT 1 FROM allowance_void_authority_gates g
-  WHERE g.workspace_id=r.workspace_id AND g.environment=r.environment
-  AND g.seller_invoice=r.seller_invoice AND g.company_revision=r.company_revision
-  AND g.state='cloud_exclusive'))
+)
 BEGIN SELECT RAISE(ABORT,'VOID_CLAIM_AUTH_OR_EVIDENCE_INVALID'); END;
 
 CREATE TABLE allowance_void_audit (
