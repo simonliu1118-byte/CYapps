@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
     ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
     ("Local g0501 changed draft, cancellation and account scope cannot claim", TestLocalVoidScopeAsync),
+    ("Local g0501 original-number fence blocks competing issue IDs", TestLocalVoidCompetingIssueAsync),
     ("Local g0501 retention preserves pending and audit while pruning unrelated history", TestLocalVoidRetentionAsync),
     ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
     ("V3.2-B2c one-shot Local sending CAS, ambiguous readback and official collision", LocalAllowanceOneShotTests.RunAsync),
@@ -249,6 +250,39 @@ static async Task TestLocalVoidScopeAsync()
     settings.CloudMode=CloudModes.CloudPreferred; setup.Repository.Settings.Save(settings);
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
     Equal(0,api.PostCalls);
+}
+
+static async Task TestLocalVoidCompetingIssueAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-competing-issue");
+    var (setup,original,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,original,api);
+    api.LoseReply=true;
+    await setup.Workflow.SendLocalVoidOnceAsync(original,"2000","AdminPass1","作廢 ALW-001",api);
+    Equal(1,api.PostCalls);
+
+    // Simulate a second local work item pointing at the exact same AMEGO
+    // allowance after a mode/device transition. Its issue ID must not bypass
+    // the original company's durable allowance-number send claim.
+    var alternateOrder=original.OrderId+"-MODE-SWITCH";
+    var alternateId=new InvoiceSyncIssueStore(setup.Repository.DataDirectory).Record(
+        original.AccountKey,original.InvoiceNumber,alternateOrder,
+        InvoiceAllowanceVoidIssueTypes.ManualReview,"合成跨模式競爭待辦",DateTimeOffset.UtcNow);
+    if(alternateId==original.Id)throw new Exception("Expected a competing issue ID.");
+    var competing=original with { Id=alternateId,OrderId=alternateOrder };
+    var resumed=new EmployeeAllowanceVoidWorkflowService(setup.Repository);
+    var beforeQueries=api.QueryCalls;
+    await ThrowsAsync<InvalidOperationException>(()=>resumed.PreviewLocalVoidAsync(
+        competing,"2000","AdminPass1",api));
+    Equal(beforeQueries,api.QueryCalls);
+    Throws<InvalidOperationException>(()=>resumed.MarkManualCompleted(
+        competing,"2000","AdminPass1"));
+    Throws<InvalidOperationException>(()=>resumed.CancelManualReview(
+        competing,"2000","AdminPass1"));
+    Equal(true,new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
+        .Unresolved(original.AccountKey).Any(item=>item.Id==alternateId));
+    Equal(1,api.PostCalls);
+    Equal(true,resumed.LocalApprovalFor(original)!.Claimed);
 }
 
 static async Task TestLocalVoidRetentionAsync()
