@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
     ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
     ("Local g0501 changed draft, cancellation and account scope cannot claim", TestLocalVoidScopeAsync),
+    ("Local g0501 cutover snapshot is read-only, privacy-safe and never authorizes Cloud", TestLocalVoidCutoverEvidenceAsync),
     ("Cloud to Local mode toggle cannot restore g0501 after reconnect/restart", TestLocalVoidModeHandoffFenceAsync),
     ("Local g0501 original-number fence blocks competing issue IDs", TestLocalVoidCompetingIssueAsync),
     ("Local g0501 retention preserves pending and audit while pruning unrelated history", TestLocalVoidRetentionAsync),
@@ -251,6 +252,72 @@ static async Task TestLocalVoidScopeAsync()
     settings.CloudMode=CloudModes.CloudPreferred; setup.Repository.Settings.Save(settings);
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
     Equal(0,api.PostCalls);
+}
+
+static async Task TestLocalVoidCutoverEvidenceAsync()
+{
+    using var missingTemporary=new TemporaryDirectory("g0501-cutover-missing");
+    var missing=TestRepository.Open(missingTemporary.Path,new TestProtector());
+    var captured=new DateTimeOffset(2026,10,21,9,30,0,TimeSpan.Zero);
+    Throws<InvalidDataException>(()=>LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        missing,"local_install_A",captured));
+
+    using var temporary=new TemporaryDirectory("g0501-cutover-snapshot");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    var now=LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        setup.Repository,"local_install_A",captured);
+    Equal(0L,now.KnownClaimCount);
+    Equal(0L,now.UnresolvedClaimCount);
+    Equal(false,now.LocalG0501CurrentlyBlocked);
+    Equal(false,now.PersistedCloudQuarantinePresent);
+    Equal(false,now.HistoricalClaimsReconciled);
+    Equal(false,now.DeviceStoppedOrMigrated);
+    Equal(false,now.CanAuthorizeCloudG0501);
+    Equal(64,now.EvidenceSha256.Length);
+
+    await ApproveApiVoidAsync(setup,issue,api);
+    var pending=LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        setup.Repository,"local_install_A",captured);
+    Equal(1L,pending.UnclaimedApprovalCount);
+    Equal(0L,pending.KnownClaimCount);
+
+    api.LoseReply=true;
+    await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1",
+        "作廢 ALW-001",api);
+    Equal(1,api.PostCalls);
+    var claimed=LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        setup.Repository,"local_install_A",captured);
+    Equal(1L,claimed.KnownClaimCount);
+    Equal(1L,claimed.UnresolvedClaimCount);
+    Equal(0L,claimed.UnclaimedApprovalCount);
+    Equal(false,claimed.HistoricalClaimsReconciled);
+    Equal(false,claimed.CanAuthorizeCloudG0501);
+    var serialized=JsonSerializer.Serialize(claimed);
+    Equal(false,serialized.Contains("ALW-001",StringComparison.Ordinal));
+    Equal(false,serialized.Contains("AdminPass1",StringComparison.Ordinal));
+    Equal(false,serialized.Contains("production|",StringComparison.Ordinal));
+    Equal(true,claimed.EvidenceSha256.All(x=>Uri.IsHexDigit(x)));
+    Equal(false,string.Equals(now.EvidenceSha256,claimed.EvidenceSha256,
+        StringComparison.Ordinal));
+
+    var settings=setup.Repository.Settings.LoadOrCreate();
+    settings.CloudMode=CloudModes.CloudPreferred;
+    setup.Repository.Settings.Save(settings);
+    settings=setup.Repository.Settings.LoadOrCreate();
+    settings.CloudMode=CloudModes.LocalOnly;
+    setup.Repository.Settings.Save(settings);
+    var reopened=TestRepository.Open(temporary.Path,new TestProtector());
+    var blocked=LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        reopened,"local_install_A",captured);
+    Equal(true,blocked.LocalG0501CurrentlyBlocked);
+    Equal(true,blocked.PersistedCloudQuarantinePresent);
+    Equal(1L,blocked.UnresolvedClaimCount);
+    Equal(false,blocked.CanAuthorizeCloudG0501);
+    Equal(blocked.EvidenceSha256,LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        reopened,"local_install_A",captured).EvidenceSha256);
+    Throws<ArgumentException>(()=>LocalAllowanceVoidCutoverEvidenceReader.Capture(
+        reopened,"!INVALID",captured));
+    Equal(1,api.PostCalls);
 }
 
 static async Task TestLocalVoidModeHandoffFenceAsync()
