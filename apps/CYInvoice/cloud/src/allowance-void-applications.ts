@@ -1,7 +1,7 @@
 // V3.2 D/E internal CYID Cloud g0501 application owner, draft schema20 only.
 // Trusted Worker injects current CYID authority and Device; no public HTTP,
 // manager approval, mutation, retries, offline send or deployed D1.
-import {encryptCompanyBusinessData} from "./company-settings";
+import {encryptCompanyBusinessData,decryptCompanyBusinessData} from "./company-settings";
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 import {validOfficialAllowanceNumber} from "./amego-allowance-void";
 
@@ -153,4 +153,81 @@ export async function readCloudAllowanceVoidApplication(
   throw new Error("VOID_APPLICATION_CORRUPT");
  return {applicationId:row.application_id,status:row.status,revision:row.revision,
   claimed:row.claimed===1,readbackOnly:row.claimed===1};
+}
+
+export interface TrustedCloudVoidRequest {
+ applicationId:string;workspaceId:string;environment:"test"|"production";
+ sellerInvoice:string;companyRevision:number;requestHash:string;
+ allowanceNumber:string;originalInvoiceNumber:string;reason:string;
+ status:"open"|"approved";revision:1|2;
+}
+interface FrozenRow {
+ application_id:string;workspace_id:string;environment:"test"|"production";
+ seller_invoice:string;company_revision:number;
+ allowance_fingerprint:string;request_hash:string;frozen_ciphertext:string;
+ status:"open"|"approved";revision:number;
+}
+// Trusted internal manager-only reader for future provider-side official proof.
+// Never return this payload directly through GET/LIST/HTTP, logs or audit.
+// Every encrypted field is re-bound to an authenticated, keyed request hash.
+export async function loadCloudAllowanceVoidForManager(
+ db:D1Database,t:{workspaceId:string;applicationId:string;deviceId:string},
+ ctx:CloudAllowanceContext,authority:AllowanceActorSource
+):Promise<TrustedCloudVoidRequest>{
+ validateTarget(t.workspaceId,t.applicationId,t.deviceId);
+ const first=await authority.revalidate();
+ if(!validActor(first,t.workspaceId)||!isManager(first)||
+  !await activeDevice(db,t.workspaceId,t.deviceId))
+  throw new Error("VOID_PREVIEW_MANAGER_REQUIRED");
+ const row=await db.prepare("SELECT application_id,workspace_id,environment,"+
+  "seller_invoice,company_revision,allowance_fingerprint,request_hash,"+
+  "frozen_ciphertext,status,revision FROM allowance_void_requests "+
+  "WHERE application_id=?1 AND workspace_id=?2 LIMIT 1")
+  .bind(t.applicationId,t.workspaceId).first<FrozenRow>();
+ if(!row||row.environment!==ctx.environment||
+  !/^[a-f0-9]{64}$/.test(row.request_hash)||
+  !/^[a-f0-9]{64}$/.test(row.allowance_fingerprint))
+  throw new Error("VOID_PREVIEW_NOT_FOUND_OR_CORRUPT");
+ const settings=await company(db,t.workspaceId);
+ if(settings.seller_invoice!==row.seller_invoice||
+  settings.revision!==row.company_revision)
+  throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
+ let frozen:{v?:unknown;allowanceNumber?:unknown;
+  originalInvoiceNumber?:unknown;reason?:unknown};
+ try{
+  frozen=JSON.parse(await decryptCompanyBusinessData(ctx.encryptionKeyHex,
+   t.workspaceId,"allowance-void/"+t.applicationId+"/"+row.request_hash,
+   row.frozen_ciphertext));
+ }catch{throw new Error("VOID_PREVIEW_FROZEN_UNAVAILABLE");}
+ if(!frozen||frozen.v!==1||typeof frozen.allowanceNumber!=="string"||
+  typeof frozen.originalInvoiceNumber!=="string"||
+  typeof frozen.reason!=="string"||
+  !NUMBER.test(frozen.allowanceNumber)||
+  !INVOICE.test(frozen.originalInvoiceNumber)||
+  frozen.reason.trim()!==frozen.reason||
+  frozen.reason.length<1||frozen.reason.length>500||
+  /[\u0000-\u001f\u007f]/.test(frozen.reason))
+  throw new Error("VOID_PREVIEW_FROZEN_INVALID");
+ const identity=[t.workspaceId,row.seller_invoice,row.environment,frozen.allowanceNumber];
+ const numberHash=await fingerprint(ctx.encryptionKeyHex,"number",identity);
+ const requestHash=await fingerprint(ctx.encryptionKeyHex,"request",[
+  ...identity,t.applicationId,frozen.originalInvoiceNumber,frozen.reason]);
+ if(numberHash!==row.allowance_fingerprint||requestHash!==row.request_hash)
+  throw new Error("VOID_PREVIEW_FROZEN_MISMATCH");
+ const second=await authority.revalidate();
+ if(!sameActor(first,second,t.workspaceId)||!await activeDevice(db,t.workspaceId,t.deviceId))
+  throw new Error("VOID_PREVIEW_AUTH_CHANGED");
+ const current=await company(db,t.workspaceId);
+ if(current.revision!==settings.revision||current.seller_invoice!==settings.seller_invoice||
+  current.amego_app_key_ciphertext!==settings.amego_app_key_ciphertext)
+  throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
+ if((row.status!=="open"&&row.status!=="approved")||
+   (row.revision!==1&&row.revision!==2))
+  throw new Error("VOID_PREVIEW_CORRUPT");
+ return {applicationId:t.applicationId,workspaceId:t.workspaceId,
+  environment:row.environment,sellerInvoice:row.seller_invoice,
+  companyRevision:row.company_revision,requestHash:row.request_hash,
+  allowanceNumber:frozen.allowanceNumber,
+  originalInvoiceNumber:frozen.originalInvoiceNumber,reason:frozen.reason,
+  status:row.status,revision:row.revision};
 }
