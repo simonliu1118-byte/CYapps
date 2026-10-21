@@ -326,6 +326,104 @@ internal static class CloudAllowanceClientTests
         Equal(4,fake.Calls);
     }
 
+    public static async Task RunVoidReconnectAsync()
+    {
+        var id=CloudAllowanceClient.OriginalVoidApplicationId(
+            "ws_synthetic","test","ALW-001");
+        var draft=new CloudAllowanceVoidDraft(id,"test","ALW-001",
+            "AB12345678","Synthetic void reason");
+
+        // A complete status is sufficient; never issue another create POST.
+        var already=new FakeHandler();
+        already.Add(req=>{
+            Check(req,"void-status");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=id,
+                status="approved",revision=2,claimed=true,readbackOnly=true,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        using(var http=new HttpClient(already))
+        {
+            var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+            var original=await api.CreateOrReadVoidApplicationAsync(
+                draft,"0001","fake-password");
+            Equal(id,original.ApplicationId);
+            Equal(true,original.ReadbackOnly);
+            Equal(1,already.Calls);
+        }
+
+        // Explicit authenticated original-ID NOT_FOUND allows one CREATE.
+        var initial=new FakeHandler();
+        initial.Add(req=>{
+            Check(req,"void-status");
+            return Json(HttpStatusCode.Conflict,new{
+                ok=false,error=new{code="VOID_APPLICATION_NOT_FOUND"}});
+        });
+        initial.Add(req=>{
+            Check(req,"void-create");
+            using var item=JsonDocument.Parse(req.Content!.ReadAsStringAsync()
+                .GetAwaiter().GetResult());
+            Equal(id,item.RootElement.GetProperty("applicationId").GetString());
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=id,
+                status="open",revision=1,claimed=false,readbackOnly=false,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        using(var http=new HttpClient(initial))
+        {
+            var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+            var state=await api.CreateOrReadVoidApplicationAsync(
+                draft,"0001","fake-password");
+            Equal("open",state.Status);
+            Equal(2,initial.Calls);
+        }
+
+        // A lost CREATE reply may have committed. Reopening by the SAME
+        // deterministic ID must read back, never create a second work item.
+        var lost=new FakeHandler();
+        lost.Add(req=>{
+            Check(req,"void-status");
+            return Json(HttpStatusCode.Conflict,new{
+                ok=false,error=new{code="VOID_APPLICATION_NOT_FOUND"}});
+        });
+        lost.Add(req=>{
+            Check(req,"void-create");
+            throw new OperationCanceledException("Synthetic lost D1 ACK");
+        });
+        lost.Add(req=>{
+            Check(req,"void-status");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=id,
+                status="open",revision=1,claimed=false,readbackOnly=false,
+                officiallyConfirmed=false,officialActionPerformed=false});
+        });
+        using(var http=new HttpClient(lost))
+        {
+            var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+            await Fail<OperationCanceledException>(()=>api.CreateOrReadVoidApplicationAsync(
+                draft,"0001","fake-password"));
+            var recovered=await api.CreateOrReadVoidApplicationAsync(
+                draft,"0001","fake-password");
+            Equal(id,recovered.ApplicationId);
+            Equal(3,lost.Calls);
+        }
+
+        // A connectivity error or uncertain server readback must never
+        // trigger the create endpoint (including a device-revocation error).
+        foreach(var code in new[]{"ALLOWANCES_NOT_READY","VOID_APPLICATION_AUTH_REQUIRED",
+                                  "VOID_APPLICATION_UNCONFIRMED_READBACK_OR_INVESTIGATE"})
+        {
+            var failed=new FakeHandler();
+            failed.Add(req=>{
+                Check(req,"void-status");
+                return Json(HttpStatusCode.ServiceUnavailable,new{
+                    ok=false,error=new{code}});
+            });
+            using var http=new HttpClient(failed);
+            var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+            await Fail<CloudApiException>(()=>api.CreateOrReadVoidApplicationAsync(
+                draft,"0001","fake-password"));
+            Equal(1,failed.Calls);
+        }
+    }
+
     public static async Task RunVoidManagerAsync()
     {
         const string hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
