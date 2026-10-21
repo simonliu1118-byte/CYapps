@@ -247,6 +247,89 @@ internal sealed class CloudAllowanceManagerForm : Form
             queue.Items.Clear();
         });
     }
+    private async Task PreviewVoidAsync()
+    {
+        var id=searchId.Text.Trim();
+        if(id.Length<8)return;
+        await RunAsync(async(no,pass)=>{
+            var proof=await client!.PreviewVoidForManagerAsync(id,no,pass,lifetime.Token);
+            pendingVoidPreview=proof;
+            MessageBox.Show(this,
+                "原申請 ID："+proof.ApplicationId+
+                "\n原折讓號："+proof.AllowanceNumber+
+                "\n原發票："+proof.OriginalInvoiceNumber+
+                "\n申請原因："+proof.Reason+
+                "\n官方查詢："+proof.OfficialCheckedAtUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")+
+                "\n\n官方預覽不代表主管核准，也不允許送出 g0501。"+
+                "\n如確認無誤，請重新輸入 CYID 密碼並按「作廢主管核准」。",
+                "CYID 折讓作廢－官方預覽",
+                MessageBoxButtons.OK,MessageBoxIcon.Information);
+            status.Text="已預覽作廢原號 "+proof.AllowanceNumber+
+                "；尚未核准或送出。";
+        });
+    }
+
+    private async Task ReadVoidStatusAsync()
+    {
+        var id=searchId.Text.Trim();
+        if(id.Length<8)return;
+        await RunAsync(async(no,pass)=>{
+            var state=await client!.ReadVoidApplicationAsync(id,no,pass,lifetime.Token);
+            status.Text="作廢申請 "+state.ApplicationId+"／"+state.Status+
+                "／rev "+state.Revision+
+                (state.Claimed?"；已有永久 Claim，只能查回、不得重送":
+                "；尚無 Cloud Claim，不代表另一 Local 裝置未送")+
+                "；不代表光貿正式作廢成功。";
+        });
+    }
+
+    private async Task ApproveVoidAsync()
+    {
+        var proof=pendingVoidPreview;
+        if(proof is null||proof.ApplicationId!=searchId.Text.Trim())return;
+        var expected="作廢 "+proof.AllowanceNumber;
+        using var dialog=new Form{Text="CYID 折讓作廢－主管確認",
+            ClientSize=new Size(650,240),
+            StartPosition=FormStartPosition.CenterParent,
+            FormBorderStyle=FormBorderStyle.FixedDialog,ShowIcon=false,
+            MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
+            Font=new Font("Microsoft JhengHei UI",10F)};
+        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(14),
+            ColumnCount=1,RowCount=3};
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute,47));
+        panel.Controls.Add(new Label{Dock=DockStyle.Fill,
+            Text="原號："+proof.AllowanceNumber+"／原發票："+proof.OriginalInvoiceNumber+
+                "\n原因："+proof.Reason+
+                "\n只寫入核准 Grant，不會送出 g0501。"+
+                "\n請完整輸入：「"+expected+"」"},0,0);
+        var typed=UiControls.TextBox(80);typed.Dock=DockStyle.Fill;
+        typed.AccessibleName="輸入原折讓號以核准 Cloud 作廢";
+        var ok=UiControls.StandardButton("確認核准");
+        ok.Enabled=false;ok.DialogResult=DialogResult.OK;
+        typed.TextChanged+=(_,_)=>ok.Enabled=typed.Text==expected;
+        var cancel=UiControls.StandardButton("取消");
+        cancel.DialogResult=DialogResult.Cancel;
+        var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,
+            FlowDirection=FlowDirection.RightToLeft};
+        buttons.Controls.Add(cancel);buttons.Controls.Add(ok);
+        panel.Controls.Add(typed,0,1);panel.Controls.Add(buttons,0,2);
+        dialog.Controls.Add(panel);dialog.AcceptButton=ok;dialog.CancelButton=cancel;
+        if(dialog.ShowDialog(this)!=DialogResult.OK||typed.Text!=expected)return;
+        await RunAsync(async(no,pass)=>{
+            // The Worker rechecks official evidence, role, Device and Gate.
+            // A lost acknowledgement is resolved by original-ID status only.
+            pendingVoidPreview=null;
+            var grant=await client!.ApproveVoidForManagerAsync(
+                proof,typed.Text,no,pass,lifetime.Token);
+            status.Text="已核准 Cloud 作廢申請 "+grant.ApplicationId+
+                "／rev "+grant.Revision+"；未送出 g0501。"+
+                "正式送出仍須獨立授權。";
+        });
+    }
+
     private async Task ReserveAsync()
     {
         var row=Selected();if(row is null)return;
