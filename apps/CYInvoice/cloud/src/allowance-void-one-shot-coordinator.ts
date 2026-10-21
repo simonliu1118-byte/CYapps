@@ -1,6 +1,8 @@
 // V3.2-E DRAFT ONLY. Sole internal Cloud g0501 send owner.
-// NOT ROUTED. Schema20 is not deployed. Cross-authority Local/Cloud collision
-// remains unresolved, so this must never be exposed until that is solved.
+// NOT ROUTED; schema20 not deployed; explicitly opt-in in tests only.
+// Before any future public send route: shut down legacy Local senders,
+// obtain operator authorization and enforce a default-off Worker send flag.
+// No D1 inventory hash can establish absent offline devices.
 // Claim first -> at most ONE provider POST. Lost claim reply = ZERO posts.
 // A provider code=0 or D0501/99 can never attribute this mutation.
 import {loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
@@ -51,15 +53,6 @@ async function active(db:D1Database,ws:string,dev:string):Promise<boolean>{
   "AND d.employee_authority_state='cloud' LIMIT 1")
   .bind(ws,dev).first<{device_id:string}>();
 }
-// Preflight reduces provider calls; the D1 INSERT trigger is the atomic gate.
-async function cloudCutoverActive(db:D1Database,ws:string,environment:string,
- seller:string,revision:number):Promise<boolean>{
- const row=await db.prepare("SELECT state FROM allowance_void_authority_gates "+
-  "WHERE workspace_id=?1 AND environment=?2 AND seller_invoice=?3 "+
-  "AND company_revision=?4 LIMIT 1").bind(ws,environment,seller,revision)
-  .first<{state:string}>();
- return row?.state==="cloud_exclusive";
-}
 function now(clock:()=>Date):Date{
  const value=clock();
  if(!(value instanceof Date)||!Number.isFinite(value.valueOf()))
@@ -69,8 +62,12 @@ function now(clock:()=>Date):Date{
 export async function executeCloudVoidOnce(
  db:D1Database,t:VoidOnceTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date()
+ clock:()=>Date=()=>new Date(),authorizedCutover=false
 ):Promise<VoidOnceOutcome>{
+ // No public route sets this. Source/fake tests may opt in explicitly;
+ // production requires separate approval and Local sender shutdown BEFORE
+ // a future route can be designed. Default: ZERO financial POSTs or claims.
+ if(authorizedCutover!==true)throw new Error("VOID_EXEC_SEND_DISABLED");
  if(!t||!WS.test(t.workspaceId)||!ID.test(t.applicationId)||
   !DEVICE.test(t.deviceId)||t.expectedRevision!==2||
   typeof t.confirmation!=="string")
@@ -103,9 +100,6 @@ export async function executeCloudVoidOnce(
  if(company.revision!==frozen.companyRevision||
   company.sellerInvoice!==frozen.sellerInvoice)
   throw new Error("VOID_EXEC_COMPANY_CHANGED");
- if(!await cloudCutoverActive(db,t.workspaceId,frozen.environment,
-  frozen.sellerInvoice,frozen.companyRevision))
-  throw new Error("VOID_EXEC_CUTOVER_NOT_AUTHORIZED");
  // Fresh signed read-only official proof just before claiming the one POST.
  const proof=await queryOfficialVoidTarget({
   sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
@@ -173,9 +167,7 @@ export async function executeCloudVoidOnce(
  try{
   const actor=await authority.revalidate();
   stillAuthorized=same(first,actor,t.workspaceId)&&
-   await active(db,t.workspaceId,t.deviceId)&&
-   await cloudCutoverActive(db,t.workspaceId,frozen.environment,
-    frozen.sellerInvoice,frozen.companyRevision);
+   await active(db,t.workspaceId,t.deviceId);
   if(stillAuthorized){
    const latestCompany=await loadAmegoCompanySettingsForGateway(
     db,t.workspaceId,ctx.encryptionKeyHex);
