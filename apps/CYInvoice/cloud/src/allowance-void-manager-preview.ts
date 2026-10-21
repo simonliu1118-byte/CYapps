@@ -7,7 +7,7 @@ import type {AllowanceActorSource,CloudAllowanceContext} from "./allowance-froze
 
 export interface CloudVoidManagerPreview {
  applicationId:string;revision:1;requestHash:string;
- allowanceNumber:string;originalInvoiceNumber:string;
+ allowanceNumber:string;originalInvoiceNumber:string;reason:string;
  officialSnapshotHash:string;officialCheckedAtUtc:string;
  canApproveWithoutFurtherReview:false;
  mayPostG0501:false;
@@ -55,7 +55,7 @@ export async function previewCloudVoidForManager(
  return {
   applicationId:t.applicationId,revision:1,requestHash:first.requestHash,
   allowanceNumber:first.allowanceNumber,
-  originalInvoiceNumber:first.originalInvoiceNumber,
+  originalInvoiceNumber:first.originalInvoiceNumber,reason:first.reason,
   officialSnapshotHash:proof.officialSnapshotHash,
   officialCheckedAtUtc:proof.checkedAtUtc,
   canApproveWithoutFurtherReview:false,mayPostG0501:false
