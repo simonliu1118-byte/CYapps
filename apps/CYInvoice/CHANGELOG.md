@@ -3,6 +3,8 @@
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
+
+- Cloud E 加入可信主管核准 owner：每次核准重查官方原號與 D0401 狀態、核對申請 SHA 與原號文字、雙次 CYID/Device 重新驗權；在單一 D1.batch 內存入 immutable Grant 並 CAS 狀態 approved，核准有效期 15 分鐘。該模組沒有 g0501 發送能力；核准結果不代表可發送或已完成。整合 Synthetic SQL/Provider 測試，未操作遠端 D1。
 - Cloud g0501 加入簽名的官方原號／原發票與 allowance_status 雙查詢唯讀前置驗證；整合 CYID 主管解密及再次驗權。官方 D0401／99 僅表示可進入完整人工覆核，不代表核准或 g0501 可送出，任何 D0501／99 仍不歸因為本次成功。
 - Cloud g0501 加入內部原申請與查回服務：由可信 CYID authority 經兩次 Role／Device 核對，按公司／環境／折讓號 HMAC 防重，Frozen 原始明細只存 AES-GCM；結果不明依原 ID 查回，不生成新 ID。整合測試用隔離 SQLite 與假身分，不觸及真 Worker／AMEGO。主管正式覆核、全域 Cloud/Local 競爭與真人驗收仍未完成。
 
