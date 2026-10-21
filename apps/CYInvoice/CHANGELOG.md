@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.32 Build 0 — 2026/10/21（V3.2 C：schema19 正式來源與受控部署準備）
+
+- 將 0019 人工稽核／外部占號證據的唯一來源從 drafts 移至 canonical migrations；既有 0001～0018 完全不變。新增 1 欄位、1 表、3 索引及 4 觸發器，原 Workspace／Device／身份與既有證據內容不改。原始碼 `SCHEMA_VERSION=19` 是待部署目標，不代表遠端已升級。
+- 非空 schema18 測試保留真實合成 Frozen／Ledger／官方讀回，先製作檔案備份，再演練 0019 中途失敗整筆回滾、成功一次套用、重套拒絕及舊備份還原；逐筆舊證據、舊表結構、FK 與 integrity 均驗證。
+- 部署仍由原唯一 preflight／version owner 執行；code-only 模式保留原 runtime marker。只有明確 `CYINVOICE_SCHEMA_UPGRADE=18:19`、deploy 模式、原 CYID／schema18、完整 canonical 19 遷移已套用且四道折讓旗標不存在或 false，才可只改 schema marker；其他 vars／Scopes／Services／Secrets／D1／限流設定不變。未完成遷移、未知升級、不同意圖／checkpoint、未真正部署或綁定讀回不同均拒絕；migration history 查詢上限 20 筆。
+- 本批是獨立的 schema19 來源升格／部署準備工作，Patch 升至 3.1.32、Build 歸零。未操作原 Cloudflare D1／Worker、未啟用任何折讓旗標、未呼叫真光貿或發布 Release。C7 歸因政策與雙機真測仍待完成；正式 Release V3.1.0 不變。
+
 ## V3.1.31 Build 0 — 2026/10/21（V3.2 B/C：Cloud 主管外部占號覆核與下一號預留）
 
 - 只有第一次 g0401 明確拒絕占號，且同次官方原號查回為已完成、不同買方及不含任何相同原發票的完整折讓，才以同一交易原子保存 `occupied_external` 與外部證據；查無、同買方、同原發票、未完成、回覆遺失或稽核失敗均保留 `sending`，禁止新配號。

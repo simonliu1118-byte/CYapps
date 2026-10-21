@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import {readFileSync,readdirSync} from "node:fs";
+import {readFileSync,readdirSync,mkdtempSync,copyFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join,dirname} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {build} from "esbuild";
 import {createHash} from "node:crypto";
@@ -63,10 +65,10 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
-async function fixture(schema19=false){
- const sql=new DatabaseSync(":memory:");
+async function fixture(schema19=false,filename=":memory:"){
+ const sql=new DatabaseSync(filename);
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
+ assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -75,9 +77,9 @@ async function fixture(schema19=false){
    status,employee_authority_state)
    VALUES(?,?,'Synthetic','active','cloud')`).run(device,ws);
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
- for(const f of migrations.filter(x=>x>="0014"))
+ for(const f of migrations.filter(x=>x>="0014"&&x<"0019"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
- if(schema19)sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+ if(schema19)sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
@@ -288,29 +290,44 @@ async function collided(){
  return {...f,t};
 }
 {
- const f=await fixture();
+ const dir=mkdtempSync(join(tmpdir(),"cyinvoice-schema19-"));
+ const live=join(dir,"schema18.sqlite"),backup=join(dir,"backup18.sqlite"),restored=join(dir,"restored18.sqlite");
+ const f=await fixture(false,live);
  try{
   const target=await f.prepare(app1);
   await execute(f.db,target,context,authority(),providerFor(target).send,clock);
   const prior=f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get();
+  const definitions=()=>f.sql.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  const priorSchema=definitions();
+  f.sql.exec("PRAGMA wal_checkpoint(TRUNCATE)");copyFileSync(live,backup);
   // A populated schema18 must retain its real exact-match evidence. Exercise
   // transactional DDL rollback before applying the proposed migration once.
   f.sql.exec("BEGIN IMMEDIATE");
   try{
-   f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+   f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
    f.sql.exec("INSERT INTO nonexistent_migration_probe VALUES (1)");
    assert.fail("expected synthetic migration failure");
   }catch{f.sql.exec("ROLLBACK");}
+  assert.deepEqual(definitions(),priorSchema,"failed schema19 must roll back all DDL and indexes");
   assert.deepEqual(f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get(),prior);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='allowance_manual_review_audit'").get().n,0);
-  f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+  f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
   assert.equal(f.sql.prepare("SELECT evidence_kind FROM allowance_reconciliation_checks").get().evidence_kind,
    "full_match_unattributed");
   assert.equal(f.sql.prepare("SELECT official_snapshot_hash FROM allowance_reconciliation_checks").get().official_snapshot_hash,
    prior.official_snapshot_hash);
-  assert.throws(()=>f.sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8")),/duplicate column/);
+  assert.throws(()=>f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8")),/duplicate column/);
   assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
- }finally{f.close();}
+  assert.equal(f.sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
+  copyFileSync(backup,restored);
+  const recovery=new DatabaseSync(restored,{readOnly:true});
+  try{
+   assert.deepEqual(recovery.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all(),priorSchema);
+   assert.deepEqual(recovery.prepare("SELECT * FROM allowance_reconciliation_checks").get(),prior);
+   assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(),[]);
+   assert.equal(recovery.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
+  }finally{recovery.close();}
+ }finally{f.close();assert.equal(dirname(dir),tmpdir());rmSync(dir,{recursive:true,force:true});}
 }
 {
  const f=await fixture(true);

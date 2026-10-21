@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade } from '../scripts/deployment-preflight.mjs';
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 let activeReads = 0;
@@ -84,6 +84,34 @@ assert.deepEqual(checkMigrations(v32Canonical.slice(0,-1),v32Canonical),
   ['0018_allowance_frozen_ledger.sql']);
 assert.throws(()=>checkMigrations(v31Canonical,v32Canonical,true),/MIGRATION_NOT_COMPLETE/);
 assert.deepEqual(checkMigrations(v32Canonical,v32Canonical,true),[]);
+const auditCanonical=[...v32Canonical,'0019_allowance_manual_review_audit.sql'];
+assert.deepEqual(checkMigrations(v32Canonical,auditCanonical),['0019_allowance_manual_review_audit.sql']);
+assert.throws(()=>checkMigrations(v32Canonical,auditCanonical,true),/MIGRATION_NOT_COMPLETE/);
+assert.deepEqual(checkMigrations(auditCanonical,auditCanonical,true),[]);
+assert.throws(()=>checkMigrations(v32Canonical,[...auditCanonical,'0020_unreviewed.sql']),/UNREVIEWED_PENDING_MIGRATIONS/);
+const upgradeSettings={bindings:[{name:'CYID_ENABLED',type:'plain_text',text:'true'},
+ {name:'SCHEMA_VERSION',type:'plain_text',text:'18'},
+ {name:'ALLOWANCE_API_ENABLED',type:'plain_text',text:'false'}]};
+assert.equal(resolveSchemaUpgrade(upgradeSettings,auditCanonical,auditCanonical,'deploy',''),undefined);
+assert.deepEqual(resolveSchemaUpgrade(upgradeSettings,auditCanonical,auditCanonical,'deploy','18:19'),
+ {from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'});
+assert.throws(()=>resolveSchemaUpgrade(upgradeSettings,auditCanonical,v32Canonical,'deploy','18:19'),/MIGRATION_NOT_COMPLETE/);
+for(const intent of ['17:19','19:18','18:20','true'])
+ assert.throws(()=>resolveSchemaUpgrade(upgradeSettings,auditCanonical,auditCanonical,'deploy',intent),/SCHEMA_UPGRADE_INTENT_INVALID/);
+assert.throws(()=>resolveSchemaUpgrade(upgradeSettings,auditCanonical,auditCanonical,'preflight','18:19'),/SCHEMA_UPGRADE_INTENT_INVALID/);
+assert.throws(()=>resolveSchemaUpgrade(upgradeSettings,v32Canonical,v32Canonical,'deploy','18:19'),/SCHEMA_UPGRADE_TARGET_INVALID/);
+for(const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED',
+ 'ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED']){
+ const enabled=structuredClone(upgradeSettings);
+ enabled.bindings=enabled.bindings.filter(b=>b.name!==name);
+ enabled.bindings.push({name,type:'plain_text',text:'true'});
+ assert.throws(()=>resolveSchemaUpgrade(enabled,auditCanonical,auditCanonical,'deploy','18:19'),
+  /SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF/);
+}
+for(const schema of ['17','19','20']){
+ const wrong=structuredClone(upgradeSettings);wrong.bindings[1].text=schema;
+ assert.throws(()=>resolveSchemaUpgrade(wrong,auditCanonical,auditCanonical,'deploy','18:19'),/SCHEMA_UPGRADE_SOURCE_INVALID/);
+}
 assert.throws(()=>checkMigrations(v31Canonical,[...v32Canonical,'0019_unreviewed.sql']),
   /UNREVIEWED_PENDING_MIGRATIONS/);
 assert.throws(()=>checkMigrations(v30Canonical,[...v31Canonical,'0017_unreviewed.sql']),/UNREVIEWED_PENDING_MIGRATIONS/);
@@ -432,6 +460,7 @@ const originalLog = console.log;
 let applied = canonical.slice(0, 12), currentDatabase = '11111111-1111-4111-8111-111111111111';
 let retainedProbe = false, configuredProviderScope = true, providerRevisionChanged = false, preparedRuntime = false, cyIdActive = false;
 let providerEnvironment = 'development', runtimeSchema = '13', v3Enabled = false, historicalProbeService = 'synthetic-provider';
+let reportedStorageSchema;
 const retainedId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const retainedNonce = 'a'.repeat(32);
 const calls = [], logs = [];
@@ -483,7 +512,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:providerEnvironment,status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.3' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.3' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });
@@ -498,7 +527,7 @@ try {
   assert.equal(generated.d1_databases[0].database_id, currentDatabase);
   assert.equal(generated.vars.CYID_ENABLED, 'false');
   assert.equal(generated.vars.CUSTOM_POLICY, 'preserve-synthetic-policy');
-  assert.equal(generated.vars.SCHEMA_VERSION, '18');
+  assert.equal(generated.vars.SCHEMA_VERSION, '19');
   assert.equal(generated.services[1].entrypoint, 'ConsumerAuthoritySync');
   await assert.rejects(main('before',statePath,{...env,...preparation,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'}),/MIGRATION_NOT_COMPLETE/);
   // POSIX mode bits are enforced on the deployment's Linux runner. Windows
@@ -569,7 +598,7 @@ try {
     await assert.rejects(deployReviewedVersion(productionAudit,changed,'export default {};',
       ()=>assert.fail('must stop before API mutation'),()=>{},Date.parse(productionAudit.capturedAt)),/ACTIVE_RUNTIME_SETTING_CHANGE/);
   }
-  let v3Current=activeId,v3Uploaded;
+  let v3Current=activeId,v3Uploaded,deploymentAudit=productionAudit,deploymentTemplate=productionConfig;
   const providerBindings=structuredClone(missingScope.bindings);
   providerBindings.find(b=>b.name==='APP_ENV').text='production';
   const v3Request=async(route,body)=>{
@@ -588,16 +617,55 @@ try {
     if(route.endsWith('/deployments')) return {deployments:[{versions:[{version_id:v3Current,percentage:100}]}]};
     if(route.endsWith('/routes')) return productionAudit.routes;
     if(route.endsWith('/subdomain')) return productionAudit.workerSubdomain;
-    if(route.endsWith('/versions/'+activeId)) return {id:activeId,bindings:productionAudit.settings.bindings};
-    if(route.endsWith('/versions/'+deployedId)) return {id:deployedId,compatibility_date:productionConfig.compatibility_date,
+    if(route.endsWith('/versions/'+activeId)) return {id:activeId,bindings:deploymentAudit.settings.bindings};
+    if(route.endsWith('/versions/'+deployedId)) return {id:deployedId,compatibility_date:deploymentTemplate.compatibility_date,
       compatibility_flags:[],bindings:v3Uploaded.bindings.map(b=>b.type==='inherit'
-        ? productionAudit.settings.bindings.find(x=>x.name===b.name):b)};
+        ? deploymentAudit.settings.bindings.find(x=>x.name===b.name):b)};
     assert.fail('Unexpected deployment request');
   };
   await deployReviewedVersion(structuredClone(productionAudit),productionConfig,'export default {};',
     v3Request,()=>{},Date.parse(productionAudit.capturedAt));
   assert.equal(v3Current,deployedId);
   await main('after',statePath,productionEnv);
+  // D1 0019 is already applied by the separately authorized operator; the
+  // old live Worker still reports 18. Nothing may silently change its marker.
+  runtimeSchema='18';reportedStorageSchema='18';
+  const upgradeEnv={...productionEnv,CYINVOICE_SCHEMA_UPGRADE:'18:19'};
+  await assert.rejects(main('before',statePath,productionEnv),/SCHEMA|HEALTH/);
+  await main('before',statePath,upgradeEnv);
+  const upgradedAudit=JSON.parse(fs.readFileSync(statePath,'utf8'));
+  const upgradedConfig=JSON.parse(fs.readFileSync(generatedPath,'utf8'));
+  assert.deepEqual(upgradedAudit.schemaUpgrade,{from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'});
+  assert.equal(upgradedConfig.vars.SCHEMA_VERSION,'19');
+  for(const b of upgradedAudit.settings.bindings.filter(b=>b.type==='plain_text'&&b.name!=='SCHEMA_VERSION'))
+    assert.equal(upgradedConfig.vars[b.name],b.text,'all other active vars preserved');
+  reportedStorageSchema='19';
+  await assert.rejects(main('after',statePath,upgradeEnv),/SCHEMA_UPGRADE_NOT_DEPLOYED/);
+  await assert.rejects(main('after',statePath,productionEnv),/SCHEMA_UPGRADE_AUDIT_MISMATCH/);
+  for(const patch of [{SCHEMA_VERSION:'20'},{COMPANY_SETTINGS_ENABLED:'false'},
+    {CUSTOM_POLICY:'changed'},{ALLOWANCE_G0401_SEND_ENABLED:'true'}]){
+    const changed={...upgradedConfig,vars:{...upgradedConfig.vars,...patch}};
+    await assert.rejects(deployReviewedVersion(structuredClone(upgradedAudit),changed,'export default {};',
+      ()=>assert.fail('must stop before any API mutation'),()=>{},Date.parse(upgradedAudit.capturedAt)),
+      /ACTIVE_RUNTIME_SETTING_CHANGE|SCHEMA_UPGRADE_RUNTIME_SETTING_CHANGE|SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF/);
+  }
+  const missingIntent=structuredClone(upgradedAudit);delete missingIntent.schemaUpgrade;
+  await assert.rejects(deployReviewedVersion(missingIntent,upgradedConfig,'export default {};',
+    ()=>assert.fail('must stop before any API mutation'),()=>{},Date.parse(upgradedAudit.capturedAt)),/ACTIVE_RUNTIME_SETTING_CHANGE/);
+  deploymentAudit=upgradedAudit;deploymentTemplate=upgradedConfig;v3Current=activeId;
+  await deployReviewedVersion(structuredClone(upgradedAudit),upgradedConfig,'export default {};',v3Request,
+    saved=>fs.writeFileSync(statePath,JSON.stringify(saved)),Date.parse(upgradedAudit.capturedAt));
+  assert.equal(v3Uploaded.bindings.find(b=>b.name==='SCHEMA_VERSION').text,'19');
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async(url,options={})=>{
+    const pathname=new URL(url).pathname;
+    if(pathname.includes('/workers/')&&!pathname.includes('/synthetic-provider/')&&
+      (pathname.endsWith('/deployments')||pathname.endsWith('/versions/'+deployedId)))
+      return Response.json({success:true,result:await v3Request(pathname)});
+    return originalFetch(url,options);
+  };
+  try{await main('after',statePath,upgradeEnv);}
+  finally{globalThis.fetch=originalFetch;reportedStorageSchema=undefined;runtimeSchema='15';}
   await assert.rejects(main('before',statePath,{...productionEnv,CYINVOICE_CYID_ENVIRONMENT:'unknown'}),/CYID_PROVIDER_ENVIRONMENT_INVALID/);
   cyIdActive=false;
   await assert.rejects(main('before',statePath,productionEnv),/PRODUCTION_PROVIDER_REQUIRES_ACTIVE_CYID/);
