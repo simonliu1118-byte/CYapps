@@ -26,6 +26,10 @@ const executeBundle=await build({entryPoints:["src/allowance-void-one-shot-coord
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {executeCloudVoidOnce:executeVoid}=await import("data:text/javascript;base64,"+
  Buffer.from(executeBundle.outputFiles[0].text).toString("base64"));
+const reconnectBundle=await build({entryPoints:["src/allowance-void-reconnection.ts"],
+ bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {readCloudVoidAfterReconnect:reconnect}=await import("data:text/javascript;base64,"+
+ Buffer.from(reconnectBundle.outputFiles[0].text).toString("base64"));
 const sql=new DatabaseSync(":memory:");
 const ws="ws_void_test",otherWs="ws_elsewhere";
 const employee="dev_11111111-1111-4111-8111-111111111111";
@@ -191,6 +195,13 @@ try{
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,2);
+ const beforeClaim=await reconnect(db,target,ctx,authority(supervisor),
+  async()=>{throw Error("readback must not call official without a claim");},()=>time);
+ assert.equal(beforeClaim.state,"not_claimed_unverified");
+ assert.equal(beforeClaim.claimRecorded,false);
+ assert.equal(beforeClaim.safeToAutoResend,false);
+ assert.equal(beforeClaim.safeToAutoClose,false);
+ assert.equal(beforeClaim.officiallyVoided,null);
  assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
   deviceId:employee},authority()),{applicationId:request.applicationId,
   status:"approved",revision:2,claimed:false,readbackOnly:false});
@@ -235,6 +246,44 @@ try{
   applicationId:request.applicationId,status:"approved",revision:2,
   claimed:true,readbackOnly:true
  });
+ const pending=await reconnect(db,target,ctx,authority(supervisor),official,()=>time);
+ assert.equal(pending.claimRecorded,true);
+ assert.equal(pending.state,"official_void_unconfirmed");
+ assert.equal(pending.officiallyVoided,false);
+ assert.equal(pending.safeToAutoResend,false);
+ assert.equal(pending.safeToAutoClose,false);
+ let statusCalls=0;
+ const providerCancelled=async(url,options)=>{
+  statusCalls++;
+  assert.equal(url,"https://invoice-api.amego.tw/json/allowance_status");
+  return Response.json({code:0,data:{"ALW-001":{type:"D0501",status:99}}});
+ };
+ const observed=await reconnect(db,target,ctx,authority(supervisor),
+  providerCancelled,()=>time);
+ assert.equal(statusCalls,1);
+ assert.equal(observed.state,"official_void_observed_unattributed");
+ assert.equal(observed.officiallyVoided,true);
+ assert.equal(observed.thisPostAttributed,false);
+ assert.equal(observed.requiresManualReview,true);
+ assert.equal(observed.safeToAutoResend,false);
+ assert.equal(observed.safeToAutoClose,false);
+ assert.match(observed.officialSnapshotHash,/^[a-f0-9]{64}$/);
+ const offline=await reconnect(db,target,ctx,authority(supervisor),
+  async()=>{throw Error("offline during reconnection");},()=>time);
+ assert.equal(offline.state,"official_unavailable_readback_only");
+ assert.equal(offline.officiallyVoided,null);
+ assert.equal(offline.safeToAutoResend,false);
+ let revokedDuringStatus=false;
+ await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>reconnect(db,target,ctx,
+  authority(supervisor),async(url,options)=>{
+   const response=await providerCancelled(url,options);
+   if(!revokedDuringStatus){active(managerDevice,"revoked");revokedDuringStatus=true;}
+   return response;
+  },()=>time));
+ active(managerDevice,"active");
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,4);
+
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
   ...request,applicationId:"void_application_duplicate"},ctx,authority()));
  assert.equal(count(),1,"same official number cannot gain another application ID");
