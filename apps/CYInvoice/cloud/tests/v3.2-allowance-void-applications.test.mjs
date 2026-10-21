@@ -179,6 +179,18 @@ try{
  await rejects("VOID_APPROVAL_MANAGER_REQUIRED",()=>approve(db,approval,ctx,
   authority(applicant),official,()=>time));
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+ // Even a verified CYID manager cannot approve without a separately audited
+ // Local-to-Cloud cutover (this fixture records synthetic evidence only).
+ await rejects("VOID_APPROVAL_UNCONFIRMED_READBACK_ONLY",()=>approve(db,approval,
+  ctx,authority(supervisor),official,()=>time));
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+ const manifest="e".repeat(64);
+ const activateGate=(revision)=>sql.prepare("INSERT INTO allowance_void_authority_gates "+
+  "(workspace_id,environment,seller_invoice,company_revision,state,"+
+  "cutover_manifest_hash,activating_device_id,activated_at) "+
+  "VALUES(?,'test','12345678',?,'cloud_exclusive',?,?,?)")
+  .run(ws,revision,manifest,managerDevice,"2026-10-21T08:55:00.000Z");
+ activateGate(1);
  // D1.batch must rollback BOTH statements on an append-only audit failure.
  sql.exec("CREATE TRIGGER synthetic_grant_audit_failure BEFORE INSERT ON allowance_void_audit "+
   "WHEN NEW.kind='manager_approved' BEGIN SELECT RAISE(ABORT,'SYNTHETIC_AUDIT_FAILED'); END;");
@@ -227,6 +239,17 @@ try{
   ctx,authority(supervisor),fakeOneShot,()=>time));
  active(managerDevice,"active");
  assert.equal(posts,0);
+ // Emergency stop after Grant, before sending: the D1 Claim must reject
+ // atomically. No network POST, no automatic fallback to Local.
+ sql.exec("SAVEPOINT cloud_void_cutover_stop");
+ sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
+  "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
+  "WHERE workspace_id=? AND company_revision=1").run(ws);
+ await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
+  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time));
+ assert.equal(posts,0);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
+ sql.exec("ROLLBACK TO cloud_void_cutover_stop; RELEASE cloud_void_cutover_stop");
  const sent=await executeVoid(db,onceTarget,ctx,authority(supervisor),
   fakeOneShot,()=>time);
  assert.equal(sent.outcome,"accepted_unconfirmed");
@@ -309,6 +332,8 @@ try{
   allowanceNumber:"ALW-002"},ctx,authority());
  assert.equal(afterCard.status,"open");
  assert.equal(count(),2);
+ // A rotated company card requires fresh cutover proof, not the old revision.
+ activateGate(2);
  let changed=0;
  await rejects("VOID_APPLICATION_AUTH_CHANGED",()=>read(db,{workspaceId:ws,
   applicationId:request.applicationId,deviceId:employee},{
