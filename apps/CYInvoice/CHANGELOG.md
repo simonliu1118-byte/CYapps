@@ -3,6 +3,8 @@
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
+- Cloud g0501 加入內部原申請與查回服務：由可信 CYID authority 經兩次 Role／Device 核對，按公司／環境／折讓號 HMAC 防重，Frozen 原始明細只存 AES-GCM；結果不明依原 ID 查回，不生成新 ID。整合測試用隔離 SQLite 與假身分，不觸及真 Worker／AMEGO。主管正式覆核、全域 Cloud/Local 競爭與真人驗收仍未完成。
+
 
 - 新增 Cloud **draft** `0020_allowance_void_coordination.sql`：分離 g0501 申請與 g0401 開立的業務狀態，保存不含原號明文的 HMAC 識別與加密 Frozen 欄位；D1 保護單一申請、主管核准、15 分鐘有效期、公司卡版次、Device 撤權、唯一永久送出 claim 及 append-only 稽核。僅草案與合成測試，尚無可執行 Cloud g0501 路由及官方前置核對，不代表 D/E 整合或 schema20 升級完成。
 
