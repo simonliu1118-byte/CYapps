@@ -4,15 +4,17 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：折讓作廢整合工程）
 
+- **本輪精簡**：刪除不能證明離線設備已停送的 D1 Cloud-exclusive Gate、交接雜湊欄位及其 3 個 Trigger；單次 Cloud g0501 送出器改由獨立明確授權參數**預設 false**，且依舊沒有可呼叫它的 Worker HTTP 路由。主管核准仍可於未切換送出權威前完成；真正送出必須另經 Local 停送核對及授權，D1 永久單次 Claim、角色／Device／公司卡二次檢查、官方證據及不可變 Audit 全保留。Cloud 主管／送出器的 CYID 權限檢查整併為同一 owner，減少權限規則分岔；合成測試改覆蓋預設關閉、Claim 前／後撤權與結果不明禁止重發。未對 Cloudflare 或 AMEGO 操作。
+
 - 員工端沿用現有 CYID 跨機折讓 WinForms 視窗，新增原號／原發票／原因的 `void-create` 申請操作；同 Workspace、環境、官方原折讓號產生固定申請 ID，斷線、重新開啟與跨 Device 查回皆沿用原 ID。Windows Client 僅在認證的原 ID `NOT_FOUND` 時建立一次申請，其餘逾時、權限撤銷、結果不明均不補發。Fake HTTP 覆蓋已有申請直接讀取、首次建立、建立回覆遺失後回線查回、503／撤權拒絕等；仍不開 g0501 送出路由。
 
-- 本輪 CYID 跨機作廢主管功能沿用既有 Worker `allowances-route` 與 WinForms `CloudAllowanceManagerForm`：新增 `void-preview`（原申請 ID 下主管身分、原號、原發票、原因與官方雙查唯讀）及 `void-approve`（再驗 CYID／Device、完整原號確認、原子 Grant）；Windows Client 不接受回應暗示可發送或官方成功。原視窗加入預覽、核准與原 ID 查回，無新送出入口。保留 schema20 草案、獨立受控切換與預設關閉旗標；合成測試涵蓋越權、無 Gate 拒絕、單次核准、回覆語意與零 g0501。
+- 本輪 CYID 跨機作廢主管功能沿用既有 Worker `allowances-route` 與 WinForms `CloudAllowanceManagerForm`：新增 `void-preview`（原申請 ID 下主管身分、原號、原發票、原因與官方雙查唯讀）及 `void-approve`（再驗 CYID／Device、完整原號確認、原子 Grant）；Windows Client 不接受回應暗示可發送或官方成功。原視窗加入預覽、核准與原 ID 查回，無新送出入口。保留 schema20 草案、獨立受控切換與預設關閉旗標；合成測試涵蓋越權、無主管權限拒絕、單次核准、回覆語意與零 g0501。
 
 - 沿既有 CYID Device／員工認證、allowances-route 與 Windows Cloud Client 新增 `void-create`／`void-status`（僅 schema20＋原旗標允許），跨機建立固定申請 ID 與唯讀查回；無 g0501 送出入口。包含越權、重複、未就緒與 Windows 契約測試。
 
 - **Local**：同一公司／環境＋原折讓號共用永久 g0501 Claim；跨待辦 ID、結果不明及回線重入均不得第二次送出。曾參與 CYID Cloud 的裝置不得僅切回 LocalOnly 即恢復本機 g0501。
 - **CYID Cloud（未對外開放）**：原申請 ID、加密 Frozen、主管重新驗權與官方原號／原發票唯讀驗證、原子核准、永久唯一 Claim、最多一次 g0501、結果不明時原 ID 唯讀查回；保留不可變稽核。
-- **簡化**：移除無法證實實際停機的 Local 設備快照與 Cloud 清冊預檢兩條平行路徑。保留單一 Cloud 控制權啟用門檻（預設拒絕）；舊 Local 裝置停送與舊交易核對在正式切換前人工確認，不另建日常盤點平台。
+- **簡化**：移除無法證實實際停機的 Local 設備快照與 Cloud 清冊預檢兩條平行路徑。Cloud g0501 協調器一律預設禁送；舊 Local 裝置停送與舊交易核對在正式切換前人工確認，不另建日常盤點平台。
 - **驗證／限制**：SQLite／Fake HTTP／Windows CI 覆蓋單次送出、撤權、斷線與回覆遺失；schema20 僅 draft，無 g0501 Worker 路由或真實 AMEGO 操作。真雙機／Local 切 Cloud、正式交易歸因與受控升級尚待驗收；正式 Release 仍 V3.1.0。
 
 ## V3.1.33 Build 0 — 2026/10/21（V3.2-E：Local 折讓作廢）
