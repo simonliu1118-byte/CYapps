@@ -18,7 +18,7 @@ CREATE TABLE allowance_void_authority_gates (
  cutover_manifest_hash TEXT,
  activating_device_id TEXT REFERENCES devices(device_id) ON DELETE RESTRICT,
  activated_at TEXT,
- PRIMARY KEY(workspace_id,environment,seller_invoice),
+ PRIMARY KEY(workspace_id,environment,seller_invoice,company_revision),
  CHECK((state='blocked' AND cutover_manifest_hash IS NULL AND
        activating_device_id IS NULL AND activated_at IS NULL) OR
        (state='cloud_exclusive' AND length(cutover_manifest_hash)=64 AND
