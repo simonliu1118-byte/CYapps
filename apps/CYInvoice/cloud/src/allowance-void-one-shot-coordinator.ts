@@ -176,6 +176,13 @@ export async function executeCloudVoidOnce(
    await active(db,t.workspaceId,t.deviceId)&&
    await cloudCutoverActive(db,t.workspaceId,frozen.environment,
     frozen.sellerInvoice,frozen.companyRevision);
+  if(stillAuthorized){
+   const latestCompany=await loadAmegoCompanySettingsForGateway(
+    db,t.workspaceId,ctx.encryptionKeyHex);
+   stillAuthorized=latestCompany.revision===company.revision&&
+    latestCompany.sellerInvoice===company.sellerInvoice&&
+    latestCompany.amegoAppKey===company.amegoAppKey;
+  }
  }catch{/* Any uncertain authority or D1 state is an irreversible no-POST hold. */}
  if(!stillAuthorized){
   // Distinguish a claimed-but-suppressed POST from an unknown provider result.
