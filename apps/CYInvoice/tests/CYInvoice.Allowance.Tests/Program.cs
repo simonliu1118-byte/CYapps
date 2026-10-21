@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
     ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
     ("Local g0501 changed draft, cancellation and account scope cannot claim", TestLocalVoidScopeAsync),
+    ("Cloud to Local mode toggle cannot restore g0501 after reconnect/restart", TestLocalVoidModeHandoffFenceAsync),
     ("Local g0501 original-number fence blocks competing issue IDs", TestLocalVoidCompetingIssueAsync),
     ("Local g0501 retention preserves pending and audit while pruning unrelated history", TestLocalVoidRetentionAsync),
     ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
@@ -250,6 +251,45 @@ static async Task TestLocalVoidScopeAsync()
     settings.CloudMode=CloudModes.CloudPreferred; setup.Repository.Settings.Save(settings);
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
     Equal(0,api.PostCalls);
+}
+
+static async Task TestLocalVoidModeHandoffFenceAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-cloud-mode-handoff");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);
+    Equal(false,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
+
+    // Enter Cloud once. Merely switching the UI back to LocalOnly must NOT
+    // re-enable local g0501 after another Device might have claimed it.
+    var settings=setup.Repository.Settings.LoadOrCreate();
+    settings.CloudMode=CloudModes.CloudPreferred;
+    setup.Repository.Settings.Save(settings);
+    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
+    settings=setup.Repository.Settings.LoadOrCreate();
+    settings.CloudMode=CloudModes.LocalOnly;
+    setup.Repository.Settings.Save(settings);
+    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
+
+    // Simulated process restart reads the persisted quarantine, not a volatile flag.
+    var resumed=new EmployeeAllowanceVoidWorkflowService(setup.Repository);
+    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
+    Equal(null,resumed.LocalApprovalFor(issue));
+    var queries=api.QueryCalls;
+    await ThrowsAsync<InvalidOperationException>(()=>resumed.PreviewLocalVoidAsync(
+        issue,"2000","AdminPass1",api));
+    await ThrowsAsync<InvalidOperationException>(()=>resumed.ApproveLocalVoidAsync(
+        issue,"2000","AdminPass1","not a real hash",api));
+    await ThrowsAsync<InvalidOperationException>(()=>resumed.SendLocalVoidOnceAsync(
+        issue,"2000","AdminPass1","作廢 ALW-001",api));
+    Equal(queries,api.QueryCalls);
+    Equal(0,api.PostCalls);
+
+    // A stale settings object cannot clear the persisted monotonic quarantine.
+    var stale=setup.Repository.Settings.LoadOrCreate();
+    stale.CloudVoidLocalSendBlocked=false;
+    setup.Repository.Settings.Save(stale);
+    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
 }
 
 static async Task TestLocalVoidCompetingIssueAsync()
