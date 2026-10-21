@@ -176,6 +176,7 @@ CREATE TABLE allowance_void_audit (
  workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id) ON DELETE RESTRICT,
  kind TEXT NOT NULL CHECK(kind IN ('request_created','manager_approved','sending_claimed',
   'accepted_unconfirmed','rejected_unconfirmed','unknown_result',
+  'post_claim_interlock_no_post',
   'official_void_observed_unattributed','official_void_unconfirmed')),
  evidence_hash TEXT NOT NULL DEFAULT '' CHECK(evidence_hash='' OR (length(evidence_hash)=64 AND evidence_hash NOT GLOB '*[^0-9a-f]*')),
  actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 100),
