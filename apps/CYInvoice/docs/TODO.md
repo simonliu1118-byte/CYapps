@@ -14,7 +14,7 @@
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.37 Build 2：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
+| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.37 Build 3：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
 | **V3.2 E Cloud 申請／核准／單次送出核心** | schema20 草案已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
 | **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
 | **V3.2 D/E 員工作廢申請 UI／回線** | 已在原 WinForms 介面新增員工 `void-create`（原號／原發票／原因）、同原號穩定申請 ID 與「先 `void-status`，確認 NotFound 才建立一次」；Fake Cloud／Windows Client 及 CYID 雙裝置路由測試涵蓋遺失回覆後原 ID 查回、B 裝置撤權、公司卡換版拒絕、錯環境、不重建；已核准／待核准顯示分開 | 尚缺 schema20 授權升級、兩台實機人工驗收；不得離線 g0501 或自動重發 |

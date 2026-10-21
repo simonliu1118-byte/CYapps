@@ -416,8 +416,10 @@ static void TestOfficialRemainingGross()
     InvoiceAllowanceMetadata.ApplyQuery(record, [active], summaryPresent: false);
     Equal(1, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
     Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
+    // No allowance[] is not an authoritative deletion; keep the last
+    // observed entry for future reconciliation, but remain fail-closed.
     InvoiceAllowanceMetadata.ApplyQuery(record, [], summaryPresent: false);
-    Equal(0, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
+    Equal(1, InvoiceAllowanceMetadata.ReadOfficial(record).Count);
     Throws<InvalidOperationException>(() => InvoiceAllowanceMetadata.RemainingGross(record));
     InvoiceAllowanceMetadata.ApplyQuery(record, [
         active with { InvoiceStatus = UploadStatuses.Processing }
