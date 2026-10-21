@@ -25,7 +25,10 @@ public static class InvoiceAllowanceMetadata
         // An omitted official summary is unknown, not an authoritative
         // empty history. Keep the last observed entries for future read-only
         // reconciliation, but the false completeness marker forbids sending.
-        if (summaryPresent || !record.ExtensionData.ContainsKey(OfficialAllowancesKey))
+        // Non-empty partial responses still advance legacy manual-review
+        // observations; only a missing/empty summary retains prior history.
+        if (summaryPresent || allowances.Count > 0 ||
+            !record.ExtensionData.ContainsKey(OfficialAllowancesKey))
             record.ExtensionData[OfficialAllowancesKey] =
                 JsonSerializer.SerializeToElement(allowances);
     }
