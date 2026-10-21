@@ -51,6 +51,7 @@
 - **所有交易權威來自光貿**：code=0、相同折讓號、同內容、Cloud 回覆或管理員「已處理」都不單獨代表本次 g0401／g0501 已正式完成。若光貿不提供可信 transaction attribution，就必須明確標示「無法歸因」、走人工查證，不創造假的 confirmed，也不為達標自動再送一次。
 - **Cloud 是協調，不是新官方資料來源**：全程沿用 CYID canonical Role／Workspace／Device contract；應用程式不保存第二份身份 authority、不把一般 work_items.ALLOWANCE 復活、不寫 D1 原始買方與 App Key。結果不明時原號、原 application ID 與 sending ledger 永久安全保留，後續人工處置必須可稽核。
 - **本機回退防線（V3.1.34 Source）**：在既有 SettingsStore 的 settings.json 持續保存 Cloud 曾參與的 Local g0501 禁送標記，僅阻止本機切換回 LocalOnly 後重新核准／送出；已加入重啟及舊設定回寫測試。此記號不是全球租約，無法排除另一台未入網 Local 裝置，不能當作 D/E 全域互斥完成；Cloud Worker g0501 不得因此啟用。
+- **員工原號固定 ID（工程來源）**：在既有 CYID 跨機折讓 WinForms 以員工密碼申請作廢；`CloudAllowanceClient` 將 Workspace／環境／原折讓號映射為固定 SHA-256 申請 ID，先從原 ID 唯讀查回，僅在正式 `VOID_APPLICATION_NOT_FOUND` 時建立一次。斷線、回覆遺失、重啟或改用其他 Device，均不可產生新的申請 ID 補送；由原號重新產生 ID 查回。此設計不驗證全部舊 Local 安裝且不授權 g0501。
 - **主管與 WinForms 工程來源**：既有 `allowances-route` 新增 schema20 限定的 `void-preview`／`void-approve`，用原 CYID Device/主管驗權、雙次官方查證與 D1 原子 Grant；WinForms 主管視窗用原申請 ID 預覽並強制輸入「作廢 原號」，沒有 Cloud g0501 送出入口。此處僅代表 Source／Synthetic CI，遠端仍未升級或驗收。
 - **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。下一步直接完成主管預覽／核准、WinForms 與回線衝突驗收，不再建清冊平台。
 - **簡化後的單一控制權**：Cloud g0501 僅透過既有 CYID Workspace／Device 的 D1 唯一 Claim 與單一 Worker 協調器送出；斷線只能原 ID 查回，不進行離線 g0501。schema20 保留一個預設拒絕的 Cloud 啟用 Gate，待確認現有 Local 裝置已停送、舊 Claim 已人工核對後，才另行受控啟用；不採用設備報表雜湊作為授權，也不新增清冊平台。此批無 Cloudflare 變更、沒有正式路由。
