@@ -121,7 +121,7 @@ public class ReceivableQueryTests
     {
         Assert.Equal(ReceivableQuery.All, ReceivableQuery.Resolve(ReceivableScope.All, "anything"));
         Assert.Equal("CU0001", ReceivableQuery.Resolve(ReceivableScope.Customer, " CU0001 ").Code);
-        Assert.Throws<ArgumentException>(() => ReceivableQuery.Resolve(ReceivableScope.Salesperson, "SP-1"));
+        Assert.Throws<ArgumentException>(() => ReceivableQuery.Resolve(ReceivableScope.Salesperson, "SP_1"));
         Assert.Throws<ArgumentException>(() => ReceivableQuery.Resolve(ReceivableScope.Customer, ""));
     }
 

@@ -142,7 +142,7 @@ public class SalesOrderQueryTests
     {
         var today = new DateOnly(2026, 10, 16);
         Assert.Equal("AC0001", SalesQuery.Resolve(" AC0001 ", null, null, today).CustomerCode);
-        Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC-1", null, null, today));
+        Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC_1", null, null, today));
         Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC0001", today, today.AddDays(-1), today));
         Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC0001", today.AddDays(1), null, today));
     }
