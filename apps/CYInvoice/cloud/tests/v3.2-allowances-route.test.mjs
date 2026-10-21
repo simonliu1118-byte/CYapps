@@ -443,6 +443,8 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
   const missing=await call(applicant,"void-status",{applicationId});
   assert.equal(missing.status,404);
   assert.equal(missing.body.error.code,"VOID_APPLICATION_NOT_FOUND");
+  assert.equal((await call(applicant,"void-create",
+   {...payload,environment:"production"})).status,400);
   const created=await call(applicant,"void-create",payload);
   assert.equal(created.status,200);
   assert.deepEqual(Object.keys(created.body).sort(),[
@@ -455,6 +457,13 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
   assert.equal(same.status,200);
   assert.equal(same.body.applicationId,applicationId);
   assert.equal(same.body.readbackOnly,false);
+  // Synthetic lost CREATE acknowledgement: another enrolled Windows device
+  // can read the exact original ID and must NOT create a second request.
+  const recoveredOnB=await call(applicant,"void-status",{applicationId},rawDevB);
+  assert.equal(recoveredOnB.status,200);
+  assert.equal(recoveredOnB.body.applicationId,applicationId);
+  assert.equal(recoveredOnB.body.status,"open");
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_requests").get().n,1);
   const other=config(f.db,principal("USER","other_employee"),"true","20");
   assert.notEqual((await call(other,"void-status",{applicationId})).status,200);
   assert.equal((await call(lead,"void-status",{applicationId},rawDevB)).status,200);
@@ -488,6 +497,14 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
    throw Error("Unexpected provider request");
   };
   try{
+   // Device B revocation must block manager operations while A stays
+   // enrolled, without any provider read or mutation.
+   f.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devB);
+   assert.notEqual((await call(lead,"void-preview",
+    {applicationId,expectedRevision:1},rawDevB)).status,200);
+   assert.equal(providerReads,0);
+   assert.equal((await call(applicant,"void-status",{applicationId})).status,200);
+   f.sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(devB);
    const view=await call(lead,"void-preview",{applicationId,expectedRevision:1},rawDevB);
    assert.equal(view.status,200,JSON.stringify(view.body));
    assert.equal(view.body.preview.allowanceNumber,"ALW-001");
@@ -506,6 +523,12 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
    assert.equal((await call(lead,"void-approve",
     {...body,confirmation:"作廢 WRONG"},rawDevB)).status,409);
    assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+   // A company-card revision change invalidates the official preview.
+   // Restoring this synthetic fixture is not a production rollback.
+   f.sql.prepare("UPDATE company_settings SET revision=2 WHERE workspace_id=?").run(ws);
+   assert.equal((await call(lead,"void-approve",body,rawDevB)).status,409);
+   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+   f.sql.prepare("UPDATE company_settings SET revision=1 WHERE workspace_id=?").run(ws);
    const approved=await call(lead,"void-approve",body,rawDevB);
    assert.equal(approved.status,200,JSON.stringify(approved.body));
    assert.equal(approved.body.status,"approved");
