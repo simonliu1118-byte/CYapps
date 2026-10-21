@@ -30,8 +30,13 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
 
     private void RequireNoApiClaim(InvoiceSyncIssue issue)
     {
-        if (new LocalAllowanceVoidStore(repository.DataDirectory).Find(issue.AccountKey, issue.Id)?.Claimed == true)
-            throw new InvalidOperationException("折讓作廢已進入送出或待查狀態，不可人工結案或取消；只能原號查回");
+        var store = new LocalAllowanceVoidStore(repository.DataDirectory);
+        // A new local issue ID, including one recreated after a mode change, is
+        // not proof that the original allowance number was never submitted.
+        var review = ReadReview(FindIssueRecord(issue));
+        if (store.Find(issue.AccountKey, issue.Id)?.Claimed == true ||
+            (review is not null && store.HasClaimForAllowance(issue.AccountKey, review.AllowanceNumber)))
+            throw new InvalidOperationException("原折讓單號已有送出紀錄，不可再次送出、人工結案或取消；只能依原申請查回");
     }
 
     private (InvoiceRecord Record, InvoiceAllowanceVoidManualReview Review) ApiRequest(InvoiceSyncIssue issue)
