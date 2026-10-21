@@ -17,6 +17,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("V3.1 manager read-only cloud Work Item list/get and strict server reply", CloudWorkItemClientTests.RunAsync),
     ("V3.2 CYID allowance client create/list/review/approve/reserve and no retry", CloudAllowanceClientTests.RunAsync),
     ("V3.2 E CYID void application and original-ID strict readback", CloudAllowanceClientTests.RunVoidAsync),
+    ("V3.2 E CYID manager official preview and approval cannot authorize g0501", CloudAllowanceClientTests.RunVoidManagerAsync),
     ("V3.2 Cloud manager collision reservation, evidence history and no retry", CloudAllowanceCollisionClientTests.RunAsync),
     ("V3.2 applicant frozen draft and original application ID envelope", CloudAllowanceSubmissionTests.RunAsync),
     ("V3.1 opaque local issue references and allowance separation", () => { CloudLocalWorkItemReferenceTests.Run(); return Task.CompletedTask; }),
