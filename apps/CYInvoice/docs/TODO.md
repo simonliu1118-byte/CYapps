@@ -22,7 +22,7 @@
 | **V3.2 D／E Local→Cloud 權威封鎖** | 既有 SettingsStore.Save 已加入持續保留的 Cloud 曾參與標記（cloud_void_local_send_blocked），只要裝置曾切換 Cloud 或保留 Cloud/CYID 裝置／公司授權，Local g0501 預覽／核准／送出均 fail-closed；重新切 LocalOnly、舊設定覆寫與重啟測試已補 | 只能防本機模式回退，不能證明其他未連線裝置沒送；Cloud g0501 路由仍停用，完整跨機交接／原 D1 升級與真測未完成 |
 | **V3.2 D／E 回線唯讀查回** | 已補 Cloud 原 application ID 重讀永久 Claim，逐原號觀察 D0401／99、D0501／99 或離線／無法解析；任何狀態均不可自動重送／結案，無 Claim 也不能推定 Local 未送；合成測試含權限撤銷 | Cloud/Local 尚無可證明的全域互斥權威，Worker g0501 路由持續禁止，需完成受控 owner 移轉與回線衝突政策 |
 | **V3.2 E Cloud g0501 Transport** | 已具內部簽名單次傳輸、原 ID claim-first 協調器及唯讀官方查回；g0501 結果不歸因、不自動重送／結案 | 無外部路由與正式 D1，先完成 Cloud/Local 全域權威互斥及實機驗收 |
-| **V3.2 E Local 作廢** | 官方原號預覽、主管凍結核准／文字確認、唯一 g0501 及 D0501／99 觀察已有 Source／合成測試；另補原號 claim 防不同本機待辦 ID 繞過結案；原號未歸因不結案 | CYID g0501、D 離線／回線、跨多原發票流程與真測仍待完成；未操作 Cloudflare 或真光貿 |
+| **V3.2 E Local 作廢** | 官方原號預覽、主管凍結核准／文字確認、唯一 g0501 及 D0501／99 觀察已有 Source／合成測試；另補原號 claim 防不同本機待辦 ID 繞過結案；原號未歸因不結案 | CYID 申請／核准／查回已有工程碼與雙裝置合成 CI；Cloud g0501 送出仍停用。D 離線／回線、跨多原發票流程、Local→Cloud 控制權切換與真機／真光貿測試仍待完成；未操作 Cloudflare 或真光貿 |
 | **V3.2 Batch 1 Cloud 主管覆核／改配號** | 明確首次占號拒絕＋完整不同買方／原發票證據；原主管文字確認後重新驗權及查證；原子追加下一 attempt／前後號 Audit，沿用唯一單次送出 | source／合成測試與 Windows 工程介面；schema19 已有 canonical 來源；遠端受控升級、正式歸因政策及真雙機光貿未完成，不可宣告 B/C 結案 |
 | **V3.2 Batch 1 Local 主管 UI** | V3.1.29 Build 0：原折讓待辦明細對 occupied_external 顯示主管覆核新號入口；重新登入／輸入明確文字／後端再查，僅新預留不重送；sending 仍只可唯讀查回。Cloud 主管改配號已有 V3.1.31 工程碼，實測未完成 | 精確 head Windows／Cloud／Governance CI；Cloud 持久人工 Audit 與受控操作、實機驗收保留待辦 |
 | **V3.2 Batch 1 下一號受控操作** | V3.1.28 Build 1 Local 新號僅預留：原 g0401 回覆明確占號 + 官方查回為不同買方／不同原發票 + 主管即時雙重驗證 + append-only 重新配號稽核。此為新工程 Source／合成測試，無真光貿送出 | Local／Cloud 人工 UI 與受控改配號已有工程碼；真正可歸因裁決與實機驗收仍待完成；不可把預留當成功 |
