@@ -167,6 +167,15 @@ try{
  await rejects("VOID_APPROVAL_MANAGER_REQUIRED",()=>approve(db,approval,ctx,
   authority(applicant),official,()=>time));
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+ // D1.batch must rollback BOTH statements on an append-only audit failure.
+ sql.exec("CREATE TRIGGER synthetic_grant_audit_failure BEFORE INSERT ON allowance_void_audit "+
+  "WHEN NEW.kind='manager_approved' BEGIN SELECT RAISE(ABORT,'SYNTHETIC_AUDIT_FAILED'); END;");
+ await rejects("VOID_APPROVAL_UNCONFIRMED_READBACK_ONLY",()=>approve(db,approval,
+  ctx,authority(supervisor),official,()=>time));
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
+ assert.equal(sql.prepare("SELECT status FROM allowance_void_requests WHERE application_id=?")
+  .get(request.applicationId).status,"open");
+ sql.exec("DROP TRIGGER synthetic_grant_audit_failure");
  const approved=await approve(db,approval,ctx,authority(supervisor),official,()=>time);
  assert.equal(approved.approvedRevision,2);
  assert.equal(approved.mayPostG0501,false);
