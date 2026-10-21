@@ -6,6 +6,7 @@
 
 - 修正 Local g0501 已有永久送出紀錄時，重新建立的另一個待辦 ID 可能略過取消／人工結案的檢查；改用公司／環境＋原折讓號查同一個既有 SQLite claim。
 - 新申請及主管處理也查原號 claim；同號不得再次申請送出，已送出者只能從原 ID 唯讀查回。新增跨待辦 ID、重啟、回覆遺失、不得繞過人工結案的合成回歸。
+- 從歷史 Draft 選擇性回收 Cloud g0501 單次簽名傳輸與 allowance_status 原號唯讀查回，加入隔離 Fake HTTP 回歸；僅內部 transport，未建立任何允許送出交易的 Worker HTTP route。D0501／99 仍不可歸因本次 POST，不授權自動結案／重送。
 - 只補既有 Local 安全防線，不宣稱已解決跨實體裝置的 Cloud/Local 全域競爭；CYID g0501 仍待 Cloud 統一協調與驗收。無遠端部署／真光貿；正式 Release 維持 V3.1.0。
 
 ## V3.1.33 Build 0 — 2026/10/21（V3.2-E：Local 折讓作廢）
