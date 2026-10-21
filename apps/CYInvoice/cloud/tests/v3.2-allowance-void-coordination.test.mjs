@@ -76,6 +76,12 @@ try{
  sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(manager);
  assert.throws(()=>grant(),/VOID_APPROVAL_SOURCE_INVALID/);
  sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(manager);
+ // A malformed or overlong manager approval cannot become a valid send claim.
+ assert.throws(()=>sql.prepare("INSERT INTO allowance_void_approvals "+
+  "(application_id,workspace_id,request_hash,official_snapshot_hash,manager_actor_id,"+
+  "manager_device_id,approved_at,valid_until_utc) VALUES(?,?,?,?,?,?,?,?)")
+  .run(app,ws,b,proof,"manager",manager,approved,"2026-10-21T09:18:00.000Z"),
+  /CHECK constraint failed/);
  grant();
  assert.throws(()=>sql.prepare("UPDATE allowance_void_requests SET request_hash=? WHERE application_id=?")
   .run(a,app),/VOID_REQUEST_IMMUTABLE_OR_UNAPPROVED/);
