@@ -15,6 +15,24 @@ export interface OfficialVoidProof {
  canApproveWithoutFullReview:false;
  canSendWithoutDurableClaim:false;proofOfOurVoidPost:false;
 }
+// Shared g0501 invariants, not an authorization or a new source of truth.
+// All callers must still perform their own post-IO CYID and D1 rechecks.
+export function sameVoidCompanyCard(
+ first:{revision:number;sellerInvoice:string;amegoAppKey:string},
+ last:{revision:number;sellerInvoice:string;amegoAppKey:string}
+):boolean{
+ return first.revision===last.revision&&
+  first.sellerInvoice===last.sellerInvoice&&
+  first.amegoAppKey===last.amegoAppKey;
+}
+export function freshVoidOfficialEvidence(
+ checkedAtUtc:string,now:Date
+):boolean{
+ const checked=Date.parse(checkedAtUtc);
+ return now instanceof Date&&Number.isFinite(now.valueOf())&&
+  Number.isFinite(checked)&&checked<=now.valueOf()+1000&&
+  now.valueOf()-checked<=60_000;
+}
 const QUERY="https://invoice-api.amego.tw/json/allowance_query";
 function dict(v:unknown):Record<string,unknown>{
  if(!v||typeof v!=="object"||Array.isArray(v))
