@@ -507,6 +507,8 @@ internal static class Program
         catch (IOException error)
             when (error.Message.Contains("150 筆", StringComparison.Ordinal)) { }
         Equal(1, issueStore.Unresolved(Environments.Production + "|12345675").Count);
+        Equal(null, new InvoiceSyncStateStore(repository.DataDirectory)
+            .LastSuccess(Environments.Production + "|12345675", "daily-two-period"));
         // After a normal daily pass the notice is resolved, never silently deleted.
         fake.AllowancePages[1] = new AllowanceListResponse(1, []);
         await automatic.SyncAsync();
@@ -515,8 +517,8 @@ internal static class Program
             record.IssueType == InvoiceSyncIssueTypes.AllowanceLimitExceeded &&
             record.ResolvedUtc is not null));
         Equal(0, fake.QueryByInvoiceCalls);
-        Equal(null, new InvoiceSyncStateStore(repository.DataDirectory)
-            .LastSuccess(Environments.Production + "|12345675", "daily-two-period"));
+        Equal(true, new InvoiceSyncStateStore(repository.DataDirectory)
+            .LastSuccess(Environments.Production + "|12345675", "daily-two-period") is not null);
     }
 
     private static async Task TestAllowanceListCapacityAsync()
