@@ -41,18 +41,20 @@ const authority=(a=applicant)=>({revalidate:async()=>a});
 const request={workspaceId:ws,deviceId:employee,applicationId:"void_application_first",
  environment:"test",allowanceNumber:"ALW-001",originalInvoiceNumber:"AB12345678",
  reason:"Synthetic review request"};
-let throwAfterWrite=false,loseClaimAcknowledgement=false,stopImmediatelyAfterClaim=false;
+let throwAfterWrite=false,loseClaimAcknowledgement=false,stopImmediatelyAfterClaim=false,revokeBeforeClaim=false;
 class Statement{
  constructor(q){this.q=q;this.args=[];}
  bind(...args){this.args=args;return this;}
  async first(){return sql.prepare(this.q).get(...this.args)??null;}
  async run(){
+  if(revokeBeforeClaim&&this.q.includes("INSERT INTO allowance_void_send_claims")){
+   revokeBeforeClaim=false;
+   active(managerDevice,"revoked");
+  }
   const result=sql.prepare(this.q).run(...this.args);
   if(stopImmediatelyAfterClaim&&this.q.includes("INSERT INTO allowance_void_send_claims")){
    stopImmediatelyAfterClaim=false;
-   sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
-    "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
-    "WHERE workspace_id=? AND company_revision=2").run(ws);
+   active(managerDevice,"revoked");
   }
   if(loseClaimAcknowledgement&&this.q.includes("INSERT INTO allowance_void_send_claims")){
    loseClaimAcknowledgement=false;
@@ -185,18 +187,6 @@ try{
  await rejects("VOID_APPROVAL_MANAGER_REQUIRED",()=>approve(db,approval,ctx,
   authority(applicant),official,()=>time));
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
- // Even a verified CYID manager cannot approve without a separately audited
- // Local-to-Cloud cutover (this fixture records synthetic evidence only).
- await rejects("VOID_APPROVAL_UNCONFIRMED_READBACK_ONLY",()=>approve(db,approval,
-  ctx,authority(supervisor),official,()=>time));
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,0);
- const manifest="e".repeat(64);
- const activateGate=(revision)=>sql.prepare("INSERT INTO allowance_void_authority_gates "+
-  "(workspace_id,environment,seller_invoice,company_revision,state,"+
-  "cutover_manifest_hash,activating_device_id,activated_at) "+
-  "VALUES(?,'test','12345678',?,'cloud_exclusive',?,?,?)")
-  .run(ws,revision,manifest,managerDevice,"2026-10-21T08:55:00.000Z");
- activateGate(1);
  // D1.batch must rollback BOTH statements on an append-only audit failure.
  sql.exec("CREATE TRIGGER synthetic_grant_audit_failure BEFORE INSERT ON allowance_void_audit "+
   "WHEN NEW.kind='manager_approved' BEGIN SELECT RAISE(ABORT,'SYNTHETIC_AUDIT_FAILED'); END;");
@@ -239,32 +229,29 @@ try{
  };
  await rejects("VOID_EXEC_NOT_APPROVED_OR_CONFIRMATION_INVALID",()=>executeVoid(db,
   {...onceTarget,confirmation:"作廢 OTHER"},ctx,authority(supervisor),
-  fakeOneShot,()=>time));
+  fakeOneShot,()=>time,true));
  active(managerDevice,"revoked");
  await rejects("VOID_EXEC_MANAGER_REQUIRED",()=>executeVoid(db,onceTarget,
-  ctx,authority(supervisor),fakeOneShot,()=>time));
+  ctx,authority(supervisor),fakeOneShot,()=>time,true));
  active(managerDevice,"active");
  assert.equal(posts,0);
- // Emergency stop after Grant, before sending: the D1 Claim must reject
- // atomically. No network POST, no automatic fallback to Local.
- sql.exec("SAVEPOINT cloud_void_cutover_stop");
- const stopAtFinalOfficialStatus=async(url,options)=>{
+ await rejects("VOID_EXEC_SEND_DISABLED",()=>executeVoid(db,onceTarget,
+  ctx,authority(supervisor),fakeOneShot,()=>time));
+ assert.equal(posts,0);
+ // Revoke manager exactly before atomic D1 Claim. Any preflight alone
+ // is insufficient: the claim guard must prevent the provider request.
+ const revokeDuringOfficial=async(url,options)=>{
   const response=await fakeOneShot(url,options);
-  if(url.endsWith("/allowance_status"))
-   sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
-    "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
-    "WHERE workspace_id=? AND company_revision=1").run(ws);
+  if(url.endsWith("/allowance_status"))revokeBeforeClaim=true;
   return response;
  };
- // First cutover check passes; then emergency stop during official IO.
- // The atomic D1 claim trigger must deny the mutation; ZERO provider POST.
  await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
-  onceTarget,ctx,authority(supervisor),stopAtFinalOfficialStatus,()=>time));
+  onceTarget,ctx,authority(supervisor),revokeDuringOfficial,()=>time,true));
  assert.equal(posts,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
- sql.exec("ROLLBACK TO cloud_void_cutover_stop; RELEASE cloud_void_cutover_stop");
+ active(managerDevice,"active");
  const sent=await executeVoid(db,onceTarget,ctx,authority(supervisor),
-  fakeOneShot,()=>time);
+  fakeOneShot,()=>time,true);
  assert.equal(sent.outcome,"accepted_unconfirmed");
  assert.equal(sent.providerPostAttempted,true);
  assert.equal(sent.auditRecorded,true);
@@ -275,7 +262,7 @@ try{
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,4);
  await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
-  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time));
+  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time,true));
  assert.equal(posts,1,"Re-entry after a permanent claim must not POST again");
  assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
   deviceId:employee},authority()),{
@@ -345,8 +332,6 @@ try{
   allowanceNumber:"ALW-002"},ctx,authority());
  assert.equal(afterCard.status,"open");
  assert.equal(count(),2);
- // A rotated company card requires fresh cutover proof, not the old revision.
- activateGate(2);
  let changed=0;
  await rejects("VOID_APPLICATION_AUTH_CHANGED",()=>read(db,{workspaceId:ws,
   applicationId:request.applicationId,deviceId:employee},{
@@ -383,16 +368,16 @@ try{
  loseClaimAcknowledgement=true;
  await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
   ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
-  ctx,authority(supervisor),officialSecond,()=>time));
+  ctx,authority(supervisor),officialSecond,()=>time,true));
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,2);
  const lost=await read(db,{...target2,deviceId:employee},authority());
  assert.equal(lost.claimed,true);
  assert.equal(lost.readbackOnly,true);
  await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
   ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
-  ctx,authority(supervisor),officialSecond,()=>time));
+  ctx,authority(supervisor),officialSecond,()=>time,true));
  assert.equal(posts,1,"Lost claim acknowledgement must not create a second POST");
- // Emergency stop AFTER durable Claim is committed prevents the FIRST POST.
+ // Device revoked AFTER durable Claim is committed prevents the FIRST POST.
  // The original claim remains permanent, auditable and readback-only.
  const third={...request,applicationId:"void_application_third",
   allowanceNumber:"ALW-004"};
@@ -413,7 +398,7 @@ try{
  stopImmediatelyAfterClaim=true;
  await rejects("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST",()=>executeVoid(db,{
   ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
- },ctx,authority(supervisor),officialThird,()=>time));
+ },ctx,authority(supervisor),officialThird,()=>time,true));
  assert.equal(posts,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,3);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit "+
@@ -421,9 +406,10 @@ try{
  const thirdRead=await read(db,{...target3,deviceId:employee},authority());
  assert.equal(thirdRead.claimed,true);
  assert.equal(thirdRead.readbackOnly,true);
- await rejects("VOID_EXEC_CUTOVER_NOT_AUTHORIZED",()=>executeVoid(db,{
+ active(managerDevice,"active");
+ await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
   ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
- },ctx,authority(supervisor),officialThird,()=>time));
+ },ctx,authority(supervisor),officialThird,()=>time,true));
  assert.equal(posts,1);
  console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
 }finally{sql.close();}
