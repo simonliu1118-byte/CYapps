@@ -30,6 +30,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             var settings = repository.Settings.LoadOrCreate();
             return repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                 settings.CloudMode == CloudModes.LocalOnly &&
+                !settings.CloudVoidLocalSendBlocked &&
                 settings.CloudWorkspaceId.Length == 0 &&
                 settings.CloudDeviceId.Length == 0 &&
                 settings.CloudIdentityProvider != "CYID" &&
