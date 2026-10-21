@@ -32,6 +32,9 @@ internal sealed class ErpAgentClient : IDisposable
     public Task CompleteAsync(string jobId, string body, CancellationToken cancellationToken) =>
         PostAsync(ErpAgentProtocol.CompletePath(jobId), body, cancellationToken);
 
+    public Task ProgressAsync(string jobId, string body, CancellationToken cancellationToken) =>
+        PostAsync(ErpAgentProtocol.ProgressPath(jobId), body, cancellationToken);
+
     private async Task<string> PostAsync(string path, string body, CancellationToken cancellationToken)
     {
         using var content = new StringContent(body, Encoding.UTF8, "application/json");

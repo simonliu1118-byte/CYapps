@@ -117,5 +117,6 @@ internal sealed record HistoryRange(DateOnly? From, DateOnly? To)
 /// <summary>What a query looks up besides INVI02: 查歷史異動 only when asked (user, 2026-10-16).</summary>
 internal sealed record ItemQueryOptions(HistoryRange? History)
 {
+
     public static readonly ItemQueryOptions Default = new((HistoryRange?)null);
 }

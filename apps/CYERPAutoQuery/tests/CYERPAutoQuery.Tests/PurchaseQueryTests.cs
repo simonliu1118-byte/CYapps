@@ -91,7 +91,7 @@ public class PurchaseQueryTests
     {
         var today = new DateOnly(2026, 10, 18);
         Assert.Equal("SU0001", PurchaseQuery.Resolve(" SU0001 ", null, null, today).SupplierCode);
-        Assert.Throws<ArgumentException>(() => PurchaseQuery.Resolve("SU-01", null, null, today));
+        Assert.Throws<ArgumentException>(() => PurchaseQuery.Resolve("SU_01", null, null, today));
         Assert.Throws<ArgumentException>(() => PurchaseQuery.Resolve("SU0001", today.AddDays(1), null, today));
         Assert.Throws<ArgumentException>(() => PurchaseQuery.Resolve("SU0001", today, today.AddDays(-1), today));
         Assert.True(PurchaseReportLayout.Report.IsTitle("進貨單明細表[假公司]"));

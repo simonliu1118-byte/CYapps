@@ -25,16 +25,25 @@ public class ItemCodeRulesTests
         Assert.False(ItemCodeRules.TryNormalize(input, out _, out _));
 
     [Theory]
-    [InlineData("A-01")]
+    [InlineData("-A01")]
     [InlineData("A01/2")]
     [InlineData("C00154.")]
     [InlineData("Ｃ00154")]
     [InlineData("穴位貼")]
     [InlineData("C00154'")]
-    public void RejectsAnythingButAsciiLettersAndDigits(string input)
+    public void RejectsAnythingButAsciiLettersDigitsAndDash(string input)
     {
         Assert.False(ItemCodeRules.TryNormalize(input, out _, out var error));
-        Assert.Equal("品號只能輸入英文字母與數字。", error);
+        Assert.Equal("品號只能輸入英文字母、數字與「-」。", error);
+    }
+
+    [Theory]
+    [InlineData("K1807003-1")]
+    [InlineData("A-01")]
+    public void AcceptsADash(string input)
+    {
+        Assert.True(ItemCodeRules.TryNormalize(input, out var code, out _));
+        Assert.Equal(input, code);
     }
 
     [Fact]
