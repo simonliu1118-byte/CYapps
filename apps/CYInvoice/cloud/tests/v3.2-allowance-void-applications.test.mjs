@@ -94,12 +94,21 @@ try{
  await rejects("VOID_APPLICATION_AUTH_REQUIRED",()=>read(db,{workspaceId:ws,
   applicationId:request.applicationId,deviceId:employee},authority()));
  active(employee,"active");
- sql.prepare("UPDATE company_settings SET revision=2 WHERE workspace_id=?").run(ws);
- await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
-  ...request,applicationId:"void_after_company_change",allowanceNumber:"ALW-002"},ctx,authority()));
- // A new card revision is valid for a NEW request; existing request remains
- // permanently bound to its original card/number fingerprint.
+ // A mid-flight company revision change must invalidate the request before INSERT.
+ let revCalls=0;
+ await rejects("VOID_APPLICATION_COMPANY_CHANGED",()=>create(db,{
+  ...request,applicationId:"void_midflight_revision",allowanceNumber:"ALW-002"},
+  ctx,{revalidate:async()=>{
+    if(++revCalls===2)
+     sql.prepare("UPDATE company_settings SET revision=2 WHERE workspace_id=?").run(ws);
+    return applicant;
+  }}));
  assert.equal(count(),1);
+ // A new card revision is valid for a NEW request, while old records remain immutable.
+ const afterCard=await create(db,{...request,applicationId:"void_after_company_change",
+  allowanceNumber:"ALW-002"},ctx,authority());
+ assert.equal(afterCard.status,"open");
+ assert.equal(count(),2);
  let changed=0;
  await rejects("VOID_APPLICATION_AUTH_CHANGED",()=>read(db,{workspaceId:ws,
   applicationId:request.applicationId,deviceId:employee},{
@@ -109,14 +118,14 @@ try{
  // Ambiguous D1 replies have an original-ID readback without retrying INSERT.
  throwAfterWrite=true;
  const second={...request,applicationId:"void_application_second",
-  allowanceNumber:"ALW-002"};
+  allowanceNumber:"ALW-003"};
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,second,ctx,authority()));
- assert.equal(count(),2);
+ assert.equal(count(),3);
  const checked=await read(db,{workspaceId:ws,
   applicationId:second.applicationId,deviceId:employee},authority());
  assert.equal(checked.applicationId,second.applicationId);
  assert.equal(checked.claimed,false);
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,second,ctx,authority()));
- assert.equal(count(),2);
+ assert.equal(count(),3);
  console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
 }finally{sql.close();}
