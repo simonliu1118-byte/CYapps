@@ -184,6 +184,11 @@ internal static class AutomaticRetentionTests
             return Task.FromResult(new InvoiceListResponse(0, "", 1, page, 0, []));
         }
 
+        public Task<AllowanceListResponse> ListAllowancesAsync(
+            DateOnly startDate, DateOnly endDate, int page = 1, int limit = 20,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AllowanceListResponse(1, []));
+
         public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default)
         {
             QueryCalls++;
