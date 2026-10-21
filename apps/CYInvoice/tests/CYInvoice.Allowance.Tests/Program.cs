@@ -271,10 +271,12 @@ static async Task TestLocalVoidModeHandoffFenceAsync()
     setup.Repository.Settings.Save(settings);
     Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
 
-    // Simulated process restart reads the persisted quarantine, not a volatile flag.
-    var resumed=new EmployeeAllowanceVoidWorkflowService(setup.Repository);
-    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
-    Equal(null,resumed.LocalApprovalFor(issue));
+    // Actual reopen from disk must preserve the guard across process restart.
+    var reopened=TestRepository.Open(temporary.Path,new TestProtector());
+    var resumed=new EmployeeAllowanceVoidWorkflowService(reopened);
+    Equal(true,reopened.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
+    if (resumed.LocalApprovalFor(issue) is not null)
+        throw new Exception("Cloud ownership must hide Local-only g0501 approval.");
     var queries=api.QueryCalls;
     await ThrowsAsync<InvalidOperationException>(()=>resumed.PreviewLocalVoidAsync(
         issue,"2000","AdminPass1",api));
