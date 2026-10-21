@@ -46,6 +46,9 @@ public sealed class Settings
     [JsonPropertyName("cloud_company_applied_seller")] public string CloudCompanyAppliedSellerInvoice { get; set; } = string.Empty;
     [JsonPropertyName("invoice_printer_name")] public string InvoicePrinterName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_mode")] public string CloudMode { get; set; } = CloudModes.LocalOnly;
+    // Monotonic safety quarantine: any prior Cloud participation forbids returning to local g0501.
+    // SettingsStore.Save carries the existing true value forward across mode changes.
+    [JsonPropertyName("cloud_void_local_send_blocked")] public bool CloudVoidLocalSendBlocked { get; set; }
     [JsonPropertyName("cloud_base_url")] public string CloudBaseUrl { get; set; } = string.Empty;
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;
