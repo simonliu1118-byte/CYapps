@@ -2,7 +2,9 @@
 // This does not execute or authorize g0501. The public route and send gate
 // remain absent while cross-device and offline/Local coordination is unproven.
 import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext}
+import {activeVoidDevice,isVoidManager,sameVoidManager}
+ from "./allowance-void-applications";
+import type {AllowanceActorSource,CloudAllowanceContext}
  from "./allowance-frozen-store";
 export interface CloudVoidApprovalTarget {
  workspaceId:string;applicationId:string;deviceId:string;
@@ -18,24 +20,6 @@ const WS=/^ws_[A-Za-z0-9_-]{3,100}$/;
 const ID=/^[A-Za-z0-9_-]{8,100}$/;
 const DEVICE=/^dev_[0-9a-f-]{36}$/;
 const HASH=/^[0-9a-f]{64}$/;
-function manager(a:AllowanceActor|null,ws:string):a is AllowanceActor {
- return !!a&&a.workspaceId===ws&&
-  (a.workspaceRole==="ADMIN"||a.workspaceRole==="SUPER_ADMIN")&&
-  typeof a.employeeId==="string"&&a.employeeId.length>0&&
-  a.employeeId.length<=100;
-}
-function sameManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolean{
- return manager(a,ws)&&manager(b,ws)&&
-  a.employeeId===b.employeeId&&a.workspaceRole===b.workspaceRole;
-}
-async function active(db:D1Database,ws:string,dev:string):Promise<boolean>{
- return !!await db.prepare("SELECT d.device_id FROM devices d "+
-  "JOIN workspaces w ON w.workspace_id=d.workspace_id "+
-  "WHERE w.workspace_id=?1 AND w.status='active' "+
-  "AND d.device_id=?2 AND d.status='active' "+
-  "AND d.employee_authority_state='cloud' LIMIT 1")
-  .bind(ws,dev).first<{device_id:string}>();
-}
 export async function approveCloudVoidAfterOfficialProof(
  db:D1Database,t:CloudVoidApprovalTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
@@ -47,7 +31,7 @@ export async function approveCloudVoidAfterOfficialProof(
   typeof t.confirmation!=="string")
   throw new Error("VOID_APPROVAL_TARGET_INVALID");
  const first=await authority.revalidate();
- if(!manager(first,t.workspaceId)||!await active(db,t.workspaceId,t.deviceId))
+ if(!isVoidManager(first,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_APPROVAL_MANAGER_REQUIRED");
  // Trusted preview decrypts frozen request, verifies its keyed HMAC and makes
  // two fresh official read-only calls; it revalidates the actor after IO.
@@ -57,8 +41,8 @@ export async function approveCloudVoidAfterOfficialProof(
   t.confirmation!=="作廢 "+proof.allowanceNumber)
   throw new Error("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID");
  const current=await authority.revalidate();
- if(!sameManager(first,current,t.workspaceId)||
-  !await active(db,t.workspaceId,t.deviceId))
+ if(!sameVoidManager(first,current,t.workspaceId)||
+  !await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_APPROVAL_AUTH_CHANGED");
  const date=clock();
  if(!(date instanceof Date)||!Number.isFinite(date.valueOf()))
