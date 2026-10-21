@@ -11,6 +11,8 @@ internal sealed class CloudAllowanceManagerForm : Form
 {
     private readonly HttpClient http=new(new HttpClientHandler{AllowAutoRedirect=false});
     private readonly CloudAllowanceClient? client;
+    private readonly string? cloudWorkspaceId;
+    private readonly string cloudEnvironment="test";
     private readonly CancellationTokenSource lifetime=new();
     private readonly TextBox employeeNo=new(){Width=85,MaxLength=4,PlaceholderText="員工編號"};
     private readonly TextBox password=new(){Width=190,UseSystemPasswordChar=true,
@@ -28,6 +30,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button review=UiControls.StandardButton("接手覆核");
     private readonly Button preview=UiControls.StandardButton("預覽官方資料");
     private readonly Button approve=UiControls.StandardButton("主管核准");
+    private readonly Button createVoid=UiControls.StandardButton("員工提出作廢");
     private readonly Button voidPreview=UiControls.StandardButton("作廢原 ID 預覽");
     private readonly Button voidApprove=UiControls.StandardButton("作廢主管核准");
     private readonly Button voidStatus=UiControls.StandardButton("作廢原 ID 查回");
@@ -62,6 +65,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         review.Click+=async(_,_)=>await ReviewAsync();
         preview.Click+=async(_,_)=>await PreviewAsync();
         approve.Click+=async(_,_)=>await ApproveAsync();
+        createVoid.Click+=async(_,_)=>await CreateVoidAsync();
         voidPreview.Click+=async(_,_)=>await PreviewVoidAsync();
         voidApprove.Click+=async(_,_)=>await ApproveVoidAsync();
         voidStatus.Click+=async(_,_)=>await ReadVoidStatusAsync();
@@ -90,14 +94,16 @@ internal sealed class CloudAllowanceManagerForm : Form
         client=new CloudAllowanceClient(http,
             new Uri(setting.CloudBaseUrl,UriKind.Absolute),
             repository.Settings.CloudDeviceToken(setting));
-        status.Text="輸入本次 CYID 主管帳密，再按重新整理。申請與送出分開處理。";
+        cloudWorkspaceId=setting.CloudWorkspaceId;
+        cloudEnvironment=setting.Environment;
+        status.Text="輸入本次 CYID 員工／主管帳密；員工可申請作廢，只有主管可預覽及核准。";
     }
     private void BuildLayout()
     {
         var credentials=new FlowLayoutPanel{Dock=DockStyle.Fill,
             FlowDirection=FlowDirection.LeftToRight,WrapContents=true,
             AutoScroll=true,Padding=new Padding(4)};
-        credentials.Controls.Add(new Label{AutoSize=true,Text="CYID 主管身份",Margin=new Padding(4,10,5,0)});
+        credentials.Controls.Add(new Label{AutoSize=true,Text="CYID 員工／主管",Margin=new Padding(4,10,5,0)});
         credentials.Controls.Add(employeeNo);credentials.Controls.Add(password);
         credentials.Controls.Add(refresh);
         var actions=new FlowLayoutPanel{Dock=DockStyle.Fill,
@@ -107,6 +113,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         actions.Controls.Add(details);
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
+        actions.Controls.Add(createVoid);
         actions.Controls.Add(voidPreview);actions.Controls.Add(voidApprove);
         actions.Controls.Add(voidStatus);
         actions.Controls.Add(reserveAfterCollision);
@@ -136,6 +143,7 @@ internal sealed class CloudAllowanceManagerForm : Form
         review.Enabled=ready&&selected?.Status=="open";
         preview.Enabled=ready&&selected?.Status=="review";
         approve.Enabled=ready&&selected?.Status=="review";
+        createVoid.Enabled=ready&&cloudWorkspaceId is not null;
         voidPreview.Enabled=ready&&searchId.Text.Trim().Length>=8;
         voidStatus.Enabled=ready&&searchId.Text.Trim().Length>=8;
         voidApprove.Enabled=ready&&pendingVoidPreview is not null&&
@@ -534,7 +542,8 @@ internal sealed class CloudAllowanceManagerForm : Form
            form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
            form.sendOnce.Enabled||form.inspect.Enabled||
            form.manualReview.Enabled||form.manualHistory.Enabled||
-           form.reserveAfterCollision.Enabled||form.voidPreview.Enabled||
+           form.reserveAfterCollision.Enabled||form.createVoid.Enabled||
+           form.voidPreview.Enabled||
            form.voidApprove.Enabled||form.voidStatus.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
