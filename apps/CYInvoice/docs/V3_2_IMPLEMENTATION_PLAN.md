@@ -51,6 +51,7 @@
 - **所有交易權威來自光貿**：code=0、相同折讓號、同內容、Cloud 回覆或管理員「已處理」都不單獨代表本次 g0401／g0501 已正式完成。若光貿不提供可信 transaction attribution，就必須明確標示「無法歸因」、走人工查證，不創造假的 confirmed，也不為達標自動再送一次。
 - **Cloud 是協調，不是新官方資料來源**：全程沿用 CYID canonical Role／Workspace／Device contract；應用程式不保存第二份身份 authority、不把一般 work_items.ALLOWANCE 復活、不寫 D1 原始買方與 App Key。結果不明時原號、原 application ID 與 sending ledger 永久安全保留，後續人工處置必須可稽核。
 - **本機回退防線（V3.1.34 Source）**：在既有 SettingsStore 的 settings.json 持續保存 Cloud 曾參與的 Local g0501 禁送標記，僅阻止本機切換回 LocalOnly 後重新核准／送出；已加入重啟及舊設定回寫測試。此記號不是全球租約，無法排除另一台未入網 Local 裝置，不能當作 D/E 全域互斥完成；Cloud Worker g0501 不得因此啟用。
+- **工程封鎖 D/E Gate（未部署）**：schema20 draft 以 workspace／環境／公司統編／公司卡版次區分送出控制權。預設沒有 Cloud-exclusive cutover manifest，則主管 Grant 與永久 Claim 均不能寫入；緊急 blocked 不得由一般變更回復為 exclusive。送出協調器在 Claim 前後重查 Gate／CYID／Device，Claim 後撤權或緊急封鎖一律保留永久 Claim、記錄 no-post 稽核，不允許補發。合成測試中的 manifest 是**假證據**，不能宣稱真實設備已停用。Cloud D1 無法辨識未註冊且離線的 Local 安裝；仍須建立可靠設備清冊、逐設備禁送回報、既有 Local Claim 核對與人工受控切換程序後才可考慮新增啟用入口。
 - **跨 Local／Cloud 作廢互斥是啟用前阻塞條件**：兩台裝置在網路分割時，僅靠各自的 SQLite／D1 claim 無法證明全域唯一送出。g0501 必須有同公司／環境／官方原號的可信單一 owner 與持久、可查證的控制權交接；已知撤權、Cloud 查詢失敗或原號未記 Claim 均不可推定其他裝置未送，回線只按原申請查回且不自動補發。跨模式 owner 無法證明互斥時，作廢送出須拒絕，不能為離線可用性放寬。Cloud g0501 路由及 schema20 升格留待該防線與獨立授權完成。
 - **D1 與 Worker 分離**：依使用者回報 schema18 已完成；以後任何新的原 D1／Worker／Bindings／Secret／公司卡操作均須先通知使用者，交由其有 Cloudflare MCP 的本機 Work；事前依共通規則 §11.3 說明預估 rows read/written、呼叫次數、備份／餘額／停止條件，完成後記錄真實計量。不建立試驗 Worker／D1，且不碰 CYID 專用 D1。
 - **驗收分層**：Source＋CI、原 D1 schema／部署、測試公司卡與光貿真交易、雙機真人操作、正式 Release 各有獨立證據；任何一層未通過只能標為「待驗」或「不可啟用」，不把 CI 視為正式財務驗收。
