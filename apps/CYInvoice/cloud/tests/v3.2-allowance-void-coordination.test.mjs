@@ -106,6 +106,11 @@ try{
   "(workspace_id,environment,seller_invoice,company_revision,state,"+
   "cutover_manifest_hash,activating_device_id,activated_at) "+
   "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
+  .run(ws,null,manager,opened),/CHECK constraint failed/);
+ assert.throws(()=>sql.prepare("INSERT INTO allowance_void_authority_gates "+
+  "(workspace_id,environment,seller_invoice,company_revision,state,"+
+  "cutover_manifest_hash,activating_device_id,activated_at) "+
+  "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
   .run(ws,a,employee+"-INVALID",opened),/VOID_GATE_CUTOVER_SCOPE_INVALID|FOREIGN KEY constraint failed/);
  sql.prepare("INSERT INTO allowance_void_authority_gates "+
   "(workspace_id,environment,seller_invoice,company_revision,state,"+
