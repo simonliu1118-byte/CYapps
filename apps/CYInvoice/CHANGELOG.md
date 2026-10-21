@@ -4,6 +4,8 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：折讓作廢整合工程）
 
+- 沿既有 CYID Device／員工認證、allowances-route 與 Windows Cloud Client 新增 `void-create`／`void-status`（僅 schema20＋原旗標允許），跨機建立固定申請 ID 與唯讀查回；無 g0501 送出入口。包含越權、重複、未就緒與 Windows 契約測試。
+
 - **Local**：同一公司／環境＋原折讓號共用永久 g0501 Claim；跨待辦 ID、結果不明及回線重入均不得第二次送出。曾參與 CYID Cloud 的裝置不得僅切回 LocalOnly 即恢復本機 g0501。
 - **CYID Cloud（未對外開放）**：原申請 ID、加密 Frozen、主管重新驗權與官方原號／原發票唯讀驗證、原子核准、永久唯一 Claim、最多一次 g0501、結果不明時原 ID 唯讀查回；保留不可變稽核。
 - **簡化**：移除無法證實實際停機的 Local 設備快照與 Cloud 清冊預檢兩條平行路徑。保留單一 Cloud 控制權啟用門檻（預設拒絕）；舊 Local 裝置停送與舊交易核對在正式切換前人工確認，不另建日常盤點平台。
