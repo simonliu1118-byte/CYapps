@@ -329,8 +329,9 @@ internal sealed class CloudAllowanceManagerForm : Form
             status.Text="原作廢申請："+current.ApplicationId+
                 "／"+current.Status+
                 (current.Claimed?"；已有永久 Claim，僅能查回":
-                    "；尚未送出 g0501，等待主管覆核")+
-                "。未建立重複申請。";
+                    current.Status=="approved"?"；主管已核准，尚未執行 Cloud g0501":
+                    "；等待主管覆核，尚未執行 Cloud g0501")+
+                "。此狀態不代表光貿作廢成功，也未建立重複申請。";
         });
     }
 
