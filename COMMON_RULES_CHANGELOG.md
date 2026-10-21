@@ -1,5 +1,9 @@
 # Shared Common Rules Changelog
 
+## 2.10.0 — 2026/10/21
+
+- 新增 11.4 工作單交接（使用者 2026-10-21：由 CY Web `PROJECT_RULES.md` §9 與 CYERPAutoQuery 抽出為共通規則）：只有在使用者指示 Claude 開立工作單轉交 GPT 製作時才適用；Claude 規劃並撰寫工作單、GPT 依單實作開 PR 並填完成報告、Claude 審查；工作單位置（單一專案 `docs/development/work-orders/`、monorepo `apps/<Project>/docs/work-orders/`）、執行者不得擴大或改變範圍且不合併不部署、審查者可直接修小問題。
+
 ## 2.9.1 — 2026/10/20
 
 - 11.3 改為明確的常設規則：不論是否有工作單、PR，或由使用者直接交辦，大量資料作業都須事前向使用者說明預估用量，完成時在回報中寫出實際用量。
