@@ -21,7 +21,8 @@ CREATE TABLE allowance_void_authority_gates (
  PRIMARY KEY(workspace_id,environment,seller_invoice,company_revision),
  CHECK((state='blocked' AND cutover_manifest_hash IS NULL AND
        activating_device_id IS NULL AND activated_at IS NULL) OR
-       (state='cloud_exclusive' AND length(cutover_manifest_hash)=64 AND
+       (state='cloud_exclusive' AND cutover_manifest_hash IS NOT NULL AND
+        length(cutover_manifest_hash)=64 AND
         cutover_manifest_hash NOT GLOB '*[^0-9a-f]*' AND
         activating_device_id IS NOT NULL AND
         unixepoch(activated_at) IS NOT NULL))
