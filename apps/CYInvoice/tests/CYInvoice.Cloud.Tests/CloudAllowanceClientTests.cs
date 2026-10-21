@@ -355,7 +355,7 @@ internal static class CloudAllowanceClientTests
         var initial=new FakeHandler();
         initial.Add(req=>{
             Check(req,"void-status");
-            return Json(HttpStatusCode.Conflict,new{
+            return Json(HttpStatusCode.NotFound,new{
                 ok=false,error=new{code="VOID_APPLICATION_NOT_FOUND"}});
         });
         initial.Add(req=>{
@@ -381,7 +381,7 @@ internal static class CloudAllowanceClientTests
         var lost=new FakeHandler();
         lost.Add(req=>{
             Check(req,"void-status");
-            return Json(HttpStatusCode.Conflict,new{
+            return Json(HttpStatusCode.NotFound,new{
                 ok=false,error=new{code="VOID_APPLICATION_NOT_FOUND"}});
         });
         lost.Add(req=>{
