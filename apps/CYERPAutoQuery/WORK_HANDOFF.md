@@ -1,6 +1,6 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-20（V0.10.1 第一個正式 Release，tag `cyerp-auto-query-v0.10.1`，由 PR #472 合併進 `main` 後以 Release workflow 發布）。之後的修改依規則升 Z 或 Build；V0.10.0 Build 2 起的程式自動更新時會顯示提示條、倒數與「正在更新」視窗。
+> 更新：2026-10-21（V1.0.0 正式 Release，tag `cyerp-auto-query-v1.0.0`：彙整 V0.10.2 Build 1–4 的進貨輔助、批次查庫存、品號可含「-」）。之後的修改依規則升 Z 或 Build；需要轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 進貨輔助（V0.10.2 Build 1，2026/10/20）
 
