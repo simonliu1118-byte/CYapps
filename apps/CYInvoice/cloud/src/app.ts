@@ -161,6 +161,7 @@ export default {
       "/v1/allowances/review","/v1/allowances/withdraw",
       "/v1/allowances/preview","/v1/allowances/approve",
       "/v1/allowances/reserve","/v1/allowances/status",
+      "/v1/allowances/void-create","/v1/allowances/void-status",
     ].includes(path);
     try {
       if (usesCyId(env)) {
