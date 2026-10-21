@@ -74,6 +74,12 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         if (matched[0].InvoiceStatus != UploadStatuses.Complete)
             throw new InvalidOperationException("只有已完成的折讓單可以提出作廢申請");
 
+        // Check the official number before idempotently returning an old
+        // application: a claimed g0501 is not just "waiting for review".
+        var accountKey = CurrentAccountKey();
+        if (new LocalAllowanceVoidStore(repository.DataDirectory)
+            .HasClaimForAllowance(accountKey, allowanceNumber))
+            throw new InvalidOperationException("原折讓單號已有不可重送的作廢紀錄，請依原申請查回");
         var existing = ReadReview(fresh);
         if (existing is not null)
         {
@@ -86,12 +92,6 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 Message: "這張折讓單已有作廢申請等待管理員處理");
         }
 
-        var accountKey = CurrentAccountKey();
-        // This fence survives completion/recreation of a local work item. It is
-        // deliberately keyed by the original official number, not the issue ID.
-        if (new LocalAllowanceVoidStore(repository.DataDirectory)
-            .HasClaimForAllowance(accountKey, allowanceNumber))
-            throw new InvalidOperationException("原折讓單號已有不可重送的作廢紀錄，請依原申請查回");
         var invoiceNumber = fresh.InvoiceNumber.Trim();
         var orderId = EffectiveOrderId(fresh);
         if (issueStore.HasUnresolved(accountKey, invoiceNumber, orderId, InvoiceAllowanceVoidIssueTypes.ManualReview))
