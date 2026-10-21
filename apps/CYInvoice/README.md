@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.34 Build 0（非正式 Release）**：Local g0501 跨待辦 ID 單次送出與 CYID→Local 回退防線；Cloud g0501 具原 ID 加密申請、主管核准、永久 Claim、單次 POST 與唯讀查回的內部工程碼及合成測試。已移除無法真正驗證裝置停送的清冊／快照輔助路徑，保留預設關閉、尚未接 HTTP 路由的 Cloud g0501 送出器。**已接 CYID Cloud 員工作廢申請／同原號固定 ID 查回、主管官方預覽／核准（沿用原 WinForms 視窗），結果不明不盲目重建。仍無 g0501 送出路由、schema20 未部署、未做真雙機／光貿驗收**；正式 Release V3.1.0 不變。
+- **目前工程 Source：V3.1.35 Build 0（非正式 Release）**：V3.2-F 起步，沿用既有 invoice_query 保存官方折讓摘要完整性與明細；官方折讓異動時清除 PDF／預覽快取，無額外 API 呼叫。真人雙 Windows 驗收依使用者指示於 V3.2 上線後補做，Cloud g0501 未開放、schema20 未部署；正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.34 Build 0（非正式 Release）**：Local g0501 跨待辦 ID 單次送出與 CYID→Local 回退防線；Cloud g0501 具原 ID 加密申請、主管核准、永久 Claim、單次 POST 與唯讀查回的內部工程碼及合成測試。已移除無法真正驗證裝置停送的清冊／快照輔助路徑，保留預設關閉、尚未接 HTTP 路由的 Cloud g0501 送出器。**已接 CYID Cloud 員工作廢申請／同原號固定 ID 查回、主管官方預覽／核准（沿用原 WinForms 視窗），結果不明不盲目重建。仍無 g0501 送出路由、schema20 未部署、未做真雙機／光貿驗收**；正式 Release V3.1.0 不變。
 
 - **前一工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
 

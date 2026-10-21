@@ -10,11 +10,11 @@
 
 ## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
 
-**現行一頁式執行看板（2026-10-21；以下覆蓋下方歷史 checkpoint 的舊停點）：**
+**現行一頁式執行看板（2026-10-22；以下覆蓋下方歷史 checkpoint 的舊停點）：**
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.34 Build 0：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
+| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.35 Build 0：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
 | **V3.2 E Cloud 申請／核准／單次送出核心** | schema20 草案已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
 | **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
 | **V3.2 D/E 員工作廢申請 UI／回線** | 已在原 WinForms 介面新增員工 `void-create`（原號／原發票／原因）、同原號穩定申請 ID 與「先 `void-status`，確認 NotFound 才建立一次」；Fake Cloud／Windows Client 及 CYID 雙裝置路由測試涵蓋遺失回覆後原 ID 查回、B 裝置撤權、公司卡換版拒絕、錯環境、不重建；已核准／待核准顯示分開 | 尚缺 schema20 授權升級、兩台實機人工驗收；不得離線 g0501 或自動重發 |
@@ -31,9 +31,10 @@
 | **V3.2 批次 1 工程進行中** | **V3.1.26 Build 1**：沿唯一 Cloud Coordinator 接入獨立預設關閉的主管 send-once HTTP、attempt 唯讀查證及 Windows 操作（尚待精確 CI 與人工 Audit／Local 撞號整合） | 以同一個主要功能 PR 集中補測試修正；不啟用 Cloudflare 旗標，不做真光貿交易 |
 | V3.2-C／遠端 schema18 | C1～C6 Source／CI 已合併；**依使用者本機 MCP 驗收報告**，原 CYInvoice D1 已有 0017／0018 且原 Worker schema18，九個折讓入口旗標仍關閉、新六表為空、備份已私有保存 | 不重套 0014～0018；C7 尚須受控送出入口、人工處置、角色／兩裝置與光貿測試 |
 | V3.2-D／E | 離線／回線撞號與正式 g0501 未完成 | 「批次 2」整合，依真相依 1～2 個功能 PR |
-| V3.2-F／G | 官方低頻同步、完整歷史及舊 UI 退役未完成 | 「批次 3」整合；新流程驗收前保留舊 UI |
+| V3.2-F／G | F 起步：既有 invoice_query 的官方折讓明細與完整性寫回本機；折讓異動清除 PDF／預覽快取，未增加 API 呼叫。低頻主動查證、完整歷史與 G 舊 UI 退役未完成 | 「批次 3」繼續整合；新流程驗收前保留舊 UI |
 | V3.2-H | 真光貿測試公司卡、雙 Windows、Cloudflare 受控驗收與最終 Release 未完成 | 「批次 4」集中驗收；公司卡／真交易／遠端操作須本機 MCP 當次授權 |
 
+- [ ] **V3.2 上線後雙 Windows 真人驗收（2026-10-22 使用者批准延期）**：兩台真正 Windows／不同 CYID Device 的員工、主管、撤權、斷線／回線、原 ID 查回及競態實測。未取得證據不得勾選；上線前仍須驗證財務送出權威及不可盲目重送／越權的安全門檻，Cloud g0501 不得擅自啟用。
 - **現行執行順序與完成標準**：只看 [V3.2 完整交付計畫](V3_2_IMPLEMENTATION_PLAN.md) §3～§5 的 **4 個主要交付批次**；下方 C1、C3c3、C4a 等小片是已完成來源索引，不再依片名重開 PR。
 - **歸因不可迴避**：code=0、原號／內容全吻合都不自動等於本次 g0401 完成；同一 ID／Ledger 的 sending、unknown、collision 不自動重送／換號。若 AMEGO 無法提供可信單次送出證明，必須有保守、可稽核的人工處置，不偽造 confirmed。
 - **原 D1 實際用量／備份**（使用者 2026-10-21 回報，未由本對話再查）：帳號 reads +1711、writes +55、Worker requests +12；私有 DPAPI 備份、還原及 FK/quick_check 通過。此工程回合不存取 Cloudflare，原 Worker `ALLOWANCE_API_ENABLED=false`，不可擅自開啟。

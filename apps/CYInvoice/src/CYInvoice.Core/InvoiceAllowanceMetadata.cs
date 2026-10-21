@@ -40,12 +40,18 @@ public static class InvoiceAllowanceMetadata
         }
     }
 
+    public static bool HasCompleteSummary(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return record.ExtensionData is not null &&
+            record.ExtensionData.TryGetValue(SummaryPresentKey, out var marker) &&
+            marker.ValueKind == JsonValueKind.True;
+    }
+
     public static FixedDecimal RemainingGross(InvoiceRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        if (record.ExtensionData is null ||
-            !record.ExtensionData.TryGetValue(SummaryPresentKey, out var marker) ||
-            marker.ValueKind != JsonValueKind.True)
+        if (!HasCompleteSummary(record))
             throw new InvalidOperationException(
                 "光貿尚未提供完整折讓摘要，不能確認本次可折讓金額，請重新查詢");
         if (record.Amount<=0)

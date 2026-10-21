@@ -525,6 +525,8 @@ public sealed class InvoiceSyncService
             record.Source = InvoiceSourceInference.FromOrderId(orderId);
         }
         InvoiceOfficialState.ApplyQuery(record, query);
+        // Persist the official allowance history from this same invoice_query.
+        InvoiceAllowanceMetadata.ApplyQuery(record, query.Allowances, query.AllowanceSummaryPresent);
         if (query.InvoiceStatus != 0)
         {
             record.UploadStatus = query.InvoiceStatus;
@@ -641,6 +643,8 @@ public sealed class InvoiceSyncService
         record.MainRemark,
         record.DetailVat,
         record.Items,
+        OfficialAllowanceSummaryPresent = InvoiceAllowanceMetadata.HasCompleteSummary(record),
+        OfficialAllowances = InvoiceAllowanceMetadata.ReadOfficial(record),
     });
 
     private static bool IsInRange(InvoiceRecord record, DateOnly startDate, DateOnly endDate)
