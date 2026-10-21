@@ -1,0 +1,9 @@
+CYInvoice V3.1.32 — engineering / 非正式 Release
+
+schema19 正式遷移來源與受控部署準備。
+
+0019 人工稽核及外部占號證據已升格為唯一 canonical migration。合成測試涵蓋有資料的 schema18 備份、失敗整筆回滾、一次升級、重套拒絕與備份還原。
+
+部署預檢只在明確選擇 18→19、原 D1 已完整套用 0019、原 Worker／CYID 狀態正確且四道折讓旗標全關時，才允許只更新 schema 標記；其他設定、身份範圍、服務綁定及 Secrets 必須完全保留。沒有真正部署及精確讀回不能判定完成。
+
+原 D1／Worker 仍依先前本機回報為 schema18。本批沒有任何 Cloudflare 操作、真光貿交易、旗標啟用或正式發布；正式 Release 仍 V3.1.0。

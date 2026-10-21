@@ -52,6 +52,8 @@
 
 **2026-10-21 Batch 1 Cloud 外部占號整合（V3.1.31 Build 0）**：首次 g0401 明確占號拒絕，且同次官方原號完整驗明不同買方與不同原發票時，才原子保存 occupied_external＋外部證據；主管重新登入並輸入含原號的完整文字後，再查官方原號／餘額及權限，以原 Ledger 追加下一 attempt 和不可變前後號 Audit。新號只有 reserved，後續另行確認才通過原唯一 coordinator。schema19 草案追加證據分類、索引及 next-ledger 連結，未升格／套用；新獨立旗標 ALLOWANCE_EXTERNAL_COLLISION_ENABLED 預設關閉，且下一 attempt 送出仍受其及原 g0401 旗標控制。原 D1／Worker、公司卡與真光貿不變；無法歸因成功政策、schema19 受控部署、雙機真測與 B/C 最終驗收仍未完成。
 
+**2026-10-21 schema19 部署準備（V3.1.32 Build 0）**：0019 唯一來源已從 drafts 升格至 canonical migrations；非空 schema18 的檔案備份、DDL 失敗回滾、一次升級及備份還原經合成驗證。原部署 owner 只在明確選擇 18:19、完整 canonical 19 已套用、原 CYID／schema18 與四道折讓旗標全關時，才允許只改 marker；其他 runtime 設定及綁定完全保留。未真正部署及精確讀回不能判為完成。原 D1／Worker 仍依先前本機回報為 schema18，沒有在本批操作 Cloudflare。下一步交本機 MCP，依[現行交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)先核額度／備份，再審核 0019 及 Worker 受控升級；不啟用折讓、不呼叫光貿、不宣告 B/C 結案。
+
 ## 5. 不可跳過的整合安全門檻
 
 - **所有交易權威來自光貿**：code=0、相同折讓號、同內容、Cloud 回覆或管理員「已處理」都不單獨代表本次 g0401／g0501 已正式完成。若光貿不提供可信 transaction attribution，就必須明確標示「無法歸因」、走人工查證，不創造假的 confirmed，也不為達標自動再送一次。

@@ -1,7 +1,8 @@
--- CYInvoice V3.2 Batch 1: proposed canonical D1 migration 0019.
--- FOR SOURCE REVIEW / SYNTHETIC CI ONLY. Do not run against original D1
--- until the user explicitly authorizes a new local Cloudflare MCP cutover.
--- Apply exactly once AFTER recorded canonical 0018. No legacy tables changed.
+-- CYInvoice V3.2 canonical D1 migration 0019. Apply exactly once AFTER 0018.
+-- Source promotion does NOT authorize running this against the original D1.
+-- A separately authorized local Cloudflare MCP cutover must verify quota,
+-- backup/restore and complete history first. Existing allowance evidence gets
+-- a classification column; identity/device/legacy business data is unchanged.
 -- A manual triage record is NOT transaction origin evidence, a resend grant,
 -- a completed allowance, or permission to allocate another allowance number.
 -- Existing reconciliation rows were produced only by the full-match reader.

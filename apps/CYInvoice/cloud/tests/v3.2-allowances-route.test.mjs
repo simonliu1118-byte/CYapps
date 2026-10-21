@@ -96,7 +96,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0018_allowance_frozen_ledger.sql");
+ assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -107,8 +107,7 @@ async function fixture(){
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const f of migrations.filter(x=>x>="0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
- // Pending schema19 is rehearsed IN MEMORY only, never a canonical remote migration.
- sql.exec(readFileSync("drafts/0019_allowance_manual_review_audit.sql","utf8"));
+ // Canonical schema19 is included above; all fixtures remain in memory.
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
