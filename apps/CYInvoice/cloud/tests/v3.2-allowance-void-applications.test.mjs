@@ -10,6 +10,14 @@ const {createCloudAllowanceVoidApplication:create,
  readCloudAllowanceVoidApplication:read,
  loadCloudAllowanceVoidForManager:inspect}=await import("data:text/javascript;base64,"+
  Buffer.from(bundle.outputFiles[0].text).toString("base64"));
+const companyBundle=await build({entryPoints:["src/company-settings.ts"],
+ bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {encryptCompanyBusinessData:seal}=await import("data:text/javascript;base64,"+
+ Buffer.from(companyBundle.outputFiles[0].text).toString("base64"));
+const previewBundle=await build({entryPoints:["src/allowance-void-manager-preview.ts"],
+ bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
+const {previewCloudVoidForManager:preview}=await import("data:text/javascript;base64,"+
+ Buffer.from(previewBundle.outputFiles[0].text).toString("base64"));
 const sql=new DatabaseSync(":memory:");
 const ws="ws_void_test",otherWs="ws_elsewhere";
 const employee="dev_11111111-1111-4111-8111-111111111111";
@@ -51,10 +59,12 @@ try{
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const file of names.filter(s=>s>="0014"))
   sql.exec(readFileSync("migrations/"+file,"utf8"));
+ const syntheticAppKey="SYNTHETIC_ONLY_NO_REAL_SECRET";
+ const encryptedAppKey=await seal(ctx.encryptionKeyHex,ws,"amego",syntheticAppKey);
  sql.prepare("INSERT INTO company_settings(workspace_id,seller_invoice,amego_app_key_ciphertext,"+
   "revision,changed_by_employee_id,changed_by_device_id,changed_at) "+
-  "VALUES(?,'12345678','SYNTHETIC_ENCRYPTED_APPKEY_NOT_REAL',1,'manager',?,"+
-  "'2026-10-21T08:00:00.000Z')").run(ws,managerDevice);
+  "VALUES(?,'12345678',?,1,'manager',?,"+
+  "'2026-10-21T08:00:00.000Z')").run(ws,encryptedAppKey,managerDevice);
  sql.exec(readFileSync("drafts/0020_allowance_void_coordination.sql","utf8"));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,allowanceNumber:"alw-001"},ctx,authority()));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,reason:"contains\nbreak"},ctx,authority()));
@@ -105,6 +115,35 @@ try{
  active(managerDevice,"revoked");
  await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>inspect(db,target,
   ctx,authority(supervisor)));
+ active(managerDevice,"active");
+ const officialRecord={allowance_number:"ALW-001",invoice_type:"D0401",
+  invoice_status:99,allowance_type:2,cancel_date:0,
+  buyer_identifier:"0000000000",buyer_name:"Synthetic buyer",wait:[],
+  product_item:[{original_invoice_number:"AB12345678"}]};
+ const time=new Date("2026-10-21T09:00:00.000Z");
+ let providerReads=0;
+ const official=async(url,options)=>{
+  providerReads++;
+  assert.equal(options.method,"POST");
+  return Response.json(url.endsWith("/allowance_query")
+   ?{code:0,data:officialRecord}
+   :{code:0,data:{"ALW-001":{type:"D0401",status:99}}});
+ };
+ const previewResult=await preview(db,target,ctx,authority(supervisor),official,()=>time);
+ assert.equal(providerReads,2);
+ assert.equal(previewResult.applicationId,request.applicationId);
+ assert.equal(previewResult.requestHash,row.request_hash);
+ assert.equal(previewResult.mayPostG0501,false);
+ assert.equal(previewResult.canApproveWithoutFurtherReview,false);
+ assert.match(previewResult.officialSnapshotHash,/^[a-f0-9]{64}$/);
+ let revokedOnStatus=0;
+ const revokeDuringProof=async(url,options)=>{
+  const response=await official(url,options);
+  if(++revokedOnStatus===2)active(managerDevice,"revoked");
+  return response;
+ };
+ await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>preview(db,target,ctx,
+  authority(supervisor),revokeDuringProof,()=>time));
  active(managerDevice,"active");
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
   ...request,applicationId:"void_application_duplicate"},ctx,authority()));
