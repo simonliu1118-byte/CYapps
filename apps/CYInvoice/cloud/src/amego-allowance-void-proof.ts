@@ -11,7 +11,8 @@ export interface VoidProofInput {
 export interface OfficialVoidProof {
  allowanceNumber:string;originalInvoiceNumber:string;
  checkedAtUtc:string;officialSnapshotHash:string;
- officialStatus:"D0401";canApproveForLaterReview:true;
+ officialStatus:"D0401";eligibleForManagerPreview:true;
+ canApproveWithoutFullReview:false;
  canSendWithoutDurableClaim:false;proofOfOurVoidPost:false;
 }
 const QUERY="https://invoice-api.amego.tw/json/allowance_query";
@@ -111,6 +112,7 @@ export async function queryOfficialVoidTarget(
  return {allowanceNumber:input.allowanceNumber,
   originalInvoiceNumber:input.originalInvoiceNumber,
   checkedAtUtc:date.toISOString(),officialSnapshotHash,
-  officialStatus:"D0401",canApproveForLaterReview:true,
+  officialStatus:"D0401",eligibleForManagerPreview:true,
+  canApproveWithoutFullReview:false,
   canSendWithoutDurableClaim:false,proofOfOurVoidPost:false};
 }
