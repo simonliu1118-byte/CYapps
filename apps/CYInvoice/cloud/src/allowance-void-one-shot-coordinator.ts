@@ -8,7 +8,8 @@
 import {loadCloudAllowanceVoidForManager,activeVoidDevice,
  isVoidManager,sameVoidManager} from "./allowance-void-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
-import {queryOfficialVoidTarget} from "./amego-allowance-void-proof";
+import {queryOfficialVoidTarget,sameVoidCompanyCard,freshVoidOfficialEvidence}
+ from "./amego-allowance-void-proof";
 import {postAllowanceVoidOnce} from "./amego-allowance-void";
 import type {OneShotAllowanceVoidOutcome} from "./amego-allowance-void";
 import type {AllowanceActorSource,CloudAllowanceContext}
@@ -90,10 +91,9 @@ export async function executeCloudVoidOnce(
   allowanceNumber:frozen.allowanceNumber,
   originalInvoiceNumber:frozen.originalInvoiceNumber
  },transport,clock);
- const timestamp=now(clock),checked=Date.parse(proof.checkedAtUtc);
+ const timestamp=now(clock);
  if(proof.officialSnapshotHash!==grant.official_snapshot_hash||
-  !Number.isFinite(checked)||checked>timestamp.valueOf()+1000||
-  timestamp.valueOf()-checked>60_000||
+  !freshVoidOfficialEvidence(proof.checkedAtUtc,timestamp)||
   timestamp.valueOf()>=Date.parse(grant.valid_until_utc))
   throw new Error("VOID_EXEC_OFFICIAL_CHANGED_OR_STALE");
  const second=await authority.revalidate();
@@ -106,9 +106,7 @@ export async function executeCloudVoidOnce(
  if(current.status!=="approved"||current.revision!==2||
   current.requestHash!==frozen.requestHash||
   current.allowanceNumber!==frozen.allowanceNumber||
-  companyAfter.revision!==company.revision||
-  companyAfter.sellerInvoice!==company.sellerInvoice||
-  companyAfter.amegoAppKey!==company.amegoAppKey)
+  !sameVoidCompanyCard(company,companyAfter))
   throw new Error("VOID_EXEC_STALE");
  // Permanent D1 claim written BEFORE the provider request. This is NOT a
  // separable method or an authorization token; one coordinator owns both.
@@ -155,9 +153,7 @@ export async function executeCloudVoidOnce(
   if(stillAuthorized){
    const latestCompany=await loadAmegoCompanySettingsForGateway(
     db,t.workspaceId,ctx.encryptionKeyHex);
-   stillAuthorized=latestCompany.revision===company.revision&&
-    latestCompany.sellerInvoice===company.sellerInvoice&&
-    latestCompany.amegoAppKey===company.amegoAppKey;
+   stillAuthorized=sameVoidCompanyCard(company,latestCompany);
   }
  }catch{/* Any uncertain authority or D1 state is an irreversible no-POST hold. */}
  if(!stillAuthorized){
