@@ -37,6 +37,8 @@ internal static class Program
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
             ("detail refresh always queries even when official data is unchanged", TestDetailRefreshAlwaysQueriesAsync),
+            ("official allowance-only detail change persists and invalidates PDF/preview once", TestDetailRefreshAllowanceHistoryAsync),
+            ("invoice list changed triggers official allowance history persistence and cache invalidation", TestListAllowanceHistoryAsync),
             ("detail refresh overwrites official fields and invalidates cache", TestDetailRefreshOverwriteAsync),
             ("test detail refresh strips prefix from displayed OrderID", TestTestDetailRefreshStripsPrefixAsync),
             ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
@@ -543,6 +545,9 @@ internal static class Program
         var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("HH12345678", "66091800555555");
+        // Seed the same authoritative empty history that the fake query
+        // will return. First-time history discovery is intentionally a change.
+        InvoiceAllowanceMetadata.ApplyQuery(original, [], summaryPresent: false);
         repository.Invoices.Append(original);
         var cache = CreatePdfCache(repository, original.InvoiceNumber);
         var fake = new FakeGateway
@@ -558,6 +563,114 @@ internal static class Program
         Equal("HH12345678", fake.LastInvoiceQuery);
         Equal("HH12345678", fresh.InvoiceNumber);
         Equal(true, File.Exists(cache));
+    }
+
+    private static async Task TestDetailRefreshAllowanceHistoryAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("AH12345678", "66091800555555");
+        InvoiceAllowanceMetadata.ApplyQuery(original, [], summaryPresent: true);
+        repository.Invoices.Append(original);
+        var pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        var allowance = new InvoiceAllowanceResult(
+            "D0401", UploadStatuses.Complete, 2, "ALW-0001",
+            "20260918", "0", "20");
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("AH12345678", "66091800555555",
+                "100", "買受人", description: "商品") with
+            {
+                Data = Query("AH12345678", "66091800555555",
+                    "100", "買受人", description: "商品").Data with
+                {
+                    Allowances = [allowance],
+                    AllowanceSummaryPresent = true,
+                },
+            },
+        };
+        var refreshed = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(1, fake.QueryByInvoiceCalls);
+        Equal(1, InvoiceAllowanceMetadata.ReadOfficial(refreshed).Count);
+        Equal("ALW-0001", InvoiceAllowanceMetadata.ReadOfficial(refreshed).Single().AllowanceNumber);
+        Equal("80", InvoiceAllowanceMetadata.RemainingGross(refreshed).ToString());
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
+
+        // A second identical official read must not remove freshly rendered
+        // caches or produce another local-history change.
+        var newPdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var newPreview = CreatePreviewCache(repository, original.InvoiceNumber);
+        var unchanged = await DetailRefresh(repository, fake).RefreshAsync(refreshed);
+        Equal(2, fake.QueryByInvoiceCalls);
+        Equal(1, InvoiceAllowanceMetadata.ReadOfficial(unchanged).Count);
+        Equal(true, File.Exists(newPdf));
+        Equal(true, File.Exists(newPreview));
+
+        // An omitted summary is NOT the same as a complete summary, even
+        // when the individual allowance rows happen to match.
+        fake.QueryResponse = fake.QueryResponse with
+        {
+            Data = fake.QueryResponse.Data with { AllowanceSummaryPresent = false },
+        };
+        var incomplete = await DetailRefresh(repository, fake).RefreshAsync(unchanged);
+        Equal(1, InvoiceAllowanceMetadata.ReadOfficial(incomplete).Count);
+        Equal(false, File.Exists(newPdf));
+        Equal(false, File.Exists(newPreview));
+        try
+        {
+            _ = InvoiceAllowanceMetadata.RemainingGross(incomplete);
+            throw new InvalidOperationException("incomplete official history must fail closed");
+        }
+        catch (InvalidOperationException error) when
+            (error.Message.Contains("光貿尚未提供完整折讓摘要", StringComparison.Ordinal))
+        {
+        }
+    }
+
+    private static async Task TestListAllowanceHistoryAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("AS12345678", "66091800555555");
+        InvoiceAllowanceMetadata.ApplyQuery(original, [], summaryPresent: true);
+        repository.Invoices.Append(original);
+        var pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("AS12345678", "66091800555555",
+                "100", "新買受人", description: "商品") with
+            {
+                Data = Query("AS12345678", "66091800555555",
+                    "100", "新買受人", description: "商品").Data with
+                {
+                    Allowances =
+                    [
+                        new InvoiceAllowanceResult("D0401", UploadStatuses.Complete,
+                            2, "ALW-0002", "20260918", "0", "20"),
+                    ],
+                    AllowanceSummaryPresent = true,
+                },
+            },
+        };
+        // The existing low-frequency invoice_list reports changed buyer
+        // information, so the existing logic performs its full invoice_query.
+        fake.Pages[1] = ListResponse(1,
+            [Remote("AS12345678", "66091800555555", "100", buyer: "新買受人")]);
+        var synced = await Sync(repository, fake).SyncRecentAsync();
+        Equal(1, synced.Queried);
+        Equal(1, synced.Updated);
+        Equal(0, synced.Problems.Count);
+        var stored = repository.Invoices.LoadOrCreate().Single();
+        Equal(1, InvoiceAllowanceMetadata.ReadOfficial(stored).Count);
+        Equal("ALW-0002", InvoiceAllowanceMetadata.ReadOfficial(stored).Single().AllowanceNumber);
+        Equal("80", InvoiceAllowanceMetadata.RemainingGross(stored).ToString());
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
     }
 
     private static async Task TestDetailRefreshOverwriteAsync()
