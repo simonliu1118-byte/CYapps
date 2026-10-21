@@ -6,9 +6,9 @@ namespace CYERPAutoQuery.Tests;
 /// <summary>進貨輔助 (user 2026-10-20), fake values only.</summary>
 public class RestockTests
 {
-    private static SalesOrder Order(string kind, string no, DateOnly date, params (string Item, decimal Qty)[] lines) =>
+    private static SalesOrder Order(string kind, string no, DateOnly date, params (string Item, decimal Qty, decimal Gift)[] lines) =>
         new(kind, no, date, "CU0001", "假客戶", "", "", "", "", "", lines.Sum(l => l.Qty), 0m, 0m, 0m, "", "",
-            lines.Select((l, i) => new SalesLine(i + 1, l.Item, "假品名" + l.Item, "", "", l.Qty, "包", 0m, 0m, "", 5m, "", "", "")).ToList());
+            lines.Select((l, i) => new SalesLine(i + 1, l.Item, "假品名" + l.Item, "", "", l.Qty, "包", 0m, 0m, "", l.Gift, "", "", "")).ToList());
 
     private static readonly DateOnly D12 = new(2026, 10, 12), D13 = new(2026, 10, 13);
 
@@ -17,16 +17,17 @@ public class RestockTests
     {
         var items = Restock.Summarize(
         [
-            Order("銷貨", "901A-1", D12, ("X00002", 3m), ("X00001", 1m)),
-            Order("銷貨", "901A-2", D12, ("X00002", 2m)),
-            Order("銷退", "902A-1", D13, ("X00002", 1m)),
-            Order("銷貨", "901A-3", D13, ("X00001", 4m)),
+            Order("銷貨", "901A-1", D12, ("X00002", 3m, 0m), ("X00001", 1m, 0m)),
+            Order("銷貨", "901A-2", D12, ("X00002", 2m, 1m)),
+            Order("銷退", "902A-1", D13, ("X00002", 1m, 0m)),
+            Order("銷貨", "901A-3", D13, ("X00001", 4m, 0m)),
         ]);
         Assert.Equal(["X00001", "X00002"], items.Select(i => i.ItemCode));
         var x2 = items[1];
         Assert.Equal(("假品名X00002", "包"), (x2.ItemName, x2.Unit));
-        Assert.Equal([new RestockDay(D12, 5m, 0m), new RestockDay(D13, 0m, 1m)], x2.Days);
-        Assert.Equal((5m, 1m), (x2.Sold, x2.Returned));
+        // 贈／備品量 counts as 銷貨 (user 2026-10-21), and is kept apart as well.
+        Assert.Equal([new RestockDay(D12, 6m, 0m, 1m), new RestockDay(D13, 0m, 1m)], x2.Days);
+        Assert.Equal((6m, 1m, 1m), (x2.Sold, x2.Returned, x2.SoldGift));
         Assert.Equal((5m, 0m), (items[0].Sold, items[0].Returned));
     }
 
@@ -50,7 +51,7 @@ public class RestockTests
         Assert.Equal("RESTOCK", job.QueryType);
         Assert.True(job.IsBusiness);
         var query = job.Restock(new DateOnly(2026, 10, 20));
-        var items = Restock.Summarize([Order("銷貨", "901A-1", D12, ("X00001", 2.5m)), Order("銷退", "902A-1", D13, ("X00002", 1m))]);
+        var items = Restock.Summarize([Order("銷貨", "901A-1", D12, ("X00001", 2.5m, 0m)), Order("銷退", "902A-1", D13, ("X00002", 1m, 2m))]);
         items[0] = items[0] with { Stock = "40" };
         items[1] = items[1] with { StockNote = "ERP 查無此品號" };
         var body = JsonNode.Parse(ErpAgentProtocol.RestockBody(job, new RestockResult(query, items, TimeSpan.FromSeconds(2)), "v"))!;
@@ -61,6 +62,8 @@ public class RestockTests
         Assert.Equal(["X00001", "2.5", "0", "40"], new[] { "itemCode", "sold", "returned", "stock" }.Select(k => first[k]!.GetValue<string>()));
         Assert.Equal(["2026-10-12", "2.5", "0"], new[] { "date", "sold", "returned" }.Select(k => first["days"]![0]![k]!.GetValue<string>()));
         var second = body["items"]![1]!;
+        Assert.Equal(["3", "2"], new[] { "returned", "returnedGift" }.Select(k => second[k]!.GetValue<string>()));
+        Assert.Equal(["3", "2"], new[] { "returned", "returnedGift" }.Select(k => second["days"]![0]![k]!.GetValue<string>()));
         Assert.Null(second["stock"]);
         Assert.Equal("ERP 查無此品號", second["stockNote"]!.GetValue<string>());
 

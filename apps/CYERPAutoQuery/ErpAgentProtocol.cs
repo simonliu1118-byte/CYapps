@@ -387,9 +387,11 @@ internal static class ErpAgentProtocol
             ["itemCode"] = i.ItemCode, ["itemName"] = i.ItemName, ["unit"] = i.Unit,
             ["days"] = new JsonArray(i.Days.Select(d => (JsonNode)new JsonObject
             {
-                ["date"] = Iso(d.Date), ["sold"] = Text(d.Sold), ["returned"] = Text(d.Returned)
+                ["date"] = Iso(d.Date), ["sold"] = Text(d.Sold), ["returned"] = Text(d.Returned),
+                ["soldGift"] = Text(d.SoldGift), ["returnedGift"] = Text(d.ReturnedGift)
             }).ToArray()),
             ["sold"] = Text(i.Sold), ["returned"] = Text(i.Returned),
+            ["soldGift"] = Text(i.SoldGift), ["returnedGift"] = Text(i.ReturnedGift),
             ["stock"] = i.Stock, ["stockNote"] = i.StockNote
         }).ToArray();
         var body = CompleteObject(result.Found ? "FOUND" : "NOT_FOUND", [], [], null, (long)result.Elapsed.TotalMilliseconds, agentVersion);

@@ -21,14 +21,19 @@ internal sealed record RestockQuery(DateOnly From, DateOnly To)
     public SalesQuery Sales => new(string.Empty, From, To);
 }
 
-/// <summary>One day of an item: 銷貨數量 and 銷退數量 (贈／備品量 not counted).</summary>
-internal sealed record RestockDay(DateOnly Date, decimal Sold, decimal Returned);
+/// <summary>
+/// One day of an item: what left and came back, 贈／備品量 included (user 2026-10-21: gifts count as
+/// 銷貨／銷退); the gift part is kept apart too, for later 銷貨分析.
+/// </summary>
+internal sealed record RestockDay(DateOnly Date, decimal Sold, decimal Returned, decimal SoldGift = 0m, decimal ReturnedGift = 0m);
 
 /// <summary>One 品號 sold or returned in the range, and its 庫存數量 once looked up.</summary>
 internal sealed record RestockItem(string ItemCode, string ItemName, string Unit, IReadOnlyList<RestockDay> Days)
 {
     public decimal Sold => Days.Sum(d => d.Sold);
     public decimal Returned => Days.Sum(d => d.Returned);
+    public decimal SoldGift => Days.Sum(d => d.SoldGift);
+    public decimal ReturnedGift => Days.Sum(d => d.ReturnedGift);
     /// <summary>INVI02 庫存數量; null when it was not looked up or could not be read (<see cref="StockNote"/> says why).</summary>
     public string? Stock { get; init; }
     public string StockNote { get; init; } = string.Empty;
@@ -53,18 +58,17 @@ internal static class Restock
     /// <summary>The orders' lines by 品號 (order of 品號) and by day; 品名／單位 from the first line seen.</summary>
     public static List<RestockItem> Summarize(IEnumerable<SalesOrder> orders)
     {
-        var items = new SortedDictionary<string, (string Name, string Unit, SortedDictionary<DateOnly, (decimal Sold, decimal Returned)> Days)>(StringComparer.OrdinalIgnoreCase);
+        var items = new SortedDictionary<string, (string Name, string Unit, SortedDictionary<DateOnly, RestockDay> Days)>(StringComparer.OrdinalIgnoreCase);
         foreach (var order in orders)
             foreach (var line in order.Lines.Where(l => l.ItemCode.Length > 0))
             {
                 if (!items.TryGetValue(line.ItemCode, out var item))
-                    items[line.ItemCode] = item = (line.ItemName, line.Unit, new SortedDictionary<DateOnly, (decimal, decimal)>());
-                var day = item.Days.GetValueOrDefault(order.Date);
+                    items[line.ItemCode] = item = (line.ItemName, line.Unit, new SortedDictionary<DateOnly, RestockDay>());
+                var day = item.Days.GetValueOrDefault(order.Date) ?? new RestockDay(order.Date, 0m, 0m);
                 item.Days[order.Date] = order.Kind == SalesReport.Returns.Kind
-                    ? (day.Sold, day.Returned + line.Quantity)
-                    : (day.Sold + line.Quantity, day.Returned);
+                    ? day with { Returned = day.Returned + line.Quantity + line.GiftQuantity, ReturnedGift = day.ReturnedGift + line.GiftQuantity }
+                    : day with { Sold = day.Sold + line.Quantity + line.GiftQuantity, SoldGift = day.SoldGift + line.GiftQuantity };
             }
-        return items.Select(p => new RestockItem(p.Key, p.Value.Name, p.Value.Unit,
-            p.Value.Days.Select(d => new RestockDay(d.Key, d.Value.Sold, d.Value.Returned)).ToList())).ToList();
+        return items.Select(p => new RestockItem(p.Key, p.Value.Name, p.Value.Unit, p.Value.Days.Values.ToList())).ToList();
     }
 }
