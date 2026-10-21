@@ -12,6 +12,8 @@ import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-appro
 import {reserveApprovedCloudAllowanceNumber,reserveCloudAllowanceAfterExternalCollision}
  from "./allowance-number-reservation";
 import {executeCloudAllowanceExactlyOnce} from "./allowance-one-shot-coordinator";
+import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication}
+ from "./allowance-void-applications";
 import {appendAllowanceManualReview,listAllowanceManualReviews,type TriageKind}
  from "./allowance-manual-review";
 
@@ -28,8 +30,12 @@ const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
  "/v1/allowances/reserve","/v1/allowances/status",
  "/v1/allowances/attempt","/v1/allowances/send-once",
  "/v1/allowances/manual-review","/v1/allowances/manual-history",
- "/v1/allowances/reserve-after-collision"]);
+ "/v1/allowances/reserve-after-collision",
+ "/v1/allowances/void-create","/v1/allowances/void-status"]);
 const keys:Record<string,readonly string[]>={
+ "void-create":["employeeNo","password","applicationId","environment",
+  "allowanceNumber","originalInvoiceNumber","reason"],
+ "void-status":["employeeNo","password","applicationId"],
  create:["employeeNo","password","applicationId","environment",
   "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
  get:["employeeNo","password","applicationId"],
@@ -135,6 +141,9 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    (env.ALLOWANCE_MANUAL_REVIEW_ENABLED!=="true"||
      input.confirmReview!==true))
   return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_DISABLED"}});
+ if((action==="void-create"||action==="void-status")&&
+    Number(env.SCHEMA_VERSION)<20)
+  return reply(503,{error:{code:"VOID_SCHEMA_NOT_READY"}});
  if(action==="list"&&
   ((input.status!==undefined&&!["open","review","approved","rejected","withdrawn"].includes(String(input.status)))||
    (input.limit!==undefined&&(!rev(input.limit)||(input.limit as number)>50))))
@@ -152,6 +161,27 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
   const environment=env.APP_ENV==="production"?"production":"test";
   const ctx:CloudAllowanceContext={
    encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,environment};
+  if(action==="void-create"){
+   if(input.environment!==environment||typeof input.allowanceNumber!=="string"||
+      typeof input.originalInvoiceNumber!=="string"||
+      typeof input.reason!=="string")
+    return reply(400,{error:{code:"INVALID_REQUEST"}});
+   const result=await createCloudAllowanceVoidApplication(env.DB,{
+     workspaceId:binding.workspaceId,deviceId:dev.device_id,
+     applicationId:target.applicationId,environment,
+     allowanceNumber:input.allowanceNumber,originalInvoiceNumber:input.originalInvoiceNumber,
+     reason:input.reason
+   },ctx,authority);
+   return reply(200,{applicationId:result.applicationId,status:result.status,
+     revision:result.revision,claimed:result.claimed,readbackOnly:result.readbackOnly,
+     officiallyConfirmed:false,officialActionPerformed:false});
+  }
+  if(action==="void-status"){
+   const result=await readCloudAllowanceVoidApplication(env.DB,target,authority);
+   return reply(200,{applicationId:result.applicationId,status:result.status,
+     revision:result.revision,claimed:result.claimed,readbackOnly:result.readbackOnly,
+     officiallyConfirmed:false,officialActionPerformed:false});
+  }
   if(action==="create"){
    if(!["production","test"].includes(String(input.environment))||
      input.environment!==environment||
@@ -394,7 +424,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
   if(e instanceof CyIdError)
    return reply(e.status,{error:{code:e.code}});
   // Do not return API key, frozen content, official buyer data or SQL details.
-  if(e instanceof Error&&/^(ALLOWANCE_|OFFICIAL_)/.test(e.message))
+  if(e instanceof Error&&/^(ALLOWANCE_|OFFICIAL_|VOID_)/.test(e.message))
    return reply(409,{error:{code:"ALLOWANCE_OPERATION_UNCONFIRMED"}});
   return reply(503,{error:{code:"ALLOWANCE_RESULT_UNKNOWN"}});
  }
