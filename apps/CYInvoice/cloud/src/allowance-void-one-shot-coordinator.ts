@@ -51,6 +51,15 @@ async function active(db:D1Database,ws:string,dev:string):Promise<boolean>{
   "AND d.employee_authority_state='cloud' LIMIT 1")
   .bind(ws,dev).first<{device_id:string}>();
 }
+// Preflight reduces provider calls; the D1 INSERT trigger is the atomic gate.
+async function cloudCutoverActive(db:D1Database,ws:string,environment:string,
+ seller:string,revision:number):Promise<boolean>{
+ const row=await db.prepare("SELECT state FROM allowance_void_authority_gates "+
+  "WHERE workspace_id=?1 AND environment=?2 AND seller_invoice=?3 "+
+  "AND company_revision=?4 LIMIT 1").bind(ws,environment,seller,revision)
+  .first<{state:string}>();
+ return row?.state==="cloud_exclusive";
+}
 function now(clock:()=>Date):Date{
  const value=clock();
  if(!(value instanceof Date)||!Number.isFinite(value.valueOf()))
@@ -94,6 +103,9 @@ export async function executeCloudVoidOnce(
  if(company.revision!==frozen.companyRevision||
   company.sellerInvoice!==frozen.sellerInvoice)
   throw new Error("VOID_EXEC_COMPANY_CHANGED");
+ if(!await cloudCutoverActive(db,t.workspaceId,frozen.environment,
+  frozen.sellerInvoice,frozen.companyRevision))
+  throw new Error("VOID_EXEC_CUTOVER_NOT_AUTHORIZED");
  // Fresh signed read-only official proof just before claiming the one POST.
  const proof=await queryOfficialVoidTarget({
   sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
@@ -155,6 +167,18 @@ export async function executeCloudVoidOnce(
  }
  if(claim.meta.changes!==1)
   throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
+ // Emergency stop or revocation after claim must suppress even the FIRST POST.
+ // The durable claim is never released or sent again after any failure.
+ let stillAuthorized=false;
+ try{
+  const actor=await authority.revalidate();
+  stillAuthorized=same(first,actor,t.workspaceId)&&
+   await active(db,t.workspaceId,t.deviceId)&&
+   await cloudCutoverActive(db,t.workspaceId,frozen.environment,
+    frozen.sellerInvoice,frozen.companyRevision);
+ }catch{/* Any uncertain authority or D1 state is an irreversible no-POST hold. */}
+ if(!stillAuthorized)
+  throw new Error("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST");
  // From here the permanent claim is irrevocable, even on exception.
  let result:OneShotAllowanceVoidOutcome;
  try{
