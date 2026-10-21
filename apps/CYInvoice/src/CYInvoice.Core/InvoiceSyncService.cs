@@ -13,7 +13,7 @@ public sealed record InvoiceSyncResult(
     int Queried,
     IReadOnlyList<string> Problems);
 
-internal sealed class AllowanceSyncLimitExceededException(string message) : InvalidDataException(message);
+internal sealed class AllowanceSyncLimitExceededException(string message) : IOException(message);
 
 public sealed class InvoiceSyncService
 {

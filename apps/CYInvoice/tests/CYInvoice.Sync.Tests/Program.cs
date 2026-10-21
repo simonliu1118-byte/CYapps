@@ -491,7 +491,7 @@ internal static class Program
             await automatic.SyncAsync();
             throw new InvalidOperationException("expected discovery call cap");
         }
-        catch (InvalidDataException error)
+        catch (IOException error)
             when (error.Message.Contains("50 張", StringComparison.Ordinal)) { }
         var issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         var issue = issueStore.Unresolved(Environments.Production + "|12345675").Single();
@@ -504,7 +504,7 @@ internal static class Program
             await automatic.SyncAsync();
             throw new InvalidOperationException("expected 150 allowance rows cap");
         }
-        catch (InvalidDataException error)
+        catch (IOException error)
             when (error.Message.Contains("150 筆", StringComparison.Ordinal)) { }
         Equal(1, issueStore.Unresolved(Environments.Production + "|12345675").Count);
         // After a normal daily pass the notice is resolved, never silently deleted.
