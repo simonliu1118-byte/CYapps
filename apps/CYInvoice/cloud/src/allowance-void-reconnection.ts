@@ -4,6 +4,7 @@
 import {loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {readOfficialAllowanceVoidStatus} from "./amego-allowance-status";
+import {sameVoidCompanyCard} from "./amego-allowance-void-proof";
 import type {AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 
 export type CloudVoidReadbackState =
@@ -71,9 +72,7 @@ export async function readCloudVoidAfterReconnect(
   throw new Error("VOID_READBACK_APPLICATION_CHANGED");
  const current=await loadAmegoCompanySettingsForGateway(
   db,t.workspaceId,ctx.encryptionKeyHex);
- if(current.revision!==company.revision||
-  current.sellerInvoice!==company.sellerInvoice||
-  current.amegoAppKey!==company.amegoAppKey)
+ if(!sameVoidCompanyCard(company,current))
   throw new Error("VOID_READBACK_COMPANY_CHANGED");
  if(!status)
   return {...base,state:"official_unavailable_readback_only",
