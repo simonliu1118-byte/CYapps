@@ -54,7 +54,7 @@
 - **員工原號固定 ID（工程來源）**：在既有 CYID 跨機折讓 WinForms 以員工密碼申請作廢；`CloudAllowanceClient` 將 Workspace／環境／原折讓號映射為固定 SHA-256 申請 ID，先從原 ID 唯讀查回，僅在正式 `VOID_APPLICATION_NOT_FOUND` 時建立一次。斷線、回覆遺失、重啟或改用其他 Device，均不可產生新的申請 ID 補送；由原號重新產生 ID 查回。此設計不驗證全部舊 Local 安裝且不授權 g0501。
 - **主管與 WinForms 工程來源**：既有 `allowances-route` 新增 schema20 限定的 `void-preview`／`void-approve`，用原 CYID Device/主管驗權、雙次官方查證與 D1 原子 Grant；WinForms 主管視窗用原申請 ID 預覽並強制輸入「作廢 原號」，沒有 Cloud g0501 送出入口。此處僅代表 Source／Synthetic CI，遠端仍未升級或驗收。
 - **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。下一步直接完成主管預覽／核准、WinForms 與回線衝突驗收，不再建清冊平台。
-- **簡化後的單一控制權**：Cloud g0501 僅透過既有 CYID Workspace／Device 的 D1 唯一 Claim 與單一 Worker 協調器送出；斷線只能原 ID 查回，不進行離線 g0501。schema20 保留一個預設拒絕的 Cloud 啟用 Gate，待確認現有 Local 裝置已停送、舊 Claim 已人工核對後，才另行受控啟用；不採用設備報表雜湊作為授權，也不新增清冊平台。此批無 Cloudflare 變更、沒有正式路由。
+- **簡化後的單一控制權**：Cloud g0501 僅透過既有 CYID Workspace／Device 的 D1 唯一 Claim 與單一 Worker 協調器送出；斷線只能原 ID 查回，不進行離線 g0501。schema20 不再設無法驗證離線舊安裝的交接 Gate；單一 Cloud g0501 協調器預設禁用且**沒有** Worker 送出路由。待現有 Local 停送、舊 Claim 人工核對並另經使用者授權後，才可另審受控啟用；不採用設備報表雜湊，也不新增清冊平台。此批無 Cloudflare 變更、沒有正式路由。
 - **跨 Local／Cloud 作廢互斥是啟用前阻塞條件**：兩台裝置在網路分割時，僅靠各自的 SQLite／D1 claim 無法證明全域唯一送出。g0501 必須有同公司／環境／官方原號的可信單一 owner 與持久、可查證的控制權交接；已知撤權、Cloud 查詢失敗或原號未記 Claim 均不可推定其他裝置未送，回線只按原申請查回且不自動補發。跨模式 owner 無法證明互斥時，作廢送出須拒絕，不能為離線可用性放寬。Cloud g0501 路由及 schema20 升格留待該防線與獨立授權完成。
 - **D1 與 Worker 分離**：依使用者回報 schema18 已完成；以後任何新的原 D1／Worker／Bindings／Secret／公司卡操作均須先通知使用者，交由其有 Cloudflare MCP 的本機 Work；事前依共通規則 §11.3 說明預估 rows read/written、呼叫次數、備份／餘額／停止條件，完成後記錄真實計量。不建立試驗 Worker／D1，且不碰 CYID 專用 D1。
 - **驗收分層**：Source＋CI、原 D1 schema／部署、測試公司卡與光貿真交易、雙機真人操作、正式 Release 各有獨立證據；任何一層未通過只能標為「待驗」或「不可啟用」，不把 CI 視為正式財務驗收。
