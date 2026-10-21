@@ -7,7 +7,8 @@ import {build} from "esbuild";
 const bundle=await build({entryPoints:["src/allowance-void-applications.ts"],
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {createCloudAllowanceVoidApplication:create,
- readCloudAllowanceVoidApplication:read}=await import("data:text/javascript;base64,"+
+ readCloudAllowanceVoidApplication:read,
+ loadCloudAllowanceVoidForManager:inspect}=await import("data:text/javascript;base64,"+
  Buffer.from(bundle.outputFiles[0].text).toString("base64"));
 const sql=new DatabaseSync(":memory:");
 const ws="ws_void_test",otherWs="ws_elsewhere";
@@ -87,6 +88,24 @@ try{
   authority({...applicant,employeeId:"other"})));
  assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
   deviceId:managerDevice},authority(supervisor)),result);
+ const target={workspaceId:ws,applicationId:request.applicationId,deviceId:managerDevice};
+ await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>inspect(db,
+  {...target,deviceId:employee},ctx,authority()));
+ const frozen=await inspect(db,target,ctx,authority(supervisor));
+ assert.equal(frozen.allowanceNumber,request.allowanceNumber);
+ assert.equal(frozen.originalInvoiceNumber,request.originalInvoiceNumber);
+ assert.equal(frozen.reason,request.reason);
+ assert.equal(frozen.companyRevision,1);
+ assert.equal(frozen.requestHash,row.request_hash);
+ await rejects("VOID_PREVIEW_FROZEN_UNAVAILABLE",()=>inspect(db,target,
+  {...ctx,encryptionKeyHex:"cd".repeat(32)},authority(supervisor)));
+ let freshManager=0;
+ await rejects("VOID_PREVIEW_AUTH_CHANGED",()=>inspect(db,target,ctx,{
+  revalidate:async()=>++freshManager===1?supervisor:null}));
+ active(managerDevice,"revoked");
+ await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>inspect(db,target,
+  ctx,authority(supervisor)));
+ active(managerDevice,"active");
  await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
   ...request,applicationId:"void_application_duplicate"},ctx,authority()));
  assert.equal(count(),1,"same official number cannot gain another application ID");
@@ -104,6 +123,9 @@ try{
     return applicant;
   }}));
  assert.equal(count(),1);
+ await rejects("VOID_PREVIEW_COMPANY_CHANGED",()=>inspect(db,
+  {workspaceId:ws,applicationId:request.applicationId,deviceId:managerDevice},
+  ctx,authority(supervisor)));
  // A new card revision is valid for a NEW request, while old records remain immutable.
  const afterCard=await create(db,{...request,applicationId:"void_after_company_change",
   allowanceNumber:"ALW-002"},ctx,authority());
