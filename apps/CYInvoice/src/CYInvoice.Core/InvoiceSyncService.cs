@@ -56,6 +56,78 @@ public sealed class InvoiceSyncService
         return await SyncListedAsync(gateway, account, startDate, endDate, null, cancellationToken).ConfigureAwait(false);
     }
 
+    // Once per day, discover newly created allowances from the official
+    // creation-date list. A bounded invoice_query refresh also finds events
+    // on retained invoices outside the recent invoice_list date window.
+    // No financial mutation, inferred history, or bulk backfill.
+    internal async Task<(int Queried, IReadOnlyList<string> Problems)> ReconcileRecentAllowanceEventsAsync(
+        DateOnly today, CancellationToken cancellationToken = default)
+    {
+        const int pageLimit = 3; // At most 60 list rows and 20 invoice queries per day.
+        const int pageSize = 20;
+        const int invoiceLimit = 20;
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
+        var account = CurrentAccount();
+        var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
+        var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var problems = new List<string>();
+        var startDate = today.AddDays(-2);
+        for (var page = 1; page <= pageLimit; page++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var listed = await gateway.ListAllowancesAsync(
+                startDate, today, page, pageSize, cancellationToken).ConfigureAwait(false);
+            if (listed.PageTotal > pageLimit)
+                throw new InvalidDataException("官方折讓列表超出每日查詢上限，需人工分批處理");
+            foreach (var allowance in listed.Data)
+            {
+                if (allowance.OriginalInvoiceNumbers.Count == 0)
+                {
+                    problems.Add(allowance.AllowanceNumber + ": 官方折讓缺少原發票關聯，未自動推測");
+                    continue;
+                }
+                foreach (var number in allowance.OriginalInvoiceNumbers)
+                {
+                    if (string.IsNullOrWhiteSpace(number))
+                        throw new InvalidDataException("官方折讓含空白原發票號碼");
+                    numbers.Add(number.Trim());
+                    if (numbers.Count > invoiceLimit)
+                        throw new InvalidDataException("官方折讓關聯發票超出每日 20 張查詢上限，需人工分批處理");
+                }
+            }
+            if (listed.PageTotal > 0 ? page >= listed.PageTotal : listed.Data.Count < pageSize)
+                break;
+            if (page == pageLimit)
+                throw new InvalidDataException("官方折讓列表超出每日 3 頁查詢上限，需人工分批處理");
+        }
+        var current = AccountRecords(account)
+            .Where(record => record.InvoiceState != InvoiceStates.Failed)
+            .GroupBy(record => record.InvoiceNumber.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var refresh = new InvoiceDetailRefreshService(repository, (_, _) => gateway, now);
+        var queried = 0;
+        foreach (var number in numbers.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!current.TryGetValue(number, out var matches) || matches.Length != 1)
+            {
+                problems.Add(number + ": 本機無唯一原發票紀錄，保留官方折讓待人工核對");
+                continue;
+            }
+            try
+            {
+                await refresh.RefreshAsync(matches[0], cancellationToken).ConfigureAwait(false);
+                queried++;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception error)
+            {
+                problems.Add(number + ": 官方折讓原發票查回失敗：" + error.Message);
+            }
+        }
+        return (queried, problems);
+    }
+
     private async Task<InvoiceSyncResult> SyncListedAsync(
         IAmegoGateway gateway,
         Account account,

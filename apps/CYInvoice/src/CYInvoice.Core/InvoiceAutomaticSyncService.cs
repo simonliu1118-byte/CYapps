@@ -56,6 +56,15 @@ public sealed class InvoiceAutomaticSyncService
 
         var startDate = account.Environment == Environments.Test ? today : TwoPeriodRangeStart(today);
         var result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
+        // Only the daily pass calls allowance_list; normal startup/manual
+        // sync retains its existing call volume.
+        var allowances = await syncService.ReconcileRecentAllowanceEventsAsync(today, cancellationToken)
+            .ConfigureAwait(false);
+        result = result with
+        {
+            Queried = result.Queried + allowances.Queried,
+            Problems = result.Problems.Concat(allowances.Problems).ToArray(),
+        };
         cancellationToken.ThrowIfCancellationRequested();
         stateStore.SetLastSuccess(accountKey, DailyReconcileScope, now());
 

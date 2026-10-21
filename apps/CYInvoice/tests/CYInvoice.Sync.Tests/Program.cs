@@ -33,6 +33,8 @@ internal static class Program
             ("production sync overwrites cache and re-infers source", TestProductionOverwriteAsync),
             ("unchanged production summary skips invoice query", TestUnchangedSkipsQueryAsync),
             ("official allowance history survives invoice sync", TestAllowanceHistorySyncAsync),
+            ("daily allowance discovery refreshes old invoice", TestHistoricalAllowanceDiscoveryAsync),
+            ("allowance discovery overflow never starts unbounded queries", TestAllowanceDiscoveryLimitAsync),
             ("test list discovers only CYInvoice-prefixed invoices", TestTestEnvironmentPrefixDiscoveryAsync),
             ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
@@ -431,6 +433,67 @@ internal static class Program
         Equal("同步商品", record.Items.Single().Description);
         Equal(false, File.Exists(pdf));
         Equal(false, File.Exists(preview));
+    }
+
+    private static async Task TestHistoricalAllowanceDiscoveryAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("AF12345678", "66091800770000");
+        original.InvoiceDate = "2026/08/01"; // outside the recent 3-day invoice_list window
+        repository.Invoices.Append(original);
+        var cache = CreatePdfCache(repository, original.InvoiceNumber);
+        var remote = Query(original.InvoiceNumber, original.ApiOrderId, "100", "買受人");
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("A20260918001", [original.InvoiceNumber])]);
+        fake.QueryByInvoice[original.InvoiceNumber] = remote with
+        {
+            Data = remote.Data with
+            {
+                Allowances = [new InvoiceAllowanceResult("D0401", UploadStatuses.Complete,
+                    2, "A20260918001", "20260918", "0", "25")],
+                AllowanceSummaryPresent = true,
+            },
+        };
+        var automatic = new InvoiceAutomaticSyncService(repository, Sync(repository, fake), () => FixedNow);
+        var result = await automatic.SyncAsync();
+        Equal(0, result.Problems.Count);
+        Equal(1, result.Queried);
+        Equal(1, fake.QueryByInvoiceCalls);
+        Equal(1, fake.AllowanceListCalls);
+        Equal(new DateOnly(2026, 9, 16), fake.AllowanceListStart);
+        var refreshed = repository.Invoices.LoadOrCreate().Single();
+        Equal(75L, InvoiceAllowanceMetadata.RemainingGross(refreshed).RoundInt64());
+        Equal(false, File.Exists(cache));
+        // The same day only needs recent invoice_list, not another allowance_list.
+        await automatic.SyncAsync();
+        Equal(1, fake.AllowanceListCalls);
+    }
+
+    private static async Task TestAllowanceDiscoveryLimitAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("A20260918002",
+                Enumerable.Range(1, 21).Select(index => $"ZZ{index:00000000}").ToArray())]);
+        var automatic = new InvoiceAutomaticSyncService(repository, Sync(repository, fake), () => FixedNow);
+        try
+        {
+            await automatic.SyncAsync();
+            throw new InvalidOperationException("expected discovery call cap");
+        }
+        catch (InvalidDataException error)
+            when (error.Message.Contains("20 張查詢上限", StringComparison.Ordinal)) { }
+        Equal(0, fake.QueryByInvoiceCalls);
+        Equal(null, new InvoiceSyncStateStore(repository.DataDirectory)
+            .LastSuccess(Environments.Production + "|12345675", InvoiceAutomaticSyncService.DailyReconcileScope));
     }
 
     private static async Task TestAllowanceHistorySyncAsync()
@@ -902,6 +965,9 @@ internal static class Program
     private sealed class FakeGateway : IAmegoGateway
     {
         public Dictionary<int, InvoiceListResponse> Pages { get; } = [];
+        public Dictionary<int, AllowanceListResponse> AllowancePages { get; } = [];
+        public int AllowanceListCalls { get; private set; }
+        public DateOnly? AllowanceListStart { get; private set; }
         public Dictionary<string, QueryResponse> QueryByInvoice { get; } = new(StringComparer.OrdinalIgnoreCase);
         public QueryResponse QueryResponse { get; set; } = null!;
         public IssueResponse IssueResultResponse { get; set; } = new(0, "", "TT12345678", FixedNow.ToUnixTimeSeconds(), "1234");
@@ -927,6 +993,16 @@ internal static class Program
             return Task.FromResult(Pages.TryGetValue(page, out var response)
                 ? response
                 : new InvoiceListResponse(0, "", page, page, 0, []));
+        }
+
+        public Task<AllowanceListResponse> ListAllowancesAsync(
+            DateOnly startDate, DateOnly endDate, int page = 1, int limit = 20,
+            CancellationToken cancellationToken = default)
+        {
+            AllowanceListCalls++;
+            AllowanceListStart = startDate;
+            return Task.FromResult(AllowancePages.TryGetValue(page, out var response)
+                ? response : new AllowanceListResponse(1, []));
         }
 
         public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default)

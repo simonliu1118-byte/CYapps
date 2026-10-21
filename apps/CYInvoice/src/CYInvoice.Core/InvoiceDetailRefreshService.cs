@@ -97,7 +97,6 @@ public sealed class InvoiceDetailRefreshService
             record.OriginalOrderId = orderId;
         record.Source = InvoiceSourceInference.FromOrderId(orderId);
         InvoiceOfficialState.ApplyQuery(record, query);
-        InvoiceAllowanceMetadata.ApplyQuery(record, query.Allowances, query.AllowanceSummaryPresent);
         if (query.InvoiceStatus != 0) record.UploadStatus = query.InvoiceStatus;
         record.UploadStatusText = UploadStatusText(record.UploadStatus);
         record.ErrorMessage = string.Empty;

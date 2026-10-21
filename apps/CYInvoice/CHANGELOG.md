@@ -2,6 +2,11 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.36 Build 0 — 2026/10/22（V3.2-F：官方新折讓低頻查證）
+
+- 沿既有 AMEGO Gateway 增加唯讀 allowance_list（date_select=2 建立日期）及有界分頁，正式日間完整同步後再查近三日新折讓，最多三頁／20 張關聯發票，以原 InvoiceDetailRefreshService 的 invoice_query 更新本機已存在的唯一原發票及 PDF／預覽快取。複數原發票可分別回查；未對應／異常、不完整、逾上限均保守停止或列出待核對項目，不推測官方狀態、不送出折讓／作廢請求。
+- 新增舊日期已留存發票被新折讓觸發的隔離回歸，確認同日不重複執行 allowance_list，並檢查超量不查、不寫入每日完成標記；移除早先在 InvoiceOfficialState 以外的重複 ApplyQuery。舊折讓今日作廢、保留期外完整歷史、G 退役仍屬後續工作。雙 Windows 真人驗收維持 V3.2 上線後補做，正式 Release V3.1.0 不變。
+
 ## V3.1.35 Build 0 — 2026/10/22（V3.2-F：官方折讓同步基礎）
 
 - 在原有 invoice_list／invoice_query 與單筆詳情服務中，安全寫回官方 allowance[] 明細及完整性，並納入變更比對；官方折讓異動時失效舊 PDF／預覽快取。缺失的 allowance[] 不視為零折讓，不能放行折讓金額。新增隔離回歸測試，無額外 API 呼叫、資料表、Worker 路由或真交易。
