@@ -17,6 +17,7 @@
 | 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.34 Build 0：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
 | **V3.2 E Cloud 申請／核准／單次送出核心** | schema20 草案已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
 | **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
+| **V3.2 D／E Local 清冊交接預檢** | 新增不連外、唯讀 `allowance-void-cutover-preflight.ts`：逐裝置核對完整安裝清冊／獨立盤點、停用與持久封鎖、舊 Claim 人工歸檔、證據時效、裝置識別與公司卡版次，生成排序穩定的檢視摘要雜湊；異常全部阻塞，合成測試納入 CI | 結果僅是**待獨立人工審查候選**，非裝置簽章、非真實停用證明或 Gate 啟用授權；尚缺 Local 裝置實際停送證據產生與可信收集、未註冊裝置盤點、雙機現場核對 |
 | **V3.2 D／E Cloud Claim 啟用門檻** | schema20 草案增加公司／環境／公司卡版次的 Cloud-exclusive 控制權 Gate；未有經外部查證的 Local 全設備停用清冊與 cutover manifest 時，D1 主管 Grant、唯一 Claim 均拒絕。緊急封鎖可原子阻擋核准後送出，Claim 後再查撤權／Gate 失效則不 POST、永久保留 Claim 並稽核；Mock D1／多情境 CI 已納入 | Cutover 啟用介面**刻意未建立**，真實 Local 設備完整性無法靠 Cloud D1 自行推定；原 Worker 仍禁止 g0501，schema20 未升格 |
 | **V3.2 D／E Local→Cloud 權威封鎖** | 既有 SettingsStore.Save 已加入持續保留的 Cloud 曾參與標記（cloud_void_local_send_blocked），只要裝置曾切換 Cloud 或保留 Cloud/CYID 裝置／公司授權，Local g0501 預覽／核准／送出均 fail-closed；重新切 LocalOnly、舊設定覆寫與重啟測試已補 | 只能防本機模式回退，不能證明其他未連線裝置沒送；Cloud g0501 路由仍停用，完整跨機交接／原 D1 升級與真測未完成 |
 | **V3.2 D／E 回線唯讀查回** | 已補 Cloud 原 application ID 重讀永久 Claim，逐原號觀察 D0401／99、D0501／99 或離線／無法解析；任何狀態均不可自動重送／結案，無 Claim 也不能推定 Local 未送；合成測試含權限撤銷 | Cloud/Local 尚無可證明的全域互斥權威，Worker g0501 路由持續禁止，需完成受控 owner 移轉與回線衝突政策 |
