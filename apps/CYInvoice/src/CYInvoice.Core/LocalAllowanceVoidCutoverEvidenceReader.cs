@@ -46,9 +46,9 @@ public static class LocalAllowanceVoidCutoverEvidenceReader
             DataSource = database, Mode = SqliteOpenMode.ReadOnly, Pooling = false
         }.ToString());
         db.Open();
-        using var transaction = db.BeginTransaction();
+        // Both counts are computed within one read-only SQLite SELECT snapshot.
+        // Do not start an IMMEDIATE transaction on a read-only connection.
         using var sql = db.CreateCommand();
-        sql.Transaction = transaction;
         sql.CommandText = """
             SELECT COUNT(*) FROM sqlite_master
             WHERE type='table' AND name IN
@@ -70,7 +70,6 @@ public static class LocalAllowanceVoidCutoverEvidenceReader
         var claims = reader.GetInt64(0);
         var approvals = reader.GetInt64(1);
         reader.Close();
-        transaction.Commit();
 
         var settings = repository.Settings.LoadOrCreate();
         var quarantine = settings.CloudVoidLocalSendBlocked;
