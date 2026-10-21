@@ -91,9 +91,14 @@ export async function assessLocalVoidCutover(
     foundIds.some(id=>!expectedIds.includes(id)))
     errors.add("INSTALLATION_EVIDENCE_MISSING_OR_DUPLICATED");
   for(const d of devices){
-    if(!d||!HASH.test(d.evidenceSha256??""))
+    if(!d){
       errors.add("INSTALLATION_EVIDENCE_MISSING_OR_DUPLICATED");
-    const captured=time(d?.capturedAtUtc);
+      errors.add("EVIDENCE_STALE_OR_FUTURE");
+      continue;
+    }
+    if(!HASH.test(d.evidenceSha256??""))
+      errors.add("INSTALLATION_EVIDENCE_MISSING_OR_DUPLICATED");
+    const captured=time(d.capturedAtUtc);
     if(!Number.isFinite(assessed)||!Number.isFinite(captured)||
       captured>assessed||assessed-captured>MAX_SNAPSHOT_AGE_MS)
       errors.add("EVIDENCE_STALE_OR_FUTURE");
