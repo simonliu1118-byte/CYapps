@@ -1,47 +1,46 @@
 # CYEnvelope
 
-志遠專用的 Windows 信封套印工具。程式、資料模型、測試、資源與封裝均位於本目錄；不引用 `CYInvoice` 的程式碼或資料。
+志遠專用 Windows 信封套印工具。正式基準仍是 Go 版 V0.1.1；開發分支 `cyenvelope/csharp-remake` 正分階段重做 C#／WPF，目前測試版本 V0.2.1 Build 2。本分支尚未正式發行。
 
-## V0.1.1
+## 本次修整（Build 2）
 
-- 15K 標準信封（105 × 222 mm），直式套印。
-- 收件人即時篩選、同名多地址、每筆地址記住上次電話。
-- 臺灣市話、手機、0800 與分機格式化。
-- 離線三碼郵遞區號（中華郵政 368 筆地區表）。
-- 6–7 個郵件種類勾記、方框文字與每格式預設值。
-- 格式即時示意與毫米座標、字體、字級設定。
-- Windows 原生印表機列舉、內容視窗及 GDI 套印。
-- SQLite 本機資料庫；按下「列印」先保存，才送 Windows 列印。
-- 修正中文輸入法搭配收件人即時清單時，游標被重設而使字序錯亂的問題。
-- 依實際 15K 信封重畫主畫面預覽，並更新內建 15K 初始座標。
-- 改用「印表機＋直式信封」多尺寸應用程式圖示。
+- 主畫面收件人／郵遞區號並排，已存地址／電話選單與對應欄位整合；日常欄位及方框文字在預設視窗完整顯示。
+- 主畫面與聯絡人、格式、方框文字、設定共用 `Theme.xaml`；一般按鈕使用 WPF 原生樣板，主動作用 Blue；焦點只改色、不改尺寸。管理視窗不顯示應用程式標題圖示。
+- 格式設定與聯絡人儲存列固定在視窗底部；聯絡人表格隨視窗伸縮。直接輸入區支援 Button 的 Tab／Enter 操作，顯示可編輯範圍；浮動輸入框依預覽縮放補償，維持可讀字級。
+- 移除將多尺寸 ICO 覆蓋為單一 BitmapImage 的程式；視窗保留 ICO decoder，封包驗證直接比對兩個最終 EXE 的七組原生 icon payload。
+- 可攜封裝維持一層 `CYEnvelope` 資料夾；根目錄為 `CYEnvelope.exe`、`VERSION`、`BUILD`、`Runtime`。WPF 程式與六個原生 DLL 在 Runtime；首次啟動於根目錄建立 Data。沒有內層 ZIP 或獨立 SHA 檔。
 
-目前預覽依提供的 15K 信封照片重畫；實際套印位置仍可在「格式設定」依印表機進紙差異精校。
+## 信封素材與列印
 
-## 開發
+`EnvelopeRenderer.cs` 以毫米保存位置，預覽與套印共用同一繪製器。紅色底圖不送往印表機；只印黑字、勾記與黑色直排方框。
 
-需求：Go 1.22 或更新版。
+Build 2 依使用者提供的 `903127F6-8FE6-48FB-AB63-89B7606DA592.png`（393×393 商品圖）重畫可辨識的 15K 結構：左上郵票框、右上六格郵遞區號、左側郵件表格與狹長中央紅框；移除舊版錯誤的紅色三角封口及底部三格。底圖不再跟著文字位置變動。郵遞區號仍使用離線三碼，填前三格。
 
-```powershell
-./build.ps1
-```
+**素材限制：** 商品標籤遮住下半部，細字不清楚；中央框的下緣為暫估，不宣稱已與實物一比一校準。收到完整掃描後才能精確核對底部與實際尺寸。新資料庫採修正後初始位置，完全未修改的舊內建格式會更新；任何已調整的格式保留原值。15K 實際套印仍須目標印表機試印。
 
-或：
+既有 Go 程式暫作行為對照；不遷移 Go 測試資料。實際聯絡人資料不進 Git 或測試包。
+
+## 開發驗證
+
+需要 .NET 10 SDK。Windows 可直接執行：
 
 ```powershell
-$env:GOOS='windows'
-$env:GOARCH='amd64'
-$env:CGO_ENABLED='0'
-go test ./...
-go build -buildvcs=false -trimpath -ldflags '-H windowsgui -s -w' -o dist/CYEnvelope/CYEnvelope.exe ./cmd/CYEnvelope
+dotnet build .\src\CYEnvelope\CYEnvelope.csproj
+dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ```
 
-## 資料位置
+非 Windows 可用 `-p:EnableWindowsTargeting=true` 做編譯檢查。Windows 視覺檢查另執行：
 
-可攜版會在 EXE 同層使用：
+```powershell
+dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
+```
 
-- `Data/CYEnvelope.db`：聯絡人、格式、方框文字與設定
-- `Logs/CYEnvelope.log`：執行紀錄
-- `Cache/`：保留供後續快取功能
+Build 2 的 Windows CI #34 已完成畫面與七尺寸圖示驗證；後續檢查也涵蓋直接輸入框的可讀尺寸與空白聯絡人的編輯初始化，結果及擷取圖以最新提交的 CI 為準。檢查會產生實際 WPF 主畫面（空白、已填、最小視窗、直接輸入）與四個管理視窗 PNG，驗證預設／最小視窗的表單可見性、焦點尺寸、圖示及原生 EXE 資源。素材皆為合成範例，與測試包分開上傳。CI 同時執行核心資料測試、安全掃描、下載結構與封裝啟動驗證。Windows 125%／150% 顯示縮放、實機互動與列印仍須另驗；不得將 96 DPI 圖像當成所有 DPI 的驗收。
 
-備份時關閉程式，再複製整個 `Data` 目錄即可。
+從 [CYEnvelope Windows 檢查](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyenvelope-build.yml) 的 Build 2 執行下載 `CYEnvelope-V0.2.1-Build-2-windows-x64-test`。解壓縮一次後開啟 `CYEnvelope/CYEnvelope.exe`，保留 Runtime；不需另裝 .NET。Artifact 保留 14 天。本分支及 PR 保持開發測試狀態，不是正式 Release。
+
+## 來源與規範
+
+共通規則依根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。介面依 AITeam 主線的 CY Desktop Visual Guide。`assets/ENV.ico`、`assets/ENV.svg` 取自 AITeam 核准的 `shared/cy-visual/icon-family/apps/envelope/`，其中 ICO SHA-256 為 `9d6f1534cb6a1e81efe96f6468db8b885b0076e10e94b85929414d86c90c6256`。
+
+Windows 自包含測試資料夾的可重建指令為 `./build-csharp.ps1`；腳本將 WPF 程式與必要原生 DLL 一起放在 `dist/stage/CYEnvelope/Runtime/`，再製作根目錄的原生啟動 EXE，執行共用安全掃描。CI 直接上傳 `CYEnvelope` 資料夾，驗證根目錄無 DLL，下載後只需一次解壓縮；掃描失敗時不上傳封包。
