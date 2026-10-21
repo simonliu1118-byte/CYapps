@@ -4,6 +4,8 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：折讓作廢整合工程）
 
+- 員工端沿用現有 CYID 跨機折讓 WinForms 視窗，新增原號／原發票／原因的 `void-create` 申請操作；同 Workspace、環境、官方原折讓號產生固定申請 ID，斷線、重新開啟與跨 Device 查回皆沿用原 ID。Windows Client 僅在認證的原 ID `NOT_FOUND` 時建立一次申請，其餘逾時、權限撤銷、結果不明均不補發。Fake HTTP 覆蓋已有申請直接讀取、首次建立、建立回覆遺失後回線查回、503／撤權拒絕等；仍不開 g0501 送出路由。
+
 - 本輪 CYID 跨機作廢主管功能沿用既有 Worker `allowances-route` 與 WinForms `CloudAllowanceManagerForm`：新增 `void-preview`（原申請 ID 下主管身分、原號、原發票、原因與官方雙查唯讀）及 `void-approve`（再驗 CYID／Device、完整原號確認、原子 Grant）；Windows Client 不接受回應暗示可發送或官方成功。原視窗加入預覽、核准與原 ID 查回，無新送出入口。保留 schema20 草案、獨立受控切換與預設關閉旗標；合成測試涵蓋越權、無 Gate 拒絕、單次核准、回覆語意與零 g0501。
 
 - 沿既有 CYID Device／員工認證、allowances-route 與 Windows Cloud Client 新增 `void-create`／`void-status`（僅 schema20＋原旗標允許），跨機建立固定申請 ID 與唯讀查回；無 g0501 送出入口。包含越權、重複、未就緒與 Windows 契約測試。
