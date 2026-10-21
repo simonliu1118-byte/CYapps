@@ -15,7 +15,7 @@
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
 | 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.34 Build 0：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
-| **V3.2 E Cloud 申請／預覽** | schema20 草案有 CYID 範圍加密申請、原 ID 唯讀查回，主管解密 Frozen 後唯讀比對官方原號／原發票／D0401 狀態，雙次驗權及身分撤銷合成測試 | 尚無主管核准 Grant、正式送出 Claim 或對外路由；未開放 g0501 |
+| **V3.2 E Cloud 申請／核准** | schema20 草案具 CYID 加密申請、原 ID 查回、主管官方雙查證及重新驗權，新增文字確認後以 D1.batch 原子建立 Grant／核准並留不可變稽核；合成測試覆蓋核准競爭與錯誤確認 | 尚未完成安全的 Cloud/Local 協調與 g0501 唯一送出流程；無對外路由或真交易 |
 | **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
 | **V3.2 E Cloud g0501 Transport** | 單次簽名 POST 與官方原號唯讀查回已有內部 Source／Fake HTTP 回歸；不會自動重送、以 D0501／99 推論本次成功或自動結案 | 仍缺原 CYID 跨 Device 申請／核准／D1 唯一 claim 與 Worker route；不得在 claim 之前曝光 mutation |
 | **V3.2 E Local 作廢** | 官方原號預覽、主管凍結核准／文字確認、唯一 g0501 及 D0501／99 觀察已有 Source／合成測試；另補原號 claim 防不同本機待辦 ID 繞過結案；原號未歸因不結案 | CYID g0501、D 離線／回線、跨多原發票流程與真測仍待完成；未操作 Cloudflare 或真光貿 |
