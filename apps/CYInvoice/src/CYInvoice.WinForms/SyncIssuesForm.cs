@@ -1599,6 +1599,7 @@ internal sealed class SyncIssuesForm : Form
     private static string DisplayType(string type) => type switch
     {
         InvoiceSyncIssueTypes.InvoiceListFailed => "發票清單查詢失敗",
+        InvoiceSyncIssueTypes.AllowanceLimitExceeded => "折讓每日查詢超限",
         InvoiceSyncIssueTypes.QueryFailed => "發票回查失敗",
         InvoiceSyncIssueTypes.RemoteNotFound => "光貿查無發票",
         InvoiceSyncIssueTypes.UnknownRemoteNotFound => "結果不明且光貿查無",

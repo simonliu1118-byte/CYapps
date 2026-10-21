@@ -22,8 +22,12 @@ public static class InvoiceAllowanceMetadata
         // and the V3.1 manual reconciliation workflow. Completeness is a
         // separate signal: new V3.2 monetary caps MUST require the true
         // SummaryPresentKey, even when an older/synthetic query has allowances.
-        record.ExtensionData[OfficialAllowancesKey] =
-            JsonSerializer.SerializeToElement(allowances);
+        // An omitted official summary is unknown, not an authoritative
+        // empty history. Keep the last observed entries for future read-only
+        // reconciliation, but the false completeness marker forbids sending.
+        if (summaryPresent || !record.ExtensionData.ContainsKey(OfficialAllowancesKey))
+            record.ExtensionData[OfficialAllowancesKey] =
+                JsonSerializer.SerializeToElement(allowances);
     }
 
     public static IReadOnlyList<InvoiceAllowanceResult> ReadOfficial(InvoiceRecord record)

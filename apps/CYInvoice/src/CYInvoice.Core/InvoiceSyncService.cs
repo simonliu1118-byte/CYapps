@@ -13,6 +13,8 @@ public sealed record InvoiceSyncResult(
     int Queried,
     IReadOnlyList<string> Problems);
 
+internal sealed class AllowanceSyncLimitExceededException(string message) : InvalidDataException(message);
+
 public sealed class InvoiceSyncService
 {
     private readonly LocalRepository repository;
@@ -63,9 +65,9 @@ public sealed class InvoiceSyncService
     internal async Task<(int Queried, IReadOnlyList<string> Problems)> ReconcileRecentAllowanceEventsAsync(
         DateOnly today, CancellationToken cancellationToken = default)
     {
-        const int pageLimit = 3; // At most 60 list rows and 20 invoice queries per day.
-        const int pageSize = 20;
-        const int invoiceLimit = 20;
+        const int pageLimit = 3; // At most 150 allowance rows and 50 original-invoice queries.
+        const int pageSize = 50;
+        const int invoiceLimit = 50;
         await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var account = CurrentAccount();
         var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
@@ -78,7 +80,8 @@ public sealed class InvoiceSyncService
             var listed = await gateway.ListAllowancesAsync(
                 startDate, today, page, pageSize, cancellationToken).ConfigureAwait(false);
             if (listed.PageTotal > pageLimit)
-                throw new InvalidDataException("官方折讓列表超出每日查詢上限，需人工分批處理");
+                throw new AllowanceSyncLimitExceededException(
+                    "折讓清單超出每日 150 筆（3 頁 × 50 筆）程式上限；請回來修改程式查詢上限，再重新同步。");
             foreach (var allowance in listed.Data)
             {
                 if (allowance.OriginalInvoiceNumbers.Count == 0)
@@ -92,13 +95,15 @@ public sealed class InvoiceSyncService
                         throw new InvalidDataException("官方折讓含空白原發票號碼");
                     numbers.Add(number.Trim());
                     if (numbers.Count > invoiceLimit)
-                        throw new InvalidDataException("官方折讓關聯發票超出每日 20 張查詢上限，需人工分批處理");
+                        throw new AllowanceSyncLimitExceededException(
+                            "折讓關聯發票超出每日 50 張程式查詢上限；請回來修改程式查詢上限，再重新同步。");
                 }
             }
             if (listed.PageTotal > 0 ? page >= listed.PageTotal : listed.Data.Count < pageSize)
                 break;
             if (page == pageLimit)
-                throw new InvalidDataException("官方折讓列表超出每日 3 頁查詢上限，需人工分批處理");
+                throw new AllowanceSyncLimitExceededException(
+                    "折讓清單超出每日 150 筆（3 頁 × 50 筆）程式上限；請回來修改程式查詢上限，再重新同步。");
         }
         var current = AccountRecords(account)
             .Where(record => record.InvoiceState != InvoiceStates.Failed)
@@ -106,6 +111,7 @@ public sealed class InvoiceSyncService
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var refresh = new InvoiceDetailRefreshService(repository, (_, _) => gateway, now);
         var queried = 0;
+        var attempted = 0;
         foreach (var number in numbers.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -116,6 +122,7 @@ public sealed class InvoiceSyncService
             }
             try
             {
+                attempted++;
                 await refresh.RefreshAsync(matches[0], cancellationToken).ConfigureAwait(false);
                 queried++;
             }
@@ -123,6 +130,46 @@ public sealed class InvoiceSyncService
             catch (Exception error)
             {
                 problems.Add(number + ": 官方折讓原發票查回失敗：" + error.Message);
+            }
+        }
+
+        // F: A past allowance can be voided today without reappearing in
+        // allowance_list filtered by creation date. Use any remaining DAILY
+        // invoice-query budget to recheck retained originals with known official
+        // allowance history, oldest verified first. Updated LastChecked rotates
+        // successful records; a failed query is never regarded as confirmed.
+        foreach (var entry in current.Values
+            .Where(group => group.Length == 1)
+            .Select(group => group[0])
+            .Where(record => record.InvoiceNumber.Trim().Length != 0 &&
+                !numbers.Contains(record.InvoiceNumber.Trim()))
+            .OrderBy(record => record.LastChecked, StringComparer.Ordinal)
+            .ThenBy(record => record.InvoiceNumber, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (attempted >= invoiceLimit) break;
+            bool hasOfficialHistory;
+            try
+            {
+                hasOfficialHistory = InvoiceAllowanceMetadata.ReadOfficial(entry)
+                    .Any(allowance => allowance.AllowanceNumber.Trim().Length != 0);
+            }
+            catch (Exception error)
+            {
+                problems.Add(entry.InvoiceNumber + ": 既有折讓歷史無法解析：" + error.Message);
+                continue;
+            }
+            if (!hasOfficialHistory) continue;
+            attempted++;
+            try
+            {
+                await refresh.RefreshAsync(entry, cancellationToken).ConfigureAwait(false);
+                queried++;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception error)
+            {
+                problems.Add(entry.InvoiceNumber + ": 舊折讓作廢狀態查回失敗：" + error.Message);
             }
         }
         return (queried, problems);

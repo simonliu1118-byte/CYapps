@@ -58,8 +58,22 @@ public sealed class InvoiceAutomaticSyncService
         var result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
         // Only the daily pass calls allowance_list; normal startup/manual
         // sync retains its existing call volume.
-        var allowances = await syncService.ReconcileRecentAllowanceEventsAsync(today, cancellationToken)
-            .ConfigureAwait(false);
+        (int Queried, IReadOnlyList<string> Problems) allowances;
+        try
+        {
+            allowances = await syncService.ReconcileRecentAllowanceEventsAsync(today, cancellationToken)
+                .ConfigureAwait(false);
+            // The durable Upload Issues alert is cleared only after a full successful list pass.
+            issueStore.ResolveAccountType(accountKey, InvoiceSyncIssueTypes.AllowanceLimitExceeded, now());
+        }
+        catch (AllowanceSyncLimitExceededException error)
+        {
+            // Fail the daily pass (no LastSuccess marker) but keep a visible,
+            // deduplicated action item in the existing Upload Issues screen.
+            issueStore.Record(accountKey, string.Empty, string.Empty,
+                InvoiceSyncIssueTypes.AllowanceLimitExceeded, error.Message, now());
+            throw;
+        }
         result = result with
         {
             Queried = result.Queried + allowances.Queried,

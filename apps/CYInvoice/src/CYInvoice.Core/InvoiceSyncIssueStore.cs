@@ -6,6 +6,7 @@ namespace CYInvoice.Core.Storage;
 public static class InvoiceSyncIssueTypes
 {
     public const string InvoiceListFailed = "invoice_list_failed";
+    public const string AllowanceLimitExceeded = "allowance_limit_exceeded";
     public const string QueryFailed = "query_failed";
     public const string RemoteNotFound = "remote_not_found";
     public const string UnknownRemoteNotFound = "unknown_remote_not_found";
