@@ -94,6 +94,25 @@ try{
  sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(manager);
  assert.throws(()=>grant(),/VOID_APPROVAL_SOURCE_INVALID/);
  sql.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(manager);
+ // A manager grant is forbidden when no cutover evidence is registered.
+ // Synthetic SQL uses a fake attestation; no real Cloud/Local exclusivity implied.
+ assert.throws(()=>grant(),/VOID_APPROVAL_SOURCE_INVALID/);
+ assert.throws(()=>sql.prepare("INSERT INTO allowance_void_authority_gates "+
+  "(workspace_id,environment,seller_invoice,company_revision,state,"+
+  "cutover_manifest_hash,activating_device_id,activated_at) "+
+  "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
+  .run(ws,"not-a-hash",manager,opened),/CHECK constraint failed/);
+ assert.throws(()=>sql.prepare("INSERT INTO allowance_void_authority_gates "+
+  "(workspace_id,environment,seller_invoice,company_revision,state,"+
+  "cutover_manifest_hash,activating_device_id,activated_at) "+
+  "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
+  .run(ws,a,employee+"-INVALID",opened),/VOID_GATE_CUTOVER_SCOPE_INVALID|FOREIGN KEY constraint failed/);
+ sql.prepare("INSERT INTO allowance_void_authority_gates "+
+  "(workspace_id,environment,seller_invoice,company_revision,state,"+
+  "cutover_manifest_hash,activating_device_id,activated_at) "+
+  "VALUES(?,'test','12345678',1,'cloud_exclusive',?,?,?)")
+  .run(ws,a,manager,opened);
+ assert.equal(count("allowance_void_authority_gates"),1);
  // A malformed or overlong manager approval cannot become a valid send claim.
  assert.throws(()=>sql.prepare("INSERT INTO allowance_void_approvals "+
   "(application_id,workspace_id,request_hash,official_snapshot_hash,manager_actor_id,"+
@@ -115,6 +134,19 @@ try{
  sql.prepare("UPDATE company_settings SET revision=2 WHERE workspace_id=?").run(ws);
  assert.throws(()=>claim(),/VOID_CLAIM_AUTH_OR_EVIDENCE_INVALID/);
  sql.prepare("UPDATE company_settings SET revision=1 WHERE workspace_id=?").run(ws);
+ // Atomic claim must also fail if an emergency stop occurs after approval.
+ sql.exec("SAVEPOINT temporary_gate_stop");
+ sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
+  "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
+  "WHERE workspace_id=?").run(ws);
+ assert.throws(()=>claim(),/VOID_CLAIM_AUTH_OR_EVIDENCE_INVALID/);
+ assert.throws(()=>sql.prepare("UPDATE allowance_void_authority_gates "+
+  "SET state='cloud_exclusive',cutover_manifest_hash=?,activating_device_id=?,"+
+  "activated_at=? WHERE workspace_id=?").run(a,manager,opened,ws),
+  /VOID_GATE_REACTIVATION_FORBIDDEN/);
+ sql.exec("ROLLBACK TO temporary_gate_stop; RELEASE temporary_gate_stop");
+ assert.throws(()=>sql.prepare("DELETE FROM allowance_void_authority_gates").run(),
+  /VOID_GATE_HISTORY_REQUIRED/);
  claim();
  assert.equal(count("allowance_void_send_claims"),1);
  assert.throws(()=>claim(),/UNIQUE constraint failed/);
@@ -134,5 +166,5 @@ try{
  assert.throws(()=>sql.prepare("DELETE FROM allowance_void_audit").run(),/VOID_AUDIT_APPEND_ONLY/);
  assert.equal(sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
  assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
- console.log("V3.2 E schema20 draft: rollback, manager grant, original-ID unique claim, revoke, company rotation, no replay & immutable audit OK");
+ console.log("V3.2 E schema20 draft: deny-by-default Cloud cutover gate, emergency stop, manager grant, unique claim, no replay & immutable audit OK");
 }finally{sql.close();}
