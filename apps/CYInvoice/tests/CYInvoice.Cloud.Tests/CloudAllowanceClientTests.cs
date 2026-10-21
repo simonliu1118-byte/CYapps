@@ -264,10 +264,10 @@ internal static class CloudAllowanceClientTests
             "ws_other","test","ALW-001"));
         Equal(false,stable==CloudAllowanceClient.OriginalVoidApplicationId(
             "ws_synthetic","test","ALW-002"));
+        var rejected=false;
         try{CloudAllowanceClient.OriginalVoidApplicationId("ws_synthetic","test","bad");}
-        catch(ArgumentException){goto ValidatedStableId;}
-        throw new InvalidOperationException("Invalid original number must fail closed.");
-        ValidatedStableId:
+        catch(ArgumentException){rejected=true;}
+        Equal(true,rejected);
         var fake=new FakeHandler();
         fake.Add(r=>{
             Check(r,"void-create");
