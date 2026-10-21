@@ -35,6 +35,9 @@ internal sealed class LocalAllowanceVoidStore
                 issue_id INTEGER NOT NULL UNIQUE REFERENCES sync_issues(local_id), claimed_utc TEXT NOT NULL,
                 PRIMARY KEY(account_key,allowance_number)
             );
+            -- Same official number cannot be claimed twice with differing case.
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_allowance_void_local_claim_unique_number
+                ON allowance_void_local_claims(account_key,allowance_number COLLATE NOCASE);
             CREATE TABLE IF NOT EXISTS allowance_void_local_observations (
                 audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 approval_id TEXT NOT NULL REFERENCES allowance_void_local_approvals(approval_id),
@@ -165,7 +168,7 @@ internal sealed class LocalAllowanceVoidStore
         using var sql = db.CreateCommand();
         sql.CommandText = """
             SELECT EXISTS(SELECT 1 FROM allowance_void_local_claims
-                WHERE account_key=$account AND allowance_number=$number)
+                WHERE account_key=$account AND allowance_number=$number COLLATE NOCASE)
             """;
         sql.Parameters.AddWithValue("$account", account);
         sql.Parameters.AddWithValue("$number", allowanceNumber);
