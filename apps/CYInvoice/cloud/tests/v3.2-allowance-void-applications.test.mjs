@@ -41,13 +41,19 @@ const authority=(a=applicant)=>({revalidate:async()=>a});
 const request={workspaceId:ws,deviceId:employee,applicationId:"void_application_first",
  environment:"test",allowanceNumber:"ALW-001",originalInvoiceNumber:"AB12345678",
  reason:"Synthetic review request"};
-let throwAfterWrite=false,loseClaimAcknowledgement=false;
+let throwAfterWrite=false,loseClaimAcknowledgement=false,stopImmediatelyAfterClaim=false;
 class Statement{
  constructor(q){this.q=q;this.args=[];}
  bind(...args){this.args=args;return this;}
  async first(){return sql.prepare(this.q).get(...this.args)??null;}
  async run(){
   const result=sql.prepare(this.q).run(...this.args);
+  if(stopImmediatelyAfterClaim&&this.q.includes("INSERT INTO allowance_void_send_claims")){
+   stopImmediatelyAfterClaim=false;
+   sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
+    "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
+    "WHERE workspace_id=? AND company_revision=2").run(ws);
+  }
   if(loseClaimAcknowledgement&&this.q.includes("INSERT INTO allowance_void_send_claims")){
    loseClaimAcknowledgement=false;
    throw Error("simulated D1 claim ACK lost AFTER durable write");
@@ -386,5 +392,38 @@ try{
   ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
   ctx,authority(supervisor),officialSecond,()=>time));
  assert.equal(posts,1,"Lost claim acknowledgement must not create a second POST");
+ // Emergency stop AFTER durable Claim is committed prevents the FIRST POST.
+ // The original claim remains permanent, auditable and readback-only.
+ const third={...request,applicationId:"void_application_third",
+  allowanceNumber:"ALW-004"};
+ await create(db,third,ctx,authority());
+ const target3={workspaceId:ws,applicationId:third.applicationId,deviceId:managerDevice};
+ const officialThird=async(url,options)=>{
+  if(url.endsWith("/g0501"))throw Error("FORBIDDEN g0501 after post-claim stop");
+  if(url.endsWith("/allowance_query"))
+   return Response.json({code:0,data:{...officialRecord,allowance_number:"ALW-004"}});
+  return Response.json({code:0,data:{"ALW-004":{type:"D0401",status:99}}});
+ };
+ const previewThird=await preview(db,target3,ctx,authority(supervisor),
+  officialThird,()=>time);
+ await approve(db,{...target3,expectedRevision:1,
+  requestHash:previewThird.requestHash,
+  expectedOfficialSnapshotHash:previewThird.officialSnapshotHash,
+  confirmation:"作廢 ALW-004"},ctx,authority(supervisor),officialThird,()=>time);
+ stopImmediatelyAfterClaim=true;
+ await rejects("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST",()=>executeVoid(db,{
+  ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
+ },ctx,authority(supervisor),officialThird,()=>time));
+ assert.equal(posts,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,3);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit "+
+  "WHERE kind='post_claim_interlock_no_post'").get().n,1);
+ const thirdRead=await read(db,{...target3,deviceId:employee},authority());
+ assert.equal(thirdRead.claimed,true);
+ assert.equal(thirdRead.readbackOnly,true);
+ await rejects("VOID_EXEC_CUTOVER_NOT_AUTHORIZED",()=>executeVoid(db,{
+  ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
+ },ctx,authority(supervisor),officialThird,()=>time));
+ assert.equal(posts,1);
  console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
 }finally{sql.close();}
