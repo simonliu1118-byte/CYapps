@@ -4,6 +4,9 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
 
+- 新增 Cloud **draft** `0020_allowance_void_coordination.sql`：分離 g0501 申請與 g0401 開立的業務狀態，保存不含原號明文的 HMAC 識別與加密 Frozen 欄位；D1 保護單一申請、主管核准、15 分鐘有效期、公司卡版次、Device 撤權、唯一永久送出 claim 及 append-only 稽核。僅草案與合成測試，尚無可執行 Cloud g0501 路由及官方前置核對，不代表 D/E 整合或 schema20 升級完成。
+
+
 - 修正 Local g0501 已有永久送出紀錄時，重新建立的另一個待辦 ID 可能略過取消／人工結案的檢查；改用公司／環境＋原折讓號查同一個既有 SQLite claim。
 - 新申請及主管處理也查原號 claim；同號不得再次申請送出，已送出者只能從原 ID 唯讀查回。新增跨待辦 ID、重啟、回覆遺失、不得繞過人工結案的合成回歸。
 - 從歷史 Draft 選擇性回收 Cloud g0501 單次簽名傳輸與 allowance_status 原號唯讀查回，加入隔離 Fake HTTP 回歸；僅內部 transport，未建立任何允許送出交易的 Worker HTTP route。D0501／99 仍不可歸因本次 POST，不授權自動結案／重送。
