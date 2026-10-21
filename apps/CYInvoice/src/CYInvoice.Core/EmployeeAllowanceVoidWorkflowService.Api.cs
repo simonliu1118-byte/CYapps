@@ -19,12 +19,29 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
     public LocalAllowanceVoidApproval? LocalApprovalFor(InvoiceSyncIssue issue) =>
         IsLocalApiMode ? new LocalAllowanceVoidStore(repository.DataDirectory).Find(CurrentAccountKey(), issue.Id) : null;
 
-    private bool IsLocalApiMode => repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
-        repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
+    // A local identity toggle is not an ownership handoff. Once the current
+    // settings retain a Cloud Device/workspace or CYID authority, Local SQLite
+    // cannot prove that a different Device has not claimed the same g0501.
+    // This is a conservative local-side fence, NOT global mutual exclusion.
+    private bool IsLocalApiMode
+    {
+        get
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            return repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
+                settings.CloudMode == CloudModes.LocalOnly &&
+                settings.CloudWorkspaceId.Length == 0 &&
+                settings.CloudDeviceId.Length == 0 &&
+                settings.CloudIdentityProvider != "CYID" &&
+                !settings.CloudEmployeeAuthorityReady &&
+                settings.CloudCompanyAppliedRevision == 0;
+        }
+    }
 
     private EmployeeAccount RequireLocalApiManager(string employee, string password)
     {
-        if (!IsLocalApiMode) throw new InvalidOperationException("此作廢 API 入口只限 Local 模式；CYID 作廢尚待跨機整合");
+        if (!IsLocalApiMode) throw new InvalidOperationException(
+            "本機仍有 Cloud／CYID 裝置或公司授權紀錄，無法證明折讓作廢只有單一送出權威；禁止由 Local 送出或核准，請依原申請 ID 查回並完成受控交接。");
         return EmployeeOperationAuthentication.AuthenticateManager(repository, employee, password);
     }
 
