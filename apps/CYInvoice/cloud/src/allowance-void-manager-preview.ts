@@ -2,7 +2,7 @@
  // A preview is NOT an approval grant, sending claim, or g0501 permission.
 import {loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
-import {queryOfficialVoidTarget} from "./amego-allowance-void-proof";
+import {queryOfficialVoidTarget,sameVoidCompanyCard,freshVoidOfficialEvidence} from "./amego-allowance-void-proof";
 import type {AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 
 export interface CloudVoidManagerPreview {
@@ -42,15 +42,9 @@ export async function previewCloudVoidForManager(
   throw new Error("VOID_PREVIEW_CHANGED_DURING_OFFICIAL_CHECK");
  const current=await loadAmegoCompanySettingsForGateway(
   db,t.workspaceId,ctx.encryptionKeyHex);
- if(current.revision!==company.revision||
-  current.sellerInvoice!==company.sellerInvoice||
-  current.amegoAppKey!==company.amegoAppKey)
+ if(!sameVoidCompanyCard(company,current))
   throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
- const date=clock();
- const checked=Date.parse(proof.checkedAtUtc);
- if(!(date instanceof Date)||!Number.isFinite(date.valueOf())||
-  !Number.isFinite(checked)||checked>date.valueOf()+1000||
-  date.valueOf()-checked>60_000)
+ if(!freshVoidOfficialEvidence(proof.checkedAtUtc,clock()))
   throw new Error("VOID_PREVIEW_OFFICIAL_EVIDENCE_STALE");
  return {
   applicationId:t.applicationId,revision:1,requestHash:first.requestHash,
