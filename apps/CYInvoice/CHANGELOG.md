@@ -4,6 +4,9 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
 
+- 新增 schema20 草案的 Cloud-exclusive cutover Gate（公司／環境／公司卡版次）；預設無正式交接證據時不允許主管 Grant 或 g0501 Claim，禁止 Gate 被靜默修改／刪除／恢復，緊急停用於 D1 永久 Claim 寫入瞬間生效。內部 g0501 owner 在 Claim 前後驗證 Gate／Device／CYID，Claim 已持久化但因後續撤權而停送，記錄 append-only `post_claim_interlock_no_post`，仍永久禁止重試；合成測試覆蓋無 Gate、變更公司卡、核准後停止、Claim 後停止、零 POST。未提供 Gate 啟用入口，不能宣稱知道所有離線 Local 裝置，原 D1／Worker 仍未升級或部署。
+
+
 - 防止已經經歷 Cloud／CYID 的本機環境單靠設定切回 LocalOnly 就重新開放 g0501：SettingsStore 原來源持續保存單調 Cloud 曾參與記號，Local 主管預覽／核准／送出須無 Cloud 綁定、沒有曾參與記號才允許；本機重新開啟、舊設定覆寫、零 POST 合成驗證。該標記非 Cloud 租約，**不宣稱**跨機互斥完成，Cloud g0501 路由仍封閉。
 
 
