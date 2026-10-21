@@ -260,6 +260,10 @@ static async Task TestLocalVoidCompetingIssueAsync()
     api.LoseReply=true;
     await setup.Workflow.SendLocalVoidOnceAsync(original,"2000","AdminPass1","作廢 ALW-001",api);
     Equal(1,api.PostCalls);
+    // Repeat submission must NOT report that a claimed transaction is merely
+    // pending manager approval, even if the original application ID survives.
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SubmitAsync(
+        setup.Record,"ALW-001","3015","Employee1","合成作廢原因"));
 
     // Simulate a second local work item pointing at the exact same AMEGO
     // allowance after a mode/device transition. Its issue ID must not bypass
