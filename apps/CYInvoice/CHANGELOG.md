@@ -4,6 +4,9 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
 
+- Windows Core 新增 `LocalAllowanceVoidCutoverEvidenceReader.Capture` 原 SQLite 唯讀交接快照：缺表 fail-closed、全部舊 Claim 保守判為待追溯，另計未送出核准與 Cloud 隔離狀態；產生不含原號與密碼的摘要 SHA-256，但不是身分認證／真停機證據、不可自動取得 Gate／g0501 權限。增補 Cloud→Local 回退、重新開啟、原 Claim 及私密資訊缺漏合成回歸。
+
+
 - 新增 Local→Cloud 作廢交接**唯讀預檢**及合成測試：完整裝置安裝清冊與獨立盤點必須具備，單機禁送、持久隔離、既有 Claim 核對及時效任一未通過即阻擋；所有預檢結果均不得啟用 Cloud g0501，雜湊僅供獨立人工審查，不能當作可信裝置簽章或 D1 Gate 交接證據。未操作原 D1／Worker／真光貿。
 
 
