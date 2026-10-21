@@ -13,18 +13,19 @@
 
 ## 2. 2026-10-21 真實進度（分開標明證據來源）
 
-- **已合併的工程能力**：V3.1.25 Build 0 的 A、B 部分 Local 工作流、C 申請／主管覆核、加密 Frozen／原因、Grant、配號、CAS、唯一內部 g0401 coordinator、嚴格原號讀回與 C7a 保守人工分類；PR #539 已通過精確 head 的必要 CI 並合併。工程碼已有這些能力，**不等於真 g0401 成功**。
-- **遠端 C6（依使用者 2026-10-21 本機 MCP 驗收回報）**：原 CYInvoice D1 0017／0018 各套一次、schema18；原 Worker 保留正式 CYID、D1 與 Secrets，SCHEMA_VERSION=18、ALLOWANCE_API_ENABLED=false；新六表皆空，備份與私有還原證據核對完成。這是**使用者提供的實測證據**，不是本 GitHub 對話重新查詢 Cloudflare。本批不應再套 0014～0018，也不新增測試 D1／Worker。
-- **尚待完成**：B 的安全撞號後人工後續流程；C 的可用受控送出入口、人工歸因／Audit 與真雙機及光貿測試；D 離線／回線；E g0501；F 官方對帳同步；G 舊介面退役；H 整合驗收及另行核准的 Release。C7a 的六類分類只是安全表達，不是已完成實際人工判定及金流歸因。
-- **正式版**：仍為 V3.1.0。工程 Source、原 D1 schema、Worker 部署、真光貿驗收、正式 Release 五種狀態不可互相替代。
+- **工程來源**：V3.1.32 Build 0。A 折讓編輯、B Local 與 C Cloud 的申請／主管覆核、加密 Frozen／原因、Grant、原 Ledger 配號／單次 g0401、無法歸因查回、人工分類與明確外部占號後主管改配號已有工程碼及合成測試。0019 已升格為唯一 canonical migration，非空 schema18 的檔案備份／失敗回滾／一次升級／還原及明確 marker 18→19 部署護欄已有工程驗證。這些都不等於真光貿交易或真人驗收。
+- **遠端基線（依使用者先前本機 MCP 回報）**：原 D1 0017／0018 各套一次、schema18；原 Worker 保留 CYID／D1／Secrets，SCHEMA_VERSION=18、ALLOWANCE_API_ENABLED=false；新六表為空，私有備份與還原證據曾核對完成。本 GitHub 工程批次沒有重新查詢或操作 Cloudflare；不重套 0014～0018、不新增替代 Worker／D1。
+- **下一個操作停點**：依[本機 MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，先核共用帳號餘額、有界盤點及 schema18 私有備份，再另行授權套一次 0019／部署原 Worker marker19，四道折讓旗標保持關閉。
+- **B/C 尚未完成的驗收**：可歸因成功與未知結果人工處置政策、測試公司卡、真兩台 Windows／角色與 Device 撤權／併發／斷電／回覆遺失，以及真光貿測試。單靠 source、合成 CI、人工分類或原號吻合都不能結案。
+- **後續範圍**：D 離線／回線、E g0501、F 官方對帳同步、G 舊介面退役、H 集中整合驗收，全部仍屬 V3.2。正式 Release 維持 V3.1.0；工程 source、遠端 schema／部署、真交易、真人驗收與正式發行分開記錄。
 
 ## 3. A～H 功能與完成門檻（範圍不刪減、不改版）
 
 | 階段 | 固定範圍 | 完成證據 |
 | --- | --- | --- |
 | A 折讓編輯 | 原發票帶入、官方現況、含／未稅與負數折扣、七位精度、超額保護 | 已有 Source＋CI；仍納入 H 真機／光貿整合回歸 |
-| B Local 正式送出 | 主管二次驗權、Frozen／SQLite Ledger、單次 g0401、原號查回及明確撞號後**受控**下一號 | 既有 B2d Source；補齊剩餘撞號人工操作、斷電與本機安全驗收 |
-| C CYID 跨機折讓 | 員工／主管多機操作、身份及 Device 撤權、加密原因、Grant、獨立 D1 Ledger、Audit、受控單次 g0401 與未知狀態人工處置 | schema18 與 Worker 受控升級已依本機報告完成，但 flag 關閉；其餘受控入口、跨機矩陣、真正測試環境未完成 |
+| B Local 正式送出 | 主管二次驗權、Frozen／SQLite Ledger、單次 g0401、原號查回及明確外部占號後受控下一號 | 已有主管文字覆核及改配號 Source／合成測試；仍待 Local 斷電、實機與真光貿驗收 |
+| C CYID 跨機折讓 | 員工／主管多機操作、身份／Device 撤權、加密原因、Grant、D1 Ledger、Audit、受控單次 g0401、未知處置與主管占號改配號 | Source 已接通且 canonical 19 已備妥；遠端仍 schema18／flag 關閉，待受控升級、歸因政策與真雙機／光貿驗收 |
 | D Cloud 故障與回線 | Cloud 失聯、光貿可用時的安全授權降級、跨機競爭／撞號、復線對帳和安全衝突處理 | 雲端／光貿不同故障組合、撤權、斷電、同一申請零自動重送 |
 | E 折讓作廢 | g0501 Local／CYID：申請、核准、單次送出、官方逐號查回、D0501 狀態 | 真測試 API、未授權拒絕、未知結果只回查、不以行政結案冒充作廢 |
 | F 正式同步 | 低頻 invoice_list／allowance_list，加必要 invoice_query／allowance_status；外部修改、跨期與 PDF Cache | 原本光貿網站操作後，本機／跨機依官方資料更新，保留不可變稽核 |
@@ -42,17 +43,7 @@
 
 這是**工作組織上限目標，不是承諾固定 PR 數或省略安全測試**。同一成果未完成的修正留在同一分支，直到精確 head CI 通過再合併；不用每修一個欄位就升 Patch。一般工程版本仍遵守共通規則 VERSION／BUILD；純規劃文件改寫不改產品版號。GitHub PR、正式 Cloudflare 操作與正式 Release 是三個獨立行為。
 
-**批次 1 原始碼進展（2026-10-21）**：#542 已合併 Cloud 受控單次送出入口／Windows 查證；Local 舊版在全項吻合時自動 `confirmed` 與 Cloud 不一致，V3.1.27 改為保留 `sending`、記錄原號全項吻合之不可修改本機摘要稽核，不准憑同號認定本次 POST 成功。整批仍須明確的主管人工裁決規範、可能需要 Cloud canonical 新 Migration 的持久手續、受控撞號後下一號與雙機真光貿驗收；不能藉由本機稽核完成而提前開啟 Cloud 送出。
-
-**2026-10-21 Batch 1 Local 改配號進展**：僅明確第一次官方占號錯誤，接著唯讀驗明舊號屬不同買方／原發票且主管再次核准，才可把新號以相同原 Ledger 的下一 `attempt` 原子預留並寫 append-only Audit；不自動發送，不解封未知狀態。Local UI／Cloud 受控流程仍屬批次 1 未完事項。
-
-**2026-10-21 Batch 1 Local 主管 UI 收斂**：沿原 SyncIssuesForm 雙擊待辦明細處理明確外部占號；只有管理員新登入與文字確認，且後端即時原號證據比對和凍結主管核准皆通過，才以原 SQLite append-only Audit 及下一 attempt 預留。原號查回即使全項吻合仍需保留 sending，不誤寫已正式完成。Cloud 持久人工 Audit、跨機改配號及測試公司卡的真光貿驗收仍是本批未完成門檻。
-
-**2026-10-21 Batch 1 Cloud 人工 Audit 工程進度**：在 schema18 之外另外提出 schema19 草案（append-only 主管裁決分類與原查回引用），以新 API 與 WinForms 讀寫、獨立預設關閉的手動功能旗標／schema19 閘門控制。此為 GitHub 工程來源與合成驗證，**不是**使用者本機 MCP 已套用；正式 Worker 與 D1 仍依使用者最近回報停在 schema18 且 ALLOWANCE_API_ENABLED=false。人工分類不代表可歸因成功，不得改 confirmed、重送或另配號。待本機有界預算／備份／回滾與真雙機實測後才可判定 C 完成。
-
-**2026-10-21 Batch 1 Cloud 外部占號整合（V3.1.31 Build 0）**：首次 g0401 明確占號拒絕，且同次官方原號完整驗明不同買方與不同原發票時，才原子保存 occupied_external＋外部證據；主管重新登入並輸入含原號的完整文字後，再查官方原號／餘額及權限，以原 Ledger 追加下一 attempt 和不可變前後號 Audit。新號只有 reserved，後續另行確認才通過原唯一 coordinator。schema19 草案追加證據分類、索引及 next-ledger 連結，未升格／套用；新獨立旗標 ALLOWANCE_EXTERNAL_COLLISION_ENABLED 預設關閉，且下一 attempt 送出仍受其及原 g0401 旗標控制。原 D1／Worker、公司卡與真光貿不變；無法歸因成功政策、schema19 受控部署、雙機真測與 B/C 最終驗收仍未完成。
-
-**2026-10-21 schema19 部署準備（V3.1.32 Build 0）**：0019 唯一來源已從 drafts 升格至 canonical migrations；非空 schema18 的檔案備份、DDL 失敗回滾、一次升級及備份還原經合成驗證。原部署 owner 只在明確選擇 18:19、完整 canonical 19 已套用、原 CYID／schema18 與四道折讓旗標全關時，才允許只改 marker；其他 runtime 設定及綁定完全保留。未真正部署及精確讀回不能判為完成。原 D1／Worker 仍依先前本機回報為 schema18，沒有在本批操作 Cloudflare。下一步交本機 MCP，依[現行交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)先核額度／備份，再審核 0019 及 Worker 受控升級；不啟用折讓、不呼叫光貿、不宣告 B/C 結案。
+**批次 1 現行停點**：工程來源已整合到上述 B/C 主路徑；不再把已完成的 DTO／按鈕／查證子片當作新工作單。接著是原 schema19／Worker 的另行授權受控升級，以及歸因政策和真實驗收。歷史各版工程證據只由 CHANGELOG／PR 追溯，不在本計畫重複逐版報告。
 
 ## 5. 不可跳過的整合安全門檻
 
