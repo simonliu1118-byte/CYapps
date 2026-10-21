@@ -35,7 +35,15 @@ function sameActor(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolea
 function isManager(a:AllowanceActor):boolean{
  return a.workspaceRole==="ADMIN"||a.workspaceRole==="SUPER_ADMIN";
 }
-async function activeDevice(db:D1Database,ws:string,dev:string):Promise<boolean>{
+// Shared Cloud g0501 authority contract; approval and the single sender must
+// not grow divergent manager/Device checks.
+export function isVoidManager(a:AllowanceActor|null,ws:string):a is AllowanceActor{
+ return validActor(a,ws)&&isManager(a);
+}
+export function sameVoidManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolean{
+ return isVoidManager(a,ws)&&isVoidManager(b,ws)&&sameActor(a,b,ws);
+}
+export async function activeVoidDevice(db:D1Database,ws:string,dev:string):Promise<boolean>{
  return !!await db.prepare("SELECT d.device_id FROM devices d "+
  "JOIN workspaces w ON w.workspace_id=d.workspace_id "+
  "WHERE w.workspace_id=?1 AND w.status='active' AND d.device_id=?2 "+
@@ -84,7 +92,7 @@ export async function createCloudAllowanceVoidApplication(
 ):Promise<CloudVoidApplicationStatus>{
  validateRequest(i,ctx);
  const first=await authority.revalidate();
- if(!validActor(first,i.workspaceId)||!await activeDevice(db,i.workspaceId,i.deviceId))
+ if(!validActor(first,i.workspaceId)||!await activeVoidDevice(db,i.workspaceId,i.deviceId))
   throw new Error("VOID_APPLICATION_AUTH_REQUIRED");
  const c=await company(db,i.workspaceId);
  const identity=[i.workspaceId,c.seller_invoice,i.environment,i.allowanceNumber];
@@ -97,7 +105,7 @@ export async function createCloudAllowanceVoidApplication(
    originalInvoiceNumber:i.originalInvoiceNumber,reason:i.reason}));
  const second=await authority.revalidate();
  if(!sameActor(first,second,i.workspaceId)||
-  !await activeDevice(db,i.workspaceId,i.deviceId))
+  !await activeVoidDevice(db,i.workspaceId,i.deviceId))
   throw new Error("VOID_APPLICATION_AUTH_CHANGED");
  const updated=await company(db,i.workspaceId);
  if(updated.revision!==c.revision||updated.seller_invoice!==c.seller_invoice||
@@ -134,7 +142,7 @@ export async function readCloudAllowanceVoidApplication(
 ):Promise<CloudVoidApplicationStatus>{
  validateTarget(t.workspaceId,t.applicationId,t.deviceId);
  const first=await authority.revalidate();
- if(!validActor(first,t.workspaceId)||!await activeDevice(db,t.workspaceId,t.deviceId))
+ if(!validActor(first,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_APPLICATION_AUTH_REQUIRED");
  const row=await db.prepare("SELECT r.application_id,r.requester_actor_id,"+
  "r.status,r.revision,EXISTS(SELECT 1 FROM allowance_void_send_claims c "+
@@ -146,7 +154,7 @@ export async function readCloudAllowanceVoidApplication(
   throw new Error("VOID_APPLICATION_NOT_FOUND");
  const second=await authority.revalidate();
  if(!sameActor(first,second,t.workspaceId)||
-  !await activeDevice(db,t.workspaceId,t.deviceId))
+  !await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_APPLICATION_AUTH_CHANGED");
  if((row.status!=="open"&&row.status!=="approved")||
    (row.revision!==1&&row.revision!==2))
@@ -177,7 +185,7 @@ export async function loadCloudAllowanceVoidForManager(
  validateTarget(t.workspaceId,t.applicationId,t.deviceId);
  const first=await authority.revalidate();
  if(!validActor(first,t.workspaceId)||!isManager(first)||
-  !await activeDevice(db,t.workspaceId,t.deviceId))
+  !await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_PREVIEW_MANAGER_REQUIRED");
  const row=await db.prepare("SELECT application_id,workspace_id,environment,"+
   "seller_invoice,company_revision,allowance_fingerprint,request_hash,"+
@@ -215,7 +223,7 @@ export async function loadCloudAllowanceVoidForManager(
  if(numberHash!==row.allowance_fingerprint||requestHash!==row.request_hash)
   throw new Error("VOID_PREVIEW_FROZEN_MISMATCH");
  const second=await authority.revalidate();
- if(!sameActor(first,second,t.workspaceId)||!await activeDevice(db,t.workspaceId,t.deviceId))
+ if(!sameActor(first,second,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_PREVIEW_AUTH_CHANGED");
  const current=await company(db,t.workspaceId);
  if(current.revision!==settings.revision||current.seller_invoice!==settings.seller_invoice||
