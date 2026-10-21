@@ -440,6 +440,9 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
    "void-create",payload)).status,503);
   assert.equal((await call(applicant,"void-create",
    {...payload,untrustedClaim:true})).status,400);
+  const missing=await call(applicant,"void-status",{applicationId});
+  assert.equal(missing.status,404);
+  assert.equal(missing.body.error.code,"VOID_APPLICATION_NOT_FOUND");
   const created=await call(applicant,"void-create",payload);
   assert.equal(created.status,200);
   assert.deepEqual(Object.keys(created.body).sort(),[
