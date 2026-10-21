@@ -242,11 +242,18 @@ try{
  // Emergency stop after Grant, before sending: the D1 Claim must reject
  // atomically. No network POST, no automatic fallback to Local.
  sql.exec("SAVEPOINT cloud_void_cutover_stop");
- sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
-  "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
-  "WHERE workspace_id=? AND company_revision=1").run(ws);
+ const stopAtFinalOfficialStatus=async(url,options)=>{
+  const response=await fakeOneShot(url,options);
+  if(url.endsWith("/allowance_status"))
+   sql.prepare("UPDATE allowance_void_authority_gates SET state='blocked',"+
+    "cutover_manifest_hash=NULL,activating_device_id=NULL,activated_at=NULL "+
+    "WHERE workspace_id=? AND company_revision=1").run(ws);
+  return response;
+ };
+ // First cutover check passes; then emergency stop during official IO.
+ // The atomic D1 claim trigger must deny the mutation; ZERO provider POST.
  await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
-  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time));
+  onceTarget,ctx,authority(supervisor),stopAtFinalOfficialStatus,()=>time));
  assert.equal(posts,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
  sql.exec("ROLLBACK TO cloud_void_cutover_stop; RELEASE cloud_void_cutover_stop");
