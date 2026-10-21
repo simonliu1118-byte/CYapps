@@ -21,6 +21,7 @@ internal static class NativeMethods
 
     internal const uint CB_GETDROPPEDSTATE = 0x0157;
     internal const uint EM_SETSEL = 0x00B1;
+    internal const uint EM_GETLIMITTEXT = 0x00D5;
     internal const uint WM_PASTE = 0x0302;
     internal const uint WM_CLOSE = 0x0010;
 

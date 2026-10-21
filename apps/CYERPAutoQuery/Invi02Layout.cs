@@ -159,8 +159,9 @@ internal static class ItemCodeRules
     public const int MaxLength = 40;
 
     /// <summary>
-    /// Accepts one ERP 品號: trimmed, 1..40 characters, ASCII letters and digits only (no spaces,
-    /// symbols, full-width or Chinese characters).
+    /// Accepts one ERP 品號: trimmed, 1..40 characters, ASCII letters, digits and 「-」 (user
+    /// 2026-10-21: codes such as K1807003-1 exist), starting with a letter or digit; no spaces,
+    /// other symbols, full-width or Chinese characters.
     /// </summary>
     public static bool TryNormalize(string? input, out string code, out string error, string what = "品號")
     {
@@ -176,11 +177,11 @@ internal static class ItemCodeRules
             error = $"{what}長度超過 {MaxLength} 字。";
             return false;
         }
-        // SMART ERP codes are letters and digits only (user, 2026-10-16); anything else is
+        // SMART ERP codes are letters, digits and 「-」 (user, 2026-10-16／10-21); anything else is
         // refused before ERP is touched.
-        if (!code.All(char.IsAsciiLetterOrDigit))
+        if (!char.IsAsciiLetterOrDigit(code[0]) || !code.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
         {
-            error = $"{what}只能輸入英文字母與數字。";
+            error = $"{what}只能輸入英文字母、數字與「-」。";
             return false;
         }
         return true;

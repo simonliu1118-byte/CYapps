@@ -1369,12 +1369,35 @@ internal sealed partial class ItemQueryService
         // The keyword rules (no quote, no LIKE wildcard) hold for every form's condition text.
         if (!ItemNameRules.TryNormalize(keywordInput, out var keyword, out var error))
             throw new InvalidOperationException(error);
+        var (items, limit, elapsed) = await ListByConditionAsync(form, condition(keyword), $"keyword={_log.Value(keyword)}",
+            "輸入進階設定名稱條件", sheets => parse(sheets, keyword), progress, cancellationToken);
+        return new ItemSearchResult(keyword, items, limit, elapsed);
+    }
 
+    /// <summary>
+    /// 品號 by the batch (進貨輔助, user 2026-10-20): every code OR-ed in 進階設定, the 資料瀏覽 list
+    /// exported at once (品號、品名、規格、單位、庫存數量、標準售價). A code ERP does not have is
+    /// simply not listed. Throws <see cref="ConditionNotTakenException"/> when the condition box
+    /// does not take the whole condition, so the caller can send fewer codes.
+    /// </summary>
+    public Task<IReadOnlyList<IReadOnlyList<ErpField>>> ListItemsAsync(IReadOnlyList<string> codes, IProgress<string> progress, CancellationToken cancellationToken) =>
+        GuardErpMessagesAsync(async () => (await ListByConditionAsync(ErpForm.Invi02, ItemCodeConditions.Condition(codes),
+            $"codes={codes.Count}", $"輸入進階設定品號條件（{codes.Count} 個）", sheets => ItemCodeConditions.Parse(sheets, codes),
+            progress, cancellationToken)).Items);
+
+    /// <summary>The 進階設定 condition box's character limit (EM_GETLIMITTEXT) once read, or null when it did not answer.</summary>
+    public int? ConditionLimit { get; private set; }
+
+    private async Task<(IReadOnlyList<IReadOnlyList<ErpField>> Items, int? Limit, TimeSpan Elapsed)> ListByConditionAsync(
+        ErpForm form, string conditionText, string describe, string step,
+        Func<IReadOnlyList<(string Name, List<string[]> Rows)>, IReadOnlyList<IReadOnlyList<ErpField>>> parse,
+        IProgress<string> progress, CancellationToken cancellationToken)
+    {
         using var gate = ErpAutomationGate.Enter();
         _form = form;
         ExportFiles.CleanUp(_log);
         var watch = Stopwatch.StartNew();
-        _log.Info("search", $"start {_form.Code} keyword={_log.Value(keyword)}");
+        _log.Info("search", $"start {_form.Code} {describe}");
 
         progress.Report($"ERP：尋找{_form.Title}…");
         var root = await ResolveFormAsync(progress, cancellationToken);
@@ -1389,8 +1412,8 @@ internal sealed partial class ItemQueryService
         var limit = ReadRecordLimit(dialog);
         // An old code left in 一般選項 must not narrow the search.
         await ClearGeneralValueAsync(dialog, cancellationToken);
-        progress.Report("ERP：輸入進階設定名稱條件…");
-        await FillAdvancedConditionAsync(dialog, condition(keyword), cancellationToken);
+        progress.Report($"ERP：{step}…");
+        await FillAdvancedConditionAsync(dialog, conditionText, cancellationToken);
 
         progress.Report("ERP：查詢中…");
         await ConfirmQueryAsync(root, dialog, cancellationToken);
@@ -1401,7 +1424,7 @@ internal sealed partial class ItemQueryService
         if (!await HasRecordAsync(root, page, cancellationToken))
         {
             _log.Info("search", $"no match elapsed_ms={watch.ElapsedMilliseconds}");
-            return new ItemSearchResult(keyword, [], limit, watch.Elapsed);
+            return ([], limit, watch.Elapsed);
         }
 
         // The list is exported from 資料瀏覽 (one 單頭 row per item; user, 2026-10-16).
@@ -1413,9 +1436,9 @@ internal sealed partial class ItemQueryService
             await ExportToExcelAsync(root, path, cancellationToken, headerOnly: true, allMatches: true);
             progress.Report("讀取匯出資料…");
             var sheets = await ExportFiles.ReadAsync(path, cancellationToken);
-            var items = parse(sheets, keyword);
+            var items = parse(sheets);
             _log.Info("search", $"done items={items.Count} limit={limit?.ToString() ?? "?"} elapsed_ms={watch.ElapsedMilliseconds}");
-            return new ItemSearchResult(keyword, items, limit, watch.Elapsed);
+            return (items, limit, watch.Elapsed);
         }
         catch (InvalidOperationException ex) when (ex is not QueryFailure)
         {
@@ -1503,6 +1526,11 @@ internal sealed partial class ItemQueryService
             throw new InvalidOperationException("「進階設定」找不到條件框。");
         }
         await PressClearAsync(dialog, sheet.Handle, box, cancellationToken);
+        // How much the box takes (a memo answers EM_GETLIMITTEXT); a longer condition is not pasted.
+        var max = NativeMethods.QueryNumber(box.Handle, NativeMethods.EM_GETLIMITTEXT) is { } m && m > 0 && m < int.MaxValue ? (int?)(int)m : null;
+        ConditionLimit = max;
+        _log.Info("search", $"condition box limit={max?.ToString() ?? "?"} length={condition.Length}");
+        if (max is { } room && condition.Length > room) throw new ConditionNotTakenException(room);
 
         SafeClick(dialog, Win32Automation.Center(box.Rect));
         await Pace.Delay(150, cancellationToken);
@@ -1519,8 +1547,8 @@ internal sealed partial class ItemQueryService
         var shown = ConditionText(box);
         if (!ItemNameRules.SameCondition(shown, condition))
         {
-            _log.Warn("search", $"condition read-back mismatch shown={_log.Value(shown)}");
-            throw new InvalidOperationException("品名條件貼上後讀回的內容不一致，已停止。");
+            _log.Warn("search", $"condition read-back mismatch shown_length={shown.Length} expected_length={condition.Length}");
+            throw new ConditionNotTakenException(shown.Length < condition.Length ? shown.Length : null);
         }
         _log.Info("search", "advanced condition pasted");
     }
@@ -2022,6 +2050,16 @@ internal static class Pace
 /// Machine-wide lock so two CY tools never drive SMART ERP's keyboard and mouse at the same
 /// time. CYERPAutoInput does not take it yet (follow-up in WORK_HANDOFF.md).
 /// </summary>
+/// <summary>
+/// The 進階設定 condition box did not take the whole condition (too long, or read back different);
+/// <see cref="Room"/> is how many characters it took when known.
+/// </summary>
+internal sealed class ConditionNotTakenException(int? room)
+    : InvalidOperationException("進階設定的條件貼上後讀回的內容不一致，已停止。")
+{
+    public int? Room { get; } = room;
+}
+
 internal sealed class ErpAutomationGate : IDisposable
 {
     public const string Name = @"Local\Chihyuan.SmartErp.UiAutomation";

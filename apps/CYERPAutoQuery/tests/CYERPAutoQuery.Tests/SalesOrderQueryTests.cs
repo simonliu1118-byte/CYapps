@@ -125,11 +125,24 @@ public class SalesOrderQueryTests
     }
 
     [Fact]
+    public void EveryCustomerIsKeptWhenNoCustomerWasAsked()
+    {
+        var all = new RestockQuery(new DateOnly(2026, 1, 1), new DateOnly(2026, 10, 16)).Sales;
+        Assert.True(all.AllCustomers);
+        var orders = SalesExport.Parse(Export(
+            Line("2026/10/14", "901A-20261014002", "AC0002", "X00001", "1", "2000", "2000"),
+            Line("2026/10/15", "901A-20261015001", "AC0001", "X00002", "2", "100", "200")), SalesReport.Sales, all);
+        Assert.Equal(["AC0001", "AC0002"], orders.Select(o => o.CustomerCode).Order());
+        Assert.Throws<InvalidDataException>(() => SalesExport.Parse(Export(
+            Line("2025/12/31", "901A-20251231001", "AC0001", "X00001", "1", "2000", "2000")), SalesReport.Sales, all));
+    }
+
+    [Fact]
     public void ResolveChecksCodeAndDates()
     {
         var today = new DateOnly(2026, 10, 16);
         Assert.Equal("AC0001", SalesQuery.Resolve(" AC0001 ", null, null, today).CustomerCode);
-        Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC-1", null, null, today));
+        Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC_1", null, null, today));
         Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC0001", today, today.AddDays(-1), today));
         Assert.Throws<ArgumentException>(() => SalesQuery.Resolve("AC0001", today.AddDays(1), null, today));
     }

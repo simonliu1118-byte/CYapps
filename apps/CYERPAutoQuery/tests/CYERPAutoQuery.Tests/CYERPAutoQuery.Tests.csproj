@@ -18,6 +18,7 @@
     <Compile Include="..\..\ItemNameSearch.cs" Link="Linked\ItemNameSearch.cs" />
     <Compile Include="..\..\PartyQuery.cs" Link="Linked\PartyQuery.cs" />
     <Compile Include="..\..\SalesOrderQuery.cs" Link="Linked\SalesOrderQuery.cs" />
+    <Compile Include="..\..\RestockQuery.cs" Link="Linked\RestockQuery.cs" />
     <Compile Include="..\..\PurchaseQuery.cs" Link="Linked\PurchaseQuery.cs" />
     <Compile Include="..\..\ErpReport.cs" Link="Linked\ErpReport.cs" />
     <Compile Include="..\..\ReceivableQuery.cs" Link="Linked\ReceivableQuery.cs" />
