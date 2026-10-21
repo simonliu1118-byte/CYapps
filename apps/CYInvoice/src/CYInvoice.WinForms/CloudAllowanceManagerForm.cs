@@ -28,6 +28,9 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button review=UiControls.StandardButton("接手覆核");
     private readonly Button preview=UiControls.StandardButton("預覽官方資料");
     private readonly Button approve=UiControls.StandardButton("主管核准");
+    private readonly Button voidPreview=UiControls.StandardButton("作廢原 ID 預覽");
+    private readonly Button voidApprove=UiControls.StandardButton("作廢主管核准");
+    private readonly Button voidStatus=UiControls.StandardButton("作廢原 ID 查回");
     private readonly Button reserve=UiControls.StandardButton("預留號碼");
     private readonly Button reserveAfterCollision=UiControls.StandardButton("外部占號主管覆核");
     private readonly Button inspect=UiControls.StandardButton("查單次送出證據");
@@ -36,6 +39,7 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button manualHistory=UiControls.StandardButton("查人工覆核稽核");
     private readonly Button close=UiControls.StandardButton("關閉");
     private bool busy;
+    private CloudAllowanceVoidManagerPreview? pendingVoidPreview;
 
     private CloudAllowanceManagerForm()
     {
@@ -51,13 +55,16 @@ internal sealed class CloudAllowanceManagerForm : Form
         queue.Columns.Add("環境",75);
         queue.Columns.Add("更新時間",170);
         queue.SelectedIndexChanged+=(_,_)=>Actions();
-        searchId.TextChanged+=(_,_)=>Actions();
+        searchId.TextChanged+=(_,_)=>{pendingVoidPreview=null;Actions();};
         refresh.Click+=async(_,_)=>await ListAsync();
         readback.Click+=async(_,_)=>await StatusAsync();
         details.Click+=async(_,_)=>await DetailsAsync();
         review.Click+=async(_,_)=>await ReviewAsync();
         preview.Click+=async(_,_)=>await PreviewAsync();
         approve.Click+=async(_,_)=>await ApproveAsync();
+        voidPreview.Click+=async(_,_)=>await PreviewVoidAsync();
+        voidApprove.Click+=async(_,_)=>await ApproveVoidAsync();
+        voidStatus.Click+=async(_,_)=>await ReadVoidStatusAsync();
         reserve.Click+=async(_,_)=>await ReserveAsync();
         reserveAfterCollision.Click+=async(_,_)=>await ReserveAfterCollisionAsync();
         inspect.Click+=async(_,_)=>await InspectAttemptAsync();
@@ -100,6 +107,8 @@ internal sealed class CloudAllowanceManagerForm : Form
         actions.Controls.Add(details);
         actions.Controls.Add(review);actions.Controls.Add(preview);
         actions.Controls.Add(approve);actions.Controls.Add(reserve);
+        actions.Controls.Add(voidPreview);actions.Controls.Add(voidApprove);
+        actions.Controls.Add(voidStatus);
         actions.Controls.Add(reserveAfterCollision);
         actions.Controls.Add(inspect);actions.Controls.Add(sendOnce);
         actions.Controls.Add(manualReview);actions.Controls.Add(manualHistory);
@@ -127,6 +136,10 @@ internal sealed class CloudAllowanceManagerForm : Form
         review.Enabled=ready&&selected?.Status=="open";
         preview.Enabled=ready&&selected?.Status=="review";
         approve.Enabled=ready&&selected?.Status=="review";
+        voidPreview.Enabled=ready&&searchId.Text.Trim().Length>=8;
+        voidStatus.Enabled=ready&&searchId.Text.Trim().Length>=8;
+        voidApprove.Enabled=ready&&pendingVoidPreview is not null&&
+            pendingVoidPreview.ApplicationId==searchId.Text.Trim();
         reserve.Enabled=ready&&selected?.Status=="approved";
         reserveAfterCollision.Enabled=ready&&selected?.Status=="approved";
         inspect.Enabled=ready&&selected?.Status=="approved";
@@ -437,7 +450,9 @@ internal sealed class CloudAllowanceManagerForm : Form
            !form.password.UseSystemPasswordChar||
            form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
            form.sendOnce.Enabled||form.inspect.Enabled||
-           form.manualReview.Enabled||form.manualHistory.Enabled||form.reserveAfterCollision.Enabled)
+           form.manualReview.Enabled||form.manualHistory.Enabled||
+           form.reserveAfterCollision.Enabled||form.voidPreview.Enabled||
+           form.voidApprove.Enabled||form.voidStatus.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
 }
