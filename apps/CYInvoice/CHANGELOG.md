@@ -4,6 +4,8 @@
 
 ## V3.1.34 Build 0 — 2026/10/21（V3.2 D/E：原折讓號跨待辦安全鎖）
 
+- D/E 回線查回新增 Cloud 原申請 ID 的只讀重建：有 Claim 時僅按原號確認官方 D0401／D0501 或離線未知狀態，保持不可自動重送／結案／歸因；無 Claim 不代表另一 Local 裝置未曾送出。角色／Device 與公司卡需再次驗證，失敗時 fail-closed。新增 isolated SQLite／Fake Provider 回歸及 CI 護欄，禁止 schema20 未核准升格及 Cloud g0501 HTTP 路由提前暴露。跨模式全域互斥未完成，正式 g0501 保持停用。
+
 - 新增未對外曝露的 Cloud g0501 單一交易協調器：再驗原主管、Device、Frozen、公司卡與官方狀態後，原號 D1 claim 必須先持久化成功才呼叫一次 g0501；claim 回覆不明或重入均不 POST。POST code=0、結果不明／稽核失敗仍永久保留 claim，回應不宣稱成功或允許重送／結案；附加合成網路與重入回歸。Local／Cloud 全域競爭尚未安全串接，故 Worker 路由／旗標仍關閉。
 
 
