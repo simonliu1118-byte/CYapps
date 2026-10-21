@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace CYInvoice.Core.Amego;
 
-public sealed class AmegoClient : IAmegoGateway, IAmegoAllowanceGateway
+public sealed partial class AmegoClient : IAmegoGateway, IAmegoAllowanceGateway, IAmegoAllowanceVoidGateway
 {
     private const int ApiResponseLimit = 8 * 1024 * 1024;
     private const int PdfResponseLimit = 20 * 1024 * 1024;

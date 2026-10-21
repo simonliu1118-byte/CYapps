@@ -9,6 +9,13 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Local g0501 signed transport never retries, and exact status decoder fails closed", TestG0501TransportAsync),
+    ("Local g0501 approval, durable claim, lost reply, restart and official observation", TestLocalVoidLifecycleAsync),
+    ("Local g0501 rejects wrong manager, expiry, changed official and revoked manager", TestLocalVoidPreconditionsAsync),
+    ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
+    ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
+    ("Local g0501 changed draft, cancellation and account scope cannot claim", TestLocalVoidScopeAsync),
+    ("Local g0501 retention preserves pending and audit while pruning unrelated history", TestLocalVoidRetentionAsync),
     ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
     ("V3.2-B2c one-shot Local sending CAS, ambiguous readback and official collision", LocalAllowanceOneShotTests.RunAsync),
     ("V3.2-B2c signed g0401 transport has exactly one POST even on time error", TestG0401SinglePostAsync),
@@ -50,6 +57,220 @@ static Task RunSync(Action action)
 {
     action();
     return Task.CompletedTask;
+}
+
+static async Task TestG0501TransportAsync()
+{
+    foreach (var reply in new[] { "{\"code\":15}", "{}", "[]", "{\"code\":null}" })
+    {
+        using var handler = new RecordingHttpHandler((_,_,_) => new HttpResponseMessage(HttpStatusCode.OK) {
+            Content=new StringContent(reply) });
+        var client = new AmegoClient(AmegoDefaults.TestInvoice,AmegoDefaults.TestAppKey,new HttpClient(handler));
+        await ThrowsAsync<Exception>(() => client.VoidAllowanceOnceAsync("LEGACY-001"));
+        Equal(1,handler.Requests.Count);
+        Equal("/json/g0501",handler.Requests[0].Uri.AbsolutePath);
+        var form=ParseForm(handler.Requests[0].Body);
+        Equal("[{\"CancelAllowanceNumber\":\"LEGACY-001\"}]",form["data"]);
+        var signature=Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(
+            form["data"]+form["time"]+AmegoDefaults.TestAppKey))).ToLowerInvariant();
+        Equal(signature,form["sign"]);
+    }
+    foreach (var state in new[] { ("D0501","99",true), ("D0501","91",false),
+        ("D0401","99",false), ("UNKNOWN","99",false), ("D0501","1",false) })
+    {
+        using var handler=new RecordingHttpHandler((_,_,_) => new HttpResponseMessage(HttpStatusCode.OK) {
+            Content=new StringContent("{\"code\":0,\"data\":{\"LEGACY-001\":{\"type\":\""+state.Item1+
+                "\",\"status\":\""+state.Item2+"\"}}}") });
+        var client=new AmegoClient(AmegoDefaults.TestInvoice,AmegoDefaults.TestAppKey,new HttpClient(handler));
+        Equal(state.Item3,(await client.ReadAllowanceVoidStatusAsync("LEGACY-001")).OfficiallyVoided);
+        Equal("[{\"AllowanceNumber\":\"LEGACY-001\"}]",ParseForm(handler.Requests[0].Body)["data"]);
+    }
+    foreach (var reply in new[] { "{\"code\":0,\"data\":{\"OTHER\":{\"type\":\"D0501\",\"status\":99}}}",
+        "{\"code\":0,\"data\":{\"LEGACY-001\":{\"type\":\"D0501\"}}}",
+        "{\"code\":0,\"data\":{\"LEGACY-001\":{\"type\":\"D0501\",\"status\":null}}}" })
+    {
+        using var handler=new RecordingHttpHandler((_,_,_)=>new HttpResponseMessage(HttpStatusCode.OK) { Content=new StringContent(reply) });
+        var client=new AmegoClient(AmegoDefaults.TestInvoice,AmegoDefaults.TestAppKey,new HttpClient(handler));
+        await ThrowsAsync<InvalidDataException>(()=>client.ReadAllowanceVoidStatusAsync("LEGACY-001"));
+    }
+}
+
+static async Task<(VoidSetup Setup,InvoiceSyncIssue Issue,FakeAllowanceVoidApi Api)> CreateApiVoidAsync(string path)
+{
+    var setup=CreateVoidSetup(path,[Allowance(99)]);
+    setup.Gateway.QueryResponse=setup.Gateway.QueryResponse with { Data=setup.Gateway.QueryResponse.Data! with {
+        BuyerIdentifier="0000000000" } };
+    await setup.Workflow.SubmitAsync(setup.Record,"ALW-001","3015","Employee1","合成作廢原因");
+    return(setup,UnresolvedAllowanceVoidIssues(setup.Repository).Single(),new FakeAllowanceVoidApi());
+}
+
+static async Task ApproveApiVoidAsync(VoidSetup setup,InvoiceSyncIssue issue,FakeAllowanceVoidApi api)
+{
+    var preview=await setup.Workflow.PreviewLocalVoidAsync(issue,"2000","AdminPass1",api);
+    await setup.Workflow.ApproveLocalVoidAsync(issue,"2000","AdminPass1",preview.OfficialSnapshotHash,api);
+}
+
+static async Task TestLocalVoidLifecycleAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-lifecycle");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.PreviewLocalVoidAsync(issue,"3015","Employee1",api));
+    Equal(0,api.QueryCalls);
+    await ApproveApiVoidAsync(setup,issue,api);
+    Equal(0,api.PostCalls);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","錯誤確認",api));
+    api.LoseReply=true;
+    var result=await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api);
+    Equal(false,result.OfficialVoidObserved);
+    Equal(1,api.PostCalls);
+    Equal(true,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+    var restarted=new EmployeeAllowanceVoidWorkflowService(setup.Repository);
+    await ThrowsAsync<InvalidOperationException>(()=>restarted.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    Throws<InvalidOperationException>(()=>restarted.CancelManualReview(issue,"2000","AdminPass1"));
+    Throws<InvalidOperationException>(()=>restarted.MarkManualCompleted(issue,"2000","AdminPass1"));
+    var closure=new InvoiceAdministrativeClosureService(setup.Repository,now:()=>DateTimeOffset.UtcNow.AddYears(1));
+    Equal(false,closure.CanClose(issue));
+    Throws<InvalidOperationException>(()=>closure.Close(issue,"2000","AdminPass1"));
+    api.Status=new("ALW-001","D0501",91);
+    Equal(false,(await restarted.ReadbackLocalVoidAsync(issue,"2000","AdminPass1",api)).OfficialVoidObserved);
+    api.Status=new("ALW-001","D0501",99);
+    Equal(true,(await restarted.ReadbackLocalVoidAsync(issue,"0001","SuperPass1",api)).OfficialVoidObserved);
+    Equal(1,api.PostCalls);
+    Equal(1,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
+    Equal(true,restarted.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
+    using var db=OpenVoidDatabase(setup.Repository);
+    foreach(var table in new[]{"approvals","claims","observations"})
+    {
+        using var command=db.CreateCommand(); command.CommandText="DELETE FROM allowance_void_local_"+table;
+        Throws<Microsoft.Data.Sqlite.SqliteException>(()=>command.ExecuteNonQuery());
+    }
+    using var audit=db.CreateCommand();
+    audit.CommandText="SELECT actor_employee_no FROM allowance_void_local_observations ORDER BY audit_id DESC LIMIT 1";
+    Equal("0001",audit.ExecuteScalar() as string);
+}
+
+static async Task TestLocalVoidPreconditionsAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-preflight");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    var valid=api.Official;
+    foreach(var invalid in new[]{valid with { BuyerIdentifier="OTHER" },valid with { InvoiceType="D0501" },
+        valid with { InvoiceStatus=1 },valid with { CancelDate=1 },valid with { AllowanceNumber="OTHER" },
+        valid with { ProductItems=JsonSerializer.SerializeToElement(new[]{new {original_invoice_number="BB12345678"}}) }})
+    {
+        api.Official=invalid;
+        await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.PreviewLocalVoidAsync(issue,"2000","AdminPass1",api));
+    }
+    api.Official=valid;
+    var preview=await setup.Workflow.PreviewLocalVoidAsync(issue,"2000","AdminPass1",api);
+    api.Official=valid with {TotalAmount="96"};
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.ApproveLocalVoidAsync(issue,"2000","AdminPass1",preview.OfficialSnapshotHash,api));
+    api.Official=valid;
+    await ApproveApiVoidAsync(setup,issue,api);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"0001","SuperPass1","作廢 ALW-001",api));
+    var expired=new EmployeeAllowanceVoidWorkflowService(setup.Repository,now:()=>new DateTimeOffset(2026,9,21,0,0,0,TimeSpan.Zero));
+    await ThrowsAsync<InvalidOperationException>(()=>expired.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    api.Official=valid with {TaxAmount="6"};
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    api.Official=valid;
+    api.OnQuery=()=>setup.Repository.Employees.SetEnabled("0001","2000",false);
+    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    Equal(0,api.PostCalls);
+    Equal(false,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+}
+
+static async Task TestLocalVoidRacesAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-races");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);
+    var gate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var callers=0;
+    api.BeforeQueryAsync=async()=> {if(Interlocked.Increment(ref callers)==2)gate.SetResult(); await gate.Task;};
+    async Task<bool> TrySend()
+    {
+        try {await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api); return true;}
+        catch(InvalidOperationException){return false;}
+    }
+    var results=await Task.WhenAll(TrySend(),TrySend());
+    Equal(1,results.Count(x=>x)); Equal(1,api.PostCalls);
+    using var cancelTemporary=new TemporaryDirectory("g0501-cancel-race");
+    var cancel=await CreateApiVoidAsync(cancelTemporary.Path);
+    await ApproveApiVoidAsync(cancel.Setup,cancel.Issue,cancel.Api);
+    cancel.Api.OnQuery=()=>cancel.Setup.Workflow.CancelManualReview(cancel.Issue,"2000","AdminPass1");
+    await ThrowsAsync<InvalidOperationException>(()=>cancel.Setup.Workflow.SendLocalVoidOnceAsync(cancel.Issue,"2000","AdminPass1","作廢 ALW-001",cancel.Api));
+    Equal(0,cancel.Api.PostCalls);
+}
+
+static Microsoft.Data.Sqlite.SqliteConnection OpenVoidDatabase(LocalRepository repository)
+{
+    var db=new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder {
+        DataSource=Path.Combine(repository.DataDirectory,SqliteBootstrapper.DatabaseFileName),Pooling=false }.ToString());
+    db.Open(); return db;
+}
+
+static async Task TestLocalVoidAuditFailureAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-audit-failure");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);
+    using(var db=OpenVoidDatabase(setup.Repository))
+    using(var command=db.CreateCommand())
+    {
+        command.CommandText="CREATE TRIGGER injected_void_audit_failure BEFORE INSERT ON allowance_void_local_observations BEGIN SELECT RAISE(ABORT,'synthetic disk failure'); END;";
+        command.ExecuteNonQuery();
+    }
+    Equal(false,(await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api)).AuditRecorded);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    Equal(1,api.PostCalls); Equal(true,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+}
+
+static async Task TestLocalVoidScopeAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-scope");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);
+    using(var cancelled=new CancellationTokenSource())
+    {
+        cancelled.Cancel();
+        await ThrowsAsync<OperationCanceledException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,
+            "2000","AdminPass1","作廢 ALW-001",api,cancelled.Token));
+    }
+    Equal(false,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+    var record=setup.Repository.Invoices.LoadOrCreate().Single();
+    var review=setup.Workflow.ManualReviewFor(record)!;
+    record.ExtensionData!["cyinvoice_allowance_void_manual_review"]=JsonSerializer.SerializeToElement(review with {Reason="已改動的原因"});
+    setup.Repository.Invoices.Save([record]);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    record.ExtensionData["cyinvoice_allowance_void_manual_review"]=JsonSerializer.SerializeToElement(review);
+    setup.Repository.Invoices.Save([record]);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue with {AccountKey="production|OTHER"},"2000","AdminPass1","作廢 ALW-001",api));
+    var settings=setup.Repository.Settings.LoadOrCreate();
+    settings.CloudMode=CloudModes.CloudPreferred; setup.Repository.Settings.Save(settings);
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    Equal(0,api.PostCalls);
+}
+
+static async Task TestLocalVoidRetentionAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-retention");
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);
+    await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api);
+    var unrelated=NewRecord("2026/09/01");
+    unrelated.InvoiceNumber="BB87654321"; unrelated.OrderId="OTHER";
+    unrelated.ApiOrderId="OTHER"; unrelated.OriginalOrderId="OTHER";
+    setup.Repository.Invoices.Append(unrelated);
+    var retention=new InvoiceRetentionService(setup.Repository);
+    Equal(1,retention.Prune(new DateOnly(2026,10,21)).Deleted);
+    Equal(1,setup.Repository.Invoices.LoadOrCreate().Count);
+    Equal(true,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+    using var cancelledTemporary=new TemporaryDirectory("g0501-retention-cancelled");
+    var cancelled=await CreateApiVoidAsync(cancelledTemporary.Path);
+    await ApproveApiVoidAsync(cancelled.Setup,cancelled.Issue,cancelled.Api);
+    cancelled.Setup.Workflow.CancelManualReview(cancelled.Issue,"2000","AdminPass1");
+    Equal(1,new InvoiceRetentionService(cancelled.Setup.Repository).Prune(new DateOnly(2026,10,21)).Deleted);
+    Equal(true,cancelled.Setup.Workflow.LocalApprovalFor(cancelled.Issue) is not null);
 }
 
 static async Task TestG0401SinglePostAsync()
