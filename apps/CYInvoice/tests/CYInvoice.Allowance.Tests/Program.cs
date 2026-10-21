@@ -283,6 +283,12 @@ static async Task TestLocalVoidCompetingIssueAsync()
         .Unresolved(original.AccountKey).Any(item=>item.Id==alternateId));
     Equal(1,api.PostCalls);
     Equal(true,resumed.LocalApprovalFor(original)!.Claimed);
+    using var db=OpenVoidDatabase(setup.Repository);
+    using var command=db.CreateCommand();
+    command.CommandText="SELECT COUNT(*) FROM allowance_void_local_claims WHERE account_key=$account AND allowance_number=$number COLLATE NOCASE";
+    command.Parameters.AddWithValue("$account",original.AccountKey);
+    command.Parameters.AddWithValue("$number","alw-001");
+    Equal(1L,Convert.ToInt64(command.ExecuteScalar()));
 }
 
 static async Task TestLocalVoidRetentionAsync()
