@@ -255,6 +255,92 @@ internal sealed class CloudAllowanceManagerForm : Form
             queue.Items.Clear();
         });
     }
+    // Employee create path reuses the same CYID credentials as the manager
+    // queue. A lost reply is resolved ONLY by a stable original application
+    // ID; never generate a new GUID to replace an uncertain first request.
+    private async Task CreateVoidAsync()
+    {
+        if(cloudWorkspaceId is null||busy||client is null)return;
+        using var dialog=new Form{Text="CYID 員工折讓作廢申請",
+            ClientSize=new Size(600,275),
+            StartPosition=FormStartPosition.CenterParent,
+            FormBorderStyle=FormBorderStyle.FixedDialog,
+            MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
+            Font=new Font("Microsoft JhengHei UI",10F)};
+        var grid=new TableLayoutPanel{Dock=DockStyle.Fill,
+            Padding=new Padding(14),ColumnCount=2,RowCount=5};
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,112));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        for(var i=0;i<3;i++)grid.RowStyles.Add(new RowStyle(SizeType.Absolute,40));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
+        var allowance=UiControls.TextBox(16);
+        var original=UiControls.TextBox(10);
+        var reason=UiControls.TextBox(500);
+        void field(int row,string label,TextBox textbox)
+        {
+            grid.Controls.Add(new Label{Text=label,Dock=DockStyle.Fill,
+                TextAlign=ContentAlignment.MiddleLeft},0,row);
+            textbox.Dock=DockStyle.Fill;grid.Controls.Add(textbox,1,row);
+        }
+        field(0,"原折讓號",allowance);
+        field(1,"原發票號",original);
+        field(2,"作廢原因",reason);
+        grid.Controls.Add(new Label{Dock=DockStyle.Fill,
+            Text="此申請只建立 CYID Cloud 待辦，不會執行光貿 g0501。" +
+                 "\n斷線、逾時或重開視窗時，輸入相同原折讓號可還原相同申請 ID 查回。",
+            ForeColor=Color.DimGray,TextAlign=ContentAlignment.MiddleLeft},0,3);
+        grid.SetColumnSpan(grid.GetControlFromPosition(0,3)!,2);
+        var yes=UiControls.StandardButton("建立／先查回");
+        yes.DialogResult=DialogResult.OK;
+        var no=UiControls.StandardButton("取消");no.DialogResult=DialogResult.Cancel;
+        var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,
+            FlowDirection=FlowDirection.RightToLeft,WrapContents=false};
+        buttons.Controls.Add(no);buttons.Controls.Add(yes);
+        grid.Controls.Add(buttons,0,4);grid.SetColumnSpan(buttons,2);
+        dialog.Controls.Add(grid);dialog.AcceptButton=yes;dialog.CancelButton=no;
+        if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+
+        var number=allowance.Text.Trim().ToUpperInvariant();
+        var invoice=original.Text.Trim().ToUpperInvariant();
+        var why=reason.Text.Trim();
+        if(!System.Text.RegularExpressions.Regex.IsMatch(number,@"^[A-Z0-9-]{1,16}$")||
+           !System.Text.RegularExpressions.Regex.IsMatch(invoice,@"^[A-Z]{2}\d{8}$")||
+           why.Length==0||why.Length>500||why.Any(char.IsControl))
+        {
+            status.Text="請確認原折讓號、10 碼原發票號及作廢原因格式。未送出申請。";
+            return;
+        }
+        string id;
+        try{id=CloudAllowanceClient.OriginalVoidApplicationId(
+            cloudWorkspaceId,cloudEnvironment,number);}
+        catch(ArgumentException){
+            status.Text="CYID 公司／環境設定無效，未建立作廢申請。";return;
+        }
+        // Visible even if networking fails or the process closes later.
+        searchId.Text=id;
+        pendingVoidPreview=null;
+        await RunAsync(async(emp,pass)=>{
+            // First read by a stable ID. Only an authoritative NOT_FOUND
+            // permits the initial create, never a timeout/unknown reply.
+            try{
+                var existing=await client!.ReadVoidApplicationAsync(
+                    id,emp,pass,lifetime.Token);
+                status.Text="原申請 "+id+" 已存在／"+existing.Status+
+                    "；本次只查回，不會重複建立或送出。";
+                return;
+            }
+            catch(CloudApiException ex)when(ex.Code=="VOID_APPLICATION_NOT_FOUND"){
+                // An exact 404 from the authenticated original-ID readback.
+            }
+            var created=await client!.CreateVoidApplicationAsync(
+                new CloudAllowanceVoidDraft(id,cloudEnvironment,number,invoice,why),
+                emp,pass,lifetime.Token);
+            status.Text="作廢申請已建立："+created.ApplicationId+
+                "／"+created.Status+"；等待主管覆核，尚未送出 g0501。";
+        });
+    }
+
     private async Task PreviewVoidAsync()
     {
         var id=searchId.Text.Trim();
