@@ -149,7 +149,7 @@ static async Task TestLocalVoidLifecycleAsync()
     Equal(0,api.QueryCalls);
     await ApproveApiVoidAsync(setup,issue,api);
     Equal(0,api.PostCalls);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","錯誤確認",api));
+    // A second textual challenge is no longer part of manager approval.
     api.LoseReply=true;
     var result=await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api);
     Equal(false,result.OfficialVoidObserved);
