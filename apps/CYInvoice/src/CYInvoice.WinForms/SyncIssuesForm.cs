@@ -1650,7 +1650,7 @@ internal sealed class SyncIssuesForm : Form
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
         if (LocalAllowancePrimaryAction("occupied_external") !=
-                "主管覆核外部占號並預留下一號" ||
+                "繼續自動加號並送出" ||
             LocalAllowancePrimaryAction("sending") !=
                 "依原折讓號碼唯讀查回" ||
             LocalAllowancePrimaryAction("confirmed") != string.Empty)
