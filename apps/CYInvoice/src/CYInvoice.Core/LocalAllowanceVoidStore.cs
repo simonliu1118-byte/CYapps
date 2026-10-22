@@ -58,6 +58,41 @@ internal sealed class LocalAllowanceVoidStore
             BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_HISTORY_REQUIRED'); END;
             """;
         sql.ExecuteNonQuery();
+        // Forward-only local trigger upgrade. Historical approval/claim/audit
+        // rows remain untouched; only independently observed official D0501/99
+        // permits finishing the existing business issue, never a second POST.
+        using (var inspect = db.CreateCommand())
+        {
+            inspect.CommandText = """
+                SELECT sql FROM sqlite_master
+                WHERE type='trigger' AND name='allowance_void_local_no_issue_close'
+                """;
+            var oldDefinition = inspect.ExecuteScalar() as string ?? string.Empty;
+            if (!oldDefinition.Contains("official_void_observed_unattributed", StringComparison.Ordinal))
+            {
+                using var transaction = db.BeginTransaction();
+                using var upgrade = db.CreateCommand();
+                upgrade.Transaction = transaction;
+                upgrade.CommandText = """
+                    DROP TRIGGER IF EXISTS allowance_void_local_no_issue_close;
+                    CREATE TRIGGER allowance_void_local_no_issue_close
+                    BEFORE UPDATE OF resolved_utc ON sync_issues
+                    WHEN NEW.resolved_utc<>OLD.resolved_utc
+                      AND EXISTS(SELECT 1 FROM allowance_void_local_claims c
+                          WHERE c.issue_id=OLD.local_id)
+                      AND NOT EXISTS(
+                        SELECT 1 FROM allowance_void_local_claims c
+                        JOIN allowance_void_local_observations o
+                            ON o.approval_id=c.approval_id
+                        WHERE c.issue_id=OLD.local_id
+                          AND o.kind='official_void_observed_unattributed'
+                      )
+                    BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_OFFICIAL_PROOF_REQUIRED'); END;
+                    """;
+                upgrade.ExecuteNonQuery();
+                transaction.Commit();
+            }
+        }
         foreach (var table in new[] { "approvals", "claims", "observations" })
         foreach (var operation in new[] { "UPDATE", "DELETE" })
         {
