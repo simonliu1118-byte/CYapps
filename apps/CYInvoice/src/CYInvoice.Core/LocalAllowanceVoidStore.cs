@@ -124,7 +124,7 @@ internal sealed class LocalAllowanceVoidStore
             WHERE a.approval_id=$id AND a.account_key=$account AND a.issue_id=$issue
                 AND a.allowance_number=$number AND a.request_hash=$request
                 AND a.official_hash=$official AND a.manager_employee_no=$manager
-                AND a.approved_utc<=$now AND a.expires_utc>$now
+                AND a.approved_utc<=$now
                 AND i.account_key=a.account_key AND i.issue_type='allowance_void_manual_review'
                 AND TRIM(i.resolved_utc)=''
                 AND a.approval_id=(SELECT approval_id FROM allowance_void_local_approvals
