@@ -199,7 +199,9 @@ internal sealed class SyncIssuesForm : Form
                 var state = IssueState(issue);
                 var time = issue.CreatedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
                 var row = new ListViewItem(ShortIssueTime(time));
-                row.SubItems.Add(processing && IsAllowanceManualReview(issue) ? "折讓處理中" : DisplayType(issue.IssueType));
+                row.SubItems.Add(processing && IsAllowanceManualReview(issue) ? "折讓處理中" :
+                    processing && IsAllowanceVoidManualReview(issue) ? "折讓作廢待主管" :
+                    processing && IsVoidManualReview(issue) ? "紙本作廢待主管" : DisplayType(issue.IssueType));
                 row.SubItems.Add(issue.InvoiceNumber);
                 row.SubItems.Add(issue.OrderId);
                 row.SubItems.Add(issue.Message);
