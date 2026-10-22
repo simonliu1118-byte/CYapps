@@ -1168,9 +1168,13 @@ internal sealed class SyncIssuesForm : Form
     {
         if (IsDisposed) return;
         var settings = repository.Settings.LoadOrCreate();
-        reportCrossDevice.Visible = !processing && settings.CloudMode != CloudModes.LocalOnly &&
-            settings.CloudIdentityProvider == "CYID";
         var selected = SelectedIssue();
+        // Paper/manager waits moved from Upload Issues to Processing; keep
+        // the original non-allowance cross-device report capability reachable.
+        reportCrossDevice.Visible = settings.CloudMode != CloudModes.LocalOnly &&
+            settings.CloudIdentityProvider == "CYID" &&
+            (!processing || selected is { ResolvedUtc: null } &&
+                CloudLocalWorkItemReferences.IsSupportedIssueType(selected.IssueType));
         reportCrossDevice.Enabled = reportCrossDevice.Visible && !manualReviewBusy &&
             settings.CloudEmployeeAuthorityReady &&
             settings.CloudWorkspaceId.Length > 0 && settings.CloudDeviceId.Length > 0 &&
@@ -1181,7 +1185,8 @@ internal sealed class SyncIssuesForm : Form
     private async Task ReportCrossDeviceAsync()
     {
         var issue = SelectedIssue();
-        if (manualReviewBusy || processing || issue is null || issue.ResolvedUtc is not null) return;
+        if (manualReviewBusy || issue is null || issue.ResolvedUtc is not null ||
+            !CloudLocalWorkItemReferences.IsSupportedIssueType(issue.IssueType)) return;
         var settings = repository.Settings.LoadOrCreate();
         if (settings.CloudMode == CloudModes.LocalOnly || settings.CloudIdentityProvider != "CYID" ||
             !settings.CloudEmployeeAuthorityReady || settings.CloudWorkspaceId.Length == 0 ||
