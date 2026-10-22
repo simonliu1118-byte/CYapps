@@ -18,6 +18,8 @@ internal static class SyncIssueTests
             ("invoice list issue resolves after later success", InvoiceListFailureResolvesAsync),
             ("ambiguous local match records issue and skips update", AmbiguousMatchIsRecordedAsync),
             ("unknown test record not found stays unresolved until confirmed", UnknownNotFoundResolvesAfterConfirmationAsync),
+            ("diagnostic lifecycle is redacted and persists resolution", DiagnosticLifecycleIsRedactedAsync),
+            ("paper waits and technical errors use distinct queues", WaitingReviewClassificationAsync),
         };
 
         var failures = new List<string>();
@@ -37,6 +39,56 @@ internal static class SyncIssueTests
 
         if (failures.Count != 0)
             throw new InvalidOperationException("sync issue tests failed: " + string.Join(" | ", failures));
+    }
+
+    private static Task DiagnosticLifecycleIsRedactedAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var store = new InvoiceSyncIssueStore(repository.DataDirectory);
+        const string account = "prod|12345675";
+        const string invoice = "QA12345678";
+        const string order = "SYNTHETIC-ORDER-1";
+        var id = store.Record(account, invoice, order, InvoiceSyncIssueTypes.QueryFailed,
+            "API code 3040122 buyer 0912345678 token=SECRET_SENTINEL", DateTimeOffset.UtcNow);
+        store.Record(account, invoice, order, InvoiceSyncIssueTypes.QueryFailed,
+            "API code 4040161 client SECRET_SENTINEL", DateTimeOffset.UtcNow);
+        Equal(1, store.ResolveMatching(account, invoice, order, DateTimeOffset.UtcNow,
+            InvoiceSyncIssueTypes.QueryFailed));
+        var resolved = store.All(account).Single(x => x.Id == id);
+        var diagnostic = IssueDiagnosticLog.Export(repository.DataDirectory, resolved);
+        True(diagnostic.Contains("3040122", StringComparison.Ordinal));
+        True(diagnostic.Contains("4040161", StringComparison.Ordinal));
+        True(diagnostic.Contains("resolved", StringComparison.Ordinal));
+        True(!diagnostic.Contains(invoice, StringComparison.Ordinal));
+        True(!diagnostic.Contains(order, StringComparison.Ordinal));
+        True(!diagnostic.Contains("SECRET_SENTINEL", StringComparison.Ordinal));
+        True(!diagnostic.Contains("0912345678", StringComparison.Ordinal));
+        Equal("無可辨識代碼", IssueDiagnosticLog.SafeCode("0922334455 invoice 12345678"));
+        return Task.CompletedTask;
+    }
+
+    private static Task WaitingReviewClassificationAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var record = Record("processing-queue", "QA12345678", "66091800111111");
+        repository.Invoices.Append(record);
+        var store = new InvoiceSyncIssueStore(repository.DataDirectory);
+        var account = "prod|12345675";
+        store.Record(account, record.InvoiceNumber, record.OrderId,
+            InvoiceVoidIssueTypes.ManualReview, "等待紙本", DateTimeOffset.UtcNow);
+        var queue = new InvoiceWorkQueue(repository).Load();
+        Equal(1, queue.ProcessingIssues.Count);
+        Equal(0, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
+        store.Record(account, record.InvoiceNumber, record.OrderId,
+            InvoiceSyncIssueTypes.QueryFailed, "API code 3040122", DateTimeOffset.UtcNow);
+        queue = new InvoiceWorkQueue(repository).Load();
+        Equal(1, queue.ProcessingIssues.Count);
+        Equal(1, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
+        return Task.CompletedTask;
     }
 
     private static async Task QueryFailureForcesRetryAndResolvesAsync()
