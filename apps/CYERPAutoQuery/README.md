@@ -132,3 +132,7 @@
 - 單元測試：`dotnet test tests/CYERPAutoQuery.Tests/CYERPAutoQuery.Tests.csproj`（純邏輯，任何 OS 可跑）。
 - OCR 模型：`tools/fetch-ocr-models.ps1` 依 `tools/ocr-models.json` 下載並核對 SHA-256。
 - 圖示：`tools/fetch-canonical-icon.ps1` 從 AITeam CY Icon Family 固定 revision 下載 `AutoQ.ico` 並核對 SHA-256（不進 Git）。
+
+## ERP 行程診斷（唯讀）
+
+在「ERP 登入」設定視窗按「行程診斷（唯讀）」，可掃描目前可存取的 ERP 候選行程、PID／父 PID／工作階段、啟動時間、記憶體與 ERP 視窗類型。勾選「每 2 秒觀察變化」後，人工正常關閉並重新開啟 ERP，工具會記錄行程新增、消失與視窗變化；按「匯出遮蔽報告」儲存 TXT，提供排查 ERP 行程關係。掃描為唯讀，不會啟動、關閉、強制終止或重新登入 ERP。報告不含帳戶原文、完整檔案路徑、命令列或原始視窗標題；跨工作階段或權限不足的資訊可能無法讀取，並不代表行程不存在。**此功能不會改變原有自動登入、閒置關閉或異常重啟的行為。**
