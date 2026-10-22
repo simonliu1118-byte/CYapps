@@ -6,7 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.39 Build 0（非正式 Release）**：V3.2-F 官方同步、跨期按需查回與歷史整合：沿用原 invoice_list／allowance_list／invoice_query，新增現有本機 SQLite 內的官方折讓查證狀態逐筆 append-only 歷程與原發票詳情唯讀查閱。唯讀歷程獨立於原發票清理；查證失敗保留「上傳問題」至成功恢復。未變更原清理規則、50 張發票／150 筆折讓上限或任何財務 POST。正式 Release V3.1.0 不變；真光貿、Cloud schema 與真機仍待驗收。
+- **目前工程 Source：V3.1.40 Build 0（非正式 Release）**：V3.2-G 介面收斂前置與 H 發行門檻盤點。舊網站人工折讓／作廢入口明確標示「舊流程」，行政結案不得暗示光貿成功；原單次 API、人工選號例外與官方歷史唯讀路徑保留。新流程真實驗收前不移除最後回退入口。既有 CI、合成跨機驗證及發行門檻分層核對；Cloud g0501、遠端 schema／真交易、正式 Release 均未啟用。
+
+- **前一工程 Source：V3.1.39 Build 0（非正式 Release）**：V3.2-F 官方同步、跨期按需查回與歷史整合：沿用原 invoice_list／allowance_list／invoice_query，新增現有本機 SQLite 內的官方折讓查證狀態逐筆 append-only 歷程與原發票詳情唯讀查閱。唯讀歷程獨立於原發票清理；查證失敗保留「上傳問題」至成功恢復。未變更原清理規則、50 張發票／150 筆折讓上限或任何財務 POST。正式 Release V3.1.0 不變；真光貿、Cloud schema 與真機仍待驗收。
 
 - **前一工程 Source：V3.1.38 Build 0（非正式 Release）**：按使用者指示維持原舊發票清理機制，折讓列表有原發票號但本機找不到時，才依原號向光貿唯讀查回；官方存在且完整才補回原發票；查無或回覆不一致則在原「上傳問題」顯示，不造假、不變動保留期。沿用每日 150 筆折讓列表／50 張發票上限、Cloud g0501 禁止送出，正式 Release V3.1.0 不變。
 

@@ -386,14 +386,14 @@ internal sealed class SyncIssuesForm : Form
                     var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                         repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                     var approval = local ? allowanceVoidWorkflow.LocalApprovalFor(issue) : null;
-                    primaryText = !local ? "已人工處理" : approval?.Claimed == true
+                    primaryText = !local ? LegacyAllowanceVoidWebsiteAction : approval?.Claimed == true
                         ? "查回作廢狀態" : approval is null || approval.ExpiresUtc <= DateTimeOffset.UtcNow
                             ? "覆核作廢" : "單次送出作廢";
                     primaryDanger = local && approval is { Claimed:false } && approval.ExpiresUtc > DateTimeOffset.UtcNow;
                     allowCancel = !allowAdministrativeClose && approval?.Claimed != true;
                     // The old website workflow remains available until the new
                     // workflow has real acceptance. A claimed POST cannot use it.
-                    if (local && !allowAdministrativeClose && approval?.Claimed != true) secondaryText = "已人工處理";
+                    if (local && !allowAdministrativeClose && approval?.Claimed != true) secondaryText = LegacyAllowanceVoidWebsiteAction;
                 }
                 else if (!allowAdministrativeClose && IsAllowanceManualReview(issue))
                 {
@@ -417,7 +417,7 @@ internal sealed class SyncIssuesForm : Form
                                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                             primaryText = local && review.DraftItems is { Count: > 0 }
                                 ? "核准折讓草稿（不送出）"
-                                : "已人工處理";
+                                : LegacyAllowanceWebsiteAction;
                             allowCancel = true;
                         }
                         else
@@ -667,8 +667,8 @@ internal sealed class SyncIssuesForm : Form
     {
         if (MessageBox.Show(
                 this,
-                "請先確認已在光貿網站完成這張折讓單的作廢。\n\n按下「是」後，CYInvoice 只會結束這筆人工待辦，不會呼叫折讓作廢 API。",
-                "折讓作廢已人工處理",
+                "此為舊網站作廢流程，僅供新流程完成真實驗收前處理既有待辦。\n\n請先在光貿網站完成作廢並另行核對官方狀態。\n\n按下「是」只結束人工待辦，不會呼叫 g0501，也不表示官方已作廢成功。",
+                "舊流程：網站作廢人工結案",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
@@ -679,7 +679,7 @@ internal sealed class SyncIssuesForm : Form
         try
         {
             allowanceVoidWorkflow.MarkManualCompleted(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
-            MessageBox.Show(this, "折讓作廢人工待辦已標記完成。", "處理完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "僅完成舊人工待辦的行政結案；光貿作廢狀態仍以官方唯讀查回為準。", "舊流程行政結案", MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
         }
         catch (Exception error)
@@ -983,8 +983,8 @@ internal sealed class SyncIssuesForm : Form
     private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue)
     {
         if (MessageBox.Show(this,
-                "請先確認已在光貿網站完成這筆人工折讓。\n\n按下「是」後，CYInvoice 會進入等待確認並用 invoice_query 自動比對新的折讓資料。",
-                "折讓已人工處理", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                "此為舊網站折讓流程，僅供新流程真實驗收完成前處理既有待辦。\n\n請先確認光貿網站已進行折讓。按下「是」只會進入官方 invoice_query 唯讀確認，不等於本次已成功開立或可重新送出。",
+                "舊流程：網站折讓待查", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證", collectCredentialsOnly: true);
         if (login.ShowDialog(this) != DialogResult.OK) return;
@@ -1580,6 +1580,9 @@ internal sealed class SyncIssuesForm : Form
             LocalAllowancePrimaryAction("confirmed") != string.Empty)
             throw new InvalidOperationException(
                 "Local allowance must not bypass reviewed collision or ambiguous-send UI.");
+        if (LegacyAllowanceWebsiteAction != "舊流程：網站已人工折讓" ||
+            LegacyAllowanceVoidWebsiteAction != "舊流程：網站已作廢")
+            throw new InvalidOperationException("G 階段舊網站入口必須與新單次送出明確區分");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
             DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理" ||
@@ -1595,6 +1598,12 @@ internal sealed class SyncIssuesForm : Form
             foreach (var nested in Descendants(child)) yield return nested;
         }
     }
+
+    // Keep old website paths visibly distinct from the new authorized
+    // g0401/g0501 workflow until real financial acceptance permits removal.
+    // These labels do not authorize a financial send or mark AMEGO success.
+    internal const string LegacyAllowanceWebsiteAction = "舊流程：網站已人工折讓";
+    internal const string LegacyAllowanceVoidWebsiteAction = "舊流程：網站已作廢";
 
     private static string DisplayType(string type) => type switch
     {
