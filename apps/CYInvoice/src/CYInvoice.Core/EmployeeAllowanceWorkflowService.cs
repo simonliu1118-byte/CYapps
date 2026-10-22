@@ -366,6 +366,21 @@ public sealed class EmployeeAllowanceWorkflowService
             .ConfigureAwait(false);
     }
 
+    // Resume the same frozen manager approval, never create a new approval.
+    // A sending/unknown attempt only receives original-number readback.
+    public async Task<LocalAllowanceSendResult> ContinueApprovedLocalDraftAsync(
+        InvoiceSyncIssue issue, string managerNo, string password,
+        IAmegoAllowanceGateway? gateway = null,
+        CancellationToken cancellationToken = default)
+    {
+        var manager = RequireLocalAllowanceManager(managerNo, password);
+        if (LocalReservationFor(issue) is null)
+            await ReserveLocalApprovedDraftAsync(issue, manager.EmployeeNo,
+                password, cancellationToken).ConfigureAwait(false);
+        return await SendLocalReservedDraftAsync(issue, manager.EmployeeNo,
+            password, gateway, cancellationToken).ConfigureAwait(false);
+    }
+
     // The only WinForms-facing Local g0401 call. A fresh official snapshot,
     // frozen approval, manager credentials and work item must all still agree.
     public async Task<LocalAllowanceSendResult> SendLocalReservedDraftAsync(
@@ -411,28 +426,6 @@ public sealed class EmployeeAllowanceWorkflowService
         if (!string.Equals(hash, review.LocalApprovalOfficialHash, StringComparison.Ordinal))
             throw new InvalidOperationException(
                 "光貿資料已不同於原主管核准，禁止操作；不會自動重新核准");
-    }
-
-    // A deliberately separate, manager-confirmed next-number operation after
-    // definitive external collision. It creates a reservation only; it NEVER
-    // issues g0401. Requires a fresh official readback identifying different
-    // buyer and original invoice(s), plus two full live preflight checks.
-    public async Task<LocalAllowanceReservation> ReserveLocalAfterExternalCollisionAsync(
-        InvoiceSyncIssue issue,string actorEmployeeNo,string actorPassword,
-        string typedManagerConfirmation,
-        IAmegoAllowanceGateway? gateway=null,CancellationToken cancellationToken=default)
-    {
-        var manager=RequireLocalAllowanceManager(actorEmployeeNo,actorPassword);
-        var previous=RequireReservedApproval(issue,manager.EmployeeNo);
-        var account=CurrentAccount();
-        var service=new LocalAllowanceOneShotService(
-            new LocalAllowanceNumberStore(repository.DataDirectory),
-            gateway??CreateAllowanceGateway(account),
-            (frozen,token)=>ValidateLocalSendPreflightAsync(
-                issue,actorEmployeeNo,actorPassword,frozen,token));
-        return await service.ReserveAfterExternalCollisionAsync(
-            account.SellerInvoice,account.Environment,previous,
-            typedManagerConfirmation,cancellationToken).ConfigureAwait(false);
     }
 
     // Restarts and unknown outcomes permit only readback of the original
