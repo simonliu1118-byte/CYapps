@@ -133,6 +133,22 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             item.BuyerName, item.TotalAmount, item.TaxAmount, Hash(item));
     }
 
+    // One manager confirmation executes the existing verified approval and
+    // durable claim within the same active operation. No second UI password,
+    // text challenge or delayed approval window is required.
+    public async Task<LocalAllowanceVoidResult> ApproveAndExecuteLocalVoidAsync(
+        InvoiceSyncIssue issue, string employee, string password,
+        string reviewedOfficialHash, IAmegoAllowanceVoidGateway? gateway = null,
+        CancellationToken cancellationToken = default)
+    {
+        var api = gateway ?? ApiGateway();
+        var approval = await ApproveLocalVoidAsync(issue, employee, password,
+            reviewedOfficialHash, api, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return await SendLocalVoidOnceAsync(issue, employee, password,
+            "作廢 " + approval.AllowanceNumber, api, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<LocalAllowanceVoidApproval> ApproveLocalVoidAsync(InvoiceSyncIssue issue,
         string employee, string password, string reviewedOfficialHash, IAmegoAllowanceVoidGateway? gateway = null,
         CancellationToken cancellationToken = default)
