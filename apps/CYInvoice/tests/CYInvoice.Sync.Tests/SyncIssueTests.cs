@@ -74,7 +74,7 @@ internal static class SyncIssueTests
         using var temporary = new TemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
-        var record = Record("processing-queue", "QA12345678", "66091800111111");
+        var record = Record("processing-queue", "QA12345678", "66091800111111", buyer: "合成買方");
         repository.Invoices.Append(record);
         var store = new InvoiceSyncIssueStore(repository.DataDirectory);
         var account = "prod|12345675";
