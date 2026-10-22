@@ -63,6 +63,12 @@ public sealed class LocalAllowanceOneShotService
         {
             var accepted = await amego.IssueAllowanceOnceAsync(frozen, cancellationToken)
                 .ConfigureAwait(false);
+            if (AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(accepted.Code))
+            {
+                ledger.MarkExternalCollision(sellerInvoice, environment, saved, accepted.Code);
+                return new(LocalAllowanceSendOutcome.ConfirmedNumberCollision, saved.AllowanceNumber,
+                    "光貿明確拒絕號碼，舊號已保存；允許同原申請自動改配下一號");
+            }
             if (accepted.Code != 0)
                 return Pending(saved, "光貿未明確接受折讓，須依原號查回，不得重新送出");
         }
