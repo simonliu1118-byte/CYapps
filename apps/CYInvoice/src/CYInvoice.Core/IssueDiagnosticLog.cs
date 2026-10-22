@@ -3,6 +3,7 @@ using CYInvoice.Core;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
 
@@ -73,6 +74,7 @@ public static class IssueDiagnosticLog
         output.AppendLine("作業系統版本：" + Environment.OSVersion.Version);
         output.AppendLine(".NET：" + Environment.Version);
         output.AppendLine("備註：不包含 App Key、密碼、Token、買方、公司統編、原發票／訂單號碼或原始 API 內容。");
+        AppendFinancialEvidence(output, dataDirectory, issue);
         output.AppendLine("操作紀錄（最多最近 500 筆）：");
         try
         {
@@ -107,6 +109,106 @@ public static class IssueDiagnosticLog
                 "。不能以缺少紀錄判定送出結果。");
         }
         return output.ToString();
+    }
+
+    // Reconstruct original financial attempts from the EXISTING durable SQLite
+    // owners. Export only sequence/status, never the actual allowance number,
+    // company identifier, frozen payload, buyer, App Key or request body.
+    // Both queries are bounded and use the existing work-item/issue indexes.
+    private static void AppendFinancialEvidence(StringBuilder output,
+        string dataDirectory, InvoiceSyncIssue issue)
+    {
+        if (issue.IssueType is not ("allowance_manual_review" or
+            "allowance_void_manual_review")) return;
+        try
+        {
+            using var db = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = System.IO.Path.Combine(dataDirectory,
+                    SqliteBootstrapper.DatabaseFileName),
+                Mode = SqliteOpenMode.ReadOnly, Pooling = false
+            }.ToString());
+            db.Open();
+            bool Exists(string name)
+            {
+                using var query = db.CreateCommand();
+                query.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$table LIMIT 1";
+                query.Parameters.AddWithValue("$table", name);
+                return query.ExecuteScalar() is not null;
+            }
+
+            if (issue.IssueType == "allowance_manual_review" &&
+                Exists("allowance_number_ledger"))
+            {
+                output.AppendLine("原申請 g0401 配號／送出歷程（最多 500 筆）：");
+                using var command = db.CreateCommand();
+                command.CommandText = """
+                    SELECT attempt, status FROM allowance_number_ledger
+                    WHERE seller_invoice=$seller AND environment=$environment
+                      AND work_item_id=$work
+                    ORDER BY attempt ASC LIMIT 501
+                    """;
+                var separator = issue.AccountKey.IndexOf('|');
+                if (separator <= 0) return;
+                command.Parameters.AddWithValue("$environment",
+                    issue.AccountKey[..separator]);
+                command.Parameters.AddWithValue("$seller",
+                    issue.AccountKey[(separator + 1)..]);
+                command.Parameters.AddWithValue("$work",
+                    issue.Id.ToString(CultureInfo.InvariantCulture));
+                using var reader = command.ExecuteReader();
+                var count = 0;
+                while (reader.Read())
+                {
+                    if (++count > 500)
+                    {
+                        output.AppendLine("超過 500 筆，匯出已停止；原 SQLite 歷史未刪除。");
+                        break;
+                    }
+                    var state = reader.GetString(1);
+                    output.AppendLine("嘗試 " + reader.GetInt32(0) + "：" +
+                        (state is "reserved" or "sending" or "confirmed" or
+                            "occupied_external" ? state : "unknown"));
+                }
+            }
+            else if (issue.IssueType == "allowance_void_manual_review" &&
+                Exists("allowance_void_local_claims") &&
+                Exists("allowance_void_local_observations"))
+            {
+                output.AppendLine("原申請 g0501 唯一 Claim 與官方結果歷程（最多 500 筆）：");
+                using var command = db.CreateCommand();
+                command.CommandText = """
+                    SELECT o.kind FROM allowance_void_local_claims c
+                    JOIN allowance_void_local_observations o
+                        ON o.approval_id=c.approval_id
+                    WHERE c.issue_id=$issue AND c.account_key=$account
+                    ORDER BY o.audit_id ASC LIMIT 501
+                    """;
+                command.Parameters.AddWithValue("$issue", issue.Id);
+                command.Parameters.AddWithValue("$account", issue.AccountKey);
+                using var reader = command.ExecuteReader();
+                var count = 0;
+                while (reader.Read())
+                {
+                    if (++count > 500)
+                    {
+                        output.AppendLine("超過 500 筆，匯出已停止；原 SQLite 歷史未刪除。");
+                        break;
+                    }
+                    var kind = reader.GetString(0);
+                    output.AppendLine("觀察 " + count + "：" +
+                        (kind is "accepted_unconfirmed" or "rejected_unconfirmed" or
+                            "unknown_result" or "official_void_observed_unattributed" or
+                            "official_void_unconfirmed" ? kind : "unknown"));
+                }
+            }
+        }
+        catch (Exception error) when (error is SqliteException or IOException or
+            UnauthorizedAccessException or InvalidOperationException)
+        {
+            output.AppendLine("財務歷程暫時無法讀取：" + error.GetType().Name +
+                "。不得據此判定沒有發送。");
+        }
     }
 
     public static string ExportFailed(InvoiceRecord record)
