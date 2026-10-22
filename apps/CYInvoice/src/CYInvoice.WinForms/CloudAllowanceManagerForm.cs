@@ -27,12 +27,9 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button refresh=UiControls.StandardButton("重新整理");
     private readonly Button readback=UiControls.StandardButton("依 ID 查狀態");
     private readonly Button details=UiControls.StandardButton("查看申請原因");
-    private readonly Button review=UiControls.StandardButton("接手覆核");
-    private readonly Button preview=UiControls.StandardButton("預覽官方資料");
-    private readonly Button approve=UiControls.StandardButton("主管核准");
+    private readonly Button approveIssue=UiControls.StandardButton("檢視並核准折讓");
     private readonly Button createVoid=UiControls.StandardButton("員工提出作廢");
-    private readonly Button voidPreview=UiControls.StandardButton("作廢原 ID 預覽");
-    private readonly Button voidApprove=UiControls.StandardButton("作廢主管核准");
+    private readonly Button approveVoid=UiControls.StandardButton("檢視並核准作廢");
     private readonly Button voidStatus=UiControls.StandardButton("作廢原 ID 查回");
     private readonly Button reserve=UiControls.StandardButton("預留號碼");
     private readonly Button reserveAfterCollision=UiControls.StandardButton("外部占號主管覆核");
@@ -42,7 +39,6 @@ internal sealed class CloudAllowanceManagerForm : Form
     private readonly Button manualHistory=UiControls.StandardButton("查人工覆核稽核");
     private readonly Button close=UiControls.StandardButton("關閉");
     private bool busy;
-    private CloudAllowanceVoidManagerPreview? pendingVoidPreview;
 
     private CloudAllowanceManagerForm()
     {
@@ -58,16 +54,13 @@ internal sealed class CloudAllowanceManagerForm : Form
         queue.Columns.Add("環境",75);
         queue.Columns.Add("更新時間",170);
         queue.SelectedIndexChanged+=(_,_)=>Actions();
-        searchId.TextChanged+=(_,_)=>{pendingVoidPreview=null;Actions();};
+        searchId.TextChanged+=(_,_)=>Actions();
         refresh.Click+=async(_,_)=>await ListAsync();
         readback.Click+=async(_,_)=>await StatusAsync();
         details.Click+=async(_,_)=>await DetailsAsync();
-        review.Click+=async(_,_)=>await ReviewAsync();
-        preview.Click+=async(_,_)=>await PreviewAsync();
-        approve.Click+=async(_,_)=>await ApproveAsync();
+        approveIssue.Click+=async(_,_)=>await ApproveIssueAsync();
         createVoid.Click+=async(_,_)=>await CreateVoidAsync();
-        voidPreview.Click+=async(_,_)=>await PreviewVoidAsync();
-        voidApprove.Click+=async(_,_)=>await ApproveVoidAsync();
+        approveVoid.Click+=async(_,_)=>await ApproveVoidAsync();
         voidStatus.Click+=async(_,_)=>await ReadVoidStatusAsync();
         reserve.Click+=async(_,_)=>await ReserveAsync();
         reserveAfterCollision.Click+=async(_,_)=>await ReserveAfterCollisionAsync();
@@ -111,10 +104,9 @@ internal sealed class CloudAllowanceManagerForm : Form
             AutoScroll=true,Padding=new Padding(4)};
         actions.Controls.Add(searchId);actions.Controls.Add(readback);
         actions.Controls.Add(details);
-        actions.Controls.Add(review);actions.Controls.Add(preview);
-        actions.Controls.Add(approve);actions.Controls.Add(reserve);
+        actions.Controls.Add(approveIssue);actions.Controls.Add(reserve);
         actions.Controls.Add(createVoid);
-        actions.Controls.Add(voidPreview);actions.Controls.Add(voidApprove);
+        actions.Controls.Add(approveVoid);
         actions.Controls.Add(voidStatus);
         actions.Controls.Add(reserveAfterCollision);
         actions.Controls.Add(inspect);actions.Controls.Add(sendOnce);
@@ -140,14 +132,11 @@ internal sealed class CloudAllowanceManagerForm : Form
         refresh.Enabled=ready;
         readback.Enabled=ready&&searchId.Text.Trim().Length>=8;
         details.Enabled=ready&&selected is not null;
-        review.Enabled=ready&&selected?.Status=="open";
-        preview.Enabled=ready&&selected?.Status=="review";
-        approve.Enabled=ready&&selected?.Status=="review";
+        approveIssue.Enabled=ready && selected?.Status is ("open" or "review");
         createVoid.Enabled=ready&&cloudWorkspaceId is not null;
-        voidPreview.Enabled=ready&&searchId.Text.Trim().Length>=8;
+        approveVoid.Enabled=ready&&searchId.Text.Trim().Length>=8;
         voidStatus.Enabled=ready&&searchId.Text.Trim().Length>=8;
-        voidApprove.Enabled=ready&&pendingVoidPreview is not null&&
-            pendingVoidPreview.ApplicationId==searchId.Text.Trim();
+
         reserve.Enabled=ready&&selected?.Status=="approved";
         reserveAfterCollision.Enabled=ready&&selected?.Status=="approved";
         inspect.Enabled=ready&&selected?.Status=="approved";
@@ -223,38 +212,51 @@ internal sealed class CloudAllowanceManagerForm : Form
                 MessageBoxButtons.OK,MessageBoxIcon.Information);
         });
     }
-    private async Task ReviewAsync()
+    // One manager action, while the Worker retains its original CYID / Device
+    // authority checks and re-reads official status on approval.
+    // This action only approves a grant; no financial g0401 is sent.
+    private async Task ApproveIssueAsync()
     {
-        var row=Selected();if(row is null)return;
+        var selected=Selected();
+        if(selected is null || selected.Status is not ("open" or "review")) return;
         await RunAsync(async(no,pass)=>{
-            var res=await client!.ReviewAsync(row.ApplicationId,row.Revision,no,pass,lifetime.Token);
-            searchId.Text=res.ApplicationId;
-            status.Text=$"已接手覆核，revision {res.Revision}。請刷新並預覽官方資訊。";
+            var revision=selected.Revision;
+            var detail=await client!.GetAsync(selected.ApplicationId,no,pass,lifetime.Token);
+            if(selected.Status=="open")
+            {
+                var taken=await client.ReviewAsync(selected.ApplicationId,revision,
+                    no,pass,lifetime.Token);
+                revision=taken.Revision;
+            }
+            var evidence=await client.PreviewAsync(selected.ApplicationId,revision,
+                no,pass,lifetime.Token);
+            searchId.Text=selected.ApplicationId;
+            var question="申請 ID："+detail.ApplicationId+
+                "\n折讓原因："+detail.Reason+
+                "\n含稅金額："+detail.RequestedGross+
+                "\n原發票："+evidence.OriginalInvoiceNumber+
+                "\n上傳狀態："+evidence.OfficialUploadStatus+
+                "\n官方已有折讓："+evidence.OfficialAllowanceCount+
+                "\n官方摘要完整："+evidence.OfficialSummaryComplete+
+                "\n\n按下核准後 Worker 將再次查證並鎖定主管核准。" +
+                "\nCloud 財務送出尚未啟用，此動作不代表已開立折讓。"+
+                "\n\n確認核准？";
+            if(MessageBox.Show(this,question,"主管檢視並核准",
+                MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            {
+                status.Text="沒有核准或送出折讓；保留原申請供查回。";
+                queue.Items.Clear();
+                return;
+            }
+            var approved=await client.ApproveAsync(selected.ApplicationId,revision,
+                no,pass,lifetime.Token);
+            status.Text="原申請已核准，rev "+approved.Revision+
+                "；Cloud g0401 仍未執行，請勿當成開立成功。";
             queue.Items.Clear();
         });
     }
-    private async Task PreviewAsync()
-    {
-        var row=Selected();if(row is null)return;
-        await RunAsync(async(no,pass)=>{
-            var info=await client!.PreviewAsync(row.ApplicationId,row.Revision,no,pass,lifetime.Token);
-            searchId.Text=info.ApplicationId;
-            status.Text=$"官方唯讀：{info.OriginalInvoiceNumber}；上傳 {info.OfficialUploadStatus}／"+
-                $"歷史折讓 {info.OfficialAllowanceCount}；摘要完整 {info.OfficialSummaryComplete}。此預覽不能核准發送。";
-        });
-    }
-    private async Task ApproveAsync()
-    {
-        var row=Selected();if(row is null)return;
-        if(MessageBox.Show(this,"核准會重新查詢光貿官方資料並建立不可變 Grant，但不會開立折讓。確定核准？",
-           "確認主管核准",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-        await RunAsync(async(no,pass)=>{
-            var res=await client!.ApproveAsync(row.ApplicationId,row.Revision,no,pass,lifetime.Token);
-            searchId.Text=res.ApplicationId;
-            status.Text=$"已建立核准 Grant；rev {res.Revision}，尚未配號或發送。";
-            queue.Items.Clear();
-        });
-    }
+
     // Employee create path reuses the same CYID credentials as the manager
     // queue. A lost reply is resolved ONLY by a stable original application
     // ID; never generate a new GUID to replace an uncertain first request.
@@ -319,7 +321,6 @@ internal sealed class CloudAllowanceManagerForm : Form
         }
         // Visible even if networking fails or the process closes later.
         searchId.Text=id;
-        pendingVoidPreview=null;
         await RunAsync(async(emp,pass)=>{
             // First read by a stable ID. Only an authoritative NOT_FOUND
             // permits the initial create, never a timeout/unknown reply.
@@ -332,28 +333,6 @@ internal sealed class CloudAllowanceManagerForm : Form
                     current.Status=="approved"?"；主管已核准，尚未執行 Cloud g0501":
                     "；等待主管覆核，尚未執行 Cloud g0501")+
                 "。此狀態不代表光貿作廢成功，也未建立重複申請。";
-        });
-    }
-
-    private async Task PreviewVoidAsync()
-    {
-        var id=searchId.Text.Trim();
-        if(id.Length<8)return;
-        await RunAsync(async(no,pass)=>{
-            var proof=await client!.PreviewVoidForManagerAsync(id,no,pass,lifetime.Token);
-            pendingVoidPreview=proof;
-            MessageBox.Show(this,
-                "原申請 ID："+proof.ApplicationId+
-                "\n原折讓號："+proof.AllowanceNumber+
-                "\n原發票："+proof.OriginalInvoiceNumber+
-                "\n申請原因："+proof.Reason+
-                "\n官方查詢："+proof.OfficialCheckedAtUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")+
-                "\n\n官方預覽不代表主管核准，也不允許送出 g0501。"+
-                "\n如確認無誤，請重新輸入 CYID 密碼並按「作廢主管核准」。",
-                "CYID 折讓作廢－官方預覽",
-                MessageBoxButtons.OK,MessageBoxIcon.Information);
-            status.Text="已預覽作廢原號 "+proof.AllowanceNumber+
-                "；尚未核准或送出。";
         });
     }
 
@@ -371,50 +350,33 @@ internal sealed class CloudAllowanceManagerForm : Form
         });
     }
 
+    // One supervisor decision: read the original official allowance and
+    // approve the immutable Cloud grant. This does not expose g0501 send.
     private async Task ApproveVoidAsync()
     {
-        var proof=pendingVoidPreview;
-        if(proof is null||proof.ApplicationId!=searchId.Text.Trim())return;
-        var expected="作廢 "+proof.AllowanceNumber;
-        using var dialog=new Form{Text="CYID 折讓作廢－主管確認",
-            ClientSize=new Size(650,240),
-            StartPosition=FormStartPosition.CenterParent,
-            FormBorderStyle=FormBorderStyle.FixedDialog,ShowIcon=false,
-            MaximizeBox=false,MinimizeBox=false,ShowInTaskbar=false,
-            Font=new Font("Microsoft JhengHei UI",10F)};
-        var panel=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(14),
-            ColumnCount=1,RowCount=3};
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute,47));
-        panel.Controls.Add(new Label{Dock=DockStyle.Fill,
-            Text="原號："+proof.AllowanceNumber+"／原發票："+proof.OriginalInvoiceNumber+
-                "\n原因："+proof.Reason+
-                "\n只寫入核准 Grant，不會送出 g0501。"+
-                "\n請完整輸入：「"+expected+"」"},0,0);
-        var typed=UiControls.TextBox(80);typed.Dock=DockStyle.Fill;
-        typed.AccessibleName="輸入原折讓號以核准 Cloud 作廢";
-        var ok=UiControls.StandardButton("確認核准");
-        ok.Enabled=false;ok.DialogResult=DialogResult.OK;
-        typed.TextChanged+=(_,_)=>ok.Enabled=typed.Text==expected;
-        var cancel=UiControls.StandardButton("取消");
-        cancel.DialogResult=DialogResult.Cancel;
-        var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,
-            FlowDirection=FlowDirection.RightToLeft};
-        buttons.Controls.Add(cancel);buttons.Controls.Add(ok);
-        panel.Controls.Add(typed,0,1);panel.Controls.Add(buttons,0,2);
-        dialog.Controls.Add(panel);dialog.AcceptButton=ok;dialog.CancelButton=cancel;
-        if(dialog.ShowDialog(this)!=DialogResult.OK||typed.Text!=expected)return;
+        var id=searchId.Text.Trim(); if(id.Length<8)return;
         await RunAsync(async(no,pass)=>{
-            // The Worker rechecks official evidence, role, Device and Gate.
-            // A lost acknowledgement is resolved by original-ID status only.
-            pendingVoidPreview=null;
-            var grant=await client!.ApproveVoidForManagerAsync(
-                proof,typed.Text,no,pass,lifetime.Token);
-            status.Text="已核准 Cloud 作廢申請 "+grant.ApplicationId+
-                "／rev "+grant.Revision+"；未送出 g0501。"+
-                "正式送出仍須獨立授權。";
+            var proof=await client!.PreviewVoidForManagerAsync(id,no,pass,lifetime.Token);
+            if(proof.ApplicationId!=id)
+                throw new InvalidDataException("作廢申請 ID 不一致，禁止核准");
+            var question="原折讓號："+proof.AllowanceNumber+
+                "\n原發票："+proof.OriginalInvoiceNumber+
+                "\n申請原因："+proof.Reason+
+                "\n\n核准會建立 Cloud Grant，不會呼叫 g0501。" +
+                "\n請確認原號、原發票與申請內容。" +
+                "\n\n確定核准？";
+            if(MessageBox.Show(this,question,"主管檢視並核准作廢",
+                MessageBoxButtons.YesNo,MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2)!=DialogResult.Yes)
+            {
+                status.Text="未核准，不會送出作廢。";
+                return;
+            }
+            var approved=await client.ApproveVoidForManagerAsync(proof,
+                "作廢 "+proof.AllowanceNumber,no,pass,lifetime.Token);
+            status.Text="已核准原作廢申請 "+approved.ApplicationId+
+                "／rev "+approved.Revision+
+                "；Cloud g0501 仍未開放，沒有送出作廢。";
         });
     }
 
@@ -619,12 +581,11 @@ internal sealed class CloudAllowanceManagerForm : Form
         if(form.Text!="CYID 跨機折讓（送出須獨立授權）"||
            form.ClientSize.Width<790||form.queue.Columns.Count!=6||
            !form.password.UseSystemPasswordChar||
-           form.queue.MultiSelect||form.reserve.Enabled||form.approve.Enabled||
+           form.queue.MultiSelect||form.reserve.Enabled||form.approveIssue.Enabled||
            form.sendOnce.Enabled||form.inspect.Enabled||
            form.manualReview.Enabled||form.manualHistory.Enabled||
            form.reserveAfterCollision.Enabled||form.createVoid.Enabled||
-           form.voidPreview.Enabled||
-           form.voidApprove.Enabled||form.voidStatus.Enabled)
+           form.approveVoid.Enabled||form.voidStatus.Enabled)
             throw new InvalidOperationException("Cloud allowance manager layout/authority gate invalid.");
     }
 }
