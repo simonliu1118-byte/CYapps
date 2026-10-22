@@ -1,15 +1,16 @@
 # CYInvoice V3.2：完整折讓與流程收斂計畫
 
-更新：2026-10-22（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
+更新：2026-10-23（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.41 Build 1，沿原 PR #550 收斂；尚未部署、合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
+**工程 Source：V3.1.41 Build 1，沿原 PR #550 收斂；本機已完成schema21／原Worker部署，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
 
 ## 1. 來源、現況與執行停點
 
 - 正式 Release 仍為 V3.1.0；本批是 V3.2 既有需求返修，VERSION=3.1.41、BUILD=1，不另開 PR 或工作單。
-- 2026-10-22 使用者提供本機 Work 截圖回報原 D1 schema20／Worker marker20、100% 流量、CYID／Bindings 與前後檢查成功。這是本機回報，非本對話即時 Cloudflare readback；實際計量與私有備份／還原詳細紀錄仍待歸檔。
+- 2026-10-23收到作業日2026-10-22的完整本機MCP報告：原D1 schema21／Worker marker21，指定Source為`83e7b691fc494186e7a0d373654c888e83874fde`；history、舊資料／稽核指紋、FK／quick_check、備份實際還原及canonical before／deploy／after通過。schema18～20私有證據亦已交回歸檔。這是使用者本機執行證據，非本對話重新連線Cloudflare驗證。
 - 已套用的 0020 完全保留；本批新增唯一 forward migration `0021_allowance_automatic_execution.sql`，調整執行投影／期限檢查及有限次作廢嘗試，保留原申請、核准、Claim、Ledger、Audit。歷史核准沒有可驗證的權威快照時不補造授權、不自動 POST。
-- `SCHEMA_VERSION=21` 是待部署 Source。原 D1／Worker、CYID D1 與財務旗標均未由本批變更；實際 20→21 僅在本機 MCP 獲具體授權後執行，見 [操作交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。結構升級時新舊全部折讓旗標保持關閉。
+- 第一階段20→21及原Worker維護已完成、遠端操作已停止；五個折讓旗標均關閉，核准入口503／ALLOWANCES_NOT_READY。線上bundle與指定Source一致，CYID／原服務與綁定保留，未碰CYID D1、不重跑0017～0021。測試公司卡／真光貿API及Local實際舊資料／未知Claim盤點仍待驗；未驗數量不記0。完整結果、私有證據位置及下一階段見 [本機完成報告](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+- 計量完整數字與私有收據已由原對話交回，不公開複製。直接SQL不是完整計費量，共用帳號差額不可全部歸因本作業；不能宣告本批完整計費read已確認在原5000參考上限內。未提高上限，維護已停止；第二階段另授權、另估用量。
 - Windows／Cloud／Governance 工程 CI 與真光貿測試分開。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選；正式 Release 仍需當次明確授權。
 
 ## 2. 已定案的產品流程
@@ -123,10 +124,10 @@
 | Cloud 一次核准與恢復 | 合成 HTTP／D1測試：open檢視不變更、核准內直接送出、25次碰撞、未知零重送、重開檔案恢復、CAS回覆遺失／撤權、正常等待、已完成查閱、分頁完整診斷 |
 | Local 一次核准與恢復 | 原 Core／Allowance／VoidWorkflow／Sync測試涵蓋核准後重啟免再次主管操作、原號查回、權限與設定失效、防重送、官方完成原子結案 |
 | g0501 | Local／Cloud 合成驗證最多3次、60秒退避、4050141等待不重送、舊未知Claim不解鎖、官方已作廢收尾 |
-| schema21 | 非空schema20備份、注入失敗回滾、成功保留舊Ledger／Grant／Audit、FK／integrity及備份實際還原；沒有遠端套用 |
+| schema21 | 非空schema20備份、注入失敗回滾、成功保留舊Ledger／Grant／Audit、FK／integrity及備份實際還原；本機MCP已回報原D1實際套用0021一次、原Worker marker21，詳細證據見完成報告 |
 | 同步與診斷 | 150筆／50張同日停止與隔日checkpoint接續、不同申請不錯誤合併、完整事件匯出、無秘密；舊版缺少的證據明列未知，不補造 |
-| Windows／工程 CI | 本地跨編譯與所有測試完成後，集中推送並核對精確HEAD的Windows Build／Cloud Check／Governance；失敗不得標完成 |
-| 尚未完成的業務驗收 | 本機schema20證據歸檔、獲授權的20→21／原Worker部署、分別授權的旗標啟用／真光貿測試、最後舊人工入口退役；雙Windows真人驗收依既有延期決議 |
+| Windows／工程 CI | 已部署Source `83e7b691` 的本地測試及Windows Build／Cloud Check／Governance／Development預檢通過；CI實際部署job skipped，真正部署由本機MCP完成；後續文件歸檔不改已部署Source |
+| 尚未完成的業務驗收 | 測試公司卡／API環境核對、Local實際舊待辦與未知Claim盤點、分別授權的旗標啟用／真光貿測試、最後舊人工入口退役；雙Windows真人驗收依既有延期決議。20→21／Worker與前批證據歸檔已完成，不重做 |
 
 ## 7. V3.3／後續邊界與歷史
 

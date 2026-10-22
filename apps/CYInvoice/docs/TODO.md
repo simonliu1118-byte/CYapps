@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-22（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
+更新日期：2026-10-23（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -10,24 +10,26 @@
 
 ## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
 
-**現行一頁式執行看板（2026-10-22；原 PR #550 整合實作中）：**
+**現行一頁式執行看板（2026-10-23；核心Source及schema21維護完成，待真流程驗收）：**
 
 使用者定案流程與全部驗收只在 [V3.2 唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本看板只列狀態。原 PR #550，工程 V3.1.41 Build 1，正式 Release 仍 V3.1.0。
 
 | 項目 | 本批狀態 | 剩餘工作 |
 | --- | --- | --- |
-| 一次核准／自動恢復 | Local／Cloud Source已串接原業務owner與既有同步；刪主管繼續／預留／送出／人工換號操作 | 完成精確HEAD工程CI；真Windows／光貿驗收分開 |
+| 一次核准／自動恢復 | Local／Cloud Source已串接原業務owner與既有同步；刪主管繼續／預留／送出／人工換號操作 | 已部署Source `83e7b691` 工程CI通過；真流程／光貿驗收仍待完成 |
 | 自動佔號與結果收尾 | 真實4040161／4040162證據後無次數上限加號；未知只查原號；完整官方99結案 | 真光貿測試，不以合成結果代替 |
 | 作廢 | 同號最多3次／至少60秒，正常處理不重送、已作廢結案；舊無證據Claim只查回 | 核准後無主管續按的真流程驗收 |
 | 處理中／上傳問題 | 原issue／application分類、同申請恢復，不按發票合併不同折讓；單筆安全診斷匯出 | 真環境故障查證與舊缺證據盤點 |
-| schema20／21 | 本機截圖回報20成功；新增0021 forward Source及非空備份／回滾合成驗證，舊0020不變 | 補20私有證據；本機另獲授權才20→21及原Worker部署，全部折讓旗標先關 |
-| 同步 | 150筆折讓／50張原票同日上限、checkpoint隔日接續；原發票清理不變 | 精確HEAD回歸與真光貿觀察 |
+| schema20／21 | 本機完整報告已交回：原D1／Worker21、history及舊資料保留、私有備份／還原與前批證據歸檔完成；0021僅一次、五旗標關閉 | 第一階段已停；不重跑0017～0021，第二階段另授權 |
+| 同步 | 150筆折讓／50張原票同日上限、checkpoint隔日接續；原發票清理不變 | Source工程回歸通過；真光貿觀察待驗 |
 | 退役／簡化 | 獨立診斷已移除；本批刪Cloud主管獨立表單、技術caller／API／DTO／舊人工占號服務 | 舊網站人工入口僅歷史相容，真驗收＋舊資料盤點後刪最後caller，歷史唯讀 |
-| 部署／發行 | 本批未動正式D1、Worker、CYID D1、財務旗標或Release | 詳見 [本機操作交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；未授權不執行 |
+| 部署／發行 | 本機已部署指定Source `83e7b691`，D1／marker21；未碰CYID D1、未開財務旗標，PR未合併、Release仍V3.1.0 | [本機完成報告](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；測試公司卡／API及Local資料／未知Claim盤點仍待驗，下一階段另授權 |
 
-- [ ] 原PR精確HEAD必要Windows／Cloud／Governance CI全部通過。
-- [ ] 本機schema20私有計量、備份與實際還原證據歸檔，不重跑0020。
-- [ ] schema21／Worker／旗標／真光貿分階段授權與驗收；V3.2未完項不移至3.3。
+- [x] 已部署Source `83e7b691fc494186e7a0d373654c888e83874fde` 的Windows／Cloud／Governance及Development預檢通過；後者實際部署job skipped，本機MCP才是真正部署。
+- [x] 本機完整報告已歸檔schema18～20及schema21私有備份／實際還原證據位置；以使用者回報登記，未由本對話再連Cloudflare。
+- [x] 第一階段20→21／原Worker維護完成、五旗標關閉，遠端已停；不重跑migration。
+- [ ] 第二階段公司卡／API環境、Local舊待辦／未知Claim盤點、適用旗標與真光貿交易另行授權與驗收；V3.2未完項不移至3.3。
+- 計量限制：完整數字與私有收據已在原對話交回，不在Public Git複製；無法確認完整計費歸屬，不能宣告本批計費read已確認在原5000參考上限內，不再為補文件重複查遠端用量。
 - [ ] 雙Windows／不同Device真人驗收依使用者原決議於V3.2上線後補做，未驗不勾選。
 - [ ] 新流程真驗收後退役最後舊人工入口；不擴大為Built-in全面重構。
 
