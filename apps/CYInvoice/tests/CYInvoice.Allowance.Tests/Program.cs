@@ -117,7 +117,7 @@ static async Task TestLocalOneClickVoidAsync()
 {
     using var temporary = new TemporaryDirectory("g0501-one-click");
     var (setup, issue, api) = await CreateApiVoidAsync(temporary.Path);
-    api.Status = new("ALW-001", "D0501", 99);
+    api.OnPost = () => api.Status = new("ALW-001", "D0501", 99);
     var preview = await setup.Workflow.PreviewLocalVoidAsync(issue,
         "2000", "AdminPass1", api);
     var result = await setup.Workflow.ApproveAndExecuteLocalVoidAsync(issue,
