@@ -88,6 +88,77 @@ public sealed class LocalAllowanceOneShotService
             .ConfigureAwait(false);
     }
 
+    // The only automatic number-advance owner. An acknowledged 4040161 or
+    // 4040162 transitions the original persisted attempt to occupied_external;
+    // only that explicit rejection allows a new number. No artificial limit:
+    // the user may cancel, and the number generator enforces legal capacity.
+    // A timeout, crash, unknown code or successful POST NEVER loops to g0401.
+    public async Task<LocalAllowanceSendResult> SendWithAutomaticNumberAdvanceAsync(
+        string sellerInvoice, string environment, LocalAllowanceReservation reservation,
+        Action<string>? reportProgress = null, CancellationToken cancellationToken = default)
+    {
+        var current = RequireCurrent(sellerInvoice, environment, reservation);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (current.Status == "occupied_external")
+            {
+                current = await ReserveAfterConfirmedRejectionAsync(
+                    sellerInvoice, environment, current, cancellationToken).ConfigureAwait(false);
+                reportProgress?.Invoke("光貿明確拒絕上一折讓號，已安全記錄並改配新號：" +
+                    current.AllowanceNumber);
+            }
+            if (current.Status != "reserved")
+                return await ReconcileAsync(sellerInvoice, environment, current,
+                    cancellationToken).ConfigureAwait(false);
+            var outcome = await SendFirstAsync(sellerInvoice, environment, current,
+                cancellationToken).ConfigureAwait(false);
+            reportProgress?.Invoke(current.AllowanceNumber + "：" + outcome.Outcome);
+            if (outcome.Outcome != LocalAllowanceSendOutcome.ConfirmedNumberCollision)
+                return outcome;
+            current = RequireCurrent(sellerInvoice, environment, current);
+        }
+    }
+
+    // A persisted occupied_external state is reachable only after an explicit
+    // provider number-rejection response. Do not require a second manager
+    // click, textual acknowledgement, different buyer or another invoice.
+    // Fresh authorization/unchanged approved payload remains mandatory.
+    public async Task<LocalAllowanceReservation> ReserveAfterConfirmedRejectionAsync(
+        string sellerInvoice, string environment, LocalAllowanceReservation previous,
+        CancellationToken cancellationToken = default)
+    {
+        var saved = RequireCurrent(sellerInvoice, environment, previous);
+        if (saved.Status != "occupied_external")
+            throw new InvalidOperationException("Only an explicitly rejected number may advance");
+        await requireFreshPreflight(saved, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        saved = RequireCurrent(sellerInvoice, environment, previous);
+        if (saved.Status != "occupied_external")
+            throw new InvalidOperationException("The prior attempt changed while advancing number");
+        var frozen = ReadFrozen(saved);
+        // Legacy audit column official_snapshot_sha256 stores a HASH of
+        // collision evidence for this new path, NOT an official query snapshot.
+        // This identity is safe: no buyer, invoice or App Key is logged.
+        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            "amego:confirmed_number_rejection:" + sellerInvoice + ":" +
+            environment + ":" + saved.AllowanceNumber))).ToLowerInvariant();
+        var template = new AllowanceIssueRequest {
+            AllowanceDate = frozen.AllowanceDate, AllowanceNumber = string.Empty,
+            AllowanceType = frozen.AllowanceType, BuyerIdentifier = frozen.BuyerIdentifier,
+            BuyerName = frozen.BuyerName, BuyerAddress = frozen.BuyerAddress,
+            BuyerTelephoneNumber = frozen.BuyerTelephoneNumber,
+            BuyerEmailAddress = frozen.BuyerEmailAddress,
+            ProductItem = frozen.ProductItem, TaxAmount = frozen.TaxAmount,
+            TotalAmount = frozen.TotalAmount
+        };
+        var day = DateOnly.ParseExact(frozen.AllowanceDate, "yyyyMMdd",
+            CultureInfo.InvariantCulture);
+        return ledger.ReserveAfterVerifiedExternalCollision(sellerInvoice, environment,
+            saved.WorkItemId, day, template, saved.ApproverEmployeeNo,
+            saved.ApprovedAtUtc, saved, digest);
+    }
+
     // Called only after a definitive first-POST duplicate-number error was
     // committed as occupied_external. A fresh official *different* allowance
     // and renewed manager approval are needed before reserving a new number.
