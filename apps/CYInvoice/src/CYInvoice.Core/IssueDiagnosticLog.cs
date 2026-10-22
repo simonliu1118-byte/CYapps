@@ -142,8 +142,19 @@ public static class IssueDiagnosticLog
             {
                 output.AppendLine("原申請 g0401 配號／送出歷程（最多 500 筆）：");
                 using var command = db.CreateCommand();
-                command.CommandText = """
-                    SELECT attempt, status FROM allowance_number_ledger
+                command.CommandText = Exists("allowance_local_number_rejections") ? """
+                    SELECT l.attempt, l.status, r.provider_code
+                    FROM allowance_number_ledger l
+                    LEFT JOIN allowance_local_number_rejections r
+                      ON r.seller_invoice=l.seller_invoice
+                     AND r.environment=l.environment
+                     AND r.work_item_id=l.work_item_id
+                     AND r.allowance_number=l.allowance_number
+                    WHERE l.seller_invoice=$seller AND l.environment=$environment
+                      AND l.work_item_id=$work
+                    ORDER BY l.attempt ASC LIMIT 501
+                    """ : """
+                    SELECT attempt, status, NULL FROM allowance_number_ledger
                     WHERE seller_invoice=$seller AND environment=$environment
                       AND work_item_id=$work
                     ORDER BY attempt ASC LIMIT 501
@@ -166,9 +177,13 @@ public static class IssueDiagnosticLog
                         break;
                     }
                     var state = reader.GetString(1);
+                    var verifiedCode = !reader.IsDBNull(2) &&
+                        reader.GetInt32(2) is 4040161 or 4040162
+                        ? "；官方明確拒號碼 " + reader.GetInt32(2).ToString(CultureInfo.InvariantCulture)
+                        : "";
                     output.AppendLine("嘗試 " + reader.GetInt32(0) + "：" +
                         (state is "reserved" or "sending" or "confirmed" or
-                            "occupied_external" ? state : "unknown"));
+                            "occupied_external" ? state : "unknown") + verifiedCode);
                 }
             }
             else if (issue.IssueType == "allowance_void_manual_review" &&
