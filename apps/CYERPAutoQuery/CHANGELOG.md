@@ -1,5 +1,12 @@
 # CYERPAutoQuery Changelog
 
+## V1.0.1 Build 1（同一功能的安全修正，工程驗證，尚未正式發行）
+
+- 修正行程診斷誤把 CYERPAutoQuery 視窗判定為 ERP；只依明確的 ERP 行程名稱／使用者設定的 ERP EXE 辨識，不再因為視窗標題含 SMART ERP 就納入。
+- 異常自動重啟不再以程式名稱批次 Kill、亦不使用 Kill(entireProcessTree)：只對本次 AutoQuery 親自啟動、且 PID／啟動時間／完整路徑／Windows 工作階段均吻合的 ERP 主行程做單一行程終止；無法證明歸屬就停止並記錄。
+- 閒置關閉同樣要求上述歸屬驗證；未確認歸屬的 SMLeaderWorkCenter 作業視窗不會由閒置流程送出 WM_CLOSE，正常關閉 MainMenu 時可能由 ERP 自行退出。這項安全限制可能使既有人工啟動的 ERP 不再由 AutoQuery 自動關閉或重啟。
+- 不更動查詢、登入輸入方式或 CY Web Agent。新增工作階段／PID 重用／路徑比對測試。
+
 ## V1.0.1（工程驗證，尚未正式發行）
 
 - 在現有「ERP 登入」設定中新增獨立唯讀行程診斷：人工掃描或每 2 秒觀察、PID／父 PID／工作階段與視窗分類、變化紀錄及遮蔽 TXT 匯出。
