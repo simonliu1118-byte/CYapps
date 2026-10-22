@@ -13,10 +13,16 @@
 7. 每段 before／deploy／after 使用相同升級意圖、精確 source identity 與私有 checkpoint；before／deploy 20分鐘限制、after 30分鐘限制不變。canonical20 的18:19只接受完整0001～0019，不要求提前套0020；19:20只接受完整0001～0020。跳版、缺遷移、已升級重用意圖、不同checkpoint、來源／scope／active version／bindings不符、未真正部署均拒絕。勿執行 `deploy:with-migrations`。失去回覆先唯讀確認，不自動再upload／deploy。
 8. 原 CYID／Device scopes、D1／Services／Secrets／Rate limits、自訂vars、公司卡及其他設定完整繼承；每段只改對應 SCHEMA_VERSION。`ALLOWANCE_API_ENABLED`、`ALLOWANCE_G0401_SEND_ENABLED`、`ALLOWANCE_MANUAL_REVIEW_ENABLED`、`ALLOWANCE_EXTERNAL_COLLISION_ENABLED` 均不存在或false。g0501無送出HTTP路由，不新增路由、不啟用內部sender、不做真光貿交易。
 
+## 同日後續產品規劃（本批遠端維護範圍不變）
+
+使用者已定案的後續簡化，統一見 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)：既有「處理中／上傳問題」、主管一次核准、自動佔號加號無次數上限、簡化作廢與問題診斷。**等本機本批完成回報交回後才實作**，本機現在不順手改UI、送出行為、0020約束或開旗標。
+
+0020既有15分鐘與永久Claim是當前Source結構，不代表使用者要求永久保留；若本批已套用，後續由新的forward migration調整，不能回寫／重套0020。舊「跨Local停送／永久單次作廢／無POST歸因不結案」不再作後續產品目標；目前未實作的新流程也不構成現在啟用財務送出的授權。
+
 ## 停點、回復與完成報告
 
 - 已完整升級的段落不重套；DB／Worker已同為20且來源／bindings符合則不重部署。若既有schema19／20來自其他維護，先核對其來源、備份與後驗證據，不能追最新硬升。其他schema／scope／未授權旗標／來源不明立即停。
-- **Local 停送不是 schema20 結構升級前置條件。** Local 停送、未知 Claim 人工查證、測試公司卡／API、單一送出權威及歸因政策仍是後續財務送出啟用的必要條件。schema完成不代表C7/H已結案。雙 Windows／不同 CYID Device 真人驗收已由使用者延至V3.2上線後補驗，不作本批前置條件。
+- **Local停送不是schema20結構升級前置條件。** 本批仍只升結構、旗標全關；後續g0501的永久單次／全域停送門檻已由使用者新流程取代，按V3.2計畫實作及驗收後再審啟用。未知歷史不得假造，測試公司卡／API與真環境驗收仍須完成。schema完成不代表產品簡化或H已結案；雙Windows真人驗收於V3.2上線後補做，不作本批前置條件。
 - 異常停止並留私有證據；Worker以保存的原immutable version回退，D1不隨Worker回退。不得反向DROP／自動還原整庫；先評估期間其他寫入及備份／業務影響，再由使用者決定。
 - 回報實際source SHA／最新必要CI、每段migration與Worker marker／version、四旗標、原CYID／Bindings保留、私有備份／實際還原證據、SQL計費meta與全帳號差額／餘額及預估差異。帶回Local停送／未知Claim的可查證現況與測試公司卡是否可用，不提供秘密值。未實測標未驗證。**回報後停下，交回原開發對話。**
 - 本Source批次未執行D1 SQL／部署；正式Release仍V3.1.0，原D1／Worker實況另以本機MCP完成報告為準。
