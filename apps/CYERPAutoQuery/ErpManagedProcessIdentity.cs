@@ -6,6 +6,10 @@ namespace CYERPAutoQuery;
 /// </summary>
 internal sealed record ErpManagedProcessIdentity(int Pid, DateTime StartedUtc, int SessionId, string ExecutablePath)
 {
+    /// <summary>Do not claim a pre-existing single-instance ERP if ShellExecute forwarded a launch.</summary>
+    public static bool IsFreshLaunch(DateTime startedUtc, DateTime launchRequestedUtc) =>
+        startedUtc.ToUniversalTime() >= launchRequestedUtc.ToUniversalTime().AddSeconds(-2);
+
     public bool Matches(int pid, DateTime startedUtc, int sessionId, string executablePath, int callerSessionId)
     {
         return Pid == pid
