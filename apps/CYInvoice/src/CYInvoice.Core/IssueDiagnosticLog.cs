@@ -11,15 +11,20 @@ namespace CYInvoice.Core.Storage;
 public static class IssueDiagnosticLog
 {
     private sealed record Breadcrumb(string AtUtc, string Stage, string IssueType, string Code);
+    // Require an explicit API error label. An unlabeled number may belong
+    // to a phone, a buyer, an invoice or another private identifier.
     private static readonly Regex CodePattern = new(
-        @"(?<![0-9])(?:[1-5][0-9]{2}|[0-9]{7})(?![0-9])",
+        @"(?:\bAPI[ _-]?code\b|\berror[ _-]?code\b|\bcode\b|光貿(?:錯誤)?代碼|錯誤碼)\s*[:=]?\s*(?<code>[0-9]{3,7})(?![0-9])",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex SafeEventName = new(
+        @"^[a-zA-Z0-9_:-]{1,72}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public static string SafeCode(string? message)
     {
         if (string.IsNullOrWhiteSpace(message)) return "未提供";
         var match = CodePattern.Match(message);
-        return match.Success ? match.Value : "無可辨識代碼";
+        return match.Success ? match.Groups["code"].Value : "無可辨識代碼";
     }
 
     private static string PathFor(string dataDirectory, long issueId) =>
@@ -38,7 +43,9 @@ public static class IssueDiagnosticLog
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var line = JsonSerializer.Serialize(new Breadcrumb(
                 DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                stage, issueType, SafeCode(providerMessage)));
+                SafeEventName.IsMatch(stage) ? stage : "unknown",
+                SafeEventName.IsMatch(issueType) ? issueType : "unknown",
+                SafeCode(providerMessage)));
             using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
             using var writer = new StreamWriter(stream, new UTF8Encoding(false));
             writer.WriteLine(line);
@@ -56,7 +63,7 @@ public static class IssueDiagnosticLog
         output.AppendLine("CYInvoice 上傳問題診斷（已遮罩）");
         output.AppendLine("匯出時間 UTC：" + DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         output.AppendLine("本機問題 ID：" + issue.Id.ToString(CultureInfo.InvariantCulture));
-        output.AppendLine("問題類型：" + issue.IssueType);
+        output.AppendLine("問題類型：" + (SafeEventName.IsMatch(issue.IssueType) ? issue.IssueType : "unknown"));
         output.AppendLine("建立時間 UTC：" + issue.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         output.AppendLine("解決時間 UTC：" + (issue.ResolvedUtc?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) ?? "尚未解決"));
         output.AppendLine("最後可辨識錯誤代碼：" + SafeCode(issue.Message));
@@ -83,8 +90,10 @@ public static class IssueDiagnosticLog
                 {
                     var item = JsonSerializer.Deserialize<Breadcrumb>(line);
                     if (item is null) continue;
-                    output.AppendLine(item.AtUtc + " | " + item.Stage + " | " +
-                        item.IssueType + " | " + SafeCode(item.Code));
+                    output.AppendLine(item.AtUtc + " | " +
+                        (SafeEventName.IsMatch(item.Stage) ? item.Stage : "unknown") + " | " +
+                        (SafeEventName.IsMatch(item.IssueType) ? item.IssueType : "unknown") +
+                        " | " + SafeCode("code=" + item.Code));
                 }
                 catch (JsonException)
                 {
