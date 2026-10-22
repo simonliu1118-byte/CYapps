@@ -348,11 +348,29 @@ public sealed class EmployeeAllowanceWorkflowService
             issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    // One manager confirmation continuously drives approval, reservation,
+    // g0401 and exact readback. Existing owners still revalidate each step.
+    public async Task<LocalAllowanceSendResult> ApproveAndIssueLocalDraftAsync(
+        InvoiceSyncIssue issue, string employeeNo, string password,
+        string previewOfficialHash, Action<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        await ApproveLocalDraftAsync(issue, employeeNo, password,
+            previewOfficialHash, cancellationToken).ConfigureAwait(false);
+        progress?.Invoke("已核准；正在檢查最新官方資料並配號");
+        await ReserveLocalApprovedDraftAsync(issue, employeeNo, password,
+            cancellationToken).ConfigureAwait(false);
+        progress?.Invoke("已保存配號；開始受控送出及原號查回");
+        return await SendLocalReservedDraftAsync(issue, employeeNo, password,
+            cancellationToken: cancellationToken, progress: progress).ConfigureAwait(false);
+    }
+
     // The only WinForms-facing Local g0401 call. A fresh official snapshot,
     // frozen approval, manager credentials and work item must all still agree.
     public async Task<LocalAllowanceSendResult> SendLocalReservedDraftAsync(
         InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
-        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default)
+        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default,
+        Action<string>? progress = null)
     {
         var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
         var reservation = RequireReservedApproval(issue, manager.EmployeeNo);
@@ -362,8 +380,8 @@ public sealed class EmployeeAllowanceWorkflowService
             gateway ?? CreateAllowanceGateway(account),
             (frozen, token) => ValidateLocalSendPreflightAsync(
                 issue,actorEmployeeNo,actorPassword,frozen,token));
-        return await sender.SendFirstAsync(account.SellerInvoice, account.Environment,
-            reservation, cancellationToken).ConfigureAwait(false);
+        return await sender.SendWithAutomaticNumberAdvanceAsync(account.SellerInvoice, account.Environment,
+            reservation, progress, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ValidateLocalSendPreflightAsync(
