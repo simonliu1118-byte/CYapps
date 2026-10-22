@@ -169,7 +169,8 @@ internal static class AllowanceWorkflowTests
         setup.Gateway.Queries.Enqueue(Query());
         setup.Gateway.Queries.Enqueue(Query());
         await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
-        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
         var issue = AllowanceIssue(setup.Repository);
         await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
         Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
@@ -429,13 +430,14 @@ internal static class AllowanceWorkflowTests
         Equal(1, gateway.IssueCalls);
         Equal("sending", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())!.Status);
-        await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "AdminPass1", gateway));
+        var retryEntry = await setup.Workflow.SendLocalReservedDraftAsync(
+            issue, "2000", "AdminPass1", gateway);
+        Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, retryEntry.Outcome);
         var readback = await setup.Workflow.ReconcileLocalReservedDraftAsync(
             issue, "2000", "AdminPass1", gateway);
         Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, readback.Outcome);
         Equal(1, gateway.IssueCalls);
-        Equal(2, gateway.QueryCalls); // one after first acceptance and one after restart
+        Equal(3, gateway.QueryCalls); // original plus two read-only resumes, zero repeat posts
         Equal(5, setup.Gateway.QueryCalls);
     }
 
