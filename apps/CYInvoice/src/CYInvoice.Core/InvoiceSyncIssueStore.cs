@@ -29,10 +29,12 @@ public sealed class InvoiceSyncIssueStore
 {
     private const string DeprecatedVoidPendingConfirmationIssueType = "void_pending_confirmation";
     private readonly string databasePath;
+    private readonly string dataDirectory;
 
     public InvoiceSyncIssueStore(string dataDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        this.dataDirectory = dataDirectory;
         databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
     }
 
@@ -161,6 +163,7 @@ public sealed class InvoiceSyncIssueStore
             update.Parameters.AddWithValue("$id", existingId.Value);
             if (update.ExecuteNonQuery() != 1) throw new InvalidDataException("sync issue update did not affect exactly one row");
             transaction.Commit();
+            IssueDiagnosticLog.TryAppend(dataDirectory, existingId.Value, "updated", issueType, message);
             return existingId.Value;
         }
 
@@ -182,6 +185,7 @@ public sealed class InvoiceSyncIssueStore
         insert.Parameters.AddWithValue("$created_utc", createdUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         var id = Convert.ToInt64(insert.ExecuteScalar(), CultureInfo.InvariantCulture);
         transaction.Commit();
+        IssueDiagnosticLog.TryAppend(dataDirectory, id, "created", issueType, message);
         return id;
     }
 
@@ -249,6 +253,7 @@ public sealed class InvoiceSyncIssueStore
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$id", id);
         if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException($"sync issue {id} not found");
+        IssueDiagnosticLog.TryAppend(dataDirectory, id, "resolved", "sync_issue");
     }
 
     public void Delete(long id)

@@ -20,7 +20,6 @@ internal sealed class SettingsForm : Form
     private readonly Button deviceManagement = UiControls.StandardButton("裝置管理");
     private readonly Button companyCard = UiControls.StandardButton("CYID 公司卡");
     private readonly Button localReset = UiControls.StandardButton("重設本機資料");
-    private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private GroupBox modeGroup = null!;
@@ -161,14 +160,8 @@ internal sealed class SettingsForm : Form
         platformGroup.Controls.Add(platformLayout);
 
         cancel.DialogResult = DialogResult.Cancel;
-        diagnostics.Width = 112;
         save.Width = 112;
         cancel.Width = 112;
-        diagnostics.Click += (_, _) =>
-        {
-            using var form = new SystemDiagnosticsForm(repository);
-            form.ShowDialog(this);
-        };
         save.Click += SaveClicked;
         actionButtons = new BufferedFlowLayoutPanel
         {
@@ -179,7 +172,6 @@ internal sealed class SettingsForm : Form
             Margin = Padding.Empty,
         };
         actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 6);
-        actionButtons.Controls.Add(diagnostics);
         actionButtons.Controls.Add(save);
         actionButtons.Controls.Add(cancel);
 
@@ -942,7 +934,7 @@ internal sealed class SettingsForm : Form
             cloudSettings.PreferredSize.Width > cloudSettings.Width ||
             deviceManagement.PreferredSize.Width > deviceManagement.Width ||
             localReset.PreferredSize.Width > localReset.Width ||
-            diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
+            cloudSettings.Text != "雲端連線設定" ||
             deviceManagement.Text != "裝置管理" || companyCard.Text != "CYID 公司卡" ||
             localReset.Text != "重設本機資料" ||
             localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
@@ -952,7 +944,7 @@ internal sealed class SettingsForm : Form
             localReset.Visible != expectedLocalResetVisible ||
             cloudSettings.Enabled != cloudMode.Checked ||
             deviceManagement.Enabled != expectedDeviceManagementEnabled ||
-            actionButtons.Controls.Count != 3 ||
+            actionButtons.Controls.Count != 2 ||
             Math.Abs(environmentX - platformX) > 1 ||
             actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
             appKeyLabel.Bottom > environmentLayout.ClientSize.Height - environmentLayout.Padding.Bottom ||

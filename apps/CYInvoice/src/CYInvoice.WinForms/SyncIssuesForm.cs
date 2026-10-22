@@ -47,6 +47,7 @@ internal sealed class SyncIssuesForm : Form
     private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
     private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
     private readonly Button reportCrossDevice = UiControls.StandardButton("回報跨機");
+    private readonly Button exportIssueDiagnostics = UiControls.StandardButton("匯出問題診斷");
 
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
@@ -99,7 +100,7 @@ internal sealed class SyncIssuesForm : Form
                 eventArgs.NewValue = CheckState.Unchecked;
         };
         list.ItemChecked += (_, _) => BeginInvoke((Action)UpdateFailedButtons);
-        list.SelectedIndexChanged += (_, _) => UpdateCrossDeviceButton();
+        list.SelectedIndexChanged += (_, _) => { UpdateCrossDeviceButton(); UpdateDiagnosticButton(); };
         list.ClientSizeChanged += (_, _) => LayoutColumns();
         list.ColumnWidthChanging += (_, eventArgs) =>
         {
@@ -114,19 +115,23 @@ internal sealed class SyncIssuesForm : Form
         deleteFailed.Click += (_, _) => DeleteCheckedFailed();
         clearFailed.Enabled = false;
         clearFailed.Click += (_, _) => ClearAllFailed();
+        exportIssueDiagnostics.Click += (_, _) => ExportSelectedIssueDiagnostics();
 
         var close = UiControls.StandardButton("關閉");
         close.Click += (_, _) => Close();
 
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, Margin = Padding.Empty };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(summary, 0, 0);
         reportCrossDevice.Margin = new Padding(0, 0, 6, 0);
         header.Controls.Add(reportCrossDevice, 1, 0);
+        exportIssueDiagnostics.Margin = new Padding(0, 0, 6, 0);
+        header.Controls.Add(exportIssueDiagnostics, 2, 0);
         reload.Anchor = AnchorStyles.Right | AnchorStyles.Top;
-        header.Controls.Add(reload, 2, 0);
+        header.Controls.Add(reload, 3, 0);
 
         var bottom = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -266,6 +271,7 @@ internal sealed class SyncIssuesForm : Form
             summary.Text = processing ? $"處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
             UpdateFailedButtons();
             UpdateCrossDeviceButton();
+            UpdateDiagnosticButton();
             FitToRows();
             LayoutColumns();
         }
@@ -1089,6 +1095,66 @@ internal sealed class SyncIssuesForm : Form
         finally { SetManualReviewBusy(false); }
     }
 
+    private void UpdateDiagnosticButton()
+    {
+        exportIssueDiagnostics.Visible = !processing;
+        exportIssueDiagnostics.Enabled = !processing && !manualReviewBusy &&
+            list.SelectedItems.Count == 1 &&
+            list.SelectedItems[0].Tag is InvoiceSyncIssue or InvoiceRecord;
+    }
+
+    private void ExportSelectedIssueDiagnostics()
+    {
+        if (processing || list.SelectedItems.Count != 1) return;
+        var selected = list.SelectedItems[0].Tag;
+        if (selected is not InvoiceSyncIssue && selected is not InvoiceRecord) return;
+        string report;
+        string suffix;
+        try
+        {
+            report = selected is InvoiceSyncIssue issue
+                ? IssueDiagnosticLog.Export(repository.DataDirectory, issue)
+                : IssueDiagnosticLog.ExportFailed((InvoiceRecord)selected!);
+            suffix = selected is InvoiceSyncIssue current
+                ? current.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "failed";
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, "無法組合診斷：" + error.GetType().Name,
+                "診斷失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        try
+        {
+            using var save = new SaveFileDialog
+            {
+                Title = "匯出已遮罩問題診斷",
+                Filter = "文字檔 (*.txt)|*.txt",
+                DefaultExt = "txt",
+                AddExtension = true,
+                FileName = "CYInvoice-Issue-" + suffix + ".txt"
+            };
+            if (save.ShowDialog(this) != DialogResult.OK) return;
+            File.WriteAllText(save.FileName, report, new System.Text.UTF8Encoding(false));
+            MessageBox.Show(this, "已匯出診斷。請先確認內容，再提供給維護人員。",
+                "匯出完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                Clipboard.SetText(report);
+                MessageBox.Show(this, "診斷檔案無法儲存，已複製遮罩內容：" +
+                    error.GetType().Name, "改以複製提供", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception)
+            {
+                MessageBox.Show(this, "診斷檔案及剪貼簿均不可用：" +
+                    error.GetType().Name, "診斷匯出失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+
     private void UpdateCrossDeviceButton()
     {
         if (IsDisposed) return;
@@ -1567,7 +1633,8 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
         if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
-        if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄")
+        if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄" ||
+            (!processing && exportIssueDiagnostics.Text != "匯出問題診斷"))
             throw new InvalidOperationException("上傳問題欄位或開立失敗清除按鈕不正確");
         if (Descendants(this).OfType<Button>().Any(button => button.Text is "標記已解決" or "查看明細" or "確認送出作廢" or "取消退回"))
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
