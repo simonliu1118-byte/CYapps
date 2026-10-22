@@ -14,6 +14,7 @@ internal static class LocalAllowanceOneShotTests
         await CollisionOnlyRecordsOriginalNumberAsync();
         await ReviewedCollisionReallocationIsAtomicAndReadbackOnlyAsync();
         await PreflightFailureNeverSendsAsync();
+        await AutoAdvanceOnlyOnExplicitRejectionAsync();
     }
 
     private static async Task AcceptedNeedsExactOfficialReadbackAsync()
@@ -207,6 +208,51 @@ internal static class LocalAllowanceOneShotTests
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
+    private static async Task AutoAdvanceOnlyOnExplicitRejectionAsync()
+    {
+        using var temp = new TemporaryDirectory("local-auto-number");
+        SqliteBootstrapper.EnsureMigrated(temp.Path);
+        var ledger = new LocalAllowanceNumberStore(temp.Path);
+        var saved = Reserve(ledger);
+        // More collisions than a conventional 3-retry cap: there is no
+        // retry-count limit for definitive provider number rejections.
+        var fake = new StubAllowanceGateway { RejectionsRemaining = 6 };
+        var seen = new List<string>();
+        var service = new LocalAllowanceOneShotService(ledger, fake,
+            (_, _) => Task.CompletedTask);
+        var result = await service.SendWithAutomaticNumberAdvanceAsync(
+            Seller, Environment, saved, seen.Add);
+        Check(fake.SendCount == 7 && fake.QueryCount == 1,
+            "six explicit occupied replies advance without manual approval");
+        Check(result.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback,
+            "a missing official query remains uncertain rather than success");
+        Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
+            "last non-collision attempt is locked against replay");
+        Check(CollisionReviewCount(temp.Path) == 6 &&
+              seen.Any(x => x.Contains("A20261019007", StringComparison.Ordinal)),
+            "all six old and new numbers are retained with safe progress");
+        await ExpectAsync<InvalidOperationException>(() =>
+            service.SendFirstAsync(Seller, Environment,
+                ledger.FindLatest(Seller, Environment, Work)!));
+        Check(fake.SendCount == 7, "a prior unknown response cannot POST again");
+
+        using var other = new TemporaryDirectory("local-auto-timeout");
+        SqliteBootstrapper.EnsureMigrated(other.Path);
+        var secondLedger = new LocalAllowanceNumberStore(other.Path);
+        var second = Reserve(secondLedger);
+        var uncertain = new StubAllowanceGateway {
+            SendException = new TaskCanceledException("unconfirmed POST")
+        };
+        var safe = new LocalAllowanceOneShotService(secondLedger, uncertain,
+            (_, _) => Task.CompletedTask);
+        var stop = await safe.SendWithAutomaticNumberAdvanceAsync(Seller,
+            Environment, second);
+        Check(stop.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback &&
+            uncertain.SendCount == 1 &&
+            secondLedger.FindLatest(Seller, Environment, Work)!.Status == "sending",
+            "timeout never triggers a new number or retry");
+    }
+
     private static async Task PreflightFailureNeverSendsAsync()
     {
         using var temp = new TemporaryDirectory("b2c-no-auth");
@@ -310,11 +356,18 @@ internal static class LocalAllowanceOneShotTests
         public int SendCount { get; private set; }
         public int QueryCount { get; private set; }
         public Exception? SendException { get; set; }
+        public int RejectionsRemaining { get; set; }
         public AllowanceQueryItem? Official { get; set; }
         public Task<AllowanceIssueResponse> IssueAllowanceOnceAsync(
             AllowanceIssueRequest request, CancellationToken ct = default)
         {
             SendCount++;
+            if (RejectionsRemaining > 0)
+            {
+                RejectionsRemaining--;
+                return Task.FromException<AllowanceIssueResponse>(
+                    new AmegoApiException(4040161, "definite occupied number"));
+            }
             if (SendException is not null)
                 return Task.FromException<AllowanceIssueResponse>(SendException);
             return Task.FromResult(new AllowanceIssueResponse(0, ""));
