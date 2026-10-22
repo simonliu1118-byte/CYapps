@@ -215,13 +215,14 @@ public sealed class InvoiceSyncIssueStore
               AND (
                     ($invoice_number <> '' AND invoice_number = $invoice_number)
                  OR ($order_id <> '' AND order_id = $order_id)
-              );
+              )
+            RETURNING local_id, issue_type;
             """;
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", invoiceNumber);
         command.Parameters.AddWithValue("$order_id", orderId);
-        return command.ExecuteNonQuery();
+        return ReadResolvedWithDiagnostics(command);
     }
 
     public int ResolveAccountType(string accountKey, string issueType, DateTimeOffset resolvedUtc)
@@ -236,12 +237,26 @@ public sealed class InvoiceSyncIssueStore
             SET resolved_utc = $resolved_utc
             WHERE account_key = $account_key
               AND issue_type = $issue_type
-              AND TRIM(resolved_utc) = '';
+              AND TRIM(resolved_utc) = ''
+            RETURNING local_id, issue_type;
             """;
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$issue_type", issueType);
-        return command.ExecuteNonQuery();
+        return ReadResolvedWithDiagnostics(command);
+    }
+
+    // The database write succeeds independently of best-effort local logs.
+    // RETURNING avoids an extra table scan and records exact changed IDs.
+    private int ReadResolvedWithDiagnostics(SqliteCommand command)
+    {
+        var changed = new List<(long Id, string Type)>();
+        using (var reader = command.ExecuteReader())
+            while (reader.Read())
+                changed.Add((reader.GetInt64(0), reader.GetString(1)));
+        foreach (var (id, type) in changed)
+            IssueDiagnosticLog.TryAppend(dataDirectory, id, "resolved", type);
+        return changed.Count;
     }
 
     public void Resolve(long id, DateTimeOffset resolvedUtc)
