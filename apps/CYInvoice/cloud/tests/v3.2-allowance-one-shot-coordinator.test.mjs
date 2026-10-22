@@ -258,6 +258,79 @@ function providerFor(target,options={}){
   assert.equal(status(sql,app1),"sending");
  }finally{close();}
 }
+// H rehearsal: a populated schema19 backup must remain recoverable after the
+// unpromoted schema20 draft. Use the existing g0401 owner to create real-shaped
+// synthetic sending/evidence/audit records; never infer anything about live D1.
+{
+ const dir=mkdtempSync(join(tmpdir(),"cyinvoice-schema20-"));
+ const live=join(dir,"schema19.sqlite"),backup=join(dir,"backup19.sqlite"),
+  restored=join(dir,"restored19.sqlite");
+ const f=await fixture(true,live);
+ const definitions=db=>db.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all();
+ const rows=(db,names)=>Object.fromEntries(names.map(name=>
+  [name,db.prepare('SELECT * FROM "'+name+'" ORDER BY rowid').all()]));
+ try{
+  f.sql.exec("PRAGMA journal_mode=WAL");
+  const target=await f.prepare(app1);
+  await execute(f.db,target,context,authority(),providerFor(target).send,clock);
+  f.sql.prepare(`INSERT INTO allowance_manual_review_audit
+   (review_id,application_id,workspace_id,ledger_id,allowance_number,
+    ledger_status_at_review,disposition,reviewed_by_actor_id,reviewed_by_device_id,reviewed_at)
+   VALUES('review_schema20',?,?,?,?,'sending','unknown_outcome','manager',?,?)`)
+   .run(app1,ws,target.ledgerId,target.allowanceNumber,devB,time.toISOString());
+  // Include migration bookkeeping in the backup, not just business tables.
+  f.sql.exec("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE)");
+  const canonical=readdirSync("migrations").filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
+  for(const [i,name] of canonical.entries())
+   f.sql.prepare("INSERT INTO d1_migrations VALUES(?,?)").run(i+1,name);
+  const priorSchema=definitions(f.sql),names=priorSchema.filter(x=>x.type==="table").map(x=>x.name);
+  const prior=rows(f.sql,names);
+  assert.equal(prior.allowance_number_ledger[0].status,"sending");
+  assert.equal(prior.allowance_manual_review_audit.length,1);
+  assert.equal(prior.allowance_reconciliation_checks.length,1);
+  f.sql.exec("PRAGMA wal_checkpoint(TRUNCATE)");copyFileSync(live,backup);
+  const ddl=readFileSync("drafts/0020_allowance_void_coordination.sql","utf8");
+  const migrate=(injected=false)=>{
+   f.sql.exec("BEGIN IMMEDIATE");
+   try{
+    f.sql.exec(ddl);
+    if(injected)f.sql.exec("SELECT * FROM __missing_schema20_probe");
+    f.sql.prepare("INSERT INTO d1_migrations VALUES(20,?)").run("0020_allowance_void_coordination.sql");
+    f.sql.exec("COMMIT");
+   }catch(error){f.sql.exec("ROLLBACK");throw error;}
+  };
+  assert.throws(()=>migrate(true),/no such table/);
+  assert.deepEqual(definitions(f.sql),priorSchema,"failed draft20 must roll back every DDL object");
+  assert.deepEqual(rows(f.sql,names),prior,"failed draft20 must preserve all schema19 rows/history");
+  migrate();
+  for(const original of priorSchema)
+   assert.deepEqual(definitions(f.sql).find(x=>x.name===original.name),original);
+  assert.deepEqual(rows(f.sql,names.filter(n=>n!=="d1_migrations")),
+   Object.fromEntries(Object.entries(prior).filter(([n])=>n!=="d1_migrations")));
+  assert.throws(()=>migrate(),/already exists/);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM d1_migrations").get().n,20);
+  const blocked=providerFor(target);
+  await assert.rejects(()=>execute(f.db,target,context,authority(),blocked.send,clock),
+   /ALLOWANCE_SENDING_LEDGER_NOT_RESERVED/);
+  assert.equal(blocked.urls.filter(u=>u.endsWith("/g0401")).length,0,
+   "draft20 never releases an existing unknown g0401 claim");
+  const reopened=new DatabaseSync(live,{readOnly:true});
+  try{
+   assert.deepEqual(rows(reopened,names),rows(f.sql,names));
+   assert.deepEqual(reopened.prepare("PRAGMA foreign_key_check").all(),[]);
+   assert.equal(reopened.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
+  }finally{reopened.close();}
+  copyFileSync(backup,restored);
+  const recovery=new DatabaseSync(restored,{readOnly:true});
+  try{
+   assert.deepEqual(definitions(recovery),priorSchema);
+   assert.deepEqual(rows(recovery,names),prior,"schema19 recovery must retain every original row");
+   assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(),[]);
+   assert.equal(recovery.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
+  }finally{recovery.close();}
+  console.log("V3.2 H: populated schema19 backup, atomic draft20 failure/success, preserved g0401 claim, reopen and complete schema19 restore OK");
+ }finally{f.close();assert.equal(dirname(dir),tmpdir());rmSync(dir,{recursive:true,force:true});}
+}
 // Cloud counterpart of the existing Local, explicitly reviewed collision flow.
 // A duplicate error alone, a lost POST, same buyer or any shared original must
 // never unlock a number, even with the independent collision feature enabled.

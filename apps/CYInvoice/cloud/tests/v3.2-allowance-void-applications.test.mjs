@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
-import {readFileSync,readdirSync} from "node:fs";
+import {readFileSync,readdirSync,mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {build} from "esbuild";
 
 // Source-only synthetic schema20 test: no Cloudflare, CYID or AMEGO network.
@@ -30,7 +32,9 @@ const reconnectBundle=await build({entryPoints:["src/allowance-void-reconnection
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {readCloudVoidAfterReconnect:reconnect}=await import("data:text/javascript;base64,"+
  Buffer.from(reconnectBundle.outputFiles[0].text).toString("base64"));
-const sql=new DatabaseSync(":memory:");
+const directory=mkdtempSync(join(tmpdir(),"cyinvoice-void-restart-"));
+const databasePath=join(directory,"schema20.sqlite");
+let sql=new DatabaseSync(databasePath);
 const ws="ws_void_test",otherWs="ws_elsewhere";
 const employee="dev_11111111-1111-4111-8111-111111111111";
 const managerDevice="dev_22222222-2222-4222-8222-222222222222";
@@ -412,5 +416,33 @@ try{
   ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
  },ctx,authority(supervisor),officialThird,()=>time,true));
  assert.equal(posts,1);
+ // All three ambiguous/permanent claims must survive a real close/reopen,
+ // including the D1-ACK-lost and post-claim-revocation cases above.
+ const beforeRestart=sql.prepare("SELECT * FROM allowance_void_send_claims ORDER BY application_id").all();
+ const auditBeforeRestart=sql.prepare("SELECT * FROM allowance_void_audit ORDER BY event_id").all();
+ sql.close();sql=new DatabaseSync(databasePath);sql.exec("PRAGMA foreign_keys=ON");
+ assert.deepEqual(sql.prepare("SELECT * FROM allowance_void_send_claims ORDER BY application_id").all(),beforeRestart);
+ assert.deepEqual(sql.prepare("SELECT * FROM allowance_void_audit ORDER BY event_id").all(),auditBeforeRestart);
+ const restartCases=new Map([
+  [target.applicationId,["ALW-001",official,"VOID_PREVIEW_COMPANY_CHANGED"]],
+  [target2.applicationId,["ALW-003",officialSecond,"VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST"]],
+  [target3.applicationId,["ALW-004",officialThird,"VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST"]]
+ ]);
+ for(const claim of beforeRestart){
+  const original={workspaceId:ws,applicationId:claim.application_id,deviceId:managerDevice};
+  const state=await read(db,original,authority(supervisor));
+  assert.equal(state.claimed,true);assert.equal(state.readbackOnly,true);
+  const [number,provider,error]=restartCases.get(claim.application_id);
+  const neverPost=async(url,options)=>{
+   if(url.endsWith("/g0501")){posts++;throw Error("unexpected repeat g0501 after restart");}
+   return provider(url,options);
+  };
+  await rejects(error,()=>executeVoid(db,{
+   ...original,expectedRevision:2,confirmation:"作廢 "+number
+  },ctx,authority(supervisor),neverPost,()=>time,true));
+ }
+ assert.equal(posts,1,"restart must never issue another g0501 POST");
+ assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ assert.equal(sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
  console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
-}finally{sql.close();}
+}finally{sql.close();rmSync(directory,{recursive:true,force:true});}

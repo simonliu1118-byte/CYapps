@@ -1,5 +1,16 @@
 # CYInvoice V3.2-C：原 Cloudflare schema19 本機 Work + MCP 交接
 
+## 2026-10-22 交接摘要（V3.1.40 Build 1）
+
+- 儲存庫 `simonliu1118-byte/CYapps`；專案 `apps/CYInvoice`；工作分支 `cyinvoice/feat-v32-de-void-coordination`／PR #550。開始前核對該 PR 的最新完整 SHA 與該 SHA 的 Windows／Cloud／Governance CI，不以舊版本成功推定新 head 通過；不要自行合併 PR 或發布 Release。
+- 先讀正式三層規則、CYID canonical consumer standard、本文件及 `V3_2_IMPLEMENTATION_PLAN.md`。共通規則目前為 2.10.0，仍須比對 AITeam main。
+- 工程端已補齊非空 schema19→schema20 草案的檔案備份、注入失敗回滾、升級後全量合成資料／g0401 sending Ledger／Audit 保留、檔案重開與升級前備份完整還原。g0501 永久 Claim 的送出回覆遺失、Claim 回覆遺失、Claim 後撤權也已驗證實際關閉重開後不重送。**這些不是原 D1／Time Travel／真光貿的驗收證據。**
+- **本機下一批僅做原 D1／Worker schema18→19**，依下節的額度、備份、單次 0019、DB 後驗、Worker marker 與 binding 回讀順序；遇不符先停並回報。不要直接執行 `deploy:with-migrations`，也不要先啟動 `schema_upgrade=18:19` 的 Worker 部署：此意圖要求原 D1 已完成 0019，必須先取得 DB 後驗證據。
+- 若唯讀發現原 D1 已是完整 canonical schema19：不重套 0019，先查明既有維護及備份證據；若原 Worker 仍為 marker18，再依本批明確授權處理 18→19 marker。若 DB／Worker 已同為19且來源／bindings 均符合，不重部署；直接回報現況。其他 schema、不同資源／scope、未授權旗標或來源不明均停下，不追最新版本硬升級。
+- **本批不套 schema20**：`cloud/drafts/0020_allowance_void_coordination.sql` 尚未升格，不能自行複製進 migrations 或手動套原 D1；Cloud g0501 沒有送出 HTTP 路由。schema19 完成後，帶回 Local 停送／未知 Claim 的可查證現況及測試公司卡是否可用（不提供秘密值），再由原開發工作線接續 schema20／送出權威與真測審查。
+- 雙 Windows／不同 CYID Device 的真人操作依使用者決定於 **V3.2 上線後補驗**；不可把這項再列成本批 schema19 的前置條件。財務送出權威、測試公司卡／API 與回復證據仍未豁免。
+- 完成報告須列：實際 source SHA／CI、操作前後 migration 與 Worker marker／version、四旗標及原 CYID／binding 保留結果、私有備份與可還原證據、每批真實 D1 read／write／Worker requests／剩餘額度與預估差異、未完成項。機密、真實發票／帳務及備份留在私有位置，不貼 Public GitHub。回報後即停，不接著開送出旗標、做真 g0401/g0501 或發行。
+
 ## 現行停點：0019／Worker 標記升級（V3.1.32 Source；尚未遠端執行）
 
 0019 已有唯一 canonical 來源 `cloud/migrations/0019_allowance_manual_review_audit.sql`；原 D1／Worker 仍依先前本機回報為 schema18。本文件是下一批作業提案，**不代表使用者已授權遠端執行**。先核對本批精確 CI head／main、原 CYInvoice Account／D1／Worker，禁止新建替代資源或碰 CYID 專用 D1。
