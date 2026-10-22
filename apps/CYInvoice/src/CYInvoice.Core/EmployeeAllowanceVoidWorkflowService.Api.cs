@@ -258,28 +258,6 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         return approval;
     }
 
-    public async Task<LocalAllowanceVoidResult> ReadbackLocalVoidAsync(InvoiceSyncIssue issue,
-        string employee, string password, IAmegoAllowanceVoidGateway? gateway = null,
-        CancellationToken cancellationToken = default)
-    {
-        var manager = RequireLocalApiManager(employee, password);
-        if (issue.AccountKey != CurrentAccountKey()) throw new InvalidOperationException("作廢待辦公司／環境不符");
-        var store = new LocalAllowanceVoidStore(repository.DataDirectory);
-        var approval = store.Find(CurrentAccountKey(), issue.Id);
-        if (approval is null || !approval.Claimed) throw new InvalidOperationException("原號尚未進入 API 送出狀態");
-        var status = await (gateway ?? ApiGateway()).ReadAllowanceVoidStatusAsync(
-            approval.AllowanceNumber, cancellationToken).ConfigureAwait(false);
-        RequireLocalApiManager(employee, password);
-        if (CurrentAccountKey() != approval.AccountKey || status.AllowanceNumber != approval.AllowanceNumber)
-            throw new InvalidOperationException("官方查回的折讓單號或目前公司已改變");
-        var observed = status.OfficiallyVoided;
-        store.Observe(approval, observed ? "official_void_observed_unattributed" : "official_void_unconfirmed", Hash(status), manager.EmployeeNo, now());
-        if (observed) CompleteLocalVoidIssue(issue);
-        return new(approval.AllowanceNumber, observed, true, observed
-            ? "官方確認原號目前已作廢，原待辦已結案；仍保留本次送出、核准及官方查回歷史。"
-            : "官方尚未確認原號已作廢，保留送出紀錄並等待下次原號查回，不得盲目重送。");
-    }
-
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(
         Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value)))).ToLowerInvariant();
 }

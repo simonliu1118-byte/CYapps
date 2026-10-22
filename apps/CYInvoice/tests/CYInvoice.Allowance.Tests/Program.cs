@@ -185,9 +185,9 @@ static async Task TestLocalVoidLifecycleAsync()
     Equal(false,closure.CanClose(issue));
     Throws<InvalidOperationException>(()=>closure.Close(issue,"2000","AdminPass1"));
     api.Status=new("ALW-001","D0501",91);
-    Equal(false,(await restarted.ReadbackLocalVoidAsync(issue,"2000","AdminPass1",api)).OfficialVoidObserved);
+    Equal(false,(await restarted.ExecuteApprovedLocalVoidAsync(issue,api)).OfficialVoidObserved);
     api.Status=new("ALW-001","D0501",99);
-    Equal(true,(await restarted.ReadbackLocalVoidAsync(issue,"0001","SuperPass1",api)).OfficialVoidObserved);
+    Equal(true,(await restarted.ExecuteApprovedLocalVoidAsync(issue,api)).OfficialVoidObserved);
     Equal(1,api.PostCalls);
     Equal(0,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
     Equal(false,restarted.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
@@ -199,7 +199,7 @@ static async Task TestLocalVoidLifecycleAsync()
     }
     using var audit=db.CreateCommand();
     audit.CommandText="SELECT actor_employee_no FROM allowance_void_local_observations ORDER BY audit_id DESC LIMIT 1";
-    Equal("0001",audit.ExecuteScalar() as string);
+    Equal("2000",audit.ExecuteScalar() as string);
 }
 
 static async Task TestLocalVoidPreconditionsAsync()

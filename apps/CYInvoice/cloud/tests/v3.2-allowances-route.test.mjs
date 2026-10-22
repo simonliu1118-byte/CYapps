@@ -96,7 +96,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql");
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -194,7 +194,7 @@ try{
  const employee=config(db,principal("USER","employee"));const manager=config(db,principal("ADMIN","manager"));
  assert.equal((await call(config(db,principal("USER","employee"),"false"),"list")).status,503);
  assert.equal((await call(config(db,principal("USER","employee"),"true","20"),"list")).status,503);
- for(const action of ["review","reserve","send-once","reserve-after-collision","manual-review","attempt"])
+ for(const action of ["preview","void-preview","review","reserve","send-once","reserve-after-collision","manual-review","attempt"])
   assert.equal((await call(manager,action,{applicationId:app1,expectedRevision:1})).status,410);
  assert.equal((await call(employee,"get",{applicationId:"bad"})).status,400);
  assert.equal((await call(employee,"list",{limit:51})).status,400);
@@ -214,12 +214,30 @@ try{
  assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_approvals").get().n,0);
  manager.ALLOWANCE_G0401_SEND_ENABLED="true";
  const approved=await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB);
- assert.equal(approved.status,200);assert.equal(approved.body.executionState,"completed");
+ assert.equal(approved.status,200,JSON.stringify(approved));assert.equal(approved.body.executionState,"completed");
  assert.equal(provider.calls.filter(x=>x.endsWith("/g0401")).length,1);
  assert.equal((await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB)).status,409);
  assert.equal(provider.calls.filter(x=>x.endsWith("/g0401")).length,1);
  const state=await call(employee,"status",{applicationId:app1});assert.equal(state.body.officiallyConfirmed,true);
  assert.ok(sql.prepare("SELECT authority_snapshot FROM allowance_execution_approvals WHERE application_id=?").get(app1).authority_snapshot);
+ // Manager cancellation retains the immutable grant and reserved number.
+ const cancelledId="application_cancel_unsent";
+ await f.prepare(cancelledId);
+ const manager22=config(db,principal("ADMIN","manager"),"true","22");
+ assert.equal((await call(manager,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,503);
+ const employee22=config(db,principal("USER","employee"),"true","22");
+ assert.equal((await call(employee22,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,409);
+ const cancelled=await call(config(db,principal("ADMIN","different_manager"),"true","22"),"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB);
+ assert.equal(cancelled.status,200,JSON.stringify(cancelled));
+ assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=?").get(cancelledId).status,"reserved");
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE application_id=?").get(cancelledId).n,1);
+ assert.equal(sql.prepare("SELECT to_status FROM allowance_application_audit_events WHERE application_id=? ORDER BY revision DESC").get(cancelledId).to_status,"withdrawn");
+ assert.equal((await call(manager22,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,409);
+ assert.equal((await call(manager22,"withdraw",{applicationId:app1,expectedRevision:3},rawDevB)).status,409);
+ const sendingId="application_cancel_sending";await f.prepare(sendingId);
+ sql.prepare("UPDATE allowance_number_ledger SET status='sending' WHERE application_id=?").run(sendingId);
+ assert.equal((await call(manager22,"withdraw",{applicationId:sendingId,expectedRevision:3},rawDevB)).status,409);
+ assert.throws(()=>sql.prepare("UPDATE allowance_applications SET status='withdrawn',revision=4 WHERE application_id=?").run(sendingId),/TRANSITION_INVALID/);
  let voided=false,voidPosts=0;
  globalThis.fetch=async(url,options)=>{
   if(url.endsWith("/invoice_query"))return Response.json({code:0,data:[invoiceRecord]});

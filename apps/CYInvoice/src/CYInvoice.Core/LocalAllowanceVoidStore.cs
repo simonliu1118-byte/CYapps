@@ -17,8 +17,12 @@ internal sealed class LocalAllowanceVoidStore
     public LocalAllowanceVoidStore(string directory)
     {
         path = Path.Combine(directory, SqliteBootstrapper.DatabaseFileName);
-        using var db = Open();
+    }
+
+    internal static void EnsureSchema(SqliteConnection db, SqliteTransaction transaction)
+    {
         using var sql = db.CreateCommand();
+        sql.Transaction = transaction;
         sql.CommandText = """
             CREATE TABLE IF NOT EXISTS allowance_void_local_approvals (
                 approval_id TEXT PRIMARY KEY, issue_id INTEGER NOT NULL REFERENCES sync_issues(local_id),
@@ -80,6 +84,7 @@ internal sealed class LocalAllowanceVoidStore
         // permits finishing the existing business issue, never a second POST.
         using (var inspect = db.CreateCommand())
         {
+            inspect.Transaction = transaction;
             inspect.CommandText = """
                 SELECT sql FROM sqlite_master
                 WHERE type='trigger' AND name='allowance_void_local_no_issue_close'
@@ -87,7 +92,6 @@ internal sealed class LocalAllowanceVoidStore
             var oldDefinition = inspect.ExecuteScalar() as string ?? string.Empty;
             if (!oldDefinition.Contains("official_void_observed_unattributed", StringComparison.Ordinal))
             {
-                using var transaction = db.BeginTransaction();
                 using var upgrade = db.CreateCommand();
                 upgrade.Transaction = transaction;
                 upgrade.CommandText = """
@@ -107,7 +111,6 @@ internal sealed class LocalAllowanceVoidStore
                     BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_OFFICIAL_PROOF_REQUIRED'); END;
                     """;
                 upgrade.ExecuteNonQuery();
-                transaction.Commit();
             }
         }
         foreach (var table in new[] { "approvals", "claims", "observations" })

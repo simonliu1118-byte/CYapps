@@ -238,6 +238,10 @@ public sealed class InvoiceAutomaticSyncService
         var problems = new List<string>();
         var voidWorkflow = allowanceVoidService;
         var account = CurrentAccount();
+        var invoicesByNumber = repository.Invoices.LoadOrCreate()
+            .Where(r => r.Environment == account.Environment &&
+                (r.SellerInvoice.Length == 0 || r.SellerInvoice == account.SellerInvoice))
+            .ToLookup(r => r.InvoiceNumber, StringComparer.Ordinal);
         foreach (var issue in issueStore.Unresolved(account.Environment + "|" + account.SellerInvoice))
         {
             token.ThrowIfCancellationRequested();
@@ -245,9 +249,7 @@ public sealed class InvoiceAutomaticSyncService
             {
                 if (issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview)
                 {
-                    var matches = repository.Invoices.LoadOrCreate().Where(r => r.Environment == account.Environment &&
-                        (r.SellerInvoice.Length == 0 || r.SellerInvoice == account.SellerInvoice) &&
-                        r.InvoiceNumber == issue.InvoiceNumber).ToArray();
+                    var matches = invoicesByNumber[issue.InvoiceNumber].ToArray();
                     if (matches.Length == 1 && allowanceService.ManualReviewFor(matches[0])?.LocalApprovedUtc is not null)
                         await allowanceService.ExecuteApprovedLocalDraftAsync(issue, cancellationToken: token).ConfigureAwait(false);
                 }

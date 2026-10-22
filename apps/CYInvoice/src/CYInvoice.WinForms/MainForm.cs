@@ -368,13 +368,12 @@ internal sealed class MainForm : Form
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
         {
-            using var adminForm = new AccountManagementForm(repository, login.AuthenticatedEmployee);
+            using var adminForm = new AccountManagementForm(repository.Employees, login.AuthenticatedEmployee);
             adminForm.ShowDialog(this);
         }
         else
         {
-            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
-                login.AuthenticatedPassword, cloudHealthHttpClient);
+            using var selfForm = new SelfAccountManagementForm(repository.Employees, login.AuthenticatedEmployee);
             selfForm.ShowDialog(this);
         }
     }
@@ -393,20 +392,6 @@ internal sealed class MainForm : Form
                 "CYInvoice 3.0 已停用舊 Built-in Cloud 密碼復原。既有設定與歷史資料會保留，" +
                 "請由管理員確認 CYID 雲端加入；程式不會將舊雲端帳密當成 CYID 帳密。",
                 "不支援的舊雲端模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (repository.UsesCloudEmployeeAuthority())
-        {
-            try
-            {
-                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
-                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
-            }
-            catch (Exception problem)
-            {
-                MessageBox.Show(this, problem.Message, "無法復原密碼",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
             return;
         }
         if (!repository.Employees.HasEmployees())

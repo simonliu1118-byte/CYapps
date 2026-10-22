@@ -54,11 +54,21 @@ internal static class LocalAllowanceOneShotTests
         SqliteBootstrapper.EnsureMigrated(temp.Path);
         var ledger = new LocalAllowanceNumberStore(temp.Path);
         var saved = Reserve(ledger);
-        var fake = new StubAllowanceGateway { SendException = new TaskCanceledException("timeout") };
-        var service = new LocalAllowanceOneShotService(ledger, fake, (_, _) => Task.CompletedTask);
+        var fake = new StubAllowanceGateway { SendException = new TaskCanceledException("SECRET_PAYLOAD_DO_NOT_EXPORT") };
+        var events = new List<(string Stage, Exception? Error)>();
+        var service = new LocalAllowanceOneShotService(ledger, fake, (_, _) => Task.CompletedTask,
+            (stage, code, error) => {
+                events.Add((stage, error));
+                IssueDiagnosticLog.Record(temp.Path, 999, stage, "allowance_manual_review", code, error);
+            });
         var first = await service.SendFirstAsync(Seller, Environment, saved);
         Check(first.Outcome == LocalAllowanceSendOutcome.Problem,
             "timeout stays uncertain");
+        Check(events.Any(e => e.Stage == "response_unknown" && e.Error is TaskCanceledException),
+            "the original exception reaches the existing diagnostic owner");
+        var log = File.ReadAllText(Path.Combine(temp.Path, "Logs", "IssueDiagnostics", "999.jsonl"));
+        Check(log.Contains("TaskCanceledException") && log.Contains("SendFirstAsync"), "exception type and stack are persisted");
+        Check(!log.Contains("SECRET_PAYLOAD_DO_NOT_EXPORT"), "raw exception payload is not exported");
         Check(new LocalAllowanceNumberStore(temp.Path).FindLatest(Seller, Environment, Work)!.Status == "sending",
             "sending must survive restart");
         await ExpectAsync<InvalidOperationException>(() =>
@@ -69,6 +79,7 @@ internal static class LocalAllowanceOneShotTests
         var mismatch = await service.ReconcileAsync(Seller, Environment, saved);
         Check(mismatch.Outcome == LocalAllowanceSendOutcome.Problem,
             "another buyer's allowance cannot confirm our frozen request");
+        Check(events.Any(e => e.Stage == "readback_buyer_mismatch"), "safe mismatch category survives without buyer values");
         Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
             "mismatch never clears sending");
         fake.Official = ValidOfficial(saved);

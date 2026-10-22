@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using CYInvoice.Core.Cloud;
+using CYInvoice.Core.Storage;
+using Microsoft.Data.Sqlite;
 
 internal static class CloudAllowanceClientTests
 {
@@ -48,8 +50,25 @@ internal static class CloudAllowanceClientTests
         try{await op();}catch(T){return;}
         throw new InvalidOperationException("Expected "+typeof(T).Name);
     }
+    private static void ProjectionSkipsUnchangedWrites()
+    {
+        using var directory = new AuthorityTemporaryDirectory();
+        SqliteBootstrapper.EnsureMigrated(directory.Path);
+        var store = new InvoiceSyncIssueStore(directory.Path);
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","processing","approved","");
+        using var db = new SqliteConnection("Data Source=" + Path.Combine(directory.Path,SqliteBootstrapper.DatabaseFileName));
+        db.Open();using var sql = db.CreateCommand();
+        sql.CommandText = "CREATE TRIGGER reject_unchanged_projection BEFORE UPDATE ON sync_issues WHEN NEW.issue_type=OLD.issue_type AND NEW.message=OLD.message BEGIN SELECT RAISE(ABORT,'UNCHANGED_PROJECTION_WAS_WRITTEN'); END;";
+        sql.ExecuteNonQuery();
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","processing","approved","");
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","problem","approved","SYNTHETIC_ERROR");
+        Equal(1,store.Unresolved("test|12345678").Count);
+        Equal("cloud_allowance_issue_problem",store.Unresolved("test|12345678").Single().IssueType);
+    }
+
     public static async Task RunAsync()
     {
+        ProjectionSkipsUnchangedWrites();
         using var fake=new FakeHandler(); using var http=new HttpClient(fake);
         foreach(var uri in new[]{"http://example.invalid/","https://example.invalid/?x=1","https://user:pass@example.invalid/","https://example.invalid/#secret"})
             await Fail<ArgumentException>(()=>{_=new CloudAllowanceClient(http,new Uri(uri),Token);return Task.CompletedTask;});

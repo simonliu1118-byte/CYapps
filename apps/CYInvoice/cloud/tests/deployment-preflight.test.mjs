@@ -8,7 +8,7 @@ import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, check
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
-assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21']"));
+assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21', '21:22']"));
 assert.doesNotMatch(workflow,/wrangler d1 migrations apply|deploy:with-migrations/,
   'Worker workflow must not apply later migrations between staged DB and marker gates');
 let activeReads = 0;
@@ -764,3 +764,13 @@ assert.ok(consumerWorkflow.includes('${{ secrets.CYINVOICE_CYID_WORKER_NAME || s
 assert.ok(consumerWorkflow.includes("${{ vars.CYINVOICE_CYID_ENVIRONMENT || 'development' }}"));
 for(const name of ['CYID_D1_DATABASE_ID',...Object.keys(preparation).filter(n=>n.startsWith('IDENTITY_'))])
   assert.equal(consumerWorkflow.includes('${{ secrets.'+name+' }}'),false);
+
+// Source support for forward 21->22 is not permission to run a migration.
+const withdrawalCanonical=fs.readdirSync('migrations').filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
+const withdrawalSettings=structuredClone(upgradeSettings);
+withdrawalSettings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='21';
+assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','21:22'),
+ {from:'21',to:'22',migration:'0022_allowance_unsent_withdrawal.sql'});
+assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical.slice(0,21),'deploy','21:22'),/MIGRATION_NOT_COMPLETE/);
+withdrawalSettings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='22';
+assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','21:22'),/SCHEMA_UPGRADE_SOURCE_INVALID/);

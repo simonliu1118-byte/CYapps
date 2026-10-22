@@ -427,7 +427,7 @@ internal sealed class SyncIssuesForm : Form
                             var reservation = local ? allowanceWorkflow.LocalReservationFor(issue) : null;
                             primaryText = string.Empty;
                             primaryDanger = false;
-                            allowCancel = false;
+                            allowCancel = local && (reservation is null || reservation.Status is "reserved" or "occupied_external");
                         }
                         else if (!review.AwaitingConfirmation)
                         {
@@ -509,8 +509,17 @@ internal sealed class SyncIssuesForm : Form
             if (IsDisposed) return;
             var canApprove = data.Status is "open" or "review";
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                data.Rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", primaryDanger: true);
-            if (detail.ShowDialog(this) != DialogResult.OK || detail.SelectedAction != ManualReviewDetailAction.Primary) return;
+                data.Rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: data.CanWithdraw, primaryDanger: true);
+            if (detail.ShowDialog(this) != DialogResult.OK) return;
+            if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
+            {
+                if(MessageBox.Show(this,"確定取消並退回此申請？已送出或結果不明的交易無法取消。", "取消退回",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+                await api.WithdrawOperationAsync(data,login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                issueStore.ApplyCloudAllowance(accountKey,issue.OrderId,"issue","processing","withdrawn","");
+                ReloadAll();return;
+            }
+            if(detail.SelectedAction != ManualReviewDetailAction.Primary)return;
             var result = await api.ApproveOperationAsync(data, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             var state = result.ExecutionState == "completed" ? "已完成" : result.ExecutionState == "processing" ? "處理中" : "上傳問題";
             issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue",

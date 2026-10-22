@@ -14,6 +14,9 @@ export interface VoidOnceTarget {
 export async function executeCloudVoidOnce(db:D1Database,t:VoidOnceTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,clock:()=>Date=()=>new Date(),
  enabled=false,requestId="internal"):Promise<CloudExecutionResult>{
+ const scope=authority.approvedOperation;
+ if(scope&&(scope.workspaceId!==t.workspaceId||scope.applicationId!==t.applicationId||scope.operation!=="void"))
+  throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
  if(!enabled)throw new Error("VOID_EXEC_SEND_DISABLED");
  const finish=(result:CloudExecutionResult)=>saveExecutionResult(db,t,"void",result,requestId,clock);
  try{

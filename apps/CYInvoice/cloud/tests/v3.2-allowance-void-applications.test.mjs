@@ -82,7 +82,7 @@ function assertReadonlyReconciliation(result){
 try{
  sql.exec("PRAGMA foreign_keys=ON");
  const names=readdirSync("migrations").filter(s=>/^\d{4}_.*\.sql$/.test(s)).sort();
- assert.equal(names.at(-1),"0021_allowance_automatic_execution.sql");
+ assert.equal(names.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const file of names.filter(s=>s<"0014"))
   sql.exec(readFileSync("migrations/"+file,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Fake')").run(ws);

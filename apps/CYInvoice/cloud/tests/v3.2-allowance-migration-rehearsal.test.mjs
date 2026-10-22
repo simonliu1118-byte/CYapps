@@ -12,7 +12,7 @@ const live=join(dir,"original-schema16.sqlite"),backup=join(dir,"backup-schema16
 const restored=join(dir,"restored-schema16.sqlite");
 const db=new DatabaseSync(live);
 const files=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
-assert.equal(files.at(-1),"0021_allowance_automatic_execution.sql",
+assert.equal(files.at(-1),"0022_allowance_unsent_withdrawal.sql",
   "canonical migrations must contain reviewed 0017 and 0018 in order");
 function tables(c){
  return c.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();

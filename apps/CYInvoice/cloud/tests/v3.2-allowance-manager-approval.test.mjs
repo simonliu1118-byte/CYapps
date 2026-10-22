@@ -58,7 +58,7 @@ function fakeHttp(record=officialInvoice,onCall=()=>{}){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql");
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const name of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES (?,'Synthetic')").run(ws);

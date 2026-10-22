@@ -71,11 +71,7 @@ export interface ExactAllowanceReadback {
  // A complete exact match, still not proof WHO created the number.
  kind:"full_frozen_match_unattributed";
  safeToAutoResend:false;
- safeToAutoConfirm:false;
  canReallocateNumber:false;
-}
-export interface ExternalAllowanceReadback extends Omit<ExactAllowanceReadback,"kind"> {
- kind:"verified_external_collision";
 }
 function checkFrozen(t:Data,input:ExactAllowanceReadbackRequest):Data[] {
  if(t.AllowanceNumber!==""||number(t.AllowanceType)!==2||
@@ -92,8 +88,8 @@ function checkFrozen(t:Data,input:ExactAllowanceReadbackRequest):Data[] {
 // may be an externally occupied number and is NEVER enough to confirm.
 export async function queryFrozenAllowanceByOriginalNumber(
  input:ExactAllowanceReadbackRequest,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date(),allowExternalCollision=false
-):Promise<ExactAllowanceReadback|ExternalAllowanceReadback|{kind:"pending_official"}>{
+ clock:()=>Date=()=>new Date()
+):Promise<ExactAllowanceReadback|{kind:"pending_official"}>{
  if(!/^\d{8}$/.test(input.sellerInvoice)||
    typeof input.appKey!=="string"||input.appKey.length<8||input.appKey.length>256||
    !/^A\d{8}(?:\d{3}|[A-Z][0-9A-Z]{2})$/.test(input.allowanceNumber)||
@@ -151,33 +147,6 @@ export async function queryFrozenAllowanceByOriginalNumber(
    number(official.cancel_date)!==0||
    !Array.isArray(official.wait)||official.wait.length!==0)
   throw new Error("G0401_READBACK_OFFICIAL_NOT_FINAL");
- // Only the trusted one-shot coordinator / manager collision review opts in.
- // Same buyer or ANY shared original invoice remains ambiguous, even when
- // the provider reported a duplicate number. Do not expose official PII.
- if(allowExternalCollision&&str(official.buyer_identifier)!==frozen.BuyerIdentifier){
-  if(!/^\d{8,10}$/.test(str(official.buyer_identifier))||
-     !str(official.buyer_name).trim()||!Array.isArray(official.product_item)||
-     official.product_item.length<1||official.product_item.length>50)
-   throw new Error("G0401_READBACK_EXTERNAL_INCOMPLETE");
-  const originals=new Set(source.map(x=>str(x.OriginalInvoiceNumber)));
-  let net=0n,tax=0n;
-  for(const value of official.product_item){
-   const line=record(value),original=str(line.original_invoice_number);
-   if(!/^[A-Z]{2}\d{8}$/.test(original)||originals.has(original)||
-      !day(line.original_invoice_date)||
-      !str(line.original_description??line.description).trim()||
-      !["1","2","3"].includes(str(line.tax_type))||amount(line.quantity)<=0n)
-    throw new Error("G0401_READBACK_EXTERNAL_NOT_DISTINCT");
-   amount(line.unit_price,true);
-   net+=amount(line.amount,true);tax+=amount(line.tax,true);
-  }
-  if(net!==amount(official.total_amount)||tax!==amount(official.tax_amount)||net+tax<=0n)
-   throw new Error("G0401_READBACK_EXTERNAL_TOTAL_INVALID");
-  return {allowanceNumber:input.allowanceNumber,
-   officialCheckedAtUtc:now.toISOString(),officialSnapshotHash:await snapshotHash(official),
-   kind:"verified_external_collision",safeToAutoResend:false,
-   safeToAutoConfirm:false,canReallocateNumber:false};
- }
  if(str(official.buyer_identifier)!==frozen.BuyerIdentifier||
    str(official.buyer_name)!==frozen.BuyerName||
    amount(official.total_amount)!==requestedNet||
@@ -209,7 +178,7 @@ export async function queryFrozenAllowanceByOriginalNumber(
   officialCheckedAtUtc:now.toISOString(),
   officialSnapshotHash:await snapshotHash(official),
   kind:"full_frozen_match_unattributed",
-  safeToAutoResend:false,safeToAutoConfirm:false,canReallocateNumber:false};
+  safeToAutoResend:false,canReallocateNumber:false};
 }
 async function snapshotHash(official:Data):Promise<string>{
  const digest=await crypto.subtle.digest("SHA-256",encoder.encode(JSON.stringify(official)));

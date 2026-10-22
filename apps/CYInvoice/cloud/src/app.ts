@@ -1,5 +1,5 @@
 import { handleCyId, usesCyId, withCyIdSession, cyIdDevice, cyIdBinding, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
-import baseWorker from "./worker";
+import deviceOnboarding from "./device-onboarding";
 import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleDeviceSelfStatus } from "./device-self-status";
 import { handleRuntimeSync } from "./runtime-sync";
@@ -161,10 +161,10 @@ export default {
       "/v1/work-items/transition",
       "/v1/allowances/create","/v1/allowances/get","/v1/allowances/list",
       "/v1/allowances/diagnostics","/v1/allowances/detail","/v1/allowances/withdraw",
-      "/v1/allowances/preview","/v1/allowances/approve",
+      "/v1/allowances/approve",
       "/v1/allowances/reserve","/v1/allowances/status",
       "/v1/allowances/void-create","/v1/allowances/void-status",
-      "/v1/allowances/void-preview","/v1/allowances/void-approve",
+      "/v1/allowances/void-approve",
     ].includes(path);
     try {
       if (usesCyId(env)) {
@@ -211,5 +211,5 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
     if(new URL(request.url).pathname.startsWith("/v1/work-items/"))
       return Response.json({ok:false,error:{code:"NOT_FOUND"}},{status:404,headers:{"cache-control":"no-store"}});
 
-    return baseWorker.fetch(request, env);
+    return deviceOnboarding.fetch(request, env);
 }

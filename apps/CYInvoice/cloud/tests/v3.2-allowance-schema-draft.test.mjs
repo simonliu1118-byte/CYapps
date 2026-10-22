@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 // Canonical schema18 checked against a disposable schema16 baseline. No remote D1 or Worker.
 const files=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
-assert.equal(files.at(-1),"0021_allowance_automatic_execution.sql");
+assert.equal(files.at(-1),"0022_allowance_unsent_withdrawal.sql");
 const draft=readFileSync("migrations/0017_allowance_applications.sql","utf8");
 const root=mkdtempSync(join(tmpdir(),"cyinvoice-c1-"));
 const before=join(root,"schema16.sqlite"), after=join(root,"schema17-trial.sqlite");

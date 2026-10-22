@@ -26,7 +26,9 @@ public sealed record InvoiceAllowanceManualReview(
     DateTimeOffset? LocalApprovedUtc = null,
     string LocalApproverEmployeeNo = "",
     string LocalApprovalOfficialHash = "",
-    string LocalApprovalDraftHash = "");
+    string LocalApprovalDraftHash = "",
+    DateTimeOffset? CancelledUtc = null,
+    string CancelledByEmployeeNo = "");
 
 public sealed record LocalAllowanceApprovalPreview(
     string InvoiceNumber,
@@ -259,20 +261,8 @@ public sealed class EmployeeAllowanceWorkflowService
         return review;
     }
 
-    // B2b stores an immutable numbered draft only. Neither this path nor the
-    // UI may mark it "sending"; B2c must re-check AMEGO immediately before
-    // the first g0401 attempt, and persist the send transition first.
-    public async Task<LocalAllowanceReservation> ReserveLocalApprovedDraftAsync(
-        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(issue);
-        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
-        return await ReserveApprovedDraftAsync(issue, manager.EmployeeNo, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<LocalAllowanceReservation> ReserveApprovedDraftAsync(
-        InvoiceSyncIssue issue, string managerNo, CancellationToken cancellationToken)
+    internal async Task<LocalAllowanceReservation> ReserveApprovedDraftAsync(
+        InvoiceSyncIssue issue, string managerNo, CancellationToken cancellationToken = default)
     {
         var manager = EmployeeOperationAuthentication.RequireApprovedLocalManager(repository, managerNo);
         RequireManualReviewIssue(issue);
@@ -389,8 +379,8 @@ public sealed class EmployeeAllowanceWorkflowService
                 issue, manager.EmployeeNo, cancellationToken).ConfigureAwait(false);
             var sender = new LocalAllowanceOneShotService(ledger, gateway ?? CreateAllowanceGateway(account),
                 (frozen, token) => ValidateLocalSendPreflightAsync(issue, manager.EmployeeNo, frozen, token),
-                (stage, code) => IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, stage,
-                    InvoiceAllowanceIssueTypes.ManualReview, code,
+                (stage, code, error) => IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, stage,
+                    InvoiceAllowanceIssueTypes.ManualReview, code, error: error,
                     attempt: ledger.AttemptNumber(account.SellerInvoice, account.Environment, reservation.WorkItemId),
                     responseReceived: stage == "response_received" ? true : stage == "response_unknown" ? false : null));
             var result = await sender.SendWithAutomaticNumberAdvanceAsync(account.SellerInvoice,
@@ -416,22 +406,16 @@ public sealed class EmployeeAllowanceWorkflowService
         {
             // Persist the original operation before presenting an error. A
             // cancelled request may already have left the machine.
-            SetConfirmationProblem(FindIssueRecord(issue), true);
-            issueStore.UpdateMessage(issue.Id, "折讓自動處理未完成：" + error.Message);
+            var failed = FindIssueRecord(issue);
+            if (ReadManualReview(failed) is not null)
+            {
+                SetConfirmationProblem(failed, true);
+                issueStore.UpdateMessage(issue.Id, "折讓自動處理未完成：" + error.Message);
+            }
             IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "execution_failed",
                 InvoiceAllowanceIssueTypes.ManualReview, error: error);
             throw;
         }
-    }
-
-    public async Task<LocalAllowanceSendResult> SendLocalReservedDraftAsync(
-        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
-        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default,
-        Action<string>? progress = null)
-    {
-        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
-        RequireReservedApproval(issue, manager.EmployeeNo);
-        return await ExecuteApprovedLocalDraftAsync(issue, gateway, progress, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ValidateLocalSendPreflightAsync(
@@ -455,18 +439,6 @@ public sealed class EmployeeAllowanceWorkflowService
             != review.LocalApprovalOfficialHash)
             throw new InvalidOperationException("光貿資料已不同於原主管核准，已停止送出並保存問題");
         EmployeeOperationAuthentication.RequireApprovedLocalManager(repository, managerNo);
-    }
-
-    public Task<LocalAllowanceSendResult> ReconcileLocalReservedDraftAsync(
-        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
-        IAmegoAllowanceGateway? gateway = null, CancellationToken cancellationToken = default)
-    {
-        var manager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
-        var reservation = RequireReservedApproval(issue, manager.EmployeeNo);
-        var account = CurrentAccount();
-        return new LocalAllowanceOneShotService(new LocalAllowanceNumberStore(repository.DataDirectory),
-            gateway ?? CreateAllowanceGateway(account), (_, _) => throw new InvalidOperationException("唯讀查回不能送出"))
-            .ReconcileAsync(account.SellerInvoice, account.Environment, reservation, cancellationToken);
     }
 
     private LocalAllowanceReservation RequireReservedApproval(
@@ -667,20 +639,24 @@ public sealed class EmployeeAllowanceWorkflowService
         string actorPassword)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        var manager = EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
-        if (review.LocalApprovedUtc is not null)
-            throw new InvalidOperationException("本筆已經 Local 管理員核准，不能取消或退回");
+        // Initialize the existing ledger before the atomic cancellation guard.
+        _ = new LocalAllowanceNumberStore(repository.DataDirectory);
         if (review.AwaitingConfirmation || HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
 
+        record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
+            review with { CancelledUtc = now().ToUniversalTime(), CancelledByEmployeeNo = manager.EmployeeNo });
         ClearManualReview(record);
         ClearPending(record);
-        syncRepository.UpsertMany([record]);
-        issueStore.Resolve(issue.Id, now());
+        syncRepository.UpsertMany([record], completedIssue: issue, cancelUnsentAllowance: true);
+        IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "approval_cancelled",
+            InvoiceAllowanceIssueTypes.ManualReview);
     }
 
     public async Task<InvoiceAllowanceReconcileResult> ReconcilePendingAsync(

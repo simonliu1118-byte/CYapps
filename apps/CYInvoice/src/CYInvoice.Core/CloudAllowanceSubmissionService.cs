@@ -194,10 +194,11 @@ public sealed class CloudAllowanceSubmissionService
         new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
             .Select(ReadPending).Where(p => p is not null).Select(p => p!.ApplicationId).ToArray();
 
-    internal static void CompleteProjection(string dataDirectory, string productionSeller, string applicationId)
+    internal static void CompleteProjection(string dataDirectory, string productionSeller, IReadOnlySet<string> applicationIds)
     {
+        if (applicationIds.Count == 0) return;
         var records = new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
-            .Where(r => ReadPending(r)?.ApplicationId == applicationId).ToArray();
+            .Where(r => ReadPending(r) is { } pending && applicationIds.Contains(pending.ApplicationId)).ToArray();
         foreach (var record in records) record.ExtensionData!.Remove(PendingKey);
         if (records.Length > 0) new InvoiceSyncRepository(dataDirectory).UpsertMany(records);
     }

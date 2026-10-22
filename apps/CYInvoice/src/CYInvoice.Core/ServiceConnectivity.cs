@@ -143,9 +143,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 || remote.GetProperty("applicationId").GetString() != binding.ApplicationId
                 || remote.GetProperty("workspaceId").GetString() != binding.WorkspaceId))
                 throw new InvalidDataException("CYID 綁定不一致。");
-            if (binding is null && (remote.GetProperty("provider").GetString() != "BUILT_IN"
-                || remote.GetProperty("workspaceId").GetString() != current.CloudWorkspaceId))
-                throw new InvalidDataException("雲端綁定不一致。");
+            if (binding is null) throw new InvalidDataException("此版本只支援 CYID 雲端帳號，舊 Built-in 已退役。");
             if (binding is not null)
             {
                 var updated = binding with { ConsumerVersion = remote.GetProperty("consumerVersion").GetString()! };
@@ -163,12 +161,6 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 if (binding is not null && cyIdOffline is not null)
                     cyIdOffline.InvalidateEmployees(permissions.GetProperty("invalidated").EnumerateArray()
                         .Select(id => id.GetString() ?? throw new InvalidDataException("權限失效清單無效。")).ToHashSet(StringComparer.Ordinal));
-                else if (remote.GetProperty("provider").GetString() == "BUILT_IN" && builtInCache is not null)
-                {
-                    var snapshot = CloudEmployeeAuthorityClient.ReadSnapshot(permissions);
-                    if (snapshot.WorkspaceId != current.CloudWorkspaceId) throw new InvalidDataException("權限 Workspace 不一致。");
-                    builtInCache.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
-                }
                 nextAuthorityRefresh = Now + 60_000;
             }
             if (dataDirectory is not null && root.TryGetProperty("allowances", out var allowances))
@@ -176,6 +168,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 if (allowances.ValueKind != JsonValueKind.Array || allowances.GetArrayLength() > 150)
                     throw new InvalidDataException("Cloud 折讓同步回應無效");
                 var store = new InvoiceSyncIssueStore(dataDirectory);
+                var completedApplications = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var item in allowances.EnumerateArray())
                 {
                     var id = item.GetProperty("application_id").GetString()!;
@@ -187,8 +180,9 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                         throw new InvalidDataException("Cloud 折讓操作識別無效");
                     store.ApplyCloudAllowance(accountKey, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "");
                     if (state == "completed" || status is "withdrawn" or "rejected")
-                        CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, id);
+                        completedApplications.Add(id);
                 }
+                CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, completedApplications);
                 if (stateStore is not null && root.TryGetProperty("allowanceCursors", out var nextCursors))
                 {
                     foreach (var name in new[] { "issue", "void" })

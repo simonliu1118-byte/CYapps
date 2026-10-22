@@ -20,6 +20,9 @@ internal static class ServiceConnectivityTests
         settings.CloudWorkspaceId = "ws_services";
         settings.CloudDeviceId = "dev_services";
         repository.Settings.SetCloudDeviceToken(settings, "cydev_" + new string('a', 64));
+        repository.Settings.ConfirmCyIdConfiguration(settings, new CyIdBinding(
+            settings.CloudBaseUrl,settings.CloudWorkspaceId,settings.CloudDeviceId,"identity_services","CYINVOICE","1.0.3",
+            CyIdGateway.TokenDigest(repository.Settings.CloudDeviceToken(settings))));
         repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
         var settingsBefore = File.ReadAllText(Path.Combine(repository.DataDirectory, "settings.json"));
@@ -39,20 +42,7 @@ internal static class ServiceConnectivityTests
         services.Amego = true;
         services.Cloud = false;
         var cache = repository.CloudEmployees;
-        var seed = BuiltInCloudAuthorityFreshnessTests.Seed;
-        cache.ReplaceSnapshot("ws_services", 1, [
-            seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 1, true),
-            seed("emp_user", "0002", "User", EmployeeRoles.User, "UserPass22", 1, 1, true),
-        ]);
-        var source = new ScriptedAuthoritySource("ws_services", _ => throw new CYInvoice.Core.Cloud.CloudApiException(
-            "STORAGE_UNAVAILABLE", "temporary outage", HttpStatusCode.ServiceUnavailable));
-        var provider = new BuiltInCloudIdentityProvider(cache, source, repository.Connections.RequireAmegoAsync);
-        Check((await provider.AuthenticateAsync(new("0002", "UserPass22")))?.Role == AppRole.User,
-            "503 plus reachable AMEGO reuses the original protected fallback");
         services.Amego = false;
-        await ThrowsAsync<ServiceConnectionException>(() => provider.AuthenticateAsync(new("0002", "UserPass22")));
-        Check(cache.LoadState()?.WorkspaceId == "ws_services", "both outages block without wiping the original cache");
-
         var record = new InvoiceRecord { Id = "retained", Source = "手動", OrderId = "M20261010001",
             Environment = Environments.Test, InvoiceNumber = "AA12345678", InvoiceState = InvoiceStates.Opened,
             Delivery = InvoiceService.DeliveryPaper, Amount = 100 };
@@ -79,16 +69,8 @@ internal static class ServiceConnectivityTests
         services.Cloud = false;
         services.Amego = true;
         Check((await repository.Connections.CheckAsync()).UsesExistingFallback, "AMEGO-only recovery restores the original fallback state");
-        Check((await provider.AuthenticateAsync(new("0002", "UserPass22")))?.Role == AppRole.User, "fallback resumes without restart");
         await invoices.LookupBuyerNameFromApiAsync("12345675");
         Check(gateway.Calls == 1, "read-only user retry resumes; recovery never sends an invoice automatically");
-        source.Handler = _ => Task.FromResult(BuiltInCloudAuthorityFreshnessTests.Snapshot("ws_services", 2,
-            seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 2, true),
-            seed("emp_user", "0002", "Updated", EmployeeRoles.Admin, "NewPass22", 2, 2, true)));
-        Check(await provider.AuthenticateAsync(new("0002", "UserPass22")) is null
-            && (await provider.AuthenticateAsync(new("0002", "NewPass22")))?.Role == AppRole.Admin,
-            "authority recovery immediately replaces stale password and role");
-
         services.Cloud = true;
         services.Revoked = true;
         var denied = await repository.Connections.CheckAsync();
@@ -131,14 +113,17 @@ internal static class ServiceConnectivityTests
         settings.CloudWorkspaceId = "ws_services";
         settings.CloudDeviceId = "dev_services";
         repository.Settings.SetCloudDeviceToken(settings, "cydev_" + new string('a', 64));
+        repository.Settings.ConfirmCyIdConfiguration(settings, new CyIdBinding(
+            settings.CloudBaseUrl,settings.CloudWorkspaceId,settings.CloudDeviceId,"identity_services","CYINVOICE","1.0.3",
+            CyIdGateway.TokenDigest(repository.Settings.CloudDeviceToken(settings))));
         repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
         long now = 100;
         var connection = new ServiceConnectivity(repository.Settings, http, repository.CloudEmployees.Clear,
             builtInCache: repository.CloudEmployees, baseDirectory: temporary.Path, monotonicMilliseconds: () => now);
         await connection.CheckAsync();
-        Check(services.CloudCalls == 1 && services.Synchronizations.SequenceEqual(new[] { true })
-            && repository.CloudEmployees.LoadState()?.WorkspaceId == "ws_services", "one startup request refreshes Device and Built-in authority");
+        Check(services.CloudCalls == 1 && services.Synchronizations.SequenceEqual(new[] { true }),
+            "one startup request refreshes Device and CYID invalidation");
         now += 15_000;
         await connection.CheckAsync();
         Check(services.Synchronizations.SequenceEqual(new[] { true, false }), "15-second liveness does not refresh all permissions");
@@ -159,11 +144,6 @@ internal static class ServiceConnectivityTests
             "unknown token is denial without authenticated revoke evidence");
         services.HttpFailure = null;
         Check(!(await connection.CheckAsync()).CloudRejected, "original Device recovers after successful current verification");
-        var seed = BuiltInCloudAuthorityFreshnessTests.Seed;
-        repository.CloudEmployees.ReplaceSnapshot("ws_services", 2, [seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 2, true)]);
-        await ThrowsAsync<InvalidDataException>(() => Task.Run(() => repository.CloudEmployees.ReplaceSnapshot("ws_services", 1,
-            [seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 1, true)])));
-        Check(repository.CloudEmployees.LoadState()?.WorkspaceRevision == 2, "older responses cannot overwrite newer Built-in authority");
         services.Reply = new { ok = true };
         Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
             "missing successful-response fields fail closed without authorizing wipe");
@@ -220,17 +200,9 @@ internal static class ServiceConnectivityTests
                 { Content = JsonContent.Create(new { ok = false, error = new { code = "STORAGE_UNAVAILABLE" } }) });
             if (Revoked) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
                 { Content = JsonContent.Create(new { ok = false, error = new { code = "DEVICE_REVOKED" } }) });
-            var snapshot = BuiltInCloudAuthorityFreshnessTests.Snapshot("ws_services", 1,
-                BuiltInCloudAuthorityFreshnessTests.Seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 1, true),
-                BuiltInCloudAuthorityFreshnessTests.Seed("emp_user", "0002", "User", EmployeeRoles.User, "UserPass22", 1, 1, true));
-            var employeeSnapshot = new { workspaceId = snapshot.WorkspaceId, workspaceRevision = snapshot.WorkspaceRevision,
-                employees = snapshot.Employees.Select(e => new { employeeId = e.EmployeeId, employeeNo = e.EmployeeNo,
-                    name = e.Name, email = e.Email, role = e.Role, enabled = e.Enabled, emailVerified = e.EmailVerified,
-                    credentialVerifier = e.CredentialVerifier, credentialAlgorithm = "pbkdf2-sha256", credentialVersion = e.CredentialVersion,
-                    revision = e.Revision }) };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new {
                 ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services", status = "active", workspaceStatus = "active" },
-                binding = new { provider = "BUILT_IN", workspaceId = "ws_services" }, permissions = new { ok = true, employeeSnapshot } }) });
+                binding = new { provider = "CYID", workspaceId = "ws_services", identityWorkspaceId="identity_services", applicationId="CYINVOICE", consumerVersion="1.0.3" }, permissions = new { ok = true, invalidated=Array.Empty<string>() } }) });
         }
     }
 

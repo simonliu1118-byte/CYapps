@@ -5,7 +5,7 @@
 // service may invoke this immediately before its one and only provider POST.
 // An ambiguous database result is ALWAYS readback-only, never retry-send.
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
+import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext,StoredCloudAllowance} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {allowanceNumberFromSequence,hasCollisionReservationAudit} from "./allowance-number-reservation";
@@ -30,6 +30,9 @@ interface LedgerRow {
  request_hash:string;created_by_device_id:string;
 }
 export interface CloudAllowanceSendingClaim {
+ approvedRequest:StoredCloudAllowance;
+ managerActorId:string;
+ managerWorkspaceRole:AllowanceActor["workspaceRole"];
  applicationId:string;
  ledgerId:string;
  allowanceNumber:string;
@@ -209,7 +212,8 @@ export async function claimCloudAllowanceOneShotSending(
  const after=await authority.revalidate();
  if(!sameManager(first,after,t.workspaceId)||!await activeDevice(db,t))
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
- return {applicationId:t.applicationId,ledgerId:t.ledgerId,
+ return {approvedRequest:frozen,managerActorId:first.employeeId,managerWorkspaceRole:first.workspaceRole,
+  applicationId:t.applicationId,ledgerId:t.ledgerId,
   allowanceNumber:t.allowanceNumber,requestHash:frozen.requestHash,
   officialEvidenceHash:proof.officialEvidenceHash,status:"sending",
   claimedExactlyOnce:true,providerPostPerformed:false,

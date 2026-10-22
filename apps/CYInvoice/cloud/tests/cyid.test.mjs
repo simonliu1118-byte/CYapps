@@ -390,3 +390,17 @@ try {
 assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
 console.log('PASS CYID real-provider authentication, runtime sync, device rename and invitations after physical Built-in table removal');
 
+
+// Exercise the real health handler rather than matching an old wrapper's source text.
+const {default:onboarding}=await moduleFrom('src/device-onboarding.ts');
+for(const storageSchema of ['21','22']){
+ const health=await onboarding.fetch(new Request('https://synthetic.invalid/v1/health'),{
+  DB:{prepare(sql){assert.equal(sql,'SELECT 1 AS ok');return{async first(){return{ok:1};}};}},
+  APP_ENV:'development',API_VERSION:'1',SCHEMA_VERSION:storageSchema,CYID_ENABLED:'true',IDENTITY:{fetch(){throw Error('health must not log in');}}
+ });
+ const body=await health.json();assert.equal(health.status,200);
+ assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.3');
+ const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
+ assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
+}

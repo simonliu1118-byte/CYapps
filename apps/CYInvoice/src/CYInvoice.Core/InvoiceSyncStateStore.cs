@@ -64,8 +64,7 @@ public sealed class InvoiceSyncStateStore
     // Cursor data belongs to the existing sync state, not a work queue.
     public string? Checkpoint(string accountKey, string scope)
     {
-        using var db = Open(SqliteOpenMode.ReadWrite);
-        EnsureCheckpointColumn(db);
+        using var db = Open(SqliteOpenMode.ReadOnly);
         using var sql = db.CreateCommand();
         sql.CommandText = "SELECT checkpoint_json FROM sync_state WHERE account_key=$account AND scope=$scope";
         sql.Parameters.AddWithValue("$account", accountKey); sql.Parameters.AddWithValue("$scope", scope);
@@ -75,24 +74,23 @@ public sealed class InvoiceSyncStateStore
     public void SaveCheckpoint(string accountKey, string scope, string json)
     {
         using var db = Open(SqliteOpenMode.ReadWrite);
-        EnsureCheckpointColumn(db);
         using var sql = db.CreateCommand();
-        sql.CommandText = "INSERT INTO sync_state(account_key,scope,last_success_utc,checkpoint_json) VALUES($account,$scope,'',$json) ON CONFLICT(account_key,scope) DO UPDATE SET checkpoint_json=excluded.checkpoint_json";
+        sql.CommandText = "INSERT INTO sync_state(account_key,scope,last_success_utc,checkpoint_json) VALUES($account,$scope,'',$json) ON CONFLICT(account_key,scope) DO UPDATE SET checkpoint_json=excluded.checkpoint_json WHERE sync_state.checkpoint_json IS NOT excluded.checkpoint_json";
         sql.Parameters.AddWithValue("$account", accountKey); sql.Parameters.AddWithValue("$scope", scope); sql.Parameters.AddWithValue("$json", json);
         sql.ExecuteNonQuery();
     }
 
-    private static void EnsureCheckpointColumn(SqliteConnection db)
+    internal static void EnsureCheckpointColumn(SqliteConnection db, SqliteTransaction transaction)
     {
         bool Exists()
         {
-            using var inspect=db.CreateCommand(); inspect.CommandText="PRAGMA table_info(sync_state)";
+            using var inspect=db.CreateCommand(); inspect.Transaction=transaction; inspect.CommandText="PRAGMA table_info(sync_state)";
             using var rows=inspect.ExecuteReader();
             while(rows.Read()) if(rows.GetString(1)=="checkpoint_json")return true;
             return false;
         }
         if(Exists())return;
-        using var add=db.CreateCommand(); add.CommandText="ALTER TABLE sync_state ADD COLUMN checkpoint_json TEXT";
+        using var add=db.CreateCommand(); add.Transaction=transaction; add.CommandText="ALTER TABLE sync_state ADD COLUMN checkpoint_json TEXT";
         try{add.ExecuteNonQuery();}catch(SqliteException)when(Exists()){ }
     }
 

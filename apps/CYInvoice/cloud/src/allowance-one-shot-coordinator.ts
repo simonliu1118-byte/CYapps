@@ -1,7 +1,7 @@
 // The existing Cloud issue owner: approved request -> allocation -> one POST
 // per number -> original-number reconciliation. Unknown outcomes never resend.
 import {claimCloudAllowanceOneShotSending,type CloudAllowanceSendingTarget} from "./allowance-sending-claim";
-import {loadEncryptedCloudAllowance,type AllowanceActorSource,type CloudAllowanceContext} from "./allowance-frozen-store";
+import {loadEncryptedCloudAllowance,type AllowanceActorSource,type CloudAllowanceContext,type StoredCloudAllowance} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {postNumberedAllowanceOnce} from "./amego-allowance-issue";
 import {queryFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
@@ -48,8 +48,9 @@ export function executionError(error:unknown):string{
 // login, principal cache, or permission to create/approve another operation.
 // No password/session/token is stored or manufactured during recovery.
 export function approvedExecutionAuthority(env:AllowanceExecutionEnv,workspaceId:string,
- snapshot:string|null,managerActorId:string):AllowanceActorSource{
- return {revalidate:async()=>{
+ snapshot:string|null,managerActorId:string,
+ operation:{applicationId:string;operation:"issue"|"void"}):AllowanceActorSource{
+ return {approvedOperation:{workspaceId,...operation},revalidate:async()=>{
   if(!snapshot||!env.IDENTITY_AUTHORITY)throw new Error("APPROVAL_AUTHORITY_UNVERIFIABLE");
   const cached=JSON.parse(snapshot) as Record<string,unknown>;
   const b=cyIdBinding(env);
@@ -65,17 +66,18 @@ export function approvedExecutionAuthority(env:AllowanceExecutionEnv,workspaceId
  }};
 }
 async function readback(db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAllowanceContext,
- authority:AllowanceActorSource,transport:typeof fetch,clock:()=>Date,requestId:string):Promise<CloudExecutionResult>{
- const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
+ authority:AllowanceActorSource,transport:typeof fetch,clock:()=>Date,requestId:string,approvedRequest?:StoredCloudAllowance):Promise<CloudExecutionResult>{
+ const frozen=approvedRequest??await loadEncryptedCloudAllowance(db,t,ctx,authority);
  const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
  if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
   throw new Error("ALLOWANCE_COMPANY_CHANGED");
  const matching=await queryFrozenAllowanceByOriginalNumber({sellerInvoice:company.sellerInvoice,
   appKey:company.amegoAppKey,allowanceNumber:t.allowanceNumber,
   allowanceDay:frozen.allowanceDay,unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock);
- if(!await authority.revalidate())throw new Error("APPROVAL_AUTHORITY_REVOKED");
- if(matching.kind==="pending_official")return {applicationId:t.applicationId,
-  executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"sending"};
+ if(matching.kind==="pending_official"){
+  if(!await authority.revalidate())throw new Error("APPROVAL_AUTHORITY_REVOKED");
+  return {applicationId:t.applicationId,executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"sending"};
+ }
  if(matching.kind!=="full_frozen_match_unattributed")throw new Error("ALLOWANCE_READBACK_NOT_MATCHED");
  const current=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
  if(current.revision!==company.revision||current.sellerInvoice!==company.sellerInvoice||current.amegoAppKey!==company.amegoAppKey)
@@ -100,10 +102,10 @@ async function readback(db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAll
 export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllowanceSendingTarget,
  ctx:CloudAllowanceContext,authority:AllowanceActorSource,transport:typeof fetch=fetch,
  clock:()=>Date=()=>new Date(),requestId="internal"):Promise<CloudExecutionResult>{
- const initial=await authority.revalidate();
- if(!initial||!["ADMIN","SUPER_ADMIN"].includes(initial.workspaceRole))throw new Error("ALLOWANCE_EXEC_MANAGER_REQUIRED");
- await claimCloudAllowanceOneShotSending(db,t,ctx,authority,transport,clock);
- const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
+ // The claim already verified and decrypted this exact immutable request.
+ // Carry it through the same operation instead of reloading it twice.
+ const claim=await claimCloudAllowanceOneShotSending(db,t,ctx,authority,transport,clock);
+ const frozen=claim.approvedRequest;
  const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
  await recordExecutionEvent(db,t,"issue","send_prepared",requestId,clock,{responseReceived:false});
  const final=await authority.revalidate();
@@ -111,7 +113,7 @@ export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllo
   WHERE d.device_id=?1 AND d.workspace_id=?2 AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active'`)
   .bind(t.deviceId,t.workspaceId).first();
  const card=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
- if(!final||final.employeeId!==initial.employeeId||final.workspaceRole!==initial.workspaceRole||
+ if(!final||final.employeeId!==claim.managerActorId||final.workspaceRole!==claim.managerWorkspaceRole||
   final.workspaceId!==t.workspaceId||!active||company.revision!==frozen.companyRevision||
   company.sellerInvoice!==frozen.sellerInvoice||card.revision!==company.revision||
   card.sellerInvoice!==company.sellerInvoice||card.amegoAppKey!==company.amegoAppKey)
@@ -134,13 +136,16 @@ export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllo
   return {applicationId:t.applicationId,executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"occupied_external"};
  }
  // Even a timeout is queried once before classification. Never repeat POST.
- try{return await readback(db,t,ctx,authority,transport,clock,requestId);}
+ try{return await readback(db,t,ctx,authority,transport,clock,requestId,frozen);}
  catch(error){return {applicationId:t.applicationId,executionState:"problem",allowanceNumber:t.allowanceNumber,
   ledgerStatus:"sending",errorCode:sent.kind==="definite_rejection"?"AMEGO_"+sent.code:executionError(error)};}
 }
 export async function executeApprovedCloudAllowance(db:D1Database,
  t:{workspaceId:string;applicationId:string;deviceId:string;expectedRevision:number},ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,clock:()=>Date=()=>new Date(),requestId="internal"){
+ const scope=authority.approvedOperation;
+ if(scope&&(scope.workspaceId!==t.workspaceId||scope.applicationId!==t.applicationId||scope.operation!=="issue"))
+  throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
  try{
   for(;;){
    const latest=await db.prepare(`SELECT ledger_id,allowance_number,status FROM allowance_number_ledger
@@ -178,7 +183,7 @@ export async function resumeApprovedCloudAllowances(env:AllowanceExecutionEnv,wo
    ORDER BY a.next_check_at,a.application_id LIMIT 10`).bind(workspaceId,at)
    .all<{application_id:string;revision:number;manager_device_id:string;manager_actor_id:string;authority_snapshot:string|null}>();
   for(const row of rows.results){
-   const authority=approvedExecutionAuthority(env,workspaceId,row.authority_snapshot,row.manager_actor_id);
+   const authority=approvedExecutionAuthority(env,workspaceId,row.authority_snapshot,row.manager_actor_id,{applicationId:row.application_id,operation});
    const target={workspaceId,applicationId:row.application_id,deviceId:row.manager_device_id,expectedRevision:row.revision};
    const requestId="resume-"+crypto.randomUUID();
    if(operation==="issue")await executeApprovedCloudAllowance(env.DB,target,ctx,authority,transport,clock,requestId);

@@ -4,6 +4,12 @@
 
 **第一階段已由使用者完整本機MCP報告確認完成，遠端操作已停止；第二階段尚未開始。** 本檔只歸檔可公開的狀態摘要；完整部署、備份、計量及回復細節留在使用者私有證據與原對話，不放入Public Git。本對話未重新連線Cloudflare驗證或執行維護。產品流程以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
 
+## 本輪開發交回：Build 2／schema22尚未部署
+
+目前工程Source為V3.1.41 Build 2；下方schema21完成證據只對已部署Source `83e7b691` 有效，不代表本輪修正已上線。逐項收斂與公司卡綁定保留見[唯一現行計畫第5節](V3_2_IMPLEMENTATION_PLAN.md)。
+
+新增唯一forward Source `0022_allowance_unsent_withdrawal.sql`，僅讓原申請在當次主管驗權、確定未送出及CAS保護下退回。沒有新增表、不解鎖舊Claim、不修改已套0020／0021；schema21下新退回入口安全拒絕。原部署owner已支援21:22預檢／意圖，**未執行遠端migration或Worker部署**。原五旗標關閉與前次停點不變；實際21→22維護仍需當次授權及備份／回復／用量證據，不能直接重跑前批。
+
 ## 已完成：原D1／Worker20→21
 
 - 實際部署Source為 `83e7b691fc494186e7a0d373654c888e83874fde`，原分支 `cyinvoice/feat-v32-de-void-coordination`。本機核對正式規則、CYID consumer相容性及指定Source工程CI。

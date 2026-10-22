@@ -12,7 +12,7 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
     internal static string Snapshot(IEnumerable<InvoiceRecord> records) =>
         JsonSerializer.Serialize(records.OrderBy(record => record.Id, StringComparer.Ordinal));
 
-    public void UpsertMany(IEnumerable<InvoiceRecord> records, string? repairSnapshot = null, CancellationToken cancellationToken = default, InvoiceSyncIssue? completedIssue = null)
+    public void UpsertMany(IEnumerable<InvoiceRecord> records, string? repairSnapshot = null, CancellationToken cancellationToken = default, InvoiceSyncIssue? completedIssue = null, bool cancelUnsentAllowance = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var materialized = records.ToList();
@@ -22,12 +22,33 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
 
         using var connection = Open();
         Configure(connection);
-        EnsureOfficialAllowanceAudit(connection);
         if (repairSnapshot is not null)
             BackupBeforeRepair(connection, repairSnapshot, cancellationToken);
         using var transaction = connection.BeginTransaction();
         if (repairSnapshot is not null)
             RequireRepairSnapshot(connection, transaction, repairSnapshot);
+        if (cancelUnsentAllowance)
+        {
+            ArgumentNullException.ThrowIfNull(completedIssue);
+            using var guard = connection.CreateCommand();
+            guard.Transaction = transaction;
+            guard.CommandText = """
+                SELECT COUNT(*) FROM allowance_number_ledger
+                WHERE seller_invoice=$seller AND environment=$environment AND work_item_id=$work AND status<>'reserved' AND NOT
+                 (status='occupied_external' AND EXISTS(SELECT 1 FROM allowance_local_number_rejections r
+                  WHERE r.work_item_id=allowance_number_ledger.work_item_id
+                   AND r.seller_invoice=allowance_number_ledger.seller_invoice
+                   AND r.environment=allowance_number_ledger.environment
+                   AND r.allowance_number=allowance_number_ledger.allowance_number));
+                """;
+            var account = completedIssue.AccountKey.Split('|', 2);
+            if (account.Length != 2) throw new InvalidDataException("折讓公司識別無效");
+            guard.Parameters.AddWithValue("$environment", account[0]);
+            guard.Parameters.AddWithValue("$seller", account[1]);
+            guard.Parameters.AddWithValue("$work", completedIssue.Id.ToString(CultureInfo.InvariantCulture));
+            if (Convert.ToInt64(guard.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+                throw new InvalidOperationException("折讓已進入送出或結果待查，不能取消；系統會依原號查證");
+        }
         foreach (var record in materialized)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -63,9 +84,10 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
         transaction.Commit();
     }
 
-    private static void EnsureOfficialAllowanceAudit(SqliteConnection connection)
+    internal static void EnsureOfficialAllowanceAudit(SqliteConnection connection, SqliteTransaction transaction)
     {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             CREATE TABLE IF NOT EXISTS official_allowance_observations (
                 audit_id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -157,8 +157,7 @@ internal static class AllowanceWorkflowTests
         Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
         Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
 
-        Throws<InvalidOperationException>(() =>
-            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
         Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
     }
 
@@ -251,8 +250,6 @@ internal static class AllowanceWorkflowTests
             setup.Repository.Invoices.LoadOrCreate().Single())!;
         Equal(approved.LocalApprovedUtc, stored.LocalApprovedUtc);
         Equal(approved.LocalApprovalOfficialHash, stored.LocalApprovalOfficialHash);
-        Throws<InvalidOperationException>(() =>
-            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
         await ThrowsAsync<InvalidOperationException>(() =>
             setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1"));
         await ThrowsAsync<InvalidOperationException>(() =>
@@ -260,6 +257,24 @@ internal static class AllowanceWorkflowTests
         Equal(3, setup.Gateway.QueryCalls);
         // B2 approval must never call a live provider issue API.
         Equal(0, setup.Gateway.VoidCalls);
+        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+        var cancelled = setup.Repository.Invoices.LoadOrCreate().Single();
+        Equal(true, setup.Workflow.ManualReviewFor(cancelled) is null);
+        Equal(approved.LocalApprovedUtc, setup.Workflow.HandledReviewFor(cancelled)!.LocalApprovedUtc);
+        Equal("2000", setup.Workflow.HandledReviewFor(cancelled)!.CancelledByEmployeeNo);
+        Equal(true, setup.Workflow.HandledReviewFor(cancelled)!.CancelledUtc is not null);
+    }
+
+    public static async Task LocalReservedCancellationNeverSendsAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        var (issue, reserved) = await PrepareReservedAsync(setup);
+        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        Throws<InvalidOperationException>(() => ledger.MarkSending(AmegoDefaults.TestInvoice, Environments.Test, reserved));
+        Equal("reserved", ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test, reserved.WorkItemId)!.Status);
+        Equal(true, setup.Workflow.HandledReviewFor(setup.Repository.Invoices.LoadOrCreate().Single())!.CancelledUtc is not null);
     }
 
     public static async Task LocalOfficialChangedBeforeApprovalMustRePreviewAsync()
@@ -327,8 +342,7 @@ internal static class AllowanceWorkflowTests
             "AdminPass1", preview.OfficialSnapshotHash);
         Equal(true, approval.LocalApprovalDraftHash.Length > 0);
         setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
-        var reserved = await setup.Workflow.ReserveLocalApprovedDraftAsync(
-            issue, "2000", "AdminPass1");
+        var reserved = await setup.Workflow.ReserveApprovedDraftAsync(issue, "2000");
         Equal("A20260919001", reserved.AllowanceNumber);
         Equal("reserved", reserved.Status);
         Equal("2000", reserved.ApproverEmployeeNo);
@@ -347,16 +361,14 @@ internal static class AllowanceWorkflowTests
         }
         // A second manager action or app restart gets the identical number
         // without another AMEGO query or allocation.
-        var same = await setup.Workflow.ReserveLocalApprovedDraftAsync(
-            issue, "2000", "AdminPass1");
+        var same = await setup.Workflow.ReserveApprovedDraftAsync(issue, "2000");
         Equal(reserved, same);
         Equal(4, setup.Gateway.QueryCalls);
         var recovered = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Equal(reserved, recovered);
         Equal(0, setup.Gateway.VoidCalls);
-        Throws<InvalidOperationException>(() =>
-            setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
     }
 
     public static async Task LocalReservationRequiresApprovalAndSameManagerAsync()
@@ -368,11 +380,9 @@ internal static class AllowanceWorkflowTests
             "部分退貨", 50, editedItems: DraftItems());
         var issue = AllowanceIssue(setup.Repository);
         await ThrowsAsync<UnauthorizedAccessException>(() =>
-            setup.Workflow.ReserveLocalApprovedDraftAsync(
-                issue, "3015", "Employee1"));
+            setup.Workflow.ReserveApprovedDraftAsync(issue, "3015"));
         await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.ReserveLocalApprovedDraftAsync(
-                issue, "2000", "AdminPass1"));
+            setup.Workflow.ReserveApprovedDraftAsync(issue, "2000"));
         Equal(1, setup.Gateway.QueryCalls);
         setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
         var preview = await setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1");
@@ -380,7 +390,7 @@ internal static class AllowanceWorkflowTests
         await setup.Workflow.ApproveLocalDraftAsync(issue, "2000", "AdminPass1",
             preview.OfficialSnapshotHash);
         await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "0001", "SuperPass1"));
+            setup.Workflow.ReserveApprovedDraftAsync(issue, "0001"));
         Equal(3, setup.Gateway.QueryCalls);
         var noReservation = new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -404,7 +414,7 @@ internal static class AllowanceWorkflowTests
             Allowance("D0401", UploadStatuses.Complete, "OTHER-001", "1", "19")
         ], summaryPresent: true));
         await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.ReserveLocalApprovedDraftAsync(issue, "2000", "AdminPass1"));
+            setup.Workflow.ReserveApprovedDraftAsync(issue, "2000"));
         Equal(4, setup.Gateway.QueryCalls);
         Equal(null, new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)));
@@ -434,8 +444,8 @@ internal static class AllowanceWorkflowTests
         var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
         Equal("sending", ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
             issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))!.Status);
-        var resumed = await setup.Workflow.SendLocalReservedDraftAsync(
-            issue, "2000", "AdminPass1", fake);
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        var resumed = await setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, fake);
         Equal(LocalAllowanceSendOutcome.Problem, resumed.Outcome);
         Equal(1, fake.IssueCalls);
     }
@@ -448,23 +458,20 @@ internal static class AllowanceWorkflowTests
         var (issue, reserved) = await PrepareReservedAsync(setup);
         var gateway = new FakeLocalIssueGateway();
         await ThrowsAsync<UnauthorizedAccessException>(() =>
-            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "wrong", gateway));
+            setup.Workflow.ApproveAndIssueLocalDraftAsync(issue, "2000", "wrong", "not-an-approval", gateway: gateway));
         Equal(4, setup.Gateway.QueryCalls);
         Equal(0, gateway.IssueCalls);
         setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
-        var first = await setup.Workflow.SendLocalReservedDraftAsync(
-            issue, "2000", "AdminPass1", gateway);
+        var first = await setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, gateway);
         Equal(LocalAllowanceSendOutcome.Problem, first.Outcome);
         Equal(reserved.AllowanceNumber, first.AllowanceNumber);
         Equal(5, setup.Gateway.QueryCalls);
         Equal(1, gateway.IssueCalls);
         Equal("sending", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())!.Status);
-        var retryEntry = await setup.Workflow.SendLocalReservedDraftAsync(
-            issue, "2000", "AdminPass1", gateway);
+        var retryEntry = await setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, gateway);
         Equal(LocalAllowanceSendOutcome.Problem, retryEntry.Outcome);
-        var readback = await setup.Workflow.ReconcileLocalReservedDraftAsync(
-            issue, "2000", "AdminPass1", gateway);
+        var readback = await setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, gateway);
         Equal(LocalAllowanceSendOutcome.Problem, readback.Outcome);
         Equal(1, gateway.IssueCalls);
         Equal(3, gateway.QueryCalls); // original plus two read-only resumes, zero repeat posts
@@ -481,7 +488,7 @@ internal static class AllowanceWorkflowTests
             Allowance("D0401", UploadStatuses.Complete, "OTHER-001", "1", "19")
         ], summaryPresent: true));
         await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.SendLocalReservedDraftAsync(issue, "2000", "AdminPass1", gateway));
+            setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, gateway));
         Equal(0, gateway.IssueCalls);
         Equal("reserved", new LocalAllowanceNumberStore(setup.Repository.DataDirectory)
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString())!.Status);
@@ -503,8 +510,7 @@ internal static class AllowanceWorkflowTests
         await setup.Workflow.ApproveLocalDraftAsync(issue, "2000",
             "AdminPass1", preview.OfficialSnapshotHash);
         setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
-        var reserved = await setup.Workflow.ReserveLocalApprovedDraftAsync(
-            issue, "2000", "AdminPass1");
+        var reserved = await setup.Workflow.ReserveApprovedDraftAsync(issue, "2000");
         return (issue, reserved);
     }
 

@@ -26,12 +26,12 @@ public sealed class LocalAllowanceOneShotService
     private readonly LocalAllowanceNumberStore ledger;
     private readonly IAmegoAllowanceGateway amego;
     private readonly Func<LocalAllowanceReservation, CancellationToken, Task> requireFreshPreflight;
-    private readonly Action<string, int?>? diagnostic;
+    private readonly Action<string, int?, Exception?>? diagnostic;
 
     public LocalAllowanceOneShotService(LocalAllowanceNumberStore ledger,
         IAmegoAllowanceGateway amego,
         Func<LocalAllowanceReservation, CancellationToken, Task> requireFreshPreflight,
-        Action<string, int?>? diagnostic = null)
+        Action<string, int?, Exception?>? diagnostic = null)
     {
         this.diagnostic = diagnostic;
         this.ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
@@ -61,12 +61,12 @@ public sealed class LocalAllowanceOneShotService
         // HTTP call. If anything fails after this point, including a crash,
         // the original number remains 'sending'; re-entry cannot POST again.
         ledger.MarkSending(sellerInvoice, environment, saved);
-        diagnostic?.Invoke("send_started", null);
+        diagnostic?.Invoke("send_started", null, null);
         try
         {
             var accepted = await amego.IssueAllowanceOnceAsync(frozen, cancellationToken)
                 .ConfigureAwait(false);
-            diagnostic?.Invoke("response_received", accepted.Code);
+            diagnostic?.Invoke("response_received", accepted.Code, null);
             if (AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(accepted.Code))
             {
                 ledger.MarkExternalCollision(sellerInvoice, environment, saved, accepted.Code);
@@ -79,8 +79,8 @@ public sealed class LocalAllowanceOneShotService
         catch (AmegoApiException error) when (
             AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code))
         {
-            // Only a definitive rejection from the FIRST g0401 attempt may
-            // record a collision. This version NEVER allocates a new number.
+            diagnostic?.Invoke("response_received", error.Code, error);
+            // The automatic execution owner advances only after this rejection.
             ledger.MarkExternalCollision(sellerInvoice, environment, saved, error.Code);
             return new(LocalAllowanceSendOutcome.ConfirmedNumberCollision,
                 saved.AllowanceNumber, "光貿明確拒絕重複折讓號碼；保留原號，尚未自動加號");
@@ -89,7 +89,7 @@ public sealed class LocalAllowanceOneShotService
             error is HttpRequestException or TaskCanceledException or IOException or
             JsonException or InvalidDataException or AmegoApiException)
         {
-            diagnostic?.Invoke("response_unknown", error is AmegoApiException api ? api.Code : null);
+            diagnostic?.Invoke("response_unknown", error is AmegoApiException api ? api.Code : null, error);
             return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken).ConfigureAwait(false);
         }
 
@@ -184,14 +184,18 @@ public sealed class LocalAllowanceOneShotService
         {
             var official = await amego.QueryAllowanceAsync(saved.AllowanceNumber, cancellationToken)
                 .ConfigureAwait(false);
-            diagnostic?.Invoke("readback_received", official.Code);
+            diagnostic?.Invoke("readback_received", official.Code, null);
             if (official.Code == 0 && official.Data is { } waiting &&
                 waiting.AllowanceNumber == saved.AllowanceNumber &&
                 InvoiceWorkQueue.IsPendingUpload(waiting.InvoiceStatus))
                 return Pending(saved, "光貿正在處理原折讓，系統會自動追蹤");
-            if (official.Code != 0 || !MatchesFrozen(ReadFrozen(saved), official.Data))
+            var mismatch = official.Code == 0 ? FrozenMismatch(ReadFrozen(saved), official.Data) : "provider_rejected";
+            if (mismatch is not null)
+            {
+                diagnostic?.Invoke("readback_" + mismatch, official.Code, null);
                 return new(LocalAllowanceSendOutcome.Problem, saved.AllowanceNumber,
                     "原號查證尚無法安全確認，已保存上傳問題；系統會繼續查回，不會重送或換號");
+            }
             // Hash exact official evidence but retain no raw buyer or item PII.
             // The readback and matching number are never origin evidence.
             var digest = Convert.ToHexString(SHA256.HashData(
@@ -206,7 +210,7 @@ public sealed class LocalAllowanceOneShotService
             error is AmegoApiException or HttpRequestException or TaskCanceledException or
             IOException or JsonException or InvalidDataException)
         {
-            diagnostic?.Invoke("readback_failed", error is AmegoApiException api ? api.Code : null);
+            diagnostic?.Invoke("readback_failed", error is AmegoApiException api ? api.Code : null, error);
             return new(LocalAllowanceSendOutcome.Problem, saved.AllowanceNumber,
                 "官方查回失敗，原號保留且不重送；詳細紀錄已保存至上傳問題");
         }
@@ -237,20 +241,19 @@ public sealed class LocalAllowanceOneShotService
         return frozen;
     }
 
-    private static bool MatchesFrozen(AllowanceIssueRequest frozen, AllowanceQueryItem official)
+    private static string? FrozenMismatch(AllowanceIssueRequest frozen, AllowanceQueryItem official)
     {
-        if (official.AllowanceNumber != frozen.AllowanceNumber ||
-            official.InvoiceType is not ("D0401" or "B0401") ||
+        if (official.AllowanceNumber != frozen.AllowanceNumber) return "number_mismatch";
+        if (official.InvoiceType is not ("D0401" or "B0401") ||
             official.InvoiceStatus != UploadStatuses.Complete ||
-            official.AllowanceType != 2 || official.CancelDate != 0 ||
-            official.AllowanceDate != frozen.AllowanceDate ||
-            !string.Equals(official.BuyerIdentifier, frozen.BuyerIdentifier, StringComparison.Ordinal) ||
-            !string.Equals(official.BuyerName, frozen.BuyerName, StringComparison.Ordinal) ||
-            !MatchDecimal(official.TotalAmount, frozen.TotalAmount) ||
-            !MatchDecimal(official.TaxAmount, frozen.TaxAmount) ||
-            official.ProductItems.ValueKind != JsonValueKind.Array ||
-            official.ProductItems.GetArrayLength() != frozen.ProductItem.Count)
-            return false;
+            official.AllowanceType != 2 || official.CancelDate != 0) return "state_mismatch";
+        if (official.AllowanceDate != frozen.AllowanceDate) return "date_mismatch";
+        if (!string.Equals(official.BuyerIdentifier, frozen.BuyerIdentifier, StringComparison.Ordinal) ||
+            !string.Equals(official.BuyerName, frozen.BuyerName, StringComparison.Ordinal)) return "buyer_mismatch";
+        if (!MatchDecimal(official.TotalAmount, frozen.TotalAmount) ||
+            !MatchDecimal(official.TaxAmount, frozen.TaxAmount)) return "amount_mismatch";
+        if (official.ProductItems.ValueKind != JsonValueKind.Array ||
+            official.ProductItems.GetArrayLength() != frozen.ProductItem.Count) return "items_mismatch";
         for (var i = 0; i < frozen.ProductItem.Count; i++)
         {
             var source = frozen.ProductItem[i];
@@ -264,9 +267,9 @@ public sealed class LocalAllowanceOneShotService
                 !MatchDecimal(candidate, "amount", source.Amount) ||
                 !MatchDecimal(candidate, "tax", source.Tax) ||
                 !MatchDecimal(candidate, "tax_type", source.TaxType))
-                return false;
+                return "items_mismatch";
         }
-        return true;
+        return null;
     }
 
     private static bool MatchText(JsonElement source, string property, string expected) =>

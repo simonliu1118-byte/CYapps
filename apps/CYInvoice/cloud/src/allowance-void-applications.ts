@@ -90,6 +90,7 @@ export async function createCloudAllowanceVoidApplication(
  db:D1Database,i:NewCloudAllowanceVoid,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource
 ):Promise<CloudVoidApplicationStatus>{
+ if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
  validateRequest(i,ctx);
  const first=await authority.revalidate();
  if(!validActor(first,i.workspaceId)||!await activeVoidDevice(db,i.workspaceId,i.deviceId))
@@ -182,6 +183,9 @@ export async function loadCloudAllowanceVoidForManager(
  db:D1Database,t:{workspaceId:string;applicationId:string;deviceId:string},
  ctx:CloudAllowanceContext,authority:AllowanceActorSource
 ):Promise<TrustedCloudVoidRequest>{
+ const scope=authority.approvedOperation;
+ if(scope&&(scope.workspaceId!==t.workspaceId||scope.applicationId!==t.applicationId||scope.operation!=="void"))
+  throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
  validateTarget(t.workspaceId,t.applicationId,t.deviceId);
  const first=await authority.revalidate();
  if(!validActor(first,t.workspaceId)||!isManager(first)||
@@ -192,6 +196,7 @@ export async function loadCloudAllowanceVoidForManager(
   "frozen_ciphertext,status,revision,requester_actor_id FROM allowance_void_requests "+
   "WHERE application_id=?1 AND workspace_id=?2 LIMIT 1")
   .bind(t.applicationId,t.workspaceId).first<FrozenRow>();
+ if(scope&&row?.status!=="approved")throw new Error("APPROVED_OPERATION_NO_LONGER_ACTIVE");
  if(!row||row.environment!==ctx.environment||
   !/^[a-f0-9]{64}$/.test(row.request_hash)||
   !/^[a-f0-9]{64}$/.test(row.allowance_fingerprint))

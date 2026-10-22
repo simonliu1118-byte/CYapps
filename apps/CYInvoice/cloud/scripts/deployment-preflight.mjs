@@ -9,7 +9,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const fail = code => { throw new Error(code); };
 const check = (condition, code) => { if (!condition) fail(code); };
 const rowLimit = 10000;
-const migrationHistorySql = 'SELECT name FROM d1_migrations ORDER BY id LIMIT 21';
+const migrationHistorySql = 'SELECT name FROM d1_migrations ORDER BY id LIMIT 23';
 const uuid = value => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value ?? '');
 const tables = {
   workspaces: 'workspace_id, status, employee_revision',
@@ -157,6 +157,7 @@ const schemaUpgrades = {
   '18:19': {from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'},
   '19:20': {from:'19',to:'20',migration:'0020_allowance_void_coordination.sql'},
   '20:21': {from:'20',to:'21',migration:'0021_allowance_automatic_execution.sql'},
+  '21:22': {from:'21',to:'22',migration:'0022_allowance_unsent_withdrawal.sql'},
 };
 const validSchemaUpgrade = upgrade => Object.values(schemaUpgrades).some(step =>
   upgrade?.from === step.from && upgrade?.to === step.to && upgrade?.migration === step.migration);
@@ -167,9 +168,10 @@ export function resolveSchemaUpgrade(settings, canonical, applied, operation, re
   const step = schemaUpgrades[requested];
   const plain = name => settings.bindings.find(b => b.name === name && b.type === 'plain_text')?.text;
   check(plain('CYID_ENABLED') === 'true' && plain('SCHEMA_VERSION') === step.from, 'SCHEMA_UPGRADE_SOURCE_INVALID');
-  check([19,20,21].includes(canonical.length) && canonical[18] === schemaUpgrades['18:19'].migration &&
+  check([19,20,21,22].includes(canonical.length) && canonical[18] === schemaUpgrades['18:19'].migration &&
     (canonical.length === 19 || canonical[19] === schemaUpgrades['19:20'].migration) &&
     (canonical.length < 21 || canonical[20] === schemaUpgrades['20:21'].migration) &&
+    (canonical.length < 22 || canonical[21] === schemaUpgrades['21:22'].migration) &&
     canonical[Number(step.to)-1] === step.migration,
     'SCHEMA_UPGRADE_TARGET_INVALID');
   // A staged rollout requires the exact target prefix. In a schema20 source,
@@ -363,6 +365,8 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
   const knownV32Void = canonical.slice(-8).join('|') === v32Void.join('|');
   const v32Automatic = [...v32Void,'0021_allowance_automatic_execution.sql'];
   const knownV32Automatic = canonical.slice(-9).join('|') === v32Automatic.join('|');
+  const v32Withdrawal = [...v32Automatic,'0022_allowance_unsent_withdrawal.sql'];
+  const knownV32Withdrawal = canonical.slice(-10).join('|') === v32Withdrawal.join('|');
   const suffix = options => pending.length === options.length &&
     options.every((name,i) => pending[i] === name);
   check(pending.length === 0 ||
@@ -372,7 +376,8 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
     (knownV32 && v32.some((_,i)=>suffix(v32.slice(i)))) ||
     (knownV32Audit && v32Audit.some((_,i)=>suffix(v32Audit.slice(i)))) ||
     (knownV32Void && v32Void.some((_,i)=>suffix(v32Void.slice(i)))) ||
-    (knownV32Automatic && v32Automatic.some((_,i)=>suffix(v32Automatic.slice(i)))),
+    (knownV32Automatic && v32Automatic.some((_,i)=>suffix(v32Automatic.slice(i)))) ||
+    (knownV32Withdrawal && v32Withdrawal.some((_,i)=>suffix(v32Withdrawal.slice(i)))),
     'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;

@@ -9,7 +9,9 @@ import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
-import type {AllowanceManagerPreviewTarget} from "./allowance-manager-preview";
+export interface AllowanceApprovalTarget {
+ workspaceId:string;applicationId:string;deviceId:string;expectedRevision:number;
+}
 
 export interface CloudAllowanceApproval {
  approvalId:string;
@@ -35,7 +37,7 @@ function sameManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):bool
  return manager(a,ws)&&manager(b,ws)&&
    a.employeeId===b.employeeId&&a.workspaceRole===b.workspaceRole;
 }
-async function validDevice(db:D1Database,t:AllowanceManagerPreviewTarget):Promise<boolean>{
+async function validDevice(db:D1Database,t:AllowanceApprovalTarget):Promise<boolean>{
  const row=await db.prepare(`SELECT d.device_id FROM devices d
   JOIN workspaces w ON w.workspace_id=d.workspace_id
   WHERE d.device_id=?1 AND d.workspace_id=?2 AND
@@ -44,7 +46,7 @@ async function validDevice(db:D1Database,t:AllowanceManagerPreviewTarget):Promis
   .bind(t.deviceId,t.workspaceId).first<{device_id:string}>();
  return !!row;
 }
-async function inReview(db:D1Database,t:AllowanceManagerPreviewTarget,
+async function inReview(db:D1Database,t:AllowanceApprovalTarget,
  actor:string,requestHash:string):Promise<boolean>{
  const row=await db.prepare(`SELECT application_id FROM allowance_applications
   WHERE application_id=?1 AND workspace_id=?2 AND (status='open' OR (status='review' AND manager_actor_id=?4))
@@ -65,10 +67,11 @@ function nowUtc(clock:()=>Date):Date{
 // No separate .run() calls may split the two statements: a crash between
 // operations would otherwise orphan the approval or misstate business status.
 export async function approveCloudAllowanceAfterOfficialProof(
- db:D1Database,t:AllowanceManagerPreviewTarget,ctx:CloudAllowanceContext,
+ db:D1Database,t:AllowanceApprovalTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
  clock:()=>Date=()=>new Date()
 ):Promise<CloudAllowanceApproval>{
+ if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
  if(typeof t.workspaceId!=="string"||!/^ws_[A-Za-z0-9_-]{3,100}$/.test(t.workspaceId)||
     typeof t.applicationId!=="string"||!ID.test(t.applicationId)||
     typeof t.deviceId!=="string"||!DEVICE.test(t.deviceId)||

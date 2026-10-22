@@ -241,7 +241,7 @@ public sealed class InvoiceSyncIssueStore
         using var db = Open(SqliteOpenMode.ReadWrite);
         Configure(db);
         using var sql = db.CreateCommand();
-        sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)=''";
+        sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)='' AND (issue_type<>$type OR message<>$message)";
         sql.Parameters.AddWithValue("$id", existing.Id);
         sql.Parameters.AddWithValue("$type", type);
         sql.Parameters.AddWithValue("$message", message);

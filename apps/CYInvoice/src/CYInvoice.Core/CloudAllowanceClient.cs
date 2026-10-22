@@ -24,7 +24,7 @@ public sealed record CloudAllowanceVoidDraft(string ApplicationId,string Environ
 public sealed record CloudAllowanceVoidState(string ApplicationId,string Status,int Revision,
     bool Claimed,bool ReadbackOnly);
 public sealed record CloudAllowanceOperationDetail(string ApplicationId, string Operation, string Status,
-    int Revision, IReadOnlyList<KeyValuePair<string,string>> Rows, string RequestHash, string OfficialSnapshotHash);
+    int Revision, IReadOnlyList<KeyValuePair<string,string>> Rows, string RequestHash, string OfficialSnapshotHash, bool CanWithdraw = false);
 public sealed record CloudAllowanceExecution(string ApplicationId, string ExecutionState, string ErrorCode);
 
 public sealed class CloudAllowanceClient
@@ -301,7 +301,18 @@ public sealed class CloudAllowanceClient
         var rows=root.GetProperty("rows").EnumerateArray().Select(r => new KeyValuePair<string,string>(
             Required(r,"label"), r.GetProperty("value").GetString() ?? "－")).ToArray();
         return new(id, isVoid?"void":"issue", Required(root,"status"), RequiredRevision(root), rows,
-            root.GetProperty("requestHash").GetString() ?? "", root.GetProperty("officialSnapshotHash").GetString() ?? "");
+            root.GetProperty("requestHash").GetString() ?? "", root.GetProperty("officialSnapshotHash").GetString() ?? "",
+            root.TryGetProperty("canWithdraw", out var cancel) && cancel.ValueKind == JsonValueKind.True);
+    }
+
+    public async Task<CloudAllowanceReceipt> WithdrawOperationAsync(CloudAllowanceOperationDetail detail,
+        string employeeNo, string password, CancellationToken token = default)
+    {
+        Credentials(employeeNo,password); ValidateId(detail.ApplicationId);
+        if(detail.Operation!="issue" || !detail.CanWithdraw)throw new InvalidOperationException("此申請不能取消退回");
+        using var doc=await SendAsync("withdraw",new {applicationId=detail.ApplicationId,
+            expectedRevision=detail.Revision,employeeNo,password},token).ConfigureAwait(false);
+        return Receipt(doc.RootElement,detail.ApplicationId,"withdrawn",detail.Revision+1);
     }
 
     public async Task<CloudAllowanceExecution> ApproveOperationAsync(CloudAllowanceOperationDetail detail,

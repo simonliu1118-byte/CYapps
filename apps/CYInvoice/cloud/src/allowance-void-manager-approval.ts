@@ -26,6 +26,7 @@ export async function approveCloudVoidAfterOfficialProof(
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
  clock:()=>Date=()=>new Date()
 ):Promise<CloudVoidApprovalResult>{
+ if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
  if(!t||!WS.test(t.workspaceId)||!ID.test(t.applicationId)||
   !DEVICE.test(t.deviceId)||t.expectedRevision!==1||
   !HASH.test(t.requestHash)||!HASH.test(t.expectedOfficialSnapshotHash))

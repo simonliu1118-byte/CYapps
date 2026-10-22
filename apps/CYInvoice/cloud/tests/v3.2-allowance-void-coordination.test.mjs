@@ -36,7 +36,7 @@ try{
  sql.exec("PRAGMA foreign_keys=ON");
  const migrations=readdirSync("migrations")
   .filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql",
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql",
   "0020 is canonical; schema promotion must not expose a g0501 sender");
 
  // Historical schema20 constraints remain unchanged on disk. The forward

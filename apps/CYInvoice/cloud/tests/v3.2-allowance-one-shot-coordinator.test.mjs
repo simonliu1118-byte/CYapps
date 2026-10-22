@@ -66,10 +66,10 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
-async function fixture(schema19=false,filename=":memory:",through21=true){
+async function fixture(schema19=false,filename=":memory:",through21=true,through22=true){
  const sql=new DatabaseSync(filename);
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql");
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -80,7 +80,7 @@ async function fixture(schema19=false,filename=":memory:",through21=true){
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const f of migrations.filter(x=>x>="0014"&&x<"0019"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
- for(const file of migrations.filter(x=>x>="0019"&&(through21||x<"0021")))sql.exec(readFileSync("migrations/"+file,"utf8"));
+ for(const file of migrations.filter(x=>x>="0019"&&(through21||x<"0021")&&(through22||x<"0022")))sql.exec(readFileSync("migrations/"+file,"utf8"));
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
@@ -252,14 +252,29 @@ for(const mode of ["normal","already","unknown","pending"]){
  await executeVoid(f.db,t,context,authority(),api.transport,()=>new Date(time.valueOf()+120_000),true);
  assert.equal(api.posts,1,"official processing never blindly reposts");f.close();
 }
+// One ordinary approval/execution has a bounded live-authority IO budget.
+{
+ const f=await fixture();await create(f.db,input(app1),context,authority(employee));
+ let checks=0;const counted={revalidate:async()=>{checks++;return manager;}};
+ const grant=await approve(f.db,{...approvalTarget(app1),expectedRevision:1},context,counted,fakeOfficial().transport,clock);
+ assert.ok(checks<=5);const api=provider();
+ const result=await execute(f.db,{...reserveTarget(app1),expectedRevision:grant.approvedRevision},context,counted,api.transport,clock);
+ assert.equal(result.executionState,"completed");assert.equal(api.posts,1);
+ assert.ok(checks<=16,"same immutable request is not repeatedly loaded/revalidated between internal stages");f.close();
+}
 // Recovery rechecks the original business approval's revocation fingerprint.
 {
  const env={CYID_ENABLED:"true",IDENTITY:{fetch(){}},IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
   IDENTITY_AUTHORITY:{async invalidateCache(){return{workspaceId:"identity_synthetic",applicationId:"CYINVOICE",available:true,invalidated:[]};}}};
- const auth=approvedExecutionAuthority(env,ws,JSON.stringify(cached),"manager");assert.equal((await auth.revalidate()).employeeId,"manager");
+ const auth=approvedExecutionAuthority(env,ws,JSON.stringify(cached),"manager",{applicationId:app1,operation:"issue"});assert.equal((await auth.revalidate()).employeeId,"manager");
+ const f=await fixture();
+ await assert.rejects(()=>create(f.db,input(app2),context,auth),/LIVE_SESSION_REQUIRED/);
+ await assert.rejects(()=>approve(f.db,approvalTarget(app1),context,auth),/LIVE_SESSION_REQUIRED/);
+ await assert.rejects(()=>execute(f.db,reserveTarget(app2),context,auth),()=>true);
+ f.close();
  env.IDENTITY_AUTHORITY.invalidateCache=async()=>({workspaceId:"identity_synthetic",applicationId:"CYINVOICE",available:true,invalidated:["manager"]});
  await assert.rejects(auth.revalidate(),/REVOKED/);
- await assert.rejects(approvedExecutionAuthority(env,ws,null,"manager").revalidate(),/UNVERIFIABLE/);
+ await assert.rejects(approvedExecutionAuthority(env,ws,null,"manager",{applicationId:app1,operation:"issue"}).revalidate(),/UNVERIFIABLE/);
 }
 // The existing runtime sync actually drives recovery without another manager
 // password, continuation button, service queue, or scheduled Worker.
@@ -333,5 +348,23 @@ for(const mode of ["normal","already","unknown","pending"]){
   assert.deepEqual(restored.prepare("SELECT * FROM allowance_number_ledger").all(),before);
   assert.ok(!restored.prepare("PRAGMA table_info(allowance_applications)").all().some(r=>r.name==="execution_state"));restored.close();
  }finally{rmSync(directory,{recursive:true,force:true});}
+}
+{
+ const f=await fixture(true,":memory:",true,false);const target=await f.prepare(app1);
+ const tables=["allowance_applications","allowance_execution_approvals","allowance_number_ledger","allowance_application_audit_events"];
+ const snapshot=()=>tables.map(name=>f.sql.prepare("SELECT * FROM "+name).all());
+ const before=snapshot(),oldTrigger=f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='allowance_application_transition_guard'").get().sql;
+ const migration=readFileSync("migrations/0022_allowance_unsent_withdrawal.sql","utf8");
+ assert.throws(()=>{f.sql.exec("BEGIN");try{f.sql.exec(migration+";SELECT * FROM injected_missing;");f.sql.exec("COMMIT");}catch(e){f.sql.exec("ROLLBACK");throw e;}},/no such table/);
+ assert.equal(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='allowance_application_transition_guard'").get().sql,oldTrigger);
+ assert.deepEqual(snapshot(),before);
+ f.sql.exec(migration);assert.deepEqual(snapshot(),before);
+ // Withdrawal winning the race prevents a stale executor from posting.
+ f.beforeSend(()=>f.sql.prepare("UPDATE allowance_applications SET status='withdrawn',manager_actor_id=NULL,actor_id='other_current_manager',revision=4 WHERE application_id=?").run(app1));
+ const api=provider();await execute(f.db,target,context,authority(),api.transport,clock);
+ assert.equal(api.posts,0);
+ assert.equal(f.sql.prepare("SELECT status FROM allowance_applications WHERE application_id=?").get(app1).status,"withdrawn");
+ assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
+ assert.equal(f.sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");f.close();
 }
 console.log("Cloud single-approval automatic execution, 25 collisions, unknown/restart recovery and bounded void retry passed.");

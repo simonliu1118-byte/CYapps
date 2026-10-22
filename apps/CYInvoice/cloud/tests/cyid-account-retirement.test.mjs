@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const migrations = fs.readdirSync('migrations').filter(name => /^\d{4}_.*\.sql$/.test(name)).sort();
-assert.equal(migrations.at(-1), '0021_allowance_automatic_execution.sql',
+assert.equal(migrations.at(-1), '0022_allowance_unsent_withdrawal.sql',
   'CYID-only retirement is opt-in maintenance, not an automatic Built-in migration');
 const maintenance = fs.readFileSync('maintenance/retire-built-in-for-cyid-only.sql', 'utf8');
 assert.match(maintenance, /CREATE TABLE cyid_storage_profile/);

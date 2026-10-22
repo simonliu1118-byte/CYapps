@@ -12,6 +12,8 @@ export interface AllowanceActor {
   workspaceRole:"SUPER_ADMIN"|"ADMIN"|"USER";
 }
 export interface AllowanceActorSource {
+  // Not a CYID Session: only the existing persisted business approval may run.
+  approvedOperation?: Readonly<{workspaceId:string;applicationId:string;operation:"issue"|"void"}>;
   revalidate():Promise<AllowanceActor|null>;
 }
 export interface NewCloudAllowance {
@@ -163,6 +165,7 @@ async function activeDevice(db:D1Database,workspace:string,device:string):Promis
 export async function createEncryptedCloudAllowance(db:D1Database,
  input:NewCloudAllowance,ctx:CloudAllowanceContext,authority:AllowanceActorSource
 ):Promise<{applicationId:string;status:"open";revision:1}>{
+  if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
   checkInput(input,ctx);
   const first=await authority.revalidate();
   if(!validated(first,input.workspaceId))
@@ -218,6 +221,9 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
  target:{workspaceId:string;applicationId:string;deviceId:string},
  ctx:CloudAllowanceContext,authority:AllowanceActorSource
 ):Promise<StoredCloudAllowance>{
+  const scope=authority.approvedOperation;
+  if(scope&&(scope.workspaceId!==target.workspaceId||scope.applicationId!==target.applicationId||scope.operation!=="issue"))
+    throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
   checkScope(target.workspaceId,target.applicationId,target.deviceId);
   const first=await authority.revalidate();
   if(!validated(first,target.workspaceId)||
@@ -236,6 +242,7 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     JOIN company_settings c ON c.workspace_id=a.workspace_id
     WHERE a.application_id=?1 AND a.workspace_id=?2 LIMIT 1`)
    .bind(target.applicationId,target.workspaceId).first<FrozenRow>();
+  if(scope&&row?.status!=="approved")throw new Error("APPROVED_OPERATION_NO_LONGER_ACTIVE");
   if(!row||ctx.environment!==row.environment||!SHA.test(row.request_hash)||
       row.request_hash!==row.frozen_hash||
       row.company_seller!==row.seller_invoice||

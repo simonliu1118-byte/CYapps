@@ -24,8 +24,12 @@ public sealed class LocalAllowanceNumberStore
         databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
         if (!File.Exists(databasePath))
             throw new FileNotFoundException("Initialize CYInvoice SQLite before allocating allowances", databasePath);
-        using var connection = Open();
+    }
+
+    internal static void EnsureSchema(SqliteConnection connection, SqliteTransaction transaction)
+    {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             CREATE TABLE IF NOT EXISTS allowance_number_ledger (
                 seller_invoice TEXT NOT NULL,
@@ -156,6 +160,7 @@ public sealed class LocalAllowanceNumberStore
         var dateText = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         using var connection = Open();
         using var transaction = connection.BeginTransaction(deferred: false);
+        RequireOpenWorkItem(connection, transaction, workItemId);
         LocalAllowanceReservation? latest = null;
         string? originalTemplate = null;
         var previousAttempt = 0;
@@ -406,6 +411,7 @@ public sealed class LocalAllowanceNumberStore
         using var transaction = connection.BeginTransaction(deferred: false);
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
+        if (from == "reserved") RequireOpenWorkItem(connection, transaction, reservation.WorkItemId);
         command.CommandText = """
             UPDATE allowance_number_ledger SET status=$to
             WHERE seller_invoice=$seller AND environment=$environment
@@ -441,6 +447,16 @@ public sealed class LocalAllowanceNumberStore
                 throw new InvalidOperationException("Provider rejection proof was not saved");
         }
         transaction.Commit();
+    }
+
+    private static void RequireOpenWorkItem(SqliteConnection connection, SqliteTransaction transaction, string workItemId)
+    {
+        using var guard = connection.CreateCommand();
+        guard.Transaction = transaction;
+        guard.CommandText = "SELECT COUNT(*) FROM sync_issues WHERE local_id=CAST($work AS INTEGER) AND CAST(local_id AS TEXT)=$work AND TRIM(resolved_utc)<>''";
+        guard.Parameters.AddWithValue("$work", workItemId);
+        if (Convert.ToInt64(guard.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            throw new InvalidOperationException("原折讓申請已結束，不能配號或送出");
     }
 
     private SqliteConnection Open()
