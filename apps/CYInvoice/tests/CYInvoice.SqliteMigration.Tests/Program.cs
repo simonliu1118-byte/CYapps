@@ -216,7 +216,9 @@ static void TestBusinessSchemaRollback()
         InvoiceNumber="AA12345678",InvoiceState=InvoiceStates.Opened,Source="手動",Amount=100,
         SentAt="2026-10-22T00:00:00+08:00"
     });
-    using var db = new SqliteConnection("Data Source="+result.DatabasePath);db.Open();
+    using var db = new SqliteConnection(new SqliteConnectionStringBuilder {
+        DataSource=result.DatabasePath, Pooling=false
+    }.ToString());db.Open();
     using var sql = db.CreateCommand();
     sql.CommandText="DROP TABLE allowance_number_ledger; DROP INDEX idx_allowance_void_local_observations; CREATE TABLE idx_allowance_void_local_observations (synthetic INTEGER);";
     sql.ExecuteNonQuery();
