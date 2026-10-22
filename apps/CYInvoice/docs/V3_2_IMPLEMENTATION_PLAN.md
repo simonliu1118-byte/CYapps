@@ -2,14 +2,14 @@
 
 更新：2026-10-22（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**目前只收斂文件，尚未實作以下簡化。** 使用者要求等本機 Work 完成原 Cloudflare 維護、回報交接後，再於同一開發工作線整合實作。本文取代先前計畫中「主管分段核准／配號／送出、人工占號換號、g0501 15 分鐘核准與文字確認、永久單次作廢、全域 Local 停送交接、無本次 POST 歸因就永不結案」等目標；舊程式與歷史測試只是現況，不能反過來要求保留被取代設計。本次文件更新不動程式、VERSION／BUILD、migration、部署設定或正式資料。
+**整合實作已在原 PR #550 啟動，但尚未完成全項驗收。** 2026-10-22 本機 Work 截圖回報 schema20 D1／Worker marker20 及健康檢查通過，仍待完整私有計量／備份驗證紀錄歸檔；此事不得視為重新執行遠端獨立驗證。Local 主管核准開立、自動佔號、Local 作廢一次核准、處理中分流與問題診斷已開始修改 Source；CYID Cloud 財務入口／新 forward migration／正式啟用及真測仍待完成。本文取代先前計畫中「主管分段核准／配號／送出、人工占號換號、g0501 15 分鐘核准與文字確認、永久單次作廢、全域 Local 停送交接、無本次 POST 歸因就永不結案」等目標；舊程式與歷史測試只是現況，不能反過來要求保留被取代設計。新 Source 修改未改正式 D1／Worker、旗標、正式 Release 或歷史 migration；仍保留未完成項目。
 
 ## 1. 來源、現況與執行停點
 
 - 工程基準：V3.1.41，PR #550 的 `ffdf66deee20e9eee1d124551649199c0bb00ef5` 已把 0020 升格為唯一 canonical migration，部署 owner 支援嚴格分段 18:19／19:20；正式 Release 仍為 V3.1.0。
-- 本機 Work：依 [既有 MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md) 完成 source／精確 head CI、有界額度、私有備份／還原與原 D1／Worker 18→19→20。本對話尚未收到遠端完成報告，不宣稱原 D1 已是20。
+- 本機 Work：使用者提供原 D1／Worker 18→19→20 的執行截圖，記錄 marker20、100% 流量、原 CYID／Bindings 保留、before／deploy／after 通過；完整計量與私有備份證據尚未歸檔，故僅登記「本機回報成功」，不冒充本對話即時 Cloudflare readback。
 - 本機這批仍保持四道折讓旗標關閉、Cloud g0501 無送出路由，不新建 Worker／D1，不碰 CYID D1，不做真光貿交易，不自行合併或 Release。本文不擴大該批維護授權。
-- **程式實作啟動條件**：本機完成回報交回後，先核實際 source SHA、CI、schema／marker、資料與備份證據，再按本計畫合併實作；遇未完成維護只處理真實阻塞，不重跑已完成段落。
+- **程式實作現況**：原 PR #550 已開始 Local／Windows Source 修改，須以最新 head CI 與回歸驗收才可逐項標記完成。Cloud g0401／g0501 的主管單次執行、解除舊 schema20 約束之 0021 forward migration、原資料與原 Local／CYID 權威核對尚未完成；不得重跑既有升級。
 - 若 schema20 已套用，後續必要的期限／Claim／狀態約束調整使用新的 forward migration；不得回寫已套用的 0020、重套既有 migration、刪歷史或假裝 source 修改已改變遠端 DB。
 - Windows／Cloud／Governance CI 與真光貿測試分開驗證。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選。正式 V3.2.0 Release 仍須使用者當次明確授權。
 

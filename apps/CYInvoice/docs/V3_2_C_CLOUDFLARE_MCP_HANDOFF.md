@@ -25,7 +25,7 @@
 - **Local停送不是schema20結構升級前置條件。** 本批仍只升結構、旗標全關；後續g0501的永久單次／全域停送門檻已由使用者新流程取代，按V3.2計畫實作及驗收後再審啟用。未知歷史不得假造，測試公司卡／API與真環境驗收仍須完成。schema完成不代表產品簡化或H已結案；雙Windows真人驗收於V3.2上線後補做，不作本批前置條件。
 - 異常停止並留私有證據；Worker以保存的原immutable version回退，D1不隨Worker回退。不得反向DROP／自動還原整庫；先評估期間其他寫入及備份／業務影響，再由使用者決定。
 - 回報實際source SHA／最新必要CI、每段migration與Worker marker／version、四旗標、原CYID／Bindings保留、私有備份／實際還原證據、SQL計費meta與全帳號差額／餘額及預估差異。帶回Local停送／未知Claim的可查證現況與測試公司卡是否可用，不提供秘密值。未實測標未驗證。**回報後停下，交回原開發對話。**
-- 本Source批次未執行D1 SQL／部署；正式Release仍V3.1.0，原D1／Worker實況另以本機MCP完成報告為準。
+- 2026-10-22 使用者提供的本機 Work 螢幕紀錄已回報原 D1 schema20、Worker marker20、100% 流量、CYID／Bindings 保留、before／deploy／after 成功；此為本機回報、非本 PR 的即時遠端獨立驗證。實際 rows read／written、Worker requests 及私有備份／還原細節仍待完整歸檔，不得補造數字。新功能 Source 提交不修改既有遠端 schema／Worker，正式 Release 仍 V3.1.0。
 
 ## 歷史：schema16→18 已完成的作業紀錄（禁止重跑）
 
