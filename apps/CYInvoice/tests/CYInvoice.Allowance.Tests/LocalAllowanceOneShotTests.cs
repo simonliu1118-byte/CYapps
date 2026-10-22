@@ -12,7 +12,7 @@ internal static class LocalAllowanceOneShotTests
         await AcceptedNeedsExactOfficialReadbackAsync();
         await TimeoutIsNeverAutomaticallyRetriedAsync();
         await CollisionOnlyRecordsOriginalNumberAsync();
-        await ReviewedCollisionReallocationIsAtomicAndReadbackOnlyAsync();
+        await DefinitiveRejectionAdvancesWithoutManualReviewAsync();
         await PreflightFailureNeverSendsAsync();
         await AutoAdvanceOnlyOnExplicitRejectionAsync();
     }
@@ -106,105 +106,65 @@ internal static class LocalAllowanceOneShotTests
         Check(fake.SendCount == 1, "no automatic increment or second POST");
     }
 
-    private static async Task ReviewedCollisionReallocationIsAtomicAndReadbackOnlyAsync()
+    private static async Task DefinitiveRejectionAdvancesWithoutManualReviewAsync()
     {
-        using var temp=new TemporaryDirectory("b2-collision-reviewed");
+        using var temp = new TemporaryDirectory("rejection-evidence");
         SqliteBootstrapper.EnsureMigrated(temp.Path);
-        var ledger=new LocalAllowanceNumberStore(temp.Path);
-        var previous=Reserve(ledger);
-        var fake=new StubAllowanceGateway{
-            SendException=new AmegoApiException(
-                AmegoAllowanceErrorCodes.ExistingIssuedAllowanceNumber,"occupied")
+        var ledger = new LocalAllowanceNumberStore(temp.Path);
+        var saved = Reserve(ledger);
+        var fake = new StubAllowanceGateway {
+            SendException = new AmegoApiException(4040161, "definite occupied")
         };
-        var managerValid=true;
-        var checks=0;
-        var service=new LocalAllowanceOneShotService(ledger,fake,(_,_)=>{
-            checks++;
-            if(!managerValid)throw new UnauthorizedAccessException("revoked");
+        var authValid = true;
+        var service = new LocalAllowanceOneShotService(ledger, fake, (_,_) => {
+            if (!authValid) throw new UnauthorizedAccessException("revoked");
             return Task.CompletedTask;
         });
-        var original=await service.SendFirstAsync(Seller,Environment,previous);
-        Check(original.Outcome==LocalAllowanceSendOutcome.ConfirmedNumberCollision,
-            "first API confirmed number collision");
-        const string ack="確認外部占號並重新配號";
-        await ExpectAsync<InvalidOperationException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,"yes"));
-        await ExpectAsync<InvalidOperationException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        fake.Official=ValidOfficial(previous);
-        await ExpectAsync<InvalidOperationException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        Check(ledger.FindLatest(Seller,Environment,Work)!.AllowanceNumber==
-            previous.AllowanceNumber,"matching provider records never authorize a new number");
-        // A different buyer alone is not enough without another original invoice.
-        fake.Official=ValidOfficial(previous) with {BuyerIdentifier="87654321"};
-        await ExpectAsync<InvalidOperationException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        // Likewise, a different invoice with the same buyer remains ambiguous.
-        fake.Official=ExternalOfficial(previous) with {BuyerIdentifier="12345678"};
-        await ExpectAsync<InvalidOperationException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        fake.Official=ExternalOfficial(previous);
-        managerValid=false;
-        await ExpectAsync<UnauthorizedAccessException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        managerValid=true;
-        var next=await service.ReserveAfterExternalCollisionAsync(
-            Seller,Environment,previous,ack);
-        Check(next.AllowanceNumber=="A20261019002"&&next.Sequence==2&&
-            next.Status=="reserved","a new immutable reservation is not an immediate send");
-        Check(fake.SendCount==1,"collision review must never re-POST g0401");
-        Check(ledger.FindLatest(Seller,Environment,Work)==next,
-            "the same work item remains the only owner of attempts");
-        Check(CollisionReviewCount(temp.Path)==1,
-            "reservation and manager collision proof must commit together");
-        using(var db=OpenAudit(temp.Path))
+        var first = await service.SendFirstAsync(Seller, Environment, saved);
+        Check(first.Outcome == LocalAllowanceSendOutcome.ConfirmedNumberCollision,
+            "Only explicit provider rejection can advance the number");
+        Check(RejectionEvidenceCount(temp.Path) == 1,
+            "provider code persisted atomically with occupied status");
+        authValid = false;
+        await ExpectAsync<UnauthorizedAccessException>(() =>
+            service.ReserveAfterConfirmedRejectionAsync(Seller, Environment, saved));
+        Check(ledger.FindLatest(Seller, Environment, Work) == saved with { Status = "occupied_external" },
+            "revocation prevents further reservation");
+        authValid = true;
+        var next = await service.ReserveAfterConfirmedRejectionAsync(
+            Seller, Environment, saved);
+        Check(next.AllowanceNumber == "A20261019002" && next.Status == "reserved",
+            "same approved request automatically allocates the next number");
+        Check(fake.SendCount == 1,
+            "reallocation never calls g0401 until the next safe send");
+        await ExpectAsync<InvalidOperationException>(() =>
+            service.ReserveAfterConfirmedRejectionAsync(Seller, Environment, saved));
+        using (var db = OpenAudit(temp.Path))
         {
-            using var query=db.CreateCommand();
-            query.CommandText="SELECT previous_number,new_number,length(official_snapshot_sha256) "+
-                "FROM allowance_local_collision_reviews";
-            using var reader=query.ExecuteReader();
-            Check(reader.Read() && reader.GetString(0)==previous.AllowanceNumber&&
-                reader.GetString(1)==next.AllowanceNumber && reader.GetInt32(2)==64,
-                "audit must bind old/new numbers and official fingerprint");
+            using var query = db.CreateCommand();
+            query.CommandText = "SELECT allowance_number,provider_code FROM allowance_local_number_rejections";
+            using var reader = query.ExecuteReader();
+            Check(reader.Read() && reader.GetString(0) == saved.AllowanceNumber &&
+                reader.GetInt32(1) == 4040161,
+                "evidence contains the actual AMEGO rejection code, not an invented official hash");
+            reader.Close();
+            using var update = db.CreateCommand();
+            update.CommandText = "UPDATE allowance_local_number_rejections SET provider_code=4040162";
+            Expect<SqliteException>(() => update.ExecuteNonQuery());
+            using var delete = db.CreateCommand();
+            delete.CommandText = "DELETE FROM allowance_local_number_rejections";
+            Expect<SqliteException>(() => delete.ExecuteNonQuery());
         }
-        await ExpectAsync<InvalidDataException>(()=>
-            service.ReserveAfterExternalCollisionAsync(Seller,Environment,previous,ack));
-        Check(CollisionReviewCount(temp.Path)==1,"cannot replay collision approval");
-        Check(fake.SendCount==1,"manual reallocation never posts the new number");
-        using(var db=OpenAudit(temp.Path))
-        {
-            using var update=db.CreateCommand();
-            update.CommandText="UPDATE allowance_local_collision_reviews SET new_number='A20261019099'";
-            Expect<SqliteException>(()=>update.ExecuteNonQuery());
-            using var delete=db.CreateCommand();
-            delete.CommandText="DELETE FROM allowance_local_collision_reviews";
-            Expect<SqliteException>(()=>delete.ExecuteNonQuery());
-        }
-        // The latest reserved intent is immutable and can be recovered.
-        var fresh=new LocalAllowanceNumberStore(temp.Path);
-        Check(fresh.FindLatest(Seller,Environment,Work)==next,
-            "the reviewed next number must survive restart");
-        Check(checks>=2,"manager verification must be fresh for manual review");
+        var reopened = new LocalAllowanceNumberStore(temp.Path);
+        Check(reopened.FindLatest(Seller, Environment, Work) == next,
+            "new reserved number and original provider evidence survive restart");
     }
 
-    private static AllowanceQueryItem ExternalOfficial(LocalAllowanceReservation prev)
+    private static int RejectionEvidenceCount(string directory)
     {
-        using var json=JsonDocument.Parse("""
-            [{"original_invoice_number":"ZZ99887766","original_invoice_date":20261018,
-              "original_description":"EXTERNAL ITEM","quantity":"1","unit_price":"5",
-              "amount":"5","tax":"0","tax_type":1}]
-            """);
-        return ValidOfficial(prev) with {
-            BuyerIdentifier="87654321",ProductItems=json.RootElement.Clone()
-        };
-    }
-
-    private static int CollisionReviewCount(string directory)
-    {
-        using var db=OpenAudit(directory);
-        using var cmd=db.CreateCommand();
-        cmd.CommandText="SELECT COUNT(*) FROM allowance_local_collision_reviews";
+        using var db = OpenAudit(directory);
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM allowance_local_number_rejections";
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
@@ -228,7 +188,7 @@ internal static class LocalAllowanceOneShotTests
             "a missing official query remains uncertain rather than success");
         Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
             "last non-collision attempt is locked against replay");
-        Check(CollisionReviewCount(temp.Path) == 6 &&
+        Check(RejectionEvidenceCount(temp.Path) == 6 &&
               seen.Any(x => x.Contains("A20261019007", StringComparison.Ordinal)),
             "all six old and new numbers are retained with safe progress");
         await ExpectAsync<InvalidOperationException>(() =>
