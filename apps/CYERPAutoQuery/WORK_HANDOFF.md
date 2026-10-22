@@ -1,5 +1,13 @@
 # CYERPAutoQuery Work Handoff
 
+## V1.0.1 Build 1 — ERP 行程診斷與安全收斂（2026-10-22，待實機驗收）
+
+- 從 V1.0.0 main 開立未合併 Draft PR #555（`cyerp-auto-query/feature-process-diagnostics`），新增唯讀 Windows 行程診斷；使用者正常關閉／重啟的 LOG 顯示 MainMenu 與 SMLeaderWorkCenter 同時消失／重新出現、相同 Session=1、不同 Parent PID，INVI02 視窗位於 SMLeaderWorkCenter。
+- V1.0.1 Build 1：修正診斷誤將 CYERPAutoQuery 本身列為 ERP 候選；對 ERP 自動 Kill 改成僅管理本次 AutoQuery Process.Start 親自啟動、PID／UTC 啟動時間／完整路徑／Session 全數匹配的主行程。不得用 Process.GetProcessesByName 全部結束或 Kill(entireProcessTree)；未驗證歸屬時 fail-closed，提示人工處理。閒置關閉同樣檢查歸屬，異 PID 的 SMLeaderWorkCenter 作業視窗不主動 WM_CLOSE。
+- **行為差異（刻意的安全限制）**：原本已啟動或其他程序啟動的 ERP 可供查詢，但無法自動強制重啟／閒置關閉；AutoQuery 重新啟動不繼承既有 ERP 所有權。MainMenu 當機後未確認歸屬的 SMLeaderWorkCenter 可能殘留，需人工確認；未對它採用推測的父子行程或共用服務歸屬。
+- 待驗收：Windows CI Build/Test；實機確認工具親自啟動時的主 PID 是否等於 Process.Start 回傳 PID、正常閒置關閉 MainMenu 時兩個 ERP 行程是否共同退出、強制異常測試應僅在隔離測試機執行。未修改 CYERPAutoInput／Web Agent／ERP 查詢。
+
+
 > 更新：2026-10-21（V1.0.0 正式 Release，tag `cyerp-auto-query-v1.0.0`：彙整 V0.10.2 Build 1–4 的進貨輔助、批次查庫存、品號可含「-」）。之後的修改依規則升 Z 或 Build；需要轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 進貨輔助（V0.10.2 Build 1，2026/10/20）
