@@ -23,17 +23,19 @@ internal sealed partial class ItemQueryService
     // sessions and similarly named processes must never be terminated automatically.
     private ErpManagedProcessIdentity? _managedErp;
 
-    private ErpManagedProcessIdentity? CaptureStartedErp(Process? started, string configuredPath)
+    private ErpManagedProcessIdentity? CaptureStartedErp(Process? started, string configuredPath, DateTime launchRequestedUtc)
     {
         try
         {
             if (started is null || started.HasExited) return null;
             using var caller = Process.GetCurrentProcess();
             var actual = started.MainModule?.FileName;
-            if (string.IsNullOrWhiteSpace(actual) ||
+            var startedUtc = started.StartTime.ToUniversalTime();
+            if (!ErpManagedProcessIdentity.IsFreshLaunch(startedUtc, launchRequestedUtc) ||
+                string.IsNullOrWhiteSpace(actual) ||
                 !string.Equals(Path.GetFullPath(actual), Path.GetFullPath(configuredPath), StringComparison.OrdinalIgnoreCase) ||
                 started.SessionId != caller.SessionId) return null;
-            return new ErpManagedProcessIdentity(started.Id, started.StartTime.ToUniversalTime(), started.SessionId, Path.GetFullPath(actual));
+            return new ErpManagedProcessIdentity(started.Id, startedUtc, started.SessionId, Path.GetFullPath(actual));
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or ArgumentException or IOException)
         {
@@ -89,8 +91,9 @@ internal sealed partial class ItemQueryService
         if (window == 0)
         {
             _log.Info("erp-login", $"starting ERP file={Path.GetFileName(exe)}");
+            var launchRequestedUtc = DateTime.UtcNow;
             using var started = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = true });
-            _managedErp = CaptureStartedErp(started, exe);
+            _managedErp = CaptureStartedErp(started, exe, launchRequestedUtc);
             if (_managedErp is null)
                 _log.Warn("erp-login", "ERP started but ownership could not be verified; automatic force-restart and idle-close are disabled for this instance");
             if (!await WaitUntilAsync(() => (window = FindLoginWindow(exe)) != 0 || Win32Automation.FindErpMainWindows().Count > 0,
@@ -265,8 +268,19 @@ internal sealed partial class ItemQueryService
                 "ERP 無回應，但無法確認該行程由本次 AutoQuery 啟動。為避免影響其他使用者，已停止自動重啟，請人工檢查 ERP。");
         }
 
-        var otherMains = Win32Automation.FindErpMainWindows()
-            .Any(hwnd => Win32Automation.ProcessId(hwnd) != (uint)owned.Id);
+        var visibleMains = Win32Automation.FindErpMainWindows();
+        // A configured launcher or helper is not necessarily the real MainMenu.
+        // Only a process actually owning the ERP main window (or the confirmed MainMenu EXE
+        // when that window is unresponsive/unavailable) may be force-terminated.
+        if (!owned.ProcessName.Equals("MainMenu", StringComparison.OrdinalIgnoreCase) &&
+            !visibleMains.Any(hwnd => Win32Automation.ProcessId(hwnd) == (uint)owned.Id))
+        {
+            _log.Warn("erp-login", "force restart refused: launched executable is not verified as ERP main");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
+                "無法確認啟動的行程是 ERP 主程式，已停止自動重啟，避免結束共用輔助程式。");
+        }
+
+        var otherMains = visibleMains.Any(hwnd => Win32Automation.ProcessId(hwnd) != (uint)owned.Id);
         if (otherMains)
         {
             _log.Warn("erp-login", "force restart refused: another ERP main window is visible in this session");
