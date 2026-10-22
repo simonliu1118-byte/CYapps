@@ -9,6 +9,7 @@ export interface CloudVoidManagerPreview {
  applicationId:string;revision:1;requestHash:string;
  allowanceNumber:string;originalInvoiceNumber:string;reason:string;
  officialSnapshotHash:string;officialCheckedAtUtc:string;
+ originalAllowance?:unknown;
  canApproveWithoutFurtherReview:false;
  mayPostG0501:false;
 }
@@ -50,7 +51,7 @@ export async function previewCloudVoidForManager(
   applicationId:t.applicationId,revision:1,requestHash:first.requestHash,
   allowanceNumber:first.allowanceNumber,
   originalInvoiceNumber:first.originalInvoiceNumber,reason:first.reason,
-  officialSnapshotHash:proof.officialSnapshotHash,
+  originalAllowance:proof.detail,officialSnapshotHash:proof.officialSnapshotHash,
   officialCheckedAtUtc:proof.checkedAtUtc,
   canApproveWithoutFurtherReview:false,mayPostG0501:false
  };

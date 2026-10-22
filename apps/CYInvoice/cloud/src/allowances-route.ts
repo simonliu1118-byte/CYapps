@@ -1,65 +1,29 @@
-// V3.2-C4: CYID-authorized Cloud allowance application HTTP entrypoints.
-// Does not expose g0401/g0501; no automatic official mutation over HTTP.
-// Requires explicit feature flag AND canonical schema >=18. All input PII
-// stays in C3a AES-GCM frozen store; GET/LIST never return payload or keys.
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
-import {createEncryptedCloudAllowance,loadEncryptedCloudAllowance}
- from "./allowance-frozen-store";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext}
- from "./allowance-frozen-store";
+import {createEncryptedCloudAllowance,loadEncryptedCloudAllowance,type AllowanceActor,type AllowanceActorSource,type CloudAllowanceContext} from "./allowance-frozen-store";
 import {previewCloudAllowanceForManager} from "./allowance-manager-preview";
 import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-approval";
-import {reserveApprovedCloudAllowanceNumber,reserveCloudAllowanceAfterExternalCollision}
- from "./allowance-number-reservation";
-import {executeCloudAllowanceExactlyOnce} from "./allowance-one-shot-coordinator";
-import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication}
- from "./allowance-void-applications";
+import {executeApprovedCloudAllowance} from "./allowance-one-shot-coordinator";
+import {executeCloudVoidOnce} from "./allowance-void-one-shot-coordinator";
+import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication,loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
 import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
 import {approveCloudVoidAfterOfficialProof} from "./allowance-void-manager-approval";
-import {appendAllowanceManualReview,listAllowanceManualReviews,type TriageKind}
- from "./allowance-manual-review";
-
-interface Env extends CyIdEnv {
- DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
- ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;
- ALLOWANCE_MANUAL_REVIEW_ENABLED?:string;
- ALLOWANCE_EXTERNAL_COLLISION_ENABLED?:string;
- COMPANY_SETTINGS_KEY_HEX?:string;
-}
-const paths=new Set(["/v1/allowances/create","/v1/allowances/get",
- "/v1/allowances/list","/v1/allowances/review","/v1/allowances/withdraw",
- "/v1/allowances/preview","/v1/allowances/approve",
- "/v1/allowances/reserve","/v1/allowances/status",
- "/v1/allowances/attempt","/v1/allowances/send-once",
- "/v1/allowances/manual-review","/v1/allowances/manual-history",
- "/v1/allowances/reserve-after-collision",
- "/v1/allowances/void-create","/v1/allowances/void-status",
- "/v1/allowances/void-preview","/v1/allowances/void-approve"]);
+import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
+import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
+interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
+ ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;ALLOWANCE_G0501_SEND_ENABLED?:string;COMPANY_SETTINGS_KEY_HEX?:string;}
 const keys:Record<string,readonly string[]>={
- "void-create":["employeeNo","password","applicationId","environment",
-  "allowanceNumber","originalInvoiceNumber","reason"],
- "void-status":["employeeNo","password","applicationId"],
- "void-preview":["employeeNo","password","applicationId","expectedRevision"],
- "void-approve":["employeeNo","password","applicationId","expectedRevision",
-  "requestHash","expectedOfficialSnapshotHash","confirmation"],
- create:["employeeNo","password","applicationId","environment",
-  "originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
- get:["employeeNo","password","applicationId"],
- list:["employeeNo","password","status","limit"],
- review:["employeeNo","password","applicationId","expectedRevision"],
- withdraw:["employeeNo","password","applicationId","expectedRevision"],
+ create:["employeeNo","password","applicationId","environment","originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],
+ get:["employeeNo","password","applicationId"],list:["employeeNo","password","status","limit"],
  preview:["employeeNo","password","applicationId","expectedRevision"],
  approve:["employeeNo","password","applicationId","expectedRevision"],
- reserve:["employeeNo","password","applicationId","expectedRevision"],
- status:["employeeNo","password","applicationId"],
- attempt:["employeeNo","password","applicationId","expectedRevision"],
- "send-once":["employeeNo","password","applicationId","expectedRevision","confirmOnce"],
- "manual-review":["employeeNo","password","applicationId","expectedRevision",
-   "reviewId","disposition","confirmReview"],
- "manual-history":["employeeNo","password","applicationId","expectedRevision"],
- "reserve-after-collision":["employeeNo","password","applicationId","expectedRevision",
-  "reviewId","previousNumber","confirmation"]
-};
+ status:["employeeNo","password","applicationId"],withdraw:["employeeNo","password","applicationId","expectedRevision"],
+ "void-create":["employeeNo","password","applicationId","environment","allowanceNumber","originalInvoiceNumber","reason"],
+ "void-status":["employeeNo","password","applicationId"],
+ "void-preview":["employeeNo","password","applicationId","expectedRevision"],
+ "void-approve":["employeeNo","password","applicationId","expectedRevision","requestHash","expectedOfficialSnapshotHash"],
+ detail:["employeeNo","password","applicationId","operation"],
+ diagnostics:["employeeNo","password","applicationId","operation","afterEventId"]};
 const reply=(status:number,data:Record<string,unknown>)=>Response.json(
  {ok:status<300,...data},{status,headers:{
   "cache-control":"no-store","x-content-type-options":"nosniff"}});
@@ -72,7 +36,7 @@ function scope(p:CyIdPrincipal|null,env:Env):AllowanceActor|null {
  if(!p||p.workspaceId!==binding.identityWorkspaceId||
     !p.emailVerified||typeof p.employeeId!=="string"||
     p.employeeId.length<1||p.employeeId.length>100)return null;
- return {workspaceId:binding.workspaceId,employeeId:p.employeeId,
+ return {authoritySnapshot:JSON.stringify({identityWorkspaceId:binding.identityWorkspaceId,applicationId:binding.applicationId,employeeId:p.employeeId,credentialVersion:p.credentialVersion,employeeRevision:p.employeeRevision,workspaceRole:p.workspaceRole,isIdentityAdmin:p.isIdentityAdmin,emailVerified:p.emailVerified}),workspaceId:binding.workspaceId,employeeId:p.employeeId,
   workspaceRole:p.workspaceRole};
 }
 function auth(env:Env):AllowanceActorSource{
@@ -110,370 +74,170 @@ async function checkDevice(db:D1Database,device:string,workspace:string){
  return !!r;
 }
 export async function handleAllowances(req:Request,env:Env):Promise<Response|null>{
- const tail=new URL(req.url).pathname;
- if(!tail.startsWith("/v1/allowances/"))return null;
- if(!paths.has(tail))return reply(404,{error:{code:"NOT_FOUND"}});
+ const path=new URL(req.url).pathname;
+ if(!path.startsWith("/v1/allowances/"))return null;
+ const action=path.split("/").at(-1)!;
+ if(!Object.hasOwn(keys,action))return reply(410,{error:{code:"ALLOWANCE_STEP_RETIRED"}});
  if(req.method!=="POST")return reply(405,{error:{code:"METHOD_NOT_ALLOWED"}});
- if(!usesCyId(env))return reply(409,{error:{code:"CYID_REQUIRED"}});
- if(env.ALLOWANCE_API_ENABLED!=="true"||
-   !/^\d+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<18)
+ if(!usesCyId(env)||!env.cyIdContext)return reply(403,{error:{code:"CYID_REQUIRED"}});
+ if(env.ALLOWANCE_API_ENABLED!=="true"||Number(env.SCHEMA_VERSION)<21||!env.COMPANY_SETTINGS_KEY_HEX)
   return reply(503,{error:{code:"ALLOWANCES_NOT_READY"}});
- if(!env.cyIdContext||!env.COMPANY_SETTINGS_KEY_HEX)
-  return reply(503,{error:{code:"ALLOWANCES_NOT_READY"}});
- const action=tail.split("/").at(-1)!;
  const input=await read(req,action);
- if(!input)return reply(400,{error:{code:"INVALID_REQUEST"}});
- if(action!=="list"&&!id(input.applicationId))
-  return reply(400,{error:{code:"INVALID_APPLICATION_ID"}});
- if(["review","withdraw","preview","approve","reserve","attempt","send-once",
-    "manual-review","manual-history","reserve-after-collision",
-    "void-preview","void-approve"].includes(action)&&
-    !rev(input.expectedRevision))
+ if(!input||action!=="list"&&!id(input.applicationId))return reply(400,{error:{code:"INVALID_REQUEST"}});
+ if(["preview","approve","void-preview","void-approve","withdraw"].includes(action)&&!rev(input.expectedRevision))
   return reply(400,{error:{code:"INVALID_REVISION"}});
- // The ability to review/create applications NEVER implicitly enables g0401.
- // This separate off-by-default production gate must be enabled by the
- // user's authorized Cloudflare MCP deployment and acceptance procedure.
- if(action==="send-once"&&
-    (env.ALLOWANCE_G0401_SEND_ENABLED!=="true"||input.confirmOnce!==true))
+ if((action==="approve"&&env.ALLOWANCE_G0401_SEND_ENABLED!=="true")||
+    (action==="void-approve"&&env.ALLOWANCE_G0501_SEND_ENABLED!=="true"))
   return reply(503,{error:{code:"OFFICIAL_SEND_DISABLED"}});
- if(action==="reserve-after-collision"&&
-   (Number(env.SCHEMA_VERSION)<19||env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED!=="true"))
-  return reply(503,{error:{code:"EXTERNAL_COLLISION_REVIEW_DISABLED"}});
- // The schema19 ledger annotation contract is entirely opt-in. Existing
- // schema18 deployments continue to work unchanged with these routes disabled.
- if((action==="manual-review"||action==="manual-history")&&
-   Number(env.SCHEMA_VERSION)<19)
-  return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_NOT_READY"}});
- if(action==="manual-review"&&
-   (env.ALLOWANCE_MANUAL_REVIEW_ENABLED!=="true"||
-     input.confirmReview!==true))
-  return reply(503,{error:{code:"ALLOWANCE_MANUAL_AUDIT_DISABLED"}});
- if(["void-create","void-status","void-preview","void-approve"].includes(action)&&
-    Number(env.SCHEMA_VERSION)<20)
-  return reply(503,{error:{code:"VOID_SCHEMA_NOT_READY"}});
- if(action==="list"&&
-  ((input.status!==undefined&&!["open","review","approved","rejected","withdrawn"].includes(String(input.status)))||
-   (input.limit!==undefined&&(!rev(input.limit)||(input.limit as number)>50))))
-  return reply(400,{error:{code:"INVALID_LIST_FILTER"}});
  try{
-  const binding=cyIdBinding(env),dev=await cyIdDevice(req,env);
-  if(dev.workspace_id!==binding.workspaceId||
-     !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(401,{error:{code:"DEVICE_INVALID"}});
-  const authority=auth(env),actor=await authority.revalidate();
-  if(!actor)return reply(403,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
-  const target={workspaceId:binding.workspaceId,deviceId:dev.device_id,
-   applicationId:input.applicationId as string,
-   expectedRevision:input.expectedRevision as number};
-  const environment=env.APP_ENV==="production"?"production":"test";
-  const ctx:CloudAllowanceContext={
-   encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,environment};
-  if(action==="void-create"){
-   if(input.environment!==environment||typeof input.allowanceNumber!=="string"||
-      typeof input.originalInvoiceNumber!=="string"||
-      typeof input.reason!=="string")
+  const binding=cyIdBinding(env),dev=await cyIdDevice(req,env),authority=auth(env),actor=await authority.revalidate();
+  if(!actor||dev.workspace_id!==binding.workspaceId||!await checkDevice(env.DB,dev.device_id,binding.workspaceId))
+   return reply(403,{error:{code:"AUTHORITY_CHANGED"}});
+  const target={workspaceId:binding.workspaceId,applicationId:input.applicationId as string,
+   deviceId:dev.device_id,expectedRevision:input.expectedRevision as number};
+  const ctx:CloudAllowanceContext={encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,environment:env.APP_ENV==="production"?"production":"test"};
+  const supplied=req.headers.get("x-request-id")??"";
+  const requestId=/^[A-Za-z0-9_.:-]{1,128}$/.test(supplied)?supplied:"req-"+crypto.randomUUID();
+  if(action==="create"){
+   if(input.environment!==ctx.environment||typeof input.originalInvoiceNumber!=="string"||
+    typeof input.allowanceDay!=="string"||!Number.isSafeInteger(input.requestedGross)||
+    typeof input.reason!=="string"||!input.reason.trim()||input.reason.length>500||/[\x00-\x1f]/.test(input.reason)||typeof input.unnumberedTemplateJson!=="string")
     return reply(400,{error:{code:"INVALID_REQUEST"}});
-   const result=await createCloudAllowanceVoidApplication(env.DB,{
-     workspaceId:binding.workspaceId,deviceId:dev.device_id,
-     applicationId:target.applicationId,environment,
-     allowanceNumber:input.allowanceNumber,originalInvoiceNumber:input.originalInvoiceNumber,
-     reason:input.reason
-   },ctx,authority);
-   return reply(200,{applicationId:result.applicationId,status:result.status,
-     revision:result.revision,claimed:result.claimed,readbackOnly:result.readbackOnly,
-     officiallyConfirmed:false,officialActionPerformed:false});
+   const result=await createEncryptedCloudAllowance(env.DB,{...target,environment:ctx.environment,
+    originalInvoiceNumber:input.originalInvoiceNumber,allowanceDay:input.allowanceDay,
+    requestedGross:input.requestedGross as number,reason:input.reason,unnumberedTemplateJson:input.unnumberedTemplateJson},ctx,authority);
+   return reply(200,{...result,officialActionPerformed:false});
+  }
+  if(action==="void-create"){
+   if(input.environment!==ctx.environment||typeof input.allowanceNumber!=="string"||typeof input.originalInvoiceNumber!=="string"||typeof input.reason!=="string")
+    return reply(400,{error:{code:"INVALID_REQUEST"}});
+   const result=await createCloudAllowanceVoidApplication(env.DB,{...target,environment:ctx.environment,
+    allowanceNumber:input.allowanceNumber,originalInvoiceNumber:input.originalInvoiceNumber,reason:input.reason},ctx,authority);
+   return reply(200,{...result,officiallyConfirmed:false,officialActionPerformed:false});
+  }
+  if(action==="list"){
+   if(input.limit!==undefined&&(!rev(input.limit)||(input.limit as number)>50))return reply(400,{error:{code:"INVALID_LIST_FILTER"}});
+   if(input.status!==undefined&&!["open","review","approved","rejected","withdrawn"].includes(String(input.status)))return reply(400,{error:{code:"INVALID_LIST_FILTER"}});
+   const rows=await env.DB.prepare(`SELECT application_id,status,revision,requested_gross,environment,updated_at,execution_state
+    FROM allowance_applications WHERE workspace_id=?1 AND (?2 IS NULL OR status=?2) AND (?3=1 OR requester_actor_id=?4)
+    ORDER BY updated_at DESC,application_id DESC LIMIT ?5`).bind(binding.workspaceId,input.status??null,manager(actor)?1:0,actor.employeeId,input.limit??20).all();
+   const fresh=await authority.revalidate();
+   if(!fresh||fresh.employeeId!==actor.employeeId||fresh.workspaceRole!==actor.workspaceRole)throw new Error("AUTHORITY_CHANGED");
+   return reply(200,{items:rows.results.map((r:any)=>({applicationId:r.application_id,status:r.status,revision:r.revision,
+    requestedGross:r.requested_gross,environment:r.environment,updatedAt:r.updated_at,executionState:r.execution_state}))});
   }
   if(action==="void-status"){
    const result=await readCloudAllowanceVoidApplication(env.DB,target,authority);
-   return reply(200,{applicationId:result.applicationId,status:result.status,
-     revision:result.revision,claimed:result.claimed,readbackOnly:result.readbackOnly,
-     officiallyConfirmed:false,officialActionPerformed:false});
+   const state=await env.DB.prepare(`SELECT execution_state,last_error FROM allowance_void_requests WHERE application_id=?1 AND workspace_id=?2`).bind(target.applicationId,target.workspaceId).first<{execution_state:string;last_error:string}>();
+   return reply(200,{...result,executionState:state?.execution_state,officiallyConfirmed:state?.execution_state==="completed",officialActionPerformed:false});
   }
-  if(action==="void-preview"){
-   if(input.expectedRevision!==1)return reply(400,{error:{code:"INVALID_REVISION"}});
-   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
-   const result=await previewCloudVoidForManager(env.DB,target,ctx,authority);
-   return reply(200,{preview:{
-      applicationId:result.applicationId,revision:result.revision,
-      requestHash:result.requestHash,officialSnapshotHash:result.officialSnapshotHash,
-      allowanceNumber:result.allowanceNumber,
-      originalInvoiceNumber:result.originalInvoiceNumber,reason:result.reason,
-      officialCheckedAtUtc:result.officialCheckedAtUtc,
-      canApproveWithoutFurtherReview:false,mayPostG0501:false
-   },officialActionPerformed:false});
+  if(["get","status","withdraw"].includes(action)){
+   const row=await env.DB.prepare(`SELECT a.*,l.allowance_number,l.status AS ledger_status FROM allowance_applications a
+    LEFT JOIN allowance_number_ledger l ON l.application_id=a.application_id
+    WHERE a.application_id=?1 AND a.workspace_id=?2 AND (?3=1 OR a.requester_actor_id=?4)
+    ORDER BY l.attempt DESC LIMIT 1`).bind(target.applicationId,target.workspaceId,manager(actor)?1:0,actor.employeeId).first<Record<string,unknown>>();
+   if(!row)return reply(404,{error:{code:"NOT_FOUND"}});
+   if(action==="status")return reply(200,{applicationId:row.application_id,status:row.status,revision:row.revision,
+    allowanceNumber:row.allowance_number,ledgerStatus:row.ledger_status,executionState:row.execution_state,
+    officiallyConfirmed:row.execution_state==="completed"});
+   if(action==="withdraw"){
+    const r=await env.DB.prepare(`UPDATE allowance_applications SET status='withdrawn',revision=revision+1,
+     actor_id=?1,updated_by_device_id=?2,updated_at=?3 WHERE application_id=?4 AND workspace_id=?5
+     AND status='open' AND revision=?6 AND requester_actor_id=?1`).bind(actor.employeeId,dev.device_id,new Date().toISOString(),target.applicationId,target.workspaceId,target.expectedRevision).run();
+    return reply(r.meta.changes===1?200:409,{applicationId:target.applicationId,status:"withdrawn",revision:target.expectedRevision+1});
+   }
+   const f=await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
+   return reply(200,{application:{applicationId:f.applicationId,status:f.status,revision:f.revision,
+    environment:f.environment,requestedGross:f.requestedGross,allowanceDay:f.allowanceDay,reason:f.reason},officialActionPerformed:false});
   }
-  if(action==="void-approve"){
-   if(input.expectedRevision!==1||typeof input.requestHash!=="string"||
-      !/^[a-f0-9]{64}$/.test(input.requestHash)||
-      typeof input.expectedOfficialSnapshotHash!=="string"||
-      !/^[a-f0-9]{64}$/.test(input.expectedOfficialSnapshotHash)||
-      typeof input.confirmation!=="string"||
-      input.confirmation.length>32)
-    return reply(400,{error:{code:"INVALID_REQUEST"}});
-   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
-   const result=await approveCloudVoidAfterOfficialProof(env.DB,{
-      workspaceId:binding.workspaceId,applicationId:target.applicationId,
-      deviceId:dev.device_id,expectedRevision:1,
-      requestHash:input.requestHash,
-      expectedOfficialSnapshotHash:input.expectedOfficialSnapshotHash,
-      confirmation:input.confirmation
-   },ctx,authority);
-   return reply(200,{applicationId:result.applicationId,
-      status:"approved",revision:result.approvedRevision,
-      validUntilUtc:result.validUntilUtc,
-      requiresFreshOfficialCheck:true,
-      mayPostG0501:false,officiallyConfirmed:false,officialActionPerformed:false});
-  }
-  if(action==="create"){
-   if(!["production","test"].includes(String(input.environment))||
-     input.environment!==environment||
-     typeof input.originalInvoiceNumber!=="string"||
-     typeof input.allowanceDay!=="string"||
-     !Number.isSafeInteger(input.requestedGross)||
-     typeof input.reason!=="string"||input.reason.length<1||
-     input.reason.length>500||input.reason!==input.reason.trim()||
-     /[\x00-\x1f\x7f]/.test(input.reason)||
-     typeof input.unnumberedTemplateJson!=="string")
-    return reply(400,{error:{code:"INVALID_REQUEST"}});
-   const result=await createEncryptedCloudAllowance(env.DB,{
-    workspaceId:binding.workspaceId,deviceId:dev.device_id,
-    applicationId:target.applicationId,environment,
-    originalInvoiceNumber:input.originalInvoiceNumber,
-    allowanceDay:input.allowanceDay,
-    requestedGross:input.requestedGross as number,
-    reason:input.reason,
-    unnumberedTemplateJson:input.unnumberedTemplateJson
-   },ctx,authority);
-   return reply(200,{applicationId:result.applicationId,
-    status:result.status,revision:result.revision,officialActionPerformed:false});
-  }
-  if(action==="get"){
-   // Authorization is checked BEFORE decrypting the frozen request. Same
-   // Workspace alone never entitles another USER to inspect a colleague's
-   // financial allowance; managers can inspect the queue.
-   const visible=await env.DB.prepare(`SELECT application_id
-    FROM allowance_applications WHERE workspace_id=?1
-     AND application_id=?2 AND (?3=1 OR requester_actor_id=?4)
-     LIMIT 1`)
-    .bind(binding.workspaceId,target.applicationId,manager(actor)?1:0,
-      actor.employeeId).first<{application_id:string}>();
-   if(!visible)return reply(404,{error:{code:"NOT_FOUND"}});
-   const result=await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
-   const fresh=await authority.revalidate();
-   if(!fresh||actor.employeeId!==fresh.employeeId||
-      actor.workspaceRole!==fresh.workspaceRole||
-      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   return reply(200,{application:{
-    applicationId:result.applicationId,environment:result.environment,
-    status:result.status,revision:result.revision,
-    requestedGross:result.requestedGross,allowanceDay:result.allowanceDay,
-    reason:result.reason
-   },officialActionPerformed:false});
-  }
-  if(action==="list"){
-   const rows=await env.DB.prepare(`SELECT application_id,status,revision,
-    requested_gross,environment,updated_at
-    FROM allowance_applications WHERE workspace_id=?1
-    AND (?2 IS NULL OR status=?2)
-    AND (?3=1 OR requester_actor_id=?4)
-    ORDER BY updated_at DESC,application_id DESC LIMIT ?5`)
-   .bind(binding.workspaceId,input.status??null,manager(actor)?1:0,
-     actor.employeeId,input.limit??20).all<{
-       application_id:string;status:string;revision:number;
-       requested_gross:string;environment:string;updated_at:string
-     }>();
-   const fresh=await authority.revalidate();
-   if(!fresh||fresh.employeeId!==actor.employeeId||
-      fresh.workspaceRole!==actor.workspaceRole||
-      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   return reply(200,{items:rows.results.map(x=>({
-    applicationId:x.application_id,status:x.status,
-    revision:x.revision,requestedGross:x.requested_gross,
-    environment:x.environment,updatedAt:x.updated_at
-   }))});
-  }
-  if(action==="status"){
-   const row=await env.DB.prepare(`SELECT a.application_id,a.status,a.revision,
-    a.requester_actor_id,l.allowance_number,l.status AS ledger_status
-    FROM allowance_applications a LEFT JOIN allowance_number_ledger l
-     ON l.application_id=a.application_id
-    WHERE a.application_id=?1 AND a.workspace_id=?2
-    ORDER BY l.attempt DESC LIMIT 1`)
-   .bind(target.applicationId,binding.workspaceId).first<{
-    application_id:string;status:string;revision:number;
-    requester_actor_id:string;allowance_number:string|null;
-    ledger_status:string|null
-   }>();
-   if(!row||(!manager(actor)&&row.requester_actor_id!==actor.employeeId))
-    return reply(404,{error:{code:"NOT_FOUND"}});
-   const fresh=await authority.revalidate();
-   if(!fresh||fresh.employeeId!==actor.employeeId||
-      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   return reply(200,{applicationId:row.application_id,
-    status:row.status,revision:row.revision,
-    allowanceNumber:row.allowance_number,ledgerStatus:row.ledger_status,
-    officiallyConfirmed:false});
-  }
-  if(action==="withdraw"){
-   // Applicant may withdraw ONLY while open, never after manager claims it.
-   const fresh=await authority.revalidate();
-   if(!fresh||fresh.employeeId!==actor.employeeId||
-      fresh.workspaceRole!==actor.workspaceRole||
-      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   const r=await env.DB.prepare(`UPDATE allowance_applications SET
-    status='withdrawn',revision=revision+1,actor_id=?1,
-    updated_by_device_id=?2,updated_at=?3
-    WHERE workspace_id=?4 AND application_id=?5
-     AND status='open' AND revision=?6
-     AND requester_actor_id=?1 AND EXISTS (
-       SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id
-       WHERE d.device_id=?2 AND d.workspace_id=?4 AND d.status='active'
-       AND d.employee_authority_state='cloud' AND w.status='active')`)
-    .bind(actor.employeeId,dev.device_id,new Date().toISOString(),
-     binding.workspaceId,target.applicationId,target.expectedRevision).run();
-   return r.meta.changes===1
-    ?reply(200,{applicationId:target.applicationId,status:"withdrawn",
-      revision:target.expectedRevision+1})
-    :reply(409,{error:{code:"APPLICATION_STATE_CHANGED"}});
-  }
-  if(!manager(actor))
-   return reply(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
-  if(action==="review"){
-   const fresh=await authority.revalidate();
-   if(!fresh||fresh.employeeId!==actor.employeeId||
-      fresh.workspaceRole!==actor.workspaceRole)
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   const r=await env.DB.prepare(`UPDATE allowance_applications
-    SET status='review',revision=revision+1,manager_actor_id=?1,actor_id=?1,
-     updated_by_device_id=?2,updated_at=?3
-    WHERE application_id=?4 AND workspace_id=?5
-     AND status='open' AND revision=?6 AND EXISTS(
-       SELECT 1 FROM allowance_frozen_requests f
-       JOIN devices d ON d.device_id=?2 AND d.workspace_id=f.workspace_id
-       JOIN workspaces w ON w.workspace_id=f.workspace_id
-       WHERE f.application_id=?4 AND f.workspace_id=?5 AND
-       f.request_hash=allowance_applications.request_hash
-       AND d.status='active' AND d.employee_authority_state='cloud'
-       AND w.status='active')`)
-    .bind(actor.employeeId,dev.device_id,new Date().toISOString(),
-     target.applicationId,binding.workspaceId,target.expectedRevision).run();
-   return r.meta.changes===1
-    ?reply(200,{applicationId:target.applicationId,status:"review",
-      revision:target.expectedRevision+1,officialActionPerformed:false})
-    :reply(409,{error:{code:"APPLICATION_STATE_CHANGED"}});
-  }
+  if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
   if(action==="preview"){
-   const result=await previewCloudAllowanceForManager(
-    env.DB,target,ctx,authority);
-   return reply(200,{preview:result});
+   const preview=await previewCloudAllowanceForManager(env.DB,target,ctx,authority);
+   const frozen=await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
+   const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
+   const proof=await reconcileOfficialAllowanceForOriginal(frozen,{sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey});
+   return reply(200,{preview,detail:{invoice:proof.invoiceDetail,remaining:proof.officialRemainingBeforeRequest,
+    request:JSON.parse(frozen.unnumberedTemplateJson),requester:frozen.requesterActorId,reason:frozen.reason}});
   }
   if(action==="approve"){
-   const result=await approveCloudAllowanceAfterOfficialProof(
-    env.DB,target,ctx,authority);
-   return reply(200,{applicationId:result.applicationId,
-    status:"approved",revision:result.approvedRevision,
-    validUntilUtc:result.validUntilUtc,officialActionPerformed:false});
+   const grant=await approveCloudAllowanceAfterOfficialProof(env.DB,target,ctx,authority);
+   const result=await executeApprovedCloudAllowance(env.DB,{...target,expectedRevision:grant.approvedRevision},ctx,authority,fetch,()=>new Date(),requestId);
+   return reply(200,{status:"approved",revision:grant.approvedRevision,...result});
   }
-  if(action==="manual-review"){
-   if(typeof input.reviewId!=="string"||
-      typeof input.disposition!=="string")
-     return reply(400,{error:{code:"INVALID_MANUAL_REVIEW"}});
-   const row=await appendAllowanceManualReview(env.DB,target,authority,
-      input.reviewId,input.disposition as TriageKind);
-   return reply(200,row);
+  if(action==="void-preview"){
+   const preview=await previewCloudVoidForManager(env.DB,target,ctx,authority);
+   const frozen=await loadCloudAllowanceVoidForManager(env.DB,target,ctx,authority);
+   const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
+   const invoice=await queryOfficialInvoiceReadOnly({sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey,originalInvoiceNumber:frozen.originalInvoiceNumber});
+   return reply(200,{preview,detail:{invoice:{invoiceNumber:invoice.invoiceNumber,invoiceDate:invoice.invoiceDate,
+    gross:invoice.totalAmount,tax:invoice.invoiceTaxAmount,items:invoice.originalProductItems,allowances:invoice.allowanceHistory},
+    requester:frozen.requesterActorId,reason:frozen.reason},officialActionPerformed:false});
   }
-  if(action==="reserve-after-collision"){
-   if(typeof input.reviewId!=="string"||typeof input.previousNumber!=="string"||
-      typeof input.confirmation!=="string")
-    return reply(400,{error:{code:"INVALID_COLLISION_REVIEW"}});
-   const result=await reserveCloudAllowanceAfterExternalCollision(env.DB,target,ctx,
-    authority,input.reviewId,input.previousNumber,input.confirmation);
-   return reply(200,{applicationId:result.applicationId,ledgerId:result.ledgerId,
-    allowanceNumber:result.allowanceNumber,status:"reserved",
-    maySendWithoutFreshOfficialCheck:false});
+  if(action==="void-approve"){
+   if(typeof input.requestHash!=="string"||typeof input.expectedOfficialSnapshotHash!=="string")return reply(400,{error:{code:"INVALID_REQUEST"}});
+   await approveCloudVoidAfterOfficialProof(env.DB,{...target,expectedRevision:1,requestHash:input.requestHash,
+    expectedOfficialSnapshotHash:input.expectedOfficialSnapshotHash},ctx,authority);
+   const result=await executeCloudVoidOnce(env.DB,{...target,expectedRevision:2},ctx,authority,fetch,()=>new Date(),true,requestId);
+   return reply(200,{status:"approved",revision:2,...result});
   }
-  if(action==="manual-history"){
-   const items=await listAllowanceManualReviews(env.DB,target,authority);
-   return reply(200,{applicationId:target.applicationId,items,
-    officiallyConfirmed:false,proofOfThisPost:false,
-    safeToAutoRetry:false,canAllocateAnotherNumber:false});
+  if((action==="detail"||action==="diagnostics")&&input.operation!=="issue"&&input.operation!=="void")
+   return reply(400,{error:{code:"INVALID_OPERATION"}});
+  if(action==="detail"){
+   const isVoid=input.operation==="void";
+   const f=isVoid?await loadCloudAllowanceVoidForManager(env.DB,target,ctx,authority):await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
+   const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
+   const invoice=await queryOfficialInvoiceReadOnly({sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey,originalInvoiceNumber:f.originalInvoiceNumber});
+   const rows:Array<{label:string;value:string}>=[];
+   const add=(label:string,value:unknown)=>rows.push({label,value:value===undefined||value===null?"－":String(value)});
+   add("原發票",invoice.invoiceNumber);add("原發票日期",invoice.invoiceDate);add("原發票含稅金額",invoice.totalAmount);add("原發票稅額",invoice.invoiceTaxAmount);
+   const itemText=(raw:unknown)=>Array.isArray(raw)?raw.map((i:any)=>
+    `${i.OriginalDescription??i.original_description??i.description??"－"}　數量 ${i.Quantity??i.quantity??"－"}　單價 ${i.UnitPrice??i.unit_price??"－"}　金額 ${i.Amount??i.amount??"－"}　稅 ${i.Tax??i.tax??"－"}`).join("\n"):"－";
+   add("原發票商品",itemText(invoice.originalProductItems));
+   add("既有折讓",invoice.allowanceHistory.map(x=>`${x.allowanceNumber??"－"}　金額 ${x.totalAmount??"－"}　稅 ${x.taxAmount??"－"}　狀態 ${x.uploadStatus??"－"}　作廢日 ${x.cancelDate??"－"}`).join("\n"));
+   add("申請人",f.requesterActorId);add("申請原因",f.reason);
+   let requestHash="",officialSnapshotHash="";
+   if(isVoid){
+    const v=f as Awaited<ReturnType<typeof loadCloudAllowanceVoidForManager>>;
+    add("原折讓號",v.allowanceNumber);
+    if(v.status==="open"){
+     const preview=await previewCloudVoidForManager(env.DB,target,ctx,authority);
+     requestHash=preview.requestHash;officialSnapshotHash=preview.officialSnapshotHash;
+     const original=preview.originalAllowance as Record<string,unknown>|undefined;
+     add("原折讓商品",itemText(original?.product_item));add("原折讓未稅額",original?.total_amount);add("原折讓稅額",original?.tax_amount);
+     add("原折讓買受人",`${original?.buyer_name??"－"}／${original?.buyer_identifier??"－"}`);
+    }else add("執行狀態","主管已核准，系統會依原號自動查回；無須再核准或送出");
+   }else{
+    const frozen=f as Awaited<ReturnType<typeof loadEncryptedCloudAllowance>>;
+    const request=JSON.parse(frozen.unnumberedTemplateJson);
+    add("買受人",`${request.BuyerName}／${request.BuyerIdentifier}`);
+    add("本次折讓商品",itemText(request.ProductItem));add("本次含稅折讓",frozen.requestedGross);
+    if(frozen.status==="open"||frozen.status==="review"){
+     const proof=await reconcileOfficialAllowanceForOriginal(frozen,{sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey});
+     const scaled=BigInt(proof.officialRemainingBeforeRequest);
+     add("最新可折含稅額",`${scaled/10000000n}.${String(scaled%10000000n).padStart(7,"0")}`);
+    }
+   }
+   const fresh=await authority.revalidate();
+   if(!fresh||fresh.employeeId!==actor.employeeId||fresh.workspaceRole!==actor.workspaceRole)throw new Error("AUTHORITY_CHANGED");
+   return reply(200,{applicationId:target.applicationId,status:f.status,revision:f.revision,operation:isVoid?"void":"issue",rows,requestHash,officialSnapshotHash});
   }
-  if(action==="attempt"||action==="send-once"){
-   // A *single* authoritative source of the reserved number: clients
-   // supply only the original application ID and optimistic revision.
-   // The DB stores both the first attempt and the bound reserving Device.
-   // Returning after CAS uncertainty is READBACK ONLY, never another POST.
-   const ledger=await env.DB.prepare(`SELECT l.ledger_id,
-     l.allowance_number,l.status,l.attempt,l.created_by_device_id,
-     EXISTS(SELECT 1 FROM allowance_reconciliation_checks c
-       WHERE c.workspace_id=l.workspace_id AND c.ledger_id=l.ledger_id
-       ${Number(env.SCHEMA_VERSION)>=19?"AND c.evidence_kind='full_match_unattributed'":""}
-       LIMIT 1) AS recorded_readback
-    FROM allowance_number_ledger l
-    JOIN allowance_applications a ON a.application_id=l.application_id
-      AND a.workspace_id=l.workspace_id
-    WHERE a.workspace_id=?1 AND a.application_id=?2
-      AND a.status='approved' AND a.revision=?3
-    ORDER BY l.attempt DESC LIMIT 1`)
-    .bind(binding.workspaceId,target.applicationId,target.expectedRevision)
-    .first<{ledger_id:string;allowance_number:string;status:string;
-      attempt:number;created_by_device_id:string;recorded_readback:number}>();
-   if(!ledger)return reply(409,{error:{code:"ALLOWANCE_ATTEMPT_NOT_FOUND"}});
-   const refreshed=await authority.revalidate();
-   if(!refreshed||refreshed.employeeId!==actor.employeeId||
-      refreshed.workspaceRole!==actor.workspaceRole||
-      !await checkDevice(env.DB,dev.device_id,binding.workspaceId))
-    return reply(409,{error:{code:"AUTHORITY_CHANGED"}});
-   if(action==="attempt")
-    return reply(200,{applicationId:target.applicationId,
-      ledgerId:ledger.ledger_id,allowanceNumber:ledger.allowance_number,
-      ledgerStatus:ledger.status,recordedExactReadback:!!ledger.recorded_readback,
-      manuallyUnattributed:ledger.status!=="reserved",
-      proofOfThisPost:false,officiallyConfirmed:false,
-      safeToAutoRetry:false,canAllocateAnotherNumber:false});
-   if(ledger.status!=="reserved"||!Number.isSafeInteger(ledger.attempt)||ledger.attempt<1||
-      ledger.created_by_device_id!==dev.device_id)
-    return reply(409,{error:{code:"ALLOWANCE_SEND_READBACK_ONLY"}});
-   if(ledger.attempt>1&&(Number(env.SCHEMA_VERSION)<19||
-       env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED!=="true"))
-    return reply(503,{error:{code:"EXTERNAL_COLLISION_REVIEW_DISABLED"}});
-   const result=await executeCloudAllowanceExactlyOnce(env.DB,{
-     workspaceId:binding.workspaceId,applicationId:target.applicationId,
-     deviceId:dev.device_id,expectedRevision:target.expectedRevision,
-     ledgerId:ledger.ledger_id,allowanceNumber:ledger.allowance_number
-   },ctx,authority,fetch,()=>new Date(),Number(env.SCHEMA_VERSION)>=19&&
-     env.ALLOWANCE_EXTERNAL_COLLISION_ENABLED==="true");
-   return reply(200,{applicationId:result.applicationId,
-      allowanceNumber:result.allowanceNumber,ledgerStatus:result.ledgerStatus,
-      issueKind:result.issueKind,manualDisposition:result.manualDisposition,
-      recordedReadback:result.recordedReadback,manualReviewRequired:true,
-      proofOfThisPost:false,officiallyConfirmed:false,
-      safeToAutoRetry:false,canAllocateAnotherNumber:false});
-  }
-  if(action==="reserve"){
-   const result=await reserveApprovedCloudAllowanceNumber(
-    env.DB,target,ctx,authority);
-   return reply(200,{applicationId:result.applicationId,
-    ledgerId:result.ledgerId,allowanceNumber:result.allowanceNumber,
-    status:"reserved",maySendWithoutFreshOfficialCheck:false});
+  if(action==="diagnostics"){
+   const operation=input.operation==="void"?"void":"issue",table=operation==="issue"?"allowance_applications":"allowance_void_requests";
+   const state=await env.DB.prepare(`SELECT execution_state,first_error,last_error,request_id FROM ${table} WHERE application_id=?1 AND workspace_id=?2`).bind(target.applicationId,target.workspaceId).first();
+   if(!state)return reply(404,{error:{code:"NOT_FOUND"}});
+   const after=input.afterEventId??0;
+   if(!Number.isSafeInteger(after)||(after as number)<0)return reply(400,{error:{code:"INVALID_DIAGNOSTIC_CURSOR"}});
+   const events=await env.DB.prepare(`SELECT event_id,stage,attempt,provider_code,http_status,response_received,request_id,error_code,recorded_at
+    FROM allowance_execution_events WHERE workspace_id=?1 AND application_id=?2 AND operation=?3 AND event_id>?4 ORDER BY event_id LIMIT 100`).bind(target.workspaceId,target.applicationId,operation,after).all<{event_id:number}>();
+   const fresh=await authority.revalidate();
+   if(!fresh||fresh.employeeId!==actor.employeeId||fresh.workspaceRole!==actor.workspaceRole)throw new Error("AUTHORITY_CHANGED");
+   return reply(200,{applicationId:target.applicationId,state,events:events.results,
+    nextEventId:events.results.at(-1)?.event_id??after,hasMore:events.results.length===100});
   }
   return reply(404,{error:{code:"NOT_FOUND"}});
- }catch(e){
-  if(e instanceof CyIdError)
-   return reply(e.status,{error:{code:e.code}});
-  // Only this authenticated, scoped read is allowed to distinguish a
-  // missing original ID from a network/authority/ambiguous failure.
-  // Unknown and inaccessible IDs are identically NOT_FOUND to callers.
-  if(action==="void-status"&&e instanceof Error&&
-     e.message==="VOID_APPLICATION_NOT_FOUND")
-   return reply(404,{error:{code:"VOID_APPLICATION_NOT_FOUND"}});
-  // Do not return API key, frozen content, official buyer data or SQL details.
-  if(e instanceof Error&&/^(ALLOWANCE_|OFFICIAL_|VOID_)/.test(e.message))
-   return reply(409,{error:{code:"ALLOWANCE_OPERATION_UNCONFIRMED"}});
-  return reply(503,{error:{code:"ALLOWANCE_RESULT_UNKNOWN"}});
+ }catch(error){
+  if(error instanceof CyIdError)return reply(error.status,{error:{code:error.code}});
+  const code=error instanceof Error&&/^[A-Z0-9_]{3,100}$/.test(error.message)?error.message:"ALLOWANCE_RESULT_OR_STORAGE_UNKNOWN";
+  return reply(code.includes("NOT_FOUND")?404:409,{error:{code}});
  }
 }

@@ -118,7 +118,7 @@ public sealed class InvoiceSyncIssueStore
         string orderId,
         string issueType,
         string message,
-        DateTimeOffset createdUtc)
+        DateTimeOffset createdUtc, Exception? error = null)
     {
         accountKey = Required(accountKey, nameof(accountKey));
         issueType = Required(issueType, nameof(issueType));
@@ -163,7 +163,7 @@ public sealed class InvoiceSyncIssueStore
             update.Parameters.AddWithValue("$id", existingId.Value);
             if (update.ExecuteNonQuery() != 1) throw new InvalidDataException("sync issue update did not affect exactly one row");
             transaction.Commit();
-            IssueDiagnosticLog.TryAppend(dataDirectory, existingId.Value, "updated", issueType, message);
+            WriteDiagnostic(connection, existingId.Value, "updated", issueType, message, error);
             return existingId.Value;
         }
 
@@ -185,8 +185,81 @@ public sealed class InvoiceSyncIssueStore
         insert.Parameters.AddWithValue("$created_utc", createdUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         var id = Convert.ToInt64(insert.ExecuteScalar(), CultureInfo.InvariantCulture);
         transaction.Commit();
-        IssueDiagnosticLog.TryAppend(dataDirectory, id, "created", issueType, message);
+        WriteDiagnostic(connection, id, "created", issueType, message, error);
         return id;
+    }
+
+    private void WriteDiagnostic(SqliteConnection db,long id,string stage,string type,string message,Exception? error)
+    {
+        var saved=false;
+        try
+        {
+            if(error is not null){IssueDiagnosticLog.Record(dataDirectory,id,stage,type,error:error);saved=true;}
+            else saved=IssueDiagnosticLog.TryAppend(dataDirectory,id,stage,type,message);
+        }
+        catch(Exception failure)when(failure is IOException or UnauthorizedAccessException){ }
+        if(saved)return;
+        using var warning=db.CreateCommand();warning.CommandText="UPDATE sync_issues SET message=$message WHERE local_id=$id";
+        warning.Parameters.AddWithValue("$id",id);
+        warning.Parameters.AddWithValue("$message",message+"\n診斷寫入失敗，請保留目前訊息並檢查儲存空間／權限。");
+        warning.ExecuteNonQuery();
+    }
+
+    public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
+        string state, string status, string error)
+    {
+        var type = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_") +
+            (state == "problem" ? "problem" : "processing");
+        InvoiceSyncIssue? existing;
+        using (var lookup = Open(SqliteOpenMode.ReadOnly))
+        using (var query = lookup.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT local_id,account_key,invoice_number,order_id,issue_type,message,created_utc,resolved_utc
+                FROM sync_issues WHERE account_key=$account AND order_id=$application
+                  AND issue_type IN ($processing,$problem) ORDER BY local_id DESC LIMIT 1
+                """;
+            var prefix = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_");
+            query.Parameters.AddWithValue("$account", accountKey);
+            query.Parameters.AddWithValue("$application", applicationId);
+            query.Parameters.AddWithValue("$processing", prefix + "processing");
+            query.Parameters.AddWithValue("$problem", prefix + "problem");
+            existing = Read(query).FirstOrDefault();
+        }
+        if (state == "completed" || status is "withdrawn" or "rejected")
+        {
+            if (existing?.ResolvedUtc is null && existing is not null) Resolve(existing.Id, DateTimeOffset.UtcNow);
+            return;
+        }
+        var message = status is "open" or "review" ? "等待主管核准" :
+            state == "problem" ? "自動處理遇到問題：" + error : "主管已核准，系統自動處理中";
+        if (existing is null)
+        {
+            Record(accountKey, "", applicationId, type, message, DateTimeOffset.UtcNow);
+            return;
+        }
+        using var db = Open(SqliteOpenMode.ReadWrite);
+        Configure(db);
+        using var sql = db.CreateCommand();
+        sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)=''";
+        sql.Parameters.AddWithValue("$id", existing.Id);
+        sql.Parameters.AddWithValue("$type", type);
+        sql.Parameters.AddWithValue("$message", message);
+        sql.ExecuteNonQuery();
+    }
+
+    public void UpdateMessage(long issueId, string message)
+    {
+        using var connection = Open(SqliteOpenMode.ReadWrite);
+        Configure(connection);
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE sync_issues SET message=$message WHERE local_id=$id AND TRIM(resolved_utc)=''";
+        if (!IssueDiagnosticLog.TryAppend(dataDirectory, issueId, "updated", "sync_issue", message))
+            message += "\n診斷紀錄寫入失敗，請保留目前錯誤內容並檢查儲存空間／權限。";
+        command.Parameters.AddWithValue("$message", message);
+        command.Parameters.AddWithValue("$id", issueId);
+        if (command.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("原問題已結案或不存在，不能更新其他操作");
     }
 
     public int ResolveMatching(

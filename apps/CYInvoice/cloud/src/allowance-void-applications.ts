@@ -166,14 +166,14 @@ export async function readCloudAllowanceVoidApplication(
 export interface TrustedCloudVoidRequest {
  applicationId:string;workspaceId:string;environment:"test"|"production";
  sellerInvoice:string;companyRevision:number;requestHash:string;
- allowanceNumber:string;originalInvoiceNumber:string;reason:string;
+ allowanceNumber:string;originalInvoiceNumber:string;reason:string;requesterActorId:string;
  status:"open"|"approved";revision:1|2;
 }
 interface FrozenRow {
  application_id:string;workspace_id:string;environment:"test"|"production";
  seller_invoice:string;company_revision:number;
  allowance_fingerprint:string;request_hash:string;frozen_ciphertext:string;
- status:"open"|"approved";revision:number;
+ status:"open"|"approved";revision:number;requester_actor_id:string;
 }
 // Trusted internal manager-only reader for future provider-side official proof.
 // Never return this payload directly through GET/LIST/HTTP, logs or audit.
@@ -189,7 +189,7 @@ export async function loadCloudAllowanceVoidForManager(
   throw new Error("VOID_PREVIEW_MANAGER_REQUIRED");
  const row=await db.prepare("SELECT application_id,workspace_id,environment,"+
   "seller_invoice,company_revision,allowance_fingerprint,request_hash,"+
-  "frozen_ciphertext,status,revision FROM allowance_void_requests "+
+  "frozen_ciphertext,status,revision,requester_actor_id FROM allowance_void_requests "+
   "WHERE application_id=?1 AND workspace_id=?2 LIMIT 1")
   .bind(t.applicationId,t.workspaceId).first<FrozenRow>();
  if(!row||row.environment!==ctx.environment||
@@ -237,5 +237,5 @@ export async function loadCloudAllowanceVoidForManager(
   companyRevision:row.company_revision,requestHash:row.request_hash,
   allowanceNumber:frozen.allowanceNumber,
   originalInvoiceNumber:frozen.originalInvoiceNumber,reason:frozen.reason,
-  status:row.status,revision:row.revision};
+  requesterActorId:row.requester_actor_id,status:row.status,revision:row.revision};
 }

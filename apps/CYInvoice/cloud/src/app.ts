@@ -21,6 +21,8 @@ interface Env extends CyIdEnv {
   RECOVERY_ENABLED?: string;
   WORK_ITEMS_ENABLED?: string;
   ALLOWANCE_API_ENABLED?: string;
+  ALLOWANCE_G0401_SEND_ENABLED?: string;
+  ALLOWANCE_G0501_SEND_ENABLED?: string;
   COMPANY_SETTINGS_KEY_HEX?: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
@@ -96,7 +98,7 @@ export class CyInvoiceRecoveryEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, context?:ExecutionContext): Promise<Response> {
     // CYInvoice V3.0 has exactly one online Employee authority: CYID.
     // Reject a missing/disabled binding BEFORE runtime sync, identity,
     // Device or any legacy account mutator can run. Local has no Worker.
@@ -106,7 +108,7 @@ export default {
       cyIdBinding(env);
     } catch (error) { return cyIdErrorResponse(error); }
 
-    const runtimeSync = await handleRuntimeSync(request, env);
+    const runtimeSync = await handleRuntimeSync(request, env, context);
     if (runtimeSync) return runtimeSync;
     const cyIdResponse = await handleCyId(request, env);
     if (cyIdResponse) return cyIdResponse;
@@ -126,7 +128,7 @@ export default {
       });
     const allowancePath=path.startsWith("/v1/allowances/");
     if(allowancePath&&(env.ALLOWANCE_API_ENABLED!=="true"||
-       !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<18))
+       !/^[0-9]+$/.test(env.SCHEMA_VERSION)||Number(env.SCHEMA_VERSION)<21))
       return Response.json({ok:false,error:{code:"ALLOWANCES_NOT_READY"}},{
         status:503,headers:{"cache-control":"no-store"}
       });
@@ -158,7 +160,7 @@ export default {
       "/v1/work-items/create", "/v1/work-items/report-upload-issue",
       "/v1/work-items/transition",
       "/v1/allowances/create","/v1/allowances/get","/v1/allowances/list",
-      "/v1/allowances/review","/v1/allowances/withdraw",
+      "/v1/allowances/diagnostics","/v1/allowances/detail","/v1/allowances/withdraw",
       "/v1/allowances/preview","/v1/allowances/approve",
       "/v1/allowances/reserve","/v1/allowances/status",
       "/v1/allowances/void-create","/v1/allowances/void-status",

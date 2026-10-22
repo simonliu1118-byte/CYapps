@@ -16,7 +16,7 @@ on:
       schema_upgrade:
         description: 'Explicit marker rollout only AFTER the original D1 migration is applied; allowance flags must stay off'
         type: choice
-        options: ['none', '18:19', '19:20']
+        options: ['none', '18:19', '19:20', '20:21']
         default: 'none'
         required: true
   push:

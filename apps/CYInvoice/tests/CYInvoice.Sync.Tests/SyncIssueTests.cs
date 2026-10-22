@@ -20,6 +20,7 @@ internal static class SyncIssueTests
             ("unknown test record not found stays unresolved until confirmed", UnknownNotFoundResolvesAfterConfirmationAsync),
             ("diagnostic lifecycle is redacted and persists resolution", DiagnosticLifecycleIsRedactedAsync),
             ("paper waits and technical errors use distinct queues", WaitingReviewClassificationAsync),
+            ("cloud projection keeps distinct applications and operation kinds", CloudProjectionIdentityAsync),
         };
 
         var failures = new List<string>();
@@ -69,6 +70,26 @@ internal static class SyncIssueTests
         return Task.CompletedTask;
     }
 
+    private static Task CloudProjectionIdentityAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var store = new InvoiceSyncIssueStore(repository.DataDirectory);
+        const string account = "prod|12345675";
+        store.ApplyCloudAllowance(account, "application_one", "issue", "processing", "approved", "");
+        store.ApplyCloudAllowance(account, "application_two", "issue", "processing", "approved", "");
+        store.ApplyCloudAllowance(account, "application_one", "void", "processing", "approved", "");
+        Equal(3, store.Unresolved(account).Count);
+        store.ApplyCloudAllowance(account, "application_one", "issue", "problem", "approved", "READBACK_UNKNOWN");
+        Equal(3, store.Unresolved(account).Count);
+        Equal(1, store.Unresolved(account).Count(i => i.IssueType == "cloud_allowance_issue_problem"));
+        store.ApplyCloudAllowance(account, "application_one", "issue", "completed", "approved", "");
+        Equal(2, store.Unresolved(account).Count);
+        True(store.Unresolved(account).Any(i => i.OrderId == "application_one" && i.IssueType == "cloud_allowance_void_processing"));
+        return Task.CompletedTask;
+    }
+
     private static Task WaitingReviewClassificationAsync()
     {
         using var temporary = new TemporaryDirectory();
@@ -86,7 +107,9 @@ internal static class SyncIssueTests
         store.Record(account, record.InvoiceNumber, record.OrderId,
             InvoiceSyncIssueTypes.QueryFailed, "API code 3040122", DateTimeOffset.UtcNow);
         queue = new InvoiceWorkQueue(repository).Load();
-        Equal(0, queue.ProcessingIssues.Count);
+        // Invoice-scoped errors cannot establish that this separate approval
+        // is the same operation; both original identities remain visible.
+        Equal(1, queue.ProcessingIssues.Count);
         Equal(1, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
         // Resolving the technical failure returns the very same original
         // paper approval request to Processing, not a duplicate work item.

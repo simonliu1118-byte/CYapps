@@ -13,7 +13,7 @@ public sealed record InvoiceAllowanceVoidManualReview(
     string AllowanceNumber,
     string RequesterEmployeeNo,
     string Reason,
-    DateTimeOffset RequestedUtc);
+    DateTimeOffset RequestedUtc, bool ConfirmationProblem = false);
 
 public sealed record EmployeeAllowanceVoidWorkflowResult(
     InvoiceRecord Record,
@@ -29,12 +29,14 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceDetailRefreshService detailRefreshService;
     private readonly Func<DateTimeOffset> now;
+    private readonly IAmegoAllowanceVoidGateway? allowanceGateway;
 
     public EmployeeAllowanceVoidWorkflowService(
         LocalRepository repository,
         InvoiceDetailRefreshService? detailRefreshService = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null, IAmegoAllowanceVoidGateway? allowanceGateway = null)
     {
+        this.allowanceGateway = allowanceGateway;
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         syncRepository = new InvoiceSyncRepository(repository.DataDirectory);
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
@@ -73,6 +75,18 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 : "光貿回傳多筆相同折讓單號，已停止建立作廢申請");
         if (matched[0].InvoiceStatus != UploadStatuses.Complete)
             throw new InvalidOperationException("只有已完成的折讓單可以提出作廢申請");
+
+        if (repository.IdentityProvider.Kind == IdentityProviderKind.CyId)
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            var id = CYInvoice.Core.Cloud.CloudAllowanceClient.OriginalVoidApplicationId(settings.CloudWorkspaceId, settings.Environment, allowanceNumber);
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var client = new CYInvoice.Core.Cloud.CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings));
+            var state = await client.CreateOrReadVoidApplicationAsync(new(id, settings.Environment, allowanceNumber,
+                fresh.InvoiceNumber, reason), employeeNo, password, cancellationToken).ConfigureAwait(false);
+            return new(fresh, new(allowanceNumber, employee.EmployeeNo, reason, now().ToUniversalTime()),
+                state.Status != "open", "原折讓作廢申請已送交主管，請從處理中開啟詳情核准");
+        }
 
         // Check the official number before idempotently returning an old
         // application: a claimed g0501 is not just "waiting for review".

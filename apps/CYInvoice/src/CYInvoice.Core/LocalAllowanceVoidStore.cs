@@ -9,8 +9,8 @@ public sealed record LocalAllowanceVoidApproval(
     string RequestHash, string OfficialHash, string ManagerEmployeeNo,
     DateTimeOffset ExpiresUtc, bool Claimed, string LastObservation);
 
-// The existing SQLite owns approvals, permanent send claims and append-only
-// observations. No queue runner may turn an observation into another POST.
+// Existing SQLite owns approval identity, bounded send attempts and immutable
+// observations. Only the workflow may retry after fresh original-number proof.
 internal sealed class LocalAllowanceVoidStore
 {
     private readonly string path;
@@ -56,6 +56,23 @@ internal sealed class LocalAllowanceVoidStore
             BEFORE DELETE ON sync_issues WHEN EXISTS
                 (SELECT 1 FROM allowance_void_local_approvals WHERE issue_id=OLD.local_id)
             BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_HISTORY_REQUIRED'); END;
+            """;
+        sql.ExecuteNonQuery();
+        sql.CommandText = """
+            CREATE TABLE IF NOT EXISTS allowance_void_local_attempts (
+                approval_id TEXT NOT NULL REFERENCES allowance_void_local_approvals(approval_id),
+                attempt INTEGER NOT NULL CHECK(attempt BETWEEN 1 AND 3),
+                started_utc TEXT NOT NULL, response_kind TEXT NOT NULL DEFAULT 'unknown',
+                provider_code INTEGER, PRIMARY KEY(approval_id,attempt)
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_void_attempts_no_delete
+            BEFORE DELETE ON allowance_void_local_attempts
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_ATTEMPTS_PERMANENT'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_void_attempts_update_guard
+            BEFORE UPDATE ON allowance_void_local_attempts
+            WHEN NEW.approval_id<>OLD.approval_id OR NEW.attempt<>OLD.attempt
+              OR NEW.started_utc<>OLD.started_utc OR OLD.response_kind<>'unknown'
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_VOID_ATTEMPT_IMMUTABLE'); END;
             """;
         sql.ExecuteNonQuery();
         // Forward-only local trigger upgrade. Historical approval/claim/audit
@@ -176,6 +193,58 @@ internal sealed class LocalAllowanceVoidStore
         {
             throw new InvalidOperationException("原折讓單已有送出紀錄，只能查回，禁止重送", error);
         }
+    }
+
+    // Each retry belongs to the original durable claim. Legacy claims with
+    // no attempt evidence remain readback-only. CAS prevents competing resumes.
+    public int StartAttempt(LocalAllowanceVoidApproval a, DateTimeOffset time, bool first)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = """
+            INSERT INTO allowance_void_local_attempts(approval_id,attempt,started_utc)
+            SELECT $id,COALESCE(MAX(t.attempt),0)+1,$now
+            FROM allowance_void_local_attempts t WHERE t.approval_id=$id
+            HAVING EXISTS(SELECT 1 FROM allowance_void_local_claims c WHERE c.approval_id=$id)
+              AND (($first=1 AND COUNT(*)=0) OR
+                ($first=0 AND COUNT(*) BETWEEN 1 AND 2 AND
+                 julianday($now)-julianday(MAX(t.started_utc))>=60.0/86400.0 AND
+                 NOT EXISTS(SELECT 1 FROM allowance_void_local_attempts x
+                    WHERE x.approval_id=$id AND (x.provider_code=4050141 OR x.provider_code IS NOT NULL AND x.provider_code NOT IN (0,4050132,4050141)))))
+            RETURNING attempt;
+            """;
+        sql.Parameters.AddWithValue("$id", a.ApprovalId);
+        sql.Parameters.AddWithValue("$first", first ? 1 : 0);
+        sql.Parameters.AddWithValue("$now", Utc(time));
+        return sql.ExecuteScalar() is long number ? checked((int)number) : 0;
+    }
+
+    public int? LastProviderCode(LocalAllowanceVoidApproval a)
+    {
+        using var db=Open();using var sql=db.CreateCommand();
+        sql.CommandText="SELECT provider_code FROM allowance_void_local_attempts WHERE approval_id=$id ORDER BY attempt DESC LIMIT 1";
+        sql.Parameters.AddWithValue("$id",a.ApprovalId);
+        return sql.ExecuteScalar() is long code ? checked((int)code) : null;
+    }
+
+    public int AttemptCount(LocalAllowanceVoidApproval a)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = "SELECT COUNT(*) FROM allowance_void_local_attempts WHERE approval_id=$id";
+        sql.Parameters.AddWithValue("$id", a.ApprovalId);
+        return Convert.ToInt32(sql.ExecuteScalar());
+    }
+
+    public void RecordResponse(LocalAllowanceVoidApproval a, int attempt, int? code)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = "UPDATE allowance_void_local_attempts SET response_kind='received',provider_code=$code WHERE approval_id=$id AND attempt=$attempt AND response_kind='unknown'";
+        sql.Parameters.AddWithValue("$id", a.ApprovalId);
+        sql.Parameters.AddWithValue("$attempt", attempt);
+        sql.Parameters.AddWithValue("$code", (object?)code ?? DBNull.Value);
+        if (sql.ExecuteNonQuery() != 1) throw new InvalidOperationException("作廢回覆證據未能保存");
     }
 
     public void Observe(LocalAllowanceVoidApproval a, string kind, string hash, string actor, DateTimeOffset time)

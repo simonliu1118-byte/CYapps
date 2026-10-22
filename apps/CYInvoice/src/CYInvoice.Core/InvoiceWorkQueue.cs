@@ -28,9 +28,15 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
             .Where(record => record.Environment == settings.Environment &&
                 (record.SellerInvoice.Trim().Length == 0 || record.SellerInvoice.Trim() == seller)).ToArray();
         var allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
+        var allowanceVoidWorkflow = new EmployeeAllowanceVoidWorkflowService(repository);
         var processingIssues = new List<InvoiceSyncIssue>();
         foreach (var issue in issues.Where(issue => issue.ResolvedUtc is null))
         {
+            if (issue.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal))
+            {
+                if (issue.IssueType.EndsWith("_processing", StringComparison.Ordinal)) processingIssues.Add(issue);
+                continue;
+            }
             // Use the existing Processing entry for paper, manager and
             // official waits. Missing or ambiguous local data remains an issue.
             if (issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
@@ -43,22 +49,14 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
                 var review = allowanceWorkflow.ManualReviewFor(matches[0]);
                 if (review is null || review.ConfirmationProblem == true) continue;
             }
+            if (issue.IssueType == InvoiceAllowanceVoidIssueTypes.ManualReview &&
+                allowanceVoidWorkflow.ManualReviewFor(matches[0])?.ConfirmationProblem != false) continue;
             processingIssues.Add(issue);
         }
-        // A genuine technical failure takes priority for the same operation.
-        // Do not show its ordinary manager/paper wait again in Upload Issues:
-        // the unchanged waiting work becomes visible when the failure clears.
-        var blockingTechnical = issues.Where(issue => issue.ResolvedUtc is null &&
-            issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
-                InvoiceAllowanceIssueTypes.ManualReview or
-                InvoiceAllowanceVoidIssueTypes.ManualReview)).ToArray();
-        var pausedWaitingIds = processingIssues.Where(wait =>
-            blockingTechnical.Any(problem => SameOperation(wait, problem)))
-            .Select(wait => wait.Id).ToHashSet();
-        processingIssues.RemoveAll(wait => pausedWaitingIds.Contains(wait.Id));
+        // Each allowance request is its own operation. An invoice-scoped
+        // historical error cannot hide a different partial allowance/void.
         var processingIds = processingIssues.Select(issue => issue.Id).ToHashSet();
-        var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id) &&
-            !pausedWaitingIds.Contains(issue.Id)).ToArray();
+        var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id)).ToArray();
         var items = new List<InvoiceProcessingItem>();
         foreach (var record in records)
         {
@@ -92,15 +90,6 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
         UploadStatuses.Uploaded => "光貿已上傳，等待電子發票平台處理",
         _ => "等待電子發票平台處理完成",
     };
-
-    private static bool SameOperation(InvoiceSyncIssue first, InvoiceSyncIssue second) =>
-        first.AccountKey == second.AccountKey &&
-        ((first.InvoiceNumber.Trim().Length > 0 &&
-            string.Equals(first.InvoiceNumber.Trim(), second.InvoiceNumber.Trim(),
-                StringComparison.OrdinalIgnoreCase)) ||
-         (first.OrderId.Trim().Length > 0 &&
-            string.Equals(first.OrderId.Trim(), second.OrderId.Trim(),
-                StringComparison.Ordinal)));
 
     private static bool Matches(InvoiceSyncIssue issue, InvoiceRecord record) =>
         (issue.InvoiceNumber.Trim().Length != 0 && string.Equals(issue.InvoiceNumber.Trim(), record.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||

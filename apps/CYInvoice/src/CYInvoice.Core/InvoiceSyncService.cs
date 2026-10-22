@@ -62,157 +62,112 @@ public sealed class InvoiceSyncService
     // creation-date list. A bounded invoice_query refresh also finds events
     // on retained invoices outside the recent invoice_list date window.
     // No financial mutation, inferred history, or bulk backfill.
+    private sealed record AllowanceSyncCheckpoint(DateOnly Start, DateOnly End, int NextPage,
+        bool Listed, List<string> Pending, DateOnly BudgetDay, int PagesUsed, int QueriesUsed);
+
     internal async Task<(int Queried, IReadOnlyList<string> Problems)> ReconcileRecentAllowanceEventsAsync(
         DateOnly today, CancellationToken cancellationToken = default)
     {
-        const int pageLimit = 3; // At most 150 allowance rows and 50 original-invoice queries.
-        const int pageSize = 50;
-        const int invoiceLimit = 50;
+        const int pageLimit=3, pageSize=50, invoiceLimit=50;
         await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
-        var account = CurrentAccount();
-        var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
-        var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var problems = new List<string>();
-        var startDate = today.AddDays(-2);
-        for (var page = 1; page <= pageLimit; page++)
+        var account=CurrentAccount(); var key=AccountKey(account);
+        var state=new InvoiceSyncStateStore(repository.DataDirectory);
+        const string scope="allowance-reconcile-checkpoint";
+        var raw=state.Checkpoint(key,scope);
+        var checkpoint=string.IsNullOrEmpty(raw)?null:JsonSerializer.Deserialize<AllowanceSyncCheckpoint>(raw);
+        if(checkpoint is not null && (checkpoint.NextPage<1 || checkpoint.PagesUsed is <0 or >3 || checkpoint.QueriesUsed is <0 or >50 || checkpoint.Start>checkpoint.End || checkpoint.End>today))
+            throw new InvalidDataException("折讓對帳游標不合法，已停止查詢，請保留診斷");
+        if(checkpoint is null || checkpoint.Listed && checkpoint.Pending.Count==0 && checkpoint.BudgetDay!=today)
+        {
+            // Retain continuous creation-date coverage if a bounded backlog
+            // takes more than three days. Never skip the intervening dates.
+            var start=checkpoint is not null && checkpoint.End.AddDays(1)<today.AddDays(-2)?checkpoint.End.AddDays(1):today.AddDays(-2);
+            checkpoint=new(start,start.AddDays(2)<today?start.AddDays(2):today,1,false,[],today,0,0);
+        }
+        if(checkpoint.BudgetDay!=today)checkpoint=checkpoint with{BudgetDay=today,PagesUsed=0,QueriesUsed=0};
+        void Save()=>state.SaveCheckpoint(key,scope,JsonSerializer.Serialize(checkpoint));
+        var gateway=gatewayFactory(account.SellerInvoice,account.AppKey);
+        var problems=new List<string>(); var queried=0;
+        while(!checkpoint.Listed && checkpoint.PagesUsed<pageLimit)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var listed = await gateway.ListAllowancesAsync(
-                startDate, today, page, pageSize, cancellationToken).ConfigureAwait(false);
-            if (listed.PageTotal > pageLimit)
-                throw new AllowanceSyncLimitExceededException(
-                    "折讓清單超出每日 150 筆（3 頁 × 50 筆）程式上限；請回來修改程式查詢上限，再重新同步。");
-            foreach (var allowance in listed.Data)
+            checkpoint=checkpoint with{PagesUsed=checkpoint.PagesUsed+1}; Save();
+            var listed=await gateway.ListAllowancesAsync(checkpoint.Start,checkpoint.End,
+                checkpoint.NextPage,pageSize,cancellationToken).ConfigureAwait(false);
+            if(listed.Data.Count>pageSize)throw new InvalidDataException("官方折讓頁超過要求的50筆");
+            foreach(var allowance in listed.Data)
             {
-                if (allowance.OriginalInvoiceNumbers.Count == 0)
+                if(allowance.OriginalInvoiceNumbers.Count==0)
                 {
-                    problems.Add(allowance.AllowanceNumber + ": 官方折讓缺少原發票關聯，未自動推測");
-                    continue;
+                    problems.Add(allowance.AllowanceNumber+": 官方折讓缺少原發票關聯"); continue;
                 }
-                foreach (var number in allowance.OriginalInvoiceNumbers)
+                foreach(var number in allowance.OriginalInvoiceNumbers)
                 {
-                    if (string.IsNullOrWhiteSpace(number))
-                        throw new InvalidDataException("官方折讓含空白原發票號碼");
-                    numbers.Add(number.Trim());
-                    if (numbers.Count > invoiceLimit)
-                        throw new AllowanceSyncLimitExceededException(
-                            "折讓關聯發票超出每日 50 張程式查詢上限；請回來修改程式查詢上限，再重新同步。");
+                    if(string.IsNullOrWhiteSpace(number))throw new InvalidDataException("官方折讓含空白原發票號碼");
+                    if(!checkpoint.Pending.Contains(number.Trim(),StringComparer.OrdinalIgnoreCase))checkpoint.Pending.Add(number.Trim());
                 }
             }
-            if (listed.PageTotal > 0 ? page >= listed.PageTotal : listed.Data.Count < pageSize)
-                break;
-            if (page == pageLimit)
-                throw new AllowanceSyncLimitExceededException(
-                    "折讓清單超出每日 150 筆（3 頁 × 50 筆）程式上限；請回來修改程式查詢上限，再重新同步。");
+            checkpoint=checkpoint with {Listed=listed.PageTotal>0?checkpoint.NextPage>=listed.PageTotal:listed.Data.Count<pageSize,
+                NextPage=checkpoint.NextPage+1}; Save();
         }
-        var current = AccountRecords(account)
-            .Where(record => record.InvoiceState != InvoiceStates.Failed)
-            .GroupBy(record => record.InvoiceNumber.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
-        var refresh = new InvoiceDetailRefreshService(repository, (_, _) => gateway, now);
-        var queried = 0;
-        var attempted = 0;
-        foreach (var number in numbers.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        var current=AccountRecords(account).Where(r=>r.InvoiceState!=InvoiceStates.Failed)
+            .GroupBy(r=>r.InvoiceNumber.Trim(),StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g=>g.Key,g=>g.ToArray(),StringComparer.OrdinalIgnoreCase);
+        var refresh=new InvoiceDetailRefreshService(repository,(_,_)=>gateway,now);
+        var visited=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        async Task QueryOriginal(string number,bool pending)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!current.TryGetValue(number, out var matches))
-            {
-                // The original may have been pruned by normal retention. Only
-                // this unmatched allowance triggers an exact official lookup.
-                attempted++;
-                try
-                {
-                    var restored = await RecoverMissingAllowanceOriginalAsync(
-                        gateway, account, number, cancellationToken).ConfigureAwait(false);
-                    queried++;
-                    current.Add(number, [restored]);
-                    ResolveIssues(problems, AccountKey(account),
-                        new IssueIdentity(number, restored.ApiOrderId),
-                        InvoiceSyncIssueTypes.RemoteNotFound, InvoiceSyncIssueTypes.QueryFailed);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-                catch (Exception error)
-                {
-                    var absent = error is AmegoApiException { Code: 71 };
-                    var reason = absent
-                        ? "查無原發票（光貿依原發票號碼查詢無結果；未建立本機紀錄）"
-                        : "折讓原發票無法查回：" + error.Message;
-                    AddIssueProblem(problems, AccountKey(account), number, string.Empty,
-                        absent ? InvoiceSyncIssueTypes.RemoteNotFound : InvoiceSyncIssueTypes.QueryFailed, reason);
-                    problems.Add(number + ": " + reason);
-                }
-                continue;
-            }
-            if (matches.Length != 1)
-            {
-                problems.Add(number + ": 本機原發票有多筆相符紀錄，未自行覆寫");
-                continue;
-            }
+            checkpoint=checkpoint with{QueriesUsed=checkpoint.QueriesUsed+1}; Save();
+            visited.Add(number); var success=false;
             try
             {
-                attempted++;
-                await refresh.RefreshAsync(matches[0], cancellationToken).ConfigureAwait(false);
-                queried++;
-                ResolveIssues(problems, AccountKey(account),
-                    new IssueIdentity(number, matches[0].ApiOrderId),
-                    InvoiceSyncIssueTypes.QueryFailed, InvoiceSyncIssueTypes.RemoteNotFound);
+                InvoiceRecord record;
+                if(!current.TryGetValue(number,out var matches))
+                {
+                    record=await RecoverMissingAllowanceOriginalAsync(gateway,account,number,cancellationToken).ConfigureAwait(false);
+                    current[number]=[record];
+                }
+                else
+                {
+                    if(matches.Length!=1)throw new InvalidDataException("本機原發票有多筆相符紀錄");
+                    record=await refresh.RefreshAsync(matches[0],cancellationToken).ConfigureAwait(false);
+                }
+                queried++; success=true;
+                ResolveIssues(problems,key,new IssueIdentity(number,record.ApiOrderId),
+                    InvoiceSyncIssueTypes.QueryFailed,InvoiceSyncIssueTypes.RemoteNotFound);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception error)
+            catch(OperationCanceledException)when(cancellationToken.IsCancellationRequested){throw;}
+            catch(Exception error)
             {
-                AddIssueProblem(problems, AccountKey(account), number, matches[0].ApiOrderId,
-                    InvoiceSyncIssueTypes.QueryFailed,
-                    "官方折讓原發票查回失敗：" + error.Message);
-                problems.Add(number + ": 官方折讓原發票查回失敗：" + error.Message);
+                var absent=error is AmegoApiException{Code:71};
+                var message=absent?"查無原發票（未建立本機紀錄）":"折讓原發票查回失敗："+error.Message;
+                AddIssueProblem(problems,key,number,string.Empty,absent?InvoiceSyncIssueTypes.RemoteNotFound:InvoiceSyncIssueTypes.QueryFailed,message,error);
+                problems.Add(number+": "+message);
+            }
+            finally
+            {
+                if(pending){checkpoint.Pending.RemoveAll(n=>string.Equals(n,number,StringComparison.OrdinalIgnoreCase));if(!success)checkpoint.Pending.Add(number);}
+                Save();
             }
         }
-
-        // F: A past allowance can be voided today without reappearing in
-        // allowance_list filtered by creation date. Use any remaining DAILY
-        // invoice-query budget to recheck retained originals with known official
-        // allowance history, oldest verified first. Updated LastChecked rotates
-        // successful records; a failed query is never regarded as confirmed.
-        foreach (var entry in current.Values
-            .Where(group => group.Length == 1)
-            .Select(group => group[0])
-            .Where(record => record.InvoiceNumber.Trim().Length != 0 &&
-                !numbers.Contains(record.InvoiceNumber.Trim()))
-            .OrderBy(record => record.LastChecked, StringComparer.Ordinal)
-            .ThenBy(record => record.InvoiceNumber, StringComparer.OrdinalIgnoreCase))
+        foreach(var number in checkpoint.Pending.ToArray())
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (attempted >= invoiceLimit) break;
-            bool hasOfficialHistory;
-            try
-            {
-                hasOfficialHistory = InvoiceAllowanceMetadata.ReadOfficial(entry)
-                    .Any(allowance => allowance.AllowanceNumber.Trim().Length != 0);
-            }
-            catch (Exception error)
-            {
-                problems.Add(entry.InvoiceNumber + ": 既有折讓歷史無法解析：" + error.Message);
-                continue;
-            }
-            if (!hasOfficialHistory) continue;
-            attempted++;
-            try
-            {
-                await refresh.RefreshAsync(entry, cancellationToken).ConfigureAwait(false);
-                queried++;
-                ResolveIssues(problems, AccountKey(account),
-                    new IssueIdentity(entry.InvoiceNumber, entry.ApiOrderId),
-                    InvoiceSyncIssueTypes.QueryFailed, InvoiceSyncIssueTypes.RemoteNotFound);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception error)
-            {
-                AddIssueProblem(problems, AccountKey(account), entry.InvoiceNumber, entry.ApiOrderId,
-                    InvoiceSyncIssueTypes.QueryFailed,
-                    "舊折讓作廢狀態查回失敗：" + error.Message);
-                problems.Add(entry.InvoiceNumber + ": 舊折讓作廢狀態查回失敗：" + error.Message);
-            }
+            if(checkpoint.QueriesUsed>=invoiceLimit)break;
+            await QueryOriginal(number,true).ConfigureAwait(false);
         }
-        return (queried, problems);
+        // Old known allowances rotate using the unchanged LastChecked owner.
+        foreach(var entry in current.Values.Where(g=>g.Length==1).Select(g=>g[0])
+            .OrderBy(r=>r.LastChecked,StringComparer.Ordinal).ThenBy(r=>r.InvoiceNumber,StringComparer.OrdinalIgnoreCase))
+        {
+            if(checkpoint.QueriesUsed>=invoiceLimit)break;
+            if(visited.Contains(entry.InvoiceNumber)||checkpoint.Pending.Contains(entry.InvoiceNumber))continue;
+            if(InvoiceAllowanceMetadata.ReadOfficial(entry).Count==0)continue;
+            await QueryOriginal(entry.InvoiceNumber,false).ConfigureAwait(false);
+        }
+        if(!checkpoint.Listed || checkpoint.Pending.Count>0)
+            throw new AllowanceSyncLimitExceededException($"折讓對帳已保存進度：{checkpoint.Start:yyyy-MM-dd}～{checkpoint.End:yyyy-MM-dd}，下頁 {checkpoint.NextPage}，待查 {checkpoint.Pending.Count} 張；本日已用 {checkpoint.PagesUsed*50}/150 筆折讓頁容量、{checkpoint.QueriesUsed}/50 張原發票。今日停止，次日自動從原進度接續。" + (problems.Count==0?"":"；"+string.Join("；",problems)));
+        return(queried,problems);
     }
 
     private async Task<InvoiceRecord> RecoverMissingAllowanceOriginalAsync(
@@ -889,11 +844,11 @@ public sealed class InvoiceSyncService
         string invoiceNumber,
         string orderId,
         string issueType,
-        string message)
+        string message, Exception? failure = null)
     {
         try
         {
-            issueStore.Record(accountKey, invoiceNumber, orderId, issueType, message, now());
+            issueStore.Record(accountKey, invoiceNumber, orderId, issueType, message, now(), failure);
         }
         catch (Exception error)
         {

@@ -59,7 +59,7 @@ assert.equal(result.canSendWithoutDurableClaim,false);
 assert.equal(result.proofOfOurVoidPost,false);
 const negative=[
  ["wrong number",{...official,allowance_number:"OTHER"},status,"ORIGINAL_NOT_ELIGIBLE"],
- ["cancelled",{...official,invoice_type:"D0501"},status,"ORIGINAL_NOT_ELIGIBLE"],
+ ["inconsistent cancelled detail",{...official,invoice_type:"D0501"},status,"OFFICIAL_STATUS_CHANGED"],
  ["wrong buyer",{...official,buyer_identifier:""},status,"ORIGINAL_NOT_ELIGIBLE"],
  ["other invoice",{...official,product_item:[{original_invoice_number:"AB98765432"}]},status,
   "MULTIPLE_ORIGINALS_NOT_SUPPORTED"],
@@ -68,14 +68,15 @@ const negative=[
   "MULTIPLE_ORIGINALS_NOT_SUPPORTED"],
  ["not complete",{...official,invoice_status:91},status,"ORIGINAL_NOT_ELIGIBLE"],
  ["pending",{...official,wait:[{type:"D0501"}]},status,"ORIGINAL_NOT_ELIGIBLE"],
- ["status already voided",official,{code:0,data:{"ALW-001":{type:"D0501",status:99}}},
-  "OFFICIAL_STATUS_CHANGED"],
+
  ["status not complete",official,{code:0,data:{"ALW-001":{type:"D0401",status:91}}},
   "OFFICIAL_STATUS_CHANGED"]
 ];
 for(const [name,row,state,pattern] of negative){
  await assert.rejects(()=>read(request,fake(row,state),now),new RegExp("VOID_PROOF_"+pattern),name);
 }
+const alreadyVoided=await read(request,fake(official,{code:0,data:{"ALW-001":{type:"D0501",status:99}}}),now);
+assert.equal(alreadyVoided.officialStatus,"D0501");
 await assert.rejects(()=>read(request,async()=>{throw Error("network unavailable");},now),
  /VOID_PROOF_PROVIDER_UNAVAILABLE/);
 await assert.rejects(()=>read(request,async()=>new Response("x".repeat(140000)),now),

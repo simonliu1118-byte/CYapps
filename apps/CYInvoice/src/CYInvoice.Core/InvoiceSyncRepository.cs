@@ -12,7 +12,7 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
     internal static string Snapshot(IEnumerable<InvoiceRecord> records) =>
         JsonSerializer.Serialize(records.OrderBy(record => record.Id, StringComparer.Ordinal));
 
-    public void UpsertMany(IEnumerable<InvoiceRecord> records, string? repairSnapshot = null, CancellationToken cancellationToken = default)
+    public void UpsertMany(IEnumerable<InvoiceRecord> records, string? repairSnapshot = null, CancellationToken cancellationToken = default, InvoiceSyncIssue? completedIssue = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var materialized = records.ToList();
@@ -47,6 +47,17 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
             }
             InsertItems(connection, transaction, localId.Value, record.Items);
             AppendOfficialAllowanceObservations(connection, transaction, record);
+        }
+        if (completedIssue is not null)
+        {
+            using var close = connection.CreateCommand();
+            close.Transaction = transaction;
+            close.CommandText = "UPDATE sync_issues SET resolved_utc=$time WHERE local_id=$id AND account_key=$account AND issue_type=$type AND TRIM(resolved_utc)=''";
+            close.Parameters.AddWithValue("$time", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            close.Parameters.AddWithValue("$id", completedIssue.Id);
+            close.Parameters.AddWithValue("$account", completedIssue.AccountKey);
+            close.Parameters.AddWithValue("$type", completedIssue.IssueType);
+            if (close.ExecuteNonQuery() != 1) throw new InvalidOperationException("原操作已變更，結案保存已回復");
         }
         cancellationToken.ThrowIfCancellationRequested();
         transaction.Commit();

@@ -227,7 +227,6 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(settingsButton, OpenSettings);
         ConfigureHeaderButton(workQueueButton, OpenWorkQueue);
         workQueueMenu.Items.Add("跨機待辦（非折讓）", null, (_, _) => OpenNonAllowanceQueue());
-        workQueueMenu.Items.Add("跨機折讓申請與主管覆核", null, (_, _) => OpenAllowanceQueue());
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
         tabHost.Controls.Add(accountManagementButton);
@@ -350,20 +349,6 @@ internal sealed class MainForm : Form
         {
             MessageBox.Show(this,"無法開啟跨機待辦，請確認 CYID 裝置與連線設定。",
                 "跨機待辦",MessageBoxButtons.OK,MessageBoxIcon.Warning);
-        }
-    }
-
-    private void OpenAllowanceQueue()
-    {
-        try
-        {
-            using var form=new CloudAllowanceManagerForm(repository);
-            form.ShowDialog(this);
-        }
-        catch(Exception)
-        {
-            MessageBox.Show(this,"無法開啟跨機折讓申請，請確認 CYID Cloud 裝置與連線設定。",
-                "跨機折讓",MessageBoxButtons.OK,MessageBoxIcon.Warning);
         }
     }
 
@@ -576,7 +561,6 @@ internal sealed class MainForm : Form
         firstSetup.Close();
 
         CloudWorkItemsForm.VerifySmokeLayout(this);
-        CloudAllowanceManagerForm.VerifySmokeLayout();
 
         using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
         employeeLogin.Show(this);

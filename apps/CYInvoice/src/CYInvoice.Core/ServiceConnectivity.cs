@@ -77,7 +77,20 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             var authorities = synchronize && binding is not null && cyIdOffline is not null ? cyIdOffline.AuthorityChecks(binding) : [];
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(current.CloudBaseUrl), "v1/runtime/sync"));
             request.Headers.Authorization = new("Bearer", settings.CloudDeviceToken(current));
-            request.Content = JsonContent.Create(new { synchronize, authorities });
+            var dataDirectory = baseDirectory is null ? null : Path.Combine(baseDirectory, "Data");
+            var seller = current.Environment == Environments.Test ? AmegoDefaults.TestInvoice : current.ProductionInvoice.Trim();
+            var accountKey = current.Environment + "|" + seller;
+            var allowanceIds = dataDirectory is null || !synchronize ? [] : new InvoiceSyncIssueStore(dataDirectory).Unresolved(accountKey)
+                .Where(i => i.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal)).Select(i => i.OrderId)
+                .Concat(CloudAllowanceSubmissionService.PendingIds(dataDirectory, current.ProductionInvoice)).Distinct().Take(100).ToArray();
+            var cursorScope = "cloud-allowance-cursors:" + current.CloudWorkspaceId + ":" + new Uri(current.CloudBaseUrl).AbsoluteUri;
+            var stateStore = dataDirectory is null || !synchronize ? null : new InvoiceSyncStateStore(dataDirectory);
+            var savedCursors = stateStore?.Checkpoint(accountKey, cursorScope);
+            using var cursors = JsonDocument.Parse(string.IsNullOrEmpty(savedCursors) ? "{}" : savedCursors);
+            var issueCursor = cursors.RootElement.TryGetProperty("issue", out var ic) ? ic.GetString() ?? "" : "";
+            var voidCursor = cursors.RootElement.TryGetProperty("void", out var vc) ? vc.GetString() ?? "" : "";
+            request.Content = JsonContent.Create(new { synchronize, authorities, allowanceIds,
+                allowanceIssueCursor = issueCursor, allowanceVoidCursor = voidCursor });
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new CloudApiException("RUNTIME_SYNC_UNSUPPORTED",
@@ -157,6 +170,35 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                     builtInCache.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
                 }
                 nextAuthorityRefresh = Now + 60_000;
+            }
+            if (dataDirectory is not null && root.TryGetProperty("allowances", out var allowances))
+            {
+                if (allowances.ValueKind != JsonValueKind.Array || allowances.GetArrayLength() > 150)
+                    throw new InvalidDataException("Cloud 折讓同步回應無效");
+                var store = new InvoiceSyncIssueStore(dataDirectory);
+                foreach (var item in allowances.EnumerateArray())
+                {
+                    var id = item.GetProperty("application_id").GetString()!;
+                    var operation = item.GetProperty("operation").GetString()!;
+                    var state = item.GetProperty("execution_state").GetString()!;
+                    var status = item.GetProperty("status").GetString()!;
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(id, @"^[A-Za-z0-9_-]{8,100}$") ||
+                        operation is not ("issue" or "void") || state is not ("processing" or "problem" or "completed"))
+                        throw new InvalidDataException("Cloud 折讓操作識別無效");
+                    store.ApplyCloudAllowance(accountKey, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "");
+                    if (state == "completed" || status is "withdrawn" or "rejected")
+                        CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, id);
+                }
+                if (stateStore is not null && root.TryGetProperty("allowanceCursors", out var nextCursors))
+                {
+                    foreach (var name in new[] { "issue", "void" })
+                    {
+                        var cursor = nextCursors.GetProperty(name).GetString() ?? throw new InvalidDataException("Cloud 折讓游標無效");
+                        if (cursor.Length != 0 && !System.Text.RegularExpressions.Regex.IsMatch(cursor, @"^[A-Za-z0-9_-]{8,100}$"))
+                            throw new InvalidDataException("Cloud 折讓游標無效");
+                    }
+                    stateStore.SaveCheckpoint(accountKey, cursorScope, nextCursors.GetRawText());
+                }
             }
         }
         catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException

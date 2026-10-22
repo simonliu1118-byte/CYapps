@@ -30,6 +30,7 @@ var tests = new (string Name, Action Run)[]
     ("approved Local draft reserves frozen numbered payload without g0401 or replay", () => AllowanceWorkflowTests.LocalApprovedDraftReservesFrozenPayloadWithoutSendingAsync().GetAwaiter().GetResult()),
     ("Local number reservation requires approved original manager", () => AllowanceWorkflowTests.LocalReservationRequiresApprovalAndSameManagerAsync().GetAwaiter().GetResult()),
     ("Local number reservation fails if official history changed after approval", () => AllowanceWorkflowTests.LocalOfficialChangeAfterApprovalBlocksFirstReservationAsync().GetAwaiter().GetResult()),
+    ("startup resumes approved/unknown allowance automatically without credentials", () => AllowanceWorkflowTests.StartupResumesApprovedWorkWithoutManagerAsync().GetAwaiter().GetResult()),
     ("Local one-click manager approval reserves and sends exactly once", () => AllowanceWorkflowTests.LocalOneClickApprovalAndIssueAsync().GetAwaiter().GetResult()),
     ("Local g0401 reauthenticates and never sends twice after unknown result", () => AllowanceWorkflowTests.LocalFirstSendAuthenticatesAndNeverRepostsAsync().GetAwaiter().GetResult()),
     ("Local g0401 rejects changed official allowance history before POST", () => AllowanceWorkflowTests.LocalSendRejectsChangedOfficialHistoryBeforePostAsync().GetAwaiter().GetResult()),
@@ -45,6 +46,7 @@ var tests = new (string Name, Action Run)[]
     ("ordinary employee cannot administratively close expired work", AdministrativeClosureTests.OrdinaryEmployeeCannotCloseExpiredWork),
     ("administrator can close expired void pending work", AdministrativeClosureTests.AdministratorClosesExpiredVoidPendingWork),
     ("administrator can close expired allowance work", AdministrativeClosureTests.AdministratorClosesExpiredAllowanceWork),
+    ("approved allowance cannot be administratively cleared", AdministrativeClosureTests.ApprovedAllowanceCannotBeAdministrativelyClosed),
 };
 
 var failures = 0;

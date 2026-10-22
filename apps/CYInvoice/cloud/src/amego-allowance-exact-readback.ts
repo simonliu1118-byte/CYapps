@@ -93,7 +93,7 @@ function checkFrozen(t:Data,input:ExactAllowanceReadbackRequest):Data[] {
 export async function queryFrozenAllowanceByOriginalNumber(
  input:ExactAllowanceReadbackRequest,transport:typeof fetch=fetch,
  clock:()=>Date=()=>new Date(),allowExternalCollision=false
-):Promise<ExactAllowanceReadback|ExternalAllowanceReadback>{
+):Promise<ExactAllowanceReadback|ExternalAllowanceReadback|{kind:"pending_official"}>{
  if(!/^\d{8}$/.test(input.sellerInvoice)||
    typeof input.appKey!=="string"||input.appKey.length<8||input.appKey.length>256||
    !/^A\d{8}(?:\d{3}|[A-Z][0-9A-Z]{2})$/.test(input.allowanceNumber)||
@@ -140,6 +140,9 @@ export async function queryFrozenAllowanceByOriginalNumber(
  if(number(root.code)!==0)
   throw new Error("G0401_READBACK_UNCONFIRMED");
  const official=record(root.data);
+ if(str(official.allowance_number)===input.allowanceNumber &&
+    [1,2,3,31,32].includes(number(official.invoice_status)))
+  return {kind:"pending_official"};
  if(str(official.allowance_number)!==input.allowanceNumber||
    day(official.allowance_date)!==input.allowanceDay||
    !["D0401","B0401"].includes(str(official.invoice_type).trim().toUpperCase())||

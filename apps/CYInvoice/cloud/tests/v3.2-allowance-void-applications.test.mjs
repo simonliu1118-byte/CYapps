@@ -24,14 +24,6 @@ const approveBundle=await build({entryPoints:["src/allowance-void-manager-approv
  bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
 const {approveCloudVoidAfterOfficialProof:approve}=await import("data:text/javascript;base64,"+
  Buffer.from(approveBundle.outputFiles[0].text).toString("base64"));
-const executeBundle=await build({entryPoints:["src/allowance-void-one-shot-coordinator.ts"],
- bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
-const {executeCloudVoidOnce:executeVoid}=await import("data:text/javascript;base64,"+
- Buffer.from(executeBundle.outputFiles[0].text).toString("base64"));
-const reconnectBundle=await build({entryPoints:["src/allowance-void-reconnection.ts"],
- bundle:true,write:false,format:"esm",platform:"node",target:"node24"});
-const {readCloudVoidAfterReconnect:reconnect}=await import("data:text/javascript;base64,"+
- Buffer.from(reconnectBundle.outputFiles[0].text).toString("base64"));
 const directory=mkdtempSync(join(tmpdir(),"cyinvoice-void-restart-"));
 const databasePath=join(directory,"schema20.sqlite");
 let sql=new DatabaseSync(databasePath);
@@ -90,7 +82,7 @@ function assertReadonlyReconciliation(result){
 try{
  sql.exec("PRAGMA foreign_keys=ON");
  const names=readdirSync("migrations").filter(s=>/^\d{4}_.*\.sql$/.test(s)).sort();
- assert.equal(names.at(-1),"0020_allowance_void_coordination.sql");
+ assert.equal(names.at(-1),"0021_allowance_automatic_execution.sql");
  for(const file of names.filter(s=>s<"0014"))
   sql.exec(readFileSync("migrations/"+file,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Fake')").run(ws);
@@ -186,11 +178,8 @@ try{
   authority(supervisor),revokeDuringProof,()=>time));
  active(managerDevice,"active");
  const approval={...target,expectedRevision:1,requestHash:row.request_hash,
-  expectedOfficialSnapshotHash:previewResult.officialSnapshotHash,
-  confirmation:"作廢 ALW-001"};
- await rejects("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID",()=>approve(db,{
-  ...approval,confirmation:"作廢 OTHER"},ctx,authority(supervisor),official,()=>time));
- await rejects("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID",()=>approve(db,{
+  expectedOfficialSnapshotHash:previewResult.officialSnapshotHash};
+ await rejects("VOID_APPROVAL_STALE",()=>approve(db,{
   ...approval,expectedOfficialSnapshotHash:"d".repeat(64)},
   ctx,authority(supervisor),official,()=>time));
  await rejects("VOID_APPROVAL_MANAGER_REQUIRED",()=>approve(db,approval,ctx,
@@ -212,236 +201,5 @@ try{
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,2);
- const beforeClaim=await reconnect(db,target,ctx,authority(supervisor),
-  async()=>{throw Error("readback must not call official without a claim");},()=>time);
- assert.equal(beforeClaim.state,"not_claimed_unverified");
- assertReadonlyReconciliation(beforeClaim);
- assert.equal(beforeClaim.claimRecorded,false);
- assert.equal(beforeClaim.officiallyVoided,null);
- assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
-  deviceId:employee},authority()),{applicationId:request.applicationId,
-  status:"approved",revision:2,claimed:false,readbackOnly:false});
- await rejects("VOID_PREVIEW_APPLICATION_NOT_OPEN",()=>approve(db,approval,
-  ctx,authority(supervisor),official,()=>time));
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_approvals").get().n,1);
- const onceTarget={...target,expectedRevision:2,confirmation:"作廢 ALW-001"};
- let posts=0;
- const fakeOneShot=async(url,options)=>{
-  if(url.endsWith("/g0501")){
-   posts++;assert.equal(options.method,"POST");
-   assert.deepEqual(JSON.parse(new URLSearchParams(options.body).get("data")),
-    [{CancelAllowanceNumber:"ALW-001"}]);
-   return Response.json({code:0});
-  }
-  return official(url,options);
- };
- await rejects("VOID_EXEC_NOT_APPROVED_OR_CONFIRMATION_INVALID",()=>executeVoid(db,
-  {...onceTarget,confirmation:"作廢 OTHER"},ctx,authority(supervisor),
-  fakeOneShot,()=>time,true));
- active(managerDevice,"revoked");
- await rejects("VOID_EXEC_MANAGER_REQUIRED",()=>executeVoid(db,onceTarget,
-  ctx,authority(supervisor),fakeOneShot,()=>time,true));
- active(managerDevice,"active");
- assert.equal(posts,0);
- await rejects("VOID_EXEC_SEND_DISABLED",()=>executeVoid(db,onceTarget,
-  ctx,authority(supervisor),fakeOneShot,()=>time));
- assert.equal(posts,0);
- // Revoke manager exactly before atomic D1 Claim. Any preflight alone
- // is insufficient: the claim guard must prevent the provider request.
- const revokeDuringOfficial=async(url,options)=>{
-  const response=await fakeOneShot(url,options);
-  if(url.endsWith("/allowance_status"))revokeBeforeClaim=true;
-  return response;
- };
- await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
-  onceTarget,ctx,authority(supervisor),revokeDuringOfficial,()=>time,true));
- assert.equal(posts,0);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,0);
- active(managerDevice,"active");
- const sent=await executeVoid(db,onceTarget,ctx,authority(supervisor),
-  fakeOneShot,()=>time,true);
- assert.equal(sent.outcome,"accepted_unconfirmed");
- assert.equal(sent.providerPostAttempted,true);
- assert.equal(sent.auditRecorded,true);
- assert.equal(sent.safeToAutoResend,false);
- assert.equal(sent.safeToAutoClose,false);
- assert.equal(sent.proofOfThisPost,false);
- assert.equal(posts,1);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,4);
- await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,
-  onceTarget,ctx,authority(supervisor),fakeOneShot,()=>time,true));
- assert.equal(posts,1,"Re-entry after a permanent claim must not POST again");
- assert.deepEqual(await read(db,{workspaceId:ws,applicationId:request.applicationId,
-  deviceId:employee},authority()),{
-  applicationId:request.applicationId,status:"approved",revision:2,
-  claimed:true,readbackOnly:true
- });
- const pending=await reconnect(db,target,ctx,authority(supervisor),official,()=>time);
- assert.equal(pending.claimRecorded,true);
- assert.equal(pending.state,"official_void_unconfirmed");
- assertReadonlyReconciliation(pending);
- assert.equal(pending.officiallyVoided,false);
- let statusCalls=0;
- const providerCancelled=async(url,options)=>{
-  statusCalls++;
-  assert.equal(url,"https://invoice-api.amego.tw/json/allowance_status");
-  return Response.json({code:0,data:{"ALW-001":{type:"D0501",status:99}}});
- };
- const observed=await reconnect(db,target,ctx,authority(supervisor),
-  providerCancelled,()=>time);
- assert.equal(statusCalls,1);
- assert.equal(observed.state,"official_void_observed_unattributed");
- assertReadonlyReconciliation(observed);
- assert.equal(observed.officiallyVoided,true);
- assert.match(observed.officialSnapshotHash,/^[a-f0-9]{64}$/);
- const offline=await reconnect(db,target,ctx,authority(supervisor),
-  async()=>{throw Error("offline during reconnection");},()=>time);
- assert.equal(offline.state,"official_unavailable_readback_only");
- assertReadonlyReconciliation(offline);
- assert.equal(offline.officiallyVoided,null);
- let revokedDuringStatus=false;
- await rejects("VOID_PREVIEW_MANAGER_REQUIRED",()=>reconnect(db,target,ctx,
-  authority(supervisor),async(url,options)=>{
-   const response=await providerCancelled(url,options);
-   if(!revokedDuringStatus){active(managerDevice,"revoked");revokedDuringStatus=true;}
-   return response;
-  },()=>time));
- active(managerDevice,"active");
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,1);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit").get().n,4);
-
- await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,{
-  ...request,applicationId:"void_application_duplicate"},ctx,authority()));
- assert.equal(count(),1,"same official number cannot gain another application ID");
- active(employee,"revoked");
- await rejects("VOID_APPLICATION_AUTH_REQUIRED",()=>read(db,{workspaceId:ws,
-  applicationId:request.applicationId,deviceId:employee},authority()));
- active(employee,"active");
- // A mid-flight company revision change must invalidate the request before INSERT.
- let revCalls=0;
- await rejects("VOID_APPLICATION_COMPANY_CHANGED",()=>create(db,{
-  ...request,applicationId:"void_midflight_revision",allowanceNumber:"ALW-002"},
-  ctx,{revalidate:async()=>{
-    if(++revCalls===2)
-     sql.prepare("UPDATE company_settings SET revision=2 WHERE workspace_id=?").run(ws);
-    return applicant;
-  }}));
- assert.equal(count(),1);
- await rejects("VOID_PREVIEW_COMPANY_CHANGED",()=>inspect(db,
-  {workspaceId:ws,applicationId:request.applicationId,deviceId:managerDevice},
-  ctx,authority(supervisor)));
- // A new card revision is valid for a NEW request, while old records remain immutable.
- const afterCard=await create(db,{...request,applicationId:"void_after_company_change",
-  allowanceNumber:"ALW-002"},ctx,authority());
- assert.equal(afterCard.status,"open");
- assert.equal(count(),2);
- let changed=0;
- await rejects("VOID_APPLICATION_AUTH_CHANGED",()=>read(db,{workspaceId:ws,
-  applicationId:request.applicationId,deviceId:employee},{
-  revalidate:async()=>++changed===1?applicant:null}));
- assert.equal(sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
- assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
- // Ambiguous D1 replies have an original-ID readback without retrying INSERT.
- throwAfterWrite=true;
- const second={...request,applicationId:"void_application_second",
-  allowanceNumber:"ALW-003"};
- await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,second,ctx,authority()));
- assert.equal(count(),3);
- const checked=await read(db,{workspaceId:ws,
-  applicationId:second.applicationId,deviceId:employee},authority());
- assert.equal(checked.applicationId,second.applicationId);
- assert.equal(checked.claimed,false);
- await rejects("VOID_APPLICATION_UNCONFIRMED",()=>create(db,second,ctx,authority()));
- assert.equal(count(),3);
- // A successful D1 claim with a LOST ACK permanently fences this application.
- // No g0501 may be attempted, even if the caller repeats the exact same ID.
- const target2={workspaceId:ws,applicationId:second.applicationId,deviceId:managerDevice};
- const officialSecond=async(url,options)=>{
-  if(url.endsWith("/g0501"))throw Error("FORBIDDEN g0501 after lost claim response");
-  if(url.endsWith("/allowance_query"))
-   return Response.json({code:0,data:{...officialRecord,allowance_number:"ALW-003"}});
-  return Response.json({code:0,data:{"ALW-003":{type:"D0401",status:99}}});
- };
- const previewSecond=await preview(db,target2,ctx,authority(supervisor),
-  officialSecond,()=>time);
- await approve(db,{...target2,expectedRevision:1,
-  requestHash:previewSecond.requestHash,
-  expectedOfficialSnapshotHash:previewSecond.officialSnapshotHash,
-  confirmation:"作廢 ALW-003"},ctx,authority(supervisor),officialSecond,()=>time);
- loseClaimAcknowledgement=true;
- await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
-  ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
-  ctx,authority(supervisor),officialSecond,()=>time,true));
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,2);
- const lost=await read(db,{...target2,deviceId:employee},authority());
- assert.equal(lost.claimed,true);
- assert.equal(lost.readbackOnly,true);
- await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
-  ...target2,expectedRevision:2,confirmation:"作廢 ALW-003"},
-  ctx,authority(supervisor),officialSecond,()=>time,true));
- assert.equal(posts,1,"Lost claim acknowledgement must not create a second POST");
- // Device revoked AFTER durable Claim is committed prevents the FIRST POST.
- // The original claim remains permanent, auditable and readback-only.
- const third={...request,applicationId:"void_application_third",
-  allowanceNumber:"ALW-004"};
- await create(db,third,ctx,authority());
- const target3={workspaceId:ws,applicationId:third.applicationId,deviceId:managerDevice};
- const officialThird=async(url,options)=>{
-  if(url.endsWith("/g0501"))throw Error("FORBIDDEN g0501 after post-claim stop");
-  if(url.endsWith("/allowance_query"))
-   return Response.json({code:0,data:{...officialRecord,allowance_number:"ALW-004"}});
-  return Response.json({code:0,data:{"ALW-004":{type:"D0401",status:99}}});
- };
- const previewThird=await preview(db,target3,ctx,authority(supervisor),
-  officialThird,()=>time);
- await approve(db,{...target3,expectedRevision:1,
-  requestHash:previewThird.requestHash,
-  expectedOfficialSnapshotHash:previewThird.officialSnapshotHash,
-  confirmation:"作廢 ALW-004"},ctx,authority(supervisor),officialThird,()=>time);
- stopImmediatelyAfterClaim=true;
- await rejects("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST",()=>executeVoid(db,{
-  ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
- },ctx,authority(supervisor),officialThird,()=>time,true));
- assert.equal(posts,1);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_send_claims").get().n,3);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_void_audit "+
-  "WHERE kind='post_claim_interlock_no_post'").get().n,1);
- const thirdRead=await read(db,{...target3,deviceId:employee},authority());
- assert.equal(thirdRead.claimed,true);
- assert.equal(thirdRead.readbackOnly,true);
- active(managerDevice,"active");
- await rejects("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST",()=>executeVoid(db,{
-  ...target3,expectedRevision:2,confirmation:"作廢 ALW-004"
- },ctx,authority(supervisor),officialThird,()=>time,true));
- assert.equal(posts,1);
- // All three ambiguous/permanent claims must survive a real close/reopen,
- // including the D1-ACK-lost and post-claim-revocation cases above.
- const beforeRestart=sql.prepare("SELECT * FROM allowance_void_send_claims ORDER BY application_id").all();
- const auditBeforeRestart=sql.prepare("SELECT * FROM allowance_void_audit ORDER BY event_id").all();
- sql.close();sql=new DatabaseSync(databasePath);sql.exec("PRAGMA foreign_keys=ON");
- assert.deepEqual(sql.prepare("SELECT * FROM allowance_void_send_claims ORDER BY application_id").all(),beforeRestart);
- assert.deepEqual(sql.prepare("SELECT * FROM allowance_void_audit ORDER BY event_id").all(),auditBeforeRestart);
- const restartCases=new Map([
-  [target.applicationId,["ALW-001",official,"VOID_PREVIEW_COMPANY_CHANGED"]],
-  [target2.applicationId,["ALW-003",officialSecond,"VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST"]],
-  [target3.applicationId,["ALW-004",officialThird,"VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST"]]
- ]);
- for(const claim of beforeRestart){
-  const original={workspaceId:ws,applicationId:claim.application_id,deviceId:managerDevice};
-  const state=await read(db,original,authority(supervisor));
-  assert.equal(state.claimed,true);assert.equal(state.readbackOnly,true);
-  const [number,provider,error]=restartCases.get(claim.application_id);
-  const neverPost=async(url,options)=>{
-   if(url.endsWith("/g0501")){posts++;throw Error("unexpected repeat g0501 after restart");}
-   return provider(url,options);
-  };
-  await rejects(error,()=>executeVoid(db,{
-   ...original,expectedRevision:2,confirmation:"作廢 "+number
-  },ctx,authority(supervisor),neverPost,()=>time,true));
- }
- assert.equal(posts,1,"restart must never issue another g0501 POST");
- assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
- assert.equal(sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
- console.log("V3.2 E Cloud g0501 request: scoped CYID, AES-GCM, keyed HMAC, unique number, revoked roles and original-ID lost-D1 readback OK");
+ console.log("Cloud void encrypted application, manager preview/approval, original-ID ACL and immutable history passed.");
 }finally{sql.close();rmSync(directory,{recursive:true,force:true});}

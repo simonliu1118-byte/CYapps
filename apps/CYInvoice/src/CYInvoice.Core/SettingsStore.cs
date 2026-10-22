@@ -23,31 +23,11 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         }
     }
 
-    // g0501 may never regain Local sending authority merely because the UI
-    // switches back to local_only, or because a stale Settings snapshot is saved.
-    // This marker is monotonic within the existing settings.json owner; it is
-    // not a cross-device lease nor a substitute for Cloud D1 arbitration.
-    private static bool HadCloudVoidAuthorityRisk(Settings value) =>
-        value.CloudVoidLocalSendBlocked ||
-        value.CloudMode != CloudModes.LocalOnly ||
-        value.CloudWorkspaceId.Length != 0 ||
-        value.CloudDeviceId.Length != 0 ||
-        value.CloudIdentityProvider == "CYID" ||
-        value.CloudEmployeeAuthorityReady ||
-        value.CloudCompanyAppliedRevision != 0;
-
     public void Save(Settings settings)
     {
         lock (gate)
         {
             Validate(settings);
-            if (JsonFile.TryRead<Settings>(path, out var previous))
-            {
-                Validate(previous!);
-                settings.CloudVoidLocalSendBlocked =
-                    HadCloudVoidAuthorityRisk(previous!) || HadCloudVoidAuthorityRisk(settings);
-            }
-            else settings.CloudVoidLocalSendBlocked = HadCloudVoidAuthorityRisk(settings);
             JsonFile.Write(path, settings);
         }
     }

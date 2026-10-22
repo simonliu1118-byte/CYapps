@@ -317,6 +317,14 @@ public sealed class LocalAllowanceNumberStore
 
     // Must commit immediately BEFORE sending the frozen payload. Never mark
     // an already-sending operation as safe for retry after a crash or timeout.
+    internal int AttemptNumber(string sellerInvoice, string environment, string workItemId)
+    {
+        using var db=Open();using var sql=db.CreateCommand();
+        sql.CommandText="SELECT COALESCE(MAX(attempt),0) FROM allowance_number_ledger WHERE seller_invoice=$seller AND environment=$env AND work_item_id=$work";
+        sql.Parameters.AddWithValue("$seller",sellerInvoice);sql.Parameters.AddWithValue("$env",environment);sql.Parameters.AddWithValue("$work",workItemId);
+        return Convert.ToInt32(sql.ExecuteScalar());
+    }
+
     public void MarkSending(string sellerInvoice, string environment, LocalAllowanceReservation reservation) =>
         Move(sellerInvoice, environment, reservation, "reserved", "sending");
 
@@ -372,15 +380,22 @@ public sealed class LocalAllowanceNumberStore
             throw new InvalidOperationException("Local allowance Ledger changed; no readback audit written");
     }
 
-    // Reserved for a later independent, auditable origin-attribution flow.
-    // Neither code=0 nor a matching allowance_query authorizes calling this.
-    // No current Local API can establish attributable g0401 origin proof.
-    // Keep the historical entrypoint fail-closed rather than letting a
-    // caller treat code=0 or a matching number as success.
+    // A full original-number/item/status match is durable content evidence.
+    // It completes this approved operation without claiming who originated it.
     public void MarkOfficiallyConfirmed(string sellerInvoice, string environment,
-        LocalAllowanceReservation reservation) =>
-        throw new InvalidOperationException(
-            "g0401 origin not attributable: preserve sending and seek audited human reconciliation");
+        LocalAllowanceReservation reservation)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = "SELECT COUNT(*) FROM allowance_local_readback_audit WHERE seller_invoice=$seller AND environment=$env AND work_item_id=$work AND allowance_number=$number AND result_kind='full_match_unattributed'";
+        sql.Parameters.AddWithValue("$seller", sellerInvoice);
+        sql.Parameters.AddWithValue("$env", environment);
+        sql.Parameters.AddWithValue("$work", reservation.WorkItemId);
+        sql.Parameters.AddWithValue("$number", reservation.AllowanceNumber);
+        if (Convert.ToInt64(sql.ExecuteScalar()) == 0)
+            throw new InvalidOperationException("缺少完整官方比對證據，不能結案");
+        Move(sellerInvoice, environment, reservation, "sending", "confirmed");
+    }
 
     private void Move(string sellerInvoice, string environment,
         LocalAllowanceReservation reservation, string from, string to,

@@ -36,26 +36,11 @@ try{
  sql.exec("PRAGMA foreign_keys=ON");
  const migrations=readdirSync("migrations")
   .filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql",
+ assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql",
   "0020 is canonical; schema promotion must not expose a g0501 sender");
 
- // The source-only Cloud one-shot sender is intentionally NOT reachable from
- // any Worker HTTP entrypoint while Local/Cloud can compete during partitions.
- const appSource=readFileSync("src/app.ts","utf8");
- const routesSource=readFileSync("src/allowances-route.ts","utf8");
- const workerSource=readFileSync("src/worker.ts","utf8");
- for(const [name,source] of [["app.ts",appSource],
-                            ["allowances-route.ts",routesSource],
-                            ["worker.ts",workerSource]]){
-  assert.ok(!source.includes("allowance-void-one-shot-coordinator"),
-   name+" must not import the Cloud g0501 sender");
-  assert.ok(!/\/v1\/allowances\/void(?:\/|["']|\x60)/.test(source),
-   name+" must not expose a g0501 route before global ownership");
- }
- const workerConfig=readFileSync("wrangler.jsonc","utf8");
- assert.ok(!workerConfig.includes("ALLOWANCE_G0501_SEND_ENABLED"),
-  "g0501 must not have a deploy-time enabling flag before global ownership");
-
+ // Historical schema20 constraints remain unchanged on disk. The forward
+ // migration and current automatic execution are exercised separately.
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);

@@ -156,6 +156,7 @@ export function preservedDeployConfig(config, settings, activating = false) {
 const schemaUpgrades = {
   '18:19': {from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'},
   '19:20': {from:'19',to:'20',migration:'0020_allowance_void_coordination.sql'},
+  '20:21': {from:'20',to:'21',migration:'0021_allowance_automatic_execution.sql'},
 };
 const validSchemaUpgrade = upgrade => Object.values(schemaUpgrades).some(step =>
   upgrade?.from === step.from && upgrade?.to === step.to && upgrade?.migration === step.migration);
@@ -166,15 +167,16 @@ export function resolveSchemaUpgrade(settings, canonical, applied, operation, re
   const step = schemaUpgrades[requested];
   const plain = name => settings.bindings.find(b => b.name === name && b.type === 'plain_text')?.text;
   check(plain('CYID_ENABLED') === 'true' && plain('SCHEMA_VERSION') === step.from, 'SCHEMA_UPGRADE_SOURCE_INVALID');
-  check([19,20].includes(canonical.length) && canonical[18] === schemaUpgrades['18:19'].migration &&
+  check([19,20,21].includes(canonical.length) && canonical[18] === schemaUpgrades['18:19'].migration &&
     (canonical.length === 19 || canonical[19] === schemaUpgrades['19:20'].migration) &&
+    (canonical.length < 21 || canonical[20] === schemaUpgrades['20:21'].migration) &&
     canonical[Number(step.to)-1] === step.migration,
     'SCHEMA_UPGRADE_TARGET_INVALID');
   // A staged rollout requires the exact target prefix. In a schema20 source,
   // 18:19 accepts exactly 0001..0019, never an incomplete or already-20 D1.
   checkMigrations(applied, canonical.slice(0, Number(step.to)), true);
   for (const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED',
-    'ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED']) {
+    'ALLOWANCE_G0501_SEND_ENABLED','ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED']) {
     const bindings = settings.bindings.filter(b => b.name === name);
     check(bindings.length === 0 || (bindings.length === 1 && bindings[0].type === 'plain_text' &&
       bindings[0].text === 'false'), 'SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF');
@@ -263,7 +265,7 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     check(activeCyId && audit.operation === 'deploy' && validSchemaUpgrade(audit.schemaUpgrade) &&
       vars.SCHEMA_VERSION === audit.schemaUpgrade.to, 'SCHEMA_UPGRADE_INTENT_INVALID');
     for (const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED',
-      'ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
+      'ALLOWANCE_G0501_SEND_ENABLED','ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
       check(vars[name] === undefined || vars[name] === 'false', 'SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF');
     // Source rollout must not smuggle changes to scopes, custom vars or flags.
     const original = Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
@@ -359,6 +361,8 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
   const knownV32Audit = canonical.slice(-7).join('|') === v32Audit.join('|');
   const v32Void = [...v32Audit,'0020_allowance_void_coordination.sql'];
   const knownV32Void = canonical.slice(-8).join('|') === v32Void.join('|');
+  const v32Automatic = [...v32Void,'0021_allowance_automatic_execution.sql'];
+  const knownV32Automatic = canonical.slice(-9).join('|') === v32Automatic.join('|');
   const suffix = options => pending.length === options.length &&
     options.every((name,i) => pending[i] === name);
   check(pending.length === 0 ||
@@ -367,7 +371,8 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
     (knownV31 && v31.some((_,i)=>suffix(v31.slice(i)))) ||
     (knownV32 && v32.some((_,i)=>suffix(v32.slice(i)))) ||
     (knownV32Audit && v32Audit.some((_,i)=>suffix(v32Audit.slice(i)))) ||
-    (knownV32Void && v32Void.some((_,i)=>suffix(v32Void.slice(i)))),
+    (knownV32Void && v32Void.some((_,i)=>suffix(v32Void.slice(i)))) ||
+    (knownV32Automatic && v32Automatic.some((_,i)=>suffix(v32Automatic.slice(i)))),
     'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;

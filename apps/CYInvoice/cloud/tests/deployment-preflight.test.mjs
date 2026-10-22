@@ -8,7 +8,7 @@ import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, check
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
-assert.ok(workflow.includes("options: ['none', '18:19', '19:20']"));
+assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21']"));
 assert.doesNotMatch(workflow,/wrangler d1 migrations apply|deploy:with-migrations/,
   'Worker workflow must not apply later migrations between staged DB and marker gates');
 let activeReads = 0;
@@ -554,7 +554,7 @@ try {
   assert.equal(generated.d1_databases[0].database_id, currentDatabase);
   assert.equal(generated.vars.CYID_ENABLED, 'false');
   assert.equal(generated.vars.CUSTOM_POLICY, 'preserve-synthetic-policy');
-  assert.equal(generated.vars.SCHEMA_VERSION, '20');
+  assert.equal(generated.vars.SCHEMA_VERSION, '21');
   assert.equal(generated.services[1].entrypoint, 'ConsumerAuthoritySync');
   await assert.rejects(main('before',statePath,{...env,...preparation,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'}),/MIGRATION_NOT_COMPLETE/);
   // POSIX mode bits are enforced on the deployment's Linux runner. Windows

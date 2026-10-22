@@ -32,16 +32,15 @@ internal static class LocalAllowanceOneShotTests
             return Task.CompletedTask;
         });
         var first = await service.SendFirstAsync(Seller, Environment, saved);
-        Check(first.Outcome == LocalAllowanceSendOutcome.FullMatchUnattributed,
+        Check(first.Outcome == LocalAllowanceSendOutcome.OfficiallyConfirmed,
             "even complete readback is not proof that this POST created the allowance");
-        Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
-            "exact readback must NOT promote the ledger to confirmed");
+        Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "confirmed",
+            "full original-number content proof completes the operation");
         Check(ReadbackAuditCount(temp.Path)==1,
             "one immutable exact-readback evidence entry must be persisted");
         Check(AuditHashLength(temp.Path)==64,"snapshot hash, not raw buyer, is recorded");
         AssertReadbackAuditImmutable(temp.Path);
-        Expect<InvalidOperationException>(()=>
-            ledger.MarkOfficiallyConfirmed(Seller,Environment,saved));
+
         Check(fake.SendCount == 1 && fake.QueryCount == 1 && checkedCount == 1,
             "one preflight, one g0401, one official query");
         await ExpectAsync<InvalidOperationException>(() =>
@@ -58,7 +57,7 @@ internal static class LocalAllowanceOneShotTests
         var fake = new StubAllowanceGateway { SendException = new TaskCanceledException("timeout") };
         var service = new LocalAllowanceOneShotService(ledger, fake, (_, _) => Task.CompletedTask);
         var first = await service.SendFirstAsync(Seller, Environment, saved);
-        Check(first.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback,
+        Check(first.Outcome == LocalAllowanceSendOutcome.Problem,
             "timeout stays uncertain");
         Check(new LocalAllowanceNumberStore(temp.Path).FindLatest(Seller, Environment, Work)!.Status == "sending",
             "sending must survive restart");
@@ -68,19 +67,19 @@ internal static class LocalAllowanceOneShotTests
         fake.SendException = null;
         fake.Official = ValidOfficial(saved) with { BuyerIdentifier = "OTHER" };
         var mismatch = await service.ReconcileAsync(Seller, Environment, saved);
-        Check(mismatch.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback,
+        Check(mismatch.Outcome == LocalAllowanceSendOutcome.Problem,
             "another buyer's allowance cannot confirm our frozen request");
         Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
             "mismatch never clears sending");
         fake.Official = ValidOfficial(saved);
         var verified = await service.ReconcileAsync(Seller, Environment, saved);
-        Check(verified.Outcome == LocalAllowanceSendOutcome.FullMatchUnattributed,
+        Check(verified.Outcome == LocalAllowanceSendOutcome.OfficiallyConfirmed,
             "readback of the original number is still not attributable to this POST");
-        Check(ledger.FindLatest(Seller,Environment,Work)!.Status=="sending",
-            "repeated exact readback cannot silently confirm");
+        Check(ledger.FindLatest(Seller,Environment,Work)!.Status=="confirmed",
+            "full official evidence confirms without another POST");
         Check(ReadbackAuditCount(temp.Path)==1,
             "only the full exact match can append a readback audit");
-        Check(fake.SendCount == 1 && fake.QueryCount == 2,
+        Check(fake.SendCount == 1 && fake.QueryCount == 3,
             "readback only, no second write");
     }
 
@@ -184,7 +183,7 @@ internal static class LocalAllowanceOneShotTests
             Seller, Environment, saved, seen.Add);
         Check(fake.SendCount == 7 && fake.QueryCount == 1,
             "six explicit occupied replies advance without manual approval");
-        Check(result.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback,
+        Check(result.Outcome == LocalAllowanceSendOutcome.Problem,
             "a missing official query remains uncertain rather than success");
         Check(ledger.FindLatest(Seller, Environment, Work)!.Status == "sending",
             "last non-collision attempt is locked against replay");
@@ -207,7 +206,7 @@ internal static class LocalAllowanceOneShotTests
             (_, _) => Task.CompletedTask);
         var stop = await safe.SendWithAutomaticNumberAdvanceAsync(Seller,
             Environment, second);
-        Check(stop.Outcome == LocalAllowanceSendOutcome.PendingOfficialReadback &&
+        Check(stop.Outcome == LocalAllowanceSendOutcome.Problem &&
             uncertain.SendCount == 1 &&
             secondLedger.FindLatest(Seller, Environment, Work)!.Status == "sending",
             "timeout never triggers a new number or retry");

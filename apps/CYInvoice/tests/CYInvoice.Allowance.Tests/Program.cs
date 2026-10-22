@@ -11,12 +11,13 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("Local g0501 signed transport never retries, and exact status decoder fails closed", TestG0501TransportAsync),
     ("Local g0501 approval, durable claim, lost reply, restart and official observation", TestLocalVoidLifecycleAsync),
+    ("Local g0501 safe retry is bounded, backed off, and original-number readback completes", TestLocalVoidSafeRetryAsync),
     ("Local g0501 one supervisor confirmation closes on official proof", TestLocalOneClickVoidAsync),
     ("Local g0501 rejects wrong manager, expiry, changed official and revoked manager", TestLocalVoidPreconditionsAsync),
     ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
     ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
     ("Local g0501 changed draft, cancellation and account scope cannot claim", TestLocalVoidScopeAsync),
-    ("Cloud to Local mode toggle cannot restore g0501 after reconnect/restart", TestLocalVoidModeHandoffFenceAsync),
+    ("current Local owner resumes its original approval despite historical Cloud settings", TestLocalVoidModeHandoffFenceAsync),
     ("Local g0501 original-number fence blocks competing issue IDs", TestLocalVoidCompetingIssueAsync),
     ("Local g0501 retention preserves pending and audit while pruning unrelated history", TestLocalVoidRetentionAsync),
     ("V3.2-B1 Local immutable approved-number ledger survives restart and blocks blind replay", () => RunSync(LocalAllowanceLedgerTests.Run)),
@@ -127,7 +128,7 @@ static async Task TestLocalOneClickVoidAsync()
     Equal(0, UnresolvedAllowanceVoidIssues(setup.Repository).Count);
     Equal(true, setup.Workflow.LocalApprovalFor(issue)!.Claimed);
     await ThrowsAsync<InvalidOperationException>(() =>
-        setup.Workflow.SendLocalVoidOnceAsync(issue, "2000", "AdminPass1", "", api));
+        setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
     Equal(1, api.PostCalls);
     using var db = OpenVoidDatabase(setup.Repository);
     using var query = db.CreateCommand();
@@ -141,6 +142,26 @@ static async Task TestLocalOneClickVoidAsync()
     Equal(false, diagnostic.Contains("ALW-001", StringComparison.Ordinal));
 }
 
+static async Task TestLocalVoidSafeRetryAsync()
+{
+    using var temporary=new TemporaryDirectory("g0501-safe-retry");var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
+    await ApproveApiVoidAsync(setup,issue,api);var current=setup.Workflow.LocalApprovalFor(issue)!.ExpiresUtc;
+    api.LoseReply=true;
+    var worker=new EmployeeAllowanceVoidWorkflowService(setup.Repository,now:()=>current,allowanceGateway:api);
+    for(var i=1;i<=3;i++)
+    {
+        await worker.ExecuteApprovedLocalVoidAsync(issue);Equal(i,api.PostCalls);
+        await worker.ExecuteApprovedLocalVoidAsync(issue);Equal(i,api.PostCalls); // Within backoff: readback only.
+        current=current.AddSeconds(61);
+    }
+    await worker.ExecuteApprovedLocalVoidAsync(issue);Equal(3,api.PostCalls);
+    Equal(1,new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count(i=>i.Id==issue.Id));
+    using var db=OpenVoidDatabase(setup.Repository);using var query=db.CreateCommand();query.CommandText="SELECT COUNT(*) FROM allowance_void_local_attempts";
+    Equal(3L,Convert.ToInt64(query.ExecuteScalar()));
+    api.Status=new("ALW-001","D0501",99);await worker.ExecuteApprovedLocalVoidAsync(issue);Equal(3,api.PostCalls);
+    Equal(0,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
+}
+
 static async Task TestLocalVoidLifecycleAsync()
 {
     using var temporary=new TemporaryDirectory("g0501-lifecycle");
@@ -151,12 +172,13 @@ static async Task TestLocalVoidLifecycleAsync()
     Equal(0,api.PostCalls);
     // A second textual challenge is no longer part of manager approval.
     api.LoseReply=true;
-    var result=await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api);
+    var result=await setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api);
     Equal(false,result.OfficialVoidObserved);
     Equal(1,api.PostCalls);
     Equal(true,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
-    var restarted=new EmployeeAllowanceVoidWorkflowService(setup.Repository);
-    await ThrowsAsync<InvalidOperationException>(()=>restarted.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    var restarted=new EmployeeAllowanceVoidWorkflowService(setup.Repository, now: () => setup.Workflow.LocalApprovalFor(issue)!.ExpiresUtc);
+    await restarted.ExecuteApprovedLocalVoidAsync(issue, api);
+    Equal(1, api.PostCalls);
     Throws<InvalidOperationException>(()=>restarted.CancelManualReview(issue,"2000","AdminPass1"));
     Throws<InvalidOperationException>(()=>restarted.MarkManualCompleted(issue,"2000","AdminPass1"));
     var closure=new InvoiceAdministrativeClosureService(setup.Repository,now:()=>DateTimeOffset.UtcNow.AddYears(1));
@@ -168,7 +190,7 @@ static async Task TestLocalVoidLifecycleAsync()
     Equal(true,(await restarted.ReadbackLocalVoidAsync(issue,"0001","SuperPass1",api)).OfficialVoidObserved);
     Equal(1,api.PostCalls);
     Equal(0,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
-    Equal(true,restarted.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
+    Equal(false,restarted.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
     using var db=OpenVoidDatabase(setup.Repository);
     foreach(var table in new[]{"approvals","claims","observations"})
     {
@@ -198,14 +220,13 @@ static async Task TestLocalVoidPreconditionsAsync()
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.ApproveLocalVoidAsync(issue,"2000","AdminPass1",preview.OfficialSnapshotHash,api));
     api.Official=valid;
     await ApproveApiVoidAsync(setup,issue,api);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"0001","SuperPass1","作廢 ALW-001",api));
-    // No 15-minute approval lease remains; the same original manager must
-    // still reauthenticate and the original official evidence must match.
+    // No 15-minute approval lease remains; the original manager must
+    // remain enabled and authorized and the original official evidence must match.
     api.Official=valid with {TaxAmount="6"};
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
     api.Official=valid;
     api.OnQuery=()=>setup.Repository.Employees.SetEnabled("0001","2000",false);
-    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
     Equal(0,api.PostCalls);
     Equal(false,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
 
@@ -214,8 +235,7 @@ static async Task TestLocalVoidPreconditionsAsync()
     await ApproveApiVoidAsync(delayed.Setup, delayed.Issue, delayed.Api);
     var delayedManager = new EmployeeAllowanceVoidWorkflowService(
         delayed.Setup.Repository, now: () => DateTimeOffset.UtcNow.AddDays(2));
-    await delayedManager.SendLocalVoidOnceAsync(delayed.Issue,
-        "2000", "AdminPass1", "", delayed.Api);
+    await delayedManager.ExecuteApprovedLocalVoidAsync(delayed.Issue,delayed.Api);
     Equal(1, delayed.Api.PostCalls);
 }
 
@@ -229,7 +249,7 @@ static async Task TestLocalVoidRacesAsync()
     api.BeforeQueryAsync=async()=> {if(Interlocked.Increment(ref callers)==2)gate.SetResult(); await gate.Task;};
     async Task<bool> TrySend()
     {
-        try {await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api); return true;}
+        try {await setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api); return true;}
         catch(InvalidOperationException){return false;}
     }
     var results=await Task.WhenAll(TrySend(),TrySend());
@@ -238,7 +258,7 @@ static async Task TestLocalVoidRacesAsync()
     var cancel=await CreateApiVoidAsync(cancelTemporary.Path);
     await ApproveApiVoidAsync(cancel.Setup,cancel.Issue,cancel.Api);
     cancel.Api.OnQuery=()=>cancel.Setup.Workflow.CancelManualReview(cancel.Issue,"2000","AdminPass1");
-    await ThrowsAsync<InvalidOperationException>(()=>cancel.Setup.Workflow.SendLocalVoidOnceAsync(cancel.Issue,"2000","AdminPass1","作廢 ALW-001",cancel.Api));
+    await ThrowsAsync<InvalidOperationException>(()=>cancel.Setup.Workflow.ExecuteApprovedLocalVoidAsync(cancel.Issue,cancel.Api));
     Equal(0,cancel.Api.PostCalls);
 }
 
@@ -260,8 +280,8 @@ static async Task TestLocalVoidAuditFailureAsync()
         command.CommandText="CREATE TRIGGER injected_void_audit_failure BEFORE INSERT ON allowance_void_local_observations BEGIN SELECT RAISE(ABORT,'synthetic disk failure'); END;";
         command.ExecuteNonQuery();
     }
-    Equal(false,(await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api)).AuditRecorded);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
+    await setup.Workflow.ExecuteApprovedLocalVoidAsync(issue, api);
     Equal(1,api.PostCalls); Equal(true,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
 }
 
@@ -273,21 +293,20 @@ static async Task TestLocalVoidScopeAsync()
     using(var cancelled=new CancellationTokenSource())
     {
         cancelled.Cancel();
-        await ThrowsAsync<OperationCanceledException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,
-            "2000","AdminPass1","作廢 ALW-001",api,cancelled.Token));
+        await ThrowsAsync<OperationCanceledException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api,cancelled.Token));
     }
     Equal(false,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
     var record=setup.Repository.Invoices.LoadOrCreate().Single();
     var review=setup.Workflow.ManualReviewFor(record)!;
     record.ExtensionData!["cyinvoice_allowance_void_manual_review"]=JsonSerializer.SerializeToElement(review with {Reason="已改動的原因"});
     setup.Repository.Invoices.Save([record]);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
     record.ExtensionData["cyinvoice_allowance_void_manual_review"]=JsonSerializer.SerializeToElement(review);
     setup.Repository.Invoices.Save([record]);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue with {AccountKey="production|OTHER"},"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue with {AccountKey="production|OTHER"},api));
     var settings=setup.Repository.Settings.LoadOrCreate();
     settings.CloudMode=CloudModes.CloudPreferred; setup.Repository.Settings.Save(settings);
-    await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
     Equal(0,api.PostCalls);
 }
 
@@ -296,40 +315,19 @@ static async Task TestLocalVoidModeHandoffFenceAsync()
     using var temporary=new TemporaryDirectory("g0501-cloud-mode-handoff");
     var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
     await ApproveApiVoidAsync(setup,issue,api);
-    Equal(false,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
 
-    // Enter Cloud once. Merely switching the UI back to LocalOnly must NOT
-    // re-enable local g0501 after another Device might have claimed it.
+    // Retained Cloud settings are history. The actual current owner and
+    // original approval/claim determine authority; no global Local quarantine.
     var settings=setup.Repository.Settings.LoadOrCreate();
-    settings.CloudMode=CloudModes.CloudPreferred;
+    settings.CloudMode=CloudModes.CloudPreferred;setup.Repository.Settings.Save(settings);
+    await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api));
+    settings=setup.Repository.Settings.LoadOrCreate();settings.CloudMode=CloudModes.LocalOnly;
     setup.Repository.Settings.Save(settings);
-    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
-    settings=setup.Repository.Settings.LoadOrCreate();
-    settings.CloudMode=CloudModes.LocalOnly;
-    setup.Repository.Settings.Save(settings);
-    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
-
-    // Actual reopen from disk must preserve the guard across process restart.
     var reopened=TestRepository.Open(temporary.Path,new TestProtector());
     var resumed=new EmployeeAllowanceVoidWorkflowService(reopened);
-    Equal(true,reopened.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
-    if (resumed.LocalApprovalFor(issue) is not null)
-        throw new Exception("Cloud ownership must hide Local-only g0501 approval.");
-    var queries=api.QueryCalls;
-    await ThrowsAsync<InvalidOperationException>(()=>resumed.PreviewLocalVoidAsync(
-        issue,"2000","AdminPass1",api));
-    await ThrowsAsync<InvalidOperationException>(()=>resumed.ApproveLocalVoidAsync(
-        issue,"2000","AdminPass1","not a real hash",api));
-    await ThrowsAsync<InvalidOperationException>(()=>resumed.SendLocalVoidOnceAsync(
-        issue,"2000","AdminPass1","作廢 ALW-001",api));
-    Equal(queries,api.QueryCalls);
-    Equal(0,api.PostCalls);
+    await resumed.ExecuteApprovedLocalVoidAsync(issue,api);
+    Equal(1,api.PostCalls);
 
-    // A stale settings object cannot clear the persisted monotonic quarantine.
-    var stale=setup.Repository.Settings.LoadOrCreate();
-    stale.CloudVoidLocalSendBlocked=false;
-    setup.Repository.Settings.Save(stale);
-    Equal(true,setup.Repository.Settings.LoadOrCreate().CloudVoidLocalSendBlocked);
 }
 
 static async Task TestLocalVoidCompetingIssueAsync()
@@ -338,7 +336,7 @@ static async Task TestLocalVoidCompetingIssueAsync()
     var (setup,original,api)=await CreateApiVoidAsync(temporary.Path);
     await ApproveApiVoidAsync(setup,original,api);
     api.LoseReply=true;
-    await setup.Workflow.SendLocalVoidOnceAsync(original,"2000","AdminPass1","作廢 ALW-001",api);
+    await setup.Workflow.ExecuteApprovedLocalVoidAsync(original,api);
     Equal(1,api.PostCalls);
     // Repeat submission must NOT report that a claimed transaction is merely
     // pending manager approval, even if the original application ID survives.
@@ -380,7 +378,7 @@ static async Task TestLocalVoidRetentionAsync()
     using var temporary=new TemporaryDirectory("g0501-retention");
     var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
     await ApproveApiVoidAsync(setup,issue,api);
-    await setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api);
+    await setup.Workflow.ExecuteApprovedLocalVoidAsync(issue,api);
     var unrelated=NewRecord("2026/09/01");
     unrelated.InvoiceNumber="BB87654321"; unrelated.OrderId="OTHER";
     unrelated.ApiOrderId="OTHER"; unrelated.OriginalOrderId="OTHER";

@@ -14,6 +14,7 @@ public sealed class InvoiceAutomaticSyncService
     private readonly InvoiceRetentionService retentionService;
     private readonly InvoiceVoidService voidService;
     private readonly EmployeeAllowanceWorkflowService allowanceService;
+    private readonly EmployeeAllowanceVoidWorkflowService allowanceVoidService;
     private readonly Func<DateTimeOffset> now;
 
     public InvoiceAutomaticSyncService(
@@ -21,7 +22,8 @@ public sealed class InvoiceAutomaticSyncService
         InvoiceSyncService syncService,
         Func<DateTimeOffset>? now = null,
         InvoiceVoidService? voidService = null,
-        EmployeeAllowanceWorkflowService? allowanceService = null)
+        EmployeeAllowanceWorkflowService? allowanceService = null,
+        EmployeeAllowanceVoidWorkflowService? allowanceVoidService = null)
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         this.syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
@@ -31,12 +33,20 @@ public sealed class InvoiceAutomaticSyncService
         retentionService = new InvoiceRetentionService(repository);
         this.voidService = voidService ?? new InvoiceVoidService(repository, now: now);
         this.now = now ?? (() => DateTimeOffset.Now);
+        this.allowanceVoidService = allowanceVoidService ?? new EmployeeAllowanceVoidWorkflowService(repository, now: this.now);
         this.allowanceService = allowanceService ?? new EmployeeAllowanceWorkflowService(repository, now: this.now);
     }
 
     public async Task<InvoiceSyncResult> SyncRecentAsync(CancellationToken cancellationToken = default)
     {
-        var result = await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
+        InvoiceSyncResult result;
+        try { result = await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Financial recovery is independent of invoice-list availability.
+            await ReconcileApprovedLocalAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
         return await ReconcilePendingAfterListAsync(result, cancellationToken).ConfigureAwait(false);
     }
 
@@ -55,7 +65,13 @@ public sealed class InvoiceAutomaticSyncService
         }
 
         var startDate = account.Environment == Environments.Test ? today : TwoPeriodRangeStart(today);
-        var result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
+        InvoiceSyncResult result;
+        try { result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            await ReconcileApprovedLocalAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
         // Only the daily pass calls allowance_list; normal startup/manual
         // sync retains its existing call volume.
         (int Queried, IReadOnlyList<string> Problems) allowances;
@@ -72,7 +88,10 @@ public sealed class InvoiceAutomaticSyncService
             // deduplicated action item in the existing Upload Issues screen.
             issueStore.Record(accountKey, string.Empty, string.Empty,
                 InvoiceSyncIssueTypes.AllowanceLimitExceeded, error.Message, now());
-            throw;
+            // Stop this day's list traversal. The existing daily marker avoids
+            // starting the same bounded pass on every timer tick; the durable
+            // limit issue remains until a complete pass on a later day succeeds.
+            allowances = (0, new[] { error.Message });
         }
         result = result with
         {
@@ -123,6 +142,7 @@ public sealed class InvoiceAutomaticSyncService
         var account = CurrentAccount();
         var accountKey = account.Environment + "|" + account.SellerInvoice;
         var problems = result.Problems.ToList();
+        problems.AddRange(await ReconcileApprovedLocalAsync(cancellationToken).ConfigureAwait(false));
         ResolveDeprecatedPendingIssues(accountKey, problems);
 
         var pending = repository.Invoices.LoadOrCreate()
@@ -209,6 +229,40 @@ public sealed class InvoiceAutomaticSyncService
         return problems.Count == result.Problems.Count
             ? result
             : result with { Problems = problems.ToArray() };
+    }
+
+    private async Task<IReadOnlyList<string>> ReconcileApprovedLocalAsync(CancellationToken token)
+    {
+        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly ||
+            repository.IdentityProvider.Kind != IdentityProviderKind.Local) return [];
+        var problems = new List<string>();
+        var voidWorkflow = allowanceVoidService;
+        var account = CurrentAccount();
+        foreach (var issue in issueStore.Unresolved(account.Environment + "|" + account.SellerInvoice))
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                if (issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview)
+                {
+                    var matches = repository.Invoices.LoadOrCreate().Where(r => r.Environment == account.Environment &&
+                        (r.SellerInvoice.Length == 0 || r.SellerInvoice == account.SellerInvoice) &&
+                        r.InvoiceNumber == issue.InvoiceNumber).ToArray();
+                    if (matches.Length == 1 && allowanceService.ManualReviewFor(matches[0])?.LocalApprovedUtc is not null)
+                        await allowanceService.ExecuteApprovedLocalDraftAsync(issue, cancellationToken: token).ConfigureAwait(false);
+                }
+                else if (issue.IssueType == InvoiceAllowanceVoidIssueTypes.ManualReview &&
+                    voidWorkflow.LocalApprovalFor(issue) is not null)
+                    await voidWorkflow.ExecuteApprovedLocalVoidAsync(issue, cancellationToken: token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                // Workflow owns durable issue/evidence. Keep servicing other
+                // independent operations after one operation fails.
+                problems.Add($"{issue.Id}: {error.Message}");
+            }
+        }
+        return problems;
     }
 
     private void ResolveDeprecatedPendingIssues(string accountKey, List<string> problems)

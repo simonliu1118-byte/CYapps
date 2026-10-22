@@ -10,7 +10,7 @@ import type {AllowanceActorSource,CloudAllowanceContext}
 export interface CloudVoidApprovalTarget {
  workspaceId:string;applicationId:string;deviceId:string;
  expectedRevision:1;requestHash:string;
- expectedOfficialSnapshotHash:string;confirmation:string;
+ expectedOfficialSnapshotHash:string;
 }
 export interface CloudVoidApprovalResult {
  applicationId:string;approvedRevision:2;officialSnapshotHash:string;
@@ -28,8 +28,7 @@ export async function approveCloudVoidAfterOfficialProof(
 ):Promise<CloudVoidApprovalResult>{
  if(!t||!WS.test(t.workspaceId)||!ID.test(t.applicationId)||
   !DEVICE.test(t.deviceId)||t.expectedRevision!==1||
-  !HASH.test(t.requestHash)||!HASH.test(t.expectedOfficialSnapshotHash)||
-  typeof t.confirmation!=="string")
+  !HASH.test(t.requestHash)||!HASH.test(t.expectedOfficialSnapshotHash))
   throw new Error("VOID_APPROVAL_TARGET_INVALID");
  const first=await authority.revalidate();
  if(!isVoidManager(first,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
@@ -38,9 +37,8 @@ export async function approveCloudVoidAfterOfficialProof(
  // two fresh official read-only calls; it revalidates the actor after IO.
  const proof=await previewCloudVoidForManager(db,t,ctx,authority,transport,clock);
  if(proof.revision!==1||proof.requestHash!==t.requestHash||
-  proof.officialSnapshotHash!==t.expectedOfficialSnapshotHash||
-  t.confirmation!=="作廢 "+proof.allowanceNumber)
-  throw new Error("VOID_APPROVAL_STALE_OR_CONFIRMATION_INVALID");
+  proof.officialSnapshotHash!==t.expectedOfficialSnapshotHash)
+  throw new Error("VOID_APPROVAL_STALE");
  const current=await authority.revalidate();
  if(!sameVoidManager(first,current,t.workspaceId)||
   !await activeVoidDevice(db,t.workspaceId,t.deviceId))
@@ -51,14 +49,16 @@ export async function approveCloudVoidAfterOfficialProof(
  if(!freshVoidOfficialEvidence(proof.officialCheckedAtUtc,date))
   throw new Error("VOID_APPROVAL_OFFICIAL_STALE");
  const approvedAtUtc=date.toISOString();
+ // Retained schema20 evidence field; schema21 execution does not use this
+ // timestamp as an approval window. Current authority is checked per attempt.
  const validUntilUtc=new Date(date.valueOf()+900_000).toISOString();
  // One D1 transaction: INSERT immutable grant, then CAS application.
  // The draft SQL triggers independently fence company revision and Device.
  // No eventual consistency, no second authorization owner or replay loop.
  const grant=db.prepare("INSERT INTO allowance_void_approvals "+
   "(application_id,workspace_id,request_hash,official_snapshot_hash,"+
-  "manager_actor_id,manager_device_id,approved_at,valid_until_utc) "+
-  "SELECT r.application_id,r.workspace_id,r.request_hash,?4,?5,?6,?7,?8 "+
+  "manager_actor_id,manager_device_id,approved_at,valid_until_utc"+(first.authoritySnapshot?",authority_snapshot":"")+") "+
+  "SELECT r.application_id,r.workspace_id,r.request_hash,?4,?5,?6,?7,?8"+(first.authoritySnapshot?",?9":"")+" "+
   "FROM allowance_void_requests r "+
   "JOIN devices d ON d.device_id=?6 AND d.workspace_id=r.workspace_id "+
   "JOIN workspaces w ON w.workspace_id=r.workspace_id "+
@@ -72,7 +72,7 @@ export async function approveCloudVoidAfterOfficialProof(
   "WHERE x.application_id=r.application_id)")
   .bind(t.applicationId,t.workspaceId,t.requestHash,
    proof.officialSnapshotHash,first.employeeId,t.deviceId,
-   approvedAtUtc,validUntilUtc);
+   approvedAtUtc,validUntilUtc,...(first.authoritySnapshot?[first.authoritySnapshot]:[]));
  const update=db.prepare("UPDATE allowance_void_requests "+
   "SET status='approved',revision=2,manager_actor_id=?4,updated_at=?5 "+
   "WHERE application_id=?1 AND workspace_id=?2 AND request_hash=?3 "+

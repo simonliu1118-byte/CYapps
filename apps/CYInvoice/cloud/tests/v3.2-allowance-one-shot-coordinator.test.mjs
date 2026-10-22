@@ -13,7 +13,7 @@ async function bundle(path){
  return import("data:text/javascript;base64,"+
   Buffer.from(b.outputFiles[0].text).toString("base64"));
 }
-const {executeCloudAllowanceExactlyOnce:execute}=await bundle("allowance-one-shot-coordinator.ts");
+const {executeApprovedCloudAllowance:execute,approvedExecutionAuthority,resumeApprovedCloudAllowances}=await bundle("allowance-one-shot-coordinator.ts");
 const {approveCloudAllowanceAfterOfficialProof:approve}=
  await bundle("allowance-manager-approval.ts");
 const {reserveApprovedCloudAllowanceNumber:reserve,
@@ -26,7 +26,8 @@ const ws="ws_c3c2",devA="dev_11111111-1111-4111-8111-111111111111",
  devB="dev_22222222-2222-4222-8222-222222222222";
 const context={encryptionKeyHex:"aa".repeat(32),environment:"test"};
 const employee={workspaceId:ws,employeeId:"employee",workspaceRole:"USER"};
-const manager={workspaceId:ws,employeeId:"manager",workspaceRole:"ADMIN"};
+const cached={identityWorkspaceId:"identity_synthetic",applicationId:"CYINVOICE",employeeId:"manager",credentialVersion:1,employeeRevision:1,workspaceRole:"ADMIN",isIdentityAdmin:false,emailVerified:true};
+const manager={workspaceId:ws,employeeId:"manager",workspaceRole:"ADMIN",authoritySnapshot:JSON.stringify(cached)};
 const authority=(a=manager)=>({revalidate:async()=>a});
 const time=new Date("2026-10-19T08:00:00.000Z"),clock=()=>time;
 const invoice="AB12345678";
@@ -65,10 +66,10 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   return Response.json({code:0,data:[row]});
  }};
 }
-async function fixture(schema19=false,filename=":memory:"){
+async function fixture(schema19=false,filename=":memory:",through21=true){
  const sql=new DatabaseSync(filename);
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql");
+ assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -79,7 +80,7 @@ async function fixture(schema19=false,filename=":memory:"){
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
  for(const f of migrations.filter(x=>x>="0014"&&x<"0019"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
- if(schema19)sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
+ for(const file of migrations.filter(x=>x>="0019"&&(through21||x<"0021")))sql.exec(readFileSync("migrations/"+file,"utf8"));
  const appKey=await seal(context.encryptionKeyHex,ws,"amego",
    "SYNTHETIC_APP_KEY_DO_NOT_USE");
  sql.prepare(`INSERT INTO company_settings(
@@ -93,6 +94,7 @@ async function fixture(schema19=false,filename=":memory:"){
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}
   async first(){return sql.prepare(this.q).get(...this.args)??null;}
+  async all(){return {results:sql.prepare(this.q).all(...this.args)};}
   async run(){
    if(this.q.includes("UPDATE allowance_number_ledger")&&beforeSend){
     const cb=beforeSend;beforeSend=null;cb();
@@ -121,15 +123,11 @@ async function fixture(schema19=false,filename=":memory:"){
  }};
  async function prepare(id){
   await create(db,input(id),context,authority(employee));
-  sql.prepare(`UPDATE allowance_applications SET status='review',revision=2,
-   manager_actor_id='manager',actor_id='manager',updated_by_device_id=?,
-   updated_at='2026-10-19T07:58:00.000Z' WHERE application_id=?`)
-  .run(devB,id);
   const official=fakeOfficial();
-  await approve(db,approvalTarget(id),context,authority(),
+  await approve(db,{...approvalTarget(id),expectedRevision:1},context,authority(through21?manager:{...manager,authoritySnapshot:undefined}),
    official.transport,clock);
   assert.equal(official.count,1);
-  const num=await reserve(db,reserveTarget(id),context,authority(),clock);
+  const num=await reserve(db,reserveTarget(id),context,authority(through21?manager:{...manager,authoritySnapshot:undefined}),clock);
   assert.equal(num.status,"reserved");
   return sendTarget(id,num);
  }
@@ -138,329 +136,202 @@ async function fixture(schema19=false,filename=":memory:"){
   lostReply:()=>loseReply=true,beforeBatch:f=>beforeBatch=f,lostBatch:()=>lostBatch=true};
 }
 
-const status=(sql,id)=>sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=?").get(id)?.status;
-function providerFor(target,options={}){
- const urls=[];
- const item={original_invoice_number:options.otherOriginal?"CD87654321":invoice,original_invoice_date:20261019,
-  original_description:"FAKE ITEM",quantity:1,unit_price:50,
-  amount:50,tax:0,tax_type:1};
- const full={allowance_number:target.allowanceNumber,allowance_date:20261019,
-  invoice_type:"D0401",invoice_status:99,allowance_type:2,
-  buyer_identifier:options.otherBuyer?"87654321":"0000000000",buyer_name:options.otherBuyer?"EXTERNAL":"FAKE BUYER",
-  total_amount:50,tax_amount:0,cancel_date:0,wait:[],product_item:[item]};
- return {urls,send:async(url,opts)=>{
-  urls.push(url);
-  const form=new URLSearchParams(opts.body);
-  assert.equal(opts.method,"POST");
-  assert.equal(opts.redirect,"error");
-  assert.equal(form.get("invoice"),"12345678");
-  assert.equal(form.get("sign"),createHash("md5").update(
-   form.get("data")+form.get("time")+"SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+
+const {createCloudAllowanceVoidApplication:createVoid}=await bundle("allowance-void-applications.ts");
+const {previewCloudVoidForManager:previewVoid}=await bundle("allowance-void-manager-preview.ts");
+const {approveCloudVoidAfterOfficialProof:approveVoid}=await bundle("allowance-void-manager-approval.ts");
+const {executeCloudVoidOnce:executeVoid}=await bundle("allowance-void-one-shot-coordinator.ts");
+const {allowanceNumberFromSequence:format}=await bundle("allowance-number-reservation.ts");
+function provider(options={}){
+ let posts=0,queries=0;
+ const transport=async(url,opts)=>{
+  const data=JSON.parse(new URLSearchParams(opts.body).get("data"));
   if(url.endsWith("/invoice_query"))return Response.json({code:0,data:[invoiceRecord]});
   if(url.endsWith("/g0401")){
-   assert.deepEqual(JSON.parse(form.get("data"))[0].AllowanceNumber,target.allowanceNumber);
-   if(options.lostPost)throw Error("response lost after official transaction");
-   return Response.json({code:options.collision?4040161:0});
+   posts++;
+   if(posts<=(options.collisions??0))return Response.json({code:4040161});
+   if(options.unknown)throw new Error("synthetic lost response");
+   return Response.json({code:0});
   }
   if(url.endsWith("/allowance_query")){
-   assert.equal(JSON.parse(form.get("data")).allowance_number,target.allowanceNumber);
-   if(options.unavailableReadback)return Response.json({code:71,data:null});
-   return Response.json({code:0,data:full});
+   queries++;
+   if(options.unavailable)return Response.json({code:71,data:null});
+   const number=data.allowance_number;
+   return Response.json({code:0,data:{allowance_number:number,allowance_date:20261019,
+    invoice_type:"D0401",invoice_status:options.pending?31:99,allowance_type:2,
+    buyer_identifier:options.mismatch?"87654321":"0000000000",buyer_name:"FAKE BUYER",total_amount:50,tax_amount:0,cancel_date:0,wait:[],
+    product_item:[{original_invoice_number:invoice,original_invoice_date:20261019,original_description:"FAKE ITEM",quantity:1,unit_price:50,amount:50,tax:0,tax_type:1}]}});
   }
-  throw Error("unexpected official mutation");
- }};
+  throw new Error("unexpected provider operation");
+ };
+ return {transport,get posts(){return posts;},get queries(){return queries;}};
+}
+for(const [sequence,suffix] of [[1,"001"],[999,"999"],[1000,"A00"],[34695,"ZZZ"]])assert.equal(format("20261019",sequence),"A20261019"+suffix);
+assert.throws(()=>format("20261019",34696));
+// Exact official content closes automatically, including restart after timeout.
+for(const mode of ["success","unknown","pending","mismatch"]){
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider({unknown:mode==="unknown",pending:mode==="pending",mismatch:mode==="mismatch"});
+ const result=await execute(f.db,t,context,authority(),api.transport,clock);
+ assert.equal(result.executionState,mode==="pending"?"processing":mode==="mismatch"?"problem":"completed");
+ assert.equal(api.posts,1);
+ const resumed=provider();await execute(f.db,t,context,authority(),resumed.transport,clock);
+ assert.equal(resumed.posts,0,"already sent/confirmed never POSTs after restart");
+ assert.equal(f.sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=? ORDER BY attempt DESC").get(app1).status,"confirmed");
+ f.close();
 }
 {
- const {sql,db,prepare,close}=await fixture();
- try{
-  const target=await prepare(app1);
-  const p=providerFor(target);
-  const result=await execute(db,target,context,authority(),p.send,clock);
-  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,1);
-  assert.equal(p.urls.filter(x=>x.endsWith("/invoice_query")).length,1);
-  assert.equal(p.urls.filter(x=>x.endsWith("/allowance_query")).length,1);
-  assert.equal(result.issueKind,"accepted_unconfirmed");
-  assert.equal(result.originalNumberReadback,"full_match_unattributed");
-  assert.equal(result.manualDisposition,"full_match_unattributed");
-  assert.equal(result.manualReviewRequired,true);
-  assert.equal(result.proofOfThisPost,false);
-  assert.equal(result.recordedReadback,true);
-  assert.equal(result.safeToAutoConfirm,false);
-  assert.equal(result.safeToAutoRetry,false);
-  assert.equal(result.canAllocateAnotherNumber,false);
-  assert.equal(status(sql,app1),"sending");
-  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
-  const audit=sql.prepare("SELECT official_snapshot_hash FROM allowance_reconciliation_checks").get();
-  assert.match(audit.official_snapshot_hash,/^[a-f0-9]{64}$/);
-  assert.throws(()=>sql.prepare("DELETE FROM allowance_reconciliation_checks").run(),/APPEND_ONLY/);
-  const repeat=providerFor(target);
-  await assert.rejects(()=>execute(db,target,context,authority(),repeat.send,clock),
-   /ALLOWANCE_SENDING_LEDGER_NOT_RESERVED/);
-  assert.equal(repeat.urls.length,0,"never a second provider request on repeated call");
-  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,1);
-  assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
- }finally{close();}
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider({collisions:25});
+ const result=await execute(f.db,t,context,authority(),api.transport,clock);
+ assert.equal(result.executionState,"completed");assert.equal(api.posts,26,"no artificial 20-collision limit");
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_rejections").get().n,25);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM allowance_reconciliation_checks WHERE evidence_kind='external_collision'").get().n,0,"no fabricated official collision snapshots");
+ f.close();
 }
 {
- const {sql,db,prepare,close}=await fixture();
- try{
-  const target=await prepare(app1);
-  const p=providerFor(target,{lostPost:true,unavailableReadback:true});
-  const result=await execute(db,target,context,authority(),p.send,clock);
-  assert.equal(result.issueKind,"unknown_result");
-  assert.equal(result.manualDisposition,"unknown_outcome_requires_investigation");
-  assert.equal(result.originalNumberReadback,"unconfirmed");
-  assert.equal(result.recordedReadback,false);
-  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,1);
-  assert.equal(status(sql,app1),"sending");
-  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0);
-  const second=providerFor(target);
-  await assert.rejects(()=>execute(db,target,context,authority(),second.send,clock),
-   /ALLOWANCE_SENDING_LEDGER_NOT_RESERVED/);
-  assert.equal(second.urls.length,0);
- }finally{close();}
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider({unknown:true,unavailable:true});
+ const result=await execute(f.db,t,context,authority(),api.transport,clock);assert.equal(result.executionState,"problem");
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_ledger").get().n,1);
+ const next=provider({unavailable:true});await execute(f.db,t,context,authority(),next.transport,clock);assert.equal(next.posts,0);
+ assert.ok(f.sql.prepare("SELECT first_error,last_error FROM allowance_applications WHERE application_id=?").get(app1).first_error);
+ f.close();
 }
 {
- const {sql,db,prepare,close}=await fixture();
- try{
-  const target=await prepare(app1);
-  const p=providerFor(target,{collision:true,otherBuyer:true});
-  const result=await execute(db,target,context,authority(),p.send,clock);
-  assert.equal(result.issueKind,"confirmed_number_collision");
-  assert.equal(result.manualDisposition,"number_collision_requires_investigation");
-  assert.equal(result.originalNumberReadback,"unconfirmed");
-  assert.equal(result.recordedReadback,false);
-  assert.equal(status(sql,app1),"sending","collision alone never renumbers or confirms");
-  assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,1);
- }finally{close();}
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider();
+ const revoked=await execute(f.db,t,context,{revalidate:async()=>null},api.transport,clock);
+ assert.equal(revoked.executionState,"problem");assert.equal(api.posts,0);f.close();
 }
 {
- const {sql,db,prepare,afterSend,close}=await fixture();
+ const directory=mkdtempSync(join(tmpdir(),"allowance-auto-restart-"));const path=join(directory,"local.sqlite");
  try{
-  const target=await prepare(app1);
-  afterSend(()=>sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devB));
-  const p=providerFor(target);
-  await assert.rejects(()=>execute(db,target,context,authority(),p.send,clock),
-   /ALLOWANCE_SENDING_READBACK_ONLY/);
-  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,0);
-  assert.equal(status(sql,app1),"sending","post-CAS revocation is irreversibly readback-only");
- }finally{close();}
+  const f=await fixture(true,path);const t=await f.prepare(app1);const api=provider({unknown:true,unavailable:true});
+  await execute(f.db,t,context,authority(),api.transport,clock);f.close();
+  const reopened=new DatabaseSync(path);
+  const stmt=q=>({args:[],bind(...args){this.args=args;return this;},async first(){return reopened.prepare(q).get(...this.args)??null;},async all(){return{results:reopened.prepare(q).all(...this.args)};},async run(){return{meta:{changes:reopened.prepare(q).run(...this.args).changes}};}});
+  const db={prepare:stmt,async batch(parts){reopened.exec("BEGIN");try{const rows=[];for(const part of parts)rows.push(await part.run());reopened.exec("COMMIT");return rows;}catch(e){reopened.exec("ROLLBACK");throw e;}}};
+  const next=provider();await execute(db,t,context,authority(),next.transport,clock);assert.equal(next.posts,0);
+  assert.equal(reopened.prepare("SELECT execution_state FROM allowance_applications WHERE application_id=?").get(app1).execution_state,"completed");reopened.close();
+ }finally{rmSync(directory,{recursive:true,force:true});}
+}
+const voidNumber="ALW-001",voidId="void_synthetic_01";
+function voidProvider(options={}){
+ let posts=0,voided=!!options.alreadyVoided;
+ const transport=async(url,opts)=>{
+  if(url.endsWith("/allowance_status"))return Response.json({code:0,data:{[voidNumber]:{type:voided?"D0501":"D0401",status:99}}});
+  if(url.endsWith("/allowance_query"))return Response.json({code:0,data:{allowance_number:voidNumber,invoice_type:voided?"D0501":"D0401",invoice_status:99,
+   allowance_type:2,cancel_date:voided?20261019:0,buyer_identifier:"0000000000",buyer_name:"FAKE BUYER",wait:[],
+   total_amount:50,tax_amount:0,product_item:[{original_invoice_number:invoice,original_invoice_date:20261019,original_description:"FAKE ITEM",quantity:1,unit_price:50,amount:50,tax:0,tax_type:1}]}});
+  if(url.endsWith("/g0501")){posts++;if(options.unknown)throw new Error("lost reply");if(!options.keepOpen)voided=true;return Response.json({code:options.waiting?4050141:0});}
+  throw new Error("unexpected void request");
+ };return{transport,get posts(){return posts;}};
+}
+async function preparedVoid(f,api){
+ const t={workspaceId:ws,applicationId:voidId,deviceId:devB,expectedRevision:2};
+ await createVoid(f.db,{...t,deviceId:devA,environment:"test",allowanceNumber:voidNumber,originalInvoiceNumber:invoice,reason:"SYNTHETIC RETURN"},context,authority(employee));
+ const proof=await previewVoid(f.db,t,context,authority(),api.transport,clock);
+ await approveVoid(f.db,{...t,expectedRevision:1,requestHash:proof.requestHash,expectedOfficialSnapshotHash:proof.officialSnapshotHash},context,authority(),api.transport,clock);
+ return t;
+}
+for(const mode of ["normal","already","unknown","pending"]){
+ const f=await fixture(true),api=voidProvider({alreadyVoided:mode==="already",unknown:mode==="unknown",keepOpen:mode==="pending",waiting:mode==="pending"});
+ const t=await preparedVoid(f,api);const result=await executeVoid(f.db,t,context,authority(),api.transport,clock,true);
+ assert.equal(result.executionState,mode==="pending"?"processing":mode==="unknown"?"problem":"completed");
+ assert.equal(api.posts,mode==="already"?0:1);
+ f.close();
 }
 {
- const {sql,db,prepare,lostReply,close}=await fixture();
- try {
-  const target=await prepare(app1);
-  lostReply();
-  const p=providerFor(target);
-  await assert.rejects(()=>execute(db,target,context,authority(),p.send,clock),
-   /ALLOWANCE_SENDING_READBACK_ONLY/);
-  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,0);
-  assert.equal(status(sql,app1),"sending");
- }finally{close();}
-}
-// H rehearsal: a populated schema19 backup must remain recoverable after the
-// canonical schema20 migration. Use the existing g0401 owner to create real-shaped
-// synthetic sending/evidence/audit records; never infer anything about live D1.
-{
- const dir=mkdtempSync(join(tmpdir(),"cyinvoice-schema20-"));
- const live=join(dir,"schema19.sqlite"),backup=join(dir,"backup19.sqlite"),
-  restored=join(dir,"restored19.sqlite");
- const f=await fixture(true,live);
- const definitions=db=>db.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all();
- const rows=(db,names)=>Object.fromEntries(names.map(name=>
-  [name,db.prepare('SELECT * FROM "'+name+'" ORDER BY rowid').all()]));
- try{
-  f.sql.exec("PRAGMA journal_mode=WAL");
-  const target=await f.prepare(app1);
-  await execute(f.db,target,context,authority(),providerFor(target).send,clock);
-  f.sql.prepare(`INSERT INTO allowance_manual_review_audit
-   (review_id,application_id,workspace_id,ledger_id,allowance_number,
-    ledger_status_at_review,disposition,reviewed_by_actor_id,reviewed_by_device_id,reviewed_at)
-   VALUES('review_schema20',?,?,?,?,'sending','unknown_outcome','manager',?,?)`)
-   .run(app1,ws,target.ledgerId,target.allowanceNumber,devB,time.toISOString());
-  // Include migration bookkeeping in the backup, not just business tables.
-  f.sql.exec("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE)");
-  const canonical=readdirSync("migrations").filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
-  for(const [i,name] of canonical.slice(0,19).entries())
-   f.sql.prepare("INSERT INTO d1_migrations VALUES(?,?)").run(i+1,name);
-  const priorSchema=definitions(f.sql),names=priorSchema.filter(x=>x.type==="table").map(x=>x.name);
-  const prior=rows(f.sql,names);
-  assert.equal(prior.allowance_number_ledger[0].status,"sending");
-  assert.equal(prior.allowance_manual_review_audit.length,1);
-  assert.equal(prior.allowance_reconciliation_checks.length,1);
-  f.sql.exec("PRAGMA wal_checkpoint(TRUNCATE)");copyFileSync(live,backup);
-  const ddl=readFileSync("migrations/0020_allowance_void_coordination.sql","utf8");
-  const migrate=(injected=false)=>{
-   f.sql.exec("BEGIN IMMEDIATE");
-   try{
-    f.sql.exec(ddl);
-    if(injected)f.sql.exec("SELECT * FROM __missing_schema20_probe");
-    f.sql.prepare("INSERT INTO d1_migrations VALUES(20,?)").run("0020_allowance_void_coordination.sql");
-    f.sql.exec("COMMIT");
-   }catch(error){f.sql.exec("ROLLBACK");throw error;}
-  };
-  assert.throws(()=>migrate(true),/no such table/);
-  assert.deepEqual(definitions(f.sql),priorSchema,"failed schema20 must roll back every DDL object");
-  assert.deepEqual(rows(f.sql,names),prior,"failed schema20 must preserve all schema19 rows/history");
-  migrate();
-  for(const original of priorSchema)
-   assert.deepEqual(definitions(f.sql).find(x=>x.name===original.name),original);
-  assert.deepEqual(rows(f.sql,names.filter(n=>n!=="d1_migrations")),
-   Object.fromEntries(Object.entries(prior).filter(([n])=>n!=="d1_migrations")));
-  assert.throws(()=>migrate(),/already exists/);
-  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM d1_migrations").get().n,20);
-  const blocked=providerFor(target);
-  await assert.rejects(()=>execute(f.db,target,context,authority(),blocked.send,clock),
-   /ALLOWANCE_SENDING_LEDGER_NOT_RESERVED/);
-  assert.equal(blocked.urls.filter(u=>u.endsWith("/g0401")).length,0,
-   "draft20 never releases an existing unknown g0401 claim");
-  const reopened=new DatabaseSync(live,{readOnly:true});
-  try{
-   assert.deepEqual(rows(reopened,names),rows(f.sql,names));
-   assert.deepEqual(reopened.prepare("PRAGMA foreign_key_check").all(),[]);
-   assert.equal(reopened.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
-  }finally{reopened.close();}
-  copyFileSync(backup,restored);
-  const recovery=new DatabaseSync(restored,{readOnly:true});
-  try{
-   assert.deepEqual(definitions(recovery),priorSchema);
-   assert.deepEqual(rows(recovery,names),prior,"schema19 recovery must retain every original row");
-   assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(),[]);
-   assert.equal(recovery.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
-  }finally{recovery.close();}
-  console.log("V3.2 H: populated schema19 backup, atomic schema20 failure/success, preserved g0401 claim, reopen and complete schema19 restore OK");
- }finally{f.close();assert.equal(dirname(dir),tmpdir());rmSync(dir,{recursive:true,force:true});}
-}
-// Cloud counterpart of the existing Local, explicitly reviewed collision flow.
-// A duplicate error alone, a lost POST, same buyer or any shared original must
-// never unlock a number, even with the independent collision feature enabled.
-for(const options of [
- {collision:true,otherBuyer:true}, {collision:true,otherOriginal:true},
- {collision:true,otherBuyer:true,otherOriginal:true,unavailableReadback:true},
- {lostPost:true,otherBuyer:true,otherOriginal:true},
- {otherBuyer:true,otherOriginal:true}
-]){
- const f=await fixture(true);
- try{
-  const target=await f.prepare(app1),p=providerFor(target,options);
-  const result=await execute(f.db,target,context,authority(),p.send,clock,true);
-  assert.equal(result.ledgerStatus,"sending");assert.equal(status(f.sql,app1),"sending");
-  const read=providerFor(target,{otherBuyer:true,otherOriginal:true});
-  await assert.rejects(()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
-   "collision_review_test",target.allowanceNumber,
-   `確認外部占號 ${target.allowanceNumber} 並預留下一號`,read.send,clock),/NOT_ELIGIBLE/);
-  assert.equal(read.urls.length,0);assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,1);
- }finally{f.close();}
-}
-async function collided(){
- const f=await fixture(true),t=await f.prepare(app1);
- const p=providerFor(t,{collision:true,otherBuyer:true,otherOriginal:true});
- const result=await execute(f.db,t,context,authority(),p.send,clock,true);
- assert.equal(result.ledgerStatus,"occupied_external");
- assert.equal(result.recordedReadback,false,"external evidence is NOT exact frozen match");
- assert.equal(f.sql.prepare("SELECT evidence_kind FROM allowance_reconciliation_checks").get().evidence_kind,
-  "external_collision");
- return {...f,t};
+ const f=await fixture(true),api=voidProvider({unknown:true,keepOpen:true});const t=await preparedVoid(f,api);
+ let offset=0;const later=()=>new Date(time.valueOf()+offset);
+ for(let n=1;n<=3;n++){await executeVoid(f.db,t,context,authority(),api.transport,later,true);assert.equal(api.posts,n);offset+=61_000;}
+ const exhausted=await executeVoid(f.db,t,context,authority(),api.transport,later,true);
+ assert.equal(api.posts,3);assert.equal(exhausted.errorCode,"VOID_RETRY_LIMIT_REACHED");
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM allowance_void_send_attempts").get().n,3);f.close();
 }
 {
- const dir=mkdtempSync(join(tmpdir(),"cyinvoice-schema19-"));
- const live=join(dir,"schema18.sqlite"),backup=join(dir,"backup18.sqlite"),restored=join(dir,"restored18.sqlite");
- const f=await fixture(false,live);
+ const f=await fixture(true),api=voidProvider({keepOpen:true,waiting:true});const t=await preparedVoid(f,api);
+ await executeVoid(f.db,t,context,authority(),api.transport,clock,true);
+ await executeVoid(f.db,t,context,authority(),api.transport,()=>new Date(time.valueOf()+120_000),true);
+ assert.equal(api.posts,1,"official processing never blindly reposts");f.close();
+}
+// Recovery rechecks the original business approval's revocation fingerprint.
+{
+ const env={CYID_ENABLED:"true",IDENTITY:{fetch(){}},IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
+  IDENTITY_AUTHORITY:{async invalidateCache(){return{workspaceId:"identity_synthetic",applicationId:"CYINVOICE",available:true,invalidated:[]};}}};
+ const auth=approvedExecutionAuthority(env,ws,JSON.stringify(cached),"manager");assert.equal((await auth.revalidate()).employeeId,"manager");
+ env.IDENTITY_AUTHORITY.invalidateCache=async()=>({workspaceId:"identity_synthetic",applicationId:"CYINVOICE",available:true,invalidated:["manager"]});
+ await assert.rejects(auth.revalidate(),/REVOKED/);
+ await assert.rejects(approvedExecutionAuthority(env,ws,null,"manager").revalidate(),/UNVERIFIABLE/);
+}
+// The existing runtime sync actually drives recovery without another manager
+// password, continuation button, service queue, or scheduled Worker.
+{
+ const f=await fixture(true);await f.prepare(app1);const api=provider();
+ const env={DB:f.db,APP_ENV:"test",SCHEMA_VERSION:"21",API_VERSION:"1",COMPANY_SETTINGS_KEY_HEX:context.encryptionKeyHex,
+  ALLOWANCE_API_ENABLED:"true",ALLOWANCE_G0401_SEND_ENABLED:"true",ALLOWANCE_G0501_SEND_ENABLED:"false",
+  CYID_ENABLED:"true",IDENTITY:{async fetch(){return Response.json({identity:"ready"});}},
+  IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
+  IDENTITY_AUTHORITY:{async invalidateCache(){return{workspaceId:"identity_synthetic",applicationId:"CYINVOICE",available:true,invalidated:[]};}}};
+ const token="cydev_"+"a".repeat(64),digest=createHash("sha256").update(token).digest("hex");
+ f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(digest,devA);
+ const {handleRuntimeSync}=await bundle("runtime-sync.ts");
+ const originalFetch=globalThis.fetch;globalThis.fetch=api.transport;let background;
  try{
-  const target=await f.prepare(app1);
-  await execute(f.db,target,context,authority(),providerFor(target).send,clock);
-  const prior=f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get();
-  const definitions=()=>f.sql.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all();
-  const priorSchema=definitions();
-  f.sql.exec("PRAGMA wal_checkpoint(TRUNCATE)");copyFileSync(live,backup);
-  // A populated schema18 must retain its real exact-match evidence. Exercise
-  // transactional DDL rollback before applying the proposed migration once.
-  f.sql.exec("BEGIN IMMEDIATE");
-  try{
-   f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
-   f.sql.exec("INSERT INTO nonexistent_migration_probe VALUES (1)");
-   assert.fail("expected synthetic migration failure");
-  }catch{f.sql.exec("ROLLBACK");}
-  assert.deepEqual(definitions(),priorSchema,"failed schema19 must roll back all DDL and indexes");
-  assert.deepEqual(f.sql.prepare("SELECT * FROM allowance_reconciliation_checks").get(),prior);
-  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='allowance_manual_review_audit'").get().n,0);
-  f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8"));
-  assert.equal(f.sql.prepare("SELECT evidence_kind FROM allowance_reconciliation_checks").get().evidence_kind,
-   "full_match_unattributed");
-  assert.equal(f.sql.prepare("SELECT official_snapshot_hash FROM allowance_reconciliation_checks").get().official_snapshot_hash,
-   prior.official_snapshot_hash);
-  assert.throws(()=>f.sql.exec(readFileSync("migrations/0019_allowance_manual_review_audit.sql","utf8")),/duplicate column/);
+  const request=()=>new Request("https://fake.invalid/v1/runtime/sync",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({synchronize:true,authorities:[],allowanceIds:[app1]})});
+  await handleRuntimeSync(request(),env,{waitUntil(p){background=p;}});await background;
+  assert.equal(api.posts,1);
+  const reply=await handleRuntimeSync(request(),env,{waitUntil(p){background=p;}});await background;
+  assert.equal((await reply.json()).allowances[0].execution_state,"completed");assert.equal(api.posts,1);
+  // Page another device's history without hiding completed known operations.
+  for(let n=0;n<60;n++)await create(f.db,input("runtime_page_"+String(n).padStart(3,"0")),context,authority(employee),clock);
+  let issueCursor="",voidCursor="";const seen=new Set();
+  for(let page=0;page<4;page++){
+   const req=new Request("https://fake.invalid/v1/runtime/sync",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({synchronize:true,authorities:[],allowanceIds:[app1],allowanceIssueCursor:issueCursor,allowanceVoidCursor:voidCursor})});
+   const response=await handleRuntimeSync(req,env,{waitUntil(p){background=p;}});await background;
+   const data=await response.json();assert.equal(response.status,200);assert.ok(data.allowances.length<=150);
+   for(const row of data.allowances)seen.add(row.application_id);
+   issueCursor=data.allowanceCursors.issue;voidCursor=data.allowanceCursors.void;
+   if(!issueCursor)break;
+  }
+  assert.equal(seen.size,61);assert.equal(api.posts,1);
+ }finally{globalThis.fetch=originalFetch;f.close();}
+}
+{
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider();
+ f.lostReply();const held=await execute(f.db,t,context,authority(),api.transport,clock);
+ assert.equal(held.executionState,"problem");assert.equal(api.posts,0,"lost CAS acknowledgement cannot POST");
+ await execute(f.db,t,context,authority(),api.transport,clock);assert.equal(api.posts,0,"restart only reads the original number");f.close();
+}
+{
+ const f=await fixture(true);const t=await f.prepare(app1);const api=provider();
+ f.afterSend(()=>f.sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devB));
+ await execute(f.db,t,context,authority(),api.transport,clock);assert.equal(api.posts,0,"revocation after claim suppresses POST");f.close();
+}
+{
+ const f=await fixture(true),api=voidProvider({keepOpen:true});const t=await preparedVoid(f,api);
+ f.sql.prepare(`INSERT INTO allowance_void_send_claims(application_id,workspace_id,environment,seller_invoice,allowance_fingerprint,request_hash,official_snapshot_hash,manager_actor_id,manager_device_id,claimed_at)
+  SELECT r.application_id,r.workspace_id,r.environment,r.seller_invoice,r.allowance_fingerprint,r.request_hash,a.official_snapshot_hash,a.manager_actor_id,a.manager_device_id,a.approved_at
+  FROM allowance_void_requests r JOIN allowance_void_approvals a ON a.application_id=r.application_id WHERE r.application_id=?`).run(voidId);
+ const legacy=await executeVoid(f.db,t,context,authority(),api.transport,clock,true);
+ assert.equal(legacy.errorCode,"VOID_LEGACY_CLAIM_READBACK_ONLY");assert.equal(api.posts,0);
+ const official=voidProvider({alreadyVoided:true});
+ assert.equal((await executeVoid(f.db,t,context,authority(),official.transport,clock,true)).executionState,"completed");assert.equal(official.posts,0);f.close();
+}
+{
+ const directory=mkdtempSync(join(tmpdir(),"schema20-forward21-")),path=join(directory,"schema20.sqlite"),backup=join(directory,"backup.sqlite");
+ try{
+  const f=await fixture(true,path,false);const t=await f.prepare(app1);
+  f.sql.prepare("UPDATE allowance_number_ledger SET status='sending' WHERE application_id=?").run(app1);
+  const before=f.sql.prepare("SELECT * FROM allowance_number_ledger").all();copyFileSync(path,backup);
+  const migration=readFileSync("migrations/0021_allowance_automatic_execution.sql","utf8");
+  assert.throws(()=>{f.sql.exec("BEGIN");try{f.sql.exec(migration+";SELECT * FROM nonexistent_injected_failure;");f.sql.exec("COMMIT");}catch(e){f.sql.exec("ROLLBACK");throw e;}},/no such table/);
+  assert.ok(!f.sql.prepare("PRAGMA table_info(allowance_applications)").all().some(r=>r.name==="execution_state"));
+  f.sql.exec(migration);assert.deepEqual(f.sql.prepare("SELECT * FROM allowance_number_ledger").all(),before);
   assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
   assert.equal(f.sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
-  copyFileSync(backup,restored);
-  const recovery=new DatabaseSync(restored,{readOnly:true});
-  try{
-   assert.deepEqual(recovery.prepare("SELECT name,type,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all(),priorSchema);
-   assert.deepEqual(recovery.prepare("SELECT * FROM allowance_reconciliation_checks").get(),prior);
-   assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(),[]);
-   assert.equal(recovery.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
-  }finally{recovery.close();}
- }finally{f.close();assert.equal(dirname(dir),tmpdir());rmSync(dir,{recursive:true,force:true});}
+  assert.equal(f.sql.prepare("SELECT authority_snapshot FROM allowance_execution_approvals").get().authority_snapshot,null,"old approval authority is never fabricated");
+  assert.equal(f.sql.prepare("SELECT status FROM allowance_number_ledger").get().status,"sending");
+  f.close();const restored=new DatabaseSync(backup,{readOnly:true});
+  assert.deepEqual(restored.prepare("SELECT * FROM allowance_number_ledger").all(),before);
+  assert.ok(!restored.prepare("PRAGMA table_info(allowance_applications)").all().some(r=>r.name==="execution_state"));restored.close();
+ }finally{rmSync(directory,{recursive:true,force:true});}
 }
-{
- const f=await fixture(true);
- try{
-  const target=await f.prepare(app1);
-  f.sql.exec(`CREATE TRIGGER reject_external_check BEFORE INSERT ON allowance_reconciliation_checks
-   WHEN NEW.evidence_kind='external_collision' BEGIN SELECT RAISE(ABORT,'fake unavailable audit'); END;`);
-  const p=providerFor(target,{collision:true,otherBuyer:true,otherOriginal:true});
-  const result=await execute(f.db,target,context,authority(),p.send,clock,true);
-  assert.equal(result.ledgerStatus,"sending");assert.equal(status(f.sql,app1),"sending");
-  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_reconciliation_checks").get().n,0);
-  assert.equal(p.urls.filter(url=>url.endsWith("/g0401")).length,1);
- }finally{f.close();}
-}
-const words=t=>`確認外部占號 ${t.allowanceNumber} 並預留下一號`;
-for(const mode of ["success","lost_reply","audit_failure","company_race","device_race","parallel"]){
- const f=await collided();
- try{
-  const p=providerFor(f.t,{otherBuyer:true,otherOriginal:true});
-  const action=()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
-   "collision_review_test",f.t.allowanceNumber,words(f.t),p.send,clock);
-  if(mode==="lost_reply")f.lostBatch();
-  if(mode==="audit_failure")f.sql.exec(`CREATE TRIGGER fail_audit BEFORE INSERT
-   ON allowance_manual_review_audit BEGIN SELECT RAISE(ABORT,'fake audit failure'); END;`);
-  if(mode==="company_race")f.beforeBatch(()=>f.sql.prepare(
-   "UPDATE company_settings SET revision=revision+1 WHERE workspace_id=?").run(ws));
-  if(mode==="device_race")f.beforeBatch(()=>f.sql.prepare(
-   "UPDATE devices SET status='revoked' WHERE device_id=?").run(devB));
-  if(mode==="parallel"){
-   const outcomes=await Promise.allSettled([action(),action()]);
-   assert.equal(outcomes.filter(x=>x.status==="fulfilled").length,1);
-  }else if(mode!=="success")await assert.rejects(action,/READBACK_REQUIRED/);
-  else {
-   const next=await action();
-   assert.equal(next.attempt,2);assert.equal(next.status,"reserved");
-   assert.notEqual(next.allowanceNumber,f.t.allowanceNumber);
-   assert.equal(next.sentToAmego,false);
-   const reRead=await reserve(f.db,reserveTarget(app1),context,authority(),clock);
-   assert.equal(reRead.ledgerId,next.ledgerId,"first-reserve endpoint is read-only for existing next attempt");
-   const p2=providerFor(sendTarget(app1,next));
-   const sent=await execute(f.db,sendTarget(app1,next),context,authority(),p2.send,clock);
-   assert.equal(sent.ledgerStatus,"sending");
-   assert.equal(p2.urls.filter(x=>x.endsWith("/g0401")).length,1);
-   await assert.rejects(()=>execute(f.db,sendTarget(app1,next),context,authority(),p2.send,clock),/NOT_RESERVED/);
-   assert.equal(p2.urls.filter(x=>x.endsWith("/g0401")).length,1);
-  }
-  const committed=["success","lost_reply","parallel"].includes(mode);
-  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_number_ledger").get().n,committed?2:1);
-  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM allowance_manual_review_audit").get().n,committed?1:0);
-  const old=f.sql.prepare("SELECT status,collision_code FROM allowance_number_ledger WHERE ledger_id=?").get(f.t.ledgerId);
-  assert.equal(old.status,"occupied_external");assert.equal(old.collision_code,4040161);
-  if(committed){
-   const replay=providerFor(f.t,{otherBuyer:true,otherOriginal:true});
-   await assert.rejects(()=>reserveCollision(f.db,reserveTarget(app1),context,authority(),
-    "collision_review_again",f.t.allowanceNumber,words(f.t),replay.send,clock),/NOT_ELIGIBLE/);
-   assert.equal(replay.urls.length,0);
-   assert.throws(()=>f.sql.exec("DELETE FROM allowance_manual_review_audit"),/APPEND_ONLY/);
-  }
-  assert.equal(p.urls.filter(x=>x.endsWith("/g0401")).length,0,"review does not post any financial mutation");
-  assert.deepEqual(f.sql.prepare("PRAGMA foreign_key_check").all(),[]);
- }finally{f.close();}
-}
-console.log("CYInvoice one-shot + reviewed external collision: immutable evidence, atomic next reservation, races/rollback/lost reply and zero blind repost passed");
+console.log("Cloud single-approval automatic execution, 25 collisions, unknown/restart recovery and bounded void retry passed.");

@@ -6,6 +6,7 @@
 import {encryptCompanyBusinessData,decryptCompanyBusinessData} from "./company-settings";
 
 export interface AllowanceActor {
+  authoritySnapshot?:string;
   workspaceId:string;
   employeeId:string;
   workspaceRole:"SUPER_ADMIN"|"ADMIN"|"USER";

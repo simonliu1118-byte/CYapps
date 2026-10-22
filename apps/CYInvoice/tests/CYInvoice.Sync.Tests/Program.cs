@@ -579,48 +579,40 @@ internal static class Program
 
     private static async Task TestAllowanceDiscoveryLimitAsync()
     {
-        using var temporary = new TemporaryDirectory();
-        var repository = TestRepository.Open(temporary.Path, new TestProtector());
-        ConfigureProduction(repository);
-        var fake = new FakeGateway();
-        fake.Pages[1] = ListResponse(1, []);
-        fake.AllowancePages[1] = new AllowanceListResponse(1,
-            [new AllowanceListItem("A20260918002",
-                Enumerable.Range(1, 51).Select(index => $"ZZ{index:00000000}").ToArray())]);
-        var automatic = new InvoiceAutomaticSyncService(repository, Sync(repository, fake), () => FixedNow);
-        try
+        using var temporary=new TemporaryDirectory();
+        var repository=TestRepository.Open(temporary.Path,new TestProtector());ConfigureProduction(repository);
+        var fake=new FakeGateway();fake.Pages[1]=ListResponse(1,[]);
+        var numbers=Enumerable.Range(1,51).Select(i=>$"ZZ{i:00000000}").ToArray();
+        fake.AllowancePages[1]=new AllowanceListResponse(1,[new AllowanceListItem("A20260918002",numbers)]);
+        foreach(var number in numbers)
         {
-            await automatic.SyncAsync();
-            throw new InvalidOperationException("expected discovery call cap");
+            var response=Query(number,"66091800"+number[2..],"100","合成買方");
+            fake.QueryByInvoice[number]=response with{Data=response.Data with{AllowanceSummaryPresent=true}};
         }
-        catch (IOException error)
-            when (error.Message.Contains("50 張", StringComparison.Ordinal)) { }
-        var issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
-        var issue = issueStore.Unresolved(Environments.Production + "|12345675").Single();
-        Equal(InvoiceSyncIssueTypes.AllowanceLimitExceeded, issue.IssueType);
-        Equal(true, issue.Message.Contains("回來修改程式", StringComparison.Ordinal));
-        // The list cap uses the same durable Upload Issues identity.
-        fake.AllowancePages[1] = new AllowanceListResponse(4, []);
-        try
-        {
-            await automatic.SyncAsync();
-            throw new InvalidOperationException("expected 150 allowance rows cap");
-        }
-        catch (IOException error)
-            when (error.Message.Contains("150 筆", StringComparison.Ordinal)) { }
-        Equal(1, issueStore.Unresolved(Environments.Production + "|12345675").Count);
-        Equal(null, new InvoiceSyncStateStore(repository.DataDirectory)
-            .LastSuccess(Environments.Production + "|12345675", "daily-two-period"));
-        // After a normal daily pass the notice is resolved, never silently deleted.
-        fake.AllowancePages[1] = new AllowanceListResponse(1, []);
+        var clock=FixedNow;
+        var service=new InvoiceSyncService(repository,(_,_)=>fake,()=>clock);
+        var automatic=new InvoiceAutomaticSyncService(repository,service,()=>clock);
         await automatic.SyncAsync();
-        Equal(0, issueStore.Unresolved(Environments.Production + "|12345675").Count);
-        Equal(true, issueStore.All(Environments.Production + "|12345675").Any(record =>
-            record.IssueType == InvoiceSyncIssueTypes.AllowanceLimitExceeded &&
-            record.ResolvedUtc is not null));
-        Equal(0, fake.QueryByInvoiceCalls);
-        Equal(true, new InvoiceSyncStateStore(repository.DataDirectory)
-            .LastSuccess(Environments.Production + "|12345675", "daily-two-period") is not null);
+        Equal(50,fake.QueryByInvoiceCalls);Equal(1,fake.AllowanceListCalls);
+        var issues=new InvoiceSyncIssueStore(repository.DataDirectory);
+        Equal(1,issues.Unresolved(Environments.Production+"|12345675").Count(i=>i.IssueType==InvoiceSyncIssueTypes.AllowanceLimitExceeded));
+        await automatic.SyncAsync();Equal(1,fake.AllowanceListCalls);
+        clock=clock.AddDays(1);await automatic.SyncAsync();
+        Equal(1,fake.AllowanceListCalls); // Resume the pending original, not the list.
+        Equal(51,repository.Invoices.LoadOrCreate().Count);
+        Equal(0,issues.Unresolved(Environments.Production+"|12345675").Count(i=>i.IssueType==InvoiceSyncIssueTypes.AllowanceLimitExceeded));
+
+        using var pagesTemporary=new TemporaryDirectory();
+        var pagesRepository=TestRepository.Open(pagesTemporary.Path,new TestProtector());ConfigureProduction(pagesRepository);
+        var pages=new FakeGateway();pages.Pages[1]=ListResponse(1,[]);
+        for(var page=1;page<=4;page++)pages.AllowancePages[page]=new(4,Enumerable.Range(1,page==4?1:50)
+            .Select(i=>new AllowanceListItem($"A{page:00000000}{i:000}",[numbers[0]])).ToArray());
+        pages.QueryByInvoice[numbers[0]]=fake.QueryByInvoice[numbers[0]];
+        var pageClock=FixedNow;
+        var daily=new InvoiceAutomaticSyncService(pagesRepository,new InvoiceSyncService(pagesRepository,(_,_)=>pages,()=>pageClock),()=>pageClock);
+        await daily.SyncAsync();Equal(3,pages.AllowanceListCalls);
+        await daily.SyncAsync();Equal(3,pages.AllowanceListCalls);
+        pageClock=pageClock.AddDays(1);await daily.SyncAsync();Equal(4,pages.AllowanceListCalls);
     }
 
     private static async Task TestAllowanceListCapacityAsync()
@@ -870,7 +862,7 @@ internal static class Program
         var automatic = new InvoiceAutomaticSyncService(repository, sync, () => now);
         var issues = new InvoiceSyncIssueStore(repository.DataDirectory);
         var first = await automatic.SyncAsync();
-        Equal(true, first.Problems.Any(value => value.Contains("作廢狀態查回失敗", StringComparison.Ordinal)));
+        Equal(true, first.Problems.Any(value => value.Contains("折讓原發票查回失敗", StringComparison.Ordinal)));
         Equal(true, issues.Unresolved(Environments.Production + "|12345675").Any(issue =>
             issue.InvoiceNumber == old.InvoiceNumber && issue.IssueType == InvoiceSyncIssueTypes.QueryFailed));
 

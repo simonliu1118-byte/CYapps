@@ -64,8 +64,8 @@ async function activeManagerDevice(db:D1Database,t:AllowanceManagerPreviewTarget
 async function unchangedReview(db:D1Database,t:AllowanceManagerPreviewTarget,
   actorId:string,requestHash:string):Promise<boolean>{
  const row=await db.prepare(`SELECT application_id FROM allowance_applications
-   WHERE workspace_id=?1 AND application_id=?2 AND status='review'
-     AND revision=?3 AND manager_actor_id=?4 AND request_hash=?5 LIMIT 1`)
+   WHERE workspace_id=?1 AND application_id=?2 AND (status='open' OR (status='review' AND manager_actor_id=?4))
+     AND revision=?3 AND request_hash=?5 LIMIT 1`)
   .bind(t.workspaceId,t.applicationId,t.expectedRevision,actorId,requestHash)
   .first<{application_id:string}>();
  return !!row;
@@ -111,7 +111,7 @@ export async function previewCloudAllowanceForManager(
    !await activeManagerDevice(db,target))
   throw new Error("ALLOWANCE_REVIEW_MANAGER_REQUIRED");
  const frozen=await loadEncryptedCloudAllowance(db,target,ctx,authority);
- if(frozen.status!=="review"||frozen.revision!==target.expectedRevision||
+ if(!["open","review"].includes(frozen.status)||frozen.revision!==target.expectedRevision||
     !await unchangedReview(db,target,before.employeeId,frozen.requestHash))
   throw new Error("ALLOWANCE_REVIEW_STALE");
  const company=await loadAmegoCompanySettingsForGateway(db,target.workspaceId,

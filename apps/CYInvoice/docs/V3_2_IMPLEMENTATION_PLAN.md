@@ -2,24 +2,15 @@
 
 更新：2026-10-22（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**整合實作已在原 PR #550 啟動，但尚未完成全項驗收。** 2026-10-22 本機 Work 截圖回報 schema20 D1／Worker marker20 及健康檢查通過，仍待完整私有計量／備份驗證紀錄歸檔；此事不得視為重新執行遠端獨立驗證。Local 主管核准開立、自動佔號、Local 作廢一次核准、處理中分流與問題診斷已開始修改 Source；CYID Cloud 財務入口／新 forward migration／正式啟用及真測仍待完成。本文取代先前計畫中「主管分段核准／配號／送出、人工占號換號、g0501 15 分鐘核准與文字確認、永久單次作廢、全域 Local 停送交接、無本次 POST 歸因就永不結案」等目標；舊程式與歷史測試只是現況，不能反過來要求保留被取代設計。新 Source 修改未改正式 D1／Worker、旗標、正式 Release 或歷史 migration；仍保留未完成項目。
-
-### 2026-10-22 流程刪減實作核對（非完成宣告）
-
-- Local WinForms 已刪除獨立「預留單號／人工占號文字覆核／再次確認送出」三套操作方法（直接刪舊路徑，不以新包裝器隱藏）。已核准的同一申請可用單一繼續入口配號／送出或唯讀查回；舊 sending 不可變成第二次 POST。
-- CYID Cloud 管理畫面已將「接手覆核→官方預覽→核准」和「作廢預覽→輸入指定文字→核准」各合為一次主管確認。Worker 仍自行驗證 CYID／Device／版次／官方資料。**這些只是 Grant 核准，不會送出 g0401／g0501；Cloud 的一鍵完整財務執行仍未完成。**
-- Local 佔號證據不再寫入假稱「官方查詢快照」的合成 SHA。明確回覆 4040161／4040162 後，原 ledger 狀態與實際 provider code 在同一 SQLite 交易落盤；再加號須有該筆不可變拒號證據。歷史人工覆核表／舊資料原封不動；新證據在原有「上傳問題」診斷匯出可逐次讀回，舊無證據的占號僅能停止人工查證，不能憑狀態推定已確認。
-- 舊 Cloud 受控送出／人工異常稽核程式尚有相依，不先隱藏或刪除來冒充正常路徑完成；缺少 schema21 正向遷移／Cloud 一鍵送出／g0501 安全有限重試／官方完成收尾仍是**本批未完成工作**。
-- 本節只描述已提交 Source。驗收以 PR #550 最新 HEAD 的實際 Windows／Cloud／Governance CI 為準，不沿用先前成功 HEAD 的結論；不改正式 D1／Worker、CYID D1、財務旗標及 Release。
+**工程 Source：V3.1.41 Build 1，沿原 PR #550 收斂；尚未部署、合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
 
 ## 1. 來源、現況與執行停點
 
-- 工程基準：V3.1.41，PR #550 的 `ffdf66deee20e9eee1d124551649199c0bb00ef5` 已把 0020 升格為唯一 canonical migration，部署 owner 支援嚴格分段 18:19／19:20；正式 Release 仍為 V3.1.0。
-- 本機 Work：使用者提供原 D1／Worker 18→19→20 的執行截圖，記錄 marker20、100% 流量、原 CYID／Bindings 保留、before／deploy／after 通過；完整計量與私有備份證據尚未歸檔，故僅登記「本機回報成功」，不冒充本對話即時 Cloudflare readback。
-- 本機這批仍保持四道折讓旗標關閉、Cloud g0501 無送出路由，不新建 Worker／D1，不碰 CYID D1，不做真光貿交易，不自行合併或 Release。本文不擴大該批維護授權。
-- **程式實作現況**：原 PR #550 已開始 Local／Windows Source 修改，須以最新 head CI 與回歸驗收才可逐項標記完成。Cloud g0401／g0501 的主管單次執行、解除舊 schema20 約束之 0021 forward migration、原資料與原 Local／CYID 權威核對尚未完成；不得重跑既有升級。
-- 若 schema20 已套用，後續必要的期限／Claim／狀態約束調整使用新的 forward migration；不得回寫已套用的 0020、重套既有 migration、刪歷史或假裝 source 修改已改變遠端 DB。
-- Windows／Cloud／Governance CI 與真光貿測試分開驗證。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選。正式 V3.2.0 Release 仍須使用者當次明確授權。
+- 正式 Release 仍為 V3.1.0；本批是 V3.2 既有需求返修，VERSION=3.1.41、BUILD=1，不另開 PR 或工作單。
+- 2026-10-22 使用者提供本機 Work 截圖回報原 D1 schema20／Worker marker20、100% 流量、CYID／Bindings 與前後檢查成功。這是本機回報，非本對話即時 Cloudflare readback；實際計量與私有備份／還原詳細紀錄仍待歸檔。
+- 已套用的 0020 完全保留；本批新增唯一 forward migration `0021_allowance_automatic_execution.sql`，調整執行投影／期限檢查及有限次作廢嘗試，保留原申請、核准、Claim、Ledger、Audit。歷史核准沒有可驗證的權威快照時不補造授權、不自動 POST。
+- `SCHEMA_VERSION=21` 是待部署 Source。原 D1／Worker、CYID D1 與財務旗標均未由本批變更；實際 20→21 僅在本機 MCP 獲具體授權後執行，見 [操作交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。結構升級時新舊全部折讓旗標保持關閉。
+- Windows／Cloud／Governance 工程 CI 與真光貿測試分開。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選；正式 Release 仍需當次明確授權。
 
 ## 2. 已定案的產品流程
 
@@ -52,7 +43,7 @@
 1. 員工指定原折讓及原因提出作廢。
 2. 主管開啟原待辦，同畫面看到原發票完整資訊、原折讓完整資訊、作廢原因與申請人，確認後按一次「核准作廢」。
 3. 程式即時確認主管權限、公司／環境及官方狀態，保存核准與操作紀錄，直接執行原號 g0501 並更新結果。
-4. 移除「核准後保留15分鐘」、再次輸入「作廢 原號」、另按單次送出及跨 Local／Cloud 永久唯一送出交接門檻。保留一般權限、防連點、必要資料一致性與紀錄；核准不是可離線轉用的長效送出授權。
+4. 移除「核准後保留15分鐘」、再次輸入「作廢 原號」、另按單次送出及跨 Local／Cloud 永久唯一送出交接門檻。保留一般權限、防連點、必要資料一致性與紀錄；原核准僅約束同一凍結內容；背景恢復仍須確認原主管有效權限、Device／公司與當前交易狀態。
 5. 原號已作廢時直接同步完成，紀錄可區分本次操作與先前已作廢，不要求證明一定由本次 POST 造成才結案；`4050132` 轉官方查證，`4050141` 等待官方處理。
 6. 逾時先查同一原號；必要時允許同號有限次重試，而非永久禁止第二次 g0501。每次重試核對原操作、當前權限與官方狀態，不因重試建立新的作廢申請。次數／退避參數於實作前在同一計畫明列，不擴散成新平台。
 7. 官方處理中列既有「處理中」並自動追蹤；仍無法確認、明確拒絕或本機保存異常才列「上傳問題」並附診斷。
@@ -101,31 +92,41 @@
 | 多份 pending 清單、歷史 checkpoint 冒充下一步 | 本檔只管現行計畫，TODO只管現況，CHANGELOG／Git只管歷史，MCP只管本批遠端操作 |
 | Built-in／Self-hosted 殘留 | 後續僅清查確定不可達的現役功能；舊資料辨識／升級／安全退出相依未釐清前不整批刪除，不擴大成本批重構 |
 
-## 5. 本機交回後的整合實作
+## 5. 本批實作與複雜度檢討
 
-以同一功能分支／PR 集中完成，不為每個按鈕、DTO或測試另開版本／工作單：
+| 責任 | 唯一現役路徑 |
+| --- | --- |
+| State | Local 原 invoice metadata＋sync_issues＋Ledger／Void Store；Cloud 原 application／void request＋frozen grant／Ledger／Claim。新增執行欄位只是原操作的結果投影，事件與attempt只保存證據 |
+| Mutation | Local `EmployeeAllowanceWorkflowService.ExecuteApprovedLocalDraftAsync`／`EmployeeAllowanceVoidWorkflowService.ExecuteApprovedLocalVoidAsync`；Cloud 原 issue／void coordinator。首次核准和背景恢復呼叫同一業務執行方法 |
+| Render | 既有 InvoiceWorkQueue／SyncIssuesForm／原生明細視窗。主管完整檢視後一次核准；已核准僅顯示系統處理狀態，無「繼續」、預留、換號或送出技術按鈕 |
+| Lifecycle | Local 既有 InvoiceAutomaticSyncService 在同步及啟動時恢復原issue；Cloud 既有 runtime/sync 的 waitUntil 恢復到期原申請，沒有新增 Worker 排程、佇列或待辦入口 |
 
-1. 核對本機完成報告與最新基準，界定已套 migration／現有資料；以現有 State／Mutation／Render／Lifecycle owner 延伸，不增加 wrapper 或第二套流程。
-2. 串接 Local／CYID 折讓詳情→一次核准→查證／配號／送出；自動佔號加號、原號未知查回及正常官方結果收尾一起完成。
-3. 串接折讓作廢詳情→一次核准立即執行／追蹤；移除期限／文字確認／永久單次作廢限制。必要 schema 變更以新 forward migration保留既有申請／核准／Claim／Audit歷史，舊未知紀錄須先查明，不直接假定可重送g0401。
-4. 更新原 InvoiceWorkQueue 的「處理中／上傳問題」分流、角色操作與錯誤恢復；整合診斷、問題匯出及系統診斷退役。
-5. 移除被取代程式／API／旗標與重複驗證，將測試改為驗證本計畫的現行 contract。維護用功能不要放到正常主管操作；真光貿驗收後才退役最後網站人工入口。
-6. 完成本地必要驗證後集中提交，核精確 head CI；後續必要遠端 migration／Worker 啟用／真光貿另按具體授權與額度作業，最後獲正式 Release 授權。雙 Windows 真人驗收上線後補做。
+核准保存後，Local 使用目前仍有效的原主管角色與目前 Local owner；Cloud 保存當次 CYID 可信 authority snapshot，在每次執行及送出前透過既有私有 authority invalidation 確認原身分／權限版本仍有效。這是同一 app 業務核准的撤權檢查，不保存密碼、不建立 CYID Session，也不能拿來核准新申請或更改金額。資料、原權威或設定不能安全證明時停止 POST，原項目進上傳問題。
 
-## 6. 驗收清單（目前均待實作／驗證，不以文件更新勾選）
+- g0401：配號後 CAS 標記 sending 才 POST；明確 4040161／4040162 以真實拒號碼證據原子保存後自動加號。沒有次數上限；中斷恢復先核對原申請與原號，sending 只查回。完整原號、買方、品項、金額與官方99可結案。
+- g0501：先查原號；已作廢直接結案。新流程最多3次實際 POST、相隔至少60秒，每次重查原號及原核准內容，官方正常處理不重送；明確不可重試錯誤不再 POST。舊 Claim 沒有嘗試證據僅查回，不能憑新版本解鎖。
+- Cloud 每輪最多恢復10筆開立＋10筆作廢；正常等待下次查證60秒、問題300秒。只在現有客戶端同步時驅動，所有桌面離線期間不會新增背景送出；下次有效 Device 同步自動接續。Cloud 狀態投影每次至多150列，已知ID與兩種操作各自索引游標，進度存原 sync_state，避免固定 LIMIT 隱藏其他待辦。
+- 官方折讓對帳沿原同步 owner 保存日期／頁／原發票進度，同日最多150筆折讓與50張原票；中斷／隔日接續，不從首頁重抓。原發票刪除／保留政策不變。
+- Local 官方完成與原issue結案在同一 SQLite 交易，核准歷史唯讀歸檔；同一發票的其他合法部分折讓不會被invoice／order模糊去重遮蔽。
+- 診斷沿同一問題ID／Cloud applicationId，包含版本、階段、attempt、回覆到達、code、Cloud HTTP／request關聯與首／末錯；不記秘密或原始交易明文。Cloud 完整事件分頁匯出；Local 不以500筆截斷長佔號證據。寫檔失敗在原問題可見。
 
-- [ ] Local／CYID 的主管開啟即見原發票、本次折讓／原折讓、原因與申請人；一次核准完成連續流程，無額外預留／送出／反覆輸密碼。
-- [ ] 連續超過一般重試上限數量的明確佔號仍持續加號；不設定換號次數上限，可取消、保存進度並安全恢復。
-- [ ] 逾時／回覆遺失／程式中斷／其他錯誤不被當佔號換號；原號可查明，不重複g0401。同一申請跨機／連點不能重複開立。
-- [ ] 官方可確認的正常完成能收尾；永久保留歷史送出紀錄不會永久阻塞另一筆合法部分折讓。
-- [ ] g0501 無15分鐘核准窗口、輸入原號與第二次送出按鈕；同號有限重試、已作廢同步完成、官方排程等待正確。
-- [ ] 既有「處理中」涵蓋等待主管／紙本／官方；真正故障才進「上傳問題」，解決後清單更新且不重複。
-- [ ] 每類上傳問題可匯出對應操作／嘗試／錯誤／官方結果與必要系統資訊；Cloud與Local可關聯，無秘密或多餘個資。
-- [ ] 同一問題多次失敗仍保留首錯與關鍵過程；長佔號流程日誌不重複整份發票；未解決證據不因一般輪替遺失；日誌寫入失敗可見。
-- [ ] 獨立系統診斷入口／視窗／純UI測試已移除，相關環境診斷可由問題匯出取得。
-- [ ] 已套 schema 的升級採新 forward migration，備份／回復／資料與稽核保留驗證通過，不重套0020或改舊正式migration。
-- [ ] 原發票清理不變；折讓對帳50張／150筆、缺原票按需查回、超限停止與恢復、PDF／官方歷史無回歸。
-- [ ] 必要 Windows／Cloud／Governance／公開包安全與封裝驗證通過，真光貿結果有獨立證據；延期真人雙機未冒充完成。
+**已刪除的重複路徑：**獨立 CloudAllowanceManagerForm、主管繼續核准、正常技術API及其DTO、人工占號／分類服務、作廢文字確認送出API與對應舊測試；原系統診斷視窗已退役。必要防並發 CAS、未知結果查回與不可變證據仍保留，直接落在原 owner。
+
+**Architecture Exception（暫存舊資料相容）：**網站人工折讓／作廢只供舊版未完成紀錄，非新申請的正常替代路徑。歷史表／過期欄位與不可變 Audit 保留；待新流程真光貿驗收及舊待辦盤點完成後，集中刪除最後直接 caller／入口，歷史唯讀。責任仍屬原 EmployeeAllowanceWorkflowService／EmployeeAllowanceVoidWorkflowService 與 SyncIssuesForm；主要風險是舊紀錄缺少送出證據，故不能推定成功或自動重送，原歷史／行政結案測試持續覆蓋。這是原 V3.2-G/H 的退役條件，不另建相容平台、不移到 V3.3。
+
+## 6. 驗證與未完項
+
+工程驗證證明 Source 行為，不代替 Windows 真人操作或光貿實際交易。精確提交 SHA 的 CI 由原 PR #550 顯示，避免在文件內先寫尚未存在的 HEAD。
+
+| 項目 | 本批證據／待驗 |
+| --- | --- |
+| Cloud 一次核准與恢復 | 合成 HTTP／D1測試：open檢視不變更、核准內直接送出、25次碰撞、未知零重送、重開檔案恢復、CAS回覆遺失／撤權、正常等待、已完成查閱、分頁完整診斷 |
+| Local 一次核准與恢復 | 原 Core／Allowance／VoidWorkflow／Sync測試涵蓋核准後重啟免再次主管操作、原號查回、權限與設定失效、防重送、官方完成原子結案 |
+| g0501 | Local／Cloud 合成驗證最多3次、60秒退避、4050141等待不重送、舊未知Claim不解鎖、官方已作廢收尾 |
+| schema21 | 非空schema20備份、注入失敗回滾、成功保留舊Ledger／Grant／Audit、FK／integrity及備份實際還原；沒有遠端套用 |
+| 同步與診斷 | 150筆／50張同日停止與隔日checkpoint接續、不同申請不錯誤合併、完整事件匯出、無秘密；舊版缺少的證據明列未知，不補造 |
+| Windows／工程 CI | 本地跨編譯與所有測試完成後，集中推送並核對精確HEAD的Windows Build／Cloud Check／Governance；失敗不得標完成 |
+| 尚未完成的業務驗收 | 本機schema20證據歸檔、獲授權的20→21／原Worker部署、分別授權的旗標啟用／真光貿測試、最後舊人工入口退役；雙Windows真人驗收依既有延期決議 |
 
 ## 7. V3.3／後續邊界與歷史
 

@@ -40,7 +40,7 @@ const fakeRecord={invoice_number:originalInvoice,status:99,cancel_date:0,
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
- assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql");
+ assert.equal(migrations.at(-1),"0021_allowance_automatic_execution.sql");
  for(const name of migrations.filter(n=>n<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES (?,'Synthetic')").run(ws);

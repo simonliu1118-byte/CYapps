@@ -138,8 +138,7 @@ export async function claimCloudAllowanceOneShotSending(
  proof.requestedGross!==(BigInt(frozen.requestedGross)*10000000n).toString()||
  proof.approvalRecorded!==false||proof.numberReserved!==false||
  !Number.isFinite(checked)||checked>date.valueOf()+1000||
- date.valueOf()-checked>60_000||
- !(Date.parse(grant.valid_until_utc)>date.valueOf()))
+ date.valueOf()-checked>60_000)
   throw new Error("ALLOWANCE_SENDING_OFFICIAL_CHANGED_OR_GRANT_EXPIRED");
  const second=await authority.revalidate();
  if(!sameManager(first,second,t.workspaceId)||
@@ -164,10 +163,6 @@ export async function claimCloudAllowanceOneShotSending(
  AND request_hash=?6 AND created_by_device_id=?7
  AND seller_invoice=?8 AND environment=?9 AND allowance_day=?10
  AND sequence=?11 AND attempt=?16 AND collision_code IS NULL
- ${ledger.attempt>1?`AND EXISTS(SELECT 1 FROM allowance_manual_review_audit r
-   WHERE r.next_ledger_id=allowance_number_ledger.ledger_id
-   AND r.workspace_id=?3 AND r.application_id=?4
-   AND r.disposition='external_collision_reserved')`:""}
  AND EXISTS (
   SELECT 1 FROM allowance_applications a
   JOIN allowance_frozen_requests f ON f.application_id=a.application_id
@@ -186,7 +181,6 @@ export async function claimCloudAllowanceOneShotSending(
    AND p.reviewed_revision=?12-1
    AND p.manager_actor_id=?13 AND p.manager_device_id=?7
    AND p.request_hash=?6 AND p.official_snapshot_hash=?15
-   AND p.valid_until_utc>?1
    AND d.status='active' AND d.employee_authority_state='cloud'
    AND w.status='active'
   )

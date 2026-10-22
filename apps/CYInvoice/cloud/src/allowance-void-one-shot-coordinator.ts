@@ -1,197 +1,116 @@
-// V3.2-E DRAFT ONLY. Sole internal Cloud g0501 send owner.
-// NOT ROUTED; schema20 not deployed; explicitly opt-in in tests only.
-// Before any future public send route: shut down legacy Local senders,
-// obtain operator authorization and enforce a default-off Worker send flag.
-// No D1 inventory hash can establish absent offline devices.
-// Claim first -> at most ONE provider POST. Lost claim reply = ZERO posts.
-// A provider code=0 or D0501/99 can never attribute this mutation.
-import {loadCloudAllowanceVoidForManager,activeVoidDevice,
- isVoidManager,sameVoidManager} from "./allowance-void-applications";
+// Existing Cloud void owner. One original-number claim, bounded evidenced
+// attempts, and official readback. A claim is an identity fence, not a lifetime
+// ban on safe same-number retry. Legacy unproven claims stay readback-only.
+import {loadCloudAllowanceVoidForManager,activeVoidDevice} from "./allowance-void-applications";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
-import {queryOfficialVoidTarget,sameVoidCompanyCard,freshVoidOfficialEvidence}
- from "./amego-allowance-void-proof";
+import {queryOfficialVoidTarget,sameVoidCompanyCard} from "./amego-allowance-void-proof";
 import {postAllowanceVoidOnce} from "./amego-allowance-void";
-import type {OneShotAllowanceVoidOutcome} from "./amego-allowance-void";
-import type {AllowanceActorSource,CloudAllowanceContext}
- from "./allowance-frozen-store";
-
+import {readOfficialAllowanceVoidStatus} from "./amego-allowance-status";
+import {recordExecutionEvent,saveExecutionResult,executionError,type CloudExecutionResult} from "./allowance-one-shot-coordinator";
+import type {AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 export interface VoidOnceTarget {
- workspaceId:string;applicationId:string;deviceId:string;
- expectedRevision:2;confirmation:string;
+ workspaceId:string;applicationId:string;deviceId:string;expectedRevision:2;
 }
-interface StoredGrant {
- request_hash:string;official_snapshot_hash:string;
- manager_actor_id:string;manager_device_id:string;
- approved_at:string;valid_until_utc:string;
-}
-export interface VoidOnceOutcome {
- applicationId:string;
- outcome:OneShotAllowanceVoidOutcome["kind"];
- providerPostAttempted:true;
- claimedExactlyOnce:true;
- auditRecorded:boolean;
- manualReviewRequired:true;
- safeToAutoResend:false;safeToAutoClose:false;
- proofOfThisPost:false;
-}
-const ID=/^[A-Za-z0-9_-]{8,100}$/;
-const WS=/^ws_[A-Za-z0-9_-]{3,100}$/;
-const DEVICE=/^dev_[0-9a-f-]{36}$/;
-const HASH=/^[a-f0-9]{64}$/;
-function now(clock:()=>Date):Date{
- const value=clock();
- if(!(value instanceof Date)||!Number.isFinite(value.valueOf()))
-  throw new Error("VOID_EXEC_CLOCK_INVALID");
- return value;
-}
-export async function executeCloudVoidOnce(
- db:D1Database,t:VoidOnceTarget,ctx:CloudAllowanceContext,
- authority:AllowanceActorSource,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date(),authorizedCutover=false
-):Promise<VoidOnceOutcome>{
- // No public route sets this. Source/fake tests may opt in explicitly;
- // production requires separate approval and Local sender shutdown BEFORE
- // a future route can be designed. Default: ZERO financial POSTs or claims.
- if(authorizedCutover!==true)throw new Error("VOID_EXEC_SEND_DISABLED");
- if(!t||!WS.test(t.workspaceId)||!ID.test(t.applicationId)||
-  !DEVICE.test(t.deviceId)||t.expectedRevision!==2||
-  typeof t.confirmation!=="string")
-  throw new Error("VOID_EXEC_TARGET_INVALID");
- const first=await authority.revalidate();
- if(!isVoidManager(first,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
-  throw new Error("VOID_EXEC_MANAGER_REQUIRED");
- const frozen=await loadCloudAllowanceVoidForManager(db,t,ctx,authority);
- if(frozen.status!=="approved"||frozen.revision!==2||
-  t.confirmation!=="作廢 "+frozen.allowanceNumber)
-  throw new Error("VOID_EXEC_NOT_APPROVED_OR_CONFIRMATION_INVALID");
- const grant=await db.prepare("SELECT request_hash,official_snapshot_hash,"+
-  "manager_actor_id,manager_device_id,approved_at,valid_until_utc "+
-  "FROM allowance_void_approvals "+
-  "WHERE application_id=?1 AND workspace_id=?2 LIMIT 1")
-  .bind(t.applicationId,t.workspaceId).first<StoredGrant>();
- const at=now(clock);
- if(!grant||grant.request_hash!==frozen.requestHash||
-  !HASH.test(grant.official_snapshot_hash)||
-  grant.manager_actor_id!==first.employeeId||
-  grant.manager_device_id!==t.deviceId||
-  !Number.isFinite(Date.parse(grant.approved_at))||
-  !Number.isFinite(Date.parse(grant.valid_until_utc))||
-  at.valueOf()<Date.parse(grant.approved_at)||
-  at.valueOf()>=Date.parse(grant.valid_until_utc)||
-  Date.parse(grant.valid_until_utc)-Date.parse(grant.approved_at)>900_000)
-  throw new Error("VOID_EXEC_GRANT_MISSING_EXPIRED_OR_CHANGED");
- const company=await loadAmegoCompanySettingsForGateway(
-  db,t.workspaceId,ctx.encryptionKeyHex);
- if(company.revision!==frozen.companyRevision||
-  company.sellerInvoice!==frozen.sellerInvoice)
-  throw new Error("VOID_EXEC_COMPANY_CHANGED");
- // Fresh signed read-only official proof just before claiming the one POST.
- const proof=await queryOfficialVoidTarget({
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
-  allowanceNumber:frozen.allowanceNumber,
-  originalInvoiceNumber:frozen.originalInvoiceNumber
- },transport,clock);
- const timestamp=now(clock);
- if(proof.officialSnapshotHash!==grant.official_snapshot_hash||
-  !freshVoidOfficialEvidence(proof.checkedAtUtc,timestamp)||
-  timestamp.valueOf()>=Date.parse(grant.valid_until_utc))
-  throw new Error("VOID_EXEC_OFFICIAL_CHANGED_OR_STALE");
- const second=await authority.revalidate();
- if(!sameVoidManager(first,second,t.workspaceId)||
-  !await activeVoidDevice(db,t.workspaceId,t.deviceId))
-  throw new Error("VOID_EXEC_AUTH_REVOKED");
- const current=await loadCloudAllowanceVoidForManager(db,t,ctx,authority);
- const companyAfter=await loadAmegoCompanySettingsForGateway(
-  db,t.workspaceId,ctx.encryptionKeyHex);
- if(current.status!=="approved"||current.revision!==2||
-  current.requestHash!==frozen.requestHash||
-  current.allowanceNumber!==frozen.allowanceNumber||
-  !sameVoidCompanyCard(company,companyAfter))
-  throw new Error("VOID_EXEC_STALE");
- // Permanent D1 claim written BEFORE the provider request. This is NOT a
- // separable method or an authorization token; one coordinator owns both.
- // SQL trigger also checks active Device, company revision, original grant.
- let claim:D1Result;
- try{
-  claim=await db.prepare("INSERT INTO allowance_void_send_claims "+
-   "(application_id,workspace_id,environment,seller_invoice,"+
-   "allowance_fingerprint,request_hash,official_snapshot_hash,"+
-   "manager_actor_id,manager_device_id,claimed_at) "+
-   "SELECT r.application_id,r.workspace_id,r.environment,r.seller_invoice,"+
-   "r.allowance_fingerprint,r.request_hash,?4,?5,?6,?7 "+
-   "FROM allowance_void_requests r "+
-   "JOIN allowance_void_approvals a ON a.application_id=r.application_id "+
-   "AND a.workspace_id=r.workspace_id "+
-   "JOIN devices d ON d.device_id=?6 AND d.workspace_id=r.workspace_id "+
-   "JOIN workspaces w ON w.workspace_id=r.workspace_id "+
-   "JOIN company_settings c ON c.workspace_id=r.workspace_id "+
-   "WHERE r.application_id=?1 AND r.workspace_id=?2 "+
-   "AND r.request_hash=?3 AND r.status='approved' AND r.revision=2 "+
-   "AND a.request_hash=?3 AND a.official_snapshot_hash=?4 "+
-   "AND a.manager_actor_id=?5 AND a.manager_device_id=?6 "+
-   "AND c.revision=r.company_revision AND c.seller_invoice=r.seller_invoice "+
-   "AND d.status='active' AND d.employee_authority_state='cloud' "+
-   "AND w.status='active' AND "+
-   "NOT EXISTS(SELECT 1 FROM allowance_void_send_claims x "+
-   "WHERE x.application_id=r.application_id)")
-   .bind(t.applicationId,t.workspaceId,frozen.requestHash,
-     proof.officialSnapshotHash,first.employeeId,t.deviceId,
-     timestamp.toISOString()).run();
- }catch{
-  // May be committed despite missing D1 acknowledgement. READBACK ONLY.
-  throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
- }
- if(claim.meta.changes!==1)
-  throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
- // Emergency stop or revocation after claim must suppress even the FIRST POST.
- // The durable claim is never released or sent again after any failure.
- let stillAuthorized=false;
+export async function executeCloudVoidOnce(db:D1Database,t:VoidOnceTarget,ctx:CloudAllowanceContext,
+ authority:AllowanceActorSource,transport:typeof fetch=fetch,clock:()=>Date=()=>new Date(),
+ enabled=false,requestId="internal"):Promise<CloudExecutionResult>{
+ if(!enabled)throw new Error("VOID_EXEC_SEND_DISABLED");
+ const finish=(result:CloudExecutionResult)=>saveExecutionResult(db,t,"void",result,requestId,clock);
  try{
   const actor=await authority.revalidate();
-  stillAuthorized=sameVoidManager(first,actor,t.workspaceId)&&
-   await activeVoidDevice(db,t.workspaceId,t.deviceId);
-  if(stillAuthorized){
-   const latestCompany=await loadAmegoCompanySettingsForGateway(
-    db,t.workspaceId,ctx.encryptionKeyHex);
-   stillAuthorized=sameVoidCompanyCard(company,latestCompany);
+  if(!actor||!["ADMIN","SUPER_ADMIN"].includes(actor.workspaceRole)||
+    !await activeVoidDevice(db,t.workspaceId,t.deviceId))throw new Error("VOID_EXEC_AUTH_REQUIRED");
+  const frozen=await loadCloudAllowanceVoidForManager(db,t,ctx,authority);
+  const grant=await db.prepare(`SELECT request_hash,official_snapshot_hash,manager_actor_id,manager_device_id
+   FROM allowance_void_approvals WHERE application_id=?1 AND workspace_id=?2`)
+   .bind(t.applicationId,t.workspaceId).first<{request_hash:string;official_snapshot_hash:string;manager_actor_id:string;manager_device_id:string}>();
+  if(frozen.status!=="approved"||frozen.revision!==2||!grant||grant.request_hash!==frozen.requestHash||
+    grant.manager_actor_id!==actor.employeeId||grant.manager_device_id!==t.deviceId)
+   throw new Error("VOID_EXEC_APPROVAL_CHANGED");
+  const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+  if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
+   throw new Error("VOID_EXEC_COMPANY_CHANGED");
+  const input={sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,allowanceNumber:frozen.allowanceNumber};
+  const status=await readOfficialAllowanceVoidStatus(input,transport,clock);
+  const prior=await db.prepare(`SELECT application_id FROM allowance_void_send_claims WHERE application_id=?1 AND workspace_id=?2`)
+   .bind(t.applicationId,t.workspaceId).first();
+  let claimed=!!prior;
+  async function claim(){
+   const fresh=await authority.revalidate();
+   if(!fresh||fresh.employeeId!==actor!.employeeId||fresh.workspaceRole!==actor!.workspaceRole||
+     !await activeVoidDevice(db,t.workspaceId,t.deviceId))throw new Error("VOID_EXEC_AUTH_REVOKED");
+   if(!sameVoidCompanyCard(company,await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex)))
+    throw new Error("VOID_EXEC_COMPANY_CHANGED");
+   if(claimed)return;
+   const r=await db.prepare(`INSERT INTO allowance_void_send_claims
+    (application_id,workspace_id,environment,seller_invoice,allowance_fingerprint,request_hash,
+     official_snapshot_hash,manager_actor_id,manager_device_id,claimed_at)
+    SELECT r.application_id,r.workspace_id,r.environment,r.seller_invoice,r.allowance_fingerprint,
+     r.request_hash,?3,?4,?5,?6 FROM allowance_void_requests r
+    WHERE r.application_id=?1 AND r.workspace_id=?2 AND r.status='approved' AND r.request_hash=?7
+     AND NOT EXISTS(SELECT 1 FROM allowance_void_send_claims c WHERE c.application_id=r.application_id)`)
+    .bind(t.applicationId,t.workspaceId,grant!.official_snapshot_hash,actor!.employeeId,t.deviceId,
+     clock().toISOString(),frozen.requestHash).run();
+   if(r.meta.changes!==1)throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
+   claimed=true;
   }
- }catch{/* Any uncertain authority or D1 state is an irreversible no-POST hold. */}
- if(!stillAuthorized){
-  // Distinguish a claimed-but-suppressed POST from an unknown provider result.
-  // This audit is best effort: failure never releases a permanent claim.
-  try{
-   await db.prepare("INSERT INTO allowance_void_audit "+
-    "(application_id,workspace_id,kind,actor_id,device_id,recorded_at) "+
-    "VALUES(?1,?2,'post_claim_interlock_no_post',?3,?4,?5)")
-    .bind(t.applicationId,t.workspaceId,first.employeeId,t.deviceId,
-     now(clock).toISOString()).run();
-  }catch{/* Keep claim forever even if audit write fails. */}
-  throw new Error("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST");
+  async function complete(hash:string){
+   await claim();
+   await db.prepare(`INSERT INTO allowance_void_audit
+    (application_id,workspace_id,kind,evidence_hash,actor_id,device_id,recorded_at)
+    VALUES(?1,?2,'official_void_observed_unattributed',?3,?4,?5,?6)`)
+    .bind(t.applicationId,t.workspaceId,hash,actor!.employeeId,t.deviceId,clock().toISOString()).run();
+   return finish({applicationId:t.applicationId,executionState:"completed",allowanceNumber:frozen.allowanceNumber});
+  }
+  if(status.officialCancelled)return await complete(status.statusEvidenceSha256);
+  if(!status.definitiveOpen){
+   if([1,2,3,31,32].includes(status.uploadStatus))return await finish({applicationId:t.applicationId,executionState:"processing",allowanceNumber:frozen.allowanceNumber});
+   throw new Error("VOID_EXEC_OFFICIAL_STATE_INVALID");
+  }
+  // Validate original invoice and original allowance items before every POST.
+  const proof=await queryOfficialVoidTarget({...input,originalInvoiceNumber:frozen.originalInvoiceNumber},transport,clock);
+  if(proof.officialSnapshotHash!==grant.official_snapshot_hash)throw new Error("VOID_EXEC_OFFICIAL_CHANGED");
+  await claim();
+  const counts=await db.prepare(`SELECT COUNT(*) AS n,MAX(attempt) AS last,
+   MAX(started_at) AS started,
+   SUM(CASE WHEN provider_code=4050141 THEN 1 ELSE 0 END) AS waiting,
+   SUM(CASE WHEN provider_code IS NOT NULL AND provider_code NOT IN (0,4050132,4050141) THEN 1 ELSE 0 END) AS rejected
+   FROM allowance_void_send_attempts WHERE application_id=?1`).bind(t.applicationId)
+   .first<{n:number;last:number|null;started:string|null;waiting:number|null;rejected:number|null}>();
+  if(!counts)throw new Error("VOID_ATTEMPTS_UNAVAILABLE");
+  if(prior&&counts.n===0)throw new Error("VOID_LEGACY_CLAIM_READBACK_ONLY");
+  if(counts.rejected)throw new Error("VOID_PROVIDER_REJECTED");
+  if(counts.n>=3)throw new Error("VOID_RETRY_LIMIT_REACHED");
+  if(counts.waiting||counts.started&&clock().valueOf()-Date.parse(counts.started)<60_000)
+   return await finish({applicationId:t.applicationId,executionState:"processing",allowanceNumber:frozen.allowanceNumber});
+  const attempt=counts.n+1,at=clock().toISOString();
+  const saved=await db.prepare(`INSERT INTO allowance_void_send_attempts(application_id,attempt,started_at)
+   SELECT ?1,?2,?3 WHERE COALESCE((SELECT MAX(attempt) FROM allowance_void_send_attempts WHERE application_id=?1),0)=?2-1`)
+   .bind(t.applicationId,attempt,at).run();
+  if(saved.meta.changes!==1)throw new Error("VOID_ATTEMPT_CHANGED_NO_POST");
+  const finalActor=await authority.revalidate();
+  if(!finalActor||finalActor.employeeId!==actor.employeeId||finalActor.workspaceRole!==actor.workspaceRole||
+    !await activeVoidDevice(db,t.workspaceId,t.deviceId)||
+    !sameVoidCompanyCard(company,await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex)))
+   throw new Error("VOID_EXEC_POST_CLAIM_INTERLOCK_NO_POST");
+  await recordExecutionEvent(db,t,"void","send_started",requestId,clock,{attempt,responseReceived:false});
+  const sent=await postAllowanceVoidOnce(input,transport,clock, httpStatus=>recordExecutionEvent(db,t,"void","http_response",requestId,clock,{attempt,httpStatus,responseReceived:true}));
+  const code="code" in sent?sent.code:undefined;
+  if(code!==undefined)await db.prepare(`UPDATE allowance_void_send_attempts SET response_received=1,provider_code=?3
+   WHERE application_id=?1 AND attempt=?2 AND response_received=0`).bind(t.applicationId,attempt,code).run();
+  await recordExecutionEvent(db,t,"void","send_response",requestId,clock,{attempt,code,responseReceived:code!==undefined});
+  await db.prepare(`INSERT INTO allowance_void_audit(application_id,workspace_id,kind,actor_id,device_id,recorded_at)
+   VALUES(?1,?2,?3,?4,?5,?6)`).bind(t.applicationId,t.workspaceId,
+   code===0?"accepted_unconfirmed":code===undefined?"unknown_result":"rejected_unconfirmed",
+   actor.employeeId,t.deviceId,clock().toISOString()).run();
+  const after=await readOfficialAllowanceVoidStatus(input,transport,clock);
+  if(after.officialCancelled)return await complete(after.statusEvidenceSha256);
+  const waiting=code===0||code===4050141||[1,2,3,31,32].includes(after.uploadStatus);
+  return await finish({applicationId:t.applicationId,executionState:waiting?"processing":"problem",
+   allowanceNumber:frozen.allowanceNumber,...(waiting?{}:{errorCode:code===undefined?"VOID_RESULT_UNKNOWN":"AMEGO_"+code})});
+ }catch(error){
+  const errorCode=executionError(error);
+  await recordExecutionEvent(db,t,"void","execution_failed",requestId,clock,{errorCode});
+  return await finish({applicationId:t.applicationId,executionState:"problem",errorCode});
  }
- // From here the permanent claim is irrevocable, even on exception.
- let result:OneShotAllowanceVoidOutcome;
- try{
-  result=await postAllowanceVoidOnce({
-   sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
-   allowanceNumber:frozen.allowanceNumber
-  },transport,clock);
- }catch{result={kind:"unknown_result"};}
- const kind=result.kind==="accepted_unconfirmed"?"accepted_unconfirmed":
-  result.kind==="definite_rejection_manual"?"rejected_unconfirmed":"unknown_result";
- let auditRecorded=false;
- try{
-  const audit=await db.prepare("INSERT INTO allowance_void_audit "+
-   "(application_id,workspace_id,kind,actor_id,device_id,recorded_at) "+
-   "VALUES(?1,?2,?3,?4,?5,?6)")
-   .bind(t.applicationId,t.workspaceId,kind,first.employeeId,t.deviceId,
-    now(clock).toISOString()).run();
-  auditRecorded=audit.meta.changes===1;
- }catch{
-  // Missing outcome audit cannot release the claim or trigger a replay.
-  auditRecorded=false;
- }
- return {applicationId:t.applicationId,outcome:result.kind,
-  providerPostAttempted:true,claimedExactlyOnce:true,auditRecorded,
-  manualReviewRequired:true,safeToAutoResend:false,safeToAutoClose:false,
-  proofOfThisPost:false};
 }

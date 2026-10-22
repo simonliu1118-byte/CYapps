@@ -42,7 +42,7 @@ async function boundedReply(res:Response):Promise<string>{
 
 export async function postAllowanceVoidOnce(
   input:OneShotAllowanceVoidInput,transport:typeof fetch=fetch,
-  now:()=>Date=()=>new Date()
+  now:()=>Date=()=>new Date(),observe?:(status?:number)=>Promise<void>
 ):Promise<OneShotAllowanceVoidOutcome>{
   if(!input||!/^\d{8}$/.test(input.sellerInvoice)||
     !validOfficialAllowanceNumber(input.allowanceNumber)||
@@ -64,6 +64,7 @@ export async function postAllowanceVoidOnce(
         accept:"application/json"},body:body.toString()
     });
   }catch{return{kind:"unknown_result"};}
+  await observe?.(response.status);
   if(!response.ok)return{kind:"unknown_result"};
   let parsed:unknown;
   try{parsed=JSON.parse(await boundedReply(response));}

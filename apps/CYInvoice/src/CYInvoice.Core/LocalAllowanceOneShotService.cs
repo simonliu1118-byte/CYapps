@@ -10,28 +10,30 @@ namespace CYInvoice.Core.Invoicing;
 public enum LocalAllowanceSendOutcome
 {
     OfficiallyConfirmed,
-    FullMatchUnattributed,
     PendingOfficialReadback,
     ConfirmedNumberCollision,
-    ReservedNotSent
+    ReservedNotSent,
+    Problem
 }
 
 public sealed record LocalAllowanceSendResult(
     LocalAllowanceSendOutcome Outcome, string AllowanceNumber, string Message);
 
-// Core-only B2c boundary. There is deliberately NO WinForms caller yet.
-// A later UI/service must supply a fresh manager-and-AMEGO preflight and
-// independently confirm live approval before invoking the first send.
+// Single Local g0401 transport owner. The approved workflow supplies fresh
+// authority/official preflight; restart and unknown outcomes use readback only.
 public sealed class LocalAllowanceOneShotService
 {
     private readonly LocalAllowanceNumberStore ledger;
     private readonly IAmegoAllowanceGateway amego;
     private readonly Func<LocalAllowanceReservation, CancellationToken, Task> requireFreshPreflight;
+    private readonly Action<string, int?>? diagnostic;
 
     public LocalAllowanceOneShotService(LocalAllowanceNumberStore ledger,
         IAmegoAllowanceGateway amego,
-        Func<LocalAllowanceReservation, CancellationToken, Task> requireFreshPreflight)
+        Func<LocalAllowanceReservation, CancellationToken, Task> requireFreshPreflight,
+        Action<string, int?>? diagnostic = null)
     {
+        this.diagnostic = diagnostic;
         this.ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         this.amego = amego ?? throw new ArgumentNullException(nameof(amego));
         this.requireFreshPreflight = requireFreshPreflight ??
@@ -59,10 +61,12 @@ public sealed class LocalAllowanceOneShotService
         // HTTP call. If anything fails after this point, including a crash,
         // the original number remains 'sending'; re-entry cannot POST again.
         ledger.MarkSending(sellerInvoice, environment, saved);
+        diagnostic?.Invoke("send_started", null);
         try
         {
             var accepted = await amego.IssueAllowanceOnceAsync(frozen, cancellationToken)
                 .ConfigureAwait(false);
+            diagnostic?.Invoke("response_received", accepted.Code);
             if (AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(accepted.Code))
             {
                 ledger.MarkExternalCollision(sellerInvoice, environment, saved, accepted.Code);
@@ -70,7 +74,7 @@ public sealed class LocalAllowanceOneShotService
                     "光貿明確拒絕號碼，舊號已保存；允許同原申請自動改配下一號");
             }
             if (accepted.Code != 0)
-                return Pending(saved, "光貿未明確接受折讓，須依原號查回，不得重新送出");
+                return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken).ConfigureAwait(false);
         }
         catch (AmegoApiException error) when (
             AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code))
@@ -85,11 +89,12 @@ public sealed class LocalAllowanceOneShotService
             error is HttpRequestException or TaskCanceledException or IOException or
             JsonException or InvalidDataException or AmegoApiException)
         {
-            return Pending(saved, "g0401 回覆不明或遭拒絕，鎖定原號供唯讀查回；禁止重新送出");
+            diagnostic?.Invoke("response_unknown", error is AmegoApiException api ? api.Code : null);
+            return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken).ConfigureAwait(false);
         }
 
-        // Even code=0 and an exact official readback do NOT attribute this
-        // transaction to the present POST, so no automatic confirmed state.
+        // ACK alone is insufficient. Full original-number content proof may
+        // complete the approved operation without asserting POST attribution.
         return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -179,22 +184,31 @@ public sealed class LocalAllowanceOneShotService
         {
             var official = await amego.QueryAllowanceAsync(saved.AllowanceNumber, cancellationToken)
                 .ConfigureAwait(false);
+            diagnostic?.Invoke("readback_received", official.Code);
+            if (official.Code == 0 && official.Data is { } waiting &&
+                waiting.AllowanceNumber == saved.AllowanceNumber &&
+                InvoiceWorkQueue.IsPendingUpload(waiting.InvoiceStatus))
+                return Pending(saved, "光貿正在處理原折讓，系統會自動追蹤");
             if (official.Code != 0 || !MatchesFrozen(ReadFrozen(saved), official.Data))
-                return Pending(saved, "光貿尚未提供可唯一比對的已完成折讓，保持原號等待查回");
+                return new(LocalAllowanceSendOutcome.Problem, saved.AllowanceNumber,
+                    "原號查證尚無法安全確認，已保存上傳問題；系統會繼續查回，不會重送或換號");
             // Hash exact official evidence but retain no raw buyer or item PII.
             // The readback and matching number are never origin evidence.
             var digest = Convert.ToHexString(SHA256.HashData(
                 Encoding.UTF8.GetBytes(JsonSerializer.Serialize(official.Data))))
                 .ToLowerInvariant();
             ledger.RecordUnattributedFullMatch(sellerInvoice,environment,saved,digest);
-            return new(LocalAllowanceSendOutcome.FullMatchUnattributed,saved.AllowanceNumber,
-                "原號及全部官方明細吻合，但無法證明為本次送出；保留 sending，須人工查證，不得重送");
+            ledger.MarkOfficiallyConfirmed(sellerInvoice, environment, saved);
+            return new(LocalAllowanceSendOutcome.OfficiallyConfirmed, saved.AllowanceNumber,
+                "原號、原發票與全部折讓明細已由官方確認完成");
         }
         catch (Exception error) when (
             error is AmegoApiException or HttpRequestException or TaskCanceledException or
             IOException or JsonException or InvalidDataException)
         {
-            return Pending(saved, "唯讀官方查回未完成，原號維持 sending，不得重送或換號");
+            diagnostic?.Invoke("readback_failed", error is AmegoApiException api ? api.Code : null);
+            return new(LocalAllowanceSendOutcome.Problem, saved.AllowanceNumber,
+                "官方查回失敗，原號保留且不重送；詳細紀錄已保存至上傳問題");
         }
     }
 
@@ -231,6 +245,7 @@ public sealed class LocalAllowanceOneShotService
             official.AllowanceType != 2 || official.CancelDate != 0 ||
             official.AllowanceDate != frozen.AllowanceDate ||
             !string.Equals(official.BuyerIdentifier, frozen.BuyerIdentifier, StringComparison.Ordinal) ||
+            !string.Equals(official.BuyerName, frozen.BuyerName, StringComparison.Ordinal) ||
             !MatchDecimal(official.TotalAmount, frozen.TotalAmount) ||
             !MatchDecimal(official.TaxAmount, frozen.TaxAmount) ||
             official.ProductItems.ValueKind != JsonValueKind.Array ||

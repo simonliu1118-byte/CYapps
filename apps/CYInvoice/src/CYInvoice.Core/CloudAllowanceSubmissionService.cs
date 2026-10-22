@@ -190,6 +190,18 @@ public sealed class CloudAllowanceSubmissionService
         }
     }
 
+    internal static IReadOnlyList<string> PendingIds(string dataDirectory, string productionSeller) =>
+        new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
+            .Select(ReadPending).Where(p => p is not null).Select(p => p!.ApplicationId).ToArray();
+
+    internal static void CompleteProjection(string dataDirectory, string productionSeller, string applicationId)
+    {
+        var records = new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
+            .Where(r => ReadPending(r)?.ApplicationId == applicationId).ToArray();
+        foreach (var record in records) record.ExtensionData!.Remove(PendingKey);
+        if (records.Length > 0) new InvoiceSyncRepository(dataDirectory).UpsertMany(records);
+    }
+
     private static PendingCloudAllowanceMarker? ReadPending(InvoiceRecord record)
     {
         if (record.ExtensionData is null ||

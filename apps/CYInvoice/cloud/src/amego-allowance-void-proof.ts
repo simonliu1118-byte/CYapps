@@ -11,7 +11,8 @@ export interface VoidProofInput {
 export interface OfficialVoidProof {
  allowanceNumber:string;originalInvoiceNumber:string;
  checkedAtUtc:string;officialSnapshotHash:string;
- officialStatus:"D0401";eligibleForManagerPreview:true;
+ officialStatus:"D0401"|"D0501";
+ detail?:unknown;eligibleForManagerPreview:true;
  canApproveWithoutFullReview:false;
  canSendWithoutDurableClaim:false;proofOfOurVoidPost:false;
 }
@@ -97,10 +98,9 @@ export async function queryOfficialVoidTarget(
  if(integer(body.code)!==0)throw new Error("VOID_PROOF_PROVIDER_UNCONFIRMED");
  const row=dict(body.data);
  if(str(row.allowance_number)!==input.allowanceNumber||
-  str(row.invoice_type).toUpperCase()!=="D0401"||
+  !["D0401","D0501"].includes(str(row.invoice_type).toUpperCase())||
   integer(row.invoice_status)!==99||
   integer(row.allowance_type)!==2||
-  integer(row.cancel_date)!==0||
   typeof row.buyer_identifier!=="string"||
   !/^\d{8,10}$/.test(row.buyer_identifier)||
   typeof row.buyer_name!=="string"||!row.buyer_name.trim()||
@@ -118,8 +118,8 @@ export async function queryOfficialVoidTarget(
  const status=await readOfficialAllowanceVoidStatus({
   sellerInvoice:input.sellerInvoice,appKey:input.appKey,
   allowanceNumber:input.allowanceNumber},transport,now);
- if(!status.definitiveOpen||status.officialCancelled||status.type!=="D0401"||
-  status.uploadStatus!==99)
+ if(!status.officialCancelled&&(!status.definitiveOpen||status.type!=="D0401"||
+  status.uploadStatus!==99||integer(row.cancel_date)!==0||str(row.invoice_type).toUpperCase()!=="D0401"))
   throw new Error("VOID_PROOF_OFFICIAL_STATUS_CHANGED");
  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(
   JSON.stringify({provider:"AMEGO",originalInvoice:input.originalInvoiceNumber,
@@ -130,7 +130,7 @@ export async function queryOfficialVoidTarget(
  return {allowanceNumber:input.allowanceNumber,
   originalInvoiceNumber:input.originalInvoiceNumber,
   checkedAtUtc:date.toISOString(),officialSnapshotHash,
-  officialStatus:"D0401",eligibleForManagerPreview:true,
+  detail:row,officialStatus:status.officialCancelled?"D0501":"D0401",eligibleForManagerPreview:true,
   canApproveWithoutFullReview:false,
   canSendWithoutDurableClaim:false,proofOfOurVoidPost:false};
 }
