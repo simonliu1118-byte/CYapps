@@ -353,7 +353,7 @@ public sealed class EmployeeAllowanceWorkflowService
     public async Task<LocalAllowanceSendResult> ApproveAndIssueLocalDraftAsync(
         InvoiceSyncIssue issue, string employeeNo, string password,
         string previewOfficialHash, Action<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IAmegoAllowanceGateway? gateway = null)
     {
         await ApproveLocalDraftAsync(issue, employeeNo, password,
             previewOfficialHash, cancellationToken).ConfigureAwait(false);
@@ -362,7 +362,8 @@ public sealed class EmployeeAllowanceWorkflowService
             cancellationToken).ConfigureAwait(false);
         progress?.Invoke("已保存配號；開始受控送出及原號查回");
         return await SendLocalReservedDraftAsync(issue, employeeNo, password,
-            cancellationToken: cancellationToken, progress: progress).ConfigureAwait(false);
+            gateway: gateway, cancellationToken: cancellationToken, progress: progress)
+            .ConfigureAwait(false);
     }
 
     // The only WinForms-facing Local g0401 call. A fresh official snapshot,
