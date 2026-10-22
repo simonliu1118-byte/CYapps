@@ -163,7 +163,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         cancellationToken.ThrowIfCancellationRequested();
         var approval = new LocalAllowanceVoidApproval(Guid.NewGuid().ToString("N"), issue.Id,
             CurrentAccountKey(), ApiRequest(issue).Review.AllowanceNumber, requestHash,
-            officialHash, manager.EmployeeNo, now().ToUniversalTime().AddMinutes(15), false, "");
+            officialHash, manager.EmployeeNo, now().ToUniversalTime(), false, "");
         new LocalAllowanceVoidStore(repository.DataDirectory).Approve(approval, now());
         return approval;
     }
@@ -176,10 +176,13 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         var store = new LocalAllowanceVoidStore(repository.DataDirectory);
         var approval = store.Find(CurrentAccountKey(), issue.Id)
             ?? throw new InvalidOperationException("請先由管理員核准折讓作廢");
+        // The legacy ExpiresUtc/text-confirmation fields are retained for
+        // historical compatibility, not for new runtime authorization.
+        // Every call still re-authenticates the current manager and rechecks
+        // the frozen request, original official number and durable send claim.
         if (approval.Claimed || approval.ManagerEmployeeNo != manager.EmployeeNo ||
-            approval.ExpiresUtc <= now().ToUniversalTime() ||
-            typedConfirmation != "作廢 " + approval.AllowanceNumber || RequestHash(issue) != approval.RequestHash)
-            throw new InvalidOperationException("須由原核准管理員重新驗證並輸入「作廢 原折讓單號」；已送出或過期者禁止發送");
+            RequestHash(issue) != approval.RequestHash)
+            throw new InvalidOperationException("原號已送出、主管或作廢申請已變更；只能查回原號");
         var api = gateway ?? ApiGateway();
         if (Hash(await InspectVoidTargetAsync(issue, api, cancellationToken).ConfigureAwait(false)) != approval.OfficialHash)
             throw new InvalidOperationException("官方明細不同於核准時，請重新覆核");
