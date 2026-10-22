@@ -45,8 +45,20 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
             }
             processingIssues.Add(issue);
         }
+        // A genuine technical failure takes priority for the same operation.
+        // Do not show its ordinary manager/paper wait again in Upload Issues:
+        // the unchanged waiting work becomes visible when the failure clears.
+        var blockingTechnical = issues.Where(issue => issue.ResolvedUtc is null &&
+            issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
+                InvoiceAllowanceIssueTypes.ManualReview or
+                InvoiceAllowanceVoidIssueTypes.ManualReview)).ToArray();
+        var pausedWaitingIds = processingIssues.Where(wait =>
+            blockingTechnical.Any(problem => SameOperation(wait, problem)))
+            .Select(wait => wait.Id).ToHashSet();
+        processingIssues.RemoveAll(wait => pausedWaitingIds.Contains(wait.Id));
         var processingIds = processingIssues.Select(issue => issue.Id).ToHashSet();
-        var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id)).ToArray();
+        var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id) &&
+            !pausedWaitingIds.Contains(issue.Id)).ToArray();
         var items = new List<InvoiceProcessingItem>();
         foreach (var record in records)
         {
@@ -80,6 +92,15 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
         UploadStatuses.Uploaded => "光貿已上傳，等待電子發票平台處理",
         _ => "等待電子發票平台處理完成",
     };
+
+    private static bool SameOperation(InvoiceSyncIssue first, InvoiceSyncIssue second) =>
+        first.AccountKey == second.AccountKey &&
+        ((first.InvoiceNumber.Trim().Length > 0 &&
+            string.Equals(first.InvoiceNumber.Trim(), second.InvoiceNumber.Trim(),
+                StringComparison.OrdinalIgnoreCase)) ||
+         (first.OrderId.Trim().Length > 0 &&
+            string.Equals(first.OrderId.Trim(), second.OrderId.Trim(),
+                StringComparison.Ordinal)));
 
     private static bool Matches(InvoiceSyncIssue issue, InvoiceRecord record) =>
         (issue.InvoiceNumber.Trim().Length != 0 && string.Equals(issue.InvoiceNumber.Trim(), record.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||

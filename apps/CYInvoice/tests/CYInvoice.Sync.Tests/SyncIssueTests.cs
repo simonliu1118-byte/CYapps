@@ -86,8 +86,15 @@ internal static class SyncIssueTests
         store.Record(account, record.InvoiceNumber, record.OrderId,
             InvoiceSyncIssueTypes.QueryFailed, "API code 3040122", DateTimeOffset.UtcNow);
         queue = new InvoiceWorkQueue(repository).Load();
-        Equal(1, queue.ProcessingIssues.Count);
+        Equal(0, queue.ProcessingIssues.Count);
         Equal(1, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
+        // Resolving the technical failure returns the very same original
+        // paper approval request to Processing, not a duplicate work item.
+        store.ResolveMatching(account, record.InvoiceNumber, record.OrderId,
+            DateTimeOffset.UtcNow, InvoiceSyncIssueTypes.QueryFailed);
+        queue = new InvoiceWorkQueue(repository).Load();
+        Equal(1, queue.ProcessingIssues.Count);
+        Equal(0, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
         return Task.CompletedTask;
     }
 
