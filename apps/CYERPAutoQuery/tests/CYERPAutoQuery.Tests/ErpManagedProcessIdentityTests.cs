@@ -32,6 +32,14 @@ public sealed class ErpManagedProcessIdentityTests
     }
 
     [Fact]
+    public void Existing_singleton_process_must_not_be_claimed_as_fresh_launch()
+    {
+        Assert.False(ErpManagedProcessIdentity.IsFreshLaunch(_started.AddMinutes(-10), _started));
+        Assert.True(ErpManagedProcessIdentity.IsFreshLaunch(_started.AddSeconds(-1), _started));
+        Assert.True(ErpManagedProcessIdentity.IsFreshLaunch(_started.AddSeconds(1), _started));
+    }
+
+    [Fact]
     public void Missing_path_fails_closed()
     {
         var owned = new ErpManagedProcessIdentity(18124, _started, 1, Path);
