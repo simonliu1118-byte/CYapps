@@ -1510,13 +1510,13 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
-        if (LocalAllowancePrimaryAction("occupied_external") !=
-                "繼續自動加號並送出" ||
-            LocalAllowancePrimaryAction("sending") !=
-                "依原折讓號碼唯讀查回" ||
+        if (LocalAllowancePrimaryAction(null) != "繼續核准的折讓" ||
+            LocalAllowancePrimaryAction("reserved") != "繼續核准的折讓" ||
+            LocalAllowancePrimaryAction("occupied_external") != "繼續核准的折讓" ||
+            LocalAllowancePrimaryAction("sending") != "查回原折讓結果" ||
             LocalAllowancePrimaryAction("confirmed") != string.Empty)
             throw new InvalidOperationException(
-                "Local allowance must not bypass reviewed collision or ambiguous-send UI.");
+                "已核准折讓只允許同一繼續操作，結果不明只能查回原號。");
         if (LegacyAllowanceWebsiteAction != "舊流程：網站已人工折讓" ||
             LegacyAllowanceVoidWebsiteAction != "舊流程：網站已作廢")
             throw new InvalidOperationException("G 階段舊網站入口必須與新單次送出明確區分");
