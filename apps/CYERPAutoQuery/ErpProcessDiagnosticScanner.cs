@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 
 namespace CYERPAutoQuery;
 
@@ -52,12 +51,15 @@ internal static class ErpProcessDiagnosticScanner
                     try { path = process.MainModule?.FileName ?? string.Empty; }
                     catch (Exception) { /* access denied for protected/remote-session process */ }
                     var basename = Path.GetFileNameWithoutExtension(path);
+                    // Window title alone is not a process identity: the AutoQuery window itself
+                    // contains "SMART ERP" and was previously misclassified as ERP.
+                    if (process.Id == Environment.ProcessId ||
+                        name.Equals("CYERPAutoQuery", StringComparison.OrdinalIgnoreCase)) continue;
                     var isCandidate =
-                        name.Contains("MainMenu", StringComparison.OrdinalIgnoreCase) ||
-                        name.Contains("SMLeaderWorkCenter", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("MainMenu", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("SMLeaderWorkCenter", StringComparison.OrdinalIgnoreCase) ||
                         (configuredName.Length > 0 && (name.Equals(configuredName, StringComparison.OrdinalIgnoreCase) ||
-                            basename.Equals(configuredName, StringComparison.OrdinalIgnoreCase))) ||
-                        windows.TryGetValue(process.Id, out var labels) && labels.Count > 0;
+                            basename.Equals(configuredName, StringComparison.OrdinalIgnoreCase)));
                     if (!isCandidate) continue;
                     int? session = null;
                     DateTimeOffset? started = null;
