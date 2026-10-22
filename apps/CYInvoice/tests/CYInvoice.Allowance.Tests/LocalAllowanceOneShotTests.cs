@@ -137,7 +137,7 @@ internal static class LocalAllowanceOneShotTests
             "same approved request automatically allocates the next number");
         Check(fake.SendCount == 1,
             "reallocation never calls g0401 until the next safe send");
-        await ExpectAsync<InvalidOperationException>(() =>
+        await ExpectAsync<InvalidDataException>(() =>
             service.ReserveAfterConfirmedRejectionAsync(Seller, Environment, saved));
         using (var db = OpenAudit(temp.Path))
         {
