@@ -29,14 +29,21 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
                 (record.SellerInvoice.Trim().Length == 0 || record.SellerInvoice.Trim() == seller)).ToArray();
         var allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
         var processingIssues = new List<InvoiceSyncIssue>();
-        foreach (var issue in issues.Where(issue => issue.ResolvedUtc is null &&
-                     issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview))
+        foreach (var issue in issues.Where(issue => issue.ResolvedUtc is null))
         {
+            // Use the existing Processing entry for paper, manager and
+            // official waits. Missing or ambiguous local data remains an issue.
+            if (issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
+                InvoiceAllowanceIssueTypes.ManualReview or
+                InvoiceAllowanceVoidIssueTypes.ManualReview)) continue;
             var matches = records.Where(record => Matches(issue, record)).ToArray();
-            if (matches.Length != 1) continue; // Ambiguity is never normal processing.
-            var review = allowanceWorkflow.ManualReviewFor(matches[0]);
-            if (review is { AwaitingConfirmation: true, ConfirmationProblem: false })
-                processingIssues.Add(issue);
+            if (matches.Length != 1) continue;
+            if (issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview)
+            {
+                var review = allowanceWorkflow.ManualReviewFor(matches[0]);
+                if (review is null || review.ConfirmationProblem == true) continue;
+            }
+            processingIssues.Add(issue);
         }
         var processingIds = processingIssues.Select(issue => issue.Id).ToHashSet();
         var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id)).ToArray();
@@ -46,6 +53,7 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
             if (record.InvoiceNumber.Trim().Length == 0 ||
                 record.InvoiceState is InvoiceStates.Failed or InvoiceStates.Unknown or InvoiceStates.Changing) continue;
             // Failed lookups and other unresolved technical problems take precedence over stale status.
+            if (processingIssues.Any(issue => Matches(issue, record))) continue;
             if (uploadIssues.Any(issue => issue.ResolvedUtc is null && Matches(issue, record) &&
                 issue.IssueType != InvoiceVoidIssueTypes.ManualReview &&
                 issue.IssueType != InvoiceAllowanceIssueTypes.ManualReview &&
