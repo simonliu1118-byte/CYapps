@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("Local g0501 signed transport never retries, and exact status decoder fails closed", TestG0501TransportAsync),
     ("Local g0501 approval, durable claim, lost reply, restart and official observation", TestLocalVoidLifecycleAsync),
+    ("Local g0501 one supervisor confirmation closes on official proof", TestLocalOneClickVoidAsync),
     ("Local g0501 rejects wrong manager, expiry, changed official and revoked manager", TestLocalVoidPreconditionsAsync),
     ("Local g0501 concurrent sends and cancellation race permit at most one POST", TestLocalVoidRacesAsync),
     ("Local g0501 failed result audit retains permanent claim", TestLocalVoidAuditFailureAsync),
@@ -112,6 +113,28 @@ static async Task ApproveApiVoidAsync(VoidSetup setup,InvoiceSyncIssue issue,Fak
     await setup.Workflow.ApproveLocalVoidAsync(issue,"2000","AdminPass1",preview.OfficialSnapshotHash,api);
 }
 
+static async Task TestLocalOneClickVoidAsync()
+{
+    using var temporary = new TemporaryDirectory("g0501-one-click");
+    var (setup, issue, api) = await CreateApiVoidAsync(temporary.Path);
+    api.Status = new("ALW-001", "D0501", 99);
+    var preview = await setup.Workflow.PreviewLocalVoidAsync(issue,
+        "2000", "AdminPass1", api);
+    var result = await setup.Workflow.ApproveAndExecuteLocalVoidAsync(issue,
+        "2000", "AdminPass1", preview.OfficialSnapshotHash, api);
+    Equal(true, result.OfficialVoidObserved);
+    Equal(1, api.PostCalls);
+    Equal(0, UnresolvedAllowanceVoidIssues(setup.Repository).Count);
+    Equal(true, setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+    await ThrowsAsync<InvalidOperationException>(() =>
+        setup.Workflow.SendLocalVoidOnceAsync(issue, "2000", "AdminPass1", "", api));
+    Equal(1, api.PostCalls);
+    using var db = OpenVoidDatabase(setup.Repository);
+    using var query = db.CreateCommand();
+    query.CommandText = "SELECT COUNT(*) FROM allowance_void_local_observations";
+    Equal(2L, Convert.ToInt64(query.ExecuteScalar()));
+}
+
 static async Task TestLocalVoidLifecycleAsync()
 {
     using var temporary=new TemporaryDirectory("g0501-lifecycle");
@@ -138,7 +161,7 @@ static async Task TestLocalVoidLifecycleAsync()
     api.Status=new("ALW-001","D0501",99);
     Equal(true,(await restarted.ReadbackLocalVoidAsync(issue,"0001","SuperPass1",api)).OfficialVoidObserved);
     Equal(1,api.PostCalls);
-    Equal(1,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
+    Equal(0,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
     Equal(true,restarted.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
     using var db=OpenVoidDatabase(setup.Repository);
     foreach(var table in new[]{"approvals","claims","observations"})
@@ -170,8 +193,8 @@ static async Task TestLocalVoidPreconditionsAsync()
     api.Official=valid;
     await ApproveApiVoidAsync(setup,issue,api);
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"0001","SuperPass1","作廢 ALW-001",api));
-    var expired=new EmployeeAllowanceVoidWorkflowService(setup.Repository,now:()=>new DateTimeOffset(2026,9,21,0,0,0,TimeSpan.Zero));
-    await ThrowsAsync<InvalidOperationException>(()=>expired.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
+    // No 15-minute approval lease remains; the same original manager must
+    // still reauthenticate and the original official evidence must match.
     api.Official=valid with {TaxAmount="6"};
     await ThrowsAsync<InvalidOperationException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
     api.Official=valid;
@@ -179,6 +202,15 @@ static async Task TestLocalVoidPreconditionsAsync()
     await ThrowsAsync<UnauthorizedAccessException>(()=>setup.Workflow.SendLocalVoidOnceAsync(issue,"2000","AdminPass1","作廢 ALW-001",api));
     Equal(0,api.PostCalls);
     Equal(false,setup.Workflow.LocalApprovalFor(issue)!.Claimed);
+
+    using var expiredTemporary = new TemporaryDirectory("g0501-no-15min");
+    var delayed = await CreateApiVoidAsync(expiredTemporary.Path);
+    await ApproveApiVoidAsync(delayed.Setup, delayed.Issue, delayed.Api);
+    var delayedManager = new EmployeeAllowanceVoidWorkflowService(
+        delayed.Setup.Repository, now: () => DateTimeOffset.UtcNow.AddDays(2));
+    await delayedManager.SendLocalVoidOnceAsync(delayed.Issue,
+        "2000", "AdminPass1", "", delayed.Api);
+    Equal(1, delayed.Api.PostCalls);
 }
 
 static async Task TestLocalVoidRacesAsync()
