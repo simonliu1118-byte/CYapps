@@ -143,12 +143,6 @@ public sealed class LocalAllowanceOneShotService
         if (saved.Status != "occupied_external")
             throw new InvalidOperationException("The prior attempt changed while advancing number");
         var frozen = ReadFrozen(saved);
-        // Legacy audit column official_snapshot_sha256 stores a HASH of
-        // collision evidence for this new path, NOT an official query snapshot.
-        // This identity is safe: no buyer, invoice or App Key is logged.
-        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            "amego:confirmed_number_rejection:" + sellerInvoice + ":" +
-            environment + ":" + saved.AllowanceNumber))).ToLowerInvariant();
         var template = new AllowanceIssueRequest {
             AllowanceDate = frozen.AllowanceDate, AllowanceNumber = string.Empty,
             AllowanceType = frozen.AllowanceType, BuyerIdentifier = frozen.BuyerIdentifier,
@@ -160,91 +154,9 @@ public sealed class LocalAllowanceOneShotService
         };
         var day = DateOnly.ParseExact(frozen.AllowanceDate, "yyyyMMdd",
             CultureInfo.InvariantCulture);
-        return ledger.ReserveAfterVerifiedExternalCollision(sellerInvoice, environment,
+        return ledger.ReserveAfterDefinitiveRejection(sellerInvoice, environment,
             saved.WorkItemId, day, template, saved.ApproverEmployeeNo,
-            saved.ApprovedAtUtc, saved, digest);
-    }
-
-    // Called only after a definitive first-POST duplicate-number error was
-    // committed as occupied_external. A fresh official *different* allowance
-    // and renewed manager approval are needed before reserving a new number.
-    // This method performs ZERO g0401 POSTs.
-    public async Task<LocalAllowanceReservation> ReserveAfterExternalCollisionAsync(
-        string sellerInvoice,string environment,LocalAllowanceReservation previous,
-        string typedManagerConfirmation,CancellationToken cancellationToken=default)
-    {
-        if(typedManagerConfirmation!="確認外部占號並重新配號")
-            throw new InvalidOperationException("Manager must explicitly acknowledge reallocation");
-        var saved=RequireCurrent(sellerInvoice,environment,previous);
-        if(saved.Status!="occupied_external")
-            throw new InvalidOperationException("Only a definitive first-POST collision may reallocate");
-        // The same fresh manager and official original-invoice preflight used
-        // before the first attempt must succeed for the immutable approval.
-        await requireFreshPreflight(saved,cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        var frozen=ReadFrozen(saved);
-        AllowanceQueryResponse queried;
-        try
-        {
-            queried=await amego.QueryAllowanceAsync(saved.AllowanceNumber,cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch(Exception ex) when(ex is AmegoApiException or HttpRequestException
-            or TaskCanceledException or IOException or JsonException)
-        {
-            throw new InvalidOperationException(
-                "Official collision evidence unavailable; retain the original number",ex);
-        }
-        var official=queried.Data;
-        // Reject not-found, ambiguous matches, different number, voided or
-        // incompletely identified rows. Require BOTH another buyer AND other
-        // original invoice(s), not just a mismatching field or error code.
-        if(queried.Code!=0 || official is null ||
-           official.AllowanceNumber!=saved.AllowanceNumber ||
-           official.InvoiceType is not ("D0401" or "B0401") ||
-           official.InvoiceStatus!=UploadStatuses.Complete ||
-           official.CancelDate!=0 ||
-           string.IsNullOrWhiteSpace(official.BuyerIdentifier) ||
-           string.Equals(official.BuyerIdentifier,frozen.BuyerIdentifier,StringComparison.Ordinal) ||
-           official.ProductItems.ValueKind!=JsonValueKind.Array ||
-           official.ProductItems.GetArrayLength()==0)
-            throw new InvalidOperationException(
-                "Official number is not proven to be a separate completed external allowance");
-        var originals=frozen.ProductItem.Select(p=>p.OriginalInvoiceNumber)
-            .ToHashSet(StringComparer.Ordinal);
-        foreach(var item in official.ProductItems.EnumerateArray())
-        {
-            if(item.ValueKind!=JsonValueKind.Object ||
-               !item.TryGetProperty("original_invoice_number",out var number) ||
-               number.ValueKind!=JsonValueKind.String ||
-               string.IsNullOrWhiteSpace(number.GetString()) ||
-               originals.Contains(number.GetString()!))
-                throw new InvalidOperationException(
-                    "Official collision may be the original invoice; prohibit reallocation");
-        }
-        // Another actor may have changed this Work Item while the query ran.
-        await requireFreshPreflight(saved,cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        saved=RequireCurrent(sellerInvoice,environment,previous);
-        if(saved.Status!="occupied_external")
-            throw new InvalidOperationException("Collision Ledger changed while verifying");
-        var fingerprint=Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(official)))).ToLowerInvariant();
-        // Preserve all original approved amounts and lines exactly; the Store
-        // atomically appends attempt N+1 and an immutable collision review.
-        var template=new AllowanceIssueRequest {
-            AllowanceDate=frozen.AllowanceDate,AllowanceNumber=string.Empty,
-            AllowanceType=frozen.AllowanceType,BuyerIdentifier=frozen.BuyerIdentifier,
-            BuyerName=frozen.BuyerName,BuyerAddress=frozen.BuyerAddress,
-            BuyerTelephoneNumber=frozen.BuyerTelephoneNumber,
-            BuyerEmailAddress=frozen.BuyerEmailAddress,
-            ProductItem=frozen.ProductItem,TaxAmount=frozen.TaxAmount,
-            TotalAmount=frozen.TotalAmount
-        };
-        var day=DateOnly.ParseExact(frozen.AllowanceDate,"yyyyMMdd",CultureInfo.InvariantCulture);
-        return ledger.ReserveAfterVerifiedExternalCollision(sellerInvoice,environment,
-            saved.WorkItemId,day,template,saved.ApproverEmployeeNo,
-            saved.ApprovedAtUtc,saved,fingerprint);
+            saved.ApprovedAtUtc, saved);
     }
 
     public async Task<LocalAllowanceSendResult> ReconcileAsync(
@@ -260,7 +172,7 @@ public sealed class LocalAllowanceOneShotService
                 "僅預留折讓號碼，尚未送出");
         if (saved.Status == "occupied_external")
             return new(LocalAllowanceSendOutcome.ConfirmedNumberCollision, saved.AllowanceNumber,
-                "號碼已遭光貿明確拒絕，不會自動重配");
+                "原號已收到明確拒絕，只有原申請受控流程可以繼續配號");
         if (saved.Status != "sending")
             throw new InvalidOperationException("未知折讓執行狀態，停止操作");
         try
