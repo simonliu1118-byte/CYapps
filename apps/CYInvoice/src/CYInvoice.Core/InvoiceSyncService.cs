@@ -153,10 +153,16 @@ public sealed class InvoiceSyncService
                 attempted++;
                 await refresh.RefreshAsync(matches[0], cancellationToken).ConfigureAwait(false);
                 queried++;
+                ResolveIssues(problems, AccountKey(account),
+                    new IssueIdentity(number, matches[0].ApiOrderId),
+                    InvoiceSyncIssueTypes.QueryFailed, InvoiceSyncIssueTypes.RemoteNotFound);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception error)
             {
+                AddIssueProblem(problems, AccountKey(account), number, matches[0].ApiOrderId,
+                    InvoiceSyncIssueTypes.QueryFailed,
+                    "官方折讓原發票查回失敗：" + error.Message);
                 problems.Add(number + ": 官方折讓原發票查回失敗：" + error.Message);
             }
         }
@@ -193,10 +199,16 @@ public sealed class InvoiceSyncService
             {
                 await refresh.RefreshAsync(entry, cancellationToken).ConfigureAwait(false);
                 queried++;
+                ResolveIssues(problems, AccountKey(account),
+                    new IssueIdentity(entry.InvoiceNumber, entry.ApiOrderId),
+                    InvoiceSyncIssueTypes.QueryFailed, InvoiceSyncIssueTypes.RemoteNotFound);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception error)
             {
+                AddIssueProblem(problems, AccountKey(account), entry.InvoiceNumber, entry.ApiOrderId,
+                    InvoiceSyncIssueTypes.QueryFailed,
+                    "舊折讓作廢狀態查回失敗：" + error.Message);
                 problems.Add(entry.InvoiceNumber + ": 舊折讓作廢狀態查回失敗：" + error.Message);
             }
         }
@@ -724,8 +736,6 @@ public sealed class InvoiceSyncService
             record.Source = InvoiceSourceInference.FromOrderId(orderId);
         }
         InvoiceOfficialState.ApplyQuery(record, query);
-        // Persist the official allowance history from this same invoice_query.
-        InvoiceAllowanceMetadata.ApplyQuery(record, query.Allowances, query.AllowanceSummaryPresent);
         if (query.InvoiceStatus != 0)
         {
             record.UploadStatus = query.InvoiceStatus;

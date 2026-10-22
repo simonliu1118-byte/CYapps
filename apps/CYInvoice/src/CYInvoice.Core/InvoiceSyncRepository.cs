@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using CYInvoice.Core.Invoicing;
 using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
@@ -21,6 +22,7 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
 
         using var connection = Open();
         Configure(connection);
+        EnsureOfficialAllowanceAudit(connection);
         if (repairSnapshot is not null)
             BackupBeforeRepair(connection, repairSnapshot, cancellationToken);
         using var transaction = connection.BeginTransaction();
@@ -44,9 +46,83 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
                 deleteItems.ExecuteNonQuery();
             }
             InsertItems(connection, transaction, localId.Value, record.Items);
+            AppendOfficialAllowanceObservations(connection, transaction, record);
         }
         cancellationToken.ThrowIfCancellationRequested();
         transaction.Commit();
+    }
+
+    private static void EnsureOfficialAllowanceAudit(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE IF NOT EXISTS official_allowance_observations (
+                audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_invoice TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                invoice_number TEXT NOT NULL,
+                allowance_number TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL,
+                observed_utc TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_official_allowance_observations_invoice
+                ON official_allowance_observations(seller_invoice,environment,invoice_number,audit_id);
+            CREATE TRIGGER IF NOT EXISTS official_allowance_observations_no_update
+            BEFORE UPDATE ON official_allowance_observations
+            BEGIN SELECT RAISE(ABORT,'OFFICIAL_ALLOWANCE_AUDIT_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS official_allowance_observations_no_delete
+            BEFORE DELETE ON official_allowance_observations
+            BEGIN SELECT RAISE(ABORT,'OFFICIAL_ALLOWANCE_AUDIT_APPEND_ONLY'); END;
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static void AppendOfficialAllowanceObservations(
+        SqliteConnection connection, SqliteTransaction transaction, InvoiceRecord record)
+    {
+        if (!InvoiceAllowanceMetadata.HasCompleteSummary(record) ||
+            record.InvoiceNumber.Trim().Length == 0 ||
+            record.SellerInvoice.Trim().Length == 0) return;
+
+        var numbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var allowance in InvoiceAllowanceMetadata.ReadOfficial(record))
+        {
+            var number = allowance.AllowanceNumber.Trim();
+            if (number.Length == 0 || !numbers.Add(number))
+                throw new InvalidDataException("官方折讓歷史缺少單號或重複，未儲存不完整稽核");
+            var snapshot = JsonSerializer.Serialize(allowance);
+            using var last = connection.CreateCommand();
+            last.Transaction = transaction;
+            last.CommandText = """
+                SELECT snapshot_json FROM official_allowance_observations
+                WHERE seller_invoice=$seller AND environment=$environment
+                  AND invoice_number=$invoice COLLATE NOCASE
+                  AND allowance_number=$allowance COLLATE NOCASE
+                ORDER BY audit_id DESC LIMIT 1;
+                """;
+            last.Parameters.AddWithValue("$seller", record.SellerInvoice.Trim());
+            last.Parameters.AddWithValue("$environment", record.Environment);
+            last.Parameters.AddWithValue("$invoice", record.InvoiceNumber.Trim());
+            last.Parameters.AddWithValue("$allowance", number);
+            var previous = last.ExecuteScalar() as string;
+            if (string.Equals(previous, snapshot, StringComparison.Ordinal)) continue;
+
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO official_allowance_observations
+                    (seller_invoice,environment,invoice_number,allowance_number,snapshot_json,observed_utc)
+                VALUES ($seller,$environment,$invoice,$allowance,$snapshot,$time);
+                """;
+            insert.Parameters.AddWithValue("$seller", record.SellerInvoice.Trim());
+            insert.Parameters.AddWithValue("$environment", record.Environment);
+            insert.Parameters.AddWithValue("$invoice", record.InvoiceNumber.Trim());
+            insert.Parameters.AddWithValue("$allowance", number);
+            insert.Parameters.AddWithValue("$snapshot", snapshot);
+            insert.Parameters.AddWithValue("$time", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            if (insert.ExecuteNonQuery() != 1)
+                throw new InvalidDataException("官方折讓查證歷史無法完整保存");
+        }
     }
 
     private static void RequireRepairSnapshot(SqliteConnection connection, SqliteTransaction transaction, string expected)

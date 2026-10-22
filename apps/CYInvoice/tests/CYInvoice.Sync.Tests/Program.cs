@@ -47,6 +47,8 @@ internal static class Program
             ("detail refresh always queries even when official data is unchanged", TestDetailRefreshAlwaysQueriesAsync),
             ("detail refresh overwrites official fields and invalidates cache", TestDetailRefreshOverwriteAsync),
             ("allowance-only detail change invalidates PDF cache", TestAllowanceOnlyRefreshInvalidatesCacheAsync),
+            ("official allowance changes have append-only retained audit", TestOfficialAllowanceAuditAsync),
+            ("historical allowance query failure remains actionable until recovered", TestHistoricalAllowanceRetryIssueAsync),
             ("test detail refresh strips prefix from displayed OrderID", TestTestDetailRefreshStripsPrefixAsync),
             ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
             ("detail refresh falls back to OrderID when invoice number is missing", TestDetailRefreshByOrderIdAsync),
@@ -848,6 +850,94 @@ internal static class Program
         Equal("HH12345678", fake.LastInvoiceQuery);
         Equal("HH12345678", fresh.InvoiceNumber);
         Equal(true, File.Exists(cache));
+    }
+
+    private static async Task TestHistoricalAllowanceRetryIssueAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var old = MatchingRecord("AQ12345678", "66091800123002");
+        InvoiceAllowanceMetadata.ApplyQuery(old,
+            [new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                "A20260918032", "20260918", "0", "10")], true);
+        repository.Invoices.Append(old);
+        var fake = new FakeGateway { QueryException = new IOException("temporary timeout") };
+        fake.Pages[1] = ListResponse(1, []);
+        fake.AllowancePages[1] = new AllowanceListResponse(1, []);
+        var now = FixedNow;
+        var sync = new InvoiceSyncService(repository, (_, _) => fake, () => now);
+        var automatic = new InvoiceAutomaticSyncService(repository, sync, () => now);
+        var issues = new InvoiceSyncIssueStore(repository.DataDirectory);
+        var first = await automatic.SyncAsync();
+        Equal(true, first.Problems.Any(value => value.Contains("作廢狀態查回失敗", StringComparison.Ordinal)));
+        Equal(true, issues.Unresolved(Environments.Production + "|12345675").Any(issue =>
+            issue.InvoiceNumber == old.InvoiceNumber && issue.IssueType == InvoiceSyncIssueTypes.QueryFailed));
+
+        fake.QueryException = null;
+        var provider = Query(old.InvoiceNumber, old.ApiOrderId, "100", "買受人");
+        fake.QueryByInvoice[old.InvoiceNumber] = provider with
+        {
+            Data = provider.Data with
+            {
+                Allowances = [new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                    "A20260918032", "20260918", "0", "10", CancelDate: 20260919)],
+                AllowanceSummaryPresent = true,
+            },
+        };
+        now = now.AddDays(1);
+        var second = await automatic.SyncAsync();
+        Equal(0, second.Problems.Count);
+        Equal(false, issues.Unresolved(Environments.Production + "|12345675").Any(issue =>
+            issue.InvoiceNumber == old.InvoiceNumber && issue.IssueType == InvoiceSyncIssueTypes.QueryFailed));
+        Equal(100L, InvoiceAllowanceMetadata.RemainingGross(repository.Invoices.LoadOrCreate().Single()).RoundInt64());
+    }
+
+    private static async Task TestOfficialAllowanceAuditAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("AH12345678", "66091800123001");
+        repository.Invoices.Append(original);
+        var query = Query(original.InvoiceNumber, original.ApiOrderId, "100", "買受人");
+        QueryResponse Official(string total, long cancelDate = 0) => query with
+        {
+            Data = query.Data with
+            {
+                Allowances = [new InvoiceAllowanceResult("D0401", UploadStatuses.Complete, 2,
+                    "A20260918031", "20260918", "0", total, cancelDate)],
+                AllowanceSummaryPresent = true,
+            },
+        };
+        var fake = new FakeGateway { QueryResponse = Official("10") };
+        var refresher = DetailRefresh(repository, fake);
+        var audit = new OfficialAllowanceHistoryStore(repository.DataDirectory);
+        Equal(0, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
+        await refresher.RefreshAsync(original);
+        Equal(1, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
+        await refresher.RefreshAsync(original);
+        Equal(1, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
+
+        fake.QueryResponse = Official("20");
+        await refresher.RefreshAsync(original);
+        Equal(2, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
+        fake.QueryResponse = Official("20", cancelDate: 20260919);
+        await refresher.RefreshAsync(original);
+        var sequence = audit.Read("12345675", Environments.Production, original.InvoiceNumber);
+        Equal(3, sequence.Count);
+        Equal(20260919L, sequence[0].Snapshot.CancelDate);
+        Equal("10", sequence[2].Snapshot.TotalAmount);
+        // Same value can recur after another official state and still be recorded.
+        fake.QueryResponse = Official("10");
+        await refresher.RefreshAsync(original);
+        Equal(4, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
+
+        // Normal old invoice retention behavior MUST remain unchanged.
+        var retention = new InvoiceRetentionService(repository).Prune(new DateOnly(2027, 3, 5));
+        Equal(1, retention.Deleted);
+        Equal(0, repository.Invoices.LoadOrCreate().Count);
+        Equal(4, audit.Read("12345675", Environments.Production, original.InvoiceNumber).Count);
     }
 
     private static async Task TestAllowanceOnlyRefreshInvalidatesCacheAsync()
