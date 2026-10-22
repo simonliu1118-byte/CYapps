@@ -145,8 +145,21 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         var approval = await ApproveLocalVoidAsync(issue, employee, password,
             reviewedOfficialHash, api, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return await SendLocalVoidOnceAsync(issue, employee, password,
+        var sent = await SendLocalVoidOnceAsync(issue, employee, password,
             "作廢 " + approval.AllowanceNumber, api, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // A code=0 by itself is only an ACK. The official source must
+            // separately show that the original number is actually void.
+            return await ReadbackLocalVoidAsync(issue, employee, password,
+                api, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // The financial attempt was already claimed: never turn a failed
+            // readback into another provider POST or a false "not sent".
+            return sent;
+        }
     }
 
     public async Task<LocalAllowanceVoidApproval> ApproveLocalVoidAsync(InvoiceSyncIssue issue,
@@ -222,9 +235,11 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             throw new InvalidOperationException("官方查回的折讓單號或目前公司已改變");
         var observed = status.OfficiallyVoided;
         store.Observe(approval, observed ? "official_void_observed_unattributed" : "official_void_unconfirmed", Hash(status), manager.EmployeeNo, now());
+        if (observed)
+            new InvoiceSyncIssueStore(repository.DataDirectory).Resolve(issue.Id, now());
         return new(approval.AllowanceNumber, observed, true, observed
-            ? "官方原號目前為 D0501／99 已作廢；尚無法歸因於本次 POST，保留原送出及待辦，不自動結案。"
-            : "官方尚未確認原號為 D0501／99，保留送出紀錄，只能再查回，不得重送。");
+            ? "官方確認原號目前已作廢，原待辦已結案；仍保留本次送出、核准及官方查回歷史。"
+            : "官方尚未確認原號已作廢，保留送出紀錄並等待下次原號查回，不得盲目重送。");
     }
 
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(
