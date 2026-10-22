@@ -19,6 +19,61 @@ internal sealed partial class ItemQueryService
     /// <summary>ERP 登入設定; null or incomplete means ERP is not started automatically.</summary>
     public ErpLoginSettings? Login { get; set; }
 
+    // Only this application's own Process.Start can grant ownership. Existing/manual ERP
+    // sessions and similarly named processes must never be terminated automatically.
+    private ErpManagedProcessIdentity? _managedErp;
+
+    private ErpManagedProcessIdentity? CaptureStartedErp(Process? started, string configuredPath)
+    {
+        try
+        {
+            if (started is null || started.HasExited) return null;
+            using var caller = Process.GetCurrentProcess();
+            var actual = started.MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(actual) ||
+                !string.Equals(Path.GetFullPath(actual), Path.GetFullPath(configuredPath), StringComparison.OrdinalIgnoreCase) ||
+                started.SessionId != caller.SessionId) return null;
+            return new ErpManagedProcessIdentity(started.Id, started.StartTime.ToUniversalTime(), started.SessionId, Path.GetFullPath(actual));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or ArgumentException or IOException)
+        {
+            _log.Warn("erp-login", $"could not identify started ERP: {ex.GetType().Name}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns an open handle to the exact process started by this instance, if its identity still
+    /// matches. Callers must dispose it. Never use GetProcessesByName() to terminate ERP.
+    /// </summary>
+    private Process? OpenOwnedErp()
+    {
+        if (_managedErp is not { } identity || Login is null) return null;
+        Process? process = null;
+        try
+        {
+            if (!string.Equals(identity.ExecutablePath, Path.GetFullPath(Login.ErpPath), StringComparison.OrdinalIgnoreCase))
+                return null;
+            using var caller = Process.GetCurrentProcess();
+            process = Process.GetProcessById(identity.Pid);
+            _ = process.Handle; // Acquire the specific process handle before rechecking identity.
+            if (process.HasExited ||
+                !identity.Matches(process.Id, process.StartTime.ToUniversalTime(), process.SessionId,
+                    process.MainModule?.FileName ?? string.Empty, caller.SessionId))
+            {
+                process.Dispose();
+                return null;
+            }
+            return process;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or ArgumentException or IOException)
+        {
+            process?.Dispose();
+            _log.Warn("erp-login", $"cannot verify ERP ownership: {ex.GetType().Name}");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Starts ERP and logs in when it is not running (or shows its login window), then waits for
     /// the main window. Returns false when automatic login is not set up.
@@ -34,7 +89,10 @@ internal sealed partial class ItemQueryService
         if (window == 0)
         {
             _log.Info("erp-login", $"starting ERP file={Path.GetFileName(exe)}");
-            Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = true });
+            using var started = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = true });
+            _managedErp = CaptureStartedErp(started, exe);
+            if (_managedErp is null)
+                _log.Warn("erp-login", "ERP started but ownership could not be verified; automatic force-restart and idle-close are disabled for this instance");
             if (!await WaitUntilAsync(() => (window = FindLoginWindow(exe)) != 0 || Win32Automation.FindErpMainWindows().Count > 0,
                     ErpStartWaitMs, cancellationToken))
                 throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "已啟動 ERP，但 60 秒內沒有出現登入畫面。");
