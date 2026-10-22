@@ -90,7 +90,7 @@ function assertReadonlyReconciliation(result){
 try{
  sql.exec("PRAGMA foreign_keys=ON");
  const names=readdirSync("migrations").filter(s=>/^\d{4}_.*\.sql$/.test(s)).sort();
- assert.equal(names.at(-1),"0019_allowance_manual_review_audit.sql");
+ assert.equal(names.at(-1),"0020_allowance_void_coordination.sql");
  for(const file of names.filter(s=>s<"0014"))
   sql.exec(readFileSync("migrations/"+file,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Fake')").run(ws);
@@ -106,7 +106,6 @@ try{
   "revision,changed_by_employee_id,changed_by_device_id,changed_at) "+
   "VALUES(?,'12345678',?,1,'manager',?,"+
   "'2026-10-21T08:00:00.000Z')").run(ws,encryptedAppKey,managerDevice);
- sql.exec(readFileSync("drafts/0020_allowance_void_coordination.sql","utf8"));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,allowanceNumber:"alw-001"},ctx,authority()));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,reason:"contains\nbreak"},ctx,authority()));
  await rejects("VOID_APPLICATION_INVALID",()=>create(db,{...request,originalInvoiceNumber:"BAD"},ctx,authority()));

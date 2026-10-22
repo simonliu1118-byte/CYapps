@@ -96,7 +96,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false){
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
+ assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -423,7 +423,6 @@ for(const role of ["ADMIN","SUPER_ADMIN"]){
 {
  const f=await fixture();
  try{
-  f.sql.exec(readFileSync("drafts/0020_allowance_void_coordination.sql","utf8"));
   f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?")
    .run(await hash(rawDevA),devA);
   f.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?")

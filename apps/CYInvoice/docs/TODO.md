@@ -14,11 +14,11 @@
 
 | 主題 | 真實狀態 | 下一步 |
 | --- | --- | --- |
-| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.40 Build 1：原 Local g0501 claim 已補跨待辦 ID 安全檢查；schema19 保留受控升級停點 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是本機 MCP 受控升級／部署，所有折讓旗標維持關閉 |
-| **V3.2 E Cloud 申請／核准／單次送出核心** | schema20 草案已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
-| **V3.2 E Cloud schema20 草案** | schema19 之後的未升格 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 未升 canonical／套原 D1；不可對外送出 |
+| 正式 Release／工程版 | 正式 V3.1.0；工程 V3.1.41：原 Local g0501 claim 已補跨待辦 ID 安全檢查；0019／0020唯一canonical，兩段marker部署保留嚴格護欄 | 原 D1／Worker 仍依先前 MCP 回報為 schema18，本批未操作遠端；下一步是最新CI通過後本機MCP分段18→19→20升級／部署，所有折讓旗標維持關閉 |
+| **V3.2 E Cloud 申請／核准／單次送出核心** | schema20結構（已升格）已具 CYID 加密申請與原 ID 查回、主管官方雙查及原子 Grant；內部單一 g0501 owner 在 D1 永久 Claim 寫入成功後最多 POST 一次，未知結果只人工查回，合成測試覆蓋重入零重送 | 尚缺 Local／Cloud 全域離線競爭防線、正式路由、真測與歸因政策；不得啟用送出 |
+| **V3.2 E Cloud schema20結構（已升格）** | schema19之後的唯一canonical 0020 契約包含原申請、加密欄位、主管 Grant、永久唯一送出 Claim、15 分鐘期限及 Audit；隔離測試已納入 CI | 已升canonical，待最新CI後受控套原D1；不可對外送出 |
 | **V3.2 D/E 員工作廢申請 UI／回線** | 已在原 WinForms 介面新增員工 `void-create`（原號／原發票／原因）、同原號穩定申請 ID 與「先 `void-status`，確認 NotFound 才建立一次」；Fake Cloud／Windows Client 及 CYID 雙裝置路由測試涵蓋遺失回覆後原 ID 查回、B 裝置撤權、公司卡換版拒絕、錯環境、不重建；已核准／待核准顯示分開 | 尚缺 schema20 授權升級與真光貿驗收；兩台實機人工驗收於上線後補做。不得離線 g0501 或自動重發 |
-| **V3.2 D/E Cloud 作廢切換** | 已移除無法驗證離線 Local 停送的 D1 獨佔 Gate；單一 Cloud g0501 執行 owner 預設禁用且無送出 HTTP 路由。主管核准與 D1 原子 Claim、官方證據及不可變稽核保留；Local 曾參與 Cloud 不可自行切回 Local 送出。實際送出啟用前必須另經受控 Local 停送核對與明確授權 | **已接**：既有 CYID 路由的跨機 `void-create`／`void-status` 和 Windows Cloud Client（schema20 未部署）。**已接**：CYID 主管 `void-preview`／`void-approve` 與現有 WinForms 原 ID 查回、原號確認。**下一步**：安全完成原 Local→Cloud 一次性人工停送核對與受控 schema20 維護，執行測試光貿驗收；雙 Windows 真人驗收於上線後補做。無 g0501 送出 HTTP 路由；不建設備盤點／自動認證系統 |
+| **V3.2 D/E Cloud 作廢切換** | 已移除無法驗證離線 Local 停送的 D1 獨佔 Gate；單一 Cloud g0501 執行 owner 預設禁用且無送出 HTTP 路由。主管核准與 D1 原子 Claim、官方證據及不可變稽核保留；Local 曾參與 Cloud 不可自行切回 Local 送出。實際送出啟用前必須另經受控 Local 停送核對與明確授權 | **已接**：既有 CYID 路由的跨機 `void-create`／`void-status` 和 Windows Cloud Client（schema20 未部署）。**已接**：CYID 主管 `void-preview`／`void-approve` 與現有 WinForms 原 ID 查回、原號確認。**下一步**：先分段完成schema19／20維護（不等待Local停送），後續送出啟用前再完成Local→Cloud人工停送及未知Claim核對，執行測試光貿驗收；雙 Windows 真人驗收於上線後補做。無 g0501 送出 HTTP 路由；不建設備盤點／自動認證系統 |
 | **V3.2 D／E Local→Cloud 權威封鎖** | 既有 SettingsStore.Save 已加入持續保留的 Cloud 曾參與標記（cloud_void_local_send_blocked），只要裝置曾切換 Cloud 或保留 Cloud/CYID 裝置／公司授權，Local g0501 預覽／核准／送出均 fail-closed；重新切 LocalOnly、舊設定覆寫與重啟測試已補 | 只能防本機模式回退，不能證明其他未連線裝置沒送；Cloud g0501 路由仍停用，完整跨機交接／原 D1 升級與真測未完成 |
 | **V3.2 D／E 回線唯讀查回** | 已補 Cloud 原 application ID 重讀永久 Claim，逐原號觀察 D0401／99、D0501／99 或離線／無法解析；任何狀態均不可自動重送／結案，無 Claim 也不能推定 Local 未送；合成測試含權限撤銷 | Cloud/Local 尚無可證明的全域互斥權威，Worker g0501 路由持續禁止，需完成受控 owner 移轉與回線衝突政策 |
 | **V3.2 E Cloud g0501 Transport** | 已具內部簽名單次傳輸、原 ID claim-first 協調器及唯讀官方查回；g0501 結果不歸因、不自動重送／結案 | 無外部路由與正式 D1，先完成 Cloud/Local 全域權威互斥及實機驗收 |
@@ -34,7 +34,7 @@
 | V3.2-F／G | F 原始碼＋合成 CI 已整合；G 已逐條檢視舊 `已人工處理`、候選選號與作廢回退 caller，並在舊網站折讓／作廢入口與確認文案明確標示**舊流程／僅行政結案或待官方查證**。官方折讓歷程保持唯讀，正常舊發票清理保持原狀。 | **G 最後實際移除舊人工入口尚未授權**：依 V3.2 計畫必須等新 g0401/g0501 路徑的真光貿／Local／CYID 驗收過關再移除，以免使既有手工待辦斷路；不得宣告 G 已驗收。 |
 | V3.2-H | H 的程式／CI／合成驗收與封裝由最新 PR #550 精確 head 完整回歸；無部署與真交易。**未連原 Cloudflare／真光貿，無法宣告 H 或 V3.2 正式驗收。** | 上線前必須有原 D1 schema19/20 受控升級／readback、真測試公司卡與 g0401/g0501、Local 停送及未知 Claim 判讀／Cloud 全域唯一送出權威，和必要回復證據；雙 Windows 真人操作依批准於上線後補做。正式 Release 仍須當次授權。 |
 
-- **V3.1.40 Build 1／這邊已完成**：既有 Cloud 測試補齊非空 schema19 備份／schema20 草案失敗回滾與全資料還原，永久 g0401 Ledger 與三類 g0501 Claim 在檔案重開後仍不可重送；schema20 留在 drafts。下一個可執行的遠端批次與回報欄位統一見 [MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不另建工作單。
+- **V3.1.41／本批Source**：既有非空schema19備份／schema20失敗回滾與全資料還原、永久g0401 Ledger與三類g0501 Claim重啟零重送測試保留；0020已移至唯一canonical來源，兩段marker檢查及回讀已補齊。最新CI通過後，本機依原預算逐段18→19→20。操作及回報統一見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不另建工作單。
 
 - [ ] **V3.2 上線後雙 Windows 真人驗收（2026-10-22 使用者批准延期）**：兩台真正 Windows／不同 CYID Device 的員工、主管、撤權、斷線／回線、原 ID 查回及競態實測。未取得證據不得勾選；上線前仍須驗證財務送出權威及不可盲目重送／越權的安全門檻，Cloud g0501 不得擅自啟用。
 - **V3.2-F 目前界線**：近三日新折讓＋本機尚留存的已知舊折讓輪巡查證，每日共用 50 張原發票的 detail 查詢額度；超出 150 筆列表／50 張發票時當天不標完成，在「上傳問題」顯示需回來修改程式上限。折讓清單對不到本機原發票時已按原號唯讀查回，查無則保留提示；獨立 append-only 官方觀察歷程已接上。官方未提供／尚未查到的舊歷史不補造，真 Cloud／光貿驗收仍待完成；無額外 D1 讀寫或財務 POST。

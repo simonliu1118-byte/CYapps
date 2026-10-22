@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {basename} from "node:path";
 import {build} from "esbuild";
 const bundle=await build({entryPoints:[
  "src/amego-allowance-void.ts","src/amego-allowance-status.ts"
 ],outdir:"dist",write:false,bundle:true,platform:"node",format:"esm",target:"node24"});
 const loaded=await Promise.all(bundle.outputFiles.map(async item=>({
-  name:item.path.split("/").at(-1),
+  name:basename(item.path),
   module:await import("data:text/javascript;base64,"+
     Buffer.from(item.text).toString("base64"))
 })));

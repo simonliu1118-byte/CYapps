@@ -1,32 +1,25 @@
-# CYInvoice V3.2-C：原 Cloudflare schema19 本機 Work + MCP 交接
+# CYInvoice V3.2：原 Cloudflare schema20 本機 Work + MCP 交接
 
-## 2026-10-22 交接摘要（V3.1.40 Build 1）
+## 2026-10-22 交接摘要（V3.1.41，取代同日 schema19 限制）
 
-- 儲存庫 `simonliu1118-byte/CYapps`；專案 `apps/CYInvoice`；工作分支 `cyinvoice/feat-v32-de-void-coordination`／PR #550。開始前核對該 PR 的最新完整 SHA 與該 SHA 的 Windows／Cloud／Governance CI，不以舊版本成功推定新 head 通過；不要自行合併 PR 或發布 Release。
-- 先讀正式三層規則、CYID canonical consumer standard、本文件及 `V3_2_IMPLEMENTATION_PLAN.md`。共通規則目前為 2.10.0，仍須比對 AITeam main。
-- 工程端已補齊非空 schema19→schema20 草案的檔案備份、注入失敗回滾、升級後全量合成資料／g0401 sending Ledger／Audit 保留、檔案重開與升級前備份完整還原。g0501 永久 Claim 的送出回覆遺失、Claim 回覆遺失、Claim 後撤權也已驗證實際關閉重開後不重送。**這些不是原 D1／Time Travel／真光貿的驗收證據。**
-- **本機下一批僅做原 D1／Worker schema18→19**，依下節的額度、備份、單次 0019、DB 後驗、Worker marker 與 binding 回讀順序；遇不符先停並回報。不要直接執行 `deploy:with-migrations`，也不要先啟動 `schema_upgrade=18:19` 的 Worker 部署：此意圖要求原 D1 已完成 0019，必須先取得 DB 後驗證據。
-- 若唯讀發現原 D1 已是完整 canonical schema19：不重套 0019，先查明既有維護及備份證據；若原 Worker 仍為 marker18，再依本批明確授權處理 18→19 marker。若 DB／Worker 已同為19且來源／bindings 均符合，不重部署；直接回報現況。其他 schema、不同資源／scope、未授權旗標或來源不明均停下，不追最新版本硬升級。
-- **本批不套 schema20**：`cloud/drafts/0020_allowance_void_coordination.sql` 尚未升格，不能自行複製進 migrations 或手動套原 D1；Cloud g0501 沒有送出 HTTP 路由。schema19 完成後，帶回 Local 停送／未知 Claim 的可查證現況及測試公司卡是否可用（不提供秘密值），再由原開發工作線接續 schema20／送出權威與真測審查。
-- 雙 Windows／不同 CYID Device 的真人操作依使用者決定於 **V3.2 上線後補驗**；不可把這項再列成本批 schema19 的前置條件。財務送出權威、測試公司卡／API 與回復證據仍未豁免。
-- 完成報告須列：實際 source SHA／CI、操作前後 migration 與 Worker marker／version、四旗標及原 CYID／binding 保留結果、私有備份與可還原證據、每批真實 D1 read／write／Worker requests／剩餘額度與預估差異、未完成項。機密、真實發票／帳務及備份留在私有位置，不貼 Public GitHub。回報後即停，不接著開送出旗標、做真 g0401/g0501 或發行。
+本文件為一次性操作交接，不是永久規則。使用者本批授權先完成 Source／精確 head CI，再以本機 Cloudflare MCP 分段完成原 D1／Worker **18→19→20**；結構升級與財務送出啟用分開。原基準為 `0b6d450d`（V3.1.40 Build 1）；工作分支 `cyinvoice/feat-v32-de-void-coordination`／PR #550。操作前核對最新完整 SHA 與 Windows／Cloud／Governance CI，不合併、不發布 Release。
 
-## 現行停點：0019／Worker 標記升級（V3.1.32 Source；尚未遠端執行）
+1. 先完整閱讀正式三層規則、CYID canonical consumer standard 與 `V3_2_IMPLEMENTATION_PLAN.md`，共通規則 2.10.0 須比對 AITeam main。
+2. 核對原 Account／D1／Worker 與全帳號當日額度。整批上限 **5,000 D1 read／500 write／30 Worker requests**；不足先重估，不自行提高；額度未知、限流或費用告警即停，不重試繞過。用量包含備份、盤點、兩段 DB／Worker 驗證，分列 SQL meta 與帳號差額。
+3. 有界盤點：migration history 按 id 最多21筆（20加1筆溢位偵測），必須是精確 canonical 前綴；原 preflight 六表依 CYID_ONLY 跳過已退役 cloud_employees，另查公司卡、六張折讓表與已存在的人工 Audit／作廢四表。每表按主鍵最多101筆 opaque ID，只在私有位置計數／比對。任一表超過100筆即停重估，不繼續全表掃描。初盤 read 上限約1,500。
+4. DDL 前保存 **schema18 升級前** Time Travel bookmark、完整加密 SQL 私有備份、原 Worker version／Bindings 及舊資料指紋；實際還原到隔離本機資料庫驗證 schema、歷史與內容。每段 DB 後的 preflight bookmark 分別標示，不冒充升級前備份。schema19→20 前另保留已驗證的 schema19 還原點及前一 Worker version；新寫入不明即停。
+5. **先 0019**：唯一來源 `cloud/migrations/0019_allowance_manual_review_audit.sql`；只套一次，沿正規 history，不重跑0014～0018。規模1 ALTER／1表／3索引／4觸發器；既有 reconciliation N≤100 時估計額外 read 約2N+metadata、write約N+metadata。DB 後驗精確0001～0019、舊內容不變、新欄位／結構、FK／integrity、人工 Audit 為空；通過才在原唯一部署 owner 使用 deploy＋`CYINVOICE_SCHEMA_UPGRADE=18:19` 更新原 Worker marker19。
+6. **再 0020**：唯一來源 `cloud/migrations/0020_allowance_void_coordination.sql`，無 drafts 副本。只在完整schema19且原 Worker marker19已驗證後套一次；新增4張空表／3索引／15觸發器，永久 Claim 與不可改寫 Audit 不授權任何送出。DB 後驗精確0001～0020、舊資料／g0401 sending Ledger／Audit 不變、新表皆空、FK／integrity。通過才使用 deploy＋`CYINVOICE_SCHEMA_UPGRADE=19:20` 更新原 Worker marker20。
+7. 每段 before／deploy／after 使用相同升級意圖、精確 source identity 與私有 checkpoint；before／deploy 20分鐘限制、after 30分鐘限制不變。canonical20 的18:19只接受完整0001～0019，不要求提前套0020；19:20只接受完整0001～0020。跳版、缺遷移、已升級重用意圖、不同checkpoint、來源／scope／active version／bindings不符、未真正部署均拒絕。勿執行 `deploy:with-migrations`。失去回覆先唯讀確認，不自動再upload／deploy。
+8. 原 CYID／Device scopes、D1／Services／Secrets／Rate limits、自訂vars、公司卡及其他設定完整繼承；每段只改對應 SCHEMA_VERSION。`ALLOWANCE_API_ENABLED`、`ALLOWANCE_G0401_SEND_ENABLED`、`ALLOWANCE_MANUAL_REVIEW_ENABLED`、`ALLOWANCE_EXTERNAL_COLLISION_ENABLED` 均不存在或false。g0501無送出HTTP路由，不新增路由、不啟用內部sender、不做真光貿交易。
 
-0019 已有唯一 canonical 來源 `cloud/migrations/0019_allowance_manual_review_audit.sql`；原 D1／Worker 仍依先前本機回報為 schema18。本文件是下一批作業提案，**不代表使用者已授權遠端執行**。先核對本批精確 CI head／main、原 CYInvoice Account／D1／Worker，禁止新建替代資源或碰 CYID 專用 D1。
+## 停點、回復與完成報告
 
-1. **先核共用帳號額度**：取得當日全帳號 D1 read／write、Worker requests、方案餘額及其他服務預留量。未知、限流、接近配額時停止；先向使用者報預估與批次上限，再開始資料作業。
-2. **有界盤點與預估**：migration history 依 id 最多 20 筆，必須精確為 0001～0018；按主鍵盤點原 preflight 六表及公司卡、六張折讓表，每表最多取 101 個 opaque ID，只在私有位置計數／比對，不匯出明細。任一表超過 100 筆，先停止重估，不接著掃全表。初盤提案上限約 1,500 rows read；整批提案上限 **5,000 read／500 write／30 Worker requests**，須對照實際餘額獲准，不能當成服務實測保證。
-3. **私有 schema18 備份／回復**：在 DDL 前用本機 MCP 保存原 D1 Time Travel bookmark、可驗證加密備份、原 Worker version／完整 binding 與非折讓資料指紋，實際確認還原方式可用。這份 schema18 bookmark 與稍後 schema19 preflight 產生的 bookmark 必須分開標示；不得把事後 bookmark 冒充升級前備份。
-4. **僅套一次 0019**：走正規 migration history，不重套 0014～0018。0019 為 1 個 ALTER／1 表／3 索引／4 觸發器；會掃描既有 reconciliation rows 作欄位檢查／索引建立，不能把沒有商業 INSERT 誤當零計費。若既有證據 N≤100，DDL 初估額外 read 約 2N＋metadata、write 約 N＋metadata，真實計量以 D1 meta 為準。失敗立即停，不以重試／DROP TABLE 代替回復。
-5. **DB 後驗再改 Worker marker**：確認完整 canonical 0001～0019、舊資料／證據內容不變、新欄位／索引／觸發器、FK／integrity 及新人工 Audit 表為空。原 Worker 仍標記 18 時，才在原部署 owner 明確選 `deploy`＋`CYINVOICE_SCHEMA_UPGRADE=18:19`（workflow 對應 `schema_upgrade=18:19`）。before／deploy／after 三段使用相同意圖與 private checkpoint；未套完 0019、來源不為 18、未知跳版、checkpoint 不符或未真正部署一律拒絕。
-6. **僅 marker 變為 19**：原 CYID／Device scopes、D1／Services／Secrets／Rate limits、自訂 vars、公司卡及其他設定必須完整繼承原 active version。`ALLOWANCE_API_ENABLED`、`ALLOWANCE_G0401_SEND_ENABLED`、`ALLOWANCE_MANUAL_REVIEW_ENABLED`、`ALLOWANCE_EXTERNAL_COLLISION_ENABLED` 均須不存在或 `false`；本批不啟用折讓、不做光貿 g0401／g0501，也不發布 Release。
-
-預檢會逐次核對精確 source identity、20 分鐘內的 checkpoint、原 active version 及部署後 binding readback；逾時／失去回覆時先唯讀確認，不能自動再 upload／deploy。新標記已為 19 時不可重用 18:19 意圖；之後一般 code-only 部署維持既有保留語意。
-
-**回復與完成紀錄**：異常先停止並保留私有證據。Worker 回退使用保存的原 version；D1 已是 additive schema19 時，不自動反向 SQL 或還原整庫，須先評估期間其他寫入、備份與業務影響，再由使用者決定。完成報告逐批列真實 rows read／written、Worker requests、預估差異、剩餘額度、原／新版本、備份位置及每個驗證結果。未實測欄位標未驗證。
-
-本 GitHub 工程批次 Cloudflare 實際 D1 read **0**／write **0**／Worker deploy **0**。C7 可歸因成功政策、公司卡及雙 Windows 真光貿驗收仍未完成；正式 Release 仍 V3.1.0。
+- 已完整升級的段落不重套；DB／Worker已同為20且來源／bindings符合則不重部署。若既有schema19／20來自其他維護，先核對其來源、備份與後驗證據，不能追最新硬升。其他schema／scope／未授權旗標／來源不明立即停。
+- **Local 停送不是 schema20 結構升級前置條件。** Local 停送、未知 Claim 人工查證、測試公司卡／API、單一送出權威及歸因政策仍是後續財務送出啟用的必要條件。schema完成不代表C7/H已結案。雙 Windows／不同 CYID Device 真人驗收已由使用者延至V3.2上線後補驗，不作本批前置條件。
+- 異常停止並留私有證據；Worker以保存的原immutable version回退，D1不隨Worker回退。不得反向DROP／自動還原整庫；先評估期間其他寫入及備份／業務影響，再由使用者決定。
+- 回報實際source SHA／最新必要CI、每段migration與Worker marker／version、四旗標、原CYID／Bindings保留、私有備份／實際還原證據、SQL計費meta與全帳號差額／餘額及預估差異。帶回Local停送／未知Claim的可查證現況與測試公司卡是否可用，不提供秘密值。未實測標未驗證。**回報後停下，交回原開發對話。**
+- 本Source批次未執行D1 SQL／部署；正式Release仍V3.1.0，原D1／Worker實況另以本機MCP完成報告為準。
 
 ## 歷史：schema16→18 已完成的作業紀錄（禁止重跑）
 

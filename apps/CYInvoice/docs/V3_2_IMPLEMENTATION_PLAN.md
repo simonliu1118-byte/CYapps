@@ -17,9 +17,9 @@
 
 ## 2. 現行真實進度（2026-10-22；分開標明證據來源）
 
-- **工程來源**：V3.1.40 Build 1。A 折讓編輯、B Local 與 C Cloud 的申請／主管覆核、加密 Frozen／原因、Grant、原 Ledger 配號／單次 g0401、無法歸因查回、人工分類與明確外部占號後主管改配號已有工程碼及合成測試。0019 已升格為唯一 canonical migration，非空 schema18 的檔案備份／失敗回滾／一次升級／還原及明確 marker 18→19 部署護欄已有工程驗證。這些都不等於真光貿交易或真人驗收。
+- **工程來源**：V3.1.41。A 折讓編輯、B Local 與 C Cloud 的申請／主管覆核、加密 Frozen／原因、Grant、原 Ledger 配號／單次 g0401、無法歸因查回、人工分類與明確外部占號後主管改配號已有工程碼及合成測試。0019 已升格為唯一 canonical migration，非空 schema18 的檔案備份／失敗回滾／一次升級／還原及明確 marker 18→19 部署護欄已有工程驗證。這些都不等於真光貿交易或真人驗收。
 - **遠端基線（依使用者先前本機 MCP 回報）**：原 D1 0017／0018 各套一次、schema18；原 Worker 保留 CYID／D1／Secrets，SCHEMA_VERSION=18、ALLOWANCE_API_ENABLED=false；新六表為空，私有備份與還原證據曾核對完成。本 GitHub 工程批次沒有重新查詢或操作 Cloudflare；不重套 0014～0018、不新增替代 Worker／D1。
-- **下一個操作停點**：依[本機 MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，先核共用帳號餘額、有界盤點及 schema18 私有備份，再另行授權套一次 0019／部署原 Worker marker19，四道折讓旗標保持關閉。
+- **下一個操作停點**：依[本機 MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，先完成最新 Source／CI，核共用帳號餘額、有界盤點及私有備份，依本批授權逐段套一次0019／marker19，再一次0020／marker20；各段DB後驗通過才更新Worker，四道折讓旗標保持關閉。schema20結構升級不等待Local停送。
 - **B/C 尚未完成的驗收**：可歸因成功與未知結果人工處置政策、測試公司卡、真兩台 Windows／角色與 Device 撤權／併發／斷電／回覆遺失，以及真光貿測試。單靠 source、合成 CI、人工分類或原號吻合都不能結案。
 - **E Local 作廢工程來源**：既有待辦已接官方預覽／原主管 15 分鐘核准、原號文字確認及 SQLite 單次 g0501；送出鎖先於 HTTP，未知結果不重送。D0501／99 只記官方狀態，無本次 POST 歸因證據而不結案。既有網站流程在尚未送出前保留；跨多原發票折讓安全拒絕，真人／真光貿尚未驗收。CYID g0501 的員工申請／主管預覽／核准／原 ID 查回已有 Source／合成 CI；Cloud 單次送出僅內部封鎖程式，無 HTTP 送出路由、遠端 schema20 未部署，D 離線／回線仍待真機驗收。
 - **後續範圍**：F 原始碼與合成測試已整合；D/E 真環境切換與 Cloud g0501 啟用、F 真光貿／Cloud 資料回讀、G 最後舊介面退役、H 真實整合驗收全部仍屬 V3.2。正式 Release 維持 V3.1.0；工程 source、遠端 schema／部署、真交易、真人驗收與正式發行分開記錄。
@@ -57,11 +57,11 @@
 - **本機回退防線（V3.1.34 Source）**：在既有 SettingsStore 的 settings.json 持續保存 Cloud 曾參與的 Local g0501 禁送標記，僅阻止本機切換回 LocalOnly 後重新核准／送出；已加入重啟及舊設定回寫測試。此記號不是全球租約，無法排除另一台未入網 Local 裝置，不能當作 D/E 全域互斥完成；Cloud Worker g0501 不得因此啟用。
 - **員工原號固定 ID（工程來源）**：在既有 CYID 跨機折讓 WinForms 以員工密碼申請作廢；`CloudAllowanceClient` 將 Workspace／環境／原折讓號映射為固定 SHA-256 申請 ID，先從原 ID 唯讀查回，僅在正式 `VOID_APPLICATION_NOT_FOUND` 時建立一次。斷線、回覆遺失、重啟或改用其他 Device，均不可產生新的申請 ID 補送；由原號重新產生 ID 查回。此設計不驗證全部舊 Local 安裝且不授權 g0501。
 - **主管與 WinForms 工程來源**：既有 `allowances-route` 新增 schema20 限定的 `void-preview`／`void-approve`，用原 CYID Device/主管驗權、雙次官方查證與 D1 原子 Grant；WinForms 主管視窗用原申請 ID 預覽並強制輸入「作廢 原號」，沒有 Cloud g0501 送出入口。此處僅代表 Source／Synthetic CI，遠端仍未升級或驗收。
-- **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。主管預覽／核准與 WinForms 已接好；A／B 裝置原 ID 查回、主管 B 撤權、公司卡換版及錯環境拒絕已通過合成 CI。下一步先做原 schema19 受控升級、測試環境與 Local 停送切換核對；雙 Windows 真人驗收依使用者決定於上線後補做，不再建清冊平台。
+- **跨機入口工程來源**：沿既有 CYID／Device 路徑接 schema20 限定的 `void-create`／`void-status` 和 Windows Client；不提供 g0501 發送路由。主管預覽／核准與 WinForms 已接好；A／B 裝置原 ID 查回、主管 B 撤權、公司卡換版及錯環境拒絕已通過合成 CI。下一步先做原schema18→19→20受控結構升級、測試環境與 Local 停送切換核對；雙 Windows 真人驗收依使用者決定於上線後補做，不再建清冊平台。
 - **簡化後的單一控制權**：Cloud g0501 僅透過既有 CYID Workspace／Device 的 D1 唯一 Claim 與單一 Worker 協調器送出；斷線只能原 ID 查回，不進行離線 g0501。schema20 不再設無法驗證離線舊安裝的交接 Gate；單一 Cloud g0501 協調器預設禁用且**沒有** Worker 送出路由。待現有 Local 停送、舊 Claim 人工核對並另經使用者授權後，才可另審受控啟用；不採用設備報表雜湊，也不新增清冊平台。此批無 Cloudflare 變更、沒有正式路由。
-- **跨 Local／Cloud 作廢互斥是啟用前阻塞條件**：兩台裝置在網路分割時，僅靠各自的 SQLite／D1 claim 無法證明全域唯一送出。g0501 必須有同公司／環境／官方原號的可信單一 owner 與持久、可查證的控制權交接；已知撤權、Cloud 查詢失敗或原號未記 Claim 均不可推定其他裝置未送，回線只按原申請查回且不自動補發。跨模式 owner 無法證明互斥時，作廢送出須拒絕，不能為離線可用性放寬。Cloud g0501 路由及 schema20 升格留待該防線與獨立授權完成。
+- **跨 Local／Cloud 作廢互斥是啟用前阻塞條件**：兩台裝置在網路分割時，僅靠各自的 SQLite／D1 claim 無法證明全域唯一送出。g0501 必須有同公司／環境／官方原號的可信單一 owner 與持久、可查證的控制權交接；已知撤權、Cloud 查詢失敗或原號未記 Claim 均不可推定其他裝置未送，回線只按原申請查回且不自動補發。跨模式 owner 無法證明互斥時，作廢送出須拒絕，不能為離線可用性放寬。schema20結構升格與受控升級依本批授權獨立進行；Cloud g0501路由／啟用仍須該防線與另行授權。
 - **D1 與 Worker 分離**：依使用者回報 schema18 已完成；以後任何新的原 D1／Worker／Bindings／Secret／公司卡操作均須先通知使用者，交由其有 Cloudflare MCP 的本機 Work；事前依共通規則 §11.3 說明預估 rows read/written、呼叫次數、備份／餘額／停止條件，完成後記錄真實計量。不建立試驗 Worker／D1，且不碰 CYID 專用 D1。
-- **D／E 官方測試及受控切換停點（雙 Windows 真人驗收已延期）**：上線前先完成原 D1 schema19／Worker 的獨立授權維護與回讀，再受控核對舊 Local 安裝停送及未知 Claim、測試公司卡與單一送出權威。schema20 升格／套用、Cloud g0501 路由與真測試交易須另經審查與授權；未完成前維持關閉。雙 Windows／不同 CYID Device 的角色、撤權、斷線／回覆遺失與原 ID 查回真人操作，於 V3.2 上線後補驗，不再排成這一批的前置條件。合成測試不等同這些真人證據。
+- **D／E 官方測試及受控切換停點（雙 Windows 真人驗收已延期）**：上線前先完成原D1／Worker分段18→19→20的本批授權維護與回讀，再受控核對舊 Local 安裝停送及未知 Claim、測試公司卡與單一送出權威。schema20結構升格／套用依本批授權先完成，不等待Local停送；Cloud g0501路由與真測試交易仍須另經審查與授權，維持關閉。雙 Windows／不同 CYID Device 的角色、撤權、斷線／回覆遺失與原 ID 查回真人操作，於 V3.2 上線後補驗，不再排成這一批的前置條件。合成測試不等同這些真人證據。
 - **驗收分層**：Source＋CI、原 D1 schema／部署、測試公司卡與光貿真交易、雙機真人操作、正式 Release 各有獨立證據；任何一層未通過只能標為「待驗」或「不可啟用」，不把 CI 視為正式財務驗收。
 - **歷史資源**：PR [#440](https://github.com/simonliu1118-byte/CYapps/pull/440) 仍可逐檔回收 g0501、離線碰撞與測試程式；不能整包合併、帶回舊 migrations／第二套 Work Item owner，或重用不相容序號。
 
@@ -69,7 +69,7 @@
 
 **G/H 集中收尾（2026-10-22）**：已完成舊人工入口 caller 檢視、舊網站流程可見區隔及歷史唯讀；合成回歸依原 Windows／Cloud CI。尚未真光貿驗收，故 **G 最後刪除舊人工入口、H 真交易與全域權威驗收仍未完成**；不另建無用系統、不拆出重複工作單、不把需求移至 3.3。實際通過後在現有 PR 一次移除舊按鈕與其直接 caller（不刪歷史），再獲明確正式 Release 授權。雙 Windows 真人驗收已批准上線後補做。
 
-**H 可離線完成部分（V3.1.40 Build 1）**：已在既有 Cloud 測試加入非空 schema19 的檔案備份、schema20 草案交易失敗／回滾、升級成功且所有舊資料／g0401 sending Ledger／Audit 不變、檔案重新開啟與升級前備份完整還原；g0501 三類永久 Claim 也通過實際關閉重開後零重送。這些只證明隔離 SQLite／Fake HTTP 行為，不代表遠端 D1、Time Travel 或真光貿已驗收。下一個遠端操作仍以 [MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md) 的 schema19 批次為限；schema20 不升格、無 Cloud g0501 路由。
+**H 可離線完成部分（V3.1.40 Build 1）**：已在既有 Cloud 測試加入非空 schema19 的檔案備份、schema20契約（0020已升格）交易失敗／回滾、升級成功且所有舊資料／g0401 sending Ledger／Audit 不變、檔案重新開啟與升級前備份完整還原；g0501 三類永久 Claim 也通過實際關閉重開後零重送。這些只證明隔離 SQLite／Fake HTTP 行為，不代表遠端 D1、Time Travel 或真光貿已驗收。下一個遠端操作仍以 [MCP 交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md) 的18→19→20結構批次為限；0020已唯一升格，仍無Cloud g0501路由。
 
 ## 6. 3.3 與後續版本邊界不變
 

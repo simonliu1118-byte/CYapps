@@ -68,7 +68,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
 async function fixture(schema19=false,filename=":memory:"){
  const sql=new DatabaseSync(filename);
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
+ assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -259,7 +259,7 @@ function providerFor(target,options={}){
  }finally{close();}
 }
 // H rehearsal: a populated schema19 backup must remain recoverable after the
-// unpromoted schema20 draft. Use the existing g0401 owner to create real-shaped
+// canonical schema20 migration. Use the existing g0401 owner to create real-shaped
 // synthetic sending/evidence/audit records; never infer anything about live D1.
 {
  const dir=mkdtempSync(join(tmpdir(),"cyinvoice-schema20-"));
@@ -281,7 +281,7 @@ function providerFor(target,options={}){
   // Include migration bookkeeping in the backup, not just business tables.
   f.sql.exec("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE)");
   const canonical=readdirSync("migrations").filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
-  for(const [i,name] of canonical.entries())
+  for(const [i,name] of canonical.slice(0,19).entries())
    f.sql.prepare("INSERT INTO d1_migrations VALUES(?,?)").run(i+1,name);
   const priorSchema=definitions(f.sql),names=priorSchema.filter(x=>x.type==="table").map(x=>x.name);
   const prior=rows(f.sql,names);
@@ -289,7 +289,7 @@ function providerFor(target,options={}){
   assert.equal(prior.allowance_manual_review_audit.length,1);
   assert.equal(prior.allowance_reconciliation_checks.length,1);
   f.sql.exec("PRAGMA wal_checkpoint(TRUNCATE)");copyFileSync(live,backup);
-  const ddl=readFileSync("drafts/0020_allowance_void_coordination.sql","utf8");
+  const ddl=readFileSync("migrations/0020_allowance_void_coordination.sql","utf8");
   const migrate=(injected=false)=>{
    f.sql.exec("BEGIN IMMEDIATE");
    try{
@@ -300,8 +300,8 @@ function providerFor(target,options={}){
    }catch(error){f.sql.exec("ROLLBACK");throw error;}
   };
   assert.throws(()=>migrate(true),/no such table/);
-  assert.deepEqual(definitions(f.sql),priorSchema,"failed draft20 must roll back every DDL object");
-  assert.deepEqual(rows(f.sql,names),prior,"failed draft20 must preserve all schema19 rows/history");
+  assert.deepEqual(definitions(f.sql),priorSchema,"failed schema20 must roll back every DDL object");
+  assert.deepEqual(rows(f.sql,names),prior,"failed schema20 must preserve all schema19 rows/history");
   migrate();
   for(const original of priorSchema)
    assert.deepEqual(definitions(f.sql).find(x=>x.name===original.name),original);
@@ -328,7 +328,7 @@ function providerFor(target,options={}){
    assert.deepEqual(recovery.prepare("PRAGMA foreign_key_check").all(),[]);
    assert.equal(recovery.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
   }finally{recovery.close();}
-  console.log("V3.2 H: populated schema19 backup, atomic draft20 failure/success, preserved g0401 claim, reopen and complete schema19 restore OK");
+  console.log("V3.2 H: populated schema19 backup, atomic schema20 failure/success, preserved g0401 claim, reopen and complete schema19 restore OK");
  }finally{f.close();assert.equal(dirname(dir),tmpdir());rmSync(dir,{recursive:true,force:true});}
 }
 // Cloud counterpart of the existing Local, explicitly reviewed collision flow.

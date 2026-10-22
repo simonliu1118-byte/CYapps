@@ -1,4 +1,5 @@
--- Engineering DRAFT for V3.2 D/E after canonical schema19.
+-- CYInvoice V3.2 canonical migration 0020. Apply exactly once AFTER 0019.
+-- Schema promotion does not authorize enabling any financial sender.
 -- DO NOT apply to original D1 without user-approved MCP preflight, backup and budget.
 -- Separate g0501 ownership is required: the canonical g0401 Ledger has a different
 -- business mutation. No buyer, invoice, allowance number or App Key in plaintext.

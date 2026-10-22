@@ -36,8 +36,8 @@ try{
  sql.exec("PRAGMA foreign_keys=ON");
  const migrations=readdirSync("migrations")
   .filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql",
-  "The unapproved 0020 draft must never enter canonical migrations");
+ assert.equal(migrations.at(-1),"0020_allowance_void_coordination.sql",
+  "0020 is canonical; schema promotion must not expose a g0501 sender");
 
  // The source-only Cloud one-shot sender is intentionally NOT reachable from
  // any Worker HTTP entrypoint while Local/Cloud can compete during partitions.
@@ -63,14 +63,14 @@ try{
   sql.prepare("INSERT INTO devices(device_id,workspace_id,display_name,status,employee_authority_state) "+
    "VALUES(?,?,'Synthetic','active','cloud')").run(dev,ws);
  sql.exec(readFileSync("maintenance/retire-built-in-for-cyid-only.sql","utf8"));
- for(const f of migrations.filter(x=>x>="0014"))
+ for(const f of migrations.filter(x=>x>="0014"&&x<"0020"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO company_settings(workspace_id,seller_invoice,amego_app_key_ciphertext,revision,"+
   "changed_by_employee_id,changed_by_device_id,changed_at) "+
   "VALUES(?,'12345678','SYNTHETIC_NOT_SECRET',1,'manager',?,'2026-10-21T08:00:00.000Z')")
   .run(ws,manager);
  const before=objects();
- const ddl=readFileSync("drafts/0020_allowance_void_coordination.sql","utf8");
+ const ddl=readFileSync("migrations/0020_allowance_void_coordination.sql","utf8");
  assert.throws(()=>{
   sql.exec("BEGIN IMMEDIATE");
   try{sql.exec(ddl+"\nSELECT * FROM __void_injected_failure;");sql.exec("COMMIT");}
@@ -134,5 +134,5 @@ try{
  assert.throws(()=>sql.prepare("DELETE FROM allowance_void_audit").run(),/VOID_AUDIT_APPEND_ONLY/);
  assert.equal(sql.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
  assert.deepEqual(sql.prepare("PRAGMA foreign_key_check").all(),[]);
- console.log("V3.2 E schema20 draft: manager grant, persistent unique claim, no replay & immutable audit OK");
+ console.log("V3.2 E schema20: manager grant, persistent unique claim, no replay & immutable audit OK");
 }finally{sql.close();}

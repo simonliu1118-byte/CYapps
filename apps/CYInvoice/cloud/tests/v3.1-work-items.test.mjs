@@ -103,7 +103,7 @@ console.log("V3 Work Item storage: CYID_ONLY, source de-dup, CAS revision and re
 {
   const {db,env}=fixture();
   assert.equal(readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort().at(-1),
-    "0019_allowance_manual_review_audit.sql","V3.2-C schema must be canonical");
+    "0020_allowance_void_coordination.sql","V3.2-C schema must be canonical");
   assert.throws(()=>db.prepare(`INSERT INTO work_items(
     work_item_id,workspace_id,opened_by_device_id,updated_by_device_id,
     environment,kind,reference_hash,actor_id,created_at,updated_at)

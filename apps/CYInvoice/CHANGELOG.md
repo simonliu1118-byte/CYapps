@@ -2,6 +2,12 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.41 — 2026/10/22（schema20結構升格與分段部署）
+
+- 0020移至唯一canonical migration，移除draft副本；4表／3索引／15觸發器保留永久Claim與append-only Audit，不新增g0501送出HTTP路由。
+- 原部署owner嚴格支援18:19及19:20。canonical20下18:19必須對應精確schema19，19:20必須對應精確schema20；禁止跳版、缺遷移、重用意圖、checkpoint不符及其他vars／Bindings更動。補齊before／deploy／after、四旗標關閉、保留設定及失敗拒絕回歸。
+- 本機MCP依獨立授權及原5,000 read／500 write／30 requests預算逐段升級，DB後驗才改marker；Local停送／未知Claim／單一送出權威仍為日後啟用前阻塞，不再阻塞結構升級。真光貿、合併及Release不在本批；雙Windows真人驗收延至3.2上線後。
+
 ## V3.1.40 Build 1 — 2026/10/22（H 離線收尾與本機交接）
 
 - 沿既有 Cloud 測試補齊非空 schema19 的檔案備份、schema20 草案交易失敗完整回滾、成功後既有資料／g0401 unknown Ledger／稽核不變、重新開啟與升級前備份逐表還原；重跑草案拒絕且不放行重送。schema20 仍留在 drafts，不升格或套遠端 D1。
