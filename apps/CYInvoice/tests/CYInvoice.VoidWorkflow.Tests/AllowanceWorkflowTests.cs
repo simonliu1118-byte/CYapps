@@ -410,6 +410,36 @@ internal static class AllowanceWorkflowTests
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
+    public static async Task LocalOneClickApprovalAndIssueAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1",
+            "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var preview = await setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1");
+        // Approve, reserve and first send each perform a fresh official read.
+        for (var i = 0; i < 3; i++)
+            setup.Gateway.Queries.Enqueue(Query([], summaryPresent: true));
+        var fake = new FakeLocalIssueGateway();
+        var progress = new List<string>();
+        var result = await setup.Workflow.ApproveAndIssueLocalDraftAsync(
+            issue, "2000", "AdminPass1", preview.OfficialSnapshotHash,
+            progress.Add, gateway: fake);
+        Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, result.Outcome);
+        Equal(1, fake.IssueCalls);
+        Equal(true, progress.Count >= 2);
+        var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
+        Equal("sending", ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
+            issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))!.Status);
+        var resumed = await setup.Workflow.SendLocalReservedDraftAsync(
+            issue, "2000", "AdminPass1", fake);
+        Equal(LocalAllowanceSendOutcome.PendingOfficialReadback, resumed.Outcome);
+        Equal(1, fake.IssueCalls);
+    }
+
     // Full Local workflow + temporary SQLite + fake official gateway (no real HTTP).
     public static async Task LocalFirstSendAuthenticatesAndNeverRepostsAsync()
     {

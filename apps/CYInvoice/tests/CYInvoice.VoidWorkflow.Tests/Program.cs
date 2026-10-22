@@ -30,6 +30,7 @@ var tests = new (string Name, Action Run)[]
     ("approved Local draft reserves frozen numbered payload without g0401 or replay", () => AllowanceWorkflowTests.LocalApprovedDraftReservesFrozenPayloadWithoutSendingAsync().GetAwaiter().GetResult()),
     ("Local number reservation requires approved original manager", () => AllowanceWorkflowTests.LocalReservationRequiresApprovalAndSameManagerAsync().GetAwaiter().GetResult()),
     ("Local number reservation fails if official history changed after approval", () => AllowanceWorkflowTests.LocalOfficialChangeAfterApprovalBlocksFirstReservationAsync().GetAwaiter().GetResult()),
+    ("Local one-click manager approval reserves and sends exactly once", () => AllowanceWorkflowTests.LocalOneClickApprovalAndIssueAsync().GetAwaiter().GetResult()),
     ("Local g0401 reauthenticates and never sends twice after unknown result", () => AllowanceWorkflowTests.LocalFirstSendAuthenticatesAndNeverRepostsAsync().GetAwaiter().GetResult()),
     ("Local g0401 rejects changed official allowance history before POST", () => AllowanceWorkflowTests.LocalSendRejectsChangedOfficialHistoryBeforePostAsync().GetAwaiter().GetResult()),
     ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
