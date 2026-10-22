@@ -424,7 +424,7 @@ internal sealed class SyncIssuesForm : Form
                             var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                             primaryText = local && review.DraftItems is { Count: > 0 }
-                                ? "核准折讓草稿（不送出）"
+                                ? "核准並開立折讓"
                                 : LegacyAllowanceWebsiteAction;
                             allowCancel = true;
                         }
@@ -584,7 +584,7 @@ internal sealed class SyncIssuesForm : Form
             else if (reservation.Status == "sending")
                 await ReconcileLocalAllowanceDraftAsync(issue);
             else if (reservation.Status == "occupied_external")
-                await ReviewLocalAllowanceCollisionAsync(issue, reservation);
+                await SendLocalAllowanceDraftAsync(issue, reservation);
             return;
         }
         else if (!review.AwaitingConfirmation)
@@ -772,7 +772,7 @@ internal sealed class SyncIssuesForm : Form
         null => "預留折讓單號（不送出）",
         "reserved" => "正式送出折讓（單次）",
         "sending" => "依原折讓號碼唯讀查回",
-        "occupied_external" => "主管覆核外部占號並預留下一號",
+        "occupied_external" => "繼續自動加號並送出",
         _ => string.Empty
     };
 
@@ -935,9 +935,8 @@ internal sealed class SyncIssuesForm : Form
     {
         MessageBox.Show(this,
             $"原折讓單號：{result.AllowanceNumber}\n{result.Message}\n\n" +
-            "原號及內容吻合仍無法證明由本次 POST 建立。" +
-            "不得再次送出或自動換號；請保留原 Ledger 與官方查回證據，" +
-            "依人工異常處置程序核對，不得視為正式確認。",
+            "每次配號與送出結果均保留。結果不明時只能查原號，" +
+            "不能把官方既有同號直接當成本次新折讓；不得盲目重送。",
             "折讓結果待人工核對", MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
     }
@@ -961,23 +960,54 @@ internal sealed class SyncIssuesForm : Form
                 $"光貿當下剩餘可折金額：{preview.OfficialRemainingGross}\n\n" +
                 "光貿目前已有折讓（包含已作廢與歷史紀錄）：\n" +
                 FormatAllowances(preview.OfficialHistory) +
-                "\n\n核准只會鎖定本機折讓草稿，不會呼叫光貿 g0401、" +
-                "不會開出折讓單。核准後不可撤回；待後續正式送出功能完成。" +
-                "\n\n是否確認核准？";
+                "\n\n按下確認後，程式將依本次核准連續查證、配號及送出光貿 g0401。" +
+                "只有明確佔號拒絕才自動改配下一號，不設換號次數上限。" +
+                "若逾時、回覆不明或其他錯誤，保留原號並停止送出。" +
+                "\n\n是否核准並開立？";
             if (MessageBox.Show(this, message, "Local 折讓覆核－光貿即時查回",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
-            var approved = await allowanceWorkflow.ApproveLocalDraftAsync(issue,
-                login.EnteredEmployeeNo, login.AuthenticatedPassword,
-                preview.OfficialSnapshotHash);
-            if (IsDisposed) return;
-            MessageBox.Show(this,
-                $"已記錄 Local 管理員 {approved.LocalApproverEmployeeNo} 核准。" +
-                "\n本次沒有向光貿開立折讓，後續正式送出功能完成前不可取消。",
-                "核准草稿完成（未送出）", MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-            ReloadAll();
+            using var stop = new CancellationTokenSource();
+            using var progressWindow = new Form
+            {
+                Text = "折讓開立進度",
+                ClientSize = new Size(570, 148),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false, MinimizeBox = false, ShowIcon = false,
+                ShowInTaskbar = false, Font = Font,
+                ControlBox = false
+            };
+            var progressText = new Label
+            {
+                Dock = DockStyle.Top, Height = 75, Padding = new Padding(12),
+                Text = "正在核准並保存原申請；此時取消不能撤回已發出的光貿請求。"
+            };
+            var stopButton = UiControls.StandardButton("停止後續嘗試");
+            stopButton.Dock = DockStyle.Bottom;
+            stopButton.Click += (_, _) => { stop.Cancel(); stopButton.Enabled = false; };
+            progressWindow.Controls.Add(progressText);
+            progressWindow.Controls.Add(stopButton);
+            progressWindow.Show(this);
+            try
+            {
+                var result = await allowanceWorkflow.ApproveAndIssueLocalDraftAsync(
+                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword,
+                    preview.OfficialSnapshotHash,
+                    message =>
+                    {
+                        if (progressWindow.IsDisposed || !progressWindow.IsHandleCreated) return;
+                        progressWindow.BeginInvoke((Action)(() =>
+                        {
+                            if (!progressWindow.IsDisposed) progressText.Text = message;
+                        }));
+                    },
+                    stop.Token);
+                if (!IsDisposed) ShowLocalAllowanceSendResult(result);
+            }
+            finally { progressWindow.Close(); }
+            if (!IsDisposed) ReloadAll();
         }
         catch (Exception error)
         {
