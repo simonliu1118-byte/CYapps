@@ -133,6 +133,12 @@ static async Task TestLocalOneClickVoidAsync()
     using var query = db.CreateCommand();
     query.CommandText = "SELECT COUNT(*) FROM allowance_void_local_observations";
     Equal(2L, Convert.ToInt64(query.ExecuteScalar()));
+    var resolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
+        .All(issue.AccountKey).Single(x => x.Id == issue.Id);
+    var diagnostic = IssueDiagnosticLog.Export(setup.Repository.DataDirectory, resolved);
+    Equal(true, diagnostic.Contains("accepted_unconfirmed", StringComparison.Ordinal));
+    Equal(true, diagnostic.Contains("official_void_observed_unattributed", StringComparison.Ordinal));
+    Equal(false, diagnostic.Contains("ALW-001", StringComparison.Ordinal));
 }
 
 static async Task TestLocalVoidLifecycleAsync()
