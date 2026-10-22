@@ -27,6 +27,17 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
         var records = repository.Invoices.LoadOrCreate()
             .Where(record => record.Environment == settings.Environment &&
                 (record.SellerInvoice.Trim().Length == 0 || record.SellerInvoice.Trim() == seller)).ToArray();
+        var byNumber = records.ToLookup(record => record.InvoiceNumber.Trim(), StringComparer.OrdinalIgnoreCase);
+        var byOrder = records.SelectMany(record => new[] { record.ApiOrderId, record.OrderId, record.OriginalOrderId }
+            .Select(order => (Order: order.Trim(), Record: record)))
+            .ToLookup(pair => pair.Order, pair => pair.Record, StringComparer.Ordinal);
+        IEnumerable<InvoiceRecord> MatchingRecords(InvoiceSyncIssue issue)
+        {
+            var number = issue.InvoiceNumber.Trim();
+            var order = issue.OrderId.Trim();
+            return (number.Length == 0 ? Enumerable.Empty<InvoiceRecord>() : byNumber[number])
+                .Concat(order.Length == 0 ? Enumerable.Empty<InvoiceRecord>() : byOrder[order]).Distinct();
+        }
         var allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
         var allowanceVoidWorkflow = new EmployeeAllowanceVoidWorkflowService(repository);
         var processingIssues = new List<InvoiceSyncIssue>();
@@ -42,7 +53,7 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
             if (issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
                 InvoiceAllowanceIssueTypes.ManualReview or
                 InvoiceAllowanceVoidIssueTypes.ManualReview)) continue;
-            var matches = records.Where(record => Matches(issue, record)).ToArray();
+            var matches = MatchingRecords(issue).ToArray();
             if (matches.Length != 1) continue;
             if (issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview)
             {
@@ -57,17 +68,17 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
         // historical error cannot hide a different partial allowance/void.
         var processingIds = processingIssues.Select(issue => issue.Id).ToHashSet();
         var uploadIssues = issues.Where(issue => !processingIds.Contains(issue.Id)).ToArray();
+        var blockedRecords = processingIssues.Concat(uploadIssues.Where(issue => issue.ResolvedUtc is null &&
+                issue.IssueType is not (InvoiceVoidIssueTypes.ManualReview or
+                    InvoiceAllowanceIssueTypes.ManualReview or InvoiceAllowanceVoidIssueTypes.ManualReview)))
+            .SelectMany(MatchingRecords).ToHashSet();
         var items = new List<InvoiceProcessingItem>();
         foreach (var record in records)
         {
             if (record.InvoiceNumber.Trim().Length == 0 ||
                 record.InvoiceState is InvoiceStates.Failed or InvoiceStates.Unknown or InvoiceStates.Changing) continue;
             // Failed lookups and other unresolved technical problems take precedence over stale status.
-            if (processingIssues.Any(issue => Matches(issue, record))) continue;
-            if (uploadIssues.Any(issue => issue.ResolvedUtc is null && Matches(issue, record) &&
-                issue.IssueType != InvoiceVoidIssueTypes.ManualReview &&
-                issue.IssueType != InvoiceAllowanceIssueTypes.ManualReview &&
-                issue.IssueType != InvoiceAllowanceVoidIssueTypes.ManualReview)) continue;
+            if (blockedRecords.Contains(record)) continue;
             if (InvoiceVoidService.HasPendingMarker(record))
             {
                 if (InvoiceVoidService.IsOfficiallyPending(record))
@@ -91,8 +102,4 @@ public sealed class InvoiceWorkQueue(LocalRepository repository)
         _ => "等待電子發票平台處理完成",
     };
 
-    private static bool Matches(InvoiceSyncIssue issue, InvoiceRecord record) =>
-        (issue.InvoiceNumber.Trim().Length != 0 && string.Equals(issue.InvoiceNumber.Trim(), record.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-        (issue.OrderId.Trim().Length != 0 && new[] { record.ApiOrderId, record.OrderId, record.OriginalOrderId }
-            .Any(order => string.Equals(issue.OrderId.Trim(), order.Trim(), StringComparison.Ordinal)));
 }

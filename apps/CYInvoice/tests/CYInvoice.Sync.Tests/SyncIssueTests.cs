@@ -118,6 +118,16 @@ internal static class SyncIssueTests
         queue = new InvoiceWorkQueue(repository).Load();
         Equal(1, queue.ProcessingIssues.Count);
         Equal(0, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
+        // Matching both the invoice and its repeated order aliases is one record.
+        // Conflicting invoice/order identities remain ambiguous, never auto-classified.
+        repository.Invoices.Append(Record("queue-other", "QB12345678", "OtherOrder", buyer: "合成買方"));
+        store.Record(account, record.InvoiceNumber.ToLowerInvariant(), "OtherOrder",
+            InvoiceVoidIssueTypes.ManualReview, "衝突來源", DateTimeOffset.UtcNow);
+        store.Record(account, "", "otherorder", InvoiceVoidIssueTypes.ManualReview,
+            "訂單大小寫不同", DateTimeOffset.UtcNow);
+        queue = new InvoiceWorkQueue(repository).Load();
+        Equal(1, queue.ProcessingIssues.Count);
+        Equal(2, queue.UploadIssues.Count(x => x.ResolvedUtc is null));
         return Task.CompletedTask;
     }
 

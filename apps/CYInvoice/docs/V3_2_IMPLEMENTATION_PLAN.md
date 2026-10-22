@@ -128,7 +128,7 @@
 | R5 退役Built-in殘留 | 刪舊provider、帳號網路客戶端與不可達管理／OTP／轉移視窗；Local帳號表單只留Local功能。Cloud app直接呼叫原Device模組，移除worker→index轉送鏈及Built-in bootstrap fallback；CYID／Device加入、復原、health相容與舊格式拒絕保留 |
 | R6 分段入口／死分支 | 刪公開Local分段預留／送出／查回wrapper、Cloud獨立preview路由與模組、失效外部碰撞判斷；測試改驗一次核准與原自動執行owner，必要內部預留仍由原owner呼叫 |
 | R7 schema初始化分散 | 原SQLite bootstrapper啟動時在同一交易完成Ledger／Void／Audit／checkpoint結構，讀寫不再執行DDL；注入中途失敗驗證DDL回滾且非空發票保留 |
-| R8 同步重掃／無效寫入 | 同輪完成投影只載一次發票、一次保存；原同步恢復共用該輪索引，實際寫入前仍重新驗證。相同問題投影／checkpoint不寫；有界分頁、公平游標及保留政策不變 |
+| R8 同步重掃／無效寫入 | 同輪完成投影只載一次發票、一次保存；原同步恢復及處理中分類共用該輪索引；發票大小寫、訂單別名與歧義規則不變，實際寫入前仍重新驗證。相同問題投影／checkpoint不寫；有界分頁、公平游標及保留政策不變 |
 | R9 公司卡綁定 | **使用者確認開票與MO密碼綁定是刻意設計，撤回缺陷判定與全部解耦修改。** 公司卡仍要求App Key與MO密碼齊全才能套用，原版次、DPAPI與來源證據規則不變 |
 | R10 背景核准權限界線 | 原actor明確附帶唯一workspace／application／operation範圍，背景核准不能建立／核准新申請或操作另一筆；原私有撤權檢查保留，不另發真人Session。跨範圍、撤權及未知結果零重送測試覆蓋 |
 
