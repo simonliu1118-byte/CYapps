@@ -398,9 +398,6 @@ internal sealed class SyncIssuesForm : Form
                         approval?.Claimed == true ? "查回作廢狀態" : "核准並作廢";
                     primaryDanger = local && approval?.Claimed != true;
                     allowCancel = !allowAdministrativeClose && approval?.Claimed != true;
-                    // The old website workflow remains available until the new
-                    // workflow has real acceptance. A claimed POST cannot use it.
-                    if (local && !allowAdministrativeClose && approval?.Claimed != true) secondaryText = LegacyAllowanceVoidWebsiteAction;
                 }
                 else if (!allowAdministrativeClose && IsAllowanceManualReview(issue))
                 {
@@ -415,7 +412,7 @@ internal sealed class SyncIssuesForm : Form
                             var reservation = local ? allowanceWorkflow.LocalReservationFor(issue) : null;
                             primaryText = !local ? string.Empty :
                                 LocalAllowancePrimaryAction(reservation?.Status);
-                            primaryDanger = reservation?.Status == "reserved";
+                            primaryDanger = reservation?.Status is "reserved" or "occupied_external";
                             allowCancel = false;
                         }
                         else if (!review.AwaitingConfirmation)
@@ -464,7 +461,6 @@ internal sealed class SyncIssuesForm : Form
                     else ResolveIssue(issue);
                     break;
                 case ManualReviewDetailAction.Secondary:
-                    if (IsAllowanceVoidManualReview(issue)) CompleteAllowanceVoid(issue);
                     break;
             }
         }
@@ -576,14 +572,10 @@ internal sealed class SyncIssuesForm : Form
         if (review.LocalApprovedUtc is not null)
         {
             var reservation = allowanceWorkflow.LocalReservationFor(issue);
-            if (reservation is null)
-                await ReserveLocalAllowanceDraftAsync(issue);
-            else if (reservation.Status == "reserved")
-                await SendLocalAllowanceDraftAsync(issue, reservation);
-            else if (reservation.Status == "sending")
+            if (reservation?.Status == "sending")
                 await ReconcileLocalAllowanceDraftAsync(issue);
-            else if (reservation.Status == "occupied_external")
-                await SendLocalAllowanceDraftAsync(issue, reservation);
+            else
+                await ContinueApprovedLocalAllowanceAsync(issue);
             return;
         }
         else if (!review.AwaitingConfirmation)
@@ -713,173 +705,37 @@ internal sealed class SyncIssuesForm : Form
         finally { SetManualReviewBusy(false); }
     }
 
-    private async Task ReserveLocalAllowanceDraftAsync(InvoiceSyncIssue issue)
-    {
-        if (manualReviewBusy || issue.ResolvedUtc is not null) return;
-        using var login = new EmployeeAdminLoginForm(repository,
-            "Local 折讓預留單號－管理員驗證", collectCredentialsOnly: true);
-        if (login.ShowDialog(this) != DialogResult.OK) return;
-        SetManualReviewBusy(true);
-        try
-        {
-            var reservation = await allowanceWorkflow.ReserveLocalApprovedDraftAsync(
-                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
-            if (IsDisposed) return;
-            MessageBox.Show(this,
-                $"已安全預留折讓號碼：{reservation.AllowanceNumber}\n" +
-                "完整請求內容已保存於本機 SQLite，程式重開後仍使用同一號碼。\n\n" +
-                "目前只有預留，沒有向光貿開立折讓。正式送出需由原核准管理員再次登入，" +
-                "確認後只會呼叫一次 g0401；結果不明只能依原號查回。",
-                "已預留（未送出）", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            ReloadAll();
-        }
-        catch (Exception error)
-        {
-            if (!IsDisposed)
-                MessageBox.Show(this, error.Message,
-                    "預留折讓單號失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally { if (!IsDisposed) SetManualReviewBusy(false); }
-    }
-
     // This is presentation-only: the actual authority and evidence gates
     // remain in EmployeeAllowanceWorkflowService and the existing Local Ledger.
     private static string LocalAllowancePrimaryAction(string? status) => status switch
     {
-        null => "預留折讓單號（不送出）",
-        "reserved" => "正式送出折讓（單次）",
-        "sending" => "依原折讓號碼唯讀查回",
-        "occupied_external" => "繼續自動加號並送出",
+        null => "繼續核准的折讓",
+        "reserved" => "繼續核准的折讓",
+        "sending" => "查回原折讓結果",
+        "occupied_external" => "繼續核准的折讓",
         _ => string.Empty
     };
 
-    private async Task ReviewLocalAllowanceCollisionAsync(
-        InvoiceSyncIssue issue, LocalAllowanceReservation previous)
+    // A frozen approved request is resumed without another manager decision
+    // or separate manual reservation and send dialogs.
+    private async Task ContinueApprovedLocalAllowanceAsync(InvoiceSyncIssue issue)
     {
         if (manualReviewBusy || issue.ResolvedUtc is not null) return;
         using var login = new EmployeeAdminLoginForm(repository,
-            "Local 外部占號重新配號－原核准管理員驗證", collectCredentialsOnly: true);
+            "繼續已核准折讓－主管驗證", collectCredentialsOnly: true);
         if (login.ShowDialog(this) != DialogResult.OK) return;
-        const string words = "確認外部占號並重新配號";
-        using var dialog = new Form
-        {
-            Text = "外部占號－人工覆核",
-            StartPosition = FormStartPosition.CenterParent,
-            ClientSize = new Size(650, 256),
-            MinimumSize = new Size(590, 246),
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = false,
-            ShowIcon = false,
-            Font = new Font("Microsoft JhengHei UI", 10F),
-            BackColor = Color.White
-        };
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, Padding = new Padding(16),
-            ColumnCount = 1, RowCount = 3
-        };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        var explanation = new Label
-        {
-            Dock = DockStyle.Fill, AutoSize = false,
-            Text = "原號：" + previous.AllowanceNumber +
-                "\n只有第一次 g0401 確認被光貿拒絕占號，且即時查回證明該號屬於" +
-                "不同買方與不同原發票、主管核准仍有效，才能預留新號。" +
-                "\n本次操作只預留新號，不會送出 g0401；舊號與稽核永久保留。" +
-                "\n請在下方完整輸入：「" + words + "」",
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        var typed = UiControls.TextBox(40);
-        typed.Dock = DockStyle.Fill;
-        typed.AccessibleName = "人工確認外部占號並重新配號";
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false, Margin = Padding.Empty
-        };
-        var confirm = UiControls.StandardButton("確認預留");
-        confirm.Width = 112;
-        confirm.Enabled = false;
-        typed.TextChanged += (_, _) =>
-            confirm.Enabled = typed.Text == words;
-        confirm.DialogResult = DialogResult.OK;
-        var cancel = UiControls.StandardButton("取消");
-        cancel.Width = 96;
-        cancel.DialogResult = DialogResult.Cancel;
-        buttons.Controls.Add(cancel);
-        buttons.Controls.Add(confirm);
-        panel.Controls.Add(explanation, 0, 0);
-        panel.Controls.Add(typed, 0, 1);
-        panel.Controls.Add(buttons, 0, 2);
-        dialog.Controls.Add(panel);
-        dialog.AcceptButton = confirm;
-        dialog.CancelButton = cancel;
-        if (dialog.ShowDialog(this) != DialogResult.OK ||
-            typed.Text != words) return;
-
         SetManualReviewBusy(true);
         try
         {
-            var next = await allowanceWorkflow.ReserveLocalAfterExternalCollisionAsync(
-                issue, login.EnteredEmployeeNo, login.AuthenticatedPassword, words);
-            if (IsDisposed) return;
-            MessageBox.Show(this,
-                "前次占號：" + previous.AllowanceNumber + "\n新預留號：" +
-                next.AllowanceNumber +
-                "\n已寫入原 Local Ledger 與不可修改的主管覆核紀錄。" +
-                "\n這不是官方成功紀錄，也沒有重新發送；後續必須由原核准管理員另行確認首次送出。",
-                "人工覆核完成（只預留）",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            ReloadAll();
-        }
-        catch (Exception error)
-        {
-            if (!IsDisposed)
-                MessageBox.Show(this,
-                    error.Message + "\n\n新號未經驗證不可送出；請查看原 Ledger。",
-                    "未能安全改配號", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-        finally { if (!IsDisposed) SetManualReviewBusy(false); }
-    }
-
-    private async Task SendLocalAllowanceDraftAsync(
-        InvoiceSyncIssue issue, LocalAllowanceReservation reservation)
-    {
-        if (manualReviewBusy || issue.ResolvedUtc is not null) return;
-        using var login = new EmployeeAdminLoginForm(repository,
-            "Local 正式折讓送出－原核准管理員驗證", collectCredentialsOnly: true);
-        if (login.ShowDialog(this) != DialogResult.OK) return;
-        var environment = repository.Settings.LoadOrCreate().Environment;
-        var prompt = $"環境：{environment}\n折讓單號：{reservation.AllowanceNumber}\n\n" +
-            "這會實際呼叫光貿 g0401 開立折讓，並且只允許一次送出。\n" +
-            "送出前將重新檢查管理員權限、核准草稿與光貿最新折讓及餘額。\n" +
-            "一旦進入 sending，斷線、逾時或關閉程式都不得重新送出或換號。\n\n" +
-            "確定要正式送出這筆折讓？";
-        if (MessageBox.Show(this, prompt, "正式折讓交易－最後確認",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
-                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-        SetManualReviewBusy(true);
-        try
-        {
-            var result = await allowanceWorkflow.SendLocalReservedDraftAsync(
+            var result = await allowanceWorkflow.ContinueApprovedLocalDraftAsync(
                 issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
-            if (IsDisposed) return;
-            ShowLocalAllowanceSendResult(result);
-            ReloadAll();
+            if (!IsDisposed) { ShowLocalAllowanceSendResult(result); ReloadAll(); }
         }
         catch (Exception error)
         {
-            if (!IsDisposed)
-                MessageBox.Show(this, error.Message +
-                    "\n\n請先重新查看原號狀態，不得重按送出。",
-                    "折讓正式送出未確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!IsDisposed) MessageBox.Show(this,
+                error.Message + "\n結果不明只能查回原號，不得盲目重新送出。",
+                "折讓尚待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
