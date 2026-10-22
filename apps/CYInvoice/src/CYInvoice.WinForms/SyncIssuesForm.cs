@@ -394,10 +394,9 @@ internal sealed class SyncIssuesForm : Form
                     var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                         repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                     var approval = local ? allowanceVoidWorkflow.LocalApprovalFor(issue) : null;
-                    primaryText = !local ? LegacyAllowanceVoidWebsiteAction : approval?.Claimed == true
-                        ? "查回作廢狀態" : approval is null || approval.ExpiresUtc <= DateTimeOffset.UtcNow
-                            ? "覆核作廢" : "單次送出作廢";
-                    primaryDanger = local && approval is { Claimed:false } && approval.ExpiresUtc > DateTimeOffset.UtcNow;
+                    primaryText = !local ? LegacyAllowanceVoidWebsiteAction :
+                        approval?.Claimed == true ? "查回作廢狀態" : "核准並作廢";
+                    primaryDanger = local && approval?.Claimed != true;
                     allowCancel = !allowAdministrativeClose && approval?.Claimed != true;
                     // The old website workflow remains available until the new
                     // workflow has real acceptance. A claimed POST cannot use it.
@@ -600,73 +599,51 @@ internal sealed class SyncIssuesForm : Form
 
     private async Task ProcessLocalAllowanceVoidAsync(InvoiceSyncIssue issue)
     {
-        using var login = new EmployeeAdminLoginForm(repository, "折讓作廢－管理員驗證", collectCredentialsOnly:true);
+        using var login = new EmployeeAdminLoginForm(repository,
+            "折讓作廢－主管當次驗證", collectCredentialsOnly: true);
         if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            var approval = allowanceVoidWorkflow.LocalApprovalFor(issue);
-            if (approval?.Claimed == true)
+            var prior = allowanceVoidWorkflow.LocalApprovalFor(issue);
+            if (prior?.Claimed == true)
             {
+                // No second g0501 after a previous durable claim, including
+                // a lost response. Read the SAME official number instead.
                 var observed = await allowanceVoidWorkflow.ReadbackLocalVoidAsync(issue,
                     login.EnteredEmployeeNo, login.AuthenticatedPassword);
-                if (!IsDisposed) MessageBox.Show(this, observed.Message, "原號作廢查回", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (!IsDisposed) MessageBox.Show(this, observed.Message,
+                    "原號作廢查回", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            else if (approval is null || approval.ExpiresUtc <= DateTimeOffset.UtcNow)
+            else
             {
                 var preview = await allowanceVoidWorkflow.PreviewLocalVoidAsync(issue,
                     login.EnteredEmployeeNo, login.AuthenticatedPassword);
                 if (IsDisposed) return;
-                if (MessageBox.Show(this, $"折讓單號：{preview.AllowanceNumber}\n原發票：{preview.OriginalInvoiceNumber}\n" +
-                    $"買受人：{preview.BuyerName}\n未稅金額：{preview.NetAmount}\n稅額：{preview.TaxAmount}\n\n" +
-                    "本次只核准作廢，尚不送出。核准後須由同一位管理員再次驗證及確認，才會單次送出。",
-                    "覆核官方折讓明細", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                var message = $"原折讓號：{preview.AllowanceNumber}\n" +
+                    $"原發票：{preview.OriginalInvoiceNumber}\n" +
+                    $"買受人：{preview.BuyerName}\n" +
+                    $"未稅金額：{preview.NetAmount}\n" +
+                    $"稅額：{preview.TaxAmount}\n\n" +
+                    "確認後程式立即重驗主管與光貿資料，保存核准並送出原號作廢。" +
+                    "不必再輸入原號或按第二次送出。結果不明只能查原號，不會盲目重送。" +
+                    "\n\n確定核准作廢？";
+                if (MessageBox.Show(this, message, "主管核准並作廢",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-                await allowanceVoidWorkflow.ApproveLocalVoidAsync(issue, login.EnteredEmployeeNo,
-                    login.AuthenticatedPassword, preview.OfficialSnapshotHash);
-                if (!IsDisposed) MessageBox.Show(this, "已核准；15 分鐘內可由原管理員重新驗證後單次送出。",
-                    "核准完成（未送出）", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            else
-            {
-                var words = "作廢 " + approval.AllowanceNumber;
-                using var dialog = new Form {
-                    Text="確認單次折讓作廢", ClientSize=new Size(520,220),
-                    StartPosition=FormStartPosition.CenterParent, FormBorderStyle=FormBorderStyle.FixedDialog,
-                    MaximizeBox=false, MinimizeBox=false, ShowIcon=false, ShowInTaskbar=false, Font=Font
-                };
-                var panel = new TableLayoutPanel { Dock=DockStyle.Fill, Padding=new Padding(16), ColumnCount=1, RowCount=3 };
-                panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-                panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-                panel.RowStyles.Add(new RowStyle(SizeType.Absolute,35));
-                panel.RowStyles.Add(new RowStyle(SizeType.Absolute,45));
-                var typed = UiControls.TextBox(40);
-                typed.Dock=DockStyle.Fill;
-                typed.AccessibleName="確認作廢原折讓單號";
-                var confirm = UiControls.DangerButton("確認單次送出");
-                confirm.Width=140;
-                confirm.Enabled=false;
-                confirm.DialogResult=DialogResult.OK;
-                typed.TextChanged += (_,_) => confirm.Enabled=typed.Text==words;
-                var cancel = UiControls.StandardButton("取消");
-                cancel.DialogResult=DialogResult.Cancel;
-                var buttons = new FlowLayoutPanel { Dock=DockStyle.Fill, FlowDirection=FlowDirection.RightToLeft };
-                buttons.Controls.Add(cancel); buttons.Controls.Add(confirm);
-                panel.Controls.Add(new Label { Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleLeft,
-                    Text=$"將對光貿單次送出原折讓單 {approval.AllowanceNumber} 的作廢。\n" +
-                        "逾時或回覆遺失後只能查回，不可重送、取消或直接結案。\n請完整輸入：「" + words + "」" },0,0);
-                panel.Controls.Add(typed,0,1); panel.Controls.Add(buttons,0,2);
-                dialog.Controls.Add(panel); dialog.AcceptButton=null; dialog.CancelButton=cancel;
-                if (dialog.ShowDialog(this)!=DialogResult.OK || typed.Text!=words) return;
-                var result=await allowanceVoidWorkflow.SendLocalVoidOnceAsync(issue,
-                    login.EnteredEmployeeNo, login.AuthenticatedPassword, typed.Text);
-                if (!IsDisposed) MessageBox.Show(this,result.Message,"折讓作廢結果待查",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                var result = await allowanceVoidWorkflow.ApproveAndExecuteLocalVoidAsync(
+                    issue, login.EnteredEmployeeNo, login.AuthenticatedPassword,
+                    preview.OfficialSnapshotHash);
+                if (!IsDisposed) MessageBox.Show(this, result.Message, "折讓作廢查證",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             if (!IsDisposed) ReloadAll();
         }
         catch (Exception error)
         {
-            if (!IsDisposed) MessageBox.Show(this,error.Message,"折讓作廢未完成",MessageBoxButtons.OK,MessageBoxIcon.Error);
+            if (!IsDisposed) MessageBox.Show(this, error.Message +
+                "\n\n若核准或送出回覆遺失，先依原號查證；不要重新建立申請。",
+                "折讓作廢尚待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
@@ -1371,7 +1348,7 @@ internal sealed class SyncIssuesForm : Form
         if (api is not null)
         {
             rows.Add(new("核准管理員", api.ManagerEmployeeNo));
-            rows.Add(new("核准有效至", api.ExpiresUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
+            // Existing expires_utc is retained only for compatibility with old approvals.
             rows.Add(new("官方作廢查回", api.LastObservation == "official_void_observed_unattributed"
                 ? "原號 D0501／99；尚無法歸因於本次送出" : api.Claimed ? "尚未取得可確認的官方作廢證據" : "尚未送出"));
         }
