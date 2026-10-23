@@ -2,15 +2,17 @@
 
 更新：2026-10-23（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.42，沿原 PR #550 收斂；本機已完成schema21／原Worker部署，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
+**工程 Source：V3.1.42，沿原 PR #550 收斂；使用者本機已回報完成schema22／配套原Worker維護，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
 
 ## 1. 來源、現況與執行停點
 
 - 正式 Release 仍為 V3.1.0；本批是 V3.2 流程收斂與單公司卡介面修正，VERSION=3.1.42、BUILD=0，不另開 PR 或工作單。
-- 2026-10-23收到作業日2026-10-22的完整本機MCP報告：原D1 schema21／Worker marker21，指定Source為`83e7b691fc494186e7a0d373654c888e83874fde`；history、舊資料／稽核指紋、FK／quick_check、備份實際還原及canonical before／deploy／after通過。schema18～20私有證據亦已交回歸檔。這是使用者本機執行證據，非本對話重新連線Cloudflare驗證。
+- 最新：2026-10-23使用者交回schema21→22完成報告，採用Source `16f6a6ce03681b157ceec2805657d3a409935221`、V3.1.42／Cloud 0.9.4；0022只成功套用一次、原服務與既有資料／稽核保留，備份實際還原及前後檢查由本機報告確認，遠端已停止。本對話獨立核對同SHA的GitHub四項CI通過，未重新連線Cloudflare。私有維護證據不公開，計費歸屬限制見原私有報告及[可公開交接摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+- 配套結構／原Worker及工程包交付已完成；接著由使用者驗收公司卡、真Device同步與畫面。五個折讓旗標仍關閉，功能啟用／真光貿交易另依原計畫處理，不因收到維護報告自動執行。Local實際舊待辦／未知Claim數量及公司卡憑證可用性仍未驗，不記0。
+- 前批歷史：2026-10-23收到作業日2026-10-22的完整本機MCP報告：原D1 schema21／Worker marker21，指定Source為`83e7b691fc494186e7a0d373654c888e83874fde`；history、舊資料／稽核指紋、FK／quick_check、備份實際還原及canonical before／deploy／after通過。schema18～20私有證據亦已交回歸檔。這是使用者本機執行證據，非本對話重新連線Cloudflare驗證。
 - 已套用的 0020 完全保留；本批新增唯一 forward migration `0021_allowance_automatic_execution.sql`，調整執行投影／期限檢查及有限次作廢嘗試，保留原申請、核准、Claim、Ledger、Audit。歷史核准沒有可驗證的權威快照時不補造授權、不自動 POST。
 - 第一階段20→21及原Worker維護已完成、遠端操作已停止；五個折讓旗標均關閉，核准入口503／ALLOWANCES_NOT_READY。線上bundle與指定Source一致，CYID／原服務與綁定保留，未碰CYID D1、不重跑0017～0021。測試公司卡／真光貿API及Local實際舊資料／未知Claim盤點仍待驗；未驗數量不記0。完整結果、私有證據位置及下一階段見 [本機完成報告](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
-- 計量完整數字與私有收據已由原對話交回，不公開複製。直接SQL不是完整計費量，共用帳號差額不可全部歸因本作業；不能宣告本批完整計費read已確認在原5000參考上限內。未提高上限，維護已停止；第二階段另授權、另估用量。
+- 前批schema21計量：完整數字與私有收據已由原對話交回，不公開複製。直接SQL不是完整計費量，共用帳號差額不可全部歸因本作業；不能宣告本批完整計費read已確認在原5000參考上限內。未提高上限，維護已停止；第二階段另授權、另估用量。
 - Windows／Cloud／Governance 工程 CI 與真光貿測試分開。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選；正式 Release 仍需當次明確授權。
 
 ## 2. 已定案的產品流程
@@ -97,7 +99,7 @@ V3只保留單一正式公司及內建光貿測試環境。多公司明確排入
 
 本輪沿原owner實作：`SettingsForm`負責原生卡片與超管編輯；`CloudCompanySettingsClient`沿原公司卡API做事件式版本同步，`SettingsStore`在同一鎖及原JSON原子替換內保存完整DPAPI設定。新`/sync`不保存／偽造員工Session，只接受原CYID已啟用Device、active Workspace及最新Application access；更新仍須真人超管。一般使用者可選卡；連線設定及本機重設在各自操作時驗權。原獨立provision／逐機套用caller已替換。
 
-尚未套用的0022同批加入原`company_settings`的`company_name`與`card_revision`兩欄，不新增表或另一套公司owner。原`revision`維持光貿公司／金鑰版次，名稱或MO密碼單獨變更只推進同步版次，保留既有財務核准的公司版次；舊欄位及Ledger／Claim／Audit不改寫。原公司與金鑰改變仍須原流程重新查證，無法安全確認即進上傳問題，不授權重送未知交易。schema21既有`revision`初始化為相同同步版次，失敗整筆回滾；不更改0020／0021、不遠端套用。
+本機回報已套用的0022同批加入原`company_settings`的`company_name`與`card_revision`兩欄，不新增表或另一套公司owner。原`revision`維持光貿公司／金鑰版次，名稱或MO密碼單獨變更只推進同步版次，保留既有財務核准的公司版次；舊欄位及Ledger／Claim／Audit不改寫。原公司與金鑰改變仍須原流程重新查證，無法安全確認即進上傳問題，不授權重送未知交易。schema21既有`revision`初始化為相同同步版次，失敗整筆回滾；不更改0020／0021；本對話未執行遠端套用。
 
 待辦整合以原`SyncIssuesForm`的「待辦／處理中」入口容納原一般Cloud待辦控制項；主畫面跨機按鈕／選單及獨立視窗已刪，未增加排程或資料owner。測試池在invoice list原票query前先以本機已保存作業證據限制；折讓日同步直接刷新自有原票，不遍歷共用allowance_list，CYInvoice prefix本身不視為所有權。歷史問題若缺乏足以安全辨識的證據仍保留，不依單一錯誤字串批次刪除。原150／50限額及發票清理政策不變。
 
@@ -186,7 +188,7 @@ V3只保留單一正式公司及內建光貿測試環境。多公司明確排入
 | R9 公司卡綁定 | **使用者確認開票與MO密碼綁定是刻意設計，撤回缺陷判定與全部解耦修改。** 公司卡仍要求App Key與MO密碼齊全才能套用，原版次、DPAPI與來源證據規則不變 |
 | R10 背景核准權限界線 | 原actor明確附帶唯一workspace／application／operation範圍，背景核准不能建立／核准新申請或操作另一筆；原私有撤權檢查保留，不另發真人Session。跨範圍、撤權及未知結果零重送測試覆蓋 |
 
-**schema22 Source，尚未套用：**R1的Cloud已核准退回需要唯一新增 `0022_allowance_unsent_withdrawal.sql`，只調整原申請transition guard，不新增表、回填舊核准或解鎖Claim。已套0020／0021不動；schema21維持既有安全行為，新review／approved退回明確拒絕並提示需schema22。原部署owner追加21:22預檢與選項，未執行migration／Worker部署。非空21→22失敗回滾、成功保留Grant／Ledger／Audit及退回對送出競態已合成驗證。後續本機維護仍需當次授權及備份／回復／用量證據。
+**schema22 Source／本機維護已完成：**唯一0022含R1原申請安全退回guard，以及單公司卡company_name／card_revision兩欄；不新增表、不回填舊核准、不解鎖Claim，已套0020／0021保留。非空21→22故障回滾、成功保留Grant／Ledger／Audit與退回／送出競態已合成驗證。2026-10-23本機報告確認以Source `16f6a6c`完成21→22及配套原Worker維護；本對話只核對Source／CI，未重跑遠端維護。真人Device同步及業務驗收仍待完成。
 
 ## 6. 驗證與未完項
 
@@ -200,7 +202,7 @@ V3只保留單一正式公司及內建光貿測試環境。多公司明確排入
 | schema21 | 非空schema20備份、注入失敗回滾、成功保留舊Ledger／Grant／Audit、FK／integrity及備份實際還原；本機MCP已回報原D1實際套用0021一次、原Worker marker21，詳細證據見完成報告 |
 | 同步與診斷 | 150筆／50張同日停止與隔日checkpoint接續、不同申請不錯誤合併、完整事件匯出、無秘密；舊版缺少的證據明列未知，不補造 |
 | Windows／工程 CI | Build 2精確SHA及測試包以原PR當次CI為準，不把以下舊證據算成本輪已部署。已部署Source `83e7b691` 的本地測試及Windows Build／Cloud Check／Governance／Development預檢通過；CI實際部署job skipped，真正部署由本機MCP完成；後續文件歸檔不改已部署Source |
-| 尚未完成的業務驗收 | Build 2／schema22未部署；測試公司卡／API環境核對、Local實際舊待辦與未知Claim盤點、分別授權的旗標啟用／真光貿測試、最後舊人工入口退役；雙Windows真人驗收依既有延期決議。20→21／Worker與前批證據歸檔已完成，不重做 |
+| 尚未完成的業務驗收 | V3.1.42配套schema22／原Worker維護已由本機回報完成；測試公司卡／API環境核對、Local實際舊待辦與未知Claim盤點、分別授權的旗標啟用／真光貿測試、最後舊人工入口退役；雙Windows真人驗收依既有延期決議。20→21與21→22／配套Worker維護及證據交回已完成，不重做 |
 
 ## 7. V3.3／後續邊界與歷史
 

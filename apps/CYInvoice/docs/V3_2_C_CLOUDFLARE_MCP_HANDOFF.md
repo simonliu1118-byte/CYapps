@@ -1,18 +1,25 @@
-# CYInvoice V3.2：schema21維護完成與後續交接
+# CYInvoice V3.2：schema22維護完成與後續驗收
 
-更新：2026-10-23（Asia/Taipei）；本機維護作業日2026-10-22。工程V3.1.41 Build 1，原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)，正式Release仍V3.1.0。
+更新：2026-10-23（Asia/Taipei）。工程V3.1.42／BUILD=0、Cloud Source 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
 
-**第一階段已由使用者完整本機MCP報告確認完成，遠端操作已停止；第二階段尚未開始。** 本檔只歸檔可公開的狀態摘要；完整部署、備份、計量及回復細節留在使用者私有證據與原對話，不放入Public Git。本對話未重新連線Cloudflare驗證或執行維護。產品流程以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
+**schema21→22及配套原Worker維護已由使用者本機MCP完成報告確認；遠端操作已停止。** 本對話只核對GitHub Source／CI並回填狀態，未獨立重新查詢Cloudflare。完整備份、回復、資源識別、私有路徑及逐筆計量證據留在使用者私有報告，不貼Public Git／PR。產品驗收以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
 
-## 本輪開發交回：V3.1.42／schema22尚未部署
+## 最新完成：schema21→22／V3.1.42配套
 
-目前工程Source為V3.1.42／Cloud 0.9.4；下方schema21完成證據只對已部署Source `83e7b691` 有效，不代表本輪修正已上線。逐項收斂與公司卡綁定保留見[唯一現行計畫第5節](V3_2_IMPLEMENTATION_PLAN.md)。
+- 本機回報採用Source `16f6a6ce03681b157ceec2805657d3a409935221`；原服務升為schema22／Cloud 0.9.4。唯一0022成功套用一次，既有資料與稽核保留；0020／0021不修改或重跑，不重建服務。
+- 單公司卡名稱／同步版次及安全退回已具配套結構；公司／金鑰原revision保留，card_revision自原revision初始化。保留歷史核准／Ledger／Claim／Audit，不補造權威或解鎖未知交易。
+- 本機回報備份已實際還原、故障回滾／成功升級及前後一致性檢查完成；這是維護證據，不代表真人公司卡同步、憑證可用性或光貿交易已驗收。
+- 五個折讓旗標維持關閉。未授權入口拒絕只證明拒絕行為，不代替真人Device同步或正向業務驗收。未執行真光貿交易、合併PR或正式Release。
+- 直接SQL計量與共用帳號差額的窗口及歸屬不同，不能當成完整作業計費量；本批完整讀取是否落在核准上限內仍不能獨立證明。不得為補計量拆分而重跑遠端查核。
+- 工程包及本機下載雜湊與同一Source的GitHub Artifact一致；使用者可開始公司卡／畫面驗收。本機結構及配套更新已完成，不再列為取卡前的未部署阻塞。
 
-新增唯一forward Source `0022_allowance_unsent_withdrawal.sql`，讓原申請在當次主管驗權、確定未送出及CAS保護下退回，並加入原company_settings的company_name／card_revision兩欄。同步版次初始化自原revision；MO／名稱變更不改光貿金鑰版次，不推翻既有核准。沒有新增表、不解鎖舊Claim、不修改已套0020／0021；schema21下新退回入口安全拒絕。原部署owner已支援21:22預檢／意圖，**未執行遠端migration或Worker部署**。原五旗標關閉與前次停點不變；實際21→22維護仍需當次授權及備份／回復／用量證據，不能直接重跑前批。
+## 本輪工程驗證與測試包
 
-本批Source另含測試只查已知作業、待辦／處理中單一入口、兩張環境卡與設定視覺、超管一次儲存並同步，以及60秒合併連線／撤權檢查。公司卡以原CYID active Device與當前Application／Workspace access自動取得改版憑證，不保存主管密碼；只在啟動、重連、開啟設定及適用作業前觸發，不加入閒置輪詢。新`/sync`需要此版Worker／schema22及原COMPANY_SETTINGS_ENABLED設定；只更新桌面無法使schema21提供新功能。公司卡尚未設定或同步失敗時，測試開票仍沿原公開測試環境及既有權限規則。
+同一Source的[Windows](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169559)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169530)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169550)、[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169615)均成功，已由本對話再次核對；Development實際部署job skipped，本次實際維護依使用者本機MCP報告登記。
 
-交回本機時先核對PR最新完整Source與精確CI；本檔不授權遠端套用或啟用。不得從Build 2舊Source執行新版0022，亦不得重跑已套0020／0021。依原流程另估實際維護用量、保存備份／還原證據與當次授權；測試交易與財務旗標仍為另一階段，先交付工程包讓使用者自行設定測試卡。
+[V3.1.42工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169559/artifacts/12487625176)對應上述Source。本次僅改文件，不改程式、VERSION／BUILD或套件，不需重新部署。Source／合成測試及未授權拒絕不代替真人畫面、Device取卡、實際環境或財務驗收。
+
+## 前批維護歷史
 
 ## 已完成：原D1／Worker20→21
 
@@ -34,13 +41,13 @@
 
 無交易內容的開立／作廢核准入口驗證均為503／ALLOWANCES_NOT_READY。未做真光貿交易，這只證明入口關閉，不代表啟用後業務驗收。
 
-## 工程驗證
+## 前批schema21工程驗證（歷史）
 
 已部署Source的[Windows](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161719)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161481)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161548)、[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161732)均成功。Development實際部署job skipped；實際維護由本機MCP執行。
 
 本機另完成TypeScript、部署預檢、migration rehearsal、coordinator及Worker dry-run。本機交回時未改Source／PR；本次文件歸檔不改已部署程式與版本，不需重新部署。
 
-## 計量結論與限制
+## 前批schema21計量結論與限制（歷史）
 
 本批另獲維護授權，未延用前批額度例外；完整估算、逐筆SQL meta、帳號前後快照、實際讀寫／request量及差異已在原對話完整報告與私有收據中交回，不複製到公開文件。
 
