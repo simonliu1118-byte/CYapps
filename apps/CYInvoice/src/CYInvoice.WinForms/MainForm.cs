@@ -95,14 +95,11 @@ internal sealed class MainForm : Form
         connectionTimer.Tick += async (_, _) => await RefreshConnectionsAsync();
         FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
-        SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
+        SetAmegoConnectionState("啟動檢查中", Color.FromArgb(128, 128, 128), "正在確認連線與裝置狀態，完成後自動開放操作。");
         UpdateEnvironment();
-        var startupSettings = repository.Settings.LoadOrCreate();
-        if (!startupSmokeTest && startupSettings.CloudMode != CloudModes.LocalOnly && startupSettings.CloudDeviceId.Length != 0)
-        {
-            invoicePage.Visible = false;
-            recordsPage.Visible = false;
-        }
+        // Render the native pages immediately, but use the existing connection
+        // gate until the first check completes. Slow I/O must not leave a blank page.
+        ApplyConnectionControls(new(false, false, true));
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
             // Existing bound devices are checked before an empty Employee cache
@@ -113,12 +110,8 @@ internal sealed class MainForm : Form
             {
                 // The startup blocker also needs the existing recovery timer.
                 connectionTimer.Start();
-                invoicePage.Visible = false;
-                recordsPage.Visible = false;
                 await RefreshConnectionsAsync();
                 if (shuttingDown) return;
-                invoicePage.Visible = true;
-                recordsPage.Visible = true;
             }
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
@@ -303,6 +296,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
+        if (!TryAuthenticateSuperAdministrator()) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
@@ -364,18 +358,17 @@ internal sealed class MainForm : Form
         form.ShowDialog(this);
     }
 
-    private bool TryAuthenticateAdministrator(string title, out EmployeeAccount? account)
+    private bool TryAuthenticateSuperAdministrator()
     {
-        account = null;
-        if (!repository.HasAuthorityEmployees())
+        const string title = "設定－超管驗證";
+        using var login = new EmployeeAdminLoginForm(repository, title);
+        if (login.ShowDialog(this) != DialogResult.OK) return false;
+        if (login.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin)
         {
-            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", title,
+            MessageBox.Show(this, "只有超級管理員可開啟設定。", "權限不足",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        using var login = new EmployeeAdminLoginForm(repository, title);
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return false;
-        account = login.AuthenticatedEmployee;
         return true;
     }
 
@@ -417,6 +410,19 @@ internal sealed class MainForm : Form
 
     internal void VerifySmokeLayout()
     {
+        // Exercise the real constructor's pending state while the native UI
+        // pumps messages, before any successful connection state is supplied.
+        foreach (var pair in new[] { (Tab: invoiceTab, Page: (Control)invoicePage), (Tab: recordsTab, Page: (Control)recordsPage) })
+        {
+            tabs.SelectedTab = pair.Tab;
+            Application.DoEvents();
+            if (!pair.Page.Visible || pair.Page.Width <= 0 || pair.Page.Height <= 0 || pair.Page.Enabled || settingsButton.Enabled
+                || accountManagementButton.Enabled || forgotPasswordButton.Enabled)
+                throw new InvalidOperationException("啟動檢查完成前，原生頁面必須已呈現且受保護操作仍停用。");
+        }
+        tabs.SelectedTab = invoiceTab;
+        ApplyConnectionControls(new(true, true, true));
+
         // V3 retains historical Built-in settings without exposing any old
         // Cloud Employee account mutation entrypoint.
         if (!AllowsLocalAccountManagement(new Settings { CloudMode = CloudModes.LocalOnly })
@@ -469,7 +475,7 @@ internal sealed class MainForm : Form
             Math.Abs(runtimeModeLabel.Font.SizeInPoints - 10F) > 0.1F ||
             Math.Abs(apiLabel.Font.SizeInPoints - 10F) > 0.1F ||
             runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
-            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動中")
+            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動檢查中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
@@ -588,6 +594,27 @@ internal sealed class MainForm : Form
             throw new InvalidOperationException("已知授權拒絕不能開放功能");
         ConnectionBlockForm.VerifySmoke(this);
         ApplyConnectionControls(new(true, false, false));
+        VerifySettingsAuthenticationSmoke();
+    }
+
+    private void VerifySettingsAuthenticationSmoke()
+    {
+        var prompted = false;
+        var exposedSettings = false;
+        using var cancelLogin = new System.Windows.Forms.Timer { Interval = 20 };
+        cancelLogin.Tick += (_, _) =>
+        {
+            exposedSettings |= Application.OpenForms.OfType<SettingsForm>().Any();
+            if (Application.OpenForms.OfType<EmployeeAdminLoginForm>().FirstOrDefault() is not { } login) return;
+            prompted = true;
+            cancelLogin.Stop();
+            login.DialogResult = DialogResult.Cancel;
+        };
+        cancelLogin.Start();
+        settingsButton.PerformClick();
+        cancelLogin.Stop();
+        if (!prompted || exposedSettings || Application.OpenForms.OfType<SettingsForm>().Any())
+            throw new InvalidOperationException("開啟設定必須先驗證超管；取消驗證不得開啟設定或同步公司卡。");
     }
 
     private void UpdateEnvironment()

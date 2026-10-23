@@ -8,12 +8,10 @@ internal sealed class SettingsForm : Form
 {
     private readonly LocalRepository repository;
     private Settings settings;
-    private readonly RadioButton test = new() { AutoSize = true, Text = "光貿測試環境" };
-    private readonly RadioButton production = new() { AutoSize = true, Text = "正式公司" };
-    private readonly Label testTaxId = new() { AutoSize = true, Text = "12345678", ForeColor = Color.FromArgb(102,112,133) };
-    private readonly Label productionTaxId = new() { AutoSize = true, ForeColor = Color.FromArgb(102,112,133) };
-    private Panel testCard = null!;
-    private Panel productionCard = null!;
+    private readonly RadioButton test = new();
+    private readonly RadioButton production = new();
+    private readonly Label environmentTitle = new() { Text = "選擇開票環境", AutoSize = true };
+    private readonly Label connectionTitle = new() { Text = "連線與裝置", AutoSize = true };
     private readonly Label identityStatus = new() { AutoSize = true, ForeColor = Color.FromArgb(102,112,133) };
     private readonly Label cardStatus = new() { AutoSize = true, MaximumSize = new Size(530,0), ForeColor = Color.FromArgb(102,112,133) };
     private readonly Button cloudSettings = UiControls.StandardButton("雲端連線設定");
@@ -42,28 +40,22 @@ internal sealed class SettingsForm : Form
         Shown += async (_,_) => { if (!startupSmokeTest) await RefreshCardAsync(); };
     }
 
-    private Panel CreateCard(RadioButton choice, Label taxId)
+    private void ConfigureCard(RadioButton choice)
     {
-        var border = new Panel { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(1),
-            BackColor = Color.FromArgb(209,213,219), MinimumSize = new Size(240,112), Margin = new Padding(0,0,12,0) };
-        var content = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 1,
-            BackColor = Color.White, Padding = new Padding(16), Margin = Padding.Empty };
-        choice.Font = new Font(Font.FontFamily,11F,FontStyle.Bold);
-        choice.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        choice.Margin = new Padding(0,0,0,8);
-        taxId.Margin = new Padding(22,0,0,0);
-        content.Controls.Add(choice,0,0); content.Controls.Add(taxId,0,1);
-        // Native radio remains the keyboard/focus owner; the surrounding card
-        // is also clickable. No owner drawing or secondary selection model.
-        content.Click += (_,_) => { choice.Checked = true; choice.Focus(); };
-        taxId.Click += (_,_) => { choice.Checked = true; choice.Focus(); };
-        content.ClientSizeChanged += (_,_) => {
-            var width = Math.Max(1, content.ClientSize.Width - content.Padding.Horizontal);
-            choice.MaximumSize = new Size(width,0);
-            taxId.MaximumSize = new Size(Math.Max(1,width-22),0);
-        };
-        border.Controls.Add(content);
-        return border;
+        // Native button appearance provides a whole-card hit area without a
+        // radio glyph, extra checked label, custom drawing or parallel state.
+        choice.Appearance = Appearance.Button;
+        choice.AutoSize = false;
+        choice.Dock = DockStyle.Fill;
+        choice.MinimumSize = new Size(240,112);
+        choice.Padding = new Padding(16);
+        choice.Font = new Font(Font.FontFamily,12F,FontStyle.Bold);
+        choice.TextAlign = ContentAlignment.MiddleLeft;
+        choice.FlatStyle = FlatStyle.Flat;
+        choice.FlatAppearance.BorderSize = 1;
+        choice.FlatAppearance.CheckedBackColor = Color.FromArgb(219,234,254);
+        choice.UseVisualStyleBackColor = false;
+        choice.CheckedChanged += (_,_) => UpdateSelection();
     }
 
     private void BuildLayout()
@@ -76,40 +68,44 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var connection = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0,0,0,20) };
-        identityStatus.Margin = new Padding(0,8,12,0);
+        environmentTitle.Font = new Font(Font.FontFamily,12F,FontStyle.Bold);
+        connectionTitle.Font = new Font(Font.FontFamily,12F,FontStyle.Bold);
+        var environmentHeader = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+            WrapContents = false, Margin = new Padding(0,0,0,12) };
+        environmentTitle.Margin = new Padding(0,7,16,0);
+        companyCard.AutoSize = true;
+        companyCard.Margin = Padding.Empty;
+        companyCard.Click += async (_,_) => await EditCompanyCardAsync();
+        environmentHeader.Controls.AddRange([environmentTitle,companyCard]);
+        root.Controls.Add(environmentHeader,0,0);
+        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        choices.RowStyles.Add(new RowStyle(SizeType.Absolute,112));
+        ConfigureCard(test); ConfigureCard(production);
+        test.Margin = new Padding(0,0,6,0);
+        production.Margin = new Padding(6,0,0,0);
+        test.TabIndex = 0; production.TabIndex = 1;
+        choices.Controls.Add(test,0,0); choices.Controls.Add(production,1,0);
+        root.Controls.Add(choices,0,1);
+        cardStatus.Margin = new Padding(0,12,0,0);
+        root.Controls.Add(cardStatus,0,2);
+        var connection = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+            ColumnCount = 1, Margin = new Padding(0,24,0,0) };
+        var connectionHeader = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+            WrapContents = false, Margin = new Padding(0,0,0,8) };
+        connectionTitle.Margin = new Padding(0,0,16,0);
+        identityStatus.Margin = new Padding(0,2,0,0);
+        connectionHeader.Controls.AddRange([connectionTitle,identityStatus]);
+        var connectionActions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
+            WrapContents = false, Margin = Padding.Empty };
         cloudSettings.AutoSize = true; deviceManagement.AutoSize = true;
-        connection.Controls.AddRange([identityStatus,cloudSettings,deviceManagement]);
+        cloudSettings.Margin = new Padding(0,0,12,0);
+        deviceManagement.Margin = Padding.Empty;
+        connectionActions.Controls.AddRange([cloudSettings,deviceManagement]);
+        connection.Controls.Add(connectionHeader,0,0); connection.Controls.Add(connectionActions,0,1);
         cloudSettings.Click += (_,_) => OpenCloudSettings();
         deviceManagement.Click += async (_,_) => await OpenDeviceManagementAsync();
-        root.Controls.Add(connection,0,0);
-        root.Controls.Add(new Label { Text = "選擇開票環境", AutoSize = true,
-            Font = new Font(Font.FontFamily,14F,FontStyle.Bold), Margin = new Padding(0,0,0,16) },0,1);
-        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
-        testCard = CreateCard(test,testTaxId);
-        productionCard = CreateCard(production,productionTaxId);
-        productionCard.Margin = Padding.Empty;
-        test.TabIndex = 0; production.TabIndex = 1;
-        test.CheckedChanged += (_,_) => UpdateSelection();
-        production.CheckedChanged += (_,_) => UpdateSelection();
-        choices.Controls.Add(testCard,0,0); choices.Controls.Add(productionCard,1,0);
-        test.CheckedChanged += (_,_) => { if(test.Checked)production.Checked=false; };
-        production.CheckedChanged += (_,_) => { if(production.Checked)test.Checked=false; };
-        foreach(var choice in new[]{test,production})
-            choice.KeyDown += (_,e) => {
-                if(e.KeyCode is not (Keys.Left or Keys.Right or Keys.Up or Keys.Down))return;
-                var other=choice==test?production:test;
-                other.Checked=true;other.Focus();e.Handled=true;e.SuppressKeyPress=true;
-            };
-        root.Controls.Add(choices,0,2);
-        var detail = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(0,20,0,0) };
-        cardStatus.Margin = new Padding(0,0,0,12);
-        companyCard.AutoSize = true;
-        companyCard.Click += async (_,_) => await EditCompanyCardAsync();
-        detail.Controls.AddRange([cardStatus,companyCard]);
-        root.Controls.Add(detail,0,3);
+        root.Controls.Add(connection,0,3);
         var footer = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0,20,0,0) };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -137,16 +133,13 @@ internal sealed class SettingsForm : Form
     private void UpdateSelection()
     {
         var name = string.IsNullOrWhiteSpace(settings.ProductionCompanyName) ? "正式公司" : settings.ProductionCompanyName;
-        test.Text = "光貿測試環境";
-        testTaxId.Text = "12345678" + (test.Checked ? "　✓ 已選取" : "");
-        production.Text = name;
-        productionTaxId.Text = (settings.ProductionInvoice.Length==0?"尚未設定統編":settings.ProductionInvoice) +
-            (production.Checked ? "　✓ 已選取" : "");
-        foreach (var pair in new[] {(Choice:test,Border:testCard),(Choice:production,Border:productionCard)})
+        test.Text = "光貿測試環境\n12345678";
+        production.Text = name + "\n" + (settings.ProductionInvoice.Length==0?"尚未設定統編":settings.ProductionInvoice);
+        foreach (var choice in new[] {test,production})
         {
-            if(pair.Border is null)continue;
-            pair.Border.BackColor = pair.Choice.Checked ? Color.FromArgb(37,99,235) : Color.FromArgb(209,213,219);
-            pair.Border.Controls[0].BackColor = pair.Choice.Checked ? Color.FromArgb(219,234,254) : Color.White;
+            choice.FlatAppearance.BorderColor = choice.Checked ? Color.FromArgb(37,99,235) : Color.FromArgb(209,213,219);
+            choice.BackColor = choice.Checked ? Color.FromArgb(219,234,254) : Color.White;
+            choice.ForeColor = Color.FromArgb(31,41,55);
         }
         cardStatus.Text = test.Checked ? "目前使用光貿公開測試環境。MO店+ 匯入沿用公司卡的檔案密碼。" :
             $"{name}｜光貿金鑰：{(settings.ProductionAppKeyEncrypted.Length>0?"已設定":"未設定")}｜MO店+ 密碼：{(settings.MoPasswordEncrypted.Length>0?"已設定":"未設定")}";
@@ -286,11 +279,6 @@ internal sealed class SettingsForm : Form
 
     private void OpenCloudSettings()
     {
-        if (repository.HasAuthorityEmployees())
-        {
-            using var login = new EmployeeAdminLoginForm(repository,"雲端連線設定－管理員驗證");
-            if (login.ShowDialog(this) != DialogResult.OK) return;
-        }
         settings = repository.Settings.LoadOrCreate();
         // V3 only supports Local and CYID Cloud. Do not expose the retired
         // Built-in onboarding flow from Settings for a new installation.
@@ -428,12 +416,25 @@ internal sealed class SettingsForm : Form
     internal void VerifySmokeLayout()
     {
         if (Text!="設定選單" || ShowIcon || AcceptButton is not null || choices.Controls.Count!=2 ||
-            testCard.Parent!=productionCard.Parent ||
-            test.Checked==production.Checked || !testTaxId.Text.Contains("12345678") || !companyCard.Enabled ||
+            test.Parent!=production.Parent ||
+            test.Checked==production.Checked || test.Text!="光貿測試環境\n12345678" || !companyCard.Enabled ||
             !cloudSettings.Visible || Controls.OfType<GroupBox>().Any())
             throw new InvalidOperationException("設定公司卡、環境選取或連線入口配置不正確");
+        if (Math.Abs(test.Width-production.Width)>1 || test.Height!=production.Height ||
+            companyCard.Parent!=environmentTitle.Parent || companyCard.Left<=environmentTitle.Right ||
+            environmentTitle.Font.SizeInPoints!=connectionTitle.Font.SizeInPoints)
+            throw new InvalidOperationException("公司卡尺寸、編輯按鈕與分組標題比例不一致");
         foreach(var card in new[]{test,production})
-            if(card.Width<=0 || card.Height<card.PreferredSize.Height)
+            if(card.Appearance!=Appearance.Button || card.Controls.Count!=0 ||
+                card.Text.Contains("已選取") || card.Text.Contains('✓') ||
+                Math.Abs(card.Font.SizeInPoints-12F)>0.1F ||
+                card.Width<=0 || card.Height<card.PreferredSize.Height)
                 throw new InvalidOperationException("公司卡文字遭裁切");
+        var wasProduction=production.Checked;
+        production.PerformClick();
+        if(!production.Checked || test.Checked)throw new InvalidOperationException("正式公司卡未維持原生單選");
+        test.PerformClick();
+        if(!test.Checked || production.Checked)throw new InvalidOperationException("測試公司卡未維持原生單選");
+        if(wasProduction)production.PerformClick();
     }
 }
