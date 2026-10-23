@@ -38,6 +38,10 @@ public interface IAmegoGateway
         int limit = 500,
         CancellationToken cancellationToken = default) =>
         Task.FromException<InvoiceListResponse>(new NotSupportedException("invoice_list is not supported by this gateway"));
+    Task<AllowanceListResponse> ListAllowancesAsync(
+        DateOnly startDate, DateOnly endDate, int page = 1, int limit = 20,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<AllowanceListResponse>(new NotSupportedException("allowance_list is not supported by this gateway"));
 }
 
 public sealed class ProductItem
@@ -155,6 +159,10 @@ public sealed record InvoiceListResponse(
     int PageNow,
     int DataTotal,
     IReadOnlyList<InvoiceListItem> Data);
+
+// Read-only discovery. Official allowance_list may reference several original invoices.
+public sealed record AllowanceListItem(string AllowanceNumber, IReadOnlyList<string> OriginalInvoiceNumbers);
+public sealed record AllowanceListResponse(int PageTotal, IReadOnlyList<AllowanceListItem> Data);
 
 public sealed record StatusResult(string InvoiceNumber, string Type, int Status, string TotalAmount);
 public sealed record StatusResponse(int Code, string Message, IReadOnlyList<StatusResult> Data);

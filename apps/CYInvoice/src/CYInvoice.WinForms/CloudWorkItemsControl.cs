@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 // Manager-only presentation for exceptional Work Items, never an invoice ledger.
 // This form cannot issue, void, retry or acknowledge an AMEGO provider action.
-internal sealed class CloudWorkItemsForm : Form
+internal sealed class CloudWorkItemsControl : UserControl
 {
     private readonly LocalRepository repository;
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false });
@@ -22,32 +22,29 @@ internal sealed class CloudWorkItemsForm : Form
         PlaceholderText = "wi_ 開頭的工作項目 ID" };
     private readonly Button lookup = UiControls.StandardButton("依 ID 查回");
     private readonly Button nextPage = UiControls.StandardButton("下一頁");
-    private readonly Button takeReview = UiControls.StandardButton("接手覆核");
     private readonly Button archive = UiControls.StandardButton("人工封存");
     private readonly Button close = UiControls.StandardButton("關閉");
     private CloudWorkItemCursor? cursor;
     private CloudWorkItemCursor? nextCursor;
     private bool busy;
+    private bool initialLoad;
 
     // Shared actual presentation path: the layout smoke uses this constructor
     // without loading settings, Device credentials, CYID, or making HTTP calls.
-    private CloudWorkItemsForm()
+    private CloudWorkItemsControl()
     {
         repository = null!;
         client = null!;
-        Text = "跨機待辦（非折讓）";
-        StartPosition = FormStartPosition.CenterParent;
+
         ClientSize = new Size(920, 500);
         MinimumSize = new Size(740, 400);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
-        ShowIcon = false;
         BuildLayout();
-        FormClosing += (_, _) => lifetime.Cancel();
-        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
+
     }
 
-    public CloudWorkItemsForm(LocalRepository repository) : this()
+    public CloudWorkItemsControl(LocalRepository repository) : this()
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         var setting = repository.Settings.LoadOrCreate();
@@ -58,7 +55,13 @@ internal sealed class CloudWorkItemsForm : Form
         var token = repository.Settings.CloudDeviceToken(setting);
         client = new CloudWorkItemClient(http, new Uri(setting.CloudBaseUrl, UriKind.Absolute),
             token, setting.CloudWorkspaceId);
-        Shown += async (_, _) => await LoadPageAsync(reset: true);
+        VisibleChanged += async (_,_) =>
+        {
+            if (!Visible || initialLoad) return;
+            initialLoad = true;
+            await LoadPageAsync(reset: true);
+        };
+
     }
 
     private void BuildLayout()
@@ -80,9 +83,8 @@ internal sealed class CloudWorkItemsForm : Form
         lookup.Click += async (_, _) => await LookupByIdAsync();
         itemIdLookup.TextChanged += (_, _) => UpdateActions();
         nextPage.Click += async (_, _) => await LoadPageAsync(reset: false);
-        takeReview.Click += async (_, _) => await TransitionAsync("review");
-        archive.Click += async (_, _) => await TransitionAsync("closed");
-        close.Click += (_, _) => Close();
+        archive.Click += async (_, _) => await ArchiveAsync();
+        close.Click += (_, _) => FindForm()?.Close();
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
             RowCount = 4, Padding = new Padding(12) };
@@ -117,7 +119,6 @@ internal sealed class CloudWorkItemsForm : Form
             FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 5, 0, 0) };
         actions.Controls.Add(close);
         actions.Controls.Add(archive);
-        actions.Controls.Add(takeReview);
         actions.Controls.Add(nextPage);
         root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
@@ -166,8 +167,7 @@ internal sealed class CloudWorkItemsForm : Form
         itemIdLookup.Enabled = !busy;
         lookup.Enabled = !busy && !string.IsNullOrWhiteSpace(itemIdLookup.Text);
         nextPage.Enabled = !busy && nextCursor is not null;
-        takeReview.Enabled = !busy && Selected?.Status == "open";
-        archive.Enabled = !busy && Selected?.Status == "review";
+        archive.Enabled = !busy && Selected?.Status is "open" or "review";
     }
 
     private string? SelectedStatus() => filter.SelectedIndex switch
@@ -229,10 +229,11 @@ internal sealed class CloudWorkItemsForm : Form
         }
     }
 
-    private async Task LoadPageAsync(bool reset)
+    private async Task LoadPageAsync(bool reset, string? employeeNo = null, string? password = null)
     {
         if (busy || !reset && nextCursor is null) return;
-        if (!CollectCredentials(out var employeeNo, out var password)) return;
+        if ((employeeNo is null || password is null) && !CollectCredentials(out employeeNo, out password)) return;
+        var selectedId = Selected?.ItemId;
         busy = true;
         UpdateActions();
         try
@@ -257,6 +258,7 @@ internal sealed class CloudWorkItemsForm : Form
                     row.SubItems.Add(item.ItemId);
                     row.Tag = item;
                     entries.Items.Add(row);
+                    if (item.ItemId == selectedId) row.Selected = true;
                 }
                 cursor = target;
                 nextCursor = page.NextCursor;
@@ -270,7 +272,7 @@ internal sealed class CloudWorkItemsForm : Form
             if (IsDisposed) return;
             ClearView();
             status.Text = error is CloudApiException api && api.Code == "WORK_ITEMS_NOT_READY"
-                ? "跨機待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
+                ? "一般待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
                 : "查詢失敗，請檢查 CYID 權限、裝置狀態及連線；未變更工作項目。";
         }
         finally
@@ -280,56 +282,57 @@ internal sealed class CloudWorkItemsForm : Form
         }
     }
 
-    private async Task TransitionAsync(string to)
+    private async Task ArchiveAsync()
     {
         var chosen = Selected;
-        if (busy || chosen is null ||
-            (to == "review" && chosen.Status != "open") ||
-            (to == "closed" && chosen.Status != "review")) return;
-        var question = to == "review"
-            ? "接手此工作項目，將狀態改為「覆核中」？\n此操作不會執行光貿作廢或重新上傳。"
-            : "將此工作項目「人工封存」？\n這不代表發票已正式作廢或上傳成功。";
-        if (MessageBox.Show(this, question, "確認人工處理",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        if (busy || chosen is null || chosen.Status is not ("open" or "review")) return;
         if (!CollectCredentials(out var employeeNo, out var password)) return;
         busy = true; UpdateActions();
+        string? outcome = null;
         try
         {
-            // GET latest revision with fresh CYID authority; never rely on a
-            // possibly stale row from the manager's local list.
             var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
             if (current is null || current.Revision != chosen.Revision || current.Status != chosen.Status)
             {
-                itemIdLookup.Text = chosen.ItemId;
-                ClearView();
-                status.Text = "工作項目已變更，請使用「依 ID 查回」核對最新狀態。";
+                outcome = "工作項目已變更，已自動重新整理，未執行封存。";
                 return;
             }
-            string? resolutionCode = null;
-            if (to == "closed" && current.Kind == "UPLOAD_ISSUE")
+            var reason = current.Kind == "UPLOAD_ISSUE" ? AskResolutionCode() : null;
+            if (current.Kind == "UPLOAD_ISSUE" && reason is null) return;
+            if (MessageBox.Show(this, "確認人工處置並封存這筆回報？\n這不代表原發票已作廢或上傳成功。",
+                    "確認人工處置", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            // Existing revision/audit transitions remain internal to one user action.
+            // Credentials live only within this action; each request revalidates CYID.
+            if (current.Status == "open")
             {
-                resolutionCode = AskResolutionCode();
-                if (resolutionCode is null) return;
+                await client.TransitionManualAsync(current, "review", employeeNo, password, cancellationToken: lifetime.Token);
+                current = current with { Status = "review", Revision = current.Revision + 1 };
             }
-            await client.TransitionManualAsync(current, to, employeeNo, password,
-                resolutionCode, lifetime.Token);
-            status.Text = "人工狀態已更新；請重新整理最新清單。";
-            ClearView();
+            await client.TransitionManualAsync(current, "closed", employeeNo, password, reason, lifetime.Token);
+            outcome = "已人工封存；原發票問題仍以本機與官方查證結果為準。";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // A lost D1 reply may follow a successful commit. Preserve the
-            // exact ID for the read-only lookup, not a second mutation.
             if (IsDisposed) return;
             itemIdLookup.Text = chosen.ItemId;
-            ClearView();
-            status.Text = "結果不明或權限變更；已保留原 ID，按「依 ID 查回」核對，不會自動重送。";
+            try
+            {
+                var latest = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
+                outcome = latest is null ? "查無原工作項目，已保留 ID。" :
+                    $"已自動查回原項目：{(latest.Status == "closed" ? "已人工封存" : "尚未封存")}；沒有重送操作。";
+            }
+            catch { outcome = "結果與查回均未確認；已保留原 ID，可稍後查詢。"; }
         }
         finally
         {
             busy = false;
-            if (!IsDisposed) UpdateActions();
+            if (!IsDisposed)
+            {
+                await LoadPageAsync(true, employeeNo, password);
+                if (!IsDisposed && outcome is not null) status.Text = outcome;
+            }
         }
     }
 
@@ -362,12 +365,19 @@ internal sealed class CloudWorkItemsForm : Form
         };
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !IsDisposed) { lifetime.Cancel(); http.Dispose(); lifetime.Dispose(); }
+        base.Dispose(disposing);
+    }
+
     internal static void VerifySmokeLayout(Form owner)
     {
         // Exercise the SAME controls and layout as production, not an empty
         // placeholder Form. No repository settings, credentials, or network.
-        using var sample = new CloudWorkItemsForm();
-        sample.Show(owner);
+        using var sample = new CloudWorkItemsControl();
+        using var host = new Form { ClientSize = sample.ClientSize, ShowIcon = false };
+        sample.Dock = DockStyle.Fill; host.Controls.Add(sample); host.Show(owner);
         sample.PerformLayout();
         if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500 ||
             sample.Controls.Count != 1 ||
@@ -383,30 +393,30 @@ internal sealed class CloudWorkItemsForm : Form
             sample.entries.Width <= 0 || sample.entries.Height <= 0 ||
             !sample.refresh.Enabled || sample.nextPage.Enabled || sample.lookup.Enabled ||
             sample.itemIdLookup.Width <= 0 ||
-            sample.takeReview.Enabled || sample.archive.Enabled)
-            throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
-        static void AssertViewportColumns(CloudWorkItemsForm form)
+            sample.archive.Enabled)
+            throw new InvalidOperationException("一般待辦控制項或版面配置異常");
+        static void AssertViewportColumns(CloudWorkItemsControl form)
         {
             form.FitColumnsToViewport();
             var used = form.entries.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
             var room = form.entries.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
             if (room <= 0 || used > room || form.entries.Columns[6].Width < 160)
                 throw new InvalidOperationException(
-                    "跨機待辦欄寬超過視窗可用寬度，或工作項目 ID 欄過窄");
+                    "一般待辦欄寬超過視窗可用寬度，或工作項目 ID 欄過窄");
         }
         AssertViewportColumns(sample);
-        sample.ClientSize = new Size(740, 400);
+        host.ClientSize = new Size(740, 400);
         sample.PerformLayout();
         AssertViewportColumns(sample);
-        sample.ClientSize = new Size(920, 500);
+        host.ClientSize = new Size(920, 500);
         sample.PerformLayout();
         AssertViewportColumns(sample);
         sample.itemIdLookup.Text = "wi_synthetic_readback";
         if (!sample.lookup.Enabled)
-            throw new InvalidOperationException("跨機待辦 ID 查回按鈕應隨有效輸入啟用");
+            throw new InvalidOperationException("一般待辦 ID 查回按鈕應隨有效輸入啟用");
         sample.itemIdLookup.Clear();
         if (sample.lookup.Enabled)
-            throw new InvalidOperationException("跨機待辦空白 ID 不得送出查回");
-        sample.Close();
+            throw new InvalidOperationException("一般待辦空白 ID 不得送出查回");
+        host.Close();
     }
 }

@@ -24,16 +24,19 @@ var tests = new (string Name, Action Run)[]
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
     ("Local manager denied before official allowance preview when credentials invalid", () => AllowanceWorkflowTests.LocalManagerMustAuthenticateBeforeOfficialPreviewAsync().GetAwaiter().GetResult()),
-    ("Local manager fresh allowance approval persists and cannot be cancelled or manually completed", () => AllowanceWorkflowTests.LocalManagerApprovesFreshLockedDraftAsync().GetAwaiter().GetResult()),
+    ("Local manager fresh allowance approval retains audit when cancelled before sending", () => AllowanceWorkflowTests.LocalManagerApprovesFreshLockedDraftAsync().GetAwaiter().GetResult()),
     ("Local approval rejects official snapshot changes and requires another review", () => AllowanceWorkflowTests.LocalOfficialChangedBeforeApprovalMustRePreviewAsync().GetAwaiter().GetResult()),
     ("Local approval rejects incomplete official allowance summary", () => AllowanceWorkflowTests.LocalIncompleteOfficialSummaryPreventsApprovalAsync().GetAwaiter().GetResult()),
     ("approved Local draft reserves frozen numbered payload without g0401 or replay", () => AllowanceWorkflowTests.LocalApprovedDraftReservesFrozenPayloadWithoutSendingAsync().GetAwaiter().GetResult()),
     ("Local number reservation requires approved original manager", () => AllowanceWorkflowTests.LocalReservationRequiresApprovalAndSameManagerAsync().GetAwaiter().GetResult()),
     ("Local number reservation fails if official history changed after approval", () => AllowanceWorkflowTests.LocalOfficialChangeAfterApprovalBlocksFirstReservationAsync().GetAwaiter().GetResult()),
+    ("startup resumes approved/unknown allowance automatically without credentials", () => AllowanceWorkflowTests.StartupResumesApprovedWorkWithoutManagerAsync().GetAwaiter().GetResult()),
+    ("Local one-click manager approval reserves and sends exactly once", () => AllowanceWorkflowTests.LocalOneClickApprovalAndIssueAsync().GetAwaiter().GetResult()),
     ("Local g0401 reauthenticates and never sends twice after unknown result", () => AllowanceWorkflowTests.LocalFirstSendAuthenticatesAndNeverRepostsAsync().GetAwaiter().GetResult()),
     ("Local g0401 rejects changed official allowance history before POST", () => AllowanceWorkflowTests.LocalSendRejectsChangedOfficialHistoryBeforePostAsync().GetAwaiter().GetResult()),
     ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
     ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),
+    ("cancelled reserved allowance cannot later send", () => AllowanceWorkflowTests.LocalReservedCancellationNeverSendsAsync().GetAwaiter().GetResult()),
     ("allowance pending cannot be cancelled", () => AllowanceWorkflowTests.PendingCannotBeCancelledAsync().GetAwaiter().GetResult()),
     ("allowance queue follows pending failure recovery and completion", () => AllowanceWorkflowTests.QueueFollowsOfficialConfirmationAsync().GetAwaiter().GetResult()),
     ("void is blocked while allowance request exists", () => AllowanceWorkflowTests.VoidIsBlockedWhileAllowanceRequestExistsAsync().GetAwaiter().GetResult()),
@@ -44,6 +47,7 @@ var tests = new (string Name, Action Run)[]
     ("ordinary employee cannot administratively close expired work", AdministrativeClosureTests.OrdinaryEmployeeCannotCloseExpiredWork),
     ("administrator can close expired void pending work", AdministrativeClosureTests.AdministratorClosesExpiredVoidPendingWork),
     ("administrator can close expired allowance work", AdministrativeClosureTests.AdministratorClosesExpiredAllowanceWork),
+    ("approved allowance cannot be administratively cleared", AdministrativeClosureTests.ApprovedAllowanceCannotBeAdministrativelyClosed),
 };
 
 var failures = 0;

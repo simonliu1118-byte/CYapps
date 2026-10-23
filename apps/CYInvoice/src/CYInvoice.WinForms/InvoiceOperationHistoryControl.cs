@@ -47,7 +47,8 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     public void LoadRecord(
         InvoiceRecord record,
         InvoiceVoidHandledReview? handledReview = null,
-        InvoiceAllowanceManualReview? allowanceReview = null)
+        InvoiceAllowanceManualReview? allowanceReview = null,
+        IReadOnlyList<OfficialAllowanceObservation>? officialObservations = null)
     {
         list.BeginUpdate();
         try
@@ -81,6 +82,22 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                 row.Tag = new AllowanceHistoryItem(record, allowance);
                 list.Items.Add(row);
             }
+
+            // Historical *observations* (not proof this app caused a POST).
+            // A previously queried invoice may already be pruned normally:
+            // the independent read-only audit remains in the same SQLite DB.
+            foreach (var observation in officialObservations ?? [])
+            {
+                var snapshot = observation.Snapshot;
+                var status = snapshot.CancelDate > 0 ? "已作廢（官方查證）" :
+                    snapshot.InvoiceStatus == UploadStatuses.Complete ? "有效（官方查證）" :
+                    "狀態待核對";
+                var row = NewRow("官方查證",
+                    observation.ObservedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture),
+                    observation.AllowanceNumber + " " + status);
+                row.Tag = observation;
+                list.Items.Add(row);
+            }
         }
         finally
         {
@@ -94,6 +111,20 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         if (list.SelectedItems.Count != 1) return;
         switch (list.SelectedItems[0].Tag)
         {
+            case OfficialAllowanceObservation observation:
+                var snapshot = observation.Snapshot;
+                MessageBox.Show(FindForm(),
+                    "折讓單號：" + observation.AllowanceNumber +
+                    "\n原發票：" + observation.InvoiceNumber +
+                    "\n系統查證時間：" + observation.ObservedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture) +
+                    "\n官方類型：" + snapshot.InvoiceType +
+                    "\n官方狀態碼：" + snapshot.InvoiceStatus.ToString(CultureInfo.InvariantCulture) +
+                    "\n官方作廢日期：" + (snapshot.CancelDate > 0 ? snapshot.CancelDate.ToString(CultureInfo.InvariantCulture) : "尚未觀察到") +
+                    "\n折讓未稅金額：" + snapshot.TotalAmount +
+                    "\n折讓稅額：" + snapshot.TaxAmount +
+                    "\n\n此為當次官方查回快照，不代表本程式完成該筆交易。",
+                    "官方折讓歷程（唯讀）", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                break;
             case VoidHistoryItem item:
                 using (var form = new VoidHistoryDetailForm(item)) form.ShowDialog(FindForm());
                 break;

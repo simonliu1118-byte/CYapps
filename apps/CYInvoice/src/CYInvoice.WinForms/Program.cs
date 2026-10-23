@@ -216,14 +216,8 @@ internal static class Program
         processing.VerifySmokeRowSizing();
         processing.Close();
 
-        using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
-        diagnostics.Show();
-        diagnostics.PerformLayout();
-        Application.DoEvents();
-        diagnostics.VerifySmokeLayout();
-        diagnostics.Close();
 
-        using var settings = new SettingsForm(repository);
+        using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show();
         settings.PerformLayout();
         Application.DoEvents();

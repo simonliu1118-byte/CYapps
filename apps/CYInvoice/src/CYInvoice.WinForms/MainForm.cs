@@ -26,7 +26,7 @@ internal sealed class MainForm : Form
     private readonly HttpClient cloudHealthHttpClient = new();
     private readonly CancellationTokenSource syncLifetime = new();
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
-    private readonly System.Windows.Forms.Timer connectionTimer = new() { Interval = 15_000 };
+    private readonly System.Windows.Forms.Timer connectionTimer = new() { Interval = 60_000 };
     private bool checkingConnections;
     private ConnectionBlockForm? connectionBlocker;
     private readonly InvoiceEntryControl invoicePage;
@@ -54,8 +54,6 @@ internal sealed class MainForm : Form
     // A historical Built-in Cloud setting is preserved but cannot revive its retired account UI.
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
-    private readonly ContextMenuStrip workQueueMenu = new();
-    private readonly Button workQueueButton = UiControls.StandardButton("跨機待辦");
     private readonly Label copyrightLabel = new()
     {
         Text = "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.",
@@ -97,14 +95,11 @@ internal sealed class MainForm : Form
         connectionTimer.Tick += async (_, _) => await RefreshConnectionsAsync();
         FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
-        SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
+        SetAmegoConnectionState("啟動檢查中", Color.FromArgb(128, 128, 128), "正在確認連線與裝置狀態，完成後自動開放操作。");
         UpdateEnvironment();
-        var startupSettings = repository.Settings.LoadOrCreate();
-        if (!startupSmokeTest && startupSettings.CloudMode != CloudModes.LocalOnly && startupSettings.CloudDeviceId.Length != 0)
-        {
-            invoicePage.Visible = false;
-            recordsPage.Visible = false;
-        }
+        // Render the native pages immediately, but use the existing connection
+        // gate until the first check completes. Slow I/O must not leave a blank page.
+        ApplyConnectionControls(new(false, false, true));
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
             // Existing bound devices are checked before an empty Employee cache
@@ -115,12 +110,8 @@ internal sealed class MainForm : Form
             {
                 // The startup blocker also needs the existing recovery timer.
                 connectionTimer.Start();
-                invoicePage.Visible = false;
-                recordsPage.Visible = false;
                 await RefreshConnectionsAsync();
                 if (shuttingDown) return;
-                invoicePage.Visible = true;
-                recordsPage.Visible = true;
             }
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
@@ -225,14 +216,10 @@ internal sealed class MainForm : Form
         ConfigureHeaderButton(forgotPasswordButton, OpenPasswordRecovery);
         ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
         ConfigureHeaderButton(settingsButton, OpenSettings);
-        ConfigureHeaderButton(workQueueButton, OpenWorkQueue);
-        workQueueMenu.Items.Add("跨機待辦（非折讓）", null, (_, _) => OpenNonAllowanceQueue());
-        workQueueMenu.Items.Add("跨機折讓申請與主管覆核", null, (_, _) => OpenAllowanceQueue());
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(forgotPasswordButton);
         tabHost.Controls.Add(accountManagementButton);
         tabHost.Controls.Add(settingsButton);
-        tabHost.Controls.Add(workQueueButton);
         tabHost.Resize += (_, _) => PositionHeaderButtons();
         tabHost.Layout += (_, _) => PositionHeaderButtons();
         root.Controls.Add(banner, 0, 0);
@@ -289,10 +276,6 @@ internal sealed class MainForm : Form
             top,
             forgotPasswordButton.Width,
             forgotPasswordButton.Height);
-        workQueueButton.SetBounds(
-            Math.Max(0, forgotPasswordButton.Left - workQueueButton.Width - HeaderButtonGap),
-            top, workQueueButton.Width, workQueueButton.Height);
-        workQueueButton.BringToFront();
         forgotPasswordButton.BringToFront();
         accountManagementButton.BringToFront();
         settingsButton.BringToFront();
@@ -313,7 +296,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        if (!TryAuthenticateAdministrator("密碼驗證", out _)) return;
+        if (!TryAuthenticateSuperAdministrator()) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
@@ -321,50 +304,6 @@ internal sealed class MainForm : Form
         recordsPage.Reload();
         _ = RefreshRuntimeModeAsync();
         _ = RefreshApiAsync();
-    }
-
-    private void OpenWorkQueue()
-    {
-        // A visibility check is never an authorization decision. All queries
-        // and transitions require fresh CYID manager verification in Cloud.
-        var current = repository.Settings.LoadOrCreate();
-        if (current.CloudMode == CloudModes.LocalOnly || current.CloudIdentityProvider != "CYID" ||
-            !current.CloudEmployeeAuthorityReady || current.CloudWorkspaceId.Length == 0 ||
-            current.CloudDeviceId.Length == 0 || string.IsNullOrWhiteSpace(current.CloudBaseUrl))
-        {
-            MessageBox.Show(this, "跨機待辦僅供已加入 CYID Cloud 的授權裝置使用。",
-                "跨機待辦", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        workQueueMenu.Show(workQueueButton, new Point(0,workQueueButton.Height));
-    }
-
-    private void OpenNonAllowanceQueue()
-    {
-        try
-        {
-            using var form=new CloudWorkItemsForm(repository);
-            form.ShowDialog(this);
-        }
-        catch(Exception)
-        {
-            MessageBox.Show(this,"無法開啟跨機待辦，請確認 CYID 裝置與連線設定。",
-                "跨機待辦",MessageBoxButtons.OK,MessageBoxIcon.Warning);
-        }
-    }
-
-    private void OpenAllowanceQueue()
-    {
-        try
-        {
-            using var form=new CloudAllowanceManagerForm(repository);
-            form.ShowDialog(this);
-        }
-        catch(Exception)
-        {
-            MessageBox.Show(this,"無法開啟跨機折讓申請，請確認 CYID Cloud 裝置與連線設定。",
-                "跨機折讓",MessageBoxButtons.OK,MessageBoxIcon.Warning);
-        }
     }
 
     private void OpenAccountManagement()
@@ -383,13 +322,12 @@ internal sealed class MainForm : Form
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
         {
-            using var adminForm = new AccountManagementForm(repository, login.AuthenticatedEmployee);
+            using var adminForm = new AccountManagementForm(repository.Employees, login.AuthenticatedEmployee);
             adminForm.ShowDialog(this);
         }
         else
         {
-            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
-                login.AuthenticatedPassword, cloudHealthHttpClient);
+            using var selfForm = new SelfAccountManagementForm(repository.Employees, login.AuthenticatedEmployee);
             selfForm.ShowDialog(this);
         }
     }
@@ -410,20 +348,6 @@ internal sealed class MainForm : Form
                 "不支援的舊雲端模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        if (repository.UsesCloudEmployeeAuthority())
-        {
-            try
-            {
-                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
-                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
-            }
-            catch (Exception problem)
-            {
-                MessageBox.Show(this, problem.Message, "無法復原密碼",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            return;
-        }
         if (!repository.Employees.HasEmployees())
         {
             MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", "無法復原密碼",
@@ -434,18 +358,17 @@ internal sealed class MainForm : Form
         form.ShowDialog(this);
     }
 
-    private bool TryAuthenticateAdministrator(string title, out EmployeeAccount? account)
+    private bool TryAuthenticateSuperAdministrator()
     {
-        account = null;
-        if (!repository.HasAuthorityEmployees())
+        const string title = "設定－超管驗證";
+        using var login = new EmployeeAdminLoginForm(repository, title);
+        if (login.ShowDialog(this) != DialogResult.OK) return false;
+        if (login.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin)
         {
-            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", title,
+            MessageBox.Show(this, "只有超級管理員可開啟設定。", "權限不足",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        using var login = new EmployeeAdminLoginForm(repository, title);
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return false;
-        account = login.AuthenticatedEmployee;
         return true;
     }
 
@@ -487,6 +410,19 @@ internal sealed class MainForm : Form
 
     internal void VerifySmokeLayout()
     {
+        // Exercise the real constructor's pending state while the native UI
+        // pumps messages, before any successful connection state is supplied.
+        foreach (var pair in new[] { (Tab: invoiceTab, Page: (Control)invoicePage), (Tab: recordsTab, Page: (Control)recordsPage) })
+        {
+            tabs.SelectedTab = pair.Tab;
+            Application.DoEvents();
+            if (!pair.Page.Visible || pair.Page.Width <= 0 || pair.Page.Height <= 0 || pair.Page.Enabled || settingsButton.Enabled
+                || accountManagementButton.Enabled || forgotPasswordButton.Enabled)
+                throw new InvalidOperationException("啟動檢查完成前，原生頁面必須已呈現且受保護操作仍停用。");
+        }
+        tabs.SelectedTab = invoiceTab;
+        ApplyConnectionControls(new(true, true, true));
+
         // V3 retains historical Built-in settings without exposing any old
         // Cloud Employee account mutation entrypoint.
         if (!AllowsLocalAccountManagement(new Settings { CloudMode = CloudModes.LocalOnly })
@@ -539,16 +475,13 @@ internal sealed class MainForm : Form
             Math.Abs(runtimeModeLabel.Font.SizeInPoints - 10F) > 0.1F ||
             Math.Abs(apiLabel.Font.SizeInPoints - 10F) > 0.1F ||
             runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
-            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動中")
+            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動檢查中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
         if (settingsButton.Right != tabHost.ClientSize.Width - HeaderButtonGap ||
             accountManagementButton.Right + HeaderButtonGap != settingsButton.Left ||
             forgotPasswordButton.Right + HeaderButtonGap != accountManagementButton.Left ||
-            workQueueButton.Right + HeaderButtonGap != forgotPasswordButton.Left ||
-            workQueueButton.Visible ||
-            !UiControls.HasLogicalSize(workQueueButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             Math.Abs((settingsButton.Top + settingsButton.Height / 2) - (tabHeader.Top + tabHeader.Height / 2)) > 2 ||
             !UiControls.HasLogicalSize(settingsButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(accountManagementButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
@@ -575,8 +508,7 @@ internal sealed class MainForm : Form
         firstSetup.VerifySmokeLayout();
         firstSetup.Close();
 
-        CloudWorkItemsForm.VerifySmokeLayout(this);
-        CloudAllowanceManagerForm.VerifySmokeLayout();
+        CloudWorkItemsControl.VerifySmokeLayout(this);
 
         using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
         employeeLogin.Show(this);
@@ -586,7 +518,7 @@ internal sealed class MainForm : Form
         employeeLogin.Close();
         EmployeeAdminLoginForm.VerifyCredentialsCollectionSmoke(this);
 
-        using var settings = new SettingsForm(repository);
+        using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show(this);
         settings.PerformLayout();
         Application.DoEvents();
@@ -646,8 +578,8 @@ internal sealed class MainForm : Form
 
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
         RecordDetailForm.VerifySmokeLayout(repository, service);
-        if (connectionTimer.Interval != 15_000 || connectionTimer.Enabled)
-            throw new InvalidOperationException("連線恢復檢查必須由主視窗的 15 秒 Timer 管理，smoke 不啟動網路檢查");
+        if (connectionTimer.Interval != 60_000 || connectionTimer.Enabled)
+            throw new InvalidOperationException("連線恢復檢查必須由主視窗的 60 秒 Timer 管理，smoke 不啟動網路檢查");
         foreach (var ame in new[] { false, true })
         foreach (var cloud in new[] { false, true })
         {
@@ -662,6 +594,27 @@ internal sealed class MainForm : Form
             throw new InvalidOperationException("已知授權拒絕不能開放功能");
         ConnectionBlockForm.VerifySmoke(this);
         ApplyConnectionControls(new(true, false, false));
+        VerifySettingsAuthenticationSmoke();
+    }
+
+    private void VerifySettingsAuthenticationSmoke()
+    {
+        var prompted = false;
+        var exposedSettings = false;
+        using var cancelLogin = new System.Windows.Forms.Timer { Interval = 20 };
+        cancelLogin.Tick += (_, _) =>
+        {
+            exposedSettings |= Application.OpenForms.OfType<SettingsForm>().Any();
+            if (Application.OpenForms.OfType<EmployeeAdminLoginForm>().FirstOrDefault() is not { } login) return;
+            prompted = true;
+            cancelLogin.Stop();
+            login.DialogResult = DialogResult.Cancel;
+        };
+        cancelLogin.Start();
+        settingsButton.PerformClick();
+        cancelLogin.Stop();
+        if (!prompted || exposedSettings || Application.OpenForms.OfType<SettingsForm>().Any())
+            throw new InvalidOperationException("開啟設定必須先驗證超管；取消驗證不得開啟設定或同步公司卡。");
     }
 
     private void UpdateEnvironment()
@@ -697,8 +650,6 @@ internal sealed class MainForm : Form
         ownsAccountManagement = AllowsLocalAccountManagement(settings);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();
-        workQueueButton.Visible = settings.CloudMode != CloudModes.LocalOnly &&
-            settings.CloudIdentityProvider == "CYID";
         if (settings.CloudMode == CloudModes.LocalOnly)
         {
             SetRuntimeModeState(
@@ -755,8 +706,6 @@ internal sealed class MainForm : Form
         ownsAccountManagement = AllowsLocalAccountManagement(requested);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();
-        workQueueButton.Visible = requested.CloudMode != CloudModes.LocalOnly &&
-            requested.CloudIdentityProvider == "CYID";
         var requestedMode = requested.CloudMode;
         var requestedUrl = requested.CloudBaseUrl.Trim();
 
@@ -992,6 +941,7 @@ internal sealed class MainForm : Form
     {
         if (checkingConnections || shuttingDown) return;
         checkingConnections = true;
+        var wasConnected = repository.Connections.Current?.CloudAvailable == true;
         ServiceConnectionState state;
         try { state = await repository.Connections.CheckAsync(syncLifetime.Token); }
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { return; }
@@ -1004,9 +954,12 @@ internal sealed class MainForm : Form
             LocalResetApplication.ScheduleRevokedDeviceRestart();
             return;
         }
+        if (state.CloudAvailable && !wasConnected)
+        {
+            try { await repository.RefreshCompanyCardAsync(syncLifetime.Token); UpdateEnvironment(); invoicePage.RefreshEnvironment(); }
+            catch (Exception) { SetRuntimeModeState("公司卡同步待確認", Color.FromArgb(166,107,16), "保留本機設定，正式操作前會再確認公司卡。"); }
+        }
         var identitySettings = repository.Settings.LoadOrCreate();
-        workQueueButton.Visible = identitySettings.CloudMode != CloudModes.LocalOnly &&
-            identitySettings.CloudIdentityProvider == "CYID";
         ownsAccountManagement = AllowsLocalAccountManagement(identitySettings);
         accountManagementButton.Visible = ownsAccountManagement;
         PositionHeaderButtons();

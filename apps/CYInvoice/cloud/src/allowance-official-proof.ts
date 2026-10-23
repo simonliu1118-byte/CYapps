@@ -64,6 +64,7 @@ function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
    fail("TOTAL_MISMATCH");
 }
 export interface OfficialPerInvoiceProof {
+ invoiceDetail:unknown;
  applicationId:string;
  originalInvoiceNumber:string;
  officialInvoiceGross:string;
@@ -148,7 +149,9 @@ export async function reconcileOfficialAllowanceForOriginal(
     frozen.originalInvoiceNumber,snapshots,effective.toString(),
     requested.toString()]))));
  const hash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
- return {applicationId:frozen.applicationId,
+ return {invoiceDetail:{invoiceNumber:snapshot.invoiceNumber,invoiceDate:snapshot.invoiceDate,
+    gross:snapshot.totalAmount,tax:snapshot.invoiceTaxAmount,items:snapshot.originalProductItems,
+    allowances:snapshot.allowanceHistory},applicationId:frozen.applicationId,
    originalInvoiceNumber:frozen.originalInvoiceNumber,
    officialInvoiceGross:gross.toString(),officialEffectiveAlreadyAllowed:effective.toString(),
    officialRemainingBeforeRequest:(gross-effective).toString(),

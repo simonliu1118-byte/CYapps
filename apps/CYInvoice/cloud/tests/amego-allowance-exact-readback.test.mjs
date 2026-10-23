@@ -56,7 +56,6 @@ function makeTransport(reply={code:0,data:official}){
  assert.match(r.officialSnapshotHash,/^[a-f0-9]{64}$/);
  assert.equal(r.kind,"full_frozen_match_unattributed");
  assert.equal(r.safeToAutoResend,false);
- assert.equal(r.safeToAutoConfirm,false);
  assert.equal(r.canReallocateNumber,false);
  assert.equal(fake.urls.length,1);
  assert.equal(JSON.stringify(r).includes("Synthetic buyer"),false);
@@ -68,7 +67,6 @@ function makeTransport(reply={code:0,data:official}){
   description:"Synthetic item"}]};
  const r=await query(input,makeTransport({code:0,data:alt}).send,clock);
  assert.equal(r.kind,"full_frozen_match_unattributed");
- assert.equal(r.safeToAutoConfirm,false);
 }
 async function mismatch(changed,pattern,overrides=input){
  const fake=makeTransport({code:0,data:{...official,...changed}});
@@ -134,5 +132,4 @@ assert.equal(mismatchDate.urls.length,0);
 // g0401 attempt by number alone. Never auto-confirm or reallocate.
 const external=await query(input,makeTransport().send,clock);
 assert.equal(external.kind,"full_frozen_match_unattributed");
-assert.equal(external.safeToAutoConfirm,false);
-console.log("CYInvoice C3c3a: signed exact-number readback and full buyer/item match, pending/unknown/mismatch fail-closed; no auto-confirm or retry passed");
+console.log("CYInvoice C3c3a: signed exact-number readback and full buyer/item match, pending/unknown/mismatch fail-closed; full content proof with no blind retry passed");

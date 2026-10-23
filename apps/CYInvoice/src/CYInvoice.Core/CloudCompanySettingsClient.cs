@@ -1,4 +1,5 @@
 using System.Net;
+using CYInvoice.Core.Storage;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -6,10 +7,10 @@ using System.Text.RegularExpressions;
 
 namespace CYInvoice.Core.Cloud;
 
-// Transport only: V3.0 Cloud company card is not yet deployed or backed by a production D1 migration.
-// No raw secret, DPAPI cache, or AMEGO side effect is returned by this API.
+// Status and edits never disclose secrets. Event-driven Device synchronization
+// receives changed credentials over HTTPS and immediately seals them with DPAPI.
 public sealed record CloudCompanySettingsStatus(
-    string SellerInvoice, int Revision, bool HasAmegoAppKey, bool HasMoExcelPassword);
+    string SellerInvoice, int Revision, bool HasAmegoAppKey, bool HasMoExcelPassword, string CompanyName = "");
 
 public sealed record CloudCompanySecretChange(string Action, string? Value = null)
 {
@@ -20,15 +21,15 @@ public sealed record CloudCompanySecretChange(string Action, string? Value = nul
 
 public sealed record CloudCompanySettingsEdit(
     int ExpectedRevision, string SellerInvoice,
-    CloudCompanySecretChange AmegoAppKey, CloudCompanySecretChange MoExcelPassword);
+    CloudCompanySecretChange AmegoAppKey, CloudCompanySecretChange MoExcelPassword, string CompanyName = "");
 
 // Decrypted credentials are held in memory only until they are sealed by
 // SettingsStore into the current Windows user's existing DPAPI settings.
 public sealed record CloudCompanyProvision(
-    string SellerInvoice, int Revision, string AmegoAppKey, string MoExcelPassword)
+    string SellerInvoice, int Revision, string AmegoAppKey, string MoExcelPassword, string CompanyName = "")
 {
     public bool Matches(CloudCompanySettingsStatus card) =>
-        Revision == card.Revision && SellerInvoice == card.SellerInvoice &&
+        Revision == card.Revision && SellerInvoice == card.SellerInvoice && CompanyName == card.CompanyName &&
         card.HasAmegoAppKey && card.HasMoExcelPassword &&
         !string.IsNullOrWhiteSpace(AmegoAppKey) && AmegoAppKey.Length <= 512 &&
         !AmegoAppKey.Any(char.IsControl) &&
@@ -88,6 +89,7 @@ public sealed class CloudCompanySettingsClient
         using var response = await SendAsync("update", new {
             expectedRevision = edit.ExpectedRevision,
             sellerInvoice = edit.SellerInvoice,
+            companyName = edit.CompanyName,
             amegoAppKey = ToWire(edit.AmegoAppKey),
             moExcelPassword = ToWire(edit.MoExcelPassword),
             employeeNo, password
@@ -102,30 +104,49 @@ public sealed class CloudCompanySettingsClient
         return card;
     }
 
-    public async Task<CloudCompanyProvision> ProvisionAsync(
-        string employeeNo, string password, CancellationToken cancellationToken = default)
+    // Event-driven only. A revision check never downloads unchanged secrets.
+    public async Task<CloudCompanySettingsStatus?> SynchronizeAsync(
+        SettingsStore store, CancellationToken cancellationToken = default)
     {
-        Credentials(employeeNo, password);
-        using var response = await SendAsync("provision",
-            new {employeeNo, password}, cancellationToken).ConfigureAwait(false);
-        if (!response.RootElement.TryGetProperty("credentials", out var value) ||
-            value.ValueKind != JsonValueKind.Object ||
-            !value.TryGetProperty("sellerInvoice", out var seller) ||
-            seller.ValueKind != JsonValueKind.String || !Invoice(seller.GetString()) ||
-            !value.TryGetProperty("revision", out var revision) ||
-            revision.ValueKind != JsonValueKind.Number ||
-            !revision.TryGetInt32(out var rev) || rev < 1 ||
-            !value.TryGetProperty("amegoAppKey", out var amego) ||
-            amego.ValueKind != JsonValueKind.String ||
-            !value.TryGetProperty("moExcelPassword", out var mo) ||
-            mo.ValueKind != JsonValueKind.String)
-            throw new InvalidDataException("Invalid company provision response.");
-        var credentials = new CloudCompanyProvision(
-            seller.GetString()!, rev, amego.GetString()!, mo.GetString()!);
-        if (!credentials.Matches(new CloudCompanySettingsStatus(
-            credentials.SellerInvoice, credentials.Revision, true, true)))
-            throw new InvalidDataException("Incomplete company provision response.");
-        return credentials;
+        var original = store.LoadOrCreate();
+        if (original.CloudMode != CloudModes.CloudPreferred ||
+            original.CloudIdentityProvider != "CYID" || !original.CloudEmployeeAuthorityReady)
+            return null;
+        if (store.CloudDeviceToken(original) != deviceToken ||
+            new Uri(original.CloudBaseUrl.TrimEnd('/') + "/") != endpoint)
+            throw new InvalidOperationException("公司卡裝置綁定已變更，請重新連線。");
+        var knownRevision = original.CloudCompanyAppliedWorkspaceId == original.CloudWorkspaceId &&
+            original.CloudCompanyAppliedDeviceId == original.CloudDeviceId &&
+            original.CloudCompanyAppliedSellerInvoice == original.ProductionInvoice &&
+            original.ProductionAppKeyEncrypted.Length != 0 && original.MoPasswordEncrypted.Length != 0
+                ? original.CloudCompanyAppliedRevision : 0;
+        using var response = await SendAsync("sync", new { knownRevision }, cancellationToken).ConfigureAwait(false);
+        var root = response.RootElement;
+        if (!root.TryGetProperty("company", out var value)) throw new InvalidDataException("公司卡回應缺少狀態。");
+        if (value.ValueKind == JsonValueKind.Null)
+        {
+            if (knownRevision > 0) throw new InvalidDataException("雲端公司卡遺失，保留本機憑證並停止套用。");
+            return null;
+        }
+        var card = Parse(value);
+        if (card.Revision < knownRevision) throw new InvalidDataException("公司卡版次倒退，未覆寫本機設定。");
+        if (!card.HasAmegoAppKey || !card.HasMoExcelPassword)
+            return card; // Editor can repair an incomplete cloud card; local credentials stay intact.
+        if (root.TryGetProperty("credentials", out var credentials))
+        {
+            var received = new CloudCompanyProvision(
+                credentials.GetProperty("sellerInvoice").GetString()!,
+                credentials.GetProperty("revision").GetInt32(),
+                credentials.GetProperty("amegoAppKey").GetString()!,
+                credentials.GetProperty("moExcelPassword").GetString()!,
+                credentials.GetProperty("companyName").GetString()!);
+            if (!received.Matches(card)) throw new InvalidDataException("公司卡內容與版次不一致。");
+            store.ApplyCloudCompanyProvision(original, received);
+        }
+        else if (!CloudCompanySettingsUsage.Inspect(card, original).CompanyCardAppliedToCurrentDevice ||
+                 original.ProductionCompanyName != card.CompanyName)
+            throw new InvalidDataException("公司卡缺少必要憑證，未套用不完整的回應。");
+        return card;
     }
 
     private async Task<JsonDocument> SendAsync(
@@ -173,7 +194,10 @@ public sealed class CloudCompanySettingsClient
             !element.TryGetProperty("hasMoExcelPassword", out var mo) ||
             mo.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             throw new InvalidDataException("Company settings status has invalid fields.");
-        return new CloudCompanySettingsStatus(seller.GetString()!, rev, key.GetBoolean(), mo.GetBoolean());
+        var name = element.TryGetProperty("companyName", out var label) && label.ValueKind == JsonValueKind.String
+            ? label.GetString()! : "";
+        if (name.Length > 100 || name.Any(char.IsControl)) throw new InvalidDataException("Invalid company name.");
+        return new CloudCompanySettingsStatus(seller.GetString()!, rev, key.GetBoolean(), mo.GetBoolean(), name);
     }
 
     private static bool Invoice(string? value) =>

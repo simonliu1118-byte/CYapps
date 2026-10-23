@@ -1,6 +1,6 @@
 # CYInvoice Cloud Reference Backend
 
-目前 canonical migration 為 0019；原始碼 SCHEMA_VERSION=19 僅為待部署目標。原 D1／Worker 仍依先前本機回報為 schema18。原 Worker 若需 18→19，必須先在另行授權的本機 MCP 完成原 D1 0019／備份及額度審核，再明確指定 CYINVOICE_SCHEMA_UPGRADE=18:19（workflow 的 schema_upgrade 選項）；四道折讓旗標必須全關，其他設定與 Secrets 保留。一般 code-only 部署不會默默改 runtime schema；未完成遷移或部署一律拒絕。操作清單見 ../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
+目前 canonical migration 為 0020，原始碼 SCHEMA_VERSION=20。原 D1／Worker 仍以本機即時盤點為準。受控升級依序 18→19→20，每段先驗證 D1 的精確 migration 前綴及資料不變，再指定 CYINVOICE_SCHEMA_UPGRADE=18:19 或 19:20，完成 before／deploy／after。canonical20 下仍支援精確 schema19 中繼，不允許跳版或以一般 code-only 改 marker。四道折讓旗標關閉，原 CYID、Secrets、Bindings 及其他 vars 完整繼承。結構升級不需等待 Local 停送；g0501 仍無送出路由，啟用前另核對 Local 停送、未知 Claim、單一權威與測試公司卡。操作清單見 ../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
 
 > **2026-10-18 最新 Source 狀態**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
 

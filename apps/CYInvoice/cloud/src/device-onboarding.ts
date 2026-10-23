@@ -1,11 +1,6 @@
 import { usesCyId, cyIdBinding, cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
 import { createEmailSender } from "./email";
-import { verifyPassword } from "./web-auth";
 import { recordSecurityEvent, securityEventStatement } from "./security-audit";
-import {
-  BOOTSTRAP_DEVICE_INSERT_SQL,
-  BOOTSTRAP_WORKSPACE_INSERT_SQL,
-} from "./bootstrap-sql";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
@@ -35,13 +30,6 @@ type DeviceIdentity = {
   deviceDisplayName: string;
 };
 
-type BootstrapDeviceRow = {
-  device_id: string;
-  workspace_id: string;
-  device_display_name: string;
-  workspace_display_name: string;
-};
-
 type PairingDeviceRow = {
   device_id: string;
   workspace_id: string;
@@ -61,18 +49,35 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.6";
+const CLOUD_VERSION = "0.9.4";
+const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
+const MINIMUM_CLIENT_VERSION = "2.6.5";
+const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";
+const CAPABILITIES = [
+  "employee-authority-v1",
+  "employee-password-recovery-v1",
+  "device-pairing-v2",
+  "device-invitation-v1",
+  "device-join-status-v1",
+  "device-revoke-v1",
+  "device-self-status-v1",
+  "device-usage-v1",
+  "device-rename-v1",
+  "security-audit-v1",
+  "cyid-consumer-v1",
+  "runtime-sync-v1",
+];
+
+
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
-const MAX_EMAIL_LENGTH = 320;
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_HOURLY_LIMIT = 5;
 const OTP_MAX_ATTEMPTS = 5;
-const WORKSPACE_BOOTSTRAP_PURPOSE = "workspace_bootstrap";
 const DEVICE_PAIRING_PURPOSE_PREFIX = "device_pairing_authorization";
 
 
@@ -137,23 +142,6 @@ function validDisplayName(value: unknown): value is string {
 
 function validClientVersion(value: unknown): value is string {
   return typeof value === "string" && value.trim().length >= 1 && value.trim().length <= MAX_CLIENT_VERSION_LENGTH;
-}
-
-function normalizeEmail(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  if (email.length < 3 || email.length > MAX_EMAIL_LENGTH || /[\r\n\s]/.test(email)) return null;
-  const at = email.lastIndexOf("@");
-  if (at <= 0 || at >= email.length - 1 || email.indexOf("@") !== at) return null;
-  const domain = email.slice(at + 1);
-  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return null;
-  return email;
-}
-
-function randomToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, part => part.toString(16).padStart(2, "0")).join("");
 }
 
 function validDeviceToken(value: unknown): value is string {
@@ -378,102 +366,6 @@ async function onboardingStatus(env: Env, requestId: string): Promise<Response> 
   });
 }
 
-async function bootstrapEmailChallenge(request: Request, env: Env, requestId: string): Promise<Response> {
-  const bootstrapKey = env.BOOTSTRAP_KEY?.trim() ?? "";
-  const supplied = request.headers.get("x-bootstrap-key")?.trim() ?? "";
-  if (!bootstrapKey || supplied !== bootstrapKey)
-    return errorResponse(env, requestId, 403, "BOOTSTRAP_FORBIDDEN", "Bootstrap authorization failed.");
-  if (await workspaceCount(env) !== 0)
-    return errorResponse(env, requestId, 409, "WORKSPACE_ALREADY_INITIALIZED", "Workspace has already been initialized.");
-
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
-  const email = normalizeEmail(body?.email);
-  if (!email) return errorResponse(env, requestId, 400, "INVALID_EMAIL", "A valid Email is required.");
-  return createEmailChallenge(
-    env,
-    requestId,
-    WORKSPACE_BOOTSTRAP_PURPOSE,
-    email,
-    "CYInvoice 雲端初始化驗證碼",
-    code => `您正在建立第一個 CYInvoice Workspace。驗證碼是 ${code}，10 分鐘內有效。若非本人操作，請忽略此信。`
-  );
-}
-
-async function bootstrapWorkspace(request: Request, env: Env, requestId: string): Promise<Response> {
-  const bootstrapKey = env.BOOTSTRAP_KEY?.trim() ?? "";
-  const supplied = request.headers.get("x-bootstrap-key")?.trim() ?? "";
-  if (!bootstrapKey || supplied !== bootstrapKey)
-    return errorResponse(env, requestId, 403, "BOOTSTRAP_FORBIDDEN", "Bootstrap authorization failed.");
-
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
-  if (!body || !validDisplayName(body.workspaceDisplayName) || !validDisplayName(body.deviceDisplayName)
-      || !validClientVersion(body.clientVersion) || !validDeviceToken(body.deviceToken)) {
-    return errorResponse(env, requestId, 400, "INVALID_BOOTSTRAP_REQUEST", "Bootstrap request is invalid.");
-  }
-  const challengeId = typeof body.emailChallengeId === "string" ? body.emailChallengeId.trim() : "";
-  const emailOtp = typeof body.emailOtp === "string" ? body.emailOtp.trim() : "";
-  if (!/^otp_[0-9a-f-]{36}$/.test(challengeId.toLowerCase()) || !/^\d{6}$/.test(emailOtp))
-    return errorResponse(env, requestId, 400, "INVALID_OTP_REQUEST", "Email verification is required.");
-
-  const normalizedToken = normalizeDeviceToken(body.deviceToken as string);
-  const tokenHash = await sha256Hex(normalizedToken);
-  const recovered = await env.DB.prepare(
-    `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name, w.display_name AS workspace_display_name
-       FROM devices d
-       JOIN workspaces w ON w.workspace_id = d.workspace_id
-      WHERE d.token_hash = ?1
-      LIMIT 1`
-  ).bind(tokenHash).first<BootstrapDeviceRow>();
-  if (recovered) {
-    return json(env, requestId, 200, {
-      recovered: true,
-      workspace: { workspaceId: recovered.workspace_id, displayName: recovered.workspace_display_name },
-      device: { deviceId: recovered.device_id, displayName: recovered.device_display_name },
-    });
-  }
-
-  if (await workspaceCount(env) !== 0)
-    return errorResponse(env, requestId, 409, "WORKSPACE_ALREADY_INITIALIZED", "Workspace has already been initialized.");
-
-  const verified = await consumeEmailChallenge(env, requestId, WORKSPACE_BOOTSTRAP_PURPOSE, challengeId.toLowerCase(), emailOtp);
-  if (verified instanceof Response) return verified;
-
-  const now = new Date().toISOString();
-  const workspaceId = `ws_${crypto.randomUUID()}`;
-  const deviceId = `dev_${crypto.randomUUID()}`;
-  try {
-    await env.DB.batch([
-      env.DB.prepare(BOOTSTRAP_WORKSPACE_INSERT_SQL)
-        .bind(workspaceId, (body.workspaceDisplayName as string).trim(), verified.email, now),
-      env.DB.prepare(BOOTSTRAP_DEVICE_INSERT_SQL)
-        .bind(deviceId, workspaceId, (body.deviceDisplayName as string).trim(), tokenHash, (body.clientVersion as string).trim(), now),
-    ]);
-  } catch (error) {
-    const byToken = await env.DB.prepare(
-      `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name, w.display_name AS workspace_display_name
-         FROM devices d JOIN workspaces w ON w.workspace_id = d.workspace_id
-        WHERE d.token_hash = ?1 LIMIT 1`
-    ).bind(tokenHash).first<BootstrapDeviceRow>();
-    if (byToken) {
-      return json(env, requestId, 200, {
-        recovered: true,
-        workspace: { workspaceId: byToken.workspace_id, displayName: byToken.workspace_display_name },
-        device: { deviceId: byToken.device_id, displayName: byToken.device_display_name },
-      });
-    }
-    const workspaceExists = await workspaceCount(env).catch(() => 0) !== 0;
-    console.error("bootstrap_insert_failed", { requestId, error: error instanceof Error ? error.message : "unknown_error" });
-    return workspaceExists
-      ? errorResponse(env, requestId, 409, "WORKSPACE_ALREADY_INITIALIZED", "Workspace initialization conflicted with existing state.")
-      : errorResponse(env, requestId, 500, "BOOTSTRAP_FAILED", "Workspace initialization failed. No Workspace or Device was created.");
-  }
-
-  return json(env, requestId, 201, {
-    workspace: { workspaceId, displayName: (body.workspaceDisplayName as string).trim() },
-    device: { deviceId, displayName: (body.deviceDisplayName as string).trim() },
-  });
-}
-
 async function pairingAuthorizationChallenge(request: Request, env: Env, requestId: string): Promise<Response> {
   const device = await authenticateDevice(request, env);
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
@@ -550,16 +442,7 @@ async function directJoinWorkspace(env: Env, workspaceId: string): Promise<{ dis
     "SELECT display_name FROM workspaces WHERE workspace_id = ?1 AND status = 'active' LIMIT 1"
   ).bind(workspaceId).first<{ display_name: string }>();
   if (!workspace) return null;
-  if (usesCyId(env)) return workspaceId === cyIdBinding(env).workspaceId ? workspace : null;
-  const ready = await env.DB.prepare(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN role = 'SUPER_ADMIN' AND enabled = 1 THEN 1 ELSE 0 END) AS owners,
-            SUM(CASE WHEN email_verified_at IS NULL OR credential_verifier IS NULL
-                      OR credential_algorithm <> 'pbkdf2-sha256' OR credential_version < 1
-                     THEN 1 ELSE 0 END) AS invalid
-       FROM cloud_employees WHERE workspace_id = ?1`
-  ).bind(workspaceId).first<{ total: number; owners: number; invalid: number }>();
-  return ready && ready.total > 0 && ready.owners === 1 && ready.invalid === 0 ? workspace : null;
+  return usesCyId(env) && workspaceId === cyIdBinding(env).workspaceId ? workspace : null;
 }
 
 async function previewPairing(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -580,38 +463,12 @@ async function previewPairing(request: Request, env: Env, requestId: string): Pr
   return json(env, requestId, 200, { workspace: { workspaceId: pairing!.workspace_id, displayName: workspace.display_name } });
 }
 
-async function directJoinOwner(env: Env, workspaceId: string, employeeNo: string) {
-  return env.DB.prepare(
-    `SELECT employee_id, email_normalized, email_verified_at, credential_verifier,
-            credential_algorithm, credential_version
-       FROM cloud_employees
-      WHERE workspace_id = ?1 AND employee_no = ?2 AND role = 'SUPER_ADMIN' AND enabled = 1 LIMIT 1`
-  ).bind(workspaceId, employeeNo).first<{
-    employee_id: string; email_normalized: string; email_verified_at: string | null;
-    credential_verifier: string | null; credential_algorithm: string | null; credential_version: number;
-  }>();
-}
-
-async function authorizedOwner(request: Request, env: Env, workspaceId: string,
-  body: Record<string, unknown> | null): Promise<{ employee_id: string; email_normalized: string } | null> {
-  if (usesCyId(env)) {
-    if (workspaceId !== cyIdBinding(env).workspaceId || !env.cyIdContext) return null;
-    const principal = await env.cyIdContext.revalidate();
-    if (principal.workspaceRole !== "SUPER_ADMIN") return null;
-    return { employee_id: principal.employeeId, email_normalized: await env.cyIdContext.verifiedEmail() };
-  }
-  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
-  const password = body?.password;
-  if (!/^\d{4}$/.test(employeeNo) || typeof password !== "string" || password.length < 1 || password.length > 200)
-    return null;
-  const employeeLimit = await env.WEB_LOGIN_EMPLOYEE_RATE_LIMIT.limit({ key: `onboard:${workspaceId}:${employeeNo}` });
-  const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
-  const ipLimit = await env.WEB_LOGIN_IP_RATE_LIMIT.limit({ key: `onboard:ip:${ip}` });
-  if (!employeeLimit.success || !ipLimit.success) return null;
-  const owner = await directJoinOwner(env, workspaceId, employeeNo);
-  if (!owner?.email_verified_at || owner.credential_algorithm !== "pbkdf2-sha256" ||
-      !owner.credential_verifier || !await verifyPassword(password, owner.credential_verifier)) return null;
-  return { employee_id: owner.employee_id, email_normalized: owner.email_normalized };
+async function authorizedOwner(_request: Request, env: Env, workspaceId: string,
+  _body: Record<string, unknown> | null): Promise<{ employee_id: string; email_normalized: string } | null> {
+  if (!usesCyId(env) || workspaceId !== cyIdBinding(env).workspaceId || !env.cyIdContext) return null;
+  const principal = await env.cyIdContext.revalidate();
+  if (principal.workspaceRole !== "SUPER_ADMIN") return null;
+  return { employee_id: principal.employeeId, email_normalized: await env.cyIdContext.verifiedEmail() };
 }
 
 function invitationCode(value: unknown): value is string {
@@ -1067,33 +924,53 @@ async function currentDevice(request: Request, env: Env, requestId: string): Pro
   });
 }
 
+function clientUpdateRequired(env: Env, requestId: string): Response {
+  return json(env, requestId, 426, {
+    minimumClientVersion: MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION,
+    error: {
+      code: "CLIENT_UPDATE_REQUIRED",
+      message: "Update CYInvoice before using device onboarding with this Cloud service.",
+    },
+  });
+}
+
+
+async function requestHasCurrentOwnerCredentials(request: Request): Promise<boolean> {
+  const body = await request.clone().json<Record<string, unknown>>().catch(() => null);
+  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
+  const password = body?.password;
+  return /^\d{4}$/.test(employeeNo)
+    && typeof password === "string"
+    && password.length >= 1
+    && password.length <= 200;
+}
+
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = requestIdFrom(request);
     const url = new URL(request.url);
     try {
-      if (request.method === "GET" && url.pathname === "/v1/health") {
+      if (request.method === "GET" && ["/v1/health","/v1/health/storage","/v1/health/db"].includes(url.pathname)) {
         const healthy = await storageHealth(env);
         return json(env, requestId, healthy ? 200 : 503, {
           storage: healthy ? "ok" : "unavailable",
-          schemaVersion: env.SCHEMA_VERSION,
+          identityProvider: usesCyId(env) ? "CYID" : "BUILT_IN",
+          schemaVersion: LEGACY_SCHEMA_COMPATIBILITY_VERSION,
+          storageSchemaVersion: env.SCHEMA_VERSION,
+          capabilities: [...CAPABILITIES], minimumClientVersion: MINIMUM_CLIENT_VERSION,
+          minimumDeviceOnboardingClientVersion: MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION,
           ...(healthy ? {} : { error: { code: "STORAGE_UNAVAILABLE", message: "Backend storage health check failed." } }),
         });
       }
-      if (request.method === "GET" && (url.pathname === "/v1/health/storage" || url.pathname === "/v1/health/db")) {
-        const healthy = await storageHealth(env);
-        return json(env, requestId, healthy ? 200 : 503, {
-          storage: healthy ? "ok" : "unavailable",
-          schemaVersion: env.SCHEMA_VERSION,
-          ...(healthy ? {} : { error: { code: "STORAGE_UNAVAILABLE", message: "Backend storage health check failed." } }),
-        });
-      }
+      if (request.method === "POST" && ["/v1/direct-join/authorize","/v1/direct-join/claim"].includes(url.pathname))
+        return clientUpdateRequired(env, requestId);
+      if (request.method === "POST" && ["/v1/device-pairings/authorization-email","/v1/device-pairings"].includes(url.pathname)
+          && !await requestHasCurrentOwnerCredentials(request)) return clientUpdateRequired(env, requestId);
       if (request.method === "GET" && url.pathname === "/v1/onboarding/status")
         return await onboardingStatus(env, requestId);
-      if (request.method === "POST" && url.pathname === "/v1/onboarding/bootstrap-email")
-        return await bootstrapEmailChallenge(request, env, requestId);
-      if (request.method === "POST" && url.pathname === "/v1/bootstrap")
-        return await bootstrapWorkspace(request, env, requestId);
+      if (request.method === "POST" && ["/v1/bootstrap","/v1/onboarding/bootstrap-email"].includes(url.pathname))
+        return errorResponse(env, requestId, 409, "IDENTITY_PROVIDER_MISMATCH", "Built-in identity is retired.");
       if (request.method === "POST" && url.pathname === "/v1/device-pairings/authorization-email")
         return await pairingAuthorizationChallenge(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings")

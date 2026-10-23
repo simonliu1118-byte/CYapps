@@ -27,6 +27,19 @@ internal static class EmployeeOperationAuthentication
         return principal.ToEmployeeAccount();
     }
 
+    // A durable business approval is executed by the local workflow, not by
+    // retaining a login. Revoked managers or a changed authority stop writes.
+    internal static EmployeeAccount RequireApprovedLocalManager(LocalRepository repository, string employeeNo)
+    {
+        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly ||
+            repository.IdentityProvider.Kind != IdentityProviderKind.Local)
+            throw new UnauthorizedAccessException("原 Local 核准的執行權威已改變");
+        var manager = repository.Employees.Find(employeeNo);
+        if (manager is null || !manager.Enabled || !EmployeeRoles.CanManageAccounts(manager.Role))
+            throw new UnauthorizedAccessException("原核准主管已停用或失去主管權限");
+        return manager;
+    }
+
     private static AppPrincipal AuthenticatePrincipal(
         LocalRepository repository,
         string employeeNo,

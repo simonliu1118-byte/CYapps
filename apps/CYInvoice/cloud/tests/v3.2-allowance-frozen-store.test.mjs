@@ -29,7 +29,7 @@ const input={workspaceId:ws,applicationId:"application_c3a_one",
 function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const name of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
  sql.prepare(

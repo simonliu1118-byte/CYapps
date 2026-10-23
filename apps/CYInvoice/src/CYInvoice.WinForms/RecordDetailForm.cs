@@ -962,7 +962,9 @@ internal sealed class RecordDetailForm : Form
             history.LoadRecord(
                 record,
                 voidWorkflow.HandledReviewFor(record),
-                allowanceWorkflow.HandledReviewFor(record));
+                allowanceWorkflow.HandledReviewFor(record),
+                new OfficialAllowanceHistoryStore(repository.DataDirectory).Read(
+                    record.SellerInvoice, record.Environment, record.InvoiceNumber));
         }
         finally
         {

@@ -1,4 +1,3 @@
-using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
@@ -11,8 +10,6 @@ internal sealed class EmployeeChangePasswordForm : Form
     private const int ActionRowHeight = 46;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount account;
-    private readonly LocalRepository? repository;
-    private readonly HttpClient? cloudHttpClient;
     private readonly TextBox currentPassword = PasswordBox();
     private readonly TextBox newPassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
@@ -34,13 +31,6 @@ internal sealed class EmployeeChangePasswordForm : Form
         Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => currentPassword.Focus();
-    }
-
-    public EmployeeChangePasswordForm(LocalRepository repository, EmployeeAccount account, HttpClient cloudHttpClient)
-        : this(repository.Employees, account)
-    {
-        this.repository = repository;
-        this.cloudHttpClient = cloudHttpClient;
     }
 
     private static int CalculateHeight() => 20 + HeaderHeight + FieldRowHeight * 3 + ActionRowHeight;
@@ -116,7 +106,7 @@ internal sealed class EmployeeChangePasswordForm : Form
         field.TextAlign = HorizontalAlignment.Left;
     }
 
-    private async void SaveClicked(object? sender, EventArgs eventArgs)
+    private void SaveClicked(object? sender, EventArgs eventArgs)
     {
         if (currentPassword.Text.Length == 0)
         {
@@ -136,39 +126,9 @@ internal sealed class EmployeeChangePasswordForm : Form
 
         try
         {
-            if (repository?.UsesCloudEmployeeAuthority() == true)
-            {
-                save.Enabled = false;
-                UseWaitCursor = true;
-                var settings = repository.Settings.LoadOrCreate();
-                var token = repository.Settings.CloudDeviceToken(settings);
-                var baseUri = new Uri(settings.CloudBaseUrl, UriKind.Absolute);
-                var client = new CloudEmployeeAccountClient(cloudHttpClient!, baseUri, token);
-                await client.SetPasswordAsync(account.EmployeeNo, currentPassword.Text, account.EmployeeNo,
-                    CloudEmployeeCredentialVerifier.Create(newPassword.Text));
-                try
-                {
-                    var authority = new CloudEmployeeAuthorityClient(cloudHttpClient!, baseUri, token);
-                    var snapshot = await authority.GetSnapshotAsync();
-                    if (snapshot.WorkspaceId != settings.CloudWorkspaceId)
-                        throw new InvalidDataException("雲端帳號快取回傳的 Workspace 不一致。");
-                    repository.CloudEmployees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
-                }
-                catch
-                {
-                    repository.CloudEmployees.DisableOfflineCredential(account.EmployeeNo);
-                    MessageBox.Show(this, "中央密碼已變更，但本機快取更新失敗。舊離線密碼已停用，請保持連線並重新啟動 CYInvoice。",
-                        "密碼已變更", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            }
-            else employees.ChangePassword(account.EmployeeNo, currentPassword.Text, newPassword.Text);
+            employees.ChangePassword(account.EmployeeNo, currentPassword.Text, newPassword.Text);
             DialogResult = DialogResult.OK;
             Close();
-        }
-        catch (CloudApiException error)
-        {
-            MessageBox.Show(this, error.Code == "EMPLOYEE_AUTHENTICATION_FAILED" ? "目前密碼不正確。" : $"雲端密碼變更失敗：{error.Code}",
-                "無法變更密碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (InvalidOperationException)
         {

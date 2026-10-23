@@ -40,12 +40,15 @@ public sealed class Settings
     [JsonPropertyName("prod_app_key_enc")] public string ProductionAppKeyEncrypted { get; set; } = string.Empty;
     [JsonPropertyName("mo_password_enc")] public string MoPasswordEncrypted { get; set; } = string.Empty;
     // Source metadata only: no plaintext, ciphertext or CYID session stored here.
+    [JsonPropertyName("production_company_name")] public string ProductionCompanyName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_company_applied_revision")] public int CloudCompanyAppliedRevision { get; set; }
     [JsonPropertyName("cloud_company_applied_workspace_id")] public string CloudCompanyAppliedWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_company_applied_device_id")] public string CloudCompanyAppliedDeviceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_company_applied_seller")] public string CloudCompanyAppliedSellerInvoice { get; set; } = string.Empty;
     [JsonPropertyName("invoice_printer_name")] public string InvoicePrinterName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_mode")] public string CloudMode { get; set; } = CloudModes.LocalOnly;
+    // Monotonic safety quarantine: any prior Cloud participation forbids returning to local g0501.
+    // SettingsStore.Save carries the existing true value forward across mode changes.
     [JsonPropertyName("cloud_base_url")] public string CloudBaseUrl { get; set; } = string.Empty;
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;

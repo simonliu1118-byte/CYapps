@@ -1,186 +1,193 @@
-// V3.2-C3c3b - sole INTERNAL Worker-side orchestration of one g0401 attempt.
-// No HTTP route, live secret, deployment or genuine provider requests in CI.
-// Any crash after the CAS leaves the ledger 'sending': retry means READBACK,
-// never another g0401 POST. An exact readback alone is UNATTRIBUTED and
-// may not set 'confirmed' without stronger origin evidence.
-import {claimCloudAllowanceOneShotSending} from "./allowance-sending-claim";
-import type {CloudAllowanceSendingTarget} from "./allowance-sending-claim";
-import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
+// The existing Cloud issue owner: approved request -> allocation -> one POST
+// per number -> original-number reconciliation. Unknown outcomes never resend.
+import {claimCloudAllowanceOneShotSending,type CloudAllowanceSendingTarget} from "./allowance-sending-claim";
+import {loadEncryptedCloudAllowance,type AllowanceActorSource,type CloudAllowanceContext,type StoredCloudAllowance} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {postNumberedAllowanceOnce} from "./amego-allowance-issue";
-import type {OneShotAllowanceOutcome} from "./amego-allowance-issue";
 import {queryFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
+import {reserveApprovedCloudAllowanceNumber} from "./allowance-number-reservation";
+import {cyIdBinding,type CyIdEnv} from "./cyid";
+import {executeCloudVoidOnce} from "./allowance-void-one-shot-coordinator";
 
-// C7a: operator triage is NOT official confirmation or authorization to resend.
-// Do not persist a manual success decision until a separately reviewed attempt-
-// attribution policy, durable audit and human approval mechanism exist.
-export type CloudAllowanceManualDisposition =
- | "full_match_unattributed"
- | "matched_readback_audit_unavailable"
- | "number_collision_requires_investigation"
- | "accepted_without_attributable_readback"
- | "provider_rejected_requires_investigation"
- | "unknown_outcome_requires_investigation";
-
-export interface OneShotCloudResult {
- manualDisposition:CloudAllowanceManualDisposition;
- manualReviewRequired:true;
- proofOfThisPost:false;
- applicationId:string;ledgerId:string;allowanceNumber:string;
- issueKind:OneShotAllowanceOutcome["kind"];
- originalNumberReadback:"full_match_unattributed"|"unconfirmed";
- recordedReadback:boolean;
- providerPostAttempted:true;
- ledgerStatus:"sending"|"occupied_external";
- safeToAutoRetry:false;
- safeToAutoConfirm:false;
- canAllocateAnotherNumber:false;
+export interface CloudExecutionResult {
+ applicationId:string;executionState:"processing"|"completed"|"problem";
+ allowanceNumber?:string;ledgerStatus?:string;errorCode?:string;
 }
-function manualDisposition(
- issueKind:OneShotAllowanceOutcome["kind"],
- readback:"full_match_unattributed"|"unconfirmed",recorded:boolean
-):CloudAllowanceManualDisposition{
- // A complete exact-number match proves content, not which POST originated it.
- // A failed audit INSERT cannot become an implicit proof of completion.
- if(readback==="full_match_unattributed")
-  return recorded?"full_match_unattributed":"matched_readback_audit_unavailable";
- if(issueKind==="confirmed_number_collision")
-  return "number_collision_requires_investigation";
- if(issueKind==="accepted_unconfirmed")
-  return "accepted_without_attributable_readback";
- if(issueKind==="definite_rejection")
-  return "provider_rejected_requires_investigation";
- return "unknown_outcome_requires_investigation";
+export interface AllowanceExecutionEnv extends CyIdEnv {
+ APP_ENV:string;SCHEMA_VERSION:string;COMPANY_SETTINGS_KEY_HEX?:string;
+ ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;
+ ALLOWANCE_G0501_SEND_ENABLED?:string;
 }
-function isSameManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):boolean{
- return !!a&&!!b&&a.workspaceId===ws&&b.workspaceId===ws&&
- a.employeeId===b.employeeId&&
- (a.workspaceRole==="ADMIN"||a.workspaceRole==="SUPER_ADMIN")&&
- a.workspaceRole===b.workspaceRole;
+export async function recordExecutionEvent(db:D1Database,t:{workspaceId:string;applicationId:string},
+ operation:"issue"|"void",stage:string,requestId:string,clock:()=>Date,
+ evidence:{attempt?:number;code?:number;httpStatus?:number;responseReceived?:boolean;errorCode?:string}={}){
+ await db.prepare(`INSERT INTO allowance_execution_events
+  (workspace_id,application_id,operation,stage,attempt,provider_code,http_status,
+   response_received,request_id,error_code,recorded_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`)
+ .bind(t.workspaceId,t.applicationId,operation,stage,evidence.attempt??null,evidence.code??null,
+  evidence.httpStatus??null,evidence.responseReceived===undefined?null:evidence.responseReceived?1:0,
+  requestId,evidence.errorCode??"",clock().toISOString()).run();
 }
-async function activeDevice(db:D1Database,ws:string,device:string):Promise<boolean>{
- return !!await db.prepare(`SELECT d.device_id FROM devices d
- JOIN workspaces w ON w.workspace_id=d.workspace_id
- WHERE d.device_id=?1 AND d.workspace_id=?2 AND d.status='active'
- AND d.employee_authority_state='cloud' AND w.status='active' LIMIT 1`)
- .bind(device,ws).first<{device_id:string}>();
+export async function saveExecutionResult(db:D1Database,t:{workspaceId:string;applicationId:string},
+ operation:"issue"|"void",result:CloudExecutionResult,requestId:string,clock:()=>Date){
+ const table=operation==="issue"?"allowance_applications":"allowance_void_requests";
+ const error=result.errorCode??"";
+ await db.prepare(`UPDATE ${table} SET execution_state=?3,
+  first_error=CASE WHEN first_error='' AND ?4<>'' THEN ?4 ELSE first_error END,
+  last_error=?4,next_check_at=?5,request_id=?6 WHERE workspace_id=?1 AND application_id=?2 AND (execution_state<>'completed' OR ?3='completed')`)
+ .bind(t.workspaceId,t.applicationId,result.executionState,error,
+  new Date(clock().valueOf()+(result.executionState==="problem"?300_000:60_000)).toISOString(),requestId).run();
+ return result;
 }
-async function recordReadback(
- db:D1Database,t:CloudAllowanceSendingTarget,actor:string,
- hash:string,clock:()=>Date
-):Promise<boolean>{
- const date=clock();
- if(!(date instanceof Date)||!Number.isFinite(date.getTime()))
-  return false;
- try {
-  const r=await db.prepare(`INSERT INTO allowance_reconciliation_checks
-   (check_id,ledger_id,application_id,workspace_id,allowance_number,
-    official_snapshot_hash,checked_by_device_id,checked_by_actor_id,checked_at)
-   SELECT ?1,l.ledger_id,l.application_id,l.workspace_id,l.allowance_number,
-    ?6,?7,?8,?9 FROM allowance_number_ledger l
-   JOIN devices d ON d.device_id=?7 AND d.workspace_id=l.workspace_id
-   JOIN workspaces w ON w.workspace_id=l.workspace_id
-   WHERE l.ledger_id=?2 AND l.application_id=?3 AND l.workspace_id=?4
-    AND l.allowance_number=?5 AND l.status='sending'
-    AND d.status='active' AND d.employee_authority_state='cloud'
-    AND w.status='active'`)
-  .bind("chk_"+crypto.randomUUID(),t.ledgerId,t.applicationId,t.workspaceId,
-   t.allowanceNumber,hash,t.deviceId,actor,date.toISOString()).run();
-  return r.meta.changes===1;
- }catch{return false;}
+export function executionError(error:unknown):string{
+ const code=error instanceof Error?error.message:"ALLOWANCE_EXECUTION_FAILED";
+ // Transport/SQL exception text may carry private payloads. Stable codes only.
+ return /^[A-Z][A-Z0-9_]{2,100}$/.test(code)?code:"ALLOWANCE_EXECUTION_OR_STORAGE_FAILED";
 }
-// Trusted Cloud handler may call this once per explicit manager confirmation.
-// Do not export a stand-alone network POST endpoint or accept buyer/key from
-// the request. This function owns claim -> provider POST -> exact readback.
-export async function executeCloudAllowanceExactlyOnce(
- db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAllowanceContext,
- authority:AllowanceActorSource,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date(),allowExternalCollision=false
-):Promise<OneShotCloudResult>{
- const first=await authority.revalidate();
- if(!first||!await activeDevice(db,t.workspaceId,t.deviceId))
-  throw new Error("ALLOWANCE_EXEC_AUTH_REQUIRED");
- // Fresh official balance check and atomic 'reserved -> sending' is owned by
- // C3c2. Once it returns successfully, no code path may claim again.
- await claimCloudAllowanceOneShotSending(db,t,ctx,authority,transport,clock);
- // Any failure here is intentionally an UNKNOWN after CAS. Keep 'sending'.
- // Never restart the coordinator from its first step.
- const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
- const company=await loadAmegoCompanySettingsForGateway(
-  db,t.workspaceId,ctx.encryptionKeyHex);
- const second=await authority.revalidate();
- if(!isSameManager(first,second,t.workspaceId)||
-    !await activeDevice(db,t.workspaceId,t.deviceId)||
-    frozen.status!=="approved"||frozen.revision!==t.expectedRevision||
-    frozen.sellerInvoice!==company.sellerInvoice||
-    frozen.companyRevision!==company.revision)
-  throw new Error("ALLOWANCE_EXEC_POST_CAS_READBACK_ONLY");
- const input={sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+// This is a revocation interlock for ONE persisted business approval, not a
+// login, principal cache, or permission to create/approve another operation.
+// No password/session/token is stored or manufactured during recovery.
+export function approvedExecutionAuthority(env:AllowanceExecutionEnv,workspaceId:string,
+ snapshot:string|null,managerActorId:string,
+ operation:{applicationId:string;operation:"issue"|"void"}):AllowanceActorSource{
+ return {approvedOperation:{workspaceId,...operation},revalidate:async()=>{
+  if(!snapshot||!env.IDENTITY_AUTHORITY)throw new Error("APPROVAL_AUTHORITY_UNVERIFIABLE");
+  const cached=JSON.parse(snapshot) as Record<string,unknown>;
+  const b=cyIdBinding(env);
+  if(workspaceId!==b.workspaceId||cached.identityWorkspaceId!==b.identityWorkspaceId||cached.applicationId!==b.applicationId||cached.employeeId!==managerActorId||
+    !["ADMIN","SUPER_ADMIN"].includes(String(cached.workspaceRole))||cached.emailVerified!==true)
+   throw new Error("APPROVAL_AUTHORITY_INVALID");
+  const checked=await env.IDENTITY_AUTHORITY.invalidateCache({workspaceId:b.identityWorkspaceId,
+   applicationId:b.applicationId,authorities:[cached]}) as Record<string,unknown>;
+  if(checked.workspaceId!==b.identityWorkspaceId||checked.applicationId!==b.applicationId||
+     checked.available!==true||!Array.isArray(checked.invalidated)||checked.invalidated.length!==0)
+   throw new Error("APPROVAL_AUTHORITY_REVOKED");
+  return {workspaceId,employeeId:managerActorId,workspaceRole:cached.workspaceRole as "ADMIN"|"SUPER_ADMIN"};
+ }};
+}
+async function readback(db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAllowanceContext,
+ authority:AllowanceActorSource,transport:typeof fetch,clock:()=>Date,requestId:string,approvedRequest?:StoredCloudAllowance):Promise<CloudExecutionResult>{
+ const frozen=approvedRequest??await loadEncryptedCloudAllowance(db,t,ctx,authority);
+ const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+ if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
+  throw new Error("ALLOWANCE_COMPANY_CHANGED");
+ const matching=await queryFrozenAllowanceByOriginalNumber({sellerInvoice:company.sellerInvoice,
+  appKey:company.amegoAppKey,allowanceNumber:t.allowanceNumber,
+  allowanceDay:frozen.allowanceDay,unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock);
+ if(matching.kind==="pending_official"){
+  if(!await authority.revalidate())throw new Error("APPROVAL_AUTHORITY_REVOKED");
+  return {applicationId:t.applicationId,executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"sending"};
+ }
+ if(matching.kind!=="full_frozen_match_unattributed")throw new Error("ALLOWANCE_READBACK_NOT_MATCHED");
+ const current=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+ if(current.revision!==company.revision||current.sellerInvoice!==company.sellerInvoice||current.amegoAppKey!==company.amegoAppKey)
+  throw new Error("ALLOWANCE_COMPANY_CHANGED");
+ const actor=await authority.revalidate();if(!actor)throw new Error("APPROVAL_AUTHORITY_REVOKED");
+ const at=clock().toISOString();
+ // Evidence commits with confirmation. A failed transaction stays sending.
+ const rows=await db.batch([
+  db.prepare(`INSERT INTO allowance_reconciliation_checks
+   (check_id,ledger_id,application_id,workspace_id,allowance_number,official_snapshot_hash,
+    checked_by_device_id,checked_by_actor_id,checked_at)
+   VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)`)
+   .bind("chk_"+crypto.randomUUID(),t.ledgerId,t.applicationId,t.workspaceId,t.allowanceNumber,
+    matching.officialSnapshotHash,t.deviceId,actor.employeeId,at),
+  db.prepare(`UPDATE allowance_number_ledger SET status='confirmed',updated_at=?2
+    WHERE ledger_id=?1 AND status='sending'`).bind(t.ledgerId,at)
+ ]);
+ if(rows.some(r=>r.meta.changes!==1))throw new Error("ALLOWANCE_CONFIRMATION_SAVE_FAILED");
+ await recordExecutionEvent(db,t,"issue","official_confirmed",requestId,clock,{responseReceived:true});
+ return {applicationId:t.applicationId,executionState:"completed",allowanceNumber:t.allowanceNumber,ledgerStatus:"confirmed"};
+}
+export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllowanceSendingTarget,
+ ctx:CloudAllowanceContext,authority:AllowanceActorSource,transport:typeof fetch=fetch,
+ clock:()=>Date=()=>new Date(),requestId="internal"):Promise<CloudExecutionResult>{
+ // The claim already verified and decrypted this exact immutable request.
+ // Carry it through the same operation instead of reloading it twice.
+ const claim=await claimCloudAllowanceOneShotSending(db,t,ctx,authority,transport,clock);
+ const frozen=claim.approvedRequest;
+ const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+ await recordExecutionEvent(db,t,"issue","send_prepared",requestId,clock,{responseReceived:false});
+ const final=await authority.revalidate();
+ const active=await db.prepare(`SELECT d.device_id FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id
+  WHERE d.device_id=?1 AND d.workspace_id=?2 AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active'`)
+  .bind(t.deviceId,t.workspaceId).first();
+ const card=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
+ if(!final||final.employeeId!==claim.managerActorId||final.workspaceRole!==claim.managerWorkspaceRole||
+  final.workspaceId!==t.workspaceId||!active||company.revision!==frozen.companyRevision||
+  company.sellerInvoice!==frozen.sellerInvoice||card.revision!==company.revision||
+  card.sellerInvoice!==company.sellerInvoice||card.amegoAppKey!==company.amegoAppKey)
+  throw new Error("ALLOWANCE_POST_CAS_AUTHORITY_CHANGED_NO_POST");
+ const sent=await postNumberedAllowanceOnce({sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
   allowanceNumber:t.allowanceNumber,allowanceDay:frozen.allowanceDay,
-  unnumberedTemplateJson:frozen.unnumberedTemplateJson};
- let issued:OneShotAllowanceOutcome={kind:"unknown_result"};
- try{issued=await postNumberedAllowanceOnce(input,transport,clock);}
- catch{issued={kind:"unknown_result"};}
- // After the single POST, a provider/network failure or a process crash is
- // ambiguous. Read original number at most once in this invocation.
- // No conditional transport retries, even for code=15 or code=0.
- let readback:"full_match_unattributed"|"unconfirmed"="unconfirmed";
- let recorded=false;
- let ledgerStatus:"sending"|"occupied_external"="sending";
- try {
-  const matching=await queryFrozenAllowanceByOriginalNumber(
-    input,transport,clock,allowExternalCollision&&issued.kind==="confirmed_number_collision");
-  if(matching.kind==="full_frozen_match_unattributed"){
-   readback="full_match_unattributed";
-   const latest=await authority.revalidate();
-   if(isSameManager(first,latest,t.workspaceId)&&
-      await activeDevice(db,t.workspaceId,t.deviceId))
-    recorded=await recordReadback(db,t,first.employeeId,
-      matching.officialSnapshotHash,clock);
-  }
-  if(matching.kind==="verified_external_collision"&&
-     issued.kind==="confirmed_number_collision"){
-   const latest=await authority.revalidate();
-   const current=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
-   if(isSameManager(first,latest,t.workspaceId)&&
-      current.revision===company.revision&&current.sellerInvoice===company.sellerInvoice&&
-      current.amegoAppKey===company.amegoAppKey&&await activeDevice(db,t.workspaceId,t.deviceId)){
-    const at=clock().toISOString();
-    // Transactional CAS plus immutable evidence. If schema19 is absent or
-    // the audit fails, both statements roll back and sending stays locked.
-    const rows=await db.batch([
-     db.prepare(`UPDATE allowance_number_ledger SET status='occupied_external',
-      collision_code=?1,updated_at=?2 WHERE ledger_id=?3 AND application_id=?4
-      AND workspace_id=?5 AND allowance_number=?6 AND status='sending'
-      AND request_hash=?7 AND EXISTS(SELECT 1 FROM allowance_applications a
-       JOIN company_settings c ON c.workspace_id=a.workspace_id
-       JOIN devices d ON d.workspace_id=a.workspace_id AND d.device_id=?8
-       JOIN workspaces w ON w.workspace_id=a.workspace_id
-       WHERE a.application_id=?4 AND a.workspace_id=?5 AND a.status='approved'
-       AND a.revision=?9 AND a.manager_actor_id=?10 AND a.request_hash=?7
-       AND c.revision=?11 AND c.seller_invoice=?12
-       AND d.status='active' AND d.employee_authority_state='cloud' AND w.status='active')`)
-      .bind(issued.code,at,t.ledgerId,t.applicationId,t.workspaceId,t.allowanceNumber,
-       frozen.requestHash,t.deviceId,t.expectedRevision,first.employeeId,
-       company.revision,company.sellerInvoice),
-     db.prepare(`INSERT INTO allowance_reconciliation_checks
-      (check_id,ledger_id,application_id,workspace_id,allowance_number,
-       official_snapshot_hash,checked_by_device_id,checked_by_actor_id,checked_at,evidence_kind)
-      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,'external_collision')`)
-      .bind("chk_"+crypto.randomUUID(),t.ledgerId,t.applicationId,t.workspaceId,
-       t.allowanceNumber,matching.officialSnapshotHash,t.deviceId,first.employeeId,at)
-    ]);
-    if(rows.every(r=>r.meta.changes===1))ledgerStatus="occupied_external";
+  unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock,
+  httpStatus=>recordExecutionEvent(db,t,"issue","http_response",requestId,clock,{httpStatus,responseReceived:true}));
+ await recordExecutionEvent(db,t,"issue","send_response",requestId,clock,
+  {responseReceived:sent.kind!=="unknown_result",code:"code" in sent?sent.code:undefined});
+ if(sent.kind==="confirmed_number_collision"){
+  const at=clock().toISOString();
+  const rows=await db.batch([
+   db.prepare(`UPDATE allowance_number_ledger SET status='occupied_external',collision_code=?2,updated_at=?3
+    WHERE ledger_id=?1 AND status='sending'`).bind(t.ledgerId,sent.code,at),
+   db.prepare(`INSERT INTO allowance_number_rejections(ledger_id,provider_code,recorded_at) VALUES(?1,?2,?3)`)
+    .bind(t.ledgerId,sent.code,at)
+  ]);
+  if(rows.some(r=>r.meta.changes!==1))throw new Error("ALLOWANCE_REJECTION_SAVE_FAILED");
+  return {applicationId:t.applicationId,executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"occupied_external"};
+ }
+ // Even a timeout is queried once before classification. Never repeat POST.
+ try{return await readback(db,t,ctx,authority,transport,clock,requestId,frozen);}
+ catch(error){return {applicationId:t.applicationId,executionState:"problem",allowanceNumber:t.allowanceNumber,
+  ledgerStatus:"sending",errorCode:sent.kind==="definite_rejection"?"AMEGO_"+sent.code:executionError(error)};}
+}
+export async function executeApprovedCloudAllowance(db:D1Database,
+ t:{workspaceId:string;applicationId:string;deviceId:string;expectedRevision:number},ctx:CloudAllowanceContext,
+ authority:AllowanceActorSource,transport:typeof fetch=fetch,clock:()=>Date=()=>new Date(),requestId="internal"){
+ const scope=authority.approvedOperation;
+ if(scope&&(scope.workspaceId!==t.workspaceId||scope.applicationId!==t.applicationId||scope.operation!=="issue"))
+  throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
+ try{
+  for(;;){
+   const latest=await db.prepare(`SELECT ledger_id,allowance_number,status FROM allowance_number_ledger
+    WHERE workspace_id=?1 AND application_id=?2 ORDER BY attempt DESC LIMIT 1`)
+    .bind(t.workspaceId,t.applicationId).first<{ledger_id:string;allowance_number:string;status:string}>();
+   let result:CloudExecutionResult;
+   if(latest?.status==="confirmed")result={applicationId:t.applicationId,executionState:"completed",allowanceNumber:latest.allowance_number,ledgerStatus:"confirmed"};
+   else if(latest?.status==="sending")result=await readback(db,{...t,ledgerId:latest.ledger_id,allowanceNumber:latest.allowance_number},ctx,authority,transport,clock,requestId);
+   else{
+    const reserved=await reserveApprovedCloudAllowanceNumber(db,t,ctx,authority,clock);
+    result=await executeCloudAllowanceExactlyOnce(db,{...t,ledgerId:reserved.ledgerId,allowanceNumber:reserved.allowanceNumber},ctx,authority,transport,clock,requestId);
    }
+   if(result.ledgerStatus==="occupied_external")continue; // explicit rejection, no count cap
+   return await saveExecutionResult(db,t,"issue",result,requestId,clock);
   }
- }catch{/* unreadable/mismatched official response remains UNKNOWN */}
- return {applicationId:t.applicationId,ledgerId:t.ledgerId,
-  allowanceNumber:t.allowanceNumber,issueKind:issued.kind,
-  originalNumberReadback:readback,recordedReadback:recorded,
-  manualDisposition:manualDisposition(issued.kind,readback,recorded),
-  manualReviewRequired:true,proofOfThisPost:false,
-  providerPostAttempted:true,ledgerStatus,
-  safeToAutoRetry:false,safeToAutoConfirm:false,
-  canAllocateAnotherNumber:false};
+ }catch(error){
+  const result:CloudExecutionResult={applicationId:t.applicationId,executionState:"problem",errorCode:executionError(error)};
+  await recordExecutionEvent(db,t,"issue","execution_failed",requestId,clock,{errorCode:result.errorCode});
+  return await saveExecutionResult(db,t,"issue",result,requestId,clock);
+ }
+}
+// Driven by the existing Device/runtime sync; no second scheduler or queue.
+export async function resumeApprovedCloudAllowances(env:AllowanceExecutionEnv,workspaceId:string,
+ transport:typeof fetch=fetch,clock:()=>Date=()=>new Date()){
+ if(env.ALLOWANCE_API_ENABLED!=="true"||Number(env.SCHEMA_VERSION)<21||!env.COMPANY_SETTINGS_KEY_HEX)return;
+ const ctx:CloudAllowanceContext={environment:env.APP_ENV==="production"?"production":"test",encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX};
+ const at=clock().toISOString();
+ for(const operation of ["issue","void"] as const){
+  if((operation==="issue"?env.ALLOWANCE_G0401_SEND_ENABLED:env.ALLOWANCE_G0501_SEND_ENABLED)!=="true")continue;
+  const table=operation==="issue"?"allowance_applications":"allowance_void_requests";
+  const grants=operation==="issue"?"allowance_execution_approvals":"allowance_void_approvals";
+  const rows=await env.DB.prepare(`SELECT a.application_id,a.revision,g.manager_device_id,g.manager_actor_id,g.authority_snapshot
+   FROM ${table} a JOIN ${grants} g ON g.application_id=a.application_id
+   WHERE a.workspace_id=?1 AND a.status='approved' AND a.execution_state<>'completed' AND a.next_check_at<=?2
+   ORDER BY a.next_check_at,a.application_id LIMIT 10`).bind(workspaceId,at)
+   .all<{application_id:string;revision:number;manager_device_id:string;manager_actor_id:string;authority_snapshot:string|null}>();
+  for(const row of rows.results){
+   const authority=approvedExecutionAuthority(env,workspaceId,row.authority_snapshot,row.manager_actor_id,{applicationId:row.application_id,operation});
+   const target={workspaceId,applicationId:row.application_id,deviceId:row.manager_device_id,expectedRevision:row.revision};
+   const requestId="resume-"+crypto.randomUUID();
+   if(operation==="issue")await executeApprovedCloudAllowance(env.DB,target,ctx,authority,transport,clock,requestId);
+   else await executeCloudVoidOnce(env.DB,{...target,expectedRevision:2},ctx,authority,transport,clock,true,requestId);
+  }
+ }
 }

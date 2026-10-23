@@ -10,6 +10,7 @@ var tests = new (string Name, Action Run)[]
     ("corrupt legacy JSON never creates SQLite database", TestCorruptLegacyJson),
     ("corrupt existing SQLite database is never overwritten", TestCorruptExistingDatabase),
     ("empty data directory creates an empty valid database", TestEmptyMigration),
+    ("startup business-schema failure rolls back DDL and retains invoices", TestBusinessSchemaRollback),
     ("employee schema is additive and preserves invoice data", EmployeeStoreTests.AdditiveSchemaPreservesExistingInvoiceData),
     ("super-admin recovery is one-time and secrets are hashed", EmployeeStoreTests.SuperAdminRecoveryIsOneTimeAndSecretsAreHashed),
     ("employee role rules protect super-admin and allow peer admin management", EmployeeStoreTests.RoleRulesProtectSuperAdminAndAllowAdminPeerManagement),
@@ -204,6 +205,28 @@ static void TestCorruptExistingDatabase()
 
     Throws<InvalidDataException>(() => SqliteBootstrapper.EnsureMigrated(temporary.Path, "12345675"));
     SequenceEqual(original, File.ReadAllBytes(databasePath));
+}
+
+static void TestBusinessSchemaRollback()
+{
+    using var temporary = new TemporaryDirectory();
+    var result = SqliteBootstrapper.EnsureMigrated(temporary.Path);
+    new InvoiceStore(temporary.Path,"12345675").Append(new InvoiceRecord {
+        Id="retained",OrderId="M20261022001",Environment="test",SellerInvoice="12345675",
+        InvoiceNumber="AA12345678",InvoiceState=InvoiceStates.Opened,Source="手動",Amount=100,
+        SentAt="2026-10-22T00:00:00+08:00"
+    });
+    using var db = new SqliteConnection(new SqliteConnectionStringBuilder {
+        DataSource=result.DatabasePath, Pooling=false
+    }.ToString());db.Open();
+    using var sql = db.CreateCommand();
+    sql.CommandText="DROP TABLE allowance_number_ledger; DROP INDEX idx_allowance_void_local_observations; CREATE TABLE idx_allowance_void_local_observations (synthetic INTEGER);";
+    sql.ExecuteNonQuery();
+    Throws<SqliteException>(()=>SqliteBootstrapper.EnsureMigrated(temporary.Path));
+    sql.CommandText="SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='allowance_number_ledger'";
+    Equal(0L,(long)sql.ExecuteScalar()!);
+    sql.CommandText="SELECT record_id FROM invoices";
+    Equal("retained",sql.ExecuteScalar() as string);
 }
 
 static void TestEmptyMigration()

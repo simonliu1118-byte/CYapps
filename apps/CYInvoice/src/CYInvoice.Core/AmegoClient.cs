@@ -207,6 +207,63 @@ public sealed partial class AmegoClient : IAmegoGateway, IAmegoAllowanceGateway,
             results);
     }
 
+    // date_select=2 discovers newly created allowances against older invoices.
+    // Details and financial authority remain with invoice_query, not this list.
+    public async Task<AllowanceListResponse> ListAllowancesAsync(
+        DateOnly startDate, DateOnly endDate, int page = 1, int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (startDate > endDate) throw new ArgumentOutOfRangeException(nameof(startDate));
+        if (page < 1) throw new ArgumentOutOfRangeException(nameof(page));
+        if (limit is < 20 or > 500) throw new ArgumentOutOfRangeException(nameof(limit));
+        var request = new Dictionary<string, object>
+        {
+            ["date_select"] = 2,
+            ["date_start"] = startDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["date_end"] = endDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["limit"] = limit,
+            ["page"] = page,
+        };
+        using var document = await PostAsync("/json/allowance_list", request, cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        if (!root.TryGetProperty("data", out var data) ||
+            data.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            if (Int32(root, "data_total") != 0)
+                throw new InvalidDataException("allowance_list has a count but no data");
+            return new AllowanceListResponse(Int32(root, "page_total"), []);
+        }
+        if (data.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("allowance_list data is not an array");
+        var results = new List<AllowanceListItem>();
+        foreach (var entry in data.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("allowance_list item is not an object");
+            var number = Text(entry, "allowance_number");
+            if (number.Length == 0 || number.Length > 16)
+                throw new InvalidDataException("allowance_list missing official allowance number");
+            var originals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (entry.TryGetProperty("product_item", out var items))
+            {
+                if (items.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
+                    throw new InvalidDataException("allowance_list product_item is not an array");
+                if (items.ValueKind == JsonValueKind.Array)
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                        throw new InvalidDataException("allowance_list product_item is not an object");
+                    var original = Text(item, "original_invoice_number");
+                    if (original.Length != 0) originals.Add(original);
+                }
+            }
+            results.Add(new AllowanceListItem(number, originals.ToArray()));
+        }
+        return new AllowanceListResponse(Int32(root, "page_total"), results);
+    }
+
     public async Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default)
     {
         var request = invoiceNumbers.Select(number => number.Trim()).Where(number => number.Length != 0)

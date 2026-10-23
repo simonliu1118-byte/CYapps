@@ -43,7 +43,7 @@ async function limited(response:Response):Promise<string>{
 }
 // Called ONCE after the D1 send fence. Never retries / issues a new number.
 export async function postNumberedAllowanceOnce(
-  input:OneShotAllowanceIssue,transport:typeof fetch=fetch,now:()=>Date=()=>new Date()
+  input:OneShotAllowanceIssue,transport:typeof fetch=fetch,now:()=>Date=()=>new Date(),observe?:(status?:number)=>Promise<void>
 ):Promise<OneShotAllowanceOutcome>{
   if(!/^[0-9]{8}$/.test(input.sellerInvoice)||
     !/^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$/.test(input.allowanceNumber)||
@@ -76,6 +76,7 @@ export async function postNumberedAllowanceOnce(
         "accept":"application/json"},body:form.toString(),
       signal:AbortSignal.timeout(8000)});
   }catch{return{kind:"unknown_result"};}
+  await observe?.(response.status);
   if(!response.ok)return{kind:"unknown_result"};
   let root:ObjectValue;
   try{

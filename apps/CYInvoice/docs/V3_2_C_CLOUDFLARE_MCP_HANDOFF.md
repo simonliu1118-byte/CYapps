@@ -1,47 +1,65 @@
-# CYInvoice V3.2-C：原 Cloudflare schema19 本機 Work + MCP 交接
+# CYInvoice V3.2：schema22維護完成與後續驗收
 
-## 現行停點：0019／Worker 標記升級（V3.1.32 Source；尚未遠端執行）
+更新：2026-10-23（Asia/Taipei）。工程V3.1.42／BUILD=0、Cloud Source 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
 
-0019 已有唯一 canonical 來源 `cloud/migrations/0019_allowance_manual_review_audit.sql`；原 D1／Worker 仍依先前本機回報為 schema18。本文件是下一批作業提案，**不代表使用者已授權遠端執行**。先核對本批精確 CI head／main、原 CYInvoice Account／D1／Worker，禁止新建替代資源或碰 CYID 專用 D1。
+**schema21→22及配套原Worker維護已由使用者本機MCP完成報告確認；遠端操作已停止。** 本對話只核對GitHub Source／CI並回填狀態，未獨立重新查詢Cloudflare。完整備份、回復、資源識別、私有路徑及逐筆計量證據留在使用者私有報告，不貼Public Git／PR。產品驗收以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
 
-1. **先核共用帳號額度**：取得當日全帳號 D1 read／write、Worker requests、方案餘額及其他服務預留量。未知、限流、接近配額時停止；先向使用者報預估與批次上限，再開始資料作業。
-2. **有界盤點與預估**：migration history 依 id 最多 20 筆，必須精確為 0001～0018；按主鍵盤點原 preflight 六表及公司卡、六張折讓表，每表最多取 101 個 opaque ID，只在私有位置計數／比對，不匯出明細。任一表超過 100 筆，先停止重估，不接著掃全表。初盤提案上限約 1,500 rows read；整批提案上限 **5,000 read／500 write／30 Worker requests**，須對照實際餘額獲准，不能當成服務實測保證。
-3. **私有 schema18 備份／回復**：在 DDL 前用本機 MCP 保存原 D1 Time Travel bookmark、可驗證加密備份、原 Worker version／完整 binding 與非折讓資料指紋，實際確認還原方式可用。這份 schema18 bookmark 與稍後 schema19 preflight 產生的 bookmark 必須分開標示；不得把事後 bookmark 冒充升級前備份。
-4. **僅套一次 0019**：走正規 migration history，不重套 0014～0018。0019 為 1 個 ALTER／1 表／3 索引／4 觸發器；會掃描既有 reconciliation rows 作欄位檢查／索引建立，不能把沒有商業 INSERT 誤當零計費。若既有證據 N≤100，DDL 初估額外 read 約 2N＋metadata、write 約 N＋metadata，真實計量以 D1 meta 為準。失敗立即停，不以重試／DROP TABLE 代替回復。
-5. **DB 後驗再改 Worker marker**：確認完整 canonical 0001～0019、舊資料／證據內容不變、新欄位／索引／觸發器、FK／integrity 及新人工 Audit 表為空。原 Worker 仍標記 18 時，才在原部署 owner 明確選 `deploy`＋`CYINVOICE_SCHEMA_UPGRADE=18:19`（workflow 對應 `schema_upgrade=18:19`）。before／deploy／after 三段使用相同意圖與 private checkpoint；未套完 0019、來源不為 18、未知跳版、checkpoint 不符或未真正部署一律拒絕。
-6. **僅 marker 變為 19**：原 CYID／Device scopes、D1／Services／Secrets／Rate limits、自訂 vars、公司卡及其他設定必須完整繼承原 active version。`ALLOWANCE_API_ENABLED`、`ALLOWANCE_G0401_SEND_ENABLED`、`ALLOWANCE_MANUAL_REVIEW_ENABLED`、`ALLOWANCE_EXTERNAL_COLLISION_ENABLED` 均須不存在或 `false`；本批不啟用折讓、不做光貿 g0401／g0501，也不發布 Release。
+## 最新完成：schema21→22／V3.1.42配套
 
-預檢會逐次核對精確 source identity、20 分鐘內的 checkpoint、原 active version 及部署後 binding readback；逾時／失去回覆時先唯讀確認，不能自動再 upload／deploy。新標記已為 19 時不可重用 18:19 意圖；之後一般 code-only 部署維持既有保留語意。
+- 本機回報採用Source `16f6a6ce03681b157ceec2805657d3a409935221`；原服務升為schema22／Cloud 0.9.4。唯一0022成功套用一次，既有資料與稽核保留；0020／0021不修改或重跑，不重建服務。
+- 單公司卡名稱／同步版次及安全退回已具配套結構；公司／金鑰原revision保留，card_revision自原revision初始化。保留歷史核准／Ledger／Claim／Audit，不補造權威或解鎖未知交易。
+- 本機回報備份已實際還原、故障回滾／成功升級及前後一致性檢查完成；這是維護證據，不代表真人公司卡同步、憑證可用性或光貿交易已驗收。
+- 五個折讓旗標維持關閉。未授權入口拒絕只證明拒絕行為，不代替真人Device同步或正向業務驗收。未執行真光貿交易、合併PR或正式Release。
+- 直接SQL計量與共用帳號差額的窗口及歸屬不同，不能當成完整作業計費量；本批完整讀取是否落在核准上限內仍不能獨立證明。不得為補計量拆分而重跑遠端查核。
+- 工程包及本機下載雜湊與同一Source的GitHub Artifact一致；使用者可開始公司卡／畫面驗收。本機結構及配套更新已完成，不再列為取卡前的未部署阻塞。
 
-**回復與完成紀錄**：異常先停止並保留私有證據。Worker 回退使用保存的原 version；D1 已是 additive schema19 時，不自動反向 SQL 或還原整庫，須先評估期間其他寫入、備份與業務影響，再由使用者決定。完成報告逐批列真實 rows read／written、Worker requests、預估差異、剩餘額度、原／新版本、備份位置及每個驗證結果。未實測欄位標未驗證。
+## 本輪工程驗證與測試包
 
-本 GitHub 工程批次 Cloudflare 實際 D1 read **0**／write **0**／Worker deploy **0**。C7 可歸因成功政策、公司卡及雙 Windows 真光貿驗收仍未完成；正式 Release 仍 V3.1.0。
+同一Source的[Windows](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169559)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169530)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169550)、[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169615)均成功，已由本對話再次核對；Development實際部署job skipped，本次實際維護依使用者本機MCP報告登記。
 
-## 歷史：schema16→18 已完成的作業紀錄（禁止重跑）
+[V3.1.42工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/39920169559/artifacts/12487625176)對應上述Source。本次僅改文件，不改程式、VERSION／BUILD或套件，不需重新部署。Source／合成測試及未授權拒絕不代替真人畫面、Device取卡、實際環境或財務驗收。
 
-**歷史一次性升級清單 — 已由使用者在 2026-10-21 本機 Work＋Cloudflare MCP 完成並回報。以下 0017／0018 步驟不得再執行！**
+## 前批維護歷史
 
-依使用者提交的本機驗收報告，原 CYInvoice D1 已從 0016 受控升至 schema18（0017、0018 各一次）；原 Worker 已部署 SCHEMA_VERSION=18，保留 CYID、Secrets、Bindings，`ALLOWANCE_API_ENABLED=false`，九條折讓入口仍關閉。六張新表皆空；私有 DPAPI 備份／還原、FK、quick_check 與 runtime 驗證已報告通過。帳號層級 read +1711、write +55、Worker request +12，未超預算。**本文件記錄的是「本機 MCP 回報」，非本 GitHub 工作對話獨立遠端驗證。**
+## 已完成：原D1／Worker20→21
 
-下方舊步驟僅供稽核／回顧，**不得重套任何 0014～0018 Migration，也不得重建測試 D1／Worker**。C7 與 V3.2 其餘功能仍未通過真光貿／雙機驗收；任何新 D1／Worker／公司卡／光貿操作需另由使用者本機 Work 按共同規則重新評估與授權。最新交付範圍與順序見 [V3.2 完整計畫](V3_2_IMPLEMENTATION_PLAN.md)。
+- 實際部署Source為 `83e7b691fc494186e7a0d373654c888e83874fde`，原分支 `cyinvoice/feat-v32-de-void-coordination`。本機核對正式規則、CYID consumer相容性及指定Source工程CI。
+- 原D1 schema21、原Worker marker21；正規history精確0001～0021，0021僅一次。舊資料／稽核、schema與history、FK／quick_check及canonical before／deploy／after均由本機報告驗證通過。
+- 原服務與綁定保留，線上bundle與指定Source一致；未新增Worker／D1、未直接讀寫CYID D1，未回填舊authority snapshot或解鎖舊Claim。
+- schema20完整加密備份及隔離實際還原、0021失敗回滾／成功升級演練、非空歷史Ledger／Claim合成驗證通過；schema18～20前批私有證據已交回。備份／回復位置與具體識別只保留私有紀錄，未驗的回復情境不推定完成。
+- 不重跑0017～0021，不修改已套用migration。Worker回退不會回退D1；不得反向DROP或自動整庫還原，回復仍須先評估新寫入與交易狀態、取得對應決定。
 
-### 歷史工作邊界與順序（0017／0018，不再執行）
+## 財務入口仍關閉
 
-1. **僅唯讀盤點**：確認 Cloudflare Account、**原 CYInvoice** Worker 與綁定原 D1 的實際 ID、當前 Worker Version、`d1_migrations` 確實停在 `0016_non_allowance_work_items.sql`、CYID Consumer 連線、`ALLOWANCE_API_ENABLED` 仍為關閉；不要使用任何測試／替代 Worker 或 D1，也不得觸碰 CYID 專用 D1。
-2. **事前額度報告**（共通規則 2.9.1 §11.3）：從使用者授權的 MCP／後台讀取 Cloudflare **共用帳號當日** D1 rows read/written、Worker requests 與方案上限／剩餘量；列出本工作預計影響的資料庫、估計讀寫列數、SQL／API 次數、額度百分比、索引及中止條件，**先向使用者說明，再進入任何大量資料作業**。不知道額度、費用或有不足／限流，**立即停止**，不重試或繞路。
-3. **備份與回退判準**：在任何 DDL 前按 Cloudflare 受支援方式建立完整可驗證備份／Time Travel Bookmark，核對原 D1 的 Workspace、Device、company_settings 與現有非折讓 Work Item 基準總數及 FK／integrity（使用有限量聚合查詢／主鍵定位，不做重複全表明細掃描）。備份位置和復原程序需可由本機 Work 立即定位；不要在 GitHub 留備份或機密。
-4. **遷移提案**：僅使用本 repo 經 CI 審核的 `cloud/migrations/0017_allowance_applications.sql`、`0018_allowance_frozen_ledger.sql`，依序一筆一筆對**原 CYInvoice D1** 套用，沿用正規 migration history；**絕不重套 0014～0016**，也不可用 DROP TABLE 當回退。兩筆 SQL 僅建立新表／索引／觸發器，不含存量 Work Item 修改。
-5. **資料庫後驗**：以限量 schema/PRAGMA、聚合查詢確認 migration history 精確前綴為 0001～0018、新的六張折讓專屬表、四個索引、二十三個觸發器存在，FK 與原 Workspace／Device／非折讓 Work Item 未變。異常立刻停下，依既定備份／Time Travel 人工判斷復原，不直接執行下一步。
-6. **Worker 部署審核**：僅在 D1 已驗證為 schema18 後，檢查 `SCHEMA_VERSION=18`、原 Worker 服務綁定（`DB`、`IDENTITY`、`IDENTITY_AUTHORITY`）、公司 AES-GCM Secret 是否已有安全配置，確保部署不覆蓋其他 runtime Secrets/Bindings。先通過 deployment preflight；`ALLOWANCE_API_ENABLED` **保持關閉**，未批准不可透過公開 route 進行折讓。
-7. **分段啟用與驗收**：待另行確認可歸因的一次性 g0401／官方未確認狀態策略、授權拒絕矩陣、兩台 Windows 實機、光貿測試環境與回退條件後，才評估由使用者本機 Work 手動啟用。未經新批准不進行任何正式帳務送出、g0501、真實客戶資料探測、正式 Release。
+| 旗標 | 本機完成時 |
+| --- | --- |
+| ALLOWANCE_API_ENABLED | false |
+| ALLOWANCE_G0401_SEND_ENABLED | 未設定（關閉） |
+| ALLOWANCE_G0501_SEND_ENABLED | 未設定（關閉） |
+| ALLOWANCE_MANUAL_REVIEW_ENABLED | 未設定（關閉） |
+| ALLOWANCE_EXTERNAL_COLLISION_ENABLED | 未設定（關閉） |
 
-### 歷史事前計量預估與禁止超額規則
+無交易內容的開立／作廢核准入口驗證均為503／ALLOWANCES_NOT_READY。未做真光貿交易，這只證明入口關閉，不代表啟用後業務驗收。
 
-- **工程端離線已數得的 DDL 規模**：0017 為 2 表／2 索引／6 觸發器；0018 為 4 表／2 索引／17 觸發器；合計 **6 張新表、4 個新索引、23 個新觸發器**，合計 33 個 CREATE DDL。**兩份遷移沒有 INSERT、UPDATE 或 DELETE 舊帳務資料的語句**。
-- **估計資料異動**：只建立空白折讓結構，預計沒有存量發票、Workspace、Device 或 Work Item 逐列更新。Cloudflare 帳單計數與實際讀寫量需以本機 MCP／帳戶 Dashboard 為準，不能把「0 筆商業資料更動」假設成「0 D1 計費量」。
-- **查核限制**：每步固定少量索引定位／表結構檢查，絕不以全表導出或逐列密集重讀代替備份；每次查核前列出具體 SQL、預估 rows read 與停止門檻；遇 D1 配額接近上限，先暫緩、跨日作業或請示。
-- **完成報告**：本機 Work 應記錄每步原 D1 schema、migration 進度、真正 D1 rows read／written 和 Worker requests（前後差）、預估差距、剩餘額度、保留的備份／rollback 路徑與 CI SHA。未在真 Cloudflare 查證的欄位請標註「未驗證」，不得填成功。
+## 前批schema21工程驗證（歷史）
 
-### 歷史 GitHub 回合資料用量
+已部署Source的[Windows](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161719)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161481)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161548)、[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/39797161732)均成功。Development實際部署job skipped；實際維護由本機MCP執行。
 
-此工作只透過 GitHub 讀寫程式碼及執行 CI 合成資料庫，沒有連線使用 Cloudflare 帳號；本回合 Cloudflare **實際 D1 讀取 0、寫入 0、Worker 部署 0**（以本對話未觸發 Cloudflare 操作為準），與本機 Work 隨後的實際操作分別報告。
+本機另完成TypeScript、部署預檢、migration rehearsal、coordinator及Worker dry-run。本機交回時未改Source／PR；本次文件歸檔不改已部署程式與版本，不需重新部署。
+
+## 前批schema21計量結論與限制（歷史）
+
+本批另獲維護授權，未延用前批額度例外；完整估算、逐筆SQL meta、帳號前後快照、實際讀寫／request量及差異已在原對話完整報告與私有收據中交回，不複製到公開文件。
+
+**直接SQL meta不是完整計費總量，共用帳號差額也不能全部歸因本作業；不能宣告本批完整計費讀取已確認在原5000參考上限內。** 原報告記錄共用差額略高於參考上限，無法精確判定本作業本身是否超額；已停止遠端操作，未提高上限。不能把未歸屬差額全歸因備份，也不能以空業務表推定DDL零計費。
+
+本次文件歸檔無Cloudflare讀寫、部署或交易；與已完成本機維護的實際用量分開。下一階段需另估用量及取得授權，不為補文件重跑遠端查核。
+
+## 下一階段尚待完成
+
+1. 核對測試公司卡、真光貿API環境及可用性；盤點實際Local舊待辦與未知Claim。未驗數量不記0，不把舊全域停送門檻重新作為已完成結構維護的前置條件。
+2. API／g0401／g0501適用功能啟用及測試交易需另授權；舊兩個人工旗標繼續關閉，非新流程正常caller。
+3. 按唯一計畫驗收一次核准、自動配號／送出／查回、等待／異常分類、斷線重啟、診斷與g0501有限重試；Local／CYID各遵守原交易owner，舊未知Claim只查回，不因新版跨權威重送。
+4. 新流程真驗及舊待辦盤點完成後，退役最後舊網站人工入口／caller，歷史唯讀。雙Windows／不同Device真人驗收依原決議於V3.2上線後補做，未冒稱完成。
+
+本機已停下；本報告僅更新狀態，未合併PR、未發布Release，維護授權不延伸到第二階段。

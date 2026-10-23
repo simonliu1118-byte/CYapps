@@ -9,7 +9,9 @@ import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
-import type {AllowanceManagerPreviewTarget} from "./allowance-manager-preview";
+export interface AllowanceApprovalTarget {
+ workspaceId:string;applicationId:string;deviceId:string;expectedRevision:number;
+}
 
 export interface CloudAllowanceApproval {
  approvalId:string;
@@ -35,7 +37,7 @@ function sameManager(a:AllowanceActor|null,b:AllowanceActor|null,ws:string):bool
  return manager(a,ws)&&manager(b,ws)&&
    a.employeeId===b.employeeId&&a.workspaceRole===b.workspaceRole;
 }
-async function validDevice(db:D1Database,t:AllowanceManagerPreviewTarget):Promise<boolean>{
+async function validDevice(db:D1Database,t:AllowanceApprovalTarget):Promise<boolean>{
  const row=await db.prepare(`SELECT d.device_id FROM devices d
   JOIN workspaces w ON w.workspace_id=d.workspace_id
   WHERE d.device_id=?1 AND d.workspace_id=?2 AND
@@ -44,11 +46,11 @@ async function validDevice(db:D1Database,t:AllowanceManagerPreviewTarget):Promis
   .bind(t.deviceId,t.workspaceId).first<{device_id:string}>();
  return !!row;
 }
-async function inReview(db:D1Database,t:AllowanceManagerPreviewTarget,
+async function inReview(db:D1Database,t:AllowanceApprovalTarget,
  actor:string,requestHash:string):Promise<boolean>{
  const row=await db.prepare(`SELECT application_id FROM allowance_applications
-  WHERE application_id=?1 AND workspace_id=?2 AND status='review'
-   AND revision=?3 AND manager_actor_id=?4 AND request_hash=?5 LIMIT 1`)
+  WHERE application_id=?1 AND workspace_id=?2 AND (status='open' OR (status='review' AND manager_actor_id=?4))
+   AND revision=?3 AND request_hash=?5 LIMIT 1`)
    .bind(t.applicationId,t.workspaceId,t.expectedRevision,actor,requestHash)
    .first<{application_id:string}>();
  return !!row;
@@ -65,20 +67,21 @@ function nowUtc(clock:()=>Date):Date{
 // No separate .run() calls may split the two statements: a crash between
 // operations would otherwise orphan the approval or misstate business status.
 export async function approveCloudAllowanceAfterOfficialProof(
- db:D1Database,t:AllowanceManagerPreviewTarget,ctx:CloudAllowanceContext,
+ db:D1Database,t:AllowanceApprovalTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
  clock:()=>Date=()=>new Date()
 ):Promise<CloudAllowanceApproval>{
+ if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
  if(typeof t.workspaceId!=="string"||!/^ws_[A-Za-z0-9_-]{3,100}$/.test(t.workspaceId)||
     typeof t.applicationId!=="string"||!ID.test(t.applicationId)||
     typeof t.deviceId!=="string"||!DEVICE.test(t.deviceId)||
-    !Number.isSafeInteger(t.expectedRevision)||t.expectedRevision<2)
+    !Number.isSafeInteger(t.expectedRevision)||t.expectedRevision<1)
   throw new Error("ALLOWANCE_APPROVAL_TARGET_INVALID");
  const first=await authority.revalidate();
  if(!manager(first,t.workspaceId)||!await validDevice(db,t))
   throw new Error("ALLOWANCE_APPROVAL_MANAGER_REQUIRED");
  const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
- if(frozen.status!=="review"||frozen.revision!==t.expectedRevision||
+ if(!["open","review"].includes(frozen.status)||frozen.revision!==t.expectedRevision||
     !await inReview(db,t,first.employeeId,frozen.requestHash))
   throw new Error("ALLOWANCE_APPROVAL_STALE");
  const company=await loadAmegoCompanySettingsForGateway(
@@ -114,6 +117,7 @@ export async function approveCloudAllowanceAfterOfficialProof(
   throw new Error("ALLOWANCE_APPROVAL_COMPANY_CHANGED");
  // A short-lived grant is only a permission for the NEXT one-shot flow to
  // re-read AMEGO. The date is UTC and its expiration is not g0401 evidence.
+ const reviewedRevision=t.expectedRevision+(frozen.status==="open"?1:0);
  const approvalId="apr_"+crypto.randomUUID();
  const approvedAtUtc=date.toISOString();
  const validUntilUtc=new Date(date.valueOf()+5*60_000).toISOString();
@@ -122,8 +126,8 @@ export async function approveCloudAllowanceAfterOfficialProof(
  const insert=db.prepare(`INSERT INTO allowance_execution_approvals
   (approval_id,application_id,workspace_id,reviewed_revision,
    request_hash,official_snapshot_hash,official_checked_at,
-   manager_actor_id,manager_device_id,approved_at,valid_until_utc)
-  SELECT ?1,a.application_id,a.workspace_id,?4,?5,?6,?7,?8,?9,?10,?11
+   manager_actor_id,manager_device_id,approved_at,valid_until_utc${first.authoritySnapshot?",authority_snapshot":""})
+  SELECT ?1,a.application_id,a.workspace_id,?4,?5,?6,?7,?8,?9,?10,?11${first.authoritySnapshot?",?15":""}
   FROM allowance_applications a
   JOIN allowance_frozen_requests f ON f.application_id=a.application_id
    AND f.workspace_id=a.workspace_id
@@ -144,11 +148,11 @@ export async function approveCloudAllowanceAfterOfficialProof(
      WHERE p.application_id=a.application_id)
    AND NOT EXISTS (SELECT 1 FROM allowance_number_ledger l
      WHERE l.application_id=a.application_id)`)
-  .bind(approvalId,t.applicationId,t.workspaceId,t.expectedRevision,
+  .bind(approvalId,t.applicationId,t.workspaceId,reviewedRevision,
     frozen.requestHash,proof.officialEvidenceHash,
     proof.officialCheckedAtUtc,first.employeeId,t.deviceId,
     approvedAtUtc,validUntilUtc,company.revision,company.sellerInvoice,
-    frozen.environment);
+    frozen.environment, ...(first.authoritySnapshot?[first.authoritySnapshot]:[]));
  const transition=db.prepare(`UPDATE allowance_applications SET
    status='approved',revision=revision+1,
    actor_id=?1,updated_by_device_id=?2,updated_at=?3
@@ -160,22 +164,25 @@ export async function approveCloudAllowanceAfterOfficialProof(
        AND p.reviewed_revision=?6 AND p.manager_actor_id=?1
        AND p.request_hash=?7 AND p.approval_id=?8)`)
   .bind(first.employeeId,t.deviceId,approvedAtUtc,t.applicationId,
-    t.workspaceId,t.expectedRevision,frozen.requestHash,approvalId);
+    t.workspaceId,reviewedRevision,frozen.requestHash,approvalId);
  // D1.batch executes statements in a single transaction and rolls back
  // if any statement throws (including the schema's immutable triggers).
  // Both SQL statements use identical CAS/source fences within that txn.
  // A zero-change or ambiguous response is NOT permission to retry approval.
  let result:D1Result[];
- try{result=await db.batch([insert,transition]);}
+ const review=db.prepare(`UPDATE allowance_applications SET status='review',revision=revision+1,
+  manager_actor_id=?1,actor_id=?1,updated_by_device_id=?2,updated_at=?3
+  WHERE application_id=?4 AND workspace_id=?5 AND status='open' AND revision=?6`)
+  .bind(first.employeeId,t.deviceId,approvedAtUtc,t.applicationId,t.workspaceId,t.expectedRevision);
+ try{result=await db.batch(frozen.status==="open"?[review,insert,transition]:[insert,transition]);}
  catch{throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");}
- if(result.length!==2||result[0].meta.changes!==1||
-    result[1].meta.changes!==1)
+ if(result.some(r=>r.meta.changes!==1))
   throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");
  const last=await authority.revalidate();
  if(!sameManager(first,last,t.workspaceId)||!await validDevice(db,t))
   throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");
  return {approvalId,applicationId:t.applicationId,
-  approvedRevision:t.expectedRevision+1,managerActorId:first.employeeId,
+  approvedRevision:reviewedRevision+1,managerActorId:first.employeeId,
   approvedAtUtc,validUntilUtc,requestHash:frozen.requestHash,
   officialEvidenceHash:proof.officialEvidenceHash,
   numberReserved:false,sentToAmego:false};
