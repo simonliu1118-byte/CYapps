@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 // Manager-only presentation for exceptional Work Items, never an invoice ledger.
 // This form cannot issue, void, retry or acknowledge an AMEGO provider action.
-internal sealed class CloudWorkItemsForm : Form
+internal sealed class CloudWorkItemsControl : UserControl
 {
     private readonly LocalRepository repository;
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false });
@@ -27,26 +27,24 @@ internal sealed class CloudWorkItemsForm : Form
     private CloudWorkItemCursor? cursor;
     private CloudWorkItemCursor? nextCursor;
     private bool busy;
+    private bool initialLoad;
 
     // Shared actual presentation path: the layout smoke uses this constructor
     // without loading settings, Device credentials, CYID, or making HTTP calls.
-    private CloudWorkItemsForm()
+    private CloudWorkItemsControl()
     {
         repository = null!;
         client = null!;
-        Text = "跨機待辦（非折讓）";
-        StartPosition = FormStartPosition.CenterParent;
+
         ClientSize = new Size(920, 500);
         MinimumSize = new Size(740, 400);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
-        ShowIcon = false;
         BuildLayout();
-        FormClosing += (_, _) => lifetime.Cancel();
-        FormClosed += (_, _) => { http.Dispose(); lifetime.Dispose(); };
+
     }
 
-    public CloudWorkItemsForm(LocalRepository repository) : this()
+    public CloudWorkItemsControl(LocalRepository repository) : this()
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         var setting = repository.Settings.LoadOrCreate();
@@ -57,7 +55,13 @@ internal sealed class CloudWorkItemsForm : Form
         var token = repository.Settings.CloudDeviceToken(setting);
         client = new CloudWorkItemClient(http, new Uri(setting.CloudBaseUrl, UriKind.Absolute),
             token, setting.CloudWorkspaceId);
-        Shown += async (_, _) => await LoadPageAsync(reset: true);
+        VisibleChanged += async (_,_) =>
+        {
+            if (!Visible || initialLoad) return;
+            initialLoad = true;
+            await LoadPageAsync(reset: true);
+        };
+
     }
 
     private void BuildLayout()
@@ -80,7 +84,7 @@ internal sealed class CloudWorkItemsForm : Form
         itemIdLookup.TextChanged += (_, _) => UpdateActions();
         nextPage.Click += async (_, _) => await LoadPageAsync(reset: false);
         archive.Click += async (_, _) => await ArchiveAsync();
-        close.Click += (_, _) => Close();
+        close.Click += (_, _) => FindForm()?.Close();
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
             RowCount = 4, Padding = new Padding(12) };
@@ -268,7 +272,7 @@ internal sealed class CloudWorkItemsForm : Form
             if (IsDisposed) return;
             ClearView();
             status.Text = error is CloudApiException api && api.Code == "WORK_ITEMS_NOT_READY"
-                ? "跨機待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
+                ? "一般待辦尚未啟用，等待最後階段的本機 Cloudflare MCP 升級。"
                 : "查詢失敗，請檢查 CYID 權限、裝置狀態及連線；未變更工作項目。";
         }
         finally
@@ -361,12 +365,19 @@ internal sealed class CloudWorkItemsForm : Form
         };
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !IsDisposed) { lifetime.Cancel(); http.Dispose(); lifetime.Dispose(); }
+        base.Dispose(disposing);
+    }
+
     internal static void VerifySmokeLayout(Form owner)
     {
         // Exercise the SAME controls and layout as production, not an empty
         // placeholder Form. No repository settings, credentials, or network.
-        using var sample = new CloudWorkItemsForm();
-        sample.Show(owner);
+        using var sample = new CloudWorkItemsControl();
+        using var host = new Form { ClientSize = sample.ClientSize, ShowIcon = false };
+        sample.Dock = DockStyle.Fill; host.Controls.Add(sample); host.Show(owner);
         sample.PerformLayout();
         if (sample.ClientSize.Width != 920 || sample.ClientSize.Height != 500 ||
             sample.Controls.Count != 1 ||
@@ -383,29 +394,29 @@ internal sealed class CloudWorkItemsForm : Form
             !sample.refresh.Enabled || sample.nextPage.Enabled || sample.lookup.Enabled ||
             sample.itemIdLookup.Width <= 0 ||
             sample.archive.Enabled)
-            throw new InvalidOperationException("跨機待辦控制項或版面配置異常");
-        static void AssertViewportColumns(CloudWorkItemsForm form)
+            throw new InvalidOperationException("一般待辦控制項或版面配置異常");
+        static void AssertViewportColumns(CloudWorkItemsControl form)
         {
             form.FitColumnsToViewport();
             var used = form.entries.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
             var room = form.entries.ClientSize.Width - SystemInformation.VerticalScrollBarWidth;
             if (room <= 0 || used > room || form.entries.Columns[6].Width < 160)
                 throw new InvalidOperationException(
-                    "跨機待辦欄寬超過視窗可用寬度，或工作項目 ID 欄過窄");
+                    "一般待辦欄寬超過視窗可用寬度，或工作項目 ID 欄過窄");
         }
         AssertViewportColumns(sample);
-        sample.ClientSize = new Size(740, 400);
+        host.ClientSize = new Size(740, 400);
         sample.PerformLayout();
         AssertViewportColumns(sample);
-        sample.ClientSize = new Size(920, 500);
+        host.ClientSize = new Size(920, 500);
         sample.PerformLayout();
         AssertViewportColumns(sample);
         sample.itemIdLookup.Text = "wi_synthetic_readback";
         if (!sample.lookup.Enabled)
-            throw new InvalidOperationException("跨機待辦 ID 查回按鈕應隨有效輸入啟用");
+            throw new InvalidOperationException("一般待辦 ID 查回按鈕應隨有效輸入啟用");
         sample.itemIdLookup.Clear();
         if (sample.lookup.Enabled)
-            throw new InvalidOperationException("跨機待辦空白 ID 不得送出查回");
-        sample.Close();
+            throw new InvalidOperationException("一般待辦空白 ID 不得送出查回");
+        host.Close();
     }
 }

@@ -40,7 +40,7 @@ internal static class Program
             ("allowance discovery overflow never starts unbounded queries", TestAllowanceDiscoveryLimitAsync),
             ("three allowance list pages of 50 are accepted", TestAllowanceListCapacityAsync),
             ("existing allowance cancellation is refreshed without creation event", TestExistingAllowanceCancellationAsync),
-            ("test list discovers only CYInvoice-prefixed invoices", TestTestEnvironmentPrefixDiscoveryAsync),
+            ("test list queries known operations and ignores foreign matching prefixes", TestTestEnvironmentPrefixDiscoveryAsync),
             ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
@@ -735,31 +735,27 @@ internal static class Program
         using var temporary = new TemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
-        var prefix = TestOrderIdPrefix.ForDate(FixedDate);
-        var ours = prefix + "66091800123456";
+        var ours = TestOrderIdPrefix.Apply("66091800123456", FixedDate);
+        var known = new InvoiceRecord { Id="known-test-operation", Environment=Environments.Test,
+            SellerInvoice=AmegoDefaults.TestInvoice, OrderId="66091800123456", OriginalOrderId="66091800123456",
+            ApiOrderId=ours, InvoiceNumber="DD12345678", InvoiceDate="2026/09/18", InvoiceState=InvoiceStates.Opened, Amount=100 };
+        repository.Invoices.Append(known);
         var fake = new FakeGateway();
         fake.Pages[1] = ListResponse(1,
-        [
-            Remote("DD12345678", ours, "100", buyer: "測試消費者"),
-            Remote("ZZ12345678", "OTHER-USER-ORDER", "999", buyer: "其他測試者"),
-        ]);
-        fake.QueryByInvoice["DD12345678"] = Query("DD12345678", ours, "100", "測試消費者");
-
-        var result = await Sync(repository, fake).SyncRecentAsync();
-        Equal(1, fake.ListCalls);
-        Equal(FixedDate, fake.LastListStart);
-        Equal(FixedDate, fake.LastListEnd);
-        Equal(1, result.RemoteCount);
-        Equal(1, result.Inserted);
-        Equal(1, result.Queried);
-        Equal(1, repository.Invoices.LoadOrCreate().Count);
-        var record = repository.Invoices.LoadOrCreate().Single();
-        Equal(RecordOrigins.Sync, record.RecordOrigin);
-        Equal("66091800123456", record.OrderId);
-        Equal("66091800123456", record.OriginalOrderId);
-        Equal(ours, record.ApiOrderId);
-        Equal(InvoiceSources.Mo, record.Source);
-        Equal(InvoiceSourceInference.SyncTag, InvoiceSourceInference.DisplayTag(record));
+        [ Remote("DD12345678",ours,"100",buyer:"測試消費者"),
+          Remote("ZZ12345678",TestOrderIdPrefix.Apply("FOREIGN",FixedDate),"999",buyer:"其他測試者") ]);
+        fake.QueryByInvoice["DD12345678"] = Query("DD12345678",ours,"100","測試消費者");
+        var result = await Sync(repository,fake).SyncRecentAsync();
+        Equal(1,result.RemoteCount); Equal(0,result.Inserted); Equal(1,result.Queried);
+        Equal(1,fake.QueryByInvoiceCalls); Equal("DD12345678",fake.LastInvoiceQuery);
+        Equal(1,repository.Invoices.LoadOrCreate().Count);
+        // Foreign allowance originals never enter the query budget or create a false issue.
+        fake.AllowancePages[1] = new AllowanceListResponse(1,
+            [new AllowanceListItem("FOREIGN_ALLOWANCE",["ZZ12345678"]) ]);
+        var automatic = await new InvoiceAutomaticSyncService(repository,Sync(repository,fake),()=>FixedNow).SyncAsync();
+        Equal(0,automatic.Problems.Count); Equal(2,fake.QueryByInvoiceCalls);
+        Equal(0,fake.AllowanceListCalls);
+        Equal(0,new InvoiceSyncIssueStore(repository.DataDirectory).Unresolved("test|"+AmegoDefaults.TestInvoice).Count);
     }
 
     private static async Task TestTestEnvironmentSkipsFailedAsync()

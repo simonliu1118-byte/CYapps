@@ -40,6 +40,7 @@ public sealed class Settings
     [JsonPropertyName("prod_app_key_enc")] public string ProductionAppKeyEncrypted { get; set; } = string.Empty;
     [JsonPropertyName("mo_password_enc")] public string MoPasswordEncrypted { get; set; } = string.Empty;
     // Source metadata only: no plaintext, ciphertext or CYID session stored here.
+    [JsonPropertyName("production_company_name")] public string ProductionCompanyName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_company_applied_revision")] public int CloudCompanyAppliedRevision { get; set; }
     [JsonPropertyName("cloud_company_applied_workspace_id")] public string CloudCompanyAppliedWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_company_applied_device_id")] public string CloudCompanyAppliedDeviceId { get; set; } = string.Empty;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using CYInvoice.Core.Cloud;
 using System.Text;
 
 namespace CYInvoice.Core.Storage;
@@ -29,6 +30,34 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         {
             Validate(settings);
             JsonFile.Write(path, settings);
+        }
+    }
+
+    public void ApplyCloudCompanyProvision(Settings expected, CloudCompanyProvision received)
+    {
+        if (!received.Matches(new CloudCompanySettingsStatus(received.SellerInvoice, received.Revision, true, true, received.CompanyName)) ||
+            received.CompanyName.Length > 100 || received.CompanyName.Any(char.IsControl))
+            throw new InvalidDataException("公司卡內容不完整，未套用本機設定。");
+        lock (gate)
+        {
+            var latest = LoadOrCreate();
+            if (latest.CloudMode != CloudModes.CloudPreferred || !latest.CloudEmployeeAuthorityReady ||
+                latest.CloudIdentityProvider != "CYID" || latest.CloudWorkspaceId != expected.CloudWorkspaceId ||
+                latest.CloudDeviceId != expected.CloudDeviceId || latest.CloudBaseUrl != expected.CloudBaseUrl ||
+                latest.CyIdBindingEncrypted != expected.CyIdBindingEncrypted ||
+                latest.CloudDeviceTokenEncrypted != expected.CloudDeviceTokenEncrypted ||
+                latest.CloudCompanyAppliedRevision != expected.CloudCompanyAppliedRevision ||
+                latest.ProductionInvoice != expected.ProductionInvoice ||
+                latest.ProductionAppKeyEncrypted != expected.ProductionAppKeyEncrypted ||
+                latest.MoPasswordEncrypted != expected.MoPasswordEncrypted ||
+                received.Revision < latest.CloudCompanyAppliedRevision)
+                throw new InvalidOperationException("公司卡同步期間裝置或憑證已變更，沒有覆寫本機設定。");
+            latest.ProductionInvoice = received.SellerInvoice;
+            latest.ProductionCompanyName = received.CompanyName;
+            SetProductionAppKey(latest, received.AmegoAppKey);
+            SetMoPassword(latest, received.MoExcelPassword);
+            StampCloudCompanyProvision(latest, received.Revision);
+            Save(latest); // JSON atomic replace; never save partially protected credentials.
         }
     }
 
@@ -68,7 +97,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
 
     public string ProductionAppKey(Settings settings) => Unprotect(settings.ProductionAppKeyEncrypted);
 
-    // Called only after explicit CYID SUPER_ADMIN provisioning and successful
+    // Called only after authorized CYID Device synchronization and successful
     // DPAPI encryption of both credentials. The marker never grants authority.
     public void StampCloudCompanyProvision(Settings settings, int revision)
     {

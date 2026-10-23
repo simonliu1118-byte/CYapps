@@ -6,6 +6,7 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("single-company automatic Device synchronization and atomic DPAPI update", CloudCompanySynchronizationTests.RunAsync),
     ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
     ("revoked-device durable recovery wipes Logs and portable runtime", LocalResetCoordinatorTests.RunAsync),
     ("identity runtime supports Local and CYID only and refuses retired Built-in authority", IdentityProviderFoundationTests.RunAsync),

@@ -217,7 +217,7 @@ internal static class Program
         processing.Close();
 
 
-        using var settings = new SettingsForm(repository);
+        using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show();
         settings.PerformLayout();
         Application.DoEvents();

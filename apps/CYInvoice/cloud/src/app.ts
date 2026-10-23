@@ -140,12 +140,12 @@ export default {
       });
     const companySettingsPath = path === "/v1/company-settings/get" ||
       path === "/v1/company-settings/update" ||
-      path === "/v1/company-settings/provision";
+      path === "/v1/company-settings/sync";
     // Exposing the route requires BOTH an explicit opt-in and the reviewed
-    // recovery+company migration marker. Schema 13 is the existing D1.
+    // single-company synchronization migration marker (schema22).
     // Do not probe missing tables or silently fall back to local credentials.
     if (companySettingsPath && (env.COMPANY_SETTINGS_ENABLED !== "true" ||
-        !/^[0-9]+$/.test(env.SCHEMA_VERSION) || Number(env.SCHEMA_VERSION) < 15))
+        !/^[0-9]+$/.test(env.SCHEMA_VERSION) || Number(env.SCHEMA_VERSION) < 22))
       return Response.json({ok:false,error:{code:"COMPANY_SETTINGS_NOT_READY"}}, {
         status:503,headers:{"cache-control":"no-store"}
       });
@@ -155,7 +155,6 @@ export default {
       "/v1/device-pairings", "/v1/device-invitations",
       "/v1/device-invitations/claim", "/v1/device-invitations/revoke", "/v1/device-invitations/preview",
       "/v1/company-settings/get", "/v1/company-settings/update",
-      "/v1/company-settings/provision",
       "/v1/work-items/get", "/v1/work-items/list",
       "/v1/work-items/create", "/v1/work-items/report-upload-issue",
       "/v1/work-items/transition",

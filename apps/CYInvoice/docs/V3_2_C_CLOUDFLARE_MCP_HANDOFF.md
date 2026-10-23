@@ -4,11 +4,15 @@
 
 **第一階段已由使用者完整本機MCP報告確認完成，遠端操作已停止；第二階段尚未開始。** 本檔只歸檔可公開的狀態摘要；完整部署、備份、計量及回復細節留在使用者私有證據與原對話，不放入Public Git。本對話未重新連線Cloudflare驗證或執行維護。產品流程以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
 
-## 本輪開發交回：Build 2／schema22尚未部署
+## 本輪開發交回：V3.1.42／schema22尚未部署
 
-目前工程Source為V3.1.41 Build 2；下方schema21完成證據只對已部署Source `83e7b691` 有效，不代表本輪修正已上線。逐項收斂與公司卡綁定保留見[唯一現行計畫第5節](V3_2_IMPLEMENTATION_PLAN.md)。
+目前工程Source為V3.1.42／Cloud 0.9.4；下方schema21完成證據只對已部署Source `83e7b691` 有效，不代表本輪修正已上線。逐項收斂與公司卡綁定保留見[唯一現行計畫第5節](V3_2_IMPLEMENTATION_PLAN.md)。
 
-新增唯一forward Source `0022_allowance_unsent_withdrawal.sql`，僅讓原申請在當次主管驗權、確定未送出及CAS保護下退回。沒有新增表、不解鎖舊Claim、不修改已套0020／0021；schema21下新退回入口安全拒絕。原部署owner已支援21:22預檢／意圖，**未執行遠端migration或Worker部署**。原五旗標關閉與前次停點不變；實際21→22維護仍需當次授權及備份／回復／用量證據，不能直接重跑前批。
+新增唯一forward Source `0022_allowance_unsent_withdrawal.sql`，讓原申請在當次主管驗權、確定未送出及CAS保護下退回，並加入原company_settings的company_name／card_revision兩欄。同步版次初始化自原revision；MO／名稱變更不改光貿金鑰版次，不推翻既有核准。沒有新增表、不解鎖舊Claim、不修改已套0020／0021；schema21下新退回入口安全拒絕。原部署owner已支援21:22預檢／意圖，**未執行遠端migration或Worker部署**。原五旗標關閉與前次停點不變；實際21→22維護仍需當次授權及備份／回復／用量證據，不能直接重跑前批。
+
+本批Source另含測試只查已知作業、待辦／處理中單一入口、兩張環境卡與設定視覺、超管一次儲存並同步，以及60秒合併連線／撤權檢查。公司卡以原CYID active Device與當前Application／Workspace access自動取得改版憑證，不保存主管密碼；只在啟動、重連、開啟設定及適用作業前觸發，不加入閒置輪詢。新`/sync`需要此版Worker／schema22及原COMPANY_SETTINGS_ENABLED設定；只更新桌面無法使schema21提供新功能。公司卡尚未設定或同步失敗時，測試開票仍沿原公開測試環境及既有權限規則。
+
+交回本機時先核對PR最新完整Source與精確CI；本檔不授權遠端套用或啟用。不得從Build 2舊Source執行新版0022，亦不得重跑已套0020／0021。依原流程另估實際維護用量、保存備份／還原證據與當次授權；測試交易與財務旗標仍為另一階段，先交付工程包讓使用者自行設定測試卡。
 
 ## 已完成：原D1／Worker20→21
 

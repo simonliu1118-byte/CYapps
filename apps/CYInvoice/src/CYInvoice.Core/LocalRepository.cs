@@ -42,6 +42,16 @@ public sealed class LocalRepository
     public IIdentityProvider IdentityProvider => identityRuntime.Current;
     public ServiceConnectivity Connections { get; }
 
+    public async Task<Cloud.CloudCompanySettingsStatus?> RefreshCompanyCardAsync(CancellationToken cancellationToken = default)
+    {
+        var current = Settings.LoadOrCreate();
+        if (current.CloudMode != CloudModes.CloudPreferred || current.CloudIdentityProvider != "CYID" ||
+            !current.CloudEmployeeAuthorityReady) return null;
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        var client = new Cloud.CloudCompanySettingsClient(http, new Uri(current.CloudBaseUrl), Settings.CloudDeviceToken(current));
+        return await client.SynchronizeAsync(Settings, cancellationToken).ConfigureAwait(false);
+    }
+
     public bool UsesCloudEmployeeAuthority() =>
         IdentityProvider.Kind == IdentityProviderKind.CyId;
 

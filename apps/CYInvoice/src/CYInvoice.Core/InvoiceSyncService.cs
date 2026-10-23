@@ -86,6 +86,21 @@ public sealed class InvoiceSyncService
         }
         if(checkpoint.BudgetDay!=today)checkpoint=checkpoint with{BudgetDay=today,PagesUsed=0,QueriesUsed=0};
         void Save()=>state.SaveCheckpoint(key,scope,JsonSerializer.Serialize(checkpoint));
+        var owned = account.Environment == Environments.Test
+            ? AccountRecords(account).Where(r => r.InvoiceState == InvoiceStates.Opened && r.RecordOrigin == RecordOrigins.Local && IsInRange(r,today,today))
+                .Select(r => r.InvoiceNumber.Trim()).Where(n => n.Length != 0).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (account.Environment == Environments.Test)
+        {
+            // Public allowance_list cannot establish ownership. Refresh only
+            // retained operations, including discovery of their first allowance.
+            checkpoint.Pending.RemoveAll(number => !owned.Contains(number));
+            if (!checkpoint.Listed)
+                foreach (var number in owned.Order(StringComparer.OrdinalIgnoreCase))
+                    if (!checkpoint.Pending.Contains(number,StringComparer.OrdinalIgnoreCase)) checkpoint.Pending.Add(number);
+            checkpoint=checkpoint with { Listed=true };
+            Save();
+        }
         var gateway=gatewayFactory(account.SellerInvoice,account.AppKey);
         var problems=new List<string>(); var queried=0;
         while(!checkpoint.Listed && checkpoint.PagesUsed<pageLimit)
@@ -99,7 +114,8 @@ public sealed class InvoiceSyncService
             {
                 if(allowance.OriginalInvoiceNumbers.Count==0)
                 {
-                    problems.Add(allowance.AllowanceNumber+": 官方折讓缺少原發票關聯"); continue;
+                    problems.Add(allowance.AllowanceNumber+": 官方折讓缺少原發票關聯");
+                    continue;
                 }
                 foreach(var number in allowance.OriginalInvoiceNumbers)
                 {
@@ -110,7 +126,8 @@ public sealed class InvoiceSyncService
             checkpoint=checkpoint with {Listed=listed.PageTotal>0?checkpoint.NextPage>=listed.PageTotal:listed.Data.Count<pageSize,
                 NextPage=checkpoint.NextPage+1}; Save();
         }
-        var current=AccountRecords(account).Where(r=>r.InvoiceState!=InvoiceStates.Failed)
+        var current=AccountRecords(account).Where(r=>r.InvoiceState!=InvoiceStates.Failed &&
+            (account.Environment != Environments.Test || owned.Contains(r.InvoiceNumber.Trim())))
             .GroupBy(r=>r.InvoiceNumber.Trim(),StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g=>g.Key,g=>g.ToArray(),StringComparer.OrdinalIgnoreCase);
         var refresh=new InvoiceDetailRefreshService(repository,(_,_)=>gateway,now);
@@ -174,6 +191,8 @@ public sealed class InvoiceSyncService
         IAmegoGateway gateway, Account account, string invoiceNumber,
         CancellationToken cancellationToken)
     {
+        if (account.Environment == Environments.Test)
+            throw new InvalidOperationException("測試環境只查回既有開票作業，不由共用折讓清單補回未知發票。");
         var response = await gateway.QueryByInvoiceNumberAsync(invoiceNumber, cancellationToken)
             .ConfigureAwait(false);
         if (response.Code != 0 || response.Data is null)
@@ -187,15 +206,6 @@ public sealed class InvoiceSyncService
             query.ProductItems.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("官方原發票必要欄位不完整，未建立本機紀錄");
 
-        // AMEGO test credentials are shared: only adopt a CYInvoice test
-        // invoice whose order prefix matches its own issue date.
-        if (account.Environment == Environments.Test)
-        {
-            if (!DateOnly.TryParseExact(query.InvoiceDate.Trim(), "yyyyMMdd",
-                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var issueDate) ||
-                !TestOrderIdPrefix.TryStripForDate(query.OrderId, issueDate, out _))
-                throw new InvalidDataException("測試環境原發票不屬於 CYInvoice，禁止跨帳戶帶入");
-        }
         var existing = AccountRecords(account).Where(record =>
             record.InvoiceState != InvoiceStates.Failed &&
             (string.Equals(record.InvoiceNumber.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase) ||
@@ -235,9 +245,12 @@ public sealed class InvoiceSyncService
         try
         {
             var listed = await LoadAllPagesAsync(gateway, startDate, endDate, cancellationToken).ConfigureAwait(false);
-            remote = testPrefixDate is null
-                ? listed
-                : listed.Where(item => TestOrderIdPrefix.TryStripForDate(item.OrderId, testPrefixDate.Value, out _)).ToArray();
+            var known = account.Environment == Environments.Test
+                ? AccountRecords(account).Where(r => r.RecordOrigin == RecordOrigins.Local && r.InvoiceState != InvoiceStates.Failed).ToArray()
+                : [];
+            remote = testPrefixDate is null ? listed : listed.Where(item => known.Any(r =>
+                (r.InvoiceNumber.Trim().Length != 0 && string.Equals(r.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                (r.ApiOrderId.Trim().Length != 0 && string.Equals(r.ApiOrderId.Trim(), item.OrderId.Trim(), StringComparison.Ordinal)))).ToArray();
         }
         catch (Exception error)
         {

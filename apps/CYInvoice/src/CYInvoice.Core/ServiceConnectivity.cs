@@ -18,12 +18,9 @@ public sealed class ServiceConnectionException(string message, Exception? inner 
 // Service reachability is not Employee authorization. Providers retain their
 // original action-time authority checks and their existing protected fallback.
 public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http = null, Action? forgetRejectedAuthority = null,
-    CyIdOfflineCache? cyIdOffline = null, CloudEmployeeCacheStore? builtInCache = null, string? baseDirectory = null,
-    Func<long>? monotonicMilliseconds = null)
+    CyIdOfflineCache? cyIdOffline = null, CloudEmployeeCacheStore? builtInCache = null, string? baseDirectory = null)
 {
-    private long Now => (monotonicMilliseconds ?? (() => Environment.TickCount64))();
     private readonly SemaphoreSlim checkGate = new(1, 1);
-    private long nextAuthorityRefresh;
     private static readonly HttpClient SharedHttp = new() { Timeout = TimeSpan.FromSeconds(8) };
     private readonly HttpClient client = http ?? SharedHttp;
     public ServiceConnectionState? Current { get; private set; }
@@ -61,15 +58,13 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
         var rejected = cloudRequired && (cloud.Result.Rejected
             || Current is { CloudRejected: true } && cloud.Result.Problem.Length != 0);
         if (cloud.Result.Rejected) forgetRejectedAuthority?.Invoke();
-        if (cloud.Result.Problem.Length != 0) nextAuthorityRefresh = default;
         return Current = new(ame.Result.Problem.Length == 0, cloudRequired && cloud.Result.Problem.Length == 0,
             cloudRequired, ame.Result.Problem, cloud.Result.Problem, rejected);
     }
 
     private async Task CheckCloudAsync(Settings current, CancellationToken cancellationToken)
     {
-        var synchronize = current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady
-            && Now >= nextAuthorityRefresh;
+        var synchronize = current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady;
         if (synchronize && cyIdOffline is not null) await cyIdOffline.AuthorityGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -121,7 +116,6 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 var code = permissions.GetProperty("code").GetString();
                 if (code == "IDENTITY_UNAVAILABLE")
                 {
-                    nextAuthorityRefresh = default;
                     throw new CloudApiException(code, "雲端驗證暫時無法連線。", System.Net.HttpStatusCode.ServiceUnavailable);
                 }
                 throw new InvalidDataException("中央權限已拒絕：" + code);
@@ -161,7 +155,6 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 if (binding is not null && cyIdOffline is not null)
                     cyIdOffline.InvalidateEmployees(permissions.GetProperty("invalidated").EnumerateArray()
                         .Select(id => id.GetString() ?? throw new InvalidDataException("權限失效清單無效。")).ToHashSet(StringComparer.Ordinal));
-                nextAuthorityRefresh = Now + 60_000;
             }
             if (dataDirectory is not null && root.TryGetProperty("allowances", out var allowances))
             {

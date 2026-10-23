@@ -1,7 +1,5 @@
-// Staged V3.0 CYID company settings. The HTTP route is disabled by default
-// until an explicitly approved original-D1 migration and feature enablement.
-// Decrypted credentials are returned only by explicit SUPER_ADMIN provisioning
-// to the same authenticated Device; normal reads never include secrets.
+// Single workspace company card. Edits require a live CYID SUPER_ADMIN;
+// automatic delivery is restricted to the original active authorized Device.
 export type SecretChange =
   | { action: "keep" }
   | { action: "clear" }
@@ -12,6 +10,7 @@ export interface CompanySettingsMutation {
   deviceId: string;
   expectedRevision: number; // zero means the first card
   sellerInvoice: string;
+  companyName?: string;
   amegoAppKey: SecretChange;
   moExcelPassword: SecretChange;
 }
@@ -27,12 +26,15 @@ export interface CompanySettingsAuthority {
 }
 export interface CompanySettingsStatus {
   sellerInvoice: string;
+  companyName: string;
   revision: number;
   hasAmegoAppKey: boolean;
   hasMoExcelPassword: boolean;
 }
 interface CompanyRow {
   seller_invoice: string;
+  company_name: string;
+  card_revision: number;
   revision: number;
   amego_app_key_ciphertext: string | null;
   mo_excel_password_ciphertext: string | null;
@@ -102,11 +104,11 @@ function superAdmin(p: CurrentCyIdSuperAdmin | null, workspaceId: string): p is 
     && p.employeeId.length<=100;
 }
 async function state(db: D1Database, workspaceId: string): Promise<CompanyRow | null> {
-  return db.prepare("SELECT seller_invoice,revision,amego_app_key_ciphertext,mo_excel_password_ciphertext "+
+  return db.prepare("SELECT * "+
     "FROM company_settings WHERE workspace_id=?1 LIMIT 1").bind(workspaceId).first<CompanyRow>();
 }
 function status(row: CompanyRow): CompanySettingsStatus {
-  return {sellerInvoice:row.seller_invoice,revision:row.revision,
+  return {sellerInvoice:row.seller_invoice,companyName:row.company_name,revision:row.card_revision,
     hasAmegoAppKey:!!row.amego_app_key_ciphertext,
     hasMoExcelPassword:!!row.mo_excel_password_ciphertext};
 }
@@ -125,12 +127,13 @@ export async function changeCompanySettings(db: D1Database,
   assertScope(input.workspaceId,input.deviceId);
   if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision<0
     || !/^[0-9]{8}$/.test(input.sellerInvoice)
+    || (input.companyName !== undefined && (typeof input.companyName !== "string" || input.companyName.length > 100 || /[\u0000-\u001f\u007f]/u.test(input.companyName)))
     || !validChange(input.amegoAppKey,512,true) || !validChange(input.moExcelPassword,256))
     throw new Error("COMPANY_SETTINGS_INVALID");
   const before=await authority.revalidate();
   if (!superAdmin(before,input.workspaceId)) throw new Error("COMPANY_SUPER_ADMIN_REQUIRED");
   const previous=await state(db,input.workspaceId);
-  if ((previous?.revision ?? 0)!==input.expectedRevision)
+  if ((previous?.card_revision ?? 0)!==input.expectedRevision)
     throw new Error("COMPANY_SETTINGS_STALE_REVISION");
   // Never insert a partly configured company card because a blank field
   // silently discarded a previously saved secret. Every change is explicit.
@@ -144,7 +147,9 @@ export async function changeCompanySettings(db: D1Database,
   if (!superAdmin(current,input.workspaceId) || current.employeeId!==before.employeeId)
     throw new Error("COMPANY_AUTHORITY_CHANGED");
   const at=new Date().toISOString();
+  const companyName=input.companyName?.trim() ?? previous?.company_name ?? "";
   const fields=[
+    ...(previous?.company_name===companyName?[]:["companyName"]),
     ...(previous?.seller_invoice===input.sellerInvoice?[]:["sellerInvoice"]),
     ...(input.amegoAppKey.action==="keep"?[]:["amegoAppKey"]),
     ...(input.moExcelPassword.action==="keep"?[]:["moExcelPassword"]),
@@ -155,20 +160,20 @@ export async function changeCompanySettings(db: D1Database,
     "AND d.employee_authority_state='cloud' AND w.status='active')";
   const sql=input.expectedRevision===0
     ? "INSERT INTO company_settings (workspace_id,seller_invoice,amego_app_key_ciphertext,"+
-      "mo_excel_password_ciphertext,revision,changed_by_employee_id,changed_by_device_id,changed_at) "+
-      "SELECT ?1,?2,?3,?4,1,?5,?6,?7 WHERE "+guardedDevice+
+      "mo_excel_password_ciphertext,revision,changed_by_employee_id,changed_by_device_id,changed_at,company_name) "+
+      "SELECT ?1,?2,?3,?4,1,?5,?6,?7,?9 WHERE "+guardedDevice+
       " AND NOT EXISTS (SELECT 1 FROM company_settings WHERE workspace_id=?1)"
     : "UPDATE company_settings SET seller_invoice=?2,amego_app_key_ciphertext=?3,"+
-      "mo_excel_password_ciphertext=?4,revision=revision+1,changed_by_employee_id=?5,"+
-      "changed_by_device_id=?6,changed_at=?7 WHERE workspace_id=?1 AND revision=?8 AND "+guardedDevice;
+      "mo_excel_password_ciphertext=?4,revision=CASE WHEN seller_invoice<>?2 OR amego_app_key_ciphertext IS NOT ?3 THEN ?8+1 ELSE revision END,card_revision=card_revision+1,changed_by_employee_id=?5,"+
+      "changed_by_device_id=?6,changed_at=?7,company_name=?9 WHERE workspace_id=?1 AND card_revision=?8 AND "+guardedDevice;
   // D1.batch commits the card and audit together or not at all.
   const params=[input.workspaceId,input.sellerInvoice,appKey,moPassword,
     before.employeeId,input.deviceId,at];
-  const update=db.prepare(sql).bind(...(input.expectedRevision===0?params:[...params,input.expectedRevision]));
+  const update=db.prepare(sql).bind(...params,input.expectedRevision,companyName);
   const audit=db.prepare("INSERT INTO company_settings_audit_events "+
     "(event_id,workspace_id,revision,actor_employee_id,actor_device_id,changed_fields,created_at) "+
     "SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE EXISTS "+
-    "(SELECT 1 FROM company_settings WHERE workspace_id=?2 AND revision=?3 "+
+    "(SELECT 1 FROM company_settings WHERE workspace_id=?2 AND card_revision=?3 "+
     "AND changed_by_employee_id=?4 AND changed_by_device_id=?5 AND changed_at=?7)")
     .bind("csa_"+crypto.randomUUID(),input.workspaceId,input.expectedRevision+1,
       before.employeeId,input.deviceId,JSON.stringify(fields),at);
@@ -177,51 +182,44 @@ export async function changeCompanySettings(db: D1Database,
   catch { throw new Error("COMPANY_MUTATION_UNKNOWN_READBACK_REQUIRED"); }
   if (results[0].meta.changes!==1 || results[1].meta.changes!==1)
     throw new Error("COMPANY_SETTINGS_CONFLICT_OR_DEVICE_REVOKED");
-  return {sellerInvoice:input.sellerInvoice,revision:input.expectedRevision+1,
+  return {sellerInvoice:input.sellerInvoice,companyName,revision:input.expectedRevision+1,
     hasAmegoAppKey:!!appKey,hasMoExcelPassword:!!moPassword};
 }
-// Explicit SUPER_ADMIN action from an authenticated, active CYID Device only.
-// This is the one controlled transport used to install credentials into
-// Windows DPAPI; never call it from status/get or an ordinary USER session.
-export async function provisionCompanySettingsToDevice(
-  db:D1Database, workspaceId:string,deviceId:string,
-  authority:CompanySettingsAuthority, encryptionKeyHex:string) {
+// The existing CYID Device binding authorizes automatic credential delivery.
+// No employee password/session is retained or synthesized for synchronization.
+export async function synchronizeCompanySettingsToDevice(
+  db:D1Database, workspaceId:string,deviceId:string,knownRevision:number,
+  encryptionKeyHex:string,authorize:()=>Promise<void>) {
   assertScope(workspaceId,deviceId);
-  const before=await authority.revalidate();
-  if(!superAdmin(before,workspaceId))throw new Error("COMPANY_SUPER_ADMIN_REQUIRED");
+  if(!Number.isSafeInteger(knownRevision)||knownRevision<0)
+    throw new Error("COMPANY_SETTINGS_INVALID");
+  await authorize();
   const row=await state(db,workspaceId);
-  if(!row?.amego_app_key_ciphertext||!row.mo_excel_password_ciphertext)
-    throw new Error("COMPANY_PROVISION_INCOMPLETE");
-  const key=await keyFromSecret(encryptionKeyHex);
-  const amegoAppKey=await open(key,workspaceId,"amego",row.amego_app_key_ciphertext);
-  const moExcelPassword=await open(key,workspaceId,"mo",row.mo_excel_password_ciphertext);
-  if(!amegoAppKey.trim()||!moExcelPassword.trim())
-    throw new Error("COMPANY_PROVISION_INCOMPLETE");
-  const after=await authority.revalidate();
-  if(!superAdmin(after,workspaceId)||after.employeeId!==before.employeeId)
-    throw new Error("COMPANY_AUTHORITY_CHANGED");
-  // Recheck original active Device and card revision after decryption;
-  // revoked Devices or concurrently edited cards cannot receive old secrets.
+  let credentials;
+  if(row && row.card_revision!==knownRevision && row.amego_app_key_ciphertext && row.mo_excel_password_ciphertext){
+    const key=await keyFromSecret(encryptionKeyHex);
+    const amegoAppKey=await open(key,workspaceId,"amego",row.amego_app_key_ciphertext);
+    const moExcelPassword=await open(key,workspaceId,"mo",row.mo_excel_password_ciphertext);
+    if(!amegoAppKey.trim()||!moExcelPassword.trim())throw new Error("COMPANY_PROVISION_INCOMPLETE");
+    credentials={sellerInvoice:row.seller_invoice,companyName:row.company_name,
+      revision:row.card_revision,amegoAppKey,moExcelPassword};
+  }
+  await authorize();
   const active=await db.prepare("SELECT 1 AS permitted FROM devices d JOIN workspaces w"+
     " ON w.workspace_id=d.workspace_id WHERE d.device_id=?1 AND d.workspace_id=?2"+
     " AND d.status='active' AND d.employee_authority_state='cloud'"+
-    " AND w.status='active' LIMIT 1").bind(deviceId,workspaceId)
-      .first<{permitted:number}>();
+    " AND w.status='active' LIMIT 1").bind(deviceId,workspaceId).first<{permitted:number}>();
   if(!active?.permitted)throw new Error("COMPANY_DEVICE_REVOKED");
   const latest=await state(db,workspaceId);
-  if(!latest||latest.revision!==row.revision||
-    latest.seller_invoice!==row.seller_invoice||
-    latest.amego_app_key_ciphertext!==row.amego_app_key_ciphertext||
-    latest.mo_excel_password_ciphertext!==row.mo_excel_password_ciphertext)
-    throw new Error("COMPANY_PROVISION_CHANGED");
-  return {sellerInvoice:row.seller_invoice,revision:row.revision,
-    amegoAppKey,moExcelPassword};
+  if(JSON.stringify(latest)!==JSON.stringify(row))throw new Error("COMPANY_PROVISION_CHANGED");
+  return {company:row?status(row):null,...(credentials?{credentials}:{})};
 }
 
 // INTERNAL trusted Worker gateway only, never a browser-facing response.
 export async function loadAmegoCompanySettingsForGateway(db: D1Database,workspaceId: string,
   encryptionKeyHex: string) {
-  const row=await state(db,workspaceId);
+  const row=await db.prepare("SELECT seller_invoice,revision,amego_app_key_ciphertext FROM company_settings WHERE workspace_id=?1 LIMIT 1")
+    .bind(workspaceId).first<CompanyRow>();
   if (!row || !row.amego_app_key_ciphertext) throw new Error("COMPANY_AMEGO_NOT_CONFIGURED");
   const key=await keyFromSecret(encryptionKeyHex);
   // Least privilege: the AMEGO caller must NOT receive the MO Excel password.

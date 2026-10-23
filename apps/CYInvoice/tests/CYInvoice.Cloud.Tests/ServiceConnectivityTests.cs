@@ -118,16 +118,13 @@ internal static class ServiceConnectivityTests
             CyIdGateway.TokenDigest(repository.Settings.CloudDeviceToken(settings))));
         repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
-        long now = 100;
         var connection = new ServiceConnectivity(repository.Settings, http, repository.CloudEmployees.Clear,
-            builtInCache: repository.CloudEmployees, baseDirectory: temporary.Path, monotonicMilliseconds: () => now);
+            builtInCache: repository.CloudEmployees, baseDirectory: temporary.Path);
         await connection.CheckAsync();
         Check(services.CloudCalls == 1 && services.Synchronizations.SequenceEqual(new[] { true }),
             "one startup request refreshes Device and CYID invalidation");
-        now += 15_000;
         await connection.CheckAsync();
-        Check(services.Synchronizations.SequenceEqual(new[] { true, false }), "15-second liveness does not refresh all permissions");
-        now = 60_100;
+        Check(services.Synchronizations.SequenceEqual(new[] { true, true }), "explicit checks include immediate permission confirmation without a second cooldown");
         await connection.CheckAsync();
         Check(services.Synchronizations.Last(), "60-second permission refresh uses the same aggregate route");
         services.Cloud = false;

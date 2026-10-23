@@ -20,7 +20,7 @@ const {reserveApprovedCloudAllowanceNumber:reserve,
  reserveCloudAllowanceAfterExternalCollision:reserveCollision}=
  await bundle("allowance-number-reservation.ts");
 const {createEncryptedCloudAllowance:create}=await bundle("allowance-frozen-store.ts");
-const {encryptCompanyBusinessData:seal}=await bundle("company-settings.ts");
+const {encryptCompanyBusinessData:seal,changeCompanySettings}=await bundle("company-settings.ts");
 
 const ws="ws_c3c2",devA="dev_11111111-1111-4111-8111-111111111111",
  devB="dev_22222222-2222-4222-8222-222222222222";
@@ -165,6 +165,19 @@ function provider(options={}){
   throw new Error("unexpected provider operation");
  };
  return {transport,get posts(){return posts;},get queries(){return queries;}};
+}
+{
+ const f=await fixture(true);const target=await f.prepare(app1);
+ await changeCompanySettings(f.db,{workspaceId:ws,deviceId:devB,expectedRevision:1,
+  sellerInvoice:"12345678",companyName:"Synthetic company",
+  amegoAppKey:{action:"keep"},moExcelPassword:{action:"replace",value:"TEST_ROTATED_MO"}},
+  authority({...manager,workspaceRole:"SUPER_ADMIN",isWorkspaceSuperAdmin:true,emailVerified:true}),context.encryptionKeyHex);
+ const card=f.sql.prepare("SELECT revision,card_revision FROM company_settings").get();
+ assert.equal(card.revision,1);assert.equal(card.card_revision,2);
+ const api=provider();await execute(f.db,target,context,authority(),api.transport,clock);
+ assert.equal(api.posts,1,"MO/name-only rotation preserves the original approval without a second manager action");
+ assert.equal(f.sql.prepare("SELECT execution_state FROM allowance_applications WHERE application_id=?").get(app1).execution_state,"completed");
+ f.close();
 }
 for(const [sequence,suffix] of [[1,"001"],[999,"999"],[1000,"A00"],[34695,"ZZZ"]])assert.equal(format("20261019",sequence),"A20261019"+suffix);
 assert.throws(()=>format("20261019",34696));
@@ -358,7 +371,11 @@ for(const mode of ["normal","already","unknown","pending"]){
  assert.throws(()=>{f.sql.exec("BEGIN");try{f.sql.exec(migration+";SELECT * FROM injected_missing;");f.sql.exec("COMMIT");}catch(e){f.sql.exec("ROLLBACK");throw e;}},/no such table/);
  assert.equal(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='allowance_application_transition_guard'").get().sql,oldTrigger);
  assert.deepEqual(snapshot(),before);
+ assert.equal(f.sql.prepare("PRAGMA table_info(company_settings)").all().some(c=>c.name==="company_name"),false,"failed migration rolls back card DDL");
  f.sql.exec(migration);assert.deepEqual(snapshot(),before);
+ const card=f.sql.prepare("SELECT * FROM company_settings").get();
+ assert.equal(card.company_name,"");assert.equal(card.card_revision,card.revision,
+  "non-empty schema21 company data starts with its exact original version");
  // Withdrawal winning the race prevents a stale executor from posting.
  f.beforeSend(()=>f.sql.prepare("UPDATE allowance_applications SET status='withdrawn',manager_actor_id=NULL,actor_id='other_current_manager',revision=4 WHERE application_id=?").run(app1));
  const api=provider();await execute(f.db,target,context,authority(),api.transport,clock);

@@ -13,6 +13,7 @@ internal sealed class SyncIssuesForm : Form
     private static readonly int[] DefaultWidths = [145, 130, 110, 150, 0, 90];
 
     private readonly bool processing;
+    private readonly ComboBox processingFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceSyncStateStore stateStore;
@@ -65,7 +66,7 @@ internal sealed class SyncIssuesForm : Form
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
 
-        Text = processing ? "處理中" : "上傳問題";
+        Text = processing ? "待辦／處理中" : "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(900, 0);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -128,7 +129,14 @@ internal sealed class SyncIssuesForm : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(summary, 0, 0);
         reportCrossDevice.Margin = new Padding(0, 0, 6, 0);
-        header.Controls.Add(reportCrossDevice, 1, 0);
+        if (processing)
+        {
+            processingFilter.Items.AddRange(["全部待辦／處理中","待主管核准","系統處理中"]);
+            processingFilter.SelectedIndex=0;
+            processingFilter.SelectedIndexChanged+=(_,_)=>ReloadAll();
+            header.Controls.Add(processingFilter,1,0);
+        }
+        else header.Controls.Add(reportCrossDevice, 1, 0);
         exportIssueDiagnostics.Margin = new Padding(0, 0, 6, 0);
         header.Controls.Add(exportIssueDiagnostics, 2, 0);
         reload.Anchor = AnchorStyles.Right | AnchorStyles.Top;
@@ -171,7 +179,17 @@ internal sealed class SyncIssuesForm : Form
         body.Controls.Add(empty);
         root.Controls.Add(body, 0, 1);
         root.Controls.Add(bottom, 0, 2);
-        Controls.Add(root);
+        if (processing && !startupSmokeTest && repository.Settings.LoadOrCreate() is
+            { CloudMode: not CloudModes.LocalOnly, CloudIdentityProvider: "CYID", CloudEmployeeAuthorityReady: true })
+        {
+            var tabs = new TabControl { Dock = DockStyle.Fill };
+            var local = new TabPage("待核准／處理中") { BackColor = Color.White };
+            local.Controls.Add(root); tabs.TabPages.Add(local);
+            var general = new TabPage("一般待辦") { BackColor = Color.White };
+            general.Controls.Add(new CloudWorkItemsControl(repository) { Dock = DockStyle.Fill });
+            tabs.TabPages.Add(general); Controls.Add(tabs);
+        }
+        else Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
     }
 
@@ -262,6 +280,11 @@ internal sealed class SyncIssuesForm : Form
                 var index = 0;
                 foreach (var row in rows.OrderByDescending(item => item.SortKey, StringComparer.Ordinal))
                 {
+                    if (processing && processingFilter.SelectedIndex is 1 or 2)
+                    {
+                        var pending = row.Row.Tag is InvoiceSyncIssue issue && NeedsManagerApproval(issue);
+                        if ((processingFilter.SelectedIndex==1)!=pending) continue;
+                    }
                     ApplyZebra(row.Row, index++);
                     list.Items.Add(row.Row);
                 }
@@ -275,7 +298,7 @@ internal sealed class SyncIssuesForm : Form
                 foreach (ListViewItem row in list.Items)
                     if (row.Tag is InvoiceSyncIssue current && current.Id == selectedId) row.Selected = true;
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
-            summary.Text = processing ? $"處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
+            summary.Text = processing ? $"待辦／處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
             UpdateFailedButtons();
             UpdateCrossDeviceButton();
             UpdateDiagnosticButton();
@@ -294,6 +317,11 @@ internal sealed class SyncIssuesForm : Form
         var hasRows = list.Items.Count > 0;
         empty.Visible = !hasRows;
         listHost.Visible = hasRows;
+        if (Controls.OfType<TabControl>().Any())
+        {
+            ClientSize = new Size(ClientSize.Width,Math.Min(520,Screen.FromControl(this).WorkingArea.Height-80));
+            root.PerformLayout(); return;
+        }
         var chrome = root.Padding.Vertical + (int)Math.Ceiling(root.RowStyles[0].Height + root.RowStyles[2].Height);
         var workArea = Screen.FromControl(this).WorkingArea;
         var maximumBodyHeight = Math.Max(listHost.HeightForRows(1), workArea.Height - (Height - ClientSize.Height) - chrome - 40);
@@ -1354,6 +1382,9 @@ internal sealed class SyncIssuesForm : Form
     {
         if (issue.ResolvedUtc is not null)
             return IsAllowanceManualReview(issue) || IsAllowanceVoidManualReview(issue) ? "已人工處理" : "已解決";
+        if (processing && NeedsManagerApproval(issue)) return "待主管核准";
+        if (processing && (IsCloudAllowance(issue) || IsAllowanceManualReview(issue) || IsAllowanceVoidManualReview(issue)))
+            return "系統處理中";
         if (administrativeClosure.IsActiveWorkIssue(issue))
         {
             try { if (administrativeClosure.CanClose(issue)) return "可結案"; }
@@ -1370,6 +1401,21 @@ internal sealed class SyncIssuesForm : Form
         }
         if (IsVoidManualReview(issue) || IsAllowanceVoidManualReview(issue)) return "人工確認";
         return lastRead is not null && issue.CreatedUtc <= lastRead.Value ? "已讀" : "未讀";
+    }
+
+    // Display filter only; business execution and authority stay with the original workflows.
+    private bool NeedsManagerApproval(InvoiceSyncIssue issue)
+    {
+        if (IsCloudAllowance(issue)) return issue.Message == "等待主管核准";
+        if (IsAllowanceVoidManualReview(issue))
+            return allowanceVoidWorkflow.LocalApprovalFor(issue) is null;
+        if (IsAllowanceManualReview(issue))
+        {
+            var record=TryFindIssueRecord(issue);
+            var review=record is null?null:allowanceWorkflow.ManualReviewFor(record);
+            return review is { LocalApprovedUtc:null, AwaitingConfirmation:false };
+        }
+        return IsVoidManualReview(issue);
     }
 
     private static bool IsManualReview(InvoiceSyncIssue issue) =>
@@ -1503,7 +1549,7 @@ internal sealed class SyncIssuesForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != (processing ? "處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
+        if (Text != (processing ? "待辦／處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
         if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
