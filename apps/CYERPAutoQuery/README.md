@@ -132,3 +132,14 @@
 - 單元測試：`dotnet test tests/CYERPAutoQuery.Tests/CYERPAutoQuery.Tests.csproj`（純邏輯，任何 OS 可跑）。
 - OCR 模型：`tools/fetch-ocr-models.ps1` 依 `tools/ocr-models.json` 下載並核對 SHA-256。
 - 圖示：`tools/fetch-canonical-icon.ps1` 從 AITeam CY Icon Family 固定 revision 下載 `AutoQ.ico` 並核對 SHA-256（不進 Git）。
+
+## ERP 行程診斷（唯讀）
+
+在「ERP 登入」設定視窗按「行程診斷（唯讀）」，可掃描目前可存取的 ERP 候選行程、PID／父 PID／工作階段、啟動時間、記憶體與 ERP 視窗類型。勾選「每 2 秒觀察變化」後，人工正常關閉並重新開啟 ERP，工具會記錄行程新增、消失與視窗變化；按「匯出遮蔽報告」儲存 TXT，提供排查 ERP 行程關係。掃描為唯讀，不會啟動、關閉、強制終止或重新登入 ERP。報告不含帳戶原文、完整檔案路徑、命令列或原始視窗標題；跨工作階段或權限不足的資訊可能無法讀取，並不代表行程不存在。**此功能不會改變原有自動登入、閒置關閉或異常重啟的行為。**
+
+### 行程診斷後的保護（V1.0.1 Build 1）
+
+- 診斷清單只納入 `MainMenu`、`SMLeaderWorkCenter` 與登入設定指定的 ERP 可執行檔，不再把 AutoQuery 自己的視窗列為 ERP。
+- 只有**這次啟動的 AutoQuery 親自啟動**且已核對 PID、啟動時間、完整執行檔路徑、工作階段的 ERP 主行程，才允許由程式自動強制終止或自動閒置關閉；原本就開著、人工啟動、其他 RDP 工作階段或驗證不完整的 ERP 都不自動結束。
+- `SMLeaderWorkCenter` 在實機診斷中與 `MainMenu` 不是直接父子行程；尚無足夠資訊證明它僅屬於本程式，因此不使用程式名稱或程序樹把它一起 Kill，也不直接關閉它的視窗。正常結束主程式後，若它未退出，需要人工確認。
+- **注意：此保護會改變原先「任何已開啟 ERP 都能自動關閉／異常重啟」的範圍。** 工具仍可查詢人工開啟的 ERP；只是不能憑名稱把別人的 ERP 強制關掉。這項行程歸屬僅保留在目前 AutoQuery 執行期間，重新啟動 AutoQuery 不會承繼舊 PID 歸屬。

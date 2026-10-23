@@ -32,6 +32,7 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <!-- DPAPI for the CY Web Agent token (config/agent.json). -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

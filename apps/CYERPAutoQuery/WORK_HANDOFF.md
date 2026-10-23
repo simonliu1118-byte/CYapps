@@ -1,5 +1,13 @@
 # CYERPAutoQuery Work Handoff
 
+## 2026-10-23 — 移交 Claude 審查：ERP 行程診斷／安全重啟（V1.0.1 Build 1）
+
+- **完整實作報告暨後續驗收工作清單：** [`docs/handoff/ERP_PROCESS_DIAGNOSTICS_CLAUDE_HANDOFF_20261023.md`](docs/handoff/ERP_PROCESS_DIAGNOSTICS_CLAUDE_HANDOFF_20261023.md)。已記載背景、兩次工程版本、正常關閉實機證據、變更檔案、行為差異、風險、CI、Claude 審查次序與待辦；本檔只保留索引，避免另一份內容分叉。
+- **PR／工作線：** [CYapps #555](https://github.com/simonliu1118-byte/CYapps/pull/555)（Draft，`cyerp-auto-query/feature-process-diagnostics`）。工程 `VERSION=1.0.1`、`BUILD=1`；正式 Release 仍 V1.0.0；**未合併、未部署、未正式發行**。
+- **已完成驗證：** [Windows CI Run #68](https://github.com/simonliu1118-byte/CYapps/actions/runs/39767604478)（source `385590c30f9c5dc6b3577f3c16cfa948c8953158`）成功，含 Unit tests、Build、Publish、public package scan、Artifact upload；工程包 [V1.0.1 Build 1](https://github.com/simonliu1118-byte/CYapps/actions/runs/39767604478/artifacts/12421151692)（GitHub Artifact 三天保留，到期須重建）。
+- **實機證據：** 使用者以 Build 0 診斷，**人工正常關閉／重新開啟 ERP**；觀察 `MainMenu` 和 `SMLeaderWorkCenter` 一起消失／再出現、同 Session、不同父 PID；`INVI02` 視窗屬 helper。這只支持正常生命週期的觀察，**不證明 helper 可被精準 Kill**。Build 1 改以 PID／UTC 啟動時間／完整 EXE 路徑／Session 驗證 AutoQuery 親自啟動的主行程，歸屬不明時停止，另修正診斷誤判 AutoQuery 本身。
+- **Claude 下一步：** 審查 PR #555 與 `PROJECT_RULES.md` 相關安全語意，進行 Build 1 真實 Windows 正常登入、手動查詢、閒置關閉與多 session 的逐步驗收；刻意當機／強制終止測試**只能在隔離測試機**。未驗證之前不要合併、部署或發 Release；不得在正式共用 ERP 上進行破壞性試驗。ERP 查詢流程、Web Agent、CYERPAutoInput 未修改。
+
 > 更新：2026-10-21（V1.0.0 正式 Release，tag `cyerp-auto-query-v1.0.0`：彙整 V0.10.2 Build 1–4 的進貨輔助、批次查庫存、品號可含「-」）。之後的修改依規則升 Z 或 Build；需要轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 進貨輔助（V0.10.2 Build 1，2026/10/20）
