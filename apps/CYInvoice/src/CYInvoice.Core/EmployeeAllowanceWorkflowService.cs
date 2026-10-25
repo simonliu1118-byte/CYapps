@@ -97,6 +97,9 @@ public sealed class EmployeeAllowanceWorkflowService
         var employee = EmployeeOperationAuthentication.AuthenticateEmployee(
             repository, employeeNo, password, now());
 
+        if (editedItems is null || editedItems.Count == 0)
+            throw new InvalidOperationException("請從原發票商品建立折讓明細，舊網站申請入口已退役。");
+
         // The fresh query is both the eligibility check and the durable allowance baseline.
         // Existing historical allowances are persisted by InvoiceOfficialState.ApplyQuery before
         // this request is created, so later reconciliation only considers newly appearing numbers.
@@ -541,37 +544,34 @@ public sealed class EmployeeAllowanceWorkflowService
         return Convert.ToHexString(SHA256.HashData(bytes));
     }
 
-    public async Task<InvoiceAllowanceReconcileResult> MarkManualCompletedAsync(
-        InvoiceSyncIssue issue,
-        string actorEmployeeNo,
-        string actorPassword,
+    public async Task<InvoiceAllowanceReconcileResult> CheckHistoricalAsync(
+        InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(issue);
-        var manager = EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        EmployeeOperationAuthentication.AuthenticateManager(repository,actorEmployeeNo,actorPassword);
         RequireManualReviewIssue(issue);
-
-        var record = FindIssueRecord(issue);
-        var review = ReadManualReview(record)
-            ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
-        if (review.LocalApprovedUtc is not null)
-            throw new InvalidOperationException("本筆已由 Local 管理員核准並鎖定，不能改用舊人工完成入口");
-        if (review.AwaitingConfirmation)
-            return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
-
-        review = review with
+        var record=FindIssueRecord(issue);
+        var review=ReadManualReview(record) ?? throw new InvalidDataException("舊折讓申請資料遺失");
+        if (review.LocalApprovedUtc is not null || review.DraftItems is {Count:>0})
+            throw new InvalidOperationException("新版申請由原核准與自動執行流程處理，不能改走歷史查證。");
+        try
         {
-            AwaitingConfirmation = true,
-            ManualCompletedUtc = now().ToUniversalTime(),
-            ConfirmedAllowanceNumber = string.Empty,
-            HandlerEmployeeNo = manager.EmployeeNo,
-        };
-        WriteManualReview(record, review);
-        MarkPending(record);
-        syncRepository.UpsertMany([record]);
-        UpdateIssueMessage(record, "管理員已完成人工折讓，等待光貿回傳新的折讓資料。");
-
-        return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+            if (review.AwaitingConfirmation && HasPendingMarker(record))
+                return await ReconcilePendingAsync(record,cancellationToken).ConfigureAwait(false);
+            var fresh=await detailRefreshService.RefreshAsync(record,cancellationToken).ConfigureAwait(false);
+            return Problem(fresh,"舊折讓申請缺少可確認的送出紀錄，已更新官方資料；保留原申請供查證，不重送或推定完成。");
+        }
+        catch (Exception error)
+        {
+            IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_readback_failed",InvoiceAllowanceIssueTypes.ManualReview,error:error);
+            var latest=FindIssueRecord(issue);
+            if (issue.AccountKey==CurrentAccountKey() && JsonSerializer.Serialize(ReadManualReview(latest))==JsonSerializer.Serialize(review))
+            {
+                SetConfirmationProblem(latest,true);
+                issueStore.UpdateMessage(issue.Id,"舊折讓官方查證未完成："+error.Message);
+            }
+            throw;
+        }
     }
 
     // Exceptional path only. Normal reconciliation discovers the new allowance number by comparing

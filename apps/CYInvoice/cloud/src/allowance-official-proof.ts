@@ -1,3 +1,4 @@
+import {amegoTestAccount} from "./company-settings";
 // V3.2-C3b2a internal OFFICIAL evidence calculation only.
 // The signed invoice_query allowance summary is a discovery index, NOT proof
 // of amounts by original invoice. Each listed number MUST be resolved using
@@ -83,7 +84,7 @@ export async function reconcileOfficialAllowanceForOriginal(
  credentials:Readonly<{sellerInvoice:string;appKey:string}>,
  transport:typeof fetch=fetch,clock:()=>Date=()=>new Date()
 ):Promise<OfficialPerInvoiceProof>{
- if(credentials.sellerInvoice!==frozen.sellerInvoice||
+ if(credentials.sellerInvoice!==(frozen.environment==="test"?amegoTestAccount.sellerInvoice:frozen.sellerInvoice)||
      !/^[A-Z]{2}\d{8}$/.test(frozen.originalInvoiceNumber)||
      !Number.isSafeInteger(frozen.requestedGross)||frozen.requestedGross<=0)
    fail("INPUT_INVALID");

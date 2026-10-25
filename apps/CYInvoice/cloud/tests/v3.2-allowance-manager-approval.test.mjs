@@ -51,7 +51,7 @@ function fakeHttp(record=officialInvoice,onCall=()=>{}){
   assert.equal(form.get("invoice"),"12345678");
   assert.deepEqual(JSON.parse(form.get("data")),{type:"invoice",invoice_number:invoice});
   assert.equal(form.get("sign"),createHash("md5").update(
-   form.get("data")+form.get("time")+"SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+   form.get("data")+form.get("time")+"sHeq7t8G1wiQvhAuIM27").digest("hex"));
   return Response.json({code:0,data:[record]});
  }};
 }

@@ -62,7 +62,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
    {type:"invoice",invoice_number:invoice});
   assert.equal(form.get("sign"),
    createHash("md5").update(form.get("data")+form.get("time")+
-     "SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+     "sHeq7t8G1wiQvhAuIM27").digest("hex"));
   return Response.json({code:0,data:[row]});
  }};
 }
@@ -293,7 +293,7 @@ for(const mode of ["normal","already","unknown","pending"]){
 // password, continuation button, service queue, or scheduled Worker.
 {
  const f=await fixture(true);await f.prepare(app1);const api=provider();
- const env={DB:f.db,APP_ENV:"test",SCHEMA_VERSION:"21",API_VERSION:"1",COMPANY_SETTINGS_KEY_HEX:context.encryptionKeyHex,
+ const env={DB:f.db,APP_ENV:"production",SCHEMA_VERSION:"21",API_VERSION:"1",COMPANY_SETTINGS_KEY_HEX:context.encryptionKeyHex,
   ALLOWANCE_API_ENABLED:"true",ALLOWANCE_G0401_SEND_ENABLED:"true",ALLOWANCE_G0501_SEND_ENABLED:"false",
   CYID_ENABLED:"true",IDENTITY:{async fetch(){return Response.json({identity:"ready"});}},
   IDENTITY_APPLICATION_ID:"CYINVOICE",IDENTITY_WORKSPACE_ID:"identity_synthetic",IDENTITY_CYINVOICE_WORKSPACE_ID:ws,

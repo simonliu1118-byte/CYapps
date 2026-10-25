@@ -11,7 +11,7 @@ internal static class AllowanceWorkflowTests
         using var temporary = new AllowanceTemporaryDirectory();
         var setup = CreateSetup(temporary.Path);
         await ThrowsAsync<InvalidOperationException>(() => setup.Workflow.SubmitAsync(
-            setup.Record, "3015", "wrong", "部分退貨", 50));
+            setup.Record, "3015", "wrong", "部分退貨", 50, editedItems:DraftItems()));
         Equal(0, setup.Gateway.QueryCalls);
     }
 
@@ -24,7 +24,7 @@ internal static class AllowanceWorkflowTests
         ]));
 
         var result = await setup.Workflow.SubmitAsync(
-            setup.Record, "3015", "Employee1", "部分退貨", 50);
+            setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
 
         Equal(false, result.AlreadyQueued);
         Equal("3015", result.Review.RequesterEmployeeNo);
@@ -46,7 +46,7 @@ internal static class AllowanceWorkflowTests
         using var temporary = new AllowanceTemporaryDirectory();
         var setup = CreateSetup(temporary.Path);
         setup.Gateway.Queries.Enqueue(Query());
-        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         var issue = AllowanceIssue(setup.Repository);
 
         setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
@@ -68,10 +68,10 @@ internal static class AllowanceWorkflowTests
         var newAllowance = Allowance("D0401", UploadStatuses.Complete, "NEW-002", tax: "2", total: "48");
         setup.Gateway.Queries.Enqueue(Query([oldAllowance]));
         setup.Gateway.Queries.Enqueue(Query([oldAllowance, newAllowance]));
-        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         var issue = AllowanceIssue(setup.Repository);
 
-        var result = await setup.Workflow.MarkManualCompletedAsync(
+        var result = await CheckSeededHistoricalAsync(setup,
             issue, "2000", "AdminPass1");
 
         Equal(InvoiceAllowanceReconcileOutcome.Confirmed, result.Outcome);
@@ -96,10 +96,10 @@ internal static class AllowanceWorkflowTests
             var wrongAmount = Allowance("D0401", UploadStatuses.Complete, "NEW-002", tax: "1", total: "48");
             setup.Gateway.Queries.Enqueue(Query([oldAllowance]));
             setup.Gateway.Queries.Enqueue(Query([oldAllowance, wrongAmount]));
-            await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+            await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
             var issue = AllowanceIssue(setup.Repository);
 
-            var result = await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
+            var result = await CheckSeededHistoricalAsync(setup, issue, "2000", "AdminPass1");
 
             Equal(InvoiceAllowanceReconcileOutcome.Problem, result.Outcome);
             var stored = setup.Repository.Invoices.LoadOrCreate().Single();
@@ -120,10 +120,10 @@ internal static class AllowanceWorkflowTests
             setup.Gateway.Queries.Enqueue(Query([oldAllowance]));
             setup.Gateway.Queries.Enqueue(Query([oldAllowance, candidateA, candidateB]));
             setup.Gateway.Queries.Enqueue(Query([oldAllowance, candidateA, candidateB]));
-            await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+            await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
             var issue = AllowanceIssue(setup.Repository);
 
-            var ambiguous = await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
+            var ambiguous = await CheckSeededHistoricalAsync(setup, issue, "2000", "AdminPass1");
             Equal(InvoiceAllowanceReconcileOutcome.Problem, ambiguous.Outcome);
             Equal(1, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
             Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
@@ -149,9 +149,9 @@ internal static class AllowanceWorkflowTests
         var setup = CreateSetup(temporary.Path);
         setup.Gateway.Queries.Enqueue(Query());
         setup.Gateway.Queries.Enqueue(Query());
-        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         var issue = AllowanceIssue(setup.Repository);
-        var pending = await setup.Workflow.MarkManualCompletedAsync(
+        var pending = await CheckSeededHistoricalAsync(setup,
             issue, "2000", "AdminPass1");
         Equal(InvoiceAllowanceReconcileOutcome.PendingConfirmation, pending.Outcome);
         Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
@@ -167,11 +167,11 @@ internal static class AllowanceWorkflowTests
         var setup = CreateSetup(temporary.Path);
         setup.Gateway.Queries.Enqueue(Query());
         setup.Gateway.Queries.Enqueue(Query());
-        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
         Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
         var issue = AllowanceIssue(setup.Repository);
-        await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
+        await CheckSeededHistoricalAsync(setup, issue, "2000", "AdminPass1");
         Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
         // A missing gateway result fails the authoritative refresh, preserving pending work.
         var failed = await setup.Workflow.ReconcilePendingAsync(setup.Record);
@@ -193,7 +193,7 @@ internal static class AllowanceWorkflowTests
         using var temporary = new AllowanceTemporaryDirectory();
         var setup = CreateSetup(temporary.Path);
         setup.Gateway.Queries.Enqueue(Query());
-        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         var callsBefore = setup.Gateway.QueryCalls;
 
         await ThrowsAsync<InvalidOperationException>(() => setup.VoidWorkflow.SubmitAsync(
@@ -251,7 +251,7 @@ internal static class AllowanceWorkflowTests
         Equal(approved.LocalApprovedUtc, stored.LocalApprovedUtc);
         Equal(approved.LocalApprovalOfficialHash, stored.LocalApprovalOfficialHash);
         await ThrowsAsync<InvalidOperationException>(() =>
-            setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1"));
+            CheckSeededHistoricalAsync(setup, issue, "2000", "AdminPass1"));
         await ThrowsAsync<InvalidOperationException>(() =>
             setup.Workflow.PreviewLocalDraftAsync(issue, "2000", "AdminPass1"));
         Equal(3, setup.Gateway.QueryCalls);
@@ -583,6 +583,24 @@ internal static class AllowanceWorkflowTests
         }
     ];
 
+    // A historical fixture records the pre-existing completed website step.
+    // The product API can now only READ this state, never assert completion.
+    private static async Task<InvoiceAllowanceReconcileResult> CheckSeededHistoricalAsync(
+        AllowanceSetup setup,InvoiceSyncIssue issue,string employee,string password)
+    {
+        var record=setup.Repository.Invoices.LoadOrCreate().Single();
+        var review=setup.Workflow.ManualReviewFor(record)!;
+        if(review.LocalApprovedUtc is null)
+        {
+            record.ExtensionData ??= new Dictionary<string,JsonElement>();
+            record.ExtensionData["cyinvoice_allowance_manual_review"]=JsonSerializer.SerializeToElement(review with {
+                DraftItems=null,AwaitingConfirmation=true,ManualCompletedUtc=DateTimeOffset.UtcNow.AddDays(-1),HandlerEmployeeNo=employee });
+            record.ExtensionData["cyinvoice_allowance_pending"]=JsonSerializer.SerializeToElement(true);
+            new InvoiceSyncRepository(setup.Repository.DataDirectory).UpsertMany([record]);
+        }
+        return await setup.Workflow.CheckHistoricalAsync(issue,employee,password);
+    }
+
     private static AllowanceSetup CreateSetup(string path)
     {
         var repository = TestRepository.Open(path, new AllowanceTestProtector());
@@ -630,7 +648,7 @@ internal static class AllowanceWorkflowTests
         new(type, status, 2, number, "20260919", tax, total);
 
     private static QueryResponse Query(IReadOnlyList<InvoiceAllowanceResult>? allowances = null,
-        bool summaryPresent = false)
+        bool summaryPresent = true)
     {
         using var productsDocument = JsonDocument.Parse("[]");
         var data = new QueryResult(

@@ -120,6 +120,28 @@ internal static class ServiceConnectivityTests
         repository.Settings.Save(settings);
         var connection = new ServiceConnectivity(repository.Settings, http, repository.CloudEmployees.Clear,
             builtInCache: repository.CloudEmployees, baseDirectory: temporary.Path);
+        settings.ProductionInvoice="12345675";
+        repository.Settings.Save(settings);
+        var issueStore=new InvoiceSyncIssueStore(repository.DataDirectory);
+        issueStore.ApplyCloudAllowance("test|12345678","application_production","issue","processing","open","");
+        issueStore.ApplyCloudAllowance("test|12345678","different_application","issue","processing","open","");
+        services.Reply=new {
+            ok=true, device=new {workspaceId="ws_services",deviceId="dev_services",status="active",workspaceStatus="active"},
+            binding=new {provider="CYID",workspaceId="ws_services",identityWorkspaceId="identity_services",applicationId="CYINVOICE",consumerVersion="1.0.3"},
+            permissions=new {ok=true,invalidated=Array.Empty<string>()},
+            allowances=new[] {
+                new {application_id="application_production",operation="issue",environment="production",execution_state="processing",status="open",last_error=""},
+                new {application_id="application_test",operation="issue",environment="test",execution_state="processing",status="open",last_error=""}
+            }
+        };
+        Check((await connection.CheckAsync()).CloudAvailable,"mixed environments synchronize on one Device");
+        Check(issueStore.Unresolved("prod|12345675").Single().OrderId=="application_production",
+            "production projection uses production account despite selected test environment");
+        var testIds=issueStore.Unresolved("test|12345678").Select(i=>i.OrderId).ToHashSet();
+        Check(testIds.SetEquals(new[]{"application_test","different_application"}),
+            "repair only exact misclassified application and preserve unrelated operations");
+        services.Reply=null;services.CloudCalls=0;services.Synchronizations.Clear();
+
         await connection.CheckAsync();
         Check(services.CloudCalls == 1 && services.Synchronizations.SequenceEqual(new[] { true }),
             "one startup request refreshes Device and CYID invalidation");

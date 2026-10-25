@@ -36,6 +36,13 @@ internal static class CloudAllowanceSubmissionTests
         Equal("AB12345678", draft.OriginalInvoiceNumber);
         Equal("20261016", draft.AllowanceDay);
         Equal("test", draft.Environment);
+        original.Environment=Environments.Production;
+        var productionDraft=CloudAllowanceSubmissionService.BuildDraft(
+            "application_production",original,new DateOnly(2026,10,16),248,"Partial return",items);
+        Equal("production",productionDraft.Environment);
+        Equal("production",Environments.ToCloud(Environments.Production));
+        Equal(Environments.Production,Environments.FromCloud("production"));
+        original.Environment=Environments.Test;
         Equal("Partial return", draft.Reason);
         using var doc = JsonDocument.Parse(draft.UnnumberedTemplateJson);
         var root = doc.RootElement;

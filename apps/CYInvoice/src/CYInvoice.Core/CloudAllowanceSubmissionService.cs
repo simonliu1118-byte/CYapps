@@ -83,7 +83,7 @@ public sealed class CloudAllowanceSubmissionService
             TotalAmount = net,
             TaxAmount = tax
         };
-        var environment = invoice.Environment is "production" ? "production" : "test";
+        var environment = Environments.ToCloud(invoice.Environment);
         return new CloudAllowanceDraft(applicationId!, environment, invoice.InvoiceNumber,
             payload.AllowanceDate, gross, JsonSerializer.Serialize(payload),
             reason.Trim());
@@ -156,7 +156,7 @@ public sealed class CloudAllowanceSubmissionService
         var id = "application_" + Guid.NewGuid().ToString("N");
         var draft = BuildDraft(id, fresh, DateOnly.FromDateTime(DateTime.Today),
             gross, reason, edited);
-        if (draft.Environment != settings.Environment)
+        if (draft.Environment != Environments.ToCloud(settings.Environment))
             throw new InvalidOperationException("申請環境與 CYID Cloud 設定不同");
         var checksum = Convert.ToHexString(SHA256.HashData(
             Encoding.UTF8.GetBytes(draft.UnnumberedTemplateJson))).ToLowerInvariant();
@@ -226,7 +226,7 @@ public sealed class CloudAllowanceSubmissionService
     {
         if (pending.WorkspaceId != workspace ||
             pending.DeviceId != device ||
-            pending.Environment != environment ||
+            Environments.ToCloud(pending.Environment) != Environments.ToCloud(environment) ||
             pending.OriginalInvoiceNumber != invoice.InvoiceNumber)
             throw new InvalidOperationException(
                 "原 Cloud 折讓申請屬於其他 Workspace／Device／環境，禁止重用");

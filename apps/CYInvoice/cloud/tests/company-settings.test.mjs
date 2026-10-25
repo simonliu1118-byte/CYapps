@@ -9,6 +9,7 @@ const output=await build({entryPoints:["src/company-settings.ts"],bundle:true,wr
   platform:"node",format:"esm",target:"node24"});
 const {changeCompanySettings:change,getCompanySettingsStatus:getStatus,
   synchronizeCompanySettingsToDevice:syncToDevice,
+  amegoCredentialsForEnvironment:credentialsForEnvironment, amegoTestAccount,
   loadAmegoCompanySettingsForGateway:loadGateway}=await import("data:text/javascript;base64,"+
     Buffer.from(output.outputFiles[0].text).toString("base64"));
 const ws="ws_synthetic";
@@ -222,3 +223,13 @@ assert.equal((await call("sync",{knownRevision:0})).status,401);
 assert.deepEqual(g.sql.prepare("PRAGMA foreign_key_check").all(),[]);
 g.sql.close();
 console.log("Draft company settings: AES-GCM, atomic audit, exact CYID scope, role-separated HTTP transport passed");
+
+// A single Workspace/Worker can use the public test account or its own company.
+const syntheticCompany={sellerInvoice:"12345675",amegoAppKey:"SYNTHETIC_PRODUCTION_KEY"};
+assert.deepEqual(credentialsForEnvironment(syntheticCompany,"production"),{sellerInvoice:syntheticCompany.sellerInvoice,appKey:syntheticCompany.amegoAppKey});
+assert.deepEqual(credentialsForEnvironment(syntheticCompany,"test"),amegoTestAccount);
+assert.equal(syntheticCompany.amegoAppKey,"SYNTHETIC_PRODUCTION_KEY");
+assert.throws(()=>credentialsForEnvironment(syntheticCompany,"development"),/ENVIRONMENT_INVALID/);
+const windowsContracts=readFileSync("../src/CYInvoice.Core/AmegoContracts.cs","utf8");
+assert.ok(windowsContracts.includes('"'+amegoTestAccount.sellerInvoice+'"'));
+assert.ok(windowsContracts.includes('"'+amegoTestAccount.appKey+'"'));

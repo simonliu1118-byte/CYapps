@@ -2,7 +2,7 @@
 // per number -> original-number reconciliation. Unknown outcomes never resend.
 import {claimCloudAllowanceOneShotSending,type CloudAllowanceSendingTarget} from "./allowance-sending-claim";
 import {loadEncryptedCloudAllowance,type AllowanceActorSource,type CloudAllowanceContext,type StoredCloudAllowance} from "./allowance-frozen-store";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {postNumberedAllowanceOnce} from "./amego-allowance-issue";
 import {queryFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
 import {reserveApprovedCloudAllowanceNumber} from "./allowance-number-reservation";
@@ -71,8 +71,7 @@ async function readback(db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAll
  const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
  if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
   throw new Error("ALLOWANCE_COMPANY_CHANGED");
- const matching=await queryFrozenAllowanceByOriginalNumber({sellerInvoice:company.sellerInvoice,
-  appKey:company.amegoAppKey,allowanceNumber:t.allowanceNumber,
+ const matching=await queryFrozenAllowanceByOriginalNumber({...amegoCredentialsForEnvironment(company,ctx.environment),allowanceNumber:t.allowanceNumber,
   allowanceDay:frozen.allowanceDay,unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock);
  if(matching.kind==="pending_official"){
   if(!await authority.revalidate())throw new Error("APPROVAL_AUTHORITY_REVOKED");
@@ -118,7 +117,7 @@ export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllo
   company.sellerInvoice!==frozen.sellerInvoice||card.revision!==company.revision||
   card.sellerInvoice!==company.sellerInvoice||card.amegoAppKey!==company.amegoAppKey)
   throw new Error("ALLOWANCE_POST_CAS_AUTHORITY_CHANGED_NO_POST");
- const sent=await postNumberedAllowanceOnce({sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+ const sent=await postNumberedAllowanceOnce({...amegoCredentialsForEnvironment(company,ctx.environment),
   allowanceNumber:t.allowanceNumber,allowanceDay:frozen.allowanceDay,
   unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock,
   httpStatus=>recordExecutionEvent(db,t,"issue","http_response",requestId,clock,{httpStatus,responseReceived:true}));
@@ -171,18 +170,19 @@ export async function executeApprovedCloudAllowance(db:D1Database,
 export async function resumeApprovedCloudAllowances(env:AllowanceExecutionEnv,workspaceId:string,
  transport:typeof fetch=fetch,clock:()=>Date=()=>new Date()){
  if(env.ALLOWANCE_API_ENABLED!=="true"||Number(env.SCHEMA_VERSION)<21||!env.COMPANY_SETTINGS_KEY_HEX)return;
- const ctx:CloudAllowanceContext={environment:env.APP_ENV==="production"?"production":"test",encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX};
  const at=clock().toISOString();
  for(const operation of ["issue","void"] as const){
   if((operation==="issue"?env.ALLOWANCE_G0401_SEND_ENABLED:env.ALLOWANCE_G0501_SEND_ENABLED)!=="true")continue;
   const table=operation==="issue"?"allowance_applications":"allowance_void_requests";
   const grants=operation==="issue"?"allowance_execution_approvals":"allowance_void_approvals";
-  const rows=await env.DB.prepare(`SELECT a.application_id,a.revision,g.manager_device_id,g.manager_actor_id,g.authority_snapshot
+  const rows=await env.DB.prepare(`SELECT a.application_id,a.environment,a.revision,g.manager_device_id,g.manager_actor_id,g.authority_snapshot
    FROM ${table} a JOIN ${grants} g ON g.application_id=a.application_id
    WHERE a.workspace_id=?1 AND a.status='approved' AND a.execution_state<>'completed' AND a.next_check_at<=?2
    ORDER BY a.next_check_at,a.application_id LIMIT 10`).bind(workspaceId,at)
-   .all<{application_id:string;revision:number;manager_device_id:string;manager_actor_id:string;authority_snapshot:string|null}>();
+   .all<{application_id:string;environment:"test"|"production";revision:number;manager_device_id:string;manager_actor_id:string;authority_snapshot:string|null}>();
   for(const row of rows.results){
+   if(row.environment!=="test"&&row.environment!=="production")throw new Error("ALLOWANCE_ENVIRONMENT_INVALID");
+   const ctx:CloudAllowanceContext={environment:row.environment,encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX};
    const authority=approvedExecutionAuthority(env,workspaceId,row.authority_snapshot,row.manager_actor_id,{applicationId:row.application_id,operation});
    const target={workspaceId,applicationId:row.application_id,deviceId:row.manager_device_id,expectedRevision:row.revision};
    const requestId="resume-"+crypto.randomUUID();

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade, applyAllowanceActivation } from '../scripts/deployment-preflight.mjs';
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
@@ -204,13 +204,13 @@ await assert.rejects(snapshot(async sql => {
 
 
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.5',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.6',
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.5', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.5', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.5', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+checkHealth(health, { version: '0.9.6', schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.6', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.6', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
 for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.5', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.6', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
@@ -539,7 +539,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:providerEnvironment,status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.5' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.6' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });
@@ -654,6 +654,21 @@ try {
     v3Request,()=>{},Date.parse(productionAudit.capturedAt));
   assert.equal(v3Current,deployedId);
   await main('after',statePath,productionEnv);
+  // The real deployment owner accepts only the exact authorized flag delta.
+  const activationAudit=structuredClone(productionAudit);
+  activationAudit.settings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='22';
+  activationAudit.allowanceActivation='enable';
+  const activationConfig=applyAllowanceActivation(productionConfig,activationAudit.settings,'enable');
+  const unauthorized={...activationConfig,vars:{...activationConfig.vars,RECOVERY_ENABLED:'false'}};
+  await assert.rejects(deployReviewedVersion(activationAudit,unauthorized,'export default {};',
+    ()=>assert.fail('reject before mutation'),()=>{},Date.parse(activationAudit.capturedAt)),/ACTIVE_RUNTIME_SETTING_CHANGE|ALLOWANCE_ACTIVATION_RUNTIME_SETTING_CHANGE/);
+  // Scope checking of the approved activation uses the existing upload/deploy/readback path.
+  deploymentAudit=activationAudit;deploymentTemplate=activationConfig;v3Current=activeId;
+  await deployReviewedVersion(activationAudit,activationConfig,'export default {};',
+    v3Request,()=>{},Date.parse(activationAudit.capturedAt));
+  for(const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED','ALLOWANCE_G0501_SEND_ENABLED'])
+    assert.equal(v3Uploaded.bindings.find(b=>b.name===name).text,'true');
+  deploymentAudit=productionAudit;deploymentTemplate=productionConfig;v3Current=activeId;
   // D1 0019 is already applied by the separately authorized operator; the
   // old live Worker still reports 18. Nothing may silently change its marker.
   for (const [from,to] of [['18','19'],['19','20']]) {
@@ -774,3 +789,27 @@ assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,wit
 assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical.slice(0,21),'deploy','21:22'),/MIGRATION_NOT_COMPLETE/);
 withdrawalSettings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='22';
 assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','21:22'),/SCHEMA_UPGRADE_SOURCE_INVALID/);
+
+// Activation changes exactly three normal flags; schema and old manual paths stay untouched.
+{
+ const active={bindings:[
+  {name:'CYID_ENABLED',type:'plain_text',text:'true'},
+  {name:'SCHEMA_VERSION',type:'plain_text',text:'22'},
+  {name:'COMPANY_SETTINGS_ENABLED',type:'plain_text',text:'true'},
+  {name:'APP_ENV',type:'plain_text',text:'development'},
+  {name:'ALLOWANCE_API_ENABLED',type:'plain_text',text:'false'},
+  {name:'COMPANY_SETTINGS_KEY_HEX',type:'secret_text'},
+  {name:'DB',type:'d1',id:'synthetic-business-db'}]};
+ const before=structuredClone(active);
+ const made=applyAllowanceActivation({vars:{SCHEMA_VERSION:'21',UNRELATED:'do-not-add'}},active,'enable');
+ assert.deepEqual(active,before);
+ assert.deepEqual(made.vars,{CYID_ENABLED:'true',SCHEMA_VERSION:'22',COMPANY_SETTINGS_ENABLED:'true',APP_ENV:'development',
+  ALLOWANCE_API_ENABLED:'true',ALLOWANCE_G0401_SEND_ENABLED:'true',ALLOWANCE_G0501_SEND_ENABLED:'true'});
+ assert.throws(()=>applyAllowanceActivation({},active,'other'),/INTENT_INVALID/);
+ const wrong=structuredClone(active);wrong.bindings.find(x=>x.name==='SCHEMA_VERSION').text='21';
+ assert.throws(()=>applyAllowanceActivation({},wrong,'enable'),/RUNTIME_INVALID/);
+ const noKey={bindings:active.bindings.filter(x=>x.name!=='COMPANY_SETTINGS_KEY_HEX')};
+ assert.throws(()=>applyAllowanceActivation({},noKey,'enable'),/COMPANY_KEY_REQUIRED/);
+ const old=structuredClone(active);old.bindings.push({name:'ALLOWANCE_MANUAL_REVIEW_ENABLED',type:'plain_text',text:'true'});
+ assert.equal(applyAllowanceActivation({},old,'enable').vars.ALLOWANCE_MANUAL_REVIEW_ENABLED,'false');
+}

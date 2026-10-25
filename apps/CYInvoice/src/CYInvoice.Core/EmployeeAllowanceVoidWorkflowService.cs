@@ -79,14 +79,17 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         if (repository.IdentityProvider.Kind == IdentityProviderKind.CyId)
         {
             var settings = repository.Settings.LoadOrCreate();
-            var id = CYInvoice.Core.Cloud.CloudAllowanceClient.OriginalVoidApplicationId(settings.CloudWorkspaceId, settings.Environment, allowanceNumber);
+            var id = CYInvoice.Core.Cloud.CloudAllowanceClient.OriginalVoidApplicationId(settings.CloudWorkspaceId, Environments.ToCloud(settings.Environment), allowanceNumber);
             using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
             var client = new CYInvoice.Core.Cloud.CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings));
-            var state = await client.CreateOrReadVoidApplicationAsync(new(id, settings.Environment, allowanceNumber,
+            var state = await client.CreateOrReadVoidApplicationAsync(new(id, Environments.ToCloud(settings.Environment), allowanceNumber,
                 fresh.InvoiceNumber, reason), employeeNo, password, cancellationToken).ConfigureAwait(false);
             return new(fresh, new(allowanceNumber, employee.EmployeeNo, reason, now().ToUniversalTime()),
                 state.Status != "open", "原折讓作廢申請已送交主管，請從處理中開啟詳情核准");
         }
+
+        if (!IsLocalApiMode)
+            throw new InvalidOperationException("此交易須由原CYID雲端提出申請，舊網站人工入口已退役。");
 
         // Check the official number before idempotently returning an old
         // application: a claimed g0501 is not just "waiting for review".
@@ -125,7 +128,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 invoiceNumber,
                 orderId,
                 InvoiceAllowanceVoidIssueTypes.ManualReview,
-                $"折讓單 {allowanceNumber} 作廢申請等待管理員至光貿網站人工處理。",
+                $"折讓單 {allowanceNumber} 作廢申請等待主管核准。",
                 now());
         }
         catch
@@ -139,7 +142,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             Reload(fresh),
             review,
             AlreadyQueued: false,
-            Message: "折讓作廢申請已送交管理員人工處理");
+            Message: "折讓作廢申請已送交主管核准");
     }
 
     public InvoiceAllowanceVoidManualReview? ManualReviewFor(InvoiceRecord record)
@@ -148,17 +151,43 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         return ReadReview(record);
     }
 
-    public void MarkManualCompleted(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
+    public async Task<LocalAllowanceVoidResult> CheckHistoricalAsync(
+        InvoiceSyncIssue issue,string actorEmployeeNo,string actorPassword,
+        IAmegoAllowanceVoidGateway? gateway=null,CancellationToken cancellationToken=default)
     {
-        ArgumentNullException.ThrowIfNull(issue);
-        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
-        RequireIssue(issue);
-        var record = FindIssueRecord(issue);
-        _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
+        EmployeeOperationAuthentication.AuthenticateManager(repository,actorEmployeeNo,actorPassword);
+        var request=ApiRequest(issue);
         RequireNoApiClaim(issue);
-        issueStore.Resolve(issue.Id, now());
-        ClearReview(record);
-        syncRepository.UpsertMany([record]);
+        var before=RequestHash(issue);
+        var api=gateway??ApiGateway();
+        try
+        {
+            await InspectVoidTargetAsync(issue,api,cancellationToken).ConfigureAwait(false);
+            var status=await api.ReadAllowanceVoidStatusAsync(request.Review.AllowanceNumber,cancellationToken).ConfigureAwait(false);
+            EmployeeOperationAuthentication.AuthenticateManager(repository,actorEmployeeNo,actorPassword);
+            if (before!=RequestHash(issue))throw new InvalidOperationException("查證期間原申請或公司設定已改變");
+            if (!status.OfficiallyVoided || status.AllowanceNumber!=request.Review.AllowanceNumber)
+                return new(request.Review.AllowanceNumber,false,false,"官方尚未確認原折讓作廢，保留舊待辦繼續查證；沒有送出作廢。");
+            var record=Reload(request.Record);
+            record.ExtensionData ??= new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+            record.ExtensionData["cyinvoice_allowance_void_handled_" + issue.Id]=JsonSerializer.SerializeToElement(request.Review);
+            ClearReview(record);
+            IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_void_confirmed",InvoiceAllowanceVoidIssueTypes.ManualReview,code:99);
+            syncRepository.UpsertMany([record],completedIssue:issue);
+            return new(request.Review.AllowanceNumber,true,true,"已查證官方原折讓作廢，原申請及歷史已保留。");
+        }
+        catch (Exception error)
+        {
+            IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_readback_failed",InvoiceAllowanceVoidIssueTypes.ManualReview,error:error);
+            var failed=Reload(request.Record);
+            if (ReadReview(failed) is { } current && RequestHash(issue)==before)
+            {
+                WriteReview(failed,current with {ConfirmationProblem=true});
+                syncRepository.UpsertMany([failed]);
+                issueStore.UpdateMessage(issue.Id,"舊折讓作廢官方查證未完成："+error.Message);
+            }
+            throw;
+        }
     }
 
     public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
@@ -170,6 +199,8 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
         RequireNoApiClaim(issue);
         issueStore.Resolve(issue.Id, now());
+        record.ExtensionData ??= new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData["cyinvoice_allowance_void_handled_" + issue.Id]=JsonSerializer.SerializeToElement(ReadReview(record));
         ClearReview(record);
         syncRepository.UpsertMany([record]);
     }

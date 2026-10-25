@@ -54,6 +54,12 @@ Use the reviewed development workflow below. The default config has no runnable 
 
 Do not infer remote deployment state from source or CI alone.
 
+### Normal allowance activation (Cloud 0.9.6, schema22)
+
+The user authorized normal g0401/g0501 activation on 2026-10-26. Source readiness is not remote activation. Use the existing deployment owner with `CYINVOICE_DEPLOYMENT_MODE=deploy` and `CYINVOICE_ALLOWANCE_ACTIVATION=enable`, without a schema-upgrade intent. The same private checkpoint must cover before/deploy/after. It preserves the original Worker/D1, consumer scopes, services, secrets and unrelated vars; only the three normal allowance flags become true. Existing legacy manual/collision flags become false and absent ones remain absent. No migration or Identity D1 access is involved. See [the local MCP handoff](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md).
+
+Financial environment comes from the created application and is subsequently read from its persisted row, including recovery. `APP_ENV` is only a deployment label. AMEGO test credentials are the vendor's public pair; production uses the existing company card. Frozen card ownership, revision and authority checks remain unchanged.
+
 ### Preserving an already activated installation
 
 The source storage template targets migration 0015. A code deployment of an

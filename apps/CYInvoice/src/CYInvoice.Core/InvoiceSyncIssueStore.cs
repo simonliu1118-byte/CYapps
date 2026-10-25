@@ -206,7 +206,7 @@ public sealed class InvoiceSyncIssueStore
     }
 
     public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
-        string state, string status, string error)
+        string state, string status, string error, string? previousAccountKey = null)
     {
         var type = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_") +
             (state == "problem" ? "problem" : "processing");
@@ -229,23 +229,47 @@ public sealed class InvoiceSyncIssueStore
         if (state == "completed" || status is "withdrawn" or "rejected")
         {
             if (existing?.ResolvedUtc is null && existing is not null) Resolve(existing.Id, DateTimeOffset.UtcNow);
-            return;
         }
-        var message = status is "open" or "review" ? "等待主管核准" :
-            state == "problem" ? "自動處理遇到問題：" + error : "主管已核准，系統自動處理中";
-        if (existing is null)
+        else
         {
-            Record(accountKey, "", applicationId, type, message, DateTimeOffset.UtcNow);
-            return;
+            var message = status is "open" or "review" ? "等待主管核准" :
+                state == "problem" ? "自動處理遇到問題：" + error : "主管已核准，系統自動處理中";
+            if (existing is null)
+            {
+                Record(accountKey, "", applicationId, type, message, DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                using var db = Open(SqliteOpenMode.ReadWrite);
+                Configure(db);
+                using var sql = db.CreateCommand();
+                sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)='' AND (issue_type<>$type OR message<>$message)";
+                sql.Parameters.AddWithValue("$id", existing.Id);
+                sql.Parameters.AddWithValue("$type", type);
+                sql.Parameters.AddWithValue("$message", message);
+                sql.ExecuteNonQuery();
+            }
         }
-        using var db = Open(SqliteOpenMode.ReadWrite);
-        Configure(db);
-        using var sql = db.CreateCommand();
-        sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)='' AND (issue_type<>$type OR message<>$message)";
-        sql.Parameters.AddWithValue("$id", existing.Id);
-        sql.Parameters.AddWithValue("$type", type);
-        sql.Parameters.AddWithValue("$message", message);
-        sql.ExecuteNonQuery();
+        // Earlier runtime projections omitted environment. Resolve only this exact
+        // Cloud operation in the other current account; retain its historical row.
+        if (!string.IsNullOrEmpty(previousAccountKey) && previousAccountKey != accountKey)
+        {
+            using var staleDb = Open(SqliteOpenMode.ReadWrite);
+            Configure(staleDb);
+            using var stale = staleDb.CreateCommand();
+            stale.CommandText = """
+                UPDATE sync_issues SET resolved_utc=$now
+                WHERE account_key=$previous AND order_id=$application
+                  AND issue_type IN ($processing,$problem) AND TRIM(resolved_utc)=''
+                """;
+            var prefix = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_");
+            stale.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            stale.Parameters.AddWithValue("$previous", previousAccountKey);
+            stale.Parameters.AddWithValue("$application", applicationId);
+            stale.Parameters.AddWithValue("$processing", prefix + "processing");
+            stale.Parameters.AddWithValue("$problem", prefix + "problem");
+            stale.ExecuteNonQuery();
+        }
     }
 
     public void UpdateMessage(long issueId, string message)

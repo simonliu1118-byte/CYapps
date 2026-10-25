@@ -6,7 +6,7 @@ import {executeCloudVoidOnce} from "./allowance-void-one-shot-coordinator";
 import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication,loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
 import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
 import {approveCloudVoidAfterOfficialProof} from "./allowance-void-manager-approval";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
 interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
@@ -92,7 +92,19 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(403,{error:{code:"AUTHORITY_CHANGED"}});
   const target={workspaceId:binding.workspaceId,applicationId:input.applicationId as string,
    deviceId:dev.device_id,expectedRevision:input.expectedRevision as number};
-  const ctx:CloudAllowanceContext={encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,environment:env.APP_ENV==="production"?"production":"test"};
+  let environment:unknown=input.environment;
+  if(action!=="create"&&action!=="void-create"&&action!=="list"){
+   const isVoid=action.startsWith("void-")||((action==="detail"||action==="diagnostics")&&input.operation==="void");
+   const table=isVoid?"allowance_void_requests":"allowance_applications";
+   const source=await env.DB.prepare(`SELECT environment FROM ${table} WHERE workspace_id=?1 AND application_id=?2 LIMIT 1`)
+    .bind(binding.workspaceId,target.applicationId).first<{environment:string}>();
+   if(!source)return reply(404,{error:{code:"NOT_FOUND"}});
+   environment=source.environment;
+  }
+  if(action!=="list"&&environment!=="test"&&environment!=="production")
+   return reply(400,{error:{code:"INVALID_ENVIRONMENT"}});
+  const ctx:CloudAllowanceContext={encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,
+   environment:environment==="production"?"production":"test"};
   const supplied=req.headers.get("x-request-id")??"";
   const requestId=/^[A-Za-z0-9_.:-]{1,128}$/.test(supplied)?supplied:"req-"+crypto.randomUUID();
   if(action==="create"){
@@ -176,7 +188,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    const isVoid=input.operation==="void";
    const f=isVoid?await loadCloudAllowanceVoidForManager(env.DB,target,ctx,authority):await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
    const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
-   const invoice=await queryOfficialInvoiceReadOnly({sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey,originalInvoiceNumber:f.originalInvoiceNumber});
+   const invoice=await queryOfficialInvoiceReadOnly({...amegoCredentialsForEnvironment(c,ctx.environment),originalInvoiceNumber:f.originalInvoiceNumber});
    const rows:Array<{label:string;value:string}>=[];
    const add=(label:string,value:unknown)=>rows.push({label,value:value===undefined||value===null?"－":String(value)});
    add("原發票",invoice.invoiceNumber);add("原發票日期",invoice.invoiceDate);add("原發票含稅金額",invoice.totalAmount);add("原發票稅額",invoice.invoiceTaxAmount);
@@ -202,7 +214,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
     add("買受人",`${request.BuyerName}／${request.BuyerIdentifier}`);
     add("本次折讓商品",itemText(request.ProductItem));add("本次含稅折讓",frozen.requestedGross);
     if(frozen.status==="open"||frozen.status==="review"){
-     const proof=await reconcileOfficialAllowanceForOriginal(frozen,{sellerInvoice:c.sellerInvoice,appKey:c.amegoAppKey});
+     const proof=await reconcileOfficialAllowanceForOriginal(frozen,{...amegoCredentialsForEnvironment(c,ctx.environment)});
      const scaled=BigInt(proof.officialRemainingBeforeRequest);
      add("最新可折含稅額",`${scaled/10000000n}.${String(scaled%10000000n).padStart(7,"0")}`);
     }

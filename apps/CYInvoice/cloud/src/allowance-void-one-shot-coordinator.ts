@@ -2,7 +2,7 @@
 // attempts, and official readback. A claim is an identity fence, not a lifetime
 // ban on safe same-number retry. Legacy unproven claims stay readback-only.
 import {loadCloudAllowanceVoidForManager,activeVoidDevice} from "./allowance-void-applications";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {queryOfficialVoidTarget,sameVoidCompanyCard} from "./amego-allowance-void-proof";
 import {postAllowanceVoidOnce} from "./amego-allowance-void";
 import {readOfficialAllowanceVoidStatus} from "./amego-allowance-status";
@@ -33,7 +33,7 @@ export async function executeCloudVoidOnce(db:D1Database,t:VoidOnceTarget,ctx:Cl
   const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
   if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
    throw new Error("VOID_EXEC_COMPANY_CHANGED");
-  const input={sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,allowanceNumber:frozen.allowanceNumber};
+  const input={...amegoCredentialsForEnvironment(company,ctx.environment),allowanceNumber:frozen.allowanceNumber};
   const status=await readOfficialAllowanceVoidStatus(input,transport,clock);
   const prior=await db.prepare(`SELECT application_id FROM allowance_void_send_claims WHERE application_id=?1 AND workspace_id=?2`)
    .bind(t.applicationId,t.workspaceId).first();

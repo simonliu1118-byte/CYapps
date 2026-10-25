@@ -215,6 +215,16 @@ export async function synchronizeCompanySettingsToDevice(
   return {company:row?status(row):null,...(credentials?{credentials}:{})};
 }
 
+// The application environment belongs to the frozen transaction, never APP_ENV.
+// These are AMEGO's published test credentials, identical to Windows AmegoDefaults.
+export const amegoTestAccount=Object.freeze({sellerInvoice:"12345678",appKey:"sHeq7t8G1wiQvhAuIM27"});
+export function amegoCredentialsForEnvironment(company:{sellerInvoice:string;amegoAppKey:string},
+ environment:"test"|"production") {
+  if(environment==="test")return amegoTestAccount;
+  if(environment!=="production")throw new Error("ALLOWANCE_ENVIRONMENT_INVALID");
+  return {sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey};
+}
+
 // INTERNAL trusted Worker gateway only, never a browser-facing response.
 export async function loadAmegoCompanySettingsForGateway(db: D1Database,workspaceId: string,
   encryptionKeyHex: string) {

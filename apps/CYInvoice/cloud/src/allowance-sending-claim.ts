@@ -6,7 +6,7 @@
 // An ambiguous database result is ALWAYS readback-only, never retry-send.
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext,StoredCloudAllowance} from "./allowance-frozen-store";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {allowanceNumberFromSequence,hasCollisionReservationAudit} from "./allowance-number-reservation";
 
@@ -131,7 +131,7 @@ export async function claimCloudAllowanceOneShotSending(
  // Do NOT accept browser-supplied official balances. Make new signed
  // invoice_query + allowance_query read-only calls for ALL historical numbers.
  const proof=await reconcileOfficialAllowanceForOriginal(frozen,{
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey
+  ...amegoCredentialsForEnvironment(company,ctx.environment)
  },transport,clock);
  const date=nowUtc(clock),at=date.toISOString();
  const checked=Date.parse(proof.officialCheckedAtUtc);

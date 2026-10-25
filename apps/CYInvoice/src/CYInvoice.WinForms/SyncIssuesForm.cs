@@ -840,7 +840,7 @@ internal sealed class SyncIssuesForm : Form
                     var local = repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                         repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                     var approval = local ? allowanceVoidWorkflow.LocalApprovalFor(issue) : null;
-                    primaryText = !local ? LegacyAllowanceVoidWebsiteAction :
+                    primaryText = !local ? HistoricalReadbackAction :
                         approval is not null ? string.Empty : "核准並作廢";
                     primaryDanger = local && approval?.Claimed != true;
                     allowCancel = !allowAdministrativeClose && approval is null;
@@ -866,7 +866,7 @@ internal sealed class SyncIssuesForm : Form
                                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly;
                             primaryText = local && review.DraftItems is { Count: > 0 }
                                 ? "核准並開立折讓"
-                                : LegacyAllowanceWebsiteAction;
+                                : HistoricalReadbackAction;
                             allowCancel = true;
                         }
                         else
@@ -1049,7 +1049,7 @@ internal sealed class SyncIssuesForm : Form
             if (repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
                 await ProcessLocalAllowanceVoidAsync(issue, authorization!);
-            else CompleteAllowanceVoid(issue, authorization!);
+            else await CheckHistoricalAllowanceVoidAsync(issue, authorization!);
             return;
         }
 
@@ -1074,7 +1074,7 @@ internal sealed class SyncIssuesForm : Form
                 repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly &&
                 review.DraftItems is { Count: > 0 })
                 await ApproveLocalAllowanceDraftAsync(issue, authorization!);
-            else await CompleteAllowanceAsync(issue, authorization!);
+            else await CheckHistoricalAllowanceAsync(issue, authorization!);
         }
         else await ConfirmAllowanceCandidateAsync(issue, record, review, authorization);
     }
@@ -1112,29 +1112,16 @@ internal sealed class SyncIssuesForm : Form
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
-    private void CompleteAllowanceVoid(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
+    private async Task CheckHistoricalAllowanceVoidAsync(InvoiceSyncIssue issue,EmployeeAdminLoginForm authorization)
     {
-        if (MessageBox.Show(
-                this,
-                "此為舊網站作廢流程，僅供新流程完成真實驗收前處理既有待辦。\n\n請先在光貿網站完成作廢並另行核對官方狀態。\n\n按下「是」只結束人工待辦，不會呼叫 g0501，也不表示官方已作廢成功。",
-                "舊流程：網站作廢人工結案",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-        var login = authorization;
         SetManualReviewBusy(true);
         try
         {
-            allowanceVoidWorkflow.MarkManualCompleted(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
-            MessageBox.Show(this, "僅完成舊人工待辦的行政結案；光貿作廢狀態仍以官方唯讀查回為準。", "舊流程行政結案", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            ReloadAll();
+            var result=await allowanceVoidWorkflow.CheckHistoricalAsync(issue,authorization.EnteredEmployeeNo,authorization.AuthenticatedPassword);
+            if (!IsDisposed) { ReloadAll(); MessageBox.Show(this,result.Message,"官方查證"); }
         }
-        catch (Exception error)
-        {
-            MessageBox.Show(this, error.Message, "折讓作廢人工處理未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally { SetManualReviewBusy(false); }
+        catch(Exception error) { if(!IsDisposed)MessageBox.Show(this,error.Message,"官方查證未完成"); }
+        finally { if(!IsDisposed)SetManualReviewBusy(false); }
     }
 
     private async Task ApproveVoidManualReviewAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
@@ -1252,25 +1239,16 @@ internal sealed class SyncIssuesForm : Form
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
 
-    private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
+    private async Task CheckHistoricalAllowanceAsync(InvoiceSyncIssue issue,EmployeeAdminLoginForm authorization)
     {
-        if (MessageBox.Show(this,
-                "此為舊網站折讓流程，僅供新流程真實驗收完成前處理既有待辦。\n\n請先確認光貿網站已進行折讓。按下「是」只會進入官方 invoice_query 唯讀確認，不等於本次已成功開立或可重新送出。",
-                "舊流程：網站折讓待查", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-        var login = authorization;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
-            ShowAllowanceResult(result);
-            ReloadAll();
+            var result=await allowanceWorkflow.CheckHistoricalAsync(issue,authorization.EnteredEmployeeNo,authorization.AuthenticatedPassword);
+            if(!IsDisposed) { ShowAllowanceResult(result); ReloadAll(); }
         }
-        catch (Exception error)
-        {
-            MessageBox.Show(this, error.Message, "折讓人工處理未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        finally { SetManualReviewBusy(false); }
+        catch(Exception error) { if(!IsDisposed)MessageBox.Show(this,error.Message,"官方查證未完成"); }
+        finally { if(!IsDisposed)SetManualReviewBusy(false); }
     }
 
     private async Task ConfirmAllowanceCandidateAsync(InvoiceSyncIssue issue, InvoiceRecord record, InvoiceAllowanceManualReview review, EmployeeAdminLoginForm authorization)
@@ -1308,7 +1286,7 @@ internal sealed class SyncIssuesForm : Form
                 MessageBox.Show(this, result.Message, "折讓確認完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 break;
             case InvoiceAllowanceReconcileOutcome.PendingConfirmation:
-                MessageBox.Show(this, result.Message + "\n\n系統會在之後每一次正常同步繼續查詢，不需要重複按「已人工處理」。",
+                MessageBox.Show(this, result.Message + "\n\n系統會在既有同步時依原申請繼續查證。",
                     "折讓等待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 break;
             case InvoiceAllowanceReconcileOutcome.Problem:
@@ -1617,7 +1595,7 @@ internal sealed class SyncIssuesForm : Form
         rows.Add(new("折讓作廢原因", review?.Reason ?? "－"));
         var api = allowanceVoidWorkflow.LocalApprovalFor(issue);
         rows.Add(new("處理狀態", api?.Claimed == true ? "主管已核准，系統正依原號自動查證與處理" :
-            issue.ResolvedUtc is not null ? "已解決" : api is not null ? "已覆核；送出前仍須重新驗證" : "等待管理員覆核"));
+            issue.ResolvedUtc is not null ? "已解決" : api is not null ? "主管已核准，系統自動處理中" : "等待主管核准"));
         if (api is not null)
         {
             rows.Add(new("核准管理員", api.ManagerEmployeeNo));
@@ -1978,9 +1956,8 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
-        if (LegacyAllowanceWebsiteAction != "舊流程：網站已人工折讓" ||
-            LegacyAllowanceVoidWebsiteAction != "舊流程：網站已作廢")
-            throw new InvalidOperationException("G 階段舊網站入口必須與新單次送出明確區分");
+        if (HistoricalReadbackAction != "查證官方資料")
+            throw new InvalidOperationException("舊待辦僅提供原號唯讀查證。");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
             DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理" ||
@@ -2000,8 +1977,7 @@ internal sealed class SyncIssuesForm : Form
     // Keep old website paths visibly distinct from the new authorized
     // g0401/g0501 workflow until real financial acceptance permits removal.
     // These labels do not authorize a financial send or mark AMEGO success.
-    internal const string LegacyAllowanceWebsiteAction = "舊流程：網站已人工折讓";
-    internal const string LegacyAllowanceVoidWebsiteAction = "舊流程：網站已作廢";
+    internal const string HistoricalReadbackAction = "查證官方資料";
 
     private static string DisplayType(string type) => type switch
     {

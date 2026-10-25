@@ -30,7 +30,7 @@ export async function handleRuntimeSync(request: Request, env: Env, context?:Exe
         if(context)context.waitUntil(work);else await work;
         const ids=Array.isArray(body.allowanceIds)?body.allowanceIds.filter(x=>typeof x==="string"&&/^[A-Za-z0-9_-]{8,100}$/.test(x)).slice(0,100):[];
         const cursor=(value:unknown)=>typeof value==="string"&&/^[A-Za-z0-9_-]{8,100}$/.test(value)?value:"";
-        const columns="application_id,status,execution_state,last_error";
+        const columns="application_id,environment,status,execution_state,last_error";
         // Known operations are checked directly. Independent indexed cursors prevent
         // one operation kind or a long history from hiding another device's work.
         const known=await env.DB.prepare(`SELECT ${columns},'issue' AS operation FROM allowance_applications

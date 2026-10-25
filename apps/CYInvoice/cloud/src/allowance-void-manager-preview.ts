@@ -1,7 +1,7 @@
 // V3.2-E: trusted CYID manager-only signed read-only proof.
  // A preview is NOT an approval grant, sending claim, or g0501 permission.
 import {loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {queryOfficialVoidTarget,sameVoidCompanyCard,freshVoidOfficialEvidence} from "./amego-allowance-void-proof";
 import type {AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 
@@ -29,7 +29,7 @@ export async function previewCloudVoidForManager(
   company.sellerInvoice!==first.sellerInvoice)
   throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
  const proof=await queryOfficialVoidTarget({
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey,
+  ...amegoCredentialsForEnvironment(company,ctx.environment),
   allowanceNumber:first.allowanceNumber,
   originalInvoiceNumber:first.originalInvoiceNumber
  },transport,clock);

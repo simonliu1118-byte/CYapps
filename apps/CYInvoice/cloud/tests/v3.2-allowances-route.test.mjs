@@ -58,12 +58,12 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
    {type:"invoice",invoice_number:invoice});
   assert.equal(form.get("sign"),
    createHash("md5").update(form.get("data")+form.get("time")+
-     "SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+     "sHeq7t8G1wiQvhAuIM27").digest("hex"));
   return Response.json({code:0,data:[row]});
  }};
 }
 // Entirely synthetic transport: no Cloudflare, no AMEGO network access.
-function fakeOneShotProvider(allowanceNumber,collision=false){
+function fakeOneShotProvider(allowanceNumber,collision=false,expectedKey="sHeq7t8G1wiQvhAuIM27"){
  const calls=[];
  const product={original_invoice_number:collision?"CD87654321":invoice,original_invoice_date:20261019,
   original_description:"FAKE ITEM",quantity:1,unit_price:50,
@@ -79,7 +79,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false){
   const form=new URLSearchParams(options.body);
   assert.equal(form.get("sign"),
    createHash("md5").update(form.get("data")+form.get("time")+
-    "SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+    expectedKey).digest("hex"));
   if(url.endsWith("/invoice_query"))
    return Response.json({code:0,data:[invoiceRecord]});
   if(url.endsWith("/g0401")){
@@ -203,6 +203,30 @@ try{
  const created=await call(employee,"create",{...input(app1),workspaceId:undefined,deviceId:undefined});
  assert.equal(created.status,200);assert.equal(created.body.revision,1);
  assert.equal((await call(employee,"create",{...input(app1),workspaceId:undefined,deviceId:undefined})).status,409);
+ const environmentFixture=await fixture();
+ try {
+ const environmentSql=environmentFixture.sql;
+ for(const [device,raw] of [[devA,rawDevA],[devB,rawDevB]])
+  environmentSql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(raw),device);
+ const environmentEmployee=config(environmentFixture.db,principal("USER","employee"));
+ const environmentManager=config(environmentFixture.db,principal("ADMIN","manager"));
+ // APP_ENV is a deployment label; persisted business environment selects credentials.
+ const prodId="application_production_environment";
+ const prodCreate=await call(environmentEmployee,"create",{...input(prodId),environment:"production",workspaceId:undefined,deviceId:undefined});
+ assert.equal(prodCreate.status,200,JSON.stringify(prodCreate));
+ assert.equal(environmentSql.prepare("SELECT environment FROM allowance_applications WHERE application_id=?").get(prodId).environment,"production");
+ const prodProvider=fakeOneShotProvider("P20261019001",false,"SYNTHETIC_APP_KEY_DO_NOT_USE");
+ globalThis.fetch=prodProvider.transport;
+ const prodDetail=await call(environmentManager,"detail",{applicationId:prodId,operation:"issue"},rawDevB);
+ assert.equal(prodDetail.status,200,JSON.stringify(prodDetail));
+ assert.ok(prodProvider.calls.some(x=>x.endsWith("/invoice_query")));
+ const testOnProdId="application_test_on_production_worker";
+ const testOnProd=await call({...environmentEmployee,APP_ENV:"production"},"create",{...input(testOnProdId),workspaceId:undefined,deviceId:undefined});
+ assert.equal(testOnProd.status,200,JSON.stringify(testOnProd));
+ assert.equal(environmentSql.prepare("SELECT environment FROM allowance_applications WHERE application_id=?").get(testOnProdId).environment,"test");
+
+ } finally {environmentFixture.close();}
+
  assert.equal((await call(config(db,principal("USER","another")),"get",{applicationId:app1})).status,404);
  assert.equal((await call(employee,"detail",{applicationId:app1,operation:"issue"})).status,403);
  const provider=fakeOneShotProvider("A20261019001");globalThis.fetch=provider.transport;

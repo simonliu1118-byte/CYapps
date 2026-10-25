@@ -35,7 +35,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("allowance void requires one completed official allowance", TestAllowanceVoidEligibilityAsync),
     ("allowance void duplicate request is idempotent", TestAllowanceVoidDuplicateAsync),
     ("ordinary employee cannot complete allowance void work", TestAllowanceVoidEmployeeCannotCompleteAsync),
-    ("manager completion is local only", TestAllowanceVoidManagerCompletesLocallyAsync),
+    ("historical void requires official proof and never POSTs", TestAllowanceVoidManagerCompletesLocallyAsync),
     ("manager cancellation is local only", TestAllowanceVoidManagerCancelsLocallyAsync),
     ("expired allowance void work supports administrative closure", TestAllowanceVoidAdministrativeClosureAsync),
 };
@@ -180,7 +180,7 @@ static async Task TestLocalVoidLifecycleAsync()
     await restarted.ExecuteApprovedLocalVoidAsync(issue, api);
     Equal(1, api.PostCalls);
     Throws<InvalidOperationException>(()=>restarted.CancelManualReview(issue,"2000","AdminPass1"));
-    Throws<InvalidOperationException>(()=>restarted.MarkManualCompleted(issue,"2000","AdminPass1"));
+    Throws<InvalidOperationException>(()=>restarted.CheckHistoricalAsync(issue,"2000","AdminPass1").GetAwaiter().GetResult());
     var closure=new InvoiceAdministrativeClosureService(setup.Repository,now:()=>DateTimeOffset.UtcNow.AddYears(1));
     Equal(false,closure.CanClose(issue));
     Throws<InvalidOperationException>(()=>closure.Close(issue,"2000","AdminPass1"));
@@ -357,8 +357,8 @@ static async Task TestLocalVoidCompetingIssueAsync()
     await ThrowsAsync<InvalidOperationException>(()=>resumed.PreviewLocalVoidAsync(
         competing,"2000","AdminPass1",api));
     Equal(beforeQueries,api.QueryCalls);
-    Throws<InvalidOperationException>(()=>resumed.MarkManualCompleted(
-        competing,"2000","AdminPass1"));
+    Throws<InvalidOperationException>(()=>resumed.CheckHistoricalAsync(
+        competing,"2000","AdminPass1").GetAwaiter().GetResult());
     Throws<InvalidOperationException>(()=>resumed.CancelManualReview(
         competing,"2000","AdminPass1"));
     Equal(true,new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
@@ -719,7 +719,7 @@ static async Task TestAllowanceVoidEmployeeCannotCompleteAsync()
     var issue = UnresolvedAllowanceVoidIssues(setup.Repository).Single();
     var calls = setup.Gateway.QueryCalls;
 
-    Throws<UnauthorizedAccessException>(() => setup.Workflow.MarkManualCompleted(issue, "3015", "Employee1"));
+    Throws<UnauthorizedAccessException>(() => setup.Workflow.CheckHistoricalAsync(issue, "3015", "Employee1").GetAwaiter().GetResult());
     Equal(calls, setup.Gateway.QueryCalls);
     Equal(0, setup.Gateway.OtherCalls);
     Equal(true, setup.Workflow.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
@@ -728,12 +728,18 @@ static async Task TestAllowanceVoidEmployeeCannotCompleteAsync()
 static async Task TestAllowanceVoidManagerCompletesLocallyAsync()
 {
     using var temporary = new TemporaryDirectory("void-complete");
-    var setup = CreateVoidSetup(temporary.Path, [Allowance(UploadStatuses.Complete)]);
-    await setup.Workflow.SubmitAsync(setup.Record, "ALW-001", "3015", "Employee1", "退貨");
-    var issue = UnresolvedAllowanceVoidIssues(setup.Repository).Single();
+    var (setup,issue,api)=await CreateApiVoidAsync(temporary.Path);
     var calls = setup.Gateway.QueryCalls;
 
-    setup.Workflow.MarkManualCompleted(issue, "2000", "AdminPass1");
+    var waiting=await setup.Workflow.CheckHistoricalAsync(issue,"2000","AdminPass1",api);
+    Equal(false,waiting.OfficialVoidObserved);
+    Equal(1,UnresolvedAllowanceVoidIssues(setup.Repository).Count);
+    Equal(0,api.PostCalls);
+    api.Official=api.Official with {InvoiceType="D0501",CancelDate=20261026};
+    api.Status=new("ALW-001","D0501",99);
+    var checkedResult=await setup.Workflow.CheckHistoricalAsync(issue,"2000","AdminPass1",api);
+    Equal(true,checkedResult.OfficialVoidObserved);
+    Equal(0,api.PostCalls);
 
     Equal(calls, setup.Gateway.QueryCalls);
     Equal(0, setup.Gateway.OtherCalls);

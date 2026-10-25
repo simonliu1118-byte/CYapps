@@ -171,7 +171,15 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                     if (!System.Text.RegularExpressions.Regex.IsMatch(id, @"^[A-Za-z0-9_-]{8,100}$") ||
                         operation is not ("issue" or "void") || state is not ("processing" or "problem" or "completed"))
                         throw new InvalidDataException("Cloud 折讓操作識別無效");
-                    store.ApplyCloudAllowance(accountKey, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "");
+                    var itemEnvironment = item.TryGetProperty("environment",out var remoteEnvironment)
+                        ? Environments.FromCloud(remoteEnvironment.GetString() ?? "")
+                        : current.Environment; // previous Worker had no environment in the projection
+                    var itemAccount = itemEnvironment+"|"+(itemEnvironment==Environments.Test
+                        ? AmegoDefaults.TestInvoice : current.ProductionInvoice.Trim());
+                    var previousAccount = !item.TryGetProperty("environment",out _) ? null : itemEnvironment==Environments.Test
+                        ? Environments.Production+"|"+current.ProductionInvoice.Trim()
+                        : Environments.Test+"|"+AmegoDefaults.TestInvoice;
+                    store.ApplyCloudAllowance(itemAccount, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "", previousAccount);
                     if (state == "completed" || status is "withdrawn" or "rejected")
                         completedApplications.Add(id);
                 }

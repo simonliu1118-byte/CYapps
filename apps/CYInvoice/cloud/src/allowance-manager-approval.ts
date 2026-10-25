@@ -7,7 +7,7 @@
 // are never accepted as proof.
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 export interface AllowanceApprovalTarget {
  workspaceId:string;applicationId:string;deviceId:string;expectedRevision:number;
@@ -92,7 +92,7 @@ export async function approveCloudAllowanceAfterOfficialProof(
  // This is the ONLY provider evidence source: the signed invoice_query
  // plus per-number signed allowance_query detail for this original invoice.
  const proof=await reconcileOfficialAllowanceForOriginal(frozen,{
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey
+  ...amegoCredentialsForEnvironment(company,ctx.environment)
  },transport,clock);
  const date=nowUtc(clock);
  const checked=Date.parse(proof.officialCheckedAtUtc);
