@@ -55,7 +55,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.402"
 
       - name: Set up Python for public artifact safety scan
         uses: actions/setup-python@v7
