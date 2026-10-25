@@ -10,7 +10,7 @@ internal sealed class SettingsForm : Form
     private Settings settings;
     private readonly RadioButton test = new();
     private readonly RadioButton production = new();
-    private readonly Label environmentTitle = new() { Text = "選擇開票環境", AutoSize = true };
+    private readonly Label environmentTitle = new() { Text = "選擇使用環境", AutoSize = true };
     private readonly Label connectionTitle = new() { Text = "連線與裝置", AutoSize = true };
     private readonly Label identityStatus = new() { AutoSize = true, ForeColor = Color.FromArgb(102,112,133) };
     private readonly Label cardStatus = new() { AutoSize = true, MaximumSize = new Size(530,0), ForeColor = Color.FromArgb(102,112,133) };
@@ -77,7 +77,7 @@ internal sealed class SettingsForm : Form
         companyCard.Margin = Padding.Empty;
         companyCard.Click += async (_,_) => await EditCompanyCardAsync();
         environmentHeader.Controls.AddRange([environmentTitle,companyCard]);
-        root.Controls.Add(environmentHeader,0,0);
+        root.Controls.Add(environmentHeader,0,1);
         choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
         choices.RowStyles.Add(new RowStyle(SizeType.Absolute,112));
@@ -86,11 +86,11 @@ internal sealed class SettingsForm : Form
         production.Margin = new Padding(6,0,0,0);
         test.TabIndex = 0; production.TabIndex = 1;
         choices.Controls.Add(test,0,0); choices.Controls.Add(production,1,0);
-        root.Controls.Add(choices,0,1);
+        root.Controls.Add(choices,0,2);
         cardStatus.Margin = new Padding(0,12,0,0);
-        root.Controls.Add(cardStatus,0,2);
+        root.Controls.Add(cardStatus,0,3);
         var connection = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
-            ColumnCount = 1, Margin = new Padding(0,24,0,0) };
+            ColumnCount = 1, Margin = new Padding(0,0,0,24) };
         var connectionHeader = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill,
             WrapContents = false, Margin = new Padding(0,0,0,8) };
         connectionTitle.Margin = new Padding(0,0,16,0);
@@ -105,7 +105,7 @@ internal sealed class SettingsForm : Form
         connection.Controls.Add(connectionHeader,0,0); connection.Controls.Add(connectionActions,0,1);
         cloudSettings.Click += (_,_) => OpenCloudSettings();
         deviceManagement.Click += async (_,_) => await OpenDeviceManagementAsync();
-        root.Controls.Add(connection,0,3);
+        root.Controls.Add(connection,0,0);
         var footer = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0,20,0,0) };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -422,7 +422,9 @@ internal sealed class SettingsForm : Form
             throw new InvalidOperationException("設定公司卡、環境選取或連線入口配置不正確");
         if (Math.Abs(test.Width-production.Width)>1 || test.Height!=production.Height ||
             companyCard.Parent!=environmentTitle.Parent || companyCard.Left<=environmentTitle.Right ||
-            environmentTitle.Font.SizeInPoints!=connectionTitle.Font.SizeInPoints)
+            environmentTitle.Font.SizeInPoints!=connectionTitle.Font.SizeInPoints ||
+            environmentTitle.Text!="選擇使用環境" ||
+            connectionTitle.PointToScreen(Point.Empty).Y>=environmentTitle.PointToScreen(Point.Empty).Y)
             throw new InvalidOperationException("公司卡尺寸、編輯按鈕與分組標題比例不一致");
         foreach(var card in new[]{test,production})
             if(card.Appearance!=Appearance.Button || card.Controls.Count!=0 ||

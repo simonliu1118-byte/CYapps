@@ -13,7 +13,12 @@ internal sealed class SyncIssuesForm : Form
     private static readonly int[] DefaultWidths = [145, 130, 110, 150, 0, 90];
 
     private readonly bool processing;
-    private readonly ComboBox processingFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    private readonly List<CloudWorkItemSummary> cloudWorkItems = [];
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly Button moreWorkItems = UiControls.StandardButton("載入更多");
+    private CloudWorkItemCursor? nextWorkItemCursor;
+    private Settings? cloudReadSettings;
+    private string cloudReadNotice = string.Empty;
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceSyncStateStore stateStore;
@@ -66,7 +71,7 @@ internal sealed class SyncIssuesForm : Form
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
 
-        Text = processing ? "待辦／處理中" : "上傳問題";
+        Text = processing ? "處理中" : "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(900, 0);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -80,7 +85,12 @@ internal sealed class SyncIssuesForm : Form
         BuildLayout();
         if (!processing) MarkVisibleIssuesRead();
         ReloadAll();
-        Shown += (_, _) => FitToRows();
+        Shown += async (_, _) =>
+        {
+            FitToRows();
+            if (!startupSmokeTest && processing) await LoadCloudWorkItemsAsync(reset: true);
+        };
+        FormClosing += (_, _) => lifetime.Cancel();
     }
 
     private void BuildLayout()
@@ -92,7 +102,12 @@ internal sealed class SyncIssuesForm : Form
         list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         ConfigureList();
         var reload = UiControls.StandardButton("重新整理");
-        reload.Click += (_, _) => ReloadAll();
+        reload.Click += async (_, _) =>
+        {
+            if (manualReviewBusy) return;
+            ReloadAll();
+            if (processing) await LoadCloudWorkItemsAsync(reset: true);
+        };
         reportCrossDevice.Click += async (_, _) => await ReportCrossDeviceAsync();
         list.DoubleClick += async (_, _) => await ShowSelectedIssueDetailsAsync();
         list.ItemCheck += (_, eventArgs) =>
@@ -129,14 +144,7 @@ internal sealed class SyncIssuesForm : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.Controls.Add(summary, 0, 0);
         reportCrossDevice.Margin = new Padding(0, 0, 6, 0);
-        if (processing)
-        {
-            processingFilter.Items.AddRange(["全部待辦／處理中","待主管核准","系統處理中"]);
-            processingFilter.SelectedIndex=0;
-            processingFilter.SelectedIndexChanged+=(_,_)=>ReloadAll();
-            header.Controls.Add(processingFilter,1,0);
-        }
-        else header.Controls.Add(reportCrossDevice, 1, 0);
+        header.Controls.Add(reportCrossDevice, 1, 0);
         exportIssueDiagnostics.Margin = new Padding(0, 0, 6, 0);
         header.Controls.Add(exportIssueDiagnostics, 2, 0);
         reload.Anchor = AnchorStyles.Right | AnchorStyles.Top;
@@ -157,6 +165,17 @@ internal sealed class SyncIssuesForm : Form
         {
             failedActions.Controls.Add(deleteFailed);
             failedActions.Controls.Add(clearFailed);
+        }
+        else
+        {
+            moreWorkItems.Visible = false;
+            moreWorkItems.Click += async (_, _) => await LoadCloudWorkItemsAsync(reset: false);
+            failedActions.Controls.Add(moreWorkItems);
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("依工作項目 ID 查回", null, async (_, _) => await LookupCloudWorkItemAsync());
+            menu.Opening += (_, eventArgs) => eventArgs.Cancel = !CanReadCloudWorkItems(repository.Settings.LoadOrCreate());
+            list.ContextMenuStrip = menu;
+            empty.ContextMenuStrip = menu;
         }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         close.Margin = new Padding(0, 4, 0, 0);
@@ -179,18 +198,252 @@ internal sealed class SyncIssuesForm : Form
         body.Controls.Add(empty);
         root.Controls.Add(body, 0, 1);
         root.Controls.Add(bottom, 0, 2);
-        if (processing && !startupSmokeTest && repository.Settings.LoadOrCreate() is
-            { CloudMode: not CloudModes.LocalOnly, CloudIdentityProvider: "CYID", CloudEmployeeAuthorityReady: true })
-        {
-            var tabs = new TabControl { Dock = DockStyle.Fill };
-            var local = new TabPage("待核准／處理中") { BackColor = Color.White };
-            local.Controls.Add(root); tabs.TabPages.Add(local);
-            var general = new TabPage("一般待辦") { BackColor = Color.White };
-            general.Controls.Add(new CloudWorkItemsControl(repository) { Dock = DockStyle.Fill });
-            tabs.TabPages.Add(general); Controls.Add(tabs);
-        }
-        else Controls.Add(root);
+        Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
+    }
+
+    private static bool CanReadCloudWorkItems(Settings value) =>
+        value.CloudMode != CloudModes.LocalOnly && value.CloudIdentityProvider == "CYID" &&
+        value.CloudEmployeeAuthorityReady && value.CloudWorkspaceId.Length != 0 && value.CloudDeviceId.Length != 0;
+
+    private bool SameWorkItemScope(Settings requested)
+    {
+        var current = repository.Settings.LoadOrCreate();
+        return current.CloudMode == requested.CloudMode && current.CloudIdentityProvider == requested.CloudIdentityProvider &&
+            current.CloudEmployeeAuthorityReady == requested.CloudEmployeeAuthorityReady &&
+            current.CloudWorkspaceId == requested.CloudWorkspaceId && current.CloudDeviceId == requested.CloudDeviceId &&
+            current.CloudBaseUrl == requested.CloudBaseUrl && current.CloudDeviceTokenEncrypted == requested.CloudDeviceTokenEncrypted &&
+            current.Environment == requested.Environment && current.ProductionInvoice == requested.ProductionInvoice;
+    }
+
+    private void ClearCloudWorkItems(string notice)
+    {
+        cloudWorkItems.Clear();
+        cloudReadSettings = null;
+        nextWorkItemCursor = null;
+        cloudReadNotice = notice;
+    }
+
+    private bool CollectWorkItemCredentials(out string employeeNo, out string password)
+    {
+        using var login = new EmployeeAdminLoginForm(repository, "CYID 管理員當次驗證",
+            administratorRequired: false, collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK)
+        {
+            employeeNo = password = string.Empty;
+            return false;
+        }
+        employeeNo = login.EnteredEmployeeNo;
+        password = login.AuthenticatedPassword;
+        return true;
+    }
+
+    private async Task LoadCloudWorkItemsAsync(bool reset, string? employeeNo = null, string? password = null)
+    {
+        if (!processing || manualReviewBusy || lifetime.IsCancellationRequested || !reset && nextWorkItemCursor is null) return;
+        var requested = repository.Settings.LoadOrCreate();
+        if (!CanReadCloudWorkItems(requested))
+        {
+            ClearCloudWorkItems(string.Empty);
+            ReloadAll();
+            return;
+        }
+        if (!reset && cloudReadSettings is not null && !SameWorkItemScope(cloudReadSettings))
+        {
+            ClearCloudWorkItems("雲端待辦需重新確認");
+            ReloadAll();
+            return;
+        }
+        var cursor = reset ? null : nextWorkItemCursor;
+        if (reset) ClearCloudWorkItems("讀取雲端待辦中");
+        if ((employeeNo is null || password is null) && !CollectWorkItemCredentials(out employeeNo, out password))
+        {
+            ClearCloudWorkItems("雲端待辦尚未驗證");
+            ReloadAll();
+            return;
+        }
+        SetManualReviewBusy(true);
+        try
+        {
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var client = new CloudWorkItemClient(http, new Uri(requested.CloudBaseUrl),
+                repository.Settings.CloudDeviceToken(requested), requested.CloudWorkspaceId);
+            var page = await client.ListAsync(employeeNo, password, 20, cursor: cursor, cancellationToken: lifetime.Token);
+            if (IsDisposed || lifetime.IsCancellationRequested) return;
+            if (!SameWorkItemScope(requested))
+            {
+                ClearCloudWorkItems("雲端待辦需重新確認");
+                return;
+            }
+            cloudReadSettings = requested;
+            foreach (var item in page.Items)
+            {
+                cloudWorkItems.RemoveAll(previous => previous.ItemId == item.ItemId);
+                cloudWorkItems.Add(item);
+            }
+            nextWorkItemCursor = page.NextCursor;
+            cloudReadNotice = page.NextCursor is null ? string.Empty : "尚有待辦可載入";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            ClearCloudWorkItems(error is CloudApiException { Code: "WORK_ITEMS_NOT_READY" }
+                ? "雲端待辦尚未啟用" : "雲端待辦讀取失敗，請重新整理");
+        }
+        finally
+        {
+            if (!IsDisposed && !lifetime.IsCancellationRequested)
+            {
+                SetManualReviewBusy(false);
+                ReloadAll();
+            }
+        }
+    }
+
+    private async Task ShowCloudWorkItemDetailsAsync(CloudWorkItemSummary item)
+    {
+        using var detail = new ManualReviewDetailForm("跨機待辦詳情", [
+            new("建立時間", item.CreatedAtUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")),
+            new("類型", item.Kind == "VOID" ? "紙本作廢覆核" : "上傳問題"),
+            new("環境", item.Environment == "production" ? "正式" : "測試"),
+            new("工作項目 ID", item.ItemId),
+            new("回報內容", item.IssueCode is null ? "紙本作廢覆核" : DisplayType(item.IssueCode)),
+            new("人工狀態", item.Status == "open" ? "待處理" : "覆核中"),
+            new("說明", "此為跨機人工追蹤；封存不代表發票已作廢或上傳成功。")
+        ], "人工封存");
+        if (detail.ShowDialog(this) == DialogResult.OK && detail.SelectedAction == ManualReviewDetailAction.Primary)
+            await ArchiveCloudWorkItemAsync(item);
+    }
+
+    private async Task ArchiveCloudWorkItemAsync(CloudWorkItemSummary chosen)
+    {
+        if (manualReviewBusy || chosen.Status is not ("open" or "review") ||
+            cloudReadSettings is null || !SameWorkItemScope(cloudReadSettings)) return;
+        if (!CollectWorkItemCredentials(out var employeeNo, out var password)) return;
+        var requested = cloudReadSettings;
+        SetManualReviewBusy(true);
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        CloudWorkItemClient? client = null;
+        string? outcome = null;
+        try
+        {
+            client = new CloudWorkItemClient(http, new Uri(requested.CloudBaseUrl),
+                repository.Settings.CloudDeviceToken(requested), requested.CloudWorkspaceId);
+            var current = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
+            if (IsDisposed || lifetime.IsCancellationRequested) return;
+            if (!SameWorkItemScope(requested) || current is null || current.Environment != chosen.Environment ||
+                current.Kind != chosen.Kind || current.Revision != chosen.Revision || current.Status != chosen.Status)
+            {
+                outcome = "工作項目已變更，未封存。";
+                return;
+            }
+            var reason = current.Kind == "UPLOAD_ISSUE" ? AskResolutionCode() : null;
+            if (current.Kind == "UPLOAD_ISSUE" && reason is null) return;
+            if (MessageBox.Show(this, "確認人工處置並封存這筆回報？\n這不代表原發票已作廢或上傳成功。",
+                "確認人工處置", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            if (!SameWorkItemScope(requested)) { outcome = "裝置或環境已變更，未封存。"; return; }
+            if (current.Status == "open")
+            {
+                await client.TransitionManualAsync(current, "review", employeeNo, password, cancellationToken: lifetime.Token);
+                current = current with { Status = "review", Revision = current.Revision + 1 };
+            }
+            await client.TransitionManualAsync(current, "closed", employeeNo, password, reason, lifetime.Token);
+            outcome = "已人工封存；原發票仍以官方查證結果為準。";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            try
+            {
+                if (client is null) throw new InvalidOperationException();
+                var latest = await client.GetAsync(chosen.ItemId, employeeNo, password, lifetime.Token);
+                outcome = latest is null ? "查無原工作項目；未重送操作。" :
+                    $"已查回原項目：{(latest.Status == "closed" ? "已人工封存" : "尚未封存")}；未重送操作。";
+            }
+            catch { outcome = "結果尚未確認；請依原工作項目 ID 查回，程式沒有重送。"; }
+        }
+        finally
+        {
+            if (!IsDisposed && !lifetime.IsCancellationRequested)
+            {
+                SetManualReviewBusy(false);
+                if (SameWorkItemScope(requested)) await LoadCloudWorkItemsAsync(true, employeeNo, password);
+                else { ClearCloudWorkItems("雲端待辦需重新確認"); ReloadAll(); }
+                if (!IsDisposed && outcome is not null)
+                    MessageBox.Show(this, outcome, "跨機待辦", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+    }
+
+    private async Task LookupCloudWorkItemAsync()
+    {
+        if (manualReviewBusy || lifetime.IsCancellationRequested) return;
+        var requested = repository.Settings.LoadOrCreate();
+        if (!CanReadCloudWorkItems(requested)) return;
+        using var dialog = new Form { Text = "依工作項目 ID 查回", StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(420,100), FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false, ShowIcon = false, ShowInTaskbar = false, Font = Font };
+        var id = new TextBox { Dock = DockStyle.Top, MaxLength = 100, PlaceholderText = "wi_ 開頭的工作項目 ID" };
+        var lookup = UiControls.StandardButton("查回");
+        lookup.DialogResult = DialogResult.OK;
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 40, FlowDirection = FlowDirection.RightToLeft };
+        actions.Controls.Add(lookup); dialog.Controls.Add(id); dialog.Controls.Add(actions);
+        dialog.AcceptButton = lookup;
+        if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(id.Text) ||
+            !CollectWorkItemCredentials(out var employeeNo, out var password)) return;
+        SetManualReviewBusy(true);
+        try
+        {
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var client = new CloudWorkItemClient(http, new Uri(requested.CloudBaseUrl),
+                repository.Settings.CloudDeviceToken(requested), requested.CloudWorkspaceId);
+            var item = await client.GetAsync(id.Text.Trim(), employeeNo, password, lifetime.Token);
+            if (IsDisposed || lifetime.IsCancellationRequested) return;
+            if (!SameWorkItemScope(requested)) throw new InvalidOperationException();
+            MessageBox.Show(this, item is null ? "查無此工作項目。" :
+                $"工作項目：{item.ItemId}\n狀態：{(item.Status == "closed" ? "已封存" : item.Status == "open" ? "待處理" : "覆核中")}\n版次：{item.Revision}\n僅人工追蹤，不代表官方發票狀態。",
+                "原項目查回", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            ClearCloudWorkItems("雲端待辦需重新確認");
+            if (!IsDisposed) MessageBox.Show(this, "查回失敗；請檢查 ID、權限與連線。程式沒有重送。", "原項目查回");
+        }
+        finally
+        {
+            if (!IsDisposed && !lifetime.IsCancellationRequested) { SetManualReviewBusy(false); ReloadAll(); }
+        }
+    }
+
+    private string? AskResolutionCode()
+    {
+        using var dialog = new Form { Text = "上傳問題封存原因", StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(320, 130), FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false, ShowIcon = false,
+            Font = new Font("Microsoft JhengHei UI", 10F) };
+        var reasons = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(10) };
+        reasons.Items.AddRange(["已於本機解決", "已確認官方狀態", "重複報告",
+            "不需處理", "仍需追蹤"]);
+        reasons.SelectedIndex = 4;
+        var ok = UiControls.StandardButton("確定");
+        ok.DialogResult = DialogResult.OK;
+        var panel = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42,
+            FlowDirection = FlowDirection.RightToLeft };
+        panel.Controls.Add(ok);
+        dialog.Controls.Add(new Label { Dock = DockStyle.Top, Height = 40,
+            Text = "請選擇人工封存原因（不改變官方狀態）", TextAlign = ContentAlignment.MiddleLeft });
+        dialog.Controls.Add(reasons);
+        dialog.Controls.Add(panel);
+        dialog.AcceptButton = ok;
+        if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        return reasons.SelectedIndex switch
+        {
+            0 => "resolved_locally", 1 => "checked_official", 2 => "duplicate_report",
+            3 => "not_actionable", _ => "needs_followup"
+        };
     }
 
     private void ConfigureList()
@@ -207,7 +460,9 @@ internal sealed class SyncIssuesForm : Form
     {
         try
         {
-            var selectedId = SelectedIssue()?.Id;
+            var selectedTag = list.SelectedItems.Count == 1 ? list.SelectedItems[0].Tag : null;
+            if (cloudReadSettings is not null && !SameWorkItemScope(cloudReadSettings))
+                ClearCloudWorkItems("雲端待辦需重新確認。 ");
             lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
             var queue = new InvoiceWorkQueue(repository).Load();
             var issues = processing ? queue.ProcessingIssues : queue.UploadIssues;
@@ -257,6 +512,32 @@ internal sealed class SyncIssuesForm : Form
                 }
             }
 
+            if (processing)
+            {
+                var localReports = new HashSet<string>(StringComparer.Ordinal);
+                if (cloudWorkItems.Count != 0 && cloudReadSettings is not null)
+                {
+                    var token = repository.Settings.CloudDeviceToken(cloudReadSettings);
+                    foreach (var issue in issues.Where(issue => CloudLocalWorkItemReferences.IsSupportedIssueType(issue.IssueType)))
+                        if (token.Length != 0) localReports.Add(CloudLocalWorkItemReferences.FromLocalIssue(issue, token).ItemId);
+                }
+                var environment = repository.Settings.LoadOrCreate().Environment == Environments.Test ? "test" : "production";
+                foreach (var item in cloudWorkItems.Where(item => item.Environment == environment &&
+                    item.Status is "open" or "review" && !localReports.Contains(item.ItemId)))
+                {
+                    var time = item.CreatedAtUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+                    var row = new ListViewItem(ShortIssueTime(time));
+                    row.SubItems.Add(item.Kind == "VOID" ? "跨機作廢覆核" : "跨機上傳問題");
+                    row.SubItems.Add(string.Empty);
+                    row.SubItems.Add(string.Empty);
+                    row.SubItems.Add((item.IssueCode is null ? "紙本作廢覆核" : DisplayType(item.IssueCode)) + "｜僅人工追蹤");
+                    row.SubItems.Add(item.Status == "open" ? "待處理" : "覆核中");
+                    row.SubItems[5].ForeColor = Color.FromArgb(190, 120, 0);
+                    row.Tag = item;
+                    rows.Add((time, row));
+                }
+            }
+
             foreach (var record in failed)
             {
                 var time = FullIssueTime(record);
@@ -280,11 +561,6 @@ internal sealed class SyncIssuesForm : Form
                 var index = 0;
                 foreach (var row in rows.OrderByDescending(item => item.SortKey, StringComparer.Ordinal))
                 {
-                    if (processing && processingFilter.SelectedIndex is 1 or 2)
-                    {
-                        var pending = row.Row.Tag is InvoiceSyncIssue issue && NeedsManagerApproval(issue);
-                        if ((processingFilter.SelectedIndex==1)!=pending) continue;
-                    }
                     ApplyZebra(row.Row, index++);
                     list.Items.Add(row.Row);
                 }
@@ -294,11 +570,21 @@ internal sealed class SyncIssuesForm : Form
                 list.EndUpdate();
             }
 
-            if (selectedId is not null)
+            if (selectedTag is not null)
                 foreach (ListViewItem row in list.Items)
-                    if (row.Tag is InvoiceSyncIssue current && current.Id == selectedId) row.Selected = true;
+                    row.Selected = (selectedTag, row.Tag) switch
+                    {
+                        (InvoiceSyncIssue before, InvoiceSyncIssue after) => before.Id == after.Id,
+                        (InvoiceProcessingItem before, InvoiceProcessingItem after) => before.Record.Id == after.Record.Id && before.Kind == after.Kind,
+                        (CloudWorkItemSummary before, CloudWorkItemSummary after) => before.ItemId == after.ItemId,
+                        _ => false,
+                    };
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
-            summary.Text = processing ? $"待辦／處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
+            summary.Text = processing ? $"處理中：{list.Items.Count} 項" +
+                (cloudReadNotice.Length == 0 ? string.Empty : "｜" + cloudReadNotice)
+                : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
+            moreWorkItems.Visible = processing && nextWorkItemCursor is not null;
+            moreWorkItems.Enabled = !manualReviewBusy;
             UpdateFailedButtons();
             UpdateCrossDeviceButton();
             UpdateDiagnosticButton();
@@ -317,11 +603,6 @@ internal sealed class SyncIssuesForm : Form
         var hasRows = list.Items.Count > 0;
         empty.Visible = !hasRows;
         listHost.Visible = hasRows;
-        if (Controls.OfType<TabControl>().Any())
-        {
-            ClientSize = new Size(ClientSize.Width,Math.Min(520,Screen.FromControl(this).WorkingArea.Height-80));
-            root.PerformLayout(); return;
-        }
         var chrome = root.Padding.Vertical + (int)Math.Ceiling(root.RowStyles[0].Height + root.RowStyles[2].Height);
         var workArea = Screen.FromControl(this).WorkingArea;
         var maximumBodyHeight = Math.Max(listHost.HeightForRows(1), workArea.Height - (Height - ClientSize.Height) - chrome - 40);
@@ -364,6 +645,62 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
+    internal static void VerifyMixedProcessingSmoke()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.MixedProcessingSmoke", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var sampleRepository = LocalRepository.Open(directory, new DpapiSecretProtector());
+            var settings = sampleRepository.Settings.LoadOrCreate();
+            settings.Environment = Environments.Test;
+            var token = "cydev_" + new string('1', 64);
+            sampleRepository.Settings.SetCloudDeviceToken(settings, token);
+            sampleRepository.Settings.Save(settings);
+            var now = DateTimeOffset.UtcNow;
+            foreach (var number in new[] { "AA00000001", "AA00000002" })
+                sampleRepository.Invoices.Append(new InvoiceRecord {
+                    Id = number, InvoiceNumber = number, OrderId = number, Environment = Environments.Test,
+                    SellerInvoice = AmegoDefaults.TestInvoice, InvoiceState = InvoiceStates.Opened,
+                    UploadStatus = UploadStatuses.Pending, SentAt = now.ToString("O"),
+                });
+            var store = new InvoiceSyncIssueStore(sampleRepository.DataDirectory);
+            store.Record("test|12345678", "AA00000001", "AA00000001", InvoiceVoidIssueTypes.ManualReview, "等待主管", now);
+            var issue = store.Unresolved("test|12345678").Single();
+            var reportedId = CloudLocalWorkItemReferences.FromLocalIssue(issue, token).ItemId;
+            using var sample = new SyncIssuesForm(sampleRepository, processing: true, startupSmokeTest: true);
+            sample.cloudReadSettings = settings;
+            sample.cloudWorkItems.AddRange([
+                new(reportedId, "test", "VOID", null, "open", 1, now, now),
+                new("wi_synthetic_first", "test", "UPLOAD_ISSUE", "query_failed", "open", 1, now, now),
+                new("wi_synthetic_second", "test", "UPLOAD_ISSUE", "query_failed", "review", 2, now, now),
+                new("wi_synthetic_closed", "test", "VOID", null, "closed", 2, now, now),
+                new("wi_synthetic_other_environment", "production", "VOID", null, "open", 1, now, now),
+            ]);
+            sample.Show();
+            sample.ReloadAll();
+            Application.DoEvents();
+            sample.VerifySmokeLayout();
+            if (sample.list.Items.Count != 4 || sample.listHost.VisibleRowCapacity() != 4 ||
+                sample.list.Items.Cast<ListViewItem>().Count(row => row.Tag is InvoiceSyncIssue) != 1 ||
+                sample.list.Items.Cast<ListViewItem>().Count(row => row.Tag is InvoiceProcessingItem) != 1 ||
+                sample.list.Items.Cast<ListViewItem>().Count(row => row.Tag is CloudWorkItemSummary) != 2)
+                throw new InvalidOperationException("本機待辦、官方處理中與跨機回報必須同列原生清單；只依原回報 ID 去重，不能合併不同操作或混入已封存／其他環境。");
+            var selected = sample.list.Items.Cast<ListViewItem>().Single(row => row.Tag is CloudWorkItemSummary { ItemId: "wi_synthetic_second" });
+            selected.Selected = true;
+            sample.ReloadAll();
+            if (sample.list.SelectedItems.Count != 1 || sample.list.SelectedItems[0].Tag is not CloudWorkItemSummary { ItemId: "wi_synthetic_second" })
+                throw new InvalidOperationException("合併清單重新整理不得遺失所選原待辦。");
+            sample.ClearCloudWorkItems("雲端待辦讀取失敗");
+            sample.ReloadAll();
+            Application.DoEvents();
+            if (sample.list.Items.Count != 2 || sample.listHost.VisibleRowCapacity() != 2 || !sample.summary.Text.Contains("雲端待辦讀取失敗"))
+                throw new InvalidOperationException("雲端待辦讀取失敗必須清除舊雲端結果，保留本機清單並明示未確認。");
+            sample.Close();
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     private void MarkVisibleIssuesRead()
     {
         try
@@ -381,6 +718,11 @@ internal sealed class SyncIssuesForm : Form
     private async Task ShowSelectedIssueDetailsAsync()
     {
         if (manualReviewBusy) return;
+        if (list.SelectedItems.Count == 1 && list.SelectedItems[0].Tag is CloudWorkItemSummary workItem)
+        {
+            await ShowCloudWorkItemDetailsAsync(workItem);
+            return;
+        }
         if (list.SelectedItems.Count == 1 && list.SelectedItems[0].Tag is InvoiceProcessingItem item)
         {
             ShowProcessingDetails(item);
@@ -1126,6 +1468,7 @@ internal sealed class SyncIssuesForm : Form
     {
         manualReviewBusy = busy;
         list.Enabled = !busy;
+        moreWorkItems.Enabled = !busy && nextWorkItemCursor is not null;
     }
 
     private IReadOnlyList<KeyValuePair<string, string>> VoidDetailRows(InvoiceSyncIssue issue)
@@ -1403,7 +1746,7 @@ internal sealed class SyncIssuesForm : Form
         return lastRead is not null && issue.CreatedUtc <= lastRead.Value ? "已讀" : "未讀";
     }
 
-    // Display filter only; business execution and authority stay with the original workflows.
+    // Display status only; business execution and authority stay with the original workflows.
     private bool NeedsManagerApproval(InvoiceSyncIssue issue)
     {
         if (IsCloudAllowance(issue)) return issue.Message == "等待主管核准";
@@ -1475,8 +1818,11 @@ internal sealed class SyncIssuesForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !IsDisposed)
         {
+            lifetime.Cancel();
+            lifetime.Dispose();
+            list.ContextMenuStrip?.Dispose();
             contentToolTip.Dispose();
         }
         base.Dispose(disposing);
@@ -1549,8 +1895,11 @@ internal sealed class SyncIssuesForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != (processing ? "待辦／處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
+        if (Text != (processing ? "處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
+        if (Controls.Count != 1 || Controls[0] != root || Descendants(this).OfType<TabControl>().Any() ||
+            Descendants(this).OfType<ComboBox>().Any())
+            throw new InvalidOperationException("處理中必須沿用單一清單，不得依來源或狀態再新增頁籤與篩選。");
         if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
         if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄" ||

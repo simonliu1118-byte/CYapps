@@ -215,6 +215,7 @@ internal static class Program
         processing.VerifySmokeLayout();
         processing.VerifySmokeRowSizing();
         processing.Close();
+        SyncIssuesForm.VerifyMixedProcessingSmoke();
 
 
         using var settings = new SettingsForm(repository, startupSmokeTest: true);

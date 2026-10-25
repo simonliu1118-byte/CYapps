@@ -508,8 +508,6 @@ internal sealed class MainForm : Form
         firstSetup.VerifySmokeLayout();
         firstSetup.Close();
 
-        CloudWorkItemsControl.VerifySmokeLayout(this);
-
         using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
         employeeLogin.Show(this);
         employeeLogin.PerformLayout();
