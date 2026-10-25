@@ -14,6 +14,7 @@ internal static class CloudWorkItemClientTests
     {
         RejectInvalidTransport();
         await ListPagesAndRejectUnsafeRepliesAsync();
+        await DeviceListOmitsCredentialsAsync();
         await RejectUntrustedResponseAsync();
         await IdReadbackIsPureAndRevalidatesErrorsAsync();
         await MutationsAreManualRecordsOnlyAsync();
@@ -112,6 +113,22 @@ internal static class CloudWorkItemClientTests
         await ThrowsAsync<InvalidDataException>(()=>client.ListAsync(
             "0001","synthetic-pass",1));
         Equal(0,handler.PendingCount,"invalid requests never consume scripted responses");
+    }
+
+    private static async Task DeviceListOmitsCredentialsAsync()
+    {
+        var handler = new QueueHandler();
+        handler.Enqueue(request => {
+            True(request.Headers.Authorization?.Parameter == Token, "device list must retain the original Device token");
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            True(!body.RootElement.TryGetProperty("employeeNo", out _) && !body.RootElement.TryGetProperty("password", out _)
+                && !body.RootElement.TryGetProperty("workspaceId", out _), "opening the list cannot collect or forward employee credentials");
+            return Json(HttpStatusCode.OK, new {ok=true, items=Array.Empty<object>(), nextCursor=(object?)null});
+        });
+        using var http = new HttpClient(handler);
+        var client = new CloudWorkItemClient(http, new Uri("https://cloud.example.test/"), Token, Workspace);
+        Equal(0, (await client.ListAsync()).Items.Count, "authenticated Device reads the privacy-limited pending list");
+        Equal(0, handler.PendingCount, "device list never retries or sends an extra login");
     }
 
     private static async Task RejectUntrustedResponseAsync()

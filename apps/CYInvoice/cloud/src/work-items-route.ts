@@ -53,9 +53,13 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
      Number(env.SCHEMA_VERSION)<16)
     return response(503,{error:{code:"WORK_ITEMS_NOT_READY"}});
   if(req.method!=="POST")return response(405,{error:{code:"METHOD_NOT_ALLOWED"}});
-  if(!env.cyIdContext)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
+  const deviceList=path==="/v1/work-items/list"&&!env.cyIdContext;
+  if(!env.cyIdContext&&!deviceList)return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
   const b=await bodyObject(req);
   if(!b)return response(400,{error:{code:"INVALID_REQUEST"}});
+  if(deviceList&&("employeeNo" in b||"password" in b))
+    return response(401,{error:{code:"EMPLOYEE_AUTH_REQUIRED"}});
+  if(deviceList&&b.status==="closed")return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
   const fields=allowedFields[path];
   if(!Object.keys(b).every(k=>fields.includes(k)))
     return response(400,{error:{code:"INVALID_REQUEST"}});
@@ -87,8 +91,21 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
     ).bind(device.device_id,device.workspace_id).first<{employee_authority_state:string}>();
     if(device.workspace_id!==binding.workspaceId||state?.employee_authority_state!=="cloud")
       return response(401,{error:{code:"DEVICE_INVALID"}});
-    const actor=await env.cyIdContext.revalidate();
-    const manager=actor.workspaceRole==="SUPER_ADMIN"||actor.workspaceRole==="ADMIN";
+    const authorizeDeviceList=async()=>{
+      const current=await cyIdDevice(req,env);
+      const proof=await env.DB.prepare(
+        "SELECT employee_authority_state FROM devices WHERE device_id=?1 AND workspace_id=?2 AND status='active'"
+      ).bind(current.device_id,current.workspace_id).first<{employee_authority_state:string}>();
+      if(proof?.employee_authority_state!=="cloud")throw new CyIdError(401,"DEVICE_INVALID");
+      if(!env.IDENTITY_AUTHORITY)throw new CyIdError(503,"IDENTITY_CONFIGURATION_INVALID");
+      const access=await env.IDENTITY_AUTHORITY.invalidateCache({workspaceId:binding.identityWorkspaceId,
+        applicationId:binding.applicationId,authorities:[]}) as Record<string,unknown>;
+      if(!access||access.workspaceId!==binding.identityWorkspaceId||access.applicationId!==binding.applicationId||access.available!==true)
+        throw new CyIdError(403,"ACCESS_DENIED");
+    };
+    if(deviceList)await authorizeDeviceList();
+    const actor=env.cyIdContext?await env.cyIdContext.revalidate():null;
+    const manager=actor?.workspaceRole==="SUPER_ADMIN"||actor?.workspaceRole==="ADMIN";
     if(path==="/v1/work-items/create"||path==="/v1/work-items/report-upload-issue"||
        path==="/v1/work-items/transition"){
       if(path==="/v1/work-items/transition"&&!manager)
@@ -109,8 +126,8 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
           (b.resolutionCode!==undefined&&
            !uploadResolutionCodes.includes(b.resolutionCode as typeof uploadResolutionCodes[number]))))
         return response(400,{error:{code:"INVALID_TRANSITION"}});
-      const recent=await env.cyIdContext.revalidate();
-      if(recent.employeeId!==actor.employeeId||recent.workspaceRole!==actor.workspaceRole)
+      const recent=await env.cyIdContext!.revalidate();
+      if(recent.employeeId!==actor!.employeeId||recent.workspaceRole!==actor!.workspaceRole)
         return response(409,{error:{code:"AUTHORITY_CHANGED"}});
       await cyIdDevice(req,env);
       // Every D1 write independently fences active Device, Workspace and CYID cloud state.
@@ -149,7 +166,7 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
       return response(200,{itemId:b.itemId,recorded:true,
         officialVerified:false,providerActionPerformed:false});
     }
-    if(!manager)
+    if(!deviceList&&!manager)
       return response(403,{error:{code:"MANAGER_AUTH_REQUIRED"}});
     const result=path.endsWith("/get")
       ?await getWorkItem(env.DB,binding.workspaceId,b.itemId as string)
@@ -159,10 +176,13 @@ export async function handleWorkItems(req:Request,env:Env):Promise<Response|null
         status:b.status as "open"|"review"|"closed"|undefined,
         beforeCreatedAt:cursor?.createdAt,beforeItemId:cursor?.itemId
       });
-    const after=await env.cyIdContext.revalidate();
-    if(after.employeeId!==actor.employeeId||
-       !["SUPER_ADMIN","ADMIN"].includes(after.workspaceRole))
-      return response(409,{error:{code:"AUTHORITY_CHANGED"}});
+    if(deviceList)await authorizeDeviceList();
+    else{
+      const after=await env.cyIdContext!.revalidate();
+      if(after.employeeId!==actor!.employeeId||
+         !["SUPER_ADMIN","ADMIN"].includes(after.workspaceRole))
+        return response(409,{error:{code:"AUTHORITY_CHANGED"}});
+    }
     await cyIdDevice(req,env); // revoked while query was in flight
     return path.endsWith("/get")
       ?(result?response(200,{item:managerReadbackItem(result as Record<string,unknown>)})

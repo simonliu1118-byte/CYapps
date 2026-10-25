@@ -131,6 +131,9 @@ internal static class CyIdIdentityProviderTests
             await provider.AuthenticateAsync(credentials);
             handler.Mode = "offline";
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.User, "real transport outage uses the last confirmed cache");
+            await ThrowsAsync<HttpRequestException>(() => provider.AuthenticateAsync(credentials with { RequireOnline = true }));
+            Check(cache.Authenticate(binding, credentials)?.Role == AppRole.User,
+                "online-only failure cannot use or destroy the existing protected offline proof");
             Check(await provider.AuthenticateAsync(credentials with { Password = "WrongPassword1" }) is null, "offline password required");
             handler.Mode = "admin";
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "online authority replaces cached role");
@@ -138,6 +141,9 @@ internal static class CyIdIdentityProviderTests
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "updated role persists offline");
             handler.Mode = "unavailable";
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "503 uses the existing protected fallback");
+            await ThrowsAsync<CyIdAuthenticationException>(() => provider.AuthenticateAsync(credentials with { RequireOnline = true }));
+            Check(cache.Authenticate(binding, credentials)?.Role == AppRole.Admin,
+                "online-only service failure never substitutes cached authority");
             ameAvailable = false;
             await ThrowsAsync<ServiceConnectionException>(() => provider.AuthenticateAsync(credentials));
             ameAvailable = true;

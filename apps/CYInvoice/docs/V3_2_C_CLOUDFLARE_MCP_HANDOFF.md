@@ -1,8 +1,18 @@
 # CYInvoice V3.2：schema22維護完成與後續驗收
 
-更新：2026-10-23（Asia/Taipei）。工程V3.1.42／BUILD=0、Cloud Source 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
+更新：2026-10-26（Asia/Taipei）。目前工程V3.1.42 Build 3／Cloud Source 0.9.5；最近完成的本機維護仍為V3.1.42／BUILD=0、Cloud 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
 
-**schema21→22及配套原Worker維護已由使用者本機MCP完成報告確認；遠端操作已停止。** 本對話只核對GitHub Source／CI並回填狀態，未獨立重新查詢Cloudflare。完整備份、回復、資源識別、私有路徑及逐筆計量證據留在使用者私有報告，不貼Public Git／PR。產品驗收以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
+**schema21→22及配套原Worker維護已由使用者本機MCP完成報告確認；遠端操作已停止。** schema維護依使用者報告登記；本輪開發配套Source，未獨立重新查詢或修改Cloudflare。完整備份、回復、資源識別、私有路徑及逐筆計量證據留在使用者私有報告，不貼Public Git／PR。產品驗收以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
+
+## 下一輪：Build 3／Cloud 0.9.5原Worker程式更新（尚未執行）
+
+- 本輪工程Source為V3.1.42 Build 3／Cloud 0.9.5，沿原PR #550；部署前核對PR完整HEAD、同SHA必要CI及bundle，不能以歷史已部署Source代替。
+- 目的只有原`/v1/work-items/list`的Device授權最小待辦摘要，避免開啟清單就詢問管理員密碼。詳情、已封存歷史與全部寫入仍須當次管理員驗證；當前Workspace／Device／Application access在讀取前後均檢查。
+- **只更新原Worker程式，D1及marker均維持22。** 不新增Worker／D1、不修改或重跑0020～0022，不更改CYID D1、Bindings、Secrets、Routes或現有旗標。沿原canonical deployment owner做同schema的before／deploy／after，不設定新的schema-upgrade意圖。
+- 本機先依原規則估算本批控制平面／健康／必要查核用量並取得該批部署授權，保留原不可變Worker版本及設定回復證據。原schema22維護與私有備份證據沿用歷史，不為程式更新重做DDL或整庫掃描。
+- 部署後核對線上bundle與同一Source建置一致、Cloud 0.9.5、storageSchemaVersion=22、history不變及原旗標／服務綁定。正式Release仍V3.1.0，不合併或發布，不呼叫真光貿交易。
+- 使用者以新工程包重測：開啟／重新整理清單無密碼窗，待辦詳情才驗管理員；失敗原因可見且驗證窗保留。若WORK_ITEMS_ENABLED原本關閉，保留原值並明示功能未啟用，不自行打開任何旗標。
+- 本輪未做遠端操作；已驗收的公司卡選取／編輯／同步／重啟取卡保留，本輪只收斂重複驗證。完整資源識別、部署回復及計量證據仍只留本機私有資料，不貼Public Git／PR。
 
 ## 最新完成：schema21→22／V3.1.42配套
 

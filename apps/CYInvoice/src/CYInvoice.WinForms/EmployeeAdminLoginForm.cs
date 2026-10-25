@@ -1,10 +1,11 @@
 using CYInvoice.Core.Storage;
+using CYInvoice.Core.Cloud;
 
 namespace CYInvoice.WinForms;
 
 internal sealed class EmployeeAdminLoginForm : Form
 {
-    private const string WindowTitle = "權限驗證";
+    internal const string WindowTitle = "密碼驗證";
     private const int WindowWidth = 280;
     private const int WindowHeight = 126;
     private const int FieldRowHeight = 34;
@@ -12,37 +13,30 @@ internal sealed class EmployeeAdminLoginForm : Form
     private const int CompactButtonWidth = 70;
     private const int CompactButtonHeight = 28;
     private readonly IIdentityProvider identityProvider;
-    private readonly bool administratorRequired;
-    private readonly bool collectCredentialsOnly;
+    private readonly AppRole? requiredRole;
+    private readonly bool requireOnline;
+    private readonly Action<string>? errorReporter;
+    private readonly CancellationTokenSource lifetime = new();
+    private bool authenticating;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly Button login = CompactButton("確定");
     private readonly Button cancel = CompactButton("取消");
 
-    public EmployeeAdminLoginForm(EmployeeStore employees, string title = WindowTitle)
-        : this(new LocalIdentityProvider(employees), title, true)
-    {
-        ArgumentNullException.ThrowIfNull(employees);
-    }
+    public EmployeeAdminLoginForm(EmployeeStore employees)
+        : this(new LocalIdentityProvider(employees)) { }
 
-    public EmployeeAdminLoginForm(LocalRepository repository, string title = WindowTitle)
-        : this(repository.IdentityProvider, title, true)
-    {
-        ArgumentNullException.ThrowIfNull(repository);
-    }
+    public EmployeeAdminLoginForm(LocalRepository repository, AppRole? requiredRole = AppRole.Admin, bool requireOnline = false)
+        : this(repository.IdentityProvider, requiredRole, requireOnline) { }
 
-    public EmployeeAdminLoginForm(LocalRepository repository, string title, bool administratorRequired = true, bool collectCredentialsOnly = false)
-        : this(repository.IdentityProvider, title, administratorRequired, collectCredentialsOnly)
-    {
-        ArgumentNullException.ThrowIfNull(repository);
-    }
-
-    internal EmployeeAdminLoginForm(IIdentityProvider identityProvider, string title, bool administratorRequired, bool collectCredentialsOnly = false)
+    internal EmployeeAdminLoginForm(IIdentityProvider identityProvider, AppRole? requiredRole = AppRole.Admin,
+        bool requireOnline = false, Action<string>? errorReporter = null)
     {
         this.identityProvider = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
-        this.administratorRequired = administratorRequired;
-        this.collectCredentialsOnly = collectCredentialsOnly;
-        Text = string.IsNullOrWhiteSpace(title) ? WindowTitle : title.Trim();
+        this.requiredRole = requiredRole;
+        this.requireOnline = requireOnline;
+        this.errorReporter = errorReporter;
+        Text = WindowTitle;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -53,11 +47,12 @@ internal sealed class EmployeeAdminLoginForm : Form
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
         Shown += (_, _) => employeeNo.Focus();
+        FormClosing += (_, _) => lifetime.Cancel();
     }
 
     public EmployeeAccount? AuthenticatedEmployee { get; private set; }
     public AppPrincipal? AuthenticatedPrincipal { get; private set; }
-    public string AuthenticatedPassword => collectCredentialsOnly || AuthenticatedPrincipal is not null ? password.Text : string.Empty;
+    public string AuthenticatedPassword => AuthenticatedPrincipal is not null ? password.Text : string.Empty;
     public string EnteredEmployeeNo => employeeNo.Text.Trim();
 
     private void BuildLayout()
@@ -106,7 +101,7 @@ internal sealed class EmployeeAdminLoginForm : Form
             Padding = new Padding(0, 5, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
-        login.Click += LoginClicked;
+        login.Click += async (_, _) => await AuthenticateAsync();
         cancel.DialogResult = DialogResult.Cancel;
         login.TabIndex = 2;
         cancel.TabIndex = 3;
@@ -127,47 +122,66 @@ internal sealed class EmployeeAdminLoginForm : Form
         field.TextAlign = HorizontalAlignment.Left;
     }
 
-    private async void LoginClicked(object? sender, EventArgs eventArgs)
+    private async Task AuthenticateAsync()
     {
+        if (authenticating || lifetime.IsCancellationRequested) return;
+        authenticating = true;
+        login.Enabled = false;
+        employeeNo.Enabled = password.Enabled = false;
         try
         {
-            if (collectCredentialsOnly)
-            {
-                // The final core operation is the authority owner. Collecting
-                // credentials grants no principal or permission in this dialog.
-                if (EnteredEmployeeNo.Length != 4 || !EnteredEmployeeNo.All(char.IsAsciiDigit) || password.Text.Length == 0)
-                {
-                    ValidationError("請輸入四位員工編號與密碼。", password);
-                    return;
-                }
-                DialogResult = DialogResult.OK;
-                Close();
-                return;
-            }
             var principal = await identityProvider.AuthenticateAsync(
-                new IdentityAuthenticationRequest(employeeNo.Text, password.Text));
+                new IdentityAuthenticationRequest(employeeNo.Text, password.Text) { RequireOnline = requireOnline }, lifetime.Token);
+            if (IsDisposed || lifetime.IsCancellationRequested) return;
             if (principal is null)
             {
-                ValidationError("員工編號或密碼錯誤", password);
+                ValidationError("帳號或密碼錯誤", password);
                 return;
             }
-            if (administratorRequired && !AppRoles.CanManageAccounts(principal.Role))
+            var allowed = principal.Enabled && (requiredRole switch {
+                AppRole.SuperAdmin => principal.Role == AppRole.SuperAdmin,
+                AppRole.Admin => AppRoles.CanManageAccounts(principal.Role),
+                _ => true,
+            });
+            if (!allowed)
             {
-                MessageBox.Show(this, "權限不足，僅管理員可執行此操作。", "權限不足",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ValidationError("權限不足", password);
                 return;
             }
-
             AuthenticatedPrincipal = principal;
             AuthenticatedEmployee = principal.ToEmployeeAccount();
             DialogResult = DialogResult.OK;
             Close();
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception error)
         {
-            ValidationError(identityProvider.Kind == IdentityProviderKind.Local && error is InvalidOperationException
-                ? "員工編號或密碼錯誤" : error.Message, employeeNo);
+            if (!IsDisposed) ValidationError(AuthenticationErrorMessage(error), password);
         }
+        finally
+        {
+            authenticating = false;
+            if (!IsDisposed)
+            {
+                login.Enabled = employeeNo.Enabled = password.Enabled = true;
+                if (Visible && DialogResult != DialogResult.OK) { password.Focus(); password.SelectAll(); }
+            }
+        }
+    }
+
+    internal static string AuthenticationErrorMessage(Exception error)
+    {
+        var code = error is CyIdAuthenticationException identity ? identity.Code :
+            error is CloudApiException cloud ? cloud.Code : string.Empty;
+        return code switch {
+            "LOGIN_FAILED" or "AUTH_INVALID" or "SUPER_ADMIN_AUTH_FAILED" => "帳號或密碼錯誤",
+            "ACCESS_DENIED" or "MANAGER_AUTH_REQUIRED" or "SUPER_ADMIN_REQUIRED" or "FORBIDDEN" => "權限不足",
+            "DEVICE_INVALID" or "UNAUTHORIZED" => "目前裝置授權已失效，請確認裝置與連線。",
+            "IDENTITY_UNAVAILABLE" => "目前無法連線驗證服務，請稍後再試。",
+            _ when error is HttpRequestException => "目前無法連線驗證服務，請稍後再試。",
+            _ when error is OperationCanceledException => "驗證連線逾時，請稍後再試。",
+            _ => error.Message,
+        };
     }
 
     private static void AdvanceOnEnter(KeyEventArgs eventArgs, Control next)
@@ -188,47 +202,82 @@ internal sealed class EmployeeAdminLoginForm : Form
 
     private void ValidationError(string message, TextBox target)
     {
-        MessageBox.Show(this, message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        BeginInvoke((Action)(() =>
-        {
-            target.Focus();
-            target.SelectAll();
-        }));
+        if (errorReporter is not null) errorReporter(message);
+        else MessageBox.Show(this, message, WindowTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        if (IsDisposed) return;
+        target.Focus();
+        target.SelectAll();
     }
 
-    internal static void VerifyCredentialsCollectionSmoke(Form owner)
+    internal static void VerifyAuthenticationSmoke(Form owner)
     {
-        var provider = new CollectionProbeProvider();
-        using var form = new EmployeeAdminLoginForm(provider, "操作驗證", true, collectCredentialsOnly: true);
-        form.Shown += (_, _) =>
+        var provider = new AuthenticationProbeProvider();
+        var errors = new List<string>();
+        using var form = new EmployeeAdminLoginForm(provider, AppRole.SuperAdmin, requireOnline: true, errorReporter: errors.Add);
+        form.Show(owner);
+        form.employeeNo.Text = "0002";
+        form.password.Text = "SyntheticPass1";
+        void Attempt()
         {
-            form.employeeNo.Text = "0002";
-            form.password.Text = "SyntheticPass1";
-            form.login.PerformClick();
-        };
-        if (form.ShowDialog(owner) != DialogResult.OK || provider.Calls != 0 || form.AuthenticatedPrincipal is not null
-            || form.AuthenticatedEmployee is not null || form.EnteredEmployeeNo != "0002" || form.AuthenticatedPassword != "SyntheticPass1")
-            throw new InvalidOperationException("操作帳密輸入不得額外呼叫 Provider 或產生授權。");
+            // The synthetic provider completes synchronously; exercise the real
+            // authentication/error path without native MessageBox automation.
+            var attempt = form.AuthenticateAsync();
+            if (!attempt.IsCompleted) throw new InvalidOperationException("Synthetic authentication must complete synchronously.");
+            attempt.GetAwaiter().GetResult();
+        }
+        void AssertFailure(string expected)
+        {
+            if (!form.Visible || form.DialogResult == DialogResult.OK || form.AuthenticatedPrincipal is not null ||
+                errors.LastOrDefault() != expected || form.Text != WindowTitle || !form.login.Enabled)
+                throw new InvalidOperationException("驗證失敗必須提示對應原因並維持密碼驗證視窗。");
+        }
+        Attempt(); AssertFailure("帳號或密碼錯誤");
+        provider.Role = AppRole.Admin;
+        Attempt(); AssertFailure("權限不足");
+        provider.Error = new CyIdAuthenticationException("ACCESS_DENIED");
+        Attempt(); AssertFailure("權限不足");
+        provider.Error = new HttpRequestException("Synthetic offline");
+        Attempt(); AssertFailure("目前無法連線驗證服務，請稍後再試。");
+        provider.Error = null; provider.Role = AppRole.SuperAdmin;
+        Attempt();
+        if (form.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin || form.DialogResult != DialogResult.OK ||
+            provider.Calls != 5 || !provider.RequiredOnline || form.AuthenticatedPassword.Length != 0)
+            throw new InvalidOperationException("只有當次帳密與指定角色均驗證成功才能關閉驗證窗。");
     }
 
-    private sealed class CollectionProbeProvider : IIdentityProvider
+    private sealed class AuthenticationProbeProvider : IIdentityProvider
     {
+        public AppRole? Role { get; set; }
+        public Exception? Error { get; set; }
         public int Calls { get; private set; }
+        public bool RequiredOnline { get; private set; }
         public IdentityProviderKind Kind => IdentityProviderKind.CyId;
         public bool OwnsAccountManagement => false;
         public Task<AppPrincipal?> AuthenticateAsync(IdentityAuthenticationRequest request, CancellationToken token = default)
         {
-            Calls++;
-            return Task.FromResult<AppPrincipal?>(new AppPrincipal("emp_synthetic", "0002", "Synthetic", "",
-                AppRole.Admin, true, IdentityProviderKind.CyId, 1));
+            Calls++; RequiredOnline = request.RequireOnline;
+            if (Error is not null) throw Error;
+            return Task.FromResult(Role is null ? null : new AppPrincipal("emp_synthetic", "0002", "Synthetic", "",
+                Role.Value, true, IdentityProviderKind.CyId, 1));
         }
         public Task<AppPrincipal?> RefreshPrincipalAsync(string employeeNo, CancellationToken token = default) =>
-            throw new InvalidOperationException("Credential collection must not refresh a principal.");
+            throw new InvalidOperationException("Authentication must verify credentials.");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !IsDisposed)
+        {
+            lifetime.Cancel();
+            password.Clear();
+            lifetime.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     internal void VerifySmokeLayout()
     {
-        if (ShowIcon || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
+        if (Text != WindowTitle || ShowIcon || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(login, CompactButtonWidth, CompactButtonHeight) ||

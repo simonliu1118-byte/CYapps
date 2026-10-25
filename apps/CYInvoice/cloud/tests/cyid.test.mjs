@@ -111,6 +111,19 @@ assert.equal(auth.body.principal.workspaceId, 'ws_identity');
 assert.equal(auth.body.principal.employeeId, 'emp_owner');
 assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
 
+// Pending summaries use the existing active Device/app scope, not a user
+// session. Actual details and mutations still require employee authentication.
+const listPathsBefore=paths.length;
+const listSessionsBefore=provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n;
+const deviceQueue=await call('/v1/work-items/list',{limit:20},tokens[0],{WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'22'});
+assert.equal(deviceQueue.status,200,JSON.stringify(deviceQueue));
+assert.deepEqual(deviceQueue.body.items,[]);
+assert.equal(paths.length,listPathsBefore,'opening the pending list must not initiate a CYID user login');
+assert.equal(provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n,listSessionsBefore);
+const protectedDetails=await call('/v1/work-items/get',{itemId:'wi_synthetic_missing'},tokens[0],{WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'22'});
+assert.equal(protectedDetails.status,400);
+assert.equal(protectedDetails.body.error.code,'INVALID_LOGIN_REQUEST');
+
 // A V3.0 company card never activates just because the Worker contains its
 // source. It needs an explicit flag AND installed schema 0014+0015.
 // No real D1/Worker is modified by this synthetic exercise.
@@ -400,7 +413,7 @@ for(const storageSchema of ['21','22']){
  });
  const body=await health.json();assert.equal(health.status,200);
  assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
- assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.4');
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.5');
  const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
  assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
 }

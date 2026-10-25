@@ -180,6 +180,11 @@ export default {
             await cyIdDevice(request, env);
           const body = bounded ? boundedBody
             : await request.clone().json<Record<string, unknown>>().catch(() => null);
+          // The pending list exposes only privacy-limited summaries to the
+          // existing active Device; details/mutations retain employee authority.
+          if (path === "/v1/work-items/list" && body &&
+              !("employeeNo" in body) && !("password" in body))
+            return await dispatchRequest(request, env);
           return await withCyIdSession(env, body?.employeeNo, body?.password, async (_, revalidate, verifiedEmail) =>
             dispatchRequest(request, { ...env, cyIdContext: { revalidate, verifiedEmail } }));
         }

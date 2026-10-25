@@ -240,12 +240,12 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
             offline.Remember(binding, principal, request.Password);
             return principal;
         }
-        catch (HttpRequestException) { return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+        catch (HttpRequestException) when (!request.RequireOnline) { return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !request.RequireOnline) {
             return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
         }
         catch (CyIdAuthenticationException error) when ((int?)error.StatusCode is >= 500 and <= 599
-            && error.Code == "IDENTITY_UNAVAILABLE") {
+            && error.Code == "IDENTITY_UNAVAILABLE" && !request.RequireOnline) {
             return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
         }
         catch (CyIdAuthenticationException error) {
@@ -254,7 +254,7 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
             if (error.Code is "LOGIN_FAILED" or "AUTH_INVALID") return null;
             throw;
         }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested) { offline.Forget(request.EmployeeNo); throw; }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested && error is not (HttpRequestException or OperationCanceledException)) { offline.Forget(request.EmployeeNo); throw; }
     }
 
     private async Task<AppPrincipal?> FallbackAsync(CyIdBinding binding, IdentityAuthenticationRequest request,

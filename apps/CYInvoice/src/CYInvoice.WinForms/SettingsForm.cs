@@ -8,6 +8,8 @@ internal sealed class SettingsForm : Form
 {
     private readonly LocalRepository repository;
     private Settings settings;
+    private readonly EmployeeAdminLoginForm? authorization;
+    private readonly Settings authorizationScope;
     private readonly RadioButton test = new();
     private readonly RadioButton production = new();
     private readonly Label environmentTitle = new() { Text = "選擇使用環境", AutoSize = true };
@@ -23,10 +25,14 @@ internal sealed class SettingsForm : Form
     private readonly TableLayoutPanel choices = new() { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, Margin = Padding.Empty };
     private bool resetFlowBusy;
 
-    public SettingsForm(LocalRepository repository, bool startupSmokeTest = false)
+    public SettingsForm(LocalRepository repository, EmployeeAdminLoginForm? authorization = null, bool startupSmokeTest = false)
     {
         this.repository = repository;
         settings = repository.Settings.LoadOrCreate();
+        this.authorization = authorization;
+        authorizationScope = settings;
+        if (!startupSmokeTest && authorization?.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin)
+            throw new InvalidOperationException("權限不足");
         Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(600, 430);
@@ -230,10 +236,18 @@ internal sealed class SettingsForm : Form
             if(saving)return;
             if(name.Text.Trim().Length==0 || seller.Text.Trim().Length!=8 || !seller.Text.Trim().All(char.IsAsciiDigit))
             { MessageBox.Show(editor,"請輸入公司名稱及八位數統編。","資料未完整",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
-            using var login=new EmployeeAdminLoginForm(repository,"編輯公司卡－超管驗證",collectCredentialsOnly:cloud);
-            if(login.ShowDialog(editor)!=DialogResult.OK)return;
-            if(!cloud && login.AuthenticatedPrincipal?.Role!=AppRole.SuperAdmin)
-            { MessageBox.Show(editor,"只有超級管理員可修改公司卡。","權限不足",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
+            if (authorization?.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin)
+            { MessageBox.Show(editor,"權限不足","密碼驗證",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
+            var currentScope = repository.Settings.LoadOrCreate();
+            if (currentScope.CloudMode != authorizationScope.CloudMode ||
+                currentScope.CloudIdentityProvider != authorizationScope.CloudIdentityProvider ||
+                currentScope.CloudEmployeeAuthorityReady != authorizationScope.CloudEmployeeAuthorityReady ||
+                currentScope.CyIdBindingEncrypted != authorizationScope.CyIdBindingEncrypted ||
+                currentScope.CloudWorkspaceId != authorizationScope.CloudWorkspaceId ||
+                currentScope.CloudDeviceId != authorizationScope.CloudDeviceId ||
+                currentScope.CloudBaseUrl != authorizationScope.CloudBaseUrl ||
+                currentScope.CloudDeviceTokenEncrypted != authorizationScope.CloudDeviceTokenEncrypted)
+            { MessageBox.Show(editor,"裝置或工作空間已變更，請重新開啟設定。","無法儲存",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
             saving=true; apply.Enabled=abort.Enabled=false;
             try
             {
@@ -247,13 +261,15 @@ internal sealed class SettingsForm : Form
                     if((card?.HasAmegoAppKey!=true&&key.Text.Length==0)||(card?.HasMoExcelPassword!=true&&mo.Text.Length==0))
                         throw new InvalidOperationException("請將金鑰與 MO店+ 密碼完整設定後儲存。");
                     if(card is null || card.SellerInvoice!=edit.SellerInvoice || card.CompanyName!=edit.CompanyName || key.Text.Length!=0 || mo.Text.Length!=0)
-                        card=await client.UpdateAsync(edit,login.EnteredEmployeeNo,login.AuthenticatedPassword);
+                        card=await client.UpdateAsync(edit,authorization.EnteredEmployeeNo,authorization.AuthenticatedPassword);
                     // UPDATE is never retried. A lost reply leaves the editor visible;
                     // reopening re-reads the current revision before another edit.
                     await client.SynchronizeAsync(repository.Settings);
                 }
                 else
                 {
+                    if (repository.Employees.Find(authorization.EnteredEmployeeNo) is not { Enabled: true, Role: EmployeeRoles.SuperAdmin })
+                        throw new InvalidOperationException("權限不足");
                     var latest=repository.Settings.LoadOrCreate();
                     latest.ProductionInvoice=seller.Text.Trim(); latest.ProductionCompanyName=name.Text.Trim();
                     repository.Settings.ClearCloudCompanyStamp(latest);
@@ -264,11 +280,13 @@ internal sealed class SettingsForm : Form
                 settings=repository.Settings.LoadOrCreate(); UpdateSelection();
                 saving=false; editor.DialogResult=DialogResult.OK;
             }
-            catch(Exception)
+            catch(Exception error)
             {
                 // Do not retry an uncertain mutation or retain an old actionable revision.
                 apply.Enabled=false;
-                MessageBox.Show(editor,cloud?"儲存或同步尚未確認。請關閉編輯並重新讀取公司卡後核對；程式沒有重送更新。":"無法儲存公司卡；原設定仍保留。",
+                MessageBox.Show(editor,error.Message == "權限不足" ? "權限不足，請重新開啟設定。" : error is CloudApiException { Code: "AUTH_INVALID" or "LOGIN_FAILED" or "ACCESS_DENIED" or "FORBIDDEN" or "SUPER_ADMIN_REQUIRED" }
+                    ? EmployeeAdminLoginForm.AuthenticationErrorMessage(error) + "，請重新開啟設定。"
+                    : cloud?"儲存或同步尚未確認。請關閉編輯並重新讀取公司卡後核對；程式沒有重送更新。":"無法儲存公司卡；原設定仍保留。",
                     "公司卡未完成",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             }
             finally { saving=false; abort.Enabled=true; key.Clear(); mo.Clear(); }
@@ -330,7 +348,7 @@ internal sealed class SettingsForm : Form
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("目前無法讀取這台電腦的 Cloud Device Token。");
 
-            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token);
+            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token, repository);
             form.ShowDialog(this);
             if (IsDisposed || Disposing || LocalResetApplication.IsPending) return;
 
@@ -365,7 +383,7 @@ internal sealed class SettingsForm : Form
     private async Task BeginLocalResetAsync()
     {
         if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly) return;
-        using var login = new EmployeeAdminLoginForm(repository,"重設本機資料－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository);
         if (login.ShowDialog(this) != DialogResult.OK) return;
         if (!ConfirmDestructiveReset(cloudExit: false)) return;
         if (!ConfirmFinalReset()) return;
@@ -411,6 +429,67 @@ internal sealed class SettingsForm : Form
         }
 
         return string.Equals(Normalize(left), Normalize(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static void VerifyAuthorizationReuseSmoke()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.SettingsAuthorizationSmoke", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        static IEnumerable<Control> Descendants(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                yield return child;
+                foreach (var descendant in Descendants(child)) yield return descendant;
+            }
+        }
+        try
+        {
+            var repository = LocalRepository.Open(directory, new DpapiSecretProtector());
+            repository.Employees.CreateFirstSuperAdmin("0001", "Synthetic", "synthetic@example.test", "SyntheticPass1");
+            using var login = new EmployeeAdminLoginForm(repository, requiredRole: AppRole.SuperAdmin);
+            login.Shown += (_, _) => login.BeginInvoke((Action)(() =>
+            {
+                var fields = Descendants(login).OfType<TextBox>().ToArray();
+                fields.Single(field => field.MaxLength == 4).Text = "0001";
+                fields.Single(field => field.UseSystemPasswordChar).Text = "SyntheticPass1";
+                Descendants(login).OfType<Button>().Single(button => button.Text == "確定").PerformClick();
+            }));
+            if (login.ShowDialog() != DialogResult.OK) throw new InvalidOperationException("設定須先通過真實本機超管驗證。");
+            using var settings = new SettingsForm(repository, login, startupSmokeTest: true);
+            settings.Show();
+            var promptedAgain = false;
+            var submitted = false;
+            using var complete = new System.Windows.Forms.Timer { Interval = 20 };
+            complete.Tick += (_, _) =>
+            {
+                if (Application.OpenForms.OfType<EmployeeAdminLoginForm>().FirstOrDefault(form => form.Visible) is { } repeated)
+                {
+                    promptedAgain = true; repeated.DialogResult = DialogResult.Cancel;
+                    Application.OpenForms.Cast<Form>().FirstOrDefault(form => form.Text == "編輯公司卡")?.Close();
+                    complete.Stop(); return;
+                }
+                if (submitted || Application.OpenForms.Cast<Form>().FirstOrDefault(form => form.Text == "編輯公司卡") is not { } editor) return;
+                submitted = true;
+                var fields = Descendants(editor).OfType<TextBox>().ToArray();
+                fields.Single(field => field.MaxLength == 100).Text = "Synthetic Company";
+                fields.Single(field => field.MaxLength == 8).Text = "12345675";
+                fields.Single(field => field.MaxLength == 512).Text = "synthetic-card-key";
+                fields.Single(field => field.MaxLength == 256).Text = "synthetic-mo-password";
+                Descendants(editor).OfType<Button>().Single(button => button.Text == "儲存公司卡").PerformClick();
+            };
+            complete.Start();
+            var save = settings.EditCompanyCardAsync();
+            if (!save.IsCompleted) throw new InvalidOperationException("本機公司卡保存不得保留未完成請求。");
+            save.GetAwaiter().GetResult();
+            complete.Stop();
+            var persisted = repository.Settings.LoadOrCreate();
+            if (promptedAgain || persisted.ProductionCompanyName != "Synthetic Company" || persisted.ProductionInvoice != "12345675" ||
+                repository.Settings.ProductionAppKey(persisted) != "synthetic-card-key" || repository.Settings.MoPassword(persisted) != "synthetic-mo-password")
+                throw new InvalidOperationException("編輯公司卡須沿用開啟設定的超管驗證，完整保存且不得再次詢問密碼。");
+            settings.Close();
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     internal void VerifySmokeLayout()

@@ -27,7 +27,7 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox state = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = UiControls.StandardButton("重新整理");
-    private readonly Button processingButton = UiControls.StandardButton("處理中");
+    private readonly Button processingButton = UiControls.StandardButton("待辦/處理中");
     private readonly Button uploadIssuesButton = UiControls.StandardButton("上傳問題");
     private readonly Label rangeToLabel = FilterLabel("至");
     private readonly Label buyerBanLabel = FilterLabel("統編");
@@ -353,12 +353,12 @@ internal sealed class RecordsControl : UserControl
             if (accountKey.Length == 0)
             {
                 uploadIssuesButton.Text = "上傳問題";
-                processingButton.Text = "處理中";
+                processingButton.Text = "待辦/處理中";
                 return;
             }
             var queue = new InvoiceWorkQueue(repository).Load();
             var issues = queue.UploadIssues.Where(issue => issue.ResolvedUtc is null);
-            processingButton.Text = queue.ProcessingCount == 0 ? "處理中" : $"處理中 ({queue.ProcessingCount})";
+            processingButton.Text = queue.ProcessingCount == 0 ? "待辦/處理中" : $"待辦/處理中 ({queue.ProcessingCount})";
             var lastRead = new InvoiceSyncStateStore(repository.DataDirectory)
                 .LastSuccess(accountKey, SyncIssuesForm.ReadStateScope);
             var unread = issues.Count(issue => lastRead is null || issue.CreatedUtc > lastRead.Value);
@@ -367,7 +367,7 @@ internal sealed class RecordsControl : UserControl
         catch (Exception)
         {
             uploadIssuesButton.Text = "上傳問題";
-            processingButton.Text = "處理中";
+            processingButton.Text = "待辦/處理中";
         }
     }
 
@@ -850,7 +850,7 @@ internal sealed class RecordsControl : UserControl
         if (!UiControls.HasLogicalSize(uploadIssuesButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !uploadIssuesButton.Text.StartsWith("上傳問題", StringComparison.Ordinal))
             throw new InvalidOperationException("上傳問題按鈕尺寸或文字不正確");
-        if (!processingButton.Text.StartsWith("處理中", StringComparison.Ordinal) ||
+        if (!processingButton.Text.StartsWith("待辦/處理中", StringComparison.Ordinal) ||
             processingButton.Parent != uploadIssuesButton.Parent || processingButton.Left <= uploadIssuesButton.Left ||
             Math.Abs(ScreenCenterY(processingButton) - ScreenCenterY(uploadIssuesButton)) > 1)
             throw new InvalidOperationException("處理中按鈕未與上傳問題並排對齊");

@@ -225,6 +225,9 @@ internal static class Program
         settings.VerifySmokeLayout();
         settings.Close();
 
+        Stage("settings authorization reuse");
+        SettingsForm.VerifyAuthorizationReuseSmoke();
+
         using var cloudSetup = new CloudSetupForm(repository);
         cloudSetup.Show();
         cloudSetup.PerformLayout();
@@ -276,7 +279,7 @@ internal static class Program
             // Smoke validation must remain deterministic and offline, so validate the complete
             // static layout without firing Shown or any real network request.
             var token = $"cydev_{new string('a', 64)}";
-            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
+            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token, repository);
             management.PerformLayout();
             management.VerifySmokeLayout();
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);

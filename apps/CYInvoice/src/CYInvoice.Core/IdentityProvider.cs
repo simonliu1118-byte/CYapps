@@ -41,7 +41,11 @@ public enum IdentityProviderKind
     CyId,
 }
 
-public sealed record IdentityAuthenticationRequest(string EmployeeNo, string Password);
+public sealed record IdentityAuthenticationRequest(string EmployeeNo, string Password)
+{
+    // Cloud-only protected operations must not substitute an offline proof.
+    public bool RequireOnline { get; init; }
+}
 
 public sealed record AppPrincipal(
     string StableEmployeeId,

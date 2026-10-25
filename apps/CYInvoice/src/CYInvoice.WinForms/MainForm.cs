@@ -296,8 +296,9 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        if (!TryAuthenticateSuperAdministrator()) return;
-        using var form = new SettingsForm(repository);
+        using var login = new EmployeeAdminLoginForm(repository, requiredRole: AppRole.SuperAdmin);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        using var form = new SettingsForm(repository, login);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
         invoicePage.RefreshEnvironment();
@@ -318,7 +319,7 @@ internal sealed class MainForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        using var login = new EmployeeAdminLoginForm(repository, "密碼驗證", administratorRequired: false);
+        using var login = new EmployeeAdminLoginForm(repository, requiredRole: null);
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
         {
@@ -356,20 +357,6 @@ internal sealed class MainForm : Form
         }
         using var form = new SuperAdminRecoveryForm(repository.Employees);
         form.ShowDialog(this);
-    }
-
-    private bool TryAuthenticateSuperAdministrator()
-    {
-        const string title = "設定－超管驗證";
-        using var login = new EmployeeAdminLoginForm(repository, title);
-        if (login.ShowDialog(this) != DialogResult.OK) return false;
-        if (login.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin)
-        {
-            MessageBox.Show(this, "只有超級管理員可開啟設定。", "權限不足",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return false;
-        }
-        return true;
     }
 
     private bool EnsureInitialSetup()
@@ -514,7 +501,7 @@ internal sealed class MainForm : Form
         Application.DoEvents();
         employeeLogin.VerifySmokeLayout();
         employeeLogin.Close();
-        EmployeeAdminLoginForm.VerifyCredentialsCollectionSmoke(this);
+        EmployeeAdminLoginForm.VerifyAuthenticationSmoke(this);
 
         using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show(this);
