@@ -1,12 +1,14 @@
 # CYInvoice V3.2：schema22維護完成與後續驗收
 
-更新：2026-10-26（Asia/Taipei）。目前工程V3.1.42 Build 3／Cloud Source 0.9.5；最近完成的本機維護仍為V3.1.42／BUILD=0、Cloud 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
+更新：2026-10-26（Asia/Taipei）。目前工程V3.1.42 Build 4／Cloud Source 0.9.5；最近完成的本機維護仍為V3.1.42／BUILD=0、Cloud 0.9.4；原[PR #550](https://github.com/simonliu1118-byte/CYapps/pull/550)仍為Draft，正式Release仍V3.1.0。
 
 **schema21→22及配套原Worker維護已由使用者本機MCP完成報告確認；遠端操作已停止。** schema維護依使用者報告登記；本輪開發配套Source，未獨立重新查詢或修改Cloudflare。完整備份、回復、資源識別、私有路徑及逐筆計量證據留在使用者私有報告，不貼Public Git／PR。產品驗收以[唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md)為準。
 
-## 下一輪：Build 3／Cloud 0.9.5原Worker程式更新（尚未執行）
+Build 4的測試票跨機抓回已按使用者指示沿原日期識別碼處理，無新增來源帳本／API／schema23；此修正不依賴Cloud新功能。折讓功能依2026-10-26使用者決定維持關閉，不因畫面修正順帶啟用。
 
-- 本輪工程Source為V3.1.42 Build 3／Cloud 0.9.5，沿原PR #550；部署前核對PR完整HEAD、同SHA必要CI及bundle，不能以歷史已部署Source代替。
+## 下一輪：Build 4／Cloud 0.9.5原Worker程式更新（尚未執行）
+
+- 本輪工程Source為V3.1.42 Build 4／Cloud 0.9.5，沿原PR #550；部署前核對PR完整HEAD、同SHA必要CI及bundle，不能以歷史已部署Source代替。
 - 目的只有原`/v1/work-items/list`的Device授權最小待辦摘要，避免開啟清單就詢問管理員密碼。詳情、已封存歷史與全部寫入仍須當次管理員驗證；當前Workspace／Device／Application access在讀取前後均檢查。
 - **只更新原Worker程式，D1及marker均維持22。** 不新增Worker／D1、不修改或重跑0020～0022，不更改CYID D1、Bindings、Secrets、Routes或現有旗標。沿原canonical deployment owner做同schema的before／deploy／after，不設定新的schema-upgrade意圖。
 - 本機先依原規則估算本批控制平面／健康／必要查核用量並取得該批部署授權，保留原不可變Worker版本及設定回復證據。原schema22維護與私有備份證據沿用歷史，不為程式更新重做DDL或整庫掃描。

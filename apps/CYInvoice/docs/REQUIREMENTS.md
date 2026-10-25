@@ -53,7 +53,7 @@
 - 公司戶測試開票使用公開測試統編 `28080623`，送出前向光貿查詢其正式名稱。
 - 測試環境 API OrderID 使用 CYInvoice technical namespace，避免不同公司／執行個體互相撞號。
 - UI 與本機資料仍顯示原始可讀 OrderID，不暴露 technical prefix。
-- 測試環境同步不以 `invoice_list` 任意掃描共享測試池，只處理本機已知測試紀錄。
+- 測試環境依既有當日 OrderID 識別碼從 `invoice_list` 篩選 CYInvoice 測試票，另一台電腦不須先有開票紀錄即可抓回；無識別碼的陌生票不查回，已知本機舊票保留精確查回。識別碼只用於測試池辨識，不作為權限或成功證據。
 
 ## 5. Excel 匯入
 

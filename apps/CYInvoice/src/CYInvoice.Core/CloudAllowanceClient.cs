@@ -118,7 +118,15 @@ public sealed class CloudAllowanceClient
             ?c.GetString()??"ALLOWANCE_RESULT_UNKNOWN":"ALLOWANCE_RESULT_UNKNOWN";
         document.Dispose();
         throw new CloudApiException(code,
-            "Cloud allowance result is not confirmed. Read back the original application ID.",
+            code switch {
+                "ALLOWANCES_NOT_READY" => "折讓功能尚未啟用。",
+                "OFFICIAL_SEND_DISABLED" => "折讓送出功能尚未啟用。",
+                "LOGIN_FAILED" or "AUTH_INVALID" => "帳號或密碼錯誤。",
+                "ACCESS_DENIED" or "MANAGER_AUTH_REQUIRED" => "權限不足。",
+                "DEVICE_INVALID" => "目前裝置授權已失效，請重新確認連線。",
+                "INVALID_REQUEST" => "折讓申請資料不符，請保留問題診斷供查證。",
+                _ => "無法確認折讓操作結果，請依原申請查回。"
+            },
             res.StatusCode);
     }
     private static CloudAllowanceReceipt Receipt(JsonElement root,string expectedId,

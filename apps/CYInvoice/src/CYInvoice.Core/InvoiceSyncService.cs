@@ -87,7 +87,8 @@ public sealed class InvoiceSyncService
         if(checkpoint.BudgetDay!=today)checkpoint=checkpoint with{BudgetDay=today,PagesUsed=0,QueriesUsed=0};
         void Save()=>state.SaveCheckpoint(key,scope,JsonSerializer.Serialize(checkpoint));
         var owned = account.Environment == Environments.Test
-            ? AccountRecords(account).Where(r => r.InvoiceState == InvoiceStates.Opened && r.RecordOrigin == RecordOrigins.Local && IsInRange(r,today,today))
+            ? AccountRecords(account).Where(r => r.InvoiceState == InvoiceStates.Opened && IsInRange(r,today,today) &&
+                (r.RecordOrigin == RecordOrigins.Local || TestOrderIdPrefix.TryStripForDate(r.ApiOrderId,today,out _)))
                 .Select(r => r.InvoiceNumber.Trim()).Where(n => n.Length != 0).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (account.Environment == Environments.Test)
@@ -248,7 +249,10 @@ public sealed class InvoiceSyncService
             var known = account.Environment == Environments.Test
                 ? AccountRecords(account).Where(r => r.RecordOrigin == RecordOrigins.Local && r.InvoiceState != InvoiceStates.Failed).ToArray()
                 : [];
-            remote = testPrefixDate is null ? listed : listed.Where(item => known.Any(r =>
+            // The existing daily CYInvoice namespace is the test-pool discovery
+            // rule. Local evidence also preserves our legacy unprefixed operations.
+            remote = testPrefixDate is null ? listed : listed.Where(item =>
+                TestOrderIdPrefix.TryStripForDate(item.OrderId,testPrefixDate.Value,out _) || known.Any(r =>
                 (r.InvoiceNumber.Trim().Length != 0 && string.Equals(r.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                 (r.ApiOrderId.Trim().Length != 0 && string.Equals(r.ApiOrderId.Trim(), item.OrderId.Trim(), StringComparison.Ordinal)))).ToArray();
         }

@@ -56,6 +56,20 @@ internal sealed class SyncIssuesForm : Form
     private readonly Button reportCrossDevice = UiControls.StandardButton("回報跨機");
     private readonly Button exportIssueDiagnostics = UiControls.StandardButton("匯出問題診斷");
 
+    private readonly Panel loading = new() { Dock=DockStyle.Fill, BackColor=Color.White, Visible=false };
+    private bool loadingRows;
+
+    private void SetLoading(bool value)
+    {
+        loadingRows=value;
+        if (!value) ReloadAll();
+        loading.Visible=value;
+        if (value) { loading.BringToFront(); summary.Text="載入中…"; }
+        listHost.Visible=!value && list.Items.Count>0;
+        empty.Visible=!value && list.Items.Count==0;
+        list.Enabled=!value;
+    }
+
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
         this.processing = processing;
@@ -84,6 +98,7 @@ internal sealed class SyncIssuesForm : Form
 
         BuildLayout();
         if (!processing) MarkVisibleIssuesRead();
+        if (processing && !startupSmokeTest) SetLoading(true);
         ReloadAll();
         Shown += async (_, _) =>
         {
@@ -105,8 +120,8 @@ internal sealed class SyncIssuesForm : Form
         reload.Click += async (_, _) =>
         {
             if (manualReviewBusy) return;
-            ReloadAll();
             if (processing) await LoadCloudWorkItemsAsync(reset: true);
+            else ReloadAll();
         };
         reportCrossDevice.Click += async (_, _) => await ReportCrossDeviceAsync();
         list.DoubleClick += async (_, _) => await ShowSelectedIssueDetailsAsync();
@@ -196,6 +211,9 @@ internal sealed class SyncIssuesForm : Form
         root.Controls.Add(header, 0, 0);
         body.Controls.Add(listHost);
         body.Controls.Add(empty);
+        loading.Controls.Add(new ProgressBar { Dock=DockStyle.Top, Height=8, Style=ProgressBarStyle.Marquee, MarqueeAnimationSpeed=25 });
+        loading.Controls.Add(new Label { Text="正在載入待辦…", Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleCenter });
+        body.Controls.Add(loading);
         root.Controls.Add(body, 0, 1);
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
@@ -231,7 +249,7 @@ internal sealed class SyncIssuesForm : Form
         if (!CanReadCloudWorkItems(requested))
         {
             ClearCloudWorkItems(string.Empty);
-            ReloadAll();
+            SetLoading(false);
             return;
         }
         if (!reset && cloudReadSettings is not null && !SameWorkItemScope(cloudReadSettings))
@@ -243,6 +261,7 @@ internal sealed class SyncIssuesForm : Form
         var cursor = reset ? null : nextWorkItemCursor;
         if (reset) ClearCloudWorkItems("讀取雲端待辦中");
         SetManualReviewBusy(true);
+        SetLoading(true);
         try
         {
             using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
@@ -280,7 +299,7 @@ internal sealed class SyncIssuesForm : Form
             if (!IsDisposed && !lifetime.IsCancellationRequested)
             {
                 SetManualReviewBusy(false);
-                ReloadAll();
+                SetLoading(false);
             }
         }
     }
@@ -580,6 +599,7 @@ internal sealed class SyncIssuesForm : Form
             UpdateDiagnosticButton();
             FitToRows();
             LayoutColumns();
+            if (loadingRows) SetLoading(true);
         }
         catch (Exception error)
         {
@@ -590,6 +610,12 @@ internal sealed class SyncIssuesForm : Form
 
     private void FitToRows()
     {
+        if (loadingRows)
+        {
+            listHost.Visible=empty.Visible=false;
+            ClientSize=new Size(ClientSize.Width,root.Padding.Vertical+82+80);
+            return;
+        }
         var hasRows = list.Items.Count > 0;
         empty.Visible = !hasRows;
         listHost.Visible = hasRows;
@@ -671,6 +697,13 @@ internal sealed class SyncIssuesForm : Form
             sample.ReloadAll();
             Application.DoEvents();
             sample.VerifySmokeLayout();
+            sample.SetLoading(true);
+            sample.ReloadAll();
+            if (!sample.loading.Visible || sample.listHost.Visible || sample.empty.Visible)
+                throw new InvalidOperationException("載入中不得顯示未完成的清單。");
+            sample.SetLoading(false);
+            if (sample.loading.Visible || !sample.listHost.Visible || sample.summary.Text.Contains("載入中"))
+                throw new InvalidOperationException("載入結束必須一次呈現完成清單。");
             if (sample.list.Items.Count != 4 || sample.listHost.VisibleRowCapacity() != 4 ||
                 sample.list.Items.Cast<ListViewItem>().Count(row => row.Tag is InvoiceSyncIssue) != 1 ||
                 sample.list.Items.Cast<ListViewItem>().Count(row => row.Tag is InvoiceProcessingItem) != 1 ||
@@ -857,7 +890,7 @@ internal sealed class SyncIssuesForm : Form
                 allowCancel,
                 allowAdministrativeClose,
                 primaryDanger,
-                secondaryText);
+                secondaryText, originalItems: TryFindIssueRecord(issue)?.Items);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
 
             switch (detail.SelectedAction)
@@ -936,11 +969,11 @@ internal sealed class SyncIssuesForm : Form
         try
         {
             var canClose = item.Kind == InvoiceProcessingKind.Void && administrativeClosure.CanClose(item.Record);
-            using var detail = new ManualReviewDetailForm("處理中", [
+            using var detail = new ManualReviewDetailForm("處理中", new KeyValuePair<string,string>[] {
                 new("發票號碼", item.Record.InvoiceNumber), new("訂單編號", item.Record.OrderId),
                 new("開立時間", FullIssueTime(item.Record)), new("目前訊息", item.Message),
                 new("官方上傳狀態", item.Record.UploadStatusText), new("最後回查", item.Record.LastChecked),
-            ], string.Empty, false, canClose);
+            }.Concat(VoidParticipantRows(item.Record)), string.Empty, false, canClose);
             if (detail.ShowDialog(this) == DialogResult.OK && detail.SelectedAction == ManualReviewDetailAction.AdministrativeClose)
             {
                 using var login = new EmployeeAdminLoginForm(repository,
@@ -1107,7 +1140,7 @@ internal sealed class SyncIssuesForm : Form
     private async Task ApproveVoidManualReviewAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
     {
         if (MessageBox.Show(this,
-                "這筆作廢申請的紙本電子發票證明聯先前尚未收回。\n\n確認後，CYInvoice 會重新查詢光貿最新狀態，再送出作廢。請確認已完成主管核准並可進行作廢。",
+                "這筆作廢申請的紙本電子發票證明聯先前尚未收回。\n\n確認後，CYInvoice 會重新查詢光貿最新狀態，再送出作廢。",
                 "確認送出作廢", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         var login = authorization;
@@ -1122,7 +1155,7 @@ internal sealed class SyncIssuesForm : Form
                     MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     break;
                 case InvoiceVoidOutcome.PendingConfirmation:
-                    MessageBox.Show(this, "作廢已送出，但光貿尚未確認最終結果。\n\n發票目前為「已開立 (等待作廢)」；後續每次正常同步都會再查詢官方結果。",
+                    MessageBox.Show(this, "作廢已送出，等待光貿處理。",
                         "作廢結果待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
                 case InvoiceVoidOutcome.Rejected:
@@ -1166,7 +1199,7 @@ internal sealed class SyncIssuesForm : Form
                 AllowanceDetailRows(issue).Concat(new[] {
                     new KeyValuePair<string,string>("最新可折含稅額", preview.OfficialRemainingGross),
                     new KeyValuePair<string,string>("官方折讓歷史", FormatAllowances(preview.OfficialHistory)) }),
-                "核准並開立", primaryDanger: true);
+                "核准並開立", primaryDanger: true, originalItems: TryFindIssueRecord(issue)?.Items);
             if (approvalDetail.ShowDialog(this) != DialogResult.OK ||
                 approvalDetail.SelectedAction != ManualReviewDetailAction.Primary) return;
             using var stop = new CancellationTokenSource();
@@ -1501,10 +1534,10 @@ internal sealed class SyncIssuesForm : Form
         var parsed = VoidOperationSessionCache.Parse(VoidOperationSessionCache.ReasonFor(issue.InvoiceNumber));
         var requester = review?.RequesterEmployeeNo ?? handled?.RequesterEmployeeNo ?? parsed?.UserEmployeeNo ?? "";
         var requested = review?.RequestedUtc ?? handled?.RequestedUtc;
-        rows.Add(new("申請員工", EmployeeDisplay(requester)));
+        rows.Add(new("申請員工", EmployeeDisplay(requester, review?.RequesterName ?? handled?.RequesterName)));
         rows.Add(new("申請時間", requested is null ? "－" : requested.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("作廢原因", review?.Reason ?? handled?.Reason ?? parsed?.Reason ?? "－"));
-        rows.Add(new("處理管理員", EmployeeDisplay(handled?.ReviewerEmployeeNo ?? parsed?.ReviewerEmployeeNo ?? "")));
+        rows.Add(new("處理管理員", EmployeeDisplay(handled?.ReviewerEmployeeNo ?? parsed?.ReviewerEmployeeNo ?? "", handled?.ReviewerName)));
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null ? "已解決" : "等待管理員人工確認"));
         return rows;
     }
@@ -1621,10 +1654,20 @@ internal sealed class SyncIssuesForm : Form
         yield return new("目前可折含稅額", InvoiceAllowanceMetadata.RemainingGross(record).ToString());
     }
 
-    private string EmployeeDisplay(string employeeNo)
+    private IEnumerable<KeyValuePair<string,string>> VoidParticipantRows(InvoiceRecord record)
+    {
+        var request=voidWorkflow.ManualReviewFor(record);
+        var handled=voidWorkflow.HandledReviewFor(record);
+        if (request is null && handled is null) yield break;
+        yield return new("申請作廢",EmployeeDisplay(request?.RequesterEmployeeNo ?? handled!.RequesterEmployeeNo,request?.RequesterName ?? handled!.RequesterName));
+        if (handled is not null) yield return new("核准管理員",EmployeeDisplay(handled.ReviewerEmployeeNo,handled.ReviewerName));
+    }
+
+    private string EmployeeDisplay(string employeeNo, string? savedName = null)
     {
         employeeNo = employeeNo.Trim();
         if (employeeNo.Length == 0) return "－";
+        if (!string.IsNullOrWhiteSpace(savedName)) return employeeNo+" "+savedName.Trim();
         try
         {
             var account = repository.LoadAuthorityEmployees()

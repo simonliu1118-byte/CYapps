@@ -73,6 +73,19 @@ internal static class CloudAllowanceClientTests
         foreach(var uri in new[]{"http://example.invalid/","https://example.invalid/?x=1","https://user:pass@example.invalid/","https://example.invalid/#secret"})
             await Fail<ArgumentException>(()=>{_=new CloudAllowanceClient(http,new Uri(uri),Token);return Task.CompletedTask;});
         var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        using (var disabledHandler=new FakeHandler())
+        using (var disabledHttp=new HttpClient(disabledHandler))
+        {
+            var disabledApi=new CloudAllowanceClient(disabledHttp,new Uri(Host),Token);
+            disabledHandler.Add(r=>{Check(r,"list");return Json(HttpStatusCode.ServiceUnavailable,new {ok=false,error=new {code="ALLOWANCES_NOT_READY"}});});
+            try { await disabledApi.ListAsync("0001","fake-password",limit:1); throw new InvalidOperationException("Disabled feature was accepted"); }
+            catch (CloudApiException error)
+            {
+                Equal("ALLOWANCES_NOT_READY",error.Code);
+                Equal("折讓功能尚未啟用。",error.Message);
+                Equal(1,disabledHandler.Calls); Equal(0,disabledHandler.Remaining);
+            }
+        }
         fake.Add(r=>{Check(r,"detail");return Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,
             operation="issue",status="open",revision=1,rows=new[]{new {label="原發票",value="AA00000001"}},requestHash="",officialSnapshotHash=""});});
         var detail=await api.OpenOperationAsync(Id,false,"0001","fake-password");

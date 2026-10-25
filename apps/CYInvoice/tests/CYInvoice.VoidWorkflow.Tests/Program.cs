@@ -125,6 +125,7 @@ static async Task TestUncollectedQueuesManualReviewAsync()
     Equal(InvoiceStates.Opened, stored.InvoiceState);
     var review = setup.Workflow.ManualReviewFor(stored) ?? throw new InvalidOperationException("manual review marker missing");
     Equal("3015", review.RequesterEmployeeNo);
+    Equal("員工", review.RequesterName);
     Equal("退貨", review.Reason);
     var issue = ManualIssue(setup.Repository);
     Equal(InvoiceVoidIssueTypes.ManualReview, issue.IssueType);
@@ -193,6 +194,8 @@ static async Task TestAdminApprovesReviewAsync()
     var handled = setup.Workflow.HandledReviewFor(stored);
     Equal("3015", handled?.RequesterEmployeeNo);
     Equal("2000", handled?.ReviewerEmployeeNo);
+    Equal("員工", handled?.RequesterName);
+    Equal("管理員", handled?.ReviewerName);
     Equal("退貨", handled?.Reason);
     Equal(false, HasCorePending(stored));
     var resolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory).All(AccountKey()).Single(item => item.Id == issue.Id);
@@ -217,6 +220,8 @@ static async Task TestApprovedPendingVoidAsync()
     Equal(true, HasCorePending(stored));
     Equal(null, setup.Workflow.ManualReviewFor(stored));
     Equal("0001", setup.Workflow.HandledReviewFor(stored)?.ReviewerEmployeeNo);
+    Equal("員工", setup.Workflow.HandledReviewFor(stored)?.RequesterName);
+    Equal(setup.Repository.Employees.Find("0001")!.Name, setup.Workflow.HandledReviewFor(stored)?.ReviewerName);
     var resolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory).All(AccountKey()).Single(item => item.Id == issue.Id);
     Equal(true, resolved.ResolvedUtc is not null);
 }

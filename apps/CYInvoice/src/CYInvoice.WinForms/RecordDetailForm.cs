@@ -30,7 +30,7 @@ internal sealed class RecordDetailForm : Form
     private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
     private readonly Button printPdf = UiControls.StandardButton("列印發票");
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
-    private readonly Button voidInvoice = UiControls.StandardButton("作廢");
+    private readonly Button voidInvoice = UiControls.DangerButton("作廢");
     private readonly Button allowanceInvoice = UiControls.StandardButton("折讓");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly InvoiceOperationHistoryControl history = new();
@@ -186,16 +186,10 @@ internal sealed class RecordDetailForm : Form
             actions.Controls.Add(changePrinter);
         }
 
-        if (CanShowVoidAction())
-        {
-            voidInvoice.Click += async (_, _) => await StartVoidAsync();
-            actions.Controls.Add(voidInvoice);
-        }
-        if (CanShowAllowanceAction())
-        {
-            allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
-            actions.Controls.Add(allowanceInvoice);
-        }
+        voidInvoice.Click += async (_, _) => await StartVoidAsync();
+        allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
+        actions.Controls.Add(allowanceInvoice);
+        actions.Controls.Add(voidInvoice);
         actions.Controls.Add(close);
 
         root.Controls.Add(content, 0, 0);
@@ -267,7 +261,7 @@ internal sealed class RecordDetailForm : Form
                             case InvoiceVoidOutcome.PendingConfirmation:
                                 MessageBox.Show(
                                     this,
-                                    "作廢請求已送出，但光貿尚未確認最終結果。\n\n目前狀態為「待確認」，系統不會盲目重送。",
+                                    "作廢已送出，等待光貿處理。",
                                     "作廢結果待確認",
                                     MessageBoxButtons.OK,
                                     MessageBoxIcon.Warning);
@@ -480,7 +474,7 @@ internal sealed class RecordDetailForm : Form
         }
         else
         {
-            voidInvoice.Text = voidManualReview ? "人工確認中" : "作廢";
+            voidInvoice.Text = voidManualReview ? "申請已送出" : "作廢";
             voidInvoice.Enabled = ameAvailable && canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null;
         }
 
@@ -494,7 +488,7 @@ internal sealed class RecordDetailForm : Form
         {
             allowanceInvoice.Text = allowanceReview is null
                 ? "折讓"
-                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
+                : "申請已送出";
             allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
         }
     }
@@ -952,6 +946,14 @@ internal sealed class RecordDetailForm : Form
             AddInvoiceStateDetail();
             AddDetail("上傳狀態", record.UploadStatusText);
             AddDetail("最後確認", record.LastChecked);
+            var request=voidWorkflow.ManualReviewFor(record);
+            var handled=voidWorkflow.HandledReviewFor(record);
+            if (request is not null || handled is not null)
+            {
+                AddDetail("申請作廢", ActorText(request?.RequesterEmployeeNo ?? handled!.RequesterEmployeeNo,
+                    request?.RequesterName ?? handled!.RequesterName));
+                if (handled is not null) AddDetail("核准管理員", ActorText(handled.ReviewerEmployeeNo,handled.ReviewerName));
+            }
             AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
             AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
             if (paperInvoice)
@@ -971,6 +973,9 @@ internal sealed class RecordDetailForm : Form
             details.ResumeLayout(true);
         }
     }
+
+    private static string ActorText(string number,string name) =>
+        string.IsNullOrWhiteSpace(name)?number:number+" "+name.Trim();
 
     private void AddInvoiceStateDetail()
     {
@@ -1086,6 +1091,29 @@ internal sealed class RecordDetailForm : Form
         using var consumer = new RecordDetailForm(baseRecord, repository, service);
         consumer.PerformLayout();
         consumer.VerifyLayout(companyBuyer: false, carrier: false);
+        if (consumer.voidInvoice.Parent is not FlowLayoutPanel actionRow ||
+            actionRow.Controls.IndexOf(consumer.allowanceInvoice)+1 != actionRow.Controls.IndexOf(consumer.voidInvoice))
+            throw new InvalidOperationException("發票動作順序必須是折讓、作廢、關閉。");
+        using (var approval=new ManualReviewDetailForm("作廢確認",[new("原發票商品", "")],originalItems:baseRecord.Items))
+        {
+            approval.Show(); Application.DoEvents();
+            var grid=approval.Controls.Cast<Control>().SelectMany(Descendants).OfType<DataGridView>().Single();
+            if (!grid.ReadOnly || grid.Rows.Count!=1 || grid.Columns.Count!=4 || grid.Rows[0].Cells[0].Value?.ToString()!="測試商品")
+                throw new InvalidOperationException("主管商品表格未顯示原始品項。");
+            approval.Close();
+        }
+        baseRecord.ExtensionData=new Dictionary<string,System.Text.Json.JsonElement> {
+            ["cyinvoice_void_handled_review"]=System.Text.Json.JsonSerializer.SerializeToElement(
+                new InvoiceVoidHandledReview("3002","退貨",DateTimeOffset.UtcNow,"0001",DateTimeOffset.UtcNow)
+                {RequesterName="測試申請員工",ReviewerName="測試核准管理員"})
+        };
+        using (var actorDetail=new RecordDetailForm(baseRecord,repository,service))
+        {
+            var labels=actorDetail.details.Controls.OfType<Label>().Select(label=>label.Text).ToArray();
+            if (!labels.Contains("3002 測試申請員工") || !labels.Contains("0001 測試核准管理員"))
+                throw new InvalidOperationException("發票詳情必須保留申請與核准人員。");
+        }
+        baseRecord.ExtensionData=null;
         using var company = new RecordDetailForm(
             new InvoiceRecord
             {
@@ -1249,6 +1277,13 @@ internal sealed class RecordDetailForm : Form
         editor.PerformLayout();
         editor.VerifySmokeLayout();
         editor.VerifySmokeOriginalInvoiceEditing();
+    }
+
+    private static IEnumerable<Control> Descendants(Control root)
+    {
+        yield return root;
+        foreach (Control child in root.Controls)
+            foreach (var descendant in Descendants(child)) yield return descendant;
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)

@@ -10,8 +10,8 @@ namespace CYInvoice.WinForms;
 // the refund, not any individual original product allocation.
 internal sealed class AllowanceRequestForm : Form
 {
-    private const int WindowWidth = 1000;
-    private const int WindowHeight = 660;
+    private const int WindowWidth = 820;
+    private const int WindowHeight = 590;
     private readonly InvoiceRecord? original;
     private readonly FixedDecimal? remaining;
     private readonly TextBox reason = UiControls.TextBox(100);
@@ -39,7 +39,7 @@ internal sealed class AllowanceRequestForm : Form
         Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,
         AutoEllipsis=true
     };
-    private readonly Button add = UiControls.StandardButton("＋ 新增品項");
+    private readonly Button reset = UiControls.StandardButton("重置");
     private readonly Button submit = UiControls.StandardButton("提出申請");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private bool calculating;
@@ -51,12 +51,12 @@ internal sealed class AllowanceRequestForm : Form
         Text="折讓申請";
         StartPosition=FormStartPosition.CenterParent;
         ClientSize=new Size(WindowWidth,WindowHeight);
-        MinimumSize=new Size(820,560);
+        MinimumSize=new Size(760,540);
         FormBorderStyle=FormBorderStyle.Sizable;
         MaximizeBox=true;
         ShowInTaskbar=false;
         Font=new Font("Microsoft JhengHei UI",10F);
-        Icon=ApplicationIcon.Load();
+        ShowIcon=false;
         reason.TextAlign=HorizontalAlignment.Left;
         employeeNo.TextAlign=HorizontalAlignment.Left;
         password.TextAlign=HorizontalAlignment.Left;
@@ -71,7 +71,7 @@ internal sealed class AllowanceRequestForm : Form
             if(products.IsCurrentCellDirty)products.CommitEdit(DataGridViewDataErrorContexts.Commit);
         };
         products.DataError+=(_,eventArgs)=>{eventArgs.ThrowException=false;};
-        add.Click+=(_,_)=>AddProduct("新商品","1","0","1");
+        reset.Click+=(_,_)=>ResetProducts();
         Shown+=(_,_)=>reason.Focus();
     }
 
@@ -92,11 +92,9 @@ internal sealed class AllowanceRequestForm : Form
         products.Columns.Add(new DataGridViewTextBoxColumn {
             Name="unit_price",HeaderText="未稅單價",FillWeight=100
         });
-        var taxType=new DataGridViewComboBoxColumn {
-            Name="tax_type",HeaderText="課稅別",FillWeight=80,FlatStyle=FlatStyle.Flat
-        };
-        taxType.Items.AddRange("應稅","零稅率","免稅");
-        products.Columns.Add(taxType);
+        products.Columns.Add(new DataGridViewTextBoxColumn {
+            Name="tax_type",HeaderText="課稅別",FillWeight=60,ReadOnly=true
+        });
         products.Columns.Add(new DataGridViewTextBoxColumn {
             Name="amount",HeaderText="未稅金額",ReadOnly=true,FillWeight=100
         });
@@ -117,10 +115,10 @@ internal sealed class AllowanceRequestForm : Form
             Padding=new Padding(14,12,14,10)
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,64));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,45));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,102));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,86));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,50));
         var header=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=2,RowCount=2
@@ -145,7 +143,7 @@ internal sealed class AllowanceRequestForm : Form
         };
         sumRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));
         sumRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        sumRow.Controls.Add(add,0,0);
+        sumRow.Controls.Add(reset,0,0);
         sumRow.Controls.Add(totals,1,0);
         root.Controls.Add(sumRow,0,3);
         var credentials=new TableLayoutPanel {
@@ -177,11 +175,23 @@ internal sealed class AllowanceRequestForm : Form
         Control control,int column,int row)
     {
         table.Controls.Add(new Label {
-            Text=name,Dock=DockStyle.Fill,
+            Text=name,Dock=DockStyle.Fill,Margin=new Padding(0,0,4,0),
             TextAlign=ContentAlignment.MiddleLeft
         },column,row);
-        control.Dock=DockStyle.Fill;
+        control.Dock=DockStyle.None;
+        control.Anchor=AnchorStyles.Left|AnchorStyles.Right;
+        control.Margin=new Padding(3,0,8,0);
         table.Controls.Add(control,column+1,row);
+    }
+
+    private void ResetProducts()
+    {
+        if (original is null) return;
+        products.CancelEdit();
+        calculating=true;
+        try { products.Rows.Clear(); LoadOriginal(original); }
+        finally { calculating=false; }
+        UpdateTotals();
     }
 
     private void LoadOriginal(InvoiceRecord invoice)
@@ -207,7 +217,9 @@ internal sealed class AllowanceRequestForm : Form
             MessageBox.Show(this,"折讓明細最多 50 筆。","無法新增");
             return;
         }
-        var kind=taxKind switch {"2"=>"零稅率","3"=>"免稅",_=>"應稅"};
+        if (taxKind is not ("" or "1"))
+            throw new InvalidOperationException("目前折讓申請僅支援應稅商品，不變更原發票稅別。");
+        var kind="應稅";
         products.Rows.Add(name,quantity,price,kind,"","","");
         UpdateTotals();
     }
@@ -386,9 +398,15 @@ internal sealed class AllowanceRequestForm : Form
 
     internal void VerifySmokeOriginalInvoiceEditing()
     {
+        if (ShowIcon || products.Columns["tax_type"] is not DataGridViewTextBoxColumn { ReadOnly: true } || reset.Text != "重置")
+            throw new InvalidOperationException("折讓申請必須無圖示、固定應稅且提供重置。 ");
         if (original is null || remaining is null || products.Rows.Count != 2)
             throw new InvalidOperationException("折讓視窗未帶入原發票及官方剩餘額");
         var initial = Calculate().Gross;
+        products.Rows.RemoveAt(1);
+        ResetProducts();
+        if (products.Rows.Count != 2 || Calculate().Gross != initial)
+            throw new InvalidOperationException("重置未還原原商品與金額。");
         products.Rows.RemoveAt(1);
         products.Rows[0].Cells["unit_price"].Value = "100.1234567";
         var net = Calculate();
