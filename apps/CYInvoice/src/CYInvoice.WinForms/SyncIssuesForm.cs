@@ -701,6 +701,7 @@ internal sealed class SyncIssuesForm : Form
                 if (passwordOpened != verifyPending || detailsOpened == verifyPending)
                     throw new InvalidOperationException("只有待辦開啟詳情須驗證管理員；一般處理中資料直接唯讀開啟。");
             }
+            foreach (ListViewItem row in sample.list.Items) row.Selected = false;
             var selected = sample.list.Items.Cast<ListViewItem>().Single(row => row.Tag is CloudWorkItemSummary { ItemId: "wi_synthetic_second" });
             selected.Selected = true;
             sample.ReloadAll();
