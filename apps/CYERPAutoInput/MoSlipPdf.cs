@@ -59,9 +59,10 @@ internal static class MoSlipPdf
     /// <summary>
     /// The first page's printed part (the box around its ink) drawn as large as fits
     /// <paramref name="maxWidthMm"/> × <paramref name="maxHeightMm"/> at <paramref name="dpi"/>, drawn
-    /// by Windows at that size (sharp, not a scaled picture). 黑貓 labels (user, 2026-10-26).
+    /// by Windows at that size (sharp, not a scaled picture). With <paramref name="enlarge"/> false it
+    /// keeps its own size and is only made smaller when it does not fit (黑貓, user 2026-10-26).
     /// </summary>
-    public static async Task<Bitmap> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi)
+    public static async Task<Bitmap> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi, bool enlarge = true)
     {
         var pdf = await OpenAsync(path, string.Empty);
         using var page = pdf.GetPage(0);
@@ -77,6 +78,7 @@ internal static class MoSlipPdf
         var widthMm = w / 96 * 25.4;
         var heightMm = h / 96 * 25.4;
         var scale = Math.Min(maxWidthMm / widthMm, maxHeightMm / heightMm);
+        if (!enlarge) scale = Math.Min(1, scale);
         using var stream = new InMemoryRandomAccessStream();
         await page.RenderToStreamAsync(stream, new PdfPageRenderOptions
         {
