@@ -423,25 +423,12 @@ internal sealed class ErpAutomationService
         if (!NativeMethods.GetWindowRect(root, out var window)) throw new InvalidOperationException("讀不到 COPI08 視窗位置");
         var before = Win32Automation.VisibleProcessWindows(root).ToHashSet();
 
-        // Ribbon 「Excel」.
-        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1600), Math.Min(window.Height, 220));
-        Rectangle? label = null;
-        for (var attempt = 0; attempt < 3 && label is null; attempt++)
-        {
-            if (attempt > 0) await Delay(800, cancellationToken);
-            IReadOnlyList<OcrToken> tokens;
-            using (var image = ScreenCapture.Capture(ribbon))
-                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
-            var list = tokens.Select(t => (t.Text, t.Rect)).ToList();
-            // The OCR reads the label in pieces, the 串查 beside it in between (user's LOG,
-            // 2026-10-26: 「E x 串 查 c e l」), so its first letters are enough.
-            label = RibbonPrintLocator.FindWord(list, "Excel") ?? RibbonPrintLocator.FindWord(list, "EXCEL") ??
-                RibbonPrintLocator.FindWord(list, "Ex") ?? RibbonPrintLocator.FindWord(list, "EX");
-            if (label is null && attempt == 2)
-                _log.Info("export", $"ribbon tokens: {string.Join(" ", tokens.Select(t => _log.Value(t.Text)))}");
-        }
-        if (label is not { } found) throw new InvalidOperationException("Ribbon 上找不到「Excel」（請確認 Ribbon 停在「常用」）");
-        var labelScreen = new Rectangle(ribbon.Left + found.Left, ribbon.Top + found.Top, found.Width, found.Height);
+        // Ribbon 「Excel」, as CYERPAutoQuery finds it (stable there): each Ribbon group window is
+        // read on its own first — the group Excel was found in last time, then the rest — so
+        // the label is not mixed with its neighbours' words (user's LOG, 2026-10-26: the whole
+        // Ribbon read 「E x 串 查 c e l」); the whole Ribbon (1200 px, as there) is the fallback.
+        var labelScreen = await FindRibbonWordAsync(root, window.ToRectangle(), cancellationToken, "Excel", "EXCEL", "Ex")
+            ?? throw new InvalidOperationException("Ribbon 上找不到「Excel」（請確認 Ribbon 停在「常用」）");
         InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
         _log.Info("export", $"ribbon Excel clicked label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
 
@@ -546,6 +533,54 @@ internal sealed class ErpAutomationService
             if (Environment.TickCount64 > fileDeadline) throw new InvalidOperationException("轉出 Excel 後找不到匯出的檔案");
             await Delay(200, cancellationToken);
         }
+    }
+
+    /// <summary>The Ribbon group window Excel was last found in (CYERPAutoQuery learns it the same way).</summary>
+    private static string? _excelGroup;
+
+    /// <summary>
+    /// Screen box of the first of <paramref name="words"/> on COPI08's Ribbon: group windows
+    /// (RibbonGroupBar) one by one, the remembered one first; then the whole Ribbon. Null when none.
+    /// </summary>
+    private async Task<Rectangle?> FindRibbonWordAsync(nint root, Rectangle window, CancellationToken cancellationToken, params string[] words)
+    {
+        Rectangle? Find(IReadOnlyList<OcrToken> tokens)
+        {
+            var list = tokens.Select(t => (t.Text, t.Rect)).ToList();
+            foreach (var word in words)
+                if (RibbonPrintLocator.FindWord(list, word) is { } r) return r;
+            return null;
+        }
+        var bars = Win32Automation.EnumerateChildren(root)
+            .Where(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => _excelGroup is not null && c.Text.Trim() == _excelGroup)
+            .ToList();
+        foreach (var bar in bars)
+        {
+            var area = Rectangle.FromLTRB(bar.Rect.Left, bar.Rect.Top, bar.Rect.Right, bar.Rect.Bottom);
+            if (area.Width < 10 || area.Height < 10) continue;
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(area))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            if (Find(tokens) is not { } g) continue;
+            _excelGroup = bar.Text.Trim();
+            _log.Info("export", $"ribbon {words[0]} found in group={_log.Value(_excelGroup)}");
+            return new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
+        }
+        _log.Info("export", $"ribbon groups={bars.Count} without {words[0]}; reading the whole Ribbon");
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (attempt > 0) await Delay(800, cancellationToken);
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(ribbon))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            if (Find(tokens) is { } r) return new Rectangle(ribbon.Left + r.Left, ribbon.Top + r.Top, r.Width, r.Height);
+            if (attempt == 2)
+                foreach (var t in tokens)
+                    _log.Info("export", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        }
+        return null;
     }
 
     private static string ControlText(WindowControl c) => (NativeMethods.ControlText(c.Handle) ?? c.Text ?? string.Empty).Trim();
