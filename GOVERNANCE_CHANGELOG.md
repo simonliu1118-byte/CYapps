@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.56 — 2026/10/26
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求（2026-10-26，伺服器工作管理員確認 MainMenu 在 `C_dsbin`、作業在 `S_dsbin` 的 SMCOPIS01S，並有 SMDispatcher、SMCounterS、AUC 等常駐服務）收斂 ERP 強制重開：只結束擁有 ERP 主視窗或建立作業視窗、同一 Windows 工作階段的行程，先送關閉訊息、5 秒後才終止單一行程，不以名稱、資料夾或行程樹挑選。閒置關閉維持只送視窗訊息。不改其他 App 規則。
+
 ## 2.3.55 — 2026/10/26
 
 - CYERPAutoQuery PROJECT_RULES 依 V1.0.0 實際行為與使用者先前決定補齊（使用者 2026-10-26 要求專案文件更新到最新）：品號與客戶／廠商／業務員代號可含「-」（第一個字須為英數，區分大小寫）；進貨輔助 `RESTOCK`（全部客戶 COPR15／COPR16、INVI02 進階設定 OR 品號批次查庫存、每批 100 個減半重試、最多 500 個、連續 3 批失敗停止、進度回報）；自動更新的提示條、10 秒倒數、延後 30 分鐘、備份還原、失敗 8 小時後重試。不改其他 App 規則。
