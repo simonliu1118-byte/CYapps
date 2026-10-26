@@ -61,8 +61,9 @@ internal static class MoSlipPdf
     /// <paramref name="maxWidthMm"/> × <paramref name="maxHeightMm"/> at <paramref name="dpi"/>, drawn
     /// by Windows at that size (sharp, not a scaled picture). With <paramref name="enlarge"/> false it
     /// keeps its own size and is only made smaller when it does not fit (黑貓, user 2026-10-26).
+    /// The printed part's top-left corner on its page comes back too.
     /// </summary>
-    public static async Task<Bitmap> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi, bool enlarge = true)
+    public static async Task<(Bitmap Image, double LeftMm, double TopMm)> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi, bool enlarge = true)
     {
         var pdf = await OpenAsync(path, string.Empty);
         using var page = pdf.GetPage(0);
@@ -93,7 +94,7 @@ internal static class MoSlipPdf
         reader.ReadBytes(bytes);
         using var memory = new MemoryStream(bytes);
         using var loaded = new Bitmap(memory);
-        return new Bitmap(loaded);
+        return (new Bitmap(loaded), x / 96 * 25.4, y / 96 * 25.4);
     }
 
     /// <summary>Opened with the MO password; a file without one (already opened and saved) opens without.</summary>

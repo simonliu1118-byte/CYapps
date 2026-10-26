@@ -1195,12 +1195,12 @@ internal sealed partial class MainForm : Form
         var folder = Path.GetDirectoryName(pdf)!;
         var printer = SlipPrinter.Installed(_settings.A4Printer)
             ?? throw new ShopeeBatchStop($"黑貓寄件單沒有列印：找不到設定的 A4 印表機（PDF 在 {folder}）。", true);
-        // The label at its own size (user, 2026-10-26: not enlarged), centred in the top cell;
-        // smaller only if it would not fit a few mm inside it.
-        const double margin = 5;
+        // The label at its own size and place, top left as in the PDF (user, 2026-10-26: not
+        // enlarged, top left); smaller only if it would not fit the top cell.
         var dpi = SlipPrinter.Label(printer, 210, 297).Dpi;
-        using var label = await MoSlipPdf.RenderFitAsync(pdf, 210 - 2 * margin, 297.0 / BlackCatCells - 2 * margin, dpi, enlarge: false);
-        _log.Info("shopee-batch", $"black cat label {label.Width}x{label.Height} at {dpi} dpi ({label.Width * 25.4 / dpi:F0}x{label.Height * 25.4 / dpi:F0} mm)");
+        var drawn = await MoSlipPdf.RenderFitAsync(pdf, 210, 297.0 / BlackCatCells, dpi, enlarge: false);
+        using var label = drawn.Image;
+        _log.Info("shopee-batch", $"black cat label {label.Width}x{label.Height} at {dpi} dpi ({label.Width * 25.4 / dpi:F0}x{label.Height * 25.4 / dpi:F0} mm) at {drawn.LeftMm:F1},{drawn.TopMm:F1} mm");
         Session.End();
         Alarm(needsPerson: true);
         bool go;
@@ -1211,7 +1211,7 @@ internal sealed partial class MainForm : Form
         if (!go) throw new ShopeeBatchStop($"黑貓寄件單按了取消，沒有列印（PDF 在 {folder}）。", true);
         try
         {
-            await Task.Run(() => SlipPrinter.PrintCells(printer, [label], BlackCatCells, "黑貓寄件單 " + order.OrderSn), token);
+            await Task.Run(() => SlipPrinter.PrintAt(printer, label, drawn.LeftMm, drawn.TopMm, "黑貓寄件單 " + order.OrderSn), token);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

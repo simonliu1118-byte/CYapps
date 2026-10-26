@@ -11,6 +11,11 @@ namespace CYERPAutoInput;
 internal static class SlipNote
 {
     public const string FontName = "Microsoft JhengHei";
+    /// <summary>
+    /// Symbols 微軟正黑體 has no shape for (user's slip, 2026-10-26: emoji printed as □) are drawn in
+    /// this font instead, in black.
+    /// </summary>
+    public const string SymbolFontName = "Segoe UI Emoji";
     public const float MinPoints = 10f;
     public const float MaxPoints = 28f;
     public const double LabelHeightMm = 150;
@@ -25,7 +30,9 @@ internal static class SlipNote
     /// <summary>The lines as typed, trailing spaces and blank lines at either end left out.</summary>
     public static IReadOnlyList<string> Lines(string? text)
     {
-        var lines = (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(l => l.TrimEnd()).ToList();
+        // Emoji variation selectors and joiners draw nothing in black and white; left out.
+        var clean = new string((text ?? string.Empty).Where(c => c is not ('\uFE0F' or '\uFE0E' or '\u200D')).ToArray());
+        var lines = clean.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(l => l.TrimEnd()).ToList();
         while (lines.Count > 0 && lines[0].Length == 0) lines.RemoveAt(0);
         while (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
         return lines;
@@ -64,6 +71,26 @@ internal static class SlipNote
         return $"寄件單下方文字太多：最小 {MinPoints:F0} pt 時最多 {most} 行（每行約 27 個中文字），請刪減。";
     }
 
+    /// <summary>A line cut where it changes between 微軟正黑體 and the symbol font (<see cref="SymbolFontName"/>).</summary>
+    public static List<(string Text, bool Symbol)> Runs(string line)
+    {
+        var runs = new List<(string Text, bool Symbol)>();
+        for (var i = 0; i < line.Length;)
+        {
+            var length = char.IsSurrogatePair(line, i) ? 2 : 1;
+            var symbol = IsSymbol(char.ConvertToUtf32(line, i) is var cp && length == 2 ? cp : line[i]);
+            var piece = line.Substring(i, length);
+            if (runs.Count > 0 && runs[^1].Symbol == symbol) runs[^1] = (runs[^1].Text + piece, symbol);
+            else runs.Add((piece, symbol));
+            i += length;
+        }
+        return runs;
+    }
+
+    /// <summary>Emoji and the pictographic symbols (☎ ✂ ⚠ ✅ 📦 …) 微軟正黑體 lacks.</summary>
+    public static bool IsSymbol(int codePoint) =>
+        codePoint >= 0x1F000 || codePoint is >= 0x2300 and <= 0x23FF or >= 0x2600 and <= 0x27BF or >= 0x2B00 and <= 0x2BFF;
+
     /// <summary>One typed line broken to the block's width: by character, a Latin word kept whole when it fits a line.</summary>
     private static IEnumerable<string> Wrap(string line, float points, Func<string, float, double> widthMm)
     {
@@ -72,7 +99,7 @@ internal static class SlipNote
         var i = 0;
         while (i < line.Length)
         {
-            var end = i + 1;
+            var end = char.IsSurrogatePair(line, i) ? i + 2 : i + 1;
             if (IsWordChar(line[i])) while (end < line.Length && IsWordChar(line[end])) end++;
             var piece = line[i..end];
             if (current.Length > 0 && widthMm(current + piece, points) > BlockWidthMm)

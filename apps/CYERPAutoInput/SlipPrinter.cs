@@ -36,11 +36,18 @@ internal static partial class SlipPrinter
         // Fitting measures many trial lines per size (as typed in 設定): one surface, a font per size.
         lock (NoteMeasure)
         {
-            if (!NoteFonts.TryGetValue(points, out var font))
-                NoteFonts[points] = font = new Font(SlipNote.FontName, points, FontStyle.Bold, GraphicsUnit.Point);
-            return NoteMeasure.Value.MeasureString(line, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+            return SlipNote.Runs(line).Sum(run =>
+            {
+                var key = (points, run.Symbol);
+                if (!NoteFonts.TryGetValue(key, out var font))
+                    NoteFonts[key] = font = NoteFont(run.Symbol, points, GraphicsUnit.Point);
+                return (double)NoteMeasure.Value.MeasureString(run.Text, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+            });
         }
     }
+
+    private static Font NoteFont(bool symbol, float size, GraphicsUnit unit) =>
+        new(symbol ? SlipNote.SymbolFontName : SlipNote.FontName, size, symbol ? FontStyle.Regular : FontStyle.Bold, unit);
 
     private static readonly Lazy<Graphics> NoteMeasure = new(() =>
     {
@@ -48,7 +55,7 @@ internal static partial class SlipPrinter
         g.PageUnit = GraphicsUnit.Millimeter;
         return g;
     });
-    private static readonly Dictionary<float, Font> NoteFonts = [];
+    private static readonly Dictionary<(float, bool), Font> NoteFonts = [];
 
     /// <summary>
     /// The printer's resolution and the label in its dots: the set label size, or the driver's
@@ -213,11 +220,11 @@ internal static partial class SlipPrinter
     }
 
     /// <summary>
-    /// Labels on A4 sheets cut in <paramref name="cellsPerPage"/> cells (黑貓, user 2026-10-26: three),
-    /// one label to a cell from the top, each centred in its cell, every pixel one printer dot
-    /// (the labels are drawn at the printer's own resolution).
+    /// One picture, every pixel one printer dot, its top-left corner <paramref name="leftMm"/>,
+    /// <paramref name="topMm"/> from the paper's corner (黑貓 on A4, user 2026-10-26: top left as
+    /// in its PDF); what the printer cannot reach at the edge moves it in that far.
     /// </summary>
-    public static void PrintCells(string printer, IReadOnlyList<Bitmap> labels, int cellsPerPage, string documentName)
+    public static void PrintAt(string printer, Bitmap picture, double leftMm, double topMm, string documentName)
     {
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
@@ -226,26 +233,17 @@ internal static partial class SlipPrinter
         doc.PrintController = new StandardPrintController();
         doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
         doc.OriginAtMargins = false;
-        var next = 0;
         doc.PrintPage += (_, e) =>
         {
             var g = e.Graphics!;
             g.PageUnit = GraphicsUnit.Pixel;
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = PixelOffsetMode.Half;
-            var pageW = e.PageBounds.Width / 100f * g.DpiX;
-            var pageH = e.PageBounds.Height / 100f * g.DpiY;
-            var marginX = e.PageSettings.HardMarginX / 100f * g.DpiX;
-            var marginY = e.PageSettings.HardMarginY / 100f * g.DpiY;
-            var cellH = pageH / cellsPerPage;
-            for (var cell = 0; cell < cellsPerPage && next < labels.Count; cell++, next++)
-            {
-                var label = labels[next];
-                var x = (int)Math.Round((pageW - label.Width) / 2 - marginX);
-                var y = (int)Math.Round(cell * cellH + (cellH - label.Height) / 2 - marginY);
-                g.DrawImage(label, new Rectangle(Math.Max(0, x), Math.Max(0, y), label.Width, label.Height), 0, 0, label.Width, label.Height, GraphicsUnit.Pixel);
-            }
-            e.HasMorePages = next < labels.Count;
+            // The graphics start at the printable area's corner.
+            var x = (int)Math.Round((leftMm / 25.4 - e.PageSettings.HardMarginX / 100.0) * g.DpiX);
+            var y = (int)Math.Round((topMm / 25.4 - e.PageSettings.HardMarginY / 100.0) * g.DpiY);
+            g.DrawImage(picture, new Rectangle(Math.Max(0, x), Math.Max(0, y), picture.Width, picture.Height), 0, 0, picture.Width, picture.Height, GraphicsUnit.Pixel);
+            e.HasMorePages = false;
         };
         doc.Print();
     }
@@ -312,17 +310,26 @@ internal static partial class SlipPrinter
             g.DrawImage(bmp, new Rectangle(Math.Max(0, x), Math.Max(0, y), bmp.Width, bmp.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel);
             if (noted && fit is { } f)
             {
-                using var font = new Font(SlipNote.FontName, f.Points / 72f * g.DpiY, FontStyle.Bold, GraphicsUnit.Pixel);
+                using var font = NoteFont(false, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
+                using var symbolFont = NoteFont(true, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
                 var lineH = Math.Min((float)SlipNote.LineHeightMm(f.Points) * dotsPerMm, blockH / f.Lines.Count);
                 var centreX = pageW / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX;
                 // The lines centred in the block, each centred across it.
                 var top = areaTop + areaH - blockH + (blockH - lineH * f.Lines.Count) / 2;
-                using var centred = (StringFormat)StringFormat.GenericTypographic.Clone();
-                centred.Alignment = StringAlignment.Center;
                 // Pure black dots on the thermal head, no grey edges.
                 g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
                 for (var i = 0; i < f.Lines.Count; i++)
-                    g.DrawString(f.Lines[i], font, Brushes.Black, centreX, top + i * lineH, centred);
+                {
+                    // A run at a time, symbols in their own font, the whole line centred.
+                    var runs = SlipNote.Runs(f.Lines[i]).Select(r => (r.Text, Font: r.Symbol ? symbolFont : font)).ToList();
+                    var widths = runs.Select(r => g.MeasureString(r.Text, r.Font, PointF.Empty, StringFormat.GenericTypographic).Width).ToList();
+                    var penX = centreX - widths.Sum() / 2;
+                    for (var r = 0; r < runs.Count; r++)
+                    {
+                        g.DrawString(runs[r].Text, runs[r].Font, Brushes.Black, penX, top + i * lineH, StringFormat.GenericTypographic);
+                        penX += widths[r];
+                    }
+                }
             }
             e.HasMorePages = false;
         };

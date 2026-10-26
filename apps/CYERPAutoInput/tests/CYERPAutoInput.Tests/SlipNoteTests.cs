@@ -46,4 +46,14 @@ public sealed class SlipNoteTests
         Assert.Null(SlipNote.Fit(new string('好', 200), Width));
         Assert.Contains("太多", SlipNote.Check(new string('好', 200), Width));
     }
+
+    [Fact]
+    public void Symbols_get_their_own_font_and_pairs_stay_whole()
+    {
+        Assert.Equal(["📹請務必錄影開箱"], SlipNote.Lines("📹\uFE0F請務必錄影開箱"));
+        Assert.Equal([("⚠", true), ("勿使用", false), ("🔪", true), ("刀片", false)], SlipNote.Runs("⚠勿使用🔪刀片"));
+        Assert.False(SlipNote.IsSymbol('★' - 0x100));
+        var fit = SlipNote.Fit(string.Concat(Enumerable.Repeat("📦", 20)), Width)!.Value;
+        Assert.All(fit.Lines, l => Assert.False(l.Length > 0 && char.IsLowSurrogate(l[0])));
+    }
 }

@@ -391,13 +391,16 @@ internal sealed partial class ShopeeBatchRunner
         if (ShopeeBatchScreens.IsFamilyLabelPage(after.Boxes)) Keys("Ctrl+W (寄取貨單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
     }
 
+    /// <summary>Chrome's print destination that saves a PDF.</summary>
+    private const string PdfPrinter = "另存為 PDF";
+
     /// <summary>
     /// Chrome's print dialog (opened by the page itself) with 目的地 set to 另存為 PDF › 儲存 › the
     /// 另存新檔 dialog into <paramref name="folder"/>. The saved PDF.
     /// </summary>
     private async Task<string> SavePrintToPdfAsync(string folder)
     {
-        const string pdfPrinter = "另存為 PDF";
+        const string pdfPrinter = PdfPrinter;
         var panel = new RectangleF(0.5f, 0, 0.5f, 1);
         var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true, part: panel);
         opened.Dispose();
@@ -433,10 +436,16 @@ internal sealed partial class ShopeeBatchRunner
             Click(screen, save, "儲存");
             break;
         }
+        return await SavedPdfAsync(folder);
+    }
+
+    /// <summary>After 儲存 in Chrome's print dialog: the 另存新檔 dialog saves into <paramref name="folder"/>; the PDF.</summary>
+    private async Task<string> SavedPdfAsync(string folder)
+    {
         var (error, files) = await SaveFromDialogAsync(folder, "另存為 PDF", 30);
-        if (error is not null) throw new ShopeeBatchStop($"寄取貨單存成 PDF 時出錯：{error}，未列印。", true);
+        if (error is not null) throw new ShopeeBatchStop($"寄件單存成 PDF 時出錯：{error}，未列印。", true);
         return files.FirstOrDefault(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-            ?? throw new ShopeeBatchStop("寄取貨單存成 PDF 後找不到 .pdf 檔，未列印。", true);
+            ?? throw new ShopeeBatchStop("寄件單存成 PDF 後找不到 .pdf 檔，未列印。", true);
     }
 
     /// <summary>
