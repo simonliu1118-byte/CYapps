@@ -145,7 +145,7 @@ internal sealed class SettingsForm : Form
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         // user, 2026-10-26: every thermal slip with the note, 蝦皮's 超商 ones too (宅配 has no room).
-        flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」（蝦皮超商寄件單也另存 PDF 後加上文字；宅配不印）", _settings.SlipNoteAllThermal));
+        flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」（蝦皮店到店、店到宅、新竹、7-11 也另存 PDF 後加上文字；黑貓不印）", _settings.SlipNoteAllThermal));
         // F8 and 蝦皮自動擷取 end to end are stable and always on (user, 2026-10-15: no switches).
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };

@@ -42,6 +42,11 @@ public sealed class ShopeeDaySkipsTests
         Assert.True(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.BlackCat));
         Assert.True(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.Hct));
         Assert.False(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.Shopee));
+        Assert.True(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.Shopee, "蝦皮店到店 - 隔日到貨"));
+        Assert.True(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.Shopee, "蝦皮店到宅"));
+        Assert.True(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.Hct, "新竹物流"));
+        Assert.False(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.BlackCat, "黑貓宅急便"));
+        Assert.False(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.Shopee, "店到家宅配"));
         // 快遞取件詳情 shows the number in groups of three.
         Assert.Equal("626152397515", ShopeeBatchScreens.DialogTracking([B("快遞取件詳情", 80, 115, 130), B("626 152 397 515", 339, 176, 150)]));
     }

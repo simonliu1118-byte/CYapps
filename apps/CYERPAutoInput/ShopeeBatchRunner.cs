@@ -853,7 +853,7 @@ internal sealed partial class ShopeeBatchRunner
             Click(awb, print, "列印出貨文件");
         }
         if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
-        else if (NoteOnStoreSlips && ShopeeBatchScreens.IsStoreDelivery(order.Carrier)) await PrintPdfWithNoteAsync(order);
+        else if (NoteOnStoreSlips && ShopeeBatchScreens.NoteRoom(order.Kind, order.Carrier)) await PrintPdfWithNoteAsync(order);
         else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
     }
 
@@ -919,7 +919,7 @@ internal sealed partial class ShopeeBatchRunner
     private bool NoteOnStoreSlips => _print.SlipNoteAll && SlipNote.Lines(_print.SlipNote).Count > 0;
 
     /// <summary>
-    /// A 超商 slip Chrome would print (蝦皮店到店, 7-11) with the 寄件單下方文字 (user, 2026-10-26):
+    /// A slip Chrome would print (蝦皮店到店／店到宅, 新竹, 7-11) with the 寄件單下方文字 (user, 2026-10-26):
     /// Chrome's print dialog, open, saves it as a PDF; its printed part is drawn at the thermal
     /// printer's resolution as large as fits above the note's block and printed with the note.
     /// </summary>

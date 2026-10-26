@@ -149,8 +149,16 @@ internal static partial class ShopeeBatchScreens
         return ShopeeBatchCarrier.Other;
     }
 
-    /// <summary>A 超商 delivery of Shopee's own label (蝦皮店到店, 隔日到貨 too), not 店到宅／店到家 宅配.</summary>
-    public static bool IsStoreDelivery(string carrier) => ShopeeScreenshot.Compact(carrier).Contains("店到店", StringComparison.Ordinal);
+    /// <summary>
+    /// A Shopee label with room under it for the 寄件單下方文字 (user, 2026-10-26): 蝦皮店到店 (隔日到貨
+    /// too), 蝦皮店到宅 and 新竹物流; not 黑貓 (A4) nor 店到家.
+    /// </summary>
+    public static bool NoteRoom(ShopeeBatchCarrier kind, string carrier)
+    {
+        var text = ShopeeScreenshot.Compact(carrier);
+        return kind == ShopeeBatchCarrier.Hct || kind == ShopeeBatchCarrier.Shopee &&
+            (text.Contains("店到店", StringComparison.Ordinal) || text.Contains("店到宅", StringComparison.Ordinal));
+    }
 
     /// <summary>A courier that comes to the set address: 安排取件 with its address checked first.</summary>
     public static bool IsPickup(ShopeeBatchCarrier kind) => kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.BlackCat;
