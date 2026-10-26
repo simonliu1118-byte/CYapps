@@ -42,6 +42,8 @@ internal sealed class UserSettings
     public int CoupangHctLabelScale { get; set; } = 22;
     /// <summary>Words printed under the slips the program cuts itself (<see cref="SlipNote"/>; user, 2026-10-20). Blank = none.</summary>
     public string SlipNote { get; set; } = string.Empty;
+    /// <summary>蝦皮's 超商 slips printed through Chrome get the note too, saved as PDF first (user, 2026-10-26).</summary>
+    public bool SlipNoteAllThermal { get; set; }
     /// <summary>
     /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
     /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.

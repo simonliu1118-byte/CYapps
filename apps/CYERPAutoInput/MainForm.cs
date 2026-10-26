@@ -1023,7 +1023,11 @@ internal sealed partial class MainForm : Form
     /// (<see cref="ShopeeBatchRunner"/>). Anything that cannot be done stops the whole batch with
     /// a beep and says where it stopped and whether Shopee had already shipped that order.
     /// </summary>
-    private async Task RunShopeeBatchAsync()
+    /// <param name="resume">
+    /// 測試 (user, 2026-10-26): only the order whose 寄件編號 dialog is open in the Chrome in front,
+    /// from its 列印寄件單 to the end (<see cref="ShopeeBatchRunner.ResumeFromDialogAsync"/>).
+    /// </param>
+    private async Task RunShopeeBatchAsync(bool resume = false)
     {
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
@@ -1038,7 +1042,16 @@ internal sealed partial class MainForm : Form
             MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (MessageBox.Show(this,
+        if (resume)
+        {
+            if (MessageBox.Show(this,
+                    "測試：接續 Chrome 前景這張蝦皮訂單已打開的寄件編號視窗（快遞取件詳情／查看寄件編號）：\n\n" +
+                    "按「列印寄件單」→ 照全自動的方式列印（黑貓存 PDF 後印在 A4 三格紙最上格）→ 擷取訂單、輸入 ERP。只做這一筆。\n\n" +
+                    "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
+                    ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+        }
+        else if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
                 "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
@@ -1057,7 +1070,7 @@ internal sealed partial class MainForm : Form
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote), token,
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
         runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;
@@ -1066,13 +1079,15 @@ internal sealed partial class MainForm : Form
         _log.Info("shopee-batch", "started");
         try
         {
-            await runner.RunAsync(async order =>
+            async Task<string?> EnterAsync(ShopeeBatchOrder order)
             {
                 var note = await EnterShopeeBatchOrderAsync(order, runner, mapping, ledger, token);
                 // Back to the batch's notice and the locked mouse for the next order.
                 Session.Begin(AutomationSession.BatchTitle);
                 return note;
-            }, SetStatus);
+            }
+            if (resume) await runner.ResumeFromDialogAsync(EnterAsync, SetStatus);
+            else await runner.RunAsync(EnterAsync, SetStatus);
             outcome = AutomationOutcome.Done;
         }
         catch (OperationCanceledException)
@@ -2196,6 +2211,8 @@ internal sealed partial class MainForm : Form
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試：從寄件編號視窗接續（列印寄件單 → ERP）", null, async (_, _) => await RunShopeeBatchAsync(resume: true));
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")

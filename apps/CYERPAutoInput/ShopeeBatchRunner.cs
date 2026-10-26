@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "");
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -92,6 +92,45 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>Orders whose buyer got the 聊聊 reply (for the closing list).</summary>
     public List<string> Chats { get; } = [];
+
+    /// <summary>
+    /// 測試 (user, 2026-10-26): one order taken up where Shopee's 寄件編號 dialog (快遞取件詳情 or
+    /// 查看寄件編號) is open in the Chrome in front — 列印寄件單 and on to the end as in 全自動
+    /// (label, ERP); the tab is left open.
+    /// </summary>
+    public async Task ResumeFromDialogAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
+    {
+        _window = ChromeWindows().FirstOrDefault();
+        if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗：請先在 Chrome 打開蝦皮訂單的寄件編號視窗（快遞取件詳情／查看寄件編號）。");
+        _shippedHint = true;
+        Front();
+        await Task.Delay(500, _token);
+        var (shown, tracking) = await WaitOrNullAsync(8, s =>
+            ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is not null && ShopeeBatchScreens.DialogTracking(s.Boxes) is { Length: > 0 } t ? t : null);
+        if (shown is null || tracking is null)
+        {
+            shown?.Dispose();
+            throw new ShopeeBatchStop("畫面上沒有蝦皮的寄件編號視窗（快遞取件詳情／查看寄件編號），或讀不到寄件編號：請在訂單頁打開後再試。");
+        }
+        ShopeeBatchOrder order;
+        using (shown)
+        {
+            var orderSn = ShopeeBatchScreens.DetailOrderSn(shown.Boxes);
+            var carrier = ShopeeBatchScreens.DetailCarrier(shown.Boxes);
+            if (orderSn.Length == 0) throw new ShopeeBatchStop("讀不到這張訂單的訂單編號。");
+            order = new ShopeeBatchOrder { OrderSn = orderSn, Carrier = carrier, Kind = ShopeeBatchScreens.CarrierKind(carrier), Tracking = tracking, Shipped = true };
+        }
+        _log.Info("shopee-batch", $"resume from the tracking dialog carrier={_log.Value(order.Carrier)} kind={order.Kind}");
+        if (order.Kind == ShopeeBatchCarrier.Other) throw new ShopeeBatchStop($"物流「{order.Carrier}」程式還沒有列印流程。", true);
+        Current = order;
+        status($"測試：訂單 {order.OrderSn} 列印寄件單…");
+        await PrintFromDialogAsync(order);
+        status($"測試：訂單 {order.OrderSn} 輸入 ERP…");
+        var note = await enterErp(order);
+        if (note is not null) Notes.Add(new ShopeeBatchNote(order.OrderSn, note));
+        Done.Add(order.OrderSn);
+        Current = null;
+    }
 
     /// <param name="enterErp">
     /// The page scan and ERP for the order on screen: null when clean, a note to list when it
@@ -590,7 +629,12 @@ internal sealed partial class ShopeeBatchRunner
         order.Tracking = tracking;
         _log.Info("shopee-batch", $"tracking assigned length={tracking.Length}");
         dialog.Dispose();
+        await PrintFromDialogAsync(order);
+    }
 
+    /// <summary>The 寄件編號 dialog open: 列印寄件單, the label printed by its carrier's way, its tab closed, the dialog closed.</summary>
+    private async Task PrintFromDialogAsync(ShopeeBatchOrder order)
+    {
         await ClickPrintLabelAsync(order);
         switch (order.Kind)
         {
@@ -809,6 +853,7 @@ internal sealed partial class ShopeeBatchRunner
             Click(awb, print, "列印出貨文件");
         }
         if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
+        else if (NoteOnStoreSlips && ShopeeBatchScreens.IsStoreDelivery(order.Carrier)) await PrintPdfWithNoteAsync(order);
         else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
     }
 
@@ -866,7 +911,33 @@ internal sealed partial class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"交貨便服務代碼（{(code.Length > 0 ? code : "讀不到")}）與寄件編號 {order.Tracking} 不同，未列印。", true);
         }
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
-        await PrintDialogAsync(_print.SevenScale, pages: null);
+        if (NoteOnStoreSlips) await PrintPdfWithNoteAsync(order);
+        else await PrintDialogAsync(_print.SevenScale, pages: null);
+    }
+
+    /// <summary>設定 › 一般 › 熱感紙寄件單都印下方文字, with words to print (user, 2026-10-26).</summary>
+    private bool NoteOnStoreSlips => _print.SlipNoteAll && SlipNote.Lines(_print.SlipNote).Count > 0;
+
+    /// <summary>
+    /// A 超商 slip Chrome would print (蝦皮店到店, 7-11) with the 寄件單下方文字 (user, 2026-10-26):
+    /// Chrome's print dialog, open, saves it as a PDF; its printed part is drawn at the thermal
+    /// printer's resolution as large as fits above the note's block and printed with the note.
+    /// </summary>
+    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order)
+    {
+        var printer = SlipPrinter.Installed(_printer) ?? throw new ShopeeBatchStop($"找不到名稱符合「{_printer}」的印表機，未列印。", true);
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "note-slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        var pdf = await SavePrintToPdfAsync(folder);
+        var label = SlipPrinter.Label(printer, 100, 150);
+        var widthMm = label.Width * 25.4 / label.Dpi - 4;
+        var heightMm = label.Height * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
+        GrayImage slip;
+        using (var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi))
+            slip = SlipPrinter.BlackWhite(drawn);
+        _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
+        PrintCutSlip(printer, slip, order.OrderSn);
+        try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>

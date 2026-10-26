@@ -97,6 +97,14 @@ internal static partial class SlipPrinter
         }
     }
 
+    /// <summary>A picture in pure black and white (darker than mid grey is black), for the thermal head.</summary>
+    public static GrayImage BlackWhite(Bitmap source)
+    {
+        var gray = Gray(source);
+        for (var i = 0; i < gray.Pixels.Length; i++) gray.Pixels[i] = gray.Pixels[i] < 128 ? (byte)0 : (byte)255;
+        return gray;
+    }
+
     private static GrayImage Gray(Bitmap source)
     {
         using var bmp = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
