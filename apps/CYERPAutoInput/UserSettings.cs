@@ -53,6 +53,10 @@ internal sealed class UserSettings
     public string ShipNoteShopee { get; set; } = string.Empty;
     public string ShipNoteMo { get; set; } = string.Empty;
     public string ShipNoteCoupang { get; set; } = string.Empty;
+    /// <summary>出貨明細抬頭: the words beside the logo (user, 2026-10-26); kept on this PC only.</summary>
+    public string ShipSheetTitle { get; set; } = string.Empty;
+    /// <summary>The logo chosen in 設定 is copied here (Data/ship_logo.png); see <see cref="ShipLogoPath"/>.</summary>
+    public static string ShipLogoPath => Path.Combine(AppContext.BaseDirectory, "Data", "ship_logo.png");
     /// <summary>
     /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
     /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.

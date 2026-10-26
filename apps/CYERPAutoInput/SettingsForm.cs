@@ -24,6 +24,10 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _slipNoteAllThermal = new();
     private readonly CheckBox _thermalSheet = new();
     private readonly TextBox _shipNoteShopee = new(), _shipNoteMo = new(), _shipNoteCoupang = new();
+    private readonly TextBox _shipTitle = new();
+    private readonly Label _shipLogoState = new();
+    /// <summary>The logo picked (copied to Data on 儲存), "" to remove it, null when unchanged.</summary>
+    private string? _shipLogoPicked;
     private readonly Label _slipNoteStatus = new();
     private readonly TextBox _hctPickupAddress = new();
     private ChatRuleEditor? _shopeeChat;
@@ -308,7 +312,7 @@ internal sealed class SettingsForm : Form
     /// </summary>
     private GroupBox ShipSheetSection()
     {
-        var box = new GroupBox { Text = "全熱感紙列印（出貨明細）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 300 };
+        var box = new GroupBox { Text = "全熱感紙列印（出貨明細）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 372 };
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -322,7 +326,28 @@ internal sealed class SettingsForm : Form
         };
         grid.Controls.Add(hint, 0, 1);
         grid.SetColumnSpan(hint, 2);
-        var row = 2;
+        grid.Controls.Add(new Label { Text = "抬頭", AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, 2);
+        _shipTitle.Width = 300;
+        _shipTitle.Text = _settings.ShipSheetTitle;
+        grid.Controls.Add(_shipTitle, 1, 2);
+        grid.Controls.Add(new Label { Text = "Logo", AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, 3);
+        var logoRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        _shipLogoState.AutoSize = true;
+        _shipLogoState.Margin = new Padding(0, 7, 8, 0);
+        _shipLogoState.Text = File.Exists(UserSettings.ShipLogoPath) ? "已設定" : "未設定";
+        var pick = new Button { Text = "選擇…", AutoSize = true };
+        pick.Click += (_, _) =>
+        {
+            using var dialog = new OpenFileDialog { Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif", Title = "選擇出貨明細 Logo" };
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            _shipLogoPicked = dialog.FileName;
+            _shipLogoState.Text = Path.GetFileName(dialog.FileName);
+        };
+        var clear = new Button { Text = "清除", AutoSize = true };
+        clear.Click += (_, _) => { _shipLogoPicked = string.Empty; _shipLogoState.Text = "未設定"; };
+        logoRow.Controls.AddRange([_shipLogoState, pick, clear]);
+        grid.Controls.Add(logoRow, 1, 3);
+        var row = 4;
         foreach (var (label, input, value) in new[] { ("蝦皮註記", _shipNoteShopee, _settings.ShipNoteShopee), ("MO店+註記", _shipNoteMo, _settings.ShipNoteMo), ("酷澎註記", _shipNoteCoupang, _settings.ShipNoteCoupang) })
         {
             grid.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, row);
@@ -653,6 +678,25 @@ internal sealed class SettingsForm : Form
         _settings.ShipNoteShopee = NoteText(_shipNoteShopee);
         _settings.ShipNoteMo = NoteText(_shipNoteMo);
         _settings.ShipNoteCoupang = NoteText(_shipNoteCoupang);
+        _settings.ShipSheetTitle = _shipTitle.Text.Trim();
+        if (_shipLogoPicked is { } logo)
+        {
+            try
+            {
+                if (logo.Length == 0) File.Delete(UserSettings.ShipLogoPath);
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(UserSettings.ShipLogoPath)!);
+                    using var image = new Bitmap(logo);
+                    image.Save(UserSettings.ShipLogoPath, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
+            {
+                MessageBox.Show(this, $"Logo 無法使用：{ex.Message}", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+        }
         _settings.HctLabelScale = hctScale;
         _settings.CoupangHctLabelScale = coupangHctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();

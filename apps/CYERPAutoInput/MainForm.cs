@@ -958,7 +958,8 @@ internal sealed partial class MainForm : Form
             };
             var sheet = new ShipSheet(result.DocumentKey, source, order?.OrderSn ?? string.Empty, order?.TrackingNumber.Trim() ?? string.Empty,
                 order?.Carrier ?? string.Empty, lines, note, DateTime.Now);
-            var pages = ShipSheetPrinter.Print(printer, sheet);
+            using var logo = LoadShipLogo();
+            var pages = ShipSheetPrinter.Print(printer, sheet, _settings.ShipSheetTitle, logo);
             result.Printed = true;
             _log.Info("ship-sheet", $"printed document={_log.Value(result.DocumentKey)} lines={lines.Count} labels={pages}");
             try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -967,6 +968,30 @@ internal sealed partial class MainForm : Form
         {
             result.PrintProblem = $"出貨明細未列印（{ex.Message}），ERP 匯出檔在 {file}";
             _log.Warn("ship-sheet", $"not printed document={_log.Value(result.DocumentKey)}: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>The logo from 設定 in pure black and white (a colour logo would come out grey and fuzzy); null when none.</summary>
+    private Bitmap? LoadShipLogo()
+    {
+        try
+        {
+            if (!File.Exists(UserSettings.ShipLogoPath)) return null;
+            using var source = new Bitmap(UserSettings.ShipLogoPath);
+            var logo = new Bitmap(source.Width, source.Height);
+            for (var y = 0; y < source.Height; y++)
+                for (var x = 0; x < source.Width; x++)
+                {
+                    var c = source.GetPixel(x, y);
+                    var light = c.A < 128 || c.R * 299 + c.G * 587 + c.B * 114 > 180_000;
+                    logo.SetPixel(x, y, light ? Color.White : Color.Black);
+                }
+            return logo;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or OutOfMemoryException)
+        {
+            _log.Warn("ship-sheet", $"logo not loaded: {ex.GetType().Name}");
+            return null;
         }
     }
 

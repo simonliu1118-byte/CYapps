@@ -6,17 +6,20 @@ namespace CYERPAutoInput;
 
 /// <summary>
 /// Draws a <see cref="ShipSheet"/> on the thermal printer's 100×150 mm label (user, 2026-10-26:
-/// one 出貨明細 per 寄件單 instead of the 二聯報表紙): 銷貨單／訂單編號／寄件編號 with their last
-/// three characters large, 貨運, each product on two lines (品名; 品號 數量 單位 × 單價 and its
-/// 金額), the total, then the platform's 註記. Products that do not fit go on to another label.
+/// one 出貨明細 per 寄件單 instead of the 二聯報表紙): the shop's logo and name, 貨運 as a tag,
+/// 銷貨單／訂單編號／寄件編號 with their last three characters large, one line a product (品號,
+/// 品名, 數量 單位, 單價, 金額), the total, then the platform's 註記. Products that do not fit go
+/// on to another label.
 /// </summary>
 internal static class ShipSheetPrinter
 {
     private const string FontName = "Microsoft JhengHei";
     private const float LabelWidthMm = 100, LabelHeightMm = 150, MarginMm = 3;
 
+    /// <param name="title">The shop's name at the top (設定 › 出貨明細抬頭); empty for none.</param>
+    /// <param name="logo">The shop's logo left of it (設定 › Logo); null for none.</param>
     /// <returns>Labels printed.</returns>
-    public static int Print(string printer, ShipSheet sheet)
+    public static int Print(string printer, ShipSheet sheet, string title = "", Image? logo = null)
     {
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
@@ -49,32 +52,57 @@ internal static class ShipSheetPrinter
 
             if (pages == 1)
             {
-                y += Text(g, "出貨明細", 13, true, left, y, right - left);
-                Text(g, "印單 " + sheet.PrintedAt.ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), 9, false, left, y - 5.2f, right - left, StringAlignment.Far);
-                y += 1;
+                // The shop (logo, name) on the left, 「出貨明細」 on the right (user, 2026-10-26).
+                var head = Math.Max(LineHeight(g, 13), logo is null ? 0 : 9);
+                var x = left;
+                if (logo is not null)
+                {
+                    var w = 9f * logo.Width / logo.Height;
+                    g.DrawImage(logo, x, y + (head - 9) / 2, w, 9);
+                    x += w + 2;
+                }
+                if (title.Trim().Length > 0) Text(g, title.Trim(), 13, true, x, y + (head - LineHeight(g, 13)) / 2, right - x - 22);
+                Text(g, "出貨明細", title.Trim().Length > 0 || logo is not null ? 11 : 13, true, left, y + (head - LineHeight(g, 13)) / 2, right - left, StringAlignment.Far);
+                y += head + 0.8f;
+                // 貨運 as a black tag on the left, the time printed on the right (user, 2026-10-26:
+                // 「貨運：…」 on a line of its own stood out too much).
+                var tag = sheet.Carrier.Length > 0 ? Tag(g, sheet.Carrier, left, y, right - left - 34) : LineHeight(g, 8.5f);
+                Text(g, "印單 " + sheet.PrintedAt.ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), 8.5f, false, left, y + (tag - LineHeight(g, 8.5f)) / 2, right - left, StringAlignment.Far);
+                y += tag + 1;
                 y += Numbered(g, "銷貨單", sheet.Document, left, y);
                 if (sheet.OrderSn.Length > 0) y += Numbered(g, sheet.Platform, sheet.OrderSn, left, y);
                 if (sheet.Tracking.Length > 0) y += Numbered(g, "寄件", sheet.Tracking, left, y);
-                if (sheet.Carrier.Length > 0) y += Text(g, "貨運：" + sheet.Carrier, 11, true, left, y, right - left) + 0.5f;
             }
             else y += Text(g, $"出貨明細（續）銷貨單 {sheet.Document}", 10, true, left, y, right - left);
             g.DrawLine(pen, left, y + 1, right, y + 1);
-            y += 2.5f;
+            y += 1.8f;
 
+            // One line a product (user, 2026-10-26): 品號, 品名, 數量 單位, 單價, 金額, dashed lines between.
+            float codeX = left, nameX = left + 15, amountR = right, priceR = right - 14, quantityR = right - 27, nameW = quantityR - 15 - nameX;
+            void Row(string code, string name, string quantity, string price, string amount, float points, bool bold)
+            {
+                Text(g, code, points, bold, codeX, y, nameX - codeX - 1);
+                Text(g, name, points, bold, nameX, y, nameW);
+                Text(g, quantity, points, bold, quantityR - 15, y, 15, StringAlignment.Far);
+                Text(g, price, points, bold, priceR - 12, y, 12, StringAlignment.Far);
+                Text(g, amount, points, true, amountR - 13, y, 13, StringAlignment.Far);
+            }
+            Row("品號", "品名", "數量", "單價", "金額", 8, false);
+            y += LineHeight(g, 8) + 0.6f;
+            using var dash = new Pen(Color.Black, 0.25f) { DashStyle = DashStyle.Dash };
             // Room kept at the foot for 「續下一張」 while products remain.
             const float more = 6;
+            var rowHeight = LineHeight(g, 9.5f) + 1.6f;
             while (next < sheet.Lines.Count)
             {
+                if (y + rowHeight > bottom - more) break;
                 var line = sheet.Lines[next];
-                var need = LineHeight(g, 10.5f) + LineHeight(g, 10) + 1.5f;
-                if (y + need > bottom - more) break;
-                y += Text(g, line.Name.Length > 0 ? line.Name : line.Code, 10.5f, true, left, y, right - left);
-                var detail = $"{line.Code}　{ShipSheet.Show(line.Quantity)} {line.Unit}".TrimEnd() +
-                    (line.Price.Length > 0 ? $" × {ShipSheet.Show(line.Price)}" : string.Empty);
-                var amount = line.Amount.Length > 0 ? ShipSheet.Show(line.Amount) : string.Empty;
-                Text(g, amount, 10, true, left, y, right - left, StringAlignment.Far);
-                y += Text(g, detail, 10, false, left + 2, y, right - left - 22) + 1.5f;
+                Row(line.Code, line.Name, $"{ShipSheet.Show(line.Quantity)} {line.Unit}".TrimEnd(),
+                    line.Price.Length > 0 ? ShipSheet.Show(line.Price) : string.Empty,
+                    line.Amount.Length > 0 ? ShipSheet.Show(line.Amount) : string.Empty, 9.5f, false);
+                y += rowHeight;
                 next++;
+                if (next < sheet.Lines.Count) g.DrawLine(dash, left, y - 0.8f, right, y - 0.8f);
             }
             if (next < sheet.Lines.Count)
             {
@@ -123,6 +151,19 @@ internal static class ShipSheetPrinter
         at += g.MeasureString(head, small, PointF.Empty, format).Width + 0.5f;
         g.DrawString(tail, big, Brushes.Black, at, y, format);
         return bigHeight * 0.95f;
+    }
+
+    /// <summary>White words on a black tag (貨運); its height.</summary>
+    private static float Tag(Graphics g, string text, float x, float y, float maxWidth)
+    {
+        using var font = new Font(FontName, 10, FontStyle.Bold, GraphicsUnit.Point);
+        var size = g.MeasureString(text, font, PointF.Empty, StringFormat.GenericTypographic);
+        var width = Math.Min(maxWidth, size.Width + 3);
+        var height = font.GetHeight(g) + 1;
+        g.FillRectangle(Brushes.Black, x, y, width, height);
+        using var format = new StringFormat(StringFormat.GenericTypographic) { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+        g.DrawString(text, font, Brushes.White, new RectangleF(x + 1.5f, y + 0.5f, width - 3, height - 1), format);
+        return height;
     }
 
     /// <summary>One line, cut with … when too long; its height.</summary>
