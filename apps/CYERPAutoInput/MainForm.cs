@@ -1173,7 +1173,8 @@ internal sealed partial class MainForm : Form
                 _log.Info("mo-slip", $"slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
                 if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
                 var slip = await Task.Run(() => SlipImage.Render(page, plan));
-                var done = SlipPrinter.Print(printer, slip, "MO店+ 寄件單", _settings.SlipNote);
+                var done = SlipPrinter.Print(printer, slip, "MO店+ 寄件單", _settings.SlipNote,
+                    seven ? SlipNote.MinPoints : SlipNote.FamilyMinPoints);
                 if (!done.Noted && SlipNote.Lines(_settings.SlipNote).Count > 0) _log.Warn("mo-slip", "slip too tall for the note block; printed without it");
                 printed++;
                 notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");

@@ -95,6 +95,8 @@ internal sealed class SettingsForm : Form
 
         _tabs.Dock = DockStyle.Fill;
         _tabs.Padding = new Point(14, 5);
+        // Two rows when the tabs do not fit across (user, 2026-10-26).
+        _tabs.Multiline = true;
         _tabs.TabPages.Add(GeneralPage());
         _tabs.TabPages.Add(ImportPage());
         _tabs.TabPages.Add(PrinterPage());
@@ -145,7 +147,12 @@ internal sealed class SettingsForm : Form
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         // user, 2026-10-26: every thermal slip with the note, 蝦皮's 超商 ones too (宅配 has no room).
-        flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」（蝦皮店到店、店到宅、新竹、7-11 也另存 PDF 後加上文字；黑貓不印）", _settings.SlipNoteAllThermal));
+        flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」", _settings.SlipNoteAllThermal));
+        flow.Controls.Add(new Label
+        {
+            Text = "蝦皮店到店、店到宅、新竹、7-11 也另存 PDF 後加上文字；黑貓不印。",
+            AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(20, 0, 0, 8)
+        });
         // F8 and 蝦皮自動擷取 end to end are stable and always on (user, 2026-10-15: no switches).
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
@@ -258,7 +265,7 @@ internal sealed class SettingsForm : Form
         var hint = new Label
         {
             AutoSize = true, MaximumSize = new Size(500, 0), Margin = new Padding(0, 2, 0, 6),
-            Text = $"印在程式自己切的熱感寄件單下方（蝦皮／酷澎全家、MO店+ 全家／7-11）。字少就大、字多自動折行變小（{SlipNote.MinPoints:F0}–{SlipNote.MaxPoints:F0} pt 粗體）；空白就不印。"
+            Text = $"印在程式自己切的熱感寄件單下方（蝦皮／酷澎全家、MO店+ 全家／7-11）。每行就是印出的一行，不折行；每行最多 {SlipNote.MinPoints:F0} pt 放得下的字數（約 19 個中文字），超過打不進去。下方空間越多字越大（最大 {SlipNote.MaxPoints:F0} pt），全家單空間少時可縮到 {SlipNote.FamilyMinPoints:F0} pt。空白就不印。"
         };
         grid.Controls.Add(hint, 0, 0);
         grid.SetColumnSpan(hint, 2);
@@ -269,7 +276,20 @@ internal sealed class SettingsForm : Form
             _slipNote[i].Width = 420;
             _slipNote[i].Margin = new Padding(0, 3, 0, 3);
             _slipNote[i].Text = i < lines.Length ? lines[i] : string.Empty;
-            _slipNote[i].TextChanged += (_, _) => ShowSlipNoteStatus();
+            var input = _slipNote[i];
+            input.Tag = input.Text;
+            // Longer than one line at the smallest size: not taken (user, 2026-10-26).
+            input.TextChanged += (_, _) =>
+            {
+                // A line saved longer before can still be shortened.
+                if (SlipNote.LineFits(input.Text, SlipPrinter.NoteWidthMm) ||
+                    SlipPrinter.NoteWidthMm(input.Text, SlipNote.MinPoints) < SlipPrinter.NoteWidthMm((string)input.Tag!, SlipNote.MinPoints))
+                { input.Tag = input.Text; ShowSlipNoteStatus(); return; }
+                var caret = Math.Max(0, input.SelectionStart - (input.Text.Length - ((string)input.Tag!).Length));
+                input.Text = (string)input.Tag!;
+                input.SelectionStart = Math.Min(caret, input.Text.Length);
+                System.Media.SystemSounds.Beep.Play();
+            };
             grid.Controls.Add(_slipNote[i], 1, i + 1);
         }
         _slipNoteStatus.AutoSize = true;
@@ -284,10 +304,10 @@ internal sealed class SettingsForm : Form
 
     private void ShowSlipNoteStatus()
     {
-        var error = SlipNote.Check(SlipNoteText, SlipPrinter.NoteWidthMm);
-        var fit = SlipNote.Fit(SlipNoteText, SlipPrinter.NoteWidthMm);
-        _slipNoteStatus.ForeColor = error is null ? SystemColors.GrayText : Color.Firebrick;
-        _slipNoteStatus.Text = error ?? (fit is { } f ? $"空間最小時：{f.Points:0.#} pt，{f.Lines.Count} 行（寄件單下方空間越多，字印得越大）" : "不印文字。");
+        var used = _slipNote.Select(b => SlipPrinter.NoteWidthMm(b.Text.Trim(), SlipNote.MinPoints) / SlipNote.BlockWidthMm).ToList();
+        _slipNoteStatus.ForeColor = SystemColors.GrayText;
+        _slipNoteStatus.Text = SlipNote.Lines(SlipNoteText).Count == 0 ? "不印文字。"
+            : "每行已用：" + string.Join("　", used.Select((u, i) => $"第 {i + 1} 行 {Math.Min(100, u * 100):F0}%"));
     }
 
     private TabPage ImportPage()
@@ -581,13 +601,6 @@ internal sealed class SettingsForm : Form
             MessageBox.Show(this, "酷澎宅配縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             _tabs.SelectedIndex = 3;
             _coupangHctLabelScale.Focus();
-            return;
-        }
-        if (SlipNote.Check(SlipNoteText, SlipPrinter.NoteWidthMm) is { } slipNoteError)
-        {
-            MessageBox.Show(this, slipNoteError, "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 3;
-            _slipNote[0].Focus();
             return;
         }
         _settings.SlipNote = string.Join("\n", SlipNote.Lines(SlipNoteText));

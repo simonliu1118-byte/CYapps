@@ -1,12 +1,11 @@
 namespace CYERPAutoInput;
 
 /// <summary>
-/// 設定 › 印表機 › 寄件單下方文字 (user, 2026-10-20): the person's own words, printed in a block of
-/// fixed size at the bottom of the 100×150 mm label, under the slips the program cuts itself
-/// (蝦皮／酷澎 全家, MO店+ 全家／7-11); slips Chrome prints are not touched. The type is sized to
-/// the words (user, 2026-10-20: few words large, many words wrapped and smaller): the largest
-/// size from <see cref="MaxPoints"/> down to <see cref="MinPoints"/> whose wrapped lines fit the
-/// block. Lines typed stay lines; a line too wide wraps (a Latin word is kept whole when it fits).
+/// 寄件單下方文字 (user, 2026-10-20): the person's own words, printed under the thermal slips the
+/// program draws itself, in the room left under the slip at its own size. Each typed line is one
+/// printed line, never broken (user, 2026-10-26); a line longer than fits at <see cref="MinPoints"/>
+/// is not taken. The size is the largest from <see cref="MaxPoints"/> down that fits the room,
+/// not below <see cref="MinPoints"/> (<see cref="FamilyMinPoints"/> under a 全家 slip).
 /// </summary>
 internal static class SlipNote
 {
@@ -16,7 +15,10 @@ internal static class SlipNote
     /// this font instead, in black.
     /// </summary>
     public const string SymbolFontName = "Segoe UI Emoji";
-    public const float MinPoints = 10f;
+    /// <summary>Never smaller (user, 2026-10-26: 10 pt was too small)…</summary>
+    public const float MinPoints = 14f;
+    /// <summary>…except under a 全家 slip, which leaves little room (user, 2026-10-26).</summary>
+    public const float FamilyMinPoints = 10f;
     public const float MaxPoints = 40f;
     public const double LabelHeightMm = 150;
     public const double BlockWidthMm = 96;
@@ -42,35 +44,24 @@ internal static class SlipNote
     public static double LineHeightMm(float points) => points * MmPerPoint * LineFactor;
 
     /// <summary>
-    /// The size and wrapped lines for the block; null when the words do not fit even at
-    /// <see cref="MinPoints"/> (or there are none). <paramref name="widthMm"/> measures a line at a size.
+    /// The size for the block: the largest from <see cref="MaxPoints"/> down to
+    /// <paramref name="minPoints"/> at which every line fits its width and all fit the height;
+    /// null when none (or no words). Lines are never broken (user, 2026-10-26).
     /// </summary>
-    public static (float Points, IReadOnlyList<string> Lines)? Fit(string? text, Func<string, float, double> widthMm, double blockHeightMm = BlockHeightMm)
+    public static (float Points, IReadOnlyList<string> Lines)? Fit(string? text, Func<string, float, double> widthMm,
+        double blockHeightMm = BlockHeightMm, float minPoints = MinPoints)
     {
-        var typed = Lines(text);
-        if (typed.Count == 0) return null;
-        for (var points = MaxPoints; points >= MinPoints; points -= 0.5f)
-        {
-            var most = (int)Math.Floor(blockHeightMm / LineHeightMm(points) + 1e-9);
-            if (most < typed.Count) continue;
-            var wrapped = new List<string>();
-            foreach (var line in typed)
-            {
-                wrapped.AddRange(Wrap(line, points, widthMm));
-                if (wrapped.Count > most) break;
-            }
-            if (wrapped.Count <= most) return (points, wrapped);
-        }
+        var lines = Lines(text);
+        if (lines.Count == 0) return null;
+        for (var points = MaxPoints; points >= minPoints; points -= 0.5f)
+            if (lines.Count * LineHeightMm(points) <= blockHeightMm + 1e-9 && lines.All(l => widthMm(l, points) <= BlockWidthMm))
+                return (points, lines);
         return null;
     }
 
-    /// <summary>Null when the words fit the block; otherwise why not.</summary>
-    public static string? Check(string? text, Func<string, float, double> widthMm)
-    {
-        if (Lines(text).Count == 0 || Fit(text, widthMm) is not null) return null;
-        var most = (int)Math.Floor(BlockHeightMm / LineHeightMm(MinPoints) + 1e-9);
-        return $"寄件單下方文字太多：最小 {MinPoints:F0} pt 時最多 {most} 行（每行約 27 個中文字），請刪減。";
-    }
+    /// <summary>Whether a typed line fits one line at <see cref="MinPoints"/>; a longer one is not taken (user, 2026-10-26).</summary>
+    public static bool LineFits(string line, Func<string, float, double> widthMm) =>
+        widthMm(Lines(line).FirstOrDefault() ?? string.Empty, MinPoints) <= BlockWidthMm;
 
     /// <summary>A line cut where it changes between 微軟正黑體 and the symbol font (<see cref="SymbolFontName"/>).</summary>
     public static List<(string Text, bool Symbol)> Runs(string line)
@@ -91,38 +82,4 @@ internal static class SlipNote
     /// <summary>Emoji and the pictographic symbols (☎ ✂ ⚠ ✅ 📦 …) 微軟正黑體 lacks.</summary>
     public static bool IsSymbol(int codePoint) =>
         codePoint >= 0x1F000 || codePoint is >= 0x2300 and <= 0x23FF or >= 0x2600 and <= 0x27BF or >= 0x2B00 and <= 0x2BFF;
-
-    /// <summary>One typed line broken to the block's width: by character, a Latin word kept whole when it fits a line.</summary>
-    private static IEnumerable<string> Wrap(string line, float points, Func<string, float, double> widthMm)
-    {
-        if (line.Length == 0) { yield return line; yield break; }
-        var current = string.Empty;
-        var i = 0;
-        while (i < line.Length)
-        {
-            var end = char.IsSurrogatePair(line, i) ? i + 2 : i + 1;
-            if (IsWordChar(line[i])) while (end < line.Length && IsWordChar(line[end])) end++;
-            var piece = line[i..end];
-            if (current.Length > 0 && widthMm(current + piece, points) > BlockWidthMm)
-            {
-                yield return current.TrimEnd();
-                current = string.Empty;
-                if (piece == " ") { i = end; continue; }
-            }
-            if (widthMm(piece, points) > BlockWidthMm)
-            {
-                // A word longer than the line: by character.
-                foreach (var c in piece)
-                {
-                    if (current.Length > 0 && widthMm(current + c, points) > BlockWidthMm) { yield return current; current = string.Empty; }
-                    current += c;
-                }
-            }
-            else current += piece;
-            i = end;
-        }
-        if (current.Length > 0) yield return current.TrimEnd();
-    }
-
-    private static bool IsWordChar(char c) => c < 0x2E80 && !char.IsWhiteSpace(c);
 }

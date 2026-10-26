@@ -17,36 +17,26 @@ public sealed class SlipNoteTests
     }
 
     [Fact]
-    public void Few_words_are_large_many_wrap_smaller()
+    public void Lines_are_never_broken_and_size_follows_the_room()
     {
         Assert.Null(SlipNote.Fit("", Width));
-        // Room under the slip: few words take the largest size.
-        var short_ = SlipNote.Fit("感謝您的購買", Width, 40)!.Value;
-        Assert.Equal(SlipNote.MaxPoints, short_.Points);
-        Assert.True(SlipNote.Fit("感謝您的購買", Width)!.Value.Points < SlipNote.MaxPoints);
-        Assert.Equal(["感謝您的購買"], short_.Lines);
-
-        var two = SlipNote.Fit("感謝您的購買\n有問題請聊聊", Width)!.Value;
-        Assert.True(two.Points < SlipNote.MaxPoints);
-        Assert.Equal(2, two.Lines.Count);
-
-        // 60 characters do not fit one line: wrapped, smaller, every line within the block.
-        var many = SlipNote.Fit(new string('好', 60), Width)!.Value;
-        Assert.True(many.Lines.Count >= 3);
-        Assert.True(many.Points >= SlipNote.MinPoints);
-        Assert.All(many.Lines, l => Assert.True(Width(l, many.Points) <= SlipNote.BlockWidthMm));
-        Assert.Equal(60, many.Lines.Sum(l => l.Length));
-        Assert.True(many.Lines.Count * SlipNote.LineHeightMm(many.Points) <= SlipNote.BlockHeightMm);
+        // Few words in a lot of room: the largest size.
+        Assert.Equal(SlipNote.MaxPoints, SlipNote.Fit("感謝您的購買", Width, 40)!.Value.Points);
+        // Three lines in the least room: not at 14 pt; under a 全家 slip down to 10 pt.
+        var three = "收到商品如有問題請先聊聊詢問\n志遠夥伴竭誠為您服務\n發票委託加值中心代開";
+        Assert.Null(SlipNote.Fit(three, Width, SlipNote.BlockHeightMm));
+        var family = SlipNote.Fit(three, Width, 16, SlipNote.FamilyMinPoints)!.Value;
+        Assert.Equal(3, family.Lines.Count);
+        Assert.True(family.Points >= SlipNote.FamilyMinPoints);
+        Assert.True(SlipNote.Fit(three, Width, 30)!.Value.Points >= SlipNote.MinPoints);
     }
 
     [Fact]
-    public void Latin_words_stay_whole_and_too_much_is_refused()
+    public void A_line_longer_than_one_line_at_14_pt_is_not_taken()
     {
-        var fit = SlipNote.Fit(string.Join(' ', Enumerable.Repeat("thanks", 20)), Width)!.Value;
-        Assert.All(fit.Lines, l => Assert.DoesNotContain(l.Split(' '), w => w.Length > 0 && w != "thanks"));
-        Assert.Null(SlipNote.Check("感謝", Width));
-        Assert.Null(SlipNote.Fit(new string('好', 200), Width));
-        Assert.Contains("太多", SlipNote.Check(new string('好', 200), Width));
+        Assert.True(SlipNote.LineFits(new string('好', 19), Width));
+        Assert.False(SlipNote.LineFits(new string('好', 20), Width));
+        Assert.True(SlipNote.LineFits(new string('A', 38), Width));
     }
 
     [Fact]
@@ -55,7 +45,5 @@ public sealed class SlipNoteTests
         Assert.Equal(["📹請務必錄影開箱"], SlipNote.Lines("📹\uFE0F請務必錄影開箱"));
         Assert.Equal([("⚠", true), ("勿使用", false), ("🔪", true), ("刀片", false)], SlipNote.Runs("⚠勿使用🔪刀片"));
         Assert.False(SlipNote.IsSymbol('★' - 0x100));
-        var fit = SlipNote.Fit(string.Concat(Enumerable.Repeat("📦", 20)), Width)!.Value;
-        Assert.All(fit.Lines, l => Assert.False(l.Length > 0 && char.IsLowSurrogate(l[0])));
     }
 }

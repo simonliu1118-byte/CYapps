@@ -939,7 +939,7 @@ internal sealed partial class ShopeeBatchRunner
         var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false);
         using (drawn.Image) slip = SlipPrinter.BlackWhite(drawn.Image);
         _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
-        PrintCutSlip(printer, slip, order.OrderSn);
+        PrintCutSlip(printer, slip, order.OrderSn, family: false);
         try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
@@ -1011,11 +1011,16 @@ internal sealed partial class ShopeeBatchRunner
     }
 
     /// <summary>The cut slip sent to the printer; an error there stops the batch (it may have printed).</summary>
-    private void PrintCutSlip(string printer, GrayImage slip, string orderSn)
+    /// <param name="family">
+    /// A 全家 slip (user, 2026-10-26: little room under it, so its words may go down to
+    /// <see cref="SlipNote.FamilyMinPoints"/>; others not below <see cref="SlipNote.MinPoints"/>).
+    /// </param>
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true)
     {
         try
         {
-            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + orderSn, _print.SlipNote);
+            var dpi = SlipPrinter.Print(printer, slip, (family ? "全家寄取貨單 " : "寄件單 ") + orderSn, _print.SlipNote,
+                family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints);
             _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
             if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }
@@ -1359,7 +1364,7 @@ internal sealed partial class ShopeeBatchRunner
             // 「顯示更多設定」 reads 「顯示較少設定」 once open, so while it still says 更多 the
             // settings are folded: a click made while the dialog was still loading may have done
             // nothing (user's LOG, 2026-10-14), so it is clicked again, a little apart.
-            if (scaleValue is null && ShopeeBatchScreens.MoreSettings(boxes) is { } more && expands < 3 && (expands == 0 || lastExpand.ElapsedMilliseconds > 1500))
+            if (!toPdf && scaleValue is null && ShopeeBatchScreens.MoreSettings(boxes) is { } more && expands < 3 && (expands == 0 || lastExpand.ElapsedMilliseconds > 1500))
             {
                 Click(screen, more, "顯示更多設定");
                 expands++;
@@ -1386,16 +1391,19 @@ internal sealed partial class ShopeeBatchRunner
                 }
             }
 
+            // 另存為 PDF has no 縮放比例 (user's LOG, 2026-10-26: 15 s waited for it); saved as
+            // Chrome lays it out, which is the size the thermal printer gets (76 mm wide for 店到店).
+            if (toPdf)
+            {
+                if (ShopeeBatchScreens.SaveButton(boxes) is not { } save) { await Task.Delay(400, _token); continue; }
+                _log.Info("shopee-batch", $"print dialog set: 目的地「{ShopeeBatchScreens.PrintDestination(boxes)}」、頁面「{shownPages}」");
+                Click(screen, save, "儲存");
+                return;
+            }
+
             // 縮放比例
             if (scaleValue is null)
             {
-                // A PDF panel that never shows 縮放比例: saved as Chrome has it (the size may differ).
-                if (toPdf && watch.Elapsed > TimeSpan.FromSeconds(15) && ShopeeBatchScreens.SaveButton(boxes) is { } save)
-                {
-                    _log.Warn("shopee-batch", "PDF print dialog shows no 縮放比例; saved without setting it");
-                    Click(screen, save, "儲存");
-                    return;
-                }
                 last = "讀不到縮放比例";
                 if (!dumped && watch.Elapsed > TimeSpan.FromSeconds(8))
                 {

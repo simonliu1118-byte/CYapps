@@ -255,7 +255,7 @@ internal static partial class SlipPrinter
     /// too tall to leave room for it is printed as before, without the note (Noted false).
     /// No progress window.
     /// </summary>
-    public static (int DpiX, int DpiY, bool Noted) Print(string printer, GrayImage slip, string documentName, string note = "")
+    public static (int DpiX, int DpiY, bool Noted) Print(string printer, GrayImage slip, string documentName, string note = "", float minPoints = SlipNote.MinPoints)
     {
         using var bmp = new Bitmap(slip.Width, slip.Height, PixelFormat.Format24bppRgb);
         var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
@@ -313,7 +313,7 @@ internal static partial class SlipPrinter
                 // (user, 2026-10-26: the more room, the larger they print).
                 y = (int)Math.Round(areaTop);
                 blockH = areaH - bmp.Height - gap;
-                fit = SlipNote.Fit(note, NoteWidthMm, blockH / dotsPerMm);
+                fit = SlipNote.Fit(note, NoteWidthMm, blockH / dotsPerMm, minPoints);
                 noted = fit is not null;
                 if (!noted) y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
             }
