@@ -20,8 +20,10 @@ public sealed class SlipNoteTests
     public void Few_words_are_large_many_wrap_smaller()
     {
         Assert.Null(SlipNote.Fit("", Width));
-        var short_ = SlipNote.Fit("感謝您的購買", Width)!.Value;
+        // Room under the slip: few words take the largest size.
+        var short_ = SlipNote.Fit("感謝您的購買", Width, 40)!.Value;
         Assert.Equal(SlipNote.MaxPoints, short_.Points);
+        Assert.True(SlipNote.Fit("感謝您的購買", Width)!.Value.Points < SlipNote.MaxPoints);
         Assert.Equal(["感謝您的購買"], short_.Lines);
 
         var two = SlipNote.Fit("感謝您的購買\n有問題請聊聊", Width)!.Value;

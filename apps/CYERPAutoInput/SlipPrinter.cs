@@ -279,7 +279,8 @@ internal static partial class SlipPrinter
 
         var used = (0, 0);
         var noted = false;
-        var fit = SlipNote.Fit(note, NoteWidthMm);
+        var hasNote = SlipNote.Lines(note).Count > 0;
+        (float Points, IReadOnlyList<string> Lines)? fit = null;
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
         doc.DocumentName = documentName;
@@ -304,9 +305,18 @@ internal static partial class SlipPrinter
             var areaH = Math.Min(pageH, (float)SlipNote.LabelHeightMm * dotsPerMm);
             var blockH = (float)SlipNote.BlockHeightMm * dotsPerMm;
             var gap = (float)SlipNote.GapMm * dotsPerMm;
-            noted = fit is not null && bmp.Height + gap + blockH <= areaH;
+            noted = hasNote && bmp.Height + gap + blockH <= areaH;
             var areaTop = (pageH - areaH) / 2 - marginY;
-            if (noted) y = (int)Math.Round(areaTop + (areaH - blockH - gap - bmp.Height) / 2);
+            if (noted)
+            {
+                // The slip at the top at its own size; the words get all the room under it
+                // (user, 2026-10-26: the more room, the larger they print).
+                y = (int)Math.Round(areaTop);
+                blockH = areaH - bmp.Height - gap;
+                fit = SlipNote.Fit(note, NoteWidthMm, blockH / dotsPerMm);
+                noted = fit is not null;
+                if (!noted) y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
+            }
             g.DrawImage(bmp, new Rectangle(Math.Max(0, x), Math.Max(0, y), bmp.Width, bmp.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel);
             if (noted && fit is { } f)
             {

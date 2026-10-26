@@ -17,9 +17,10 @@ internal static class SlipNote
     /// </summary>
     public const string SymbolFontName = "Segoe UI Emoji";
     public const float MinPoints = 10f;
-    public const float MaxPoints = 28f;
+    public const float MaxPoints = 40f;
     public const double LabelHeightMm = 150;
     public const double BlockWidthMm = 96;
+    /// <summary>The least room the block needs; the space under a shorter slip is all used (user, 2026-10-26).</summary>
     public const double BlockHeightMm = 15;
     /// <summary>The least white between the slip and the block.</summary>
     public const double GapMm = 2;
@@ -44,13 +45,13 @@ internal static class SlipNote
     /// The size and wrapped lines for the block; null when the words do not fit even at
     /// <see cref="MinPoints"/> (or there are none). <paramref name="widthMm"/> measures a line at a size.
     /// </summary>
-    public static (float Points, IReadOnlyList<string> Lines)? Fit(string? text, Func<string, float, double> widthMm)
+    public static (float Points, IReadOnlyList<string> Lines)? Fit(string? text, Func<string, float, double> widthMm, double blockHeightMm = BlockHeightMm)
     {
         var typed = Lines(text);
         if (typed.Count == 0) return null;
         for (var points = MaxPoints; points >= MinPoints; points -= 0.5f)
         {
-            var most = (int)Math.Floor(BlockHeightMm / LineHeightMm(points) + 1e-9);
+            var most = (int)Math.Floor(blockHeightMm / LineHeightMm(points) + 1e-9);
             if (most < typed.Count) continue;
             var wrapped = new List<string>();
             foreach (var line in typed)

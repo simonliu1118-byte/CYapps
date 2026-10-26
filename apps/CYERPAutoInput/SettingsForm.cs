@@ -287,7 +287,7 @@ internal sealed class SettingsForm : Form
         var error = SlipNote.Check(SlipNoteText, SlipPrinter.NoteWidthMm);
         var fit = SlipNote.Fit(SlipNoteText, SlipPrinter.NoteWidthMm);
         _slipNoteStatus.ForeColor = error is null ? SystemColors.GrayText : Color.Firebrick;
-        _slipNoteStatus.Text = error ?? (fit is { } f ? $"印出：{f.Points:0.#} pt，{f.Lines.Count} 行" : "不印文字。");
+        _slipNoteStatus.Text = error ?? (fit is { } f ? $"空間最小時：{f.Points:0.#} pt，{f.Lines.Count} 行（寄件單下方空間越多，字印得越大）" : "不印文字。");
     }
 
     private TabPage ImportPage()
