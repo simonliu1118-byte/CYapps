@@ -339,7 +339,7 @@ internal sealed partial class ShopeeBatchRunner
         screen.Area.Contains(new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY)) &&
         box.CenterY > 40 && box.CenterY < screen.Area.Height - 40;
 
-    private void Click(Screen screen, OcrBox box, string what, bool front = true)
+    private void Click(Screen screen, OcrBox box, string what, bool front = true, bool hover = false)
     {
         var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
         // Page text includes what is scrolled out of view; a click goes only on what is shown.
@@ -348,6 +348,12 @@ internal sealed partial class ShopeeBatchRunner
         _inputs++;
         if (front) Front();
         _log.Info("shopee-batch", $"click {what} at {point.X},{point.Y}");
+        if (hover)
+        {
+            // Resting on it first, as a hand would, for a button that ignored a bare click.
+            NativeMethods.SetCursorPos(point.X, point.Y);
+            Thread.Sleep(350);
+        }
         InputSender.Click(point);
         NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
     }
@@ -517,6 +523,7 @@ internal sealed partial class ShopeeBatchRunner
             order.Carrier = carrier;
             if (!Orange(detail.Image, button))
                 throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「{button.Text.Trim()}」按鈕顏色不對，為避免按錯已停止。");
+            _log.Info("shopee-batch", $"ship button box={button.Left},{button.Top} {button.Width}x{button.Height} area={detail.Area}");
             Click(detail, button, button.Text.Trim());
         }
         if (order.Kind == ShopeeBatchCarrier.Hct) await ConfirmPickupAsync(order);
@@ -529,8 +536,23 @@ internal sealed partial class ShopeeBatchRunner
         // the one in 查看寄件編號, then the one beside 取消.
         var pressedAsk = false;
         var pressedApply = false;
+        // 安排出貨 pressed and nothing opened (user's LOG／screenshot, 2026-10-26: the same order
+        // twice, the click did not take): while the button is still there, orange, with no
+        // dialog over it, it is found again and pressed again, resting on it first; twice more at most.
+        var shipPresses = 1;
+        var sincePress = Stopwatch.StartNew();
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
+            if (order.Kind != ShopeeBatchCarrier.Hct && shipPresses < 3 && sincePress.Elapsed.TotalSeconds > 6 &&
+                ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is null &&
+                ShopeeBatchScreens.ShipButton(s.Boxes) is { } again && Orange(s.Image, again))
+            {
+                shipPresses++;
+                sincePress.Restart();
+                _log.Warn("shopee-batch", $"安排出貨 pressed, nothing opened; pressing again ({shipPresses}) box={again.Left},{again.Top} {again.Width}x{again.Height} area={s.Area}");
+                Click(s, again, "安排出貨（再按一次）", hover: true);
+                return null;
+            }
             if (ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply)
             {
                 var inAsk = ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is not null && !ShopeeBatchScreens.ApplyBesideCancel(s.Boxes);
