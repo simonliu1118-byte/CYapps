@@ -638,4 +638,25 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"^\d{2,3}$")]
     private static partial Regex ScalePattern();
+
+    /// <summary>
+    /// The red message Shopee shows at the top after 安排出貨 when it refuses, e.g. 「買家門市關轉，
+    /// 請待買家重選完門市後，再重新申請寄件編號。(error:10514)」 (user's screenshot, 2026-10-26): the
+    /// line with 「error:數字」 and the lines just above and below it, centred with it.
+    /// </summary>
+    public static string? ShipError(IReadOnlyList<OcrBox> boxes)
+    {
+        var error = boxes.FirstOrDefault(b => ErrorCodePattern().IsMatch(C(b)));
+        if (error is null) return null;
+        return string.Concat(boxes
+            .Where(b => b == error || (Math.Abs(b.CenterY - error.CenterY) <= 35 && Math.Abs(b.CenterX - error.CenterX) <= 350))
+            .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+    }
+
+    /// <summary>The buyer's store closed (error 10514): nothing to do until the buyer picks another one.</summary>
+    public static bool StoreClosed(string error) =>
+        error.Contains("門市關轉", StringComparison.Ordinal) || error.Contains("10514", StringComparison.Ordinal);
+
+    [GeneratedRegex(@"error[:：]\d{3,}", RegexOptions.IgnoreCase)]
+    private static partial Regex ErrorCodePattern();
 }

@@ -100,6 +100,13 @@ internal sealed partial class ShopeeBatchRunner
     /// <param name="status">Progress text for the main window.</param>
     public async Task RunAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
     {
+        // Orders passed over earlier today stay passed over until tomorrow (user, 2026-10-26).
+        foreach (var (orderSn, reason) in ShopeeDaySkips.Load(DateTime.Today))
+        {
+            Skipped.Add(orderSn);
+            Notes.Add(new ShopeeBatchNote(orderSn, $"今天已略過：{reason}（明天再試）"));
+        }
+        if (Skipped.Count > 0) _log.Info("shopee-batch", $"passed over today already count={Skipped.Count}");
         status("全自動：開啟 Chrome…");
         await OpenWindowAsync();
         while (true)
@@ -543,6 +550,18 @@ internal sealed partial class ShopeeBatchRunner
         var sincePress = Stopwatch.StartNew();
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
+            // Shopee refused (user's screenshot, 2026-10-26: 買家門市關轉 … (error:10514)): nothing
+            // was shipped; 門市關轉 waits for the buyer, so the order is passed over until tomorrow.
+            if (ShopeeBatchScreens.ShipError(s.Boxes) is { } error)
+            {
+                s.Dispose();
+                order.Shipped = false;
+                _shippedHint = false;
+                _log.Warn("shopee-batch", $"安排出貨 refused: {error}");
+                if (!ShopeeBatchScreens.StoreClosed(error)) throw new ShopeeBatchSkip($"未出貨：蝦皮回覆「{error}」，請人工處理。");
+                ShopeeDaySkips.Add(DateTime.Today, order.OrderSn, "買家門市關轉，等買家重選門市");
+                throw new ShopeeBatchSkip($"未出貨：蝦皮回覆「{error}」。今天略過，明天再試。");
+            }
             if (order.Kind != ShopeeBatchCarrier.Hct && shipPresses < 3 && sincePress.Elapsed.TotalSeconds > 6 &&
                 ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is null &&
                 ShopeeBatchScreens.ShipButton(s.Boxes) is { } again && Orange(s.Image, again))
