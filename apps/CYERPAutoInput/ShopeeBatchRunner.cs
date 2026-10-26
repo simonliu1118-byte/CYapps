@@ -522,6 +522,9 @@ internal sealed partial class ShopeeBatchRunner
             _log.Info("shopee-batch", $"order page carrier={_log.Value(carrier)} kind={kind}");
             // Each carrier has its own label flow after 安排出貨; one without a flow yet stops here,
             // before anything is shipped.
+            // 任選／下單請備註 (user, 2026-10-26): the items depend on the buyer's note; passed over unshipped.
+            if (ShopeeBatchScreens.BuyerChoiceSpec(detail.Boxes) is { } spec)
+                throw new ShopeeBatchSkip($"未出貨：商品「{spec}」要依買家備註決定品項，請人工處理。");
             if (kind == ShopeeBatchCarrier.Other)
                 throw new ShopeeBatchSkip($"未出貨：物流「{carrier}」程式還沒有出貨流程，請人工處理。");
             if (kind == ShopeeBatchCarrier.Hct && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)

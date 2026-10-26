@@ -107,6 +107,22 @@ internal sealed class PhysicalMouseLock : IDisposable
         return CallNextHookEx(0, code, wParam, lParam);
     }
 
+    /// <summary>
+    /// The mouse free again while the keyboard hook stays (user, 2026-10-26: inside 蝦皮全自動 a
+    /// question for the person must not end the watch for Esc, or Esc stops nothing).
+    /// </summary>
+    public void Release()
+    {
+        _released = true;
+        _log.Info("mouse-lock", "physical mouse released; Esc still watched");
+    }
+
+    public void Relock()
+    {
+        _released = false;
+        _log.Info("mouse-lock", "physical mouse locked again");
+    }
+
     public void Dispose()
     {
         _released = true;

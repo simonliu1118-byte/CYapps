@@ -1214,6 +1214,8 @@ internal sealed partial class MainForm : Form
         ShopeeShotResult? read;
         using (var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: true, session: Session, browser: runner.Window))
         {
+            // Esc while it waits on the person stops the batch, not just this order (user, 2026-10-26).
+            using var escape = token.Register(() => BeginInvoke(() => { if (!dialog.IsDisposed && dialog.Visible) dialog.DialogResult = DialogResult.Cancel; }));
             var ok = dialog.ShowDialog(this) == DialogResult.OK;
             token.ThrowIfCancellationRequested();
             read = ok ? dialog.Result : null;

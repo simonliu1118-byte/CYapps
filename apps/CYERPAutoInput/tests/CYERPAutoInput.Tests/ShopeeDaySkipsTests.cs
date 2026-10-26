@@ -24,6 +24,18 @@ public sealed class ShopeeDaySkipsTests
     }
 
     [Fact]
+    public void Buyer_choice_spec_is_found()
+    {
+        List<OcrBox> page =
+        [
+            B("【志遠】§台灣製現貨§ 按摩精油膏 450ml大罐 綠薰舒 紫薰舒蘆薈玫瑰香茅薄荷生薑 推拿整復", 107, 90, 477),
+            B("規格: 任選3罐(下單請備註指定的味道)", 107, 138, 222)
+        ];
+        Assert.Equal("規格:任選3罐(下單請備註指定的味道)", ShopeeBatchScreens.BuyerChoiceSpec(page));
+        Assert.Null(ShopeeBatchScreens.BuyerChoiceSpec([B("規格: 兩支優惠組(長刷x1+丸形刷x1)", 107, 138), B("買家備註 任選", 0, 0)]));
+    }
+
+    [Fact]
     public void Skips_last_for_the_day()
     {
         var today = new DateTime(2026, 10, 26);

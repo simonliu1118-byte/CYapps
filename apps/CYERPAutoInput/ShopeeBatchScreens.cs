@@ -653,6 +653,14 @@ internal static partial class ShopeeBatchScreens
             .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
     }
 
+    /// <summary>
+    /// An item whose 規格 leaves the choice to the buyer's note, e.g. 「規格: 任選3罐(下單請備註指定的味道)」
+    /// (user's screenshot, 2026-10-26): the 規格 line, or null. Such orders go to a person before shipping.
+    /// </summary>
+    public static string? BuyerChoiceSpec(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Select(C).FirstOrDefault(t => t.StartsWith("規格", StringComparison.Ordinal) &&
+            (t.Contains("任選", StringComparison.Ordinal) || t.Contains("請備註", StringComparison.Ordinal)));
+
     /// <summary>The buyer's store closed (error 10514): nothing to do until the buyer picks another one.</summary>
     public static bool StoreClosed(string error) =>
         error.Contains("門市關轉", StringComparison.Ordinal) || error.Contains("10514", StringComparison.Ordinal);

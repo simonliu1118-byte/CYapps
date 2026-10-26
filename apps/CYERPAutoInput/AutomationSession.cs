@@ -63,7 +63,10 @@ internal sealed class AutomationSession : IDisposable
     /// <summary>Esc was pressed (raised on the UI thread): everything of the run stops, background work too.</summary>
     public event Action? Escaped;
 
-    public bool Active => _mouseLock is not null;
+    public bool Active => _mouseLock is not null && !_paused;
+
+    /// <summary>A pinned run (蝦皮全自動) waiting on the person: mouse free, Esc still stops the run.</summary>
+    private bool _paused;
 
     /// <summary>Locks the mouse and shows the notice; when already running, only the title follows.</summary>
     public void Begin(string title)
@@ -74,6 +77,11 @@ internal sealed class AutomationSession : IDisposable
             _ui = SynchronizationContext.Current;
             _mouseLock = PhysicalMouseLock.Engage(_log);
             _mouseLock.EscapePressed += OnEscape;
+        }
+        else if (_paused)
+        {
+            _paused = false;
+            _mouseLock.Relock();
         }
         try
         {
@@ -93,6 +101,14 @@ internal sealed class AutomationSession : IDisposable
     public void End(AutomationOutcome outcome = AutomationOutcome.Paused)
     {
         if (_mouseLock is null) return;
+        // A pause inside 蝦皮全自動 (user, 2026-10-26: Esc there only freed the mouse and the batch
+        // went on after the question): the mouse is freed, the Esc watch stays.
+        if (_pinned is not null && outcome == AutomationOutcome.Paused)
+        {
+            if (!_paused) { _paused = true; _mouseLock.Release(); }
+            return;
+        }
+        _paused = false;
         _mouseLock.Dispose();
         _mouseLock = null;
         // Inside 蝦皮全自動 a step's end is not the batch's: the notice stays, unless stopped.
