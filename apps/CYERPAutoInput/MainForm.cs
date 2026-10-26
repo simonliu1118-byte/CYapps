@@ -900,7 +900,11 @@ internal sealed partial class MainForm : Form
             Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
             // The physical Esc stops the run as soon as it is pressed, not at the next key poll.
             using var escape = Session.EscapeToken.Register(() => { try { _automationCts?.Cancel(); } catch (ObjectDisposedException) { } });
-            result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+            // 全熱感紙列印 (user, 2026-10-26): the print step becomes the thermal 出貨明細.
+            var printWanted = autoSave && (print ?? _settings.AutoPrint);
+            var thermal = printWanted && _settings.ThermalSheet;
+            result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
+            if (result.ExportFile.Length > 0) PrintShipSheet(result);
             outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
                 ? AutomationOutcome.NeedsAttention
                 : AutomationOutcome.Done;
@@ -924,6 +928,46 @@ internal sealed partial class MainForm : Form
             ? $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{result.Warnings.Count} 筆需人工確認；{saveText}"
             : $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{saveText}");
         return result;
+    }
+
+    /// <summary>
+    /// 全熱感紙列印 (user, 2026-10-26): the 出貨明細 of the document just saved — its lines from
+    /// ERP's export, the order's platform numbers, 貨運 and the platform's 註記 — on the thermal
+    /// printer. A problem goes to <see cref="AutomationRunResult.PrintProblem"/>; the export is
+    /// kept then, deleted once printed.
+    /// </summary>
+    private void PrintShipSheet(AutomationRunResult result)
+    {
+        var file = result.ExportFile;
+        try
+        {
+            var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter)
+                ?? throw new InvalidOperationException("找不到設定的熱感紙印表機");
+            IReadOnlyList<(string Name, List<string[]> Rows)> sheets;
+            using (var stream = File.OpenRead(file)) sheets = XlsxReader.ReadSheets(stream);
+            _log.Info("ship-sheet", $"export columns: {ShipSheetExport.Describe(sheets)}");
+            var lines = ShipSheetExport.Lines(sheets);
+            var order = _loadedOrder;
+            var source = order?.Source ?? string.Empty;
+            var note = source switch
+            {
+                ShopeeOrderImport.Source => _settings.ShipNoteShopee,
+                MoOrderImport.Source => _settings.ShipNoteMo,
+                CoupangOrderImport.Source => _settings.ShipNoteCoupang,
+                _ => string.Empty
+            };
+            var sheet = new ShipSheet(result.DocumentKey, source, order?.OrderSn ?? string.Empty, order?.TrackingNumber.Trim() ?? string.Empty,
+                order?.Carrier ?? string.Empty, lines, note, DateTime.Now);
+            var pages = ShipSheetPrinter.Print(printer, sheet);
+            result.Printed = true;
+            _log.Info("ship-sheet", $"printed document={_log.Value(result.DocumentKey)} lines={lines.Count} labels={pages}");
+            try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or System.ComponentModel.Win32Exception)
+        {
+            result.PrintProblem = $"出貨明細未列印（{ex.Message}），ERP 匯出檔在 {file}";
+            _log.Warn("ship-sheet", $"not printed document={_log.Value(result.DocumentKey)}: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static string DocumentKeyText(AutomationRunResult result) =>

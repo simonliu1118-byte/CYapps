@@ -45,6 +45,15 @@ internal sealed class UserSettings
     /// <summary>蝦皮's 超商 slips printed through Chrome get the note too, saved as PDF first (user, 2026-10-26).</summary>
     public bool SlipNoteAllThermal { get; set; }
     /// <summary>
+    /// 全熱感紙列印 (user, 2026-10-26): ERP's 直接列印 on 二聯報表紙 is replaced by a thermal 出貨明細
+    /// from ERP's own 轉出至 Excel of the saved 銷貨單, for every platform.
+    /// </summary>
+    public bool ThermalSheet { get; set; }
+    /// <summary>出貨明細註記, the words printed at its foot, per platform (user, 2026-10-26).</summary>
+    public string ShipNoteShopee { get; set; } = string.Empty;
+    public string ShipNoteMo { get; set; } = string.Empty;
+    public string ShipNoteCoupang { get; set; } = string.Empty;
+    /// <summary>
     /// The 安排取件 dialog's 快遞向你取件的地址 must contain this (spaces ignored) before 確認 is
     /// pressed (user, 2026-10-14). Kept here, never in the source; blank stops 新竹物流 orders.
     /// </summary>

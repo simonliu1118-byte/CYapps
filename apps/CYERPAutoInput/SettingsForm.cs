@@ -22,6 +22,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _coupangHctLabelScale = new();
     private readonly TextBox[] _slipNote = [new(), new(), new()];
     private readonly CheckBox _slipNoteAllThermal = new();
+    private readonly CheckBox _thermalSheet = new();
+    private readonly TextBox _shipNoteShopee = new(), _shipNoteMo = new(), _shipNoteCoupang = new();
     private readonly Label _slipNoteStatus = new();
     private readonly TextBox _hctPickupAddress = new();
     private ChatRuleEditor? _shopeeChat;
@@ -234,6 +236,7 @@ internal sealed class SettingsForm : Form
         // 酷澎 宅配 寄件單 on the thermal printer (user, 2026-10-19: 22 %; 超商 print at 100 %).
         page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
             ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        page.Controls.Add(ShipSheetSection());
         page.Controls.Add(SlipNoteSection());
         // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
         var invoiceBox = new GroupBox { Text = "紙本發票樣式（有統編的發票；酷澎無統編一律 A4 雙面；印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
@@ -299,6 +302,43 @@ internal sealed class SettingsForm : Form
         ShowSlipNoteStatus();
         return box;
     }
+
+    /// <summary>
+    /// 全熱感紙列印 and the 出貨明細註記 per platform (user, 2026-10-26), several lines each.
+    /// </summary>
+    private GroupBox ShipSheetSection()
+    {
+        var box = new GroupBox { Text = "全熱感紙列印（出貨明細）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 300 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Option(_thermalSheet, "全熱感紙列印：ERP 存檔後不印二聯單，改用熱感機印出貨明細", _settings.ThermalSheet);
+        grid.Controls.Add(_thermalSheet, 0, 0);
+        grid.SetColumnSpan(_thermalSheet, 2);
+        var hint = new Label
+        {
+            AutoSize = true, MaximumSize = new Size(500, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(20, 0, 0, 6),
+            Text = "在原本會按 ERP「列印 → 直接列印」的時候（一般 › 自動儲存後按直接列印、蝦皮全自動）改為：ERP「Excel → 轉出至 Excel」取得這張銷貨單，印出品號／品名／數量／單位／單價／金額、訂單編號、寄件編號、貨運與下面的註記。"
+        };
+        grid.Controls.Add(hint, 0, 1);
+        grid.SetColumnSpan(hint, 2);
+        var row = 2;
+        foreach (var (label, input, value) in new[] { ("蝦皮註記", _shipNoteShopee, _settings.ShipNoteShopee), ("MO店+註記", _shipNoteMo, _settings.ShipNoteMo), ("酷澎註記", _shipNoteCoupang, _settings.ShipNoteCoupang) })
+        {
+            grid.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, row);
+            input.Multiline = true;
+            input.AcceptsReturn = true;
+            input.ScrollBars = ScrollBars.Vertical;
+            input.Size = new Size(420, 52);
+            input.Margin = new Padding(0, 3, 0, 3);
+            input.Text = value.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            grid.Controls.Add(input, 1, row++);
+        }
+        box.Controls.Add(grid);
+        return box;
+    }
+
+    private static string NoteText(TextBox box) => string.Join("\n", box.Text.Replace("\r\n", "\n").Split('\n').Select(l => l.TrimEnd())).Trim('\n');
 
     private string SlipNoteText => string.Join("\n", _slipNote.Select(b => b.Text.Trim()));
 
@@ -383,6 +423,10 @@ internal sealed class SettingsForm : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData != Keys.Enter || ActiveControl is Button) return base.ProcessCmdKey(ref msg, keyData);
+        // A box of several lines takes its Enter (出貨明細註記, user 2026-10-26).
+        Control? typing = ActiveControl;
+        while (typing is ContainerControl { ActiveControl: { } inner }) typing = inner;
+        if (typing is TextBox { Multiline: true, AcceptsReturn: true }) return base.ProcessCmdKey(ref msg, keyData);
         // Enter in a pill box makes the typed text a pill (user, 2026-10-14); empty, it moves on.
         for (Control? c = ActiveControl; c is not null; c = c is ContainerControl cc ? cc.ActiveControl : null)
             if (c.Parent is PillBox pills && pills.Holds(c) && pills.Commit()) return true;
@@ -605,6 +649,10 @@ internal sealed class SettingsForm : Form
         }
         _settings.SlipNote = string.Join("\n", SlipNote.Lines(SlipNoteText));
         _settings.SlipNoteAllThermal = _slipNoteAllThermal.Checked;
+        _settings.ThermalSheet = _thermalSheet.Checked;
+        _settings.ShipNoteShopee = NoteText(_shipNoteShopee);
+        _settings.ShipNoteMo = NoteText(_shipNoteMo);
+        _settings.ShipNoteCoupang = NoteText(_shipNoteCoupang);
         _settings.HctLabelScale = hctScale;
         _settings.CoupangHctLabelScale = coupangHctScale;
         _settings.HctPickupAddress = _hctPickupAddress.Text.Trim();
