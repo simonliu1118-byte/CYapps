@@ -7,8 +7,8 @@ namespace CYERPAutoInput;
 /// <summary>
 /// Draws a <see cref="ShipSheet"/> on the thermal printer's 100×150 mm label (user, 2026-10-26:
 /// one 出貨明細 per 寄件單 instead of the 二聯報表紙): the shop's logo and name, 貨運 as a tag,
-/// 銷貨單／訂單編號／寄件編號 with their last three characters large, one line a product (品號,
-/// 品名, 數量 單位, 單價, 金額), the total, then the platform's 註記. Products that do not fit go
+/// 銷貨單／訂單編號／寄件編號 with their last three characters large, one line a product (a box to
+/// tick, 品號, 品名, 數量 單位, 單價, 金額), the total, then the platform's 註記. Products that do not fit go
 /// on to another label.
 /// </summary>
 internal static class ShipSheetPrinter
@@ -77,32 +77,40 @@ internal static class ShipSheetPrinter
             g.DrawLine(pen, left, y + 1, right, y + 1);
             y += 1.8f;
 
-            // One line a product (user, 2026-10-26): 品號, 品名, 數量 單位, 單價, 金額, dashed lines between.
-            float codeX = left, nameX = left + 15, amountR = right, priceR = right - 14, quantityR = right - 27, nameW = quantityR - 15 - nameX;
-            void Row(string code, string name, string quantity, string price, string amount, float points, bool bold)
-            {
-                Text(g, code, points, bold, codeX, y, nameX - codeX - 1);
-                Text(g, name, points, bold, nameX, y, nameW);
-                Text(g, quantity, points, bold, quantityR - 15, y, 15, StringAlignment.Far);
-                Text(g, price, points, bold, priceR - 12, y, 12, StringAlignment.Far);
-                Text(g, amount, points, true, amountR - 13, y, 13, StringAlignment.Far);
-            }
-            Row("品號", "品名", "數量", "單價", "金額", 8, false);
+            // One line a product (user, 2026-10-26): a box to tick, 品號, 品名, 數量 (larger, bold) 單位,
+            // 單價, 金額, dashed lines between.
+            const float box = 3.4f;
+            float codeX = left + box + 1.6f, nameX = codeX + 14, amountR = right, priceR = right - 14, quantityR = right - 27, nameW = quantityR - 18 - nameX;
+            var small = LineHeight(g, 9.5f);
+            var large = LineHeight(g, 12);
+            Text(g, "品號", 8, false, codeX, y, 14);
+            Text(g, "品名", 8, false, nameX, y, nameW);
+            Text(g, "數量", 8, false, quantityR - 18, y, 18, StringAlignment.Far);
+            Text(g, "單價", 8, false, priceR - 12, y, 12, StringAlignment.Far);
+            Text(g, "金額", 8, false, amountR - 13, y, 13, StringAlignment.Far);
             y += LineHeight(g, 8) + 0.6f;
             using var dash = new Pen(Color.Black, 0.25f) { DashStyle = DashStyle.Dash };
+            using var thin = new Pen(Color.Black, 0.3f);
             // Room kept at the foot for 「續下一張」 while products remain.
             const float more = 6;
-            var rowHeight = LineHeight(g, 9.5f) + 1.6f;
+            var rowHeight = large + 1.4f;
             while (next < sheet.Lines.Count)
             {
                 if (y + rowHeight > bottom - more) break;
                 var line = sheet.Lines[next];
-                Row(line.Code, line.Name, $"{ShipSheet.Show(line.Quantity)} {line.Unit}".TrimEnd(),
-                    line.Price.Length > 0 ? ShipSheet.Show(line.Price) : string.Empty,
-                    line.Amount.Length > 0 ? ShipSheet.Show(line.Amount) : string.Empty, 9.5f, false);
+                // The smaller words sit on the large 數量's baseline, near enough.
+                var textY = y + (large - small) * 0.75f;
+                g.DrawRectangle(thin, left, y + (large - box) / 2, box, box);
+                Text(g, line.Code, 9.5f, false, codeX, textY, nameX - codeX - 1);
+                Text(g, line.Name, 9.5f, false, nameX, textY, nameW);
+                var unitWidth = line.Unit.Length == 0 ? 0 : Width(g, " " + line.Unit, 9.5f);
+                if (unitWidth > 0) Text(g, " " + line.Unit, 9.5f, false, quantityR - unitWidth, textY, unitWidth + 1);
+                Text(g, ShipSheet.Show(line.Quantity), 12, true, quantityR - 18, y, 18 - unitWidth, StringAlignment.Far);
+                Text(g, line.Price.Length > 0 ? ShipSheet.Show(line.Price) : string.Empty, 9.5f, false, priceR - 12, textY, 12, StringAlignment.Far);
+                Text(g, line.Amount.Length > 0 ? ShipSheet.Show(line.Amount) : string.Empty, 9.5f, true, amountR - 13, textY, 13, StringAlignment.Far);
                 y += rowHeight;
                 next++;
-                if (next < sheet.Lines.Count) g.DrawLine(dash, left, y - 0.8f, right, y - 0.8f);
+                if (next < sheet.Lines.Count) g.DrawLine(dash, left, y - 0.7f, right, y - 0.7f);
             }
             if (next < sheet.Lines.Count)
             {
@@ -112,7 +120,9 @@ internal static class ShipSheetPrinter
             }
 
             // Total and 註記 on the last label; a 註記 that does not fit goes on one more.
-            var noteHeight = sheet.Note.Trim().Length == 0 ? 0 : Measure(g, sheet.Note.Trim(), 9, right - left) + 2;
+            // 註記 a little larger (user, 2026-10-26).
+            const float notePoints = 10.5f;
+            var noteHeight = sheet.Note.Trim().Length == 0 ? 0 : Measure(g, sheet.Note.Trim(), notePoints, right - left) + 2;
             if (y + 9 + noteHeight > bottom && y > top + 30)
             {
                 Text(g, "（續下一張）", 9, false, left, bottom - 4.5f, right - left, StringAlignment.Far);
@@ -125,7 +135,7 @@ internal static class ShipSheetPrinter
             if (noteHeight > 0)
             {
                 g.DrawLine(pen, left, y, right, y);
-                using var font = new Font(FontName, 9, FontStyle.Regular, GraphicsUnit.Point);
+                using var font = new Font(FontName, notePoints, FontStyle.Regular, GraphicsUnit.Point);
                 g.DrawString(sheet.Note.Trim(), font, Brushes.Black, new RectangleF(left, y + 1, right - left, bottom - y - 1));
             }
             e.HasMorePages = false;
@@ -179,6 +189,12 @@ internal static class ShipSheetPrinter
         var height = font.GetHeight(g);
         if (text.Length > 0) g.DrawString(text, font, Brushes.Black, new RectangleF(x, y, width, height), format);
         return height;
+    }
+
+    private static float Width(Graphics g, string text, float points)
+    {
+        using var font = new Font(FontName, points, FontStyle.Regular, GraphicsUnit.Point);
+        return g.MeasureString(text, font, PointF.Empty, StringFormat.GenericTypographic).Width;
     }
 
     private static float LineHeight(Graphics g, float points)
