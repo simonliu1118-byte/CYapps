@@ -1,5 +1,24 @@
 # CYERPAutoQuery Changelog
 
+## V1.0.1 Build 2（2026/10/26，工程驗證，尚未正式發行）
+
+- 強制重開改為**以視窗找程式**（使用者 2026-10-26）：伺服器上 MainMenu 在 `C_dsbin`，品號／銷貨單／進貨單等作業開在 `S_dsbin` 的 SMCOPIS01S，另有 SMDispatcher、SMCounterS、AUC 等常駐服務，名稱與資料夾都不可靠。只結束擁有 ERP 主視窗或建立作業視窗、且與本程式同一 Windows 工作階段的行程；先送關閉訊息，5 秒未結束才終止該行程（不含子行程），作業的行程先、主視窗的最後；終止前再確認工作階段與仍擁有 ERP 視窗。LOG 記錄每個 ERP 視窗所屬行程（PID、名稱、工作階段）。
+- 取消 Build 1「只處理本次 AutoQuery 親自啟動的 ERP」的限制：它會讓人工開啟的 ERP、或 AutoQuery 自動更新重開後，閒置關閉與無回應重開都失效，且作業視窗不在 MainMenu 行程，10 分鐘閒置關閉作業永遠不會發生。閒置關閉恢復 V1.0.0 行為（只送視窗訊息，詢問時保留）。
+- 行程診斷另列出擁有 ERP 視窗的行程（例如 SMCOPIS01S）。
+
+## V1.0.1 Build 1（同一功能的安全修正，工程驗證，尚未正式發行）
+
+- 修正行程診斷誤把 CYERPAutoQuery 視窗判定為 ERP；只依明確的 ERP 行程名稱／使用者設定的 ERP EXE 辨識，不再因為視窗標題含 SMART ERP 就納入。
+- 異常自動重啟不再以程式名稱批次 Kill、亦不使用 Kill(entireProcessTree)：只對本次 AutoQuery 親自啟動、且 PID／啟動時間／完整路徑／Windows 工作階段均吻合的 ERP 主行程做單一行程終止；無法證明歸屬就停止並記錄。
+- 閒置關閉同樣要求上述歸屬驗證；未確認歸屬的 SMLeaderWorkCenter 作業視窗不會由閒置流程送出 WM_CLOSE，正常關閉 MainMenu 時可能由 ERP 自行退出。這項安全限制可能使既有人工啟動的 ERP 不再由 AutoQuery 自動關閉或重啟。
+- 不更動查詢、登入輸入方式或 CY Web Agent。新增工作階段／PID 重用／路徑比對測試。
+
+## V1.0.1（工程驗證，尚未正式發行）
+
+- 在現有「ERP 登入」設定中新增獨立唯讀行程診斷：人工掃描或每 2 秒觀察、PID／父 PID／工作階段與視窗分類、變化紀錄及遮蔽 TXT 匯出。
+- 不更動既有 ERP 查詢、自動登入、閒置關閉、強制重啟與 Web Agent；診斷不呼叫行程終止 API。
+
+
 ## V1.0.0 — 2026/10/21（正式 Release：tag `cyerp-auto-query-v1.0.0`）
 
 1.0 正式版（使用者 2026-10-21 指示發布），彙整 V0.10.2 Build 1–4：

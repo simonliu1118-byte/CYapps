@@ -1,12 +1,19 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-26。目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-26。工程版 **V1.0.1 Build 2**（PR #555，未發行）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 - 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.0.0 為目前最新。
+
+## 進行中：V1.0.1 Build 2 — ERP 行程診斷與強制重開收斂（PR #555）
+
+- Build 0／1 由 GPT 實作（使用者 2026-10-22 要求避免誤關共用行程），報告見 `docs/handoff/ERP_PROCESS_DIAGNOSTICS_CLAUDE_HANDOFF_20261023.md`。Claude 審查發現 Build 1「只處理 AutoQuery 親自啟動的 ERP」會讓閒置關閉與無回應重開在 ERP 人工開啟或 AutoQuery 自動更新後失效，且作業視窗不在 MainMenu 行程。
+- 使用者 2026-10-26 以伺服器工作管理員確認：MainMenu 在 `D:\iSmartERPX64\C_dsbin\`（工作階段 1）；品號、銷貨單、進貨單都開在 `S_dsbin\SMCOPIS01S.exe`；另有 SMDispatcher、SMCounterS、AUC 等 ERP 關著也在跑的服務。
+- Build 2：強制重開改為以視窗找程式（`ErpRestartTargets`，有單元測試），閒置關閉恢復 V1.0.0 行為，診斷另列擁有 ERP 視窗的行程。
+- 待實機：一般查詢、閒置關閉不受影響；ERP 真的卡住時看 LOG `ERP window owner pid=… name=… session=… main=…` 與 `ERP process closed／killed`。不刻意弄當機測試。
 
 ## 功能與實機紀錄
 

@@ -94,6 +94,9 @@ internal sealed class ErpLoginSettingsForm : Form
         var ok = new CyPrimaryButton { Text = "儲存", Width = 92, Height = 34 };
         var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         ok.Click += (_, _) => Save();
+        var diagnose = new Button { Text = "行程診斷（唯讀）", AutoSize = true, Height = 34 }; 
+        diagnose.Click += (_, _) => { using var tool = new ErpProcessDiagnosticForm(_path.Text.Trim()); tool.ShowDialog(this); };
+        buttons.Controls.Add(diagnose);
         buttons.Controls.Add(ok);
         buttons.Controls.Add(cancel);
         root.Controls.Add(buttons, 0, 8);
