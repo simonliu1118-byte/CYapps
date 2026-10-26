@@ -78,6 +78,56 @@ internal static class ShipSheetExport
         throw new InvalidDataException("ERP 匯出的 Excel 找不到有「品號」「數量」欄位的單身資料。");
     }
 
+    /// <summary>The 單頭資料 of one document: column title → value (the first record after the title row with 單號).</summary>
+    public static Dictionary<string, string> Header(IReadOnlyList<(string Name, List<string[]> Rows)> sheets)
+    {
+        foreach (var (_, rows) in sheets.OrderByDescending(s => s.Name.Contains("單頭", StringComparison.Ordinal)))
+        {
+            var titleIndex = rows.FindIndex(r => Column(r, ["單號"]) >= 0);
+            if (titleIndex < 0) continue;
+            var titles = rows[titleIndex];
+            var record = rows.Skip(titleIndex + 1).FirstOrDefault(r => !r.All(string.IsNullOrWhiteSpace));
+            if (record is null) continue;
+            var header = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var i = 0; i < titles.Length; i++)
+                if (titles[i].Trim().Length > 0) header.TryAdd(titles[i].Trim(), i < record.Length ? record[i].Trim() : string.Empty);
+            return header;
+        }
+        throw new InvalidDataException("ERP 匯出的 Excel 找不到有「單號」欄位的單頭資料。");
+    }
+
+    /// <summary>
+    /// 出貨明細 of a 銷貨單 opened in ERP by hand (user, 2026-10-26: orders entered by a person get
+    /// one too): everything from the export — 單別-單號; the platform and its 訂單編號 from 備註
+    /// (each platform's 備註前綴 + 訂單編號, as the program enters them); 寄件編號 from 送貨地址(一);
+    /// 貨運 from 貨運別 (named back through 設定 › 貨運別 when the export has only the code).
+    /// </summary>
+    public static ShipSheet FromDocument(IReadOnlyList<(string Name, List<string[]> Rows)> sheets,
+        IReadOnlyList<(string Platform, string Prefix)> prefixes, IReadOnlyDictionary<string, string> freightTypes,
+        Func<string, string> noteFor, DateTime printedAt)
+    {
+        var header = Header(sheets);
+        string Value(params string[] titles) => titles.Select(t => header.GetValueOrDefault(t, string.Empty)).FirstOrDefault(v => v.Length > 0) ?? string.Empty;
+        var type = Value("單別");
+        var number = Value("單號");
+        var document = type.Length > 0 && number.Length > 0 ? $"{type}-{number}" : number;
+        var remark = Value("備註");
+        var platform = string.Empty;
+        var orderSn = string.Empty;
+        foreach (var (name, prefix) in prefixes.Where(p => p.Prefix.Trim().Length > 0).OrderByDescending(p => p.Prefix.Trim().Length))
+            if (remark.StartsWith(prefix.Trim(), StringComparison.Ordinal))
+            {
+                platform = name;
+                orderSn = remark[prefix.Trim().Length..].Trim();
+                break;
+            }
+        var freight = Value("貨運別名稱", "貨運方式", "貨運別");
+        // 設定 › 貨運別 maps the platform's carrier to ERP's code; a code is named back by it.
+        var carrier = freightTypes.FirstOrDefault(p => string.Equals(p.Value.Trim(), freight, StringComparison.OrdinalIgnoreCase)).Key ?? freight;
+        return new ShipSheet(document, platform, orderSn, Value("送貨地址(一)", "送貨地址一", "送貨地址"), carrier,
+            Lines(sheets), noteFor(platform), printedAt);
+    }
+
     /// <summary>The column titled exactly one of <paramref name="titles"/>, else -1.</summary>
     private static int Column(string[] row, string[] titles)
     {
@@ -88,5 +138,5 @@ internal static class ShipSheetExport
 
     /// <summary>The column titles of each sheet, for the LOG when the workbook is not as expected.</summary>
     public static string Describe(IReadOnlyList<(string Name, List<string[]> Rows)> sheets) =>
-        string.Join(" / ", sheets.Select(s => $"{s.Name}: " + string.Join(" | ", s.Rows.Take(4).Select(r => string.Join(",", r.Take(16))))));
+        string.Join(" / ", sheets.Select(s => $"{s.Name}: " + string.Join(" | ", s.Rows.Take(4).Select(r => string.Join(",", r.Take(60))))));
 }

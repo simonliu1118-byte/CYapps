@@ -221,6 +221,11 @@ internal sealed partial class MainForm : Form
         settingsButton.Click += (_, _) => OpenSettings();
         rightTools.Controls.Add(settingsButton);
 
+        // 出貨明細 of the 銷貨單 open in ERP (user, 2026-10-26: those entered by hand too).
+        var sheetButton = MakeButton("印出貨明細", 120);
+        sheetButton.Click += async (_, _) => await PrintShownShipSheetAsync();
+        rightTools.Controls.Add(sheetButton);
+
         _modeToggle.Margin = new Padding(4, 1, 8, 1);
         _modeToggle.Visible = false;
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
@@ -949,15 +954,8 @@ internal sealed partial class MainForm : Form
             var lines = ShipSheetExport.Lines(sheets);
             var order = _loadedOrder;
             var source = order?.Source ?? string.Empty;
-            var note = source switch
-            {
-                ShopeeOrderImport.Source => _settings.ShipNoteShopee,
-                MoOrderImport.Source => _settings.ShipNoteMo,
-                CoupangOrderImport.Source => _settings.ShipNoteCoupang,
-                _ => string.Empty
-            };
             var sheet = new ShipSheet(result.DocumentKey, source, order?.OrderSn ?? string.Empty, order?.TrackingNumber.Trim() ?? string.Empty,
-                order?.Carrier ?? string.Empty, lines, note, DateTime.Now);
+                order?.Carrier ?? string.Empty, lines, ShipNoteFor(source), DateTime.Now);
             using var logo = LoadShipLogo();
             var pages = ShipSheetPrinter.Print(printer, sheet, _settings.ShipSheetTitle, logo);
             result.Printed = true;
@@ -970,6 +968,58 @@ internal sealed partial class MainForm : Form
             _log.Warn("ship-sheet", $"not printed document={_log.Value(result.DocumentKey)}: {ex.GetType().Name}: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 印出貨明細 (user, 2026-10-26): the 銷貨單 open in COPI08 (saved, in browse mode) exported and
+    /// printed as the thermal 出貨明細, its platform numbers and 貨運 read from the document itself.
+    /// </summary>
+    private async Task PrintShownShipSheetAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
+        if (printer is null)
+        {
+            MessageBox.Show(this, "請先在「設定 › 印表機」勾選熱感紙印表機。", "印出貨明細", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        string? problem = null;
+        await RunGuardedAsync(async token =>
+        {
+            string file;
+            Session.Begin(AutomationSession.InputTitle);
+            try { file = await _automation.ExportShownDocumentAsync(new Progress<string>(SetStatus), token); }
+            catch (InvalidOperationException ex) { problem = $"ERP 轉出 Excel 失敗：{ex.Message}"; return; }
+            finally { Session.End(AutomationOutcome.Done); }
+            try
+            {
+                IReadOnlyList<(string Name, List<string[]> Rows)> sheets;
+                using (var stream = File.OpenRead(file)) sheets = XlsxReader.ReadSheets(stream);
+                _log.Info("ship-sheet", $"export columns: {ShipSheetExport.Describe(sheets)}");
+                var sheet = ShipSheetExport.FromDocument(sheets,
+                    [(ShopeeOrderImport.Source, _settings.ShopeeNotePrefix), (MoOrderImport.Source, _settings.MoNotePrefix), (CoupangOrderImport.Source, _settings.CoupangNotePrefix)],
+                    _settings.FreightTypes, ShipNoteFor, DateTime.Now);
+                using var logo = LoadShipLogo();
+                var pages = ShipSheetPrinter.Print(printer, sheet, _settings.ShipSheetTitle, logo);
+                _log.Info("ship-sheet", $"printed shown document={_log.Value(sheet.Document)} lines={sheet.Lines.Count} labels={pages} platform={sheet.Platform}");
+                SetStatus($"出貨明細已印出：銷貨單 {sheet.Document}");
+                try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or System.ComponentModel.Win32Exception)
+            {
+                problem = $"出貨明細未列印：{ex.Message}\n\nERP 匯出檔在 {file}";
+                _log.Warn("ship-sheet", $"shown document not printed: {ex.GetType().Name}: {ex.Message}");
+            }
+        });
+        if (problem is not null) MessageBox.Show(this, problem, "印出貨明細", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    private string ShipNoteFor(string source) => source switch
+    {
+        ShopeeOrderImport.Source => _settings.ShipNoteShopee,
+        MoOrderImport.Source => _settings.ShipNoteMo,
+        CoupangOrderImport.Source => _settings.ShipNoteCoupang,
+        _ => string.Empty
+    };
 
     /// <summary>The logo from 設定 in pure black and white (a colour logo would come out grey and fuzzy); null when none.</summary>
     private Bitmap? LoadShipLogo()

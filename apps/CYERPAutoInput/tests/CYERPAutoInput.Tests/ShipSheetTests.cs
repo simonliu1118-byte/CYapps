@@ -34,4 +34,26 @@ public sealed class ShipSheetTests
         Assert.Equal("12.5", ShipSheet.Show("12.50"));
         Assert.Equal("-6", ShipSheet.Show("-6"));
     }
+
+    [Fact]
+    public void A_document_opened_by_hand_is_read_from_its_export()
+    {
+        List<string[]> header = [["銷貨單建立作業"], [], ["單別", "單號", "備註", "送貨地址(一)", "貨運別"], ["234", "20261026101", "蝦皮訂單261026M2KX1EQD", "TW269346516980B", "07"]];
+        List<string[]> detail = [["銷貨單建立作業"], [], ["品號", "品名", "數量", "單位", "單價", "金額"], ["A00023", "志遠拔罐器組(紅盒)", "1", "組", "649", "649"]];
+        var freight = new Dictionary<string, string> { ["蝦皮店到店"] = "07", ["新竹物流"] = "03" };
+        var sheet = ShipSheetExport.FromDocument([("單頭資料", header), ("單身資料", detail)],
+            [("蝦皮", "蝦皮訂單"), ("MO店+", "MO店+訂單")], freight, p => p == "蝦皮" ? "註記" : "", DateTime.Now);
+        Assert.Equal("234-20261026101", sheet.Document);
+        Assert.Equal("蝦皮", sheet.Platform);
+        Assert.Equal("261026M2KX1EQD", sheet.OrderSn);
+        Assert.Equal("TW269346516980B", sheet.Tracking);
+        Assert.Equal("蝦皮店到店", sheet.Carrier);
+        Assert.Equal("註記", sheet.Note);
+        Assert.Single(sheet.Lines);
+
+        // Entered by hand, with no platform 備註: only the document.
+        header[3] = ["234", "20261026102", "林先生自取", "", "99"];
+        var plain = ShipSheetExport.FromDocument([("單頭資料", header), ("單身資料", detail)], [("蝦皮", "蝦皮訂單")], freight, _ => "", DateTime.Now);
+        Assert.Equal((string.Empty, string.Empty, "99"), (plain.Platform, plain.OrderSn, plain.Carrier));
+    }
 }

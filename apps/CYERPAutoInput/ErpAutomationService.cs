@@ -393,6 +393,28 @@ internal sealed class ErpAutomationService
         }
     }
 
+    /// <summary>
+    /// 出貨明細 of the 銷貨單 a person has open in COPI08 (user, 2026-10-26): exported the same way;
+    /// the workbook's path. Throws <see cref="InvalidOperationException"/> with the reason.
+    /// </summary>
+    public async Task<string> ExportShownDocumentAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var root = await ResolveCopi08Async(progress, cancellationToken);
+            var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "erp-export");
+            Directory.CreateDirectory(folder);
+            var path = Path.Combine(folder, $"COPI08-{DateTime.Now:yyyyMMdd-HHmmss-fff}.xlsx");
+            progress.Report("ERP：轉出這張銷貨單…");
+            await ExportOnceAsync(root, path, cancellationToken);
+            return path;
+        }
+        finally
+        {
+            RestoreClipboard();
+        }
+    }
+
     private async Task ExportOnceAsync(nint root, string path, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(root, _log)) throw new InvalidOperationException("無法把 COPI08 帶到前景");
