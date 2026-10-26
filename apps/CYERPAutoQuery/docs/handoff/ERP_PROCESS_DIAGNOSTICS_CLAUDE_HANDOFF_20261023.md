@@ -1,5 +1,7 @@
 # CYERPAutoQuery — ERP 行程診斷與安全重啟：實作報告暨 Claude 交接
 
+> **2026-10-26 更新**：本報告描述的 Build 1「親自啟動才可終止」做法已由 V1.0.1 Build 2 取代（以 ERP 視窗與工作階段挑選行程、閒置關閉恢復原行為），現況見 `WORK_HANDOFF.md` 與 `CHANGELOG.md`。
+
 - 整理日期：2026-10-23（Asia/Taipei）
 - 交接方向：GPT 完成程式修改及 CI 驗證 → Claude 審查、追蹤實機驗收、決定後續修正與是否發行
 - Repository：[simonliu1118-byte/CYapps](https://github.com/simonliu1118-byte/CYapps)

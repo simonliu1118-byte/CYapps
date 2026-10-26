@@ -19,63 +19,6 @@ internal sealed partial class ItemQueryService
     /// <summary>ERP 登入設定; null or incomplete means ERP is not started automatically.</summary>
     public ErpLoginSettings? Login { get; set; }
 
-    // Only this application's own Process.Start can grant ownership. Existing/manual ERP
-    // sessions and similarly named processes must never be terminated automatically.
-    private ErpManagedProcessIdentity? _managedErp;
-
-    private ErpManagedProcessIdentity? CaptureStartedErp(Process? started, string configuredPath, DateTime launchRequestedUtc)
-    {
-        try
-        {
-            if (started is null || started.HasExited) return null;
-            using var caller = Process.GetCurrentProcess();
-            var actual = started.MainModule?.FileName;
-            var startedUtc = started.StartTime.ToUniversalTime();
-            if (!ErpManagedProcessIdentity.IsFreshLaunch(startedUtc, launchRequestedUtc) ||
-                string.IsNullOrWhiteSpace(actual) ||
-                !string.Equals(Path.GetFullPath(actual), Path.GetFullPath(configuredPath), StringComparison.OrdinalIgnoreCase) ||
-                started.SessionId != caller.SessionId) return null;
-            return new ErpManagedProcessIdentity(started.Id, startedUtc, started.SessionId, Path.GetFullPath(actual));
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or ArgumentException or IOException)
-        {
-            _log.Warn("erp-login", $"could not identify started ERP: {ex.GetType().Name}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Returns an open handle to the exact process started by this instance, if its identity still
-    /// matches. Callers must dispose it. Never use GetProcessesByName() to terminate ERP.
-    /// </summary>
-    private Process? OpenOwnedErp()
-    {
-        if (_managedErp is not { } identity || Login is null) return null;
-        Process? process = null;
-        try
-        {
-            if (!string.Equals(identity.ExecutablePath, Path.GetFullPath(Login.ErpPath), StringComparison.OrdinalIgnoreCase))
-                return null;
-            using var caller = Process.GetCurrentProcess();
-            process = Process.GetProcessById(identity.Pid);
-            _ = process.Handle; // Acquire the specific process handle before rechecking identity.
-            if (process.HasExited ||
-                !identity.Matches(process.Id, process.StartTime.ToUniversalTime(), process.SessionId,
-                    process.MainModule?.FileName ?? string.Empty, caller.SessionId))
-            {
-                process.Dispose();
-                return null;
-            }
-            return process;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException or ArgumentException or IOException)
-        {
-            process?.Dispose();
-            _log.Warn("erp-login", $"cannot verify ERP ownership: {ex.GetType().Name}");
-            return null;
-        }
-    }
-
     /// <summary>
     /// Starts ERP and logs in when it is not running (or shows its login window), then waits for
     /// the main window. Returns false when automatic login is not set up.
@@ -91,11 +34,7 @@ internal sealed partial class ItemQueryService
         if (window == 0)
         {
             _log.Info("erp-login", $"starting ERP file={Path.GetFileName(exe)}");
-            var launchRequestedUtc = DateTime.UtcNow;
-            using var started = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = true });
-            _managedErp = CaptureStartedErp(started, exe, launchRequestedUtc);
-            if (_managedErp is null)
-                _log.Warn("erp-login", "ERP started but ownership could not be verified; automatic force-restart and idle-close are disabled for this instance");
+            Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = true });
             if (!await WaitUntilAsync(() => (window = FindLoginWindow(exe)) != 0 || Win32Automation.FindErpMainWindows().Count > 0,
                     ErpStartWaitMs, cancellationToken))
                 throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, "已啟動 ERP，但 60 秒內沒有出現登入畫面。");
@@ -254,61 +193,99 @@ internal sealed partial class ItemQueryService
     private static bool Responds(nint hwnd) => NativeMethods.QueryNumber(hwnd, 0 /* WM_NULL */, 5000) is not null;
 
     /// <summary>
-    /// For a hung ERP, kill only the exact MainMenu executable launched by this application.
-    /// SMLeaderWorkCenter has a different parent PID in the real diagnostic log; it is never
-    /// included by process name or Kill(entireProcessTree), since its ownership is unproven.
+    /// Ends the processes that own an ERP main or 作業 window in this Windows session (see
+    /// <see cref="ErpRestartTargets"/>), then starts ERP and logs in again. Each is first sent WM_CLOSE
+    /// on its ERP windows and only killed when it has not exited 5 seconds later; never its process
+    /// tree, never a process found by name (user, 2026-10-26: ERP server services must not be hit).
     /// </summary>
     private async Task RestartErpAsync(string why, CancellationToken cancellationToken)
     {
-        using var owned = OpenOwnedErp();
-        if (owned is null)
-        {
-            _log.Warn("erp-login", "force restart refused: ERP was not launched and verified by this AutoQuery instance");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
-                "ERP 無回應，但無法確認該行程由本次 AutoQuery 啟動。為避免影響其他使用者，已停止自動重啟，請人工檢查 ERP。");
-        }
+        int session;
+        using (var self = Process.GetCurrentProcess())
+            session = self.SessionId;
+        var windows = ErpWindows();
+        foreach (var (owner, _) in windows.DistinctBy(w => (w.Owner.Pid, w.Owner.OwnsMainWindow)))
+            _log.Info("erp-login", $"ERP window owner pid={owner.Pid} name={ProcessNameOf(owner.Pid)} session={owner.SessionId?.ToString() ?? "?"} main={owner.OwnsMainWindow}");
+        var targets = ErpRestartTargets.Select(windows.Select(w => w.Owner), session, Environment.ProcessId);
+        _log.Warn("erp-login", $"restarting ERP: {why} targets={targets.Count} session={session}");
+        if (targets.Count == 0)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {why}，但這個 Windows 工作階段找不到 ERP 視窗，未強制關閉，請人工檢查 ERP。");
 
-        var visibleMains = Win32Automation.FindErpMainWindows();
-        // A configured launcher or helper is not necessarily the real MainMenu.
-        // Only a process actually owning the ERP main window (or the confirmed MainMenu EXE
-        // when that window is unresponsive/unavailable) may be force-terminated.
-        if (!owned.ProcessName.Equals("MainMenu", StringComparison.OrdinalIgnoreCase) &&
-            !visibleMains.Any(hwnd => Win32Automation.ProcessId(hwnd) == (uint)owned.Id))
+        foreach (var pid in targets)
         {
-            _log.Warn("erp-login", "force restart refused: launched executable is not verified as ERP main");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
-                "無法確認啟動的行程是 ERP 主程式，已停止自動重啟，避免結束共用輔助程式。");
+            Process process;
+            try { process = Process.GetProcessById(pid); }
+            catch (ArgumentException) { continue; } // already gone
+            using (process)
+            {
+                try
+                {
+                    // Recheck: same session, and the PID has not been reused since the windows were read.
+                    if (process.HasExited || process.SessionId != session ||
+                        !ErpWindows().Any(w => w.Owner.Pid == pid))
+                        continue;
+                    foreach (var (_, hwnd) in windows.Where(w => w.Owner.Pid == pid))
+                        NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, 0, 0);
+                    if (process.WaitForExit(5000))
+                    {
+                        _log.Info("erp-login", $"ERP process closed pid={pid}");
+                        continue;
+                    }
+                    process.Kill();
+                    var gone = process.WaitForExit(10000);
+                    _log.Warn("erp-login", $"ERP process killed pid={pid} exited={gone}");
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    _log.Warn("erp-login", $"ending ERP process failed pid={pid}: {ex.GetType().Name}");
+                }
+            }
         }
-
-        var otherMains = visibleMains.Any(hwnd => Win32Automation.ProcessId(hwnd) != (uint)owned.Id);
-        if (otherMains)
-        {
-            _log.Warn("erp-login", "force restart refused: another ERP main window is visible in this session");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
-                "發現其他 ERP 主視窗，為避免誤關其他使用者的 ERP，已停止自動重啟。");
-        }
-
-        _log.Warn("erp-login", $"restarting owned ERP: {why} pid={owned.Id} session={owned.SessionId}");
-        try
-        {
-            if (!owned.HasExited) owned.Kill(); // Single verified process only; never entireProcessTree.
-            if (!owned.WaitForExit(10000))
-                throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
-                    "ERP 主行程未能在 10 秒內結束，已停止自動重啟，請人工檢查。");
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            _log.Warn("erp-login", $"owned ERP exit failed: {ex.GetType().Name}");
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE,
-                "無法安全結束已辨識的 ERP 主行程，已停止自動重啟，請人工檢查。");
-        }
-
-        _managedErp = null;
         await Pace.Delay(2000, cancellationToken);
         if (!await StartAndLoginAsync(cancellationToken) || Win32Automation.FindErpMainWindows().Count == 0)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN,
-                $"ERP {why}，已重新開啟主程式，但沒有回到主畫面；輔助行程未經歸屬確認，不會強制終止。");
-        _log.Info("erp-login", "owned ERP main process restarted; unverified helper processes untouched");
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP {why}，已強制關閉並重新開啟，但沒有回到主畫面。");
+        _log.Info("erp-login", "ERP restarted");
+    }
+
+    /// <summary>ERP's main window (also when minimized) and the 作業 windows this program uses, with their owners.</summary>
+    private static List<(ErpWindowOwner Owner, nint Hwnd)> ErpWindows()
+    {
+        var found = new List<(ErpWindowOwner, nint)>();
+        void Add(nint hwnd, bool main)
+        {
+            var pid = (int)Win32Automation.ProcessId(hwnd);
+            if (pid == 0) return;
+            int? session = null;
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                session = process.SessionId;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            found.Add((new ErpWindowOwner(pid, session, main), hwnd));
+        }
+        foreach (var hwnd in Win32Automation.FindErpMainWindows()) Add(hwnd, main: true);
+        if (Win32Automation.FindMinimizedErp() is { } minimized)
+        {
+            Add(minimized.Main, main: true);
+            Add(minimized.Application, main: true);
+        }
+        foreach (var form in KeptForms)
+            foreach (var hwnd in Win32Automation.FindFormWindows(form)) Add(hwnd, main: false);
+        return found;
+    }
+
+    private static string ProcessNameOf(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return process.ProcessName;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return "?";
+        }
     }
 
     // ---- idle ------------------------------------------------------------------------
@@ -327,23 +304,11 @@ internal sealed partial class ItemQueryService
     public async Task<int> CloseKeptFormsAsync()
     {
         using var gate = ErpAutomationGate.Enter();
-        using var owned = OpenOwnedErp();
-        if (owned is null)
-        {
-            _log.Warn("idle", "forms idle-close skipped: ERP ownership not verified");
-            return 0;
-        }
         var closed = 0;
-        var skipped = 0;
         foreach (var form in KeptForms)
             foreach (var hwnd in Win32Automation.FindFormWindows(form))
-            {
-                // ERP helper windows may run in SMLeaderWorkCenter rather than MainMenu.
-                // No process-tree assumption is safe here, even for the same Windows session.
-                if (Win32Automation.ProcessId(hwnd) != (uint)owned.Id) { skipped++; continue; }
                 if (await CloseWindowAsync(hwnd, form.Title)) closed++;
-            }
-        _log.Info("idle", $"forms closed={closed} skipped_unowned={skipped}");
+        _log.Info("idle", $"forms closed={closed}");
         return closed;
     }
 
@@ -354,34 +319,21 @@ internal sealed partial class ItemQueryService
     public async Task<bool> CloseErpAsync()
     {
         using var gate = ErpAutomationGate.Enter();
-        using var owned = OpenOwnedErp();
-        if (owned is null)
-        {
-            _log.Warn("idle", "ERP idle-close skipped: process ownership not verified");
-            return false;
-        }
         foreach (var form in KeptForms)
             foreach (var hwnd in Win32Automation.FindFormWindows(form))
-                if (Win32Automation.ProcessId(hwnd) == (uint)owned.Id)
-                    await CloseWindowAsync(hwnd, form.Title);
-
-        var main = Win32Automation.FindErpMainWindows()
-            .FirstOrDefault(hwnd => Win32Automation.ProcessId(hwnd) == (uint)owned.Id);
-        if (main == 0)
-        {
-            _log.Warn("idle", "ERP idle-close skipped: owned process has no verified main window");
-            return false;
-        }
-
-        var pid = (uint)owned.Id;
-        _log.Info("idle", $"closing owned ERP main pid={pid} class={NativeMethods.ClassName(main)}");
+                await CloseWindowAsync(hwnd, form.Title);
+        var mains = Win32Automation.FindErpMainWindows();
+        if (mains.Count == 0) return !ErpRunning();
+        var main = mains[0];
+        var pid = Win32Automation.ProcessId(main);
+        _log.Info("idle", $"closing ERP main class={NativeMethods.ClassName(main)}");
         NativeMethods.PostMessage(main, NativeMethods.WM_CLOSE, 0, 0);
         var deadline = Environment.TickCount64 + 20000;
         var answered = false;
         while (Environment.TickCount64 < deadline)
         {
             await Task.Delay(300);
-            if (owned.HasExited) break;
+            if (!ErpRunning()) break;
             var box = FindProcessMessageBox(pid);
             if (box != 0 && !answered)
             {
@@ -395,9 +347,8 @@ internal sealed partial class ItemQueryService
                 answered = true;
             }
         }
-        var gone = owned.HasExited;
-        if (gone) _managedErp = null;
-        _log.Info("idle", $"owned ERP closed={gone}");
+        var gone = !ErpRunning();
+        _log.Info("idle", $"ERP closed={gone}");
         return gone;
     }
 

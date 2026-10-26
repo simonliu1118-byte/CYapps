@@ -55,7 +55,9 @@ internal static class ErpProcessDiagnosticScanner
                     // contains "SMART ERP" and was previously misclassified as ERP.
                     if (process.Id == Environment.ProcessId ||
                         name.Equals("CYERPAutoQuery", StringComparison.OrdinalIgnoreCase)) continue;
-                    var isCandidate =
+                    // Owning an ERP window also counts: the 作業 run in SMCOPIS01S on the user's
+                    // ERP (user, 2026-10-26), not only in SMLeaderWorkCenter.
+                    var isCandidate = windows.ContainsKey(process.Id) ||
                         name.Equals("MainMenu", StringComparison.OrdinalIgnoreCase) ||
                         name.Equals("SMLeaderWorkCenter", StringComparison.OrdinalIgnoreCase) ||
                         (configuredName.Length > 0 && (name.Equals(configuredName, StringComparison.OrdinalIgnoreCase) ||
