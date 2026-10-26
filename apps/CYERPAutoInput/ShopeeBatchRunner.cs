@@ -527,8 +527,8 @@ internal sealed partial class ShopeeBatchRunner
                 throw new ShopeeBatchSkip($"未出貨：商品「{spec}」要依買家備註決定品項，請人工處理。");
             if (kind == ShopeeBatchCarrier.Other)
                 throw new ShopeeBatchSkip($"未出貨：物流「{carrier}」程式還沒有出貨流程，請人工處理。");
-            if (kind == ShopeeBatchCarrier.Hct && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
-                throw new ShopeeBatchSkip("未出貨：新竹物流要先在「設定 › 平台匯入 › 蝦皮」填入「新竹取件地址」，請人工處理。");
+            if (ShopeeBatchScreens.IsPickup(kind) && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
+                throw new ShopeeBatchSkip($"未出貨：{carrier}要先在「設定 › 平台匯入 › 蝦皮」填入「取件地址」，請人工處理。");
             order.Kind = kind;
             order.Carrier = carrier;
             if (!Orange(detail.Image, button))
@@ -536,7 +536,7 @@ internal sealed partial class ShopeeBatchRunner
             _log.Info("shopee-batch", $"ship button box={button.Left},{button.Top} {button.Width}x{button.Height} area={detail.Area}");
             Click(detail, button, button.Text.Trim());
         }
-        if (order.Kind == ShopeeBatchCarrier.Hct) await ConfirmPickupAsync(order);
+        if (ShopeeBatchScreens.IsPickup(order.Kind)) await ConfirmPickupAsync(order);
         order.Shipped = true;
         _shippedHint = true;
 
@@ -565,7 +565,7 @@ internal sealed partial class ShopeeBatchRunner
                 ShopeeDaySkips.Add(DateTime.Today, order.OrderSn, "買家門市關轉，等買家重選門市");
                 throw new ShopeeBatchSkip($"未出貨：蝦皮回覆「{error}」。今天略過，明天再試。");
             }
-            if (order.Kind != ShopeeBatchCarrier.Hct && shipPresses < 3 && sincePress.Elapsed.TotalSeconds > 6 &&
+            if (!ShopeeBatchScreens.IsPickup(order.Kind) && shipPresses < 3 && sincePress.Elapsed.TotalSeconds > 6 &&
                 ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is null &&
                 ShopeeBatchScreens.ShipButton(s.Boxes) is { } again && Orange(s.Image, again))
             {
@@ -754,7 +754,7 @@ internal sealed partial class ShopeeBatchRunner
                 _log.Info("shopee-batch", "pickup address is not the set one; cancelled");
                 if (ShopeeBatchScreens.PickupCancelButton(dialog.Boxes) is { } cancel) Click(dialog, cancel, "取消（安排取件）");
                 await Task.Delay(800, _token);
-                throw new ShopeeBatchSkip("未出貨：「安排取件」視窗的取件地址與設定的「新竹取件地址」不同，已按取消，請人工處理。");
+                throw new ShopeeBatchSkip("未出貨：「安排取件」視窗的取件地址與設定的「取件地址」不同，已按取消，請人工處理。");
             }
             Click(dialog, confirm, "確認（安排取件）");
         }
@@ -808,7 +808,30 @@ internal sealed partial class ShopeeBatchRunner
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
-        await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+        if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
+        else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+    }
+
+    /// <summary>
+    /// Prints a saved 黑貓 label PDF on the A4 printer after asking for the paper (the main
+    /// window's); throws <see cref="ShopeeBatchStop"/> when it is not printed.
+    /// </summary>
+    public Func<ShopeeBatchOrder, string, Task>? PrintBlackCat { get; set; }
+
+    /// <summary>
+    /// 黑貓宅急便 (user, 2026-10-26): its label is a third of an A4 page that Chrome cannot put at
+    /// the top, so Chrome's print dialog saves it as a PDF (另存為 PDF) into Temp instead and the
+    /// label is printed from it into the top cell of a sheet; the PDF is deleted once printed.
+    /// </summary>
+    private async Task SaveBlackCatLabelAsync(ShopeeBatchOrder order)
+    {
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "blackcat-" + order.OrderSn + "-" + DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        var pdf = await SavePrintToPdfAsync(folder);
+        _log.Info("shopee-batch", "black cat label saved as PDF");
+        if (PrintBlackCat is null) throw new ShopeeBatchStop($"黑貓寄件單已存成 PDF 但沒有列印（{folder}）。", true);
+        await PrintBlackCat(order, pdf);
+        try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>The label as drawn (the PDF viewer's page, else the page under the header), read with OCR at twice the size.</summary>

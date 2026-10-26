@@ -205,6 +205,44 @@ internal static partial class SlipPrinter
     }
 
     /// <summary>
+    /// Labels on A4 sheets cut in <paramref name="cellsPerPage"/> cells (黑貓, user 2026-10-26: three),
+    /// one label to a cell from the top, each centred in its cell, every pixel one printer dot
+    /// (the labels are drawn at the printer's own resolution).
+    /// </summary>
+    public static void PrintCells(string printer, IReadOnlyList<Bitmap> labels, int cellsPerPage, string documentName)
+    {
+        using var doc = new PrintDocument();
+        doc.PrinterSettings.PrinterName = printer;
+        if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
+        doc.DocumentName = documentName;
+        doc.PrintController = new StandardPrintController();
+        doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+        doc.OriginAtMargins = false;
+        var next = 0;
+        doc.PrintPage += (_, e) =>
+        {
+            var g = e.Graphics!;
+            g.PageUnit = GraphicsUnit.Pixel;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            var pageW = e.PageBounds.Width / 100f * g.DpiX;
+            var pageH = e.PageBounds.Height / 100f * g.DpiY;
+            var marginX = e.PageSettings.HardMarginX / 100f * g.DpiX;
+            var marginY = e.PageSettings.HardMarginY / 100f * g.DpiY;
+            var cellH = pageH / cellsPerPage;
+            for (var cell = 0; cell < cellsPerPage && next < labels.Count; cell++, next++)
+            {
+                var label = labels[next];
+                var x = (int)Math.Round((pageW - label.Width) / 2 - marginX);
+                var y = (int)Math.Round(cell * cellH + (cellH - label.Height) / 2 - marginY);
+                g.DrawImage(label, new Rectangle(Math.Max(0, x), Math.Max(0, y), label.Width, label.Height), 0, 0, label.Width, label.Height, GraphicsUnit.Pixel);
+            }
+            e.HasMorePages = next < labels.Count;
+        };
+        doc.Print();
+    }
+
+    /// <summary>
     /// Prints the slip as one page: each of its pixels one printer dot (GraphicsUnit.Pixel,
     /// nearest neighbour), centred on the page. With a <paramref name="note"/> (<see cref="SlipNote"/>)
     /// the block sits at the bottom of the 150 mm label and the slip is centred above it; a slip

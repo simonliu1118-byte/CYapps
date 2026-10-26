@@ -36,6 +36,27 @@ public sealed class ShopeeDaySkipsTests
     }
 
     [Fact]
+    public void Black_cat_is_a_pickup()
+    {
+        Assert.Equal(ShopeeBatchCarrier.BlackCat, ShopeeBatchScreens.CarrierKind("黑貓宅急便"));
+        Assert.True(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.BlackCat));
+        Assert.True(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.Hct));
+        Assert.False(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.Shopee));
+        // 快遞取件詳情 shows the number in groups of three.
+        Assert.Equal("626152397515", ShopeeBatchScreens.DialogTracking([B("快遞取件詳情", 80, 115, 130), B("626 152 397 515", 339, 176, 150)]));
+    }
+
+    [Fact]
+    public void Ink_bounds_box_the_printed_part()
+    {
+        var page = GrayImage.Blank(50, 40);
+        page.Pixels[5 * 50 + 10] = 0;
+        page.Pixels[20 * 50 + 30] = 0;
+        Assert.Equal(System.Drawing.Rectangle.FromLTRB(10, 5, 31, 21), SlipImage.InkBounds(page));
+        Assert.Null(SlipImage.InkBounds(GrayImage.Blank(5, 5)));
+    }
+
+    [Fact]
     public void Skips_last_for_the_day()
     {
         var today = new DateTime(2026, 10, 26);

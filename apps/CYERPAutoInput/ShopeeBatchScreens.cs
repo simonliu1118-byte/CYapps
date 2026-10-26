@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -144,8 +144,13 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
         // 新竹物流 is 安排取件 (user, 2026-10-14): a pickup at the set address, then Shopee's label.
         if (text.Contains("新竹", StringComparison.Ordinal) || text.Contains("HCT", StringComparison.Ordinal)) return ShopeeBatchCarrier.Hct;
+        // 黑貓宅急便 is 安排取件 too (user, 2026-10-26); its label is saved as a PDF and printed on A4.
+        if (text.Contains("黑貓", StringComparison.Ordinal) || text.Contains("宅急便", StringComparison.Ordinal)) return ShopeeBatchCarrier.BlackCat;
         return ShopeeBatchCarrier.Other;
     }
+
+    /// <summary>A courier that comes to the set address: 安排取件 with its address checked first.</summary>
+    public static bool IsPickup(ShopeeBatchCarrier kind) => kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.BlackCat;
 
     public static bool SupportedCarrier(string carrier) => CarrierKind(carrier) != ShopeeBatchCarrier.Other;
 

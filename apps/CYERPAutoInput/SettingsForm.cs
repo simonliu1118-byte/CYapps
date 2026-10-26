@@ -299,7 +299,7 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
-            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
+            ("取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;

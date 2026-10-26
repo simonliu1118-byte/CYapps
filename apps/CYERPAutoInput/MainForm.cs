@@ -1040,9 +1040,9 @@ internal sealed partial class MainForm : Form
         }
         if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」（新竹物流為「安排取件」，取件地址須與設定相同）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
-                "目前只處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN 與全家；遇到其他物流或任何問題會停下並發出聲音。\n" +
+                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1059,6 +1059,7 @@ internal sealed partial class MainForm : Form
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
                 _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
+        runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;
         string? problem = null;
         var shipped = false;
@@ -1164,6 +1165,44 @@ internal sealed partial class MainForm : Form
             }
         }
         return (printed, notes);
+    }
+
+    /// <summary>A4 寄件單 sheets of 黑貓 are cut in three; one label goes in each (user, 2026-10-26).</summary>
+    private const int BlackCatCells = 3;
+
+    /// <summary>
+    /// 蝦皮全自動 黑貓宅急便 (user, 2026-10-26): the saved label PDF on the A4 printer, in the top
+    /// third of the sheet, after the person is asked to load one sheet (a pause: the mouse is
+    /// free, Esc still stops the batch). One label per sheet, so no count is given.
+    /// </summary>
+    private async Task PrintBlackCatLabelAsync(ShopeeBatchOrder order, string pdf, CancellationToken token)
+    {
+        var folder = Path.GetDirectoryName(pdf)!;
+        var printer = SlipPrinter.Installed(_settings.A4Printer)
+            ?? throw new ShopeeBatchStop($"黑貓寄件單沒有列印：找不到設定的 A4 印表機（PDF 在 {folder}）。", true);
+        // The label as large as fits its cell, a few mm inside it.
+        const double margin = 5;
+        var dpi = SlipPrinter.Label(printer, 210, 297).Dpi;
+        using var label = await MoSlipPdf.RenderFitAsync(pdf, 210 - 2 * margin, 297.0 / BlackCatCells - 2 * margin, dpi);
+        _log.Info("shopee-batch", $"black cat label {label.Width}x{label.Height} at {dpi} dpi ({label.Width * 25.4 / dpi:F0}x{label.Height * 25.4 / dpi:F0} mm)");
+        Session.End();
+        Alarm(needsPerson: true);
+        bool go;
+        using (var prompt = new PaperPromptForm("黑貓三格 A4 寄件單用紙", printer, $"訂單 {order.OrderSn}，印在最上面那一格"))
+            go = prompt.ShowDialog(this) == DialogResult.OK;
+        token.ThrowIfCancellationRequested();
+        Session.Begin(AutomationSession.BatchTitle);
+        if (!go) throw new ShopeeBatchStop($"黑貓寄件單按了取消，沒有列印（PDF 在 {folder}）。", true);
+        try
+        {
+            await Task.Run(() => SlipPrinter.PrintCells(printer, [label], BlackCatCells, "黑貓寄件單 " + order.OrderSn), token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.Warn("shopee-batch", $"black cat print failed: {ex.GetType().Name}: {ex.Message}");
+            throw new ShopeeBatchStop($"黑貓寄件單送 {printer} 時出錯（{ex.Message}），PDF 在 {folder}。", true);
+        }
+        _log.Info("shopee-batch", "black cat label printed on A4");
     }
 
     /// <summary>
