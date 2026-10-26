@@ -190,6 +190,14 @@ internal sealed partial class MainForm : Form
         _start.Margin = new Padding(4, 1, 4, 1);
         _start.Click += async (_, _) => await StartAutomationAsync();
         actions.Controls.Add(_start);
+        // 出貨明細 of the 銷貨單 open in ERP (user, 2026-10-26: those entered by hand too; a small
+        // button beside 開始輸入 ERP, the toolbar was too crowded).
+        var sheetButton = MakeButton("印出貨明細", 86);
+        sheetButton.Font = new Font(Font.FontFamily, 9F);
+        sheetButton.Height = ToolbarButtonHeight - 10;
+        sheetButton.Margin = new Padding(0, 6, 4, 6);
+        sheetButton.Click += async (_, _) => await PrintShownShipSheetAsync();
+        actions.Controls.Add(sheetButton);
 
         actions.Controls.Add(new Label
         {
@@ -221,10 +229,7 @@ internal sealed partial class MainForm : Form
         settingsButton.Click += (_, _) => OpenSettings();
         rightTools.Controls.Add(settingsButton);
 
-        // 出貨明細 of the 銷貨單 open in ERP (user, 2026-10-26: those entered by hand too).
-        var sheetButton = MakeButton("印出貨明細", 120);
-        sheetButton.Click += async (_, _) => await PrintShownShipSheetAsync();
-        rightTools.Controls.Add(sheetButton);
+
 
         _modeToggle.Margin = new Padding(4, 1, 8, 1);
         _modeToggle.Visible = false;
@@ -987,9 +992,24 @@ internal sealed partial class MainForm : Form
         {
             string file;
             Session.Begin(AutomationSession.InputTitle);
-            try { file = await _automation.ExportShownDocumentAsync(new Progress<string>(SetStatus), token); }
-            catch (InvalidOperationException ex) { problem = $"ERP 轉出 Excel 失敗：{ex.Message}"; return; }
-            finally { Session.End(AutomationOutcome.Done); }
+            try
+            {
+                file = await _automation.ExportShownDocumentAsync(new Progress<string>(SetStatus), token);
+                Session.End(AutomationOutcome.Done);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // A failure is shown as one (user, 2026-10-26: it ended with the 「完成」 notice).
+                Session.End(AutomationOutcome.Stopped);
+                SetStatus("出貨明細未列印：ERP 轉出 Excel 失敗");
+                problem = $"ERP 轉出 Excel 失敗：{ex.Message}";
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                Session.End(AutomationOutcome.Cancelled);
+                throw;
+            }
             try
             {
                 IReadOnlyList<(string Name, List<string[]> Rows)> sheets;
@@ -1007,6 +1027,7 @@ internal sealed partial class MainForm : Form
             catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or System.ComponentModel.Win32Exception)
             {
                 problem = $"出貨明細未列印：{ex.Message}\n\nERP 匯出檔在 {file}";
+                SetStatus("出貨明細未列印");
                 _log.Warn("ship-sheet", $"shown document not printed: {ex.GetType().Name}: {ex.Message}");
             }
         });

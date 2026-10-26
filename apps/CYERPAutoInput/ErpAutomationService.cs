@@ -433,7 +433,10 @@ internal sealed class ErpAutomationService
             using (var image = ScreenCapture.Capture(ribbon))
                 tokens = await _textVision.RecognizeAsync(image, cancellationToken);
             var list = tokens.Select(t => (t.Text, t.Rect)).ToList();
-            label = RibbonPrintLocator.FindWord(list, "Excel") ?? RibbonPrintLocator.FindWord(list, "EXCEL");
+            // The OCR reads the label in pieces, the 串查 beside it in between (user's LOG,
+            // 2026-10-26: 「E x 串 查 c e l」), so its first letters are enough.
+            label = RibbonPrintLocator.FindWord(list, "Excel") ?? RibbonPrintLocator.FindWord(list, "EXCEL") ??
+                RibbonPrintLocator.FindWord(list, "Ex") ?? RibbonPrintLocator.FindWord(list, "EX");
             if (label is null && attempt == 2)
                 _log.Info("export", $"ribbon tokens: {string.Join(" ", tokens.Select(t => _log.Value(t.Text)))}");
         }
