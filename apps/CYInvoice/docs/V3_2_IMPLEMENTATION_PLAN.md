@@ -2,15 +2,16 @@
 
 更新：2026-10-28（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.44 Build 0／Cloud Source 0.9.7（原Worker仍0.9.6，待本機程式更新），沿原 PR #550 收斂；使用者本機已回報完成schema22、Cloud 0.9.6／三正常旗標啟用及限定舊案盤點，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
+**工程 Source：V3.1.44 Build 0／Cloud Source 0.9.7（使用者本機已回報完成原Worker0.9.7更新），沿原 PR #550 收斂；使用者本機已回報完成schema22、Cloud 0.9.7程式更新；先前三正常旗標啟用及限定舊案盤點完成狀態保留，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
 
 ## 1. 來源、現況與執行停點
 
+- 2026-10-28本機完成報告：指定Source `29b65ab21a01bd7759b0955ad68ff059948ef473`／V3.1.44 Build0已更新原Worker0.9.7、單一版本100%；原before／deploy／after、bundle一致性、health及身分／綁定連續性通過。schema22、history及正常三旗標保留；無migration、DB匯出、Local重盤或真交易。工程包已下載核對，未安裝或覆寫原EXE／Data。私有計量及回復證據不公開，維護停止、不重跑；詳見[完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 2026-10-27本機完成報告：指定Source `25ae151ed880cb6256a4cc1e01ce499145a802b7` 已部署原Worker Cloud 0.9.6、單一版本100%；正常API／g0401／g0501三旗標true，舊人工兩旗標仍未設定。原owner的before／deploy／after、bundle一致性與health通過，schema22、history及其他設定保留，無migration／DDL／CYID D1操作。本對話依使用者報告歸檔，未重新連線Cloudflare。
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
-- 工程VERSION=3.1.44、BUILD=0；正式Release仍V3.1.0。本批Source修正尚未部署，不執行Cloudflare操作；正式發布仍需當次明確授權。完整用量／回復證據只留私有，直接SQL與共用帳號差額的歸屬限制見完成摘要。
+- 工程VERSION=3.1.44、BUILD=0；正式Release仍V3.1.0。本批Source已由本機部署；此輪只歸檔使用者報告，不重新執行Cloudflare操作；正式發布仍需當次明確授權。完整用量／回復證據只留私有，直接SQL與共用帳號差額的歸屬限制見完成摘要。
 
 ### 本批返修及驗收（2026-10-28）
 
@@ -22,7 +23,7 @@
 
 清單改用業務類型文字；精確本機application ID可連回發票／訂單，跨機未對應時顯示「開啟詳情查閱／－」，不把內部application ID當訂單號，也不誤合併同一發票的不同申請。折讓申請窗寬738、原因獨立一列，員工編號／密碼同列。
 
-驗收須區分：本地隔離測試與Windows CI／工程包、0.9.7本機部署、使用者真人操作。舊0.9.6完成報告繼續有效，但不代表0.9.7已部署。新格式與回退界線見[原本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。測試三天保留為本次使用者明確調整，正式兩期清理及待辦／Claim保護不變。
+驗收須區分：本地隔離測試與Windows CI／工程包、0.9.7本機部署、使用者真人操作。0.9.7已由使用者本機完成報告確認部署，舊0.9.6記錄保留歷史；真人業務驗收仍未完成。新格式與回退界線見[原本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。測試三天保留為本次使用者明確調整，正式兩期清理及待辦／Claim保護不變。
 
 ## 2. 已定案的產品流程
 

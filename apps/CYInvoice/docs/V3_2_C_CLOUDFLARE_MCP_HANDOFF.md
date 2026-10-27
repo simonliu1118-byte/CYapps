@@ -1,14 +1,17 @@
-# CYInvoice Cloud 0.9.7程式更新交接／既有維護索引
+# CYInvoice Cloud 0.9.7原Worker更新完成摘要／維護索引
 
-更新：2026-10-28（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`，工程V3.1.44 Build 0／Cloud Source 0.9.7。**這一段尚待本機執行；下方0.9.6完成報告仍是實際遠端基準。** 不合併、不發布Release、不執行真光貿交易。
+更新：2026-10-28（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`，工程V3.1.44 Build 0／Cloud0.9.7；正式Release仍V3.1.0。**使用者已由本機對話交回完成報告，遠端維護已停止，不重跑。** 本頁依該報告歸檔遮罩摘要，本對話未重新連線Cloudflare；私有設定、完整資源識別、帳號計量、checkpoint、備份與回復收據不提交Public Git／PR。
 
-## 本次本機要完成的工作
+## 本機已完成（2026-10-28）
 
-1. 核對交付的完整程式Source SHA、VERSION=3.1.44、BUILD=0、Cloud0.9.7，以及同SHA必要CI和工程Artifact。不要以PR後續文件提交取代程式SHA；不要直接取浮動HEAD。下載工程包後核對GitHub Artifact雜湊與ZIP內容，交付使用者，不自動覆寫原程式／Data。
-2. 循原canonical deployment-preflight、原Worker及D1、同Source／專用私有checkpoint執行before→deploy→after，只做程式更新。**沒有schema-upgrade意圖、migration、DDL、資料回填、DB匯出或重跑0017～0022；schema及marker維持22。** 無需重新設定allowance activation意圖，正常三旗標已啟用，原值必須保留。舊人工兩旗標保持未設定／關閉；其餘Bindings、Secrets、Routes、CYID服務與scope不變。
-3. 有界核對原Workspace／Device／驗證及history連續性，沿既有部署owner核對原控制面設定及不可變回退版本；不掃全庫、不改CYID D1、不新增Worker／D1。預估直接D1讀1200列／寫0，runtime約8、控制面約90；建議本批停止界線2000／0／12／110，執行前依共同規則核對本批額度與授權，不能延用過去例外。每表LIMIT101，超100停止；額度不足或錯誤停止，不為拆分共用帳號計量而額外重查。
-4. 線上bundle size／SHA與指定Source本機建置比對，health應為Cloud0.9.7、storage=ok、identityProvider=CYID、storageSchemaVersion=22；legacy schemaVersion=8不是實際schema。無憑證的create／approve／void-approve應401／DEVICE_INVALID，不能把拒絕測試當正向財務驗收。
-5. 私有保存原設定、完整版本／Deployment識別、checkpoint、計量、bundle及回復證據；交回遮罩摘要，明確列實際可歸屬D1／runtime／控制面量與預估差異，另列共用帳號差額及歸屬限制。不得把本批寫0、直接SQL讀取量冒充完整計費量。
+- 指定並實際部署Source：`29b65ab21a01bd7759b0955ad68ff059948ef473`。原Worker0.9.6→0.9.7，單一版本100%流量；原canonical deployment-preflight、同Source與專用私有checkpoint的before→deploy→after均通過。無schema-upgrade或allowance-activation意圖。
+- schema及marker22，history精確0001～0022且前後相同。無migration、DDL、DB匯出、回填、還原、新Worker／D1或CYID D1操作；原身分／稽核指紋、FK、Bindings、Secrets繼承、Routes及服務scope保持。
+- API／g0401／g0501三正常旗標維持true；舊MANUAL_REVIEW／EXTERNAL_COLLISION維持未設定、關閉。沒有重新啟用舊人工路徑。
+- 線上bundle與指定Source完整建置一致；health為Cloud0.9.7、storage=ok、identityProvider=CYID、storageSchemaVersion=22。legacy schemaVersion8不是實際D1版次。無憑證create／approve／void-approve均401／DEVICE_INVALID；只證明Device拒絕有效，不代替正向角色或真光貿驗收。
+- 同Source的[Windows run1076](https://github.com/simonliu1118-byte/CYapps/actions/runs/40546364833)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/40546364838)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/40546365002)、[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/40546365016)成功。CI實際部署job skipped；實際更新由本機MCP完成，本機TypeScript、完整Cloud隔離測試及dry-run通過。
+- `CYInvoice_V3.1.44_engineering-run1076.zip`已由本機下載並核對[Artifact12752164809](https://github.com/simonliu1118-byte/CYapps/actions/runs/40546364833/artifacts/12752164809)一致、ZIP路徑／VERSION3.1.44／BUILD0及不含runtime資料。原EXE／Data未覆寫，工程包未執行或安裝；使用者須使用新版程式進行驗收。
+- 本批直接操作計數及預估差異由本機私有收據保存，已記錄直接操作低於原估與各自停止界線。直接SQL不是完整計費量，共用帳號差額不能全歸因本批，不能宣稱完整計費read已獨立證實低於參考上限；不為拆分歸屬再查遠端。
+- 未重盤Local舊資料，不把前批限定快照的0筆外推目前全域；未知申請仍按原ID查回。無真光貿交易、PR合併或正式Release。本報告不延伸授權後續維護、回復或財務操作。
 
 ## 變更與資料相容界線
 
@@ -23,7 +26,7 @@
 
 ---
 
-# CYInvoice V3.2：Cloud 0.9.6啟用與限定舊案盤點完成
+# 歷史完成紀錄：Cloud 0.9.6啟用與限定舊案盤點
 
 更新：2026-10-27（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`；工程V3.1.43 Build 0；正式Release仍V3.1.0，未合併或發布。
 
@@ -72,7 +75,7 @@
 
 ## 已完成維護索引
 
-以下為已歸檔維護的來源索引，取代過時的待執行／暫停清單；完整備份、實際還原及逐筆操作收據仍留本機私有。這些歷史狀態不覆蓋上方Cloud 0.9.6現況，也不是重新套migration或部署的指令。
+以下為已歸檔維護的來源索引，取代過時的待執行／暫停清單；完整備份、實際還原及逐筆操作收據仍留本機私有。這些歷史狀態不覆蓋上方Cloud 0.9.7現況，也不是重新套migration或部署的指令。
 
 | 作業日 | 已完成範圍 | 指定Source | 結果 |
 | --- | --- | --- | --- |
@@ -82,8 +85,10 @@
 | 2026-10-26 | Cloud 0.9.4→0.9.5 | `cff89085adb72536437ba2edc88b3d21d056de5a` | 僅程式更新；schema22、原綁定及當時關閉旗標保留 |
 | 2026-10-27 | Cloud 0.9.5→0.9.6 | `25ae151ed880cb6256a4cc1e01ce499145a802b7` | 僅程式與已授權正常旗標更新；schema／marker22，限定舊案盤點完成 |
 
+| 2026-10-28 | Cloud 0.9.6→0.9.7 | `29b65ab21a01bd7759b0955ad68ff059948ef473` | 原Worker程式更新完成；schema22、原正常旗標及綁定保留，未重盤Local |
+
 ## 剩餘真人驗收
 
-以已下載V3.1.43工程包及使用者自行設定的公司卡，驗收真實金鑰可用性、角色正向操作、主管一次核准後自動配號／送出／查回、正常等待／異常分類、斷線重啟、診斷與g0501有限重試。不能以旗標、無憑證拒絕或合成測試代替真人財務結果。
+以已下載V3.1.44工程包配套Cloud0.9.7及使用者自行設定的公司卡，驗收真實金鑰可用性、角色正向操作、主管一次核准後自動配號／送出／查回、正常等待／異常分類、斷線重啟、診斷與g0501有限重試。不能以旗標、無憑證拒絕或合成測試代替真人財務結果。
 
 公司卡選取／編輯／同步／重啟取卡的既有使用者驗收保留。雙Windows／不同Device真人驗收依既定決議於V3.2上線後補做，不新增上線阻擋條件。V3.2尚未全部業務驗收完成；PR未合併、正式Release仍需使用者當次授權。
