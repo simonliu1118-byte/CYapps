@@ -9,22 +9,8 @@
 - 2026-10-27本機完成報告：指定Source `25ae151ed880cb6256a4cc1e01ce499145a802b7` 已部署原Worker Cloud 0.9.6、單一版本100%；正常API／g0401／g0501三旗標true，舊人工兩旗標仍未設定。原owner的before／deploy／after、bundle一致性與health通過，schema22、history及其他設定保留，無migration／DDL／CYID D1操作。本對話依使用者報告歸檔，未重新連線Cloudflare。
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
-- 以下Build／維護紀錄為歷史checkpoint；當前部署／啟用及盤點結果以上述最新報告為準。
-- Build 4沿原識別碼恢復跨機測試票抓回，未增加Cloud來源帳本或schema；待辦清單載入用原生marquee，資料／尺寸／狀態色完成才顯示。詳情按鈕固定折讓→作廢，申請後在原按鈕顯示「申請已送出」，作廢保留紅色辨識。主管原商品用小型原生唯讀表格，作廢申請及核准由原驗證結果保存姓名＋編號並接回處理中／發票詳情；歷史沒有姓名只顯示既有編號，不補造。折讓編輯隱藏Icon、固定應稅、以重置取代新增品項、對齊欄位並縮窄；未啟用提示依Cloud實際錯誤碼顯示中文，旗標依使用者決定繼續關閉。新包／真人驗收待本輪CI。
-- Build 3收斂既有共用密碼驗證元件：固定標題、角色條件、實際帳密與權限驗證完成後才關窗；失敗顯示對應錯誤並留原窗。清單免登入、待辦詳情才驗管理員；設定入口直接驗超管，公司卡保存不重複輸入。Cloud Source 0.9.5需配套原Worker程式更新，schema22及旗標不變，未部署。使用者確認公司卡選取／編輯／同步／重啟取卡操作OK；本批驗證調整仍待新包重測。
-
-- Build 2依真人畫面返修：設定「連線與裝置」移上，「選擇使用環境」與公司卡移下；恢復原「處理中」單一清單，不再依來源拆頁籤或另加狀態篩選。本機／跨機待辦直接列入，沿原服務驗權及雙擊詳情，刪除被取代的CloudWorkItemsControl；不是新增待辦平台。
-
-- V3.1.42工程包真人回報返修（Build 1）：啟動不再隱藏主頁，檢查完成前由原連線控制停用操作；恢復設定入口超管驗證並簡化卡片／分組比例。只改Windows與既有文件，未變更Cloud／schema／旗標。Windows工程驗證與真人畫面驗收分開記錄。
-
-- 正式 Release 仍為 V3.1.0；本批是 V3.2 流程收斂與單公司卡介面修正，VERSION=3.1.43、BUILD=0，不另開 PR 或工作單。
-- 最新：2026-10-23使用者交回schema21→22完成報告，採用Source `16f6a6ce03681b157ceec2805657d3a409935221`、V3.1.42／Cloud 0.9.4；0022只成功套用一次、原服務與既有資料／稽核保留，備份實際還原及前後檢查由本機報告確認，遠端已停止。本對話獨立核對同SHA的GitHub四項CI通過，未重新連線Cloudflare。私有維護證據不公開，計費歸屬限制見原私有報告及[可公開交接摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
-- 配套結構／原Worker及工程包交付已完成；接著由使用者驗收公司卡、真Device同步與畫面。五個折讓旗標仍關閉，功能啟用／真光貿交易另依原計畫處理，不因收到維護報告自動執行。Local實際舊待辦／未知Claim數量及公司卡憑證可用性仍未驗，不記0。
-- 前批歷史：2026-10-23收到作業日2026-10-22的完整本機MCP報告：原D1 schema21／Worker marker21，指定Source為`83e7b691fc494186e7a0d373654c888e83874fde`；history、舊資料／稽核指紋、FK／quick_check、備份實際還原及canonical before／deploy／after通過。schema18～20私有證據亦已交回歸檔。這是使用者本機執行證據，非本對話重新連線Cloudflare驗證。
-- 已套用的 0020 完全保留；本批新增唯一 forward migration `0021_allowance_automatic_execution.sql`，調整執行投影／期限檢查及有限次作廢嘗試，保留原申請、核准、Claim、Ledger、Audit。歷史核准沒有可驗證的權威快照時不補造授權、不自動 POST。
-- 第一階段20→21及原Worker維護已完成、遠端操作已停止；五個折讓旗標均關閉，核准入口503／ALLOWANCES_NOT_READY。線上bundle與指定Source一致，CYID／原服務與綁定保留，未碰CYID D1、不重跑0017～0021。測試公司卡／真光貿API及Local實際舊資料／未知Claim盤點仍待驗；未驗數量不記0。完整結果、私有證據位置及下一階段見 [本機完成報告](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
-- 前批schema21計量：完整數字與私有收據已由原對話交回，不公開複製。直接SQL不是完整計費量，共用帳號差額不可全部歸因本作業；不能宣告本批完整計費read已確認在原5000參考上限內。未提高上限，維護已停止；第二階段另授權、另估用量。
-- Windows／Cloud／Governance 工程 CI 與真光貿測試分開。雙 Windows／不同 CYID Device 真人驗收依使用者決定於 V3.2 上線後補做，未驗不得勾選；正式 Release 仍需當次明確授權。
+- 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
+- 工程VERSION=3.1.43、BUILD=0；正式Release仍V3.1.0。文件整理不改已部署Source、不執行Cloudflare操作；正式發布仍需當次明確授權。完整用量／回復證據只留私有，直接SQL與共用帳號差額的歸屬限制見完成摘要。
 
 ## 2. 已定案的產品流程
 
@@ -214,7 +200,7 @@ V3只保留單一正式公司及內建光貿測試環境。多公司明確排入
 | g0501 | Local／Cloud 合成驗證最多3次、60秒退避、4050141等待不重送、舊未知Claim不解鎖、官方已作廢收尾 |
 | schema21 | 非空schema20備份、注入失敗回滾、成功保留舊Ledger／Grant／Audit、FK／integrity及備份實際還原；本機MCP已回報原D1實際套用0021一次、原Worker marker21，詳細證據見完成報告 |
 | 同步與診斷 | 150筆／50張同日停止與隔日checkpoint接續、不同申請不錯誤合併、完整事件匯出、無秘密；舊版缺少的證據明列未知，不補造 |
-| Windows／工程 CI | Build 2精確SHA及測試包以原PR當次CI為準，不把以下舊證據算成本輪已部署。已部署Source `83e7b691` 的本地測試及Windows Build／Cloud Check／Governance／Development預檢通過；CI實際部署job skipped，真正部署由本機MCP完成；後續文件歸檔不改已部署Source |
+| Windows／工程 CI | 已部署Source `25ae151ed880cb6256a4cc1e01ce499145a802b7` 的Windows／Cloud／Governance及Development預檢通過，工程包V3.1.43 Build 0；CI部署job skipped，實際部署由本機MCP完成。後續文件提交的CI另列於原PR，不改已部署Source |
 | 尚未完成的業務驗收 | 以V3.1.43工程包驗收實際金鑰、角色正向操作及一次核准後的配號／送出／查回、等待／異常分類、斷線重啟與診斷、g0501有限重試；雙Windows依既有延期。schema22／原Worker 0.9.6及三正常旗標啟用、指定Local快照／原D1六表盤點與舊入口退役已完成，不重做 |
 
 ## 7. V3.3／後續邊界與歷史
