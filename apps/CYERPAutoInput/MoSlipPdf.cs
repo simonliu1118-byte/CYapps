@@ -56,6 +56,49 @@ internal static class MoSlipPdf
         return pages;
     }
 
+    /// <summary>
+    /// The first page's printed part (the box around its ink) drawn as large as fits
+    /// <paramref name="maxWidthMm"/> × <paramref name="maxHeightMm"/> at <paramref name="dpi"/>, drawn
+    /// by Windows at that size (sharp, not a scaled picture). With <paramref name="enlarge"/> false it
+    /// keeps its own size and is only made smaller when it does not fit (黑貓, user 2026-10-26).
+    /// The printed part's top-left corner on its page comes back too.
+    /// </summary>
+    /// <param name="factor">With <paramref name="enlarge"/> false: the size wanted, as a share of its own (1.1 = 110 %).</param>
+    public static async Task<(Bitmap Image, double LeftMm, double TopMm)> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi,
+        bool enlarge = true, double factor = 1)
+    {
+        var pdf = await OpenAsync(path, string.Empty);
+        using var page = pdf.GetPage(0);
+        const int previewDpi = 100;
+        var preview = SlipPrinter.Load(await DrawAsync(page, previewDpi)) ?? throw new InvalidDataException("PDF 畫不出來");
+        var ink = SlipImage.InkBounds(preview) ?? throw new InvalidDataException("PDF 是空白頁");
+        // Page size is in 1/96 inch; a preview pixel of margin all round.
+        var dip = page.Size.Width / preview.Width;
+        var x = Math.Max(0, (ink.Left - 1) * dip);
+        var y = Math.Max(0, (ink.Top - 1) * dip);
+        var w = Math.Min(page.Size.Width - x, (ink.Width + 2) * dip);
+        var h = Math.Min(page.Size.Height - y, (ink.Height + 2) * dip);
+        var widthMm = w / 96 * 25.4;
+        var heightMm = h / 96 * 25.4;
+        var scale = Math.Min(maxWidthMm / widthMm, maxHeightMm / heightMm);
+        if (!enlarge) scale = Math.Min(factor, scale);
+        using var stream = new InMemoryRandomAccessStream();
+        await page.RenderToStreamAsync(stream, new PdfPageRenderOptions
+        {
+            SourceRect = new Windows.Foundation.Rect(x, y, w, h),
+            DestinationWidth = (uint)Math.Round(widthMm * scale / 25.4 * dpi),
+            DestinationHeight = (uint)Math.Round(heightMm * scale / 25.4 * dpi)
+        });
+        using var reader = new DataReader(stream.GetInputStreamAt(0));
+        var length = (uint)stream.Size;
+        await reader.LoadAsync(length);
+        var bytes = new byte[length];
+        reader.ReadBytes(bytes);
+        using var memory = new MemoryStream(bytes);
+        using var loaded = new Bitmap(memory);
+        return (new Bitmap(loaded), x / 96 * 25.4, y / 96 * 25.4);
+    }
+
     /// <summary>Opened with the MO password; a file without one (already opened and saved) opens without.</summary>
     private static async Task<PdfDocument> OpenAsync(string path, string password)
     {

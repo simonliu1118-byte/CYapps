@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22);
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -93,6 +93,45 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>Orders whose buyer got the 聊聊 reply (for the closing list).</summary>
     public List<string> Chats { get; } = [];
 
+    /// <summary>
+    /// 測試 (user, 2026-10-26): one order taken up where Shopee's 寄件編號 dialog (快遞取件詳情 or
+    /// 查看寄件編號) is open in the Chrome in front — 列印寄件單 and on to the end as in 全自動
+    /// (label, ERP); the tab is left open.
+    /// </summary>
+    public async Task ResumeFromDialogAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
+    {
+        _window = ChromeWindows().FirstOrDefault();
+        if (_window == 0) throw new ShopeeBatchStop("找不到 Chrome 視窗：請先在 Chrome 打開蝦皮訂單的寄件編號視窗（快遞取件詳情／查看寄件編號）。");
+        _shippedHint = true;
+        Front();
+        await Task.Delay(500, _token);
+        var (shown, tracking) = await WaitOrNullAsync(8, s =>
+            ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is not null && ShopeeBatchScreens.DialogTracking(s.Boxes) is { Length: > 0 } t ? t : null);
+        if (shown is null || tracking is null)
+        {
+            shown?.Dispose();
+            throw new ShopeeBatchStop("畫面上沒有蝦皮的寄件編號視窗（快遞取件詳情／查看寄件編號），或讀不到寄件編號：請在訂單頁打開後再試。");
+        }
+        ShopeeBatchOrder order;
+        using (shown)
+        {
+            var orderSn = ShopeeBatchScreens.DetailOrderSn(shown.Boxes);
+            var carrier = ShopeeBatchScreens.DetailCarrier(shown.Boxes);
+            if (orderSn.Length == 0) throw new ShopeeBatchStop("讀不到這張訂單的訂單編號。");
+            order = new ShopeeBatchOrder { OrderSn = orderSn, Carrier = carrier, Kind = ShopeeBatchScreens.CarrierKind(carrier), Tracking = tracking, Shipped = true };
+        }
+        _log.Info("shopee-batch", $"resume from the tracking dialog carrier={_log.Value(order.Carrier)} kind={order.Kind}");
+        if (order.Kind == ShopeeBatchCarrier.Other) throw new ShopeeBatchStop($"物流「{order.Carrier}」程式還沒有列印流程。", true);
+        Current = order;
+        status($"測試：訂單 {order.OrderSn} 列印寄件單…");
+        await PrintFromDialogAsync(order);
+        status($"測試：訂單 {order.OrderSn} 輸入 ERP…");
+        var note = await enterErp(order);
+        if (note is not null) Notes.Add(new ShopeeBatchNote(order.OrderSn, note));
+        Done.Add(order.OrderSn);
+        Current = null;
+    }
+
     /// <param name="enterErp">
     /// The page scan and ERP for the order on screen: null when clean, a note to list when it
     /// went on with something for a person to check; throws <see cref="ShopeeBatchStop"/> to stop.
@@ -100,6 +139,13 @@ internal sealed partial class ShopeeBatchRunner
     /// <param name="status">Progress text for the main window.</param>
     public async Task RunAsync(Func<ShopeeBatchOrder, Task<string?>> enterErp, Action<string> status)
     {
+        // Orders passed over earlier today stay passed over until tomorrow (user, 2026-10-26).
+        foreach (var (orderSn, reason) in ShopeeDaySkips.Load(DateTime.Today))
+        {
+            Skipped.Add(orderSn);
+            Notes.Add(new ShopeeBatchNote(orderSn, $"今天已略過：{reason}（明天再試）"));
+        }
+        if (Skipped.Count > 0) _log.Info("shopee-batch", $"passed over today already count={Skipped.Count}");
         status("全自動：開啟 Chrome…");
         await OpenWindowAsync();
         while (true)
@@ -339,7 +385,7 @@ internal sealed partial class ShopeeBatchRunner
         screen.Area.Contains(new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY)) &&
         box.CenterY > 40 && box.CenterY < screen.Area.Height - 40;
 
-    private void Click(Screen screen, OcrBox box, string what, bool front = true)
+    private void Click(Screen screen, OcrBox box, string what, bool front = true, bool hover = false)
     {
         var point = new Point(screen.Area.Left + box.CenterX, screen.Area.Top + box.CenterY);
         // Page text includes what is scrolled out of view; a click goes only on what is shown.
@@ -348,8 +394,14 @@ internal sealed partial class ShopeeBatchRunner
         _inputs++;
         if (front) Front();
         _log.Info("shopee-batch", $"click {what} at {point.X},{point.Y}");
+        if (hover)
+        {
+            // Resting on it first, as a hand would, for a button that ignored a bare click.
+            NativeMethods.SetCursorPos(point.X, point.Y);
+            Thread.Sleep(350);
+        }
         InputSender.Click(point);
-        NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
+        if (InputSender.ParkAt is null) NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
     }
 
     /// <summary>
@@ -509,17 +561,21 @@ internal sealed partial class ShopeeBatchRunner
             _log.Info("shopee-batch", $"order page carrier={_log.Value(carrier)} kind={kind}");
             // Each carrier has its own label flow after 安排出貨; one without a flow yet stops here,
             // before anything is shipped.
+            // 任選／下單請備註 (user, 2026-10-26): the items depend on the buyer's note; passed over unshipped.
+            if (ShopeeBatchScreens.BuyerChoiceSpec(detail.Boxes) is { } spec)
+                throw new ShopeeBatchSkip($"未出貨：商品「{spec}」要依買家備註決定品項，請人工處理。");
             if (kind == ShopeeBatchCarrier.Other)
                 throw new ShopeeBatchSkip($"未出貨：物流「{carrier}」程式還沒有出貨流程，請人工處理。");
-            if (kind == ShopeeBatchCarrier.Hct && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
-                throw new ShopeeBatchSkip("未出貨：新竹物流要先在「設定 › 平台匯入 › 蝦皮」填入「新竹取件地址」，請人工處理。");
+            if (ShopeeBatchScreens.IsPickup(kind) && ShopeeScreenshot.Compact(_print.HctPickupAddress).Length < 6)
+                throw new ShopeeBatchSkip($"未出貨：{carrier}要先在「設定 › 平台匯入 › 蝦皮」填入「取件地址」，請人工處理。");
             order.Kind = kind;
             order.Carrier = carrier;
             if (!Orange(detail.Image, button))
                 throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「{button.Text.Trim()}」按鈕顏色不對，為避免按錯已停止。");
+            _log.Info("shopee-batch", $"ship button box={button.Left},{button.Top} {button.Width}x{button.Height} area={detail.Area}");
             Click(detail, button, button.Text.Trim());
         }
-        if (order.Kind == ShopeeBatchCarrier.Hct) await ConfirmPickupAsync(order);
+        if (ShopeeBatchScreens.IsPickup(order.Kind)) await ConfirmPickupAsync(order);
         order.Shipped = true;
         _shippedHint = true;
 
@@ -529,8 +585,35 @@ internal sealed partial class ShopeeBatchRunner
         // the one in 查看寄件編號, then the one beside 取消.
         var pressedAsk = false;
         var pressedApply = false;
+        // 安排出貨 pressed and nothing opened (user's LOG／screenshot, 2026-10-26: the same order
+        // twice, the click did not take): while the button is still there, orange, with no
+        // dialog over it, it is found again and pressed again, resting on it first; twice more at most.
+        var shipPresses = 1;
+        var sincePress = Stopwatch.StartNew();
         var (dialog, tracking) = await WaitAsync("寄件編號", 60, s =>
         {
+            // Shopee refused (user's screenshot, 2026-10-26: 買家門市關轉 … (error:10514)): nothing
+            // was shipped; 門市關轉 waits for the buyer, so the order is passed over until tomorrow.
+            if (ShopeeBatchScreens.ShipError(s.Boxes) is { } error)
+            {
+                s.Dispose();
+                order.Shipped = false;
+                _shippedHint = false;
+                _log.Warn("shopee-batch", $"安排出貨 refused: {error}");
+                if (!ShopeeBatchScreens.StoreClosed(error)) throw new ShopeeBatchSkip($"未出貨：蝦皮回覆「{error}」，請人工處理。");
+                ShopeeDaySkips.Add(DateTime.Today, order.OrderSn, "買家門市關轉，等買家重選門市");
+                throw new ShopeeBatchSkip($"未出貨：蝦皮回覆「{error}」。今天略過，明天再試。");
+            }
+            if (!ShopeeBatchScreens.IsPickup(order.Kind) && shipPresses < 3 && sincePress.Elapsed.TotalSeconds > 6 &&
+                ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null && ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is null &&
+                ShopeeBatchScreens.ShipButton(s.Boxes) is { } again && Orange(s.Image, again))
+            {
+                shipPresses++;
+                sincePress.Restart();
+                _log.Warn("shopee-batch", $"安排出貨 pressed, nothing opened; pressing again ({shipPresses}) box={again.Left},{again.Top} {again.Width}x{again.Height} area={s.Area}");
+                Click(s, again, "安排出貨（再按一次）", hover: true);
+                return null;
+            }
             if (ShopeeBatchScreens.ApplyTrackingButton(s.Boxes) is { } apply)
             {
                 var inAsk = ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is not null && !ShopeeBatchScreens.ApplyBesideCancel(s.Boxes);
@@ -546,7 +629,12 @@ internal sealed partial class ShopeeBatchRunner
         order.Tracking = tracking;
         _log.Info("shopee-batch", $"tracking assigned length={tracking.Length}");
         dialog.Dispose();
+        await PrintFromDialogAsync(order);
+    }
 
+    /// <summary>The 寄件編號 dialog open: 列印寄件單, the label printed by its carrier's way, its tab closed, the dialog closed.</summary>
+    private async Task PrintFromDialogAsync(ShopeeBatchOrder order)
+    {
         await ClickPrintLabelAsync(order);
         switch (order.Kind)
         {
@@ -710,7 +798,7 @@ internal sealed partial class ShopeeBatchRunner
                 _log.Info("shopee-batch", "pickup address is not the set one; cancelled");
                 if (ShopeeBatchScreens.PickupCancelButton(dialog.Boxes) is { } cancel) Click(dialog, cancel, "取消（安排取件）");
                 await Task.Delay(800, _token);
-                throw new ShopeeBatchSkip("未出貨：「安排取件」視窗的取件地址與設定的「新竹取件地址」不同，已按取消，請人工處理。");
+                throw new ShopeeBatchSkip("未出貨：「安排取件」視窗的取件地址與設定的「取件地址」不同，已按取消，請人工處理。");
             }
             Click(dialog, confirm, "確認（安排取件）");
         }
@@ -764,7 +852,32 @@ internal sealed partial class ShopeeBatchRunner
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
-        await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+        if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
+        else if (NoteOnStoreSlips && ShopeeBatchScreens.NoteRoom(order.Kind, order.Carrier))
+            await PrintPdfWithNoteAsync(order, order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale);
+        else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+    }
+
+    /// <summary>
+    /// Prints a saved 黑貓 label PDF on the A4 printer after asking for the paper (the main
+    /// window's); throws <see cref="ShopeeBatchStop"/> when it is not printed.
+    /// </summary>
+    public Func<ShopeeBatchOrder, string, Task>? PrintBlackCat { get; set; }
+
+    /// <summary>
+    /// 黑貓宅急便 (user, 2026-10-26): its label is a third of an A4 page that Chrome cannot put at
+    /// the top, so Chrome's print dialog saves it as a PDF (另存為 PDF) into Temp instead and the
+    /// label is printed from it into the top cell of a sheet; the PDF is deleted once printed.
+    /// </summary>
+    private async Task SaveBlackCatLabelAsync(ShopeeBatchOrder order)
+    {
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "blackcat-" + order.OrderSn + "-" + DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        var pdf = await SavePrintToPdfAsync(folder);
+        _log.Info("shopee-batch", "black cat label saved as PDF");
+        if (PrintBlackCat is null) throw new ShopeeBatchStop($"黑貓寄件單已存成 PDF 但沒有列印（{folder}）。", true);
+        await PrintBlackCat(order, pdf);
+        try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>The label as drawn (the PDF viewer's page, else the page under the header), read with OCR at twice the size.</summary>
@@ -799,7 +912,37 @@ internal sealed partial class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"交貨便服務代碼（{(code.Length > 0 ? code : "讀不到")}）與寄件編號 {order.Tracking} 不同，未列印。", true);
         }
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
-        await PrintDialogAsync(_print.SevenScale, pages: null);
+        if (NoteOnStoreSlips) await PrintPdfWithNoteAsync(order, _print.SevenScale);
+        else await PrintDialogAsync(_print.SevenScale, pages: null);
+    }
+
+    /// <summary>設定 › 一般 › 熱感紙寄件單都印下方文字, with words to print (user, 2026-10-26).</summary>
+    private bool NoteOnStoreSlips => _print.SlipNoteAll && SlipNote.Lines(_print.SlipNote).Count > 0;
+
+    /// <summary>
+    /// A slip Chrome would print (蝦皮店到店／店到宅, 新竹, 7-11) with the 寄件單下方文字 (user, 2026-10-26):
+    /// Chrome's print dialog, open, saves it as a PDF; its printed part is drawn at the thermal
+    /// printer's resolution at the size Chrome would print it (user, 2026-10-26: not enlarged — the
+    /// PDF is saved at the carrier's own 縮放), smaller only when it does not fit above the note.
+    /// </summary>
+    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order, int scale)
+    {
+        var printer = SlipPrinter.Installed(_printer) ?? throw new ShopeeBatchStop($"找不到名稱符合「{_printer}」的印表機，未列印。", true);
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "note-slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        await PrintDialogAsync(scale, pages: null, target: PdfPrinter);
+        var pdf = await SavedPdfAsync(folder);
+        var label = SlipPrinter.Label(printer, 100, 150);
+        var widthMm = label.Width * 25.4 / label.Dpi - 4;
+        var heightMm = label.Height * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
+        GrayImage slip;
+        // At the carrier's own 縮放 as Chrome prints it (user, 2026-10-27: 蝦皮 110 %); the words
+        // under it may go smaller for it.
+        var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false, factor: scale / 100.0);
+        using (drawn.Image) slip = SlipPrinter.BlackWhite(drawn.Image);
+        _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
+        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints);
+        try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>
@@ -870,12 +1013,18 @@ internal sealed partial class ShopeeBatchRunner
     }
 
     /// <summary>The cut slip sent to the printer; an error there stops the batch (it may have printed).</summary>
-    private void PrintCutSlip(string printer, GrayImage slip, string orderSn)
+    /// <param name="family">
+    /// A 全家 slip (user, 2026-10-26: little room under it, so its words may go down to
+    /// <see cref="SlipNote.FamilyMinPoints"/>; others not below <see cref="SlipNote.MinPoints"/>).
+    /// </param>
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null)
     {
         try
         {
-            var dpi = SlipPrinter.Print(printer, slip, "全家寄取貨單 " + orderSn);
-            _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi)");
+            var dpi = SlipPrinter.Print(printer, slip, (family ? "全家寄取貨單 " : "寄件單 ") + orderSn, _print.SlipNote,
+                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints));
+            _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
+            if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1158,8 +1307,14 @@ internal sealed partial class ShopeeBatchRunner
     /// read back — the set printer, the scale, the pages and 「1 張紙」 — before 列印 is pressed.
     /// What does not come right stops the batch without printing.
     /// </summary>
-    private async Task PrintDialogAsync(int wanted, string? pages, int sheetsAllowed = 1)
+    /// <param name="target">
+    /// The 目的地 wanted: the set printer, or 另存為 PDF (user, 2026-10-26: a slip saved at the
+    /// scale it would print at, so it keeps its size), whose button is 儲存.
+    /// </param>
+    private async Task PrintDialogAsync(int wanted, string? pages, int sheetsAllowed = 1, string? target = null)
     {
+        target ??= _printer;
+        var toPdf = target == PdfPrinter;
         // The settings are the right of the dialog: only that half is read (faster).
         var panel = new RectangleF(0.5f, 0, 0.5f, 1);
         var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true, part: panel);
@@ -1196,13 +1351,13 @@ internal sealed partial class ShopeeBatchRunner
             // 目的地 first: another printer has its own settings (user, 2026-10-14: Chrome showed
             // the Brother; the set printer is picked from 目的地's list).
             var shownPrinter = ShopeeBatchScreens.PrintDestination(boxes);
-            if (shownPrinter.Length > 0 && !ShopeeBatchScreens.SamePrinter(shownPrinter, _printer))
+            if (shownPrinter.Length > 0 && !ShopeeBatchScreens.SamePrinter(shownPrinter, target))
             {
                 if (printerTries >= 2)
-                    throw new ShopeeBatchStop($"Chrome 列印的目的地是「{shownPrinter}」，換不成設定的「{_printer}」，未列印。", true);
+                    throw new ShopeeBatchStop($"Chrome 列印的目的地是「{shownPrinter}」，換不成「{target}」，未列印。", true);
                 printerTries++;
                 actions++;
-                await ChoosePrinterAsync(screen, shownPrinter, panel);
+                await ChoosePrinterAsync(screen, shownPrinter, panel, target);
                 continue;
             }
 
@@ -1211,7 +1366,7 @@ internal sealed partial class ShopeeBatchRunner
             // 「顯示更多設定」 reads 「顯示較少設定」 once open, so while it still says 更多 the
             // settings are folded: a click made while the dialog was still loading may have done
             // nothing (user's LOG, 2026-10-14), so it is clicked again, a little apart.
-            if (scaleValue is null && ShopeeBatchScreens.MoreSettings(boxes) is { } more && expands < 3 && (expands == 0 || lastExpand.ElapsedMilliseconds > 1500))
+            if (!toPdf && scaleValue is null && ShopeeBatchScreens.MoreSettings(boxes) is { } more && expands < 3 && (expands == 0 || lastExpand.ElapsedMilliseconds > 1500))
             {
                 Click(screen, more, "顯示更多設定");
                 expands++;
@@ -1236,6 +1391,16 @@ internal sealed partial class ShopeeBatchRunner
                     await TypeIntoAsync(screen, at, pages, "頁面");
                     continue;
                 }
+            }
+
+            // 另存為 PDF has no 縮放比例 (user's LOG, 2026-10-26: 15 s waited for it); saved as
+            // Chrome lays it out, which is the size the thermal printer gets (76 mm wide for 店到店).
+            if (toPdf)
+            {
+                if (ShopeeBatchScreens.SaveButton(boxes) is not { } save) { await Task.Delay(400, _token); continue; }
+                _log.Info("shopee-batch", $"print dialog set: 目的地「{ShopeeBatchScreens.PrintDestination(boxes)}」、頁面「{shownPages}」");
+                Click(screen, save, "儲存");
+                return;
             }
 
             // 縮放比例
@@ -1266,12 +1431,13 @@ internal sealed partial class ShopeeBatchRunner
             var destination = ShopeeBatchScreens.PrintDestination(boxes);
             var sheets = ShopeeBatchScreens.SheetCount(boxes);
             last = $"目的地「{destination}」、頁面「{shownPages}{(pages is null ? string.Empty : " " + pages)}」、縮放 {scale}、{sheets?.ToString() ?? "?"} 張紙";
-            if (!ShopeeBatchScreens.SamePrinter(destination, _printer))
-                throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是設定的「{_printer}」，未列印。", true);
+            if (!ShopeeBatchScreens.SamePrinter(destination, target))
+                throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是「{target}」，未列印。", true);
             if (sheets > sheetsAllowed || pages is not null && sheets is null) { await Task.Delay(800, _token); continue; }
-            if (ShopeeBatchScreens.PrintButton(boxes) is not { } printButton) { await Task.Delay(600, _token); continue; }
+            if ((toPdf ? ShopeeBatchScreens.SaveButton(boxes) : ShopeeBatchScreens.PrintButton(boxes)) is not { } printButton) { await Task.Delay(600, _token); continue; }
             _log.Info("shopee-batch", $"print dialog set: {last}");
-            Click(screen, printButton, "列印");
+            Click(screen, printButton, toPdf ? "儲存" : "列印");
+            if (!toPdf) PrintWatch.Watch(SlipPrinter.Installed(target) ?? target, null);
             return;
         }
     }
@@ -1281,19 +1447,19 @@ internal sealed partial class ShopeeBatchRunner
     /// drawn over the dialog). A printer not in the short list (only under 顯示更多…) stops the
     /// batch: choosing among all printers is left to a person.
     /// </summary>
-    private async Task ChoosePrinterAsync(Screen screen, string shown, RectangleF part)
+    private async Task ChoosePrinterAsync(Screen screen, string shown, RectangleF part, string target)
     {
         var value = ShopeeBatchScreens.PrintRowValue(screen.Boxes, "目的地") ?? throw new ShopeeBatchStop("讀不到 Chrome 列印的目的地。", true);
-        _log.Info("shopee-batch", $"print destination is {shown}; choosing {_printer}");
+        _log.Info("shopee-batch", $"print destination is {shown}; choosing {target}");
         Click(screen, value, "目的地");
         await Task.Delay(700, _token);
         using var list = await ReadAsync(part: part, ocr: true);
-        if (ShopeeBatchScreens.PrinterOption(list.Boxes, _printer) is not { } option)
+        if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is not { } option)
         {
             _inputs++;
             InputSender.Press(NativeMethods.VK_ESCAPE);
             await Task.Delay(400, _token);
-            throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有設定的「{_printer}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
+            throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{target}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
         }
         Click(list, option, $"印表機 {option.Text.Trim()}");
         // Chrome redraws the preview for the new printer.

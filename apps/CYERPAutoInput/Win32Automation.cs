@@ -364,7 +364,21 @@ internal static class InputSender
             new NativeMethods.INPUT { type = 0, U = new NativeMethods.InputUnion { mi = new NativeMethods.MOUSEINPUT { dwFlags = MouseLeftUp } } }
         };
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+        if (ParkAt is { } park)
+        {
+            // Back into the 紙本發票待列印 box, so the person's mouse starts from there.
+            Thread.Sleep(40);
+            NativeMethods.SetCursorPos(park.X, park.Y);
+        }
     }
+
+    /// <summary>Where the cursor goes after each click while the 紙本發票待列印 box is shown; null otherwise.</summary>
+    public static Point? ParkAt
+    {
+        get => _parkAt as Point?;
+        set => _parkAt = value;
+    }
+    private static volatile object? _parkAt;
 
     /// <summary>Tick of the last Esc CY itself sent, so the global Esc watcher can ignore it.</summary>
     public static long LastSyntheticEscapeTick;

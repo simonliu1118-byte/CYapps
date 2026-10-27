@@ -29,6 +29,22 @@ internal static class SlipImage
 {
     private const int Dark = 128;
 
+    /// <summary>The box around everything darker than mid grey; null on a blank page.</summary>
+    public static Rectangle? InkBounds(GrayImage page)
+    {
+        int left = page.Width, top = page.Height, right = -1, bottom = -1;
+        for (var y = 0; y < page.Height; y++)
+            for (var x = 0; x < page.Width; x++)
+            {
+                if (page[x, y] >= Dark) continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        return right < 0 ? null : Rectangle.FromLTRB(left, top, right + 1, bottom + 1);
+    }
+
     /// <summary>
     /// The slips on a page: the dashed cut lines (long, broken lines across the page) divide it
     /// into four cells; each cell with ink gives the box around its ink, with a margin for the

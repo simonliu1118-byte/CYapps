@@ -20,7 +20,37 @@ internal static class XlsxReader
         var shared = ReadSharedStrings(zip);
         var sheetPath = FirstSheetPath(zip);
         var sheet = Load(zip, sheetPath) ?? throw new InvalidDataException("Excel 檔案沒有工作表。");
+        return ReadRows(sheet, shared);
+    }
 
+    /// <summary>Every worksheet by name (ERP's 轉出至 Excel: 單頭資料, 單身資料).</summary>
+    public static IReadOnlyList<(string Name, List<string[]> Rows)> ReadSheets(Stream xlsx)
+    {
+        using var zip = new ZipArchive(xlsx, ZipArchiveMode.Read, leaveOpen: true);
+        var shared = ReadSharedStrings(zip);
+        var workbook = Load(zip, "xl/workbook.xml") ?? throw new InvalidDataException("不是有效的 Excel（.xlsx）檔案。");
+        var rels = Load(zip, "xl/_rels/workbook.xml.rels");
+        var result = new List<(string, List<string[]>)>();
+        var index = 0;
+        foreach (var entry in workbook.Descendants(Main + "sheet"))
+        {
+            index++;
+            var name = (string?)entry.Attribute("name") ?? $"Sheet{index}";
+            var relId = (string?)entry.Attribute(Rel + "id");
+            var target = rels?.Root?.Elements(PackageRel + "Relationship")
+                .FirstOrDefault(r => (string?)r.Attribute("Id") == relId)?
+                .Attribute("Target")?.Value?.Replace('\\', '/');
+            var path = string.IsNullOrEmpty(target) ? $"xl/worksheets/sheet{index}.xml"
+                : target.StartsWith('/') ? target.TrimStart('/') : "xl/" + target;
+            var sheet = Load(zip, path) ?? throw new InvalidDataException($"Excel 工作表「{name}」讀取失敗。");
+            result.Add((name, ReadRows(sheet, shared)));
+        }
+        if (result.Count == 0) throw new InvalidDataException("Excel 檔案沒有工作表。");
+        return result;
+    }
+
+    private static List<string[]> ReadRows(XDocument sheet, IReadOnlyList<string> shared)
+    {
         var rows = new List<string[]>();
         foreach (var row in sheet.Descendants(Main + "row"))
         {

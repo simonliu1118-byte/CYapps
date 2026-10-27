@@ -226,12 +226,16 @@ internal sealed class ErpAutomationService
         return (mode, edits.Length, readOnly, writable);
     }
 
+    /// <param name="exportSheet">
+    /// 全熱感紙列印 (user, 2026-10-26): instead of 直接列印, the saved document is exported with
+    /// 轉出至 Excel for the thermal 出貨明細 (<see cref="AutomationRunResult.ExportFile"/>).
+    /// </param>
     public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken,
-        bool autoPrint = false)
+        bool autoPrint = false, bool exportSheet = false)
     {
         try
         {
-            return await FillDocumentAsync(snapshot, autoSave, progress, cancellationToken, autoPrint);
+            return await FillDocumentAsync(snapshot, autoSave, progress, cancellationToken, autoPrint, exportSheet);
         }
         finally
         {
@@ -240,7 +244,7 @@ internal sealed class ErpAutomationService
     }
 
     private async Task<AutomationRunResult> FillDocumentAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken,
-        bool autoPrint)
+        bool autoPrint, bool exportSheet)
     {
         var result = new AutomationRunResult();
         LastSalesOrderNumber = string.Empty;
@@ -304,7 +308,13 @@ internal sealed class ErpAutomationService
         progress.Report("ERP：輸入完成，儲存單據…");
         await SaveDocumentAsync(root, result, snapshot.Details, cancellationToken);
         progress.Report("ERP：已儲存。");
-        if (autoPrint)
+        if (exportSheet)
+        {
+            progress.Report("ERP：已儲存，轉出 Excel 供出貨明細…");
+            await ExportDocumentAsync(root, result, cancellationToken);
+            progress.Report(result.ExportFile.Length > 0 ? "ERP：已儲存並轉出 Excel。" : $"ERP：已儲存；{result.PrintProblem}");
+        }
+        else if (autoPrint)
         {
             progress.Report("ERP：已儲存，直接列印…");
             await PrintDocumentAsync(root, result, cancellationToken);
@@ -354,6 +364,248 @@ internal sealed class ErpAutomationService
         await Delay(1500, cancellationToken);
         var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
         if (peers.Count > 0) LogPeerWindows("after-direct-print", peers);
+    }
+
+    /// <summary>
+    /// 全熱感紙列印 (user, 2026-10-26): the saved 銷貨單 exported the way CYERPAutoQuery exports
+    /// INVI02 — Ribbon 「Excel」 → 「轉出至 Excel」 (both found by OCR) → 匯出設定: xlsx, 單頭／單身
+    /// 全選, 儲存檔案 pasted with a path in Temp → 確定 → 「檢視Excel資料?」 No. Anything unexpected
+    /// is reported in <see cref="AutomationRunResult.PrintProblem"/>; the saved document is never touched.
+    /// </summary>
+    private async Task ExportDocumentAsync(nint root, AutomationRunResult result, CancellationToken cancellationToken)
+    {
+        var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "erp-export");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"COPI08-{DateTime.Now:yyyyMMdd-HHmmss-fff}.xlsx");
+        try
+        {
+            // ERP keeps working for a while after the save shows browse mode (as for 直接列印).
+            await Delay(800, cancellationToken);
+            await ExportOnceAsync(root, path, cancellationToken);
+            result.ExportFile = path;
+            _log.Info("export", $"document exported document={_log.Value(result.DocumentKey)}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            result.PrintProblem = $"轉出 Excel 失敗（{ex.Message}），出貨明細未列印";
+            _log.Warn("export", $"export failed document={_log.Value(result.DocumentKey)}: {ex.Message}");
+            if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0) LogPeerWindows("after-export-failure", Win32Automation.FindVisibleProcessPeerWindows(root));
+        }
+    }
+
+    /// <summary>
+    /// 出貨明細 of the 銷貨單 a person has open in COPI08 (user, 2026-10-26): exported the same way;
+    /// the workbook's path. Throws <see cref="InvalidOperationException"/> with the reason.
+    /// </summary>
+    public async Task<string> ExportShownDocumentAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var root = await ResolveCopi08Async(progress, cancellationToken);
+            var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "erp-export");
+            Directory.CreateDirectory(folder);
+            var path = Path.Combine(folder, $"COPI08-{DateTime.Now:yyyyMMdd-HHmmss-fff}.xlsx");
+            progress.Report("ERP：轉出這張銷貨單…");
+            await ExportOnceAsync(root, path, cancellationToken);
+            return path;
+        }
+        finally
+        {
+            RestoreClipboard();
+        }
+    }
+
+    private async Task ExportOnceAsync(nint root, string path, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log)) throw new InvalidOperationException("無法把 COPI08 帶到前景");
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0) throw new InvalidOperationException("ERP 有其他視窗開著");
+        if (DetectMode(root) != ErpMode.Browse) throw new InvalidOperationException("ERP 不在檢視狀態");
+        if (!NativeMethods.GetWindowRect(root, out var window)) throw new InvalidOperationException("讀不到 COPI08 視窗位置");
+        var before = Win32Automation.VisibleProcessWindows(root).ToHashSet();
+
+        // Ribbon 「Excel」, as CYERPAutoQuery finds it (stable there): each Ribbon group window is
+        // read on its own first — the group Excel was found in last time, then the rest — so
+        // the label is not mixed with its neighbours' words (user's LOG, 2026-10-26: the whole
+        // Ribbon read 「E x 串 查 c e l」); the whole Ribbon (1200 px, as there) is the fallback.
+        var labelScreen = await FindRibbonWordAsync(root, window.ToRectangle(), cancellationToken, "Excel", "EXCEL", "Ex")
+            ?? throw new InvalidOperationException("Ribbon 上找不到「Excel」（請確認 Ribbon 停在「常用」）");
+        InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
+        _log.Info("export", $"ribbon Excel clicked label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
+
+        // The drop-down: 「轉出至 Excel」.
+        var near = new Rectangle(labelScreen.Left - 120, labelScreen.Top - 60, 480, 260);
+        Point? item = null;
+        var menuDeadline = Environment.TickCount64 + 3000;
+        while (item is null && Environment.TickCount64 < menuDeadline)
+        {
+            await Delay(250, cancellationToken);
+            var areas = Win32Automation.FindProcessPopupsNear(root, near).ToList();
+            areas.Add(near);
+            foreach (var area in areas)
+            {
+                using var image = ScreenCapture.CaptureWithLayers(area);
+                var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+                if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "轉出至") is { } r)
+                {
+                    item = new Point(area.Left + r.Left + r.Width / 2, area.Top + r.Top + r.Height / 2);
+                    break;
+                }
+            }
+        }
+        if (item is not { } menuItem)
+        {
+            if (Win32Automation.FindProcessPopupsNear(root, near).Count > 0) InputSender.Press(NativeMethods.VK_ESCAPE);
+            throw new InvalidOperationException("Excel 選單沒有出現「轉出至 Excel」");
+        }
+        InputSender.Click(menuItem);
+        _log.Info("export", "轉出至 Excel clicked");
+
+        // 匯出設定: the new window with a file path box.
+        nint dialog = 0;
+        var dialogDeadline = Environment.TickCount64 + 10000;
+        while (dialog == 0 && Environment.TickCount64 < dialogDeadline)
+        {
+            await Delay(250, cancellationToken);
+            dialog = Win32Automation.VisibleProcessWindows(root).FirstOrDefault(h => !before.Contains(h) && PathBox(h) is not null);
+        }
+        if (dialog == 0) throw new InvalidOperationException("按下轉出至 Excel 後沒有出現匯出設定視窗");
+        await Delay(500, cancellationToken);
+        LogExportDialog(dialog);
+        Win32Automation.PrepareForeground(dialog, _log);
+        var children = Win32Automation.EnumerateChildren(dialog).Where(c => c.Visible).ToList();
+        var formats = children.Where(c => c.ClassName.Contains("Combo", StringComparison.OrdinalIgnoreCase) &&
+            ControlText(c).Contains(".xls", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (formats.Count > 0 && !formats.Any(c => ControlText(c).Contains(".xlsx", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("匯出設定的檔案格式不是「Excel 2007以上 (*.xlsx)」，請在 ERP 改好");
+
+        // 全選 on 單頭 and 單身: 儲存設定 keeps whatever someone ticked last.
+        if (!NativeMethods.GetWindowRect(dialog, out var d)) throw new InvalidOperationException("讀不到匯出設定視窗位置");
+        foreach (var tab in new[] { "單頭", "單身" })
+        {
+            var tabArea = new Rectangle(d.Left, d.Top, Math.Min(d.Width, 360), d.Height);
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(tabArea))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), tab) is { } t)
+            {
+                InputSender.Click(new Point(tabArea.Left + t.Left + t.Width / 2, tabArea.Top + t.Top + t.Height / 2));
+                await Delay(400, cancellationToken);
+            }
+            else _log.Warn("export", $"export tab {tab} not found by OCR");
+            if (Button(dialog, c => c.StartsWith("全選", StringComparison.Ordinal)) is { } all)
+            {
+                InputSender.Click(Center(all));
+                _log.Info("export", $"全選 clicked tab={tab}");
+                await Delay(300, cancellationToken);
+            }
+            else _log.Warn("export", $"全選 not found tab={tab}");
+        }
+
+        var box = PathBox(dialog) ?? throw new InvalidOperationException("匯出設定視窗找不到「儲存檔案」欄位");
+        InputSender.Click(Center(box));
+        await PasteTextAsync(box.Handle, path, "export_path", cancellationToken);
+        if (!string.Equals((NativeMethods.ControlText(box.Handle) ?? string.Empty).Trim(), path, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("匯出路徑貼上後讀回的內容不一致");
+        var ok = Button(dialog, c => c.StartsWith("確定", StringComparison.Ordinal)) ?? throw new InvalidOperationException("匯出設定視窗找不到「確定」");
+        InputSender.Click(Center(ok));
+        _log.Info("export", "匯出設定 確定 clicked");
+
+        // ERP writes the file and asks 「檢視Excel資料?」: No (Yes opens the file).
+        var deadline = Environment.TickCount64 + 60000;
+        while (true)
+        {
+            if (Environment.TickCount64 > deadline) throw new InvalidOperationException("轉出 Excel 後沒有出現「檢視Excel資料?」");
+            await Delay(250, cancellationToken);
+            if (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog)) continue;
+            var question = Win32Automation.VisibleProcessWindows(root)
+                .Where(h => !before.Contains(h))
+                .Select(h => Button(h, c => c is "No" or "否" or "&No" or "否(&N)" || c.StartsWith("否", StringComparison.Ordinal)))
+                .FirstOrDefault(b => b is not null);
+            if (question is null) continue;
+            await Delay(200, cancellationToken);
+            InputSender.Click(Center(question));
+            _log.Info("export", "檢視Excel資料? answered No");
+            break;
+        }
+        var fileDeadline = Environment.TickCount64 + 15000;
+        while (!File.Exists(path) || !NativeMethods.IsWindowEnabled(root))
+        {
+            if (Environment.TickCount64 > fileDeadline) throw new InvalidOperationException("轉出 Excel 後找不到匯出的檔案");
+            await Delay(200, cancellationToken);
+        }
+    }
+
+    /// <summary>The Ribbon group window Excel was last found in (CYERPAutoQuery learns it the same way).</summary>
+    private static string? _excelGroup;
+
+    /// <summary>
+    /// Screen box of the first of <paramref name="words"/> on COPI08's Ribbon: group windows
+    /// (RibbonGroupBar) one by one, the remembered one first; then the whole Ribbon. Null when none.
+    /// </summary>
+    private async Task<Rectangle?> FindRibbonWordAsync(nint root, Rectangle window, CancellationToken cancellationToken, params string[] words)
+    {
+        Rectangle? Find(IReadOnlyList<OcrToken> tokens)
+        {
+            var list = tokens.Select(t => (t.Text, t.Rect)).ToList();
+            foreach (var word in words)
+                if (RibbonPrintLocator.FindWord(list, word) is { } r) return r;
+            return null;
+        }
+        var bars = Win32Automation.EnumerateChildren(root)
+            .Where(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => _excelGroup is not null && c.Text.Trim() == _excelGroup)
+            .ToList();
+        foreach (var bar in bars)
+        {
+            var area = Rectangle.FromLTRB(bar.Rect.Left, bar.Rect.Top, bar.Rect.Right, bar.Rect.Bottom);
+            if (area.Width < 10 || area.Height < 10) continue;
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(area))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            if (Find(tokens) is not { } g) continue;
+            _excelGroup = bar.Text.Trim();
+            _log.Info("export", $"ribbon {words[0]} found in group={_log.Value(_excelGroup)}");
+            return new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
+        }
+        _log.Info("export", $"ribbon groups={bars.Count} without {words[0]}; reading the whole Ribbon");
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (attempt > 0) await Delay(800, cancellationToken);
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(ribbon))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            if (Find(tokens) is { } r) return new Rectangle(ribbon.Left + r.Left, ribbon.Top + r.Top, r.Width, r.Height);
+            if (attempt == 2)
+                foreach (var t in tokens)
+                    _log.Info("export", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        }
+        return null;
+    }
+
+    private static string ControlText(WindowControl c) => (NativeMethods.ControlText(c.Handle) ?? c.Text ?? string.Empty).Trim();
+
+    private static Point Center(WindowControl c) => new((c.Rect.Left + c.Rect.Right) / 2, (c.Rect.Top + c.Rect.Bottom) / 2);
+
+    /// <summary>The 儲存檔案 box: an edit showing a file path (C:\… or \\server\…).</summary>
+    private static WindowControl? PathBox(nint dialog) =>
+        Win32Automation.EnumerateChildren(dialog).Where(c => c.Visible && Win32Automation.IsInputLike(c.ClassName))
+            .FirstOrDefault(c => ControlText(c) is var t && t.Length > 3 && (t[1] == ':' || t.StartsWith(@"\\", StringComparison.Ordinal)) &&
+                !c.ClassName.Contains("Combo", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>A button window (Win32, Delphi TButton／TBitBtn, DevExpress) whose caption matches.</summary>
+    private static WindowControl? Button(nint window, Func<string, bool> caption) =>
+        Win32Automation.EnumerateChildren(window).FirstOrDefault(c => c.Visible &&
+            (c.ClassName.Contains("Button", StringComparison.OrdinalIgnoreCase) || c.ClassName.Contains("Btn", StringComparison.OrdinalIgnoreCase)) &&
+            caption(c.Text.Replace("&", string.Empty, StringComparison.Ordinal).Trim()));
+
+    /// <summary>For on-site diagnosis: the 匯出設定 window's controls.</summary>
+    private void LogExportDialog(nint dialog)
+    {
+        NativeMethods.GetWindowRect(dialog, out var w);
+        _log.Info("export", $"export dialog title={_log.Value(NativeMethods.WindowText(dialog))} class={NativeMethods.ClassName(dialog)}");
+        foreach (var c in Win32Automation.EnumerateChildren(dialog).Where(c => c.Visible))
+            _log.Info("export", $"  child class={c.ClassName} text={_log.Value(c.Text)} rect={c.Rect.Left - w.Left},{c.Rect.Top - w.Top},{c.Rect.Right - c.Rect.Left}x{c.Rect.Bottom - c.Rect.Top}");
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Printing;
+using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
@@ -28,6 +29,33 @@ internal static partial class SlipPrinter
     public static string? Installed(string wanted) =>
         PrinterSettings.InstalledPrinters.Cast<string>().FirstOrDefault(p => string.Equals(p, wanted, StringComparison.OrdinalIgnoreCase))
         ?? PrinterSettings.InstalledPrinters.Cast<string>().FirstOrDefault(p => ShopeeBatchScreens.SamePrinter(p, wanted));
+
+    /// <summary>The width of one <see cref="SlipNote"/> line in mm, in the type it is printed in at <paramref name="points"/>.</summary>
+    public static double NoteWidthMm(string line, float points)
+    {
+        // Fitting measures many trial lines per size (as typed in 設定): one surface, a font per size.
+        lock (NoteMeasure)
+        {
+            return SlipNote.Runs(line).Sum(run =>
+            {
+                var key = (points, run.Symbol);
+                if (!NoteFonts.TryGetValue(key, out var font))
+                    NoteFonts[key] = font = NoteFont(run.Symbol, points, GraphicsUnit.Point);
+                return (double)NoteMeasure.Value.MeasureString(run.Text, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+            });
+        }
+    }
+
+    private static Font NoteFont(bool symbol, float size, GraphicsUnit unit) =>
+        new(symbol ? SlipNote.SymbolFontName : SlipNote.FontName, size, symbol ? FontStyle.Regular : FontStyle.Bold, unit);
+
+    private static readonly Lazy<Graphics> NoteMeasure = new(() =>
+    {
+        var g = Graphics.FromImage(new Bitmap(1, 1));
+        g.PageUnit = GraphicsUnit.Millimeter;
+        return g;
+    });
+    private static readonly Dictionary<(float, bool), Font> NoteFonts = [];
 
     /// <summary>
     /// The printer's resolution and the label in its dots: the set label size, or the driver's
@@ -74,6 +102,14 @@ internal static partial class SlipPrinter
         {
             return null;
         }
+    }
+
+    /// <summary>A picture in pure black and white (darker than mid grey is black), for the thermal head.</summary>
+    public static GrayImage BlackWhite(Bitmap source)
+    {
+        var gray = Gray(source);
+        for (var i = 0; i < gray.Pixels.Length; i++) gray.Pixels[i] = gray.Pixels[i] < 128 ? (byte)0 : (byte)255;
+        return gray;
     }
 
     private static GrayImage Gray(Bitmap source)
@@ -181,13 +217,47 @@ internal static partial class SlipPrinter
             e.HasMorePages = next < pages.Count;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName, 60);
+    }
+
+    /// <summary>
+    /// One picture, every pixel one printer dot, its top-left corner <paramref name="leftMm"/>,
+    /// <paramref name="topMm"/> from the paper's corner (黑貓 on A4, user 2026-10-26: top left as
+    /// in its PDF); what the printer cannot reach at the edge moves it in that far.
+    /// </summary>
+    public static void PrintAt(string printer, Bitmap picture, double leftMm, double topMm, string documentName)
+    {
+        using var doc = new PrintDocument();
+        doc.PrinterSettings.PrinterName = printer;
+        if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
+        doc.DocumentName = documentName;
+        doc.PrintController = new StandardPrintController();
+        doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+        doc.OriginAtMargins = false;
+        doc.PrintPage += (_, e) =>
+        {
+            var g = e.Graphics!;
+            g.PageUnit = GraphicsUnit.Pixel;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            // The graphics start at the printable area's corner.
+            var x = (int)Math.Round((leftMm / 25.4 - e.PageSettings.HardMarginX / 100.0) * g.DpiX);
+            var y = (int)Math.Round((topMm / 25.4 - e.PageSettings.HardMarginY / 100.0) * g.DpiY);
+            g.DrawImage(picture, new Rectangle(Math.Max(0, x), Math.Max(0, y), picture.Width, picture.Height), 0, 0, picture.Width, picture.Height, GraphicsUnit.Pixel);
+            e.HasMorePages = false;
+        };
+        doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName);
     }
 
     /// <summary>
     /// Prints the slip as one page: each of its pixels one printer dot (GraphicsUnit.Pixel,
-    /// nearest neighbour), centred on the page. No progress window.
+    /// nearest neighbour), centred on the page. With a <paramref name="note"/> (<see cref="SlipNote"/>)
+    /// the block sits at the bottom of the 150 mm label and the slip is centred above it; a slip
+    /// too tall to leave room for it is printed as before, without the note (Noted false).
+    /// No progress window.
     /// </summary>
-    public static (int DpiX, int DpiY) Print(string printer, GrayImage slip, string documentName)
+    public static (int DpiX, int DpiY, bool Noted) Print(string printer, GrayImage slip, string documentName, string note = "", float minPoints = SlipNote.MinPoints)
     {
         using var bmp = new Bitmap(slip.Width, slip.Height, PixelFormat.Format24bppRgb);
         var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
@@ -210,6 +280,9 @@ internal static partial class SlipPrinter
         }
 
         var used = (0, 0);
+        var noted = false;
+        var hasNote = SlipNote.Lines(note).Count > 0;
+        (float Points, IReadOnlyList<string> Lines)? fit = null;
         using var doc = new PrintDocument();
         doc.PrinterSettings.PrinterName = printer;
         doc.DocumentName = documentName;
@@ -228,11 +301,52 @@ internal static partial class SlipPrinter
             var pageW = e.PageBounds.Width / 100f * g.DpiX;
             var pageH = e.PageBounds.Height / 100f * g.DpiY;
             var x = (int)Math.Round((pageW - bmp.Width) / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX);
-            var y = (int)Math.Round((pageH - bmp.Height) / 2 - e.PageSettings.HardMarginY / 100f * g.DpiY);
+            var marginY = e.PageSettings.HardMarginY / 100f * g.DpiY;
+            var y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
+            var dotsPerMm = g.DpiY / 25.4f;
+            var areaH = Math.Min(pageH, (float)SlipNote.LabelHeightMm * dotsPerMm);
+            var blockH = (float)SlipNote.BlockHeightMm * dotsPerMm;
+            var gap = (float)SlipNote.GapMm * dotsPerMm;
+            noted = hasNote && bmp.Height + gap + blockH <= areaH;
+            var areaTop = (pageH - areaH) / 2 - marginY;
+            if (noted)
+            {
+                // The slip at the top at its own size; the words get all the room under it
+                // (user, 2026-10-26: the more room, the larger they print).
+                y = (int)Math.Round(areaTop);
+                blockH = areaH - bmp.Height - gap;
+                fit = SlipNote.Fit(note, NoteWidthMm, blockH / dotsPerMm, minPoints);
+                noted = fit is not null;
+                if (!noted) y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
+            }
             g.DrawImage(bmp, new Rectangle(Math.Max(0, x), Math.Max(0, y), bmp.Width, bmp.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel);
+            if (noted && fit is { } f)
+            {
+                using var font = NoteFont(false, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
+                using var symbolFont = NoteFont(true, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
+                var lineH = Math.Min((float)SlipNote.LineHeightMm(f.Points) * dotsPerMm, blockH / f.Lines.Count);
+                var centreX = pageW / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX;
+                // The lines centred in the block, each centred across it.
+                var top = areaTop + areaH - blockH + (blockH - lineH * f.Lines.Count) / 2;
+                // Pure black dots on the thermal head, no grey edges.
+                g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+                for (var i = 0; i < f.Lines.Count; i++)
+                {
+                    // A run at a time, symbols in their own font, the whole line centred.
+                    var runs = SlipNote.Runs(f.Lines[i]).Select(r => (r.Text, Font: r.Symbol ? symbolFont : font)).ToList();
+                    var widths = runs.Select(r => g.MeasureString(r.Text, r.Font, PointF.Empty, StringFormat.GenericTypographic).Width).ToList();
+                    var penX = centreX - widths.Sum() / 2;
+                    for (var r = 0; r < runs.Count; r++)
+                    {
+                        g.DrawString(runs[r].Text, runs[r].Font, Brushes.Black, penX, top + i * lineH, StringFormat.GenericTypographic);
+                        penX += widths[r];
+                    }
+                }
+            }
             e.HasMorePages = false;
         };
         doc.Print();
-        return used;
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName);
+        return (used.Item1, used.Item2, noted);
     }
 }

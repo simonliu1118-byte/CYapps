@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -144,8 +144,24 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
         // 新竹物流 is 安排取件 (user, 2026-10-14): a pickup at the set address, then Shopee's label.
         if (text.Contains("新竹", StringComparison.Ordinal) || text.Contains("HCT", StringComparison.Ordinal)) return ShopeeBatchCarrier.Hct;
+        // 黑貓宅急便 is 安排取件 too (user, 2026-10-26); its label is saved as a PDF and printed on A4.
+        if (text.Contains("黑貓", StringComparison.Ordinal) || text.Contains("宅急便", StringComparison.Ordinal)) return ShopeeBatchCarrier.BlackCat;
         return ShopeeBatchCarrier.Other;
     }
+
+    /// <summary>
+    /// A Shopee label with room under it for the 寄件單下方文字 (user, 2026-10-26): 蝦皮店到店 (隔日到貨
+    /// too), 蝦皮店到宅 and 新竹物流; not 黑貓 (A4) nor 店到家.
+    /// </summary>
+    public static bool NoteRoom(ShopeeBatchCarrier kind, string carrier)
+    {
+        var text = ShopeeScreenshot.Compact(carrier);
+        return kind == ShopeeBatchCarrier.Hct || kind == ShopeeBatchCarrier.Shopee &&
+            (text.Contains("店到店", StringComparison.Ordinal) || text.Contains("店到宅", StringComparison.Ordinal));
+    }
+
+    /// <summary>A courier that comes to the set address: 安排取件 with its address checked first.</summary>
+    public static bool IsPickup(ShopeeBatchCarrier kind) => kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.BlackCat;
 
     public static bool SupportedCarrier(string carrier) => CarrierKind(carrier) != ShopeeBatchCarrier.Other;
 
@@ -638,4 +654,33 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"^\d{2,3}$")]
     private static partial Regex ScalePattern();
+
+    /// <summary>
+    /// The red message Shopee shows at the top after 安排出貨 when it refuses, e.g. 「買家門市關轉，
+    /// 請待買家重選完門市後，再重新申請寄件編號。(error:10514)」 (user's screenshot, 2026-10-26): the
+    /// line with 「error:數字」 and the lines just above and below it, centred with it.
+    /// </summary>
+    public static string? ShipError(IReadOnlyList<OcrBox> boxes)
+    {
+        var error = boxes.FirstOrDefault(b => ErrorCodePattern().IsMatch(C(b)));
+        if (error is null) return null;
+        return string.Concat(boxes
+            .Where(b => b == error || (Math.Abs(b.CenterY - error.CenterY) <= 35 && Math.Abs(b.CenterX - error.CenterX) <= 350))
+            .OrderBy(b => b.Top).ThenBy(b => b.Left).Select(C));
+    }
+
+    /// <summary>
+    /// An item whose 規格 leaves the choice to the buyer's note, e.g. 「規格: 任選3罐(下單請備註指定的味道)」
+    /// (user's screenshot, 2026-10-26): the 規格 line, or null. Such orders go to a person before shipping.
+    /// </summary>
+    public static string? BuyerChoiceSpec(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Select(C).FirstOrDefault(t => t.StartsWith("規格", StringComparison.Ordinal) &&
+            (t.Contains("任選", StringComparison.Ordinal) || t.Contains("請備註", StringComparison.Ordinal)));
+
+    /// <summary>The buyer's store closed (error 10514): nothing to do until the buyer picks another one.</summary>
+    public static bool StoreClosed(string error) =>
+        error.Contains("門市關轉", StringComparison.Ordinal) || error.Contains("10514", StringComparison.Ordinal);
+
+    [GeneratedRegex(@"error[:：]\d{3,}", RegexOptions.IgnoreCase)]
+    private static partial Regex ErrorCodePattern();
 }

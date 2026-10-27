@@ -35,6 +35,17 @@ internal sealed class PhysicalMouseLock : IDisposable
     public event Action? EscapePressed;
     private int _blocked;
 
+    /// <summary>
+    /// The one place the physical mouse may move and click while locked (the 紙本發票待列印 box,
+    /// user 2026-10-27); null for none. Shared by every lock.
+    /// </summary>
+    public static Rectangle? Allowed
+    {
+        get => _allowed as Rectangle?;
+        set => _allowed = value;
+    }
+    private static volatile object? _allowed;
+
     private PhysicalMouseLock(AppLogger log)
     {
         _log = log;
@@ -82,7 +93,7 @@ internal sealed class PhysicalMouseLock : IDisposable
         if (code >= 0 && !_released)
         {
             var info = Marshal.PtrToStructure<MsLlHookStruct>(lParam);
-            if ((info.flags & LlmhfInjected) == 0)
+            if ((info.flags & LlmhfInjected) == 0 && !(_allowed is Rectangle area && area.Contains(info.pt)))
             {
                 Interlocked.Increment(ref _blocked);
                 return 1;
@@ -105,6 +116,22 @@ internal sealed class PhysicalMouseLock : IDisposable
             }
         }
         return CallNextHookEx(0, code, wParam, lParam);
+    }
+
+    /// <summary>
+    /// The mouse free again while the keyboard hook stays (user, 2026-10-26: inside 蝦皮全自動 a
+    /// question for the person must not end the watch for Esc, or Esc stops nothing).
+    /// </summary>
+    public void Release()
+    {
+        _released = true;
+        _log.Info("mouse-lock", "physical mouse released; Esc still watched");
+    }
+
+    public void Relock()
+    {
+        _released = false;
+        _log.Info("mouse-lock", "physical mouse locked again");
     }
 
     public void Dispose()

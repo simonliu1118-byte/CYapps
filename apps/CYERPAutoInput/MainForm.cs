@@ -90,6 +90,28 @@ internal sealed partial class MainForm : Form
         // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
         Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
         Shown += (_, _) => StartUpdateChecks();
+        // A printer out of paper, jammed or stuck after a print (user, 2026-10-27).
+        PrintWatch.Warn = message => _log.Warn("print-watch", message);
+        PrintWatch.Problem += message => { if (IsHandleCreated) BeginInvoke(() => OnPrintProblem(message)); };
+    }
+
+    /// <summary>Print problems noticed during a 全自動, shown when it ends.</summary>
+    private readonly List<string> _printProblems = [];
+
+    /// <summary>
+    /// A print problem: a beep and the status line at once; a message now when nothing runs, or
+    /// at the end of the 全自動 (a box now would wait behind the locked mouse).
+    /// </summary>
+    private void OnPrintProblem(string message)
+    {
+        Alarm(needsPerson: true);
+        SetStatus(message);
+        if (BatchRunning || _automationSession?.Active == true)
+        {
+            if (!_printProblems.Contains(message)) _printProblems.Add(message);
+            return;
+        }
+        MessageBox.Show(this, message, "列印問題", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     protected override void WndProc(ref Message m)
@@ -190,6 +212,14 @@ internal sealed partial class MainForm : Form
         _start.Margin = new Padding(4, 1, 4, 1);
         _start.Click += async (_, _) => await StartAutomationAsync();
         actions.Controls.Add(_start);
+        // 出貨明細 of the 銷貨單 open in ERP (user, 2026-10-26: those entered by hand too; a small
+        // button beside 開始輸入 ERP, the toolbar was too crowded).
+        var sheetButton = MakeButton("印出貨明細", 86);
+        sheetButton.Font = new Font(Font.FontFamily, 9F);
+        sheetButton.Height = ToolbarButtonHeight - 10;
+        sheetButton.Margin = new Padding(0, 6, 4, 6);
+        sheetButton.Click += async (_, _) => await PrintShownShipSheetAsync();
+        actions.Controls.Add(sheetButton);
 
         actions.Controls.Add(new Label
         {
@@ -220,6 +250,8 @@ internal sealed partial class MainForm : Form
         var settingsButton = MakeButton("設定", 120);
         settingsButton.Click += (_, _) => OpenSettings();
         rightTools.Controls.Add(settingsButton);
+
+
 
         _modeToggle.Margin = new Padding(4, 1, 8, 1);
         _modeToggle.Visible = false;
@@ -710,6 +742,12 @@ internal sealed partial class MainForm : Form
 
     /// <summary>The last run of <see cref="StartAutomationAsync"/>, for 蝦皮全自動 to judge (null when it failed or stopped).</summary>
     private AutomationRunResult? _lastRunResult;
+    /// <summary>撿貨單 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
+    private PickList? _pickList;
+    /// <summary>理貨表 of the batch running: its saved documents (user, 2026-10-27).</summary>
+    private readonly List<PackingRow> _packingRows = [];
+    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨單.</summary>
+    private List<ShipSheetLine>? _lastSheetLines;
 
     /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
     /// <param name="batch">蝦皮全自動: the batch reports problems itself, so no summary box here.</param>
@@ -900,7 +938,19 @@ internal sealed partial class MainForm : Form
             Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
             // The physical Esc stops the run as soon as it is pressed, not at the next key poll.
             using var escape = Session.EscapeToken.Register(() => { try { _automationCts?.Cancel(); } catch (ObjectDisposedException) { } });
-            result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+            // 全熱感紙列印 (user, 2026-10-26): the print step becomes the thermal 出貨明細.
+            var printWanted = autoSave && (print ?? _settings.AutoPrint);
+            var thermal = printWanted && _settings.ThermalSheet;
+            _lastSheetLines = null;
+            result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
+            if (result.ExportFile.Length > 0) PrintShipSheet(result);
+            // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
+            if (result.Saved && _pickList is not null && thermal)
+                _packingRows.Add(new PackingRow(result.DocumentKey, _loadedOrder?.Source ?? string.Empty,
+                    _loadedOrder?.OrderSn ?? string.Empty, _loadedOrder?.TrackingNumber.Trim() ?? string.Empty));
+            if (result.Saved && _pickList is { } pick)
+                pick.Add(_lastSheetLines ?? snapshot.Details.Where(d => d.HasAnyData)
+                    .Select(d => new ShipSheetLine(d.ItemCode, string.Empty, d.Quantity, d.Unit, d.UnitPrice, string.Empty) { GiftQuantity = d.GiftQuantity }).ToList());
             outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
                 ? AutomationOutcome.NeedsAttention
                 : AutomationOutcome.Done;
@@ -924,6 +974,222 @@ internal sealed partial class MainForm : Form
             ? $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{result.Warnings.Count} 筆需人工確認；{saveText}"
             : $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{saveText}");
         return result;
+    }
+
+    /// <summary>
+    /// 全熱感紙列印 (user, 2026-10-26): the 出貨明細 of the document just saved — its lines from
+    /// ERP's export, the order's platform numbers, 貨運 and the platform's 註記 — on the thermal
+    /// printer. A problem goes to <see cref="AutomationRunResult.PrintProblem"/>; the export is
+    /// kept then, deleted once printed.
+    /// </summary>
+    private void PrintShipSheet(AutomationRunResult result)
+    {
+        var file = result.ExportFile;
+        try
+        {
+            var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter)
+                ?? throw new InvalidOperationException("找不到設定的熱感紙印表機");
+            IReadOnlyList<(string Name, List<string[]> Rows)> sheets;
+            using (var stream = File.OpenRead(file)) sheets = XlsxReader.ReadSheets(stream);
+            _log.Info("ship-sheet", $"export columns: {ShipSheetExport.Describe(sheets)}");
+            var lines = ShipSheetExport.Lines(sheets);
+            _lastSheetLines = lines;
+            var order = _loadedOrder;
+            var source = order?.Source ?? string.Empty;
+            var sheet = new ShipSheet(result.DocumentKey, source, order?.OrderSn ?? string.Empty, order?.TrackingNumber.Trim() ?? string.Empty,
+                order?.Carrier ?? string.Empty, lines, ShipNoteFor(source), DateTime.Now);
+            using var logo = LoadShipLogo();
+            var pages = ShipSheetPrinter.Print(printer, sheet, _settings.ShipSheetTitle, logo);
+            result.Printed = true;
+            _log.Info("ship-sheet", $"printed document={_log.Value(result.DocumentKey)} lines={lines.Count} labels={pages}");
+            try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or System.ComponentModel.Win32Exception)
+        {
+            result.PrintProblem = $"出貨明細未列印（{ex.Message}），ERP 匯出檔在 {file}";
+            _log.Warn("ship-sheet", $"not printed document={_log.Value(result.DocumentKey)}: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 印出貨明細 (user, 2026-10-26): the 銷貨單 open in COPI08 (saved, in browse mode) exported and
+    /// printed as the thermal 出貨明細, its platform numbers and 貨運 read from the document itself.
+    /// </summary>
+    private async Task PrintShownShipSheetAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
+        if (printer is null)
+        {
+            MessageBox.Show(this, "請先在「設定 › 印表機」勾選熱感紙印表機。", "印出貨明細", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        string? problem = null;
+        await RunGuardedAsync(async token =>
+        {
+            string file;
+            Session.Begin(AutomationSession.InputTitle);
+            try
+            {
+                file = await _automation.ExportShownDocumentAsync(new Progress<string>(SetStatus), token);
+                Session.End(AutomationOutcome.Done);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // A failure is shown as one (user, 2026-10-26: it ended with the 「完成」 notice).
+                Session.End(AutomationOutcome.Stopped);
+                SetStatus("出貨明細未列印：ERP 轉出 Excel 失敗");
+                problem = $"ERP 轉出 Excel 失敗：{ex.Message}";
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                Session.End(AutomationOutcome.Cancelled);
+                throw;
+            }
+            try
+            {
+                IReadOnlyList<(string Name, List<string[]> Rows)> sheets;
+                using (var stream = File.OpenRead(file)) sheets = XlsxReader.ReadSheets(stream);
+                _log.Info("ship-sheet", $"export columns: {ShipSheetExport.Describe(sheets)}");
+                var sheet = ShipSheetExport.FromDocument(sheets,
+                    [(ShopeeOrderImport.Source, _settings.ShopeeNotePrefix), (MoOrderImport.Source, _settings.MoNotePrefix), (CoupangOrderImport.Source, _settings.CoupangNotePrefix)],
+                    _settings.FreightTypes, ShipNoteFor, DateTime.Now);
+                using var logo = LoadShipLogo();
+                var pages = ShipSheetPrinter.Print(printer, sheet, _settings.ShipSheetTitle, logo);
+                _log.Info("ship-sheet", $"printed shown document={_log.Value(sheet.Document)} lines={sheet.Lines.Count} labels={pages} platform={sheet.Platform}");
+                SetStatus($"出貨明細已印出：銷貨單 {sheet.Document}");
+                try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or System.ComponentModel.Win32Exception)
+            {
+                problem = $"出貨明細未列印：{ex.Message}\n\nERP 匯出檔在 {file}";
+                SetStatus("出貨明細未列印");
+                _log.Warn("ship-sheet", $"shown document not printed: {ex.GetType().Name}: {ex.Message}");
+            }
+        });
+        if (problem is not null) MessageBox.Show(this, problem, "印出貨明細", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    private string ShipNoteFor(string source) => source switch
+    {
+        ShopeeOrderImport.Source => _settings.ShipNoteShopee,
+        MoOrderImport.Source => _settings.ShipNoteMo,
+        CoupangOrderImport.Source => _settings.ShipNoteCoupang,
+        _ => string.Empty
+    };
+
+    /// <summary>The logo from 設定 in pure black and white (a colour logo would come out grey and fuzzy); null when none.</summary>
+    private Bitmap? LoadShipLogo()
+    {
+        try
+        {
+            if (!File.Exists(UserSettings.ShipLogoPath)) return null;
+            using var source = new Bitmap(UserSettings.ShipLogoPath);
+            var logo = new Bitmap(source.Width, source.Height);
+            for (var y = 0; y < source.Height; y++)
+                for (var x = 0; x < source.Width; x++)
+                {
+                    var c = source.GetPixel(x, y);
+                    var light = c.A < 128 || c.R * 299 + c.G * 587 + c.B * 114 > 180_000;
+                    logo.SetPixel(x, y, light ? Color.White : Color.Black);
+                }
+            return logo;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or OutOfMemoryException)
+        {
+            _log.Warn("ship-sheet", $"logo not loaded: {ex.GetType().Name}");
+            return null;
+        }
+    }
+
+    private PickList NewPickList()
+    {
+        _packingRows.Clear();
+        return new([_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
+    }
+
+    /// <summary>
+    /// The end of a 全自動 batch, in the order the user set (2026-10-27), each step after the one
+    /// before so nothing waits on another: 1 the paper invoices still to print (their paper prompts)
+    /// are done; 2 the 理貨表 and the 撿貨單 print on A4 at once (no paper prompt); 3 the 撿貨單 is
+    /// shown; the caller then shows the results. Paper prompts wait until <see cref="EndBatchHold"/>.
+    /// </summary>
+    private async Task FinishBatchAsync(string title)
+    {
+        if (_printProblems.Count > 0)
+        {
+            var problems = string.Join("\n", _printProblems.Distinct());
+            _printProblems.Clear();
+            MessageBox.Show(this, "全自動途中印表機有狀況：\n\n" + problems, "列印問題", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        await FinishPaperInvoicesAsync();
+        _paperHold++;
+        PrintPackingSheet();
+        var list = _pickList;
+        _pickList = null;
+        if (list is null || list.Items.Count == 0) return;
+        var printer = SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty;
+        if (printer.Length > 0)
+        {
+            try
+            {
+                var pages = PickListForm.PrintTable(printer, PickListForm.Heading(list, title), list.Items);
+                _log.Info("pick-list", $"printed items={list.Items.Count} pages={pages}");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
+                MessageBox.Show(this, $"撿貨單沒有印出：{ex.Message}（可在撿貨單視窗再按列印）", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        using var form = new PickListForm(list, title, printer, _log);
+        form.ShowDialog(this);
+    }
+
+    /// <summary>After the results are closed: paper prompts may come again.</summary>
+    private void EndBatchHold() => _paperHold = Math.Max(0, _paperHold - 1);
+
+    /// <summary>
+    /// Paper invoices of the batch first (user, 2026-10-27): waits while jobs remain, asking
+    /// CYInvoice for their PDFs straight away; the prompts and printing go on as usual. Not
+    /// forever — after two minutes the rest is left to the usual timer, so the end never hangs.
+    /// </summary>
+    private async Task FinishPaperInvoicesAsync()
+    {
+        HidePaperPanel();
+        if (_paperJobs.Count == 0 && _paperNotes.Count == 0) return;
+        _paperNextAsk = DateTime.MinValue;
+        var deadline = DateTime.Now.AddMinutes(2);
+        while ((_paperJobs.Count > 0 || _paperNotes.Count > 0) && DateTime.Now < deadline)
+        {
+            if (!_paperBusy) await PaperTickAsync();
+            await Task.Delay(500);
+        }
+        if (_paperJobs.Count > 0) _log.Warn("paper", $"batch end: {_paperJobs.Count} paper invoice(s) still waiting; going on");
+    }
+
+    /// <summary>
+    /// 理貨表 (user, 2026-10-27): with 全熱感紙列印 on, the batch's saved documents on the A4
+    /// printer, one side, as soon as the batch ends.
+    /// </summary>
+    private void PrintPackingSheet()
+    {
+        if (_packingRows.Count == 0) return;
+        var rows = _packingRows.ToList();
+        _packingRows.Clear();
+        var printer = SlipPrinter.Installed(_settings.A4Printer);
+        try
+        {
+            if (printer is null) throw new InvalidOperationException("沒有設定 A4 印表機");
+            var pages = PackingSheet.Print(printer, rows, DateTime.Today);
+            _log.Info("packing-sheet", $"printed rows={rows.Count} pages={pages}");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _log.Warn("packing-sheet", $"not printed: {ex.GetType().Name}: {ex.Message}");
+            MessageBox.Show(this, $"理貨表沒有印出：{ex.Message}", "理貨表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private static string DocumentKeyText(AutomationRunResult result) =>
@@ -1023,7 +1289,11 @@ internal sealed partial class MainForm : Form
     /// (<see cref="ShopeeBatchRunner"/>). Anything that cannot be done stops the whole batch with
     /// a beep and says where it stopped and whether Shopee had already shipped that order.
     /// </summary>
-    private async Task RunShopeeBatchAsync()
+    /// <param name="resume">
+    /// 測試 (user, 2026-10-26): only the order whose 寄件編號 dialog is open in the Chrome in front,
+    /// from its 列印寄件單 to the end (<see cref="ShopeeBatchRunner.ResumeFromDialogAsync"/>).
+    /// </param>
+    private async Task RunShopeeBatchAsync(bool resume = false)
     {
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
@@ -1038,11 +1308,20 @@ internal sealed partial class MainForm : Form
             MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", ShopeeBatchTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        if (MessageBox.Show(this,
+        if (resume)
+        {
+            if (MessageBox.Show(this,
+                    "測試：接續 Chrome 前景這張蝦皮訂單已打開的寄件編號視窗（快遞取件詳情／查看寄件編號）：\n\n" +
+                    "按「列印寄件單」→ 照全自動的方式列印（黑貓存 PDF 後印在 A4 三格紙最上格）→ 擷取訂單、輸入 ERP。只做這一筆。\n\n" +
+                    "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
+                    ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+        }
+        else if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」（新竹物流為「安排取件」，取件地址須與設定相同）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
-                "目前只處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN 與全家；遇到其他物流或任何問題會停下並發出聲音。\n" +
+                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1052,26 +1331,30 @@ internal sealed partial class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
 
         _shopeeBatchRunning = true;
+        _pickList = NewPickList();
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), token,
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
+        runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;
         string? problem = null;
         var shipped = false;
         _log.Info("shopee-batch", "started");
         try
         {
-            await runner.RunAsync(async order =>
+            async Task<string?> EnterAsync(ShopeeBatchOrder order)
             {
                 var note = await EnterShopeeBatchOrderAsync(order, runner, mapping, ledger, token);
                 // Back to the batch's notice and the locked mouse for the next order.
                 Session.Begin(AutomationSession.BatchTitle);
                 return note;
-            }, SetStatus);
+            }
+            if (resume) await runner.ResumeFromDialogAsync(EnterAsync, SetStatus);
+            else await runner.RunAsync(EnterAsync, SetStatus);
             outcome = AutomationOutcome.Done;
         }
         catch (OperationCanceledException)
@@ -1123,11 +1406,13 @@ internal sealed partial class MainForm : Form
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         // Esc is the person's own stop: no sound for it.
         if (outcome != AutomationOutcome.Cancelled) Alarm(needsPerson: outcome != AutomationOutcome.Done || runner.Notes.Count > 0);
+        await FinishBatchAsync(ShopeeBatchTitle);
         using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
             [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
              new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
             stopped);
         summary.ShowDialog(this);
+        EndBatchHold();
     }
 
     /// <summary>
@@ -1157,12 +1442,53 @@ internal sealed partial class MainForm : Form
                 _log.Info("mo-slip", $"slip area={area} module={plan.Module} up={plan.Up} down={plan.Down} size={plan.Width}x{plan.Height} ({mm})");
                 if (plan.Width > label.Width || plan.Height > label.Height) { notes.Add($"{from}一張太大印不下"); continue; }
                 var slip = await Task.Run(() => SlipImage.Render(page, plan));
-                SlipPrinter.Print(printer, slip, "MO店+ 寄件單");
+                var done = SlipPrinter.Print(printer, slip, "MO店+ 寄件單", _settings.SlipNote,
+                    seven ? SlipNote.MinPoints : SlipNote.FamilyMinPoints);
+                if (!done.Noted && SlipNote.Lines(_settings.SlipNote).Count > 0) _log.Warn("mo-slip", "slip too tall for the note block; printed without it");
                 printed++;
                 notes.Add($"{from}：條碼最細線 {plan.Module} 點，" + (plan.Up > 1 ? $"放大 {plan.Up} 倍" : plan.Down > 1 ? $"縮小為 1/{plan.Down}" : "原尺寸") + $"，約 {mm}");
             }
         }
         return (printed, notes);
+    }
+
+    /// <summary>A4 寄件單 sheets of 黑貓 are cut in three; one label goes in each (user, 2026-10-26).</summary>
+    private const int BlackCatCells = 3;
+
+    /// <summary>
+    /// 蝦皮全自動 黑貓宅急便 (user, 2026-10-26): the saved label PDF on the A4 printer, in the top
+    /// third of the sheet, after the person is asked to load one sheet (a pause: the mouse is
+    /// free, Esc still stops the batch). One label per sheet, so no count is given.
+    /// </summary>
+    private async Task PrintBlackCatLabelAsync(ShopeeBatchOrder order, string pdf, CancellationToken token)
+    {
+        var folder = Path.GetDirectoryName(pdf)!;
+        var printer = SlipPrinter.Installed(_settings.A4Printer)
+            ?? throw new ShopeeBatchStop($"黑貓寄件單沒有列印：找不到設定的 A4 印表機（PDF 在 {folder}）。", true);
+        // The label at its own size and place, top left as in the PDF (user, 2026-10-26: not
+        // enlarged, top left); smaller only if it would not fit the top cell.
+        var dpi = SlipPrinter.Label(printer, 210, 297).Dpi;
+        var drawn = await MoSlipPdf.RenderFitAsync(pdf, 210, 297.0 / BlackCatCells, dpi, enlarge: false);
+        using var label = drawn.Image;
+        _log.Info("shopee-batch", $"black cat label {label.Width}x{label.Height} at {dpi} dpi ({label.Width * 25.4 / dpi:F0}x{label.Height * 25.4 / dpi:F0} mm) at {drawn.LeftMm:F1},{drawn.TopMm:F1} mm");
+        Session.End();
+        Alarm(needsPerson: true);
+        bool go;
+        using (var prompt = new PaperPromptForm("黑貓三格 A4 寄件單用紙", printer, $"訂單 {order.OrderSn}，印在最上面那一格"))
+            go = prompt.ShowDialog(this) == DialogResult.OK;
+        token.ThrowIfCancellationRequested();
+        Session.Begin(AutomationSession.BatchTitle);
+        if (!go) throw new ShopeeBatchStop($"黑貓寄件單按了取消，沒有列印（PDF 在 {folder}）。", true);
+        try
+        {
+            await Task.Run(() => SlipPrinter.PrintAt(printer, label, drawn.LeftMm, drawn.TopMm, "黑貓寄件單 " + order.OrderSn), token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.Warn("shopee-batch", $"black cat print failed: {ex.GetType().Name}: {ex.Message}");
+            throw new ShopeeBatchStop($"黑貓寄件單送 {printer} 時出錯（{ex.Message}），PDF 在 {folder}。", true);
+        }
+        _log.Info("shopee-batch", "black cat label printed on A4");
     }
 
     /// <summary>
@@ -1213,6 +1539,8 @@ internal sealed partial class MainForm : Form
         ShopeeShotResult? read;
         using (var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: true, session: Session, browser: runner.Window))
         {
+            // Esc while it waits on the person stops the batch, not just this order (user, 2026-10-26).
+            using var escape = token.Register(() => BeginInvoke(() => { if (!dialog.IsDisposed && dialog.Visible) dialog.DialogResult = DialogResult.Cancel; }));
             var ok = dialog.ShowDialog(this) == DialogResult.OK;
             token.ThrowIfCancellationRequested();
             read = ok ? dialog.Result : null;
@@ -1357,7 +1685,7 @@ internal sealed partial class MainForm : Form
         Session.Begin(AutomationSession.BatchTitle);
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress), Session.EscapeToken);
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote), Session.EscapeToken);
         MoBatchResult? result = null;
         string? stopped = null;
         _log.Info("mo-batch", "started");
@@ -1854,6 +2182,7 @@ internal sealed partial class MainForm : Form
         }
         if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
+        _pickList = NewPickList();
         var done = new List<string>();
         var review = new List<string>();
         var failed = new List<string>();
@@ -1946,6 +2275,7 @@ internal sealed partial class MainForm : Form
             if (rest.Count > 0) stopped += $"\r\n未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）";
         }
         SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
+        await FinishBatchAsync($"{source}批次");
         using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
         [
             new($"已完成 {done.Count} 張：", done),
@@ -1957,6 +2287,7 @@ internal sealed partial class MainForm : Form
             new("其他事項：", notes ?? [])
         ], stopped);
         summary.ShowDialog(this);
+        EndBatchHold();
         return true;
     }
 
@@ -2154,6 +2485,8 @@ internal sealed partial class MainForm : Form
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add($"自動擷取輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("匯入訂單匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("測試：從寄件編號視窗接續（列印寄件單 → ERP）", null, async (_, _) => await RunShopeeBatchAsync(resume: true));
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "MO店+")

@@ -20,6 +20,15 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
     private readonly TextBox _coupangHctLabelScale = new();
+    private readonly TextBox[] _slipNote = [new(), new(), new()];
+    private readonly CheckBox _slipNoteAllThermal = new();
+    private readonly CheckBox _thermalSheet = new();
+    private readonly TextBox _shipNoteShopee = new(), _shipNoteMo = new(), _shipNoteCoupang = new();
+    private readonly TextBox _shipTitle = new();
+    private readonly Label _shipLogoState = new();
+    /// <summary>The logo picked (copied to Data on 儲存), "" to remove it, null when unchanged.</summary>
+    private string? _shipLogoPicked;
+    private readonly Label _slipNoteStatus = new();
     private readonly TextBox _hctPickupAddress = new();
     private ChatRuleEditor? _shopeeChat;
     private ChatRuleEditor? _moChat;
@@ -92,9 +101,12 @@ internal sealed class SettingsForm : Form
 
         _tabs.Dock = DockStyle.Fill;
         _tabs.Padding = new Point(14, 5);
+        // Two rows when the tabs do not fit across (user, 2026-10-26).
+        _tabs.Multiline = true;
         _tabs.TabPages.Add(GeneralPage());
         _tabs.TabPages.Add(ImportPage());
         _tabs.TabPages.Add(PrinterPage());
+        _tabs.TabPages.Add(PrintSettingsPage());
         _tabs.TabPages.Add(MessagesPage());
         _tabs.TabPages.Add(GiftPage());
         _tabs.TabPages.Add(FreightPage());
@@ -140,6 +152,13 @@ internal sealed class SettingsForm : Form
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
+        // user, 2026-10-26: every thermal slip with the note, 蝦皮's 超商 ones too (宅配 has no room).
+        flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」", _settings.SlipNoteAllThermal));
+        flow.Controls.Add(new Label
+        {
+            Text = "蝦皮店到店、店到宅、新竹、7-11 也另存 PDF 後加上文字；黑貓不印。",
+            AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(20, 0, 0, 8)
+        });
         // F8 and 蝦皮自動擷取 end to end are stable and always on (user, 2026-10-15: no switches).
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
@@ -195,12 +214,22 @@ internal sealed class SettingsForm : Form
     }
 
     /// <summary>
-    /// 印表機 (user, 2026-10-14: a tab of its own): the printers of this PC ticked for 熱感紙 and
-    /// A4, and the 蝦皮 Chrome print scales.
+    /// 印表機 (user, 2026-10-14: a tab of its own; 2026-10-26: only the printers): the printers of
+    /// this PC ticked for 熱感紙 and A4.
     /// </summary>
     private TabPage PrinterPage()
     {
         var page = Page("印表機");
+        page.AutoScroll = true;
+        _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
+        page.Controls.Add(_printers);
+        return page;
+    }
+
+    /// <summary>列印設定 (user, 2026-10-26: apart from the printers): scales, the slip note, the invoice style.</summary>
+    private TabPage PrintSettingsPage()
+    {
+        var page = Page("列印設定");
         page.AutoScroll = true;
         page.Controls.Add(Section("蝦皮寄件單（Chrome 列印視窗的縮放）",
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
@@ -211,6 +240,8 @@ internal sealed class SettingsForm : Form
         // 酷澎 宅配 寄件單 on the thermal printer (user, 2026-10-19: 22 %; 超商 print at 100 %).
         page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
             ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+        page.Controls.Add(ShipSheetSection());
+        page.Controls.Add(SlipNoteSection());
         // 紙本發票 (user, 2026-10-15): CYInvoice's PDF style, chosen beforehand; printed on the A4 printer.
         var invoiceBox = new GroupBox { Text = "紙本發票樣式（有統編的發票；酷澎無統編一律 A4 雙面；印在 A4 印表機）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 64 };
         var invoiceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
@@ -221,11 +252,127 @@ internal sealed class SettingsForm : Form
         invoiceRow.Controls.Add(_paperInvoiceStyle);
         invoiceBox.Controls.Add(invoiceRow);
         page.Controls.Add(invoiceBox);
-        _printers = new PrinterPicker(_settings.ShopeeLabelPrinter, _settings.A4Printer);
-        page.Controls.Add(_printers);
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
         return page;
+    }
+
+    /// <summary>
+    /// 寄件單下方文字 (user, 2026-10-20): a box of the block's lines, checked as typed against
+    /// the width it is printed in (<see cref="SlipNote"/>).
+    /// </summary>
+    private GroupBox SlipNoteSection()
+    {
+        // Three one-line boxes (user, 2026-10-26: Enter moved to the next field, so a box of
+        // several lines could not be typed); each line still wraps and the size follows the words.
+        var box = new GroupBox { Text = "寄件單下方文字", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 196 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var hint = new Label
+        {
+            AutoSize = true, MaximumSize = new Size(500, 0), Margin = new Padding(0, 2, 0, 6),
+            Text = $"印在程式自己切的熱感寄件單下方（蝦皮／酷澎全家、MO店+ 全家／7-11）。每行就是印出的一行，不折行；每行最多 {SlipNote.MinPoints:F0} pt 放得下的字數（約 19 個中文字），超過打不進去。下方空間越多字越大（最大 {SlipNote.MaxPoints:F0} pt），全家單空間少時可縮到 {SlipNote.FamilyMinPoints:F0} pt。空白就不印。"
+        };
+        grid.Controls.Add(hint, 0, 0);
+        grid.SetColumnSpan(hint, 2);
+        var lines = _settings.SlipNote.Replace("\r\n", "\n").Split('\n');
+        for (var i = 0; i < _slipNote.Length; i++)
+        {
+            grid.Controls.Add(new Label { Text = $"第 {i + 1} 行", AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, i + 1);
+            _slipNote[i].Width = 420;
+            _slipNote[i].Margin = new Padding(0, 3, 0, 3);
+            _slipNote[i].Text = i < lines.Length ? lines[i] : string.Empty;
+            var input = _slipNote[i];
+            input.Tag = input.Text;
+            // Longer than one line at the smallest size: not taken (user, 2026-10-26).
+            input.TextChanged += (_, _) =>
+            {
+                // A line saved longer before can still be shortened.
+                if (SlipNote.LineFits(input.Text, SlipPrinter.NoteWidthMm) ||
+                    SlipPrinter.NoteWidthMm(input.Text, SlipNote.MinPoints) < SlipPrinter.NoteWidthMm((string)input.Tag!, SlipNote.MinPoints))
+                { input.Tag = input.Text; ShowSlipNoteStatus(); return; }
+                var caret = Math.Max(0, input.SelectionStart - (input.Text.Length - ((string)input.Tag!).Length));
+                input.Text = (string)input.Tag!;
+                input.SelectionStart = Math.Min(caret, input.Text.Length);
+                System.Media.SystemSounds.Beep.Play();
+            };
+            grid.Controls.Add(_slipNote[i], 1, i + 1);
+        }
+        _slipNoteStatus.AutoSize = true;
+        _slipNoteStatus.Margin = new Padding(0, 4, 0, 0);
+        grid.Controls.Add(_slipNoteStatus, 1, _slipNote.Length + 1);
+        box.Controls.Add(grid);
+        ShowSlipNoteStatus();
+        return box;
+    }
+
+    /// <summary>
+    /// 全熱感紙列印 and the 出貨明細註記 per platform (user, 2026-10-26), several lines each.
+    /// </summary>
+    private GroupBox ShipSheetSection()
+    {
+        var box = new GroupBox { Text = "全熱感紙列印（出貨明細）", Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Height = 372 };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        Option(_thermalSheet, "全熱感紙列印：ERP 存檔後不印二聯單，改用熱感機印出貨明細", _settings.ThermalSheet);
+        grid.Controls.Add(_thermalSheet, 0, 0);
+        grid.SetColumnSpan(_thermalSheet, 2);
+        var hint = new Label
+        {
+            AutoSize = true, MaximumSize = new Size(500, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(20, 0, 0, 6),
+            Text = "在原本會按 ERP「列印 → 直接列印」的時候（一般 › 自動儲存後按直接列印、蝦皮全自動）改為：ERP「Excel → 轉出至 Excel」取得這張銷貨單，印出品號／品名／數量／單位／單價／金額、訂單編號、寄件編號、貨運與下面的註記。"
+        };
+        grid.Controls.Add(hint, 0, 1);
+        grid.SetColumnSpan(hint, 2);
+        grid.Controls.Add(new Label { Text = "抬頭", AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, 2);
+        _shipTitle.Width = 300;
+        _shipTitle.Text = _settings.ShipSheetTitle;
+        grid.Controls.Add(_shipTitle, 1, 2);
+        grid.Controls.Add(new Label { Text = "Logo", AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, 3);
+        var logoRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        _shipLogoState.AutoSize = true;
+        _shipLogoState.Margin = new Padding(0, 7, 8, 0);
+        _shipLogoState.Text = File.Exists(UserSettings.ShipLogoPath) ? "已設定" : "未設定";
+        var pick = new Button { Text = "選擇…", AutoSize = true };
+        pick.Click += (_, _) =>
+        {
+            using var dialog = new OpenFileDialog { Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif", Title = "選擇出貨明細 Logo" };
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            _shipLogoPicked = dialog.FileName;
+            _shipLogoState.Text = Path.GetFileName(dialog.FileName);
+        };
+        var clear = new Button { Text = "清除", AutoSize = true };
+        clear.Click += (_, _) => { _shipLogoPicked = string.Empty; _shipLogoState.Text = "未設定"; };
+        logoRow.Controls.AddRange([_shipLogoState, pick, clear]);
+        grid.Controls.Add(logoRow, 1, 3);
+        var row = 4;
+        foreach (var (label, input, value) in new[] { ("蝦皮註記", _shipNoteShopee, _settings.ShipNoteShopee), ("MO店+註記", _shipNoteMo, _settings.ShipNoteMo), ("酷澎註記", _shipNoteCoupang, _settings.ShipNoteCoupang) })
+        {
+            grid.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 7, 6, 0) }, 0, row);
+            input.Multiline = true;
+            input.AcceptsReturn = true;
+            input.ScrollBars = ScrollBars.Vertical;
+            input.Size = new Size(420, 52);
+            input.Margin = new Padding(0, 3, 0, 3);
+            input.Text = value.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            grid.Controls.Add(input, 1, row++);
+        }
+        box.Controls.Add(grid);
+        return box;
+    }
+
+    private static string NoteText(TextBox box) => string.Join("\n", box.Text.Replace("\r\n", "\n").Split('\n').Select(l => l.TrimEnd())).Trim('\n');
+
+    private string SlipNoteText => string.Join("\n", _slipNote.Select(b => b.Text.Trim()));
+
+    private void ShowSlipNoteStatus()
+    {
+        var used = _slipNote.Select(b => SlipPrinter.NoteWidthMm(b.Text.Trim(), SlipNote.MinPoints) / SlipNote.BlockWidthMm).ToList();
+        _slipNoteStatus.ForeColor = SystemColors.GrayText;
+        _slipNoteStatus.Text = SlipNote.Lines(SlipNoteText).Count == 0 ? "不印文字。"
+            : "每行已用：" + string.Join("　", used.Select((u, i) => $"第 {i + 1} 行 {Math.Min(100, u * 100):F0}%"));
     }
 
     private TabPage ImportPage()
@@ -256,7 +403,7 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
-            ("新竹取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
+            ("取件地址", _hctPickupAddress, _settings.HctPickupAddress, 300)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -301,6 +448,10 @@ internal sealed class SettingsForm : Form
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData != Keys.Enter || ActiveControl is Button) return base.ProcessCmdKey(ref msg, keyData);
+        // A box of several lines takes its Enter (出貨明細註記, user 2026-10-26).
+        Control? typing = ActiveControl;
+        while (typing is ContainerControl { ActiveControl: { } inner }) typing = inner;
+        if (typing is TextBox { Multiline: true, AcceptsReturn: true }) return base.ProcessCmdKey(ref msg, keyData);
         // Enter in a pill box makes the typed text a pill (user, 2026-10-14); empty, it moves on.
         for (Control? c = ActiveControl; c is not null; c = c is ContainerControl cc ? cc.ActiveControl : null)
             if (c.Parent is PillBox pills && pills.Holds(c) && pills.Commit()) return true;
@@ -468,14 +619,14 @@ internal sealed class SettingsForm : Form
             var problems = ChatRules.Problems(editor.Rules());
             if (problems.Count == 0) continue;
             MessageBox.Show(this, $"發送訊息 › {editor.Text}：\n\n" + string.Join("\n", problems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 3;
+            _tabs.SelectedIndex = 4;
             return;
         }
         var giftProblems = GiftRules.Problems(_gifts!.Rules());
         if (giftProblems.Count > 0)
         {
             MessageBox.Show(this, "滿件贈送：\n\n" + string.Join("\n", giftProblems), "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 4;
+            _tabs.SelectedIndex = 5;
             return;
         }
         var warehouse = _firstRowWarehouseCode.Text.Trim();
@@ -488,14 +639,14 @@ internal sealed class SettingsForm : Form
         if (!int.TryParse(_shopeeLabelScale.Text.Trim(), out var labelScale) || labelScale is < 10 or > 200)
         {
             MessageBox.Show(this, "蝦皮寄件單縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             _shopeeLabelScale.Focus();
             return;
         }
         if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
         {
             MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             _sevenLabelScale.Focus();
             return;
         }
@@ -503,23 +654,48 @@ internal sealed class SettingsForm : Form
             !System.Text.RegularExpressions.Regex.IsMatch(_familyLabelPages.Text.Trim(), @"^\d+$"))
         {
             MessageBox.Show(this, "全家縮放請填 10–200 的數字，全家列印頁請填頁碼（例如 2）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             _familyLabelScale.Focus();
             return;
         }
         if (!int.TryParse(_hctLabelScale.Text.Trim(), out var hctScale) || hctScale is < 10 or > 200)
         {
             MessageBox.Show(this, "新竹縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             _hctLabelScale.Focus();
             return;
         }
         if (!int.TryParse(_coupangHctLabelScale.Text.Trim(), out var coupangHctScale) || coupangHctScale is < 10 or > 200)
         {
             MessageBox.Show(this, "酷澎宅配縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tabs.SelectedIndex = 2;
+            _tabs.SelectedIndex = 3;
             _coupangHctLabelScale.Focus();
             return;
+        }
+        _settings.SlipNote = string.Join("\n", SlipNote.Lines(SlipNoteText));
+        _settings.SlipNoteAllThermal = _slipNoteAllThermal.Checked;
+        _settings.ThermalSheet = _thermalSheet.Checked;
+        _settings.ShipNoteShopee = NoteText(_shipNoteShopee);
+        _settings.ShipNoteMo = NoteText(_shipNoteMo);
+        _settings.ShipNoteCoupang = NoteText(_shipNoteCoupang);
+        _settings.ShipSheetTitle = _shipTitle.Text.Trim();
+        if (_shipLogoPicked is { } logo)
+        {
+            try
+            {
+                if (logo.Length == 0) File.Delete(UserSettings.ShipLogoPath);
+                else
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(UserSettings.ShipLogoPath)!);
+                    using var image = new Bitmap(logo);
+                    image.Save(UserSettings.ShipLogoPath, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
+            {
+                MessageBox.Show(this, $"Logo 無法使用：{ex.Message}", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
         }
         _settings.HctLabelScale = hctScale;
         _settings.CoupangHctLabelScale = coupangHctScale;
