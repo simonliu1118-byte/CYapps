@@ -90,6 +90,28 @@ internal sealed partial class MainForm : Form
         // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
         Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
         Shown += (_, _) => StartUpdateChecks();
+        // A printer out of paper, jammed or stuck after a print (user, 2026-10-27).
+        PrintWatch.Warn = message => _log.Warn("print-watch", message);
+        PrintWatch.Problem += message => { if (IsHandleCreated) BeginInvoke(() => OnPrintProblem(message)); };
+    }
+
+    /// <summary>Print problems noticed during a 全自動, shown when it ends.</summary>
+    private readonly List<string> _printProblems = [];
+
+    /// <summary>
+    /// A print problem: a beep and the status line at once; a message now when nothing runs, or
+    /// at the end of the 全自動 (a box now would wait behind the locked mouse).
+    /// </summary>
+    private void OnPrintProblem(string message)
+    {
+        Alarm(needsPerson: true);
+        SetStatus(message);
+        if (BatchRunning || _automationSession?.Active == true)
+        {
+            if (!_printProblems.Contains(message)) _printProblems.Add(message);
+            return;
+        }
+        MessageBox.Show(this, message, "列印問題", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     protected override void WndProc(ref Message m)
@@ -1095,6 +1117,12 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private async Task FinishBatchAsync(string title)
     {
+        if (_printProblems.Count > 0)
+        {
+            var problems = string.Join("\n", _printProblems.Distinct());
+            _printProblems.Clear();
+            MessageBox.Show(this, "全自動途中印表機有狀況：\n\n" + problems, "列印問題", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
         await FinishPaperInvoicesAsync();
         _paperHold++;
         PrintPackingSheet();

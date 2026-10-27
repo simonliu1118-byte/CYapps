@@ -76,6 +76,7 @@ internal static class PackingSheet
             e.HasMorePages = next < rows.Count;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName, 60);
         return page;
     }
 }

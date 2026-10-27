@@ -122,6 +122,7 @@ internal sealed class PickListForm : Form
             e.HasMorePages = next < items.Count;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName, 60);
         return pages;
     }
 }

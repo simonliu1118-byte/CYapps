@@ -66,4 +66,15 @@ public sealed class ShipSheetTests
         Assert.Equal(2, list.Orders);
         Assert.Equal([new PickItem("A00001", "1號杯", 3, "個"), new PickItem("A00023", "志遠拔罐器組(紅盒)", 4, "組")], list.Items);
     }
+
+    [Fact]
+    public void Printer_states_are_named()
+    {
+        Assert.Null(PrintWatch.Describe(0, 0));
+        Assert.Equal("缺紙", PrintWatch.Describe(0x10, 0));
+        Assert.Equal("缺紙", PrintWatch.Describe(0, 0x40));
+        Assert.Equal("卡紙", PrintWatch.Describe(0x8, 0));
+        Assert.Equal("離線", PrintWatch.Describe(0x80, 0));
+        Assert.Equal("印表機錯誤，需要處理", PrintWatch.Describe(0, 0x2));
+    }
 }

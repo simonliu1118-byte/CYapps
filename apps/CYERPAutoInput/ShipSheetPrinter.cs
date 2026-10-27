@@ -141,6 +141,7 @@ internal static class ShipSheetPrinter
             e.HasMorePages = false;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName);
         return pages;
     }
 

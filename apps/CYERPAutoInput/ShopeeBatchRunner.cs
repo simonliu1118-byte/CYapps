@@ -1437,6 +1437,7 @@ internal sealed partial class ShopeeBatchRunner
             if ((toPdf ? ShopeeBatchScreens.SaveButton(boxes) : ShopeeBatchScreens.PrintButton(boxes)) is not { } printButton) { await Task.Delay(600, _token); continue; }
             _log.Info("shopee-batch", $"print dialog set: {last}");
             Click(screen, printButton, toPdf ? "儲存" : "列印");
+            if (!toPdf) PrintWatch.Watch(SlipPrinter.Installed(target) ?? target, null);
             return;
         }
     }

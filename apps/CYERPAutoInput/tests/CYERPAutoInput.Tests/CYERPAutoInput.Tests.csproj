@@ -34,6 +34,7 @@
     <Compile Include="..\..\ShopeeDaySkips.cs" Link="Linked\ShopeeDaySkips.cs" />
     <Compile Include="..\..\ShipSheet.cs" Link="Linked\ShipSheet.cs" />
     <Compile Include="..\..\PickList.cs" Link="Linked\PickList.cs" />
+    <Compile Include="..\..\PrintWatch.cs" Link="Linked\PrintWatch.cs" />
     <Compile Include="..\..\MoBatchScreens.cs" Link="Linked\MoBatchScreens.cs" />
     <Compile Include="..\..\MoPickupSummary.cs" Link="Linked\MoPickupSummary.cs" />
     <Compile Include="..\..\CyInvoiceLink.cs" Link="Linked\CyInvoiceLink.cs" />

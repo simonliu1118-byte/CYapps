@@ -217,6 +217,7 @@ internal static partial class SlipPrinter
             e.HasMorePages = next < pages.Count;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName, 60);
     }
 
     /// <summary>
@@ -246,6 +247,7 @@ internal static partial class SlipPrinter
             e.HasMorePages = false;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName);
     }
 
     /// <summary>
@@ -344,6 +346,7 @@ internal static partial class SlipPrinter
             e.HasMorePages = false;
         };
         doc.Print();
+        PrintWatch.Watch(doc.PrinterSettings.PrinterName, doc.DocumentName);
         return (used.Item1, used.Item2, noted);
     }
 }
