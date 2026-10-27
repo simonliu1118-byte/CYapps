@@ -1069,6 +1069,10 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>Replaces an edit box's text by a clipboard paste (EM_SETSEL + WM_PASTE), keeping the user's clipboard.</summary>
+    /// <summary>The same text, line breaks aside (a memo keeps \r\n, a set text may come back with \n).</summary>
+    private static bool SameText(string? shown, string expected) =>
+        (shown ?? string.Empty).Replace("\r\n", "\n").Trim() == expected.Replace("\r\n", "\n").Trim();
+
     private async Task PasteIntoAsync(nint box, string text, CancellationToken cancellationToken, bool selectAll = true)
     {
         IDataObject? saved = null;
@@ -1087,7 +1091,9 @@ internal sealed partial class ItemQueryService
                 try
                 {
                     Clipboard.SetText(text);
-                    held = Clipboard.ContainsText() && Clipboard.GetText() == text;
+                    var back = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+                    held = back == text;
+                    if (!held) why = back is null ? "no text" : $"different len={back.Length}";
                 }
                 catch (ExternalException ex) { why = $"{ex.GetType().Name} 0x{ex.ErrorCode:X8}"; }
                 if (!held) _log.Warn("export", $"clipboard not holding the text attempt={attempt} why={why}");
@@ -1101,20 +1107,21 @@ internal sealed partial class ItemQueryService
             else
             {
                 // The clipboard stayed unusable on the ERP server for a whole evening (V1.1.0 Build 1
-                // LOG, 2026-10-27), so every query stopped there. The text is typed into the focused
-                // box instead (as the ERP login is); the callers read it back the same way.
-                // A standard edit box (TEdit, TMemo, Edit: export paths, the 進階設定 condition) takes
-                // its text whole by WM_SETTEXT; other boxes get it typed into the focused box.
+                // LOG, 2026-10-27), so every query stopped there. The box gets its text whole by WM_SETTEXT: export paths (TEdit／Edit) and the
+                // 進階設定 condition (TcxCustomInnerMemo, a memo underneath) take it at once and read
+                // back the same (V1.1.0 Build 2 LOG, 2026-10-27: typing a 3,212-character condition
+                // took 102 s and still came out wrong). Typing is left for a box that does not.
                 var cls = NativeMethods.ClassName(box);
-                if (selectAll && cls is "TEdit" or "TMemo" or "Edit")
+                if (selectAll && NativeMethods.SetControlText(box, text) &&
+                    SameText(NativeMethods.ControlText(box), text))
                 {
-                    NativeMethods.SetControlText(box, text);
                     _log.Info("export", $"clipboard unusable; set text instead class={cls} len={text.Length}");
                 }
                 else
                 {
                     if (!Win32Automation.FocusedIsInside(box))
                         throw new InvalidOperationException("剪貼簿無法使用，改用輸入時欄位沒有游標，已停止。");
+                    if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
                     InputSender.UnicodeText(text);
                     _log.Info("export", $"clipboard unusable; typed instead class={cls} len={text.Length}");
                 }
