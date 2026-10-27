@@ -1,6 +1,6 @@
 # CYERPAutoQuery — SMART ERP 自動查詢工具
 
-以 Windows 桌面自動化唯讀查詢鼎新 SMART ERP：品號（INVI02，批號與歷史異動走 INVQ01）、品名、客戶（COPI01）、供應廠商（PURI01）、銷貨銷退單（COPR15／COPR16）、進貨退貨單（PURR18／PURR22）、未收款（ACRR18），以及 CY Web「進貨輔助」的銷售彙總與批次庫存。資料一律用 ERP 自己的「轉出 Excel」取得。可在本機視窗查詢，也可作為 CY Web 的查詢 Agent。介面與 CYERPAutoInput 一致。目前版本 V1.0.0。
+以 Windows 桌面自動化唯讀查詢鼎新 SMART ERP：品號（INVI02，批號與歷史異動走 INVQ01）、品名、客戶（COPI01）、供應廠商（PURI01）、銷貨銷退單（COPR15／COPR16）、進貨退貨單（PURR18／PURR22）、未收款（ACRR18），以及 CY Web「進貨輔助」的銷售彙總與批次庫存。資料一律用 ERP 自己的「轉出 Excel」取得。可在本機視窗查詢，也可作為 CY Web 的查詢 Agent。介面與 CYERPAutoInput 一致。目前版本 V1.2.0。
 
 ## 使用方式
 
