@@ -24,6 +24,15 @@ public sealed record CloudAllowanceOfficialPreview(string ApplicationId,int Revi
 public sealed record CloudAllowanceDetail(string ApplicationId,string Status,
     int Revision,string Environment,long RequestedGross,string AllowanceDay,
     string Reason);
+public sealed record CloudAllowanceAttempt(string ApplicationId,string LedgerId,
+    string AllowanceNumber,string LedgerStatus,bool RecordedExactReadback,
+    bool ManuallyUnattributed);
+public sealed record CloudAllowanceSendReceipt(string ApplicationId,
+    string AllowanceNumber,string LedgerStatus,string IssueKind,
+    string ManualDisposition,bool RecordedReadback);
+
+public sealed record CloudAllowanceManualReview(string ReviewId,string LedgerId,
+    string LedgerStatus,string Disposition,string? NextLedgerId=null,string? NextAllowanceNumber=null);
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
@@ -300,7 +309,29 @@ public sealed class CloudAllowanceClient
         if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
         using var doc=await SendAsync("reserve",new{applicationId=id,
             expectedRevision,employeeNo,password},cancellationToken).ConfigureAwait(false);
-        var root=doc.RootElement;
+        return ReadReservation(doc.RootElement,id);
+    }
+    public async Task<CloudAllowanceReservation> ReserveAfterCollisionAsync(
+        string id,int expectedRevision,string reviewId,string previousNumber,string confirmation,
+        string employeeNo,string password,CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3||!Regex.IsMatch(reviewId,@"^[A-Za-z0-9_-]{12,100}$")||
+           !Regex.IsMatch(previousNumber,@"^A\d{8}[0-9A-Z]{3}$")||
+           confirmation!=$"確認外部占號 {previousNumber} 並預留下一號")
+            throw new ArgumentException("Explicit original-number collision review is required.");
+        // Never retry this mutation. Inspect the original application / audit
+        // after a lost response; a reserved number still requires a separate send.
+        using var doc=await SendAsync("reserve-after-collision",new{applicationId=id,
+            expectedRevision,reviewId,previousNumber,confirmation,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var result=ReadReservation(doc.RootElement,id);
+        if(result.AllowanceNumber==previousNumber)
+            throw new InvalidDataException("Collision reservation returned the old number.");
+        return result;
+    }
+    private static CloudAllowanceReservation ReadReservation(JsonElement root,string id)
+    {
         if(Required(root,"applicationId")!=id||
            Required(root,"status")!="reserved"||
            !root.TryGetProperty("maySendWithoutFreshOfficialCheck",out var b)||
@@ -312,6 +343,175 @@ public sealed class CloudAllowanceClient
            !Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$"))
             throw new InvalidDataException("Cloud allowance reserved ID is invalid.");
         return new CloudAllowanceReservation(id,ledger,number);
+    }
+    private static void RequireFalse(JsonElement root,string key)
+    {
+        if(!root.TryGetProperty(key,out var prop)||
+            prop.ValueKind!=JsonValueKind.False)
+            throw new InvalidDataException("Cloud allowance operation cannot certify a financial transaction.");
+    }
+    private static bool RequiredBoolean(JsonElement root,string key)
+    {
+        if(!root.TryGetProperty(key,out var value)||
+           value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new InvalidDataException("Cloud allowance evidence flag missing.");
+        return value.ValueKind==JsonValueKind.True;
+    }
+    private static string Ledger(string number)
+    {
+        if(number is not ("reserved" or "sending" or "occupied_external" or "confirmed"))
+            throw new InvalidDataException("Unknown Cloud allowance Ledger status.");
+        return number;
+    }
+    public async Task<CloudAllowanceAttempt> InspectAttemptAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        using var doc=await SendAsync("attempt",new{
+            applicationId=id,expectedRevision,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id)
+            throw new InvalidDataException("Cloud allowance attempt identity changed.");
+        var ledger=Required(root,"ledgerId");
+        var number=Required(root,"allowanceNumber");
+        if(!Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+           !Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$"))
+            throw new InvalidDataException("Cloud allowance attempt has malformed Ledger.");
+        return new CloudAllowanceAttempt(id,ledger,number,
+            Ledger(Required(root,"ledgerStatus")),
+            RequiredBoolean(root,"recordedExactReadback"),
+            RequiredBoolean(root,"manuallyUnattributed"));
+    }
+    public async Task<CloudAllowanceSendReceipt> SendOnceAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        // This method never retries. A lost HTTP response means that the D1
+        // one-shot CAS may already have executed. Inspect the SAME ID only.
+        using var doc=await SendAsync("send-once",new{
+            applicationId=id,expectedRevision,confirmOnce=true,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(!RequiredBoolean(root,"manualReviewRequired")||
+           Required(root,"applicationId")!=id||
+           Required(root,"ledgerStatus") is not ("sending" or "occupied_external"))
+            throw new InvalidDataException("Cloud send receipt cannot be trusted.");
+        var number=Required(root,"allowanceNumber");
+        var kind=Required(root,"issueKind");
+        var disposition=Required(root,"manualDisposition");
+        if(!Regex.IsMatch(number,@"^A\d{8}[0-9A-Z]{3}$")||
+           kind is not ("accepted_unconfirmed" or "confirmed_number_collision" or
+             "definite_rejection" or "unknown_result")||
+           disposition is not ("full_match_unattributed" or
+             "matched_readback_audit_unavailable" or
+             "number_collision_requires_investigation" or
+             "accepted_without_attributable_readback" or
+             "provider_rejected_requires_investigation" or
+             "unknown_outcome_requires_investigation"))
+            throw new InvalidDataException("Cloud send response has unknown review state.");
+        var ledgerStatus=Required(root,"ledgerStatus");
+        if(ledgerStatus=="occupied_external"&&
+           (kind!="confirmed_number_collision"||disposition!="number_collision_requires_investigation"||
+            RequiredBoolean(root,"recordedReadback")))
+            throw new InvalidDataException("External collision requires distinct official evidence.");
+        return new CloudAllowanceSendReceipt(id,number,ledgerStatus,kind,
+            disposition,RequiredBoolean(root,"recordedReadback"));
+    }
+    private static readonly HashSet<string> TriageCodes=new(StringComparer.Ordinal)
+    {
+        "full_match_unattributed","unknown_outcome",
+        "number_collision_investigation","provider_rejection_investigation"
+    };
+    // Manual classification is an append-only human annotation; never a
+    // success claim, another number grant or permission to send a second POST.
+    public async Task<CloudAllowanceManualReview> RecordManualReviewAsync(
+        string id,int expectedRevision,string reviewId,string disposition,
+        string employeeNo,string password,CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3||!Regex.IsMatch(reviewId,
+            @"^[A-Za-z0-9_-]{12,100}$")||!TriageCodes.Contains(disposition))
+            throw new ArgumentException("Invalid manual review classification.");
+        using var doc=await SendAsync("manual-review",new{
+            applicationId=id,expectedRevision,reviewId,disposition,
+            confirmReview=true,employeeNo,password},cancellationToken)
+            .ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id||
+           Required(root,"reviewId")!=reviewId||
+           Required(root,"disposition")!=disposition)
+            throw new InvalidDataException("Manual review identity changed.");
+        var ledger=Required(root,"ledgerId");
+        var status=Ledger(Required(root,"ledgerStatus"));
+        if(!Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+           status is not ("sending" or "occupied_external"))
+            throw new InvalidDataException("Manual review ledger is not an attempted transaction.");
+        return new CloudAllowanceManualReview(reviewId,ledger,status,disposition);
+    }
+    public async Task<IReadOnlyList<CloudAllowanceManualReview>> ManualHistoryAsync(
+        string id,int expectedRevision,string employeeNo,string password,
+        CancellationToken cancellationToken=default)
+    {
+        Credentials(employeeNo,password);ValidateId(id);
+        if(expectedRevision<3)throw new ArgumentException("Invalid approved revision.");
+        using var doc=await SendAsync("manual-history",new{
+            applicationId=id,expectedRevision,employeeNo,password},
+            cancellationToken).ConfigureAwait(false);
+        var root=doc.RootElement;
+        RequireFalse(root,"proofOfThisPost");
+        RequireFalse(root,"officiallyConfirmed");
+        RequireFalse(root,"safeToAutoRetry");
+        RequireFalse(root,"canAllocateAnotherNumber");
+        if(Required(root,"applicationId")!=id||
+           !root.TryGetProperty("items",out var items)||
+           items.ValueKind!=JsonValueKind.Array||items.GetArrayLength()>30)
+            throw new InvalidDataException("Cloud manual review history is invalid.");
+        var result=new List<CloudAllowanceManualReview>();
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var r in items.EnumerateArray())
+        {
+            RequireFalse(r,"proofOfThisPost");
+            RequireFalse(r,"officiallyConfirmed");
+            RequireFalse(r,"safeToAutoRetry");
+            RequireFalse(r,"canAllocateAnotherNumber");
+            var review=Required(r,"reviewId");
+            var ledger=Required(r,"ledgerId");
+            var status=Ledger(Required(r,"ledgerStatus"));
+            var disposition=Required(r,"disposition");
+            if(!seen.Add(review)||!Regex.IsMatch(review,@"^[A-Za-z0-9_-]{12,100}$")||
+               !Regex.IsMatch(ledger,@"^al_[0-9a-f-]{36}$")||
+               status is not ("sending" or "occupied_external")||
+               (!TriageCodes.Contains(disposition)&&disposition!="external_collision_reserved"))
+                throw new InvalidDataException("Cloud manual review history entry is invalid.");
+            string? nextId=null,nextNumber=null;
+            if(disposition=="external_collision_reserved")
+            {
+                nextId=Required(r,"nextLedgerId");nextNumber=Required(r,"nextAllowanceNumber");
+                if(status!="occupied_external"||nextId==ledger||
+                   !Regex.IsMatch(nextId,@"^al_[0-9a-f-]{36}$")||
+                   !Regex.IsMatch(nextNumber,@"^A\d{8}[0-9A-Z]{3}$"))
+                    throw new InvalidDataException("Collision review has invalid next reservation identity.");
+            }
+            result.Add(new CloudAllowanceManualReview(review,ledger,status,disposition,nextId,nextNumber));
+        }
+        return result;
     }
     public async Task<CloudAllowanceStatus> StatusAsync(
         string id,string employeeNo,string password,

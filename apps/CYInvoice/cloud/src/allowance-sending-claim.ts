@@ -8,7 +8,7 @@ import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
-import {allowanceNumberFromSequence} from "./allowance-number-reservation";
+import {allowanceNumberFromSequence,hasCollisionReservationAudit} from "./allowance-number-reservation";
 
 export interface CloudAllowanceSendingTarget {
  workspaceId:string;
@@ -100,7 +100,7 @@ export async function claimCloudAllowanceOneShotSending(
  FROM allowance_number_ledger WHERE ledger_id=?1 AND application_id=?2
  AND workspace_id=?3 LIMIT 1`)
  .bind(t.ledgerId,t.applicationId,t.workspaceId).first<LedgerRow>();
- if(!ledger||ledger.status!=="reserved"||ledger.attempt!==1||
+ if(!ledger||ledger.status!=="reserved"||!Number.isSafeInteger(ledger.attempt)||ledger.attempt<1||
  ledger.allowance_number!==t.allowanceNumber||
  ledger.allowance_number!==allowanceNumberFromSequence(
    frozen.allowanceDay,ledger.sequence)||
@@ -109,6 +109,8 @@ export async function claimCloudAllowanceOneShotSending(
  ledger.seller_invoice!==frozen.sellerInvoice||
  ledger.environment!==frozen.environment||ledger.allowance_day!==frozen.allowanceDay)
   throw new Error("ALLOWANCE_SENDING_LEDGER_NOT_RESERVED");
+ if(ledger.attempt>1&&!await hasCollisionReservationAudit(db,t,ledger.ledger_id))
+  throw new Error("ALLOWANCE_SENDING_COLLISION_AUDIT_REQUIRED");
  const grant=await db.prepare(`SELECT reviewed_revision,request_hash,
  official_snapshot_hash,manager_actor_id,manager_device_id,valid_until_utc
  FROM allowance_execution_approvals WHERE application_id=?1
@@ -161,7 +163,11 @@ export async function claimCloudAllowanceOneShotSending(
  AND allowance_number=?5 AND status='reserved'
  AND request_hash=?6 AND created_by_device_id=?7
  AND seller_invoice=?8 AND environment=?9 AND allowance_day=?10
- AND sequence=?11 AND attempt=1 AND collision_code IS NULL
+ AND sequence=?11 AND attempt=?16 AND collision_code IS NULL
+ ${ledger.attempt>1?`AND EXISTS(SELECT 1 FROM allowance_manual_review_audit r
+   WHERE r.next_ledger_id=allowance_number_ledger.ledger_id
+   AND r.workspace_id=?3 AND r.application_id=?4
+   AND r.disposition='external_collision_reserved')`:""}
  AND EXISTS (
   SELECT 1 FROM allowance_applications a
   JOIN allowance_frozen_requests f ON f.application_id=a.application_id
@@ -198,7 +204,7 @@ export async function claimCloudAllowanceOneShotSending(
   .bind(at,t.ledgerId,t.workspaceId,t.applicationId,t.allowanceNumber,
    frozen.requestHash,t.deviceId,frozen.sellerInvoice,frozen.environment,
    frozen.allowanceDay,ledger.sequence,t.expectedRevision,first.employeeId,
-   frozen.companyRevision,proof.officialEvidenceHash).run();
+   frozen.companyRevision,proof.officialEvidenceHash,ledger.attempt).run();
  }catch{
   // A D1 timeout may happen AFTER status moved to sending. In that case
   // every new invocation fails read-only at the ledger guard above.

@@ -18,6 +18,7 @@
     <Compile Include="..\..\ItemNameSearch.cs" Link="Linked\ItemNameSearch.cs" />
     <Compile Include="..\..\PartyQuery.cs" Link="Linked\PartyQuery.cs" />
     <Compile Include="..\..\SalesOrderQuery.cs" Link="Linked\SalesOrderQuery.cs" />
+    <Compile Include="..\..\RestockQuery.cs" Link="Linked\RestockQuery.cs" />
     <Compile Include="..\..\PurchaseQuery.cs" Link="Linked\PurchaseQuery.cs" />
     <Compile Include="..\..\ErpReport.cs" Link="Linked\ErpReport.cs" />
     <Compile Include="..\..\ReceivableQuery.cs" Link="Linked\ReceivableQuery.cs" />
@@ -26,6 +27,8 @@
     <Compile Include="..\..\OcrTextNormalizer.cs" Link="Linked\OcrTextNormalizer.cs" />
     <Compile Include="..\..\XlsxReader.cs" Link="Linked\XlsxReader.cs" />
     <Compile Include="..\..\ItemFieldCatalog.cs" Link="Linked\ItemFieldCatalog.cs" />
+    <Compile Include="..\..\ErpProcessDiagnosticModels.cs" Link="Linked\ErpProcessDiagnosticModels.cs" />
+    <Compile Include="..\..\ErpRestartTargets.cs" Link="Linked\ErpRestartTargets.cs" />
     <Compile Include="..\..\ErpAgentProtocol.cs" Link="Linked\ErpAgentProtocol.cs" />
     <Compile Include="..\..\ErpAgent.cs" Link="Linked\ErpAgent.cs" />
     <Compile Include="..\..\UpdateCheck.cs" Link="Linked\UpdateCheck.cs" />

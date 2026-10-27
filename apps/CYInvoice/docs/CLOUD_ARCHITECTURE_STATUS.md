@@ -1,10 +1,10 @@
 # CYInvoice Cloud Architecture Status
 
-此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。若由新的長時間工作階段／ChatGPT Work 接手，先依 `AGENTS.md` 讀永久規則，再讀 `V3_1_HANDOFF.md`。
+本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**，不是 2026-10-21 的即時 Worker／D1 狀態；下方 storage13／Cloud0.9.3／V2.6.19 是當時快照。最新 V3.1.0 正式版、V3.1.25 Build 0 工程版與使用者本機 MCP 原 D1／Worker schema18 驗收狀態，請先讀 [TODO](TODO.md) 現行看板及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID 身分權威仍以 canonical Consumer Standard 和永久規則為準。
 
 > 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
 
-## 1. 工程基準
+## 1. 歷史工程基準（不是目前 live 版號）
 
 - Windows 正式產品線：C# / WinForms。
 - Windows 正式版本：V2.6.19 Build 0 已發布。

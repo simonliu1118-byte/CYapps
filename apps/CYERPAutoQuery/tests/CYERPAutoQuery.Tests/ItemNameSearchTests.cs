@@ -50,7 +50,7 @@ public class ItemNameSearchTests
     public void NameMatchFollowsSqlLike(string name, string keyword, bool expected) =>
         Assert.Equal(expected, ItemNameRules.NameContains(name, keyword));
 
-    private static byte[] FakeList(params (string Code, string Name)[] items)
+    internal static byte[] FakeList(params (string Code, string Name)[] items)
     {
         string Cell(string col, int row, string value) =>
             $"<c r=\"{col}{row}\" t=\"inlineStr\"><is><t xml:space=\"preserve\">{System.Security.SecurityElement.Escape(value)}</t></is></c>";
@@ -82,7 +82,7 @@ public class ItemNameSearchTests
         return ms.ToArray();
     }
 
-    private static IReadOnlyList<(string Name, List<string[]> Rows)> Read(byte[] bytes) => XlsxReader.ReadSheets(new MemoryStream(bytes));
+    internal static IReadOnlyList<(string Name, List<string[]> Rows)> Read(byte[] bytes) => XlsxReader.ReadSheets(new MemoryStream(bytes));
 
     [Fact]
     public void ListsEveryItemWithSearchColumnsOnly()
@@ -134,5 +134,38 @@ public class ItemNameSearchTests
         var none = JsonNode.Parse(ErpAgentProtocol.SearchBody(new ItemSearchResult("穴位貼", [], 500, TimeSpan.Zero), "v"))!;
         Assert.Equal("NOT_FOUND", none["outcome"]!.GetValue<string>());
         Assert.Empty(none["items"]!.AsArray());
+    }
+
+    [Fact]
+    public void ItemCodesAreOrEdTheWayErpWritesThem()
+    {
+        Assert.Equal("(INVMB.MB001 = N'X00001')\r\n  OR (INVMB.MB001 = N'X00315-1')", ItemCodeConditions.Condition(["X00001", "X00315-1"]));
+        Assert.True(ItemNameRules.SameCondition("(INVMB.MB001 = N'X00001')\n OR (INVMB.MB001 = N'X00315-1')", ItemCodeConditions.Condition(["X00001", "X00315-1"])));
+        Assert.False(ItemCodeConditions.IsUsable("X'1"));
+        Assert.False(ItemCodeConditions.IsUsable("X 1"));
+        Assert.False(ItemCodeConditions.IsUsable("貼布"));
+        Assert.Throws<ArgumentException>(() => ItemCodeConditions.Condition(["X0001", "X'1"]));
+    }
+
+    [Fact]
+    public void ABatchFitsTheBoxAndTheCount()
+    {
+        var codes = Enumerable.Range(1, 250).Select(i => $"X{i:00000}").ToList();
+        Assert.Equal(ItemCodeConditions.MaxBatch, ItemCodeConditions.Batch(codes, null, ItemCodeConditions.MaxBatch));
+        var one = ItemCodeConditions.Condition(codes.Take(1)).Length;
+        var fits = ItemCodeConditions.Batch(codes, 300, ItemCodeConditions.MaxBatch);
+        Assert.True(ItemCodeConditions.Condition(codes.Take(fits)).Length <= 300);
+        Assert.True(ItemCodeConditions.Condition(codes.Take(fits + 1)).Length > 300);
+        Assert.Equal(1, ItemCodeConditions.Batch(codes, one - 1, 50));
+        Assert.Equal(3, ItemCodeConditions.Batch(codes.Take(3).ToList(), null, 50));
+    }
+
+    [Fact]
+    public void AnItemCodeListKeepsOnlyTheAskedCodes()
+    {
+        var items = ItemCodeConditions.Parse(Read(FakeList(("T0001", "假品A"), ("T0002", "假品B"))), ["T0001", "T0002", "T0009"]);
+        Assert.Equal(["T0001", "T0002"], items.Select(i => ItemSearchResult.Value(i, "品號")));
+        Assert.Equal("12", ItemSearchResult.Value(items[0], "庫存數量"));
+        Assert.Throws<InvalidDataException>(() => ItemCodeConditions.Parse(Read(FakeList(("T0001", "假品A"), ("T0003", "假品C"))), ["T0001", "T0002"]));
     }
 }

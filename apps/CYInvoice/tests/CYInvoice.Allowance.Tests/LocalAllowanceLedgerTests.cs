@@ -72,11 +72,10 @@ internal static class LocalAllowanceLedgerTests
             ledger.Reserve(seller, environment, workId, date, template, "2000", approved));
         Expect<ArgumentException>(() =>
             ledger.MarkExternalCollision(seller, environment, reserved, 4040163));
-        ledger.MarkOfficiallyConfirmed(seller, environment, reserved);
-        Check(reopened.FindLatest(seller, environment, workId)?.Status == "confirmed",
-            "confirmed must be durable");
         Expect<InvalidOperationException>(() =>
             ledger.MarkOfficiallyConfirmed(seller, environment, reserved));
+        Check(reopened.FindLatest(seller, environment, workId)?.Status == "sending",
+            "matching readback cannot manually force a false confirmed state");
 
         var second = ledger.Reserve(seller, environment, "synthetic-work-002", date,
             template, "2000", approved);

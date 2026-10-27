@@ -154,8 +154,8 @@ public class PartyQueryTests
     {
         Assert.True(ItemCodeRules.TryNormalize(" AC0007 ", out var code, out _, ErpParty.Customer.CodeName));
         Assert.Equal("AC0007", code);
-        Assert.False(ItemCodeRules.TryNormalize("AC-0007", out _, out var error, ErpParty.Customer.CodeName));
-        Assert.Equal("客戶代號只能輸入英文字母與數字。", error);
+        Assert.False(ItemCodeRules.TryNormalize("AC_0007", out _, out var error, ErpParty.Customer.CodeName));
+        Assert.Equal("客戶代號只能輸入英文字母、數字與「-」。", error);
         Assert.False(ItemCodeRules.TryNormalize("", out _, out error, ErpParty.Customer.CodeName));
         Assert.Equal("請輸入客戶代號。", error);
     }

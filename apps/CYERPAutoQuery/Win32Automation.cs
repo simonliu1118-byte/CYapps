@@ -50,8 +50,10 @@ internal static class Win32Automation
         if (found.Count > 0) return found;
 
         // The main form's own caption need not say Conductor: on the user's PC only the hidden
-        // TApplication window did (V0.4.0 Build 2 LOG). Then the main form is the largest visible
-        // window of that ERP process that is not a program form (INVxx) or a message box.
+        // TApplication window did (V0.4.0 Build 2 LOG). Then the main form is the visible window of
+        // that ERP process with the main form's class (SmartERP_iSM_MainMenu). Only that class: while
+        // ERP starts, the same process shows its splash (TfrmLogo 「frmLogo」) and the login form,
+        // which were taken for the main window (V1.0.1 Build 2 LOG, 2026-10-26: 自動登入 never ran).
         foreach (var app in applications)
         {
             var pid = ProcessId(app);
@@ -59,7 +61,7 @@ internal static class Win32Automation
             NativeMethods.EnumWindows((hwnd, _) =>
             {
                 if (hwnd != app && ProcessId(hwnd) == pid && NativeMethods.IsWindowVisible(hwnd) &&
-                    Invi02Layout.IsErpMainClass(NativeMethods.ClassName(hwnd)) && IsMainSized(hwnd) &&
+                    NativeMethods.ClassName(hwnd).Equals(Invi02Layout.ErpMainFormClass, StringComparison.OrdinalIgnoreCase) && IsMainSized(hwnd) &&
                     !Invi02Layout.IsInvi02Title(NativeMethods.WindowText(hwnd)) &&
                     !ErpForm.Copi01.IsTitle(NativeMethods.WindowText(hwnd)) &&
                     !ErpForm.Puri01.IsTitle(NativeMethods.WindowText(hwnd)) &&

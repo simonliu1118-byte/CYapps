@@ -360,33 +360,60 @@ public sealed class EmployeeAllowanceWorkflowService
         var sender = new LocalAllowanceOneShotService(
             new LocalAllowanceNumberStore(repository.DataDirectory),
             gateway ?? CreateAllowanceGateway(account),
-            async (frozen, token) =>
-            {
-                var freshManager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
-                RequireReservedApproval(issue, freshManager.EmployeeNo, frozen);
-                var original = FindIssueRecord(issue);
-                var currentInvoice = await detailRefreshService.RefreshAsync(original, token)
-                    .ConfigureAwait(false);
-                ValidateCurrentAccount(currentInvoice);
-                var review = ReadManualReview(currentInvoice)
-                    ?? throw new InvalidDataException("光貿回查後核准草稿遺失");
-                RequireFrozenApproval(currentInvoice, review, freshManager.EmployeeNo);
-                if (review.LocalApprovedUtc != frozen.ApprovedAtUtc)
-                    throw new InvalidOperationException("折讓主管核准版本已改變");
-                ValidateEligible(currentInvoice, review.TaxInclusiveAmount);
-                var remaining = InvoiceAllowanceMetadata.RemainingGross(currentInvoice);
-                if (FixedDecimal.FromInt64(review.TaxInclusiveAmount).ScaledValue > remaining.ScaledValue)
-                    throw new InvalidOperationException("光貿當前可折餘額不足，禁止送出");
-                AllowanceDraftValidator.Validate(review.DraftItems!, currentInvoice.InvoiceNumber,
-                    currentInvoice.InvoiceDate, review.TaxInclusiveAmount);
-                var hash = OfficialApprovalHash(currentInvoice,
-                    InvoiceAllowanceMetadata.ReadOfficial(currentInvoice), remaining);
-                if (!string.Equals(hash, review.LocalApprovalOfficialHash, StringComparison.Ordinal))
-                    throw new InvalidOperationException(
-                        "光貿資料已不同於原主管核准，禁止送出；不會自動重新核准");
-            });
+            (frozen, token) => ValidateLocalSendPreflightAsync(
+                issue,actorEmployeeNo,actorPassword,frozen,token));
         return await sender.SendFirstAsync(account.SellerInvoice, account.Environment,
             reservation, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ValidateLocalSendPreflightAsync(
+        InvoiceSyncIssue issue,string actorEmployeeNo,string actorPassword,
+        LocalAllowanceReservation frozen,CancellationToken token)
+    {
+        var freshManager = RequireLocalAllowanceManager(actorEmployeeNo, actorPassword);
+        RequireReservedApproval(issue, freshManager.EmployeeNo, frozen);
+        var original = FindIssueRecord(issue);
+        var currentInvoice = await detailRefreshService.RefreshAsync(original, token)
+            .ConfigureAwait(false);
+        ValidateCurrentAccount(currentInvoice);
+        var review = ReadManualReview(currentInvoice)
+            ?? throw new InvalidDataException("光貿回查後核准草稿遺失");
+        RequireFrozenApproval(currentInvoice, review, freshManager.EmployeeNo);
+        if (review.LocalApprovedUtc != frozen.ApprovedAtUtc)
+            throw new InvalidOperationException("折讓主管核准版本已改變");
+        ValidateEligible(currentInvoice, review.TaxInclusiveAmount);
+        var remaining = InvoiceAllowanceMetadata.RemainingGross(currentInvoice);
+        if (FixedDecimal.FromInt64(review.TaxInclusiveAmount).ScaledValue > remaining.ScaledValue)
+            throw new InvalidOperationException("光貿當前可折餘額不足，禁止操作");
+        AllowanceDraftValidator.Validate(review.DraftItems!, currentInvoice.InvoiceNumber,
+            currentInvoice.InvoiceDate, review.TaxInclusiveAmount);
+        var hash = OfficialApprovalHash(currentInvoice,
+            InvoiceAllowanceMetadata.ReadOfficial(currentInvoice), remaining);
+        if (!string.Equals(hash, review.LocalApprovalOfficialHash, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "光貿資料已不同於原主管核准，禁止操作；不會自動重新核准");
+    }
+
+    // A deliberately separate, manager-confirmed next-number operation after
+    // definitive external collision. It creates a reservation only; it NEVER
+    // issues g0401. Requires a fresh official readback identifying different
+    // buyer and original invoice(s), plus two full live preflight checks.
+    public async Task<LocalAllowanceReservation> ReserveLocalAfterExternalCollisionAsync(
+        InvoiceSyncIssue issue,string actorEmployeeNo,string actorPassword,
+        string typedManagerConfirmation,
+        IAmegoAllowanceGateway? gateway=null,CancellationToken cancellationToken=default)
+    {
+        var manager=RequireLocalAllowanceManager(actorEmployeeNo,actorPassword);
+        var previous=RequireReservedApproval(issue,manager.EmployeeNo);
+        var account=CurrentAccount();
+        var service=new LocalAllowanceOneShotService(
+            new LocalAllowanceNumberStore(repository.DataDirectory),
+            gateway??CreateAllowanceGateway(account),
+            (frozen,token)=>ValidateLocalSendPreflightAsync(
+                issue,actorEmployeeNo,actorPassword,frozen,token));
+        return await service.ReserveAfterExternalCollisionAsync(
+            account.SellerInvoice,account.Environment,previous,
+            typedManagerConfirmation,cancellationToken).ConfigureAwait(false);
     }
 
     // Restarts and unknown outcomes permit only readback of the original

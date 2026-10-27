@@ -21,7 +21,7 @@ public sealed record EmployeeAllowanceVoidWorkflowResult(
     bool AlreadyQueued,
     string Message);
 
-public sealed class EmployeeAllowanceVoidWorkflowService
+public sealed partial class EmployeeAllowanceVoidWorkflowService
 {
     private const string MetadataKey = "cyinvoice_allowance_void_manual_review";
     private readonly LocalRepository repository;
@@ -136,9 +136,10 @@ public sealed class EmployeeAllowanceVoidWorkflowService
         RequireIssue(issue);
         var record = FindIssueRecord(issue);
         _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
+        RequireNoApiClaim(issue);
+        issueStore.Resolve(issue.Id, now());
         ClearReview(record);
         syncRepository.UpsertMany([record]);
-        issueStore.Resolve(issue.Id, now());
     }
 
     public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
@@ -148,9 +149,10 @@ public sealed class EmployeeAllowanceVoidWorkflowService
         RequireIssue(issue);
         var record = FindIssueRecord(issue);
         _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
+        RequireNoApiClaim(issue);
+        issueStore.Resolve(issue.Id, now());
         ClearReview(record);
         syncRepository.UpsertMany([record]);
-        issueStore.Resolve(issue.Id, now());
     }
 
     private static InvoiceAllowanceVoidManualReview? ReadReview(InvoiceRecord record)

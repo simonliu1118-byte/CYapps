@@ -7,7 +7,7 @@ import {build} from "esbuild";
 // number reallocation, or Ledger confirmation.
 const built=await build({entryPoints:["src/amego-allowance-exact-readback.ts"],
  bundle:true,format:"esm",platform:"node",target:"node24",write:false});
-const {queryExactFrozenAllowanceByOriginalNumber:query}=await import(
+const {queryFrozenAllowanceByOriginalNumber:query}=await import(
  "data:text/javascript;base64,"+
  Buffer.from(built.outputFiles[0].text).toString("base64"));
 const day="20261019",number="A20261019001";

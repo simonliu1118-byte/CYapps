@@ -129,6 +129,65 @@ internal static class CloudAllowanceClientTests
                 ledgerStatus="reserved",officiallyConfirmed=false});
         });
         fake.Add(r=>{
+            Check(r,"attempt");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                ledgerId="al_11111111-1111-4111-8111-111111111111",
+                allowanceNumber="A20261019001",ledgerStatus="reserved",
+                recordedExactReadback=false,manuallyUnattributed=false,
+                proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false});
+        });
+        fake.Add(r=>{
+            Check(r,"send-once");
+            using var d=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(true,d.RootElement.GetProperty("confirmOnce").GetBoolean());
+            Equal(3,d.RootElement.GetProperty("expectedRevision").GetInt32());
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                allowanceNumber="A20261019001",ledgerStatus="sending",
+                issueKind="accepted_unconfirmed",
+                manualDisposition="full_match_unattributed",
+                recordedReadback=true,manualReviewRequired=true,
+                proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false});
+        });
+        fake.Add(r=>{
+            Check(r,"attempt");
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                ledgerId="al_11111111-1111-4111-8111-111111111111",
+                allowanceNumber="A20261019001",ledgerStatus="sending",
+                recordedExactReadback=true,manuallyUnattributed=true,
+                proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false});
+        });
+        fake.Add(r=>{
+            Check(r,"send-once");
+            return Json(HttpStatusCode.Conflict,new{ok=false,
+                error=new{code="ALLOWANCE_SEND_READBACK_ONLY"}});
+        });
+        fake.Add(r=>{
+            Check(r,"manual-review");
+            using var d=JsonDocument.Parse(
+                r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(true,d.RootElement.GetProperty("confirmReview").GetBoolean());
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                reviewId="synthetic_review_001",
+                ledgerId="al_11111111-1111-4111-8111-111111111111",
+                ledgerStatus="sending",disposition="full_match_unattributed",
+                proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false});
+        });
+        fake.Add(r=>{
+            Check(r,"manual-history");
+            var review=new{reviewId="synthetic_review_001",
+                ledgerId="al_11111111-1111-4111-8111-111111111111",
+                ledgerStatus="sending",disposition="full_match_unattributed",
+                proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false};
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+                items=new[]{review},proofOfThisPost=false,officiallyConfirmed=false,
+                safeToAutoRetry=false,canAllocateAnotherNumber=false});
+        });
+        fake.Add(r=>{
             Check(r,"status");
             return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
                 status="approved",revision=3,allowanceNumber="A20261019001",
@@ -161,14 +220,30 @@ internal static class CloudAllowanceClientTests
         Equal("A20261019001",reserved.AllowanceNumber);
         var status=await api.StatusAsync(Id,"0001","fake-password");
         Equal("reserved",status.LedgerStatus);
+        var attempt=await api.InspectAttemptAsync(Id,3,"0001","fake-password");
+        Equal("reserved",attempt.LedgerStatus);
+        var sent=await api.SendOnceAsync(Id,3,"0001","fake-password");
+        Equal("sending",sent.LedgerStatus);
+        Equal("full_match_unattributed",sent.ManualDisposition);
+        Equal(true,sent.RecordedReadback);
+        var after=await api.InspectAttemptAsync(Id,3,"0001","fake-password");
+        Equal("sending",after.LedgerStatus);
+        Equal(true,after.ManuallyUnattributed);
+        await Fail<CloudApiException>(()=>api.SendOnceAsync(Id,3,"0001","fake-password"));
+        var manual=await api.RecordManualReviewAsync(Id,3,"synthetic_review_001",
+            "full_match_unattributed","0001","fake-password");
+        Equal("sending",manual.LedgerStatus);
+        var history=await api.ManualHistoryAsync(Id,3,"0001","fake-password");
+        Equal(1,history.Count);
+        Equal("synthetic_review_001",history[0].ReviewId);
         await Fail<InvalidDataException>(()=>api.StatusAsync(Id,"0001","fake-password"));
         await Fail<CloudApiException>(()=>api.CreateAsync(draft,"0001","fake-password"));
-        Equal(10,fake.Calls);
+        Equal(16,fake.Calls);
         Equal(0,fake.Remaining);
         // Invalid IDs and data never reach network; failure never retries.
         await Fail<ArgumentException>(()=>api.ApproveAsync(Id,0,"0001","fake-password"));
         await Fail<ArgumentException>(()=>api.CreateAsync(draft with{
            Environment="evil"},"0001","fake-password"));
-        Equal(10,fake.Calls);
+        Equal(16,fake.Calls);
     }
 }

@@ -17,6 +17,7 @@ public sealed class InvoiceRetentionService
         InvoiceVoidIssueTypes.ManualReview,
         InvoiceVoidSyncIssueTypes.PendingConfirmation,
         InvoiceAllowanceIssueTypes.ManualReview,
+        InvoiceAllowanceVoidIssueTypes.ManualReview,
     ];
 
     private readonly LocalRepository repository;
@@ -35,6 +36,7 @@ public sealed class InvoiceRetentionService
             ? today
             : InvoiceAutomaticSyncService.TwoPeriodRangeStart(today);
         var accountKey = account.Environment + "|" + account.SellerInvoice;
+        var voidHistory = new LocalAllowanceVoidStore(repository.DataDirectory).HistoryIssueIds(accountKey);
 
         using var connection = Open();
         Configure(connection);
@@ -44,7 +46,8 @@ public sealed class InvoiceRetentionService
             .Where(candidate => !HasActiveWorkMetadata(candidate.ExtraJson))
             .Where(candidate => !HasMatchingActiveIssue(candidate, activeIssues))
             .ToArray();
-        var expiredIssueIds = LoadExpiredIssueIds(connection, accountKey, cutoff);
+        IReadOnlyList<long> expiredIssueIds = LoadExpiredIssueIds(connection, accountKey, cutoff)
+            .Where(id => !voidHistory.Contains(id)).ToArray();
         if (candidates.Length == 0 && expiredIssueIds.Count == 0)
             return new InvoiceRetentionResult(0, []);
 
@@ -143,13 +146,14 @@ public sealed class InvoiceRetentionService
             FROM sync_issues
             WHERE account_key = $account_key
               AND TRIM(resolved_utc) = ''
-              AND issue_type IN ($void_manual, $void_pending, $allowance_manual)
+              AND issue_type IN ($void_manual, $void_pending, $allowance_manual, $allowance_void)
             ORDER BY local_id;
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$void_manual", InvoiceVoidIssueTypes.ManualReview);
         command.Parameters.AddWithValue("$void_pending", InvoiceVoidSyncIssueTypes.PendingConfirmation);
         command.Parameters.AddWithValue("$allowance_manual", InvoiceAllowanceIssueTypes.ManualReview);
+        command.Parameters.AddWithValue("$allowance_void", InvoiceAllowanceVoidIssueTypes.ManualReview);
         using var reader = command.ExecuteReader();
         while (reader.Read())
             issues.Add(new ActiveIssue(reader.GetString(0), reader.GetString(1)));
@@ -219,7 +223,9 @@ public sealed class InvoiceRetentionService
                  OR ($original_order_id <> '' AND order_id = $original_order_id)
                  OR ($order_id <> '' AND order_id = $order_id)
                  OR ($api_order_id <> '' AND order_id = $api_order_id)
-              );
+              )
+              AND local_id NOT IN (SELECT issue_id FROM allowance_void_local_approvals
+                  WHERE account_key=$account_key);
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", candidate.InvoiceNumber.Trim());
@@ -247,7 +253,8 @@ public sealed class InvoiceRetentionService
             return IsTrue(root, "cyinvoice_void_pending") ||
                    IsTrue(root, "cyinvoice_allowance_pending") ||
                    HasValue(root, "cyinvoice_void_manual_review") ||
-                   HasValue(root, "cyinvoice_allowance_manual_review");
+                   HasValue(root, "cyinvoice_allowance_manual_review") ||
+                   HasValue(root, "cyinvoice_allowance_void_manual_review");
         }
         catch (JsonException error)
         {

@@ -192,32 +192,100 @@ internal sealed partial class ItemQueryService
     /// <summary>A window that answers a harmless message within 5 seconds.</summary>
     private static bool Responds(nint hwnd) => NativeMethods.QueryNumber(hwnd, 0 /* WM_NULL */, 5000) is not null;
 
-    /// <summary>Force-closes every process of the ERP program, then starts ERP and logs in again.</summary>
+    /// <summary>
+    /// Ends the processes that own an ERP main or 作業 window in this Windows session (see
+    /// <see cref="ErpRestartTargets"/>), then starts ERP and logs in again. Each is first sent WM_CLOSE
+    /// on its ERP windows and only killed when it has not exited 5 seconds later; never its process
+    /// tree, never a process found by name (user, 2026-10-26: ERP server services must not be hit).
+    /// </summary>
     private async Task RestartErpAsync(string why, CancellationToken cancellationToken)
     {
-        var name = Path.GetFileNameWithoutExtension(Login!.ErpPath);
-        var processes = Process.GetProcessesByName(name);
-        _log.Warn("erp-login", $"restarting ERP: {why} processes={processes.Length}");
-        foreach (var process in processes)
+        int session;
+        using (var self = Process.GetCurrentProcess())
+            session = self.SessionId;
+        var windows = ErpWindows();
+        foreach (var (owner, _) in windows.DistinctBy(w => (w.Owner.Pid, w.Owner.OwnsMainWindow)))
+            _log.Info("erp-login", $"ERP window owner pid={owner.Pid} name={ProcessNameOf(owner.Pid)} session={owner.SessionId?.ToString() ?? "?"} main={owner.OwnsMainWindow}");
+        var targets = ErpRestartTargets.Select(windows.Select(w => w.Owner), session, Environment.ProcessId);
+        _log.Warn("erp-login", $"restarting ERP: {why} targets={targets.Count} session={session}");
+        if (targets.Count == 0)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {why}，但這個 Windows 工作階段找不到 ERP 視窗，未強制關閉，請人工檢查 ERP。");
+
+        foreach (var pid in targets)
         {
-            try
+            Process process;
+            try { process = Process.GetProcessById(pid); }
+            catch (ArgumentException) { continue; } // already gone
+            using (process)
             {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(10000);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                _log.Warn("erp-login", $"kill failed: {ex.GetType().Name}");
-            }
-            finally
-            {
-                process.Dispose();
+                try
+                {
+                    // Recheck: same session, and the PID has not been reused since the windows were read.
+                    if (process.HasExited || process.SessionId != session ||
+                        !ErpWindows().Any(w => w.Owner.Pid == pid))
+                        continue;
+                    foreach (var (_, hwnd) in windows.Where(w => w.Owner.Pid == pid))
+                        NativeMethods.PostMessage(hwnd, NativeMethods.WM_CLOSE, 0, 0);
+                    if (process.WaitForExit(5000))
+                    {
+                        _log.Info("erp-login", $"ERP process closed pid={pid}");
+                        continue;
+                    }
+                    process.Kill();
+                    var gone = process.WaitForExit(10000);
+                    _log.Warn("erp-login", $"ERP process killed pid={pid} exited={gone}");
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    _log.Warn("erp-login", $"ending ERP process failed pid={pid}: {ex.GetType().Name}");
+                }
             }
         }
         await Pace.Delay(2000, cancellationToken);
         if (!await StartAndLoginAsync(cancellationToken) || Win32Automation.FindErpMainWindows().Count == 0)
             throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP {why}，已強制關閉並重新開啟，但沒有回到主畫面。");
         _log.Info("erp-login", "ERP restarted");
+    }
+
+    /// <summary>ERP's main window (also when minimized) and the 作業 windows this program uses, with their owners.</summary>
+    private static List<(ErpWindowOwner Owner, nint Hwnd)> ErpWindows()
+    {
+        var found = new List<(ErpWindowOwner, nint)>();
+        void Add(nint hwnd, bool main)
+        {
+            var pid = (int)Win32Automation.ProcessId(hwnd);
+            if (pid == 0) return;
+            int? session = null;
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                session = process.SessionId;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            found.Add((new ErpWindowOwner(pid, session, main), hwnd));
+        }
+        foreach (var hwnd in Win32Automation.FindErpMainWindows()) Add(hwnd, main: true);
+        if (Win32Automation.FindMinimizedErp() is { } minimized)
+        {
+            Add(minimized.Main, main: true);
+            Add(minimized.Application, main: true);
+        }
+        foreach (var form in KeptForms)
+            foreach (var hwnd in Win32Automation.FindFormWindows(form)) Add(hwnd, main: false);
+        return found;
+    }
+
+    private static string ProcessNameOf(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return process.ProcessName;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return "?";
+        }
     }
 
     // ---- idle ------------------------------------------------------------------------
