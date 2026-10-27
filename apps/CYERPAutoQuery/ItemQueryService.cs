@@ -932,6 +932,26 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task FillExportDialogAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken, bool headerOnly = false)
     {
+        try
+        {
+            await FillExportDialogCoreAsync(dialog, path, strict, cancellationToken, headerOnly);
+        }
+        catch (InvalidOperationException) when (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog))
+        {
+            // A dialog left open keeps INVI02／INVQ01 disabled, so ERP stays stuck there and the
+            // forms cannot be closed (V1.0.4 LOG, 2026-10-27). 取消 never exports anything.
+            if (FindButton(dialog, c => c.StartsWith("取消", StringComparison.Ordinal)) is { } cancel)
+            {
+                NativeMethods.PostMessage(cancel.Handle, NativeMethods.BM_CLICK, 0, 0);
+                await WaitUntilAsync(() => !NativeMethods.IsWindow(dialog) || !NativeMethods.IsWindowVisible(dialog), 3000, CancellationToken.None);
+                _log.Info("export", $"export dialog cancelled after a failure closed={!NativeMethods.IsWindowVisible(dialog)}");
+            }
+            throw;
+        }
+    }
+
+    private async Task FillExportDialogCoreAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken, bool headerOnly)
+    {
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法把匯出設定視窗帶到前景。");
         var inputs = Win32Automation.InputControls(dialog, visibleOnly: true);
@@ -1055,7 +1075,23 @@ internal sealed partial class ItemQueryService
         try { saved = Clipboard.GetDataObject(); } catch (ExternalException) { }
         try
         {
-            Clipboard.SetText(text);
+            // A remote-desktop tool syncing the clipboard (AnyDesk on the ERP server) can replace it
+            // between SetText and the paste: the box then came out empty (V1.0.4 LOG, 2026-10-27:
+            // 「path read-back mismatch len=0」). The clipboard is set again until it holds the text
+            // right before WM_PASTE; the callers still read the box back.
+            var held = false;
+            for (var attempt = 1; attempt <= 5 && !held; attempt++)
+            {
+                if (attempt > 1) await Pace.Delay(100, cancellationToken);
+                try
+                {
+                    Clipboard.SetText(text);
+                    held = Clipboard.ContainsText() && Clipboard.GetText() == text;
+                }
+                catch (ExternalException) { }
+                if (!held) _log.Warn("export", $"clipboard not holding the text attempt={attempt}");
+            }
+            if (!held) throw new InvalidOperationException("剪貼簿被其他程式佔用（例如遠端桌面同步剪貼簿），無法貼上，已停止。");
             // A masked box is pasted at the caret (after Home) instead of over a selection.
             if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
             NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);

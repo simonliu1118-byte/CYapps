@@ -1,6 +1,6 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-26。工程版 **V1.0.4**（未發行；V1.0.1 Build 2、V1.0.2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-26。工程版 **V1.0.5**（未發行；V1.0.1 Build 2、V1.0.2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
@@ -8,7 +8,11 @@
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 - 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.0.0 為目前最新。
 
-## 進行中：V1.0.4 — ERP 人數已滿
+## 進行中：V1.0.5 — 伺服器剪貼簿被遠端桌面同步換掉
+
+- V1.0.4 實機（2026-10-27）：自動登入、INVI02 查詢成功；匯出路徑貼上讀回為空（INVI02 重試成功、INVQ01 兩次失敗），失敗後匯出設定視窗留著讓 ERP 卡住。推定是 AnyDesk 剪貼簿同步。V1.0.5 貼上前確認剪貼簿內容，失敗時取消匯出設定視窗。待實機：LOG 是否出現 `clipboard not holding the text`；若仍常發生，請在 AnyDesk 關閉剪貼簿同步。
+
+## V1.0.4 — ERP 人數已滿（CY Web 0.9.37 已部署）
 
 - 使用者 2026-10-27：登入後跳「Leader作業元件」「人數已滿!!」，按 OK 後 ERP 自行關閉。V1.0.4 偵測後按掉並回報 `ERP_SEATS_FULL`；CY Web 須先部署認得此代碼的版本（chihyuan-web 0.9.36）。待實機：LOG `ERP 人數已滿`。
 
