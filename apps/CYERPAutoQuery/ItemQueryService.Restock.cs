@@ -64,7 +64,7 @@ internal sealed partial class ItemQueryService
                 _log.Warn("restock", $"condition of {take} codes not taken room={ex.Room?.ToString() ?? "?"}; next batch {size}");
                 continue;
             }
-            catch (InvalidOperationException ex) when (ex is not QueryFailure { Code: ErpAgentErrorCode.ERP_BUSY })
+            catch (InvalidOperationException ex) when (ex is not QueryFailure { Code: ErpAgentErrorCode.ERP_BUSY or ErpAgentErrorCode.ERP_SEATS_FULL })
             {
                 failures++;
                 failed.UnionWith(batch);

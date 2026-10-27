@@ -162,6 +162,13 @@ internal static class Win32Automation
         return popups;
     }
 
+    /// <summary>Whether the keyboard focus of the foreground window is <paramref name="box"/> or inside it.</summary>
+    public static bool FocusedIsInside(nint box)
+    {
+        var focus = NativeMethods.FocusedControlOfForeground();
+        return focus != 0 && (focus == box || IsInside(focus, box) || IsInside(box, focus));
+    }
+
     public static uint ProcessId(nint hwnd)
     {
         if (hwnd == 0) return 0;

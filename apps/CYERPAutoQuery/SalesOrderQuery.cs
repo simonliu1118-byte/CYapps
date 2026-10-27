@@ -40,6 +40,11 @@ internal static class SalesReportLayout
     /// </summary>
     public const string ErpExportFolder = @"C:\My Documents";
 
+    /// <summary>Where ERP may have written a report workbook: its usual folder, then the given ones (Desktop, Documents), each once.</summary>
+    public static IEnumerable<string> ExportFolderCandidates(params string[] others) =>
+        new[] { ErpExportFolder }.Concat(others.Where(f => !string.IsNullOrWhiteSpace(f)))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>ERP's 「匯出失敗Cannot create file "…"」: the folder is missing.</summary>
     public static bool IsMissingFolder(string message) =>
         message.Contains("Cannot create file", StringComparison.OrdinalIgnoreCase) ||

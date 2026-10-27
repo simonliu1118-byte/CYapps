@@ -66,6 +66,48 @@ internal sealed partial class MainForm
         }
     }
 
+    /// <summary>
+    /// CY Web's ERP 關閉 (user, 2026-10-27): CLOSE closes ERP the same way as the idle close (a
+    /// question about unsaved work keeps ERP open); FORCE_CLOSE ends ERP's processes. Null when the
+    /// program is busy, so CY Web's request is taken up again at the next claim.
+    /// </summary>
+    private async Task<string?> RunWebControlAsync(string request, CancellationToken cancellationToken)
+    {
+        if (_idleBusy || _queryCts is not null || _automationSession?.Active == true) return null;
+        _idleBusy = true;
+        try
+        {
+            if (request == ErpAgentControl.ForceClose)
+            {
+                var forced = await _service.ForceCloseErpAsync();
+                _log.Info("control", $"force close result={forced}");
+                SetStatus(forced == ErpAgentControl.Closed ? "ERP：CY Web 要求強制關閉，已關閉 ERP" : forced == ErpAgentControl.NotOpen ? "ERP：CY Web 要求強制關閉，ERP 沒有開著" : "ERP：CY Web 要求強制關閉，但有 ERP 程式沒有結束");
+                return forced;
+            }
+            if (!ItemQueryService.ErpRunning() && !ItemQueryService.AnyKeptFormOpen()) return ErpAgentControl.NotOpen;
+            var gone = await _service.CloseErpAsync();
+            _log.Info("control", $"close result gone={gone}");
+            SetStatus(gone ? "ERP：CY Web 要求關閉，已關閉 ERP" : "ERP：CY Web 要求關閉，但 ERP 有未完成的作業，沒有關閉");
+            return gone ? ErpAgentControl.Closed : ErpAgentControl.KeptOpen;
+        }
+        catch (QueryFailure ex) when (ex.Code == ErpAgentErrorCode.ERP_BUSY)
+        {
+            return null; // another CY program is driving ERP: next claim
+        }
+        finally
+        {
+            _idleBusy = false;
+        }
+    }
+
+    /// <summary>CY Web's ERP 暫停: ERP is not opened automatically until then.</summary>
+    private void SetErpHold(DateTimeOffset? holdUntil)
+    {
+        if (_service.HoldUntil == holdUntil) return;
+        _service.HoldUntil = holdUntil;
+        _log.Info("control", $"hold until={(holdUntil is { } h ? h.ToLocalTime().ToString("HH:mm") : "-")}");
+    }
+
     private void OpenErpLoginSettings()
     {
         bool startup;

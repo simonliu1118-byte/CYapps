@@ -482,7 +482,13 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task ExportReportAsync(nint viewer, ErpReport report, string path, CancellationToken cancellationToken)
     {
-        var folders = new List<string> { SalesReportLayout.ErpExportFolder };
+        // ERP writes the workbook where its own setting says: C:\My Documents on the user's PC, the
+        // Desktop on the ERP server (V1.1.0 LOG and screenshot, 2026-10-27). The folder in ERP's
+        // 「匯出成功」 message is added when it can be read; the usual places are always searched,
+        // for a workbook of this report written after the export started.
+        var folders = SalesReportLayout.ExportFolderCandidates(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)).ToList();
         EnsureFolder(SalesReportLayout.ErpExportFolder);
         for (var attempt = 1; attempt <= 2; attempt++)
         {
@@ -615,16 +621,17 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>
-    /// 存成EXCEL檔: format xlsx (ERP's default, checked), 「顯示數值欄位無千分符號」 (user,
-    /// 2026-10-16: plain numbers are easier to read), then 確認.
+    /// 存成EXCEL檔: format xlsx, 「顯示數值欄位無千分符號」 (user, 2026-10-16: plain numbers are
+    /// easier to read), then 確認. xlsx was ERP's default on the user's PC; on the ERP server it
+    /// showed 「Excel 97-2003 試算表(*.xls)」 (V1.0.2 LOG, 2026-10-27), so it is picked when needed.
     /// </summary>
     private async Task FillSaveDialogAsync(nint dialog, ErpReport report, CancellationToken cancellationToken)
     {
         var format = Win32Automation.InputControls(dialog, visibleOnly: true).FirstOrDefault(c => Invi02Layout.IsCombo(c.ClassName));
         var formatText = format is null ? string.Empty : ComboText(format);
-        _log.Info("sales", $"{report.Code} save format=\"{formatText}\"");
-        if (format is not null && !formatText.Contains("xlsx", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"「存成EXCEL檔」的檔案格式不是 xlsx（目前「{formatText}」），已停止。");
+        _log.Info("sales", $"{report.Code} save format=\"{formatText}\" class={format?.ClassName ?? "-"}");
+        if (format is not null && !IsXlsx(formatText))
+            await SelectXlsxFormatAsync(dialog, format, report, cancellationToken);
 
         var plain = Win32Automation.EnumerateChildren(dialog)
             .FirstOrDefault(c => c.Visible && Invi02Layout.NormalizeCaption(c.Text).StartsWith(SalesReportLayout.PlainNumbers, StringComparison.Ordinal));
@@ -638,6 +645,42 @@ internal sealed partial class ItemQueryService
         await Pace.Delay(150, cancellationToken);
         await ClickButtonAsync(dialog, SalesReportLayout.SaveConfirm, "「存成EXCEL檔」的「確認」", cancellationToken);
         _log.Info("sales", $"{report.Code} save 確認 clicked");
+    }
+
+    private static bool IsXlsx(string format) => format.Contains("xlsx", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Picks the xlsx item of the 存成EXCEL檔 format box, a standard Windows combo box (TComboBox
+    /// with a ComboLBox list, V1.0.5 LOG 2026-10-27). Its items are read with CB_GETLBTEXT; the list
+    /// is opened with a click and the item reached with Up／Down from the current one, then Enter,
+    /// the way a person picks it (ERP sees its usual change notification). Read back afterwards.
+    /// </summary>
+    private async Task SelectXlsxFormatAsync(nint dialog, WindowControl format, ErpReport report, CancellationToken cancellationToken)
+    {
+        var items = NativeMethods.ComboItems(format.Handle) ?? [];
+        var current = (int)(NativeMethods.QueryNumber(format.Handle, NativeMethods.CB_GETCURSEL) ?? -1);
+        var target = items.ToList().FindIndex(IsXlsx);
+        _log.Info("sales", $"{report.Code} format items=\"{string.Join(" | ", items)}\" current={current} xlsx={target}");
+        if (target < 0 || current < 0)
+            throw new InvalidOperationException($"「存成EXCEL檔」的檔案格式清單找不到 xlsx（目前「{ComboText(format)}」），已停止。");
+
+        var before = Win32Automation.VisibleProcessWindows(dialog);
+        SafeClick(dialog, Win32Automation.Center(format.Rect));
+        nint popup = 0;
+        await WaitUntilAsync(() => (popup = Win32Automation.VisibleProcessWindows(dialog).FirstOrDefault(h => !before.Contains(h))) != 0 || IsDropDownOpen(dialog, format), 800, cancellationToken);
+        var key = target > current ? NativeMethods.VK_DOWN : NativeMethods.VK_UP;
+        for (var i = 0; i < Math.Abs(target - current); i++)
+        {
+            InputSender.Press(key);
+            await Pace.Delay(100, cancellationToken);
+        }
+        if (IsDropDownOpen(dialog, format) || (popup != 0 && NativeMethods.IsWindowVisible(popup)))
+            InputSender.Press(NativeMethods.VK_RETURN);
+        await Pace.Delay(200, cancellationToken);
+        var shown = ComboText(format);
+        _log.Info("sales", $"{report.Code} format shown=\"{shown}\"");
+        if (!IsXlsx(shown))
+            throw new InvalidOperationException($"「存成EXCEL檔」的檔案格式無法改成 xlsx（目前「{shown}」），已停止。");
     }
 
     /// <summary>Presses the message box's only button (Yes): the button window, else Enter on the box.</summary>

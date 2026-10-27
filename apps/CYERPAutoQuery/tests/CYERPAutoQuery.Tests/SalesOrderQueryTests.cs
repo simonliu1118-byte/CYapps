@@ -265,4 +265,11 @@ public class SalesOrderQueryTests
         Assert.Equal(Error, SalesReportLayout.ClassifyNotice("其他程式", "", 1, captionIsReport: false));
         Assert.Equal(Error, SalesReportLayout.ClassifyNotice("銷退單明細表[假公司]", "E", 2, captionIsReport: true));
     }
+
+    [Fact]
+    public void ExportIsLookedForInMyDocumentsThenDesktopAndDocuments()
+    {
+        Assert.Equal([@"C:\My Documents", @"C:\Users\USER\Desktop", @"C:\Users\USER\Documents"],
+            SalesReportLayout.ExportFolderCandidates(@"C:\Users\USER\Desktop", @"C:\Users\USER\Documents", "", @"c:\my documents"));
+    }
 }

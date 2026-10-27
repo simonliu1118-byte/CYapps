@@ -58,6 +58,21 @@ internal static class Invi02Layout
         title.Contains(QueryDialogTitle, StringComparison.Ordinal);
 
     /// <summary>ERP message boxes may reuse the caption of the form that raised them.</summary>
+    /// <summary>ERP's 「Leader作業元件」 box after 登入 when every licence is taken: 「人數已滿!!」 (user, 2026-10-27).</summary>
+    public static bool IsSeatsFullMessage(string text) =>
+        NormalizeCaption(text).Contains("人數已滿", StringComparison.Ordinal);
+
+    /// <summary>
+    /// ERP's 「Leader作業元件中心」 after being idle (user's screenshots, 2026-10-27): 「使用者因閒置而
+    /// 登出授權，請問是否重新登入授權?」 (answered Yes) or 「…無法開啟作業程式!」 (answered OK).
+    /// </summary>
+    public static bool IsIdleLogoutMessage(string text) =>
+        NormalizeCaption(text).Contains("登出授權", StringComparison.Ordinal);
+
+    /// <summary>The idle-logout box that asks whether to log the licence in again (Yes／No).</summary>
+    public static bool IsRelicenseQuestion(string text) =>
+        NormalizeCaption(text).Contains("重新登入授權", StringComparison.Ordinal);
+
     public static bool IsMessageDialogClass(string className) =>
         className is "#32770" or "TMessageForm";
 

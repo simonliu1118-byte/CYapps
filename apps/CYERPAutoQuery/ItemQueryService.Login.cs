@@ -20,12 +20,20 @@ internal sealed partial class ItemQueryService
     public ErpLoginSettings? Login { get; set; }
 
     /// <summary>
+    /// CY Web's ERP 暫停 (user, 2026-10-27): until then ERP is not opened automatically, so the
+    /// licence stays free for a colleague. Set from every Agent claim.
+    /// </summary>
+    public DateTimeOffset? HoldUntil { get; set; }
+
+    /// <summary>
     /// Starts ERP and logs in when it is not running (or shows its login window), then waits for
     /// the main window. Returns false when automatic login is not set up.
     /// </summary>
     private async Task<bool> StartAndLoginAsync(CancellationToken cancellationToken)
     {
         if (Login is not { CanAutoLogin: true } login) return false;
+        if (HoldUntil is { } hold && hold > DateTimeOffset.Now)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP 已由 CY Web 暫停，{hold.ToLocalTime():HH:mm} 前不會自動開啟。");
         var exe = login.ErpPath;
         if (!File.Exists(exe))
             throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP 程式不存在：{exe}\n請在「ERP 登入」設定重新選擇。");
@@ -122,6 +130,13 @@ internal sealed partial class ItemQueryService
         while (Environment.TickCount64 - started < ErpLoginWaitMs)
         {
             await Pace.Delay(500, cancellationToken);
+            if (await FindSeatsFullBoxAsync() is var full && full != 0)
+            {
+                // ERP closes itself once the box is answered (user, 2026-10-27).
+                _log.Warn("erp-login", "ERP 人數已滿");
+                await DismissMessageAsync(full, cancellationToken);
+                throw new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿，請稍後再查詢。") { FromErpMessage = true };
+            }
             if (Win32Automation.FindErpMainWindows().Count > 0)
             {
                 _log.Info("erp-login", $"logged in after_ms={Environment.TickCount64 - started}");
@@ -200,6 +215,22 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task RestartErpAsync(string why, CancellationToken cancellationToken)
     {
+        var (targets, _) = await EndErpWindowOwnersAsync(why);
+        if (targets == 0)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {why}，但這個 Windows 工作階段找不到 ERP 視窗，未強制關閉，請人工檢查 ERP。");
+        await Pace.Delay(2000, cancellationToken);
+        if (!await StartAndLoginAsync(cancellationToken) || Win32Automation.FindErpMainWindows().Count == 0)
+            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP {why}，已強制關閉並重新開啟，但沒有回到主畫面。");
+        _log.Info("erp-login", "ERP restarted");
+    }
+
+    /// <summary>
+    /// Ends the processes that own an ERP main or 作業 window in this Windows session (see
+    /// <see cref="ErpRestartTargets"/>): WM_CLOSE on their ERP windows first, killed when still
+    /// running 5 seconds later; never a process tree. Returns how many there were and how many are left.
+    /// </summary>
+    private async Task<(int Targets, int Left)> EndErpWindowOwnersAsync(string why)
+    {
         int session;
         using (var self = Process.GetCurrentProcess())
             session = self.SessionId;
@@ -207,9 +238,8 @@ internal sealed partial class ItemQueryService
         foreach (var (owner, _) in windows.DistinctBy(w => (w.Owner.Pid, w.Owner.OwnsMainWindow)))
             _log.Info("erp-login", $"ERP window owner pid={owner.Pid} name={ProcessNameOf(owner.Pid)} session={owner.SessionId?.ToString() ?? "?"} main={owner.OwnsMainWindow}");
         var targets = ErpRestartTargets.Select(windows.Select(w => w.Owner), session, Environment.ProcessId);
-        _log.Warn("erp-login", $"restarting ERP: {why} targets={targets.Count} session={session}");
-        if (targets.Count == 0)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"ERP {why}，但這個 Windows 工作階段找不到 ERP 視窗，未強制關閉，請人工檢查 ERP。");
+        _log.Warn("erp-login", $"ending ERP processes: {why} targets={targets.Count} session={session}");
+        if (targets.Count == 0) return (0, 0);
 
         foreach (var pid in targets)
         {
@@ -241,10 +271,19 @@ internal sealed partial class ItemQueryService
                 }
             }
         }
-        await Pace.Delay(2000, cancellationToken);
-        if (!await StartAndLoginAsync(cancellationToken) || Win32Automation.FindErpMainWindows().Count == 0)
-            throw new QueryFailure(ErpAgentErrorCode.ERP_NOT_OPEN, $"ERP {why}，已強制關閉並重新開啟，但沒有回到主畫面。");
-        _log.Info("erp-login", "ERP restarted");
+        var left = targets.Count(pid => { try { using var p = Process.GetProcessById(pid); return !p.HasExited; } catch (ArgumentException) { return false; } });
+        return (targets.Count, left);
+    }
+
+    /// <summary>
+    /// CY Web's 強制關閉 ERP (user, 2026-10-27: after a failed query the member decides). Returns
+    /// NOT_OPEN, CLOSED, or FAILED when some ERP process would not end.
+    /// </summary>
+    public async Task<string> ForceCloseErpAsync()
+    {
+        using var gate = ErpAutomationGate.Enter();
+        var (targets, left) = await EndErpWindowOwnersAsync("由 CY Web 強制關閉");
+        return targets == 0 ? ErpAgentControl.NotOpen : left == 0 ? ErpAgentControl.Closed : ErpAgentControl.Failed;
     }
 
     /// <summary>ERP's main window (also when minimized) and the 作業 windows this program uses, with their owners.</summary>
@@ -370,6 +409,31 @@ internal sealed partial class ItemQueryService
         var closed = !NativeMethods.IsWindow(hwnd) || !NativeMethods.IsWindowVisible(hwnd);
         _log.Info("idle", $"{title} closed={closed}");
         return closed;
+    }
+
+    /// <summary>
+    /// A visible message box of another program saying 「人數已滿」. It comes from ERP's
+    /// 「Leader作業元件」, not necessarily from the MainMenu process, so any box is looked at;
+    /// only one titled Leader… or already showing the text is read (OCR when it has no text yet).
+    /// </summary>
+    private async Task<nint> FindSeatsFullBoxAsync()
+    {
+        var boxes = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && Win32Automation.ProcessId(hwnd) != (uint)Environment.ProcessId &&
+                Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                boxes.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var box in boxes)
+        {
+            var title = NativeMethods.WindowText(box);
+            var shown = Win32Automation.EnumerateChildren(box).Any(c => c.Visible && Invi02Layout.IsSeatsFullMessage(c.Text));
+            if (!shown && !title.Contains("Leader", StringComparison.OrdinalIgnoreCase)) continue;
+            if (shown || Invi02Layout.IsSeatsFullMessage(await ReadErpMessageAsync(box))) return box;
+        }
+        return 0;
     }
 
     private static nint FindProcessMessageBox(uint pid)

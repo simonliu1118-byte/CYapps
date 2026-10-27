@@ -932,6 +932,26 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task FillExportDialogAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken, bool headerOnly = false)
     {
+        try
+        {
+            await FillExportDialogCoreAsync(dialog, path, strict, cancellationToken, headerOnly);
+        }
+        catch (InvalidOperationException) when (NativeMethods.IsWindow(dialog) && NativeMethods.IsWindowVisible(dialog))
+        {
+            // A dialog left open keeps INVI02／INVQ01 disabled, so ERP stays stuck there and the
+            // forms cannot be closed (V1.0.4 LOG, 2026-10-27). 取消 never exports anything.
+            if (FindButton(dialog, c => c.StartsWith("取消", StringComparison.Ordinal)) is { } cancel)
+            {
+                NativeMethods.PostMessage(cancel.Handle, NativeMethods.BM_CLICK, 0, 0);
+                await WaitUntilAsync(() => !NativeMethods.IsWindow(dialog) || !NativeMethods.IsWindowVisible(dialog), 3000, CancellationToken.None);
+                _log.Info("export", $"export dialog cancelled after a failure closed={!NativeMethods.IsWindowVisible(dialog)}");
+            }
+            throw;
+        }
+    }
+
+    private async Task FillExportDialogCoreAsync(nint dialog, string path, bool strict, CancellationToken cancellationToken, bool headerOnly)
+    {
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法把匯出設定視窗帶到前景。");
         var inputs = Win32Automation.InputControls(dialog, visibleOnly: true);
@@ -1049,16 +1069,63 @@ internal sealed partial class ItemQueryService
     }
 
     /// <summary>Replaces an edit box's text by a clipboard paste (EM_SETSEL + WM_PASTE), keeping the user's clipboard.</summary>
+    /// <summary>The same text, line breaks aside (a memo keeps \r\n, a set text may come back with \n).</summary>
+    private static bool SameText(string? shown, string expected) =>
+        (shown ?? string.Empty).Replace("\r\n", "\n").Trim() == expected.Replace("\r\n", "\n").Trim();
+
     private async Task PasteIntoAsync(nint box, string text, CancellationToken cancellationToken, bool selectAll = true)
     {
         IDataObject? saved = null;
         try { saved = Clipboard.GetDataObject(); } catch (ExternalException) { }
         try
         {
-            Clipboard.SetText(text);
+            // A remote-desktop tool syncing the clipboard (AnyDesk on the ERP server) can replace it
+            // between SetText and the paste: the box then came out empty (V1.0.4 LOG, 2026-10-27:
+            // 「path read-back mismatch len=0」). The clipboard is set again until it holds the text
+            // right before WM_PASTE; the callers still read the box back.
+            var held = false;
+            for (var attempt = 1; attempt <= 3 && !held; attempt++)
+            {
+                if (attempt > 1) await Pace.Delay(100, cancellationToken);
+                var why = "different";
+                try
+                {
+                    Clipboard.SetText(text);
+                    var back = Clipboard.ContainsText() ? Clipboard.GetText() : null;
+                    held = back == text;
+                    if (!held) why = back is null ? "no text" : $"different len={back.Length}";
+                }
+                catch (ExternalException ex) { why = $"{ex.GetType().Name} 0x{ex.ErrorCode:X8}"; }
+                if (!held) _log.Warn("export", $"clipboard not holding the text attempt={attempt} why={why}");
+            }
             // A masked box is pasted at the caret (after Home) instead of over a selection.
             if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
-            NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
+            if (held)
+            {
+                NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
+            }
+            else
+            {
+                // The clipboard stayed unusable on the ERP server for a whole evening (V1.1.0 Build 1
+                // LOG, 2026-10-27), so every query stopped there. The box gets its text whole by WM_SETTEXT: export paths (TEdit／Edit) and the
+                // 進階設定 condition (TcxCustomInnerMemo, a memo underneath) take it at once and read
+                // back the same (V1.1.0 Build 2 LOG, 2026-10-27: typing a 3,212-character condition
+                // took 102 s and still came out wrong). Typing is left for a box that does not.
+                var cls = NativeMethods.ClassName(box);
+                if (selectAll && NativeMethods.SetControlText(box, text) &&
+                    SameText(NativeMethods.ControlText(box), text))
+                {
+                    _log.Info("export", $"clipboard unusable; set text instead class={cls} len={text.Length}");
+                }
+                else
+                {
+                    if (!Win32Automation.FocusedIsInside(box))
+                        throw new InvalidOperationException("剪貼簿無法使用，改用輸入時欄位沒有游標，已停止。");
+                    if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
+                    InputSender.UnicodeText(text);
+                    _log.Info("export", $"clipboard unusable; typed instead class={cls} len={text.Length}");
+                }
+            }
             await Pace.Delay(150, cancellationToken);
         }
         finally
@@ -1170,6 +1237,80 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task<T> GuardErpMessagesAsync<T>(Func<Task<T>> run)
     {
+        // ERP may have logged its licence out while idle (user, 2026-10-27): answered before the
+        // query, and when a step fails because of it the query runs once more.
+        await AnswerLicenceBoxesAsync();
+        try
+        {
+            return await GuardErpMessagesOnceAsync(run);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure { Code: ErpAgentErrorCode.ERP_SEATS_FULL })
+        {
+            if (!await AnswerLicenceBoxesAsync()) throw;
+            _log.Info("licence", "query runs again after the licence box");
+            return await GuardErpMessagesOnceAsync(run);
+        }
+    }
+
+    /// <summary>
+    /// Answers ERP's licence boxes (any program's visible message box whose text says so): the
+    /// idle-logout question with Yes, the idle-logout notice with OK, and 「人數已滿」 with OK and a
+    /// stop. Returns whether any box was answered.
+    /// </summary>
+    private async Task<bool> AnswerLicenceBoxesAsync()
+    {
+        var answered = false;
+        for (var round = 0; round < 3; round++)
+        {
+            nint found = 0;
+            var text = string.Empty;
+            var boxes = new List<nint>();
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (NativeMethods.IsWindowVisible(hwnd) && Win32Automation.ProcessId(hwnd) != (uint)Environment.ProcessId &&
+                    Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                    boxes.Add(hwnd);
+                return true;
+            }, 0);
+            foreach (var box in boxes)
+            {
+                var title = NativeMethods.WindowText(box);
+                var own = string.Join(" ", Win32Automation.EnumerateChildren(box).Where(c => c.Visible).Select(c => c.Text));
+                if (!title.Contains("Leader", StringComparison.OrdinalIgnoreCase) && !Invi02Layout.IsIdleLogoutMessage(own) && !Invi02Layout.IsSeatsFullMessage(own)) continue;
+                var read = await ReadErpMessageAsync(box);
+                if (Invi02Layout.IsIdleLogoutMessage(read) || Invi02Layout.IsSeatsFullMessage(read))
+                {
+                    found = box;
+                    text = read;
+                    break;
+                }
+            }
+            if (found == 0) break;
+            _log.Warn("licence", $"ERP licence box text={_log.Value(text)}");
+            if (Invi02Layout.IsSeatsFullMessage(text))
+            {
+                await DismissMessageAsync(found, CancellationToken.None);
+                throw new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿，請稍後再查詢。") { FromErpMessage = true };
+            }
+            var button = Invi02Layout.IsRelicenseQuestion(text)
+                ? FindButton(found, c => c.StartsWith("是", StringComparison.Ordinal) || c.Equals("YES", StringComparison.OrdinalIgnoreCase) || c.Equals("&YES", StringComparison.OrdinalIgnoreCase))
+                : FindButton(found, c => c.StartsWith("確定", StringComparison.Ordinal) || c.Equals("OK", StringComparison.OrdinalIgnoreCase));
+            if (button is null)
+            {
+                LogChildren(found, "licence");
+                break;
+            }
+            NativeMethods.PostMessage(button.Handle, NativeMethods.BM_CLICK, 0, 0);
+            await WaitUntilAsync(() => !NativeMethods.IsWindow(found) || !NativeMethods.IsWindowVisible(found), 3000, CancellationToken.None);
+            _log.Info("licence", $"answered {(Invi02Layout.IsRelicenseQuestion(text) ? "Yes" : "OK")}");
+            answered = true;
+            await Pace.Delay(1500, CancellationToken.None); // the licence logs in again, or the next box shows
+        }
+        return answered;
+    }
+
+    private async Task<T> GuardErpMessagesOnceAsync<T>(Func<Task<T>> run)
+    {
         try
         {
             return await run();
@@ -1231,7 +1372,9 @@ internal sealed partial class ItemQueryService
         {
             try
             {
-                if (attempt > 0) await Task.Delay(350);
+                // Even the first look waits a moment: a box captured before it painted gives the
+                // window behind it (V1.1.0 LOG, 2026-10-27: the report's rows instead of 「匯出成功」).
+                await Task.Delay(attempt > 0 ? 350 : 300);
                 IReadOnlyList<OcrToken> tokens;
                 using (var image = ScreenCapture.Capture(r.ToRectangle()))
                     tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: attempt < 2);
