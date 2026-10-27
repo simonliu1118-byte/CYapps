@@ -644,37 +644,35 @@ internal sealed partial class ItemQueryService
     private static bool IsXlsx(string format) => format.Contains("xlsx", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Steps the 存成EXCEL檔 format box to xlsx. The box gets focus by a click; a list that opens is
-    /// closed with Esc (only while it is open: Esc on the dialog itself would cancel it), since in
-    /// the closed box Home／Down change the value directly and it can be read after each key (as
-    /// End does in <see cref="SetComboLastAsync"/>). Anything but xlsx at the end stops the export.
+    /// Picks the xlsx item of the 存成EXCEL檔 format box, a standard Windows combo box (TComboBox
+    /// with a ComboLBox list, V1.0.5 LOG 2026-10-27). Its items are read with CB_GETLBTEXT; the list
+    /// is opened with a click and the item reached with Up／Down from the current one, then Enter,
+    /// the way a person picks it (ERP sees its usual change notification). Read back afterwards.
     /// </summary>
     private async Task SelectXlsxFormatAsync(nint dialog, WindowControl format, ErpReport report, CancellationToken cancellationToken)
     {
+        var items = NativeMethods.ComboItems(format.Handle) ?? [];
+        var current = (int)(NativeMethods.QueryNumber(format.Handle, NativeMethods.CB_GETCURSEL) ?? -1);
+        var target = items.ToList().FindIndex(IsXlsx);
+        _log.Info("sales", $"{report.Code} format items=\"{string.Join(" | ", items)}\" current={current} xlsx={target}");
+        if (target < 0 || current < 0)
+            throw new InvalidOperationException($"「存成EXCEL檔」的檔案格式清單找不到 xlsx（目前「{ComboText(format)}」），已停止。");
+
         var before = Win32Automation.VisibleProcessWindows(dialog);
         SafeClick(dialog, Win32Automation.Center(format.Rect));
         nint popup = 0;
-        await WaitUntilAsync(() => (popup = Win32Automation.VisibleProcessWindows(dialog).FirstOrDefault(h => !before.Contains(h))) != 0, 800, cancellationToken);
-        var open = (popup != 0 && NativeMethods.IsWindowVisible(popup)) || IsDropDownOpen(dialog, format);
-        _log.Info("sales", $"{report.Code} format list open={open} class={(popup != 0 ? NativeMethods.ClassName(popup) : "-")}");
-        if (open)
+        await WaitUntilAsync(() => (popup = Win32Automation.VisibleProcessWindows(dialog).FirstOrDefault(h => !before.Contains(h))) != 0 || IsDropDownOpen(dialog, format), 800, cancellationToken);
+        var key = target > current ? NativeMethods.VK_DOWN : NativeMethods.VK_UP;
+        for (var i = 0; i < Math.Abs(target - current); i++)
         {
-            InputSender.Press(NativeMethods.VK_ESCAPE);
-            await WaitUntilAsync(() => popup == 0 || !NativeMethods.IsWindowVisible(popup), 1000, cancellationToken);
+            InputSender.Press(key);
+            await Pace.Delay(100, cancellationToken);
         }
-        InputSender.Press(NativeMethods.VK_HOME);
-        await Pace.Delay(150, cancellationToken);
-        var seen = new List<string> { ComboText(format) };
-        for (var step = 0; step < 8 && !IsXlsx(seen[^1]); step++)
-        {
-            InputSender.Press(NativeMethods.VK_DOWN);
-            await Pace.Delay(150, cancellationToken);
-            var text = ComboText(format);
-            if (text == seen[^1]) break; // the end of the list
-            seen.Add(text);
-        }
+        if (IsDropDownOpen(dialog, format) || (popup != 0 && NativeMethods.IsWindowVisible(popup)))
+            InputSender.Press(NativeMethods.VK_RETURN);
+        await Pace.Delay(200, cancellationToken);
         var shown = ComboText(format);
-        _log.Info("sales", $"{report.Code} format items=\"{string.Join(" | ", seen)}\" shown=\"{shown}\"");
+        _log.Info("sales", $"{report.Code} format shown=\"{shown}\"");
         if (!IsXlsx(shown))
             throw new InvalidOperationException($"「存成EXCEL檔」的檔案格式無法改成 xlsx（目前「{shown}」），已停止。");
     }

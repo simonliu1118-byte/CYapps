@@ -34,6 +34,7 @@ internal static class NativeMethods
     internal const ushort VK_ESCAPE = 0x1B;
     internal const ushort VK_END = 0x23;
     internal const ushort VK_HOME = 0x24;
+    internal const ushort VK_UP = 0x26;
     internal const ushort VK_DOWN = 0x28;
     internal const ushort VK_F6 = 0x75;
 
@@ -259,6 +260,25 @@ internal static class NativeMethods
         if (SendMessageTimeout(hwnd, WM_GETTEXT, sb.Capacity, sb, SMTO_ABORTIFHUNG, timeoutMs, out _) == 0)
             return null;
         return sb.ToString();
+    }
+
+    internal const uint CB_GETCURSEL = 0x0147;
+    private const uint CB_GETLBTEXT = 0x0148;
+    private const uint CB_GETLBTEXTLEN = 0x0149;
+
+    /// <summary>The items of a standard Windows combo box (class ComboBox／TComboBox), or null when it does not answer.</summary>
+    internal static IReadOnlyList<string>? ComboItems(nint hwnd, uint timeoutMs = 150)
+    {
+        if (QueryNumber(hwnd, CB_GETCOUNT, timeoutMs) is not { } count || count < 0) return null;
+        var items = new List<string>();
+        for (var i = 0; i < Math.Min(count, 50); i++)
+        {
+            if (SendMessageTimeout(hwnd, CB_GETLBTEXTLEN, i, 0, SMTO_ABORTIFHUNG, timeoutMs, out var length) == 0 || length < 0) return null;
+            var sb = new StringBuilder((int)length + 2);
+            if (SendMessageTimeout(hwnd, CB_GETLBTEXT, i, sb, SMTO_ABORTIFHUNG, timeoutMs, out _) == 0) return null;
+            items.Add(sb.ToString());
+        }
+        return items;
     }
 
     /// <summary>Sends a message that returns a number, with the same hang protection.</summary>
