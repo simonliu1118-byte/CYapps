@@ -722,6 +722,8 @@ internal sealed partial class MainForm : Form
     private AutomationRunResult? _lastRunResult;
     /// <summary>撿貨單 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
     private PickList? _pickList;
+    /// <summary>理貨表 of the batch running: its saved documents (user, 2026-10-27).</summary>
+    private readonly List<PackingRow> _packingRows = [];
     /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨單.</summary>
     private List<ShipSheetLine>? _lastSheetLines;
 
@@ -921,6 +923,9 @@ internal sealed partial class MainForm : Form
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
             if (result.ExportFile.Length > 0) PrintShipSheet(result);
             // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
+            if (result.Saved && _pickList is not null && thermal)
+                _packingRows.Add(new PackingRow(result.DocumentKey, _loadedOrder?.Source ?? string.Empty,
+                    _loadedOrder?.OrderSn ?? string.Empty, _loadedOrder?.TrackingNumber.Trim() ?? string.Empty));
             if (result.Saved && _pickList is { } pick)
                 pick.Add(_lastSheetLines ?? snapshot.Details.Where(d => d.HasAnyData)
                     .Select(d => new ShipSheetLine(d.ItemCode, string.Empty, d.Quantity, d.Unit, d.UnitPrice, string.Empty) { GiftQuantity = d.GiftQuantity }).ToList());
@@ -1076,16 +1081,86 @@ internal sealed partial class MainForm : Form
         }
     }
 
-    private PickList NewPickList() => new([_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
-
-    /// <summary>撿貨單 of the batch just ended, before its results (user, 2026-10-27); nothing when no document was saved.</summary>
-    private void ShowPickList(string title)
+    private PickList NewPickList()
     {
+        _packingRows.Clear();
+        return new([_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
+    }
+
+    /// <summary>
+    /// The end of a 全自動 batch, in the order the user set (2026-10-27), each step after the one
+    /// before so nothing waits on another: 1 the paper invoices still to print (their paper prompts)
+    /// are done; 2 the 理貨表 and the 撿貨單 print on A4 at once (no paper prompt); 3 the 撿貨單 is
+    /// shown; the caller then shows the results. Paper prompts wait until <see cref="EndBatchHold"/>.
+    /// </summary>
+    private async Task FinishBatchAsync(string title)
+    {
+        await FinishPaperInvoicesAsync();
+        _paperHold++;
+        PrintPackingSheet();
         var list = _pickList;
         _pickList = null;
         if (list is null || list.Items.Count == 0) return;
-        using var form = new PickListForm(list, title, SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty, _log);
+        var printer = SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty;
+        if (printer.Length > 0)
+        {
+            try
+            {
+                var pages = PickListForm.PrintTable(printer, PickListForm.Heading(list, title), list.Items);
+                _log.Info("pick-list", $"printed items={list.Items.Count} pages={pages}");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
+                MessageBox.Show(this, $"撿貨單沒有印出：{ex.Message}（可在撿貨單視窗再按列印）", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        using var form = new PickListForm(list, title, printer, _log);
         form.ShowDialog(this);
+    }
+
+    /// <summary>After the results are closed: paper prompts may come again.</summary>
+    private void EndBatchHold() => _paperHold = Math.Max(0, _paperHold - 1);
+
+    /// <summary>
+    /// Paper invoices of the batch first (user, 2026-10-27): waits while jobs remain, asking
+    /// CYInvoice for their PDFs straight away; the prompts and printing go on as usual. Not
+    /// forever — after two minutes the rest is left to the usual timer, so the end never hangs.
+    /// </summary>
+    private async Task FinishPaperInvoicesAsync()
+    {
+        if (_paperJobs.Count == 0 && _paperNotes.Count == 0) return;
+        _paperNextAsk = DateTime.MinValue;
+        var deadline = DateTime.Now.AddMinutes(2);
+        while ((_paperJobs.Count > 0 || _paperNotes.Count > 0) && DateTime.Now < deadline)
+        {
+            if (!_paperBusy) await PaperTickAsync();
+            await Task.Delay(500);
+        }
+        if (_paperJobs.Count > 0) _log.Warn("paper", $"batch end: {_paperJobs.Count} paper invoice(s) still waiting; going on");
+    }
+
+    /// <summary>
+    /// 理貨表 (user, 2026-10-27): with 全熱感紙列印 on, the batch's saved documents on the A4
+    /// printer, one side, as soon as the batch ends.
+    /// </summary>
+    private void PrintPackingSheet()
+    {
+        if (_packingRows.Count == 0) return;
+        var rows = _packingRows.ToList();
+        _packingRows.Clear();
+        var printer = SlipPrinter.Installed(_settings.A4Printer);
+        try
+        {
+            if (printer is null) throw new InvalidOperationException("沒有設定 A4 印表機");
+            var pages = PackingSheet.Print(printer, rows, DateTime.Today);
+            _log.Info("packing-sheet", $"printed rows={rows.Count} pages={pages}");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _log.Warn("packing-sheet", $"not printed: {ex.GetType().Name}: {ex.Message}");
+            MessageBox.Show(this, $"理貨表沒有印出：{ex.Message}", "理貨表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private static string DocumentKeyText(AutomationRunResult result) =>
@@ -1302,12 +1377,13 @@ internal sealed partial class MainForm : Form
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         // Esc is the person's own stop: no sound for it.
         if (outcome != AutomationOutcome.Cancelled) Alarm(needsPerson: outcome != AutomationOutcome.Done || runner.Notes.Count > 0);
-        ShowPickList(ShopeeBatchTitle);
+        await FinishBatchAsync(ShopeeBatchTitle);
         using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
             [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
              new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
             stopped);
         summary.ShowDialog(this);
+        EndBatchHold();
     }
 
     /// <summary>
@@ -2170,7 +2246,7 @@ internal sealed partial class MainForm : Form
             if (rest.Count > 0) stopped += $"\r\n未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）";
         }
         SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
-        ShowPickList($"{source}批次");
+        await FinishBatchAsync($"{source}批次");
         using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
         [
             new($"已完成 {done.Count} 張：", done),
@@ -2182,6 +2258,7 @@ internal sealed partial class MainForm : Form
             new("其他事項：", notes ?? [])
         ], stopped);
         summary.ShowDialog(this);
+        EndBatchHold();
         return true;
     }
 

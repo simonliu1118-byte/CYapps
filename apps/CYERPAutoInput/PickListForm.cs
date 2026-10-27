@@ -19,7 +19,7 @@ internal sealed class PickListForm : Form
         _items = list.Items;
         _printer = printer;
         _log = log;
-        _heading = $"{title} 撿貨單　{DateTime.Now:yyyy/MM/dd HH:mm}　{list.Orders} 張單、{_items.Count} 個品號";
+        _heading = Heading(list, title);
         Text = "撿貨單";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(720, 640);
@@ -52,13 +52,16 @@ internal sealed class PickListForm : Form
         CancelButton = close;
     }
 
+    public static string Heading(PickList list, string title) =>
+        $"{title} 撿貨單　{DateTime.Now:yyyy/MM/dd HH:mm}　{list.Orders} 張單、{list.Items.Count} 個品號";
+
     private static string Quantity(PickItem item) => $"{ShipSheet.Show(item.Quantity)} {item.Unit}".TrimEnd();
 
     private void Print()
     {
         try
         {
-            var pages = PrintTable();
+            var pages = PrintTable(_printer, _heading, _items);
             _log.Info("pick-list", $"printed items={_items.Count} pages={pages}");
             MessageBox.Show(this, $"撿貨單已送到 {_printer}（{pages} 頁）。", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -70,11 +73,11 @@ internal sealed class PickListForm : Form
     }
 
     /// <summary>The table on A4, 10 pt, both sides when the printer can (else one side); pages printed.</summary>
-    private int PrintTable()
+    public static int PrintTable(string printer, string heading, IReadOnlyList<PickItem> items)
     {
         using var doc = new PrintDocument();
-        doc.PrinterSettings.PrinterName = _printer;
-        if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {_printer}");
+        doc.PrinterSettings.PrinterName = printer;
+        if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
         doc.PrinterSettings.Duplex = doc.PrinterSettings.CanDuplex ? Duplex.Vertical : Duplex.Simplex;
         doc.DocumentName = "撿貨單";
         doc.PrintController = new StandardPrintController();
@@ -93,7 +96,7 @@ internal sealed class PickListForm : Form
             float left = (bounds.Left - e.PageSettings.HardMarginX) * 0.254f, right = (bounds.Right - e.PageSettings.HardMarginX) * 0.254f;
             float top = (bounds.Top - e.PageSettings.HardMarginY) * 0.254f, bottom = (bounds.Bottom - e.PageSettings.HardMarginY) * 0.254f;
             using var pen = new Pen(Color.Black, 0.2f);
-            g.DrawString(_heading, title, Brushes.Black, left, top);
+            g.DrawString(heading, title, Brushes.Black, left, top);
             g.DrawString($"第 {pages} 頁", font, Brushes.Black, new RectangleF(left, top, right - left, 8), new StringFormat { Alignment = StringAlignment.Far });
             var y = top + 9;
             float codeW = 32, quantityW = 28;
@@ -111,12 +114,12 @@ internal sealed class PickListForm : Form
                 y += rowH;
             }
             Row("品號", "品名", "數量", bold);
-            while (next < _items.Count && y + rowH <= bottom)
+            while (next < items.Count && y + rowH <= bottom)
             {
-                var item = _items[next++];
+                var item = items[next++];
                 Row(item.Code, item.Name, Quantity(item), font);
             }
-            e.HasMorePages = next < _items.Count;
+            e.HasMorePages = next < items.Count;
         };
         doc.Print();
         return pages;
