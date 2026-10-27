@@ -1206,6 +1206,80 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task<T> GuardErpMessagesAsync<T>(Func<Task<T>> run)
     {
+        // ERP may have logged its licence out while idle (user, 2026-10-27): answered before the
+        // query, and when a step fails because of it the query runs once more.
+        await AnswerLicenceBoxesAsync();
+        try
+        {
+            return await GuardErpMessagesOnceAsync(run);
+        }
+        catch (InvalidOperationException ex) when (ex is not QueryFailure { Code: ErpAgentErrorCode.ERP_SEATS_FULL })
+        {
+            if (!await AnswerLicenceBoxesAsync()) throw;
+            _log.Info("licence", "query runs again after the licence box");
+            return await GuardErpMessagesOnceAsync(run);
+        }
+    }
+
+    /// <summary>
+    /// Answers ERP's licence boxes (any program's visible message box whose text says so): the
+    /// idle-logout question with Yes, the idle-logout notice with OK, and 「人數已滿」 with OK and a
+    /// stop. Returns whether any box was answered.
+    /// </summary>
+    private async Task<bool> AnswerLicenceBoxesAsync()
+    {
+        var answered = false;
+        for (var round = 0; round < 3; round++)
+        {
+            nint found = 0;
+            var text = string.Empty;
+            var boxes = new List<nint>();
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (NativeMethods.IsWindowVisible(hwnd) && Win32Automation.ProcessId(hwnd) != (uint)Environment.ProcessId &&
+                    Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                    boxes.Add(hwnd);
+                return true;
+            }, 0);
+            foreach (var box in boxes)
+            {
+                var title = NativeMethods.WindowText(box);
+                var own = string.Join(" ", Win32Automation.EnumerateChildren(box).Where(c => c.Visible).Select(c => c.Text));
+                if (!title.Contains("Leader", StringComparison.OrdinalIgnoreCase) && !Invi02Layout.IsIdleLogoutMessage(own) && !Invi02Layout.IsSeatsFullMessage(own)) continue;
+                var read = await ReadErpMessageAsync(box);
+                if (Invi02Layout.IsIdleLogoutMessage(read) || Invi02Layout.IsSeatsFullMessage(read))
+                {
+                    found = box;
+                    text = read;
+                    break;
+                }
+            }
+            if (found == 0) break;
+            _log.Warn("licence", $"ERP licence box text={_log.Value(text)}");
+            if (Invi02Layout.IsSeatsFullMessage(text))
+            {
+                await DismissMessageAsync(found, CancellationToken.None);
+                throw new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿，請稍後再查詢。") { FromErpMessage = true };
+            }
+            var button = Invi02Layout.IsRelicenseQuestion(text)
+                ? FindButton(found, c => c.StartsWith("是", StringComparison.Ordinal) || c.Equals("YES", StringComparison.OrdinalIgnoreCase) || c.Equals("&YES", StringComparison.OrdinalIgnoreCase))
+                : FindButton(found, c => c.StartsWith("確定", StringComparison.Ordinal) || c.Equals("OK", StringComparison.OrdinalIgnoreCase));
+            if (button is null)
+            {
+                LogChildren(found, "licence");
+                break;
+            }
+            NativeMethods.PostMessage(button.Handle, NativeMethods.BM_CLICK, 0, 0);
+            await WaitUntilAsync(() => !NativeMethods.IsWindow(found) || !NativeMethods.IsWindowVisible(found), 3000, CancellationToken.None);
+            _log.Info("licence", $"answered {(Invi02Layout.IsRelicenseQuestion(text) ? "Yes" : "OK")}");
+            answered = true;
+            await Pace.Delay(1500, CancellationToken.None); // the licence logs in again, or the next box shows
+        }
+        return answered;
+    }
+
+    private async Task<T> GuardErpMessagesOnceAsync<T>(Func<Task<T>> run)
+    {
         try
         {
             return await run();

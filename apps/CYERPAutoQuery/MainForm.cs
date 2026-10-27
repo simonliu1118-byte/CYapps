@@ -1104,7 +1104,9 @@ internal sealed partial class MainForm : Form
             RunWebQueryAsync,
             SetAgentStatus,
             runSearch: RunWebSearchAsync,
-            runBusiness: RunWebBusinessAsync);
+            runBusiness: RunWebBusinessAsync,
+            runControl: RunWebControlAsync,
+            holdChanged: SetErpHold);
         _agentClient = client;
         _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
     }

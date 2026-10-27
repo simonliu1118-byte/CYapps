@@ -148,6 +148,9 @@ public class ErpAgentLoopTests
         public Func<string, ItemQueryResult> Query = code => new ItemQueryResult(code, [new ErpField("品號", code)], [], TimeSpan.FromSeconds(1));
         public bool LocalBusy;
         public int StopAfterDelays = 3;
+        public readonly List<string> ControlRequests = [];
+        public Func<string, string?> Control = _ => ErpAgentControl.Closed;
+        public readonly List<DateTimeOffset?> Holds = [];
         private readonly CancellationTokenSource _cts = new();
 
         public async Task RunAsync()
@@ -161,7 +164,9 @@ public class ErpAgentLoopTests
                     Delays.Add(span);
                     if (Delays.Count >= StopAfterDelays) _cts.Cancel();
                     return Task.CompletedTask;
-                });
+                },
+                runControl: (request, _) => { ControlRequests.Add(request); if (ControlRequests.Count >= StopAfterDelays) _cts.Cancel(); return Task.FromResult(Control(request)); },
+                holdChanged: Holds.Add);
             await loop.RunAsync(_cts.Token);
         }
     }
@@ -278,5 +283,54 @@ public class ErpAgentLoopTests
         Assert.Equal(3, completes.Count);
         Assert.All(completes, c => Assert.Equal("FOUND", JsonNode.Parse(c.Body)!["outcome"]!.GetValue<string>()));
         Assert.Equal([TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(6)], h.Delays.Take(2));
+    }
+
+    private static HttpResponseMessage ControlClaim(string? request, string? holdUntil = null, string job = "null")
+    {
+        var data = new JsonObject
+        {
+            ["job"] = JsonNode.Parse(job),
+            ["control"] = new JsonObject { ["request"] = request, ["holdUntil"] = holdUntil },
+        };
+        return FakeCyWeb.Json(HttpStatusCode.OK, new JsonObject { ["ok"] = true, ["data"] = data, ["requestId"] = "r" }.ToJsonString());
+    }
+
+    [Fact]
+    public void ControlIsReadFromTheClaimAndAbsentFromAnOlderCyWeb()
+    {
+        var control = ErpAgentProtocol.ParseControl("""{"ok":true,"data":{"job":null,"control":{"request":"CLOSE","holdUntil":"2026-10-27T08:30:00.000Z"}},"requestId":"r"}""");
+        Assert.Equal(ErpAgentControl.Close, control.Request);
+        Assert.Equal(new DateTimeOffset(2026, 10, 27, 8, 30, 0, TimeSpan.Zero), control.HoldUntil);
+        Assert.Equal(ErpAgentControl.None, ErpAgentProtocol.ParseControl("""{"ok":true,"data":{"job":null},"requestId":"r"}"""));
+        Assert.Throws<InvalidDataException>(() => ErpAgentProtocol.ParseControl("""{"ok":true,"data":{"job":null,"control":{"request":"REBOOT"}},"requestId":"r"}"""));
+    }
+
+    [Fact]
+    public async Task CloseWaitsForTheQueueThenReportsItsOutcome()
+    {
+        var h = new Harness { StopAfterDelays = 5 };
+        h.Web.Claims.Enqueue(() => ControlClaim("CLOSE", "2026-10-27T08:30:00.000Z", $$$"""{"id":"{{{JobId}}}","itemNo":"T0001","expiresAt":"x"}"""));
+        h.Web.Claims.Enqueue(() => ControlClaim("CLOSE", "2026-10-27T08:30:00.000Z"));
+        await h.RunAsync();
+
+        Assert.Equal(["T0001"], h.Queried);
+        Assert.Equal(["CLOSE"], h.ControlRequests);
+        var paths = h.Web.Requests.Select(r => r.Path).ToList();
+        Assert.True(paths.FindIndex(p => p.EndsWith("/complete")) < paths.IndexOf("/api/erp-agent/control"), "the queued job runs before ERP is closed");
+        var report = JsonNode.Parse(h.Web.Requests.Single(r => r.Path == "/api/erp-agent/control").Body)!;
+        Assert.Equal("CLOSE", report["request"]!.GetValue<string>());
+        Assert.Equal("CLOSED", report["result"]!.GetValue<string>());
+        Assert.Contains(new DateTimeOffset(2026, 10, 27, 8, 30, 0, TimeSpan.Zero), h.Holds);
+    }
+
+    [Fact]
+    public async Task ABusyProgramLeavesTheRequestForTheNextClaim()
+    {
+        var h = new Harness { StopAfterDelays = 2, Control = _ => null };
+        h.Web.Claims.Enqueue(() => ControlClaim("FORCE_CLOSE"));
+        await h.RunAsync();
+
+        Assert.Equal(["FORCE_CLOSE"], h.ControlRequests);
+        Assert.DoesNotContain(h.Web.Requests, r => r.Path == "/api/erp-agent/control");
     }
 }

@@ -23,11 +23,14 @@ internal sealed class ErpAgentClient : IDisposable
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
-    public async Task<ErpAgentJob?> ClaimAsync(string agentVersion, string erpState, CancellationToken cancellationToken)
+    public async Task<(ErpAgentJob? Job, ErpAgentControl Control)> ClaimAsync(string agentVersion, string erpState, CancellationToken cancellationToken)
     {
         var json = await PostAsync(ErpAgentProtocol.ClaimPath, ErpAgentProtocol.ClaimBody(agentVersion, erpState), cancellationToken);
-        return ErpAgentProtocol.ParseClaim(json);
+        return (ErpAgentProtocol.ParseClaim(json), ErpAgentProtocol.ParseControl(json));
     }
+
+    public Task ControlAsync(string request, string result, CancellationToken cancellationToken) =>
+        PostAsync(ErpAgentProtocol.ControlPath, ErpAgentProtocol.ControlBody(request, result), cancellationToken);
 
     public Task CompleteAsync(string jobId, string body, CancellationToken cancellationToken) =>
         PostAsync(ErpAgentProtocol.CompletePath(jobId), body, cancellationToken);
@@ -73,7 +76,9 @@ internal sealed class ErpAgentLoop(
     Action<ErpAgentState, string> report,
     Func<TimeSpan, CancellationToken, Task>? delay = null,
     Func<ErpAgentJob, CancellationToken, Task<ItemSearchResult>>? runSearch = null,
-    Func<ErpAgentJob, CancellationToken, Task<(bool Found, string Body)>>? runBusiness = null)
+    Func<ErpAgentJob, CancellationToken, Task<(bool Found, string Body)>>? runBusiness = null,
+    Func<string, CancellationToken, Task<string?>>? runControl = null,
+    Action<DateTimeOffset?>? holdChanged = null)
 {
     public static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
@@ -94,9 +99,10 @@ internal sealed class ErpAgentLoop(
             }
 
             ErpAgentJob? job;
+            ErpAgentControl control;
             try
             {
-                job = await client.ClaimAsync(agentVersion, erpState(), cancellationToken);
+                (job, control) = await client.ClaimAsync(agentVersion, erpState(), cancellationToken);
                 backoff = IdleInterval;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -116,6 +122,13 @@ internal sealed class ErpAgentLoop(
                 continue;
             }
 
+            holdChanged?.Invoke(control.HoldUntil);
+            // A close request waits for the queue: it is acted on only when there is no job.
+            if (job is null && control.Request is { } request && runControl is not null)
+            {
+                await RunControlAsync(request, cancellationToken);
+                continue;
+            }
             if (job is null)
             {
                 report(ErpAgentState.Online, "CY Web 已連線，等待查詢。");
@@ -126,6 +139,44 @@ internal sealed class ErpAgentLoop(
             await RunJobAsync(job, cancellationToken);
         }
         report(ErpAgentState.Stopped, "Web 連線已停止。");
+    }
+
+    /// <summary>
+    /// Closes ERP for CY Web and reports the outcome. A null outcome means it could not be done
+    /// now (the program is busy): nothing is reported and the request is seen again next claim.
+    /// </summary>
+    private async Task RunControlAsync(string request, CancellationToken cancellationToken)
+    {
+        report(ErpAgentState.Querying, request == ErpAgentControl.ForceClose ? "Web 要求：強制關閉 ERP" : "Web 要求：關閉 ERP");
+        string? result;
+        try
+        {
+            result = await runControl!(request, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            result = ErpAgentControl.Failed;
+        }
+        if (result is null)
+        {
+            await _delay(IdleInterval, cancellationToken);
+            return;
+        }
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await client.ControlAsync(request, result, timeout.Token);
+            report(ErpAgentState.Online, $"Web 要求的 ERP 關閉已回報（{result}）。");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or ErpAgentHttpException or TaskCanceledException)
+        {
+            report(ErpAgentState.Offline, $"ERP 關閉結果回報失敗（{Describe(ex)}）。");
+            await _delay(IdleInterval, cancellationToken);
+        }
     }
 
     private async Task RunJobAsync(ErpAgentJob job, CancellationToken cancellationToken)

@@ -144,4 +144,14 @@ public class Invi02LayoutTests
     public void SeatsFullIsReportedWithItsOwnCode() =>
         Assert.Equal(ErpAgentErrorCode.ERP_SEATS_FULL,
             ErpAgentProtocol.Classify(new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿")));
+
+    [Theory]
+    [InlineData("使用者因閒置而登出授權，請問是否重新登入授權?\nYes: 重新登入授權\nNo: 不重新登入授權，請關閉所有程式並離開ERP系統", true, true)]
+    [InlineData("使用者因閒置而登出授權，無法開啟作業程式!", true, false)]
+    [InlineData("報表沒有資料", false, false)]
+    public void IdleLogoutBoxesAreRecognised(string text, bool logout, bool question)
+    {
+        Assert.Equal(logout, Invi02Layout.IsIdleLogoutMessage(text));
+        Assert.Equal(question, Invi02Layout.IsRelicenseQuestion(text));
+    }
 }

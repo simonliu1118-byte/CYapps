@@ -7,6 +7,19 @@ namespace CYERPAutoQuery;
 /// <summary>ERP_SEATS_FULL: ERP refused the login, 「人數已滿」 (user, 2026-10-27: report exactly that).</summary>
 internal enum ErpAgentErrorCode { ERP_NOT_OPEN, ERP_BUSY, ERP_STATE, EXPORT_FAILED, CANCELLED, INTERNAL, ERP_SEATS_FULL }
 
+/// <summary>The ERP 關閉／暫停 part of a claim: what CY Web asks of ERP, and the hold on opening it.</summary>
+internal sealed record ErpAgentControl(string? Request, DateTimeOffset? HoldUntil)
+{
+    public const string Close = "CLOSE";
+    public const string ForceClose = "FORCE_CLOSE";
+    // Outcomes reported back.
+    public const string Closed = "CLOSED";
+    public const string KeptOpen = "KEPT_OPEN";
+    public const string NotOpen = "NOT_OPEN";
+    public const string Failed = "FAILED";
+    public static readonly ErpAgentControl None = new(null, null);
+}
+
 /// <summary>A query failure whose contract error code is known where it is raised.</summary>
 internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Exception? inner = null)
     : InvalidOperationException(message, inner)
@@ -168,6 +181,28 @@ internal static class ErpAgentProtocol
             ["erpState"] = erpState,
             ["queryTypes"] = new JsonArray(ErpAgentJob.SupportedTypes.Select(t => (JsonNode?)t).ToArray())
         }.ToJsonString();
+
+    /// <summary>
+    /// ERP 關閉／暫停 in a claim response (CY Web 0.9.38, user 2026-10-27): the pending request
+    /// (CLOSE or FORCE_CLOSE, else null) and until when ERP must not be opened automatically.
+    /// An older CY Web sends none: no request, no hold.
+    /// </summary>
+    public static ErpAgentControl ParseControl(string json)
+    {
+        var data = Data(json);
+        if (data["control"] is not JsonObject control) return ErpAgentControl.None;
+        var request = OptionalString(control["request"]);
+        if (request is not (null or ErpAgentControl.Close or ErpAgentControl.ForceClose))
+            throw new InvalidDataException("CY Web claim 回應的 control.request 不正確。");
+        DateTimeOffset? hold = OptionalString(control["holdUntil"]) is { } text &&
+            DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+        return new ErpAgentControl(request, hold);
+    }
+
+    public const string ControlPath = "api/erp-agent/control";
+
+    public static string ControlBody(string request, string result) =>
+        new JsonObject { ["request"] = request, ["result"] = result }.ToJsonString();
 
     /// <summary>The job in a claim response, or null for <c>{job:null}</c>.</summary>
     public static ErpAgentJob? ParseClaim(string json)

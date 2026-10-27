@@ -1,6 +1,6 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-26。工程版 **V1.0.6**（未發行；V1.0.1 Build 2、V1.0.2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-26。工程版 **V1.1.0**（未發行；V1.0.1 Build 2、V1.0.2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
@@ -8,7 +8,12 @@
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 - 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.0.0 為目前最新。
 
-## 進行中：V1.0.6 — 報表「存成EXCEL檔」格式下拉是標準 Windows 下拉
+## 進行中：V1.1.0 — CY Web 關閉／暫停 ERP、閒置登出授權
+
+- CY Web 0.9.38（chihyuan-web PR）新增 `erp_item_agent_control`；claim 回應帶 `control:{request,holdUntil}`，Agent 沒有工作時處理並 `POST /api/erp-agent/control` 回報。暫停期間 `ItemQueryService.HoldUntil` 讓自動登入不開 ERP。
+- 閒置登出授權訊息由 `ItemQueryService.AnswerLicenceBoxesAsync`（GuardErpMessagesAsync 前後）回答。待實機：LOG `licence`、`control`。
+
+## V1.0.6 — 報表「存成EXCEL檔」格式下拉是標準 Windows 下拉
 
 - V1.0.5 實機：品號（含 INVQ01）全部成功；COPR15 切 xlsx 失敗。V1.0.6 以 CB_GETLBTEXT 讀選項、上下鍵選 xlsx。待實機：LOG `format items=… current=… xlsx=…`、`format shown=`。
 
