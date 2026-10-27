@@ -1,6 +1,6 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-26。工程版 **V1.0.2**（未發行；V1.0.1 Build 2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-26。工程版 **V1.0.3**（未發行；V1.0.1 Build 2、V1.0.2 已合併）；目前正式版 **V1.0.0**（`VERSION=1.0.0`、`BUILD=0`，tag `cyerp-auto-query-v1.0.0`，2026-10-21 發布）。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
@@ -8,7 +8,12 @@
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 - 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.0.0 為目前最新。
 
-## 進行中：V1.0.2 — 自動登入把啟動畫面當主視窗
+## 進行中：V1.0.3 — 伺服器上報表匯出格式預設 xls
+
+- V1.0.2 伺服器實機（2026-10-27）：COPR15 按 XLSX 後「存成EXCEL檔」顯示 xls 而停止。V1.0.3 會切換到 xlsx。待實機：進貨輔助或銷貨銷退查詢，LOG `format items=… shown=…`。若 LOG 顯示 `XLSX clicked by=geometry` 卻開的是 XLS 按鈕，需改按鈕位置（伺服器顯示比例可能不同）。
+- 另一次「按「作業速查」後游標不在 ERP 的搜尋框」出現在前一次失敗後，下一次查詢即正常，先觀察。
+
+## V1.0.2 — 自動登入把啟動畫面當主視窗（已實機：伺服器自動登入成功）
 
 - V1.0.1 Build 2 實機 LOG（2026-10-26）：ERP 沒開時查詢，啟動 MainMenu.exe 後 1.9 秒就把啟動畫面 `TfrmLogo`（標題 frmLogo）當成主視窗，跳過登入。V1.0.2 備援判斷只認 `SmartERP_iSM_MainMenu`。待實機：ERP 沒開時從 Web 查一筆，LOG 應出現 `login form class=…`、`logged in after_ms=`。
 
@@ -33,14 +38,14 @@
 | 進貨退貨單 | PURR18／PURR22 | `PURCHASES` | 已實機：廠商 B0009（V0.9.0 Build 2–3） |
 | 未收款 | ACRR18 | `RECEIVABLE` | 文件無實機紀錄 |
 | 進貨輔助 | COPR15／COPR16＋INVI02 批次 | `RESTOCK` | 使用者以 CY Web 實際查詢並回饋，修正至 V0.10.2 Build 3–4（批次查庫存、含贈品量、品號含「-」） |
-| ERP 自動登入／閒置關閉／開機自動開啟 | ERP 登入畫面 | — | 尚未實機（登入畫面視窗類別、公司下拉、ERP 關閉確認訊息，LOG 會記錄） |
+| ERP 自動登入／閒置關閉／開機自動開啟 | ERP 登入畫面 | — | 自動登入已實機（V1.0.2，伺服器 2026-10-27）；閒置關閉、ERP 關閉確認訊息尚未實機 |
 | 自動更新（含提示條、倒數、還原） | GitHub Release | — | V0.10.1 起以正式 Release 實測；文件未記錄結果 |
 
 「文件無實機紀錄」不代表失敗，只是 CHANGELOG／交接沒有寫下結果；使用者確認後更新本表。
 
 ## 待實機確認
 
-- 自動登入：登入畫面視窗類別、公司清單操作、ERP 離開確認訊息（LOG `login`、`idle`）。
+- 閒置關閉：作業與 ERP 的閒置關閉、ERP 離開確認訊息（LOG `idle`）。
 - 進貨輔助：條件框實際字數上限（LOG `condition box limit=`）、每批 100 個品號的耗時（LOG `restock`）。
 - PURI01：視窗類別（預期 `TfrmPuri01`，不符時以標題辨識）、頁籤座標（不符時 OCR）、資料瀏覽「轉出全部」欄位名稱（廠商代號、簡稱、公司全名、TEL、FAXNO、統一編號）。
 - PURR18／PURR22：頁籤座標（量自截圖，不符時 OCR）、PURR22 進階選項內容、「驗收日」選項與「僅列印…」勾選狀態能否以 BM_GETCHECK 讀到（LOG 有記錄）。

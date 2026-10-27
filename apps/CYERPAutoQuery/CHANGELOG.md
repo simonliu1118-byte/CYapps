@@ -1,5 +1,10 @@
 # CYERPAutoQuery Changelog
 
+## V1.0.3（2026/10/27，工程驗證，尚未正式發行）
+
+- 報表匯出選 xlsx（V1.0.2 伺服器實機 LOG，2026-10-27：進貨輔助的 COPR15 報表按 XLSX 後，「存成EXCEL檔」的格式顯示「Excel 97-2003 試算表(*.xls)」而停止；使用者電腦上原本預設 xlsx）。格式不是 xlsx 時，點格式下拉、清單開著就按 Esc 收起，再以 Home／下移逐項切換並讀回，到 xlsx 為止；仍不是 xlsx 才停止。LOG 記錄格式清單內容。
+- V1.0.2 已實機：伺服器上 ERP 沒開時自動開啟並登入成功（`login form class=TfrmLogin`、`logged in after_ms=500`）。
+
 ## V1.0.2（2026/10/26，工程驗證，尚未正式發行）
 
 - 修正自動登入沒有執行（V1.0.1 Build 2 實機 LOG，2026-10-26：ERP 沒開時查詢，程式啟動 MainMenu.exe 後立刻把啟動畫面 `TfrmLogo`「frmLogo」當成 ERP 主視窗，沒有等登入畫面就去開 INVI02，失敗「無法把 ERP 主視窗帶到前景」）。主視窗標題不含 Conductor 時，只認主畫面的視窗類別 `SmartERP_iSM_MainMenu`，啟動畫面與登入畫面不再算主視窗。
