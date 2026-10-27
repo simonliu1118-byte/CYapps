@@ -482,7 +482,13 @@ internal sealed partial class ItemQueryService
     /// </summary>
     private async Task ExportReportAsync(nint viewer, ErpReport report, string path, CancellationToken cancellationToken)
     {
-        var folders = new List<string> { SalesReportLayout.ErpExportFolder };
+        // ERP writes the workbook where its own setting says: C:\My Documents on the user's PC, the
+        // Desktop on the ERP server (V1.1.0 LOG and screenshot, 2026-10-27). The folder in ERP's
+        // 「匯出成功」 message is added when it can be read; the usual places are always searched,
+        // for a workbook of this report written after the export started.
+        var folders = SalesReportLayout.ExportFolderCandidates(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)).ToList();
         EnsureFolder(SalesReportLayout.ErpExportFolder);
         for (var attempt = 1; attempt <= 2; attempt++)
         {

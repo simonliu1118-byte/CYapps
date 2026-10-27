@@ -1341,7 +1341,9 @@ internal sealed partial class ItemQueryService
         {
             try
             {
-                if (attempt > 0) await Task.Delay(350);
+                // Even the first look waits a moment: a box captured before it painted gives the
+                // window behind it (V1.1.0 LOG, 2026-10-27: the report's rows instead of 「匯出成功」).
+                await Task.Delay(attempt > 0 ? 350 : 300);
                 IReadOnlyList<OcrToken> tokens;
                 using (var image = ScreenCapture.Capture(r.ToRectangle()))
                     tokens = await _ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: attempt < 2);
