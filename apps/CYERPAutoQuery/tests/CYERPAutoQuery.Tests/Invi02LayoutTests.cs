@@ -132,4 +132,16 @@ public class Invi02LayoutTests
     [InlineData("TfrmMain", true)]
     public void MainWindowClassSkipsHiddenApplicationWindow(string className, bool expected) =>
         Assert.Equal(expected, Invi02Layout.IsErpMainClass(className));
+
+    [Theory]
+    [InlineData("人數已滿!!", true)]
+    [InlineData(" 人數 已滿 ", true)]
+    [InlineData("報表沒有資料", false)]
+    public void SeatsFullMessageIsRecognised(string text, bool expected) =>
+        Assert.Equal(expected, Invi02Layout.IsSeatsFullMessage(text));
+
+    [Fact]
+    public void SeatsFullIsReportedWithItsOwnCode() =>
+        Assert.Equal(ErpAgentErrorCode.ERP_SEATS_FULL,
+            ErpAgentProtocol.Classify(new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿")));
 }

@@ -4,7 +4,8 @@ using System.Text.Json.Nodes;
 namespace CYERPAutoQuery;
 
 /// <summary>FAILED error codes of the CY Web ERP item query contract (chihyuan-web #169).</summary>
-internal enum ErpAgentErrorCode { ERP_NOT_OPEN, ERP_BUSY, ERP_STATE, EXPORT_FAILED, CANCELLED, INTERNAL }
+/// <summary>ERP_SEATS_FULL: ERP refused the login, 「人數已滿」 (user, 2026-10-27: report exactly that).</summary>
+internal enum ErpAgentErrorCode { ERP_NOT_OPEN, ERP_BUSY, ERP_STATE, EXPORT_FAILED, CANCELLED, INTERNAL, ERP_SEATS_FULL }
 
 /// <summary>A query failure whose contract error code is known where it is raised.</summary>
 internal sealed class QueryFailure(ErpAgentErrorCode code, string message, Exception? inner = null)

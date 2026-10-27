@@ -58,6 +58,10 @@ internal static class Invi02Layout
         title.Contains(QueryDialogTitle, StringComparison.Ordinal);
 
     /// <summary>ERP message boxes may reuse the caption of the form that raised them.</summary>
+    /// <summary>ERP's 「Leader作業元件」 box after 登入 when every licence is taken: 「人數已滿!!」 (user, 2026-10-27).</summary>
+    public static bool IsSeatsFullMessage(string text) =>
+        NormalizeCaption(text).Contains("人數已滿", StringComparison.Ordinal);
+
     public static bool IsMessageDialogClass(string className) =>
         className is "#32770" or "TMessageForm";
 

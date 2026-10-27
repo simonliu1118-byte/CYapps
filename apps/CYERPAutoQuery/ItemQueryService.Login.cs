@@ -122,6 +122,13 @@ internal sealed partial class ItemQueryService
         while (Environment.TickCount64 - started < ErpLoginWaitMs)
         {
             await Pace.Delay(500, cancellationToken);
+            if (await FindSeatsFullBoxAsync() is var full && full != 0)
+            {
+                // ERP closes itself once the box is answered (user, 2026-10-27).
+                _log.Warn("erp-login", "ERP 人數已滿");
+                await DismissMessageAsync(full, cancellationToken);
+                throw new QueryFailure(ErpAgentErrorCode.ERP_SEATS_FULL, "ERP 人數已滿，請稍後再查詢。") { FromErpMessage = true };
+            }
             if (Win32Automation.FindErpMainWindows().Count > 0)
             {
                 _log.Info("erp-login", $"logged in after_ms={Environment.TickCount64 - started}");
@@ -370,6 +377,31 @@ internal sealed partial class ItemQueryService
         var closed = !NativeMethods.IsWindow(hwnd) || !NativeMethods.IsWindowVisible(hwnd);
         _log.Info("idle", $"{title} closed={closed}");
         return closed;
+    }
+
+    /// <summary>
+    /// A visible message box of another program saying 「人數已滿」. It comes from ERP's
+    /// 「Leader作業元件」, not necessarily from the MainMenu process, so any box is looked at;
+    /// only one titled Leader… or already showing the text is read (OCR when it has no text yet).
+    /// </summary>
+    private async Task<nint> FindSeatsFullBoxAsync()
+    {
+        var boxes = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && Win32Automation.ProcessId(hwnd) != (uint)Environment.ProcessId &&
+                Invi02Layout.IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
+                boxes.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var box in boxes)
+        {
+            var title = NativeMethods.WindowText(box);
+            var shown = Win32Automation.EnumerateChildren(box).Any(c => c.Visible && Invi02Layout.IsSeatsFullMessage(c.Text));
+            if (!shown && !title.Contains("Leader", StringComparison.OrdinalIgnoreCase)) continue;
+            if (shown || Invi02Layout.IsSeatsFullMessage(await ReadErpMessageAsync(box))) return box;
+        }
+        return 0;
     }
 
     private static nint FindProcessMessageBox(uint pid)
