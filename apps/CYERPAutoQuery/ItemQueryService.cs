@@ -1080,21 +1080,45 @@ internal sealed partial class ItemQueryService
             // 「path read-back mismatch len=0」). The clipboard is set again until it holds the text
             // right before WM_PASTE; the callers still read the box back.
             var held = false;
-            for (var attempt = 1; attempt <= 5 && !held; attempt++)
+            for (var attempt = 1; attempt <= 3 && !held; attempt++)
             {
                 if (attempt > 1) await Pace.Delay(100, cancellationToken);
+                var why = "different";
                 try
                 {
                     Clipboard.SetText(text);
                     held = Clipboard.ContainsText() && Clipboard.GetText() == text;
                 }
-                catch (ExternalException) { }
-                if (!held) _log.Warn("export", $"clipboard not holding the text attempt={attempt}");
+                catch (ExternalException ex) { why = $"{ex.GetType().Name} 0x{ex.ErrorCode:X8}"; }
+                if (!held) _log.Warn("export", $"clipboard not holding the text attempt={attempt} why={why}");
             }
-            if (!held) throw new InvalidOperationException("剪貼簿被其他程式佔用（例如遠端桌面同步剪貼簿），無法貼上，已停止。");
             // A masked box is pasted at the caret (after Home) instead of over a selection.
             if (selectAll) NativeMethods.SendMessage(box, NativeMethods.EM_SETSEL, 0, -1);
-            NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
+            if (held)
+            {
+                NativeMethods.SendMessage(box, NativeMethods.WM_PASTE, 0, 0);
+            }
+            else
+            {
+                // The clipboard stayed unusable on the ERP server for a whole evening (V1.1.0 Build 1
+                // LOG, 2026-10-27), so every query stopped there. The text is typed into the focused
+                // box instead (as the ERP login is); the callers read it back the same way.
+                // A standard edit box (TEdit, TMemo, Edit: export paths, the 進階設定 condition) takes
+                // its text whole by WM_SETTEXT; other boxes get it typed into the focused box.
+                var cls = NativeMethods.ClassName(box);
+                if (selectAll && cls is "TEdit" or "TMemo" or "Edit")
+                {
+                    NativeMethods.SetControlText(box, text);
+                    _log.Info("export", $"clipboard unusable; set text instead class={cls} len={text.Length}");
+                }
+                else
+                {
+                    if (!Win32Automation.FocusedIsInside(box))
+                        throw new InvalidOperationException("剪貼簿無法使用，改用輸入時欄位沒有游標，已停止。");
+                    InputSender.UnicodeText(text);
+                    _log.Info("export", $"clipboard unusable; typed instead class={cls} len={text.Length}");
+                }
+            }
             await Pace.Delay(150, cancellationToken);
         }
         finally

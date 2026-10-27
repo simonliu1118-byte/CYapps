@@ -281,6 +281,13 @@ internal static class NativeMethods
         return items;
     }
 
+    private const uint WM_SETTEXT = 0x000C;
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
+    private static extern nint SendMessageText(nint hWnd, uint msg, nint wParam, string lParam);
+
+    /// <summary>Replaces a standard edit box's whole text (WM_SETTEXT).</summary>
+    internal static bool SetControlText(nint hwnd, string text) => SendMessageText(hwnd, WM_SETTEXT, 0, text) != 0;
+
     /// <summary>Sends a message that returns a number, with the same hang protection.</summary>
     internal static nint? QueryNumber(nint hwnd, uint msg, uint timeoutMs = 150) =>
         SendMessageTimeout(hwnd, msg, 0, 0, SMTO_ABORTIFHUNG, timeoutMs, out var result) == 0 ? null : result;
