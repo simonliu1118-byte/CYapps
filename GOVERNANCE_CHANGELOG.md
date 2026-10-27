@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.57 — 2026/10/27
+
+- CYERPAutoQuery PROJECT_RULES 依使用者要求（2026-10-27）加入 ERP 授權訊息處理（人數已滿回報 ERP_SEATS_FULL；閒置登出授權按 Yes／OK 後照常查詢）與 CY Web 關閉／暫停 ERP（佇列跑完才關、暫停期間不自動開啟、強制關閉沿用以視窗挑選行程的規則）。不改其他 App 規則。
+
 ## 2.3.56 — 2026/10/26
 
 - CYERPAutoQuery PROJECT_RULES 依使用者要求（2026-10-26，伺服器工作管理員確認 MainMenu 在 `C_dsbin`、作業在 `S_dsbin` 的 SMCOPIS01S，並有 SMDispatcher、SMCounterS、AUC 等常駐服務）收斂 ERP 強制重開：只結束擁有 ERP 主視窗或建立作業視窗、同一 Windows 工作階段的行程，先送關閉訊息、5 秒後才終止單一行程，不以名稱、資料夾或行程樹挑選。閒置關閉維持只送視窗訊息。不改其他 App 規則。
