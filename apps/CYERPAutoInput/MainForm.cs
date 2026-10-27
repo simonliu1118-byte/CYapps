@@ -720,6 +720,10 @@ internal sealed partial class MainForm : Form
 
     /// <summary>The last run of <see cref="StartAutomationAsync"/>, for 蝦皮全自動 to judge (null when it failed or stopped).</summary>
     private AutomationRunResult? _lastRunResult;
+    /// <summary>撿貨單 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
+    private PickList? _pickList;
+    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨單.</summary>
+    private List<ShipSheetLine>? _lastSheetLines;
 
     /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
     /// <param name="batch">蝦皮全自動: the batch reports problems itself, so no summary box here.</param>
@@ -913,8 +917,13 @@ internal sealed partial class MainForm : Form
             // 全熱感紙列印 (user, 2026-10-26): the print step becomes the thermal 出貨明細.
             var printWanted = autoSave && (print ?? _settings.AutoPrint);
             var thermal = printWanted && _settings.ThermalSheet;
+            _lastSheetLines = null;
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
             if (result.ExportFile.Length > 0) PrintShipSheet(result);
+            // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
+            if (result.Saved && _pickList is { } pick)
+                pick.Add(_lastSheetLines ?? snapshot.Details.Where(d => d.HasAnyData)
+                    .Select(d => new ShipSheetLine(d.ItemCode, string.Empty, d.Quantity, d.Unit, d.UnitPrice, string.Empty) { GiftQuantity = d.GiftQuantity }).ToList());
             outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
                 ? AutomationOutcome.NeedsAttention
                 : AutomationOutcome.Done;
@@ -957,6 +966,7 @@ internal sealed partial class MainForm : Form
             using (var stream = File.OpenRead(file)) sheets = XlsxReader.ReadSheets(stream);
             _log.Info("ship-sheet", $"export columns: {ShipSheetExport.Describe(sheets)}");
             var lines = ShipSheetExport.Lines(sheets);
+            _lastSheetLines = lines;
             var order = _loadedOrder;
             var source = order?.Source ?? string.Empty;
             var sheet = new ShipSheet(result.DocumentKey, source, order?.OrderSn ?? string.Empty, order?.TrackingNumber.Trim() ?? string.Empty,
@@ -1064,6 +1074,18 @@ internal sealed partial class MainForm : Form
             _log.Warn("ship-sheet", $"logo not loaded: {ex.GetType().Name}");
             return null;
         }
+    }
+
+    private PickList NewPickList() => new([_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
+
+    /// <summary>撿貨單 of the batch just ended, before its results (user, 2026-10-27); nothing when no document was saved.</summary>
+    private void ShowPickList(string title)
+    {
+        var list = _pickList;
+        _pickList = null;
+        if (list is null || list.Items.Count == 0) return;
+        using var form = new PickListForm(list, title, SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty, _log);
+        form.ShowDialog(this);
     }
 
     private static string DocumentKeyText(AutomationRunResult result) =>
@@ -1205,6 +1227,7 @@ internal sealed partial class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
 
         _shopeeBatchRunning = true;
+        _pickList = NewPickList();
         Session.Pin(AutomationSession.BatchTitle);
         Session.Begin(AutomationSession.BatchTitle);
         var token = Session.EscapeToken;
@@ -1279,6 +1302,7 @@ internal sealed partial class MainForm : Form
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         // Esc is the person's own stop: no sound for it.
         if (outcome != AutomationOutcome.Cancelled) Alarm(needsPerson: outcome != AutomationOutcome.Done || runner.Notes.Count > 0);
+        ShowPickList(ShopeeBatchTitle);
         using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
             [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
              new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
@@ -2053,6 +2077,7 @@ internal sealed partial class MainForm : Form
         }
         if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
+        _pickList = NewPickList();
         var done = new List<string>();
         var review = new List<string>();
         var failed = new List<string>();
@@ -2145,6 +2170,7 @@ internal sealed partial class MainForm : Form
             if (rest.Count > 0) stopped += $"\r\n未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）";
         }
         SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
+        ShowPickList($"{source}批次");
         using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
         [
             new($"已完成 {done.Count} 張：", done),

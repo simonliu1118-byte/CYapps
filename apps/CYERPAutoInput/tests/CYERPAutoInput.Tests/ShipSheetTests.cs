@@ -56,4 +56,14 @@ public sealed class ShipSheetTests
         var plain = ShipSheetExport.FromDocument([("單頭資料", header), ("單身資料", detail)], [("蝦皮", "蝦皮訂單")], freight, _ => "", DateTime.Now);
         Assert.Equal((string.Empty, string.Empty, "99"), (plain.Platform, plain.OrderSn, plain.Carrier));
     }
+
+    [Fact]
+    public void Pick_list_adds_up_goods_per_code()
+    {
+        var list = new PickList(["Z901", "Z902", ""]);
+        list.Add([new ShipSheetLine("A00023", "志遠拔罐器組(紅盒)", "1", "組", "649", "649"), new ShipSheetLine("Z901", "優惠券", "1", "PCS", "-20", "-20")]);
+        list.Add([new ShipSheetLine("A00023", "", "2", "", "649", "1298") { GiftQuantity = "1" }, new ShipSheetLine("A00001", "1號杯", "0", "個", "0", "0") { GiftQuantity = "3" }]);
+        Assert.Equal(2, list.Orders);
+        Assert.Equal([new PickItem("A00001", "1號杯", 3, "個"), new PickItem("A00023", "志遠拔罐器組(紅盒)", 4, "組")], list.Items);
+    }
 }

@@ -936,10 +936,12 @@ internal sealed partial class ShopeeBatchRunner
         var widthMm = label.Width * 25.4 / label.Dpi - 4;
         var heightMm = label.Height * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
         GrayImage slip;
-        var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false);
+        // At the carrier's own 縮放 as Chrome prints it (user, 2026-10-27: 蝦皮 110 %); the words
+        // under it may go smaller for it.
+        var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false, factor: scale / 100.0);
         using (drawn.Image) slip = SlipPrinter.BlackWhite(drawn.Image);
         _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
-        PrintCutSlip(printer, slip, order.OrderSn, family: false);
+        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints);
         try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
@@ -1015,12 +1017,12 @@ internal sealed partial class ShopeeBatchRunner
     /// A 全家 slip (user, 2026-10-26: little room under it, so its words may go down to
     /// <see cref="SlipNote.FamilyMinPoints"/>; others not below <see cref="SlipNote.MinPoints"/>).
     /// </param>
-    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true)
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null)
     {
         try
         {
             var dpi = SlipPrinter.Print(printer, slip, (family ? "全家寄取貨單 " : "寄件單 ") + orderSn, _print.SlipNote,
-                family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints);
+                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints));
             _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
             if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }

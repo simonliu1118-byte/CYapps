@@ -3,7 +3,11 @@ using System.Globalization;
 namespace CYERPAutoInput;
 
 /// <summary>One product line of the 出貨明細.</summary>
-internal sealed record ShipSheetLine(string Code, string Name, string Quantity, string Unit, string Price, string Amount);
+internal sealed record ShipSheetLine(string Code, string Name, string Quantity, string Unit, string Price, string Amount)
+{
+    /// <summary>贈／備品量: goes out too (the 撿貨單 counts it), not on the 出貨明細's 數量.</summary>
+    public string GiftQuantity { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// 全熱感紙列印 (user, 2026-10-26: 二聯報表紙 is costly; every order gets a thermal 出貨明細 instead
@@ -54,6 +58,7 @@ internal static class ShipSheetExport
     private static readonly string[] UnitTitles = ["單位"];
     private static readonly string[] PriceTitles = ["單價"];
     private static readonly string[] AmountTitles = ["金額"];
+    private static readonly string[] GiftTitles = ["贈/備品量", "贈／備品量", "贈品量", "備品量"];
 
     public static List<ShipSheetLine> Lines(IReadOnlyList<(string Name, List<string[]> Rows)> sheets)
     {
@@ -69,10 +74,11 @@ internal static class ShipSheetExport
             var unit = Column(titles, UnitTitles);
             var price = Column(titles, PriceTitles);
             var amount = Column(titles, AmountTitles);
+            var gift = Column(titles, GiftTitles);
             string Cell(string[] row, int i) => i >= 0 && i < row.Length ? row[i].Trim() : string.Empty;
             return rows.Skip(titleIndex + 1)
                 .Where(r => Cell(r, code).Length > 0)
-                .Select(r => new ShipSheetLine(Cell(r, code), Cell(r, name), Cell(r, quantity), Cell(r, unit), Cell(r, price), Cell(r, amount)))
+                .Select(r => new ShipSheetLine(Cell(r, code), Cell(r, name), Cell(r, quantity), Cell(r, unit), Cell(r, price), Cell(r, amount)) { GiftQuantity = Cell(r, gift) })
                 .ToList();
         }
         throw new InvalidDataException("ERP 匯出的 Excel 找不到有「品號」「數量」欄位的單身資料。");

@@ -63,7 +63,9 @@ internal static class MoSlipPdf
     /// keeps its own size and is only made smaller when it does not fit (黑貓, user 2026-10-26).
     /// The printed part's top-left corner on its page comes back too.
     /// </summary>
-    public static async Task<(Bitmap Image, double LeftMm, double TopMm)> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi, bool enlarge = true)
+    /// <param name="factor">With <paramref name="enlarge"/> false: the size wanted, as a share of its own (1.1 = 110 %).</param>
+    public static async Task<(Bitmap Image, double LeftMm, double TopMm)> RenderFitAsync(string path, double maxWidthMm, double maxHeightMm, int dpi,
+        bool enlarge = true, double factor = 1)
     {
         var pdf = await OpenAsync(path, string.Empty);
         using var page = pdf.GetPage(0);
@@ -79,7 +81,7 @@ internal static class MoSlipPdf
         var widthMm = w / 96 * 25.4;
         var heightMm = h / 96 * 25.4;
         var scale = Math.Min(maxWidthMm / widthMm, maxHeightMm / heightMm);
-        if (!enlarge) scale = Math.Min(1, scale);
+        if (!enlarge) scale = Math.Min(factor, scale);
         using var stream = new InMemoryRandomAccessStream();
         await page.RenderToStreamAsync(stream, new PdfPageRenderOptions
         {
