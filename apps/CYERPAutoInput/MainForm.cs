@@ -1129,6 +1129,7 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private async Task FinishPaperInvoicesAsync()
     {
+        HidePaperPanel();
         if (_paperJobs.Count == 0 && _paperNotes.Count == 0) return;
         _paperNextAsk = DateTime.MinValue;
         var deadline = DateTime.Now.AddMinutes(2);

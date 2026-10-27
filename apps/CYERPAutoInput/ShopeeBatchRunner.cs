@@ -401,7 +401,7 @@ internal sealed partial class ShopeeBatchRunner
             Thread.Sleep(350);
         }
         InputSender.Click(point);
-        NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
+        if (InputSender.ParkAt is null) NativeMethods.SetCursorPos(screen.Area.Left + 12, screen.Area.Top + screen.Area.Height / 2);
     }
 
     /// <summary>

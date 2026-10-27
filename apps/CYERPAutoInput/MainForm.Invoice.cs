@@ -274,6 +274,9 @@ internal sealed partial class MainForm
         try
         {
             if (DateTime.Now >= _paperNextAsk && _paperJobs.Any(j => j.Pdf is null)) await AskPaperPdfsAsync();
+            // During a 全自動 the ready ones wait in the 紙本發票待列印 box (user, 2026-10-27).
+            if (BatchRunning && _paperJobs.Any(j => j.Pdf is not null)) ShowPaperPanel();
+            else HidePaperPanel();
             if (PaperMayPrompt) await PrintReadyPaperAsync(null);
             if (PaperMayPrompt && _paperNotes.Count > 0 && _paperJobs.Count == 0)
             {
@@ -343,7 +346,76 @@ internal sealed partial class MainForm
     /// 停止 leaves them for CYInvoice; a printer error is listed (no stop). <paramref name="printed"/>
     /// takes the lines for a run's result when given, else they go to the later notice.
     /// </summary>
-    private async Task PrintReadyPaperAsync(List<string>? printed)
+    /// <summary>A 全自動 is running (蝦皮, or MO店+／酷澎 and their ERP batch).</summary>
+    private bool BatchRunning => _shopeeBatchRunning || _automationCts is not null;
+
+    private PaperPanel? _paperPanel;
+    private bool _paperPanelShown;
+
+    /// <summary>Paper invoices ready to print: (count, the kinds as said to the person).</summary>
+    private (int Count, string Kinds) ReadyPaper()
+    {
+        var ready = _paperJobs.Where(j => j.Pdf is not null).ToList();
+        var styleName = CyInvoiceLink.PaperStyles.FirstOrDefault(p => p.Code == _settings.PaperInvoiceStyle).Name ?? string.Empty;
+        var withBan = ready.Count(j => j.Invoice.BuyerBan.Length > 0);
+        var kinds = new List<string>();
+        if (withBan > 0) kinds.Add($"有統編 {withBan} 張（{styleName}）");
+        if (ready.Count > withBan) kinds.Add($"無統編 {ready.Count - withBan} 張（A4 雙面）");
+        return (ready.Count, string.Join("、", kinds));
+    }
+
+    /// <summary>
+    /// 紙本發票待列印 (user, 2026-10-27): the box under the 全自動 notice; the locked mouse may move
+    /// and click inside it only, and goes back there after each of the run's own clicks.
+    /// </summary>
+    private void ShowPaperPanel()
+    {
+        var (count, kinds) = ReadyPaper();
+        if (count == 0) { HidePaperPanel(); return; }
+        if (_paperPanel is null)
+        {
+            _paperPanel = new PaperPanel();
+            _paperPanel.PrintRequested += async () => await PrintFromPanelAsync();
+        }
+        var bounds = _paperPanel.Show($"紙本發票 {count} 張待列印\n{kinds}");
+        if (bounds.IsEmpty) return;
+        PhysicalMouseLock.Allowed = bounds;
+        InputSender.ParkAt = new Point(bounds.Left + bounds.Width / 2, bounds.Bottom - 20);
+        if (!_paperPanelShown)
+        {
+            _paperPanelShown = true;
+            _log.Info("cyinvoice", $"paper invoices wait in the panel count={count}");
+            Alarm(needsPerson: true);
+        }
+    }
+
+    private void HidePaperPanel()
+    {
+        if (!_paperPanelShown) return;
+        _paperPanelShown = false;
+        PhysicalMouseLock.Allowed = null;
+        InputSender.ParkAt = null;
+        _paperPanel?.Hide();
+    }
+
+    private async Task PrintFromPanelAsync()
+    {
+        if (_paperBusy) return;
+        _paperBusy = true;
+        try
+        {
+            _log.Info("cyinvoice", "paper invoices printed from the panel");
+            HidePaperPanel();
+            await PrintReadyPaperAsync(null, paperLoaded: true);
+        }
+        finally
+        {
+            _paperBusy = false;
+        }
+    }
+
+    /// <param name="paperLoaded">The person already said the paper is in (the 紙本發票待列印 box): no prompt.</param>
+    private async Task PrintReadyPaperAsync(List<string>? printed, bool paperLoaded = false)
     {
         var ready = _paperJobs.Where(j => j.Pdf is not null).ToList();
         if (ready.Count == 0) return;
@@ -354,21 +426,19 @@ internal sealed partial class MainForm
             foreach (var j in ready) Drop(j, "沒有印：找不到 A4 印表機（設定 › 印表機）");
             return;
         }
-        var styleName = CyInvoiceLink.PaperStyles.FirstOrDefault(p => p.Code == _settings.PaperInvoiceStyle).Name ?? string.Empty;
-        _log.Info("cyinvoice", $"paper invoices wait for paper count={ready.Count}");
-        Alarm(needsPerson: true);
         // Which kinds are in the pile (user, 2026-10-19: a 酷澎 consumer's invoice was described as
         // 有統編): with 統編 in the set style; without (酷澎) always A4, both sides.
-        var withBan = ready.Count(j => j.Invoice.BuyerBan.Length > 0);
-        var kinds = new List<string>();
-        if (withBan > 0) kinds.Add($"有統編 {withBan} 張（{styleName}）");
-        if (ready.Count > withBan) kinds.Add($"無統編 {ready.Count - withBan} 張（A4 雙面）");
-        using (var prompt = new PaperPromptForm("A4 白紙（紙本發票）", printer, $"共 {ready.Count} 張發票：{string.Join("、", kinds)}"))
+        if (!paperLoaded)
+        {
+            _log.Info("cyinvoice", $"paper invoices wait for paper count={ready.Count}");
+            Alarm(needsPerson: true);
+            using var prompt = new PaperPromptForm("A4 白紙（紙本發票）", printer, $"共 {ready.Count} 張發票：{ReadyPaper().Kinds}");
             if (prompt.ShowDialog(Form.ActiveForm ?? this) != DialogResult.OK)
             {
                 foreach (var j in ready) Drop(j, "在放紙提醒按了停止，沒有印");
                 return;
             }
+        }
         var ledger = new PaperInvoiceLedger(PaperInvoiceLedger.DefaultPath);
         foreach (var j in ready)
         {
