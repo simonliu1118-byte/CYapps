@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.43 Build 0／Cloud 0.9.6（非正式 Release）**：依使用者2026-10-26指示準備全面啟用正常折讓開立／作廢，並同批退役舊網站人工完成入口。修正單一Worker內測試／正式交易的環境與憑證分流、Windows正式環境代碼及跨環境待辦歸屬；既有核准、Claim、未知查回與稽核不放寬。使用者確認前批Cloud 0.9.5原Worker更新已完成；本批0.9.6及三旗標實際切換仍交本機MCP，schema22不變。具體交接見[本機作業清單](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，財務真流程仍待驗收，正式Release仍V3.1.0。
+- **目前工程 Source：V3.1.43 Build 0／Cloud 0.9.6（非正式 Release）**：使用者2026-10-27本機完成報告確認，原Worker已部署Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`，正常折讓API／g0401／g0501三旗標均啟用；兩個舊人工旗標仍關閉，schema22及原服務／身分保留。舊人工完成入口已從Source及工程包移除。指定桌面Data快照及原D1限定六表的舊案盤點完成，該範圍無待收尾財務案；不代表其他安裝或裝置皆為0。工程包已由本機下載，桌面原EXE未覆寫，請使用V3.1.43測試。詳見[本機完成摘要](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；真人財務流程仍待驗收，正式Release仍V3.1.0。
 
 - **前一工程 Source：V3.1.39 Build 0（非正式 Release）**：V3.2-F 官方同步、跨期按需查回與歷史整合：沿用原 invoice_list／allowance_list／invoice_query，新增現有本機 SQLite 內的官方折讓查證狀態逐筆 append-only 歷程與原發票詳情唯讀查閱。唯讀歷程獨立於原發票清理；查證失敗保留「上傳問題」至成功恢復。未變更原清理規則、50 張發票／150 筆折讓上限或任何財務 POST。正式 Release V3.1.0 不變；真光貿、Cloud schema 與真機仍待驗收。
 

@@ -1,59 +1,56 @@
-# CYInvoice V3.2：正常折讓啟用與舊資料收尾交接
+# CYInvoice V3.2：Cloud 0.9.6啟用與限定舊案盤點完成
 
-更新：2026-10-26（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`；工程V3.1.43 Build 0／Cloud Source 0.9.6／schema22；正式Release仍V3.1.0。
+更新：2026-10-27（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`；工程V3.1.43 Build 0；正式Release仍V3.1.0，未合併或發布。
 
-使用者已明確指示「折讓應該要啟用了，全面啟用」及「舊資料和入口收尾一起做」。**正常開立／作廢啟用已授權，不需重問啟用同意。** 本對話只完成Source、隔離測試及交接，沒有連線Cloudflare或執行真光貿交易；實際切換由本機Work＋MCP沿原部署owner完成。
+**使用者已交回本機MCP完整完成報告，遠端操作已停止。** 本頁只歸檔可公開摘要；本對話未重新連線Cloudflare。實際私有收據、完整資源識別、備份、設定、checkpoint及回復證據均保留本機，不提交Public Git／PR。產品範圍及驗收唯一來源仍為[V3.2現行計畫](V3_2_IMPLEMENTATION_PLAN.md)。
 
-## 已完成的基線
+## 完成的部署與旗標
 
-- schema20→21與21→22／配套原Worker維護，已由使用者本機完成報告確認。原0022只成功一次、資料／稽核保留，私有備份實際還原及回復證據留在本機。不得修改或重跑0017～0022。
-- 使用者另確認Cloud 0.9.5原Worker程式更新已完成。本輪不以尚未取得的完整報告捏造Source、部署ID或即時readback；本機沿既有私有報告核對當前原服務即可，不重做前批作業。
-- 使用者已確認公司卡選取、編輯、同步、重啟取卡介面可用。不能延伸宣稱所有正式金鑰或財務交易已驗收。
-- 本輪0.9.6修正：申請保存測試／正式環境，核准與恢復均取原申請環境；不再用APP_ENV決定金融帳號。測試用官方公開測試憑證，正式用原公司卡，原卡身分／revision／Claim及授權綁定保留。
+- 指定並實際部署Source：`25ae151ed880cb6256a4cc1e01ce499145a802b7`。原Worker Cloud 0.9.6、單一版本100%流量；原不可變0.9.5版本保留。
+- 沿原canonical deployment-preflight，以deploy＋`CYINVOICE_ALLOWANCE_ACTIVATION=enable`、相同Source與專用checkpoint完成before→deploy→after。無schema-upgrade意圖、migration或DDL；schema／marker維持22，history精確0001～0022。
+- 線上app.js為329377 bytes，SHA256 `374f279974a0e3d43b7a1959c1742f3c6d03ee99f4c8a0742564957487462d00`，與指定Source建置一致。health為Cloud 0.9.6、storage=ok、identityProvider=CYID、storageSchemaVersion=22；legacy schemaVersion=8不是D1版次。
+- 原Company Settings及加密綁定、CYID／D1／scope／Secrets繼承／Routes及其他vars保留；只新增兩個正常送出旗標變數。APP_ENV保持原值，交易環境由原申請保存。未新增Worker／D1、未直接操作CYID D1。
 
-## 本機執行範圍
-
-1. 沿原分支核對PR最新完整HEAD、同SHA必要CI及工程版本；使用完全相同Source建置Worker bundle。不得使用舊包、移動的分支名稱或歷史成功CI代替精確SHA。
-2. 先估算本批必要metadata／有界D1讀取／健康檢查及部署用量，依原用量規則取得必要的額度決定；前批額度例外不延用。本批啟用本身不需重問同意。實際resource IDs、token及Secret值只在原私有設定內使用，不貼聊天／Git／PR。
-3. 只更新原Worker，不新增Worker／D1、不操作CYID D1、不做migration；schema與marker均維持22。保留原不可變Worker版本、設定及本批私有checkpoint供回復；Worker回退不回退D1，不自動整庫還原。
-4. 原`cloud/scripts/deployment-preflight.mjs`設定：
-   - `CYINVOICE_DEPLOYMENT_MODE=deploy`
-   - `CYINVOICE_ALLOWANCE_ACTIVATION=enable`
-   - **不設定**`CYINVOICE_SCHEMA_UPGRADE`
-   - 沿原本機認證、原Worker／CYID provider選擇及原部署設定。APP_ENV保留，不為測試公司卡改部署環境。
-5. 同一Source、同一專用私有checkpoint及相同意圖，依序執行原owner的`before`→`deploy`→`after`。`before`產生原`wrangler.deploy.generated.jsonc`，只在本機使用；用原已審方式產生單一`app.js`，再交原owner部署，禁止另跑wrangler deploy繞過稽核：
-
-   ```text
-   node scripts/deployment-preflight.mjs before <private-checkpoint.json>
-   node scripts/deployment-preflight.mjs deploy <private-checkpoint.json> <reviewed-bundle/app.js>
-   node scripts/deployment-preflight.mjs after <private-checkpoint.json>
-   ```
-
-6. 查核原Worker單一版本100%流量、線上bundle雜湊與同Source本機產物一致、health的`cloudVersion=0.9.6`／`storageSchemaVersion=22`／storage及CYID正常。legacy schemaVersion不是實際D1版次。核對原Bindings、Secrets名稱與繼承、Routes、裝置／Workspace身分及固定CYID scope不變；不讀出秘密值。
-
-### 旗標目標
-
-| 旗標 | 本批目標 |
+| 旗標 | 本機完成報告確認結果 |
 | --- | --- |
 | ALLOWANCE_API_ENABLED | true |
 | ALLOWANCE_G0401_SEND_ENABLED | true |
 | ALLOWANCE_G0501_SEND_ENABLED | true |
-| ALLOWANCE_MANUAL_REVIEW_ENABLED | 原存在則false；原未設定則繼續未設定 |
-| ALLOWANCE_EXTERNAL_COLLISION_ENABLED | 原存在則false；原未設定則繼續未設定 |
+| ALLOWANCE_MANUAL_REVIEW_ENABLED | 未設定，關閉 |
+| ALLOWANCE_EXTERNAL_COLLISION_ENABLED | 未設定，關閉 |
 
-原COMPANY_SETTINGS_ENABLED=true及加密Secret綁定必須存在；原部署owner檢查後才允許啟用。除了上述正常旗標及停用舊人工旗標，其他vars不變。未授權／無效Device及角色拒絕檢查只用無交易內容請求；不拿503退回當作啟用成功，也不透過MCP自動送出真財務交易。
+無憑證、無交易內容的create／approve／void-approve入口均401／DEVICE_INVALID，已不再是503／ALLOWANCES_NOT_READY。結合旗標及bundle回讀，證明功能已啟用並保留Device拒絕；不能當成正向角色或真光貿流程驗收。MCP未使用真Device Token、員工密碼、公司卡或財務內容，真光貿交易為0。
 
-## 同批舊資料與入口收尾
+## 同批舊資料及入口收尾
 
-- 舊網站「已人工完成」按鈕與直接結案方法已從Source移除；不另建立待辦入口。舊紀錄仍留原「待辦/處理中」或「上傳問題」，詳情提供官方查證，歷史唯讀保留。
-- 舊折讓有原送出marker及官方候選證據，沿原reconcile核對；沒有送出證據則保留原問題，不以相同金額／同號推定成功，也不轉新申請或POST。
-- 舊折讓作廢以原號、買方及原發票明細查證；官方明確作廢才結案，保留原申請。已有Claim交原恢復owner只查回，不解鎖或用歷史按鈕繞過。
-- 新runtime projection帶原申請環境。本機依精確application ID＋issue/void操作歸入正確測試／正式帳戶；舊錯置投影只結束其重複顯示，原歷史行保留。不得按同張發票合併不同部分折讓。
-- **實際Local舊待辦／未知Claim仍未在本對話盤點，不能記0。** 本機關閉程式並依原方式備份原Data後，對原帳戶／既有索引做有界唯讀盤點，區分未核准新草稿、已核准Ledger、舊待確認marker、未知Claim及歷史已結案；只回報遮罩後數量／分類，不貼真實單號或客戶資料。超過預估停止擴大讀取並回報，不能為收尾批次DELETE、回填authority或解鎖Claim。
-- 不要求全部Local Claim歸零才能更新Worker或啟用新流程；每筆沿原交易owner及原證據處理。不更動舊發票清理政策。
+- 指定桌面安裝的原Data已在程式未執行時完整備份，以DPAPI CurrentUser加密；記憶體解密逐檔核對並實際還原SQLite，quick_check／FK通過。盤點僅讀備份副本，未啟動App或執行bootstrap／migration；前後原Data雜湊、檔案數不變，原EXE及登入設定未覆寫。跨Windows使用者解密未驗。
+- 該快照只有已找到的測試帳戶同步索引；未核准草稿、已核准Local metadata／Ledger、舊pending／Cloud提交marker、未知Void Claim、歷史處置及財務稽核等當次查詢分類均0。**此結果只適用該份快照，不能推定其他安裝、裝置、未提供正式帳戶或未盤點表也為0。**
+- 原業務D1申請、核准、Ledger、作廢申請、Void Claim、Void attempts六表完成主鍵有界唯讀盤點，當次均無舊案；其他表不因此記0，原稽核及身分歷史保留。
+- 本批沒有可逐筆收尾的既有財務案；未DELETE、回填authority、解鎖Claim、改寫投影或假造官方完成。舊案若再出現，仍沿原owner及證據查回，不按同號／同金額猜測，不跨權威重送。
+- 舊「已人工完成」入口與直接結案方法已從同Source及V3.1.43工程包移除，沒有另一套待辦。**原桌面EXE未自動更新，使用者需使用已交付V3.1.43工程包，才會看到新版入口及環境投影修正。** 不更動舊發票清理政策。
 
-## 完成後交回
+## Source CI與工程包
 
-回報精確Source／CI／工程包、原Worker版本與bundle一致性、schema22、三正常旗標與舊人工旗標狀態、原服務／身分保留、本批實際用量與計費歸屬限制、舊資料盤點分類及未解決項。私有備份、checkpoint、完整resource IDs及逐筆收據不提交Public Git／PR。
+指定完整SHA的[Windows](https://github.com/simonliu1118-byte/CYapps/actions/runs/40230081363)、[Cloud](https://github.com/simonliu1118-byte/CYapps/actions/runs/40230081307)、[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/40230081258)及[Development預檢](https://github.com/simonliu1118-byte/CYapps/actions/runs/40230081257)均成功。Development實際部署job skipped；實際部署由本機MCP完成。Cloud Windows畫面smoke同SHA失敗job重跑後成功，未更改120秒上限。
 
-之後由使用者以工程包及自行設定的公司卡驗收一次核准、自動配號／送出／查回、正常等待／異常分類、斷線重啟、診斷及g0501有限重試。合成碰號與故障測試不能當成真人已測。雙Windows／不同Device真人驗收依既有決議於V3.2上線後補做，不新增上線阻擋條件。未授權合併PR／正式Release；切換完成不等於V3.2全部業務驗收完成。
+本機TypeScript、完整Cloud隔離測試及Worker dry-run通過，含交易環境保存／恢復、一次核准、25次明確拒號、未知不重送、有限作廢重試、舊案只查回與精確投影；合成案例不代表真人已測。正式規則／CYID契約未改，共通2.10.0與AITeam main一致，CYID Consumer Impact: NONE。
+
+工程包`CYInvoice_V3.1.43_engineering-run1073.zip`已由使用者本機下載保存，不依賴Artifact保留期限；[原Artifact 12612925250](https://github.com/simonliu1118-byte/CYapps/actions/runs/40230081363/artifacts/12612925250)為81177580 bytes，SHA256 `d4ddde799e93cde25b9ca951e0573a67c63e21d46b49f7893c0c992d9d1b4256`。本機已核對與原Artifact一致、ZIP路徑安全及VERSION=3.1.43／BUILD=0，未執行或安裝，不含Data，不是正式Release。
+
+## 用量與回復界線
+
+本機已依該批另行同意的用量及有界盤點範圍完成，實際直接D1 SQL、runtime、控制平面及Local副本查詢量與預估差異已在使用者完整報告／私有收據交回，已記錄作業均在該批上限內。本次文件歸檔沒有新增Cloudflare讀寫或請求。
+
+直接SQL meta不是完整計費read；共用帳號差額包含其他服務／runtime內部SQL及延遲，不能全歸因本批。原報告未能獨立證明本批完整計費read精確值或是否低於參考上限；維護已停止，不為拆分計費重跑查核。
+
+本批未重新匯出D1，歷史schema22備份不宣稱涵蓋後續新寫入。若啟用後停送／回退，先評估新申請、未知Claim及設定變更；Worker回退不回退D1，不重跑0017～0022、不自動整庫還原。本頁是完成紀錄，不是重做部署、盤點或回復的指令。
+
+## 前批0.9.5證據補齊
+
+使用者已交回2026-10-26完整完成報告：Source `cff89085adb72536437ba2edc88b3d21d056de5a`／V3.1.42 Build 3，原Worker 0.9.4→0.9.5完成；schema22、原服務／綁定及旗標保留，當時折讓仍關閉，無真交易。這是本批0.9.6前的歷史基線，無需重做。
+
+## 剩餘真人驗收
+
+以已下載V3.1.43工程包及使用者自行設定的公司卡，驗收真實金鑰可用性、角色正向操作、主管一次核准後自動配號／送出／查回、正常等待／異常分類、斷線重啟、診斷與g0501有限重試。不能以旗標、無憑證拒絕或合成測試代替真人財務結果。
+
+公司卡選取／編輯／同步／重啟取卡的既有使用者驗收保留。雙Windows／不同Device真人驗收依既定決議於V3.2上線後補做，不新增上線阻擋條件。V3.2尚未全部業務驗收完成；PR未合併、正式Release仍需使用者當次授權。

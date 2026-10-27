@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## 2026/10/27 本機Cloud 0.9.6啟用與限定舊案盤點完成
+
+- 使用者本機報告確認Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`、V3.1.43 Build 0已部署至原Worker，單一版本100%流量；原before／deploy／after、bundle一致性及健康檢查通過，schema22／history未變，無migration、DDL、新資源或CYID D1操作。
+- 正常API／g0401／g0501三旗標均true；兩個舊人工旗標仍未設定。原Company Settings、加密綁定、CYID及其餘設定保留。無憑證入口401證明Device拒絕仍有效，不代替正向財務驗收。
+- 指定桌面Data已加密備份、實際還原核對，僅在副本有界唯讀盤點；原Data未改。該快照及原D1限定六表無既有待收尾財務案，未清除、回填或解鎖；不外推其他安裝／裝置。舊入口已在同Source工程包退役，原桌面EXE未被自動覆寫。
+- 本批無真光貿交易、合併或正式Release；私有證據不公開。此輪只歸檔使用者提供的報告，不重新連線Cloudflare，不改VERSION／BUILD。詳見[完成摘要](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+
 ## V3.1.43 Build 0 — 2026/10/26（折讓啟用準備與舊入口收尾）
 
 - 使用者已授權全面啟用正常折讓開立／作廢。原部署owner增加明確啟用意圖，僅調整三個正常旗標，保留其他設定、原服務及schema22；兩個舊人工旗標維持關閉。實際遠端切換交本機MCP，不以Source或CI當成已啟用。
