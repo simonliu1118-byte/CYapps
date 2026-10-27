@@ -90,6 +90,10 @@ async function fixture(schema19=false,filename=":memory:",through21=true,through
   .run(ws,appKey,devB);
  // Canonical 0017/0018 are included in the preceding migration sequence.
  let beforeSend=null,loseReply=false,afterSend=null,beforeBatch=null,lostBatch=false;
+ const runD1=(query,args)=>{
+  const total=()=>Number(sql.prepare("SELECT total_changes() AS n").get().n);
+  const before=total();sql.prepare(query).run(...args);return {meta:{changes:total()-before}};
+ };
  class Statement {
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}
@@ -99,7 +103,7 @@ async function fixture(schema19=false,filename=":memory:",through21=true,through
    if(this.q.includes("UPDATE allowance_number_ledger")&&beforeSend){
     const cb=beforeSend;beforeSend=null;cb();
    }
-   const result={meta:{changes:sql.prepare(this.q).run(...this.args).changes}};
+   const result=runD1(this.q,this.args);
    if(this.q.includes("UPDATE allowance_number_ledger")&&afterSend){
     const cb=afterSend;afterSend=null;cb();
    }
@@ -114,8 +118,7 @@ async function fixture(schema19=false,filename=":memory:",through21=true,through
   sql.exec("BEGIN IMMEDIATE");
   let result;
   try{
-   result=parts.map(p=>({meta:{
-    changes:sql.prepare(p.q).run(...p.args).changes}}));
+   result=parts.map(p=>(runD1(p.q,p.args)));
    sql.exec("COMMIT");
   }catch(e){sql.exec("ROLLBACK");throw e;}
   if(lostBatch){lostBatch=false;throw new Error("lost batch reply AFTER commit");}

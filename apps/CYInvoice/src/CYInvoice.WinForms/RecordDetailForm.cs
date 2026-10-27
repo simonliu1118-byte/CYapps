@@ -393,15 +393,10 @@ internal sealed class RecordDetailForm : Form
                 var cloud = await new CloudAllowanceSubmissionService(repository)
                     .SubmitAsync(record, request.EmployeeNo, request.Password,
                         request.Reason, request.TaxInclusiveAmount, request.EditedItems);
-                MessageBox.Show(this,
-                    (cloud.AlreadySubmitted
-                        ? "已依原申請 ID 查回雲端狀態，沒有重送申請。"
-                        : "雲端折讓申請已建立，待主管查驗並核准。") +
-                    "\n\n申請 ID：" + cloud.ApplicationId +
-                    "\n狀態：" + cloud.Status +
-                    "\n不代表已開立折讓，光貿尚未接受任何本次交易。",
-                    "CYID 折讓申請", MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                MessageBox.Show(this, cloud.Status is "open" or "review"
+                    ? "折讓申請已送出，等待主管核准。"
+                    : cloud.Status == "approved" ? "主管已核准，系統處理中。" : "原申請狀態：" + cloud.Status,
+                    "折讓申請", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
@@ -464,6 +459,7 @@ internal sealed class RecordDetailForm : Form
 
         var voidManualReview = voidWorkflow.ManualReviewFor(record) is not null;
         var allowanceReview = allowanceWorkflow.ManualReviewFor(record);
+        var cloudAllowancePending = CloudAllowanceSubmissionService.HasPending(record);
         var canOperateInvoice = CanShowVoidAction() && !latestStatusUnknown;
 
         voidInvoice.Visible = canOperateInvoice || voidManualReview;
@@ -475,10 +471,10 @@ internal sealed class RecordDetailForm : Form
         else
         {
             voidInvoice.Text = voidManualReview ? "申請已送出" : "作廢";
-            voidInvoice.Enabled = ameAvailable && canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null;
+            voidInvoice.Enabled = ameAvailable && canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null && !cloudAllowancePending;
         }
 
-        allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
+        allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null || cloudAllowancePending;
         if (allowanceBusy)
         {
             allowanceInvoice.Text = "折讓申請中…";
@@ -486,10 +482,10 @@ internal sealed class RecordDetailForm : Form
         }
         else
         {
-            allowanceInvoice.Text = allowanceReview is null
+            allowanceInvoice.Text = allowanceReview is null && !cloudAllowancePending
                 ? "折讓"
                 : "申請已送出";
-            allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
+            allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview && !cloudAllowancePending;
         }
     }
 
@@ -966,7 +962,7 @@ internal sealed class RecordDetailForm : Form
                 voidWorkflow.HandledReviewFor(record),
                 allowanceWorkflow.HandledReviewFor(record),
                 new OfficialAllowanceHistoryStore(repository.DataDirectory).Read(
-                    record.SellerInvoice, record.Environment, record.InvoiceNumber));
+                    record.SellerInvoice, record.Environment, record.InvoiceNumber), repository);
         }
         finally
         {
@@ -974,8 +970,7 @@ internal sealed class RecordDetailForm : Form
         }
     }
 
-    private static string ActorText(string number,string name) =>
-        string.IsNullOrWhiteSpace(name)?number:number+" "+name.Trim();
+    private string ActorText(string number,string name) => EmployeeDisplayText.Format(repository, number, name);
 
     private void AddInvoiceStateDetail()
     {
@@ -1113,6 +1108,15 @@ internal sealed class RecordDetailForm : Form
             if (!labels.Contains("3002 測試申請員工") || !labels.Contains("0001 測試核准管理員"))
                 throw new InvalidOperationException("發票詳情必須保留申請與核准人員。");
         }
+        baseRecord.InvoiceState=InvoiceStates.Voided;
+        InvoiceOfficialMetadata.SetCancelDate(baseRecord, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        using (var operationHistory = new InvoiceOperationHistoryControl()) {
+            operationHistory.LoadRecord(baseRecord, new InvoiceVoidHandledReview("3002","退貨",DateTimeOffset.UtcNow,"0001",DateTimeOffset.UtcNow)
+                {RequesterName="測試申請員工",ReviewerName="測試核准管理員"}, repository: repository);
+            operationHistory.VerifySmokeVoidNames();
+        }
+        baseRecord.InvoiceState=InvoiceStates.Opened;
+        InvoiceOfficialMetadata.SetCancelDate(baseRecord, 0);
         baseRecord.ExtensionData=null;
         using var company = new RecordDetailForm(
             new InvoiceRecord

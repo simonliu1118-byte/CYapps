@@ -75,6 +75,8 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             var dataDirectory = baseDirectory is null ? null : Path.Combine(baseDirectory, "Data");
             var seller = current.Environment == Environments.Test ? AmegoDefaults.TestInvoice : current.ProductionInvoice.Trim();
             var accountKey = current.Environment + "|" + seller;
+            if (dataDirectory is not null && synchronize)
+                CloudAllowanceSubmissionService.RestorePendingIssues(dataDirectory, current.ProductionInvoice, current.CloudWorkspaceId);
             var allowanceIds = dataDirectory is null || !synchronize ? [] : new InvoiceSyncIssueStore(dataDirectory).Unresolved(accountKey)
                 .Where(i => i.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal)).Select(i => i.OrderId)
                 .Concat(CloudAllowanceSubmissionService.PendingIds(dataDirectory, current.ProductionInvoice)).Distinct().Take(100).ToArray();

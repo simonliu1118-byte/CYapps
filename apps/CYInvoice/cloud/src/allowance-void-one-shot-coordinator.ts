@@ -54,7 +54,7 @@ export async function executeCloudVoidOnce(db:D1Database,t:VoidOnceTarget,ctx:Cl
      AND NOT EXISTS(SELECT 1 FROM allowance_void_send_claims c WHERE c.application_id=r.application_id)`)
     .bind(t.applicationId,t.workspaceId,grant!.official_snapshot_hash,actor!.employeeId,t.deviceId,
      clock().toISOString(),frozen.requestHash).run();
-   if(r.meta.changes!==1)throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
+   if((!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0))throw new Error("VOID_EXEC_CLAIM_UNCONFIRMED_NO_POST");
    claimed=true;
   }
   async function complete(hash:string){
@@ -90,7 +90,7 @@ export async function executeCloudVoidOnce(db:D1Database,t:VoidOnceTarget,ctx:Cl
   const saved=await db.prepare(`INSERT INTO allowance_void_send_attempts(application_id,attempt,started_at)
    SELECT ?1,?2,?3 WHERE COALESCE((SELECT MAX(attempt) FROM allowance_void_send_attempts WHERE application_id=?1),0)=?2-1`)
    .bind(t.applicationId,attempt,at).run();
-  if(saved.meta.changes!==1)throw new Error("VOID_ATTEMPT_CHANGED_NO_POST");
+  if((!Number.isSafeInteger(saved.meta.changes)||saved.meta.changes<=0))throw new Error("VOID_ATTEMPT_CHANGED_NO_POST");
   const finalActor=await authority.revalidate();
   if(!finalActor||finalActor.employeeId!==actor.employeeId||finalActor.workspaceRole!==actor.workspaceRole||
     !await activeVoidDevice(db,t.workspaceId,t.deviceId)||

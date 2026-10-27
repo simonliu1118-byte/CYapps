@@ -207,7 +207,7 @@ export async function claimCloudAllowanceOneShotSending(
   // every new invocation fails read-only at the ledger guard above.
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
  }
- if(result.meta.changes!==1)
+ if((!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0))
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
  const after=await authority.revalidate();
  if(!sameManager(first,after,t.workspaceId)||!await activeDevice(db,t))

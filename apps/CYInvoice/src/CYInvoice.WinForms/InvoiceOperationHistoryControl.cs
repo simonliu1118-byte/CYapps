@@ -48,7 +48,8 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         InvoiceRecord record,
         InvoiceVoidHandledReview? handledReview = null,
         InvoiceAllowanceManualReview? allowanceReview = null,
-        IReadOnlyList<OfficialAllowanceObservation>? officialObservations = null)
+        IReadOnlyList<OfficialAllowanceObservation>? officialObservations = null,
+        LocalRepository? repository = null)
     {
         list.BeginUpdate();
         try
@@ -65,7 +66,9 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                         handledReview.Reason);
                 var row = NewRow("作廢", ShortDate(cancelText),
                     "已作廢(" + (parsed?.Reason ?? "原因未取得") + ")");
-                row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed);
+                row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed,
+                    EmployeeDisplayText.Format(repository, parsed?.UserEmployeeNo ?? "", handledReview?.RequesterName),
+                    EmployeeDisplayText.Format(repository, parsed?.ReviewerEmployeeNo ?? "", handledReview?.ReviewerName));
                 list.Items.Add(row);
             }
 
@@ -229,7 +232,19 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         }
     }
 
-    internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason);
+    internal void VerifySmokeVoidNames()
+    {
+        var item = list.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<VoidHistoryItem>().Single();
+        using var detail = new VoidHistoryDetailForm(item);
+        static IEnumerable<Control> Descendants(Control control) => control.Controls.Cast<Control>()
+            .SelectMany(child => new[] { child }.Concat(Descendants(child)));
+        var labels = Descendants(detail).OfType<Label>().Select(x => x.Text).ToArray();
+        if (!labels.Contains("3002 測試申請員工") || !labels.Contains("0001 測試核准管理員"))
+            throw new InvalidOperationException("作廢歷程彈窗遺失申請或核准姓名。");
+    }
+
+    internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason,
+        string? RequesterDisplay = null, string? ReviewerDisplay = null);
     internal sealed record AllowanceHistoryItem(InvoiceRecord Record, InvoiceAllowanceResult Allowance);
 
 
@@ -241,7 +256,7 @@ internal sealed class VoidHistoryDetailForm : Form
     {
         Text = "作廢詳細資訊";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, 270);
+        ClientSize = new Size(430, 290);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -254,8 +269,8 @@ internal sealed class VoidHistoryDetailForm : Form
             new("發票號碼", item.InvoiceNumber),
             new("作廢時間", item.CancelDate),
         };
-        rows.Add(new("操作使用者", item.ParsedReason?.UserEmployeeNo is { Length: > 0 } user ? user : "未取得"));
-        rows.Add(new("覆核管理員", item.ParsedReason?.ReviewerEmployeeNo is { Length: > 0 } reviewer ? reviewer : "－"));
+        rows.Add(new("操作使用者", item.RequesterDisplay ?? EmployeeDisplayText.Format(null, item.ParsedReason?.UserEmployeeNo ?? "")));
+        rows.Add(new("覆核管理員", item.ReviewerDisplay ?? EmployeeDisplayText.Format(null, item.ParsedReason?.ReviewerEmployeeNo ?? "")));
         rows.Add(new("作廢原因", item.ParsedReason?.Reason is { Length: > 0 } reason ? reason : "本次資料未取得"));
         Build(rows);
     }
@@ -348,6 +363,12 @@ internal sealed class AllowanceHistoryDetailForm : Form
             new("稅額", Money(allowance.TaxAmount)),
             new("含稅總額", Money(InvoiceOperationHistoryControl.InclusiveAmount(allowance))),
         };
+        var review = new EmployeeAllowanceWorkflowService(repository).HandledReviewFor(record);
+        if (review is not null && string.Equals(review.ConfirmedAllowanceNumber, allowance.AllowanceNumber, StringComparison.OrdinalIgnoreCase)) {
+            rows.Add(new("申請員工", EmployeeDisplayText.Format(repository, review.RequesterEmployeeNo, review.RequesterName)));
+            if (review.LocalApproverEmployeeNo.Length != 0)
+                rows.Add(new("核准管理員", EmployeeDisplayText.Format(repository, review.LocalApproverEmployeeNo, review.LocalApproverName)));
+        }
         var body = VoidHistoryDetailForm.HistoryDetailLayout(rows, Font);
         var close = UiControls.StandardButton("關閉");
         close.Width = 90;

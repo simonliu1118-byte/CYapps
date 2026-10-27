@@ -479,6 +479,10 @@ internal sealed class SyncIssuesForm : Form
             var failed = processing ? Array.Empty<InvoiceRecord>() : CurrentFailedRecords();
             var rows = new List<(string SortKey, ListViewItem Row)>();
 
+            var pendingRecords = repository.Invoices.LoadOrCreate()
+                .Where(r => r.Environment + "|" + r.SellerInvoice == accountKey && CloudAllowanceSubmissionService.HasPending(r))
+                .GroupBy(r => CloudAllowanceSubmissionService.PendingApplicationId(r)!)
+                .Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
             foreach (var issue in issues)
             {
                 var state = IssueState(issue);
@@ -487,8 +491,10 @@ internal sealed class SyncIssuesForm : Form
                 row.SubItems.Add(processing && IsAllowanceManualReview(issue) ? "折讓處理中" :
                     processing && IsAllowanceVoidManualReview(issue) ? "折讓作廢待主管" :
                     processing && IsVoidManualReview(issue) ? "紙本作廢待主管" : DisplayType(issue.IssueType));
-                row.SubItems.Add(issue.InvoiceNumber);
-                row.SubItems.Add(issue.OrderId);
+                var cloudAllowance = IsCloudAllowance(issue);
+                var linked = cloudAllowance ? pendingRecords.GetValueOrDefault(issue.OrderId) : null;
+                row.SubItems.Add(cloudAllowance ? linked?.InvoiceNumber ?? "開啟詳情查閱" : issue.InvoiceNumber);
+                row.SubItems.Add(cloudAllowance ? linked?.OrderId ?? "－" : issue.OrderId);
                 row.SubItems.Add(issue.Message);
                 row.SubItems.Add(state);
                 row.Tag = issue;
@@ -745,6 +751,11 @@ internal sealed class SyncIssuesForm : Form
             Application.DoEvents();
             if (sample.list.Items.Count != 2 || sample.listHost.VisibleRowCapacity() != 2 || !sample.summary.Text.Contains("雲端待辦讀取失敗"))
                 throw new InvalidOperationException("雲端待辦讀取失敗必須清除舊雲端結果，保留本機清單並明示未確認。");
+            store.ApplyCloudAllowance("test|12345678", "application_synthetic_cloud", "issue", "processing", "open", "");
+            sample.ReloadAll();
+            var cloudRow = sample.list.Items.Cast<ListViewItem>().Single(row => row.Tag is InvoiceSyncIssue x && x.OrderId == "application_synthetic_cloud");
+            if (cloudRow.SubItems[1].Text != "折讓申請" || cloudRow.SubItems[2].Text != "開啟詳情查閱" || cloudRow.SubItems[3].Text != "－")
+                throw new InvalidOperationException("Cloud 申請 ID 不得冒充訂單號，清單類型必須為業務文字。");
             sample.Close();
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -1529,7 +1540,7 @@ internal sealed class SyncIssuesForm : Form
             (issue.ResolvedUtc is null ? null : allowanceWorkflow.HandledReviewFor(record));
         if (review is not null && Math.Abs((review.RequestedUtc - issue.CreatedUtc).TotalMinutes) > 5)
             review = null;
-        rows.Add(new("申請員工", EmployeeDisplay(review?.RequesterEmployeeNo ?? "")));
+        rows.Add(new("申請員工", EmployeeDisplay(review?.RequesterEmployeeNo ?? "", review?.RequesterName)));
         rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("折讓原因", review?.Reason ?? "－"));
         if (review?.DraftItems is { } items)
@@ -1537,7 +1548,7 @@ internal sealed class SyncIssuesForm : Form
                 $"{i.OriginalDescription}　數量 {i.Quantity}　單價 {i.UnitPrice}　未稅 {i.Amount}　稅 {i.Tax}"))));
         if (review?.LocalApprovedUtc is { } approved)
         {
-            rows.Add(new("Local 核准管理員", EmployeeDisplay(review.LocalApproverEmployeeNo)));
+            rows.Add(new("Local 核准管理員", EmployeeDisplay(review.LocalApproverEmployeeNo, review.LocalApproverName)));
             rows.Add(new("Local 核准時間", approved.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
             var reservation = issue.ResolvedUtc is null
                 ? allowanceWorkflow.LocalReservationFor(issue) : null;
@@ -1590,7 +1601,7 @@ internal sealed class SyncIssuesForm : Form
         if (issue.ResolvedUtc is not null && record?.ExtensionData?.TryGetValue("cyinvoice_allowance_void_handled_" + issue.Id, out var handled) == true)
             review = handled.Deserialize<InvoiceAllowanceVoidManualReview>();
         rows.Add(new("折讓單號", review?.AllowanceNumber ?? "－"));
-        rows.Add(new("申請員工", review?.RequesterEmployeeNo ?? "－"));
+        rows.Add(new("申請員工", EmployeeDisplay(review?.RequesterEmployeeNo ?? "", review?.RequesterName)));
         rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("折讓作廢原因", review?.Reason ?? "－"));
         var api = allowanceVoidWorkflow.LocalApprovalFor(issue);
@@ -1598,7 +1609,7 @@ internal sealed class SyncIssuesForm : Form
             issue.ResolvedUtc is not null ? "已解決" : api is not null ? "主管已核准，系統自動處理中" : "等待主管核准"));
         if (api is not null)
         {
-            rows.Add(new("核准管理員", api.ManagerEmployeeNo));
+            rows.Add(new("核准管理員", EmployeeDisplay(api.ManagerEmployeeNo, review?.ReviewerName)));
             // Existing expires_utc is retained only for compatibility with old approvals.
             rows.Add(new("官方作廢查回", api.LastObservation == "official_void_observed_unattributed"
                 ? "原號 D0501／99；尚無法歸因於本次送出" : api.Claimed ? "尚未取得可確認的官方作廢證據" : "尚未送出"));
@@ -1641,23 +1652,8 @@ internal sealed class SyncIssuesForm : Form
         if (handled is not null) yield return new("核准管理員",EmployeeDisplay(handled.ReviewerEmployeeNo,handled.ReviewerName));
     }
 
-    private string EmployeeDisplay(string employeeNo, string? savedName = null)
-    {
-        employeeNo = employeeNo.Trim();
-        if (employeeNo.Length == 0) return "－";
-        if (!string.IsNullOrWhiteSpace(savedName)) return employeeNo+" "+savedName.Trim();
-        try
-        {
-            var account = repository.LoadAuthorityEmployees()
-                .FirstOrDefault(employee => string.Equals(employee.EmployeeNo, employeeNo, StringComparison.Ordinal));
-            return account is null || string.IsNullOrWhiteSpace(account.Name)
-                ? employeeNo : employeeNo + " " + account.Name.Trim();
-        }
-        catch
-        {
-            return employeeNo;
-        }
-    }
+    private string EmployeeDisplay(string employeeNo, string? savedName = null) =>
+        EmployeeDisplayText.Format(repository, employeeNo, savedName);
 
     private InvoiceRecord FindIssueRecord(InvoiceSyncIssue issue) =>
         TryFindIssueRecord(issue) ?? throw new InvalidOperationException("本機找不到這筆人工確認對應的發票");
@@ -1981,6 +1977,10 @@ internal sealed class SyncIssuesForm : Form
 
     private static string DisplayType(string type) => type switch
     {
+        "cloud_allowance_issue_processing" => "折讓申請",
+        "cloud_allowance_issue_problem" => "折讓申請待查證",
+        "cloud_allowance_void_processing" => "折讓作廢申請",
+        "cloud_allowance_void_problem" => "折讓作廢申請待查證",
         InvoiceSyncIssueTypes.InvoiceListFailed => "發票清單查詢失敗",
         InvoiceSyncIssueTypes.AllowanceLimitExceeded => "折讓每日查詢超限",
         InvoiceSyncIssueTypes.QueryFailed => "發票回查失敗",

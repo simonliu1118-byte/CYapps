@@ -90,13 +90,17 @@ public sealed class CloudAllowanceClient
             Content=JsonContent.Create(payload)};
         req.Headers.Authorization=new AuthenticationHeaderValue("Bearer",deviceToken);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        req.Headers.TryAddWithoutValidation("X-Request-ID","win-"+Guid.NewGuid().ToString("N"));
+        var requestId="win-"+Guid.NewGuid().ToString("N");
+        req.Headers.TryAddWithoutValidation("X-Request-ID",requestId);
+        bool responseReceived=false;int? httpStatus=null;
+        try {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
         // The provided HttpClient MUST have redirects disabled; a redirect can
         // otherwise disclose Employee login material to a different endpoint.
         using var res=await http.SendAsync(req,HttpCompletionOption.ResponseHeadersRead,
             timeout.Token).ConfigureAwait(false);
+        responseReceived=true;httpStatus=(int)res.StatusCode;
         // Bound even malicious error responses; never print raw sensitive JSON.
         await res.Content.LoadIntoBufferAsync(65536,timeout.Token).ConfigureAwait(false);
         JsonDocument document;
@@ -128,6 +132,12 @@ public sealed class CloudAllowanceClient
                 _ => "無法確認折讓操作結果，請依原申請查回。"
             },
             res.StatusCode);
+        } catch (Exception error) {
+            error.Data["CloudRequestId"]=requestId;
+            error.Data["ResponseReceived"]=responseReceived;
+            if(httpStatus is not null)error.Data["HttpStatus"]=httpStatus.Value;
+            throw;
+        }
     }
     private static CloudAllowanceReceipt Receipt(JsonElement root,string expectedId,
         string expectedStatus,int expectedRevision)

@@ -65,7 +65,7 @@ internal static class RetentionTests
         }
     }
 
-    public static void TestEnvironmentKeepsTodayOnly()
+    public static void TestEnvironmentKeepsThreeDays()
     {
         using var temporary = new RetentionTemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
@@ -73,23 +73,25 @@ internal static class RetentionTests
         settings.Environment = Environments.Test;
         repository.Settings.Save(settings);
 
-        repository.Invoices.Append(Record("test-old-delete", "TT00000001", "M20260917001", InvoiceStates.Opened, "2026/09/17", Environments.Test));
+        repository.Invoices.Append(Record("test-old-delete", "TT00000001", "M20260915001", InvoiceStates.Opened, "2026/09/15", Environments.Test));
         repository.Invoices.Append(Record("test-today-keep", "TT00000002", "M20260918001", InvoiceStates.Opened, "2026/09/18", Environments.Test));
         repository.Invoices.Append(Record("test-future-keep", "TT00000003", "M20260919001", InvoiceStates.Opened, "2026/09/19", Environments.Test));
-        repository.Invoices.Append(Record("test-unknown-delete", "TT00000004", "M20260916001", InvoiceStates.Unknown, "2026/09/16", Environments.Test));
+        repository.Invoices.Append(Record("test-unknown-delete", "TT00000004", "M20260915002", InvoiceStates.Unknown, "2026/09/15", Environments.Test));
         InsertSyncIssue(
             repository,
             "test|12345678",
             string.Empty,
             "OLD-TEST-ISSUE",
             resolved: false,
-            createdUtc: "2026-09-17T00:00:00.0000000+00:00");
+            createdUtc: "2026-09-15T12:00:00.0000000+00:00");
 
+        repository.Invoices.Append(Record("test-yesterday-keep", "TT00000005", "M20260917001", InvoiceStates.Voided, "2026/09/17", Environments.Test));
+        repository.Invoices.Append(Record("test-boundary-keep", "TT00000006", "M20260916001", InvoiceStates.Unknown, "2026/09/16", Environments.Test));
         var result = new InvoiceRetentionService(repository).Prune(new DateOnly(2026, 9, 18));
         Equal(2, result.Deleted);
         Equal(0, result.Problems.Count);
         var remaining = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
-        SequenceEqual(new[] { "test-future-keep", "test-today-keep" }, remaining);
+        SequenceEqual(new[] { "test-boundary-keep", "test-future-keep", "test-today-keep", "test-yesterday-keep" }, remaining);
         Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("test|12345678").Count);
     }
 

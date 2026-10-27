@@ -35,10 +35,12 @@ public sealed class InvoiceSyncService
         this.now = now ?? (() => DateTimeOffset.Now);
     }
 
+    internal static DateOnly RecentRangeStart(DateOnly today) => today.AddDays(-2);
+
     public async Task<InvoiceSyncResult> SyncRecentAsync(CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(now().DateTime);
-        return await SyncRangeAsync(today.AddDays(-2), today, cancellationToken).ConfigureAwait(false);
+        return await SyncRangeAsync(RecentRangeStart(today), today, cancellationToken).ConfigureAwait(false);
     }
 
     internal async Task<InvoiceSyncResult> SyncRangeAsync(
@@ -53,9 +55,9 @@ public sealed class InvoiceSyncService
         if (account.Environment == Environments.Test)
         {
             var today = DateOnly.FromDateTime(now().DateTime);
-            return await SyncListedAsync(gateway, account, today, today, today, cancellationToken).ConfigureAwait(false);
+            return await SyncListedAsync(gateway, account, RecentRangeStart(today), today, cancellationToken).ConfigureAwait(false);
         }
-        return await SyncListedAsync(gateway, account, startDate, endDate, null, cancellationToken).ConfigureAwait(false);
+        return await SyncListedAsync(gateway, account, startDate, endDate, cancellationToken).ConfigureAwait(false);
     }
 
     // Once per day, discover newly created allowances from the official
@@ -87,8 +89,8 @@ public sealed class InvoiceSyncService
         if(checkpoint.BudgetDay!=today)checkpoint=checkpoint with{BudgetDay=today,PagesUsed=0,QueriesUsed=0};
         void Save()=>state.SaveCheckpoint(key,scope,JsonSerializer.Serialize(checkpoint));
         var owned = account.Environment == Environments.Test
-            ? AccountRecords(account).Where(r => r.InvoiceState == InvoiceStates.Opened && IsInRange(r,today,today) &&
-                (r.RecordOrigin == RecordOrigins.Local || TestOrderIdPrefix.TryStripForDate(r.ApiOrderId,today,out _)))
+            ? AccountRecords(account).Where(r => r.InvoiceState == InvoiceStates.Opened && IsInRange(r,RecentRangeStart(today),today) &&
+                (r.RecordOrigin == RecordOrigins.Local || HasTestPrefixInRange(r.ApiOrderId,RecentRangeStart(today),today)))
                 .Select(r => r.InvoiceNumber.Trim()).Where(n => n.Length != 0).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (account.Environment == Environments.Test)
@@ -233,12 +235,18 @@ public sealed class InvoiceSyncService
         return restored;
     }
 
+    private static bool HasTestPrefixInRange(string orderId, DateOnly start, DateOnly end)
+    {
+        for (var day = start; day <= end; day = day.AddDays(1))
+            if (TestOrderIdPrefix.TryStripForDate(orderId, day, out _)) return true;
+        return false;
+    }
+
     private async Task<InvoiceSyncResult> SyncListedAsync(
         IAmegoGateway gateway,
         Account account,
         DateOnly startDate,
         DateOnly endDate,
-        DateOnly? testPrefixDate,
         CancellationToken cancellationToken)
     {
         var accountKey = AccountKey(account);
@@ -251,8 +259,8 @@ public sealed class InvoiceSyncService
                 : [];
             // The existing daily CYInvoice namespace is the test-pool discovery
             // rule. Local evidence also preserves our legacy unprefixed operations.
-            remote = testPrefixDate is null ? listed : listed.Where(item =>
-                TestOrderIdPrefix.TryStripForDate(item.OrderId,testPrefixDate.Value,out _) || known.Any(r =>
+            remote = account.Environment != Environments.Test ? listed : listed.Where(item =>
+                HasTestPrefixInRange(item.OrderId, startDate, endDate) || known.Any(r =>
                 (r.InvoiceNumber.Trim().Length != 0 && string.Equals(r.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                 (r.ApiOrderId.Trim().Length != 0 && string.Equals(r.ApiOrderId.Trim(), item.OrderId.Trim(), StringComparison.Ordinal)))).ToArray();
         }
@@ -384,12 +392,12 @@ public sealed class InvoiceSyncService
             }
         }
 
-        if (testPrefixDate is not null)
+        if (account.Environment == Environments.Test)
         {
             foreach (var record in local.Where(record =>
                          !processedLocalIds.Contains(record.Id) &&
                          record.InvoiceState is InvoiceStates.Unknown or InvoiceStates.Changing &&
-                         IsInRange(record, testPrefixDate.Value, testPrefixDate.Value)))
+                         IsInRange(record, startDate, endDate)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var before = Fingerprint(record);

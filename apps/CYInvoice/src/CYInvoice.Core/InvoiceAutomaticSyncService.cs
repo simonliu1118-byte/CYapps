@@ -64,7 +64,7 @@ public sealed class InvoiceAutomaticSyncService
             return await SyncRecentAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var startDate = account.Environment == Environments.Test ? today : TwoPeriodRangeStart(today);
+        var startDate = account.Environment == Environments.Test ? InvoiceSyncService.RecentRangeStart(today) : TwoPeriodRangeStart(today);
         InvoiceSyncResult result;
         try { result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is not OperationCanceledException)

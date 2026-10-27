@@ -1,5 +1,6 @@
 using System.Globalization;
 using CYInvoice.Core;
+using CYInvoice.Core.Cloud;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -43,10 +44,11 @@ public static class IssueDiagnosticLog
         // Error messages can contain payloads. Keep type/stack and labelled
         // provider codes only; correlation never includes credentials or PII.
         var entry = new Breadcrumb(DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-            stage, issueType, code?.ToString(CultureInfo.InvariantCulture) ?? SafeCode(error?.Message),
+            stage, issueType, code?.ToString(CultureInfo.InvariantCulture) ?? (error is CloudApiException cloud && SafeEventName.IsMatch(cloud.Code) ? cloud.Code : SafeCode(error?.Message)),
             attempt, responseReceived, error?.GetType().FullName, error?.StackTrace,
             requestId is not null && SafeEventName.IsMatch(requestId) ? requestId : null,
-            error is HttpRequestException requestError ? (int?)requestError.StatusCode : null);
+            error is CloudApiException cloudError ? (int?)cloudError.StatusCode :
+            error is HttpRequestException requestError ? (int?)requestError.StatusCode : error?.Data["HttpStatus"] as int?);
         using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         writer.WriteLine(JsonSerializer.Serialize(entry));
@@ -118,7 +120,7 @@ public static class IssueDiagnosticLog
                     output.AppendLine(item.AtUtc + " | " +
                         (SafeEventName.IsMatch(item.Stage) ? item.Stage : "unknown") + " | " +
                         (SafeEventName.IsMatch(item.IssueType) ? item.IssueType : "unknown") +
-                        " | " + SafeCode("code=" + item.Code) + " attempt=" + item.Attempt +
+                        " | " + (SafeEventName.IsMatch(item.Code) ? item.Code : "unknown") + " attempt=" + item.Attempt +
                         " response=" + item.ResponseReceived + " request=" + item.RequestId +
                         " http=" + item.HttpStatus + " error=" + item.ErrorType + "\n" + item.Stack);
                 }

@@ -176,7 +176,7 @@ export async function approveCloudAllowanceAfterOfficialProof(
   .bind(first.employeeId,t.deviceId,approvedAtUtc,t.applicationId,t.workspaceId,t.expectedRevision);
  try{result=await db.batch(frozen.status==="open"?[review,insert,transition]:[insert,transition]);}
  catch{throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");}
- if(result.some(r=>r.meta.changes!==1))
+ if(result.some(r=>(!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0)))
   throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");
  const last=await authority.revalidate();
  if(!sameManager(first,last,t.workspaceId)||!await validDevice(db,t))

@@ -28,6 +28,7 @@ internal static class AllowanceWorkflowTests
 
         Equal(false, result.AlreadyQueued);
         Equal("3015", result.Review.RequesterEmployeeNo);
+        Equal("員工", result.Review.RequesterName);
         Equal("部分退貨", result.Review.Reason);
         Equal(50L, result.Review.TaxInclusiveAmount);
         Equal(false, result.Review.AwaitingConfirmation);
@@ -244,11 +245,13 @@ internal static class AllowanceWorkflowTests
         var approved = await setup.Workflow.ApproveLocalDraftAsync(issue,
             "2000", "AdminPass1", preview.OfficialSnapshotHash);
         Equal("2000", approved.LocalApproverEmployeeNo);
+        Equal("管理員", approved.LocalApproverName);
         Equal(true, approved.LocalApprovedUtc is not null);
         Equal(3, setup.Gateway.QueryCalls);
         var stored = setup.Workflow.ManualReviewFor(
             setup.Repository.Invoices.LoadOrCreate().Single())!;
         Equal(approved.LocalApprovedUtc, stored.LocalApprovedUtc);
+        Equal("員工", stored.RequesterName); Equal("管理員", stored.LocalApproverName);
         Equal(approved.LocalApprovalOfficialHash, stored.LocalApprovalOfficialHash);
         await ThrowsAsync<InvalidOperationException>(() =>
             CheckSeededHistoricalAsync(setup, issue, "2000", "AdminPass1"));

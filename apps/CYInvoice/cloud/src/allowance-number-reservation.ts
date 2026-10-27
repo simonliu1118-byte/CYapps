@@ -138,7 +138,7 @@ export async function reserveApprovedCloudAllowanceNumber(
   .bind(ledgerId,target.applicationId,target.workspaceId,frozen.sellerInvoice,frozen.environment,
    frozen.allowanceDay,sequence,number,attempt,frozen.requestHash,target.deviceId,at,
    target.expectedRevision,actor.employeeId,frozen.companyRevision).run();
- if(result.meta.changes!==1)throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
+ if((!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0))throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
  return {applicationId:target.applicationId,ledgerId,allowanceNumber:number,sequence,attempt,
   status:"reserved",requestHash:frozen.requestHash,maySendWithoutFreshOfficialCheck:false,sentToAmego:false};
 }

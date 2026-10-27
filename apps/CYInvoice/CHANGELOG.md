@@ -2,6 +2,20 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.44 Build 0 — 2026/10/28（測試三天同步、折讓提交及業務人員姓名）
+
+本批修正（2026-10-28）：測試環境同步及本機保留改為今天加前兩天，逐日套用原有日期識別碼；陌生測試票不回查，正式環境保留期不變。折讓申請成功立即出現在原「待辦/處理中」；回覆不明只查回原ID一次，仍未知則保留原「上傳問題」及遮罩診斷，既有同步也會恢復舊版只留下marker的申請，不重新POST。
+
+隔離SQLite測試重現稽核trigger讓D1 `meta.changes` 大於1，原程式因此在成功提交後錯回409；改為確認正整數變更，保留原SQL的主鍵／CAS、Device、角色、公司及版次限制。測試fixture使用`total_changes()`差值模擬D1，不能以直接受影響列數掩蓋trigger成本。這不是放寬一般員工核准權限，也不以同號、同金額推定財務成功。
+
+姓名只加在業務人員欄位：原發票作廢詳情、作廢歷程彈窗、Local折讓／折讓作廢待辦詳情、可精確對應的Local已完成折讓詳情、Cloud折讓／折讓作廢主管詳情。新Cloud申請人姓名來自當次CYID principal並隨原請求加密保存，核准人姓名存原Grant snapshot；Local來源仍用原Local authority。舊資料沒有姓名時，只用同權威範圍的既有可信快取輔助顯示，否則明示「姓名未取得」，不補造歷史姓名或新員工目錄。Device最小摘要不增加姓名／原發票內容。
+
+清單改用業務類型文字；精確本機application ID可連回發票／訂單，跨機未對應時顯示「開啟詳情查閱／－」，不把內部application ID當訂單號，也不誤合併同一發票的不同申請。折讓申請窗寬738、原因獨立一列，員工編號／密碼同列。
+
+- Cloud Source 0.9.7只更新原Worker程式；schema22、正式Release V3.1.0及已啟用的正常旗標維持。未做Cloudflare操作或真光貿交易，實際部署仍是0.9.6。
+- 原encrypted request reader相容舊／新可選申請人快照；新格式不能直接交回0.9.6的嚴格reader。回退前須盤點新請求與未知送出，不能自動降版、還原D1或解鎖Claim。
+- State／Mutation沿原InvoiceStore、IssueStore、Cloud application／Grant／Ledger／Claim；Render沿原詳情及清單；Lifecycle沿原同步，不增排程、資料表、介面入口或財務owner。共用純文字姓名formatter取代原兩個不一致的顯示方法。CYID Consumer Impact: NONE。
+
 ## 2026/10/27 本機Cloud 0.9.6啟用與限定舊案盤點完成
 
 - 使用者本機報告確認Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`、V3.1.43 Build 0已部署至原Worker，單一版本100%流量；原before／deploy／after、bundle一致性及健康檢查通過，schema22／history未變，無migration、DDL、新資源或CYID D1操作。

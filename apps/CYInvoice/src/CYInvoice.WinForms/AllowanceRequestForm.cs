@@ -10,7 +10,7 @@ namespace CYInvoice.WinForms;
 // the refund, not any individual original product allocation.
 internal sealed class AllowanceRequestForm : Form
 {
-    private const int WindowWidth = 820;
+    private const int WindowWidth = 738;
     private const int WindowHeight = 590;
     private readonly InvoiceRecord? original;
     private readonly FixedDecimal? remaining;
@@ -51,7 +51,7 @@ internal sealed class AllowanceRequestForm : Form
         Text="折讓申請";
         StartPosition=FormStartPosition.CenterParent;
         ClientSize=new Size(WindowWidth,WindowHeight);
-        MinimumSize=new Size(760,540);
+        MinimumSize=new Size(700,540);
         FormBorderStyle=FormBorderStyle.Sizable;
         MaximizeBox=true;
         ShowInTaskbar=false;
@@ -155,8 +155,9 @@ internal sealed class AllowanceRequestForm : Form
         for(var i=0;i<2;i++)credentials.RowStyles.Add(
             new RowStyle(SizeType.Percent,50));
         Credentials(credentials,"折讓原因",reason,0,0);
-        Credentials(credentials,"員工編號",employeeNo,2,0);
-        Credentials(credentials,"員工密碼",password,0,1);
+        credentials.SetColumnSpan(reason,3);
+        Credentials(credentials,"員工編號",employeeNo,0,1);
+        Credentials(credentials,"員工密碼",password,2,1);
         root.Controls.Add(credentials,0,4);
         var buttons=new FlowLayoutPanel {
             Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,
@@ -437,6 +438,10 @@ internal sealed class AllowanceRequestForm : Form
 
     internal void VerifySmokeLayout()
     {
+        if (employeeNo.Parent is not TableLayoutPanel credentials || password.Parent != credentials ||
+            credentials.GetRow(employeeNo) != credentials.GetRow(password) ||
+            employeeNo.Bounds.Right > password.Bounds.Left || password.Bounds.Right > credentials.ClientSize.Width)
+            throw new InvalidOperationException("員工編號與密碼必須同列對齊且不超出視窗。");
         if(Text!="折讓申請"||ClientSize.Width!=WindowWidth||
            ClientSize.Height!=WindowHeight||CancelButton!=cancel||
            !password.UseSystemPasswordChar||products.Columns.Count!=7||

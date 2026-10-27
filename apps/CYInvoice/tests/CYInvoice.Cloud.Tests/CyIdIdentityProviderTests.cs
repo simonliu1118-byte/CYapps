@@ -113,6 +113,9 @@ internal static class CyIdIdentityProviderTests
             var principal = await provider.AuthenticateAsync(credentials);
             Check(principal?.StableEmployeeId == "emp_test" && principal.Role == AppRole.User
                 && principal.WorkspaceId == "ws_identity" && principal.CredentialVersion == 1, "canonical principal");
+            Check(cache.DisplayName(binding, credentials.EmployeeNo) == principal!.DisplayName, "display name comes from authenticated CYID cache");
+            Check(cache.DisplayName(binding with { IdentityWorkspaceId = "ws_other" }, credentials.EmployeeNo) is null &&
+                cache.DisplayName(binding, "9999") is null, "names never cross authority or invent unknown staff");
             var saved = File.ReadAllText(Path.Combine(directory, "cyid_offline_cache.json"));
             Check(!saved.Contains("SyntheticPass1", StringComparison.Ordinal) && !saved.Contains("emp_test", StringComparison.Ordinal)
                 && !saved.Contains("USER", StringComparison.Ordinal) && !saved.Contains("cyid_", StringComparison.Ordinal),

@@ -57,6 +57,8 @@ export function approvedExecutionAuthority(env:AllowanceExecutionEnv,workspaceId
   if(workspaceId!==b.workspaceId||cached.identityWorkspaceId!==b.identityWorkspaceId||cached.applicationId!==b.applicationId||cached.employeeId!==managerActorId||
     !["ADMIN","SUPER_ADMIN"].includes(String(cached.workspaceRole))||cached.emailVerified!==true)
    throw new Error("APPROVAL_AUTHORITY_INVALID");
+  // Display metadata is not part of the shared CYID authority contract.
+  delete cached.employeeNo;delete cached.displayName;
   const checked=await env.IDENTITY_AUTHORITY.invalidateCache({workspaceId:b.identityWorkspaceId,
    applicationId:b.applicationId,authorities:[cached]}) as Record<string,unknown>;
   if(checked.workspaceId!==b.identityWorkspaceId||checked.applicationId!==b.applicationId||
@@ -94,7 +96,7 @@ async function readback(db:D1Database,t:CloudAllowanceSendingTarget,ctx:CloudAll
   db.prepare(`UPDATE allowance_number_ledger SET status='confirmed',updated_at=?2
     WHERE ledger_id=?1 AND status='sending'`).bind(t.ledgerId,at)
  ]);
- if(rows.some(r=>r.meta.changes!==1))throw new Error("ALLOWANCE_CONFIRMATION_SAVE_FAILED");
+ if(rows.some(r=>(!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0)))throw new Error("ALLOWANCE_CONFIRMATION_SAVE_FAILED");
  await recordExecutionEvent(db,t,"issue","official_confirmed",requestId,clock,{responseReceived:true});
  return {applicationId:t.applicationId,executionState:"completed",allowanceNumber:t.allowanceNumber,ledgerStatus:"confirmed"};
 }
@@ -131,7 +133,7 @@ export async function executeCloudAllowanceExactlyOnce(db:D1Database,t:CloudAllo
    db.prepare(`INSERT INTO allowance_number_rejections(ledger_id,provider_code,recorded_at) VALUES(?1,?2,?3)`)
     .bind(t.ledgerId,sent.code,at)
   ]);
-  if(rows.some(r=>r.meta.changes!==1))throw new Error("ALLOWANCE_REJECTION_SAVE_FAILED");
+  if(rows.some(r=>(!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0)))throw new Error("ALLOWANCE_REJECTION_SAVE_FAILED");
   return {applicationId:t.applicationId,executionState:"processing",allowanceNumber:t.allowanceNumber,ledgerStatus:"occupied_external"};
  }
  // Even a timeout is queried once before classification. Never repeat POST.

@@ -49,7 +49,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.9.6";
+const CLOUD_VERSION = "0.9.7";
 const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
 const MINIMUM_CLIENT_VERSION = "2.6.5";
 const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";

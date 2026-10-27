@@ -255,6 +255,11 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             CurrentAccountKey(), ApiRequest(issue).Review.AllowanceNumber, requestHash,
             officialHash, manager.EmployeeNo, now().ToUniversalTime(), false, "");
         new LocalAllowanceVoidStore(repository.DataDirectory).Approve(approval, now());
+        var request = ApiRequest(issue);
+        WriteReview(request.Record, request.Review with {
+            ReviewerEmployeeNo = manager.EmployeeNo, ReviewerName = manager.Name
+        });
+        syncRepository.UpsertMany([request.Record]);
         return approval;
     }
 

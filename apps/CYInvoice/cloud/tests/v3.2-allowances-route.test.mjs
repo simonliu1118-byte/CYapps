@@ -117,6 +117,10 @@ async function fixture(){
   .run(ws,appKey,devB);
  // Canonical 0017/0018 were applied in the migration loop above.
  let beforeSend=null,loseReply=false,afterSend=null;
+ const runD1=(query,args)=>{
+  const total=()=>Number(sql.prepare("SELECT total_changes() AS n").get().n);
+  const before=total();sql.prepare(query).run(...args);return {meta:{changes:total()-before}};
+ };
  class Statement {
   constructor(q){this.q=q;this.args=[];}
   bind(...args){this.args=args;return this;}
@@ -126,7 +130,7 @@ async function fixture(){
    if(this.q.includes("UPDATE allowance_number_ledger")&&beforeSend){
     const cb=beforeSend;beforeSend=null;cb();
    }
-   const result={meta:{changes:sql.prepare(this.q).run(...this.args).changes}};
+   const result=runD1(this.q,this.args);
    if(this.q.includes("UPDATE allowance_number_ledger")&&afterSend){
     const cb=afterSend;afterSend=null;cb();
    }
@@ -139,8 +143,7 @@ async function fixture(){
  const db={prepare:q=>new Statement(q),async batch(parts){
   sql.exec("BEGIN IMMEDIATE");
   try{
-   const result=parts.map(p=>({meta:{
-    changes:sql.prepare(p.q).run(...p.args).changes}}));
+   const result=parts.map(p=>(runD1(p.q,p.args)));
    sql.exec("COMMIT");return result;
   }catch(e){sql.exec("ROLLBACK");throw e;}
  }};
@@ -233,12 +236,18 @@ try{
  const detail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
  assert.equal(detail.status,200);assert.ok(detail.body.rows.some(r=>r.label==="原發票商品"));
  assert.ok(detail.body.rows.some(r=>r.label==="本次折讓商品"));
+ assert.ok(detail.body.rows.some(r=>r.label==="申請員工"&&r.value==="1234 Synthetic"));
+ assert.ok(detail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="尚未核准"));
  assert.deepEqual(sql.prepare("SELECT status,revision FROM allowance_applications WHERE application_id=?").get(app1),Object.assign(Object.create(null),{status:"open",revision:1}));
  assert.equal((await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB)).status,503);
  assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_approvals").get().n,0);
  manager.ALLOWANCE_G0401_SEND_ENABLED="true";
  const approved=await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB);
  assert.equal(approved.status,200,JSON.stringify(approved));assert.equal(approved.body.executionState,"completed");
+ const approvedDetail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
+ assert.equal(approvedDetail.status,200);
+ assert.ok(approvedDetail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="1234 Synthetic"));
+ assert.equal((await call({...employee,ALLOWANCE_G0401_SEND_ENABLED:"true"},"approve",{applicationId:app1,expectedRevision:1})).status,403);
  assert.equal(provider.calls.filter(x=>x.endsWith("/g0401")).length,1);
  assert.equal((await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB)).status,409);
  assert.equal(provider.calls.filter(x=>x.endsWith("/g0401")).length,1);

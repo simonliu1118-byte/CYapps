@@ -87,8 +87,8 @@ export async function approveCloudVoidAfterOfficialProof(
  let outcome:D1Result[];
  try{outcome=await db.batch([grant,update]);}
  catch{throw new Error("VOID_APPROVAL_UNCONFIRMED_READBACK_ONLY");}
- if(outcome.length!==2||outcome[0].meta.changes!==1||
-  outcome[1].meta.changes!==1)
+ if(outcome.length!==2||(!Number.isSafeInteger(outcome[0].meta.changes)||outcome[0].meta.changes<=0)||
+  (!Number.isSafeInteger(outcome[1].meta.changes)||outcome[1].meta.changes<=0))
   throw new Error("VOID_APPROVAL_UNCONFIRMED_READBACK_ONLY");
  // A lost reply after commit is handled by same-ID readback, never reapprove.
  return {applicationId:t.applicationId,approvedRevision:2,

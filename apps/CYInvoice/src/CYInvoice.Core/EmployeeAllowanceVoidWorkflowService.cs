@@ -13,7 +13,12 @@ public sealed record InvoiceAllowanceVoidManualReview(
     string AllowanceNumber,
     string RequesterEmployeeNo,
     string Reason,
-    DateTimeOffset RequestedUtc, bool ConfirmationProblem = false);
+    DateTimeOffset RequestedUtc, bool ConfirmationProblem = false)
+{
+    public string RequesterName { get; init; } = "";
+    public string ReviewerEmployeeNo { get; init; } = "";
+    public string ReviewerName { get; init; } = "";
+}
 
 public sealed record EmployeeAllowanceVoidWorkflowResult(
     InvoiceRecord Record,
@@ -118,7 +123,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             allowanceNumber,
             employee.EmployeeNo,
             reason,
-            now().ToUniversalTime());
+            now().ToUniversalTime()) { RequesterName = employee.Name };
         WriteReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try

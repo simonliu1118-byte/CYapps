@@ -58,6 +58,10 @@ public sealed class LocalRepository
     public bool HasAuthorityEmployees() =>
         IdentityProvider.Kind == IdentityProviderKind.CyId || Employees.HasEmployees();
 
+    public string? KnownEmployeeName(string employeeNo) =>
+        IdentityProvider is CyIdIdentityProvider cyId ? cyId.CachedDisplayName(employeeNo) :
+        Employees.LoadAll().FirstOrDefault(x => x.EmployeeNo == employeeNo)?.Name;
+
     public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
         IdentityProvider.Kind == IdentityProviderKind.CyId ? [] : Employees.LoadAll();
 

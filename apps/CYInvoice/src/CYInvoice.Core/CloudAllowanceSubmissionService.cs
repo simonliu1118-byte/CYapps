@@ -40,6 +40,8 @@ public sealed class CloudAllowanceSubmissionService
     public static bool HasPending(InvoiceRecord invoice) =>
         invoice.ExtensionData?.ContainsKey(PendingKey) == true;
 
+    public static string? PendingApplicationId(InvoiceRecord invoice) => ReadPending(invoice)?.ApplicationId;
+
     // The AMEGO-typed, unnumbered JSON is the only financial payload sent to
     // the Worker. It is NOT persisted as plaintext pending application state.
     public static CloudAllowanceDraft BuildDraft(
@@ -121,16 +123,15 @@ public sealed class CloudAllowanceSubmissionService
             {
                 var state = await api.StatusAsync(pending.ApplicationId, employeeNo,
                     password, cancellationToken).ConfigureAwait(false);
+                TrackState(record, pending.ApplicationId, state.Status, state.LedgerStatus == "confirmed" ? "completed" : "processing");
                 return new CloudAllowanceSubmissionResult(pending.ApplicationId,
                     AlreadySubmitted: true, state.Status);
             }
             catch (Exception error) when (error is HttpRequestException or
                    TaskCanceledException or CloudApiException or InvalidDataException)
             {
-                throw new InvalidOperationException(
-                    "原折讓申請 " + pending.ApplicationId +
-                    " 尚無法確認。已保留原 ID，禁止建立新申請或盲目重送；請依原 ID 人工查回。",
-                    error);
+                TrackState(record, pending.ApplicationId, "unknown", "problem", error, "status_readback", 1);
+                throw new InvalidOperationException("原折讓申請尚無法確認，已保留在「上傳問題」並保存診斷；系統會依原申請查證，請勿重新建立。", error);
             }
         }
 
@@ -177,16 +178,62 @@ public sealed class CloudAllowanceSubmissionService
         {
             var receipt = await api.CreateAsync(draft, employeeNo, password,
                 cancellationToken).ConfigureAwait(false);
+            TrackState(fresh, id, receipt.Status, "processing");
             return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: false,
                 receipt.Status);
         }
         catch (Exception error) when (error is HttpRequestException or
                TaskCanceledException or CloudApiException or InvalidDataException)
         {
-            throw new InvalidOperationException(
-                "Cloud 折讓申請 " + id +
-                " 回覆不明；原 ID 已在本機保存。請查回這個 ID，切勿再按建立或重送。",
-                error);
+            TrackState(fresh, id, "unknown", "problem", error, "create_response", 1);
+            try {
+                // Exactly one bounded original-ID readback. Never another create POST.
+                var state = await api.StatusAsync(id, employeeNo, password, cancellationToken).ConfigureAwait(false);
+                TrackState(fresh, id, state.Status, state.LedgerStatus == "confirmed" ? "completed" : "processing", stage: "create_readback", attempt: 2);
+                return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: true, state.Status);
+            } catch (Exception readback) when (readback is HttpRequestException or
+                TaskCanceledException or CloudApiException or InvalidDataException) {
+                TrackState(fresh, id, "unknown", "problem", readback, "create_readback", 2);
+                var code = error is CloudApiException cloud ? cloud.Code : error.GetType().Name;
+                throw new InvalidOperationException("折讓申請尚無法確認，已保留在「上傳問題」並保存診斷（" + code + "）。請勿重新建立或重送。", error);
+            }
+        }
+    }
+
+    private void TrackState(InvoiceRecord record, string id, string status, string state,
+        Exception? error = null, string stage = "application_receipt", int? attempt = null)
+    {
+        var store = new InvoiceSyncIssueStore(repository.DataDirectory);
+        var account = record.Environment + "|" + record.SellerInvoice;
+        var code = error is CloudApiException cloud ? cloud.Code : error?.GetType().Name ?? "";
+        store.ApplyCloudAllowance(account, id, "issue", state, status, code);
+        var issue = store.All(account).FirstOrDefault(x => x.OrderId == id &&
+            x.IssueType.StartsWith("cloud_allowance_issue_", StringComparison.Ordinal));
+        if (state == "completed" || status is "withdrawn" or "rejected")
+            CompleteProjection(repository.DataDirectory, repository.Settings.LoadOrCreate().ProductionInvoice,
+                new HashSet<string>(StringComparer.Ordinal) { id });
+        if (issue is null) return;
+        try {
+            IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, stage, issue.IssueType,
+                error: error, attempt: attempt,
+                responseReceived: error?.Data["ResponseReceived"] as bool?,
+                requestId: error?.Data["CloudRequestId"] as string);
+        } catch (Exception logError) when (logError is IOException or UnauthorizedAccessException) {
+            store.UpdateMessage(issue.Id, issue.Message + "；診斷寫入失敗：" + logError.GetType().Name + "，請保留本機 Data 供查證。");
+        }
+    }
+
+    internal static void RestorePendingIssues(string dataDirectory, string productionSeller, string workspaceId)
+    {
+        var store = new InvoiceSyncIssueStore(dataDirectory);
+        var records = new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
+            .Select(record => (Record: record, Pending: ReadPending(record)))
+            .Where(x => x.Pending?.WorkspaceId == workspaceId).Take(100);
+        foreach (var group in records.GroupBy(x => x.Record.Environment + "|" + x.Record.SellerInvoice)) {
+            var known = store.All(group.Key).Where(x => x.IssueType.StartsWith("cloud_allowance_issue_", StringComparison.Ordinal))
+                .Select(x => x.OrderId).ToHashSet(StringComparer.Ordinal);
+            foreach (var entry in group.Where(x => !known.Contains(x.Pending!.ApplicationId)))
+                store.ApplyCloudAllowance(group.Key, entry.Pending!.ApplicationId, "issue", "problem", "unknown", "原申請等待系統查證");
         }
     }
 

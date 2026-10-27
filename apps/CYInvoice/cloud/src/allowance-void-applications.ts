@@ -2,6 +2,7 @@
 // Trusted Worker injects current CYID authority and Device; no public HTTP,
 // manager approval, mutation, retries, offline send or deployed D1.
 import {encryptCompanyBusinessData,decryptCompanyBusinessData} from "./company-settings";
+import {allowanceActorParticipant,readAllowanceParticipant,type AllowanceParticipant} from "./allowance-frozen-store";
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 import {validOfficialAllowanceNumber} from "./amego-allowance-void";
 
@@ -103,7 +104,7 @@ export async function createCloudAllowanceVoidApplication(
  const ciphertext=await encryptCompanyBusinessData(ctx.encryptionKeyHex,i.workspaceId,
   "allowance-void/"+i.applicationId+"/"+requestHash,
   JSON.stringify({v:1,allowanceNumber:i.allowanceNumber,
-   originalInvoiceNumber:i.originalInvoiceNumber,reason:i.reason}));
+   originalInvoiceNumber:i.originalInvoiceNumber,reason:i.reason,requester:allowanceActorParticipant(first)}));
  const second=await authority.revalidate();
  if(!sameActor(first,second,i.workspaceId)||
   !await activeVoidDevice(db,i.workspaceId,i.deviceId))
@@ -129,7 +130,7 @@ export async function createCloudAllowanceVoidApplication(
    .bind(i.applicationId,i.workspaceId,i.deviceId,i.environment,c.seller_invoice,
      c.revision,numberHash,requestHash,ciphertext,first.employeeId,now,
      c.amego_app_key_ciphertext).run();
-  if(result.meta.changes!==1)throw new Error("VOID_APPLICATION_STALE");
+  if((!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0))throw new Error("VOID_APPLICATION_STALE");
  }catch{
   // Lost D1 response or duplicate number is original-ID readback only.
   throw new Error("VOID_APPLICATION_UNCONFIRMED_READBACK_OR_INVESTIGATE");
@@ -167,7 +168,7 @@ export async function readCloudAllowanceVoidApplication(
 export interface TrustedCloudVoidRequest {
  applicationId:string;workspaceId:string;environment:"test"|"production";
  sellerInvoice:string;companyRevision:number;requestHash:string;
- allowanceNumber:string;originalInvoiceNumber:string;reason:string;requesterActorId:string;
+ allowanceNumber:string;originalInvoiceNumber:string;reason:string;requesterActorId:string;requester?:AllowanceParticipant;
  status:"open"|"approved";revision:1|2;
 }
 interface FrozenRow {
@@ -206,7 +207,7 @@ export async function loadCloudAllowanceVoidForManager(
   settings.revision!==row.company_revision)
   throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
  let frozen:{v?:unknown;allowanceNumber?:unknown;
-  originalInvoiceNumber?:unknown;reason?:unknown};
+  originalInvoiceNumber?:unknown;reason?:unknown;requester?:unknown};
  try{
   frozen=JSON.parse(await decryptCompanyBusinessData(ctx.encryptionKeyHex,
    t.workspaceId,"allowance-void/"+t.applicationId+"/"+row.request_hash,
@@ -242,5 +243,5 @@ export async function loadCloudAllowanceVoidForManager(
   companyRevision:row.company_revision,requestHash:row.request_hash,
   allowanceNumber:frozen.allowanceNumber,
   originalInvoiceNumber:frozen.originalInvoiceNumber,reason:frozen.reason,
-  requesterActorId:row.requester_actor_id,status:row.status,revision:row.revision};
+  requesterActorId:row.requester_actor_id,requester:readAllowanceParticipant(frozen.requester,row.requester_actor_id),status:row.status,revision:row.revision};
 }

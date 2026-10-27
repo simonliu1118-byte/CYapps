@@ -41,6 +41,7 @@ internal static class Program
             ("three allowance list pages of 50 are accepted", TestAllowanceListCapacityAsync),
             ("existing allowance cancellation is refreshed without creation event", TestExistingAllowanceCancellationAsync),
             ("test list discovers the existing namespace across machines and ignores foreign invoices", TestTestEnvironmentPrefixDiscoveryAsync),
+            ("test three-day discovery and retention retain owned invoices only", TestThreeDayTestDiscoveryAsync),
             ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
@@ -745,7 +746,7 @@ internal static class Program
         var fake=new FakeGateway();
         fake.Pages[1]=ListResponse(1,[ Remote("DD12345678",ours,"100",buyer:"測試消費者"),
             Remote("ZZ12345678","FOREIGN_ORDER","999",buyer:"其他測試者"),
-            Remote("YY12345678",TestOrderIdPrefix.Apply("OLD",FixedDate.AddDays(-1)),"999") ]);
+            Remote("YY12345678",TestOrderIdPrefix.Apply("OLD",FixedDate.AddDays(-3)),"999") ]);
         fake.QueryByInvoice["DD12345678"]=Query("DD12345678",ours,"100","測試消費者");
         var result=await Sync(machineB,fake).SyncRecentAsync();
         Equal(1,result.RemoteCount); Equal(1,result.Inserted); Equal(1,result.Queried);
@@ -758,6 +759,36 @@ internal static class Program
         var automatic=await new InvoiceAutomaticSyncService(machineB,Sync(machineB,fake),()=>FixedNow).SyncAsync();
         Equal(0,automatic.Problems.Count); Equal(0,fake.AllowanceListCalls);
         Equal(0,new InvoiceSyncIssueStore(machineB.DataDirectory).Unresolved("test|"+AmegoDefaults.TestInvoice).Count);
+    }
+
+    private static async Task TestThreeDayTestDiscoveryAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureTest(repository);
+        var fake = new FakeGateway();
+        var listed = new List<InvoiceListItem>();
+        for (var offset = 0; offset >= -3; offset--) {
+            var date = FixedDate.AddDays(offset);
+            var number = "TX0000000" + (-offset + 1);
+            var order = TestOrderIdPrefix.Apply("SYNTHETIC" + -offset, date);
+            var item = Remote(number, order, "100") with { InvoiceDate = date.ToString("yyyyMMdd"), CancelDate = offset == -1 ? FixedNow.ToUnixTimeSeconds() : 0 };
+            listed.Add(item);
+            var query = Query(number, order, "100", "Synthetic");
+            fake.QueryByInvoice[number] = query with { Data = query.Data with {
+                InvoiceDate = date.ToString("yyyyMMdd"), CancelDate = item.CancelDate, AllowanceSummaryPresent = true } };
+        }
+        listed.Add(Remote("ZZ00000001", "FOREIGN", "100"));
+        listed.Add(Remote("ZZ00000002", TestOrderIdPrefix.Apply("FUTURE", FixedDate.AddDays(1)), "100"));
+        fake.Pages[1] = ListResponse(1, listed.ToArray());
+        var result = await Sync(repository, fake).SyncRecentAsync();
+        Equal(3, result.Inserted); Equal(3, result.Queried);
+        Equal(InvoiceStates.Voided, repository.Invoices.LoadOrCreate().Single(x => x.InvoiceNumber == "TX00000002").InvoiceState);
+        Equal(FixedDate.AddDays(-2), fake.LastListStart); Equal(FixedDate, fake.LastListEnd);
+        Equal(0, (await Sync(repository, fake).SyncRecentAsync()).Inserted);
+        Equal(0, new InvoiceRetentionService(repository).Prune(FixedDate).Deleted);
+        Equal(3, repository.Invoices.LoadOrCreate().Count);
+        Equal(1, new InvoiceRetentionService(repository).Prune(FixedDate.AddDays(1)).Deleted);
     }
 
     private static async Task TestTestEnvironmentSkipsFailedAsync()
@@ -780,7 +811,7 @@ internal static class Program
 
         var result = await Sync(repository, fake).SyncRecentAsync();
         Equal(1, fake.ListCalls);
-        Equal(FixedDate, fake.LastListStart);
+        Equal(FixedDate.AddDays(-2), fake.LastListStart);
         Equal(FixedDate, fake.LastListEnd);
         Equal(0, fake.QueryCalls);
         Equal(0, result.Queried);

@@ -28,7 +28,11 @@ public sealed record InvoiceAllowanceManualReview(
     string LocalApprovalOfficialHash = "",
     string LocalApprovalDraftHash = "",
     DateTimeOffset? CancelledUtc = null,
-    string CancelledByEmployeeNo = "");
+    string CancelledByEmployeeNo = "")
+{
+    public string RequesterName { get; init; } = "";
+    public string LocalApproverName { get; init; } = "";
+}
 
 public sealed record LocalAllowanceApprovalPreview(
     string InvoiceNumber,
@@ -153,7 +157,7 @@ public sealed class EmployeeAllowanceWorkflowService
             reason,
             taxInclusiveAmount,
             now().ToUniversalTime(),
-            baseline) { DraftItems = editedItems?.ToArray() };
+            baseline) { DraftItems = editedItems?.ToArray(), RequesterName = employee.Name };
         WriteManualReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
@@ -255,6 +259,7 @@ public sealed class EmployeeAllowanceWorkflowService
         review = review with {
             LocalApprovedUtc = now().ToUniversalTime(),
             LocalApproverEmployeeNo = manager.EmployeeNo,
+            LocalApproverName = manager.Name,
             LocalApprovalOfficialHash = preview.OfficialSnapshotHash,
             LocalApprovalDraftHash = ApprovalDraftHash(record, review)
         };

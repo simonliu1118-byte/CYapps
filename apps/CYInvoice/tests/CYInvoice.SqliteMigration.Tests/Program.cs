@@ -18,7 +18,7 @@ var tests = new (string Name, Action Run)[]
     ("legacy employee and cloud cache role constraints migrate to USER", RoleVocabularyMigrationTests.LegacyEmployeeAndCloudCacheConstraintsMigrateToUser),
     ("legacy management password mechanism is absent", EmployeeStoreTests.SettingsModelHasNoLegacyManagementPasswordFields),
     ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
-    ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
+    ("test retention keeps three days", RetentionTests.TestEnvironmentKeepsThreeDays),
     ("failed invoice cleanup deletes only definite failures", RetentionTests.FailedStoreDeletesOnlyFailedRows),
 };
 

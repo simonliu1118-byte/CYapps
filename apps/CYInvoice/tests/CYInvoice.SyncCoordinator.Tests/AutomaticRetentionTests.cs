@@ -15,14 +15,14 @@ internal static class AutomaticRetentionTests
         using var temporary = new TemporaryDirectory();
         var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
-        repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
+        repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260915001", "2026/09/15"));
         var gateway = new FakeGateway();
         var automatic = Automatic(repository, gateway);
 
         var result = await automatic.SyncAsync();
         Equal(0, result.Problems.Count);
         Equal(1, gateway.ListCalls);
-        Equal(Today, gateway.LastListStart);
+        Equal(Today.AddDays(-2), gateway.LastListStart);
         Equal(Today, gateway.LastListEnd);
         Equal(0, gateway.QueryCalls);
         Equal(0, repository.Invoices.LoadOrCreate().Count);
@@ -34,7 +34,7 @@ internal static class AutomaticRetentionTests
         {
             var repository = TestRepository.Open(temporary.Path, new TestProtector());
             ConfigureTest(repository);
-            repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
+            repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260915001", "2026/09/15"));
             var today = TestRecord("today", "TT00000002", "M20260918001", "2026/09/18");
             today.InvoiceState = InvoiceStates.Unknown;
             repository.Invoices.Append(today);
@@ -44,7 +44,7 @@ internal static class AutomaticRetentionTests
             var result = await automatic.SyncAsync();
             True(result.Problems.Count != 0);
             Equal(1, gateway.ListCalls);
-            Equal(Today, gateway.LastListStart);
+            Equal(Today.AddDays(-2), gateway.LastListStart);
             Equal(Today, gateway.LastListEnd);
             Equal(1, gateway.QueryCalls);
             var ids = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
@@ -60,23 +60,23 @@ internal static class AutomaticRetentionTests
         var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
 
-        repository.Invoices.Append(TestRecord("plain-expired", "TT00000001", "M20260917001", "2026/09/17"));
+        repository.Invoices.Append(TestRecord("plain-expired", "TT00000001", "M20260915001", "2026/09/15"));
 
-        var voidPending = TestRecord("void-pending", "TT00000002", "M20260917002", "2026/09/17");
+        var voidPending = TestRecord("void-pending", "TT00000002", "M20260915002", "2026/09/15");
         voidPending.ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
         {
             ["cyinvoice_void_pending"] = JsonSerializer.SerializeToElement(true),
         };
         repository.Invoices.Append(voidPending);
 
-        var allowanceMetadata = TestRecord("allowance-metadata", "TT00000003", "M20260917003", "2026/09/17");
+        var allowanceMetadata = TestRecord("allowance-metadata", "TT00000003", "M20260915003", "2026/09/15");
         allowanceMetadata.ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
         {
             ["cyinvoice_allowance_manual_review"] = JsonSerializer.SerializeToElement(new { active = true }),
         };
         repository.Invoices.Append(allowanceMetadata);
 
-        var allowanceIssue = TestRecord("allowance-issue", "TT00000004", "M20260917004", "2026/09/17");
+        var allowanceIssue = TestRecord("allowance-issue", "TT00000004", "M20260915004", "2026/09/15");
         repository.Invoices.Append(allowanceIssue);
         var issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         issueStore.Record(
@@ -85,7 +85,7 @@ internal static class AutomaticRetentionTests
             allowanceIssue.ApiOrderId,
             InvoiceAllowanceIssueTypes.ManualReview,
             "折讓人工處理",
-            new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.FromHours(8)));
+            new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(8)));
 
         var result = new InvoiceRetentionService(repository).Prune(Today);
 

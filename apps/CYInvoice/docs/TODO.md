@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-更新日期：2026-10-27（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
+更新日期：2026-10-28（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -12,7 +12,7 @@
 
 **現行一頁式執行看板（2026-10-27；Cloud 0.9.6及正常三旗標啟用、限定Local／D1舊案盤點已完成；待真人財務驗收）：**
 
-使用者定案流程與全部驗收只在 [V3.2 唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本看板只列狀態。原 PR #550，工程 V3.1.43 Build 0／Cloud 0.9.6，正式 Release 仍 V3.1.0。
+使用者定案流程與全部驗收只在 [V3.2 唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本看板只列狀態。原 PR #550，工程 V3.1.44 Build 0／Cloud Source 0.9.7（原Worker仍0.9.6），正式 Release 仍 V3.1.0。
 
 最新狀態（2026-10-27）：使用者已交回Cloud 0.9.6／正常三旗標啟用及舊資料盤點完成報告，指定Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`。schema22、原服務及身分保留，兩個舊人工旗標仍關閉。指定桌面Data快照及原D1限定六表已完成有界盤點，該範圍無舊財務案；不推定其他安裝／裝置皆為0。無清除、authority回填或Claim解鎖。原EXE未覆寫，使用者需用已下載V3.1.43工程包驗收。詳細證據來源與界線見[完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；下方較舊Build／部署記錄為歷史checkpoint。
 
@@ -39,6 +39,13 @@
 - [ ] 以V3.1.43工程包驗收公司卡實際金鑰、正向角色、正常開立／作廢及故障恢復；未驗項仍屬V3.2，不移至3.3。
 - 計量限制：完整數字與私有收據保留本機；直接SQL不是完整計費量，共用帳號差額無法完整歸屬，不宣稱完整計費read已確認低於參考上限，也不為整理文件重查遠端。
 - [ ] 雙Windows／不同Device真人驗收依使用者原決議於V3.2上線後補做，未驗不勾選。
+
+### 本批返修（2026-10-28）
+
+- [x] 測試票三天同步與保留、原日期識別碼篩選；正式清理不變。
+- [x] 修正D1稽核trigger變更筆數誤判；原ID一次查回、既有待辦／問題保存、舊marker恢復與遮罩診斷。
+- [x] 必要業務人員姓名由原authority取得並保存；清單業務文字與訂單／申請ID分離；申請視窗738寬及帳密同列。
+- [ ] 精確新Source的Windows／Cloud／Governance／Development預檢及V3.1.44工程包；本機Cloud0.9.7程式更新與真人驗收。沿[原交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不重做schema22或正常旗標啟用。
 
 ### 歷史工程索引（不再作為待執行流程）
 

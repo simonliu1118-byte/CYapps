@@ -1,3 +1,28 @@
+# CYInvoice Cloud 0.9.7程式更新交接／既有維護索引
+
+更新：2026-10-28（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`，工程V3.1.44 Build 0／Cloud Source 0.9.7。**這一段尚待本機執行；下方0.9.6完成報告仍是實際遠端基準。** 不合併、不發布Release、不執行真光貿交易。
+
+## 本次本機要完成的工作
+
+1. 核對交付的完整程式Source SHA、VERSION=3.1.44、BUILD=0、Cloud0.9.7，以及同SHA必要CI和工程Artifact。不要以PR後續文件提交取代程式SHA；不要直接取浮動HEAD。下載工程包後核對GitHub Artifact雜湊與ZIP內容，交付使用者，不自動覆寫原程式／Data。
+2. 循原canonical deployment-preflight、原Worker及D1、同Source／專用私有checkpoint執行before→deploy→after，只做程式更新。**沒有schema-upgrade意圖、migration、DDL、資料回填、DB匯出或重跑0017～0022；schema及marker維持22。** 無需重新設定allowance activation意圖，正常三旗標已啟用，原值必須保留。舊人工兩旗標保持未設定／關閉；其餘Bindings、Secrets、Routes、CYID服務與scope不變。
+3. 有界核對原Workspace／Device／驗證及history連續性，沿既有部署owner核對原控制面設定及不可變回退版本；不掃全庫、不改CYID D1、不新增Worker／D1。預估直接D1讀1200列／寫0，runtime約8、控制面約90；建議本批停止界線2000／0／12／110，執行前依共同規則核對本批額度與授權，不能延用過去例外。每表LIMIT101，超100停止；額度不足或錯誤停止，不為拆分共用帳號計量而額外重查。
+4. 線上bundle size／SHA與指定Source本機建置比對，health應為Cloud0.9.7、storage=ok、identityProvider=CYID、storageSchemaVersion=22；legacy schemaVersion=8不是實際schema。無憑證的create／approve／void-approve應401／DEVICE_INVALID，不能把拒絕測試當正向財務驗收。
+5. 私有保存原設定、完整版本／Deployment識別、checkpoint、計量、bundle及回復證據；交回遮罩摘要，明確列實際可歸屬D1／runtime／控制面量與預估差異，另列共用帳號差額及歸屬限制。不得把本批寫0、直接SQL讀取量冒充完整計費量。
+
+## 變更與資料相容界線
+
+- 0.9.7直接修正原allowance owner：稽核trigger會增加D1 `meta.changes`，原本等於1的成功判定可能在提交後錯回409；改為正整數，原SQL主鍵／CAS及權限不放寬。來源驗證依官方D1 `changes`定義及隨Wrangler的Miniflare D1 worker `total_changes()`差值，SQLite隔離測試重現；本對話沒有連線真D1探測。
+- 新申請人姓名由已驗證CYID principal保存至原加密envelope，核准姓名存原Grant snapshot；不新增表或schema，不送到光貿，不放入Device最小摘要。新reader可讀舊3欄envelope與新可選requester欄；舊資料不造假補姓名。
+- **新增具姓名的請求後，舊0.9.6嚴格reader可能拒讀新envelope。不能僅因schema仍22就直接降版。** 回退前先評估新申請／Grant／未知Ledger／Claim與新格式，選擇可讀新資料的修正版；不得改寫舊authority、解除Claim、財務重送、自動還原D1或反向migration。Worker回退不回退D1。
+- Windows送出成功立即投影原待辦；回覆不明只做一次原ID查回，不重做create。未知保留原上傳問題與診斷；啟動／既有同步恢復舊版僅marker的申請。舊版已提交的同ID申請不能另建一筆。
+
+## 使用者測試重點
+
+使用V3.1.44配套原Worker0.9.7：一般員工提出折讓應立即顯示「等待主管核准」並進原待辦；主管核准才執行。核對CYID申請／核准姓名與實際身份、詳情及歷程、清單欄位、帳密同列；使用者先前公司卡驗收維持。測試票應取得今天及前兩天原日期識別碼發票（含作廢），不查無識別碼陌生票；正式保留期不變。原未知申請只查回，不能為測試清Claim或刪原資料。其他未驗財務項仍依唯一現行計畫；雙Windows真人完整驗收延期決議不變。
+
+---
+
 # CYInvoice V3.2：Cloud 0.9.6啟用與限定舊案盤點完成
 
 更新：2026-10-27（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`；工程V3.1.43 Build 0；正式Release仍V3.1.0，未合併或發布。

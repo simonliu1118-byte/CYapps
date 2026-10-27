@@ -1,5 +1,5 @@
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
-import {createEncryptedCloudAllowance,loadEncryptedCloudAllowance,type AllowanceActor,type AllowanceActorSource,type CloudAllowanceContext} from "./allowance-frozen-store";
+import {createEncryptedCloudAllowance,loadEncryptedCloudAllowance,readAllowanceParticipant,allowanceParticipantText,type AllowanceActor,type AllowanceActorSource,type CloudAllowanceContext} from "./allowance-frozen-store";
 import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-approval";
 import {executeApprovedCloudAllowance} from "./allowance-one-shot-coordinator";
 import {executeCloudVoidOnce} from "./allowance-void-one-shot-coordinator";
@@ -33,8 +33,8 @@ function scope(p:CyIdPrincipal|null,env:Env):AllowanceActor|null {
  if(!p||p.workspaceId!==binding.identityWorkspaceId||
     !p.emailVerified||typeof p.employeeId!=="string"||
     p.employeeId.length<1||p.employeeId.length>100)return null;
- return {authoritySnapshot:JSON.stringify({identityWorkspaceId:binding.identityWorkspaceId,applicationId:binding.applicationId,employeeId:p.employeeId,credentialVersion:p.credentialVersion,employeeRevision:p.employeeRevision,workspaceRole:p.workspaceRole,isIdentityAdmin:p.isIdentityAdmin,emailVerified:p.emailVerified}),workspaceId:binding.workspaceId,employeeId:p.employeeId,
-  workspaceRole:p.workspaceRole};
+ return {authoritySnapshot:JSON.stringify({identityWorkspaceId:binding.identityWorkspaceId,applicationId:binding.applicationId,employeeId:p.employeeId,employeeNo:p.employeeNo,displayName:p.displayName,credentialVersion:p.credentialVersion,employeeRevision:p.employeeRevision,workspaceRole:p.workspaceRole,isIdentityAdmin:p.isIdentityAdmin,emailVerified:p.emailVerified}),workspaceId:binding.workspaceId,employeeId:p.employeeId,
+  workspaceRole:p.workspaceRole,employeeNo:p.employeeNo,displayName:p.displayName};
 }
 function auth(env:Env):AllowanceActorSource{
  return {revalidate:async()=>scope(
@@ -163,7 +163,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
       AND l.status<>'reserved' AND NOT (l.status='occupied_external' AND EXISTS
    (SELECT 1 FROM allowance_number_rejections r WHERE r.ledger_id=l.ledger_id AND r.provider_code=l.collision_code)))`)
      .bind(actor.employeeId,dev.device_id,new Date().toISOString(),target.applicationId,target.workspaceId,target.expectedRevision,manager(fresh)?1:0).run();
-    return reply(r.meta.changes===1?200:409,{applicationId:target.applicationId,status:"withdrawn",revision:target.expectedRevision+1});
+    return reply(Number.isSafeInteger(r.meta.changes)&&r.meta.changes>0?200:409,{applicationId:target.applicationId,status:"withdrawn",revision:target.expectedRevision+1});
    }
    const f=await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
    return reply(200,{application:{applicationId:f.applicationId,status:f.status,revision:f.revision,
@@ -196,7 +196,17 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
     `${i.OriginalDescription??i.original_description??i.description??"－"}　數量 ${i.Quantity??i.quantity??"－"}　單價 ${i.UnitPrice??i.unit_price??"－"}　金額 ${i.Amount??i.amount??"－"}　稅 ${i.Tax??i.tax??"－"}`).join("\n"):"－";
    add("原發票商品",itemText(invoice.originalProductItems));
    add("既有折讓",invoice.allowanceHistory.map(x=>`${x.allowanceNumber??"－"}　金額 ${x.totalAmount??"－"}　稅 ${x.taxAmount??"－"}　狀態 ${x.uploadStatus??"－"}　作廢日 ${x.cancelDate??"－"}`).join("\n"));
-   add("申請人",f.requesterActorId);add("申請原因",f.reason);
+   add("申請員工",allowanceParticipantText(f.requesterActorId,f.requester));add("申請原因",f.reason);
+   const approvalTable=isVoid?"allowance_void_approvals":"allowance_execution_approvals";
+   const grant=await env.DB.prepare(`SELECT manager_actor_id,authority_snapshot FROM ${approvalTable} WHERE application_id=?1 AND workspace_id=?2 LIMIT 1`)
+    .bind(target.applicationId,target.workspaceId).first<{manager_actor_id:string;authority_snapshot:string|null}>();
+   let reviewer=grant?allowanceParticipantText(grant.manager_actor_id):"尚未核准";
+   if(grant?.authority_snapshot){
+    const saved=JSON.parse(grant.authority_snapshot);
+    if(saved.employeeId===grant.manager_actor_id&&saved.employeeNo&&saved.displayName)
+     reviewer=allowanceParticipantText(grant.manager_actor_id,readAllowanceParticipant({actorId:saved.employeeId,employeeNo:saved.employeeNo,name:saved.displayName},grant.manager_actor_id));
+   }
+   add("核准管理員",reviewer);
    let requestHash="",officialSnapshotHash="";
    if(isVoid){
     const v=f as Awaited<ReturnType<typeof loadCloudAllowanceVoidForManager>>;
