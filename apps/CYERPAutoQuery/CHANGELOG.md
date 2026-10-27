@@ -1,5 +1,9 @@
 # CYERPAutoQuery Changelog
 
+## V1.0.2（2026/10/26，工程驗證，尚未正式發行）
+
+- 修正自動登入沒有執行（V1.0.1 Build 2 實機 LOG，2026-10-26：ERP 沒開時查詢，程式啟動 MainMenu.exe 後立刻把啟動畫面 `TfrmLogo`「frmLogo」當成 ERP 主視窗，沒有等登入畫面就去開 INVI02，失敗「無法把 ERP 主視窗帶到前景」）。主視窗標題不含 Conductor 時，只認主畫面的視窗類別 `SmartERP_iSM_MainMenu`，啟動畫面與登入畫面不再算主視窗。
+
 ## V1.0.1 Build 2（2026/10/26，工程驗證，尚未正式發行）
 
 - 強制重開改為**以視窗找程式**（使用者 2026-10-26）：伺服器上 MainMenu 在 `C_dsbin`，品號／銷貨單／進貨單等作業開在 `S_dsbin` 的 SMCOPIS01S，另有 SMDispatcher、SMCounterS、AUC 等常駐服務，名稱與資料夾都不可靠。只結束擁有 ERP 主視窗或建立作業視窗、且與本程式同一 Windows 工作階段的行程；先送關閉訊息，5 秒未結束才終止該行程（不含子行程），作業的行程先、主視窗的最後；終止前再確認工作階段與仍擁有 ERP 視窗。LOG 記錄每個 ERP 視窗所屬行程（PID、名稱、工作階段）。
