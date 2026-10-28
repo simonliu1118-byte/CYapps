@@ -71,7 +71,7 @@ assert.doesNotMatch(appearanceCss, /data-cyacc-theme/);
 assert.doesNotMatch(appearanceCss, /!important;\s*!\s*important/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
-assert.match(css, /\.current-user\.role-super-admin/);
+assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-account-avatar/);
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
 assert.match(css, /\.ledger-balance-popover/);
