@@ -1,0 +1,147 @@
+name: CYEnvelope Stable Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cyenvelope-release
+  cancel-in-progress: false
+
+jobs:
+  release-windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: apps/CYEnvelope
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Validate formal release identity
+        run: |
+          if ($env:GITHUB_REF_NAME -ne "main") { throw "Formal CYEnvelope releases must run from main; got $env:GITHUB_REF_NAME" }
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "A formal release requires a stable semantic VERSION; got $version" }
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^\d+$' -or [int]$build -ne 0) { throw "Formal release requires BUILD=0; got $build" }
+          if (!(Test-Path "./V$version.txt" -PathType Leaf)) { throw "Missing formal version marker V$version.txt" }
+          "CYENVELOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYENVELOPE_TAG=cyenvelope-v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Check release does not already exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:CYENVELOPE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            "CYENVELOPE_SHOULD_RELEASE=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Release $env:CYENVELOPE_TAG already exists; nothing to publish."
+            exit 0
+          }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$env:CYENVELOPE_TAG"
+          if (![string]::IsNullOrWhiteSpace($remoteTag)) { throw "Tag $env:CYENVELOPE_TAG exists without a matching Release; refusing to overwrite it" }
+          "CYENVELOPE_SHOULD_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Set up .NET
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Fetch bundled fonts (pinned URL, SHA-256 verified)
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: ./tools/fetch-fonts.ps1
+
+      - name: Build Windows application
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: dotnet build ./src/CYEnvelope/CYEnvelope.csproj -c Release --nologo -warnaserror
+
+      - name: Run Windows core checks
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          dotnet run --project ./tests/CYEnvelope.Tests/CYEnvelope.Tests.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'Core checks failed' }
+
+      - name: Build and scan portable folder
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: ./build-csharp.ps1
+
+      - name: Review rendered Windows UI and final icon resources
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -c Release -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
+          if ($LASTEXITCODE -ne 0) { throw 'Visual review checks failed' }
+
+      - name: Verify portable folder contents and startup
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          $folder = './dist/stage/CYEnvelope'
+          $contents = @(Get-ChildItem $folder -Force | Select-Object -ExpandProperty Name)
+          $expected = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'FONT_LICENSES.txt', 'Runtime')
+          if (@(Compare-Object $expected $contents).Count -ne 0) { throw "Unexpected portable folder contents: $($contents -join ', ')" }
+          if ((Get-Content "$folder/BUILD" -Raw).Trim() -ne '0') { throw 'Packaged BUILD is not 0' }
+          if ((Get-Content "$folder/VERSION" -Raw).Trim() -ne $env:CYENVELOPE_VERSION) { throw 'Packaged VERSION differs from the source VERSION' }
+          $exe = Join-Path (Resolve-Path $folder) 'CYEnvelope.exe'
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 4
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)" }
+            if (-not (Test-Path "$folder/Data/CYEnvelope.db")) { throw 'Packaged app did not create its database in the outer Data folder' }
+          } finally {
+            if (-not $proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F | Out-Null }
+          }
+          # The smoke run created user data; it must never ship.
+          foreach ($leftover in 'Data', 'Logs', 'Cache') { if (Test-Path "$folder/$leftover") { Remove-Item "$folder/$leftover" -Recurse -Force } }
+
+      - name: Create release archive and SHA-256
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          New-Item -ItemType Directory -Force ./out | Out-Null
+          $zip = "./out/CYEnvelope_V${env:CYENVELOPE_VERSION}_Windows_x64.zip"
+          Compress-Archive -Path ./dist/stage/CYEnvelope -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content "$zip.sha256" -Encoding ascii
+
+      - name: Scan release archive for secrets and production bindings
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" "./out/CYEnvelope_V${env:CYENVELOPE_VERSION}_Windows_x64.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Public package safety scan failed' }
+
+      - name: Create release notes
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        run: |
+          $year = (Get-Date).Year
+          @"
+          CYEnvelope V$env:CYENVELOPE_VERSION
+
+          Windows 10/11 x64 正式版（信封套印輔助工具，含客戶資料庫）。
+
+          Copyright © $year C.C. Liu, Chihyuan Co. All Rights Reserved.
+
+          - 本版由使用者明確要求正式發布後，從 main 重新建置並完成驗證。
+          - 下載 CYEnvelope_V${env:CYENVELOPE_VERSION}_Windows_x64.zip 後解壓縮一次，執行 CYEnvelope\CYEnvelope.exe；第一次執行會在同一層建立 Data 資料夾。
+          - 內建字體（思源黑體、思源宋體、霞鶩文楷）為 SIL Open Font License 1.1，授權見資料夾內 FONT_LICENSES.txt。
+          - 變更摘要請見 V$env:CYENVELOPE_VERSION.txt。SHA-256 見 .sha256 檔。
+          "@ | Set-Content -Path ./out/release-notes.md -Encoding utf8
+
+      - name: Publish GitHub Release
+        if: env.CYENVELOPE_SHOULD_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $zip = "./out/CYEnvelope_V${env:CYENVELOPE_VERSION}_Windows_x64.zip"
+          gh release create $env:CYENVELOPE_TAG `
+            $zip `
+            "$zip.sha256" `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "CYEnvelope V$env:CYENVELOPE_VERSION" `
+            --notes-file ./out/release-notes.md
