@@ -32,7 +32,7 @@ function fake(query=official,state=status){
  return async (url,init)=>{
   calls.push(url);
   assert.equal(init.method,"POST");
-  assert.equal(init.redirect,"error");
+  assert.equal(init.redirect,"manual");
   assert.equal(init.headers["content-type"],"application/x-www-form-urlencoded");
   const form=new URLSearchParams(init.body);
   assert.equal(form.get("invoice"),request.sellerInvoice);

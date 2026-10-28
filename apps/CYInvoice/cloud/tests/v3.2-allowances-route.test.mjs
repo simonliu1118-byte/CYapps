@@ -51,7 +51,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   calls++;onCall(url);
   assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
   assert.equal(opts.method,"POST");
-  assert.equal(opts.redirect,"error");
+  assert.equal(opts.redirect,"manual");
   const form=new URLSearchParams(opts.body);
   assert.equal(form.get("invoice"),"12345678");
   assert.deepEqual(JSON.parse(form.get("data")),
@@ -75,7 +75,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false,expectedKey="sHeq7t
  return {calls,transport:async(url,options)=>{
   calls.push(url);
   assert.equal(options.method,"POST");
-  assert.equal(options.redirect,"error");
+  assert.equal(options.redirect,"manual");
   const form=new URLSearchParams(options.body);
   assert.equal(form.get("sign"),
    createHash("md5").update(form.get("data")+form.get("time")+

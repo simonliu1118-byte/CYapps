@@ -88,11 +88,12 @@ export async function queryOfficialVoidTarget(
   time:String(stamp),sign:signOfficialInvoiceQuery(data,stamp,input.appKey)});
  let response:Response;
  try{
-  response=await transport(QUERY,{method:"POST",redirect:"error",
+  response=await transport(QUERY,{method:"POST",redirect:"manual",
    signal:AbortSignal.timeout(8000),headers:{
     "content-type":"application/x-www-form-urlencoded",accept:"application/json"},
    body:form.toString()});
  }catch{throw new Error("VOID_PROOF_PROVIDER_UNAVAILABLE");}
+ if(response.status>=300&&response.status<400)throw new Error("VOID_PROOF_REDIRECT_REJECTED");
  if(!response.ok)throw new Error("VOID_PROOF_PROVIDER_UNCONFIRMED");
  const body=await bounded(response);
  if(integer(body.code)!==0)throw new Error("VOID_PROOF_PROVIDER_UNCONFIRMED");

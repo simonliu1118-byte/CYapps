@@ -1,10 +1,12 @@
 # CYInvoice V3.2：完整折讓與流程收斂計畫
 
-更新：2026-10-28（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
+更新：2026-10-29（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.44 Build2／Cloud0.9.9，沿原 PR #550 返修詳情失敗診斷。指定程式Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 已完成原Worker0.9.9部署及canonical前後檢、線上程式雜湊與health後驗；schema22、原旗標及綁定保留。尚未合併或發布。** 同機流程與新底層診斷仍待真人回報；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
+**工程 Source：V3.1.44 Build3／Cloud Source0.9.10，沿原 PR #550 修正Workers不支援redirect:error的7處正式傳輸路徑，原生合成回歸已加入原測試入口。0.9.10尚未部署；實際仍是指定Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 的原Worker0.9.9／schema22，原旗標及綁定保留。尚未合併或發布。** 同機流程與修正版仍待真人回報；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
 
 ## 1. 來源、現況與執行停點
+
+- Build3：已以專案固定workerd重現redirect:error在Request建構時拋TypeError；原7個adapter改manual並拒絕3xx。78項原生合成檢查驗證正常簽章請求與不跟隨／不重送，沒有遠端測試Worker或真交易。Build3交付與0.9.10配套更新依[本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不重跑0.9.9維護或原失敗申請。
 
 - 2026-10-28本機Cloud0.9.8完成報告：Source `262741c613a5862d43c9e50f7fc84e773fdbee4f`，原Worker100%流量、canonical前後檢、bundle與health及身分／綁定連續性通過；schema22、原旗標保留。私有證據留本機，不重跑維護或原失敗申請。Build1真人回報：詳情查詢HTTP409／OFFICIAL_QUERY_UNAVAILABLE，尚未進入核准；底層根因未證實。
 - Build2只補診斷及階段提示：詳情唯讀失敗不改寫業務狀態；Cloud回傳白名單的query phase／elapsed／HTTP／供應商代碼與可識別連線分類，Windows寫原log。未知保持unknown，不保存原始例外或交易內容。沒有新表、migration、業務owner、官方重試或放寬成功判定。配套及待執行更新見[本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。下列0.9.7及更早紀錄屬歷史。
@@ -14,7 +16,7 @@
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
-- 工程VERSION=3.1.44、BUILD=2；正式Release仍V3.1.0。0.9.9／Build2指定Source已完成原Worker更新，無migration、資料修改、真交易或原案重試。兩項審查停點取得本批明確授權後接續原收據，未降低檢查。維護停止，正式發布仍需當次明確授權，私有計量不公開。
+- 工程VERSION=3.1.44、BUILD=3；正式Release仍V3.1.0。0.9.9／Build2指定Source已完成原Worker更新；新Source0.9.10僅完成程式與合成驗證，尚未部署，無migration、資料修改、真交易或原案重試。維護不重跑，正式發布仍需當次明確授權，私有計量不公開。
 
 ### 本批返修及驗收（2026-10-28）
 

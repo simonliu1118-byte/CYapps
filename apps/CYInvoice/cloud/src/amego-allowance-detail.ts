@@ -97,11 +97,12 @@ export async function queryOfficialAllowanceDetail(
  let response:Response;
  try{
   response=await transport("https://invoice-api.amego.tw/json/allowance_query",{
-   method:"POST",redirect:"error",headers:{
+   method:"POST",redirect:"manual",headers:{
     "content-type":"application/x-www-form-urlencoded",accept:"application/json"},
    body:form.toString(),signal:AbortSignal.timeout(8000)
   });
  }catch{throw new Error("OFFICIAL_DETAIL_UNAVAILABLE");}
+ if(response.status>=300&&response.status<400)throw new Error("OFFICIAL_DETAIL_REDIRECT_REJECTED");
  if(!response.ok)throw new Error("OFFICIAL_DETAIL_HTTP_FAILED");
  let dataRoot:Record<string,unknown>;
  try{dataRoot=obj(JSON.parse(await readBounded(response)));}

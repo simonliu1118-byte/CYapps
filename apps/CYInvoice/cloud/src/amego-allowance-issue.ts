@@ -71,12 +71,15 @@ export async function postNumberedAllowanceOnce(
   // Fail-closed: a transport exception may have occurred AFTER the provider
   // accepted the request. Never classify it as a safe definite rejection.
   try{
-    response=await transport(URL,{method:"POST",redirect:"error",
+    response=await transport(URL,{method:"POST",redirect:"manual",
       headers:{"content-type":"application/x-www-form-urlencoded",
         "accept":"application/json"},body:form.toString(),
       signal:AbortSignal.timeout(8000)});
   }catch{return{kind:"unknown_result"};}
   await observe?.(response.status);
+  // Workers supports manual, not error. Never forward a signed POST to a
+  // Location target or turn a redirect into rejection/collision/retry authority.
+  if(response.status>=300&&response.status<400)return{kind:"unknown_result"};
   if(!response.ok)return{kind:"unknown_result"};
   let root:ObjectValue;
   try{

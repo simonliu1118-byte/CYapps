@@ -2,6 +2,16 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.44 Build 3 — 2026/10/29（Workers原生請求相容性）
+
+Cloud0.9.9部署後的新診斷定位到詳情第一個官方查詢在request階段拋TypeError、尚無HTTP回覆。對照Cloudflare官方Request契約與專案固定workerd本機重現，Workers不支援redirect:error，建立Request即失敗；先前Node注入transport的測試未驗到這項平台差異。此結論定位本次可重現程式錯誤，不把所有更早歷史失敗推定為同一根因。
+
+Cloud Source0.9.10將原7個AMEGO adapter直接改為manual並明確拒絕3xx：原票查詢、折讓詳情、逐內容查回、狀態、作廢前查證、g0401與g0501。不得跟隨同站或跨站Location；兩個財務POST對3xx仍回unknown_result，不當成功／撞號／可重送證據。保留簽章、8秒界線、嚴格內容核對及原Grant／Ledger／Claim權威，不新增wrapper或第二套傳輸owner。
+
+新增原npm test入口的Workers原生合成回歸，使用固定Wrangler附帶的Miniflare／workerd，直接執行7個adapter的原生fetch；全部對外請求由合成供應商攔截，不存取真光貿或帳戶。78項涵蓋正常簽章POST、301／302／303／307／308、同站與跨站、不重送及二段作廢查證；原Node contract／財務回歸仍保留。
+
+工程VERSION維持3.1.44、BUILD=3；Cloud0.9.10尚未部署，實際仍原Worker0.9.9／schema22。無migration、旗標／綁定修改、原案重試、真交易、合併或Release。CYID Consumer Impact: NONE。Build3工程包僅提供GitHub下載連結，不再自動下載到本機outputs。
+
 ## V3.1.44 Build 2 — 2026/10/28（詳情失敗診斷與操作階段返修）
 
 同一未完成項目的返修，VERSION維持3.1.44。讀取詳情失敗使用「讀取折讓詳情失敗」提示，不冒充已送出核准／取消，也不因唯讀查詢失敗把已知申請改成problem；核准及取消失敗才沿原ID查回與問題分類，不重送。

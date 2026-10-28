@@ -59,12 +59,14 @@ export async function postAllowanceVoidOnce(
   let response:Response;
   try{
     response=await transport("https://invoice-api.amego.tw/json/g0501",{
-      method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),
+      method:"POST",redirect:"manual",signal:AbortSignal.timeout(8000),
       headers:{"content-type":"application/x-www-form-urlencoded",
         accept:"application/json"},body:body.toString()
     });
   }catch{return{kind:"unknown_result"};}
   await observe?.(response.status);
+  // A redirect is unconfirmed; never follow it or retry the financial POST.
+  if(response.status>=300&&response.status<400)return{kind:"unknown_result"};
   if(!response.ok)return{kind:"unknown_result"};
   let parsed:unknown;
   try{parsed=JSON.parse(await boundedReply(response));}

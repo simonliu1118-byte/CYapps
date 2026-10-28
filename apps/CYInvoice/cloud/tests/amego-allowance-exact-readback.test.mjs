@@ -39,7 +39,7 @@ function makeTransport(reply={code:0,data:official}){
   urls.push(url);
   assert.equal(url,"https://invoice-api.amego.tw/json/allowance_query");
   assert.equal(options.method,"POST");
-  assert.equal(options.redirect,"error");
+  assert.equal(options.redirect,"manual");
   assert.equal(options.headers["content-type"],"application/x-www-form-urlencoded");
   const form=new URLSearchParams(options.body);
   assert.equal(form.get("invoice"),input.sellerInvoice);

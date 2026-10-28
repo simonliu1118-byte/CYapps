@@ -55,7 +55,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
   calls++;onCall(url);
   assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
   assert.equal(opts.method,"POST");
-  assert.equal(opts.redirect,"error");
+  assert.equal(opts.redirect,"manual");
   const form=new URLSearchParams(opts.body);
   assert.equal(form.get("invoice"),"12345678");
   assert.deepEqual(JSON.parse(form.get("data")),

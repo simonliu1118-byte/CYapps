@@ -10,11 +10,17 @@
 
 ## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
 
-**現行狀態（2026-10-28）：原Worker Cloud0.9.9／V3.1.44 Build2指定Source已部署，schema22／旗標／綁定保留；canonical前後檢、線上程式雜湊及health通過，待真人詳情診斷與財務驗收。下方舊看板與勾選保留歷史checkpoint，不得據此重跑已完成維護。**
+**現行狀態（2026-10-29）：工程V3.1.44 Build3／Cloud Source0.9.10修正Workers redirect:error相容性；新Source尚未部署。原Worker仍Cloud0.9.9／schema22，旗標／綁定保留。下方舊看板與勾選保留歷史checkpoint，不得據此重跑已完成維護。**
 
 使用者定案流程與全部驗收只在 [V3.2 唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本看板只列狀態。原 PR #550，正式 Release 仍 V3.1.0。
 
-### 本輪詳情診斷返修（V3.1.44 Build2／Cloud Source0.9.9）
+### 本輪Workers原生請求返修（V3.1.44 Build3／Cloud Source0.9.10）
+
+- [x] 固定workerd重現不支援redirect:error；原7個adapter改manual並明確拒絕3xx，財務POST仍未知、不重送。
+- [x] 78項原生合成回歸加入原npm test，正常簽章與301／302／303／307／308、同站／跨站及二段查證均覆蓋。
+- [ ] Build3精確Source必要CI／工程包、原Worker0.9.10配套更新及唯一計畫所列真人驗收；只提供GitHub包連結，不再次下載到outputs。
+
+### 已交付詳情診斷（V3.1.44 Build2／Cloud0.9.9）
 
 - [x] 已歸檔原0.9.8部署完成報告；不重跑0.9.7／0.9.8維護。
 - [x] 詳情／取消／核准分開提示；唯讀詳情失敗保留原業務狀態，安全底層分類與階段沿原JSONL交回。

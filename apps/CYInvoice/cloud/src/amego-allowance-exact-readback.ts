@@ -127,10 +127,11 @@ export async function queryFrozenAllowanceByOriginalNumber(
   time:String(timestamp),sign:signOfficialInvoiceQuery(data,timestamp,input.appKey)});
  let response:Response;
  try{
-  response=await transport(URL,{method:"POST",redirect:"error",
+  response=await transport(URL,{method:"POST",redirect:"manual",
    headers:{"content-type":"application/x-www-form-urlencoded",accept:"application/json"},
    body:form.toString(),signal:AbortSignal.timeout(8000)});
  }catch{throw new Error("G0401_READBACK_UNAVAILABLE");}
+ if(response.status>=300&&response.status<400)throw new Error("G0401_READBACK_REDIRECT_REJECTED");
  if(!response.ok)throw new Error("G0401_READBACK_HTTP_FAILED");
  const root=await limited(response);
  if(number(root.code)!==0)

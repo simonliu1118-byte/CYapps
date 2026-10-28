@@ -238,9 +238,13 @@ async function queryOfficialInvoice(
     response=await transport(endpoint,{method:"POST",
       headers:{"content-type":"application/x-www-form-urlencoded",
         "accept":"application/json"},body:body.toString(),
-      signal:AbortSignal.timeout(8000),redirect:"error"});
+      signal:AbortSignal.timeout(8000),redirect:"manual"});
   }catch(error){Object.assign(diagnostic,transportFailure(error));throw new Error("OFFICIAL_QUERY_UNAVAILABLE");}
   diagnostic.responseReceived=true;diagnostic.httpStatus=response.status;
+  if(response.status>=300&&response.status<400){
+    diagnostic.failureKind="redirect";
+    throw new Error("OFFICIAL_QUERY_REDIRECT_REJECTED");
+  }
   diagnostic.failureKind="http";
   if(!response.ok)throw new Error("OFFICIAL_QUERY_HTTP_FAILED");
   diagnostic.failureKind="response";

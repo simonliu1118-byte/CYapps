@@ -30,7 +30,7 @@ function transport(expectedUrl,payload,reply={code:0,msg:""}){
    count++;
    assert.equal(url,"https://invoice-api.amego.tw/json/"+expectedUrl);
    assert.equal(options.method,"POST");
-   assert.equal(options.redirect,"error");
+   assert.equal(options.redirect,"manual");
    assert.equal(options.headers["content-type"],"application/x-www-form-urlencoded");
    validSignature(new URLSearchParams(options.body),payload);
    return Response.json(reply);

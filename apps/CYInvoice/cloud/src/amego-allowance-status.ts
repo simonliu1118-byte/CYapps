@@ -73,11 +73,12 @@ export async function readOfficialAllowanceVoidStatus(
   let response:Response;
   try{
     response=await transport("https://invoice-api.amego.tw/json/allowance_status",{
-      method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),
+      method:"POST",redirect:"manual",signal:AbortSignal.timeout(8000),
       headers:{"content-type":"application/x-www-form-urlencoded",accept:"application/json"},
       body:form.toString()
     });
   }catch{throw new Error("ALLOWANCE_STATUS_UNAVAILABLE");}
+  if(response.status>=300&&response.status<400)throw new Error("ALLOWANCE_STATUS_REDIRECT_REJECTED");
   if(!response.ok)throw new Error("ALLOWANCE_STATUS_HTTP_UNCONFIRMED");
   let root:Record<string,unknown>;
   try{root=dict(JSON.parse(await readBounded(response)));}

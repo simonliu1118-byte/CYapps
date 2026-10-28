@@ -1,3 +1,16 @@
+# 本輪待配套：Cloud0.9.10／V3.1.44 Build3
+
+2026-10-29（Asia/Taipei）。原PR #550／同分支；0.9.10尚未部署，以下只描述本輪後續配套，不重跑下方已完成的0.9.9維護。完整程式Source以本輪完成報告固定SHA與同SHA必要CI為準，不以浮動HEAD或後續文件提交代替。
+
+- 本輪直接修原7個AMEGO adapter的redirect:error→manual，明確拒絕3xx；g0401／g0501仍unknown_result、不重送，不變財務權威。原npm test增加固定Wrangler／workerd的78項原生合成檢查，非Node transport模擬，無外部服務存取。
+- 工程包只提供GitHub下載連結，不再次下載到outputs、不自動覆寫原EXE／Data或啟動原安裝。
+- 原Worker0.9.9→0.9.10更新只沿canonical deployment-preflight及新的私有checkpoint執行before→deploy→after；schema／marker22、history0001～0022、三正常旗標true、兩舊人工旗標關閉及原Bindings／Secrets／Routes／CYID scope全保留。無schema-upgrade、migration、DDL、匯出、activation、新Worker／D1或CYID D1操作。
+- 後續部署沿原有界前後檢估算直接D1讀1200／寫0、服務請求8、控制面90，停止界線2000／0／12／110；當批先查方案餘額、限流即停，不沿用前批額度例外或為拆分帳號歸屬補查。私有雜湊／稽核／線上程式查核依該批明確授權範圍，原成功收據保留，不弱化檢查。
+- 更新後核對線上bundle與固定Source一致、health Cloud0.9.10／storage=ok／CYID／storageSchemaVersion22；無憑證拒絕只驗拒絕邊界，不重做原案或送真交易來補證據。原不可變0.9.9與私有回復檢查點保留，Worker回退不回退D1，不解鎖Claim、不自動還原或重送。
+- 修正版的真人詳情與財務驗收仍待使用者操作。Workers合成成功不代表已部署或真光貿成功；原始更早失敗不可直接推定只有這一原因。
+
+---
+
 # Cloud0.9.9部署完成／V3.1.44 Build2
 
 2026-10-28（Asia/Taipei）。原PR #550／同分支；**指定程式Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 已完成原Worker0.9.8→0.9.9部署，單一版本100%流量。** canonical before／deploy／after、線上app.js大小與SHA-256、health、schema／marker22、原身分／稽核指紋與FK、全部綁定及原旗標均通過。後續文件提交不取代此程式Source。維護停止，不重跑；本輪未重新核准或查詢原申請詳情、未送真光貿交易、未合併／Release。私有收據、資源識別、回復檢查點及帳號計量只留本機工作目錄。

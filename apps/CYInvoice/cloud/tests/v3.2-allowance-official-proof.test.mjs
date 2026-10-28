@@ -47,7 +47,7 @@ function transport(original,rows={}){
  return {called,send:async(url,options)=>{
   called.push(url);
   assert.equal(options.method,"POST");
-  assert.equal(options.redirect,"error");
+  assert.equal(options.redirect,"manual");
   const form=new URLSearchParams(options.body);
   assert.equal(form.get("invoice"),credentials.sellerInvoice);
   assert.equal(form.get("sign"),createHash("md5").update(
