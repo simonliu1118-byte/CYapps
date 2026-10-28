@@ -9,6 +9,10 @@
 - CY Web 端（chihyuan-web，目前 V0.9.43）：ERP 查詢頁（商品、客戶、供應商、進貨輔助、未收款）、排程佇列（每人最多 3 筆）、ERP 關閉／暫停（含「關閉到…」與暫停時加入佇列）；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。本程式只依 claim 回應的 `control.holdUntil` 決定暫停期間不開 ERP，暫停中排隊的工作由 CY Web 在暫停結束後才派發。
 - 自動更新只認本專案正式 Release；目前只保留 V1.2.1。V1.1.0 Build 3 → V1.2.0 的自動更新已在伺服器實際完成（2026-10-28 LOG）。
 
+## 待執行：V1.3.0 — 庫存盤點（交 GPT：[WO-1.3.0](docs/work-orders/WO-1.3.0.md)）
+
+- 讀盤點單（INVR11）、寫回 ERP（INVI14 逐筆、INVI06 新增批號與確認）；本程式第一次寫入 ERP，規則另開 governance PR。CY Web 端為 chihyuan-web WO-0.9.52。
+
 ## 功能與實機紀錄（2026-10-28 整理）
 
 | 功能 | ERP 作業 | CY Web 類型 | 實機紀錄 |
