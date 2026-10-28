@@ -24,7 +24,7 @@ const adaptiveCss = read('public/adaptive-ui.css');
 const accountingUiCss = read('public/accounting-ui.css');
 const bootStyles = [...html.matchAll(/<link\b[^>]*href="\/([^"?]+)(?:\?[^" ]*)?"[^>]*>/g)]
   .map(match => match[1]).filter(name => name.endsWith('.css')).map(name => read('public/' + name)).join('\n');
-assert.match(bootStyles, /\\.cy-account-menu:not\\(\\[data-identity-ready="true"\\]\\)[^{]*\\{[^}]*visibility:\\s*hidden/, 'pending identity must be hidden by the canonical account stylesheet loaded at startup');
+assert.match(bootStyles, /\.cy-account-menu:not\(\[data-identity-ready="true"\]\)[^{]*\{[^}]*visibility:\s*hidden/, 'pending identity must be hidden by the canonical account stylesheet loaded at startup');
 
 const accountingTools = read('src/accounting-tools.js');
 const coreApi = read('src/index.js');
