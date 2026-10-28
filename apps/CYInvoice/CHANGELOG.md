@@ -8,7 +8,7 @@
 
 Cloud Source0.9.9沿原invoice_query adapter輸出固定白名單診斷：查詢／讀取／解析／驗證階段、耗時、是否收到回覆、HTTP／供應商代碼，以及可辨識的timeout、abort、DNS、TLS、redirect、connection或unknown分類。保留原錯誤碼與8秒界線，不重試、不改官方成功判定。詳情分開標記原票查詢、餘額查證與權限重查；未知例外不推定逾時，不傳原始message／stack／cause或交易內容。
 
-Windows只接受白名單欄位與有界數值，將安全診斷寫入原每日及單筆JSONL；不新增表、schema、排程、診斷入口或第二套業務owner。CYID Consumer Impact: NONE。本批Source／隔離驗證與實際部署分開記錄；Cloud0.9.9尚未部署，schema22、旗標與綁定不變，無真交易、合併或Release。
+Windows只接受白名單欄位與有界數值，將安全診斷寫入原每日及單筆JSONL；不新增表、schema、排程、診斷入口或第二套業務owner。CYID Consumer Impact: NONE。2026-10-28已以指定Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 完成原Worker0.9.9更新、100%流量，canonical前後檢、線上bundle雜湊及health通過。schema22、旗標與綁定不變；原申請未重新核准或交易，無migration、合併或Release。私有計量、識別及回復證據不公開，維護停止、不重跑；新診斷與完整財務流程仍待真人回報。
 
 ## 2026/10/28 本機原Worker Cloud0.9.8更新完成
 

@@ -1,11 +1,15 @@
-# 本輪待本機配套：Cloud0.9.9／V3.1.44 Build2
+# Cloud0.9.9部署完成／V3.1.44 Build2
 
-2026-10-28。原PR #550／同分支；**原0.9.8部署已完成；本輪新Source0.9.9尚未部署。0.9.7／0.9.8維護不重跑。** 交付時指定的完整程式SHA及同SHA必要CI／Artifact為唯一來源，不取浮動HEAD。本輪只補詳情診斷與階段提示，不切LocalOnly或改交易owner。
+2026-10-28（Asia/Taipei）。原PR #550／同分支；**指定程式Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 已完成原Worker0.9.8→0.9.9部署，單一版本100%流量。** canonical before／deploy／after、線上app.js大小與SHA-256、health、schema／marker22、原身分／稽核指紋與FK、全部綁定及原旗標均通過。後續文件提交不取代此程式Source。維護停止，不重跑；本輪未重新核准或查詢原申請詳情、未送真光貿交易、未合併／Release。私有收據、資源識別、回復檢查點及帳號計量只留本機工作目錄。
 
-1. 下載同SHA的V3.1.44 Build2工程包，核對Artifact雜湊、路徑、VERSION／BUILD、不含實際Data／log；交付使用者，不自動覆寫原EXE／Data或啟動程式。
-2. 執行原Worker更新時循canonical deployment-preflight，以原Worker、原D1、同Source及新的私有checkpoint完成before→deploy→after，只更新0.9.8→0.9.9程式。沒有schema-upgrade、migration、DDL、匯出或allowance-activation意圖。schema／marker22、history0001～0022、三正常旗標true、舊兩旗標關閉及原Bindings／Secrets／Routes／CYID scope全保留；不新增資源、不改CYID D1。
+兩項自動審查停點（憑證衍生雜湊、線上程式雜湊核對）取得使用者本批明確授權後才接續；已成功唯讀收據及累計用量沿用，沒有重跑、繞過或弱化原檢查。每表101筆含超限偵測，超過100停止；沒有讀明文憑證或操作CYID D1。直接操作在原停止界線內，完整帳號差額不能歸因本批，直接SQL不等於完整計費量；不為歸屬補查。
+
+## 已完成部署步驟（留存，不重跑）
+
+1. 同SHA的Build2必要CI與工程包已於交付核對，使用者已使用Build2。本次部署未再次下載工程包、未自動覆寫原EXE／Data或啟動原安裝。
+2. 已循canonical deployment-preflight，以原Worker、原D1、同Source及新的私有checkpoint完成before→deploy→after，只更新0.9.8→0.9.9程式。沒有schema-upgrade、migration、DDL、匯出或allowance-activation意圖。schema／marker22、history0001～0022、三正常旗標true、舊兩旗標關閉及原Bindings／Secrets／Routes／CYID scope全保留；不新增資源、不改CYID D1。
 3. 沿原owner有界核對；預估直接D1讀1200／寫0、runtime8、控制面90；本批停止參考2000／0／12／110。依既有規則核對當批額度，不延用前批例外；限流立即停止，不為拆分共用帳號歸屬補查。實際用量、差異、回復證據私有交回，公開只放遮罩摘要。
-4. 核對線上bundle與指定Source一致，health Cloud0.9.9、storage=ok、identityProvider=CYID、storageSchemaVersion22；無憑證拒絕檢查不含交易內容，不冒充正向驗收。不用原失敗申請重新核准來補證據，不清Claim或資料，不合併／Release／真交易。
+4. 已核對線上bundle與指定Source一致，health Cloud0.9.9、storage=ok、identityProvider=CYID、storageSchemaVersion22；三項無憑證拒絕檢查均401／DEVICE_INVALID，不含交易內容，不冒充正向驗收。不用原失敗申請重新核准來補證據，不清Claim或資料，不合併／Release／真交易。
 5. 原不可變0.9.8版本與私有checkpoint保留。原schema22並未改變，但0.9.6舊reader仍不能當新姓名資料的直接回退；Worker回退不回退D1，不自動整庫還原。背景核准後使用原Grant authority snapshot與既有私有撤權服務，不依賴已登出的真人Session。
 
 ## 本輪驗收及log

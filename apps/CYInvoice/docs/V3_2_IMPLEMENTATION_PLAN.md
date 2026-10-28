@@ -2,7 +2,7 @@
 
 更新：2026-10-28（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.44 Build2／Cloud Source0.9.9，沿原 PR #550 返修詳情失敗診斷。實際原Worker0.9.8已由本機完成報告確認部署，schema22、原旗標及綁定保留；0.9.9尚未部署。尚未合併或發布。** 同機流程仍待真人驗收；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
+**工程 Source：V3.1.44 Build2／Cloud0.9.9，沿原 PR #550 返修詳情失敗診斷。指定程式Source `d7fa81e42b8eb35fba98f2475a7ac7bfa7b9a899` 已完成原Worker0.9.9部署及canonical前後檢、線上程式雜湊與health後驗；schema22、原旗標及綁定保留。尚未合併或發布。** 同機流程與新底層診斷仍待真人回報；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
 
 ## 1. 來源、現況與執行停點
 
@@ -14,7 +14,7 @@
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
-- 工程VERSION=3.1.44、BUILD=2；正式Release仍V3.1.0。已部署的是0.9.8／Build1指定Source，不能用它宣稱新0.9.9已部署；本輪未重新執行Cloudflare操作。正式發布仍需當次明確授權，私有計量不公開。
+- 工程VERSION=3.1.44、BUILD=2；正式Release仍V3.1.0。0.9.9／Build2指定Source已完成原Worker更新，無migration、資料修改、真交易或原案重試。兩項審查停點取得本批明確授權後接續原收據，未降低檢查。維護停止，正式發布仍需當次明確授權，私有計量不公開。
 
 ### 本批返修及驗收（2026-10-28）
 
