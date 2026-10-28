@@ -29,3 +29,53 @@ html[data-cyacc-theme="dark"] .login-form label, html[data-cyacc-theme="dark"] .
  html[data-cyacc-theme="system"] .topbar, html[data-cyacc-theme="system"] .card, html[data-cyacc-theme="system"] .login-card { background:#202837; color:#e5edf7; }
 }
 @media(max-width:767px){ .cyacc-appearance-slot { display:none; } }
+
+/* Align CYACC sign-in card composition with CY Web AuthGate while retaining the first-login guide. */
+.login-appearance { position:absolute; top:18px; right:20px; z-index:2; margin:0; }
+.login-card { position:relative; }
+.login-card .brand-block { padding-bottom:20px; border-bottom:1px solid #e8edf4; }
+.login-card #loginPanel h2 { margin:0 0 17px; font-size:18px; }
+.login-card .login-form { gap:15px; }
+.login-card .login-form label:not(.cyacc-remember-label) { font-weight:650; }
+.login-card .primary { width:100%; }
+.cyacc-login-options { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.login-form .cyacc-remember-label { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:500; cursor:pointer; }
+.login-form .cyacc-remember-label input { width:16px; height:16px; min-height:16px; margin:0; padding:0; accent-color:#215c9e; }
+.cyacc-login-options .link-button { font-weight:600; font-size:13px; }
+.login-card .first-login-help { margin-top:5px; }
+html[data-cyacc-theme="dark"] .login-card .brand-block { border-color:#40516a; }
+html[data-cyacc-theme="dark"] .login-subtitle, html[data-cyacc-theme="dark"] .login-appearance,
+html[data-cyacc-theme="dark"] .login-card .message:not(.error) { color:#aebcd0; }
+html[data-cyacc-theme="dark"] .first-login-help { border-color:#40516a; }
+html[data-cyacc-theme="dark"] .first-login-help a { color:#8ab9ff; }
+html[data-cyacc-theme="dark"] .login-form input { background:#263448; color:#eff5ff; border-color:#51647d; }
+html[data-cyacc-theme="dark"] .login-form .primary { background:#3575c9; color:white; }
+html[data-cyacc-theme="dark"] .cyacc-account-popover button:hover { background:#3c2e37; }
+html[data-cyacc-theme="dark"] .cyacc-account-avatar { background:#59462b; color:#ffdf92; }
+html[data-cyacc-theme="dark"] .cyacc-account-details { color:#e5edf7; }
+html[data-cyacc-theme="dark"] .topbar p, html[data-cyacc-theme="dark"] .section-title p,
+html[data-cyacc-theme="dark"] .ledger-card .hint { color:#b7c5d7; }
+html[data-cyacc-theme="dark"] .table-wrap,
+html[data-cyacc-theme="dark"] .ledger-card tbody tr { background:#202837 !important; }
+html[data-cyacc-theme="dark"] .ledger-card td { border-bottom-color:#3b485b !important; }
+html[data-cyacc-theme="dark"] .statistics-results, html[data-cyacc-theme="dark"] .statistics-card { color:#e5edf7; }
+html[data-cyacc-theme="dark"] .cy-ledger-summary-bar,
+html[data-cyacc-theme="dark"] .cy-ledger-summary-bar *,
+html[data-cyacc-theme="dark"] .ledger-card .cy-ledger-context { background-color:#202837; }
+html[data-cyacc-theme="dark"] .entry-card.entry-income { background:#1b3029 !important; border-color:#386950 !important; }
+html[data-cyacc-theme="dark"] .entry-card.entry-expense { background:#38292d !important; border-color:#704147 !important; }
+html[data-cyacc-theme="dark"] .ledger-card .row-action { color:#8dbcf0; }
+@media (prefers-color-scheme: dark) {
+  html[data-cyacc-theme="system"] .login-form input { background:#263448; color:#eff5ff; border-color:#51647d; }
+  html[data-cyacc-theme="system"] .first-login-help { color:#e5edf7; border-color:#40516a; }
+  html[data-cyacc-theme="system"] .first-login-help strong { color:#e5edf7; }
+  html[data-cyacc-theme="system"] .first-login-help a { color:#8ab9ff; }
+  html[data-cyacc-theme="system"] .ledger-card td, html[data-cyacc-theme="system"] .ledger-card th { background:#263346; color:#e5edf7; }
+  html[data-cyacc-theme="system"] .ledger-sticky-head, html[data-cyacc-theme="system"] .ledger-toolbar { background:#202837; }
+}
+@media(max-width:560px) {
+  .login-appearance { top:7px; right:10px; }
+  .login-appearance > span { display:none; }
+  .cyacc-theme-switch button { min-height:26px; height:26px; padding:3px 7px; font-size:11px; }
+  .login-card .brand-block { margin-bottom:12px; padding-bottom:12px; }
+}
