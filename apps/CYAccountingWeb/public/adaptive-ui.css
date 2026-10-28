@@ -12145,8 +12145,7 @@ html[data-viewport="desktop"] .confirmation-status::before { font-size: 11.5px; 
 html[data-viewport="desktop"] .confirmation-item.success .confirmation-status::before { content: '✓'; }
 html[data-viewport="desktop"] .confirmation-item.error .confirmation-status::before { content: '!'; }
 
-/* Desktop ledger: retain page scrolling, keep entry and ledger controls visible.
-   The table wrapper must not become a vertical scroll ancestor of sticky cells. */
+/* Desktop ledger: one sticky header and the original page scroll owner. */
 @media (min-width: 1360px) {
   html[data-viewport="desktop"] .shell {
     align-items: start;
@@ -12157,22 +12156,35 @@ html[data-viewport="desktop"] .confirmation-item.error .confirmation-status::bef
     z-index: 8;
     align-self: start;
     max-height: calc(100dvh - 24px);
+    min-width: 0;
+    overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+  }
+  html[data-viewport="desktop"] .entry-card > *,
+  html[data-viewport="desktop"] .entry-card .entry-grid {
+    max-width: 100%;
+    min-width: 0;
   }
   html[data-viewport="desktop"] .ledger-card {
     overflow: visible;
+    border-radius: 8px;
   }
-  html[data-viewport="desktop"] .ledger-card .ledger-title {
+  html[data-viewport="desktop"] .ledger-sticky-head {
     position: sticky;
     top: 0;
     z-index: 7;
     background: #fff;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 1px 0 #dde3e9;
   }
-  html[data-viewport="desktop"] .ledger-card #ledgerToolbar {
-    position: sticky;
-    top: 58px;
-    z-index: 7;
+  html[data-viewport="desktop"] .ledger-sticky-head .ledger-title {
+    position: static;
+    background: #fff;
+    border-radius: 8px 8px 0 0;
+  }
+  html[data-viewport="desktop"] .ledger-sticky-head #ledgerToolbar {
+    position: static;
     background: #fafcfe;
   }
   html[data-viewport="desktop"] .ledger-card .table-wrap {
