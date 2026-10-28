@@ -166,6 +166,12 @@ context.renderTieredBackupHistory([], [{slot:'primary',createdAt:'2026-10-19T19:
 assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML, /<script>/);
 assert.doesNotMatch(nodes.get('#backupHistoryRows').innerHTML, /0 筆/, 'a failed pre-export attempt is not presented as an empty ledger');
 assert.doesNotMatch(renderedHtml, /backupVerifyRestore|backupRestoreStatus|backupActivatePhaseD|檢查備份可還原性|試還原並核對/);
+nodes.set('#backupRecoveryTools', {hidden:true});nodes.set('#backupRecoveryStatus',{});nodes.set('#backupRecoverySummary',{});nodes.set('#backupRecoveryPreview',{});
+context.renderBackupRecoveryState({policy:{},recoveryWorkspace:{configured:false,ready:false},logicalBackups:[]});
+assert.match(nodes.get('#backupRecoveryStatus').textContent, /需要時建立/);
+assert.equal(nodes.get('#backupRecoveryPreview').disabled,true);
+context.renderBackupRecoveryState({policy:{},recoveryWorkspace:{configured:true,ready:false},logicalBackups:[]});
+assert.match(nodes.get('#backupRecoveryStatus').textContent, /已有資料.*不可覆寫/);
 assert.match(renderedHtml,/立即備份/); assert.doesNotMatch(renderedHtml,/立即執行測試備份/);
 
 // Only the launcher remains in settings; the single restore form is dialog-owned.

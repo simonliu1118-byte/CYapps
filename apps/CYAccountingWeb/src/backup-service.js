@@ -708,7 +708,7 @@ async function readRecoverySource(env,backupId,preferred,options={}) {
 }
 async function handleRecoveryAction(path,body,env,session,options) {
   assertSuperAdmin(session);
-  if(!env.RECOVERY_DB||env.RECOVERY_DB===env.DB) throw new TieredBackupError('獨立還原工作區尚未設定。','RECOVERY_TARGET_UNAVAILABLE');
+  if(!env.RECOVERY_DB||env.RECOVERY_DB===env.DB) throw new TieredBackupError('還原工作區採需要時建立，請先由維運人員準備。','RECOVERY_TARGET_UNAVAILABLE');
   const actor=backupActor(session);
   const verify=options.verifyRestore||(await import('./backup-restore-runtime.js')).verifyRestoreInMemory;
   if(path==='/api/backup/recovery/preview') {
@@ -749,6 +749,7 @@ async function latestRecoveryEvent(db) {
 
 export async function recoveryLanding(env,session,options={}) {
   if(session?.role!=='SUPER_ADMIN')return recoveryPage({error:'只有超級管理員可以使用帳本復原。'},403);
+  if(!env.RECOVERY_DB)return recoveryPage({sources:[],workspace:{configured:false,ready:false}});
   try {
     const provider=options.gcsProvider||createGcsBackupStorageProvider(env);
     const objects=await provider.listObjects('CYAccountingWeb/');

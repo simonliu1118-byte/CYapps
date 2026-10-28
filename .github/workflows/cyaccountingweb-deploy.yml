@@ -2,6 +2,15 @@ name: CYAccountingWeb Validate and Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      recovery_workspace:
+        description: 'Recovery workspace: disabled for normal publishing; prepare only when recovery is needed'
+        type: choice
+        required: true
+        default: disabled
+        options:
+          - disabled
+          - prepare
   pull_request:
     branches:
       - main
@@ -207,13 +216,16 @@ jobs:
       - name: Verify reviewed main source before remote changes
         run: node scripts/verify-deployment.mjs source
 
-      - name: Prepare isolated recovery D1
+      - name: Configure optional recovery D1
+        env:
+          RECOVERY_D1_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_workspace || 'disabled' }}
         run: node scripts/provision-recovery-d1.mjs
 
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
 
       - name: Apply D1 migrations
+        if: inputs.recovery_workspace != 'prepare'
         run: npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc
 
       - name: Deploy Worker and static assets

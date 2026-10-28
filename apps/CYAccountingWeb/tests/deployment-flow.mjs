@@ -132,6 +132,9 @@ test('workflow wiring keeps deployment explicit, serialized, guarded and documen
   assert.match(deploy, /resolve-cyid-production-runtime\.mjs --require-account-portal/);
   assert.match(deploy, /Verify production secure login entry/);
   assert.match(deploy, /Verify production semantic frontend assets/);
+  assert.match(workflow, /recovery_workspace:[\s\S]*?default: disabled[\s\S]*?- disabled[\s\S]*?- prepare/);
+  assert.match(deploy, /RECOVERY_D1_MODE:.*github\.event_name == 'workflow_dispatch'.*inputs\.recovery_workspace.*'disabled'/);
+  assert.match(deploy, /name: Apply D1 migrations\s*\n\s*if: inputs\.recovery_workspace != 'prepare'/, 'emergency preparation does not require the failed primary database to migrate');
   assert.match(release, /node apps\/CYAccountingWeb\/scripts\/verify-deployment\.mjs release/);
   assert.doesNotMatch(release, /event=push&branch=main/);
   assert.match(workflow, /node tests\/deployment-flow\.mjs/);
