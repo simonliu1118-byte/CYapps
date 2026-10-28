@@ -8,6 +8,10 @@
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
 - 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.2.0 為目前最新。
 
+## 進行中：V1.2.1 — Ribbon 文字辨識只看 Ribbon
+
+- V1.2.0 LOG（2026-10-28）：COPI01 客戶 AC0001 找「Excel」時整條 Ribbon OCR 三種縮放都 `IndexOutOfRangeException`（RapidOCR `TextCalRecBox.GetWordInfo`），原因是 1200×220 截圖含下方客戶資料。V1.2.1 截圖只到 RibbonGroupBar 下緣、先試同名群組、失敗時逐群組辨識。待實機：查 AC0001 客戶資料，LOG 應出現 `clicked Excel in group=Excel`。
+
 ## 待觀察（V1.2.0 發行後）
 
 - 2026-10-28 實機已確認：自動開啟 ERP、報表匯出、進貨輔助、立即關閉與關閉 15 分鐘。

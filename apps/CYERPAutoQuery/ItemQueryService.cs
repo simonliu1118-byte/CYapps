@@ -2126,15 +2126,27 @@ internal sealed partial class ItemQueryService
             .Where(c => c.Visible && c.ClassName.Contains("RibbonGroupBar", StringComparison.OrdinalIgnoreCase))
             .ToList();
         var key = NativeMethods.ClassName(window) + "|" + word;
-        var preferred = group ?? (_ribbonGroups.TryGetValue(key, out var learned) ? learned : null);
+        // A group captioned like the word (Excel is in the 「Excel」 group) is tried first even
+        // before it was learned (V1.2.0 LOG, 2026-10-28: after ERP was reopened the whole Ribbon was
+        // read and OCR failed on it).
+        var preferred = group ?? (_ribbonGroups.TryGetValue(key, out var learned) ? learned : null)
+            ?? bars.Select(c => c.Text.Trim()).FirstOrDefault(t => t.Length > 0 && Invi02Layout.NormalizeCaption(t) == Invi02Layout.NormalizeCaption(word));
         if (preferred is not null)
         {
             if (bars.FirstOrDefault(c => Invi02Layout.NormalizeCaption(c.Text) == Invi02Layout.NormalizeCaption(preferred)) is { } bar)
             {
                 var area = bar.Rect.ToRectangle();
                 IReadOnlyList<OcrToken> groupTokens;
-                using (var image = ScreenCapture.Capture(area))
+                try
+                {
+                    using var image = ScreenCapture.Capture(area);
                     groupTokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: requireChinese);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _log.Warn("ribbon", $"group={preferred} OCR failed ({ex.Message}); reading the whole Ribbon");
+                    groupTokens = [];
+                }
                 if (Find(groupTokens) is { } g)
                 {
                     var found = new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
@@ -2147,10 +2159,40 @@ internal sealed partial class ItemQueryService
             else _log.Warn("ribbon", $"ribbon group {preferred} not found; reading the whole Ribbon");
         }
 
-        var ribbon = new Rectangle(w.Left, w.Top, Math.Min(w.Width, 1200), Math.Min(w.Height, 220));
+        // Only the Ribbon itself: below it are the record's fields, and some of their text makes the OCR
+        // engine throw (V1.2.0 LOG, 2026-10-28: COPI01 of one customer failed at every scale while
+        // other customers and forms were read fine).
+        var ribbonBottom = bars.Count > 0 ? bars.Max(c => c.Rect.Bottom) + 2 - w.Top : 220;
+        var ribbon = new Rectangle(w.Left, w.Top, Math.Min(w.Width, 1200), Math.Clamp(ribbonBottom, 40, Math.Min(w.Height, 220)));
         IReadOnlyList<OcrToken> tokens;
-        using (var image = ScreenCapture.Capture(ribbon))
+        try
+        {
+            using var image = ScreenCapture.Capture(ribbon);
             tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: requireChinese);
+        }
+        catch (InvalidOperationException ex) when (bars.Count > 0)
+        {
+            // Read group by group instead, so text the engine cannot handle stays in its own image.
+            _log.Warn("ribbon", $"whole Ribbon OCR failed ({ex.Message}); reading {bars.Count} groups one by one");
+            foreach (var bar in bars)
+            {
+                var area = bar.Rect.ToRectangle();
+                IReadOnlyList<OcrToken> groupTokens;
+                try
+                {
+                    using var image = ScreenCapture.Capture(area);
+                    groupTokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: requireChinese);
+                }
+                catch (InvalidOperationException) { continue; }
+                if (Find(groupTokens) is not { } g) continue;
+                var found = new Rectangle(area.Left + g.Left, area.Top + g.Top, g.Width, g.Height);
+                SafeClick(window, new Point(found.Left + found.Width / 2, found.Top + found.Height / 2));
+                if (bar.Text.Trim().Length > 0) _ribbonGroups[key] = bar.Text.Trim();
+                _log.Info("ribbon", $"clicked {word} in group={bar.Text.Trim()} after whole Ribbon OCR failed");
+                return found;
+            }
+            throw;
+        }
         if (Find(tokens) is not { } r)
         {
             _log.Warn("ribbon", $"OCR did not find {word} tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
