@@ -310,13 +310,13 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=device-preview-retirement" 'data-desktop-ui-date-value'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'id="ledgerMonthLoading"'
           verify_asset "$base/app.js?rev=optimistic-create" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
-          verify_asset "$base/login.css?rev=cyweb-first-login-guide" '.first-login-help'
+          verify_asset "$base/login.css?rev=cyweb-login-alignment" '.first-login-help'
           verify_asset "$base/login.js?rev=cyweb-first-login-guide" 'async function loadFirstLoginPortal'
           verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.js?rev=device-preview-retirement" 'startSettingsCategoryPointerDrag'
           verify_asset "$base/adaptive-ui.js?rev=device-preview-retirement" 'data-settings-group-move'
-          verify_asset "$base/auth.js?rev=session-expiry-navigation" 'window.cyaccSessionPromise = checkSessionFallback()'
-          verify_asset "$base/auth.js?rev=session-expiry-navigation" 'Promise.race([request, timeout])'
+          verify_asset "$base/auth.js?rev=cyweb-account-menu" 'window.cyaccSessionPromise = checkSessionFallback()'
+          verify_asset "$base/auth.js?rev=cyweb-account-menu" 'Promise.race([request, timeout])'
           verify_asset "$base/app.js?rev=optimistic-create" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" "new CustomEvent('cyacc:ledger-rendered'"
