@@ -16,6 +16,7 @@ export interface OfficialAllowanceHistorySummary {
 }
 export interface OfficialInvoiceSnapshot {
   invoiceNumber: string;
+  orderId: string;
   uploadStatus: number;
   voidPending: boolean;
   hasUnsettledMutation: boolean;
@@ -228,7 +229,7 @@ export async function queryOfficialInvoiceReadOnly(
     new Uint8Array(encoder.encode(JSON.stringify(record))));
   const snapshotSha256=Array.from(new Uint8Array(digest),
     n=>n.toString(16).padStart(2,"0")).join("");
-  return {invoiceNumber,uploadStatus:status,voidPending,hasUnsettledMutation,cancelDate:cancel,
+  return {invoiceNumber,orderId:typeof record.order_id==="string"?record.order_id:typeof record.OrderId==="string"?record.OrderId:"",uploadStatus:status,voidPending,hasUnsettledMutation,cancelDate:cancel,
     totalAmount:gross,
     invoiceDate:record.date??record.invoice_date??null,
     detailVat:record.detail_vat??null,

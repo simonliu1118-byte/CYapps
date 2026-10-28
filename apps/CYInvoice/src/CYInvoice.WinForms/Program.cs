@@ -76,7 +76,7 @@ internal static class Program
                 return;
             }
             MessageBox.Show(
-                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 Logs\\startup-error.log。",
+                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 log\\startup-error.log。",
                 "CYInvoice 啟動失敗",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -304,7 +304,7 @@ internal static class Program
     {
         try
         {
-            var directory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            var directory = Path.Combine(AppContext.BaseDirectory, "log");
             Directory.CreateDirectory(directory);
             var message = $"[{DateTimeOffset.Now:O}]{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "startup-error.log"), message);

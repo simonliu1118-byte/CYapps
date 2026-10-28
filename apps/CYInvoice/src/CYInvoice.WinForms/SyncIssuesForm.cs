@@ -479,8 +479,9 @@ internal sealed class SyncIssuesForm : Form
             var failed = processing ? Array.Empty<InvoiceRecord>() : CurrentFailedRecords();
             var rows = new List<(string SortKey, ListViewItem Row)>();
 
-            var pendingRecords = repository.Invoices.LoadOrCreate()
-                .Where(r => r.Environment + "|" + r.SellerInvoice == accountKey && CloudAllowanceSubmissionService.HasPending(r))
+            var invoiceRecords = repository.Invoices.LoadOrCreate().Where(r => r.Environment + "|" + r.SellerInvoice == accountKey).ToArray();
+            var pendingRecords = invoiceRecords
+                .Where(CloudAllowanceSubmissionService.HasPending)
                 .GroupBy(r => CloudAllowanceSubmissionService.PendingApplicationId(r)!)
                 .Where(g => g.Count() == 1).ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
             foreach (var issue in issues)
@@ -492,9 +493,9 @@ internal sealed class SyncIssuesForm : Form
                     processing && IsAllowanceVoidManualReview(issue) ? "折讓作廢待主管" :
                     processing && IsVoidManualReview(issue) ? "紙本作廢待主管" : DisplayType(issue.IssueType));
                 var cloudAllowance = IsCloudAllowance(issue);
-                var linked = cloudAllowance ? pendingRecords.GetValueOrDefault(issue.OrderId) : null;
-                row.SubItems.Add(cloudAllowance ? linked?.InvoiceNumber ?? "開啟詳情查閱" : issue.InvoiceNumber);
-                row.SubItems.Add(cloudAllowance ? linked?.OrderId ?? "－" : issue.OrderId);
+                var identity = cloudAllowance ? CloudInvoiceIdentity(issue, pendingRecords.GetValueOrDefault(issue.OrderId), invoiceRecords) : (issue.InvoiceNumber, issue.OrderId);
+                row.SubItems.Add(identity.Item1.Length == 0 ? "尚未取得" : identity.Item1);
+                row.SubItems.Add(identity.Item2.Length == 0 ? "尚未取得" : identity.Item2);
                 row.SubItems.Add(issue.Message);
                 row.SubItems.Add(state);
                 row.Tag = issue;
@@ -751,11 +752,21 @@ internal sealed class SyncIssuesForm : Form
             Application.DoEvents();
             if (sample.list.Items.Count != 2 || sample.listHost.VisibleRowCapacity() != 2 || !sample.summary.Text.Contains("雲端待辦讀取失敗"))
                 throw new InvalidOperationException("雲端待辦讀取失敗必須清除舊雲端結果，保留本機清單並明示未確認。");
-            store.ApplyCloudAllowance("test|12345678", "application_synthetic_cloud", "issue", "processing", "open", "");
+            store.ApplyCloudAllowance("test|12345678", "application_synthetic_cloud", "issue", "processing", "open", "",
+                originalInvoiceNumber: "AA00000001", originalOrderId: "SYNTHETIC_ORDER");
             sample.ReloadAll();
             var cloudRow = sample.list.Items.Cast<ListViewItem>().Single(row => row.Tag is InvoiceSyncIssue x && x.OrderId == "application_synthetic_cloud");
-            if (cloudRow.SubItems[1].Text != "折讓申請" || cloudRow.SubItems[2].Text != "開啟詳情查閱" || cloudRow.SubItems[3].Text != "－")
+            if (cloudRow.SubItems[1].Text != "折讓申請" || cloudRow.SubItems[2].Text != "AA00000001" || cloudRow.SubItems[3].Text != "AA00000001")
                 throw new InvalidOperationException("Cloud 申請 ID 不得冒充訂單號，清單類型必須為業務文字。");
+            var cloudIssue = (InvoiceSyncIssue)cloudRow.Tag!;
+            store.UpdateMessage(cloudIssue.Id, "SYNTHETIC_ERROR_MESSAGE_CHANGED");
+            sample.ReloadAll();
+            var changed = store.All("test|12345678").Single(x => x.Id == cloudIssue.Id);
+            if (!sample.NeedsManagerApproval(changed) || sample.IssueState(changed) != "待主管核准")
+                throw new InvalidOperationException("待核准判斷不得依賴訊息字串。");
+            var detailRows = sample.CommonDetailRows(changed).ToDictionary(x => x.Key, x => x.Value);
+            if (detailRows["發票號碼"] != "AA00000001" || detailRows["訂單編號"] != "AA00000001")
+                throw new InvalidOperationException("清單與詳情必須顯示同一原發票及訂單。");
             sample.Close();
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -934,23 +945,30 @@ internal sealed class SyncIssuesForm : Form
         var settings = repository.Settings.LoadOrCreate();
         if (settings.CloudMode == CloudModes.LocalOnly || repository.IdentityProvider.Kind != IdentityProviderKind.CyId)
             throw new InvalidOperationException("請連回原 CYID 公司與裝置查證此申請");
-        return new CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings));
+        return new CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings), repository.DataDirectory);
     }
 
     private async Task OpenCloudAllowanceAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
     {
         var login = authorization;
         SetManualReviewBusy(true);
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        CloudAllowanceClient? api = null;
+        var isVoid = issue.IssueType.Contains("_void_", StringComparison.Ordinal);
         try
         {
-            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-            var api = CloudAllowanceApi(http);
-            var isVoid = issue.IssueType.Contains("_void_", StringComparison.Ordinal);
+            api = CloudAllowanceApi(http);
             var data = await api.OpenOperationAsync(issue.OrderId, isVoid, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+            string Detail(string label) => data.Rows.FirstOrDefault(row => row.Key == label).Value ?? "";
+            issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue",
+                issueStore.CloudProjection(accountKey, issue.OrderId, isVoid ? "void" : "issue")?.ExecutionState ?? "processing", data.Status, "",
+                originalInvoiceNumber: Detail("原發票"), originalOrderId: Detail("訂單編號"));
             if (IsDisposed) return;
             var canApprove = data.Status is "open" or "review";
+            var rows = data.Rows.Select(row => row.Key == "訂單編號" && accountKey.StartsWith("test|", StringComparison.Ordinal)
+                ? new KeyValuePair<string,string>(row.Key, TestOrderIdPrefix.StripIfPresent(row.Value)) : row);
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                data.Rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: data.CanWithdraw, primaryDanger: true);
+                rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: data.CanWithdraw, primaryDanger: true);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
             if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
             {
@@ -965,12 +983,36 @@ internal sealed class SyncIssuesForm : Form
             var state = result.ExecutionState == "completed" ? "已完成" : result.ExecutionState == "processing" ? "處理中" : "上傳問題";
             issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue",
                 result.ExecutionState, "approved", result.ErrorCode);
-            if (!IsDisposed) { ReloadAll(); MessageBox.Show(this, state + "。系統會依原申請自動追蹤。", "折讓執行結果"); }
+            if (!IsDisposed) { ReloadAll(); MessageBox.Show(this, state + "。系統會依原申請自動追蹤。" + (api.DiagnosticWriteProblem.Length == 0 ? "" : "\n" + api.DiagnosticWriteProblem), "折讓執行結果"); }
         }
         catch (Exception error)
         {
-            issueStore.UpdateMessage(issue.Id, "Cloud 操作尚未確認：" + error.Message + "；系統將依原申請同步，請勿重新建立。");
-            if (!IsDisposed) MessageBox.Show(this, "原申請已保留，系統會自動同步。\n" + error.Message, "Cloud 尚待確認");
+            var saved = issueStore.CloudProjection(accountKey, issue.OrderId, isVoid ? "void" : "issue");
+            var status = saved?.Status ?? "unknown";
+            var state = "problem";
+            var code = error is CloudApiException cloud ? cloud.Code : error.GetType().Name;
+            try { IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "manager_operation_failed", issue.IssueType,
+                error: error, responseReceived: error.Data["ResponseReceived"] as bool?, requestId: error.Data["CloudRequestId"] as string); }
+            catch (Exception logError) when (logError is IOException or UnauthorizedAccessException) {
+                code += "；log 寫入失敗：" + logError.GetType().Name;
+            }
+            if (api is not null && !isVoid) {
+                try {
+                    var original = await api.StatusAsync(issue.OrderId, login.EnteredEmployeeNo, login.AuthenticatedPassword);
+                    status = original.Status;
+                    state = original.Status == "approved" ? original.ExecutionState : "problem";
+                } catch (Exception) { /* Original-ID readback failed; never retry the approval. HTTP evidence is already logged. */ }
+            }
+            if (api is not null) {
+                try { await api.ExportOperationDiagnosticsAsync(issue.OrderId, isVoid, login.EnteredEmployeeNo, login.AuthenticatedPassword, maxPages:1); }
+                catch (Exception) { /* The bounded HTTP failure is recorded locally; never repeat a financial operation. */ }
+            }
+            issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue", state, status, code);
+            if (!IsDisposed) {
+                ReloadAll();
+                MessageBox.Show(this, "原申請已保留。" + (status == "approved" ? "主管核准已保存，系統會接續處理。" : "尚未確認完成核准，請查看上傳問題。") +
+                    "\n" + error.Message + "\n診斷位於程式同目錄 log 資料夾。" + (api?.DiagnosticWriteProblem ?? ""), "折讓操作未完成");
+            }
         }
         finally { if (!IsDisposed) SetManualReviewBusy(false); }
     }
@@ -1349,15 +1391,15 @@ internal sealed class SyncIssuesForm : Form
 
     private void UpdateDiagnosticButton()
     {
-        exportIssueDiagnostics.Visible = !processing;
-        exportIssueDiagnostics.Enabled = !processing && !manualReviewBusy &&
+        exportIssueDiagnostics.Visible = true;
+        exportIssueDiagnostics.Enabled = !manualReviewBusy &&
             list.SelectedItems.Count == 1 &&
             list.SelectedItems[0].Tag is InvoiceSyncIssue or InvoiceRecord;
     }
 
     private async Task ExportSelectedIssueDiagnosticsAsync()
     {
-        if (processing || list.SelectedItems.Count != 1) return;
+        if (list.SelectedItems.Count != 1) return;
         var selected = list.SelectedItems[0].Tag;
         if (selected is not InvoiceSyncIssue && selected is not InvoiceRecord) return;
         string report;
@@ -1370,11 +1412,16 @@ internal sealed class SyncIssuesForm : Form
             if (selected is InvoiceSyncIssue cloudIssue && IsCloudAllowance(cloudIssue))
             {
                 using var login = new EmployeeAdminLoginForm(repository, requireOnline: true);
-                if (login.ShowDialog(this) != DialogResult.OK) return;
-                using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-                var api = CloudAllowanceApi(http);
-                report += "\nCloud 原操作診斷：\n" + await api.ExportOperationDiagnosticsAsync(cloudIssue.OrderId,
-                    cloudIssue.IssueType.Contains("_void_", StringComparison.Ordinal), login.EnteredEmployeeNo, login.AuthenticatedPassword);
+                if (login.ShowDialog(this) == DialogResult.OK) {
+                    try {
+                        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+                        var api = CloudAllowanceApi(http);
+                        report += "\nCloud 原操作診斷：\n" + await api.ExportOperationDiagnosticsAsync(cloudIssue.OrderId,
+                            cloudIssue.IssueType.Contains("_void_", StringComparison.Ordinal), login.EnteredEmployeeNo, login.AuthenticatedPassword);
+                    } catch (Exception diagnosticError) {
+                        report += "\nCloud 診斷未能取得：" + diagnosticError.GetType().Name + "；請一併提供程式同目錄 log。";
+                    }
+                } else report += "\n未取得Cloud授權，僅匯出本機遮罩紀錄；可一併提供程式同目錄 log。";
             }
             suffix = selected is InvoiceSyncIssue current
                 ? current.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) : "failed";
@@ -1625,11 +1672,28 @@ internal sealed class SyncIssuesForm : Form
             $"{Value(i,"original_description")}　數量 {Value(i,"quantity")}　單價 {Value(i,"unit_price")}　未稅 {Value(i,"amount")}　稅 {Value(i,"tax")}"));
     }
 
+    private (string, string) CloudInvoiceIdentity(InvoiceSyncIssue issue, InvoiceRecord? pending = null, IReadOnlyList<InvoiceRecord>? loadedRecords = null)
+    {
+        var projection = issueStore.CloudProjection(accountKey, issue.OrderId,
+            issue.IssueType.Contains("_void_", StringComparison.Ordinal) ? "void" : "issue");
+        var records = loadedRecords ?? repository.Invoices.LoadOrCreate().Where(r => r.Environment + "|" + r.SellerInvoice == accountKey).ToArray();
+        var pendingMatches = records.Where(r => CloudAllowanceSubmissionService.HasPending(r) &&
+            CloudAllowanceSubmissionService.PendingApplicationId(r) == issue.OrderId).ToArray();
+        pending ??= pendingMatches.Length == 1 ? pendingMatches[0] : null;
+        var number = pending?.InvoiceNumber ?? projection?.OriginalInvoiceNumber ?? issue.InvoiceNumber;
+        var matching = records.Where(r => number.Length != 0 && r.InvoiceNumber == number).ToArray();
+        var local = pending ?? (matching.Length == 1 ? matching[0] : null);
+        var order = local?.OrderId ?? projection?.OriginalOrderId ?? "";
+        return (number, local is null && accountKey.StartsWith("test|", StringComparison.Ordinal)
+            ? TestOrderIdPrefix.StripIfPresent(order) : order);
+    }
+
     private IEnumerable<KeyValuePair<string, string>> CommonDetailRows(InvoiceSyncIssue issue)
     {
         yield return new("類型", DisplayType(issue.IssueType));
-        yield return new("發票號碼", issue.InvoiceNumber);
-        yield return new("訂單編號", issue.OrderId);
+        var identity = IsCloudAllowance(issue) ? CloudInvoiceIdentity(issue) : (issue.InvoiceNumber, issue.OrderId);
+        yield return new("發票號碼", identity.Item1.Length == 0 ? "尚未取得" : identity.Item1);
+        yield return new("訂單編號", identity.Item2.Length == 0 ? "尚未取得" : identity.Item2);
         yield return new("待辦建立時間", issue.CreatedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss"));
         yield return new("目前訊息", issue.Message);
         var record = TryFindIssueRecord(issue);
@@ -1787,7 +1851,11 @@ internal sealed class SyncIssuesForm : Form
     // Display status only; business execution and authority stay with the original workflows.
     private bool NeedsManagerApproval(InvoiceSyncIssue issue)
     {
-        if (IsCloudAllowance(issue)) return issue.Message == "等待主管核准";
+        if (IsCloudAllowance(issue)) {
+            var projection = issueStore.CloudProjection(accountKey, issue.OrderId,
+                issue.IssueType.Contains("_void_", StringComparison.Ordinal) ? "void" : "issue");
+            return projection?.Status is "open" or "review";
+        }
         if (IsAllowanceVoidManualReview(issue))
             return allowanceVoidWorkflow.LocalApprovalFor(issue) is null;
         if (IsAllowanceManualReview(issue))

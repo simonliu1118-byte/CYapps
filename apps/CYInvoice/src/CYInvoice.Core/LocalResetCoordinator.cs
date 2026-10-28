@@ -395,7 +395,7 @@ public static class LocalResetCoordinator
             var relative = raw.Replace('\\', '/');
             if (relative.Length == 0 || Path.IsPathRooted(relative)
                 || relative.Split('/').Any(p => p is "" or "." or ".." || p.Contains(':'))
-                || new[] { "Data", "Cache", "Logs" }.Any(d => relative.Equals(d, StringComparison.OrdinalIgnoreCase)
+                || new[] { "Data", "Cache", "Logs", "log" }.Any(d => relative.Equals(d, StringComparison.OrdinalIgnoreCase)
                     || relative.StartsWith(d + "/", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("發行檔案清單包含無效路徑。");
             keep.Add(relative);

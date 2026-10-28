@@ -66,7 +66,7 @@ internal static class LocalAllowanceOneShotTests
             "timeout stays uncertain");
         Check(events.Any(e => e.Stage == "response_unknown" && e.Error is TaskCanceledException),
             "the original exception reaches the existing diagnostic owner");
-        var log = File.ReadAllText(Path.Combine(temp.Path, "Logs", "IssueDiagnostics", "999.jsonl"));
+        var log = File.ReadAllText(Path.Combine(IssueDiagnosticLog.LogDirectory(temp.Path), "issue-999.jsonl"));
         Check(log.Contains("TaskCanceledException") && log.Contains("SendFirstAsync"), "exception type and stack are persisted");
         Check(!log.Contains("SECRET_PAYLOAD_DO_NOT_EXPORT"), "raw exception payload is not exported");
         Check(new LocalAllowanceNumberStore(temp.Path).FindLatest(Seller, Environment, Work)!.Status == "sending",

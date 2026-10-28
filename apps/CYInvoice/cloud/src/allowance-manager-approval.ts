@@ -14,6 +14,7 @@ export interface AllowanceApprovalTarget {
 }
 
 export interface CloudAllowanceApproval {
+ authoritySnapshot?:string;
  approvalId:string;
  applicationId:string;
  approvedRevision:number;
@@ -69,7 +70,8 @@ function nowUtc(clock:()=>Date):Date{
 export async function approveCloudAllowanceAfterOfficialProof(
  db:D1Database,t:AllowanceApprovalTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,transport:typeof fetch=fetch,
- clock:()=>Date=()=>new Date()
+ clock:()=>Date=()=>new Date(),
+ reportStage?:(stage:string)=>Promise<void>
 ):Promise<CloudAllowanceApproval>{
  if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
  if(typeof t.workspaceId!=="string"||!/^ws_[A-Za-z0-9_-]{3,100}$/.test(t.workspaceId)||
@@ -80,6 +82,7 @@ export async function approveCloudAllowanceAfterOfficialProof(
  const first=await authority.revalidate();
  if(!manager(first,t.workspaceId)||!await validDevice(db,t))
   throw new Error("ALLOWANCE_APPROVAL_MANAGER_REQUIRED");
+ await reportStage?.("approval_request_check");
  const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
  if(!["open","review"].includes(frozen.status)||frozen.revision!==t.expectedRevision||
     !await inReview(db,t,first.employeeId,frozen.requestHash))
@@ -91,9 +94,11 @@ export async function approveCloudAllowanceAfterOfficialProof(
   throw new Error("ALLOWANCE_APPROVAL_COMPANY_CHANGED");
  // This is the ONLY provider evidence source: the signed invoice_query
  // plus per-number signed allowance_query detail for this original invoice.
+ await reportStage?.("approval_official_check");
  const proof=await reconcileOfficialAllowanceForOriginal(frozen,{
   ...amegoCredentialsForEnvironment(company,ctx.environment)
  },transport,clock);
+ await reportStage?.("approval_official_checked");
  const date=nowUtc(clock);
  const checked=Date.parse(proof.officialCheckedAtUtc);
  if(proof.applicationId!==t.applicationId||
@@ -174,14 +179,16 @@ export async function approveCloudAllowanceAfterOfficialProof(
   manager_actor_id=?1,actor_id=?1,updated_by_device_id=?2,updated_at=?3
   WHERE application_id=?4 AND workspace_id=?5 AND status='open' AND revision=?6`)
   .bind(first.employeeId,t.deviceId,approvedAtUtc,t.applicationId,t.workspaceId,t.expectedRevision);
+ await reportStage?.("approval_save_started");
  try{result=await db.batch(frozen.status==="open"?[review,insert,transition]:[insert,transition]);}
- catch{throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");}
+ catch(error){throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED",{cause:error});}
  if(result.some(r=>(!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0)))
   throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");
+ await reportStage?.("approval_saved");
  const last=await authority.revalidate();
  if(!sameManager(first,last,t.workspaceId)||!await validDevice(db,t))
   throw new Error("ALLOWANCE_APPROVAL_READBACK_REQUIRED");
- return {approvalId,applicationId:t.applicationId,
+ return {authoritySnapshot:first.authoritySnapshot,approvalId,applicationId:t.applicationId,
   approvedRevision:reviewedRevision+1,managerActorId:first.employeeId,
   approvedAtUtc,validUntilUtc,requestHash:frozen.requestHash,
   officialEvidenceHash:proof.officialEvidenceHash,

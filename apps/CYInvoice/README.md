@@ -6,7 +6,10 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.44 Build 0／Cloud Source 0.9.7（非正式Release）**：本批修正（2026-10-28）：測試環境同步及本機保留改為今天加前兩天，逐日套用原有日期識別碼；陌生測試票不回查，正式環境保留期不變。折讓申請成功立即出現在原「待辦/處理中」；回覆不明只查回原ID一次，仍未知則保留原「上傳問題」及遮罩診斷，既有同步也會恢復舊版只留下marker的申請，不重新POST。 姓名來源及介面修正見[現行計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)；使用者2026-10-28本機完成報告確認原Worker已更新0.9.7，schema22及正常三旗標保留；V3.1.44工程包已下載核對，原EXE／Data未覆寫。真人驗收仍待使用者操作，不重跑維護。
+- **目前工程Source：V3.1.44 Build1／Cloud Source0.9.8（非正式Release）**：本輪先修同機折讓申請／核准、清單／詳情號碼及狀態；新增程式同目錄`log`，可直接壓縮交回查證，不含帳密、金鑰或原始交易內容。背景沿原Grant／coordinator恢復，不新增業務架構。實際原Worker仍0.9.7／schema22，新0.9.8待本機配套更新；未送真交易。見[現行計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)及[本機交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+
+
+- **前一已部署工程 Source：V3.1.44 Build 0／Cloud Source 0.9.7（非正式Release）**：本批修正（2026-10-28）：測試環境同步及本機保留改為今天加前兩天，逐日套用原有日期識別碼；陌生測試票不回查，正式環境保留期不變。折讓申請成功立即出現在原「待辦/處理中」；回覆不明只查回原ID一次，仍未知則保留原「上傳問題」及遮罩診斷，既有同步也會恢復舊版只留下marker的申請，不重新POST。 姓名來源及介面修正見[現行計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)；使用者2026-10-28本機完成報告確認原Worker已更新0.9.7，schema22及正常三旗標保留；V3.1.44工程包已下載核對，原EXE／Data未覆寫。真人驗收仍待使用者操作，不重跑維護。
 
 - **前一已部署工程 Source：V3.1.43 Build 0／Cloud 0.9.6（非正式 Release）**：使用者2026-10-27本機完成報告確認，原Worker已部署Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`，正常折讓API／g0401／g0501三旗標均啟用；兩個舊人工旗標仍關閉，schema22及原服務／身分保留。舊人工完成入口已從Source及工程包移除。指定桌面Data快照及原D1限定六表的舊案盤點完成，該範圍無待收尾財務案；不代表其他安裝或裝置皆為0。工程包已由本機下載，桌面原EXE未覆寫，請使用V3.1.43測試。詳見[本機完成摘要](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；真人財務流程仍待驗收，正式Release仍V3.1.0。
 

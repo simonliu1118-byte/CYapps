@@ -42,7 +42,7 @@ const approvalTarget=id=>({workspaceId:ws,applicationId:id,
 const reserveTarget=id=>({...approvalTarget(id),expectedRevision:3});
 const sendTarget=(id,number)=>({...reserveTarget(id),
  ledgerId:number.ledgerId,allowanceNumber:number.allowanceNumber});
-const invoiceRecord={invoice_number:invoice,status:99,cancel_date:0,
+const invoiceRecord={order_id:"SYNTHETIC_ORDER",invoice_number:invoice,status:99,cancel_date:0,
  total_amount:100,invoice_date:20261019,detail_vat:1,tax_amount:5,
  product_item:[{description:"FAKE ORIGINAL"}],allowance:[],wait:[]};
 function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
@@ -181,12 +181,12 @@ function config(db,user,allowanceFlag="true",schema="21"){
  IDENTITY_CYINVOICE_WORKSPACE_ID:ws,
  cyIdContext:{revalidate:async()=>user,verifiedEmail:async()=>"synthetic@example.invalid"}};
 }
-async function call(env,action,body={},token=rawDevA){
+async function call(env,action,body={},token=rawDevA,context){
  const req=new Request("https://fake.invalid/v1/allowances/"+action,{
   method:"POST",headers:{"authorization":"Bearer "+token,
     "content-type":"application/json"},body:JSON.stringify({employeeNo:"1234",
     password:"NOT_A_REAL_PASSWORD",...body})});
- const res=await handle(req,env);
+ const res=await handle(req,env,context);
  assert.ok(res);
  return {status:res.status,body:await res.json()};
 }
@@ -236,6 +236,7 @@ try{
  const detail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
  assert.equal(detail.status,200);assert.ok(detail.body.rows.some(r=>r.label==="原發票商品"));
  assert.ok(detail.body.rows.some(r=>r.label==="本次折讓商品"));
+ assert.ok(detail.body.rows.some(r=>r.label==="訂單編號"&&r.value==="SYNTHETIC_ORDER"));
  assert.ok(detail.body.rows.some(r=>r.label==="申請員工"&&r.value==="1234 Synthetic"));
  assert.ok(detail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="尚未核准"));
  assert.deepEqual(sql.prepare("SELECT status,revision FROM allowance_applications WHERE application_id=?").get(app1),Object.assign(Object.create(null),{status:"open",revision:1}));
@@ -302,5 +303,40 @@ try{
   if(!page.body.hasMore)break;assert.ok(page.body.nextEventId>cursor);cursor=page.body.nextEventId;
  }
  assert.ok(total>205);
+ // Actual same-Device grant -> response -> background lifecycle. No live session retained.
+ const same=await fixture();
+ try {
+  for(const [device,raw] of [[devA,rawDevA],[devB,rawDevB]])
+   same.sql.prepare("UPDATE devices SET token_hash=? WHERE device_id=?").run(await hash(raw),device);
+  const user=config(same.db,principal("USER","employee"));
+  const admin={...config(same.db,principal("ADMIN","manager")),ALLOWANCE_G0401_SEND_ENABLED:"true",
+   IDENTITY_AUTHORITY:{invalidateCache:async()=>({workspaceId:"identity_workspace",applicationId:"CYINVOICE",available:true,invalidated:[]})}};
+  const sameId="application_same_device_background";
+  assert.equal((await call(user,"create",{...input(sameId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
+  const slow=fakeOneShotProvider("A20261019001");let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  globalThis.fetch=async(url,options)=>{if(url.endsWith("/g0401"))await gate;return slow.transport(url,options);};
+  const pending=[];
+  const ack=await call(admin,"approve",{applicationId:sameId,expectedRevision:1},rawDevA,{waitUntil:p=>pending.push(p)});
+  assert.equal(ack.status,200,JSON.stringify(ack));assert.equal(ack.body.executionState,"processing");
+  assert.equal(same.sql.prepare("SELECT status FROM allowance_applications WHERE application_id=?").get(sameId).status,"approved");
+  assert.equal(same.sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_approvals WHERE application_id=?").get(sameId).n,1);
+  admin.cyIdContext.revalidate=async()=>{throw new Error("LIVE_SESSION_ALREADY_CLOSED");};
+  release();await Promise.all(pending);
+  assert.equal(slow.calls.filter(x=>x.endsWith("/g0401")).length,1);
+  assert.equal(same.sql.prepare("SELECT execution_state FROM allowance_applications WHERE application_id=?").get(sameId).execution_state,"completed");
+  // Pre-approval failure must keep open revision1, record the stage and classify a problem.
+  const failId="application_preapproval_failure";
+  assert.equal((await call(user,"create",{...input(failId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
+  const failAdmin={...config(same.db,principal("ADMIN","manager")),ALLOWANCE_G0401_SEND_ENABLED:"true"};
+  globalThis.fetch=async()=>{throw new Error("SECRET_RAW_PROVIDER_PAYLOAD");};
+  const rejected=await call(failAdmin,"approve",{applicationId:failId,expectedRevision:1},rawDevA);
+  assert.equal(rejected.status,409);assert.equal(rejected.body.error.stage,"approval_official_check");
+  const failedState=same.sql.prepare("SELECT status,revision,execution_state,last_error FROM allowance_applications WHERE application_id=?").get(failId);
+  assert.equal(failedState.status,"open");assert.equal(failedState.revision,1);assert.equal(failedState.execution_state,"problem");
+  assert.equal(same.sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_approvals WHERE application_id=?").get(failId).n,0);
+  const events=same.sql.prepare("SELECT stage,error_code FROM allowance_execution_events WHERE application_id=? ORDER BY event_id").all(failId);
+  assert.ok(events.some(x=>x.stage==="approval_failed"));assert.ok(!JSON.stringify(events).includes("SECRET_RAW_PROVIDER_PAYLOAD"));
+ } finally {same.close();}
  console.log("Allowance HTTP ACL, view/cancel without mutation, one approval including send, default-off gates and complete paged diagnostics passed.");
 }finally{globalThis.fetch=savedFetch;f.close();}

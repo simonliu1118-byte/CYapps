@@ -184,17 +184,17 @@ export default {
           // existing active Device; details/mutations retain employee authority.
           if (path === "/v1/work-items/list" && body &&
               !("employeeNo" in body) && !("password" in body))
-            return await dispatchRequest(request, env);
+            return await dispatchRequest(request, env, context);
           return await withCyIdSession(env, body?.employeeNo, body?.password, async (_, revalidate, verifiedEmail) =>
-            dispatchRequest(request, { ...env, cyIdContext: { revalidate, verifiedEmail } }));
+            dispatchRequest(request, { ...env, cyIdContext: { revalidate, verifiedEmail } }, context));
         }
       }
-      return await dispatchRequest(request, env);
+      return await dispatchRequest(request, env, context);
     } catch (error) { return cyIdErrorResponse(error); }
   },
 };
 
-async function dispatchRequest(request: Request, env: Env): Promise<Response> {
+async function dispatchRequest(request: Request, env: Env, context?:ExecutionContext): Promise<Response> {
     const recoveryResponse = await handleRecoveryRoutes(request, env);
     if (recoveryResponse) return recoveryResponse;
 
@@ -206,7 +206,7 @@ async function dispatchRequest(request: Request, env: Env): Promise<Response> {
 
     const companySettingsResponse = await handleCompanySettings(request, env);
     if (companySettingsResponse) return companySettingsResponse;
-    const allowanceResponse=await handleAllowances(request,env);
+    const allowanceResponse=await handleAllowances(request,env,context);
     if(allowanceResponse)return allowanceResponse;
     if(new URL(request.url).pathname.startsWith("/v1/allowances/"))
       return Response.json({ok:false,error:{code:"NOT_FOUND"}},{status:404,headers:{"cache-control":"no-store"}});

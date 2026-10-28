@@ -181,7 +181,20 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                     var previousAccount = !item.TryGetProperty("environment",out _) ? null : itemEnvironment==Environments.Test
                         ? Environments.Production+"|"+current.ProductionInvoice.Trim()
                         : Environments.Test+"|"+AmegoDefaults.TestInvoice;
-                    store.ApplyCloudAllowance(itemAccount, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "", previousAccount);
+                    var prior = store.CloudProjection(itemAccount, id, operation);
+                    var diagnosticSaved = true;
+                    if (prior?.Status != status || prior.ExecutionState != state) {
+                        var correlation = item.TryGetProperty("request_id", out var requestId) ? requestId.GetString() ?? "runtime" : "runtime";
+                        diagnosticSaved = IssueDiagnosticLog.RecordCloud(dataDirectory, operation, "state_synchronized", correlation, id,
+                            code: item.GetProperty("last_error").GetString(), status: status, executionState: state);
+                    }
+                    store.ApplyCloudAllowance(itemAccount, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "", previousAccount,
+                        item.TryGetProperty("originalInvoiceNumber", out var originalNumber) && originalNumber.ValueKind == JsonValueKind.String ? originalNumber.GetString() : null,
+                        item.TryGetProperty("originalOrderId", out var originalOrder) && originalOrder.ValueKind == JsonValueKind.String ? originalOrder.GetString() : null);
+                    if (!diagnosticSaved) {
+                        var currentIssue = store.Unresolved(itemAccount).FirstOrDefault(x => x.OrderId == id && x.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal));
+                        if (currentIssue is not null) store.UpdateMessage(currentIssue.Id, currentIssue.Message + "；程式同目錄 log 寫入失敗，請確認權限與磁碟空間。");
+                    }
                     if (state == "completed" || status is "withdrawn" or "rejected")
                         completedApplications.Add(id);
                 }

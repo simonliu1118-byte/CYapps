@@ -1,7 +1,7 @@
 import {cyIdBinding,cyIdDevice,usesCyId,CyIdError,type CyIdEnv,type CyIdPrincipal} from "./cyid";
 import {createEncryptedCloudAllowance,loadEncryptedCloudAllowance,readAllowanceParticipant,allowanceParticipantText,type AllowanceActor,type AllowanceActorSource,type CloudAllowanceContext} from "./allowance-frozen-store";
 import {approveCloudAllowanceAfterOfficialProof} from "./allowance-manager-approval";
-import {executeApprovedCloudAllowance} from "./allowance-one-shot-coordinator";
+import {approvedExecutionAuthority,recordExecutionEvent,saveExecutionResult,executeApprovedCloudAllowance} from "./allowance-one-shot-coordinator";
 import {executeCloudVoidOnce} from "./allowance-void-one-shot-coordinator";
 import {createCloudAllowanceVoidApplication,readCloudAllowanceVoidApplication,loadCloudAllowanceVoidForManager} from "./allowance-void-applications";
 import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
@@ -70,7 +70,7 @@ async function checkDevice(db:D1Database,device:string,workspace:string){
  .bind(device,workspace).first<{device_id:string}>();
  return !!r;
 }
-export async function handleAllowances(req:Request,env:Env):Promise<Response|null>{
+export async function handleAllowances(req:Request,env:Env,context?:ExecutionContext):Promise<Response|null>{
  const path=new URL(req.url).pathname;
  if(!path.startsWith("/v1/allowances/"))return null;
  const action=path.split("/").at(-1)!;
@@ -86,6 +86,12 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
  if((action==="approve"&&env.ALLOWANCE_G0401_SEND_ENABLED!=="true")||
     (action==="void-approve"&&env.ALLOWANCE_G0501_SEND_ENABLED!=="true"))
   return reply(503,{error:{code:"OFFICIAL_SEND_DISABLED"}});
+ const supplied=req.headers.get("x-request-id")??"";
+ const requestId=/^[A-Za-z0-9_.:-]{1,128}$/.test(supplied)?supplied:"req-"+crypto.randomUUID();
+ let stage="request_authority_check";
+ let reportStage:((stage:string,errorCode?:string)=>Promise<void>)|undefined;
+ let failureTarget:{workspaceId:string;applicationId:string}|undefined;
+ let diagnosticSaved=true;
  try{
   const binding=cyIdBinding(env),dev=await cyIdDevice(req,env),authority=auth(env),actor=await authority.revalidate();
   if(!actor||dev.workspace_id!==binding.workspaceId||!await checkDevice(env.DB,dev.device_id,binding.workspaceId))
@@ -105,8 +111,6 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    return reply(400,{error:{code:"INVALID_ENVIRONMENT"}});
   const ctx:CloudAllowanceContext={encryptionKeyHex:env.COMPANY_SETTINGS_KEY_HEX,
    environment:environment==="production"?"production":"test"};
-  const supplied=req.headers.get("x-request-id")??"";
-  const requestId=/^[A-Za-z0-9_.:-]{1,128}$/.test(supplied)?supplied:"req-"+crypto.randomUUID();
   if(action==="create"){
    if(input.environment!==ctx.environment||typeof input.originalInvoiceNumber!=="string"||
     typeof input.allowanceDay!=="string"||!Number.isSafeInteger(input.requestedGross)||
@@ -171,9 +175,25 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
   }
   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
   if(action==="approve"){
-   const grant=await approveCloudAllowanceAfterOfficialProof(env.DB,target,ctx,authority);
-   const result=await executeApprovedCloudAllowance(env.DB,{...target,expectedRevision:grant.approvedRevision},ctx,authority,fetch,()=>new Date(),requestId);
-   return reply(200,{status:"approved",revision:grant.approvedRevision,...result});
+   failureTarget=target;
+   reportStage=async(next,errorCode)=>{
+    stage=next;
+    try {await recordExecutionEvent(env.DB,target,"issue",next,requestId,()=>new Date(),{errorCode});}
+    catch {diagnosticSaved=false;}
+   };
+   await reportStage("approval_started");
+   const grant=await approveCloudAllowanceAfterOfficialProof(env.DB,target,ctx,authority,fetch,()=>new Date(),reportStage);
+   const executionAuthority=context?approvedExecutionAuthority(env,target.workspaceId,grant.authoritySnapshot??null,
+    grant.managerActorId,{applicationId:target.applicationId,operation:"issue"}):authority;
+   const work=executeApprovedCloudAllowance(env.DB,{...target,expectedRevision:grant.approvedRevision},ctx,executionAuthority,fetch,()=>new Date(),requestId);
+   if(context){
+    // The existing execution owner continues after the durable decision. Runtime sync resumes interruptions.
+    context.waitUntil(work);
+    return reply(200,{applicationId:target.applicationId,status:"approved",revision:grant.approvedRevision,
+     executionState:"processing",diagnosticSaved});
+   }
+   const result=await work;
+   return reply(200,{status:"approved",revision:grant.approvedRevision,...result,diagnosticSaved});
   }
   if(action==="void-approve"){
    if(typeof input.requestHash!=="string"||typeof input.expectedOfficialSnapshotHash!=="string")return reply(400,{error:{code:"INVALID_REQUEST"}});
@@ -191,7 +211,7 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
    const invoice=await queryOfficialInvoiceReadOnly({...amegoCredentialsForEnvironment(c,ctx.environment),originalInvoiceNumber:f.originalInvoiceNumber});
    const rows:Array<{label:string;value:string}>=[];
    const add=(label:string,value:unknown)=>rows.push({label,value:value===undefined||value===null?"－":String(value)});
-   add("原發票",invoice.invoiceNumber);add("原發票日期",invoice.invoiceDate);add("原發票含稅金額",invoice.totalAmount);add("原發票稅額",invoice.invoiceTaxAmount);
+   add("原發票",invoice.invoiceNumber);add("訂單編號",invoice.orderId);add("原發票日期",invoice.invoiceDate);add("原發票含稅金額",invoice.totalAmount);add("原發票稅額",invoice.invoiceTaxAmount);
    const itemText=(raw:unknown)=>Array.isArray(raw)?raw.map((i:any)=>
     `${i.OriginalDescription??i.original_description??i.description??"－"}　數量 ${i.Quantity??i.quantity??"－"}　單價 ${i.UnitPrice??i.unit_price??"－"}　金額 ${i.Amount??i.amount??"－"}　稅 ${i.Tax??i.tax??"－"}`).join("\n"):"－";
    add("原發票商品",itemText(invoice.originalProductItems));
@@ -253,8 +273,21 @@ export async function handleAllowances(req:Request,env:Env):Promise<Response|nul
   }
   return reply(404,{error:{code:"NOT_FOUND"}});
  }catch(error){
-  if(error instanceof CyIdError)return reply(error.status,{error:{code:error.code}});
-  const code=error instanceof Error&&/^[A-Z0-9_]{3,100}$/.test(error.message)?error.message:"ALLOWANCE_RESULT_OR_STORAGE_UNKNOWN";
-  return reply(code.includes("NOT_FOUND")?404:409,{error:{code}});
+  const code=error instanceof CyIdError?error.code:
+   error instanceof Error&&/^[A-Z0-9_]{3,100}$/.test(error.message)?error.message:"ALLOWANCE_RESULT_OR_STORAGE_UNKNOWN";
+  const failedStage=stage;
+  let causeCode="";
+  if(reportStage&&failureTarget){
+   if(error instanceof Error&&error.cause instanceof Error){
+    // Only schema-defined symbolic errors, never raw SQL or bound values.
+    const known=error.cause.message.match(/\b(?:ALLOWANCE|COMPANY|DEVICE|WORKSPACE)_[A-Z0-9_]{3,90}\b/);
+    causeCode=known?.[0]??"D1_BATCH_FAILED";
+   }
+   await reportStage("approval_failed",code);
+   if(causeCode)await reportStage("approval_storage_rejected",causeCode);
+   try {await saveExecutionResult(env.DB,failureTarget,"issue",{applicationId:failureTarget.applicationId,
+    executionState:"problem",errorCode:code},requestId,()=>new Date());}catch{diagnosticSaved=false;}
+  }
+  return reply(error instanceof CyIdError?error.status:code.includes("NOT_FOUND")?404:409,{error:{code,stage:failedStage,requestId,diagnosticSaved,causeCode}});
  }
 }

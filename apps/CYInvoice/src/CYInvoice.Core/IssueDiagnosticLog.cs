@@ -31,9 +31,70 @@ public static class IssueDiagnosticLog
         return match.Success ? match.Groups["code"].Value : "無可辨識代碼";
     }
 
+    // Same owner as the existing per-issue evidence. New files live beside the EXE.
+    public static string LogDirectory(string dataDirectory) =>
+        Path.Combine(string.Equals(Path.GetFileName(Path.GetFullPath(dataDirectory)), "Data", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetDirectoryName(Path.GetFullPath(dataDirectory))! : dataDirectory, "log");
+    private static readonly Lock LogGate = new();
+    private static string cleanedDay = "";
     private static string PathFor(string dataDirectory, long issueId) =>
-        Path.Combine(dataDirectory, "Logs", "IssueDiagnostics",
-            issueId.ToString(CultureInfo.InvariantCulture) + ".jsonl");
+        Path.Combine(LogDirectory(dataDirectory), "issue-" + issueId.ToString(CultureInfo.InvariantCulture) + ".jsonl");
+    private static IEnumerable<string> ReadPathsFor(string dataDirectory, long issueId)
+    {
+        var legacy = Path.Combine(dataDirectory, "Logs", "IssueDiagnostics", issueId.ToString(CultureInfo.InvariantCulture) + ".jsonl");
+        if (File.Exists(legacy)) yield return legacy;
+        var current = PathFor(dataDirectory, issueId);
+        if (File.Exists(current)) yield return current;
+    }
+
+    public static bool RecordCloud(string dataDirectory, string action, string phase, string requestId,
+        string? applicationId = null, long? elapsedMs = null, int? httpStatus = null,
+        bool? responseReceived = null, string? code = null, Exception? error = null,
+        string? serverStage = null, string? status = null, string? executionState = null,
+        int? attempt = null, int? providerCode = null, string? serverAtUtc = null)
+    {
+        try {
+            var directory = LogDirectory(dataDirectory);
+            var day = DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+            var validId = applicationId is not null && Regex.IsMatch(applicationId, @"^[A-Za-z0-9_-]{8,100}$") ? applicationId : null;
+            string? Safe(string? value) => value is not null && Regex.IsMatch(value, @"^[A-Za-z0-9_.:-]{1,128}$") ? value : null;
+            var root = Path.GetDirectoryName(directory)!;
+            var versionPath = Path.Combine(root, "VERSION");
+            var buildPath = Path.Combine(root, "BUILD");
+            var productVersion = File.Exists(versionPath) ? File.ReadAllText(versionPath).Trim() : typeof(IssueDiagnosticLog).Assembly.GetName().Version?.ToString();
+            var build = File.Exists(buildPath) && int.TryParse(File.ReadAllText(buildPath).Trim(), out var buildNumber) ? buildNumber : (int?)null;
+            var line = JsonSerializer.Serialize(new {
+                format = "CYInvoice-diagnostic-1", atUtc = DateTimeOffset.UtcNow.ToString("O"),
+                version = productVersion is not null && Regex.IsMatch(productVersion, @"^\d+\.\d+\.\d+(?:\.\d+)?$") ? productVersion : "unknown", build,
+                runtime = Environment.Version.ToString(), action = Safe(action), phase = Safe(phase),
+                requestId = Safe(requestId), applicationId = validId, elapsedMs, httpStatus,
+                responseReceived, code = Safe(code), serverStage = Safe(serverStage),
+                causeCode = Safe(error?.Data["CloudCauseCode"] as string),
+                serverDiagnosticsSaved = error?.Data["CloudDiagnosticsSaved"] as bool?,
+                status = Safe(status), executionState = Safe(executionState), attempt, providerCode,
+                serverAtUtc = DateTimeOffset.TryParse(serverAtUtc, out var serverTime) ? serverTime.ToUniversalTime().ToString("O") : null,
+                errorType = error?.GetType().FullName,
+                stack = error is null ? null : new System.Diagnostics.StackTrace(error, false).ToString()
+            });
+            lock (LogGate) {
+                Directory.CreateDirectory(directory);
+                if (cleanedDay != directory + day) {
+                    foreach (var old in Directory.EnumerateFiles(directory, "cloud-????????*.jsonl"))
+                        if (File.GetLastWriteTimeUtc(old) < DateTime.UtcNow.AddDays(-14)) File.Delete(old);
+                    cleanedDay = directory + day;
+                }
+                var path = Path.Combine(directory, "cloud-" + day + ".jsonl");
+                if (File.Exists(path) && new FileInfo(path).Length >= 4 * 1024 * 1024)
+                    File.Move(path, Path.Combine(directory, "cloud-" + day + "-previous.jsonl"), true);
+                using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                writer.WriteLine(line);writer.Flush();stream.Flush(true);
+            }
+            return true;
+        } catch (Exception logError) when (logError is IOException or UnauthorizedAccessException or ArgumentException) {
+            return false;
+        }
+    }
 
     public static void Record(string directory, long issueId, string stage, string issueType,
         int? code = null, Exception? error = null, int? attempt = null,
@@ -103,13 +164,13 @@ public static class IssueDiagnosticLog
         output.AppendLine("操作紀錄（保留首錯與完整嘗試歷程）：");
         try
         {
-            var path = PathFor(dataDirectory, issue.Id);
-            if (!File.Exists(path))
+            var paths = ReadPathsFor(dataDirectory, issue.Id).ToArray();
+            if (paths.Length == 0)
             {
                 output.AppendLine("尚無診斷紀錄（舊版問題或記錄失敗）；不可由缺少紀錄推論未送出。");
                 return output.ToString();
             }
-            var events = File.ReadLines(path).ToArray();
+            var events = paths.SelectMany(File.ReadLines).ToArray();
             if (events.Length == 0) output.AppendLine("診斷檔為空，可能曾寫入失敗。");
             foreach (var line in events)
             {

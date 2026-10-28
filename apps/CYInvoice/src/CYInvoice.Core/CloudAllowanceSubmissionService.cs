@@ -12,7 +12,10 @@ namespace CYInvoice.Core.Cloud;
 // ID is persisted in Local SQLite BEFORE the first Cloud write. No retry,
 // hidden second POST, provider mutation or number allocation occurs here.
 public sealed record CloudAllowanceSubmissionResult(
-    string ApplicationId, bool AlreadySubmitted, string Status);
+    string ApplicationId, bool AlreadySubmitted, string Status)
+{
+    public string DiagnosticWriteProblem { get; init; } = "";
+}
 
 internal sealed record PendingCloudAllowanceMarker(
     string ApplicationId, string WorkspaceId, string DeviceId,
@@ -108,7 +111,7 @@ public sealed class CloudAllowanceSubmissionService
             throw new InvalidOperationException("CYID Cloud 尚未具備可信的 Device 與 HTTPS 設定");
 
         var token = repository.Settings.CloudDeviceToken(settings);
-        var api = new CloudAllowanceClient(http, endpoint, token);
+        var api = new CloudAllowanceClient(http, endpoint, token, repository.DataDirectory);
         var record = repository.Invoices.LoadOrCreate()
             .SingleOrDefault(x => x.Id == selected.Id)
             ?? throw new InvalidOperationException("找不到本機原發票，禁止建立雲端折讓");
@@ -125,7 +128,7 @@ public sealed class CloudAllowanceSubmissionService
                     password, cancellationToken).ConfigureAwait(false);
                 TrackState(record, pending.ApplicationId, state.Status, state.LedgerStatus == "confirmed" ? "completed" : "processing");
                 return new CloudAllowanceSubmissionResult(pending.ApplicationId,
-                    AlreadySubmitted: true, state.Status);
+                    AlreadySubmitted: true, state.Status) { DiagnosticWriteProblem = api.DiagnosticWriteProblem };
             }
             catch (Exception error) when (error is HttpRequestException or
                    TaskCanceledException or CloudApiException or InvalidDataException)
@@ -180,7 +183,7 @@ public sealed class CloudAllowanceSubmissionService
                 cancellationToken).ConfigureAwait(false);
             TrackState(fresh, id, receipt.Status, "processing");
             return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: false,
-                receipt.Status);
+                receipt.Status) { DiagnosticWriteProblem = api.DiagnosticWriteProblem };
         }
         catch (Exception error) when (error is HttpRequestException or
                TaskCanceledException or CloudApiException or InvalidDataException)
@@ -190,7 +193,7 @@ public sealed class CloudAllowanceSubmissionService
                 // Exactly one bounded original-ID readback. Never another create POST.
                 var state = await api.StatusAsync(id, employeeNo, password, cancellationToken).ConfigureAwait(false);
                 TrackState(fresh, id, state.Status, state.LedgerStatus == "confirmed" ? "completed" : "processing", stage: "create_readback", attempt: 2);
-                return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: true, state.Status);
+                return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: true, state.Status) { DiagnosticWriteProblem = api.DiagnosticWriteProblem };
             } catch (Exception readback) when (readback is HttpRequestException or
                 TaskCanceledException or CloudApiException or InvalidDataException) {
                 TrackState(fresh, id, "unknown", "problem", readback, "create_readback", 2);
@@ -206,7 +209,8 @@ public sealed class CloudAllowanceSubmissionService
         var store = new InvoiceSyncIssueStore(repository.DataDirectory);
         var account = record.Environment + "|" + record.SellerInvoice;
         var code = error is CloudApiException cloud ? cloud.Code : error?.GetType().Name ?? "";
-        store.ApplyCloudAllowance(account, id, "issue", state, status, code);
+        store.ApplyCloudAllowance(account, id, "issue", state, status, code,
+            originalInvoiceNumber: record.InvoiceNumber, originalOrderId: record.OrderId);
         var issue = store.All(account).FirstOrDefault(x => x.OrderId == id &&
             x.IssueType.StartsWith("cloud_allowance_issue_", StringComparison.Ordinal));
         if (state == "completed" || status is "withdrawn" or "rejected")

@@ -2,6 +2,18 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.44 Build 1 — 2026/10/28（同機折讓返修與可交回log）
+
+本輪依使用者指示先收斂同機申請／核准，不切LocalOnly、不變交易owner，跨機協同留下一版處理／驗收。修正Cloud非空清單7欄與Windows6欄不一致，清單與詳情使用原發票／訂單參照，不再把application ID當訂單或刻意隱藏已知號碼。狀態存原sync_state投影，待核准判斷不再依訊息字串；核准出錯依原ID查回一次，不重做核准、create或財務POST。
+
+Cloud保存核准Grant後即回覆已核准／處理中；財務執行沿原coordinator及既有ExecutionContext.waitUntil，背景使用原Grant authority snapshot與既有私有撤權檢查，不保留或延長真人Session／密碼。中斷仍由原runtime/sync恢復。Windows核准請求有界90秒、其他讀取30秒，不再用10秒涵蓋完整送出／查回。這不宣稱已找出舊失敗的實際根因，舊案沒有核准／發號證據時不補造結果。
+
+log沿原IssueDiagnosticLog，新增紀錄放程式同目錄`log`：HTTP請求開始／回覆／失敗、版本／Build、UTC時間、action、application ID、request ID、耗時、HTTP結果、回覆是否到達、後端階段及安全錯誤碼；核准失敗自動按原ID讀診斷並保存安全事件。Cloud核准前段記官方查證、Grant保存及失敗階段至原事件表，失敗分類不再只改文字。每日日誌4MiB輪替，保留一份前段、14天；原單筆問題證據不隨每日清理刪除，舊Data/Logs診斷保留唯讀匯出。缺磁碟／權限明示寫入失敗，不把記錄失敗當交易失敗或自動重送。
+
+log不保存員工密碼、Device Token、公司卡金鑰、姓名／買受人、商品／金額、原始請求或回覆。處理中與上傳問題皆可匯出既有診斷；Cloud取不到時仍能匯出本機證據。新檔案列入忽略與原Source／package保護，撤銷裝置仍沿原清理owner處理，不增加診斷視窗、待辦入口、資料表或排程。
+
+- Cloud Source0.9.8／schema22；實際原Worker仍0.9.7，本批尚未遠端部署、真交易、合併或Release。0.9.7維護不重跑；新0.9.8僅原Worker程式更新，旗標／Bindings／Secrets保留。CYID Consumer Impact: NONE。
+
 ## 2026/10/28 本機原Worker Cloud0.9.7更新完成
 
 - 使用者本機報告確認指定Source `29b65ab21a01bd7759b0955ad68ff059948ef473`／V3.1.44 Build0已部署原Worker0.9.7，單一版本100%；原canonical before／deploy／after、bundle一致性與health通過，schema／marker22、history、原身分／稽核及Bindings保留，三正常旗標true、兩舊人工旗標未設定。

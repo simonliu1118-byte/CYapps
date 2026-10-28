@@ -393,9 +393,10 @@ internal sealed class RecordDetailForm : Form
                 var cloud = await new CloudAllowanceSubmissionService(repository)
                     .SubmitAsync(record, request.EmployeeNo, request.Password,
                         request.Reason, request.TaxInclusiveAmount, request.EditedItems);
-                MessageBox.Show(this, cloud.Status is "open" or "review"
+                MessageBox.Show(this, (cloud.Status is "open" or "review"
                     ? "折讓申請已送出，等待主管核准。"
-                    : cloud.Status == "approved" ? "主管已核准，系統處理中。" : "原申請狀態：" + cloud.Status,
+                    : cloud.Status == "approved" ? "主管已核准，系統處理中。" : "原申請狀態：" + cloud.Status) +
+                    (cloud.DiagnosticWriteProblem.Length == 0 ? "" : "\n" + cloud.DiagnosticWriteProblem),
                     "折讓申請", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else

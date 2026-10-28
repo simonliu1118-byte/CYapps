@@ -1,4 +1,5 @@
 using System.Net;
+using CYInvoice.Core.Storage;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -15,7 +16,10 @@ namespace CYInvoice.Core.Cloud;
 public sealed record CloudAllowanceSummary(string ApplicationId,string Status,int Revision,string RequestedGross,string Environment,DateTimeOffset UpdatedAt);
 public sealed record CloudAllowanceReceipt(string ApplicationId,string Status,int Revision);
 public sealed record CloudAllowanceStatus(string ApplicationId,string Status,int Revision,
-    string? AllowanceNumber,string? LedgerStatus);
+    string? AllowanceNumber,string? LedgerStatus)
+{
+    public string ExecutionState { get; init; } = "processing";
+}
 public sealed record CloudAllowanceDraft(string ApplicationId,string Environment,
     string OriginalInvoiceNumber,string AllowanceDay,long RequestedGross,
     string UnnumberedTemplateJson,string Reason);
@@ -32,14 +36,15 @@ public sealed class CloudAllowanceClient
     private readonly HttpClient http;
     private readonly Uri endpoint;
     private readonly string deviceToken;
-    private static readonly TimeSpan Timeout=TimeSpan.FromSeconds(10);
+    private readonly string dataDirectory;
+    public string DiagnosticWriteProblem { get; private set; } = "";
     private const string Segment="v1/allowances/";
     private static readonly Regex IdPattern=new(@"^[A-Za-z0-9_-]{8,100}$",
         RegexOptions.CultureInvariant);
     private static readonly Regex DevicePattern=new(@"^cydev_[0-9a-fA-F]{64}$",
         RegexOptions.CultureInvariant);
 
-    public CloudAllowanceClient(HttpClient http,Uri endpoint,string deviceToken)
+    public CloudAllowanceClient(HttpClient http,Uri endpoint,string deviceToken,string? dataDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -49,6 +54,7 @@ public sealed class CloudAllowanceClient
             throw new ArgumentException("Allowance Cloud API requires HTTPS.",nameof(endpoint));
         if(deviceToken is null||!DevicePattern.IsMatch(deviceToken))
             throw new ArgumentException("Invalid Cloud Device token.",nameof(deviceToken));
+        this.dataDirectory=dataDirectory ?? Path.Combine(AppContext.BaseDirectory,"Data");
         this.http=http;
         this.endpoint=new Uri(endpoint.AbsoluteUri.TrimEnd('/')+"/",UriKind.Absolute);
         this.deviceToken=deviceToken.ToLowerInvariant();
@@ -92,10 +98,21 @@ public sealed class CloudAllowanceClient
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         var requestId="win-"+Guid.NewGuid().ToString("N");
         req.Headers.TryAddWithoutValidation("X-Request-ID",requestId);
+        var timer=System.Diagnostics.Stopwatch.StartNew();
+        var metadata=JsonSerializer.SerializeToElement(payload);
+        var applicationId=metadata.TryGetProperty("applicationId",out var operationId)?operationId.GetString():null;
         bool responseReceived=false;int? httpStatus=null;
+        string? serverStage=null, serverCause=null;
+        bool? serverDiagnosticsSaved=null;
+        void Log(string phase, string? code=null, Exception? error=null, string? status=null, string? executionState=null) {
+            if(!IssueDiagnosticLog.RecordCloud(dataDirectory,action,phase,requestId,applicationId,timer.ElapsedMilliseconds,
+                httpStatus,responseReceived,code,error,serverStage,status,executionState))
+                DiagnosticWriteProblem="程式同目錄 log 寫入失敗，請確認資料夾權限與磁碟空間。";
+        }
+        Log("request_started");
         try {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(Timeout);
+        timeout.CancelAfter(TimeSpan.FromSeconds(action is "approve" or "void-approve" ? 90 : 30));
         // The provided HttpClient MUST have redirects disabled; a redirect can
         // otherwise disclose Employee login material to a different endpoint.
         using var res=await http.SendAsync(req,HttpCompletionOption.ResponseHeadersRead,
@@ -115,7 +132,23 @@ public sealed class CloudAllowanceClient
         var root=document.RootElement;
         if(res.IsSuccessStatusCode&&root.ValueKind==JsonValueKind.Object&&
             root.TryGetProperty("ok",out var ok)&&ok.ValueKind==JsonValueKind.True)
+        {
+            string? Field(string key)=>root.TryGetProperty(key,out var field)&&field.ValueKind==JsonValueKind.String?field.GetString():null;
+            Log("response_confirmed",status:Field("status"),executionState:Field("executionState"));
+            if(root.TryGetProperty("diagnosticSaved",out var saved)&&saved.ValueKind==JsonValueKind.False)
+                DiagnosticWriteProblem += "Cloud 診斷保存失敗；請保留本機 log。";
             return document;
+        }
+        if(root.ValueKind==JsonValueKind.Object&&root.TryGetProperty("error",out var diagnostic)&&diagnostic.ValueKind==JsonValueKind.Object&&
+            diagnostic.TryGetProperty("stage",out var failedStage)&&failedStage.ValueKind==JsonValueKind.String)
+            serverStage=failedStage.GetString();
+        if(root.ValueKind==JsonValueKind.Object&&root.TryGetProperty("error",out var errorDetail)&&errorDetail.ValueKind==JsonValueKind.Object) {
+            if(errorDetail.TryGetProperty("causeCode",out var cause)&&cause.ValueKind==JsonValueKind.String)serverCause=cause.GetString();
+            if(errorDetail.TryGetProperty("diagnosticSaved",out var saved)&&saved.ValueKind is JsonValueKind.True or JsonValueKind.False) {
+                serverDiagnosticsSaved=saved.GetBoolean();
+                if(!serverDiagnosticsSaved.Value)DiagnosticWriteProblem+="Cloud 診斷保存失敗；請保留本機 log。";
+            }
+        }
         var code=root.ValueKind==JsonValueKind.Object&&
             root.TryGetProperty("error",out var e)&&e.ValueKind==JsonValueKind.Object&&
             e.TryGetProperty("code",out var c)&&c.ValueKind==JsonValueKind.String
@@ -126,13 +159,18 @@ public sealed class CloudAllowanceClient
                 "ALLOWANCES_NOT_READY" => "折讓功能尚未啟用。",
                 "OFFICIAL_SEND_DISABLED" => "折讓送出功能尚未啟用。",
                 "LOGIN_FAILED" or "AUTH_INVALID" => "帳號或密碼錯誤。",
-                "ACCESS_DENIED" or "MANAGER_AUTH_REQUIRED" => "權限不足。",
+                "ACCESS_DENIED" or "MANAGER_AUTH_REQUIRED" or "MANAGER_REQUIRED" or "ALLOWANCE_APPROVAL_MANAGER_REQUIRED" => "權限不足。",
                 "DEVICE_INVALID" => "目前裝置授權已失效，請重新確認連線。",
                 "INVALID_REQUEST" => "折讓申請資料不符，請保留問題診斷供查證。",
-                _ => "無法確認折讓操作結果，請依原申請查回。"
+                _ => "折讓操作未完成（" + (Regex.IsMatch(code,@"^[A-Z0-9_]{3,100}$")?code:"UNKNOWN") + "），原申請已保留，請查看 log 紀錄。"
             },
             res.StatusCode);
         } catch (Exception error) {
+            if(serverCause is not null)error.Data["CloudCauseCode"]=serverCause;
+            if(serverDiagnosticsSaved is not null)error.Data["CloudDiagnosticsSaved"]=serverDiagnosticsSaved.Value;
+            Log("request_failed",error is CloudApiException cloud?cloud.Code:null,error);
+            if(DiagnosticWriteProblem.Length!=0)error.Data["DiagnosticWriteProblem"]=DiagnosticWriteProblem;
+            if(serverStage is not null)error.Data["CloudStage"]=serverStage;
             error.Data["CloudRequestId"]=requestId;
             error.Data["ResponseReceived"]=responseReceived;
             if(httpStatus is not null)error.Data["HttpStatus"]=httpStatus.Value;
@@ -291,8 +329,12 @@ public sealed class CloudAllowanceClient
         var result=new List<CloudAllowanceSummary>();
         var seen=new HashSet<string>(StringComparer.Ordinal);
         foreach(var r in items.EnumerateArray()){
-            if(r.ValueKind!=JsonValueKind.Object||r.EnumerateObject().Count()!=6)
+            if(r.ValueKind!=JsonValueKind.Object||r.EnumerateObject().Any(p=>p.Name is not
+                ("applicationId" or "status" or "revision" or "requestedGross" or "environment" or "updatedAt" or "executionState")))
                 throw new InvalidDataException("Cloud allowance list contains an unsafe field.");
+            if(r.TryGetProperty("executionState",out var execution)&&
+                (execution.ValueKind!=JsonValueKind.String || execution.GetString() is not ("processing" or "problem" or "completed")))
+                throw new InvalidDataException("Cloud allowance execution state is invalid.");
             var id=Required(r,"applicationId");
             var s=Required(r,"status");
             ValidateId(id);EnsureStatus(s);
@@ -349,17 +391,30 @@ public sealed class CloudAllowanceClient
     }
 
     public async Task<string> ExportOperationDiagnosticsAsync(string id, bool isVoid,
-        string employeeNo,string password,CancellationToken token=default)
+        string employeeNo,string password,CancellationToken token=default,int maxPages=int.MaxValue)
     {
+        if(maxPages<1)throw new ArgumentOutOfRangeException(nameof(maxPages));
         Credentials(employeeNo,password);ValidateId(id);
-        var output=new StringBuilder();long cursor=0;
+        var output=new StringBuilder();long cursor=0;var pages=0;
         do
         {
             using var doc=await SendAsync("diagnostics",new{applicationId=id,operation=isVoid?"void":"issue",afterEventId=cursor,employeeNo,password},token).ConfigureAwait(false);
             var root=doc.RootElement;
             if(Required(root,"applicationId")!=id)throw new InvalidDataException("診斷操作身分不符");
             output.AppendLine(JsonSerializer.Serialize(root,new JsonSerializerOptions{WriteIndented=true}));
-            if(!root.GetProperty("hasMore").GetBoolean())break;
+            if(root.TryGetProperty("events",out var events)&&events.ValueKind==JsonValueKind.Array) {
+                foreach(var entry in events.EnumerateArray()) {
+                    string? Text(string key)=>entry.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString():null;
+                    int? Number(string key)=>entry.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetInt32(out var n)?n:null;
+                    var received=entry.TryGetProperty("response_received",out var response)&&response.ValueKind==JsonValueKind.Number
+                        ?response.GetInt32()==1:(bool?)null;
+                    if(!IssueDiagnosticLog.RecordCloud(dataDirectory,isVoid?"void":"issue","server_event",Text("request_id")??"unknown",id,
+                        httpStatus:Number("http_status"),responseReceived:received,code:Text("error_code"),serverStage:Text("stage"),
+                        attempt:Number("attempt"),providerCode:Number("provider_code"),serverAtUtc:Text("recorded_at")))
+                        DiagnosticWriteProblem="程式同目錄 log 寫入失敗，請確認資料夾權限與磁碟空間。";
+                }
+            }
+            if(!root.GetProperty("hasMore").GetBoolean() || ++pages>=maxPages)break;
             var next=root.GetProperty("nextEventId").GetInt64();
             if(next<=cursor)throw new InvalidDataException("診斷游標未前進，請保留目前紀錄");
             cursor=next;
@@ -394,6 +449,6 @@ public sealed class CloudAllowanceClient
         if(state is not ("processing" or "problem" or "completed") ||
            official.GetBoolean() != (state=="completed") || state=="completed" && ledger!="confirmed")
             throw new InvalidDataException("Cloud 官方完成狀態與原 Ledger 不一致");
-        return new CloudAllowanceStatus(id,status,RequiredRevision(root),number,ledger);
+        return new CloudAllowanceStatus(id,status,RequiredRevision(root),number,ledger) { ExecutionState = state };
     }
 }

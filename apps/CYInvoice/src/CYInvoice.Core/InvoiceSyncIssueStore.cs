@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
@@ -24,6 +25,10 @@ public sealed record InvoiceSyncIssue(
     string Message,
     DateTimeOffset CreatedUtc,
     DateTimeOffset? ResolvedUtc);
+
+// Read-only UI projection in the existing sync_state. Never an execution or authority owner.
+public sealed record CloudAllowanceProjection(string Status, string ExecutionState,
+    string OriginalInvoiceNumber = "", string OriginalOrderId = "");
 
 public sealed class InvoiceSyncIssueStore
 {
@@ -205,9 +210,22 @@ public sealed class InvoiceSyncIssueStore
         warning.ExecuteNonQuery();
     }
 
-    public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
-        string state, string status, string error, string? previousAccountKey = null)
+    public CloudAllowanceProjection? CloudProjection(string accountKey, string applicationId, string operation = "issue")
     {
+        var json = new InvoiceSyncStateStore(dataDirectory).Checkpoint(accountKey, "cloud-allowance:" + operation + ":" + applicationId);
+        return string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<CloudAllowanceProjection>(json);
+    }
+
+    public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
+        string state, string status, string error, string? previousAccountKey = null,
+        string? originalInvoiceNumber = null, string? originalOrderId = null)
+    {
+        var previous = CloudProjection(accountKey, applicationId, operation);
+        var projection = new CloudAllowanceProjection(status, state,
+            originalInvoiceNumber ?? previous?.OriginalInvoiceNumber ?? "",
+            originalOrderId ?? previous?.OriginalOrderId ?? "");
+        new InvoiceSyncStateStore(dataDirectory).SaveCheckpoint(accountKey,
+            "cloud-allowance:" + operation + ":" + applicationId, JsonSerializer.Serialize(projection));
         var type = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_") +
             (state == "problem" ? "problem" : "processing");
         InvoiceSyncIssue? existing;
@@ -232,8 +250,8 @@ public sealed class InvoiceSyncIssueStore
         }
         else
         {
-            var message = status is "open" or "review" ? "等待主管核准" :
-                state == "problem" ? "自動處理遇到問題：" + error : "主管已核准，系統自動處理中";
+            var message = state == "problem" ? "折讓處理未完成：" + error :
+                status is "open" or "review" ? "等待主管核准" : "主管已核准，系統自動處理中";
             if (existing is null)
             {
                 Record(accountKey, "", applicationId, type, message, DateTimeOffset.UtcNow);

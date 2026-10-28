@@ -1,3 +1,21 @@
+# 本輪待本機配套：Cloud0.9.8／V3.1.44 Build1
+
+2026-10-28。原PR #550／同分支；**以下0.9.8尚未執行，下方0.9.7維護已完成，不重跑。** 交付時指定的完整程式SHA及同SHA必要CI／Artifact為唯一來源，不取浮動HEAD。僅修同機折讓與log，不切LocalOnly或改交易owner。
+
+1. 下載同SHA的V3.1.44 Build1工程包，核對Artifact雜湊、路徑、VERSION／BUILD、不含Data／log；交付使用者，不自動覆寫原EXE／Data或啟動程式。
+2. 循原canonical deployment-preflight，以原Worker、原D1、同Source及新的私有checkpoint完成before→deploy→after，只更新0.9.7→0.9.8程式。沒有schema-upgrade、migration、DDL、匯出或allowance-activation意圖。schema／marker22、history0001～0022、三正常旗標true、舊兩旗標關閉及原Bindings／Secrets／Routes／CYID scope全保留；不新增資源、不改CYID D1。
+3. 沿原owner有界核對；預估直接D1讀1200／寫0、runtime8、控制面90；本批停止參考2000／0／12／110。依既有規則核對當批額度，不延用前批例外；限流立即停止，不為拆分共用帳號歸屬補查。實際用量、差異、回復證據私有交回，公開只放遮罩摘要。
+4. 核對線上bundle與指定Source一致，health Cloud0.9.8、storage=ok、identityProvider=CYID、storageSchemaVersion22；無憑證拒絕檢查不含交易內容，不冒充正向驗收。不用原失敗申請重新核准來補證據，不清Claim或資料，不合併／Release／真交易。
+5. 原不可變0.9.7版本與私有checkpoint保留。原schema22並未改變，但0.9.6舊reader仍不能當新姓名資料的直接回退；Worker回退不回退D1，不自動整庫還原。背景核准後使用原Grant authority snapshot與既有私有撤權服務，不依賴已登出的真人Session。
+
+## 本輪驗收及log
+
+使用Build1配套Cloud0.9.8，先驗同機申請／核准及正確發票／訂單、等待／失敗分類。核准Grant保存後回覆已核准／處理中，後續沿原coordinator與runtime/sync自動完成，不再由主管按繼續。原未知交易不重送。
+
+程式同目錄`log`可直接壓縮私下交回，包含HTTP／後端事件及單筆問題JSONL；新紀錄不含密碼、Token、公司Key、姓名／買受人或原始交易內容。每日日誌4MiB輪替一份前段、14天，單筆問題證據保留；舊Data/Logs唯讀可匯出。寫入失敗須顯示，不造假已記錄。先前單筆唯讀診斷只證明核准尚未持久化，真實舊錯誤缺證據，不能推定就是逾時。原始識別、帳號計量與備份只留私有。
+
+---
+
 # CYInvoice Cloud 0.9.7原Worker更新完成摘要／維護索引
 
 更新：2026-10-28（Asia/Taipei）。原PR #550／`cyinvoice/feat-v32-de-void-coordination`，工程V3.1.44 Build 0／Cloud0.9.7；正式Release仍V3.1.0。**使用者已由本機對話交回完成報告，遠端維護已停止，不重跑。** 本頁依該報告歸檔遮罩摘要，本對話未重新連線Cloudflare；私有設定、完整資源識別、帳號計量、checkpoint、備份與回復收據不提交Public Git／PR。
