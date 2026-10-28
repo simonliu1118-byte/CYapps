@@ -742,11 +742,11 @@ internal sealed partial class MainForm : Form
 
     /// <summary>The last run of <see cref="StartAutomationAsync"/>, for 蝦皮全自動 to judge (null when it failed or stopped).</summary>
     private AutomationRunResult? _lastRunResult;
-    /// <summary>撿貨單 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
+    /// <summary>撿貨總表 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
     private PickList? _pickList;
     /// <summary>理貨表 of the batch running: its saved documents (user, 2026-10-27).</summary>
     private readonly List<PackingRow> _packingRows = [];
-    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨單.</summary>
+    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨總表.</summary>
     private List<ShipSheetLine>? _lastSheetLines;
 
     /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
@@ -944,8 +944,8 @@ internal sealed partial class MainForm : Form
             _lastSheetLines = null;
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
             if (result.ExportFile.Length > 0) PrintShipSheet(result);
-            // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
-            if (result.Saved && _pickList is not null)
+            // 撿貨總表: ERP's own lines when exported, else what was entered (no 品名 then).
+            if (result.Saved && _pickList is not null && thermal)
                 _packingRows.Add(new PackingRow(result.DocumentKey, _loadedOrder?.Source ?? string.Empty,
                     _loadedOrder?.OrderSn ?? string.Empty, _loadedOrder?.TrackingNumber.Trim() ?? string.Empty));
             if (result.Saved && _pickList is { } pick)
@@ -1112,7 +1112,7 @@ internal sealed partial class MainForm : Form
     /// <summary>
     /// The end of a 全自動 batch, in the order the user set (2026-10-27), each step after the one
     /// before so nothing waits on another: 1 the paper invoices still to print (their paper prompts)
-    /// are done; 2 the 理貨表 and the 撿貨單 print on A4 at once (no paper prompt); 3 the 撿貨單 is
+    /// are done; 2 the 理貨表 and the 撿貨總表 print on A4 at once (no paper prompt); 3 the 撿貨總表 is
     /// shown; the caller then shows the results. Paper prompts wait until <see cref="EndBatchHold"/>.
     /// </summary>
     private async Task FinishBatchAsync(string title)
@@ -1141,7 +1141,7 @@ internal sealed partial class MainForm : Form
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
-                MessageBox.Show(this, $"撿貨單沒有印出：{ex.Message}（可在撿貨單視窗再按列印）", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, $"撿貨總表沒有印出：{ex.Message}（可在撿貨總表視窗再按列印）", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         using var form = new PickListForm(list, title, printer, _log);
@@ -1171,15 +1171,14 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 理貨表 (user, 2026-10-27; 2026-10-28: when ticked in 設定), the batch's saved documents on the A4
+    /// 理貨表 (user, 2026-10-27): with 全熱感紙列印 on, the batch's saved documents on the A4
     /// printer, one side, as soon as the batch ends.
     /// </summary>
     private void PrintPackingSheet()
     {
+        if (_packingRows.Count == 0) return;
         var rows = _packingRows.ToList();
         _packingRows.Clear();
-        // Only when ticked in 設定 › 一般 (user, 2026-10-28).
-        if (!_settings.PackingSheet || rows.Count == 0) return;
         var printer = SlipPrinter.Installed(_settings.A4Printer);
         try
         {

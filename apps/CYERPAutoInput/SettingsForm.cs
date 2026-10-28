@@ -24,7 +24,6 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _slipNoteAllThermal = new();
     private readonly CheckBox _thermalSheet = new();
     private readonly CheckBox _pickList = new();
-    private readonly CheckBox _packingSheet = new();
     private readonly TextBox _shipNoteShopee = new(), _shipNoteMo = new(), _shipNoteCoupang = new();
     private readonly TextBox _shipTitle = new();
     private readonly Label _shipLogoState = new();
@@ -155,8 +154,7 @@ internal sealed class SettingsForm : Form
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         // user, 2026-10-26: every thermal slip with the note, 蝦皮's 超商 ones too (宅配 has no room).
-        flow.Controls.Add(Option(_pickList, "全自動結束時印撿貨單（各品號總數量，A4）", _settings.PickList));
-        flow.Controls.Add(Option(_packingSheet, "全自動結束時印理貨表（銷貨單號／訂單／寄件編號、包貨人員與時間，A4）", _settings.PackingSheet));
+        flow.Controls.Add(Option(_pickList, "全自動結束時印撿貨總表（各品號總數量，A4）", _settings.PickList));
         flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」", _settings.SlipNoteAllThermal));
         flow.Controls.Add(new Label
         {
@@ -680,7 +678,6 @@ internal sealed class SettingsForm : Form
         _settings.SlipNoteAllThermal = _slipNoteAllThermal.Checked;
         _settings.ThermalSheet = _thermalSheet.Checked;
         _settings.PickList = _pickList.Checked;
-        _settings.PackingSheet = _packingSheet.Checked;
         _settings.ShipNoteShopee = NoteText(_shipNoteShopee);
         _settings.ShipNoteMo = NoteText(_shipNoteMo);
         _settings.ShipNoteCoupang = NoteText(_shipNoteCoupang);

@@ -3,7 +3,7 @@ using System.Drawing.Printing;
 namespace CYERPAutoInput;
 
 /// <summary>
-/// 撿貨單 (user, 2026-10-27): shown when a 全自動 batch ends, before its list of results; 列印
+/// 撿貨總表 (user, 2026-10-27): shown when a 全自動 batch ends, before its list of results; 列印
 /// prints it on the A4 printer as a table (品號／品名／數量 單位, 10 pt), both sides when the
 /// printer can.
 /// </summary>
@@ -20,7 +20,7 @@ internal sealed class PickListForm : Form
         _printer = printer;
         _log = log;
         _heading = Heading(list, title);
-        Text = "撿貨單";
+        Text = "撿貨總表";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(720, 640);
         MinimizeBox = false;
@@ -53,7 +53,7 @@ internal sealed class PickListForm : Form
     }
 
     public static string Heading(PickList list, string title) =>
-        $"{title} 撿貨單　{DateTime.Now:yyyy/MM/dd HH:mm}　{list.Orders} 張單、{list.Items.Count} 個品號";
+        $"{title} 撿貨總表　{DateTime.Now:yyyy/MM/dd HH:mm}　{list.Orders} 張單、{list.Items.Count} 個品號";
 
     private static string Quantity(PickItem item) => $"{ShipSheet.Show(item.Quantity)} {item.Unit}".TrimEnd();
 
@@ -63,12 +63,12 @@ internal sealed class PickListForm : Form
         {
             var pages = PrintTable(_printer, _heading, _items);
             _log.Info("pick-list", $"printed items={_items.Count} pages={pages}");
-            MessageBox.Show(this, $"撿貨單已送到 {_printer}（{pages} 頁）。", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"撿貨總表已送到 {_printer}（{pages} 頁）。", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
-            MessageBox.Show(this, $"撿貨單沒有印出：{ex.Message}", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, $"撿貨總表沒有印出：{ex.Message}", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -79,7 +79,7 @@ internal sealed class PickListForm : Form
         doc.PrinterSettings.PrinterName = printer;
         if (!doc.PrinterSettings.IsValid) throw new InvalidOperationException($"找不到印表機 {printer}");
         doc.PrinterSettings.Duplex = doc.PrinterSettings.CanDuplex ? Duplex.Vertical : Duplex.Simplex;
-        doc.DocumentName = "撿貨單";
+        doc.DocumentName = "撿貨總表";
         doc.PrintController = new StandardPrintController();
         using var font = new Font("Microsoft JhengHei", 10, FontStyle.Regular, GraphicsUnit.Point);
         using var bold = new Font("Microsoft JhengHei", 10, FontStyle.Bold, GraphicsUnit.Point);
