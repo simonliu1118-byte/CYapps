@@ -8,6 +8,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginPassword = document.querySelector('input[name="password"]');
   const loginButton = document.querySelector('#loginButton');
   const firstLoginLink = document.querySelector('#firstLoginCyWebLink');
+  const rememberEmployee = document.querySelector('#rememberEmployee');
+  const rememberedKey = 'cyacc-remember-employee';
+  try {
+    const previous = localStorage.getItem(rememberedKey);
+    if (/^\\d{4}$/.test(previous || '')) {
+      loginEmployeeNo.value = previous;
+      rememberEmployee.checked = true;
+    }
+  } catch { /* Storage may be disabled. */ }
 
   const form = document.querySelector('#recoveryForm');
   const employeeNo = document.querySelector('#recoveryEmployeeNo');
@@ -131,6 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       const { response, data } = await Promise.race([request, timeout]);
       if (!response.ok || data.ok === false) throw new Error(data.error || '登入失敗。');
+      try {
+        if (rememberEmployee?.checked) localStorage.setItem(rememberedKey, no);
+        else localStorage.removeItem(rememberedKey);
+      } catch { /* Remembering the employee number is optional. */ }
       loginMessage.textContent = '登入成功，正在開啟記帳系統…';
       navigating = true;
       window.location.replace('/');
