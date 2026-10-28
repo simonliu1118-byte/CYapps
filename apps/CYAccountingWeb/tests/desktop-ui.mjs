@@ -37,7 +37,7 @@ const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/c
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
-assert.equal(build, '1');
+assert.equal(build, '2');
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] body \{\s*display: flex;/);
 assert.match(adaptiveCss, /\.shell\.cy-split-layout \{[\s\S]*?overflow: hidden;/);
 assert.match(adaptiveCss, /\.ledger-card \{[\s\S]*?display: flex;[\s\S]*?overflow: hidden;/);
@@ -47,27 +47,24 @@ assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;\s*top: 
 assert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);
 
 assert.match(markup, /志遠記帳系統 CYACC Web/);
-assert.match(markup, /data-cyacc-theme-switch/);
 assert.match(read('public/login.html'), /id="firstLoginHelp"/);
 assert.match(read('public/login.html'), /cyacc-icon\.svg/);
 assert.match(read('public/auth.js'), /renderCyaccAccountMenu/);
 assert.doesNotMatch(read('public/auth.js'), /我的帳號（密碼、Email）/);
-assert.match(read('public/cyacc-appearance.js'), /value: 'system'/);
-assert.match(read('public/cyacc-appearance.js'), /value: 'light'/);
-assert.match(read('public/cyacc-appearance.js'), /value: 'dark'/);
-assert.match(read('public/cyacc-appearance.js'), /data-cy-dark/);
-assert.match(read('public/cyacc-appearance.js'), /cyweb-ui-theme/);
-assert.match(read('public/login.html'), /data-cyacc-theme-toggle/);
 assert.match(adaptive, /accountCluster\.className = 'cy-account-menu'/);
 assert.match(read('public/auth.js'), /root\.dataset\.role/);
 assert.ok(read('public/auth.js').includes("root.querySelector('.cy-account-trigger')"));
 assert.doesNotMatch(adaptiveCss, /cy-account-cluster/);
 const appearanceCss = read('public/cyacc-appearance.css');
-assert.match(appearanceCss, /--cy-bg: #17171f/);
-assert.match(appearanceCss, /--cy-surface: #23232f/);
-assert.match(appearanceCss, /\.cy-segmented\.compact button/);
+assert.match(appearanceCss, /color-scheme: light/);
+assert.match(appearanceCss, /--cy-bg: #f6f6f9/);
 assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-account-avatar/);
-assert.doesNotMatch(appearanceCss, /data-cyacc-theme/);
+assert.match(appearanceCss, /\.cy-account-menu:not\(\[data-identity-ready="true"\]\)/);
+assert.doesNotMatch(appearanceCss, /data-cy-dark|color-scheme:\s*dark|cy-segmented|cy-theme-toggle/);
+assert.doesNotMatch(markup, /data-cyacc-theme-switch|cyacc-appearance\.js|cyacc-appearance-slot/);
+assert.doesNotMatch(read('public/login.html'), /data-cyacc-theme-toggle|cyacc-appearance\.js/);
+assert.match(read('public/login.html'), /name="color-scheme" content="light"/);
+assert.equal(fs.existsSync(path.join(ROOT, 'public/cyacc-appearance.js')), false, 'retired theme runtime must not remain');
 assert.doesNotMatch(appearanceCss, /!important;\s*!\s*important/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
