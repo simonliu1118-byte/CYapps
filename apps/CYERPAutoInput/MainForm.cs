@@ -42,7 +42,12 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private string _sessionEmployeeCode = string.Empty;
     private readonly ModeToggle _modeToggle = new();
-    private readonly CyStatusBadge _erpStateTag = new();
+    /// <summary>ERP's document state, at the left of the status bar (user, 2026-10-28: the toolbar badge took too much room).</summary>
+    private readonly ToolStripStatusLabel _erpStateTag = new()
+    {
+        Text = "ERP：尚未偵測", AutoSize = true, Padding = new Padding(8, 0, 8, 0), Margin = new Padding(0, 2, 8, 2),
+        Font = new Font("Microsoft JhengHei UI", 9F, FontStyle.Bold), AccessibleName = "ERP 單據狀態"
+    };
     private readonly ErpDocumentStateTracker _stateTracker = new();
     private readonly System.Windows.Forms.Timer _statePoll = new() { Interval = 1000 };
     private ErpDocumentState? _shownState;
@@ -149,7 +154,9 @@ internal sealed partial class MainForm : Form
             ErpDocumentState.NotFound => ("未開啟", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly),
             _ => ("無法判斷", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly)
         };
-        _erpStateTag.SetState($"ERP：{text}", fore, back, CyVisualTheme.Blend(fore, back, 0.35));
+        _erpStateTag.Text = $"ERP：{text}";
+        _erpStateTag.ForeColor = fore;
+        _erpStateTag.BackColor = back;
         _log.Info("state", $"status tag {state}");
     }
 
@@ -258,11 +265,6 @@ internal sealed partial class MainForm : Form
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
-        _erpStateTag.Size = new Size(150, ToolbarButtonHeight);
-        _erpStateTag.Margin = new Padding(4, 1, 12, 1);
-        _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
-        _erpStateTag.AccessibleName = "ERP 單據狀態";
-        rightTools.Controls.Add(_erpStateTag);
 
         var fieldsHost = new TableLayoutPanel
         {
@@ -336,7 +338,8 @@ internal sealed partial class MainForm : Form
             Padding = new Padding(2, 0, 2, 0),
             Margin = Padding.Empty
         };
-        _status.Text = "ERP：尚未偵測";
+        _status.Text = string.Empty;
+        statusStrip.Items.Add(_erpStateTag);
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
