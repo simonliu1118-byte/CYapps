@@ -1158,43 +1158,23 @@
 
 @media (min-width: 1024px) {
   /* Role identity: subtle medal-inspired cues without changing the account cluster structure. */
-  .cy-account-cluster .current-user {
-    transition: background-color 120ms ease, box-shadow 120ms ease;
-  }
 
-  .cy-account-cluster .current-user.role-super-admin {
-    background: linear-gradient(180deg, #fffaf0 0%, #fff4d6 100%);
-    box-shadow: inset 0 0 0 1px rgba(190, 142, 38, .18);
-  }
 
-  .cy-account-cluster .current-user.role-super-admin .current-user-main {
-    color: #4d3a12;
-  }
 
-  .cy-account-cluster .current-user.role-super-admin .current-user-role {
-    color: #8a6515;
-  }
 
-  .cy-account-cluster .current-user.role-super-admin .current-user-role::before {
-    color: #c49a42;
-  }
 
-  .cy-account-cluster .current-user.role-admin {
-    background: linear-gradient(180deg, #fdf8f4 0%, #f8ebe1 100%);
-    box-shadow: inset 0 0 0 1px rgba(158, 99, 61, .16);
-  }
 
-  .cy-account-cluster .current-user.role-admin .current-user-main {
-    color: #4a3327;
-  }
 
-  .cy-account-cluster .current-user.role-admin .current-user-role {
-    color: #8b5a3c;
-  }
 
-  .cy-account-cluster .current-user.role-admin .current-user-role::before {
-    color: #b47a57;
-  }
+
+
+
+
+
+
+
+
+
 
   /* Readability: headings/month remain as approved; supporting UI moves up one size tier. */
   .topbar p,
@@ -1203,18 +1183,11 @@
   }
 
   .topbar #settingsButton,
-  .cy-account-cluster #logoutButton {
-    font-size: 13px;
-  }
 
-  .cy-account-cluster .current-user-main {
-    font-size: 13.5px;
-    font-weight: 600;
-  }
 
-  .cy-account-cluster .current-user-role {
-    font-size: 12.5px;
-  }
+
+
+
 
   label > span,
   legend,
@@ -1511,74 +1484,25 @@
     font-size: 12.5px;
   }
 
-  .cy-account-cluster {
-    grid-column: 2;
-    display: flex;
-    align-items: stretch;
-    justify-self: stretch;
-    min-width: 0;
-    min-height: 34px;
-    overflow: hidden;
-    border: 1px solid #dbe2e9;
-    border-radius: 7px;
-    background: #fff;
-  }
 
-  .cy-account-cluster .current-user {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    min-height: 34px;
-    padding: 0 8px;
-    overflow: hidden;
-  }
 
-  .cy-account-cluster .current-user-main,
-  .cy-account-cluster .current-user-role {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
-  .cy-account-cluster .current-user-main {
-    min-width: 0;
-    color: #354252;
-    font-size: 12.5px;
-    font-weight: 600;
-  }
 
-  .cy-account-cluster .current-user-role {
-    flex: 0 1 auto;
-    color: #687687;
-    font-size: 10.5px;
-  }
 
-  .cy-account-cluster #logoutButton {
-    flex: 0 0 auto;
-    min-height: 34px;
-    height: 34px;
-    padding: 4px 8px;
-    border-width: 0 0 0 1px;
-    border-radius: 0;
-    font-size: 11.5px;
-  }
 
-  .cy-account-cluster .current-user.role-super-admin {
-    background: linear-gradient(180deg, #fffaf0 0%, #fff4d6 100%);
-  }
 
-  .cy-account-cluster .current-user.role-super-admin .current-user-role {
-    color: #8a6515;
-  }
 
-  .cy-account-cluster .current-user.role-admin {
-    background: linear-gradient(180deg, #fdf8f4 0%, #f8ebe1 100%);
-  }
 
-  .cy-account-cluster .current-user.role-admin .current-user-role {
-    color: #8b5a3c;
-  }
+
+
+
+
+
+
+
+
+
+
 
   .cy-mobile-main-nav {
     position: sticky;
@@ -5757,83 +5681,21 @@
     color: #344054;
   }
 
-  .cy-account-cluster {
-    display: flex;
-    align-items: stretch;
-    min-height: 30px;
-    overflow: hidden;
-    border: 1px solid #dde3ea;
-    border-radius: 6px;
-    background: #f8f9fb;
-  }
 
-  .cy-account-cluster .current-user {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    max-width: 300px;
-    min-height: 28px;
-    padding: 6px 10px 5px;
-    overflow: hidden;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    line-height: 1;
-    white-space: nowrap;
-  }
 
-  .cy-account-cluster .current-user-main,
-  .cy-account-cluster .current-user-role {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
-  .cy-account-cluster .current-user-main {
-    color: #344054;
-    font-size: 12.5px;
-    font-weight: 500;
-    line-height: 1.2;
-  }
 
-  .cy-account-cluster .current-user-role {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin: 0;
-    color: #8a94a3;
-    font-size: 10.5px;
-    font-weight: 400;
-    line-height: 1.2;
-  }
 
-  .cy-account-cluster .current-user-role::before {
-    content: "·";
-    color: #b0b8c3;
-    font-size: 12px;
-  }
 
-  .cy-account-cluster #logoutButton {
-    flex: 0 0 auto;
-    min-width: 52px;
-    min-height: 28px;
-    height: auto;
-    margin: 0;
-    padding: 4px 10px;
-    border: 0;
-    border-left: 1px solid #dde3ea;
-    border-radius: 0;
-    background: transparent;
-    color: #526174;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1;
-  }
 
-  .cy-account-cluster #logoutButton:hover:not(:disabled) {
-    background: #eef1f4;
-    color: #344054;
-  }
+
+
+
+
+
+
+
+
 
   /* Opening balance is a compact utility dialog, not a full settings page. */
   .opening-modal {
@@ -6004,74 +5866,19 @@
     order: 0 !important;
   }
 
-  .cy-account-cluster {
-    order: 1 !important;
-    display: flex;
-    align-items: center;
-    height: 30px;
-    min-height: 30px;
-    overflow: hidden;
-    border: 1px solid #dde3ea;
-    border-radius: 6px;
-    background: #f8f9fb;
-  }
 
-  .cy-account-cluster .current-user {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: none;
-    height: 30px;
-    min-height: 30px;
-    padding: 0 11px;
-    overflow: visible;
-    line-height: 1;
-  }
 
-  .cy-account-cluster .current-user-main,
-  .cy-account-cluster .current-user-role {
-    display: inline-flex;
-    align-items: center;
-    overflow: visible;
-    line-height: 1;
-    text-overflow: clip;
-    white-space: nowrap;
-  }
 
-  .cy-account-cluster .current-user-main {
-    color: #273548;
-    font-size: 12.5px;
-    font-weight: 600;
-  }
 
-  .cy-account-cluster .current-user-role {
-    gap: 8px;
-    margin: 0;
-    color: #667085;
-    font-size: 11.5px;
-    font-weight: 400;
-  }
 
-  .cy-account-cluster .current-user-role::before {
-    content: "·";
-    display: inline-flex;
-    align-items: center;
-    color: #a1aab6;
-    font-size: 13px;
-    line-height: 1;
-  }
 
-  .cy-account-cluster #logoutButton {
-    align-self: stretch;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 30px;
-    min-height: 30px;
-    padding: 0 11px;
-    border-left-color: #d9dfe7;
-    line-height: 1;
-  }
+
+
+
+
+
+
+
 
   /* Settings is a compact work surface, not a documentation page. */
   .settings-modal {
@@ -11384,16 +11191,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  html[data-viewport="desktop"] .cy-account-cluster {
-    --account-identity-font-size: 13px;
-    --account-identity-height: 32px;
-    --account-identity-line-height: 18px;
 
-  }
-  html[data-viewport="desktop"] .cy-account-cluster.role-super-admin {
-    --account-role-open: "[";
-    --account-role-close: "]";
-  }
+
   html[data-viewport="desktop"] .entry-card .section-title,
   html[data-viewport="desktop"] .entry-card .title-with-badge {
     align-items: center;
