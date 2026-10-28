@@ -260,6 +260,58 @@ input::placeholder, textarea::placeholder { color: var(--cy-text-subtle); opacit
 .settings-content, .settings-modal, .opening-modal, .confirmation-drawer,
 .cy-confirm-dialog, .modal-header { background: var(--cy-surface); }
 
+/* Dark surfaces and controls: active adaptive selectors sometimes use !important.
+   Keep necessary specificity corrections here, never as extra CSS versions. */
+:root[data-cy-dark] .topbar,
+:root[data-cy-dark] .card,
+:root[data-cy-dark] .modal,
+:root[data-cy-dark] .settings-content,
+:root[data-cy-dark] .settings-modal,
+:root[data-cy-dark] .statistics-card,
+:root[data-cy-dark] .opening-modal,
+:root[data-cy-dark] .confirmation-drawer,
+:root[data-cy-dark] .cy-confirm-dialog,
+:root[data-cy-dark] .ledger-sticky-head {
+  background: var(--cy-surface) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+:root[data-cy-dark] body { background: var(--cy-bg) !important; color: var(--cy-text); }
+:root[data-cy-dark] .entry-card.entry-income { background: var(--cyacc-entry-income) !important; }
+:root[data-cy-dark] .entry-card.entry-expense { background: var(--cyacc-entry-expense) !important; }
+:root[data-cy-dark] .secondary,
+:root[data-cy-dark] .settings-content input,
+:root[data-cy-dark] .settings-content select,
+:root[data-cy-dark] .ledger-card #ledgerSummarySearch,
+:root[data-cy-dark] .statistics-card select {
+  background: var(--cy-surface-muted) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border-strong) !important;
+}
+:root[data-cy-dark] .topbar #headerAccountManagerButton,
+:root[data-cy-dark] .topbar #headerCategoryManagerButton,
+:root[data-cy-dark] .topbar #settingsButton,
+:root[data-cy-dark] #ledgerMonthPickerTrigger,
+:root[data-cy-dark] #ledgerPrevMonth,
+:root[data-cy-dark] #ledgerNextMonth {
+  background: var(--cy-surface-muted) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+:root[data-cy-dark] .cy-account-trigger,
+:root[data-cy-dark] .cy-account-popover,
+:root[data-cy-dark] .cy-segmented button[aria-pressed="true"] {
+  background: var(--cy-surface);
+  color: var(--cy-text);
+}
+:root[data-cy-dark] .ledger-card .ledger-title,
+:root[data-cy-dark] .ledger-card .ledger-toolbar,
+:root[data-cy-dark] .statistics-card .statistics-view-tabs {
+  background: var(--cy-surface) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+
 /* Existing high-specificity adaptive presentation must use the same token values.
    These are intentional single-owner color rules, NOT per-version CSS overrides. */
 :root[data-cy-dark] .ledger-card .table-wrap,
