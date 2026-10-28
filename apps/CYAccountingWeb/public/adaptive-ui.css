@@ -12145,8 +12145,8 @@ html[data-viewport="desktop"] .confirmation-status::before { font-size: 11.5px; 
 html[data-viewport="desktop"] .confirmation-item.success .confirmation-status::before { content: '✓'; }
 html[data-viewport="desktop"] .confirmation-item.error .confirmation-status::before { content: '!'; }
 
-/* Desktop workspace owns its vertical scrolling: no page scroll or competing sticky offsets. */
-@media (min-width: 1360px) {
+/* Three-column desktop workspace owns its vertical scrolling; two-column desktops keep the existing responsive page flow. */
+@media (min-width: 1600px) {
   html[data-viewport="desktop"],
   html[data-viewport="desktop"] body {
     height: 100%;
