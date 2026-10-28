@@ -113,3 +113,39 @@ await assert.rejects(()=>query(request,async()=>{throw Error("network fail")},()
 await assert.rejects(()=>query(request,async()=>new Response("a".repeat(300000)),()=>dt),
  /RESPONSE_TOO_LARGE/);
 console.log("AMEGO official read-only query: signed form, strict response, no retry, no implicit approval passed");
+
+// Capture only fixed classifications, including causes; never serialize the raw
+// runtime error even when it contains credentials, SQL or provider payloads.
+for(const [error,kind,name,code] of [
+ [new DOMException("SYNTHETIC_SECRET", "TimeoutError"),"timeout","TimeoutError",null],
+ [new DOMException("SYNTHETIC_SECRET", "AbortError"),"aborted","AbortError",null],
+ [new TypeError("fetch failed",{cause:Object.assign(new Error("SYNTHETIC_SECRET"),{code:"ENOTFOUND"})}),"dns","TypeError","ENOTFOUND"],
+ [new TypeError("TLS handshake failed SYNTHETIC_SECRET"),"tls","TypeError",null],
+ [new TypeError("Unexpected redirect SYNTHETIC_SECRET"),"redirect","TypeError",null],
+ [Object.assign(new Error("SYNTHETIC_SECRET"),{code:"ECONNRESET"}),"connection","Error","ECONNRESET"],
+ [Object.assign(new Error("SYNTHETIC_SECRET"),{code:"SYNTHETIC_SECRET",name:"SYNTHETIC_SECRET"}),"unknown","Unknown",null]
+]){
+ let attempts=0;
+ await assert.rejects(()=>query(request,async()=>{attempts++;throw error;},()=>dt),caught=>{
+  assert.equal(caught.message,"OFFICIAL_QUERY_UNAVAILABLE");
+  assert.equal(caught.diagnostic.failureKind,kind);assert.equal(caught.diagnostic.errorName,name);
+  assert.equal(caught.diagnostic.transportCode,code);assert.equal(caught.diagnostic.phase,"request");
+  assert.equal(caught.diagnostic.responseReceived,false);assert.equal(caught.diagnostic.httpStatus,null);
+  assert.ok(caught.diagnostic.elapsedMs>=0);assert.equal(caught.cause,undefined);
+  assert.ok(!JSON.stringify(caught).includes("SYNTHETIC_SECRET"));return true;
+ });
+ assert.equal(attempts,1,"diagnostics must not retry official calls");
+}
+for(const [response,expectedCode,phase,kind,status,providerCode] of [
+ [new Response("SYNTHETIC_SECRET",{status:503}),"OFFICIAL_QUERY_HTTP_FAILED","request","http",503,null],
+ [new Response("SYNTHETIC_SECRET"),"OFFICIAL_QUERY_INVALID_RESPONSE","response_parse","response",200,null],
+ [Response.json({code:403,msg:"SYNTHETIC_SECRET"}),"OFFICIAL_QUERY_REJECTED","response_validation","response",200,403],
+ [new Response(new ReadableStream({start(c){c.error(new DOMException("SYNTHETIC_SECRET","TimeoutError"));}})),
+  "OFFICIAL_QUERY_INVALID_RESPONSE","response_read","timeout",200,null]
+])await assert.rejects(()=>query(request,async()=>response,()=>dt),error=>{
+ assert.equal(error.message,expectedCode);assert.equal(error.diagnostic.phase,phase);
+ assert.equal(error.diagnostic.failureKind,kind);assert.equal(error.diagnostic.httpStatus,status);
+ assert.equal(error.diagnostic.responseReceived,true);assert.equal(error.diagnostic.providerCode,providerCode);
+ assert.ok(!JSON.stringify(error).includes("SYNTHETIC_SECRET"));return true;
+});
+console.log("Official query phase, duration, timeout/DNS/TLS/redirect/connection/unknown and redaction passed");

@@ -954,6 +954,7 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
         CloudAllowanceClient? api = null;
+        var operation = "detail";
         var isVoid = issue.IssueType.Contains("_void_", StringComparison.Ordinal);
         try
         {
@@ -974,11 +975,13 @@ internal sealed class SyncIssuesForm : Form
             {
                 if(MessageBox.Show(this,"確定取消並退回此申請？已送出或結果不明的交易無法取消。", "取消退回",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+                operation = "withdraw";
                 await api.WithdrawOperationAsync(data,login.EnteredEmployeeNo,login.AuthenticatedPassword);
                 issueStore.ApplyCloudAllowance(accountKey,issue.OrderId,"issue","processing","withdrawn","");
                 ReloadAll();return;
             }
             if(detail.SelectedAction != ManualReviewDetailAction.Primary)return;
+            operation = "approve";
             var result = await api.ApproveOperationAsync(data, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             var state = result.ExecutionState == "completed" ? "已完成" : result.ExecutionState == "processing" ? "處理中" : "上傳問題";
             issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue",
@@ -991,27 +994,33 @@ internal sealed class SyncIssuesForm : Form
             var status = saved?.Status ?? "unknown";
             var state = "problem";
             var code = error is CloudApiException cloud ? cloud.Code : error.GetType().Name;
-            try { IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "manager_operation_failed", issue.IssueType,
+            var diagnosticProblem = "";
+            try { IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "manager_" + operation + "_failed", issue.IssueType,
                 error: error, responseReceived: error.Data["ResponseReceived"] as bool?, requestId: error.Data["CloudRequestId"] as string); }
             catch (Exception logError) when (logError is IOException or UnauthorizedAccessException) {
-                code += "；log 寫入失敗：" + logError.GetType().Name;
+                diagnosticProblem = "\n單筆 log 寫入失敗，請確認資料夾權限與磁碟空間。";
             }
-            if (api is not null && !isVoid) {
+            if (operation != "detail" && api is not null && !isVoid) {
                 try {
                     var original = await api.StatusAsync(issue.OrderId, login.EnteredEmployeeNo, login.AuthenticatedPassword);
                     status = original.Status;
                     state = original.Status == "approved" ? original.ExecutionState : "problem";
                 } catch (Exception) { /* Original-ID readback failed; never retry the approval. HTTP evidence is already logged. */ }
             }
-            if (api is not null) {
+            if (operation != "detail" && api is not null) {
                 try { await api.ExportOperationDiagnosticsAsync(issue.OrderId, isVoid, login.EnteredEmployeeNo, login.AuthenticatedPassword, maxPages:1); }
                 catch (Exception) { /* The bounded HTTP failure is recorded locally; never repeat a financial operation. */ }
             }
-            issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue", state, status, code);
+            // Viewing details is read-only. A failed read cannot turn an open
+            // application into a failed approval or overwrite its known state.
+            if (operation != "detail")
+                issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue", state, status, code);
             if (!IsDisposed) {
                 ReloadAll();
-                MessageBox.Show(this, "原申請已保留。" + (status == "approved" ? "主管核准已保存，系統會接續處理。" : "尚未確認完成核准，請查看上傳問題。") +
-                    "\n" + error.Message + "\n診斷位於程式同目錄 log 資料夾。" + (api?.DiagnosticWriteProblem ?? ""), "折讓操作未完成");
+                var title = operation == "detail" ? "讀取折讓詳情失敗" : operation == "withdraw" ? "取消退回未完成" : "折讓核准未完成";
+                var message = operation == "detail" ? "尚未開啟詳情，本次未送出核准或取消。原申請狀態保留。" :
+                    "原申請已保留。" + (status == "approved" ? "主管核准已保存，系統會接續處理。" : operation == "withdraw" ? "尚未確認取消結果，請查看上傳問題。" : "尚未確認完成核准，請查看上傳問題。");
+                MessageBox.Show(this, message + "\n" + error.Message + "\n診斷位於程式同目錄 log 資料夾。" + diagnosticProblem + (api?.DiagnosticWriteProblem ?? ""), title);
             }
         }
         finally { if (!IsDisposed) SetManualReviewBusy(false); }

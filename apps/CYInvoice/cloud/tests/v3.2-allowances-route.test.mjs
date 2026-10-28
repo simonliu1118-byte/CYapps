@@ -329,6 +329,29 @@ try{
   const failId="application_preapproval_failure";
   assert.equal((await call(user,"create",{...input(failId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
   const failAdmin={...config(same.db,principal("ADMIN","manager")),ALLOWANCE_G0401_SEND_ENABLED:"true"};
+  // Detail failures return safe diagnostics but do not save an approval failure,
+  // alter execution state, create grants/ledger entries, or send a transaction.
+  const detailId="application_detail_read_failure";
+  assert.equal((await call(user,"create",{...input(detailId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
+  const beforeDetail=same.sql.prepare("SELECT * FROM allowance_applications WHERE application_id=?").get(detailId);
+  const beforeEvents=same.sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_events WHERE application_id=?").get(detailId).n;
+  let detailCalls=0;
+  globalThis.fetch=async()=>{detailCalls++;throw new TypeError("TLS handshake failed SECRET_RAW_PROVIDER_PAYLOAD");};
+  const detailFailure=await call(failAdmin,"detail",{applicationId:detailId,operation:"issue"},rawDevA);
+  assert.equal(detailFailure.status,409);assert.equal(detailFailure.body.error.stage,"detail_official_invoice_query");
+  assert.equal(detailFailure.body.error.officialQuery.failureKind,"tls");
+  assert.equal(detailFailure.body.error.officialQuery.responseReceived,false);
+  assert.equal(detailCalls,1);assert.ok(!JSON.stringify(detailFailure).includes("SECRET_RAW_PROVIDER_PAYLOAD"));
+  // A separate balance-check fetch must report its own phase.
+  detailCalls=0;
+  globalThis.fetch=async()=>{if(++detailCalls===1)return Response.json({code:0,data:[invoiceRecord]});throw new DOMException("SECRET_RAW_PROVIDER_PAYLOAD","TimeoutError");};
+  const balanceFailure=await call(failAdmin,"detail",{applicationId:detailId,operation:"issue"},rawDevA);
+  assert.equal(balanceFailure.body.error.stage,"detail_official_balance_check");
+  assert.equal(balanceFailure.body.error.officialQuery.failureKind,"timeout");assert.equal(detailCalls,2);
+  assert.deepEqual(same.sql.prepare("SELECT * FROM allowance_applications WHERE application_id=?").get(detailId),beforeDetail);
+  assert.equal(same.sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_events WHERE application_id=?").get(detailId).n,beforeEvents);
+  for(const table of ["allowance_execution_approvals","allowance_number_ledger"])
+   assert.equal(same.sql.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE application_id=?`).get(detailId).n,0);
   globalThis.fetch=async()=>{throw new Error("SECRET_RAW_PROVIDER_PAYLOAD");};
   const rejected=await call(failAdmin,"approve",{applicationId:failId,expectedRevision:1},rawDevA);
   assert.equal(rejected.status,409);assert.equal(rejected.body.error.stage,"approval_official_check");

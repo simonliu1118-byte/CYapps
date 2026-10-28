@@ -14,7 +14,8 @@ public static class IssueDiagnosticLog
 {
     private sealed record Breadcrumb(string AtUtc, string Stage, string IssueType, string Code,
         int? Attempt = null, bool? ResponseReceived = null, string? ErrorType = null,
-        string? Stack = null, string? RequestId = null, int? HttpStatus = null);
+        string? Stack = null, string? RequestId = null, int? HttpStatus = null,
+        string? ServerStage = null, CloudOfficialQueryDiagnostic? OfficialQuery = null);
     // Require an explicit API error label. An unlabeled number may belong
     // to a phone, a buyer, an invoice or another private identifier.
     private static readonly Regex CodePattern = new(
@@ -71,6 +72,7 @@ public static class IssueDiagnosticLog
                 responseReceived, code = Safe(code), serverStage = Safe(serverStage),
                 causeCode = Safe(error?.Data["CloudCauseCode"] as string),
                 serverDiagnosticsSaved = error?.Data["CloudDiagnosticsSaved"] as bool?,
+                officialQuery = error?.Data["OfficialQuery"] as CloudOfficialQueryDiagnostic,
                 status = Safe(status), executionState = Safe(executionState), attempt, providerCode,
                 serverAtUtc = DateTimeOffset.TryParse(serverAtUtc, out var serverTime) ? serverTime.ToUniversalTime().ToString("O") : null,
                 errorType = error?.GetType().FullName,
@@ -109,7 +111,9 @@ public static class IssueDiagnosticLog
             attempt, responseReceived, error?.GetType().FullName, error?.StackTrace,
             requestId is not null && SafeEventName.IsMatch(requestId) ? requestId : null,
             error is CloudApiException cloudError ? (int?)cloudError.StatusCode :
-            error is HttpRequestException requestError ? (int?)requestError.StatusCode : error?.Data["HttpStatus"] as int?);
+            error is HttpRequestException requestError ? (int?)requestError.StatusCode : error?.Data["HttpStatus"] as int?,
+            error?.Data["CloudStage"] is string serverStage && SafeEventName.IsMatch(serverStage) ? serverStage : null,
+            error?.Data["OfficialQuery"] as CloudOfficialQueryDiagnostic);
         using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         writer.WriteLine(JsonSerializer.Serialize(entry));

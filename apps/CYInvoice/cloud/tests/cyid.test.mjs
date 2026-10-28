@@ -413,7 +413,7 @@ for(const storageSchema of ['21','22']){
  });
  const body=await health.json();assert.equal(health.status,200);
  assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
- assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.8');
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.9');
  const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
  assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
 }

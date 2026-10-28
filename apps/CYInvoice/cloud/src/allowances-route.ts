@@ -8,7 +8,7 @@ import {previewCloudVoidForManager} from "./allowance-void-manager-preview";
 import {approveCloudVoidAfterOfficialProof} from "./allowance-void-manager-approval";
 import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
-import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
+import {queryOfficialInvoiceReadOnly,OfficialInvoiceQueryError} from "./amego-invoice-query";
 interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
  ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;ALLOWANCE_G0501_SEND_ENABLED?:string;COMPANY_SETTINGS_KEY_HEX?:string;}
 const keys:Record<string,readonly string[]>={
@@ -205,10 +205,13 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
   if((action==="detail"||action==="diagnostics")&&input.operation!=="issue"&&input.operation!=="void")
    return reply(400,{error:{code:"INVALID_OPERATION"}});
   if(action==="detail"){
+   stage="detail_load";
    const isVoid=input.operation==="void";
    const f=isVoid?await loadCloudAllowanceVoidForManager(env.DB,target,ctx,authority):await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
    const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
+   stage="detail_official_invoice_query";
    const invoice=await queryOfficialInvoiceReadOnly({...amegoCredentialsForEnvironment(c,ctx.environment),originalInvoiceNumber:f.originalInvoiceNumber});
+   stage="detail_projection";
    const rows:Array<{label:string;value:string}>=[];
    const add=(label:string,value:unknown)=>rows.push({label,value:value===undefined||value===null?"－":String(value)});
    add("原發票",invoice.invoiceNumber);add("訂單編號",invoice.orderId);add("原發票日期",invoice.invoiceDate);add("原發票含稅金額",invoice.totalAmount);add("原發票稅額",invoice.invoiceTaxAmount);
@@ -232,6 +235,7 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
     const v=f as Awaited<ReturnType<typeof loadCloudAllowanceVoidForManager>>;
     add("原折讓號",v.allowanceNumber);
     if(v.status==="open"){
+     stage="detail_official_void_preview";
      const preview=await previewCloudVoidForManager(env.DB,target,ctx,authority);
      requestHash=preview.requestHash;officialSnapshotHash=preview.officialSnapshotHash;
      const original=preview.originalAllowance as Record<string,unknown>|undefined;
@@ -244,11 +248,13 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
     add("買受人",`${request.BuyerName}／${request.BuyerIdentifier}`);
     add("本次折讓商品",itemText(request.ProductItem));add("本次含稅折讓",frozen.requestedGross);
     if(frozen.status==="open"||frozen.status==="review"){
+     stage="detail_official_balance_check";
      const proof=await reconcileOfficialAllowanceForOriginal(frozen,{...amegoCredentialsForEnvironment(c,ctx.environment)});
      const scaled=BigInt(proof.officialRemainingBeforeRequest);
      add("最新可折含稅額",`${scaled/10000000n}.${String(scaled%10000000n).padStart(7,"0")}`);
     }
    }
+   stage="detail_authority_recheck";
    const fresh=await authority.revalidate();
    if(!fresh||fresh.employeeId!==actor.employeeId||fresh.workspaceRole!==actor.workspaceRole)throw new Error("AUTHORITY_CHANGED");
    const withdrawable=!isVoid&&Number(env.SCHEMA_VERSION)>=22&&!!await env.DB.prepare(`SELECT application_id FROM allowance_applications
@@ -273,12 +279,14 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
   }
   return reply(404,{error:{code:"NOT_FOUND"}});
  }catch(error){
+  const officialQuery=error instanceof OfficialInvoiceQueryError?error.diagnostic:undefined;
   const code=error instanceof CyIdError?error.code:
    error instanceof Error&&/^[A-Z0-9_]{3,100}$/.test(error.message)?error.message:"ALLOWANCE_RESULT_OR_STORAGE_UNKNOWN";
   const failedStage=stage;
   let causeCode="";
+  if(officialQuery)causeCode="OFFICIAL_QUERY_"+officialQuery.failureKind.toUpperCase();
   if(reportStage&&failureTarget){
-   if(error instanceof Error&&error.cause instanceof Error){
+   if(!officialQuery&&error instanceof Error&&error.cause instanceof Error){
     // Only schema-defined symbolic errors, never raw SQL or bound values.
     const known=error.cause.message.match(/\b(?:ALLOWANCE|COMPANY|DEVICE|WORKSPACE)_[A-Z0-9_]{3,90}\b/);
     causeCode=known?.[0]??"D1_BATCH_FAILED";
@@ -288,6 +296,7 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
    try {await saveExecutionResult(env.DB,failureTarget,"issue",{applicationId:failureTarget.applicationId,
     executionState:"problem",errorCode:code},requestId,()=>new Date());}catch{diagnosticSaved=false;}
   }
-  return reply(error instanceof CyIdError?error.status:code.includes("NOT_FOUND")?404:409,{error:{code,stage:failedStage,requestId,diagnosticSaved,causeCode}});
+  return reply(error instanceof CyIdError?error.status:code.includes("NOT_FOUND")?404:409,{error:{code,stage:failedStage,requestId,
+   diagnosticSaved:action==="detail"?undefined:diagnosticSaved,causeCode,officialQuery}});
  }
 }

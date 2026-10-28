@@ -2,16 +2,19 @@
 
 更新：2026-10-28（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.44 Build1／Cloud Source0.9.8（實際原Worker0.9.7維護已完成，新程式待本機配套更新），沿原 PR #550 收斂；使用者本機已回報完成schema22、Cloud 0.9.7程式更新；先前三正常旗標啟用及限定舊案盤點完成狀態保留，尚未合併或發布。** 本批直接替換分段主管操作，核准後由既有業務服務及同步生命週期完成與恢復。Source／合成驗證、遠端結構／Worker 啟用及真光貿驗收分開記錄，不以 CI 宣稱實際財務流程已驗收。
+**工程 Source：V3.1.44 Build2／Cloud Source0.9.9，沿原 PR #550 返修詳情失敗診斷。實際原Worker0.9.8已由本機完成報告確認部署，schema22、原旗標及綁定保留；0.9.9尚未部署。尚未合併或發布。** 同機流程仍待真人驗收；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
 
 ## 1. 來源、現況與執行停點
+
+- 2026-10-28本機Cloud0.9.8完成報告：Source `262741c613a5862d43c9e50f7fc84e773fdbee4f`，原Worker100%流量、canonical前後檢、bundle與health及身分／綁定連續性通過；schema22、原旗標保留。私有證據留本機，不重跑維護或原失敗申請。Build1真人回報：詳情查詢HTTP409／OFFICIAL_QUERY_UNAVAILABLE，尚未進入核准；底層根因未證實。
+- Build2只補診斷及階段提示：詳情唯讀失敗不改寫業務狀態；Cloud回傳白名單的query phase／elapsed／HTTP／供應商代碼與可識別連線分類，Windows寫原log。未知保持unknown，不保存原始例外或交易內容。沒有新表、migration、業務owner、官方重試或放寬成功判定。配套及待執行更新見[本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。下列0.9.7及更早紀錄屬歷史。
 
 - 2026-10-28本機完成報告：指定Source `29b65ab21a01bd7759b0955ad68ff059948ef473`／V3.1.44 Build0已更新原Worker0.9.7、單一版本100%；原before／deploy／after、bundle一致性、health及身分／綁定連續性通過。schema22、history及正常三旗標保留；無migration、DB匯出、Local重盤或真交易。工程包已下載核對，未安裝或覆寫原EXE／Data。私有計量及回復證據不公開，維護停止、不重跑；詳見[完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 2026-10-27本機完成報告：指定Source `25ae151ed880cb6256a4cc1e01ce499145a802b7` 已部署原Worker Cloud 0.9.6、單一版本100%；正常API／g0401／g0501三旗標true，舊人工兩旗標仍未設定。原owner的before／deploy／after、bundle一致性與health通過，schema22、history及其他設定保留，無migration／DDL／CYID D1操作。本對話依使用者報告歸檔，未重新連線Cloudflare。
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
-- 工程VERSION=3.1.44、BUILD=0；正式Release仍V3.1.0。本批Source已由本機部署；此輪只歸檔使用者報告，不重新執行Cloudflare操作；正式發布仍需當次明確授權。完整用量／回復證據只留私有，直接SQL與共用帳號差額的歸屬限制見完成摘要。
+- 工程VERSION=3.1.44、BUILD=2；正式Release仍V3.1.0。已部署的是0.9.8／Build1指定Source，不能用它宣稱新0.9.9已部署；本輪未重新執行Cloudflare操作。正式發布仍需當次明確授權，私有計量不公開。
 
 ### 本批返修及驗收（2026-10-28）
 

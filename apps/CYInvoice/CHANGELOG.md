@@ -2,6 +2,18 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.44 Build 2 — 2026/10/28（詳情失敗診斷與操作階段返修）
+
+同一未完成項目的返修，VERSION維持3.1.44。讀取詳情失敗使用「讀取折讓詳情失敗」提示，不冒充已送出核准／取消，也不因唯讀查詢失敗把已知申請改成problem；核准及取消失敗才沿原ID查回與問題分類，不重送。
+
+Cloud Source0.9.9沿原invoice_query adapter輸出固定白名單診斷：查詢／讀取／解析／驗證階段、耗時、是否收到回覆、HTTP／供應商代碼，以及可辨識的timeout、abort、DNS、TLS、redirect、connection或unknown分類。保留原錯誤碼與8秒界線，不重試、不改官方成功判定。詳情分開標記原票查詢、餘額查證與權限重查；未知例外不推定逾時，不傳原始message／stack／cause或交易內容。
+
+Windows只接受白名單欄位與有界數值，將安全診斷寫入原每日及單筆JSONL；不新增表、schema、排程、診斷入口或第二套業務owner。CYID Consumer Impact: NONE。本批Source／隔離驗證與實際部署分開記錄；Cloud0.9.9尚未部署，schema22、旗標與綁定不變，無真交易、合併或Release。
+
+## 2026/10/28 本機原Worker Cloud0.9.8更新完成
+
+本機完成報告確認Source `262741c613a5862d43c9e50f7fc84e773fdbee4f` 已更新原Worker0.9.8，100%流量，before／deploy／after、線上bundle、health與身分／綁定連續性通過。schema22、原旗標及設定保留；工程Build1已核對留存。私有識別、計量、收據與回復資料不公開。此處只歸檔完成事實，不重跑0.9.7／0.9.8維護或原失敗申請；真人財務流程仍未驗收。
+
 ## V3.1.44 Build 1 — 2026/10/28（同機折讓返修與可交回log）
 
 本輪依使用者指示先收斂同機申請／核准，不切LocalOnly、不變交易owner，跨機協同留下一版處理／驗收。修正Cloud非空清單7欄與Windows6欄不一致，清單與詳情使用原發票／訂單參照，不再把application ID當訂單或刻意隱藏已知號碼。狀態存原sync_state投影，待核准判斷不再依訊息字串；核准出錯依原ID查回一次，不重做核准、create或財務POST。

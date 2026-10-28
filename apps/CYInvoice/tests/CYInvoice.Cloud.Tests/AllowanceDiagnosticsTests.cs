@@ -25,6 +25,23 @@ internal static class AllowanceDiagnosticsTests
         try {await api.ApproveOperationAsync(new("application_synthetic_log","issue","open",1,[],"",""),"1234","SYNTHETIC_PASSWORD");throw new Exception("Expected timeout");}
         catch(TaskCanceledException) { }
         Check(handler.Approvals==2,"each explicit approval exactly once; no retry");
+        handler.Mode="detail-error";
+        try { await api.OpenOperationAsync("application_synthetic_log",false,"1234","SYNTHETIC_PASSWORD");throw new Exception("Expected detail failure"); }
+        catch(CloudApiException error) {
+            Check(error.Data["CloudStage"]?.ToString()=="detail_official_invoice_query","detail phase survives transport");
+            Check(error.Data["OfficialQuery"] is CloudOfficialQueryDiagnostic {
+                Endpoint:"invoice_query",Phase:"request",FailureKind:"tls",ErrorName:"TypeError",
+                TransportCode:null,ElapsedMs:1090,ResponseReceived:false,HttpStatus:null,ProviderCode:null},
+                "only allowlisted provider diagnostic fields survive");
+            IssueDiagnosticLog.Record(data,999,"manager_detail_failed","cloud_allowance_issue_processing",error:error);
+        }
+        var detailLog=File.ReadAllText(Path.Combine(log,"issue-999.jsonl"));
+        Check(detailLog.Contains("detail_official_invoice_query")&&detailLog.Contains("OfficialQuery")&&
+            detailLog.Contains("1090")&&!detailLog.Contains("SYNTHETIC_BUYER_SECRET"),"single-issue export retains safe detail diagnostics");
+        handler.Mode="detail-invalid-diagnostic";
+        try { await api.OpenOperationAsync("application_synthetic_log",false,"1234","SYNTHETIC_PASSWORD");throw new Exception("Expected detail failure"); }
+        catch(CloudApiException error) { Check(error.Data["OfficialQuery"] is null,"reject an unrecognized diagnostic endpoint"); }
+        Check(handler.Approvals==2,"reading details never approves");
         handler.Mode="diagnostics";
         await api.ExportOperationDiagnosticsAsync("application_synthetic_log",false,"1234","SYNTHETIC_PASSWORD",maxPages:1);
         Check(handler.Diagnostics==1,"automatic failure diagnostics are a single bounded page");
@@ -34,6 +51,7 @@ internal static class AllowanceDiagnosticsTests
         }
         Check(text.Contains("approval_save_started")&&text.Contains("ALLOWANCE_APPROVAL_READBACK_REQUIRED")&&
             text.Contains("ALLOWANCE_APPROVAL_SOURCE_INVALID")&&text.Contains("elapsedMs")&&text.Contains("TaskCanceledException")&&text.Contains("server_event")&&text.Contains("\"build\":1"),"stages, errors and timing survive");
+        Check(text.Contains("detail_official_invoice_query")&&text.Contains("\"FailureKind\":\"tls\""),"daily log carries the official-query evidence");
         Check(!text.Contains("SYNTHETIC_PASSWORD")&&!text.Contains("SYNTHETIC_BUYER_SECRET")&&!text.Contains("cydev_"),"never record credentials or raw response");
         var store=new InvoiceSyncIssueStore(data);
         store.ApplyCloudAllowance("test|12345678","application_synthetic_log","issue","processing","open","",originalInvoiceNumber:"AA00000001",originalOrderId:"SYNTHETIC_ORDER");
@@ -65,6 +83,14 @@ internal static class AllowanceDiagnosticsTests
         {
             if(request.RequestUri!.AbsolutePath.EndsWith("/approve"))Approvals++;
             if(Mode=="timeout")return Task.FromException<HttpResponseMessage>(new TaskCanceledException("SYNTHETIC_PASSWORD must never be logged"));
+            if(Mode.StartsWith("detail-",StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict){Content=JsonContent.Create(new {
+                    ok=false,error=new {code="OFFICIAL_QUERY_UNAVAILABLE",stage="detail_official_invoice_query",officialQuery=new {
+                        endpoint=Mode=="detail-error"?"invoice_query":"SYNTHETIC_BUYER_SECRET",phase="request",failureKind="tls",errorName="TypeError",
+                        transportCode="SYNTHETIC_BUYER_SECRET",elapsedMs=1090,responseReceived=false,httpStatus=(int?)null,providerCode=(int?)null,
+                        message="SYNTHETIC_PASSWORD",stack="SYNTHETIC_BUYER_SECRET"
+                    }}
+                })});
             if(Mode=="diagnostics") {
                 Diagnostics++;
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=JsonContent.Create(new {

@@ -104,6 +104,7 @@ public sealed class CloudAllowanceClient
         bool responseReceived=false;int? httpStatus=null;
         string? serverStage=null, serverCause=null;
         bool? serverDiagnosticsSaved=null;
+        CloudOfficialQueryDiagnostic? officialQuery=null;
         void Log(string phase, string? code=null, Exception? error=null, string? status=null, string? executionState=null) {
             if(!IssueDiagnosticLog.RecordCloud(dataDirectory,action,phase,requestId,applicationId,timer.ElapsedMilliseconds,
                 httpStatus,responseReceived,code,error,serverStage,status,executionState))
@@ -143,6 +144,7 @@ public sealed class CloudAllowanceClient
             diagnostic.TryGetProperty("stage",out var failedStage)&&failedStage.ValueKind==JsonValueKind.String)
             serverStage=failedStage.GetString();
         if(root.ValueKind==JsonValueKind.Object&&root.TryGetProperty("error",out var errorDetail)&&errorDetail.ValueKind==JsonValueKind.Object) {
+            officialQuery=CloudOfficialQueryDiagnostic.Read(errorDetail);
             if(errorDetail.TryGetProperty("causeCode",out var cause)&&cause.ValueKind==JsonValueKind.String)serverCause=cause.GetString();
             if(errorDetail.TryGetProperty("diagnosticSaved",out var saved)&&saved.ValueKind is JsonValueKind.True or JsonValueKind.False) {
                 serverDiagnosticsSaved=saved.GetBoolean();
@@ -166,6 +168,7 @@ public sealed class CloudAllowanceClient
             },
             res.StatusCode);
         } catch (Exception error) {
+            if(officialQuery is not null)error.Data["OfficialQuery"]=officialQuery;
             if(serverCause is not null)error.Data["CloudCauseCode"]=serverCause;
             if(serverDiagnosticsSaved is not null)error.Data["CloudDiagnosticsSaved"]=serverDiagnosticsSaved.Value;
             Log("request_failed",error is CloudApiException cloud?cloud.Code:null,error);
