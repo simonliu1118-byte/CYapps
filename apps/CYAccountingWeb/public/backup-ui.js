@@ -651,7 +651,7 @@ function renderBackupRecoveryState(data) {
   const button=document.querySelector('#backupRecoveryPreview');
   if(button)button.disabled=!workspace.ready||!data.logicalBackups?.length;
   const status=document.querySelector('#backupRecoveryStatus');
-  if(status)status.textContent=data.recoveryLatest?.status==='verified'?'獨立帳本已還原，完整資料、稽核及備份政策核對通過；目前正式帳本未切換。':!workspace.configured?'還原工作區尚未準備完成。':!workspace.ready?'還原工作區已有資料，不可覆寫；請由維運人員處理。':'請選擇備份、填寫理由並預覽還原。';
+  if(status)status.textContent=data.recoveryLatest?.status==='verified'?'獨立帳本已還原，完整資料、稽核及備份政策核對通過；目前正式帳本未切換。':!workspace.configured?'還原工作區採需要時建立，請先由維運人員準備。':!workspace.ready?'還原工作區已有資料，不可覆寫；請由維運人員處理。':'請選擇備份、填寫理由並預覽還原。';
   const summary = document.querySelector('#backupRecoverySummary');
   if (summary && status) summary.textContent = status.textContent;
   if(!workspace.ready)cancelBackupRecoveryPreview();
