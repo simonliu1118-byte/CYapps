@@ -57,16 +57,19 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public const string OrderQueryType = "ORDER";
     /// <summary>進貨輔助: every customer's 銷貨／銷退 by 品號 and day, with 庫存 (user 2026-10-20).</summary>
     public const string RestockQueryType = "RESTOCK";
+    public const string StocktakeSyncType = "STOCKTAKE_SYNC";
+    public const string StocktakeWriteType = "STOCKTAKE_WRITE";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType, RestockQueryType];
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType, RestockQueryType]; // Stocktake types gated until verified Win32 driver is connected.
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
     /// <summary>A customer, supplier, 銷貨銷退 or 未收款 job (not the item queries).</summary>
     public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SupplierQuery or SupplierSearch
-        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType or RestockQueryType;
+        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType or RestockQueryType
+        or StocktakeSyncType or StocktakeWriteType;
 
     /// <summary>CUSTOMER_*／SUPPLIER_*: whose form is queried.</summary>
     public ErpParty Party => QueryType is SupplierQuery or SupplierSearch ? ErpParty.Supplier : ErpParty.Customer;
@@ -87,6 +90,10 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public string? Code { get; init; }
     /// <summary>ORDER: the 銷貨單／銷退單 number, echoed back unchanged.</summary>
     public string? OrderNo { get; init; }
+    public string? SheetNo { get; init; }
+    public IReadOnlyList<string> SkipSheets { get; init; } = [];
+    public string? OnlySheet { get; init; }
+    public IReadOnlyList<StocktakeWriteRow> StocktakeRows { get; init; } = [];
 
     /// <summary>What the job asks for, for status lines.</summary>
     public string Display => QueryType switch
@@ -101,6 +108,8 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
         ReceivableQueryType => Scope == "ALL" ? "全部未收款" : $"{(Scope == "CUSTOMER" ? "客戶" : "業務員")} {Code} 未收款",
         OrderQueryType => $"單號 {OrderNo}",
         RestockQueryType => $"進貨輔助（{DateFrom}～{DateTo}）",
+        StocktakeSyncType => OnlySheet is null ? "盤點更新" : $"盤點更新 {OnlySheet}",
+        StocktakeWriteType => $"盤點寫回 {SheetNo}",
         _ => ItemNo
     };
 
@@ -151,7 +160,7 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
 /// chihyuan-web docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md). Pure, so it is unit
 /// tested on any OS.
 /// </summary>
-internal static class ErpAgentProtocol
+internal static partial class ErpAgentProtocol
 {
     public const string ClaimPath = "api/erp-agent/item-queries/claim";
     public static string CompletePath(string jobId) => $"api/erp-agent/item-queries/{Uri.EscapeDataString(jobId)}/complete";
@@ -239,6 +248,9 @@ internal static class ErpAgentProtocol
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, Scope = Required("scope"), Code = OptionalString(job["code"]) };
             case ErpAgentJob.OrderQueryType:
                 return new ErpAgentJob(id!, string.Empty) { QueryType = type, OrderNo = Required("orderNo") };
+            case ErpAgentJob.StocktakeSyncType:
+            case ErpAgentJob.StocktakeWriteType:
+                return ParseStocktakeClaim(job,id!,type);
             case ErpAgentJob.RestockQueryType:
                 // Dates are checked when the job runs, so a bad one is reported as FAILED, not lost.
                 return new ErpAgentJob(id!, string.Empty)

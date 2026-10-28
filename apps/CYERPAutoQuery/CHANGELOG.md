@@ -1,5 +1,10 @@
 # CYERPAutoQuery Changelog
 
+## V1.3.0 — 2026/10/29（**WO-1.3.0 開發中，未發行**）
+
+- 依 CY Web WO-0.9.52 新增 `STOCKTAKE_SYNC`（INVR11）與 `STOCKTAKE_WRITE`（INVI14／INVI06）配套；本版是首次限定 ERP 修改。獨立 [治理 PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571) 將規範改為限定例外，必須先由 Claude 審查／合併。
+- 純邏輯與安全測試正開發：讀取 F2 清單、INVR11 欄位解析、十進位與序號校驗、Agent 協定、重試核對；**正式 ERP 視窗操作尚未驗收，沒有任何生產寫入**。
+
 ## V1.2.1 — 2026/10/28（正式 Release：tag `cyerp-auto-query-v1.2.1`）
 
 使用者 2026-10-28 決定不另做實機測試直接發行（失敗與當下畫面內容有關，難以刻意重現）；舊版 Release（V0.10.1、V1.0.0、V1.2.0）同日依使用者要求刪除。

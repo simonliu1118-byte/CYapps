@@ -2,6 +2,13 @@
 
 > 更新：2026-10-28。目前正式版 **V1.2.1**（`VERSION=1.2.1`、`BUILD=0`，tag `cyerp-auto-query-v1.2.1`）；較舊的 Release（V0.10.1、V1.0.0、V1.2.0）已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
+## WO-1.3.0 庫存盤點工作交接（2026-10-29，GPT 開發中）
+
+- 來源：[工單 PR #565](https://github.com/simonliu1118-byte/CYapps/pull/565) 最新 `9a101c26e4a4704186bbbb15665d808958bc3eda`；CY Web 對應 [WO-0.9.52 PR #307](https://github.com/simonliu1118-byte/chihyuan-web/pull/307)。
+- **治理前置 PR #571**：`governance/cyerp-auto-query-stocktake`，GOVERNANCE_VERSION 2.3.58，限定 ERP 寫回範圍；尚未合併。
+- **程式分支**：`cyerp-auto-query/stocktake`，開發中、未合併／未發行／未部署，WIN32 實機測試未執行。新增純邏輯 `StocktakeQuery.cs`、Agent protocol partial 與假資料 xUnit 測試。程式須經 Windows CI 及 Claude 審查；真 ERP 寫入待使用者另行核准測試底稿。
+- 不得提交任何真 ERP 匯出 XLSX、LOG 或營運資料至 Public repo。
+
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
