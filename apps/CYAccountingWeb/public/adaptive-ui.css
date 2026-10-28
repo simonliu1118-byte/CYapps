@@ -6702,10 +6702,10 @@
     font-size: 15px !important;
   }
 
-  /* Opening balance is tied to the current ledger month, so no second month control is shown. */
+  /* Keep the desktop account and audit columns readable at the same dialog width. */
   .opening-modal {
-    width: min(300px, calc(100vw - 28px)) !important;
-    max-width: 300px !important;
+    width: min(880px, calc(100vw - 48px)) !important;
+    max-width: 880px !important;
   }
 
   .opening-modal .opening-dialog-heading {
@@ -12067,11 +12067,12 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.loss strong {
     color: #a54b45;
   }
-  html[data-viewport="desktop"] .opening-modal {
+  .opening-modal {
     width: min(880px, calc(100vw - 48px)) !important;
+    max-width: 880px !important;
     max-height: min(760px, calc(100vh - 40px));
   }
-  html[data-viewport="desktop"] .opening-modal .opening-list {
+  .opening-modal .opening-list {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     gap: 18px;
@@ -12079,10 +12080,10 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     align-items: start;
     padding: 12px 18px 12px;
   }
-  html[data-viewport="desktop"] .opening-modal .opening-account-column {
+  .opening-modal .opening-account-column {
     min-width: 0;
   }
-  html[data-viewport="desktop"] .opening-modal .opening-audit {
+  .opening-modal .opening-audit {
     min-width: 0;
     max-height: 490px;
     margin: 0;
@@ -12090,7 +12091,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     border-left: 1px solid #e4e9ee;
     padding: 0 0 0 16px;
   }
-  html[data-viewport="desktop"] .opening-modal .opening-audit > summary {
+  .opening-modal .opening-audit > summary {
     font-size: 13px;
     font-weight: 600;
   }
