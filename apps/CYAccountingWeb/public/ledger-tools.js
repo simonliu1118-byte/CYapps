@@ -82,6 +82,11 @@ function setupLedgerToolbar() {
       <span id="ledgerExcelExportStatus" class="ledger-export-status" aria-live="polite"></span>
     </div>`;
   title.insertAdjacentElement('afterend', toolbar);
+  // The title and search must stick as one unit so neither can cover the other.
+  const ledgerHead = document.createElement('div');
+  ledgerHead.className = 'ledger-sticky-head';
+  card.insertBefore(ledgerHead, title);
+  ledgerHead.append(title, toolbar);
 
   const tableWrap = card.querySelector('.table-wrap');
   if (tableWrap) {
