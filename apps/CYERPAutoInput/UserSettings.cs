@@ -51,6 +51,8 @@ internal sealed class UserSettings
     public bool ThermalSheet { get; set; }
     /// <summary>撿貨單 at the end of a 全自動, printed on A4 and shown (user, 2026-10-28: only when ticked).</summary>
     public bool PickList { get; set; }
+    /// <summary>理貨表 at the end of a 全自動, on A4 (user, 2026-10-28: only when ticked, not tied to 全熱感紙列印).</summary>
+    public bool PackingSheet { get; set; }
     /// <summary>出貨明細註記, the words printed at its foot, per platform (user, 2026-10-26).</summary>
     public string ShipNoteShopee { get; set; } = string.Empty;
     public string ShipNoteMo { get; set; } = string.Empty;

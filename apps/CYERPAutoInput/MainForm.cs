@@ -945,7 +945,7 @@ internal sealed partial class MainForm : Form
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
             if (result.ExportFile.Length > 0) PrintShipSheet(result);
             // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
-            if (result.Saved && _pickList is not null && thermal)
+            if (result.Saved && _pickList is not null)
                 _packingRows.Add(new PackingRow(result.DocumentKey, _loadedOrder?.Source ?? string.Empty,
                     _loadedOrder?.OrderSn ?? string.Empty, _loadedOrder?.TrackingNumber.Trim() ?? string.Empty));
             if (result.Saved && _pickList is { } pick)
@@ -1171,14 +1171,15 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// 理貨表 (user, 2026-10-27): with 全熱感紙列印 on, the batch's saved documents on the A4
+    /// 理貨表 (user, 2026-10-27; 2026-10-28: when ticked in 設定), the batch's saved documents on the A4
     /// printer, one side, as soon as the batch ends.
     /// </summary>
     private void PrintPackingSheet()
     {
-        if (_packingRows.Count == 0) return;
         var rows = _packingRows.ToList();
         _packingRows.Clear();
+        // Only when ticked in 設定 › 一般 (user, 2026-10-28).
+        if (!_settings.PackingSheet || rows.Count == 0) return;
         var printer = SlipPrinter.Installed(_settings.A4Printer);
         try
         {
