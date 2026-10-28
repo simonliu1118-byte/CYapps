@@ -1,3 +1,10 @@
+## V0.25.11 — 2026/10/29
+
+- 參照 CY Web AuthGate、ThemeToggle 及 AccountMenu 的外觀，調整 CYACC 登入頁、右上帳號資訊與系統／淺色／深色切換。
+- 保留首次使用 CY 系統的 CY Web Email 驗證入口與現有登入／密碼復原 API；CYACC 帳號選單只提供登出，不提供我的帳號或更改密碼、Email。
+- 採用 AITeam 已核准的 CYAccounting ACC SVG 圖示（來源 `shared/cy-visual/icon-family/apps/accounting/ACC.svg`，canonical blob `aa858ae0988bc70726a10d1c258f491ceacd2e3f`），作為登入卡片圖標及分頁 favicon，分頁標題統一為「志遠記帳系統 CYACC Web」。
+- 未修改 CYID authority、業務與帳務資料；正式驗收與發布待使用者授權。
+
 ## V0.25.10 Build 2 — 2026/10/29
 
 - 桌機改為工作區獨立捲動：上方主導覽、左側輸入與確認區固定，中央交易表格及右側統計各自垂直捲動；中央月份摘要和搜尋列留在卡片頂部。

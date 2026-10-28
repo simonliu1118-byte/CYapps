@@ -104,6 +104,7 @@ function setupAdaptiveHeaderLayout() {
     if (settings.parentElement !== actions) actions.append(settings);
     actions.insertBefore(settings, accountCluster);
   }
+  window.cyaccRefreshAccountMenu?.();
 }
 
 function setupTabletStatisticsEntry() {

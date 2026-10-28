@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>志遠記帳系統 Web</title>
+  <title>志遠記帳系統 CYACC Web</title>
+  <link rel="icon" href="/cyacc-icon.svg" type="image/svg+xml">
   <style id="cyaccBootStyle">
     #cyaccBootStatus { display: none; }
     @media (max-width: 767px) {
@@ -48,14 +49,17 @@
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
   <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-independent-scroll">
   <link rel="stylesheet" href="/statistics.css?rev=transfer-settings-density">
+  <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-login-alignment">
+  <script src="/cyacc-appearance.js?rev=cyweb-login-alignment" defer></script>
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.25.10 Build 2</span></p>
+      <p>CYAccounting Web <span class="version">V0.25.11</span></p>
     </div>
     <div class="topbar-actions">
+      <div class="cyacc-appearance-slot" data-cyacc-theme-switch aria-label="外觀設定"></div>
       <span id="currentUser" class="current-user hidden"></span>
       <button id="logoutButton" class="secondary compact logout-button hidden" type="button">登出</button>
       <button id="settingsButton" class="secondary compact" type="button">設定</button>
@@ -177,7 +181,7 @@
     <div id="archivedAccountsMessage" class="dialog-message" role="status"></div>
   </dialog>
 
-  <script src="/auth.js?rev=session-expiry-navigation" defer></script>
+  <script src="/auth.js?rev=cyweb-account-menu" defer></script>
   <script src="/app.js?rev=optimistic-create" defer></script>
   <script src="/quick-entry.js?rev=entry-submit-focus" defer></script>
   <script src="/ledger-tools.js?rev=pending-create-rows" defer></script>
@@ -188,7 +192,7 @@
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
   <script src="/backup-ui.js?rev=on-demand-recovery" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=device-preview-retirement" defer></script>
+  <script src="/adaptive-ui.js?rev=cyweb-account-menu" defer></script>
   <script src="/statistics-ui.js?rev=transfer-settings-density" type="module"></script>
 </body>
 </html>

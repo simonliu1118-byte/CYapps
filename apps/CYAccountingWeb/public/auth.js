@@ -120,6 +120,8 @@ function startCyaccAuth() {
     }
 
     logoutButton?.classList.remove('hidden');
+    window.cyaccRefreshAccountMenu = () => renderCyaccAccountMenu(user, roleLabels[role] || role, currentUser, logoutButton);
+    window.cyaccRefreshAccountMenu();
     document.body.dataset.cyaccRole = role;
     if (user.canWriteAccounting === false || role === 'USER') {
       document.body.dataset.cyaccReadOnly = 'true';
@@ -175,4 +177,65 @@ async function fetchWithTimeout(input, init = {}, timeoutMs = 8_000) {
   } finally {
     if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
+}
+
+function renderCyaccAccountMenu(user, roleLabel, currentUser, logoutButton) {
+  const cluster = currentUser?.closest('.cy-account-cluster');
+  if (!cluster || !logoutButton) return;
+  let trigger = cluster.querySelector('.cyacc-account-trigger');
+  let popover = cluster.querySelector('.cyacc-account-popover');
+  if (!trigger) {
+    trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'cyacc-account-trigger';
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    popover = document.createElement('div');
+    popover.className = 'cyacc-account-popover';
+    popover.setAttribute('role', 'menu');
+    popover.setAttribute('aria-label', '個人選單');
+    popover.hidden = true;
+    const exit = document.createElement('button');
+    exit.type = 'button';
+    exit.setAttribute('role', 'menuitem');
+    exit.textContent = '登出';
+    exit.addEventListener('click', () => { popover.hidden = true; logoutButton.click(); });
+    popover.append(exit);
+    trigger.addEventListener('click', () => {
+      popover.hidden = !popover.hidden;
+      trigger.setAttribute('aria-expanded', String(!popover.hidden));
+    });
+    document.addEventListener('pointerdown', event => {
+      if (!cluster.contains(event.target)) {
+        popover.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        popover.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.focus();
+      }
+    });
+    cluster.append(trigger, popover);
+  }
+  const displayName = [user.employeeNo, user.name].filter(Boolean).join(' ');
+  trigger.replaceChildren();
+  const avatar = document.createElement('span');
+  avatar.className = 'cyacc-account-avatar';
+  avatar.textContent = String(user.name || user.employeeNo || '人').slice(0, 1);
+  const details = document.createElement('span');
+  details.className = 'cyacc-account-details';
+  const name = document.createElement('strong');
+  name.textContent = displayName;
+  const role = document.createElement('span');
+  role.textContent = roleLabel;
+  details.append(name, role);
+  const chevron = document.createElement('span');
+  chevron.textContent = '⌄';
+  chevron.setAttribute('aria-hidden', 'true');
+  trigger.append(avatar, details, chevron);
+  trigger.setAttribute('aria-label', '個人選單：' + displayName);
+  cluster.classList.add('cyacc-menu-ready');
 }
