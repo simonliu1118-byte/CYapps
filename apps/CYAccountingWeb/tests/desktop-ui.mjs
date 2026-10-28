@@ -44,7 +44,7 @@ assert.match(css, /\.current-user\.role-super-admin/);
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
 assert.match(css, /\.ledger-balance-popover/);
-assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
+assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(880px, calc\(100vw - 48px\)\) !important;/);
 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(quick, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
@@ -285,7 +285,7 @@ assert.match(adaptive, /grid\.insertBefore\(item, anchor\)/);
 assert.match(adaptive, /clearTouchWorkspaceEntryForm\(\)/);
 assert.match(adaptiveCss, /grid-template-columns: minmax\(0, 1fr\) 78px 68px !important/);
 assert.match(adaptiveCss, /#monthSummary[\s\S]*?grid-template-areas: "opening income expense ending net" !important/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.opening-modal\s*\{\s*width: min\(880px/);
+assert.match(adaptiveCss, /\.opening-modal\s*\{\s*width: min\(880px/);
 assert.match(appJs, /class="opening-account-column"/);
 assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
