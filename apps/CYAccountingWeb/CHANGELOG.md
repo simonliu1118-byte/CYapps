@@ -1,3 +1,9 @@
+## V0.25.11 Build 2 — 2026/10/29
+
+- 依使用者決定暫停 CYACCweb 深色模式，移除主頁「系統／淺色／深色」切換、登入頁外觀按鈕，以及獨立主題切換／Cookie 執行程式；固定淺色介面，避免讀取 CYWEB 共用外觀偏好。
+- 清理 `cyacc-appearance.css` 中深色變數、選擇器與已廢止的主題元件 CSS；保留 CYWEB 風格的單一帳號元件、淺色 tokens 與原登入／帳務 UI，未以新 CSS 修補層覆蓋。
+- 深色功能納入 TODO，未來須明確另行授權；未修改 CYID 登入／登出、帳務權限、D1 或 Worker API。
+
 ## V0.25.11 Build 1 — 2026/10/29
 
 - 依 CY Web \`src/app.css\`、\`ThemeToggle\`、\`AccountMenu\` 的正式尺寸、狀態與色票重整 CYACC 主題與右上帳號元件。
