@@ -37,7 +37,7 @@ const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/c
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
-assert.equal(build, '2');
+assert.equal(build, '0');
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] body \{\s*display: flex;/);
 assert.match(adaptiveCss, /\.shell\.cy-split-layout \{[\s\S]*?overflow: hidden;/);
 assert.match(adaptiveCss, /\.ledger-card \{[\s\S]*?display: flex;[\s\S]*?overflow: hidden;/);
@@ -46,6 +46,13 @@ assert.match(adaptiveCss, /\.statistics-card \{[\s\S]*?overflow-y: auto;/);
 assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;\s*top: 0;/);
 assert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);
 
+assert.match(markup, /志遠記帳系統 CYACC Web/);
+assert.match(markup, /data-cyacc-theme-switch/);
+assert.match(read('public/login.html'), /id="firstLoginHelp"/);
+assert.match(read('public/login.html'), /cyacc-icon\.svg/);
+assert.match(read('public/auth.js'), /renderCyaccAccountMenu/);
+assert.doesNotMatch(read('public/auth.js'), /我的帳號（密碼、Email）/);
+assert.match(read('public/cyacc-appearance.js'), /\['system', 'light', 'dark'\]/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
