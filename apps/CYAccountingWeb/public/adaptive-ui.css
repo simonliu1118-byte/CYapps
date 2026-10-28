@@ -2028,18 +2028,6 @@
     grid-template-columns: 54px minmax(0, 1fr);
   }
 
-  .cy-account-cluster .current-user {
-    padding-inline: 7px;
-  }
-
-  .cy-account-cluster .current-user-main {
-    font-size: 12px;
-  }
-
-  .cy-account-cluster .current-user-role {
-    font-size: 10px;
-  }
-
   .entry-grid {
     grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
   }
@@ -6354,42 +6342,12 @@
 }
 
 @media (min-width: 1024px) {
-  /* Header identity: same-size role text, clearer bracketed role marker, same medal cue. */
-  .cy-account-cluster .current-user {
+  /* Header identity: same-size role text, clearer bracketed role marker{
     align-items: center !important;
     gap: 7px !important;
   }
 
-  .cy-account-cluster .current-user-main,
-  .cy-account-cluster .current-user-role {
-    font-size: 13.5px !important;
-    line-height: 1.2 !important;
-  }
-
-  .cy-account-cluster .current-user-main {
-    font-weight: 600 !important;
-  }
-
-  .cy-account-cluster .current-user-role {
-    gap: 0 !important;
-    font-weight: 500 !important;
-  }
-
-  .cy-account-cluster .current-user-role::before {
-    content: "[" !important;
-    margin: 0 !important;
-    color: currentColor !important;
-    font-size: inherit !important;
-  }
-
-  .cy-account-cluster .current-user-role::after {
-    content: "]";
-    color: currentColor;
-    font-size: inherit;
-  }
-
-  .topbar #settingsButton,
-  .cy-account-cluster #logoutButton {
+  .topbar #settingsButton{
     font-size: 13.5px !important;
   }
 
@@ -7574,15 +7532,13 @@
 
 @media (min-width: 1024px) {
   /* Header controls and identity badge must sit on one visual baseline. */
-  .topbar-actions,
-  .cy-account-cluster {
+  .topbar-actions{
     align-items: center !important;
   }
 
   .topbar #headerAccountManagerButton,
   .topbar #headerCategoryManagerButton,
-  .topbar #settingsButton,
-  .cy-account-cluster #logoutButton {
+  .topbar #settingsButton{
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -7592,8 +7548,6 @@
     padding-bottom: 0 !important;
     line-height: 1 !important;
   }
-
-  .cy-account-cluster .current-user,
   #currentUser.current-user {
     display: inline-flex !important;
     align-items: center !important;
@@ -7605,9 +7559,6 @@
     line-height: 1 !important;
     box-sizing: border-box;
   }
-
-  .cy-account-cluster .current-user-main,
-  .cy-account-cluster .current-user-role,
   #currentUser .current-user-main,
   #currentUser .current-user-role {
     display: inline-flex !important;
@@ -9576,152 +9527,8 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #settingsButton {
   font-weight: 600 !important;
   line-height: 1 !important;
 }
-
-html[data-viewport="desktop"] .cy-account-cluster,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
-  order: 1 !important;
-  display: flex !important;
-  align-items: stretch !important;
-  min-height: 34px !important;
-  height: 34px !important;
-  overflow: hidden !important;
-  border: 1px solid #d7dfe7 !important;
-  border-radius: 8px !important;
-  background: #fff !important;
-}
-
-/* Auth owns the identity; keep its cluster hidden until the canonical render is complete. */
-.cy-account-cluster:not([data-identity-ready="true"]),
 .topbar-actions #currentUser.hidden,
 .topbar-actions #logoutButton.hidden { visibility: hidden !important; }
-
-html[data-viewport="desktop"] .cy-account-cluster .current-user,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
-  display: flex !important;
-  align-items: center !important;
-  gap: 5px !important;
-  max-width: 250px !important;
-  min-height: 32px !important;
-  height: 32px !important;
-  padding: 0 9px !important;
-  overflow: hidden !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: #fff !important;
-  box-shadow: none !important;
-  color: #39495a !important;
-  line-height: 1 !important;
-  white-space: nowrap !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster .current-user-main,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-main {
-  overflow: hidden !important;
-  color: #39495a !important;
-  font-size: var(--account-identity-font-size, 12px) !important;
-  font-weight: 600 !important;
-  line-height: var(--account-identity-line-height, 1) !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster .current-user-role,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  color: #6f7c89 !important;
-  font-size: var(--account-identity-font-size, 11px) !important;
-  font-weight: 600 !important;
-  line-height: var(--account-identity-line-height, 1) !important;
-  white-space: nowrap !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster .current-user-role::before,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::before {
-  content: var(--account-role-open, "［") !important;
-  color: inherit !important;
-  font-size: inherit !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster .current-user-role::after,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::after {
-  content: var(--account-role-close, "］") !important;
-  display: inline !important;
-  color: inherit !important;
-  font-size: inherit !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster #logoutButton,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster #logoutButton {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex: 0 0 auto !important;
-  min-width: 50px !important;
-  min-height: 32px !important;
-  height: 32px !important;
-  margin: 0 !important;
-  padding: 0 9px !important;
-  border: 0 !important;
-  border-left: 1px solid #d7dfe7 !important;
-  border-radius: 0 !important;
-  background: #fff !important;
-  color: #526174 !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  line-height: 1 !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-super-admin,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin {
-  border-color: #ddc789 !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user {
-  background: linear-gradient(180deg, #fffdf7, #fff4d6) !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user-main,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-main,
-html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user-role,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-role {
-  color: #6d5317 !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-super-admin #logoutButton,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin #logoutButton {
-  border-left-color: #ddc789 !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-admin,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin {
-  border-color: #d7b79e !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user {
-  background: linear-gradient(180deg, #fffaf6, #f7e8dc) !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user-main,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-main,
-html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user-role,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-role {
-  color: #70472f !important;
-}
-
-html[data-viewport="desktop"] .cy-account-cluster.role-admin #logoutButton,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin #logoutButton {
-  border-left-color: #d7b79e !important;
-}
 
 html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
