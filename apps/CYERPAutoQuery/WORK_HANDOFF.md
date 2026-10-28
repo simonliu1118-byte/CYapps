@@ -1,14 +1,14 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-28。目前正式版 **V1.2.0**（`VERSION=1.2.0`、`BUILD=0`，tag `cyerp-auto-query-v1.2.0`，包含 V1.0.1～V1.1.0 Build 3 的工程版）；前一版正式版 V1.0.0。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-28。目前正式版 **V1.2.1**（`VERSION=1.2.1`、`BUILD=0`，tag `cyerp-auto-query-v1.2.1`）；較舊的 Release（V0.10.1、V1.0.0、V1.2.0）已依使用者要求刪除，各版內容仍在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
 - CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
-- 自動更新只認本專案正式 Release；V0.10.1 是第一個正式版，V1.2.0 為目前最新。
+- 自動更新只認本專案正式 Release；目前只保留 V1.2.1。
 
-## 進行中：V1.2.1 — Ribbon 文字辨識只看 Ribbon
+## V1.2.1 — Ribbon 文字辨識只看 Ribbon（已發行）
 
 - V1.2.0 LOG（2026-10-28）：COPI01 客戶 AC0001 找「Excel」時整條 Ribbon OCR 三種縮放都 `IndexOutOfRangeException`（RapidOCR `TextCalRecBox.GetWordInfo`），原因是 1200×220 截圖含下方客戶資料。V1.2.1 截圖只到 RibbonGroupBar 下緣、先試同名群組、失敗時逐群組辨識。待實機：查 AC0001 客戶資料，LOG 應出現 `clicked Excel in group=Excel`。
 
