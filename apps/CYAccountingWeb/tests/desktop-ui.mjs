@@ -60,7 +60,7 @@ assert.match(read('public/cyacc-appearance.js'), /cyweb-ui-theme/);
 assert.match(read('public/login.html'), /data-cyacc-theme-toggle/);
 assert.match(adaptive, /accountCluster\.className = 'cy-account-menu'/);
 assert.match(read('public/auth.js'), /root\.dataset\.role/);
-assert.match(read('public/auth.js'), /\\.cy-account-trigger/);
+assert.ok(read('public/auth.js').includes("root.querySelector('.cy-account-trigger')"));
 assert.doesNotMatch(adaptiveCss, /cy-account-cluster/);
 const appearanceCss = read('public/cyacc-appearance.css');
 assert.match(appearanceCss, /--cy-bg: #17171f/);
