@@ -1,0 +1,31 @@
+/* CY Web-derived interaction language, scoped to CYACC presentation. */
+.cyacc-theme-switch { display:inline-flex; gap:2px; padding:3px; border:1px solid #d8dee9; border-radius:10px; background:#f4f6fa; white-space:nowrap; }
+.cyacc-theme-switch button { width:auto; min-height:28px; height:28px; padding:3px 9px; font-size:12px; font-weight:500; border:0; border-radius:7px; color:#5c6879; background:transparent; cursor:pointer; }
+.cyacc-theme-switch button[aria-pressed="true"] { background:#fff; color:#182b49; box-shadow:0 1px 4px #122a4a18; font-weight:700; }
+.login-appearance { display:flex; justify-content:flex-end; align-items:center; gap:8px; margin:-14px 0 20px; color:#667085; font-size:12px; }
+.login-card .brand-mark { padding:0; background:transparent; }
+.login-card .brand-block { margin-bottom:20px; }
+.cyacc-account-trigger { display:flex; align-items:center; gap:7px; border:1px solid #d8dee9; padding:4px 10px 4px 4px; border-radius:99px; background:#fff; color:#283542; cursor:pointer; }
+.cyacc-account-avatar { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; background:#fff4dc; color:#986308; font-weight:700; }
+.cyacc-account-details { display:flex; flex-direction:column; align-items:flex-start; font-size:11px; line-height:1.25; }
+.cyacc-account-details strong { font-size:12px; }
+.cyacc-account-popover { position:absolute; top:calc(100% + 7px); right:0; width:250px; padding:8px; z-index:100; border:1px solid #d8dee9; border-radius:12px; box-shadow:0 12px 32px #14243e22; background:#fff; }
+.cyacc-account-popover button { display:block; width:100%; text-align:left; padding:10px; border:0; border-radius:7px; background:transparent; color:#be4035; cursor:pointer; }
+.cyacc-account-popover button:hover { background:#f8eded; }
+.cy-account-cluster.cyacc-menu-ready { position:relative; display:flex; align-items:center; background:transparent !important; border:0 !important; padding:0 !important; }
+.cy-account-cluster.cyacc-menu-ready #currentUser, .cy-account-cluster.cyacc-menu-ready #logoutButton { display:none !important; }
+html[data-cyacc-theme="dark"] { color-scheme:dark; --cyacc-surface:#202837; }
+html[data-cyacc-theme="dark"] body { background:#121a26; color:#e5edf7; }
+html[data-cyacc-theme="dark"] .topbar, html[data-cyacc-theme="dark"] .card, html[data-cyacc-theme="dark"] .modal, html[data-cyacc-theme="dark"] .login-card,
+html[data-cyacc-theme="dark"] .ledger-sticky-head, html[data-cyacc-theme="dark"] .ledger-title, html[data-cyacc-theme="dark"] .ledger-toolbar, html[data-cyacc-theme="dark"] .cyacc-account-popover { background:#202837 !important; color:#e5edf7; border-color:#3b485b; }
+html[data-cyacc-theme="dark"] input, html[data-cyacc-theme="dark"] select, html[data-cyacc-theme="dark"] textarea,
+html[data-cyacc-theme="dark"] .cyacc-account-trigger { background:#253247; color:#e5edf7; border-color:#506077; }
+html[data-cyacc-theme="dark"] .ledger-card th, html[data-cyacc-theme="dark"] .ledger-card td, html[data-cyacc-theme="dark"] .cyacc-theme-switch { background:#263346; color:#e5edf7; border-color:#435169; }
+html[data-cyacc-theme="dark"] .cyacc-theme-switch button[aria-pressed="true"] { background:#435675; color:#fff; }
+html[data-cyacc-theme="dark"] .login-form label, html[data-cyacc-theme="dark"] .first-login-help, html[data-cyacc-theme="dark"] .first-login-help strong { color:#e5edf7; }
+@media(prefers-color-scheme:dark) {
+ html[data-cyacc-theme="system"] { color-scheme:dark; --cyacc-surface:#202837; }
+ html[data-cyacc-theme="system"] body { background:#121a26; color:#e5edf7; }
+ html[data-cyacc-theme="system"] .topbar, html[data-cyacc-theme="system"] .card, html[data-cyacc-theme="system"] .login-card { background:#202837; color:#e5edf7; }
+}
+@media(max-width:767px){ .cyacc-appearance-slot { display:none; } }
