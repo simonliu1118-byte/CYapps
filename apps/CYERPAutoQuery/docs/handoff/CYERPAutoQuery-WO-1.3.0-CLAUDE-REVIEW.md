@@ -60,6 +60,12 @@
 - **文件後續提交**只補 handoff／WO §8 等 WIP 記錄；Claude 審查時須核對實作工作樹及 `#40755553029` 的 source SHA，不把合成 CI 當 ERP 實機測試。
 - 建議 Claude 對 `IStocktakeErpDriver` 的 read-before-write／full compare／Confirm gate、F2 多頁 OCR 的可用性做重點複審。
 
+## 6. PR 差異整理（2026-10-29）
+
+- 初次 PR #572 分支以較新的 `main` 建立，當 base 轉回工單 PR #565 時，誤顯示其他專案 `CYAccountingWeb` 的 17 項歷史變動。**已立即修正差異基準**：用原工單 SHA `9a101c26e4a4704186bbbb15665d808958bc3eda` 的 tree 作唯一 base，以當前程式分支**完全相同的 14 個 app blob SHA** 建立乾淨單一提交 `c48d7285df2d669727d1c193c92365f941d10bab`，透過僅此開發分支、核對 expected SHA 的 Git ref lease 更新。原先程式與測試檔內容不變。
+- 重讀 [PR #572](https://github.com/simonliu1118-byte/CYapps/pull/572) patch：現在只含 **13 個 `apps/CYERPAutoQuery/**` 檔案**，沒有任何其他專案或 `.github/workflows/*` 修改。這是為了讓 Claude 審查時只看到本張工單程式變更；主分支／原規格分支／治理 PR 均未改動。
+- PR #572 base 已恢復成 `cyerp-auto-query/wo-1.3.0-stocktake`，保持 Draft。Windows CI #40755553029 對整理前的程式提交 `e6d7403e6cd6d902d4fa83800b2373e45998c4e1` 取得 237/237；本次重建的 C#／測試檔 **blob 完全照原版本複製**，因此此證據支援相同程式內容的編譯，但不能把 `c48d7285` 稱為取得另一次 CI run。
+
 ## 8. GPT 最終完成報告（待全部 Windows UI 程式與測試補齊）
 
 - 最終程式 SHA：**待完成**
