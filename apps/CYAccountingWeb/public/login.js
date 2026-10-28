@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const rememberedKey = 'cyacc-remember-employee';
   try {
     const previous = localStorage.getItem(rememberedKey);
-    if (/^\\d{4}$/.test(previous || '')) {
+    if (/^\d{4}$/.test(previous || '')) {
       loginEmployeeNo.value = previous;
       rememberEmployee.checked = true;
     }
