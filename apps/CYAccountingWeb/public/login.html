@@ -17,11 +17,12 @@
   <title>志遠記帳系統 CYACC Web</title>
   <link rel="icon" href="/cyacc-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/login.css?rev=cyweb-login-alignment">
-  <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-login-alignment">
-  <script src="/cyacc-appearance.js?rev=cyweb-login-alignment" defer></script>
+  <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-theme-owner-build1">
+  <script src="/cyacc-appearance.js?rev=cyweb-theme-owner-build1"></script>
 </head>
 <body>
   <main class="login-shell">
+    <div class="login-appearance"><button class="cy-op-button quiet cy-theme-toggle" data-cyacc-theme-toggle type="button" aria-label="外觀"></button></div>
     <section class="login-card" aria-labelledby="loginTitle">
       <div class="brand-block">
         <span class="brand-mark" aria-hidden="true"><img src="/cyacc-icon.svg" width="46" height="46" alt=""></span>
@@ -30,7 +31,6 @@
         </div>
       </div>
 
-      <div class="login-appearance" aria-label="外觀設定"><span>外觀</span><div data-cyacc-theme-switch></div></div>
       <section id="loginPanel">
         <h2>員工帳號登入</h2>
         <form id="loginForm" action="/login" method="post" class="login-form" autocomplete="on">
