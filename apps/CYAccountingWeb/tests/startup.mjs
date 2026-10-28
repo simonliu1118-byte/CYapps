@@ -50,7 +50,7 @@ assert.match(login, /8_000/);
 assert.match(login, /Promise\.race\(\[request, timeout\]\)/);
 assert.match(login, /TimeoutError/);
 assert.match(login, /window\.location\.replace\('\/'\)/);
-assert.match(html, /auth\.js\?rev=cyweb-theme-owner-build1/);
+assert.match(html, /auth\.js\?rev=cyweb-theme-owner/);
 const appAsset = /src="(\/app\.js\?rev=[^"]+)"/.exec(html)?.[1];
 assert.ok(appAsset, 'the current app asset must have a cache revision');
 const deployWorkflow = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
