@@ -76,7 +76,7 @@ assert.match(js, /const ready = Boolean\(main\) && !source\.classList\.contains\
 assert.match(js, /if \(!mobileAccountMenu \|\| !ready\)[\s\S]*?trigger\.hidden = true;[\s\S]*?return;/);
 assert.match(js, /cluster\?\.classList\.toggle\('role-super-admin', superAdmin\)/);
 assert.match(js, /cluster\?\.classList\.toggle\('role-admin', admin\)/);
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster[\s\S]*?display:\s*flex !important/, 'tablet identity remains the inline account cluster');
+assert.match(js, /accountCluster\.className = 'cy-account-menu'/, 'tablet and desktop share the canonical CY Web account control');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?\.cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet hides phone identity surfaces');
 assert.match(js, /triggerName\.textContent = main;[\s\S]*?trigger\.hidden = false;/);
 assert.doesNotMatch(js, /new MutationObserver\(syncMobileWorkspaceMobileIdentity\)/);

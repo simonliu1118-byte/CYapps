@@ -37,7 +37,7 @@ const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/c
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
-assert.equal(build, '0');
+assert.equal(build, '1');
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] body \{\s*display: flex;/);
 assert.match(adaptiveCss, /\.shell\.cy-split-layout \{[\s\S]*?overflow: hidden;/);
 assert.match(adaptiveCss, /\.ledger-card \{[\s\S]*?display: flex;[\s\S]*?overflow: hidden;/);
@@ -52,10 +52,26 @@ assert.match(read('public/login.html'), /id="firstLoginHelp"/);
 assert.match(read('public/login.html'), /cyacc-icon\.svg/);
 assert.match(read('public/auth.js'), /renderCyaccAccountMenu/);
 assert.doesNotMatch(read('public/auth.js'), /我的帳號（密碼、Email）/);
-assert.match(read('public/cyacc-appearance.js'), /\['system', 'light', 'dark'\]/);
+assert.match(read('public/cyacc-appearance.js'), /value: 'system'/);
+assert.match(read('public/cyacc-appearance.js'), /value: 'light'/);
+assert.match(read('public/cyacc-appearance.js'), /value: 'dark'/);
+assert.match(read('public/cyacc-appearance.js'), /data-cy-dark/);
+assert.match(read('public/cyacc-appearance.js'), /cyweb-ui-theme/);
+assert.match(read('public/login.html'), /data-cyacc-theme-toggle/);
+assert.match(adaptive, /accountCluster\.className = 'cy-account-menu'/);
+assert.match(read('public/auth.js'), /root\.dataset\.role/);
+assert.ok(read('public/auth.js').includes("root.querySelector('.cy-account-trigger')"));
+assert.doesNotMatch(adaptiveCss, /cy-account-cluster/);
+const appearanceCss = read('public/cyacc-appearance.css');
+assert.match(appearanceCss, /--cy-bg: #17171f/);
+assert.match(appearanceCss, /--cy-surface: #23232f/);
+assert.match(appearanceCss, /\.cy-segmented\.compact button/);
+assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-account-avatar/);
+assert.doesNotMatch(appearanceCss, /data-cyacc-theme/);
+assert.doesNotMatch(appearanceCss, /!important;\s*!\s*important/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
-assert.match(css, /\.current-user\.role-super-admin/);
+assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-account-avatar/);
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
 assert.match(css, /\.ledger-balance-popover/);
@@ -305,9 +321,6 @@ assert.match(appJs, /class="opening-account-column"/);
 assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
 assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster,\s*html\[data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster\s*\{[\s\S]*?height: 34px !important/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before,[\s\S]*?\{\s*content: var\(--account-role-open, "［"\) !important;/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after,[\s\S]*?\{\s*content: var\(--account-role-close, "］"\) !important;/);
 
 // Editable dates and the picker update the same required source field.
 const editable = pickerFixture(true);

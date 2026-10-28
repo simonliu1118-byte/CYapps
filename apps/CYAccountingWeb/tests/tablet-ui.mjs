@@ -113,11 +113,11 @@ assert.match(source, /if \(!isDesktopInteractionWorkspace\(\)\) return;/, 'table
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #ledgerMonthDisplay/, 'both tablet orientations reuse the shared mobile month display layer');
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster[\s\S]*?display:\s*flex !important[\s\S]*?role-super-admin[\s\S]*?#ddc789[\s\S]*?role-admin[\s\S]*?#d7b79e/, 'tablet keeps the inline account cluster and shares mobile gold/bronze role colors');
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster \.current-user-role \{[\s\S]*?border:\s*0 !important[\s\S]*?background:\s*transparent !important/, 'tablet role text is inline text rather than a separate pill');
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster \.current-user-role::before[\s\S]*?content:\s*var\(--account-role-open, "［"\)/, 'tablet role label keeps the inline bracketed presentation');
+assert.match(source, /accountCluster\.className = 'cy-account-menu'/, 'tablet uses the same account component as CY Web');
+assert.match(read('cyacc-appearance.css'), /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-account-avatar/, 'super admin avatar uses canonical gold theme token');
+assert.match(read('cyacc-appearance.css'), /\.cy-account-menu\[data-role="ADMIN"\] \.cy-account-avatar/, 'admin avatar uses canonical copper theme token');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet does not reuse the phone dropdown account owner');
-assert.doesNotMatch(css, /data-tablet-layout[^\n]*\.cy-account-cluster[^\{]*\{[^\}]*display:\s*none !important/, 'tablet must never hide the canonical inline account cluster');
+assert.doesNotMatch(css, /cy-account-cluster/, 'legacy tablet cluster CSS is retired');
 assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*\{[^\}]*display:\s*(?:block|flex|inline-flex) !important/, 'tablet must never show the phone account trigger');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail \.entry-card \{[\s\S]*?grid-template-columns:\s*46px minmax\(0, 1fr\)/, 'portrait entry rail reserves a slimmer left mode switch column');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-kind-switch \{[\s\S]*?grid-template-columns:\s*1fr[\s\S]*?grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/, 'income and expense are a vertical two-segment switch');

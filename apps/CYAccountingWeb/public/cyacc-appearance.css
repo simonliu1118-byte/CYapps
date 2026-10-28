@@ -1,81 +1,365 @@
-/* CY Web-derived interaction language, scoped to CYACC presentation. */
-.cyacc-theme-switch { display:inline-flex; gap:2px; padding:3px; border:1px solid #d8dee9; border-radius:10px; background:#f4f6fa; white-space:nowrap; }
-.cyacc-theme-switch button { width:auto; min-height:28px; height:28px; padding:3px 9px; font-size:12px; font-weight:500; border:0; border-radius:7px; color:#5c6879; background:transparent; cursor:pointer; }
-.cyacc-theme-switch button[aria-pressed="true"] { background:#fff; color:#182b49; box-shadow:0 1px 4px #122a4a18; font-weight:700; }
-.login-appearance { display:flex; justify-content:flex-end; align-items:center; gap:8px; margin:-14px 0 20px; color:#667085; font-size:12px; }
-.login-card .brand-mark { padding:0; background:transparent; }
-.login-card .brand-block { margin-bottom:20px; }
-.cyacc-account-trigger { display:flex; align-items:center; gap:7px; border:1px solid #d8dee9; padding:4px 10px 4px 4px; border-radius:99px; background:#fff; color:#283542; cursor:pointer; }
-.cyacc-account-avatar { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; background:#fff4dc; color:#986308; font-weight:700; }
-.cyacc-account-details { display:flex; flex-direction:column; align-items:flex-start; font-size:11px; line-height:1.25; }
-.cyacc-account-details strong { font-size:12px; }
-.cyacc-account-popover { position:absolute; top:calc(100% + 7px); right:0; width:250px; padding:8px; z-index:100; border:1px solid #d8dee9; border-radius:12px; box-shadow:0 12px 32px #14243e22; background:#fff; }
-.cyacc-account-popover button { display:block; width:100%; text-align:left; padding:10px; border:0; border-radius:7px; background:transparent; color:#be4035; cursor:pointer; }
-.cyacc-account-popover button:hover { background:#f8eded; }
-.cy-account-cluster.cyacc-menu-ready { position:relative; display:flex; align-items:center; background:transparent !important; border:0 !important; padding:0 !important; }
-.cy-account-cluster.cyacc-menu-ready #currentUser, .cy-account-cluster.cyacc-menu-ready #logoutButton { display:none !important; }
-html[data-cyacc-theme="dark"] { color-scheme:dark; --cyacc-surface:#202837; }
-html[data-cyacc-theme="dark"] body { background:#121a26; color:#e5edf7; }
-html[data-cyacc-theme="dark"] .topbar, html[data-cyacc-theme="dark"] .card, html[data-cyacc-theme="dark"] .modal, html[data-cyacc-theme="dark"] .login-card,
-html[data-cyacc-theme="dark"] .ledger-sticky-head, html[data-cyacc-theme="dark"] .ledger-title, html[data-cyacc-theme="dark"] .ledger-toolbar, html[data-cyacc-theme="dark"] .cyacc-account-popover { background:#202837 !important; color:#e5edf7; border-color:#3b485b; }
-html[data-cyacc-theme="dark"] input, html[data-cyacc-theme="dark"] select, html[data-cyacc-theme="dark"] textarea,
-html[data-cyacc-theme="dark"] .cyacc-account-trigger { background:#253247; color:#e5edf7; border-color:#506077; }
-html[data-cyacc-theme="dark"] .ledger-card th, html[data-cyacc-theme="dark"] .ledger-card td, html[data-cyacc-theme="dark"] .cyacc-theme-switch { background:#263346; color:#e5edf7; border-color:#435169; }
-html[data-cyacc-theme="dark"] .cyacc-theme-switch button[aria-pressed="true"] { background:#435675; color:#fff; }
-html[data-cyacc-theme="dark"] .login-form label, html[data-cyacc-theme="dark"] .first-login-help, html[data-cyacc-theme="dark"] .first-login-help strong { color:#e5edf7; }
-@media(prefers-color-scheme:dark) {
- html[data-cyacc-theme="system"] { color-scheme:dark; --cyacc-surface:#202837; }
- html[data-cyacc-theme="system"] body { background:#121a26; color:#e5edf7; }
- html[data-cyacc-theme="system"] .topbar, html[data-cyacc-theme="system"] .card, html[data-cyacc-theme="system"] .login-card { background:#202837; color:#e5edf7; }
-}
-@media(max-width:767px){ .cyacc-appearance-slot { display:none; } }
+/*
+ * CYACC appearance owner — one source for theme tokens and the CY Web controls.
+ * Reference: chihyuan-web/src/app.css (tokens, .cy-segmented, .cy-account-menu).
+ * Product layout stays with login.css, adaptive-ui.css, accounting-ui.css and statistics.css.
+ * Do not append per-version dark-mode overrides in other stylesheets.
+ */
+:root {
+  color-scheme: light;
+  --cy-bg: #f6f6f9;
+  --cy-surface: #ffffff;
+  --cy-surface-muted: #f8f8fb;
+  --cy-surface-sunken: #f1f1f6;
+  --cy-border: #e3e3ec;
+  --cy-border-strong: #c9cad8;
+  --cy-border-input: #8e91a6;
+  --cy-text: #282a3a;
+  --cy-text-muted: #676b7e;
+  --cy-text-subtle: #8a8ea2;
+  --cy-accent: #3d63d2;
+  --cy-accent-hover: #3354bc;
+  --cy-accent-soft: #eaf0fc;
+  --cy-on-accent: #ffffff;
+  --cy-focus: rgba(61,99,210,.32);
+  --cy-success: #1f7a4d;
+  --cy-success-soft: #e8f5ee;
+  --cy-danger: #b42318;
+  --cy-danger-soft: #fdecea;
+  --cy-gold: #7a5600;
+  --cy-gold-soft: #fff6dc;
+  --cy-gold-line: #ebd49a;
+  --cy-copper: #8f4523;
+  --cy-copper-soft: #fbede4;
+  --cy-copper-line: #e5c3ad;
+  --cy-shadow-sm: 0 1px 2px rgba(40,42,58,.05);
+  --cy-shadow-lg: 0 16px 40px rgba(40,42,58,.16);
+  --cy-fs-xs: 12px;
+  --cy-fs-sm: 13px;
+  --cy-fs-md: 14px;
+  --cy-control-h: 32px;
+  --cy-control-h-sm: 28px;
+  --cy-radius-sm: 6px;
+  --cy-radius-md: 8px;
+  --cy-radius-lg: 10px;
 
-/* Align CYACC sign-in card composition with CY Web AuthGate while retaining the first-login guide. */
-.login-appearance { position:absolute; top:18px; right:20px; z-index:2; margin:0; }
-.login-card { position:relative; }
-.login-card .brand-block { padding-bottom:20px; border-bottom:1px solid #e8edf4; }
-.login-card #loginPanel h2 { margin:0 0 17px; font-size:18px; }
-.login-card .login-form { gap:15px; }
-.login-card .login-form label:not(.cyacc-remember-label) { font-weight:650; }
-.login-card .primary { width:100%; }
-.cyacc-login-options { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.login-form .cyacc-remember-label { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:500; cursor:pointer; }
-.login-form .cyacc-remember-label input { width:16px; height:16px; min-height:16px; margin:0; padding:0; accent-color:#215c9e; }
-.cyacc-login-options .link-button { font-weight:600; font-size:13px; }
-.login-card .first-login-help { margin-top:5px; }
-html[data-cyacc-theme="dark"] .login-card .brand-block { border-color:#40516a; }
-html[data-cyacc-theme="dark"] .login-subtitle, html[data-cyacc-theme="dark"] .login-appearance,
-html[data-cyacc-theme="dark"] .login-card .message:not(.error) { color:#aebcd0; }
-html[data-cyacc-theme="dark"] .first-login-help { border-color:#40516a; }
-html[data-cyacc-theme="dark"] .first-login-help a { color:#8ab9ff; }
-html[data-cyacc-theme="dark"] .login-form input { background:#263448; color:#eff5ff; border-color:#51647d; }
-html[data-cyacc-theme="dark"] .login-form .primary { background:#3575c9; color:white; }
-html[data-cyacc-theme="dark"] .cyacc-account-popover button:hover { background:#3c2e37; }
-html[data-cyacc-theme="dark"] .cyacc-account-avatar { background:#59462b; color:#ffdf92; }
-html[data-cyacc-theme="dark"] .cyacc-account-details { color:#e5edf7; }
-html[data-cyacc-theme="dark"] .topbar p, html[data-cyacc-theme="dark"] .section-title p,
-html[data-cyacc-theme="dark"] .ledger-card .hint { color:#b7c5d7; }
-html[data-cyacc-theme="dark"] .table-wrap,
-html[data-cyacc-theme="dark"] .ledger-card tbody tr { background:#202837 !important; }
-html[data-cyacc-theme="dark"] .ledger-card td { border-bottom-color:#3b485b !important; }
-html[data-cyacc-theme="dark"] .statistics-results, html[data-cyacc-theme="dark"] .statistics-card { color:#e5edf7; }
-html[data-cyacc-theme="dark"] .cy-ledger-summary-bar,
-html[data-cyacc-theme="dark"] .cy-ledger-summary-bar *,
-html[data-cyacc-theme="dark"] .ledger-card .cy-ledger-context { background-color:#202837; }
-html[data-cyacc-theme="dark"] .entry-card.entry-income { background:#1b3029 !important; border-color:#386950 !important; }
-html[data-cyacc-theme="dark"] .entry-card.entry-expense { background:#38292d !important; border-color:#704147 !important; }
-html[data-cyacc-theme="dark"] .ledger-card .row-action { color:#8dbcf0; }
-@media (prefers-color-scheme: dark) {
-  html[data-cyacc-theme="system"] .login-form input { background:#263448; color:#eff5ff; border-color:#51647d; }
-  html[data-cyacc-theme="system"] .first-login-help { color:#e5edf7; border-color:#40516a; }
-  html[data-cyacc-theme="system"] .first-login-help strong { color:#e5edf7; }
-  html[data-cyacc-theme="system"] .first-login-help a { color:#8ab9ff; }
-  html[data-cyacc-theme="system"] .ledger-card td, html[data-cyacc-theme="system"] .ledger-card th { background:#263346; color:#e5edf7; }
-  html[data-cyacc-theme="system"] .ledger-sticky-head, html[data-cyacc-theme="system"] .ledger-toolbar { background:#202837; }
+  /* Accounting-specific semantic surfaces, without a second theme palette. */
+  --cyacc-row-alt: #f7f9fc;
+  --cyacc-entry-income: #f7fcf8;
+  --cyacc-entry-expense: #fff8f8;
+  --cyacc-chip-bg: #f5f7fb;
+  --cyacc-chart-ink: #526273;
 }
-@media(max-width:560px) {
-  .login-appearance { top:7px; right:10px; }
-  .login-appearance > span { display:none; }
-  .cyacc-theme-switch button { min-height:26px; height:26px; padding:3px 7px; font-size:11px; }
-  .login-card .brand-block { margin-bottom:12px; padding-bottom:12px; }
+:root[data-cy-dark] {
+  color-scheme: dark;
+  --cy-bg: #17171f;
+  --cy-surface: #23232f;
+  --cy-surface-muted: #2a2a37;
+  --cy-surface-sunken: #1d1d27;
+  --cy-border: #383848;
+  --cy-border-strong: #4a4a5e;
+  --cy-border-input: #75738c;
+  --cy-text: #efedf8;
+  --cy-text-muted: #b6b4cb;
+  --cy-text-subtle: #8f8da6;
+  --cy-accent: #9dbbff;
+  --cy-accent-hover: #b5cbff;
+  --cy-accent-soft: #2a3550;
+  --cy-on-accent: #172446;
+  --cy-focus: rgba(157,187,255,.4);
+  --cy-success: #6fd3a0;
+  --cy-success-soft: #1e3a2e;
+  --cy-danger: #ff8a80;
+  --cy-danger-soft: #44211f;
+  --cy-gold: #e8c56b;
+  --cy-gold-soft: #3a3020;
+  --cy-gold-line: #5e4e2a;
+  --cy-copper: #e8a47f;
+  --cy-copper-soft: #3d261c;
+  --cy-copper-line: #5f3d2d;
+  --cy-shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --cy-shadow-lg: 0 16px 40px rgba(0,0,0,.45);
+  --cyacc-row-alt: #292936;
+  --cyacc-entry-income: #23332c;
+  --cyacc-entry-expense: #37292f;
+  --cyacc-chip-bg: #333342;
+  --cyacc-chart-ink: #efedf8;
+}
+
+/* CY Web ThemeSwitch: exactly the component's geometry and interactive states. */
+.cy-segmented {
+  display: inline-flex; gap: 2px; padding: 2px; justify-self: start;
+  border-radius: var(--cy-radius-md); background: var(--cy-surface-sunken);
+  border: 1px solid var(--cy-border);
+}
+.cy-segmented button {
+  flex: 1 1 0; min-height: calc(var(--cy-control-h) - 6px); padding: 1px 14px;
+  border: 0; border-radius: var(--cy-radius-sm); background: transparent;
+  color: var(--cy-text-muted); font-size: var(--cy-fs-md); white-space: nowrap;
+  cursor: pointer;
+}
+.cy-segmented button:hover:not(:disabled) { color: var(--cy-text); }
+.cy-segmented button[aria-pressed="true"] {
+  background: var(--cy-surface); color: var(--cy-text); font-weight: 600;
+  box-shadow: var(--cy-shadow-sm);
+}
+.cy-segmented.compact button {
+  min-height: calc(var(--cy-control-h-sm) - 4px); padding: 1px 6px;
+  font-size: var(--cy-fs-sm);
+}
+
+/* CY Web AccountMenu: one identity control, no additional CYACC account editor. */
+.cy-account-menu { position: relative; flex: 0 0 auto; }
+.cy-account-trigger {
+  display: flex; align-items: center; gap: 8px; min-height: 40px;
+  padding: 3px 10px 3px 4px; border: 1px solid var(--cy-border-strong);
+  border-radius: 999px; background: var(--cy-surface); color: var(--cy-text);
+  text-align: left; cursor: pointer; font: inherit;
+}
+.cy-account-trigger:hover { border-color: var(--cy-accent); }
+.cy-account-avatar {
+  width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center;
+  border-radius: 50%; background: var(--cy-surface-sunken);
+  color: var(--cy-text-muted); border: 1px solid var(--cy-border);
+  font-weight: 700; font-size: var(--cy-fs-sm);
+}
+.cy-account-menu[data-role="SUPER_ADMIN"] .cy-account-avatar {
+  background: var(--cy-gold-soft); color: var(--cy-gold); border-color: var(--cy-gold-line);
+}
+.cy-account-menu[data-role="ADMIN"] .cy-account-avatar {
+  background: var(--cy-copper-soft); color: var(--cy-copper); border-color: var(--cy-copper-line);
+}
+.cy-account-name { min-width: 0; display: grid; line-height: 1.3; }
+.cy-account-name strong { font-size: var(--cy-fs-md); font-weight: 600; white-space: nowrap; }
+.cy-account-role { font-size: var(--cy-fs-xs); color: var(--cy-text-muted); }
+.cy-account-menu[data-role="SUPER_ADMIN"] .cy-account-role { color: var(--cy-gold); font-weight: 600; }
+.cy-account-menu[data-role="ADMIN"] .cy-account-role { color: var(--cy-copper); font-weight: 600; }
+.cy-account-caret { color: var(--cy-text-muted); }
+.cy-account-popover {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 100;
+  width: 260px; display: grid; padding: 6px;
+  border: 1px solid var(--cy-border); border-radius: var(--cy-radius-lg);
+  background: var(--cy-surface); box-shadow: var(--cy-shadow-lg);
+}
+.cy-account-popover[hidden] { display: none; }
+.cy-account-popover button {
+  min-height: 40px; padding: 0 10px; border: 0;
+  border-radius: var(--cy-radius-sm); background: transparent;
+  color: var(--cy-text); font-size: var(--cy-fs-md);
+  text-align: left; cursor: pointer;
+}
+.cy-account-popover button:hover:not(:disabled) { background: var(--cy-surface-muted); }
+.cy-account-popover button.danger { color: var(--cy-danger); }
+.cy-account-trigger:focus-visible, .cy-account-popover button:focus-visible,
+.cy-segmented button:focus-visible { outline: 2px solid var(--cy-accent); outline-offset: 2px; }
+
+/* The identity source is retained for role-gating and existing mobile consumers. */
+.cy-account-menu > #currentUser,
+.cy-account-menu > #logoutButton { display: none !important; }
+.cy-account-menu:not([data-identity-ready="true"]) { visibility: hidden; }
+
+/* CY Web ThemeToggle on the sign-in screen (cycle System -> Light -> Dark). */
+.cy-op-button.quiet.cy-theme-toggle {
+  appearance: none; min-height: var(--cy-control-h); display: inline-flex;
+  align-items: center; justify-content: center; gap: 6px; padding: 4px 12px;
+  border: 1px solid transparent; border-radius: var(--cy-radius-md);
+  background: transparent; color: var(--cy-text-muted);
+  font-size: var(--cy-fs-md); font-weight: 500; line-height: 1.3; cursor: pointer;
+}
+.cy-op-button.quiet.cy-theme-toggle:hover { background: var(--cy-surface-muted); color: var(--cy-text); }
+.login-card .login-subtitle, .login-card .brand-block p { color: var(--cy-text-muted); }
+.login-card .message.error { color: var(--cy-danger); }
+.login-card .login-shell { background: var(--cy-bg); }
+
+/* Sign-in: preserve CYACC's independent CYID contract and first-login guidance. */
+.login-card { position: relative; border-color: var(--cy-border); background: var(--cy-surface); color: var(--cy-text); }
+.login-card .brand-mark { padding: 0; background: transparent; }
+.login-card .brand-block { padding-bottom: 18px; border-bottom: 1px solid var(--cy-border); }
+.login-card .login-form label:not(.cyacc-remember-label) { color: var(--cy-text); font-weight: 600; }
+.login-card .login-form input:not([type="checkbox"]) {
+  background: var(--cy-surface); color: var(--cy-text);
+  border-color: var(--cy-border-input);
+}
+.login-card .login-form input:focus { border-color: var(--cy-accent); box-shadow: 0 0 0 3px var(--cy-focus); }
+.login-card .login-form .primary { width: 100%; background: var(--cy-accent); color: var(--cy-on-accent); }
+.login-card .login-form .secondary { background: var(--cy-surface); border-color: var(--cy-border-strong); color: var(--cy-text); }
+.login-card .login-form .link-button, .login-card .first-login-help a { color: var(--cy-accent); }
+.login-card .first-login-help { border-color: var(--cy-border); color: var(--cy-text-muted); }
+.login-card .first-login-help strong { color: var(--cy-text); }
+.login-card .message:not(.error), .login-card .delivery-note { color: var(--cy-text-muted); }
+.login-card .delivery-note { background: var(--cy-surface-muted); }
+.login-appearance { position: fixed; top: 16px; right: 16px; z-index: 10; }
+.login-appearance > span { display: none; }
+.cyacc-login-options { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.login-form .cyacc-remember-label {
+  display:flex; align-items:center; gap:7px; color:var(--cy-text);
+  font-size:13px; font-weight:500; cursor:pointer;
+}
+.login-form .cyacc-remember-label input {
+  width:16px; height:16px; min-height:16px; margin:0; padding:0; accent-color:var(--cy-accent);
+}
+.cyacc-login-options .link-button { font-weight:600; font-size:13px; }
+
+/* Accounting product skin: all colors are references to the same CY Web tokens. */
+body { background: var(--cy-bg); color: var(--cy-text); }
+.topbar, .card, .modal, .ledger-sticky-head, .ledger-title {
+  background: var(--cy-surface); color: var(--cy-text); border-color: var(--cy-border);
+}
+.topbar h1, .section-title h2, .statistics-card h2, .settings-modal h2,
+.settings-pane h3 { color: var(--cy-text); }
+.topbar p, .section-title p, label > span, .hint, .keyboard-hint,
+.statistics-note, .statistics-scope-note { color: var(--cy-text-muted); }
+.topbar .secondary, .secondary, .mini-button,
+#settingsButton, #headerAccountManagerButton, #headerCategoryManagerButton {
+  background: var(--cy-surface); color: var(--cy-text); border-color: var(--cy-border-strong);
+}
+.primary { background: var(--cy-accent); color: var(--cy-on-accent); border-color: var(--cy-accent); }
+input, select, textarea, .settings-content input, .settings-content select {
+  background: var(--cy-surface); color: var(--cy-text); border-color: var(--cy-border-input);
+}
+input::placeholder, textarea::placeholder { color: var(--cy-text-subtle); opacity: 1; }
+.entry-card.entry-income { background: var(--cyacc-entry-income); border-color: var(--cy-border); }
+.entry-card.entry-expense { background: var(--cyacc-entry-expense); border-color: var(--cy-border); }
+.quick-chip, .summary-chip, .kind-button, .entry-kind-switch,
+.ledger-card .kind-tag, .settings-tab, .settings-nav, .manager-row,
+.settings-content, .confirmation-drawer, .opening-row {
+  color: var(--cy-text); border-color: var(--cy-border); background-color: var(--cy-surface-muted);
+}
+.ledger-card .table-wrap, .ledger-card table, .ledger-card tbody,
+.ledger-card tbody > tr, .ledger-card tbody > tr > td { color: var(--cy-text); }
+.ledger-card thead th { color: var(--cy-text-muted); background: var(--cy-surface-sunken); border-color: var(--cy-border); }
+.ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) td {
+  background: var(--cy-surface); color: var(--cy-text); border-color: var(--cy-border);
+}
+.ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row):nth-child(even) td {
+  background: var(--cyacc-row-alt); color: var(--cy-text);
+}
+.ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row):hover td { background: var(--cy-surface-muted); }
+.ledger-card .account-group-row td { background: var(--cy-surface-sunken); color: var(--cy-text); }
+.ledger-card .row-action:not(.delete) { color: var(--cy-accent); }
+.ledger-card .row-action.delete { color: var(--cy-danger); }
+.ledger-card tbody > tr.ledger-row-income .ledger-amount, .statistics-income { color: var(--cy-success); }
+.ledger-card tbody > tr.ledger-row-expense .ledger-amount, .statistics-expense { color: var(--cy-danger); }
+.ledger-card .ledger-toolbar { background: var(--cy-surface-muted); border-color: var(--cy-border); }
+.ledger-card .cy-ledger-context, .ledger-card .cy-ledger-summary-bar { background: var(--cy-surface); color: var(--cy-text); }
+.statistics-card { background: var(--cy-surface); color: var(--cy-text); }
+.statistics-totals, .statistics-chart, .statistics-breakdown details,
+.statistics-view-tabs, .statistics-legend { border-color: var(--cy-border); }
+.statistics-pie .statistics-pie-center, .statistics-pie .statistics-pie-total { fill: var(--cyacc-chart-ink); }
+.statistics-pie text { fill: var(--cy-text); }
+.statistics-legend button, .statistics-reset { color: var(--cy-accent); }
+.statistics-view-tabs button, .statistics-legend small, .statistics-note,
+.statistics-scope-note, #statisticsMonthLabel { color: var(--cy-text-muted); }
+.statistics-view-tabs button[aria-selected="true"],
+.statistics-actions button.active { background: var(--cy-accent-soft); color: var(--cy-accent); border-color: var(--cy-accent); }
+.income-statement th, .income-statement td { border-color: var(--cy-border); background: var(--cy-surface); color: var(--cy-text); }
+.income-statement thead th, .income-statement .statement-group { background: var(--cy-surface-sunken); color: var(--cy-text); }
+.income-statement .statement-subject, .statement-period { color: var(--cy-text-muted); }
+.settings-modal, .settings-layout, .settings-content, .settings-nav,
+.settings-pane, .manager-row, .opening-modal, .confirmation-drawer,
+.cy-confirm-dialog, .modal-header { color: var(--cy-text); border-color: var(--cy-border); }
+.settings-content, .settings-modal, .opening-modal, .confirmation-drawer,
+.cy-confirm-dialog, .modal-header { background: var(--cy-surface); }
+
+/* Dark surfaces and controls: active adaptive selectors sometimes use !important.
+   Keep necessary specificity corrections here, never as extra CSS versions. */
+:root[data-cy-dark] .topbar,
+:root[data-cy-dark] .card,
+:root[data-cy-dark] .modal,
+:root[data-cy-dark] .settings-content,
+:root[data-cy-dark] .settings-modal,
+:root[data-cy-dark] .statistics-card,
+:root[data-cy-dark] .opening-modal,
+:root[data-cy-dark] .confirmation-drawer,
+:root[data-cy-dark] .cy-confirm-dialog,
+:root[data-cy-dark] .ledger-sticky-head {
+  background: var(--cy-surface) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+:root[data-cy-dark] body { background: var(--cy-bg) !important; color: var(--cy-text); }
+:root[data-cy-dark] .entry-card.entry-income { background: var(--cyacc-entry-income) !important; }
+:root[data-cy-dark] .entry-card.entry-expense { background: var(--cyacc-entry-expense) !important; }
+:root[data-cy-dark] .secondary,
+:root[data-cy-dark] .settings-content input,
+:root[data-cy-dark] .settings-content select,
+:root[data-cy-dark] .ledger-card #ledgerSummarySearch,
+:root[data-cy-dark] .statistics-card select {
+  background: var(--cy-surface-muted) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border-strong) !important;
+}
+:root[data-cy-dark] .topbar #headerAccountManagerButton,
+:root[data-cy-dark] .topbar #headerCategoryManagerButton,
+:root[data-cy-dark] .topbar #settingsButton,
+:root[data-cy-dark] #ledgerMonthPickerTrigger,
+:root[data-cy-dark] #ledgerPrevMonth,
+:root[data-cy-dark] #ledgerNextMonth {
+  background: var(--cy-surface-muted) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+:root[data-cy-dark] .cy-account-trigger,
+:root[data-cy-dark] .cy-account-popover,
+:root[data-cy-dark] .cy-segmented button[aria-pressed="true"] {
+  background: var(--cy-surface);
+  color: var(--cy-text);
+}
+:root[data-cy-dark] .ledger-card .ledger-title,
+:root[data-cy-dark] .ledger-card .ledger-toolbar,
+:root[data-cy-dark] .statistics-card .statistics-view-tabs {
+  background: var(--cy-surface) !important;
+  color: var(--cy-text) !important;
+  border-color: var(--cy-border) !important;
+}
+
+/* Existing high-specificity adaptive presentation must use the same token values.
+   These are intentional single-owner color rules, NOT per-version CSS overrides. */
+:root[data-cy-dark] .ledger-card .table-wrap,
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row,
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row::before {
+  background: var(--cy-surface) !important;
+}
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row > td {
+  background: transparent !important; color: var(--cy-text) !important;
+}
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row:nth-child(even) > td {
+  background: var(--cyacc-row-alt) !important;
+}
+:root[data-cy-dark] .entry-card label > span,
+:root[data-cy-dark] .entry-card .quick-tool-label,
+:root[data-cy-dark] .entry-card .entry-field-label {
+  color: var(--cy-text) !important;
+}
+:root[data-cy-dark] .entry-card input,
+:root[data-cy-dark] .entry-card select,
+:root[data-cy-dark] .settings-modal input,
+:root[data-cy-dark] .settings-modal select {
+  -webkit-text-fill-color: var(--cy-text) !important;
+}
+:root[data-cy-dark] .ledger-card .ledger-summary-item,
+:root[data-cy-dark] .statistics-scope-note,
+:root[data-cy-dark] .statistics-note {
+  color: var(--cy-text-muted);
+}
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row .ledger-amount {
+  background: transparent !important;
+}
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row-income .ledger-amount { color: var(--cy-success) !important; }
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row-expense .ledger-amount { color: var(--cy-danger) !important; }
+:root[data-cy-dark] .entry-card .quick-tool-row,
+:root[data-cy-dark] .entry-card .quick-chip,
+:root[data-cy-dark] .entry-card input,
+:root[data-cy-dark] .entry-card select { background: var(--cy-surface-muted) !important; color: var(--cy-text) !important; border-color: var(--cy-border-strong) !important; }
+:root[data-cy-dark] .entry-card.entry-income { background: var(--cyacc-entry-income) !important; }
+:root[data-cy-dark] .entry-card.entry-expense { background: var(--cyacc-entry-expense) !important; }
+:root[data-cy-dark] .ledger-card thead th,
+:root[data-cy-dark] .ledger-card .ledger-toolbar,
+:root[data-cy-dark] .statistics-card,
+:root[data-cy-dark] .statistics-card .statistics-view-tabs button,
+:root[data-cy-dark] .modal { color: var(--cy-text) !important; border-color: var(--cy-border) !important; }
+:root[data-cy-dark] .ledger-card thead th { background: var(--cy-surface-sunken) !important; }
+:root[data-cy-dark] .statistics-card .statistics-view-tabs button[aria-selected="true"] { background: var(--cy-accent-soft) !important; color: var(--cy-accent) !important; }
+@media (max-width: 820px) {
+  .cy-account-trigger { padding: 3px; border-color: transparent; }
+  .cy-account-name, .cy-account-caret { display: none; }
 }
