@@ -1,82 +1,41 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-28。目前正式版 **V1.2.1**（`VERSION=1.2.1`、`BUILD=0`，tag `cyerp-auto-query-v1.2.1`）；較舊的 Release（V0.10.1、V1.0.0、V1.2.0）已依使用者要求刪除，各版內容仍在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-28。目前正式版 **V1.2.1**（`VERSION=1.2.1`、`BUILD=0`，tag `cyerp-auto-query-v1.2.1`）；較舊的 Release（V0.10.1、V1.0.0、V1.2.0）已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
-- CY Web 端（chihyuan-web）已上線「ERP 查詢」（商品、客戶、廠商、未收款）與「進貨輔助」；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。
-- 自動更新只認本專案正式 Release；目前只保留 V1.2.1。
+- 部署在公司伺服器（Windows 工作階段 1），作為 CY Web 的查詢 Agent；開機自動啟動、ERP 沒開時自動開啟並登入，閒置自動關閉。
+- CY Web 端（chihyuan-web，目前 V0.9.43）：ERP 查詢頁（商品、客戶、供應商、進貨輔助、未收款）、排程佇列（每人最多 3 筆）、ERP 關閉／暫停（含「關閉到…」與暫停時加入佇列）；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。本程式只依 claim 回應的 `control.holdUntil` 決定暫停期間不開 ERP，暫停中排隊的工作由 CY Web 在暫停結束後才派發。
+- 自動更新只認本專案正式 Release；目前只保留 V1.2.1。V1.1.0 Build 3 → V1.2.0 的自動更新已在伺服器實際完成（2026-10-28 LOG）。
 
-## V1.2.1 — Ribbon 文字辨識只看 Ribbon（已發行）
+## 功能與實機紀錄（2026-10-28 整理）
 
-- V1.2.0 LOG（2026-10-28）：COPI01 客戶 AC0001 找「Excel」時整條 Ribbon OCR 三種縮放都 `IndexOutOfRangeException`（RapidOCR `TextCalRecBox.GetWordInfo`），原因是 1200×220 截圖含下方客戶資料。V1.2.1 截圖只到 RibbonGroupBar 下緣、先試同名群組、失敗時逐群組辨識。待實機：查 AC0001 客戶資料，LOG 應出現 `clicked Excel in group=Excel`。
-
-## 待觀察（V1.2.0 發行後）
-
-- 2026-10-28 實機已確認：自動開啟 ERP、報表匯出、進貨輔助、立即關閉與關閉 15 分鐘。
-- 尚未遇到：ERP 人數已滿（LOG `ERP 人數已滿`）、強制關閉 ERP、閒置登出授權訊息（LOG `licence`）。遇到時對照 LOG。
-
-## V1.1.0 — CY Web 關閉／暫停 ERP、閒置登出授權（隨 V1.2.0 發行）
-
-- CY Web 0.9.38（chihyuan-web PR）新增 `erp_item_agent_control`；claim 回應帶 `control:{request,holdUntil}`，Agent 沒有工作時處理並 `POST /api/erp-agent/control` 回報。暫停期間 `ItemQueryService.HoldUntil` 讓自動登入不開 ERP。
-- 閒置登出授權訊息由 `ItemQueryService.AnswerLicenceBoxesAsync`（GuardErpMessagesAsync 前後）回答。待實機：LOG `licence`、`control`。
-
-## V1.0.6 — 報表「存成EXCEL檔」格式下拉是標準 Windows 下拉
-
-- V1.0.5 實機：品號（含 INVQ01）全部成功；COPR15 切 xlsx 失敗。V1.0.6 以 CB_GETLBTEXT 讀選項、上下鍵選 xlsx。待實機：LOG `format items=… current=… xlsx=…`、`format shown=`。
-
-## V1.0.5 — 伺服器剪貼簿被遠端桌面同步換掉（已實機修正）
-
-- V1.0.4 實機（2026-10-27）：自動登入、INVI02 查詢成功；匯出路徑貼上讀回為空（INVI02 重試成功、INVQ01 兩次失敗），失敗後匯出設定視窗留著讓 ERP 卡住。推定是 AnyDesk 剪貼簿同步。V1.0.5 貼上前確認剪貼簿內容，失敗時取消匯出設定視窗。待實機：LOG 是否出現 `clipboard not holding the text`；若仍常發生，請在 AnyDesk 關閉剪貼簿同步。
-
-## V1.0.4 — ERP 人數已滿（CY Web 0.9.37 已部署）
-
-- 使用者 2026-10-27：登入後跳「Leader作業元件」「人數已滿!!」，按 OK 後 ERP 自行關閉。V1.0.4 偵測後按掉並回報 `ERP_SEATS_FULL`；CY Web 須先部署認得此代碼的版本（chihyuan-web 0.9.36）。待實機：LOG `ERP 人數已滿`。
-
-## V1.0.3 — 伺服器上報表匯出格式預設 xls
-
-- V1.0.2 伺服器實機（2026-10-27）：COPR15 按 XLSX 後「存成EXCEL檔」顯示 xls 而停止。V1.0.3 會切換到 xlsx。待實機：進貨輔助或銷貨銷退查詢，LOG `format items=… shown=…`。若 LOG 顯示 `XLSX clicked by=geometry` 卻開的是 XLS 按鈕，需改按鈕位置（伺服器顯示比例可能不同）。
-- 另一次「按「作業速查」後游標不在 ERP 的搜尋框」出現在前一次失敗後，下一次查詢即正常，先觀察。
-
-## V1.0.2 — 自動登入把啟動畫面當主視窗（已實機：伺服器自動登入成功）
-
-- V1.0.1 Build 2 實機 LOG（2026-10-26）：ERP 沒開時查詢，啟動 MainMenu.exe 後 1.9 秒就把啟動畫面 `TfrmLogo`（標題 frmLogo）當成主視窗，跳過登入。V1.0.2 備援判斷只認 `SmartERP_iSM_MainMenu`。待實機：ERP 沒開時從 Web 查一筆，LOG 應出現 `login form class=…`、`logged in after_ms=`。
-
-## V1.0.1 Build 2 — ERP 行程診斷與強制重開收斂（PR #555）
-
-- Build 0／1 由 GPT 實作（使用者 2026-10-22 要求避免誤關共用行程），報告見 `docs/handoff/ERP_PROCESS_DIAGNOSTICS_CLAUDE_HANDOFF_20261023.md`。Claude 審查發現 Build 1「只處理 AutoQuery 親自啟動的 ERP」會讓閒置關閉與無回應重開在 ERP 人工開啟或 AutoQuery 自動更新後失效，且作業視窗不在 MainMenu 行程。
-- 使用者 2026-10-26 以伺服器工作管理員確認：MainMenu 在 `D:\iSmartERPX64\C_dsbin\`（工作階段 1）；品號、銷貨單、進貨單都開在 `S_dsbin\SMCOPIS01S.exe`；另有 SMDispatcher、SMCounterS、AUC 等 ERP 關著也在跑的服務。
-- Build 2：強制重開改為以視窗找程式（`ErpRestartTargets`，有單元測試），閒置關閉恢復 V1.0.0 行為，診斷另列擁有 ERP 視窗的行程。
-- 待實機：一般查詢、閒置關閉不受影響；ERP 真的卡住時看 LOG `ERP window owner pid=… name=… session=… main=…` 與 `ERP process closed／killed`。不刻意弄當機測試。
-
-## 功能與實機紀錄
-
-| 功能 | ERP 作業 | CY Web 類型 | 實機紀錄（依 CHANGELOG） |
+| 功能 | ERP 作業 | CY Web 類型 | 實機紀錄 |
 |---|---|---|---|
-| 品號查詢 | INVI02 | `ITEM_NO` | 已實機：本機 A00124、Web C00154（V0.2.0 Build 3–4） |
+| 品號查詢 | INVI02 | `ITEM_NO` | 伺服器正常（2026-10-28：A00124、C00154） |
 | 品名查詢 | INVI02 進階設定 | `ITEM_NAME` | 已實機：「針灸針」轉出 81 筆（V0.3.0 Build 8） |
-| 批號／歷史異動 | INVQ01 | `ITEM_NO`（`includeHistory`） | 已實機：A00124 歷史異動 426 筆（V0.3.0 Build 8） |
-| 客戶資料 | COPI01 | `CUSTOMER_NO`／`CUSTOMER_NAME` | 已實機至開啟、F6、頁籤（V0.5.0 Build 4），其後修正未另記錄結果 |
-| 供應廠商資料 | PURI01 | `SUPPLIER_NO`／`SUPPLIER_NAME` | 文件無實機紀錄（視窗類別、頁籤座標沿用 COPI01 推測） |
-| 銷貨銷退單 | COPR15／COPR16 | `SALES` | 已實機：客戶 AC0016，依使用者 LOG 修正至 V0.9.0 Build 8（含「報表沒有資料」處理） |
+| 批號／歷史異動 | INVQ01 | `ITEM_NO`（`includeHistory`） | 伺服器正常（2026-10-28：A00124 批號 3 筆） |
+| 客戶資料 | COPI01 | `CUSTOMER_NO`／`CUSTOMER_NAME` | AC0007 正常；AC0001 曾在 V1.2.0 找 Ribbon「Excel」時 OCR 失敗，V1.2.1 修正（待觀察） |
+| 供應廠商資料 | PURI01 | `SUPPLIER_NO`／`SUPPLIER_NAME` | 伺服器正常（2026-10-28：B0003） |
+| 銷貨銷退單 | COPR15／COPR16 | `SALES` | 使用者 2026-10-28 確認正常 |
 | 單筆銷貨／銷退單 | COPR15／COPR16 | `ORDER` | 文件無實機紀錄 |
-| 進貨退貨單 | PURR18／PURR22 | `PURCHASES` | 已實機：廠商 B0009（V0.9.0 Build 2–3） |
-| 未收款 | ACRR18 | `RECEIVABLE` | 文件無實機紀錄 |
-| 進貨輔助 | COPR15／COPR16＋INVI02 批次 | `RESTOCK` | 使用者以 CY Web 實際查詢並回饋，修正至 V0.10.2 Build 3–4（批次查庫存、含贈品量、品號含「-」） |
-| ERP 自動登入／閒置關閉／開機自動開啟 | ERP 登入畫面 | — | 自動登入已實機（V1.0.2，伺服器 2026-10-27）；閒置關閉、ERP 關閉確認訊息尚未實機 |
-| 自動更新（含提示條、倒數、還原） | GitHub Release | — | V0.10.1 起以正式 Release 實測；文件未記錄結果 |
+| 進貨退貨單 | PURR18／PURR22 | `PURCHASES` | 使用者 2026-10-28 確認正常 |
+| 未收款 | ACRR18 | `RECEIVABLE` | 伺服器正常（2026-10-28：全部客戶 131 張結帳單） |
+| 進貨輔助 | COPR15／COPR16＋INVI02 批次 | `RESTOCK` | 伺服器正常（2026-10-28：2 天 217 個品號，約 2 分 15 秒；V1.1.0 Build 2 為 6 分半） |
+| 自動登入、閒置關閉 | ERP 登入畫面 | — | 自動登入正常；作業閒置 10 分鐘關閉正常（2026-10-28 LOG） |
+| CY Web 關閉／暫停 | — | claim `control` | 立即關閉、關閉 15 分鐘正常（使用者 2026-10-28）；強制關閉未遇到 |
+| 自動更新 | GitHub Release | — | V1.1.0 Build 3 → V1.2.0 正常（2026-10-28 LOG） |
 
-「文件無實機紀錄」不代表失敗，只是 CHANGELOG／交接沒有寫下結果；使用者確認後更新本表。
+「文件無實機紀錄」不代表失敗，只是沒有留下結果；使用者確認後更新本表。
 
 ## 待實機確認
 
-- 閒置關閉：作業與 ERP 的閒置關閉、ERP 離開確認訊息（LOG `idle`）。
-- 進貨輔助：條件框實際字數上限（LOG `condition box limit=`）、每批 100 個品號的耗時（LOG `restock`）。
-- PURI01：視窗類別（預期 `TfrmPuri01`，不符時以標題辨識）、頁籤座標（不符時 OCR）、資料瀏覽「轉出全部」欄位名稱（廠商代號、簡稱、公司全名、TEL、FAXNO、統一編號）。
-- PURR18／PURR22：頁籤座標（量自截圖，不符時 OCR）、PURR22 進階選項內容、「驗收日」選項與「僅列印…」勾選狀態能否以 BM_GETCHECK 讀到（LOG 有記錄）。
-- 無人值守電腦（OpenOffice）上 ERP 轉出是否正常。
-- Icon：AITeam Icon Family `apps/erp-autoquery/AutoQ.ico` 在 Windows 檔案總管／工作列的顯示。
+- V1.2.1：COPI01 找 Ribbon「Excel」，LOG 應為 `clicked Excel in group=Excel`；若仍出現 `whole Ribbon OCR failed`，看之後的逐群組結果。
+- ERP 人數已滿（LOG `ERP 人數已滿`）、強制關閉 ERP（LOG `ERP window owner`／`ERP process closed`）、閒置登出授權訊息（LOG `licence`）：遇到時對照 LOG，不刻意製造。
+- 單筆銷貨／銷退單（`ORDER`，未收款憑證另開視窗）。
+- 進貨輔助條件框實際字數上限（LOG `condition box limit=`）。
+- 無人值守電腦（OpenOffice）上 ERP 轉出是否正常；Icon 在檔案總管／工作列的顯示。
 
 ## 程式結構
 
@@ -90,6 +49,8 @@
 - **測試**：`tests/CYERPAutoQuery.Tests`（純邏輯，任何 OS 可跑）；`LiveCyWebTests` 為 opt-in（需 `CYQ_LIVE_BASE`／`CYQ_LIVE_TOKEN`）。
 
 ## 已知 ERP 行為（使用者提供）
+
+- 伺服器（使用者 2026-10-26～27）：MainMenu 在 `D:\iSmartERPX64\C_dsbin\`（工作階段 1）；品號、銷貨單、進貨單都開在 `S_dsbin\SMCOPIS01S.exe`；另有 SMDispatcher、SMCounterS、AUC 等 ERP 關著也在跑的服務（強制重開不碰）。伺服器有 AnyDesk，剪貼簿會被遠端桌面同步換掉，所以輸入以直接寫入欄位為主。報表「匯出成功」的檔案存在桌面。
 
 - 查詢快捷鍵 F6，開啟「設定查詢條件」；視窗會記住上次使用的頁籤（一般選項／進階設定）。
 - 已在一般選項時點一般選項不會有反應（正常）。
@@ -110,7 +71,7 @@
 - 只有起日：點起日 → Home → `yyyyMMdd`。只有迄日：直接點迄日 → Home → `yyyyMMdd`。
 - 兩個都沒填：本機查詢不動日期欄；CY Web 由 Worker 補齊起迄後傳入。
 - Home：日期欄點過一次後會顯示「    /  /  」遮罩，點擊可能落在第二位以後（使用者 2026-10-16）。輸入後讀回，不符即停止、不按開始查詢。
-- 實機慢點（V0.3.0 LOG）：整條 Ribbon OCR 約 2 秒、整窗頁籤 OCR 約 2.6 秒；Build 6～7 改為只讀按鈕所在群組（並記住群組）與頁籤先點座標。
+- 實機慢點（V0.3.0 LOG）：整條 Ribbon OCR 約 2 秒、整窗頁籤 OCR 約 2.6 秒；Build 6～7 改為只讀按鈕所在群組（並記住群組）與頁籤先點座標。V1.2.1 起找不到記住的群組時先試同名群組，整條 Ribbon 只截到群組下緣。
 
 ## 產品規劃（使用者 2026-10-16）
 
