@@ -6,6 +6,7 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("desktop decimal draft JSON matches the Workers financial contract fixture", () => { AllowanceDecimalContractTests.Run(); return Task.CompletedTask; }),
     ("allowance log privacy, correlation, contract and state projection", AllowanceDiagnosticsTests.RunAsync),
     ("Cloud allowance submit preserves task and original ID after lost receipt", CloudAllowanceSubmissionWorkflowTests.RunAsync),
     ("single-company automatic Device synchronization and atomic DPAPI update", CloudCompanySynchronizationTests.RunAsync),

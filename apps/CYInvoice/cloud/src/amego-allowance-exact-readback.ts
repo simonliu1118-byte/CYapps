@@ -4,7 +4,7 @@
 // Still NOT attribution proof that our POST created this official record.
 // This internal module cannot mark the Ledger confirmed, allocate or retry.
 import {signOfficialInvoiceQuery} from "./amego-invoice-query";
-import {fixed7} from "./amego-allowance-detail";
+import {fixed7,parseAllowanceFinancialJson} from "./allowance-decimal";
 
 const URL="https://invoice-api.amego.tw/json/allowance_query";
 const encoder=new TextEncoder();
@@ -57,7 +57,7 @@ async function limited(response:Response):Promise<Data>{
  }finally{reader.releaseLock();}
  const bytes=new Uint8Array(total);let pos=0;
  for(const chunk of chunks){bytes.set(chunk,pos);pos+=chunk.length;}
- try{return record(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)));}
+ try{return record(parseAllowanceFinancialJson(new TextDecoder("utf-8",{fatal:true}).decode(bytes)));}
  catch{throw new Error("G0401_READBACK_INCOMPLETE");}
 }
 export interface ExactAllowanceReadbackRequest {
@@ -98,7 +98,7 @@ export async function queryFrozenAllowanceByOriginalNumber(
    input.unnumberedTemplateJson.length<2||input.unnumberedTemplateJson.length>32768)
   throw new Error("G0401_READBACK_INPUT_INVALID");
  let frozen:Data;
- try{frozen=record(JSON.parse(input.unnumberedTemplateJson));}
+ try{frozen=record(parseAllowanceFinancialJson(input.unnumberedTemplateJson));}
  catch{throw new Error("G0401_READBACK_FROZEN_INVALID");}
  const source=checkFrozen(frozen,input);
  const requestedNet=amount(frozen.TotalAmount);

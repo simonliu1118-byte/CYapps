@@ -2,6 +2,7 @@
 // durably numbered g0401 request. Caller must first win the atomic D1
 // "reserved -> sending" fence; a lost reply is permanently ambiguous.
 import {signOfficialInvoiceQuery} from "./amego-invoice-query";
+import {parseAllowanceFinancialJson,numberedAllowanceJson} from "./allowance-decimal";
 const URL="https://invoice-api.amego.tw/json/g0401";
 const TE=new TextEncoder();
 type ObjectValue=Record<string,unknown>;
@@ -53,7 +54,7 @@ export async function postNumberedAllowanceOnce(
     typeof input.unnumberedTemplateJson!=="string"||
     input.unnumberedTemplateJson.length<2||input.unnumberedTemplateJson.length>32768)
     throw new Error("G0401_REQUEST_INVALID");
-  const template=record(JSON.parse(input.unnumberedTemplateJson));
+  const template=record(parseAllowanceFinancialJson(input.unnumberedTemplateJson));
   if(template.AllowanceNumber!==""||template.AllowanceDate!==input.allowanceDay||
     template.AllowanceType!==2||!Array.isArray(template.ProductItem)||
     template.ProductItem.length<1||template.ProductItem.length>50||
@@ -63,7 +64,7 @@ export async function postNumberedAllowanceOnce(
   const date=now();
   if(!(date instanceof Date)||!Number.isFinite(date.valueOf()))
     throw new Error("G0401_CLOCK_INVALID");
-  const data=JSON.stringify([{...template,AllowanceNumber:input.allowanceNumber}]);
+  const data=numberedAllowanceJson(input.unnumberedTemplateJson,input.allowanceNumber);
   const timestamp=Math.floor(date.valueOf()/1000);
   const form=new URLSearchParams({invoice:input.sellerInvoice,data,
     time:String(timestamp),sign:signOfficialInvoiceQuery(data,timestamp,input.appKey)});

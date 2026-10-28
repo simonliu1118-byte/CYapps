@@ -6,8 +6,8 @@ import {amegoTestAccount} from "./company-settings";
 // No public route, manager approval grant, ledger, g0401 or g0501.
 import type {StoredCloudAllowance} from "./allowance-frozen-store";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
-import {queryOfficialAllowanceDetail,fixed7,allowanceScale}
- from "./amego-allowance-detail";
+import {queryOfficialAllowanceDetail} from "./amego-allowance-detail";
+import {fixed7,allowanceScale,parseAllowanceFinancialJson} from "./allowance-decimal";
 
 const encoder=new TextEncoder();
 const day=(v:unknown):string|null=>{
@@ -31,7 +31,7 @@ function obj(x:unknown):Record<string,unknown>{
 }
 function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
  let request:Record<string,unknown>={};
- try{request=obj(JSON.parse(f.unnumberedTemplateJson));}
+ try{request=obj(parseAllowanceFinancialJson(f.unnumberedTemplateJson));}
  catch{fail("TEMPLATE_INVALID");}
  if(request.AllowanceNumber!==""||String(request.AllowanceType)!=="2"||
      day(request.AllowanceDate)!==f.allowanceDay||

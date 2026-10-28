@@ -1,6 +1,21 @@
-# 本輪待配套：Cloud0.9.10／V3.1.44 Build3
+# 本輪待配套：Cloud0.9.11／V3.1.44 Build4
 
-2026-10-29（Asia/Taipei）。原PR #550／同分支；0.9.10尚未部署，以下只描述本輪後續配套，不重跑下方已完成的0.9.9維護。完整程式Source以本輪完成報告固定SHA與同SHA必要CI為準，不以浮動HEAD或後續文件提交代替。
+2026-10-29（Asia/Taipei）。原PR #550／同分支；0.9.11尚未部署，原Worker0.9.10已完成，不重跑。指定程式Source以本輪完成報告固定SHA及同SHA必要CI為準，不以浮動HEAD或後續文件提交代替。
+
+- 小數解析改讀原JSON numeric token，仍用原七位規則與BigInt；原申請字串、加密內容、requestHash、Grant、Ledger不修改。既有C#產生的numeric小數草稿可由同一reader讀取，不新增格式版本或回填；g0401沿原owner只加已核准號碼，所有numeric token原樣，不轉成字串或先經JS Number重算。
+- 三組實際桌面BuildDraft合成fixture由C#與workerd同時驗證；七位精度、正負／範圍、原發票／買受人／逐項／稅額／總額、3xx拒絕與未知不重送保持。沒有新表、migration、排程、fallback或第二套財務owner。
+- 工程包只給GitHub連結，不再次下載、不覆寫原EXE／Data。原Worker0.9.10→0.9.11更新仍循canonical before／deploy／after及新私有checkpoint；schema／marker22、history、原Bindings／Secrets／Routes／CYID scope、三正常旗標true與兩舊人工旗標關閉全保留，不做schema-upgrade、activation、DDL、DB匯出或CYID D1操作。
+- 後續部署估算直接D1讀1200／寫0、服務8、控制面90，停止界線2000／0／12／110；按當批方案與共用餘額執行有界查核，限流即停。完整雜湊／稽核及線上程式查核遵守該批明確授權，成功收據沿用，不弱化原檢查。私有計量與識別不公開，不將共享差額當作本批完整計費量。
+- 後驗須為Cloud0.9.11／storage=ok／CYID／storageSchemaVersion22、線上bundle吻合指定Source。原不可變0.9.10及回復checkpoint保留；新reader不改儲存格式，但舊版仍會拒絕numeric小數，不能把降版當修好。Worker回退不回退D1，不自動還原、清Claim、重建或重新核准原案。
+- 真人詳情／財務仍待配套後驗收；本批合成測試不送真光貿，不以正常合成POST當成財務成功。
+
+---
+
+# 已完成：Cloud0.9.10／V3.1.44 Build3
+
+本機完整完成報告已核對：固定Source `27abeffe58b8921cd65a53c545cf7291188a5a27` 已更新原Worker0.9.10，100%流量；canonical before／deploy／after、線上bundle、health、身分／稽核／FK與全部綁定連續性通過。schema／marker22與history不變，原三正常旗標true、兩舊人工旗標關閉，無migration、CYID D1操作、真交易、合併或Release。私有原碼副本／Time Travel bookmark及回復證據保留，本批未再次下載工程包。維護已停止，不重跑或以原失敗申請補證據。
+
+以下為0.9.10原交付步驟的留存紀錄，已由上述本機報告確認完成，不再作待執行清單。完整程式Source固定為上述SHA，不以浮動HEAD或後續文件提交代替。
 
 - 本輪直接修原7個AMEGO adapter的redirect:error→manual，明確拒絕3xx；g0401／g0501仍unknown_result、不重送，不變財務權威。原npm test增加固定Wrangler／workerd的78項原生合成檢查，非Node transport模擬，無外部服務存取。
 - 工程包只提供GitHub下載連結，不再次下載到outputs、不自動覆寫原EXE／Data或啟動原安裝。

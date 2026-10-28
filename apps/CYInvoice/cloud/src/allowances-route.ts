@@ -9,6 +9,7 @@ import {approveCloudVoidAfterOfficialProof} from "./allowance-void-manager-appro
 import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {queryOfficialInvoiceReadOnly,OfficialInvoiceQueryError} from "./amego-invoice-query";
+import {parseAllowanceFinancialJson} from "./allowance-decimal";
 interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
  ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;ALLOWANCE_G0501_SEND_ENABLED?:string;COMPANY_SETTINGS_KEY_HEX?:string;}
 const keys:Record<string,readonly string[]>={
@@ -244,7 +245,7 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
     }else add("執行狀態","主管已核准，系統會依原號自動查回；無須再核准或送出");
    }else{
     const frozen=f as Awaited<ReturnType<typeof loadEncryptedCloudAllowance>>;
-    const request=JSON.parse(frozen.unnumberedTemplateJson);
+    const request=parseAllowanceFinancialJson(frozen.unnumberedTemplateJson) as Record<string,unknown>;
     add("買受人",`${request.BuyerName}／${request.BuyerIdentifier}`);
     add("本次折讓商品",itemText(request.ProductItem));add("本次含稅折讓",frozen.requestedGross);
     if(frozen.status==="open"||frozen.status==="review"){

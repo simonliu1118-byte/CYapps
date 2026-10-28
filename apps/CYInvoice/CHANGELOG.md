@@ -2,6 +2,22 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V3.1.44 Build 4 — 2026/10/29（桌面與Cloud七位小數契約）
+
+Cloud0.9.10後最新詳情已通過官方原票查詢，停在原草稿驗證SOURCE_AMOUNT_INVALID。實際桌面BuildDraft以JSON number保存decimal，但原Cloud fixed7只接受安全整數number或十進位字串，合法小數數量／未稅單價會被拒絕。本輪修正解析邊界，不把錯誤視為使用者總額不符，也不猜測私有原案究竟是哪一欄。
+
+原fixed7／七位縮放常數移至唯一allowance-decimal格式模組；透過JSON.parse原始token取得精確文字後，仍按原七位／範圍／正負政策轉BigInt。已失去原文的JS非整數number仍拒絕，不用浮點值反推財務值。原草稿驗證、詳情顯示、官方折讓詳情與完整原號查回沿此邊界；不改原加密內容、requestHash、Grant或Ledger。
+
+g0401沿原傳輸owner新增原生raw JSON序列化，所有numeric token及JSON number型別保持原樣，只加已核准且已配號的AllowanceNumber；不將小數改成字串送光貿、不將大單價尾數截掉，也不重寫原申請。既有日期／買受人／逐項／稅額／總額核對、3xx拒絕與未知不重送保持。
+
+新增由實際C# BuildDraft產生的三組合成契約fixture，C#測試每次重新產生比對，Cloud原生workerd測試直接讀相同fixture；涵蓋七位單價／負折扣、0.5數量及大單價搭配極小數量。正常proof／detail／完整查回／簽章POST通過，逐token原樣、無原文變更；八位小數、指數、超範圍、格式／負數限制及總額不符仍拒絕。無原Data或真光貿存取。
+
+工程VERSION3.1.44／BUILD4，Cloud Source0.9.11尚未部署；原Worker0.9.10已由本機完成報告核對部署及後驗。schema22、旗標及綁定不變，沒有migration、舊資料回填、原案重建／重新核准、真交易、合併或Release。CYID Consumer Impact: NONE。
+
+## 2026/10/29 本機Cloud0.9.10部署完成
+
+本機完成報告確認指定Source `27abeffe58b8921cd65a53c545cf7291188a5a27` 已更新原Worker0.9.10、100%流量；canonical before／deploy／after、線上bundle雜湊、health及原身分／綁定連續性通過，schema22／history與原旗標保留，未重跑先前維護或原失敗申請。私有回復證據及計量不公開，不以401或部署成功代替真人財務驗收。
+
 ## V3.1.44 Build 3 — 2026/10/29（Workers原生請求相容性）
 
 Cloud0.9.9部署後的新診斷定位到詳情第一個官方查詢在request階段拋TypeError、尚無HTTP回覆。對照Cloudflare官方Request契約與專案固定workerd本機重現，Workers不支援redirect:error，建立Request即失敗；先前Node注入transport的測試未驗到這項平台差異。此結論定位本次可重現程式錯誤，不把所有更早歷史失敗推定為同一根因。
