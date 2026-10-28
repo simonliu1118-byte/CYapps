@@ -90,10 +90,10 @@ function setupAdaptiveHeaderLayout() {
   }
   if (status && status.parentElement !== brandLine) brandLine.append(status);
 
-  let accountCluster = actions.querySelector('.cy-account-cluster');
+  let accountCluster = actions.querySelector('.cy-account-menu');
   if (!accountCluster) {
     accountCluster = document.createElement('div');
-    accountCluster.className = 'cy-account-cluster';
+    accountCluster.className = 'cy-account-menu';
   }
 
   if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
@@ -814,7 +814,7 @@ function syncMobileWorkspaceMobileIdentity() {
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
   const mobileAccountMenu = usesMobileAccountMenuIdentity();
   const ready = Boolean(main) && !source.classList.contains('hidden');
-  const cluster = source.closest('.cy-account-cluster');
+  const cluster = source.closest('.cy-account-menu');
   if (cluster) cluster.dataset.identityReady = String(ready);
   const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
   const admin = source.classList.contains('role-admin') || role === '管理員';
