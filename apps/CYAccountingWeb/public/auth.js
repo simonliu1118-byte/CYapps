@@ -115,7 +115,7 @@ function startCyaccAuth() {
       if (role === 'SUPER_ADMIN') currentUser.classList.add('role-super-admin');
       else if (role === 'ADMIN') currentUser.classList.add('role-admin');
       else currentUser.classList.add('role-user');
-      const cluster = currentUser.closest('.cy-account-cluster');
+      const cluster = currentUser.closest('.cy-account-menu');
       if (cluster) cluster.dataset.identityReady = 'true';
     }
 
@@ -180,62 +180,72 @@ async function fetchWithTimeout(input, init = {}, timeoutMs = 8_000) {
 }
 
 function renderCyaccAccountMenu(user, roleLabel, currentUser, logoutButton) {
-  const cluster = currentUser?.closest('.cy-account-cluster');
-  if (!cluster || !logoutButton) return;
-  let trigger = cluster.querySelector('.cyacc-account-trigger');
-  let popover = cluster.querySelector('.cyacc-account-popover');
+  // Auth renders the person controls; the existing topbar layout only mounts the slot.
+  const root = currentUser?.closest('.cy-account-menu');
+  if (!root || !logoutButton) return;
+  root.dataset.role = String(user.role || 'USER');
+  root.dataset.identityReady = 'true';
+  let trigger = root.querySelector('.cy-account-trigger');
+  let popover = root.querySelector('.cy-account-popover');
   if (!trigger) {
     trigger = document.createElement('button');
     trigger.type = 'button';
-    trigger.className = 'cyacc-account-trigger';
+    trigger.className = 'cy-account-trigger';
     trigger.setAttribute('aria-haspopup', 'menu');
     trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', 'cyaccAccountPopover');
     popover = document.createElement('div');
-    popover.className = 'cyacc-account-popover';
+    popover.id = 'cyaccAccountPopover';
+    popover.className = 'cy-account-popover';
     popover.setAttribute('role', 'menu');
     popover.setAttribute('aria-label', '個人選單');
     popover.hidden = true;
-    const exit = document.createElement('button');
-    exit.type = 'button';
-    exit.setAttribute('role', 'menuitem');
-    exit.textContent = '登出';
-    exit.addEventListener('click', () => { popover.hidden = true; logoutButton.click(); });
-    popover.append(exit);
+    const logout = document.createElement('button');
+    logout.type = 'button';
+    logout.className = 'danger';
+    logout.setAttribute('role', 'menuitem');
+    logout.textContent = '登出';
+    logout.addEventListener('click', () => { close(); logoutButton.click(); });
+    popover.append(logout);
+    const close = () => {
+      popover.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    };
     trigger.addEventListener('click', () => {
       popover.hidden = !popover.hidden;
       trigger.setAttribute('aria-expanded', String(!popover.hidden));
     });
-    document.addEventListener('pointerdown', event => {
-      if (!cluster.contains(event.target)) {
-        popover.hidden = true;
-        trigger.setAttribute('aria-expanded', 'false');
-      }
-    });
+    document.addEventListener('pointerdown', event => { if (!root.contains(event.target)) close(); });
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        popover.hidden = true;
-        trigger.setAttribute('aria-expanded', 'false');
-        trigger.focus();
-      }
+      if (event.key === 'Escape' && !popover.hidden) { close(); trigger.focus(); }
     });
-    cluster.append(trigger, popover);
+    root.append(trigger, popover);
   }
-  const displayName = [user.employeeNo, user.name].filter(Boolean).join(' ');
-  trigger.replaceChildren();
+  const displayName = String(user.name || user.employeeNo || '使用者');
   const avatar = document.createElement('span');
-  avatar.className = 'cyacc-account-avatar';
-  avatar.textContent = String(user.name || user.employeeNo || '人').slice(0, 1);
-  const details = document.createElement('span');
-  details.className = 'cyacc-account-details';
+  avatar.className = 'cy-account-avatar';
+  avatar.setAttribute('aria-hidden', 'true');
+  avatar.textContent = displayName.slice(0, 1);
+  const nameWrap = document.createElement('span');
+  nameWrap.className = 'cy-account-name';
   const name = document.createElement('strong');
   name.textContent = displayName;
   const role = document.createElement('span');
+  role.className = 'cy-account-role';
   role.textContent = roleLabel;
-  details.append(name, role);
-  const chevron = document.createElement('span');
-  chevron.textContent = '⌄';
-  chevron.setAttribute('aria-hidden', 'true');
-  trigger.append(avatar, details, chevron);
+  nameWrap.append(name, role);
+  const caret = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  caret.classList.add('cy-account-caret');
+  caret.setAttribute('viewBox', '0 0 24 24');
+  caret.setAttribute('width', '14');
+  caret.setAttribute('height', '14');
+  caret.setAttribute('fill', 'none');
+  caret.setAttribute('stroke', 'currentColor');
+  caret.setAttribute('stroke-width', '2');
+  caret.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'm6 9 6 6 6-6');
+  caret.append(path);
+  trigger.replaceChildren(avatar, nameWrap, caret);
   trigger.setAttribute('aria-label', '個人選單：' + displayName);
-  cluster.classList.add('cyacc-menu-ready');
 }
