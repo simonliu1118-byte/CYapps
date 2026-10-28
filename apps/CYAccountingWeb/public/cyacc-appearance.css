@@ -270,6 +270,25 @@ input::placeholder, textarea::placeholder { color: var(--cy-text-subtle); opacit
 :root[data-cy-dark] .ledger-card tbody > tr.ledger-row > td {
   background: transparent !important; color: var(--cy-text) !important;
 }
+:root[data-cy-dark] .ledger-card tbody > tr.ledger-row:nth-child(even) > td {
+  background: var(--cyacc-row-alt) !important;
+}
+:root[data-cy-dark] .entry-card label > span,
+:root[data-cy-dark] .entry-card .quick-tool-label,
+:root[data-cy-dark] .entry-card .entry-field-label {
+  color: var(--cy-text) !important;
+}
+:root[data-cy-dark] .entry-card input,
+:root[data-cy-dark] .entry-card select,
+:root[data-cy-dark] .settings-modal input,
+:root[data-cy-dark] .settings-modal select {
+  -webkit-text-fill-color: var(--cy-text) !important;
+}
+:root[data-cy-dark] .ledger-card .ledger-summary-item,
+:root[data-cy-dark] .statistics-scope-note,
+:root[data-cy-dark] .statistics-note {
+  color: var(--cy-text-muted);
+}
 :root[data-cy-dark] .ledger-card tbody > tr.ledger-row .ledger-amount {
   background: transparent !important;
 }
