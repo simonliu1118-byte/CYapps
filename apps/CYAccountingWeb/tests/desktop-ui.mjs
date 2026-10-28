@@ -38,6 +38,11 @@ assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed dat
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
 assert.equal(build, '0');
+assert.match(adaptiveCss, /@media \(min-width: 1360px\) \{[\s\S]*?\.entry-card \{\s*position: sticky;/);
+assert.match(adaptiveCss, /\.ledger-card \.ledger-title \{\s*position: sticky;/);
+assert.match(adaptiveCss, /\.ledger-card #ledgerToolbar \{\s*position: sticky;/);
+assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;/);
+
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
