@@ -120,7 +120,8 @@ function startCyaccAuth() {
     }
 
     logoutButton?.classList.remove('hidden');
-    renderCyaccAccountMenu(user, roleLabels[role] || role, currentUser, logoutButton);
+    window.cyaccRefreshAccountMenu = () => renderCyaccAccountMenu(user, roleLabels[role] || role, currentUser, logoutButton);
+    window.cyaccRefreshAccountMenu();
     document.body.dataset.cyaccRole = role;
     if (user.canWriteAccounting === false || role === 'USER') {
       document.body.dataset.cyaccReadOnly = 'true';
