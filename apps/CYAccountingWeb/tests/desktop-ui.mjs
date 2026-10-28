@@ -38,10 +38,13 @@ assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed dat
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
 assert.equal(build, '1');
-assert.match(adaptiveCss, /@media \\(min-width: 1360px\\) \\{[\\s\\S]*?\\.entry-card \\{\\s*position: sticky;/);
+assert.match(adaptiveCss, /@media \(min-width: 1360px\) \{[\s\S]*?\.entry-card \{\s*position: sticky;/);
 assert.match(adaptiveCss, /\.ledger-sticky-head \{\s*position: sticky;/);
 assert.match(adaptiveCss, /\.ledger-sticky-head #ledgerToolbar \{\s*position: static;/);
-assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;/);\nassert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);\nassert.match(adaptiveCss, /overflow-x: hidden;\s*overflow-y: auto;/);\nassert.match(adaptiveCss, /border-radius: 8px 8px 0 0;/);
+assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;/);
+assert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);
+assert.match(adaptiveCss, /overflow-x: hidden;\s*overflow-y: auto;/);
+assert.match(adaptiveCss, /border-radius: 8px 8px 0 0;/);
 
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
