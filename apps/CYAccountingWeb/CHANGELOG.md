@@ -1,3 +1,11 @@
+## V0.25.11 Build 1 — 2026/10/29
+
+- 依 CY Web \`src/app.css\`、\`ThemeToggle\`、\`AccountMenu\` 的正式尺寸、狀態與色票重整 CYACC 主題與右上帳號元件。
+- \`cyacc-appearance.css\` 為唯一外觀 token／帳號／主題控制主責；移除舊 \`cy-account-cluster\` 樣式與多次深色覆寫，深色以同一組 CY Web token 驅動表單、帳本、統計、設定和對話框。
+- CYACC 右上選單顯示頭像、名稱及角色，僅含登出；保留既有 CYID Session／登出權限邏輯，不增加「我的帳號」、密碼或 Email 管理。
+- 登入頁的外觀按鈕使用 CY Web ThemeToggle 循環（系統／淺色／深色），保留首次使用引導、ACC ICON、原登入及密碼復原流程。
+- 版本為 V0.25.11 Build 1；僅來源碼／回歸驗證，未合併或部署，實機視覺驗收另行確認。
+
 ## V0.25.11 — 2026/10/29
 
 - 參照 CY Web AuthGate、ThemeToggle 及 AccountMenu 的外觀，調整 CYACC 登入頁、右上帳號資訊與系統／淺色／深色切換。
