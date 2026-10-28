@@ -37,14 +37,14 @@ const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/c
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
-assert.equal(build, '1');
-assert.match(adaptiveCss, /@media \(min-width: 1360px\) \{[\s\S]*?\.entry-card \{\s*position: sticky;/);
-assert.match(adaptiveCss, /\.ledger-sticky-head \{\s*position: sticky;/);
-assert.match(adaptiveCss, /\.ledger-sticky-head #ledgerToolbar \{\s*position: static;/);
-assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;/);
+assert.equal(build, '2');
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] body \{\s*display: flex;/);
+assert.match(adaptiveCss, /\.shell\.cy-split-layout \{[\s\S]*?overflow: hidden;/);
+assert.match(adaptiveCss, /\.ledger-card \{[\s\S]*?display: flex;[\s\S]*?overflow: hidden;/);
+assert.match(adaptiveCss, /\.ledger-card \.table-wrap \{[\s\S]*?overflow-x: hidden;[\s\S]*?overflow-y: auto;/);
+assert.match(adaptiveCss, /\.statistics-card \{[\s\S]*?overflow-y: auto;/);
+assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;\s*top: 0;/);
 assert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);
-assert.match(adaptiveCss, /overflow-x: hidden;\s*overflow-y: auto;/);
-assert.match(adaptiveCss, /border-radius: 8px 8px 0 0;/);
 
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);

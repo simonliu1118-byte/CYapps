@@ -12145,56 +12145,111 @@ html[data-viewport="desktop"] .confirmation-status::before { font-size: 11.5px; 
 html[data-viewport="desktop"] .confirmation-item.success .confirmation-status::before { content: '✓'; }
 html[data-viewport="desktop"] .confirmation-item.error .confirmation-status::before { content: '!'; }
 
-/* Desktop ledger: one sticky header and the original page scroll owner. */
-@media (min-width: 1360px) {
-  html[data-viewport="desktop"] .shell {
-    align-items: start;
+/* Three-column desktop workspace owns its vertical scrolling; two-column desktops keep the existing responsive page flow. */
+@media (min-width: 1600px) {
+  html[data-viewport="desktop"],
+  html[data-viewport="desktop"] body {
+    height: 100%;
+    overflow: hidden;
   }
-  html[data-viewport="desktop"] .entry-card {
-    position: sticky;
-    top: 12px;
-    z-index: 8;
+  html[data-viewport="desktop"] body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  html[data-viewport="desktop"] .topbar,
+  html[data-viewport="desktop"] #readOnlyNotice {
+    flex: 0 0 auto;
+  }
+  html[data-viewport="desktop"] .shell.cy-split-layout {
+    flex: 1 1 auto;
+    width: calc(100% - 48px);
+    height: auto;
+    min-height: 0;
+    margin: 12px auto;
+    align-items: stretch;
+    overflow: hidden;
+  }
+  html[data-viewport="desktop"] .cy-entry-rail {
+    position: static;
+    top: auto;
     align-self: start;
-    max-height: calc(100dvh - 24px);
-    min-width: 0;
+    min-height: 0;
+    max-height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9c4cf transparent;
   }
-  html[data-viewport="desktop"] .entry-card > *,
-  html[data-viewport="desktop"] .entry-card .entry-grid {
-    max-width: 100%;
+  html[data-viewport="desktop"] .entry-card {
+    position: static;
+    top: auto;
     min-width: 0;
+    width: 100%;
+    max-height: none;
+    overflow: hidden;
   }
   html[data-viewport="desktop"] .ledger-card {
-    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
     border-radius: 8px;
   }
   html[data-viewport="desktop"] .ledger-sticky-head {
-    position: sticky;
-    top: 0;
-    z-index: 7;
-    background: #fff;
+    position: static;
+    z-index: auto;
+    flex: 0 0 auto;
+    min-width: 0;
     border-radius: 8px 8px 0 0;
-    box-shadow: 0 1px 0 #dde3e9;
+    background: #fff;
   }
   html[data-viewport="desktop"] .ledger-sticky-head .ledger-title {
     position: static;
-    background: #fff;
-    border-radius: 8px 8px 0 0;
   }
   html[data-viewport="desktop"] .ledger-sticky-head #ledgerToolbar {
     position: static;
-    background: #fafcfe;
   }
   html[data-viewport="desktop"] .ledger-card .table-wrap {
-    overflow: visible;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9c4cf transparent;
+  }
+  html[data-viewport="desktop"] .ledger-card table {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
   }
   html[data-viewport="desktop"] .ledger-card thead th {
     position: sticky;
-    top: 105px;
-    z-index: 6;
-    background: #f4f6f8;
-    box-shadow: 0 1px 0 #dde3e9;
+    top: 0;
+    z-index: 3;
+  }
+  html[data-viewport="desktop"] .statistics-card {
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b9c4cf transparent;
+  }
+  html[data-viewport="desktop"] .cy-entry-rail::-webkit-scrollbar,
+  html[data-viewport="desktop"] .ledger-card .table-wrap::-webkit-scrollbar,
+  html[data-viewport="desktop"] .statistics-card::-webkit-scrollbar { width: 6px; }
+  html[data-viewport="desktop"] .cy-entry-rail::-webkit-scrollbar-thumb,
+  html[data-viewport="desktop"] .ledger-card .table-wrap::-webkit-scrollbar-thumb,
+  html[data-viewport="desktop"] .statistics-card::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #b9c4cf;
   }
 }
