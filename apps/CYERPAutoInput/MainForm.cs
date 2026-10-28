@@ -1128,7 +1128,8 @@ internal sealed partial class MainForm : Form
         PrintPackingSheet();
         var list = _pickList;
         _pickList = null;
-        if (list is null || list.Items.Count == 0) return;
+        // Only when ticked in 設定 › 一般 (user, 2026-10-28).
+        if (!_settings.PickList || list is null || list.Items.Count == 0) return;
         var printer = SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty;
         if (printer.Length > 0)
         {
