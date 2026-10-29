@@ -132,4 +132,24 @@ public class StocktakeTests
         Assert.Equal("1",body["details"]![0]!["rows"]![0]!["bookQty"]!.GetValue<string>());
         Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeSyncBody(valid,"V1.3.0","990002"));
     }
+    [Fact]
+    public void WriteRejectsDuplicateExistingSequenceAndNewBatchBeforeErpMutation()
+    {
+        var existing=new StocktakeWriteRow("00001","00001","X0001","B1","2");
+        var duplicateExisting=existing with {Quantity="3"};
+        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ValidateWrite("990001",
+            [existing,duplicateExisting]));
+        var added=new StocktakeWriteRow("N0001",null,"X0001","B9","2");
+        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ValidateWrite("990001",
+            [added,added with {Key="N0002",Quantity="3"}]));
+    }
+
+    [Fact]
+    public void AlreadyAppliedComparesDecimalValueNotDisplayFormatting()
+    {
+        var row=new StocktakeWriteRow("00001","00001","X0001","B1","2.00");
+        var existing=new StocktakeLine("00001","X0001","測試品","規格","假倉","A","盒","B1","2");
+        Assert.True(StocktakeQuery.AlreadyApplied(row,existing));
+    }
+
 }
