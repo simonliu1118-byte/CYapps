@@ -29,13 +29,42 @@ export async function handleOpeningBalanceApi(request, env, principal) {
 export async function buildOpeningBalanceSnapshot(db, month) {
   if (!isMonth(month)) throw new Error('INVALID_MONTH');
 
-  const [accountRows, transactionNames, overrideRows, transactionMonths, lockedRow] = await Promise.all([
+  const [accountRows, overrideRows, lockedRow] = await Promise.all([
     db.prepare('SELECT name, archived_at FROM accounts ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, sort_order, id').all(),
-    db.prepare('SELECT DISTINCT account_name AS name FROM transactions WHERE substr(tx_date, 1, 7) <= ?').bind(month).all(),
     db.prepare('SELECT month, account_name, amount, reason, updated_at, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides WHERE month <= ? ORDER BY account_name, month').bind(month).all(),
-    db.prepare("SELECT account_name, substr(tx_date, 1, 7) AS month, SUM(CASE WHEN kind = 'income' THEN amount ELSE -amount END) AS net FROM transactions WHERE substr(tx_date, 1, 7) < ? GROUP BY account_name, substr(tx_date, 1, 7) ORDER BY account_name, month").bind(month).all(),
     db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'").first()
   ]);
+
+  // Use the same prior anchors for the SQL range and the returned metadata.
+  // A second read of the override table could observe a concurrent adjustment.
+  const priorMonths = new Map();
+  for (const row of overrideRows.results || []) {
+    if (row.month < month) priorMonths.set(String(row.account_name), row.month);
+  }
+  const transactionTotals = await db.prepare(`
+    -- Walk distinct account keys with indexed seeks instead of scanning every
+    -- historical row just to discover names (including archived/orphan names).
+    -- The same covering index bounds each sum at its latest prior anchor.
+      WITH RECURSIVE transaction_accounts(account_name) AS (
+        SELECT MIN(account_name) FROM transactions
+        UNION ALL
+        SELECT (SELECT MIN(account_name) FROM transactions
+                WHERE account_name > transaction_accounts.account_name)
+        FROM transaction_accounts WHERE account_name IS NOT NULL
+      )
+      SELECT names.account_name,
+        (SELECT SUM(CASE WHEN kind = 'income' THEN amount ELSE -amount END)
+         FROM transactions AS t
+         WHERE t.account_name = names.account_name
+           AND substr(t.tx_date, 1, 7) >= COALESCE(anchors.value, '')
+           AND substr(t.tx_date, 1, 7) < ?) AS net
+      FROM transaction_accounts AS names
+      LEFT JOIN json_each(?) AS anchors ON anchors.key = names.account_name
+      WHERE names.account_name IS NOT NULL AND EXISTS (
+        SELECT 1 FROM transactions AS t
+        WHERE t.account_name = names.account_name AND substr(t.tx_date, 1, 7) <= ?
+      )
+    `).bind(month, JSON.stringify(Object.fromEntries(priorMonths)), month).all();
 
   const master = new Map();
   for (const row of accountRows.results || []) {
@@ -46,7 +75,7 @@ export async function buildOpeningBalanceSnapshot(db, month) {
   for (const [name, meta] of master) {
     if (!meta.archived) names.add(name);
   }
-  for (const row of transactionNames.results || []) names.add(String(row.name || ''));
+  for (const row of transactionTotals.results || []) names.add(String(row.account_name || ''));
   for (const row of overrideRows.results || []) names.add(String(row.account_name || ''));
   names.delete('');
 
@@ -65,12 +94,8 @@ export async function buildOpeningBalanceSnapshot(db, month) {
     });
   }
 
-  const netsByAccount = new Map();
-  for (const row of transactionMonths.results || []) {
-    const name = String(row.account_name || '');
-    if (!netsByAccount.has(name)) netsByAccount.set(name, []);
-    netsByAccount.get(name).push({ month: String(row.month), net: Number(row.net) || 0 });
-  }
+  const netsByAccount = new Map((transactionTotals.results || [])
+    .map(row => [String(row.account_name || ''), Number(row.net) || 0]));
 
   const accounts = [...names].sort((left, right) => {
     const l = master.get(left);
@@ -82,7 +107,7 @@ export async function buildOpeningBalanceSnapshot(db, month) {
     const allOverrides = overridesByAccount.get(name) || [];
     const exact = allOverrides.find(item => item.month === month) || null;
     const previous = [...allOverrides].reverse().find(item => item.month < month) || null;
-    const automaticAmount = calculateFromAnchor(previous, netsByAccount.get(name) || [], month);
+    const automaticAmount = (previous ? previous.amount : 0) + (netsByAccount.get(name) || 0);
     const meta = master.get(name);
     return {
       name,
@@ -217,17 +242,6 @@ async function readAuditEntries(db, month, account, limit) {
     actorRole: String(row.actor_role || ''),
     createdAt: String(row.created_at || '')
   }));
-}
-
-function calculateFromAnchor(anchor, monthlyNets, targetMonth) {
-  let amount = anchor ? Number(anchor.amount) || 0 : 0;
-  const startMonth = anchor ? anchor.month : '';
-  for (const item of monthlyNets) {
-    if (item.month >= targetMonth) continue;
-    if (startMonth && item.month < startMonth) continue;
-    amount += Number(item.net) || 0;
-  }
-  return amount;
 }
 
 function auditStatement(db, month, name, action, previousAmount, newAmount, reason, actor, now) {

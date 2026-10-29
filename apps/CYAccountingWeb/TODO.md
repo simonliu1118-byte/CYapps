@@ -1,6 +1,11 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/20（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/29（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+
+## D1 讀取成本修正
+
+- [ ] V0.25.12 的本機與必要 CI 通過後，另行核對正式用量、完整備份／回復與原 Worker 設定，再受控套用 0012 及部署；目前未授權遠端 migration、合併或發布。
+- [ ] 上線後以相同條件與統計時間窗驗收期初／摘要實際 `rows_read`，並觀察新增三個索引的寫入成本；無手動基準時仍須讀取歷史淨額，不承諾固定降幅。程式回退不會自動回退 D1 schema／索引；需保持 schema 與備份契約一致，不直接刪除索引或改寫 schema marker。
 
 ## 部署模式切換驗收
 

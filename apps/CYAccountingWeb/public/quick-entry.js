@@ -102,10 +102,11 @@ function renderFavoriteCategories() {
 async function loadFrequentSummaries() {
   const group = document.querySelector('#summarySuggestionGroup');
   const container = document.querySelector('#summarySuggestions');
-  if (!group || !container || !els.accountName?.value || !els.categoryName?.value) return;
   const requestId = ++cyFastSummaryRequest;
+  if (!group || !container) return;
   group.classList.add('hidden');
   container.innerHTML = '';
+  if (!els.accountName?.value || !els.categoryName?.value) return;
   const query = new URLSearchParams({
     kind: state.kind,
     account: els.accountName.value,

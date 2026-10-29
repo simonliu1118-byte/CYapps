@@ -129,6 +129,8 @@ jobs:
           node tests/tablet-ui.mjs
           node tests/opening-balances.mjs
           node tests/opening-balances-d1.mjs
+          node tests/accounting-read-cost.mjs
+          node tests/accounting-read-requests.mjs
           node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
           node tests/deployment-flow.mjs
@@ -309,7 +311,7 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'function setupDesktopEntryQuickTools'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'data-desktop-ui-date-value'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'id="ledgerMonthLoading"'
-          verify_asset "$base/app.js?rev=optimistic-create" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
           verify_asset "$base/login.css?rev=cyweb-login-alignment" '.first-login-help'
           verify_asset "$base/login.js?rev=cyweb-login-alignment" 'async function loadFirstLoginPortal'
           verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
@@ -317,20 +319,20 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=cyweb-theme-owner" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=cyweb-theme-owner" 'Promise.race([request, timeout])'
-          verify_asset "$base/app.js?rev=optimistic-create" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" "new CustomEvent('cyacc:ledger-rendered'"
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'id="ledgerMoreButton"'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'id="ledgerBalanceButton"'
-          verify_asset "$base/quick-entry.js?rev=entry-submit-focus" "addEventListener('cyacc:entry-submitted', handleFastEntrySubmitted)"
-          verify_asset "$base/app.js?rev=optimistic-create" 'function initialEntryKind'
-          verify_asset "$base/app.js?rev=optimistic-create" "new CustomEvent('cyacc:entry-kind-changed'"
-          verify_asset "$base/quick-entry.js?rev=entry-submit-focus" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
-          verify_asset "$base/quick-entry.js?rev=entry-submit-focus" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
+          verify_asset "$base/quick-entry.js?rev=summary-selection-guard" "addEventListener('cyacc:entry-submitted', handleFastEntrySubmitted)"
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'function initialEntryKind'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" "new CustomEvent('cyacc:entry-kind-changed'"
+          verify_asset "$base/quick-entry.js?rev=summary-selection-guard" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
+          verify_asset "$base/quick-entry.js?rev=summary-selection-guard" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
           verify_asset "$base/input-confirmation.js?rev=identified-entry-results" "addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual)"
           verify_asset "$base/input-confirmation.js?rev=identified-entry-results" "new CustomEvent('cyacc:confirmation-ready')"
           verify_asset "$base/input-confirmation.js?rev=identified-entry-results" 'confirmationMessageSlot'
-          verify_asset "$base/app.js?rev=optimistic-create" 'cyacc:entry-message'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'cyacc:entry-message'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'compareLedgerDisplayOrder'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" "addEventListener('cyacc:confirmation-ready', sync)"
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" '.desktopUi-native-date-source'
@@ -345,22 +347,22 @@ jobs:
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
           verify_asset "$base/backup-ui.js?rev=backup-health-alerts" 'setupBackupSettings'
           verify_asset "$base/backup-ui.js?rev=backup-health-alerts" '/api/backup/recovery/preview'
-          verify_asset "$base/app.js?rev=optimistic-create" 'x-cyacc-book-epoch'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'x-cyacc-book-epoch'
           verify_asset "$base/backup-ui.js?rev=backup-health-alerts" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'class="ledger-message-row"'
-          verify_asset "$base/app.js?rev=optimistic-create" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" "await api('/api/opening-balance-overrides'"
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'setupArchivedAccountDialog'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'function settingsActionIcon'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" '帳戶名稱最多八字'
-          verify_asset "$base/app.js?rev=optimistic-create" 'function openingAccountRowHtml'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'function openingAccountRowHtml'
           verify_asset "$base/app.css?rev=app-shell" '.opening-source'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" 'data-settings-kind-choice'
           verify_asset "$base/accounting-ui.css?rev=ledger-header-controls" '.ledger-account-color::before'
-          verify_asset "$base/app.js?rev=optimistic-create" 'const groupName = category.group_name'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'const groupName = category.group_name'
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" '--settings-kind-canvas'
-          verify_asset "$base/app.js?rev=optimistic-create" 'function mergePendingTransactionUpdates'
-          verify_asset "$base/quick-entry.js?rev=entry-submit-focus" 'await mutateSettings'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'function mergePendingTransactionUpdates'
+          verify_asset "$base/quick-entry.js?rev=summary-selection-guard" 'await mutateSettings'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'function setupTabletWorkspace'
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" 'data-tablet-layout="portrait"'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'class="tablet-entry-handle"'
@@ -370,7 +372,7 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" '#ledgerQuickLockButton.is-locked'
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" 'Tablet portrait touch parity'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'function handleLedgerQuickLock'
-          verify_asset "$base/app.js?rev=optimistic-create" 'window.cyaccSaveLock = saveLock'
+          verify_asset "$base/app.js?rev=accounting-read-coalescing" 'window.cyaccSaveLock = saveLock'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'syncTabletPickerOwnership'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'setupLedgerBalancePopover'
           verify_asset "$base/adaptive-ui.js?rev=cyweb-theme-owner" 'showMigrationComplete'
