@@ -542,7 +542,7 @@ async function runBackupNow() {
       method: 'POST',
       headers: jsonHeaders(),
       body: '{}'
-    });
+    }, 90_000);
     setBackupMessage(`備份完成：${data.backup?.backupId || data.backup?.fileName || ''}`);
     await loadBackupStatus();
   } catch (error) {

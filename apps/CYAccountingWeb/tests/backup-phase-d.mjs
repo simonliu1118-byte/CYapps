@@ -72,6 +72,15 @@ const monday=new Date('2026-10-18T19:30:00Z');
 const result=await runTieredBackup(env,'scheduled',{...options,now:monday});
 assert.equal(result.gcsExpected,false); assert.equal(result.copies.length,1);
 assert.equal((await status()).logicalBackups[0].status,'success','unscheduled GCS does not produce false failure');
+// Operational journals are optional: a stuck R2 read cannot hide valid D1 history.
+const degraded = await (await handleBackupApi(new Request('https://example.invalid/api/backup/status'),
+  { ...env, BACKUP_R2: { ...env.BACKUP_R2, get() { return new Promise(() => {}); } } }, session,
+  { attemptLogTimeoutMs: 10 })).json();
+assert.equal(degraded.attemptLogAvailable, false);
+assert.equal(degraded.logicalBackups[0].backupId, result.backupId);
+assert.deepEqual(degraded.logicalBackups, (await status()).logicalBackups);
+assert.ok(degraded.logicalBackups.every(row => row.copies.every(copy =>
+  db.db.prepare('SELECT status FROM backup_copies WHERE backup_id=? AND provider=?').get(row.backupId, copy.provider)?.status === copy.status)));
 assert.equal((await readPhaseCAcceptance(db)).completed,true,'Phase D does not erase Phase C evidence');
 // Retention boundaries: old GCS validation copies survive the new 182-day policy.
 assert.equal(gcs.deleted.length,0);

@@ -47,7 +47,7 @@ export async function handleBackupApi(request, env, session, options = {}) {
   }
   if (url.pathname === '/api/backup/health' && request.method === 'GET') return json({ ok: true, health: await readBackupHealth(env.DB) });
   if (url.pathname === '/api/backup/status' && request.method === 'GET') {
-    return parallelBackupStatus(env);
+    return parallelBackupStatus(env, options);
   }
   if (request.method === 'POST' && ['/api/backup/verify-restore', '/api/backup/phase-d/activate'].includes(url.pathname)) {
     try {
@@ -139,13 +139,22 @@ export async function runScheduledBackup(env, options = {}) {
     const expired = taipeiBackupDay(new Date(now.getTime() - 31 * 86400000));
     await env.BACKUP_R2.delete(['primary', 'retry'].map(name => `${ATTEMPT_PREFIX}${expired}/${name}.json`));
   } catch { console.warn('cyaccounting_backup_attempt_cleanup_failed'); }
-  if (backup.skipped) return backup;
+  if (backup.skipped && (slot !== 'retry' || backup.reason !== 'already_backed_up')) return backup;
   if (!databaseReady) {
     const delivery = await notifyBackupIncident(env, incident);
     return { ...backup, emailSent: delivery.sent };
   }
   // A failed new backup must not suppress verification / incident notification.
-  try { return { ...backup, health: await checkBackupHealth(env, { ...options, backupFailed: backup.ok === false }) }; }
+  try {
+    if (backup.skipped) {
+      // A successful copy does not prove that the later health check finished.
+      // Catch up that check without exporting or uploading the accounting data again.
+      const health = await readBackupHealth(env.DB, now);
+      if (health.status === 'healthy' && health.checkedAt
+        && taipeiBackupDay(new Date(health.checkedAt)) === day) return { ...backup, health };
+    }
+    return { ...backup, health: await checkBackupHealth(env, { ...options, backupFailed: backup.ok === false }) };
+  }
   catch (error) {
     console.error('cyaccounting_backup_health_failed', safeCode(error));
     const delivery = await notifyBackupIncident(env, crypto.randomUUID());
@@ -172,20 +181,34 @@ async function successfulBackupToday(db, now) {
     ORDER BY bs.created_at DESC LIMIT 1`).bind(start.toISOString(), end.toISOString(), Number(gcsExpected)).first());
 }
 
-export async function readScheduledBackupAttempts(env, now = new Date()) {
-  const attempts = [];
+export async function readScheduledBackupAttempts(env, now = new Date(), options = {}) {
+  const keys = [];
   // The existing history shows eight rows. Read at most eight days / 16 keys,
   // independently of the number of historical objects in the bucket.
   for (let age = 0; age < 8; age++) {
     const day = taipeiBackupDay(new Date(now.getTime() - age * 86400000));
     for (const slot of ['retry', 'primary']) {
-      const object = await env.BACKUP_R2.get(`${ATTEMPT_PREFIX}${day}/${slot}.json`);
-      if (!object) continue;
-      const record = JSON.parse(await object.text());
-      if (record.day === day && record.slot === slot && ['pending', 'failed', 'success', 'skipped'].includes(record.status)) attempts.push(record);
+      keys.push({ day, slot, key: `${ATTEMPT_PREFIX}${day}/${slot}.json` });
     }
   }
-  return attempts;
+  const attempts = Array(keys.length);
+  let next = 0, stopped = false, timer;
+  const read = async () => {
+    while (!stopped && next < keys.length) {
+      const index = next++, { day, slot, key } = keys[index];
+      const object = await env.BACKUP_R2.get(key);
+      if (!object || stopped) continue;
+      const record = JSON.parse(await object.text());
+      if (record.day === day && record.slot === slot && ['pending', 'failed', 'success', 'skipped'].includes(record.status)) attempts[index] = record;
+    }
+  };
+  try {
+    await Promise.race([
+      Promise.all(Array.from({ length: 4 }, read)),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('BACKUP_ATTEMPT_LOG_TIMEOUT')), options.attemptLogTimeoutMs ?? 5000); })
+    ]);
+    return attempts.filter(Boolean);
+  } finally { stopped = true; clearTimeout(timer); }
 }
 
 export async function runTieredBackup(env, triggerKind = 'scheduled', options = {}) {
@@ -337,7 +360,7 @@ async function writeLegacyGcsRun(db, backupSet, triggerKind, now, copy) {
   ).run();
 }
 
-export async function parallelBackupStatus(env) {
+export async function parallelBackupStatus(env, options = {}) {
   const configured = gcsConfigReady(env) && r2ConfigReady(env);
   const policy = await readBackupPolicy(env.DB);
   const result = await env.DB.prepare(`
@@ -349,16 +372,18 @@ export async function parallelBackupStatus(env) {
     LIMIT 8
   `).all();
 
+  const backupIds = (result.results || []).map(row => row.backup_id);
+  const copiesResult = backupIds.length ? await env.DB.prepare(`
+    SELECT backup_id, provider, status, started_at, completed_at, verified_at,
+           storage_prefix, version_token, last_error
+    FROM backup_copies
+    WHERE backup_id IN (${backupIds.map(() => '?').join(',')})
+    ORDER BY backup_id DESC, provider
+  `).bind(...backupIds).all() : { results: [] };
+
   const logicalBackups = [];
   for (const row of result.results || []) {
-    const copiesResult = await env.DB.prepare(`
-      SELECT provider, status, started_at, completed_at, verified_at,
-             storage_prefix, version_token, last_error
-      FROM backup_copies
-      WHERE backup_id = ?
-      ORDER BY provider
-    `).bind(row.backup_id).all();
-    const copies = (copiesResult.results || []).map(normalizeCopyRow);
+    const copies = (copiesResult.results || []).filter(copy => copy.backup_id === row.backup_id).map(normalizeCopyRow);
     logicalBackups.push({
       backupId: String(row.backup_id),
       createdAt: String(row.created_at),
@@ -382,7 +407,7 @@ export async function parallelBackupStatus(env) {
   const restoreChecks = await recentRestoreChecks(env.DB);
   const latestSuccess = logicalBackups.find(item => item.status === 'success') || null;
   let scheduledAttempts = [], attemptLogAvailable = true;
-  try { scheduledAttempts = await readScheduledBackupAttempts(env); }
+  try { scheduledAttempts = await readScheduledBackupAttempts(env, new Date(), options); }
   catch { attemptLogAvailable = false; }
   const workspace = await recoveryWorkspace(env.RECOVERY_DB);
   return json({

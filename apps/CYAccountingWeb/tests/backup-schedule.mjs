@@ -51,12 +51,26 @@ try {
   result = await runScheduledBackup(env, { ...options, now: nextNight, cron: primary });
   assert.equal(result.ok, true);
   const count = db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n;
+  // The primary copy succeeded, but its subsequent health check was interrupted.
+  // Yesterday's healthy result is not sufficient, even before the 36-hour limit.
+  db.db.prepare('UPDATE backup_health_state SET checked_at=?,lease_until=? WHERE id=1')
+    .run(atMorning.toISOString(), new Date(nextNight.getTime() + 600000).toISOString());
+  const checksBeforeRetry = db.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n;
+  const objectsBeforeRetry = r2.objects.size + gcs.objects.size;
   const [one, two] = await Promise.all([
     runScheduledBackup(env, { ...options, now: nextMorning, cron: retry }),
     runScheduledBackup(env, { ...options, now: nextMorning, cron: retry })
   ]);
   assert.deepEqual([one.reason, two.reason].sort(), ['already_backed_up', 'attempt_already_recorded'].sort());
   assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n, count);
+  assert.equal(r2.objects.size + gcs.objects.size, objectsBeforeRetry, 'health catch-up does not upload another backup');
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n, checksBeforeRetry + 2,
+    'one canonical health check verifies both existing provider copies');
+  const healthAfterRetry = db.db.prepare('SELECT status,checked_at,lease_until FROM backup_health_state WHERE id=1').get();
+  assert.equal(healthAfterRetry.status, 'healthy');
+  assert.equal(healthAfterRetry.checked_at, nextMorning.toISOString());
+  assert.equal(healthAfterRetry.lease_until, '');
+  assert.equal(JSON.stringify(db.db.prepare('SELECT * FROM transactions ORDER BY id').all()), ledger);
 
   // Partial provider failure requires another paired backup on required GCS days.
   const failDay = new Date('2026-10-21T19:30:00Z'), retryDay = new Date('2026-10-22T00:00:00Z');
@@ -127,3 +141,40 @@ await assert.rejects(buildBackupPackage(huge), error => error.code === 'BACKUP_E
 assert.equal(packageCalls, 21);
 await assert.rejects(buildRecoveryContext({ prepare() { return { bind() { return this; }, async all() { return { results: Array(20001).fill({}) }; } }; } }), error => error.code === 'BACKUP_RECOVERY_ROW_LIMIT');
 console.log('Backup scheduling: independent outage journal, 08:00 retry, atomic dedup, quota stop, partial copies, manual/day boundary, recovery hold and bounded export passed.');
+
+// A fresh same-day health result does not cause an extra full verification.
+const freshDb = accountingFixture();
+try {
+  const freshEnv = { ...env, DB: freshDb, BACKUP_R2: memoryR2Bucket() };
+  const freshOptions = { ...options, r2Provider: memoryProvider('cloudflare_r2'), gcsProvider: memoryProvider('google_cloud_storage') };
+  await runScheduledBackup(freshEnv, { ...freshOptions, now: atNight, cron: primary });
+  const checkCount = freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n;
+  const freshRetry = await runScheduledBackup(freshEnv, { ...freshOptions, now: atMorning, cron: retry });
+  assert.equal(freshRetry.reason, 'already_backed_up');
+  assert.equal(freshRetry.health.status, 'healthy');
+  assert.equal(freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n, checkCount);
+} finally { freshDb.close(); }
+
+// Concurrent journal reads stay bounded and preserve chronological slot order.
+let active = 0, peak = 0;
+const ordered = await readScheduledBackupAttempts({ BACKUP_R2: { async get(key) {
+  active++; peak = Math.max(peak, active);
+  await new Promise(resolve => setTimeout(resolve, key.endsWith('/retry.json') ? 5 : 1));
+  active--;
+  const [day, filename] = key.split('/').slice(-2);
+  return { async text() { return JSON.stringify({ day, slot: filename.split('.')[0], status: 'success' }); } };
+} } }, atMorning);
+assert.equal(ordered.length, 16);
+assert.equal(peak, 4);
+assert.deepEqual(ordered.slice(0, 4).map(row => [row.day, row.slot]), [
+  ['2026-10-20', 'retry'], ['2026-10-20', 'primary'], ['2026-10-19', 'retry'], ['2026-10-19', 'primary']
+]);
+let started = 0;
+const unblock = [];
+await assert.rejects(readScheduledBackupAttempts({ BACKUP_R2: { async get() {
+  started++; await new Promise(resolve => unblock.push(resolve)); return null;
+} } }, atMorning, { attemptLogTimeoutMs: 10 }), /BACKUP_ATTEMPT_LOG_TIMEOUT/);
+assert.equal(started, 4);
+unblock.forEach(resolve => resolve());
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(started, 4, 'timed-out journal reads do not start another batch');

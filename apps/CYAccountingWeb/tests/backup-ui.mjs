@@ -215,3 +215,26 @@ assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS.*自動�
 assert.match(textNodes.get('.backup-health-delivery').textContent,/下次排程重試/);
 await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
 console.log('Healthy boot silence and single accessible Super Admin incident warning passed.');
+
+// A confirmed paired backup may outlast normal interactive reads. Completion
+// refreshes the status once, without retrying the backup POST after a delay.
+const backupRequests = [], backupMessages = [];
+context.window.cyConfirm = async () => true;
+context.setDialogMessage = (_node, message) => backupMessages.push(message);
+nodes.set('#backupMessage', {});
+nodes.set('#backupRunNow', { disabled: false });
+context.api = async (path, request, timeout = 12000) => {
+  backupRequests.push({ path, method: request?.method || 'GET' });
+  if (path === '/api/backup/run') {
+    if (timeout <= 20000) throw new Error('TEST_VALID_BACKUP_STILL_RUNNING');
+    return { backup: { backupId: 'TEST_COMPLETED' } };
+  }
+  return { configured: true, logicalBackups: [] };
+};
+context.renderBackupStatus = () => {};
+await context.runBackupNow();
+assert.deepEqual(backupRequests, [
+  { path: '/api/backup/run', method: 'POST' }, { path: '/api/backup/status', method: 'GET' }
+]);
+assert.ok(backupMessages.some(message => message.includes('備份完成：TEST_COMPLETED')));
+assert.ok(!backupMessages.some(message => message.includes('TEST_VALID_BACKUP_STILL_RUNNING')));
