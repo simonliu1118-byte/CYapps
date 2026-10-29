@@ -31,8 +31,7 @@ internal sealed partial class ItemQueryService
         IReadOnlyList<OcrToken> formTokens;
         using (var shot = ScreenCapture.Capture(formRect.ToRectangle()))
             formTokens = await _ocr.RecognizeAsync(shot, cancellationToken, requireChinese: true);
-        var label = OcrWordFinder.FindWord(formTokens, "選擇盤點底稿編號");
-        if (label is null)
+        if (OcrWordFinder.FindWord(formTokens, "選擇盤點底稿編號") is not { } label)
             throw new InvalidOperationException("INVR11 找不到「選擇盤點底稿編號」，未開啟 F2。");
         var labelBounds = new Rectangle(
             formRect.Left + label.Left, formRect.Top + label.Top, label.Width, label.Height);
