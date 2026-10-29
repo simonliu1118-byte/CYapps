@@ -58,8 +58,8 @@ internal sealed partial class ItemQueryService
         IReadOnlyList<OcrToken> tokens;
         using (var image = ScreenCapture.Capture(popupRect.ToRectangle()))
             tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: false);
-        var text = string.Join(" ", tokens.OrderBy(t => t.Top)
-            .ThenBy(t => t.Left).Select(t => t.Text));
+        var text = string.Join(" ", tokens.OrderBy(t => t.Rect.Top)
+            .ThenBy(t => t.Rect.Left).Select(t => t.Text));
         var sheets = StocktakeQuery.ParseF2(text);
         if (sheets.Count == 0)
             throw new InvalidDataException("F2 畫面未辨識到任何盤點底稿，不得當作空清單。");
