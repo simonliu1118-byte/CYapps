@@ -13,6 +13,7 @@ public class StocktakeExecutionTests
         public List<StocktakeLine> Rows=[Row("00001","B1","2"),Row("00002","B2","1")];
         public int Changes,Confirms,Cancels,Reads;
         public bool FaultyUnchanged;
+        public bool ReuseWrongSequence;
         public Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<StocktakeSheet>>(Sheets);
         public Task<StocktakeDetail> ReadSheetAsync(string sheet,CancellationToken ct)
@@ -37,7 +38,8 @@ public class StocktakeExecutionTests
         {
             Changes++;
             Rows.Add(Row("00003",row.Batch,row.Quantity));
-            return Task.FromResult(new StocktakeWriteRowResult(row.Key,true,"00003","已新增"));
+            return Task.FromResult(new StocktakeWriteRowResult(row.Key,true,
+                ReuseWrongSequence?"00002":"00003","已新增"));
         }
         public Task<bool> ConfirmAsync(string sheet,CancellationToken ct)
         {
@@ -142,4 +144,17 @@ public class StocktakeExecutionTests
         Assert.Equal(0,driver.Confirms);
         Assert.Equal(1,driver.Cancels);
     }
+    [Fact]
+    public async Task NewBatchMustNotReuseUnrelatedErpSequence()
+    {
+        var driver=new FakeDriver {ReuseWrongSequence=true};
+        var service=new StocktakeExecution(driver);
+        var result=await service.WriteAsync(Write(
+            new StocktakeWriteRow("N0001",null,"X0001","B9","3")),
+            null,CancellationToken.None);
+        Assert.False(result.Confirmed);
+        Assert.Equal(0,driver.Confirms);
+        Assert.Equal(1,driver.Cancels);
+    }
+
 }
