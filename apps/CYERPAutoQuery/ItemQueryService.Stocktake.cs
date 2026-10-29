@@ -10,7 +10,7 @@ internal sealed partial class ItemQueryService
     /// Mutation is deliberately not exposed by this entry point.
     /// </summary>
     internal async Task<IReadOnlyList<StocktakeSheet>> ReadStocktakeF2Async(
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool keepPopup = false)
     {
         using var gate = ErpAutomationGate.Enter();
         const string code = "INVR11";
@@ -65,6 +65,12 @@ internal sealed partial class ItemQueryService
         // A multi-page F2 must not be silently treated as a complete listing.
         if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\b1\s*/\s*[2-9][0-9]*\b"))
             throw new InvalidDataException("F2 有多頁底稿，尚未核對全部頁數，禁止回傳不完整清單。");
+        if (!keepPopup)
+        {
+            if (!Win32Automation.PrepareForeground(popup.Value, _log))
+                throw new InvalidOperationException("F2 清單無法切回，未能安全關閉。");
+            InputSender.Press(NativeMethods.VK_ESCAPE);
+        }
         return sheets;
     }
 

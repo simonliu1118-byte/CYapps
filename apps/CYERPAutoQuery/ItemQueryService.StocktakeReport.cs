@@ -20,7 +20,7 @@ internal sealed partial class ItemQueryService
         if (!StocktakeQuery.IsSheetNo(sheetNo))
             throw new InvalidDataException("盤點底稿編號格式錯誤。");
         // Reuse the existing F2 list and its focused selection field.
-        var list = await ReadStocktakeF2Async(ct);
+        var list = await ReadStocktakeF2Async(ct, keepPopup: true);
         if (!list.Any(x => x.SheetNo == sheetNo))
             throw new InvalidDataException("INVR11 清單沒有指定底稿。");
         var roots = FindStocktakeWindows("INVR11");
