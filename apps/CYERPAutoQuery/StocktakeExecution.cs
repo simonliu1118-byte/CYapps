@@ -57,6 +57,8 @@ internal sealed class StocktakeExecution(IStocktakeErpDriver driver)
             job.SheetNo is not { } sheet)
             throw new InvalidOperationException("不是盤點寫回工作。");
         var rows=StocktakeQuery.ValidateWrite(sheet,job.StocktakeRows);
+        if(rows.Count==0)
+            throw new InvalidDataException("空白盤點寫回工作不得觸發 ERP 確認。");
         var watch=System.Diagnostics.Stopwatch.StartNew();
         var results=new List<StocktakeWriteRowResult>();
         var assigned=new Dictionary<string,string>(StringComparer.Ordinal);
@@ -167,7 +169,12 @@ internal sealed class StocktakeExecution(IStocktakeErpDriver driver)
             // Driver is responsible for ensuring a confirmed sheet cannot be
             // cancelled or modified here. No "undo" of a committed ERP write.
             if(started)
-                await driver.CancelUncommittedEditAsync(CancellationToken.None);
+            {
+                // Cleanup must not mask the original failure or cancellation.
+                // The driver remains responsible for failing closed if ERP is still editing.
+                try { await driver.CancelUncommittedEditAsync(CancellationToken.None); }
+                catch(Exception) { /* The job is already failed; never attempt confirmation. */ }
+            }
         }
     }
 }
