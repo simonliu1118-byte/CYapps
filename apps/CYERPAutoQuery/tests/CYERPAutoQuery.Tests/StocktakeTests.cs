@@ -152,4 +152,18 @@ public class StocktakeTests
         Assert.True(StocktakeQuery.AlreadyApplied(row,existing));
     }
 
+    [Fact]
+    public void CompleteRejectsTwoRowsSharingOneErpSequence()
+    {
+        var rows=new[]{
+            new StocktakeWriteRow("N0001",null,"X0001","B9","3"),
+            new StocktakeWriteRow("N0002",null,"X0001","B8","4")
+        };
+        var result=new StocktakeWriteResult("990001",[
+            new StocktakeWriteRowResult("N0001",true,"00003","已新增"),
+            new StocktakeWriteRowResult("N0002",true,"00003","已新增")
+        ],true,[],TimeSpan.Zero);
+        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeWriteBody(result,rows,"V1.3.0"));
+    }
+
 }
