@@ -873,7 +873,7 @@ internal sealed class ErpAutomationService
     /// </summary>
     private bool _createdByF5;
 
-    /// <summary>銷貨單別 typed instead of pasted (the retry when ERP gave no sales order number).</summary>
+    /// <summary>Set while 銷貨單別 is entered again when ERP gave no sales order number (it is always typed).</summary>
     private bool _typeOrderType;
 
     /// <summary>客戶代號 typed instead of pasted (the retry when ERP cleared the pasted one).</summary>
@@ -1297,10 +1297,11 @@ internal sealed class ErpAutomationService
         }
 
         var imeClosedBefore = InputSender.ImeClosedCount;
-        if ((field.Key == "order_type" && _typeOrderType) || (field.Key == "customer_code" && _typeCustomer))
+        if (field.Key == "order_type" || (field.Key == "customer_code" && _typeCustomer))
         {
-            // The retry typed: a paste that read back right once left ERP without a sales order
-            // number (user LOG 2026-10-19; pasting works otherwise, so it stays the first try).
+            // 銷貨單別 is always typed (user's LOG, 2026-10-28: a paste that read back right left ERP
+            // without a sales order number in about one order of five, each waiting 3.5 s and
+            // typing it again; typed, the number came at once). Three characters cost little.
             await Delay(120, cancellationToken);
             InputSender.UnicodeText(value);
         }

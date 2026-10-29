@@ -42,7 +42,12 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private string _sessionEmployeeCode = string.Empty;
     private readonly ModeToggle _modeToggle = new();
-    private readonly CyStatusBadge _erpStateTag = new();
+    /// <summary>ERP's document state, at the left of the status bar (user, 2026-10-28: the toolbar badge took too much room).</summary>
+    private readonly ToolStripStatusLabel _erpStateTag = new()
+    {
+        Text = "ERP：尚未偵測", AutoSize = true, Padding = new Padding(8, 0, 8, 0), Margin = new Padding(0, 2, 8, 2),
+        Font = new Font("Microsoft JhengHei UI", 9F, FontStyle.Bold), AccessibleName = "ERP 單據狀態"
+    };
     private readonly ErpDocumentStateTracker _stateTracker = new();
     private readonly System.Windows.Forms.Timer _statePoll = new() { Interval = 1000 };
     private ErpDocumentState? _shownState;
@@ -149,7 +154,9 @@ internal sealed partial class MainForm : Form
             ErpDocumentState.NotFound => ("未開啟", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly),
             _ => ("無法判斷", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly)
         };
-        _erpStateTag.SetState($"ERP：{text}", fore, back, CyVisualTheme.Blend(fore, back, 0.35));
+        _erpStateTag.Text = $"ERP：{text}";
+        _erpStateTag.ForeColor = fore;
+        _erpStateTag.BackColor = back;
         _log.Info("state", $"status tag {state}");
     }
 
@@ -258,11 +265,6 @@ internal sealed partial class MainForm : Form
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
-        _erpStateTag.Size = new Size(150, ToolbarButtonHeight);
-        _erpStateTag.Margin = new Padding(4, 1, 12, 1);
-        _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
-        _erpStateTag.AccessibleName = "ERP 單據狀態";
-        rightTools.Controls.Add(_erpStateTag);
 
         var fieldsHost = new TableLayoutPanel
         {
@@ -336,7 +338,8 @@ internal sealed partial class MainForm : Form
             Padding = new Padding(2, 0, 2, 0),
             Margin = Padding.Empty
         };
-        _status.Text = "ERP：尚未偵測";
+        _status.Text = string.Empty;
+        statusStrip.Items.Add(_erpStateTag);
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
@@ -742,11 +745,11 @@ internal sealed partial class MainForm : Form
 
     /// <summary>The last run of <see cref="StartAutomationAsync"/>, for 蝦皮全自動 to judge (null when it failed or stopped).</summary>
     private AutomationRunResult? _lastRunResult;
-    /// <summary>撿貨單 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
+    /// <summary>撿貨總表 of the 全自動 batch running (user, 2026-10-27); null outside one.</summary>
     private PickList? _pickList;
     /// <summary>理貨表 of the batch running: its saved documents (user, 2026-10-27).</summary>
     private readonly List<PackingRow> _packingRows = [];
-    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨單.</summary>
+    /// <summary>The lines ERP exported for the document just saved (全熱感紙列印), for the 撿貨總表.</summary>
     private List<ShipSheetLine>? _lastSheetLines;
 
     /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
@@ -944,7 +947,7 @@ internal sealed partial class MainForm : Form
             _lastSheetLines = null;
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, printWanted && !thermal, thermal);
             if (result.ExportFile.Length > 0) PrintShipSheet(result);
-            // 撿貨單: ERP's own lines when exported, else what was entered (no 品名 then).
+            // 撿貨總表: ERP's own lines when exported, else what was entered (no 品名 then).
             if (result.Saved && _pickList is not null && thermal)
                 _packingRows.Add(new PackingRow(result.DocumentKey, _loadedOrder?.Source ?? string.Empty,
                     _loadedOrder?.OrderSn ?? string.Empty, _loadedOrder?.TrackingNumber.Trim() ?? string.Empty));
@@ -1112,7 +1115,7 @@ internal sealed partial class MainForm : Form
     /// <summary>
     /// The end of a 全自動 batch, in the order the user set (2026-10-27), each step after the one
     /// before so nothing waits on another: 1 the paper invoices still to print (their paper prompts)
-    /// are done; 2 the 理貨表 and the 撿貨單 print on A4 at once (no paper prompt); 3 the 撿貨單 is
+    /// are done; 2 the 理貨表 and the 撿貨總表 print on A4 at once (no paper prompt); 3 the 撿貨總表 is
     /// shown; the caller then shows the results. Paper prompts wait until <see cref="EndBatchHold"/>.
     /// </summary>
     private async Task FinishBatchAsync(string title)
@@ -1128,7 +1131,8 @@ internal sealed partial class MainForm : Form
         PrintPackingSheet();
         var list = _pickList;
         _pickList = null;
-        if (list is null || list.Items.Count == 0) return;
+        // Only when ticked in 設定 › 一般 (user, 2026-10-28).
+        if (!_settings.PickList || list is null || list.Items.Count == 0) return;
         var printer = SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty;
         if (printer.Length > 0)
         {
@@ -1140,7 +1144,7 @@ internal sealed partial class MainForm : Form
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
-                MessageBox.Show(this, $"撿貨單沒有印出：{ex.Message}（可在撿貨單視窗再按列印）", "撿貨單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, $"撿貨總表沒有印出：{ex.Message}（可在撿貨總表視窗再按列印）", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         using var form = new PickListForm(list, title, printer, _log);
@@ -1319,9 +1323,9 @@ internal sealed partial class MainForm : Form
         }
         else if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%、萊爾富 " + _settings.HiLifeLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
-                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
+                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、萊爾富、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1337,7 +1341,8 @@ internal sealed partial class MainForm : Form
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal), token,
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal,
+                HiLifeScale: _settings.HiLifeLabelScale), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
         runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;

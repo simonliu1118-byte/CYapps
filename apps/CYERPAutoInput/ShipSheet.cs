@@ -5,7 +5,7 @@ namespace CYERPAutoInput;
 /// <summary>One product line of the 出貨明細.</summary>
 internal sealed record ShipSheetLine(string Code, string Name, string Quantity, string Unit, string Price, string Amount)
 {
-    /// <summary>贈／備品量: goes out too (the 撿貨單 counts it), not on the 出貨明細's 數量.</summary>
+    /// <summary>贈／備品量: goes out too (the 撿貨總表 counts it), not on the 出貨明細's 數量.</summary>
     public string GiftQuantity { get; init; } = string.Empty;
 }
 

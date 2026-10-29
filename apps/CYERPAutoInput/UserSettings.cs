@@ -33,6 +33,8 @@ internal sealed class UserSettings
     public int PaperInvoiceStyle { get; set; }
     /// <summary>7-ELEVEN 交貨便服務單 print at 100 % (user, 2026-10-13).</summary>
     public int SevenLabelScale { get; set; } = 100;
+    /// <summary>萊爾富 Hi-Life 寄取貨單 print at 100 % (user, 2026-10-29).</summary>
+    public int HiLifeLabelScale { get; set; } = 100;
     /// <summary>全家 FamilyMart寄取貨單: 頁面 自訂 2, 縮放比例 165 % (user, 2026-10-13).</summary>
     public int FamilyLabelScale { get; set; } = 165;
     public string FamilyLabelPages { get; set; } = "2";
@@ -49,6 +51,8 @@ internal sealed class UserSettings
     /// from ERP's own 轉出至 Excel of the saved 銷貨單, for every platform.
     /// </summary>
     public bool ThermalSheet { get; set; }
+    /// <summary>撿貨總表 at the end of a 全自動, printed on A4 and shown (user, 2026-10-28: only when ticked).</summary>
+    public bool PickList { get; set; }
     /// <summary>出貨明細註記, the words printed at its foot, per platform (user, 2026-10-26).</summary>
     public string ShipNoteShopee { get; set; } = string.Empty;
     public string ShipNoteMo { get; set; } = string.Empty;

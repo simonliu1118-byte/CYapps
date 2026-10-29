@@ -16,6 +16,7 @@ internal sealed class SettingsForm : Form
     private PrinterPicker? _printers;
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
+    private readonly TextBox _hiLifeLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
@@ -23,6 +24,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox[] _slipNote = [new(), new(), new()];
     private readonly CheckBox _slipNoteAllThermal = new();
     private readonly CheckBox _thermalSheet = new();
+    private readonly CheckBox _pickList = new();
     private readonly TextBox _shipNoteShopee = new(), _shipNoteMo = new(), _shipNoteCoupang = new();
     private readonly TextBox _shipTitle = new();
     private readonly Label _shipLogoState = new();
@@ -153,6 +155,7 @@ internal sealed class SettingsForm : Form
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         // user, 2026-10-26: every thermal slip with the note, 蝦皮's 超商 ones too (宅配 has no room).
+        flow.Controls.Add(Option(_pickList, "全自動結束時印撿貨總表（各品號總數量，A4）", _settings.PickList));
         flow.Controls.Add(Option(_slipNoteAllThermal, "熱感紙寄件單都印「寄件單下方文字」", _settings.SlipNoteAllThermal));
         flow.Controls.Add(new Label
         {
@@ -234,6 +237,7 @@ internal sealed class SettingsForm : Form
         page.Controls.Add(Section("蝦皮寄件單（Chrome 列印視窗的縮放）",
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("萊爾富縮放 %", _hiLifeLabelScale, _settings.HiLifeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
@@ -643,6 +647,14 @@ internal sealed class SettingsForm : Form
             _shopeeLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_hiLifeLabelScale.Text.Trim(), out var hiLifeScale) || hiLifeScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "萊爾富縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 3;
+            _hiLifeLabelScale.Focus();
+            return;
+        }
+        _settings.HiLifeLabelScale = hiLifeScale;
         if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
         {
             MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -675,6 +687,7 @@ internal sealed class SettingsForm : Form
         _settings.SlipNote = string.Join("\n", SlipNote.Lines(SlipNoteText));
         _settings.SlipNoteAllThermal = _slipNoteAllThermal.Checked;
         _settings.ThermalSheet = _thermalSheet.Checked;
+        _settings.PickList = _pickList.Checked;
         _settings.ShipNoteShopee = NoteText(_shipNoteShopee);
         _settings.ShipNoteMo = NoteText(_shipNoteMo);
         _settings.ShipNoteCoupang = NoteText(_shipNoteCoupang);

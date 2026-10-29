@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false);
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false, int HiLifeScale = 100);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -640,6 +640,7 @@ internal sealed partial class ShopeeBatchRunner
         {
             case ShopeeBatchCarrier.SevenEleven: await PrintSevenSlipAsync(order); break;
             case ShopeeBatchCarrier.FamilyMart: await PrintFamilySlipAsync(order); break;
+            case ShopeeBatchCarrier.HiLife: await PrintHiLifeSlipAsync(order); break;
             default: await PrintShopeeLabelAsync(order); break;
         }
         var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
@@ -892,6 +893,43 @@ internal sealed partial class ShopeeBatchRunner
         using var crop = awb.Image.Clone(rect, awb.Image.PixelFormat);
         var tokens = await _ocr.RecognizeLinesAsync(crop, _token, maxScale: 2.0);
         return tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)).ToList();
+    }
+
+    /// <summary>
+    /// 萊爾富 (user, 2026-10-29): 列印寄件單 opens the 「Hi-Life 寄取貨單」 PDF in a tab of its own;
+    /// once it shows the order's 訂單編號 and 寄件代碼 (its words, else read by OCR), Ctrl+P prints
+    /// it on the thermal printer at its 縮放 (100 %), or, with the 寄件單下方文字, saved as a PDF
+    /// and drawn small enough to leave room for the words.
+    /// </summary>
+    private async Task PrintHiLifeSlipAsync(ShopeeBatchOrder order)
+    {
+        var watch = Stopwatch.StartNew();
+        Screen? slip = null;
+        while (slip is null)
+        {
+            var screen = await ReadAsync();
+            if (ShopeeBatchScreens.IsHiLifeLabelPage(screen.Boxes) && !ShopeeBatchScreens.IsPrintDialog(screen.Boxes)) { slip = screen; break; }
+            screen.Dispose();
+            // Chrome's PDF viewer may give no words: the screen is read instead.
+            if (watch.Elapsed.TotalSeconds >= 3)
+            {
+                var seen = await ReadAsync(ocr: true);
+                if (ShopeeBatchScreens.IsHiLifeLabelPage(seen.Boxes)) { slip = seen; break; }
+                seen.Dispose();
+            }
+            if (watch.Elapsed.TotalSeconds > 60) throw new ShopeeBatchStop("等不到萊爾富 Hi-Life 寄取貨單（60 秒）。", true);
+            await Task.Delay(500, _token);
+        }
+        using (slip)
+        {
+            if (!ShopeeBatchScreens.ShowsOrderSnLoosely(slip.Boxes, order.OrderSn))
+                throw new ShopeeBatchStop($"萊爾富寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
+            if (!ShopeeBatchScreens.ShowsNumber(slip.Boxes, order.Tracking))
+                throw new ShopeeBatchStop($"萊爾富寄取貨單上讀不到寄件代碼 {order.Tracking}，未列印。", true);
+        }
+        Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+        if (NoteOnStoreSlips) await PrintPdfWithNoteAsync(order, _print.HiLifeScale);
+        else await PrintDialogAsync(_print.HiLifeScale, pages: null);
     }
 
     /// <summary>

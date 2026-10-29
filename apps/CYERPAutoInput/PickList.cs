@@ -1,10 +1,10 @@
 namespace CYERPAutoInput;
 
-/// <summary>One product of the 撿貨單: everything to take off the shelves for it.</summary>
+/// <summary>One product of the 撿貨總表: everything to take off the shelves for it.</summary>
 internal sealed record PickItem(string Code, string Name, decimal Quantity, string Unit);
 
 /// <summary>
-/// 撿貨單 (user, 2026-10-27): what a 全自動 batch saved, added up per 品號 (數量 and 贈／備品量),
+/// 撿貨總表 (user, 2026-10-27): what a 全自動 batch saved, added up per 品號 (數量 and 贈／備品量),
 /// for the people picking. The 折價券／運費／促銷組合 lines are not goods and are left out. Pure.
 /// </summary>
 internal sealed class PickList(IEnumerable<string> notGoods)
