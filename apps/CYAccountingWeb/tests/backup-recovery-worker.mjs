@@ -19,5 +19,6 @@ try {
   const response=await worker.fetch('/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({backup,packageSha256:await backupPackageDigest(set)})});
   const report=await response.json();assert.equal(response.status,200,JSON.stringify(report));
   assert.equal(report.fullRowRoundtrip,true);assert.equal(report.operationalContext,true);assert.equal(report.liveAccountingModified,false);assert.equal(report.counts.transactions,3);assert.equal(report.readService.accounts,2);assert.equal(report.readService.transactions,3);
+  assert.equal(report.readService.openingCached,true,'restored D1 rebuilds and shares its disposable monthly snapshot in workerd');
   console.log('Actual workerd + fresh D1 binding: canonical migrations, real WASM validation, bound JSON batch restore, complete row/policy/audit roundtrip and integrity checks passed.');
 } finally {if(worker)await worker.stop();fs.rmSync(folder,{recursive:true,force:true});}

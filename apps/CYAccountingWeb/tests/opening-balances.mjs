@@ -41,9 +41,11 @@ class Statement {
     throw new Error('unexpected all query: ' + this.sql);
   }
   async first() {
+    if (this.sql.includes('FROM opening_balance_snapshot_state')) return { revision: 0, accounts_json: null, locked_through: null };
     if (this.sql.includes("key = 'locked_through'")) return null;
     throw new Error('unexpected first query: ' + this.sql);
   }
+  async run() { return { meta: { changes: 1 } }; }
 }
 
 class MockDb {

@@ -13,7 +13,7 @@ const worker = await unstable_dev('tests/fixtures/backup-restore-worker.js', {
 });
 try {
   const cases=[validated,validated];
-  for(const schemaVersion of [6,7,11]) {
+  for(const schemaVersion of [6,7,11,12]) {
     const old=structuredClone(validated);old.manifest.schemaVersion=schemaVersion;
     if(schemaVersion<8){delete old.manifest.recoveryContext;delete old.data.excelImportRuns;}
     if(schemaVersion===6)old.data.accounts.forEach(row=>{delete row.colorSlot;});

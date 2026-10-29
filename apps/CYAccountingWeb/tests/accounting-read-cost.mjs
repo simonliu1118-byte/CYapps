@@ -7,7 +7,8 @@ import { handleAccountingToolsApi } from '../src/accounting-tools.js';
 const sql = new DatabaseSync(':memory:');
 const migrations = fs.readdirSync(new URL('../migrations/', import.meta.url)).filter(name => name.endsWith('.sql')).sort();
 const ddl = migrations.map(name => fs.readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
-for (const migration of ddl.slice(0, -1)) sql.exec(migration);
+const indexMigration = migrations.findIndex(name => name.startsWith('0012_'));
+for (const migration of ddl.slice(0, indexMigration)) sql.exec(migration);
 const fixture = `
   WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<59999)
   INSERT INTO transactions(tx_date,account_name,kind,category_name,summary,amount,created_at,updated_at)
@@ -39,7 +40,8 @@ const db = { prepare(text) {
   return {
     bind(...args) { query.args = args; return this; },
     async all() { return { results: statement.all(...query.args) }; },
-    async first() { return statement.get(...query.args) || null; }
+    async first() { return statement.get(...query.args) || null; },
+    async run() { return { meta: statement.run(...query.args) }; }
   };
 } };
 const frequentUrl = new URL('https://acc.example.test/api/summaries/frequent?kind=expense&account=TEST_ACCOUNT_01&category=TEST_CATEGORY_1');
@@ -48,8 +50,8 @@ for (const basis of ['tx_date', 'created_at']) {
   sql.prepare("INSERT OR REPLACE INTO app_settings(key,value) VALUES('frequent_summary_basis',?)").run(basis);
   before.push(await (await handleAccountingToolsApi(new Request(frequentUrl), { DB: db })).json());
 }
-sql.exec(ddl.at(-1));
-assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '12');
+for (const migration of ddl.slice(indexMigration)) sql.exec(migration);
+assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '13');
 assert.throws(() => sql.exec(ddl.at(-1)), /already exists/, 'the forward migration is not silently applied twice');
 const plan = query => sql.prepare('EXPLAIN QUERY PLAN ' + query.sql).all(...query.args).map(row => row.detail).join('\n');
 for (const [i, basis] of ['tx_date', 'created_at'].entries()) {
@@ -87,6 +89,10 @@ assert.match(plan(openingQuery), /<expr>>\? AND <expr><\?/);
 assert.doesNotMatch(plan(openingQuery), /SCAN t\b|TEMP B-TREE FOR (?:ORDER BY|GROUP BY)/);
 const current = (await buildOpeningBalanceSnapshot(db, '2026-01')).accounts.find(row => row.name === 'TEST_CURRENT_ONLY');
 assert.equal(current.isArchived, true); assert.equal(current.amount, 0);
+const warmStart = queries.length;
+await buildOpeningBalanceSnapshot(db, '2026-01');
+assert.equal(queries.length-warmStart, 1, 'a shared warm snapshot needs only one indexed lookup');
+assert.doesNotMatch(queries.at(-1).sql, /FROM transactions|FROM accounts|FROM opening_balance_overrides/);
 
 sql.exec('DELETE FROM opening_balance_overrides;');
 const noAnchors = await buildOpeningBalanceSnapshot(db, '2026-01');

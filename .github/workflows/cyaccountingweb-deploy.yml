@@ -129,6 +129,7 @@ jobs:
           node tests/tablet-ui.mjs
           node tests/opening-balances.mjs
           node tests/opening-balances-d1.mjs
+          node tests/opening-balance-cache.mjs
           node tests/accounting-read-cost.mjs
           node tests/accounting-read-requests.mjs
           node tests/desktop-ui.mjs

@@ -29,10 +29,32 @@ export async function handleOpeningBalanceApi(request, env, principal) {
 export async function buildOpeningBalanceSnapshot(db, month) {
   if (!isMonth(month)) throw new Error('INVALID_MONTH');
 
-  const [accountRows, overrideRows, lockedRow] = await Promise.all([
+  // One indexed lookup on a warm month, shared by every device and Excel.
+  // Lock state is live metadata, not part of the saved financial read model.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const saved = await db.prepare(`SELECT revision,
+      (SELECT accounts_json FROM opening_balance_snapshots WHERE month=?) AS accounts_json,
+      (SELECT value FROM app_settings WHERE key='locked_through') AS locked_through
+      FROM opening_balance_snapshot_state WHERE id=1`).bind(month).first();
+    if (saved.accounts_json !== null) {
+      return openingSnapshotResult(month, JSON.parse(saved.accounts_json), saved.locked_through);
+    }
+    const accounts = await calculateOpeningAccounts(db, month);
+    // A concurrent financial write also advances revision in the same D1
+    // transaction. Never republish an obsolete calculation after invalidation.
+    const stored = await db.prepare(`INSERT INTO opening_balance_snapshots(month,accounts_json,created_at)
+      SELECT ?,?,? FROM opening_balance_snapshot_state WHERE id=1 AND revision=?
+      ON CONFLICT(month) DO UPDATE SET accounts_json=excluded.accounts_json,created_at=excluded.created_at`)
+      .bind(month, JSON.stringify(accounts), new Date().toISOString(), saved.revision).run();
+    if (Number(stored.meta?.changes) === 1) return openingSnapshotResult(month, accounts, saved.locked_through);
+  }
+  throw new Error('帳務更新中，請重新載入期初餘額。');
+}
+
+async function calculateOpeningAccounts(db, month) {
+  const [accountRows, overrideRows] = await Promise.all([
     db.prepare('SELECT name, archived_at FROM accounts ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END, sort_order, id').all(),
-    db.prepare('SELECT month, account_name, amount, reason, updated_at, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides WHERE month <= ? ORDER BY account_name, month').bind(month).all(),
-    db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'").first()
+    db.prepare('SELECT month, account_name, amount, reason, updated_at, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides WHERE month <= ? ORDER BY account_name, month').bind(month).all()
   ]);
 
   // Use the same prior anchors for the SQL range and the returned metadata.
@@ -126,7 +148,11 @@ export async function buildOpeningBalanceSnapshot(db, month) {
     };
   });
 
-  const lockedThrough = validLockedThrough(lockedRow && lockedRow.value);
+  return accounts;
+}
+
+function openingSnapshotResult(month, accounts, lockedValue) {
+  const lockedThrough = validLockedThrough(lockedValue);
   return {
     ok: true,
     month,
