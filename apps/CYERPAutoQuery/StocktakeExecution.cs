@@ -130,6 +130,14 @@ internal sealed class StocktakeExecution(IStocktakeErpDriver driver)
                     if(!StocktakeQuery.IsSeq(result.ErpSeq) ||
                         (row.Seq is not null && row.Seq!=result.ErpSeq))
                         throw new InvalidDataException("ERP 寫入後未返回可驗證底稿序號。");
+                    // A newly inserted row must not be mapped to an unrelated
+                    // original ERP sequence or share a sequence with another job.
+                    if(row.Seq is null &&
+                       bySeq.TryGetValue(result.ErpSeq!,out var originalRow) &&
+                       (originalRow.ItemCode!=row.ItemCode || originalRow.Batch!=row.Batch))
+                        throw new InvalidDataException("ERP 回報序號對應到其他原始列，禁止確認。");
+                    if(assigned.Any(entry=>entry.Key!=row.Key && entry.Value==result.ErpSeq))
+                        throw new InvalidDataException("ERP 為不同盤點列回報相同序號，禁止確認。");
                     assigned[row.Key]=result.ErpSeq!;
                 }
                 // Some lines may have already changed in ERP if a later line fails.
