@@ -14,6 +14,7 @@ public class StocktakeExecutionTests
         public int Changes,Confirms,Cancels,Reads;
         public bool FaultyUnchanged;
         public bool ReuseWrongSequence;
+        public bool CleanupFails;
         public Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<StocktakeSheet>>(Sheets);
         public Task<StocktakeDetail> ReadSheetAsync(string sheet,CancellationToken ct)
@@ -49,6 +50,7 @@ public class StocktakeExecutionTests
         public Task CancelUncommittedEditAsync(CancellationToken ct)
         {
             Cancels++;
+            if(CleanupFails) throw new InvalidOperationException("synthetic cleanup failure");
             return Task.CompletedTask;
         }
     }
@@ -153,6 +155,30 @@ public class StocktakeExecutionTests
             new StocktakeWriteRow("N0001",null,"X0001","B9","3")),
             null,CancellationToken.None);
         Assert.False(result.Confirmed);
+        Assert.Equal(0,driver.Confirms);
+        Assert.Equal(1,driver.Cancels);
+    }
+
+    [Fact]
+    public async Task EmptyWriteNeverConfirms()
+    {
+        var driver=new FakeDriver();
+        var service=new StocktakeExecution(driver);
+        await Assert.ThrowsAsync<InvalidDataException>(()=>
+            service.WriteAsync(Write(),null,CancellationToken.None));
+        Assert.Equal(0,driver.Confirms);
+        Assert.Equal(0,driver.Changes);
+    }
+
+    [Fact]
+    public async Task CleanupFailureMustNotMaskWriteMismatch()
+    {
+        var driver=new FakeDriver {FaultyUnchanged=true,CleanupFails=true};
+        var result=await new StocktakeExecution(driver).WriteAsync(Write(
+            new StocktakeWriteRow("00001","00001","X0001","B1","3")),
+            null,CancellationToken.None);
+        Assert.False(result.Confirmed);
+        Assert.Single(result.Mismatches);
         Assert.Equal(0,driver.Confirms);
         Assert.Equal(1,driver.Cancels);
     }
