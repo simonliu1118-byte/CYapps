@@ -1,3 +1,13 @@
+## 2026-10-29 Agent 與 MainForm 整合進度
+
+- `7cd7f2f`：新增 `MainForm.Stocktake.cs`，以既有 `RunAutomationAsync` 執行 `StocktakeExecution`，沿用執行鎖、Esc 取消、狀態列與 WebProgress；寫回逐列回報 `stage=STOCK`。
+- `0809b1f`：`MainForm.StartAgent` 的既有 `ErpAgentLoop` 實際連上 `runStocktake` 入口。
+- `12b79ab`：新增純合成的 `StocktakeAgentIntegrationTests`，覆蓋 SYNC 的 claim→complete，以及無 Driver 時 WRITE 必須失敗、不得落到一般品號查詢。
+- `51a882b`／`e77e3fd`：空寫回不得確認、清理失敗不得遮蓋原始錯誤，及對應測試。
+- **安全開關仍關閉**：`_stocktakeDriver` 預設為 null，`SupportedTypes` 仍未宣告兩個盤點類型；任何真 ERP 寫入都不能從這些變更啟動。
+- **Windows CI 尚未取得此提交的執行／成功證據**；不宣稱建置成功或流程完成。
+- 待完成的真正阻擋：實作與驗收 `IStocktakeErpDriver` 的 INVR11 F2/報表、INVI14 欄位讀回與修改、INVI06 新增與確認。驗收前不得啟用工作類型、合併、發行或部署。
+
 ## 2026-10-29 續作：重用現有穩定 ERP 自動化元件
 
 使用者確認：ERP 操作應以現有經測試的 Win32 程式碼為基礎，差異主要是欄位輸入參數，**不可另建一套重複的 UI Driver**。
