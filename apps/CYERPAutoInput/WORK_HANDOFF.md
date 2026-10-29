@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-27（V1.1.0 正式 Release，tag `cyerp-auto-input-v1.1.0`，版本號由使用者指定，內容為 V1.0.1 Build 0–18：寄件單下方文字、黑貓宅急便、全熱感紙列印（出貨明細）、撿貨單、理貨表、紙本發票待列印小視窗、列印佇列檢查等，見 CHANGELOG；V1.0.0 Release 依使用者要求刪除）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
+> 更新：2026-10-29（V1.2.0 正式 Release，tag `cyerp-auto-input-v1.2.0`，版本號由使用者指定，內容為 V1.1.1 Build 0–4：銷貨單別改打字、撿貨總表改勾選、ERP 狀態移到狀態列、蝦皮萊爾富，見 CHANGELOG；V1.1.0 Release 依使用者要求刪除）。之後的修改依規則升 Z 或 Build。**新 session 接手先看 §0。**
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
