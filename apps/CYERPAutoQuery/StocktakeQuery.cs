@@ -148,7 +148,8 @@ internal static class StocktakeQuery
 
     public static bool AlreadyApplied(StocktakeWriteRow row, StocktakeLine? found) =>
         found is not null && found.ItemCode==row.ItemCode && found.Batch==row.Batch &&
-        Quantity(found.BookQty)==Quantity(row.Quantity);
+        decimal.Parse(Quantity(found.BookQty),CultureInfo.InvariantCulture)==
+        decimal.Parse(Quantity(row.Quantity),CultureInfo.InvariantCulture);
 
     /// <summary>
     /// INVR11 after write must match the entire original sheet, not just the
@@ -211,6 +212,8 @@ internal static class StocktakeQuery
         if (!IsSheetNo(sheetNo)) throw new InvalidDataException("盤點底稿編號錯誤。");
         if (rows.Count>MaxRowsPerSheet) throw new InvalidDataException("寫回列數超過 3,000。");
         var keys = new HashSet<string>(StringComparer.Ordinal);
+        var sequences = new HashSet<string>(StringComparer.Ordinal);
+        var newBatches = new HashSet<(string ItemCode,string Batch)>();
         foreach(var row in rows)
         {
             if (!keys.Add(row.Key) || row.Key.Length>60 ||
@@ -218,6 +221,10 @@ internal static class StocktakeQuery
                 (row.Seq is null && (!Regex.IsMatch(row.Key,@"^N[0-9]{4,}$") || row.Batch.Length==0)) ||
                 row.ItemCode.Length is < 1 or > 40 || row.Batch.Length>80)
                 throw new InvalidDataException("ERP 寫回工作含不合法或重複的列鍵。");
+            if (row.Seq is not null && !sequences.Add(row.Seq))
+                throw new InvalidDataException("同一底稿序號重複指定，禁止寫回。");
+            if (row.Seq is null && !newBatches.Add((row.ItemCode,row.Batch)))
+                throw new InvalidDataException("同一品號與批號重複新增，禁止寫回。");
             _ = Quantity(row.Quantity);
         }
         return rows;
