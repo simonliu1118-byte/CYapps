@@ -190,8 +190,7 @@ internal sealed class ErpAgentLoop(
         {
             if (job.QueryType is ErpAgentJob.StocktakeSyncType or ErpAgentJob.StocktakeWriteType)
             {
-                if (runStocktake is null)
-                    throw new NotSupportedException("盤點 Driver 尚未通過 Windows 驗收，禁止執行。");
+                if (runStocktake is null) throw new NotSupportedException("庫存盤點未接上。");
                 var reply = await runStocktake(job, cancellationToken);
                 body = reply.Body;
                 outcome = reply.Found ? "FOUND" : "NOT_FOUND";

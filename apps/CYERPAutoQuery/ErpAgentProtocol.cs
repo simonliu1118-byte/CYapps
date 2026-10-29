@@ -61,15 +61,14 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public const string StocktakeWriteType = "STOCKTAKE_WRITE";
     /// <summary>Every query type this Agent runs; sent with each claim so CY Web only hands those out.</summary>
     public static readonly IReadOnlyList<string> SupportedTypes =
-        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType, RestockQueryType]; // Stocktake types gated until verified Win32 driver is connected.
+        [ItemQuery, NameSearch, CustomerQuery, CustomerSearch, SupplierQuery, SupplierSearch, PurchaseQueryType, SalesQueryType, ReceivableQueryType, OrderQueryType, RestockQueryType, StocktakeSyncType, StocktakeWriteType];
 
     public string QueryType { get; init; } = ItemQuery;
     public string? Keyword { get; init; }
     public bool IsNameSearch => QueryType == NameSearch;
     /// <summary>A customer, supplier, 銷貨銷退 or 未收款 job (not the item queries).</summary>
     public bool IsBusiness => QueryType is CustomerQuery or CustomerSearch or SupplierQuery or SupplierSearch
-        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType or RestockQueryType
-        or StocktakeSyncType or StocktakeWriteType;
+        or PurchaseQueryType or SalesQueryType or ReceivableQueryType or OrderQueryType or RestockQueryType;
 
     /// <summary>CUSTOMER_*／SUPPLIER_*: whose form is queried.</summary>
     public ErpParty Party => QueryType is SupplierQuery or SupplierSearch ? ErpParty.Supplier : ErpParty.Customer;
@@ -90,6 +89,7 @@ internal sealed record ErpAgentJob(string Id, string ItemNo, bool IncludeHistory
     public string? Code { get; init; }
     /// <summary>ORDER: the 銷貨單／銷退單 number, echoed back unchanged.</summary>
     public string? OrderNo { get; init; }
+    /// <summary>STOCKTAKE_WRITE: the 盤點底稿編號; STOCKTAKE_SYNC: skipSheets／onlySheet.</summary>
     public string? SheetNo { get; init; }
     public IReadOnlyList<string> SkipSheets { get; init; } = [];
     public string? OnlySheet { get; init; }

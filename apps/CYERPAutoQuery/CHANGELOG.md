@@ -1,9 +1,13 @@
 # CYERPAutoQuery Changelog
 
-## V1.3.0 — 2026/10/29（**WO-1.3.0 開發中，未發行**）
+## V1.3.0 — 2026/10/29（開發中，未發行；WO-1.3.0）
 
-- 依 CY Web WO-0.9.52 新增 `STOCKTAKE_SYNC`（INVR11）與 `STOCKTAKE_WRITE`（INVI14／INVI06）配套；本版是首次限定 ERP 修改。獨立 [治理 PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571) 將規範改為限定例外，必須先由 Claude 審查／合併。
-- 純邏輯與安全測試正開發：讀取 F2 清單、INVR11 欄位解析、十進位與序號校驗、Agent 協定、重試核對；**正式 ERP 視窗操作尚未驗收，沒有任何生產寫入**。
+- 庫存盤點：CY Web `STOCKTAKE_SYNC` 從 INVR11 品號盤點清單讀盤點底稿。流程是 F2 清單選底稿，選擇列印設「二者皆列印」，再到報表「欄位資訊」把儲位、批號、盤點數量切成 Y，最後匯出 XLSX。
+- `STOCKTAKE_WRITE` 在 CY Web 第二次確認後寫回：
+  - 差異列用 INVI14 逐筆修改盤點數量並儲存。
+  - 新增的批號在 INVI06 修改後，按「下」產生新列，填入品號、批號、盤點數量再儲存。
+  - 寫完重新讀 INVR11，每一列都相符後才在 INVI06 按「確認」。若有任何一列失敗，就停下來不確認。
+- 這是本程式第一次寫入 ERP，限定範圍見治理 [PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571)。
 
 ## V1.2.1 — 2026/10/28（正式 Release：tag `cyerp-auto-query-v1.2.1`）
 

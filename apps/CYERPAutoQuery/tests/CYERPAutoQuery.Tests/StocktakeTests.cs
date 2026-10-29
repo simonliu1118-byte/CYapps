@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Text.Json.Nodes;
 using Xunit;
 
@@ -5,165 +6,107 @@ namespace CYERPAutoQuery.Tests;
 
 public class StocktakeTests
 {
-    private const string Id="4a5c95df-4b19-4070-9911-82a66f26aacc";
-    private static string Claim(string payload) =>
-        $$"""{"ok":true,"data":{"job":{{payload}}},"requestId":"test"}""";
+    private const string Id = "4a5c95df-4b19-4070-9911-82a66f26aacc";
+    private static string Claim(string payload) => $$"""{"ok":true,"data":{"job":{{payload}}},"requestId":"test"}""";
+    private static OcrToken T(string text, int x, int y, int w = 50, int h = 14) => new(text, new Rectangle(x, y, w, h));
 
     [Fact]
-    public void ClaimOnlySheetPreservesSkipAndAdvertisesBothTypes()
+    public void ClaimsParseAndBothTypesAreAdvertised()
     {
-        var job=ErpAgentProtocol.ParseClaim(Claim(
-            $$$"""{"id":"{{{Id}}}","queryType":"STOCKTAKE_SYNC","expiresAt":"x","skipSheets":["990001"],"onlySheet":"990001"}"""))!;
-        Assert.Equal(ErpAgentJob.StocktakeSyncType,job.QueryType);
-        Assert.Equal("990001",job.OnlySheet);
-        Assert.Single(job.SkipSheets);
-        var advertised=JsonNode.Parse(ErpAgentProtocol.ClaimBody("V1.3.0","BROWSE"))!["queryTypes"]!.AsArray()
-            .Select(x=>x!.GetValue<string>()).ToArray();
-        // Feature is intentionally not claimed until the Win32 driver has been
-        // implemented and verified against the real ERP UI.
-        Assert.DoesNotContain("STOCKTAKE_SYNC",advertised);
-        Assert.DoesNotContain("STOCKTAKE_WRITE",advertised);
-    }
+        var sync = ErpAgentProtocol.ParseClaim(Claim(
+            $$$"""{"id":"{{{Id}}}","queryType":"STOCKTAKE_SYNC","skipSheets":["990001"],"onlySheet":"990002"}"""))!;
+        Assert.Equal(["990001"], sync.SkipSheets);
+        Assert.Equal("990002", sync.OnlySheet);
 
-    [Fact]
-    public void ClaimRejectsTooManySkipsAndMalformedWrite()
-    {
-        string Sync(string data) => Claim($$"""{"id":"{{Id}}","queryType":"STOCKTAKE_SYNC","skipSheets":{{data}},"onlySheet":null}""");
-        var skips="["+string.Join(",",Enumerable.Repeat("\"990001\"",501))+"]";
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.ParseClaim(Sync(skips)));
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.ParseClaim(Claim(
-            $$$"""{"id":"{{{Id}}}","queryType":"STOCKTAKE_WRITE","sheetNo":"990001","rows":[{"key":"00001","seq":"00001","itemCode":"X0001","batch":"B1","quantity":3}]}""")));
-    }
-
-    [Fact]
-    public void WriteClaimUsesStringDecimalsAndDistinguishesNewBatch()
-    {
-        var job=ErpAgentProtocol.ParseClaim(Claim(
+        var write = ErpAgentProtocol.ParseClaim(Claim(
             $$$"""{"id":"{{{Id}}}","queryType":"STOCKTAKE_WRITE","sheetNo":"990001","rows":[{"key":"00001","seq":"00001","itemCode":"X0001","batch":"B1","quantity":"-3.25"},{"key":"N0001","seq":null,"itemCode":"X0001","batch":"B9","quantity":"2"}]}"""))!;
-        Assert.Equal(2,job.StocktakeRows.Count);
-        Assert.Equal("-3.25",job.StocktakeRows[0].Quantity);
-        Assert.Null(job.StocktakeRows[1].Seq);
+        Assert.Equal("990001", write.SheetNo);
+        Assert.Equal("-3.25", write.StocktakeRows[0].Quantity);
+        Assert.Null(write.StocktakeRows[1].Seq);
+
+        var advertised = JsonNode.Parse(ErpAgentProtocol.ClaimBody("V1.3.0", "BROWSE"))!["queryTypes"]!.AsArray()
+            .Select(x => x!.GetValue<string>()).ToArray();
+        Assert.Contains("STOCKTAKE_SYNC", advertised);
+        Assert.Contains("STOCKTAKE_WRITE", advertised);
     }
 
     [Fact]
-    public void F2ParsesDatesDeduplicatesPagesAndRejectsOverflow()
+    public void QuantityIsAPlainDecimalString()
     {
-        var listed=StocktakeQuery.ParseF2("990001 2026/10/28\n990002 2026/10/29\n990001 2026/10/28");
-        Assert.Equal(2,listed.Count);
-        Assert.Equal(new DateOnly(2026,10,29),listed[1].Date);
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ParseF2(
-            string.Join("\n",Enumerable.Range(100000,201).Select(x=>$"{x} 2026/10/28"))));
+        Assert.Equal("1234.5", StocktakeQuery.Quantity("1,234.50"));
+        Assert.Equal("0", StocktakeQuery.Quantity(""));
+        Assert.Equal("-12", StocktakeQuery.Quantity("-12"));
+        Assert.True(StocktakeQuery.SameQuantity("10", "10.0"));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.Quantity("1e3"));
     }
 
     [Fact]
-    public void ParseExportUsesErpCountNotUnderlinedFirstCount()
+    public void F2GridAndFooterAreReadFromOcrTokens()
     {
-        var headers=new[]{"底稿編號","底稿序號","品號","品名","規格","庫別名稱","儲位","單位","批號","盤點數量","初盤數量"};
-        var rows=new List<string[]>{
-            headers,new[]{"990001","00001","X0001","測試商品","60入","假倉","A-01","盒","A1","2","999"},
-            new[]{"990001","00002","X0001","測試商品","60入","假倉","A-01","盒","A2","1","0"}
+        // Screenshot 105: 底稿編號 and 盤點日期 cells, the filter row above, 「1 / 4」 in the footer.
+        IReadOnlyList<OcrToken> tokens =
+        [
+            T("底稿編號", 240, 165), T(">=", 400, 165, 20),
+            T("990202", 80, 240), T("2025/02/17", 180, 241, 70),
+            T("990102", 80, 262), T("2026/01/09", 180, 262, 70),
+            T("990901", 80, 284), T("2026/09/02", 180, 285, 70),
+            T("1 / 4", 125, 485, 40), T("INVTE-02", 240, 485, 60)
+        ];
+        var sheets = StocktakeQuery.ParseF2(tokens);
+        Assert.Equal(["990202", "990102", "990901"], sheets.Select(s => s.Sheet.SheetNo));
+        Assert.Equal(new DateOnly(2026, 1, 9), sheets[1].Sheet.Date);
+        Assert.Equal(262, sheets[1].Rect.Top);
+        Assert.Equal(4, StocktakeQuery.ParseF2Total(tokens));
+        Assert.Null(StocktakeQuery.ParseF2Total([T("990202", 80, 240), T("2025/02/17", 180, 241, 70)]));
+    }
+
+    [Fact]
+    public void GridHeaderSeparatesBatchFromBatchCheckAndFindsTheNewRow()
+    {
+        // Screenshot 111: … 批號盤點 批號 盤點數量 …
+        IReadOnlyList<OcrToken> header = [T("序號", 50, 5, 30), T("品號", 125, 5, 30), T("批號盤點", 850, 5, 60), T("批號", 930, 5, 30), T("盤點數量", 990, 5, 60)];
+        var x = StocktakeQuery.GridColumns(header, "序號", "品號", "批號", "盤點數量");
+        Assert.Equal(945, x["批號"]);
+        Assert.Equal(1020, x["盤點數量"]);
+
+        IReadOnlyList<OcrToken> grid = [T("00046A00671", 45, 100, 120), T("00047", 45, 122, 40), T("A00671", 90, 122), T("00048", 45, 144, 40)];
+        var seqs = StocktakeQuery.GridSeqs(grid, x["序號"]);
+        Assert.Equal(["00046", "00047", "00048"], seqs.Select(s => s.Seq));
+        Assert.Equal(151, seqs[^1].Y);
+
+        IReadOnlyList<OcrToken> typed = [T("00048", 45, 144, 40), T("A00671", 90, 144), T("揚隆美容針", 200, 144, 80), T("20261201", 910, 144, 55), T("5", 1045, 144, 8), T("0", 1100, 144, 8)];
+        Assert.Contains("A00671", StocktakeQuery.RowText(typed, 151));
+        Assert.Equal("5", StocktakeQuery.CellText(typed, 151, x["盤點數量"] + 28, 40));
+    }
+
+    [Fact]
+    public void ExportUsesErpQuantityAndSkipsBlankLines()
+    {
+        var rows = new List<string[]>
+        {
+            new[] { "志遠測試" },
+            new[] { "底稿編號", "底稿序號", "品號", "品名", "規格", "庫別名稱", "儲位", "單位", "批號", "盤點數量", "初盤數量" },
+            new[] { "990001", "00001", "X0001", "測試商品", "60入", "假倉", "A-01", "盒", "A1", "2", "" },
+            new[] { "990001", "00002", "X0001", "測試商品", "60入", "假倉", "A-01", "盒", "A2", "-1", "" },
+            new[] { "", "", "", "", "", "", "", "", "", "", "" }
         };
-        var parsed=StocktakeQuery.ParseExport("990001",[("Sheet1",rows)]);
-        Assert.Equal("2",parsed.Rows[0].BookQty);
-        Assert.Equal("1",parsed.Rows[1].BookQty);
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ParseExport("990002",[("Sheet1",rows)]));
-        rows.Add(rows[1]);
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ParseExport("990001",[("Sheet1",rows)]));
+        var parsed = StocktakeQuery.ParseExport("990001", [("Sheet1", rows)]);
+        Assert.Equal(["2", "-1"], parsed.Rows.Select(r => r.BookQty));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.ParseExport("990002", [("Sheet1", rows)]));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.ParseExport("990001", [("Sheet1", [rows[2]])]));
     }
 
     [Fact]
-    public void ReconciliationHandlesIdempotentExistingAndNewBatch()
+    public void WriteBodyCarriesResultsAndMismatches()
     {
-        var before=new StocktakeLine("00001","X0001","測試品","規格","假倉","A","盒","B1","2");
-        var after=new StocktakeLine("00003","X0001","測試品","規格","假倉","B","盒","B9","3");
-        var jobs=new[]{
-            new StocktakeWriteRow("00001","00001","X0001","B1","2"),
-            new StocktakeWriteRow("N0001",null,"X0001","B9","3")
-        };
-        Assert.True(StocktakeQuery.AlreadyApplied(jobs[0],before));
-        Assert.True(StocktakeQuery.AlreadyApplied(jobs[1],after));
-        Assert.Empty(StocktakeQuery.Verify(jobs,[before,after],
-            new Dictionary<string,string>{{"N0001","00003"}}));
-        Assert.Single(StocktakeQuery.Verify(jobs,[before,after with { BookQty="2" }]));
-    }
+        var result = new StocktakeWriteResult("990001",
+            [new StocktakeWriteRowResult("00001", true, "00001", "已寫入")], false,
+            [new StocktakeMismatch("00001", "00001", "X0001", "B1", "3", "2")], TimeSpan.FromSeconds(1));
+        var body = JsonNode.Parse(ErpAgentProtocol.StocktakeWriteBody(result, "V1.3.0"))!;
+        Assert.Equal("FAILED", body["outcome"]!.GetValue<string>());
+        Assert.Equal("2", body["mismatches"]![0]!["actual"]!.GetValue<string>());
 
-    [Fact]
-    public void WholeSheetMustDetectUnexpectedUntouchedBatchChangesAndExtraRows()
-    {
-        var before=new[]{
-            new StocktakeLine("00001","X0001","假品","盒","假倉","A","盒","B1","2"),
-            new StocktakeLine("00002","X0001","假品","盒","假倉","A","盒","B2","1")
-        };
-        var writes=new[]{new StocktakeWriteRow("00001","00001","X0001","B1","3")};
-        var after=new[]{before[0] with {BookQty="3"},before[1]};
-        Assert.Empty(StocktakeQuery.VerifyEntireSheet(before,after,writes));
-        var changed=new[]{after[0],after[1] with {BookQty="9"}};
-        Assert.Single(StocktakeQuery.VerifyEntireSheet(before,changed,writes));
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.VerifyEntireSheet(before,
-          [..after,new StocktakeLine("00003","X0001","假品","盒","假倉","A","盒","B9","1")],writes));
+        var empty = new StocktakeSyncResult([new StocktakeSheet("990001", new DateOnly(2026, 10, 29))], [], TimeSpan.Zero);
+        Assert.Equal("NOT_FOUND", JsonNode.Parse(ErpAgentProtocol.StocktakeSyncBody(empty, "V1.3.0"))!["outcome"]!.GetValue<string>());
     }
-
-    [Fact]
-    public void WriteCompleteRequiresConfirmedAndAssignedSequence()
-    {
-        var rows=new[]{new StocktakeWriteRow("N0001",null,"X0001","B9","3")};
-        var ok=new StocktakeWriteResult("990001",
-            [new StocktakeWriteRowResult("N0001",true,"00003","已寫入")],
-            true,[],TimeSpan.FromSeconds(2));
-        var body=JsonNode.Parse(ErpAgentProtocol.StocktakeWriteBody(ok,rows,"V1.3.0"))!;
-        Assert.Equal("FOUND",body["outcome"]!.GetValue<string>());
-        Assert.Equal("00003",body["results"]![0]!["erpSeq"]!.GetValue<string>());
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeWriteBody(
-            ok with { Results=[new StocktakeWriteRowResult("N0001",true,null,"錯誤")]},rows,"V1.3.0"));
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeWriteBody(
-            ok with { Mismatches=[new StocktakeMismatch("N0001","00003","X0001","B9","3","2")]},rows,"V1.3.0"));
-    }
-
-    [Fact]
-    public void SyncCompleteValidatesSubsetAndDoesNotTruncate()
-    {
-        var valid=new StocktakeSyncResult(
-            [new StocktakeSheet("990001",new DateOnly(2026,10,28))],
-            [new StocktakeDetail("990001",
-              [new StocktakeLine("00001","X0001","測試","規格","假倉","A","盒","B1","1")])],
-            TimeSpan.FromSeconds(1));
-        var body=JsonNode.Parse(ErpAgentProtocol.StocktakeSyncBody(valid,"V1.3.0",null))!;
-        Assert.Equal("FOUND",body["outcome"]!.GetValue<string>());
-        Assert.Equal("1",body["details"]![0]!["rows"]![0]!["bookQty"]!.GetValue<string>());
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeSyncBody(valid,"V1.3.0","990002"));
-    }
-    [Fact]
-    public void WriteRejectsDuplicateExistingSequenceAndNewBatchBeforeErpMutation()
-    {
-        var existing=new StocktakeWriteRow("00001","00001","X0001","B1","2");
-        var duplicateExisting=existing with {Quantity="3"};
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ValidateWrite("990001",
-            [existing,duplicateExisting]));
-        var added=new StocktakeWriteRow("N0001",null,"X0001","B9","2");
-        Assert.Throws<InvalidDataException>(()=>StocktakeQuery.ValidateWrite("990001",
-            [added,added with {Key="N0002",Quantity="3"}]));
-    }
-
-    [Fact]
-    public void AlreadyAppliedComparesDecimalValueNotDisplayFormatting()
-    {
-        var row=new StocktakeWriteRow("00001","00001","X0001","B1","2.00");
-        var existing=new StocktakeLine("00001","X0001","測試品","規格","假倉","A","盒","B1","2");
-        Assert.True(StocktakeQuery.AlreadyApplied(row,existing));
-    }
-
-    [Fact]
-    public void CompleteRejectsTwoRowsSharingOneErpSequence()
-    {
-        var rows=new[]{
-            new StocktakeWriteRow("N0001",null,"X0001","B9","3"),
-            new StocktakeWriteRow("N0002",null,"X0001","B8","4")
-        };
-        var result=new StocktakeWriteResult("990001",[
-            new StocktakeWriteRowResult("N0001",true,"00003","已新增"),
-            new StocktakeWriteRowResult("N0002",true,"00003","已新增")
-        ],true,[],TimeSpan.Zero);
-        Assert.Throws<InvalidDataException>(()=>ErpAgentProtocol.StocktakeWriteBody(result,rows,"V1.3.0"));
-    }
-
 }

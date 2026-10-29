@@ -59,8 +59,8 @@ public sealed class StocktakeAgentIntegrationTests
             Assert.Equal(ErpAgentJob.StocktakeSyncType,j.QueryType);
             var sync=new StocktakeSyncResult(
                 [new StocktakeSheet("990001",new DateOnly(2026,10,29))],
-                [new StocktakeDetail("990001",[])],TimeSpan.Zero);
-            return (true,ErpAgentProtocol.StocktakeSyncBody(sync,"V1.3.0",null));
+                [new StocktakeDetail("990001",[new StocktakeLine("00001","X0001","測試品","","假倉","","盒","B1","2")])],TimeSpan.Zero);
+            return (true,ErpAgentProtocol.StocktakeSyncBody(sync,"V1.3.0"));
         });
         Assert.Equal(1,calls);
         var complete=web.Requests.Single(x=>x.Path.EndsWith("/complete",StringComparison.Ordinal));
@@ -70,7 +70,7 @@ public sealed class StocktakeAgentIntegrationTests
     }
 
     [Fact]
-    public async Task WriteWithoutVerifiedDriverIsNeverDispatched()
+    public async Task WriteWithoutRunnerReportsFailed()
     {
         var job="{\"id\":\""+JobId+"\",\"queryType\":\"STOCKTAKE_WRITE\",\"sheetNo\":\"990001\",\"rows\":[{\"key\":\"00001\",\"seq\":\"00001\",\"itemCode\":\"X0001\",\"batch\":\"B1\",\"quantity\":\"3\"}]}";
         var (web,calls)=await RunAsync(job,null);

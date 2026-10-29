@@ -80,7 +80,6 @@ internal sealed partial class MainForm : Form
     {
         _log = log;
         _service = new ItemQueryService(log);
-        _stocktakeDriver = new StocktakeWin32Driver(_service);
         _agentSettings = ErpAgentSettings.Load(log);
         LoadErpLogin();
         // Same as CYERPAutoInput: the local log keeps what CY read, for troubleshooting.

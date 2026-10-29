@@ -1,180 +1,96 @@
 namespace CYERPAutoQuery;
 
-/// <summary>
-/// The sole orchestration owner for stocktake Agent jobs. A Win32 implementation
-/// must provide fail-closed operations; this coordinator never guesses ERP
-/// control positions or confirms an unverified sheet.
-/// </summary>
+/// <summary>The ERP steps of 庫存盤點; the Win32 one is <see cref="StocktakeWin32Driver"/>, tests use a fake.</summary>
 internal interface IStocktakeErpDriver
 {
+    /// <summary>INVR11 「選擇盤點底稿編號」 F2 list.</summary>
     Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct);
-    Task<StocktakeDetail> ReadSheetAsync(string sheetNo,CancellationToken ct);
-    /// <summary>Must verify sheet, seq, item, batch and current mode before any edit.</summary>
-    Task<StocktakeWriteRowResult> WriteExistingAsync(
-        string sheetNo,StocktakeWriteRow row,CancellationToken ct);
-    /// <summary>Must verify sheet and batch uniqueness before inserting.</summary>
-    Task<StocktakeWriteRowResult> AddBatchAsync(
-        string sheetNo,StocktakeWriteRow row,CancellationToken ct);
-    /// <summary>Must read the exact sheet after clicking INVI06 confirm.</summary>
-    Task<bool> ConfirmAsync(string sheetNo,CancellationToken ct);
-    /// <summary>Cancel an uncommitted edit on failure; never cancel a confirmed document.</summary>
-    Task CancelUncommittedEditAsync(CancellationToken ct);
+    /// <summary>INVR11 report of one sheet (儲位／批號／盤點數量 shown) exported to Excel.</summary>
+    Task<StocktakeDetail> ReadSheetAsync(string sheetNo, CancellationToken ct);
+    /// <summary>INVI14: one existing line's 盤點數量 → 儲存.</summary>
+    Task WriteExistingAsync(string sheetNo, StocktakeLine line, string quantity, CancellationToken ct);
+    /// <summary>INVI06: a new line (品號＋批號＋盤點數量) at the end of the sheet → 儲存.</summary>
+    Task AddBatchAsync(string sheetNo, StocktakeWriteRow row, CancellationToken ct);
+    /// <summary>INVI06 確認; true when ERP shows the sheet confirmed.</summary>
+    Task<bool> ConfirmAsync(string sheetNo, CancellationToken ct);
 }
 
+/// <summary>
+/// STOCKTAKE_SYNC and STOCKTAKE_WRITE (WO-1.3.0, user 2026-10-29): after the second 確認 in CY Web
+/// every differing line is written (INVI14), every added batch inserted (INVI06), the sheet read
+/// again from INVR11 and only when everything matches is it confirmed in INVI06.
+/// </summary>
 internal sealed class StocktakeExecution(IStocktakeErpDriver driver)
 {
-    public async Task<StocktakeSyncResult> SyncAsync(ErpAgentJob job,CancellationToken ct)
+    public async Task<StocktakeSyncResult> SyncAsync(ErpAgentJob job, CancellationToken ct)
     {
-        if(job.QueryType!=ErpAgentJob.StocktakeSyncType)
-            throw new InvalidOperationException("不是盤點同步工作。");
-        var watch=System.Diagnostics.Stopwatch.StartNew();
-        var sheets=await driver.ListSheetsAsync(ct);
-        if(sheets.Count>StocktakeQuery.MaxSheets ||
-            sheets.Select(x=>x.SheetNo).Distinct(StringComparer.Ordinal).Count()!=sheets.Count)
-            throw new InvalidDataException("ERP 清單超過上限或底稿編號重複。");
-        var skips=job.SkipSheets.ToHashSet(StringComparer.Ordinal);
-        var targets=job.OnlySheet is null
-            ? sheets.Where(x=>!skips.Contains(x.SheetNo)).ToArray()
-            : sheets.Where(x=>x.SheetNo==job.OnlySheet).ToArray();
-        if(job.OnlySheet is not null && targets.Length!=1)
-            throw new InvalidDataException("ERP F2 清單找不到要重新整理的底稿。");
-        var details=new List<StocktakeDetail>(targets.Length);
-        foreach(var sheet in targets)
-        {
-            ct.ThrowIfCancellationRequested();
-            var detail=await driver.ReadSheetAsync(sheet.SheetNo,ct);
-            if(detail.SheetNo!=sheet.SheetNo || detail.Rows.Count>StocktakeQuery.MaxRowsPerSheet)
-                throw new InvalidDataException("ERP 讀出的底稿編號或明細列數不正確。");
-            details.Add(detail);
-        }
-        return new StocktakeSyncResult(sheets,details,watch.Elapsed);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var sheets = await driver.ListSheetsAsync(ct);
+        IEnumerable<StocktakeSheet> targets;
+        if (job.OnlySheet is { } only)
+            targets = [sheets.FirstOrDefault(s => s.SheetNo == only)
+                       ?? throw new InvalidDataException($"ERP 的盤點底稿清單沒有 {only}。")];
+        else
+            targets = sheets.Where(s => !job.SkipSheets.Contains(s.SheetNo));
+        var details = new List<StocktakeDetail>();
+        foreach (var sheet in targets)
+            details.Add(await driver.ReadSheetAsync(sheet.SheetNo, ct));
+        return new StocktakeSyncResult(sheets, details, watch.Elapsed);
     }
 
-    public async Task<StocktakeWriteResult> WriteAsync(ErpAgentJob job,
-        Action<int,int>? progress,CancellationToken ct)
+    public async Task<StocktakeWriteResult> WriteAsync(ErpAgentJob job, Action<int, int>? progress, CancellationToken ct)
     {
-        if(job.QueryType!=ErpAgentJob.StocktakeWriteType ||
-            job.SheetNo is not { } sheet)
-            throw new InvalidOperationException("不是盤點寫回工作。");
-        var rows=StocktakeQuery.ValidateWrite(sheet,job.StocktakeRows);
-        if(rows.Count==0)
-            throw new InvalidDataException("空白盤點寫回工作不得觸發 ERP 確認。");
-        var watch=System.Diagnostics.Stopwatch.StartNew();
-        var results=new List<StocktakeWriteRowResult>();
-        var assigned=new Dictionary<string,string>(StringComparer.Ordinal);
-        var mismatches=new List<StocktakeMismatch>();
-        var started=false;
-        StocktakeWriteResult Failure(string reason)
-        {
-            var failed=results.ToList();
-            foreach(var missing in rows.Skip(failed.Count))
-                failed.Add(new StocktakeWriteRowResult(missing.Key,false,null,reason));
-            return new StocktakeWriteResult(sheet,failed,false,mismatches,watch.Elapsed);
-        }
-        try
+        var sheet = job.SheetNo ?? throw new InvalidDataException("盤點寫回缺底稿編號。");
+        var rows = StocktakeQuery.ValidateWrite(sheet, job.StocktakeRows);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var results = new List<StocktakeWriteRowResult>();
+
+        StocktakeWriteResult Failed(IReadOnlyList<StocktakeMismatch> mismatches) =>
+            new(sheet, results.Concat(rows.Skip(results.Count).Select(r => new StocktakeWriteRowResult(r.Key, false, r.Seq, "未執行"))).ToList(),
+                false, mismatches, watch.Elapsed);
+
+        var original = await driver.ReadSheetAsync(sheet, ct);
+        for (var i = 0; i < rows.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
-            var original=await driver.ReadSheetAsync(sheet,ct);
-            if(original.SheetNo!=sheet)
-                throw new InvalidDataException("ERP 開啟的底稿與寫回目標不符。");
-            var bySeq=original.Rows.ToDictionary(x=>x.Seq,StringComparer.Ordinal);
-            // Before a write, assert the identity of EVERY existing row.
-            // An injected/changed batch is not grounds to silently overwrite it.
-            foreach(var row in rows.Where(x=>x.Seq is not null))
+            var row = rows[i];
+            var line = StocktakeQuery.Find(original.Rows, row);
+            try
             {
-                if(!bySeq.TryGetValue(row.Seq!,out var observed) ||
-                    observed.ItemCode!=row.ItemCode || observed.Batch!=row.Batch)
-                    throw new InvalidDataException("原盤點底稿序號、品號或批號不符，已停止寫入。");
-            }
-            started=true;
-            for(var i=0;i<rows.Count;i++)
-            {
-                ct.ThrowIfCancellationRequested();
-                var row=rows[i];
-                StocktakeWriteRowResult result;
-                if(row.Seq is { } seq)
+                if (row.Seq is not null && (line is null || line.ItemCode != row.ItemCode || line.Batch != row.Batch))
+                    throw new InvalidDataException($"ERP 底稿序號 {row.Seq} 已不是 {row.ItemCode} 批號 {row.Batch}。");
+                if (StocktakeQuery.AlreadyApplied(row, line))
+                    results.Add(new StocktakeWriteRowResult(row.Key, true, line!.Seq, "ERP 已是此數量"));
+                else if (line is not null)
                 {
-                    var old=bySeq[seq];
-                    result=StocktakeQuery.AlreadyApplied(row,old)
-                        ? new StocktakeWriteRowResult(row.Key,true,seq,"原數量已一致")
-                        : await driver.WriteExistingAsync(sheet,row,ct);
+                    // An added batch already on the sheet (an earlier run inserted it) is written in place.
+                    await driver.WriteExistingAsync(sheet, line, row.Quantity, ct);
+                    results.Add(new StocktakeWriteRowResult(row.Key, true, line.Seq, "已寫入"));
                 }
                 else
                 {
-                    // Defense in depth: CY Web permits new batches only for an
-                    // item already batch-managed in this exact ERP stocktake.
-                    if(!original.Rows.Any(x=>x.ItemCode==row.ItemCode && x.Batch.Length>0))
-                        throw new InvalidDataException("此品號在原底稿沒有批號，禁止自行新增批號。");
-                    var exists=original.Rows.Where(x=>x.ItemCode==row.ItemCode &&
-                        x.Batch==row.Batch).ToArray();
-                    if(exists.Length>1)
-                        throw new InvalidDataException("ERP 相同品號批號有重複列，不能自動新增。");
-                    if(exists.Length==1)
-                    {
-                        var present=exists[0];
-                        assigned[row.Key]=present.Seq;
-                        if(StocktakeQuery.AlreadyApplied(row,present))
-                            result=new StocktakeWriteRowResult(row.Key,true,present.Seq,"新增批號已存在且數量一致");
-                        else
-                        {
-                            started=true;
-                            var updated=await driver.WriteExistingAsync(sheet,row with
-                            {
-                                Key=present.Seq,Seq=present.Seq
-                            },ct);
-                            result=new StocktakeWriteRowResult(row.Key,updated.Ok,present.Seq,updated.Message);
-                        }
-                    }
-                    else result=await driver.AddBatchAsync(sheet,row,ct);
+                    await driver.AddBatchAsync(sheet, row, ct);
+                    results.Add(new StocktakeWriteRowResult(row.Key, true, null, "已新增"));
                 }
-                if(result.Ok)
-                {
-                    if(!StocktakeQuery.IsSeq(result.ErpSeq) ||
-                        (row.Seq is not null && row.Seq!=result.ErpSeq))
-                        throw new InvalidDataException("ERP 寫入後未返回可驗證底稿序號。");
-                    // A newly inserted row must not be mapped to an unrelated
-                    // original ERP sequence or share a sequence with another job.
-                    if(row.Seq is null &&
-                       bySeq.TryGetValue(result.ErpSeq!,out var originalRow) &&
-                       (originalRow.ItemCode!=row.ItemCode || originalRow.Batch!=row.Batch))
-                        throw new InvalidDataException("ERP 回報序號對應到其他原始列，禁止確認。");
-                    if(assigned.Any(entry=>entry.Key!=row.Key && entry.Value==result.ErpSeq))
-                        throw new InvalidDataException("ERP 為不同盤點列回報相同序號，禁止確認。");
-                    assigned[row.Key]=result.ErpSeq!;
-                }
-                // Some lines may have already changed in ERP if a later line fails.
-                // Never auto-retry or confirm partial writes.
-                results.Add(result with {Key=row.Key});
-                progress?.Invoke(i+1,rows.Count);
-                if(!result.Ok)
-                    return Failure("有盤點列寫入失敗，其他列未執行。");
             }
-            ct.ThrowIfCancellationRequested();
-            var final=await driver.ReadSheetAsync(sheet,ct);
-            if(final.SheetNo!=sheet)
-                throw new InvalidDataException("INVR11 核對時底稿編號已改變，不能確認。");
-            mismatches.AddRange(StocktakeQuery.VerifyEntireSheet(
-                original.Rows,final.Rows,rows,assigned));
-            if(mismatches.Count>0)
-                return Failure("全表核對不一致，不得確認。");
-            if(!await driver.ConfirmAsync(sheet,ct))
-                return Failure("ERP 未回報盤點單確認完成。");
-            started=false; // confirmed: do not send cancel to a committed document
-            return new StocktakeWriteResult(sheet,results,true,[],watch.Elapsed);
-        }
-        catch(OperationCanceledException) { throw; }
-        catch(Exception) { return Failure("ERP 操作未完成，請人工核對後再重試。"); }
-        finally
-        {
-            // Driver is responsible for ensuring a confirmed sheet cannot be
-            // cancelled or modified here. No "undo" of a committed ERP write.
-            if(started)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Cleanup must not mask the original failure or cancellation.
-                // The driver remains responsible for failing closed if ERP is still editing.
-                try { await driver.CancelUncommittedEditAsync(CancellationToken.None); }
-                catch(Exception) { /* The job is already failed; never attempt confirmation. */ }
+                results.Add(new StocktakeWriteRowResult(row.Key, false, row.Seq, ex.Message));
+                return Failed([]);
             }
+            progress?.Invoke(i + 1, rows.Count);
         }
+
+        // INVR11 again: every written line must show its quantity before 確認 (user, 2026-10-29).
+        var final = await driver.ReadSheetAsync(sheet, ct);
+        for (var i = 0; i < results.Count; i++)
+            if (results[i].ErpSeq is null)
+                results[i] = StocktakeQuery.Find(final.Rows, rows[i]) is { } added
+                    ? results[i] with { ErpSeq = added.Seq }
+                    : results[i] with { Ok = false, Message = "INVR11 找不到新增的批號" };
+        var mismatches = StocktakeQuery.Verify(rows, final.Rows);
+        if (mismatches.Count > 0) return Failed(mismatches);
+        var confirmed = await driver.ConfirmAsync(sheet, ct);
+        return new StocktakeWriteResult(sheet, results, confirmed, [], watch.Elapsed);
     }
 }

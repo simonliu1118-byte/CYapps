@@ -2,13 +2,6 @@
 
 > 更新：2026-10-28。目前正式版 **V1.2.1**（`VERSION=1.2.1`、`BUILD=0`，tag `cyerp-auto-query-v1.2.1`）；較舊的 Release（V0.10.1、V1.0.0、V1.2.0）已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
-## WO-1.3.0 庫存盤點工作交接（2026-10-29，GPT 開發中）
-
-- 來源：[工單 PR #565](https://github.com/simonliu1118-byte/CYapps/pull/565) 最新 `9a101c26e4a4704186bbbb15665d808958bc3eda`；CY Web 對應 [WO-0.9.52 PR #307](https://github.com/simonliu1118-byte/chihyuan-web/pull/307)。
-- **治理前置 PR #571**：`governance/cyerp-auto-query-stocktake`，GOVERNANCE_VERSION 2.3.58，限定 ERP 寫回範圍；尚未合併。
-- **程式分支**：`cyerp-auto-query/stocktake`，開發中、未合併／未發行／未部署，WIN32 實機測試未執行。新增純邏輯 `StocktakeQuery.cs`、Agent protocol partial 與假資料 xUnit 測試。程式須經 Windows CI 及 Claude 審查；真 ERP 寫入待使用者另行核准測試底稿。
-- 不得提交任何真 ERP 匯出 XLSX、LOG 或營運資料至 Public repo。
-
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
@@ -16,9 +9,12 @@
 - CY Web 端（chihyuan-web，目前 V0.9.43）：ERP 查詢頁（商品、客戶、供應商、進貨輔助、未收款）、排程佇列（每人最多 3 筆）、ERP 關閉／暫停（含「關閉到…」與暫停時加入佇列）；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。本程式只依 claim 回應的 `control.holdUntil` 決定暫停期間不開 ERP，暫停中排隊的工作由 CY Web 在暫停結束後才派發。
 - 自動更新只認本專案正式 Release；目前只保留 V1.2.1。V1.1.0 Build 3 → V1.2.0 的自動更新已在伺服器實際完成（2026-10-28 LOG）。
 
-## 待執行：V1.3.0 — 庫存盤點（交 GPT：[WO-1.3.0](docs/work-orders/WO-1.3.0.md)）
+## 進行中：V1.3.0 — 庫存盤點（[WO-1.3.0](docs/work-orders/WO-1.3.0.md)，[PR #572](https://github.com/simonliu1118-byte/CYapps/pull/572)）
 
-- 讀盤點單（INVR11）、寫回 ERP（INVI14 逐筆、INVI06 新增批號與確認）；本程式第一次寫入 ERP，規則另開 governance PR。CY Web 端為 chihyuan-web WO-0.9.52。
+- GPT 完成後由 Claude 審查並重寫 Win32 點選部分，依據是使用者截圖 104–115，見 `docs/handoff/CYERPAutoQuery-WO-1.3.0-CLAUDE-REVIEW.md` §9。
+- 程式在 `ItemQueryService.Stocktake.cs`（INVR11）與 `ItemQueryService.StocktakeWrite.cs`（INVI14、INVI06）；流程協調在 `StocktakeExecution.cs`。
+- 前置條件是治理 [PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571) 和 CY Web WO-0.9.52 [PR #307](https://github.com/simonliu1118-byte/chihyuan-web/pull/307)。
+- 尚未在實機上跑過。第一次實測請用一張測試底稿，依序驗證：讀取、單筆寫入、新增批號、確認。
 
 ## 功能與實機紀錄（2026-10-28 整理）
 

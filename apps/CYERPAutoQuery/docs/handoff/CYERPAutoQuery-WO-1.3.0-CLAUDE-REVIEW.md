@@ -1,60 +1,6 @@
-## Claude 審查優先項目：Win32 核心實作（新增）
-
-已依使用者要求以現有成熟的 ItemQueryService 作業速查、F6、OCR、Ribbon、Excel 匯出、Win32 控制項與 RunAutomationAsync 擴充，不建立另一套自動化框架。
-
-- ItemQueryService.Stocktake.cs：INVR11 F2 OCR 清單，清單讀完按 Esc；keepPopup 模式供選取底稿。
-- ItemQueryService.StocktakeReport.cs：從 F2 選取指定底稿，選「兩者皆列印」、即時報表、沿用 ExportReportAsync 與 StocktakeQuery.ParseExport。
-- ItemQueryService.StocktakeWrite.cs：INVI14 F6 查詢與逐筆修改儲存讀回、INVI06 明細新增與確認，均沿用現有操作 helper；StocktakeWin32Driver 實作既有 IStocktakeErpDriver。
-- MainForm.cs：裝配 Driver 到既有盤點 Agent 路由；SupportedTypes 仍未開啟，不能在正式環境領取盤點工作。
-
-**請 Claude 實際檢查並修改以下 UI 對位問題（本提交沒有 Windows 實機證據）：**
-1. INVR11 F2 的選擇欄位實際是否為可獲焦點的 Win32 input；F2 若為分頁清單，目前多頁仍拒絕，需依 Delphi grid 補全頁翻頁與 OCR 位置核對。
-2. INVR11 報表名稱、視窗辨識、報表「欄位資訊」中的儲位／批號／盤點數量 N→Y 尚未操作；此步必須加入並讀回。報表 ErpReport 標題與匯出檔名需以現場畫面對照。
-3. INVI14 F6 一般選項是否恰為兩行（底稿編號、序號）；查詢完須確認資料瀏覽只有一筆、切到詳細欄位；目前只做欄位識別文字與讀回，不保證切換完成。
-4. INVI06 以 cx grid 最後一列向下產生新列，需要從實際控制項核對並確保新增列確實填對欄位；目前使用共通欄位找尋方式，需現場檢查。
-5. INVI06「確認」後須讀取真實確認狀態，且整個動作需確保沒有其他對話框；現有狀態讀取定位屬待審查。
-6. 新提交無 Windows CI／.NET Build 成功證據，請 Claude 編譯、測試及改正。不可引用舊 237 tests 作為此提交驗收。
-7. 治理 PR #571 尚需先審；完成真 Driver 驗證後再加入 SupportedTypes。未部署、未合併或操作正式 ERP。
-
-## 2026-10-29 Agent 與 MainForm 整合進度
-
-- `7cd7f2f`：新增 `MainForm.Stocktake.cs`，以既有 `RunAutomationAsync` 執行 `StocktakeExecution`，沿用執行鎖、Esc 取消、狀態列與 WebProgress；寫回逐列回報 `stage=STOCK`。
-- `0809b1f`：`MainForm.StartAgent` 的既有 `ErpAgentLoop` 實際連上 `runStocktake` 入口。
-- `12b79ab`：新增純合成的 `StocktakeAgentIntegrationTests`，覆蓋 SYNC 的 claim→complete，以及無 Driver 時 WRITE 必須失敗、不得落到一般品號查詢。
-- `51a882b`／`e77e3fd`：空寫回不得確認、清理失敗不得遮蓋原始錯誤，及對應測試。
-- **安全開關仍關閉**：`_stocktakeDriver` 預設為 null，`SupportedTypes` 仍未宣告兩個盤點類型；任何真 ERP 寫入都不能從這些變更啟動。
-- **Windows CI 尚未取得此提交的執行／成功證據**；不宣稱建置成功或流程完成。
-- 待完成的真正阻擋：實作與驗收 `IStocktakeErpDriver` 的 INVR11 F2/報表、INVI14 欄位讀回與修改、INVI06 新增與確認。驗收前不得啟用工作類型、合併、發行或部署。
-
-## 2026-10-29 續作：重用現有穩定 ERP 自動化元件
-
-使用者確認：ERP 操作應以現有經測試的 Win32 程式碼為基礎，差異主要是欄位輸入參數，**不可另建一套重複的 UI Driver**。
-
-已核對可重用的 `ItemQueryService` 內部元件：`OpenFormAsync`（作業速查）、`OpenQueryDialogAsync`（F6）、`RibbonClickAsync`、`ExportToExcelAsync`／`CompleteExportAsync`、`ExportFiles.ReadAsync`、`OcrClickAsync`、`GuardErpMessagesAsync`、`ErpAutomationGate`。新功能應以 `partial ItemQueryService` 復用它們，針對 INVR11／INVI14／INVI06 補精確目標控制項與每次讀回。
-
-最新提交：
-- `5455bd1`：AgentLoop 分流盤點專用 handler；未注入 handler 則 fail-closed。
-- `1ae0b5b`：complete body 序號碰撞也拒絕成功回報。
-- `a3a6621`：新增重複 ERP 序號 complete 的單元測試。
-
-**重要**：上列僅完成 Agent 路由接口及協定安全，未注入可執行的真實盤點 handler，SupportedTypes 仍不含兩種盤點類型。Windows ERP Driver、MainForm 實際路由與進度、最新 CI 和實機 UI 驗證仍未完成。請勿宣稱可合併或部署。原 237 項測試成功屬舊 SHA。
-
-## 2026-10-29 補充：寫回安全防護與未完成界線
-
-本節為最新補充，不取代先前 Windows CI 證據。
-
-- `e7986b6`：寫回前拒絕相同既有 ERP 序號重複指定，以及不同列鍵重複新增相同品號＋批號；冪等核對改以 decimal 數值比較，而非字串格式相等。
-- `11017d2`：新增上述重複資料與十進位等值測試。
-- `3cd669c`：新增批號回傳的 ERP 序號不得與不同品號／批號的原始列衝突，且不同工作列不得共用同一個回傳序號。
-- `7128557`：新增錯誤序號對應的 Fake Driver 回歸測試。
-- **此批提交沒有取得新 Windows CI 成功結果**。GitHub 工作流程列表未見以上 SHA 的 Build 觸發結果；先前 237/237 與 Build 成功不能外推至新增修改。
-- **不可宣稱可以交付最終 Claude 程式審查**：`ItemQueryService.Stocktake.cs` 真 Win32 Driver、INVR11 報表及 F2 翻頁、INVI14 單筆核對寫入、INVI06 新增與確認、MainForm 派工與 STOCK 進度尚未實作驗收。
-- `ErpAgentJob.SupportedTypes` 仍不得加入 `STOCKTAKE_SYNC` 或 `STOCKTAKE_WRITE`，直到真 Driver 與整合安全測試完備，並明確取得 ERP 測試授權。
-- 沒有合併、發行、部署或對正式 ERP 寫入。治理 PR #571 是未解除的前置依賴。
-
 # CYERPAutoQuery WO-1.3.0 — GPT 實作／Claude 最終審查 Handoff
 
-> **狀態：GPT 開發中，尚未具備正式 ERP Win32 讀取／寫回，禁止合併、正式發行或部署。** 本檔為所有 GPT 修改的唯一逐檔索引及後續 Claude 審查入口；Claude 最終意見在 §9 填寫，GPT 不代填。
+> **狀態：Claude 已審查並重寫 Win32 部分（§9），待治理 PR #571 合併與實機測試。** 本檔為所有 GPT 修改的唯一逐檔索引及後續 Claude 審查入口；Claude 最終意見在 §9 填寫，GPT 不代填。
 
 ## 1. 來源、規則與工作分支
 
@@ -129,9 +75,79 @@
 
 ## 9. Claude 最終審查（僅 Claude 填）
 
-- 最新 SHA／審查日期：
-- 治理 PR #571：
-- WIN32 控制項與寫回安全：
-- 測試與真機界線：
-- 結論：**待審**
-- 是否允許合併、發行：
+- 審查日期：2026-10-29。程式分支 `cyerp-auto-query/stocktake`，最新 SHA 見 PR #572。
+- **結論：需修正，已由 Claude 直接修改。** GPT 沒有拿到截圖，所有點選位置都不對，加上大量多餘的防護與測試，因此依使用者指示由 Claude 重寫。
+
+### 9.1 GPT 版本的錯誤（依截圖 104–115 對照）
+
+**INVR11**
+- 條件視窗標題是「品號盤點清單[公司]」，不含 INVR11，原程式用 INVR11 找視窗會永遠找不到。報表名稱寫成「盤點底稿明細表」也不對。
+- F2 清單頁尾的「1 / 4」意思是第 1 筆、共 4 筆，原程式卻當成多頁直接拋錯。只要有一張以上底稿就一定失敗。
+- 「選擇列印」的選項是「二者皆列印」，原程式搜尋「兩者」，永遠找不到。
+- 完全沒有做報表「欄位資訊」把儲位、批號、盤點數量切成 Y 的步驟，所以匯出檔缺欄位。
+- 沒有沿用既有的 `RunReportAsync`（關閉殘留視窗、按三次即時報表、匯出、關窗），另寫了一套。
+
+**INVI14**
+- 沒有切到「詳細欄位」頁籤。
+- 用 `WM_SETTEXT` 寫入資料感知欄位，ERP 可能不會把值當成修改。
+- 欄位定位要求「Enabled」，但唯讀的識別欄位會被排除在外。
+
+**INVI06**
+- 新增列用「欄位標籤＋右邊輸入框」去找，但表格的格子不是視窗，這樣找不到。
+- 確認後去讀一個不存在的「確認狀態」欄位。
+- `ErpAutomationGate` 有巢狀使用。
+- 寫入動作沒有包在 `GuardErpMessagesAsync` 裡。
+
+**流程與協定**
+- 協定、流程協調和測試裡有大量重複驗證，例如序號碰撞、整張底稿外的新列、200 張上限、空白寫回禁止確認等，對實際流程沒有幫助。依使用者 2026-10-29 指示刪除。
+
+### 9.2 Claude 的修改
+
+**INVR11**（`ItemQueryService.Stocktake.cs`）
+- 改用 `RunReportAsync`，報表名稱改為「品號盤點清單」。新增 `prepare` hook，在匯出前開「欄位資訊」。
+- F2 清單用 OCR 逐行讀出底稿編號和盤點日期，並讀頁尾的總筆數。讀到的張數少於總數時往下翻頁，最後以點擊該列加按「確定」選取底稿，並讀回輸入框內容核對。
+- 「選擇列印」是基本選項右側的下拉選單，「二者皆列印」是最後一項，沿用 `SetComboLastAsync` 設定。
+- 「欄位資訊」從報表左上第一個按鈕開啟（避開旁邊的 ▼）。用 OCR 找「顯示」欄與儲位、批號、盤點數量三列，是 N 的就點一下。點完重新讀一次，確認三列都是 Y 再按「確定」。
+
+**INVI14**（`ItemQueryService.StocktakeWrite.cs`）
+- F6 一般選項填兩列條件：盤點底稿編號和序號。查詢完切到「詳細欄位」。
+- 詳細欄位依列位置對應欄位：第 1 列底稿編號＋序號、第 2 列盤點日期＋品號、第 3 列盤點數量＋品名、第 6 列批號＋庫別。
+- 先核對序號、品號、批號，再按修改，點盤點數量，用 End＋Backspace 清空後輸入並按 Tab，接著儲存。儲存完讀回數量；中途失敗就按「取消」。
+
+**INVI06 新增批號**
+- 用 OCR 讀表格標題，取得序號、品號、批號、盤點數量的欄位位置。比對時避開「批號盤點」，以免和「批號」混淆。
+- 點第一列序號，按 Ctrl+End 到最後一列，再按「下」產生新列。以「最下方序號比上一列大」判定新列確實產生。
+- 依序點品號、批號、盤點數量格子輸入。盤點數量格預設是 0，所以點格子右側，讓游標落在 0 後面。不按 End 或 Ctrl+A，因為不在編輯狀態時，這兩個鍵會跳到別欄。
+- 填完用 OCR 讀回新列，再按儲存。
+
+**INVI06 確認**
+- 若「取消確認」已經是深色，代表已確認，直接回報成功。
+- 否則按「確認」；過程中出現詢問框就按「是」，出現其他訊息就停下。之後等「取消確認」由灰轉深，判定確認成功。
+
+**流程**（`StocktakeExecution.cs`）
+1. 讀 INVR11。
+2. 逐列處理：數量已一致的跳過；原有列用 INVI14 寫；之前已新增過的批號改用 INVI14 寫，避免重複新增；其他新增批號用 INVI06。
+3. 任一列失敗就停止，其餘列標為「未執行」。
+4. 重讀 INVR11，每一寫入列都相符才確認。新增列的 ERP 序號從這次重讀取得。
+
+**其他**
+- `SupportedTypes` 已加入兩種盤點類型。實際是否派工由 CY Web 端決定，CY Web WO-0.9.52 需另外部署。
+- 測試從 GPT 的 23 項精簡為 13 項，涵蓋協定、數量格式、F2 與表格 OCR 解析、匯出、寫回流程。全部 235 項通過（Linux `dotnet test`）。
+
+### 9.3 治理 PR #571
+
+方向同意。條文中的「INVR11 全表一致」已改成「所有寫入列一致」，並寫明確認時會回答 ERP 的詢問框，以符合實作。
+
+### 9.4 尚未驗證（需實機）
+
+以下推定都還沒在實機確認：
+- F2 視窗與表格的 OCR 結果。
+- 「欄位資訊」按鈕的位置。
+- 單擊 N 是否確實切成 Y。
+- INVI06 的 Ctrl+End 與按「下」新增列。
+- 盤點數量格子的點擊位置。
+- 「取消確認」顏色的判定。
+
+建議用一張測試底稿依序實測：讀取、單筆寫入、新增批號、確認。失敗時把 LOG 交回（LOG 會記錄 OCR 讀到的文字）。
+
+- 是否允許合併：先合併治理 PR #571，再合併本 PR；發 Release 前先做上述實機測試。

@@ -1,11 +1,12 @@
+using System.Drawing;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace CYERPAutoQuery;
 
 /// <summary>
-/// ERP stocktake contract: all data handling is pure and synthetic-testable.
-/// No ERP side effect is permitted here. Mutations belong to the gated service.
+/// 庫存盤點 (WO-1.3.0): the data read from and written to ERP's 盤點底稿. Pure, so it is unit
+/// tested on any OS; the ERP screens are driven by ItemQueryService.Stocktake*.cs.
 /// </summary>
 internal sealed record StocktakeSheet(string SheetNo, DateOnly Date);
 internal sealed record StocktakeLine(
@@ -13,8 +14,8 @@ internal sealed record StocktakeLine(
     string Location, string Unit, string Batch, string BookQty);
 internal sealed record StocktakeDetail(string SheetNo, IReadOnlyList<StocktakeLine> Rows);
 internal sealed record StocktakeSyncResult(
-    IReadOnlyList<StocktakeSheet> Sheets, IReadOnlyList<StocktakeDetail> Details,
-    TimeSpan Elapsed);
+    IReadOnlyList<StocktakeSheet> Sheets, IReadOnlyList<StocktakeDetail> Details, TimeSpan Elapsed);
+/// <summary>One line to write: <see cref="Seq"/> null is a batch added in CY Web (INVI06 new row).</summary>
 internal sealed record StocktakeWriteRow(string Key, string? Seq, string ItemCode, string Batch, string Quantity);
 internal sealed record StocktakeWriteRowResult(string Key, bool Ok, string? ErpSeq, string Message);
 internal sealed record StocktakeMismatch(
@@ -25,60 +26,134 @@ internal sealed record StocktakeWriteResult(
 
 internal static class StocktakeQuery
 {
-    public const int MaxSheets = 200;
-    public const int MaxSkipSheets = 500;
     public const int MaxRowsPerSheet = 3000;
     public const int MaxCompleteBytes = 900 * 1024;
     private static readonly Regex SheetNumber = new(@"^[0-9]{6,20}$", RegexOptions.CultureInvariant);
     private static readonly Regex Sequence = new(@"^[0-9]{5}$", RegexOptions.CultureInvariant);
-    private static readonly Regex QuantityValue = new(@"^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,4})?$", RegexOptions.CultureInvariant);
-    private static readonly Regex F2Row = new(@"(?<![0-9])(?<number>[0-9]{6,20})\s+(?<date>[0-9]{4}[/\-][0-9]{2}[/\-][0-9]{2})(?![0-9])",
+    private static readonly Regex QuantityValue = new(@"^-?[0-9]{1,9}(?:\.[0-9]{1,4})?$", RegexOptions.CultureInvariant);
+    private static readonly Regex F2Row = new(@"(?<![0-9])(?<number>[0-9]{6,20})\s*(?<date>[0-9]{4}/[0-9]{2}/[0-9]{2})(?![0-9])",
         RegexOptions.CultureInvariant);
+    private static readonly Regex Position = new(@"(?<![0-9/])(?<at>[0-9]+)\s*/\s*(?<total>[0-9]+)(?![0-9/])", RegexOptions.CultureInvariant);
 
     public static bool IsSheetNo(string? number) => number is not null && SheetNumber.IsMatch(number);
     public static bool IsSeq(string? seq) => seq is not null && Sequence.IsMatch(seq);
 
+    /// <summary>A quantity as a plain decimal string (ERP may show 「1,234.0」).</summary>
     public static string Quantity(string? value)
     {
-        var text = value?.Trim() ?? "";
-        if (!QuantityValue.IsMatch(text) ||
-            !decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
-                CultureInfo.InvariantCulture, out var amount) ||
-            Math.Abs(amount) >= 1000000000m)
-            throw new InvalidDataException("盤點數量格式不正確。");
-        return text;
+        var text = (value ?? "").Trim().Replace(",", "");
+        if (text.Length == 0) text = "0";
+        if (!QuantityValue.IsMatch(text))
+            throw new InvalidDataException($"盤點數量格式不正確：「{value}」。");
+        return decimal.Parse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)
+            .ToString("0.####", CultureInfo.InvariantCulture);
     }
 
-    public static IReadOnlyList<StocktakeSheet> ParseF2(string ocr)
+    public static bool SameQuantity(string? a, string? b) => Quantity(a) == Quantity(b);
+
+    // ---- INVR11 「F2開窗查詢」 -------------------------------------------------------------
+
+    /// <summary>
+    /// Text lines of an OCR result: tokens whose vertical centres are within half a token height,
+    /// left to right (the grid's 底稿編號 and 盤點日期 cells come as separate tokens).
+    /// </summary>
+    public static IReadOnlyList<(string Text, Rectangle Rect)> Lines(IReadOnlyList<OcrToken> tokens)
     {
-        var result = new List<StocktakeSheet>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match row in F2Row.Matches(ocr))
+        var lines = new List<List<OcrToken>>();
+        foreach (var token in tokens.OrderBy(t => t.Rect.Top + t.Rect.Height / 2))
         {
-            var number = row.Groups["number"].Value;
-            var date = row.Groups["date"].Value.Replace('/', '-');
-            if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out var parsed))
-                throw new InvalidDataException("盤點底稿的日期不正確。");
-            if (!seen.Add(number)) continue; // Same row may repeat between OCR pages.
-            result.Add(new StocktakeSheet(number, parsed));
-            if (result.Count > MaxSheets)
-                throw new InvalidDataException("F2 盤點底稿清單超過 200 張，不能截斷後宣稱已讀完。");
+            var cy = token.Rect.Top + token.Rect.Height / 2.0;
+            var line = lines.FirstOrDefault(l =>
+                Math.Abs(l[0].Rect.Top + l[0].Rect.Height / 2.0 - cy) <= Math.Max(l[0].Rect.Height, token.Rect.Height) / 2.0);
+            if (line is null) lines.Add([token]);
+            else line.Add(token);
         }
-        return result;
+        return lines.Select(l =>
+        {
+            var ordered = l.OrderBy(t => t.Rect.Left).ToList();
+            var rect = ordered.Skip(1).Aggregate(ordered[0].Rect, (r, t) => Rectangle.Union(r, t.Rect));
+            return (string.Join(" ", ordered.Select(t => t.Text.Trim())), rect);
+        }).OrderBy(l => l.rect.Top).ToList();
+    }
+
+    /// <summary>The sheets in the F2 grid (底稿編號 + 盤點日期 on one line), each with where its line is.</summary>
+    public static IReadOnlyList<(StocktakeSheet Sheet, Rectangle Rect)> ParseF2(IReadOnlyList<OcrToken> tokens)
+    {
+        var found = new List<(StocktakeSheet, Rectangle)>();
+        foreach (var (text, rect) in Lines(tokens))
+        {
+            var match = F2Row.Match(text);
+            if (!match.Success) continue;
+            if (!DateOnly.TryParseExact(match.Groups["date"].Value, "yyyy/MM/dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date))
+                continue;
+            found.Add((new StocktakeSheet(match.Groups["number"].Value, date), rect));
+        }
+        return found;
+    }
+
+    /// <summary>The record count in the F2 footer 「1 / 4」 (record 1 of 4), or null when it is not read.</summary>
+    public static int? ParseF2Total(IReadOnlyList<OcrToken> tokens)
+    {
+        foreach (var (text, _) in Lines(tokens).Reverse())
+            if (Position.Match(text) is { Success: true } m && int.TryParse(m.Groups["total"].Value, out var total))
+                return total;
+        return null;
+    }
+
+    // ---- INVI06 detail grid ------------------------------------------------------------------
+
+    /// <summary>
+    /// Centre x of each wanted column header in the grid's header line. 「批號盤點」 also contains
+    /// 「批號」, so a header is only taken where it is not part of a longer header.
+    /// </summary>
+    public static IReadOnlyDictionary<string, int> GridColumns(IReadOnlyList<OcrToken> header, params string[] names)
+    {
+        var columns = new Dictionary<string, int>(StringComparer.Ordinal);
+        var batchCheck = OcrWordFinder.FindWords(header, "批號盤點");
+        foreach (var name in names)
+        {
+            var hit = OcrWordFinder.FindWords(header, name)
+                .Where(r => name == "批號盤點" || !batchCheck.Any(b => b.IntersectsWith(r)))
+                .Cast<Rectangle?>().FirstOrDefault();
+            if (hit is { } r) columns[name] = r.Left + r.Width / 2;
+        }
+        return columns;
     }
 
     /// <summary>
-    /// Only INVR11's 盤點數量 is the current ERP book value.
-    /// 初盤數量 (underlined blank) is deliberately ignored.
+    /// The 序號 down the grid's first column, top to bottom: tokens across the column's centre that
+    /// start with 5 digits (OCR may join a 序號 with the 品號 next to it).
+    /// </summary>
+    public static IReadOnlyList<(string Seq, int Y)> GridSeqs(IReadOnlyList<OcrToken> tokens, int seqX) =>
+        tokens.Where(t => t.Rect.Left <= seqX && t.Rect.Right >= seqX)
+            .Select(t => (Match: Regex.Match(t.Text.Trim(), @"^[0-9]{5}(?![0-9])"), Y: t.Rect.Top + t.Rect.Height / 2))
+            .Where(m => m.Match.Success).Select(m => (m.Match.Value, m.Y)).OrderBy(m => m.Y).ToList();
+
+    /// <summary>A grid row's whole text without spaces (to check the 品號 and 批號 typed into it).</summary>
+    public static string RowText(IReadOnlyList<OcrToken> tokens, int rowCenterY) =>
+        string.Concat(Lines(tokens).Where(l => Math.Abs(l.Rect.Top + l.Rect.Height / 2 - rowCenterY) <= 8)
+            .Select(l => OcrTextNormalizer.Normalize(l.Text).Replace(" ", "")));
+
+    /// <summary>What a row shows under a column: the tokens on the row's line overlapping the column's centre ± <paramref name="halfWidth"/>.</summary>
+    public static string CellText(IReadOnlyList<OcrToken> tokens, int rowCenterY, int columnX, int halfWidth)
+    {
+        var cell = tokens.Where(t => Math.Abs(t.Rect.Top + t.Rect.Height / 2 - rowCenterY) <= Math.Max(6, t.Rect.Height / 2) &&
+                                     t.Rect.Right >= columnX - halfWidth && t.Rect.Left <= columnX + halfWidth)
+            .OrderBy(t => t.Rect.Left).Select(t => t.Text.Trim());
+        return string.Join("", cell);
+    }
+
+    // ---- INVR11 export ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The INVR11 workbook (品號盤點清單 with 儲位／批號／盤點數量 shown): 盤點數量 is ERP's book
+    /// quantity; 初盤數量 is a blank line for writing on paper and is ignored.
     /// </summary>
     public static StocktakeDetail ParseExport(string sheetNo,
         IReadOnlyList<(string Name, List<string[]> Rows)> sheets)
     {
-        if (!IsSheetNo(sheetNo)) throw new InvalidDataException("盤點底稿編號不正確。");
-        string[] required =
-            ["底稿編號","底稿序號","品號","品名","規格","庫別名稱","儲位","單位","批號","盤點數量"];
-        List<StocktakeLine>? parsed = null;
+        string[] required = ["底稿編號", "底稿序號", "品號", "品名", "規格", "庫別名稱", "儲位", "單位", "批號", "盤點數量"];
         foreach (var (_, rows) in sheets)
         {
             for (var h = 0; h < Math.Min(rows.Count, 25); h++)
@@ -86,145 +161,58 @@ internal static class StocktakeQuery
                 var columns = rows[h].Select(v => v.Trim()).ToArray();
                 var index = required.ToDictionary(k => k, k => Array.IndexOf(columns, k));
                 if (index.Values.Any(v => v < 0)) continue;
-                if (parsed is not null) throw new InvalidDataException("同一匯出有多組盤點明細，無法確定資料來源。");
-                parsed = [];
-                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var parsed = new List<StocktakeLine>();
                 for (var n = h + 1; n < rows.Count; n++)
                 {
                     var values = rows[n];
-                    string Cell(string col)
-                    {
-                        var pos = index[col];
-                        return pos < values.Length ? values[pos].Trim() : "";
-                    }
-                    if (values.All(string.IsNullOrWhiteSpace)) continue;
+                    string Cell(string col) => index[col] < values.Length ? values[index[col]].Trim() : "";
+                    if (!IsSeq(Cell("底稿序號"))) continue; // blank and total lines
                     if (Cell("底稿編號") != sheetNo)
-                        throw new InvalidDataException("匯出資料含其他盤點底稿編號，已拒絕讀取。");
-                    var seq = Cell("底稿序號");
-                    if (!IsSeq(seq) || !seen.Add(seq))
-                        throw new InvalidDataException("底稿序號缺漏、格式錯誤或重複。");
-                    var item = Cell("品號");
-                    if (string.IsNullOrWhiteSpace(item) || item.Length > 40 ||
-                        item.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != '-'))
-                        throw new InvalidDataException("盤點品號格式錯誤。");
-                    parsed.Add(new StocktakeLine(seq,item,Cell("品名"),Cell("規格"),
-                        Cell("庫別名稱"),Cell("儲位"),Cell("單位"),Cell("批號"),
-                        Quantity(Cell("盤點數量"))));
-                    if (parsed.Count > MaxRowsPerSheet)
-                        throw new InvalidDataException("盤點底稿超過 3,000 列，不可截斷。");
+                        throw new InvalidDataException($"INVR11 匯出含其他盤點底稿（{Cell("底稿編號")}），不是 {sheetNo}。");
+                    parsed.Add(new StocktakeLine(Cell("底稿序號"), Cell("品號"), Cell("品名"), Cell("規格"),
+                        Cell("庫別名稱"), Cell("儲位"), Cell("單位"), Cell("批號"), Quantity(Cell("盤點數量"))));
                 }
+                return new StocktakeDetail(sheetNo, parsed);
             }
         }
-        return new StocktakeDetail(sheetNo, parsed ?? throw new InvalidDataException(
-            "盤點明細缺少必要欄位：" + string.Join("、", required)));
+        throw new InvalidDataException("INVR11 匯出缺少欄位：" + string.Join("、", required) + "（欄位資訊的儲位／批號／盤點數量要切成 Y）。");
     }
 
+    /// <summary>The ERP line a write is about: by 底稿序號, or for an added batch by 品號＋批號.</summary>
+    public static StocktakeLine? Find(IReadOnlyList<StocktakeLine> lines, StocktakeWriteRow row) =>
+        row.Seq is { } seq
+            ? lines.FirstOrDefault(l => l.Seq == seq)
+            : lines.FirstOrDefault(l => l.ItemCode == row.ItemCode && l.Batch == row.Batch);
+
+    public static bool AlreadyApplied(StocktakeWriteRow row, StocktakeLine? found) =>
+        found is not null && found.ItemCode == row.ItemCode && found.Batch == row.Batch &&
+        SameQuantity(found.BookQty, row.Quantity);
+
+    /// <summary>The INVR11 read after writing: every written line must show its quantity.</summary>
     public static IReadOnlyList<StocktakeMismatch> Verify(
-        IReadOnlyList<StocktakeWriteRow> expected, IReadOnlyList<StocktakeLine> actual,
-        IReadOnlyDictionary<string,string>? assignedSeq = null)
+        IReadOnlyList<StocktakeWriteRow> expected, IReadOnlyList<StocktakeLine> actual)
     {
-        if (expected.Count > MaxRowsPerSheet || actual.Count > MaxRowsPerSheet)
-            throw new InvalidDataException("盤點核對超過每張 3,000 列上限。");
-        var bySeq = actual.ToDictionary(x=>x.Seq,StringComparer.Ordinal);
         var mismatches = new List<StocktakeMismatch>();
         foreach (var row in expected)
         {
-            var seq = row.Seq ?? (assignedSeq?.TryGetValue(row.Key,out var value)==true?value:null);
-            var seen = seq is not null && bySeq.TryGetValue(seq,out var found)?found:null;
-            if (seen is null && row.Seq is null)
-            {
-                var possible = actual.Where(x=>x.ItemCode==row.ItemCode && x.Batch==row.Batch).ToArray();
-                if (possible.Length==1) seen=possible[0];
-            }
-            var actualValue = seen?.BookQty ?? "";
-            var matching = seen is not null && seen.ItemCode==row.ItemCode &&
-                seen.Batch==row.Batch && Quantity(row.Quantity)==Quantity(actualValue);
-            if (!matching)
-                mismatches.Add(new StocktakeMismatch(row.Key,seen?.Seq ?? seq,
-                    row.ItemCode,row.Batch,row.Quantity,actualValue));
+            var seen = Find(actual, row);
+            if (!AlreadyApplied(row, seen))
+                mismatches.Add(new StocktakeMismatch(row.Key, seen?.Seq ?? row.Seq, row.ItemCode, row.Batch,
+                    Quantity(row.Quantity), seen is null ? "0" : seen.BookQty));
         }
         return mismatches;
     }
 
-    public static bool AlreadyApplied(StocktakeWriteRow row, StocktakeLine? found) =>
-        found is not null && found.ItemCode==row.ItemCode && found.Batch==row.Batch &&
-        decimal.Parse(Quantity(found.BookQty),CultureInfo.InvariantCulture)==
-        decimal.Parse(Quantity(row.Quantity),CultureInfo.InvariantCulture);
-
-    /// <summary>
-    /// INVR11 after write must match the entire original sheet, not just the
-    /// subset returned to CY Web for modification. This detects unexpected
-    /// changes to untouched batches and missing/duplicate ERP rows.
-    /// </summary>
-    public static IReadOnlyList<StocktakeMismatch> VerifyEntireSheet(
-        IReadOnlyList<StocktakeLine> before,
-        IReadOnlyList<StocktakeLine> after,
-        IReadOnlyList<StocktakeWriteRow> writes,
-        IReadOnlyDictionary<string,string>? assignedSeq = null)
-    {
-        var targetsBySequence=new Dictionary<string,StocktakeWriteRow>(StringComparer.Ordinal);
-        foreach(var write in writes)
-        {
-            var sequence=write.Seq ?? (assignedSeq is not null &&
-                assignedSeq.TryGetValue(write.Key,out var mapped)?mapped:null);
-            if(sequence is not null)targetsBySequence[sequence]=write;
-        }
-        var afterBySeq=after.ToDictionary(row=>row.Seq,StringComparer.Ordinal);
-        var mismatches=new List<StocktakeMismatch>();
-        var checkedSequences=new HashSet<string>(StringComparer.Ordinal);
-        foreach(var line in before)
-        {
-            var key=line.Seq;
-            var write=targetsBySequence.GetValueOrDefault(key);
-            var wanted=write?.Quantity ?? line.BookQty;
-            afterBySeq.TryGetValue(key,out var result);
-            checkedSequences.Add(key);
-            if(result is null || result.ItemCode!=line.ItemCode || result.Batch!=line.Batch)
-                throw new InvalidDataException("INVR11 核對時 ERP 底稿列遺失或識別變更，禁止確認。");
-            if(decimal.Parse(Quantity(result.BookQty),CultureInfo.InvariantCulture)!=
-                decimal.Parse(Quantity(wanted),CultureInfo.InvariantCulture))
-                mismatches.Add(new StocktakeMismatch(key,key,line.ItemCode,line.Batch,wanted,
-                    result.BookQty));
-        }
-        foreach(var line in writes.Where(x=>x.Seq is null))
-        {
-            var seq=assignedSeq is not null && assignedSeq.TryGetValue(line.Key,out var assigned)
-                ? assigned : after.SingleOrDefault(x=>x.ItemCode==line.ItemCode && x.Batch==line.Batch)?.Seq;
-            var result=seq is not null && afterBySeq.TryGetValue(seq,out var found)?found:null;
-            if(result is null || result.ItemCode!=line.ItemCode || result.Batch!=line.Batch)
-                throw new InvalidDataException("INVR11 新增批號核對時未找到或識別錯誤，禁止確認。");
-            if(decimal.Parse(Quantity(result.BookQty),CultureInfo.InvariantCulture)!=
-                decimal.Parse(Quantity(line.Quantity),CultureInfo.InvariantCulture))
-                mismatches.Add(new StocktakeMismatch(line.Key,seq,line.ItemCode,line.Batch,line.Quantity,
-                    result.BookQty));
-            if(seq is not null)checkedSequences.Add(seq);
-        }
-        // Any unrecognised ERP row is a dangerous discrepancy, never approve
-        // confirmation if a new row appeared outside the authorized job.
-        if(after.Any(row=>!checkedSequences.Contains(row.Seq)))
-            throw new InvalidDataException("INVR11 出現工作範圍外的新列，無法安全確認。");
-        return mismatches;
-    }
-
-    public static IReadOnlyList<StocktakeWriteRow> ValidateWrite(
-        string sheetNo,IReadOnlyList<StocktakeWriteRow> rows)
+    public static IReadOnlyList<StocktakeWriteRow> ValidateWrite(string sheetNo, IReadOnlyList<StocktakeWriteRow> rows)
     {
         if (!IsSheetNo(sheetNo)) throw new InvalidDataException("盤點底稿編號錯誤。");
-        if (rows.Count>MaxRowsPerSheet) throw new InvalidDataException("寫回列數超過 3,000。");
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-        var sequences = new HashSet<string>(StringComparer.Ordinal);
-        var newBatches = new HashSet<(string ItemCode,string Batch)>();
-        foreach(var row in rows)
+        if (rows.Count > MaxRowsPerSheet) throw new InvalidDataException("盤點寫回超過 3,000 列。");
+        if (rows.Select(r => r.Key).Distinct(StringComparer.Ordinal).Count() != rows.Count)
+            throw new InvalidDataException("盤點寫回的列鍵重複。");
+        foreach (var row in rows)
         {
-            if (!keys.Add(row.Key) || row.Key.Length>60 ||
-                (row.Seq is not null && (!IsSeq(row.Seq) || row.Key!=row.Seq)) ||
-                (row.Seq is null && (!Regex.IsMatch(row.Key,@"^N[0-9]{4,}$") || row.Batch.Length==0)) ||
-                row.ItemCode.Length is < 1 or > 40 || row.Batch.Length>80)
-                throw new InvalidDataException("ERP 寫回工作含不合法或重複的列鍵。");
-            if (row.Seq is not null && !sequences.Add(row.Seq))
-                throw new InvalidDataException("同一底稿序號重複指定，禁止寫回。");
-            if (row.Seq is null && !newBatches.Add((row.ItemCode,row.Batch)))
-                throw new InvalidDataException("同一品號與批號重複新增，禁止寫回。");
+            if ((row.Seq is not null && !IsSeq(row.Seq)) || row.ItemCode.Length == 0 || (row.Seq is null && row.Batch.Length == 0))
+                throw new InvalidDataException($"盤點寫回列 {row.Key} 的序號、品號或批號不正確。");
             _ = Quantity(row.Quantity);
         }
         return rows;
