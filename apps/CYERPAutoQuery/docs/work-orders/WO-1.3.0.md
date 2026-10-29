@@ -102,4 +102,15 @@
 
 ## 8. 完成報告（執行者填）
 
+> **GPT 開發中紀錄（2026-10-29）— 尚未完成真 Windows ERP 驅動及實機驗收，不是可合併完成報告。**
+
+- 前置治理 [PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571)：限定只讀例外、GOVERNANCE_VERSION 2.3.58 與 changelog；Governance Check 已通過，尚未合併。
+- 實作 [Draft PR #572](https://github.com/simonliu1118-byte/CYapps/pull/572)：`cyerp-auto-query/stocktake`，目標 `V1.3.0 Build 0`，不合併、不部署、不發行。
+- 已提交純邏輯：`StocktakeQuery.cs`、`StocktakeExecution.cs`、`ErpAgentProtocol.Stocktake.cs`，支援 F2 清單、INVR11 表格驗證、SYNC skip／only、WRITE existing/new 逐列識別、重試與全表核對、complete 900 KiB／ERP 序號約束；相關合成 xUnit 已寫入 test project。
+- **安全阻擋**：`ErpAgentJob.SupportedTypes` 暫不宣告兩個盤點工作，因真正 Windows INVR11／INVI14／INVI06 控制項識別與回寫尚未完成，避免工程包意外領取寫入工作。
+- 未完成：`ItemQueryService.Stocktake.cs` 及 MainForm Agent 路由、Windows 本機／CI 視窗測試與使用者核准的實機 ERP 測試底稿；不能冒稱此項已可運作。
+- **Windows CI 已有明確證據**：[Build #40755553029](https://github.com/simonliu1118-byte/CYapps/actions/runs/40755553029) 對程式 SHA `e6d7403e6cd6d902d4fa83800b2373e45998c4e1` **成功**：xUnit **237/237 通過**、Windows x64 dotnet Build／Publish、公開套件安全掃描、工程 [Artifact #12844799841](https://github.com/simonliu1118-byte/CYapps/actions/runs/40755553029/artifacts/12844799841) 已產生（3 日）。**只是安全鎖定的工程包，並未實作或啟用正式 ERP 視窗寫入**。每個修改與風險詳見 `docs/handoff/CYERPAutoQuery-WO-1.3.0-CLAUDE-REVIEW.md`。
+- 仍待：INVR11/INVI14/INVI06 實際 Win32 自動化、Agent 逐列進度／派工連線、使用者另案核准的實機盤點底稿驗收；不得宣告 WO 已完成。
+- 沒有操作正式 ERP、Cloudflare、CY Web、客戶資料或庫存。
+
 ## 9. 審查紀錄（審查者填）

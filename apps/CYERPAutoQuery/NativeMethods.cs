@@ -30,12 +30,16 @@ internal static class NativeMethods
     internal const uint KEYEVENTF_UNICODE = 0x0004;
 
     internal const ushort VK_BACK = 0x08;
+    internal const ushort VK_TAB = 0x09;
+    internal const ushort VK_CONTROL = 0x11;
+    internal const ushort VK_NEXT = 0x22;
     internal const ushort VK_RETURN = 0x0D;
     internal const ushort VK_ESCAPE = 0x1B;
     internal const ushort VK_END = 0x23;
     internal const ushort VK_HOME = 0x24;
     internal const ushort VK_UP = 0x26;
     internal const ushort VK_DOWN = 0x28;
+    internal const ushort VK_F2 = 0x71;
     internal const ushort VK_F6 = 0x75;
 
     [StructLayout(LayoutKind.Sequential)]

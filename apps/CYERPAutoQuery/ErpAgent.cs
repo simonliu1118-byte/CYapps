@@ -78,7 +78,8 @@ internal sealed class ErpAgentLoop(
     Func<ErpAgentJob, CancellationToken, Task<ItemSearchResult>>? runSearch = null,
     Func<ErpAgentJob, CancellationToken, Task<(bool Found, string Body)>>? runBusiness = null,
     Func<string, CancellationToken, Task<string?>>? runControl = null,
-    Action<DateTimeOffset?>? holdChanged = null)
+    Action<DateTimeOffset?>? holdChanged = null,
+    Func<ErpAgentJob, CancellationToken, Task<(bool Found, string Body)>>? runStocktake = null)
 {
     public static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
     public static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
@@ -187,7 +188,14 @@ internal sealed class ErpAgentLoop(
         string outcome;
         try
         {
-            if (job.IsBusiness)
+            if (job.QueryType is ErpAgentJob.StocktakeSyncType or ErpAgentJob.StocktakeWriteType)
+            {
+                if (runStocktake is null) throw new NotSupportedException("庫存盤點未接上。");
+                var reply = await runStocktake(job, cancellationToken);
+                body = reply.Body;
+                outcome = reply.Found ? "FOUND" : "NOT_FOUND";
+            }
+            else if (job.IsBusiness)
             {
                 // Customer, supplier, 銷貨銷退 and 未收款 jobs build their own complete body (ErpAgentProtocol).
                 if (runBusiness is null) throw new NotSupportedException("客戶／廠商／銷貨銷退／未收款查詢未接上。");

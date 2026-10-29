@@ -300,6 +300,13 @@ internal static class InputSender
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    /// <summary>Ctrl + <paramref name="key"/> (Ctrl+End in a DevExpress grid goes to its last row).</summary>
+    public static void PressWithControl(ushort key)
+    {
+        var inputs = new[] { Key(NativeMethods.VK_CONTROL, 0), Key(key, 0), Key(key, NativeMethods.KEYEVENTF_KEYUP), Key(NativeMethods.VK_CONTROL, NativeMethods.KEYEVENTF_KEYUP) };
+        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
     public static void UnicodeText(string text, int delayMs = 24)
     {
         // A Chinese IME left open in ERP holds typed characters in its composition instead of

@@ -9,9 +9,12 @@
 - CY Web 端（chihyuan-web，目前 V0.9.43）：ERP 查詢頁（商品、客戶、供應商、進貨輔助、未收款）、排程佇列（每人最多 3 筆）、ERP 關閉／暫停（含「關閉到…」與暫停時加入佇列）；協定見該 repo `docs/architecture/ERP_ITEM_QUERY_BRIDGE_CONTRACT.md`。本程式只依 claim 回應的 `control.holdUntil` 決定暫停期間不開 ERP，暫停中排隊的工作由 CY Web 在暫停結束後才派發。
 - 自動更新只認本專案正式 Release；目前只保留 V1.2.1。V1.1.0 Build 3 → V1.2.0 的自動更新已在伺服器實際完成（2026-10-28 LOG）。
 
-## 待執行：V1.3.0 — 庫存盤點（交 GPT：[WO-1.3.0](docs/work-orders/WO-1.3.0.md)）
+## 進行中：V1.3.0 — 庫存盤點（[WO-1.3.0](docs/work-orders/WO-1.3.0.md)，[PR #572](https://github.com/simonliu1118-byte/CYapps/pull/572)）
 
-- 讀盤點單（INVR11）、寫回 ERP（INVI14 逐筆、INVI06 新增批號與確認）；本程式第一次寫入 ERP，規則另開 governance PR。CY Web 端為 chihyuan-web WO-0.9.52。
+- GPT 完成後由 Claude 審查並重寫 Win32 點選部分，依據是使用者截圖 104–115，見 `docs/handoff/CYERPAutoQuery-WO-1.3.0-CLAUDE-REVIEW.md` §9。
+- 程式在 `ItemQueryService.Stocktake.cs`（INVR11）與 `ItemQueryService.StocktakeWrite.cs`（INVI14、INVI06）；流程協調在 `StocktakeExecution.cs`。
+- 前置條件是治理 [PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571) 和 CY Web WO-0.9.52 [PR #307](https://github.com/simonliu1118-byte/chihyuan-web/pull/307)。
+- 尚未在實機上跑過。第一次實測請用一張測試底稿，依序驗證：讀取、單筆寫入、新增批號、確認。
 
 ## 功能與實機紀錄（2026-10-28 整理）
 

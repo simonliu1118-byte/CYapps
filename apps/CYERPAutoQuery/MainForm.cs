@@ -1106,7 +1106,8 @@ internal sealed partial class MainForm : Form
             runSearch: RunWebSearchAsync,
             runBusiness: RunWebBusinessAsync,
             runControl: RunWebControlAsync,
-            holdChanged: SetErpHold);
+            holdChanged: SetErpHold,
+            runStocktake: RunWebStocktakeAsync);
         _agentClient = client;
         _agentTask = RunAgentAsync(loop, client, _agentCts.Token);
     }
