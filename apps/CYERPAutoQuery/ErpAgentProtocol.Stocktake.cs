@@ -99,10 +99,12 @@ internal static partial class ErpAgentProtocol
             (result.Confirmed && (result.Mismatches.Count>0||result.Results.Any(x=>!x.Ok))))
             throw new InvalidDataException("ERP 盤點寫回結果／確認狀態不一致。");
         var original=expected.ToDictionary(x=>x.Key,StringComparer.Ordinal);
+        var assignedSequences=new HashSet<string>(StringComparer.Ordinal);
         foreach(var row in result.Results.Where(x=>x.Ok))
         {
             var old=original[row.Key];
             if(!StocktakeQuery.IsSeq(row.ErpSeq) ||
+                !assignedSequences.Add(row.ErpSeq!) ||
                 (old.Seq is not null && old.Seq!=row.ErpSeq))
                 throw new InvalidDataException("ERP 底稿序號與工作不一致，不能回報成功。");
         }
