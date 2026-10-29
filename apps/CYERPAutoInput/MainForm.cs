@@ -1323,9 +1323,9 @@ internal sealed partial class MainForm : Form
         }
         else if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%、萊爾富 " + _settings.HiLifeLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
-                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
+                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、萊爾富、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1341,7 +1341,8 @@ internal sealed partial class MainForm : Form
         var token = Session.EscapeToken;
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
-                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal), token,
+                _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal,
+                HiLifeScale: _settings.HiLifeLabelScale), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
         runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;

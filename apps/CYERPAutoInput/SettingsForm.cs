@@ -16,6 +16,7 @@ internal sealed class SettingsForm : Form
     private PrinterPicker? _printers;
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
+    private readonly TextBox _hiLifeLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
@@ -236,6 +237,7 @@ internal sealed class SettingsForm : Form
         page.Controls.Add(Section("蝦皮寄件單（Chrome 列印視窗的縮放）",
             ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("萊爾富縮放 %", _hiLifeLabelScale, _settings.HiLifeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
             ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
@@ -645,6 +647,14 @@ internal sealed class SettingsForm : Form
             _shopeeLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_hiLifeLabelScale.Text.Trim(), out var hiLifeScale) || hiLifeScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "萊爾富縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 3;
+            _hiLifeLabelScale.Focus();
+            return;
+        }
+        _settings.HiLifeLabelScale = hiLifeScale;
         if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
         {
             MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);

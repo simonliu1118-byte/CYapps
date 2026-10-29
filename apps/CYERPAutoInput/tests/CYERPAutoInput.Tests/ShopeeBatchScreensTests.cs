@@ -50,7 +50,8 @@ public sealed class ShopeeBatchScreensTests
         Assert.Equal(["261012AB1C23D4", "261012XY9Z87W6"], ShopeeBatchScreens.Orders(boxes).Select(o => o.OrderSn));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("蝦皮店到宅"));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
-        Assert.False(ShopeeBatchScreens.SupportedCarrier("萊爾富"));
+        Assert.True(ShopeeBatchScreens.SupportedCarrier("萊爾富"));
+        Assert.False(ShopeeBatchScreens.SupportedCarrier("OK超商"));
     }
 
     private static List<OcrBox> Detail(params OcrBox[] card) =>
@@ -157,7 +158,8 @@ public sealed class ShopeeBatchScreensTests
     {
         Assert.Equal(ShopeeBatchCarrier.SevenEleven, ShopeeBatchScreens.CarrierKind("7-ELEVEN"));
         Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("蝦皮店到店-隔日到貨"));
-        Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("萊爾富"));
+        Assert.Equal(ShopeeBatchCarrier.HiLife, ShopeeBatchScreens.CarrierKind("萊爾富"));
+        Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("OK超商"));
 
         List<OcrBox> dialog = [B("查看寄件編號", 35, 35), B("G12 345 678 9O1", 244, 89), B("寄件編號將於2026/10/1523:59失效", 245, 119), B("列印寄件單", 545, 711)];
         Assert.Equal("G12345678901", ShopeeBatchScreens.DialogTracking(dialog));

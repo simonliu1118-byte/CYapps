@@ -73,4 +73,14 @@ public sealed class ShopeeDaySkipsTests
         Assert.Single(ShopeeDaySkips.Today(ShopeeDaySkips.With(json, today.AddDays(1), "X", "r"), today.AddDays(1)));
         Assert.Empty(ShopeeDaySkips.Today("not json", today));
     }
+
+    [Fact]
+    public void Hi_life_is_read()
+    {
+        Assert.Equal(ShopeeBatchCarrier.HiLife, ShopeeBatchScreens.CarrierKind("萊爾富"));
+        Assert.Equal("6QTF47389302", ShopeeBatchScreens.DialogTracking(
+            [B("查看寄件編號", 54, 40, 130), B("6QT F47 389 302", 262, 92, 155), B("寄件編號將於 2026/10/31 23:59 失效", 262, 118, 250), B("02302475981", 64, 618, 110)]));
+        Assert.True(ShopeeBatchScreens.IsHiLifeLabelPage([B("Hi-Life 寄取貨單", 670, 75, 170), B("訂單編號:261029UHE4NWQ4", 623, 225, 150), B("寄件代碼:6QTF47389302", 623, 241, 130)]));
+        Assert.False(ShopeeBatchScreens.IsHiLifeLabelPage([B("FamilyMart寄取貨單", 300, 40, 150)]));
+    }
 }

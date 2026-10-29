@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat, HiLife }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -142,6 +142,8 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("7ELEVEN", StringComparison.Ordinal) || text.Contains("711", StringComparison.Ordinal) || text.Contains("統一超商", StringComparison.Ordinal))
             return ShopeeBatchCarrier.SevenEleven;
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
+        // 萊爾富 (user, 2026-10-29): 申請寄件編號 as 全家, its 寄取貨單 a PDF printed through Chrome.
+        if (text.Contains("萊爾富", StringComparison.Ordinal) || text.Contains("HILIFE", StringComparison.Ordinal)) return ShopeeBatchCarrier.HiLife;
         // 新竹物流 is 安排取件 (user, 2026-10-14): a pickup at the set address, then Shopee's label.
         if (text.Contains("新竹", StringComparison.Ordinal) || text.Contains("HCT", StringComparison.Ordinal)) return ShopeeBatchCarrier.Hct;
         // 黑貓宅急便 is 安排取件 too (user, 2026-10-26); its label is saved as a PDF and printed on A4.
@@ -461,6 +463,11 @@ internal static partial class ShopeeBatchScreens
     /// <summary>The 交貨便 slip 7-11's page shows after 列印寄件單 (user, 2026-10-13).</summary>
     public static bool IsSevenLabelPage(IReadOnlyList<OcrBox> boxes) =>
         Has(boxes, "交貨便服務代碼") || Has(boxes, "統一超商") && Has(boxes, "寄貨訂單編號");
+
+    /// <summary>萊爾富's 「Hi-Life 寄取貨單」 (a PDF in Chrome's viewer; its words as read, or by OCR).</summary>
+    public static bool IsHiLifeLabelPage(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Any(b => C(b).ToUpperInvariant().Replace("-", string.Empty, StringComparison.Ordinal).Contains("HILIFE", StringComparison.Ordinal)) &&
+        (Has(boxes, "寄取貨單") || Has(boxes, "寄件代碼"));
 
     /// <summary>The 交貨便服務代碼 on the slip (the dialog's 寄件編號).</summary>
     public static string SevenLabelCode(IReadOnlyList<OcrBox> boxes) =>
