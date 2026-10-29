@@ -2,11 +2,14 @@
 
 更新：2026/10/29（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
 
-## 最新狀態：V0.25.13 已部署，V0.25.14 備份修正待部署
+## 最新狀態：V0.25.14 已部署，V0.25.15 重新整理提示待部署
 
 - V0.25.13／schema13 已由 [PR #575](https://github.com/simonliu1118-byte/CYapps/pull/575) 合併，main source `6d238eb54faa188f9bbc0ece4cb92de871f4628d` 的 [dispatch run 40838160660](https://github.com/simonliu1118-byte/CYapps/actions/runs/40838160660) validate／deploy 成功。0012／0013 已套用，原資料與綁定核對通過；期初快照命中已有正式低讀取回讀。備份／實際還原與資源證據只保存在本機私人維運目錄。
 - V0.25.14 沿唯一 backup owner 補上「副本成功、健康檢查中斷」的 08:00 補驗；當天已健康則不重驗，補驗不重建備份、不改帳務。狀態頁合併副本查詢，固定 16 個 operational key 以四筆並行／五秒上限讀取；逾時保留有效備份狀態，真實健康失敗不隱藏。
 - schema13、CYID contract1.0.6、現有資源與權限保持；本批沒有 migration。需要必要 CI、當次受控部署及正式回讀，部署成功不等同下一次健康檢查已完成；相關待辦見 TODO。
+- V0.25.14 的 [PR #578](https://github.com/simonliu1118-byte/CYapps/pull/578) 已合併，main source `e9f43026de66768dc353e5bf4aaf8a522a637077` 的 [dispatch run719／40894084073](https://github.com/simonliu1118-byte/CYapps/actions/runs/40894084073) validate／deploy 成功；原綁定與 schema13 後驗不變。健康總狀態仍是舊紀錄，須等實際排程驗證，不直接寫成健康。診斷及後驗直接 D1 查詢合計29讀／0寫，私有用量證據另存。
+- 使用者追加 V0.25.15 備份視窗重新整理進度提示：同一載入函式顯示 spinner／「重新整理中…」，停用按鈕並在 finally 恢復；不新增請求或獨立 owner。完成／部署證據待該批必要 CI 及正式回讀。
+- 接續工作先用此摘要、來源 SHA 與新增差異；已確認且未變的規則／盤點不重讀整批。需要完整性或重新還原的驗證仍以實際內容為準，不能沿用舊成功取代。
 - 下列 V0.25.5 及更早的段落保留為歷史驗收，不作目前版本或目前綁定的證據。
 
 ## 歷史：部署模式變更

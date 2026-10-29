@@ -355,10 +355,10 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-independent-scroll" '#mobileEntrySecondaryButton'
           verify_asset "$base/quick-entry-settings.js?rev=settings-general" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
-          verify_asset "$base/backup-ui.js?rev=backup-status-bounded" 'setupBackupSettings'
-          verify_asset "$base/backup-ui.js?rev=backup-status-bounded" '/api/backup/recovery/preview'
+          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" 'setupBackupSettings'
+          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" '/api/backup/recovery/preview'
           verify_asset "$base/app.js?rev=accounting-read-coalescing" 'x-cyacc-book-epoch'
-          verify_asset "$base/backup-ui.js?rev=backup-status-bounded" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
+          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=pending-create-rows" 'class="ledger-message-row"'
           verify_asset "$base/app.js?rev=accounting-read-coalescing" "await api('/api/opening-balance-overrides'"
@@ -426,6 +426,8 @@ jobs:
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" "!window.cyIsDesktopInteractionWorkspace()) return;"
           verify_asset "$base/statistics-ui.js?rev=transfer-settings-density" 'renderIncomeStatement'
           verify_asset "$base/statistics.css?rev=transfer-settings-density" 'statistics-dialog'
+          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" "重新整理中…"
+          verify_asset "$base/backup.css?rev=backup-refresh-feedback" '@keyframes backup-refresh-spin'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files

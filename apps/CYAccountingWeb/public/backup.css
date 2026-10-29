@@ -21,6 +21,32 @@
   margin: 0 0 3px;
 }
 
+.backup-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.backup-refresh-button[aria-busy="true"]::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: backup-refresh-spin .7s linear infinite;
+}
+
+@keyframes backup-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backup-refresh-button[aria-busy="true"]::before { animation: none; }
+}
+
 .backup-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -9,11 +9,11 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | 已部署 **V0.25.13**／schema13；本批 **V0.25.14** 修正備份補驗及狀態逾時，正式上線以成功 deploy run 回讀為準 |
+| 產品版本 | 已部署 **V0.25.14**／schema13；本批 **V0.25.15** 新增備份重新整理進度提示，正式上線以成功 deploy run 回讀為準 |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
-| 最近已確認部署 | [PR #575](https://github.com/simonliu1118-byte/CYapps/pull/575)；[main dispatch／run 40838160660](https://github.com/simonliu1118-byte/CYapps/actions/runs/40838160660) validate／deploy 成功，V0.25.13／schema13；私有備份還原與正式唯讀回讀已完成 |
+| 最近已確認部署 | [PR #578](https://github.com/simonliu1118-byte/CYapps/pull/578)；[main dispatch／run 40894084073](https://github.com/simonliu1118-byte/CYapps/actions/runs/40894084073) validate／deploy 成功，V0.25.14／schema13；原綁定與 schema 後驗通過，下一次排程健康仍待回讀 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
-| D1 schema | **13**；交易索引與共用期初快照已部署，帳務及稽核保留；V0.25.14 無新 migration |
+| D1 schema | **13**；交易索引與共用期初快照已部署，帳務及稽核保留；V0.25.14／V0.25.15 無新 migration |
 | CYID consumer | 本 App `CYID_CONSUMER_VERSION` 為 1.0.6；同 repo 已發布 contract 1.0.6、minimum 1.0.0，仍在支援範圍內；不據此推定所有 Provider 環境皆已部署最新版 |
 | 治理 | Common Rules 2.11.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
 | 帳務與備份現況 | 依私人檢查點及正式 catalog 確認；公開文件不保存交易、來源檔、備份識別或資料操作紀錄 |
