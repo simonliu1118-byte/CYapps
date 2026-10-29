@@ -2,20 +2,20 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/15（台灣時間）。本文件是專案入口與現況摘要；永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+更新：2026/10/29（台灣時間）。本文件是專案入口與現況摘要；永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
 ## 正式基準
 
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.25.5**（備份自動檢查告警、設定密度與技術清理；D1 schema 11） |
+| 產品版本 | 已部署 **V0.25.13**／schema13；本批 **V0.25.14** 修正備份補驗及狀態逾時，正式上線以成功 deploy run 回讀為準 |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
-| 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
+| 最近已確認部署 | [PR #575](https://github.com/simonliu1118-byte/CYapps/pull/575)；[main dispatch／run 40838160660](https://github.com/simonliu1118-byte/CYapps/actions/runs/40838160660) validate／deploy 成功，V0.25.13／schema13；私有備份還原與正式唯讀回讀已完成 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
-| D1 schema | **11**；新增背景檢查狀態並退休舊 Session 表，帳務及稽核保留 |
+| D1 schema | **13**；交易索引與共用期初快照已部署，帳務及稽核保留；V0.25.14 無新 migration |
 | CYID consumer | 本 App `CYID_CONSUMER_VERSION` 為 1.0.6；同 repo 已發布 contract 1.0.6、minimum 1.0.0，仍在支援範圍內；不據此推定所有 Provider 環境皆已部署最新版 |
-| 治理 | Common Rules 2.8.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
+| 治理 | Common Rules 2.11.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
 | 帳務與備份現況 | 依私人檢查點及正式 catalog 確認；公開文件不保存交易、來源檔、備份識別或資料操作紀錄 |
 
 首次登入引導沿 [PR #435](https://github.com/simonliu1118-byte/CYapps/pull/435) 整合至最新主線，保留 V0.25.3 新增記帳／草稿回復及既有備份能力。CY Web 正式 authority 已修正；本版部署強制同 authority／Workspace／core health 驗證，通過後才注入 HTTPS 入口，不轉交帳密或 Session。
