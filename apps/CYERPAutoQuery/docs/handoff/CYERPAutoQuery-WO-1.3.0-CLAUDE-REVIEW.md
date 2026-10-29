@@ -1,3 +1,16 @@
+## 2026-10-29 續作：重用現有穩定 ERP 自動化元件
+
+使用者確認：ERP 操作應以現有經測試的 Win32 程式碼為基礎，差異主要是欄位輸入參數，**不可另建一套重複的 UI Driver**。
+
+已核對可重用的 `ItemQueryService` 內部元件：`OpenFormAsync`（作業速查）、`OpenQueryDialogAsync`（F6）、`RibbonClickAsync`、`ExportToExcelAsync`／`CompleteExportAsync`、`ExportFiles.ReadAsync`、`OcrClickAsync`、`GuardErpMessagesAsync`、`ErpAutomationGate`。新功能應以 `partial ItemQueryService` 復用它們，針對 INVR11／INVI14／INVI06 補精確目標控制項與每次讀回。
+
+最新提交：
+- `5455bd1`：AgentLoop 分流盤點專用 handler；未注入 handler 則 fail-closed。
+- `1ae0b5b`：complete body 序號碰撞也拒絕成功回報。
+- `a3a6621`：新增重複 ERP 序號 complete 的單元測試。
+
+**重要**：上列僅完成 Agent 路由接口及協定安全，未注入可執行的真實盤點 handler，SupportedTypes 仍不含兩種盤點類型。Windows ERP Driver、MainForm 實際路由與進度、最新 CI 和實機 UI 驗證仍未完成。請勿宣稱可合併或部署。原 237 項測試成功屬舊 SHA。
+
 ## 2026-10-29 補充：寫回安全防護與未完成界線
 
 本節為最新補充，不取代先前 Windows CI 證據。
