@@ -67,8 +67,10 @@ internal sealed partial class ItemQueryService
     /// → 即時報表 → XLSX export → read → close the report and condition windows (also after a
     /// failure or Esc). The export is deleted from TEMP once read. Null when ERP said nothing matched.
     /// </summary>
+    /// <param name="prepare">Runs on the report window before the export (INVR11 shows hidden columns there).</param>
     private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>?> RunReportAsync(ErpReport report, string conditions,
-        Func<nint, CancellationToken, Task> fill, IProgress<string> progress, CancellationToken cancellationToken)
+        Func<nint, CancellationToken, Task> fill, IProgress<string> progress, CancellationToken cancellationToken,
+        Func<nint, CancellationToken, Task>? prepare = null)
     {
         await CloseReportWindowsAsync(report, progress, leftover: true);
         progress.Report($"ERP：開啟{report.Title}（作業速查）…");
@@ -107,6 +109,7 @@ internal sealed partial class ItemQueryService
                 return null;
             }
 
+            if (prepare is not null) await prepare(viewer, cancellationToken);
             progress.Report($"ERP：{report.Title}轉出 Excel…");
             var path = ExportFiles.NewPath(report.Code);
             try

@@ -30,6 +30,9 @@
     <Compile Include="..\..\ErpProcessDiagnosticModels.cs" Link="Linked\ErpProcessDiagnosticModels.cs" />
     <Compile Include="..\..\ErpRestartTargets.cs" Link="Linked\ErpRestartTargets.cs" />
     <Compile Include="..\..\ErpAgentProtocol.cs" Link="Linked\ErpAgentProtocol.cs" />
+    <Compile Include="..\..\ErpAgentProtocol.Stocktake.cs" Link="Linked\ErpAgentProtocol.Stocktake.cs" />
+    <Compile Include="..\..\StocktakeQuery.cs" Link="Linked\StocktakeQuery.cs" />
+    <Compile Include="..\..\StocktakeExecution.cs" Link="Linked\StocktakeExecution.cs" />
     <Compile Include="..\..\ErpAgent.cs" Link="Linked\ErpAgent.cs" />
     <Compile Include="..\..\UpdateCheck.cs" Link="Linked\UpdateCheck.cs" />
     <Compile Include="..\..\ErpLoginSettings.cs" Link="Linked\ErpLoginSettings.cs" />

@@ -13,7 +13,7 @@ public class ErpAgentBusinessTests
     public void ClaimListsEverySupportedQueryType()
     {
         var body = JsonNode.Parse(ErpAgentProtocol.ClaimBody("v", "BROWSE"))!;
-        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SUPPLIER_NO", "SUPPLIER_NAME", "PURCHASES", "SALES", "RECEIVABLE", "ORDER", "RESTOCK"],
+        Assert.Equal(["ITEM_NO", "ITEM_NAME", "CUSTOMER_NO", "CUSTOMER_NAME", "SUPPLIER_NO", "SUPPLIER_NAME", "PURCHASES", "SALES", "RECEIVABLE", "ORDER", "RESTOCK", "STOCKTAKE_SYNC", "STOCKTAKE_WRITE"],
             body["queryTypes"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 
