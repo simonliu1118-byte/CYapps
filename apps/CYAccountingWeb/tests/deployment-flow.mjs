@@ -118,7 +118,7 @@ test('API denial does not expose provider bodies or bypass the release gate', as
 });
 
 test('workflow wiring keeps deployment explicit, serialized, guarded and documented', () => {
-  const workflow = fs.readFileSync(path.resolve(root, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
+  const workflow = fs.readFileSync(path.resolve(root, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8').replaceAll('\r\n', '\n');
   const release = fs.readFileSync(path.resolve(root, '../../.github/workflows/cyaccountingweb-release.yml'), 'utf8');
   const push = workflow.split('  push:\n')[1].split('\npermissions:')[0];
   assert.match(push, new RegExp(`branches:\\s*\\n\\s*- ${DEPLOYMENT_BRANCH}`));

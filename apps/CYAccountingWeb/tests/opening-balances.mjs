@@ -19,8 +19,11 @@ class Statement {
     if (this.sql.includes('FROM accounts')) {
       return { results: [{ name: '現金', archived_at: null }] };
     }
-    if (this.sql.includes('SELECT DISTINCT account_name AS name')) {
-      return { results: [{ name: '現金' }] };
+    if (this.sql.includes('WITH RECURSIVE transaction_accounts')) {
+      const anchor = this.db.overrides.filter(row => row.month < month).at(-1);
+      return { results: [{ account_name: '現金', net: this.db.monthlyNets
+        .filter(row => row.month < month && (!anchor || row.month >= anchor.month))
+        .reduce((sum, row) => sum + row.net, 0) }] };
     }
     if (this.sql.includes('FROM opening_balance_overrides')) {
       return {
@@ -35,15 +38,14 @@ class Statement {
           }))
       };
     }
-    if (this.sql.includes('SUM(CASE WHEN kind')) {
-      return { results: this.db.monthlyNets.filter(row => row.month < month) };
-    }
     throw new Error('unexpected all query: ' + this.sql);
   }
   async first() {
+    if (this.sql.includes('FROM opening_balance_snapshot_state')) return { revision: 0, accounts_json: null, locked_through: null };
     if (this.sql.includes("key = 'locked_through'")) return null;
     throw new Error('unexpected first query: ' + this.sql);
   }
+  async run() { return { meta: { changes: 1 } }; }
 }
 
 class MockDb {

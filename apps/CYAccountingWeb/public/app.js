@@ -949,7 +949,43 @@ function numericInput(event) {
 
 window.cyaccApi = api;
 
-async function api(path, options = {}, timeoutMs = 12_000) {
+// Only share concurrent reads in this browser document. Settled responses are
+// never cached, and any attempted write invalidates reads that started before it.
+const cyAccountingReadFlights = new Map();
+let cyAccountingReadRevision = 0;
+
+function invalidateAccountingReads() {
+  cyAccountingReadRevision += 1;
+  cyAccountingReadFlights.clear();
+}
+
+async function api(path, options = {}, timeoutMs = 12_000, readAttempt = 0) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const shareRead = method === 'GET' && Object.keys(options).length === 0
+    && /^\/api\/(?:opening-balances|summaries\/frequent)\?/.test(path);
+  if (shareRead) {
+    const epoch = window.cyaccBookEpoch || '';
+    const key = `${epoch}:${timeoutMs}:${path}`;
+    if (cyAccountingReadFlights.has(key)) return cyAccountingReadFlights.get(key);
+    const revision = cyAccountingReadRevision;
+    const pending = requestApi(path, options, timeoutMs).then(data => {
+      if (revision === cyAccountingReadRevision && epoch === (window.cyaccBookEpoch || '')) return data;
+      if (readAttempt >= 1) throw new Error('資料已更新，請重新整理後再試。');
+      return api(path, options, timeoutMs, readAttempt + 1);
+    }).finally(() => {
+      if (cyAccountingReadFlights.get(key) === pending) cyAccountingReadFlights.delete(key);
+    });
+    cyAccountingReadFlights.set(key, pending);
+    return pending;
+  }
+  try {
+    return await requestApi(path, options, timeoutMs);
+  } finally {
+    if (!['GET', 'HEAD'].includes(method)) invalidateAccountingReads();
+  }
+}
+
+async function requestApi(path, options, timeoutMs) {
   const controller = new AbortController();
   let timeoutId;
   const request = Promise.resolve().then(async () => {

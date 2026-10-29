@@ -50,6 +50,9 @@ assert.equal(sql.prepare("SELECT color_slot FROM accounts WHERE name='現金'").
 assert.equal(sql.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='opening_balances'").get().n, 0);
 assert.equal(sql.prepare('SELECT amount FROM opening_balance_overrides').get().amount, 0);
 assert.equal(sql.prepare('SELECT action FROM opening_balance_audit').get().action, 'migration');
+for (const name of migrations.filter(name => name > '0007_account_color_slots.sql')) {
+  sql.exec(fs.readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
+}
 assert.throws(() => sql.exec(openingMigration), /already exists/, 'forward migration must not silently re-import a second time');
 assert.throws(() => sql.exec("UPDATE opening_balance_audit SET reason='rewrite'"), /append-only/);
 assert.throws(() => sql.exec('DELETE FROM opening_balance_audit'), /append-only/);
@@ -213,7 +216,7 @@ assert.equal((await call(`/api/accounts/${nonzeroId}/permanent`,'DELETE')).statu
 
 const backup = await buildBackupPackage(db);
 assert.equal(backup.manifest.formatVersion, 2);
-assert.equal(backup.manifest.schemaVersion, 7);
+assert.equal(backup.manifest.schemaVersion, Number(migrations.at(-1).split('_')[0]));
 assert.equal(backup.data.openingBalanceAudit.length, sql.prepare('SELECT count(*) AS n FROM opening_balance_audit').get().n);
 assert.equal(backup.data.openingBalanceOverrides.length, sql.prepare('SELECT count(*) AS n FROM opening_balance_overrides').get().n);
 assert.ok(backup.data.accounts.find(row => row.name === '現金').archivedAt);

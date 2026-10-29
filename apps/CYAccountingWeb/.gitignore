@@ -1,2 +1,3 @@
 # Local Wrangler runtime and generated bundles
 .wrangler/
+node_modules/

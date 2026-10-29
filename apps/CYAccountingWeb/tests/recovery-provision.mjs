@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { RECOVERY_SEED_SNAPSHOT_SQL } from '../src/backup-recovery.js';
@@ -44,7 +45,7 @@ return Response.json({success:true,result:[{results}]});};`);
       db.close();
     }
     const token=crypto.randomUUID(),env={...process.env,CLOUDFLARE_ACCOUNT_ID:'test-account',CLOUDFLARE_API_TOKEN:token,CF_D1_DATABASE_ID:primary,CF_WORKER_NAME:'test-worker',GITHUB_ENV:githubEnv,TEST_TRACE:trace,TEST_DB:database,TEST_SCHEMAS:schemaFile,TEST_SCENARIO:scenario,RECOVERY_D1_MODE:'prepare',GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',...override};
-    const result=spawnSync(process.execPath,['--import',mock,'scripts/provision-recovery-d1.mjs'],{env,encoding:'utf8'});
+    const result=spawnSync(process.execPath,['--import',pathToFileURL(mock).href,'scripts/provision-recovery-d1.mjs'],{env,encoding:'utf8'});
     const calls=JSON.parse(fs.readFileSync(trace,'utf8')),binding=fs.existsSync(githubEnv)?fs.readFileSync(githubEnv,'utf8'):'';
     assert.doesNotMatch(result.stdout+result.stderr,new RegExp(token+'|PRIVATE_DIAGNOSTIC|PRIVATE_TEST_VALUE|TEST_CHANGED_SEED'));
     assert.ok(!calls.some(call=>call.url?.includes('/'+primary+'/query')),'never queries or mutates primary D1');

@@ -19,7 +19,7 @@ export const ACCOUNTING_RESTORE_TABLES = [
 // have passed the existing manifest/digest validator. Historical objects are not rewritten.
 export function normalizeAccountingRestoreData(backup) {
   const schema = Number(backup.manifest?.schemaVersion);
-  if (![6, 7, 8, 9, 10, 11].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
+  if (![6, 7, 8, 9, 10, 11, 12, 13].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
   const original = backup.data;
   if (!original || Object.keys(original).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
   const data = { ...original };
