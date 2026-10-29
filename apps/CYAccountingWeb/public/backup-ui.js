@@ -298,7 +298,13 @@ function setBackupRecoveryMessage(message, failed = false) {
 
 async function loadBackupStatus() {
   const run = document.querySelector('#backupRunNow');
+  const refresh = document.querySelector('#backupRefreshStatus');
   if (run) run.disabled = true;
+  if (refresh) {
+    refresh.disabled = true;
+    refresh.setAttribute('aria-busy', 'true');
+    refresh.textContent = '重新整理中…';
+  }
   setBackupMessage('');
 
   try {
@@ -310,6 +316,12 @@ async function loadBackupStatus() {
     const state = document.querySelector('#backupConnectionState');
     if (state) state.textContent = '狀態讀取失敗';
     return null;
+  } finally {
+    if (refresh) {
+      refresh.disabled = false;
+      refresh.removeAttribute('aria-busy');
+      refresh.textContent = '重新整理';
+    }
   }
 }
 
