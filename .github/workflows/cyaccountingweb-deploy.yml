@@ -216,6 +216,10 @@ jobs:
       - name: Resolve CYID production consumer runtime
         run: node scripts/resolve-cyid-production-runtime.mjs --require-account-portal
 
+      - name: Mask deployment resource identifiers
+        run: |
+          node -e 'for (const key of ["CF_WORKER_NAME","CF_D1_DATABASE_NAME","CF_D1_DATABASE_ID","CF_R2_BACKUP_BUCKET","CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"]) { if (process.env[key]) console.log("::add-mask::" + process.env[key]); }'
+
       - name: Verify reviewed main source before remote changes
         run: node scripts/verify-deployment.mjs source
 
@@ -293,14 +297,19 @@ jobs:
         run: |
           set -euo pipefail
           base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
-          asset_file=$(mktemp)
-          trap 'rm -f "$asset_file"' EXIT
+          asset_dir=$(mktemp -d)
+          trap 'rm -rf "$asset_dir"' EXIT
           verify_asset() {
-            local asset_url="$1" marker="$2" attempt
+            local asset_url="$1" marker="$2" attempt asset_file
+            asset_file="$asset_dir/$(printf '%s' "$asset_url" | sha256sum | cut -d ' ' -f 1)"
+            if [ -f "$asset_file" ] && grep -F -- "$marker" "$asset_file" >/dev/null; then
+              return 0
+            fi
             for attempt in 1 2 3 4 5 6; do
               if curl --max-time 8 -fsS "$asset_url" -o "$asset_file" && grep -F -- "$marker" "$asset_file" >/dev/null; then
                 return 0
               fi
+              rm -f "$asset_file"
               echo "Waiting for asset: $asset_url (attempt $attempt/6)"
               if [ "$attempt" -lt 6 ]; then sleep 5; fi
             done
