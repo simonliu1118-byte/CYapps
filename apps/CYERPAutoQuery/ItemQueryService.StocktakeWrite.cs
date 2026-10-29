@@ -416,6 +416,7 @@ internal sealed class StocktakeWin32Driver(ItemQueryService service) : IStocktak
     private static readonly IProgress<string> Quiet = new Progress<string>();
 
     public Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct) => service.ListStocktakeSheetsAsync(Quiet, ct);
+    public Task CloseReportAsync() => service.CloseStocktakeReportAsync();
     public Task<StocktakeDetail> ReadSheetAsync(string sheetNo, CancellationToken ct) => service.ReadStocktakeSheetAsync(sheetNo, Quiet, ct);
     public Task WriteExistingAsync(string sheetNo, StocktakeLine line, string quantity, CancellationToken ct) =>
         service.WriteStocktakeLineAsync(sheetNo, line, quantity, ct);
