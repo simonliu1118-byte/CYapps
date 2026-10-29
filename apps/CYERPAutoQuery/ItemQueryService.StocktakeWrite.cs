@@ -37,6 +37,7 @@ internal sealed partial class ItemQueryService
     internal async Task<StocktakeWriteRowResult> AddStocktakeBatchAsync(
         string sheetNo, StocktakeWriteRow row, CancellationToken ct)
     {
+        {
         using var gate = ErpAutomationGate.Enter();
         var root = await OpenStocktakeEditorAsync("INVI06", ct);
         await QueryStocktakeFormAsync(root,[sheetNo],ct);
@@ -63,6 +64,7 @@ internal sealed partial class ItemQueryService
         {
             await CancelStocktakeEditAsync(root);
             throw;
+        }
         }
 
         // New sequence is ERP-assigned: read INVR11 instead of predicting it.

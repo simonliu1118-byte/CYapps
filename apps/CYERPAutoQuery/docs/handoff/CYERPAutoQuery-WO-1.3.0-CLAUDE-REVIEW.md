@@ -1,3 +1,21 @@
+## Claude 審查優先項目：Win32 核心實作（新增）
+
+已依使用者要求以現有成熟的 ItemQueryService 作業速查、F6、OCR、Ribbon、Excel 匯出、Win32 控制項與 RunAutomationAsync 擴充，不建立另一套自動化框架。
+
+- ItemQueryService.Stocktake.cs：INVR11 F2 OCR 清單，清單讀完按 Esc；keepPopup 模式供選取底稿。
+- ItemQueryService.StocktakeReport.cs：從 F2 選取指定底稿，選「兩者皆列印」、即時報表、沿用 ExportReportAsync 與 StocktakeQuery.ParseExport。
+- ItemQueryService.StocktakeWrite.cs：INVI14 F6 查詢與逐筆修改儲存讀回、INVI06 明細新增與確認，均沿用現有操作 helper；StocktakeWin32Driver 實作既有 IStocktakeErpDriver。
+- MainForm.cs：裝配 Driver 到既有盤點 Agent 路由；SupportedTypes 仍未開啟，不能在正式環境領取盤點工作。
+
+**請 Claude 實際檢查並修改以下 UI 對位問題（本提交沒有 Windows 實機證據）：**
+1. INVR11 F2 的選擇欄位實際是否為可獲焦點的 Win32 input；F2 若為分頁清單，目前多頁仍拒絕，需依 Delphi grid 補全頁翻頁與 OCR 位置核對。
+2. INVR11 報表名稱、視窗辨識、報表「欄位資訊」中的儲位／批號／盤點數量 N→Y 尚未操作；此步必須加入並讀回。報表 ErpReport 標題與匯出檔名需以現場畫面對照。
+3. INVI14 F6 一般選項是否恰為兩行（底稿編號、序號）；查詢完須確認資料瀏覽只有一筆、切到詳細欄位；目前只做欄位識別文字與讀回，不保證切換完成。
+4. INVI06 以 cx grid 最後一列向下產生新列，需要從實際控制項核對並確保新增列確實填對欄位；目前使用共通欄位找尋方式，需現場檢查。
+5. INVI06「確認」後須讀取真實確認狀態，且整個動作需確保沒有其他對話框；現有狀態讀取定位屬待審查。
+6. 新提交無 Windows CI／.NET Build 成功證據，請 Claude 編譯、測試及改正。不可引用舊 237 tests 作為此提交驗收。
+7. 治理 PR #571 尚需先審；完成真 Driver 驗證後再加入 SupportedTypes。未部署、未合併或操作正式 ERP。
+
 ## 2026-10-29 Agent 與 MainForm 整合進度
 
 - `7cd7f2f`：新增 `MainForm.Stocktake.cs`，以既有 `RunAutomationAsync` 執行 `StocktakeExecution`，沿用執行鎖、Esc 取消、狀態列與 WebProgress；寫回逐列回報 `stage=STOCK`。
