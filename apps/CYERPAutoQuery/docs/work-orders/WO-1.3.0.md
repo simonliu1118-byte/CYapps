@@ -102,7 +102,7 @@
 
 ## 8. 完成報告（執行者填）
 
-> **GPT 開發中紀錄（2026-10-29）— 尚未完成真 Windows ERP 驅動及實機驗收，不是可合併完成報告。**
+> **2026-10-29：Claude 審查後重寫 Win32 部分並合併發行 V1.3.0，審查紀錄見 `docs/handoff/CYERPAutoQuery-WO-1.3.0-CLAUDE-REVIEW.md` §9。** 以下為 GPT 開發中紀錄。
 
 - 前置治理 [PR #571](https://github.com/simonliu1118-byte/CYapps/pull/571)：限定只讀例外、GOVERNANCE_VERSION 2.3.58 與 changelog；Governance Check 已通過，尚未合併。
 - 實作 [Draft PR #572](https://github.com/simonliu1118-byte/CYapps/pull/572)：`cyerp-auto-query/stocktake`，目標 `V1.3.0 Build 0`，不合併、不部署、不發行。

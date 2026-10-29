@@ -1,6 +1,9 @@
 # CYERPAutoQuery Changelog
 
-## V1.3.0 — 2026/10/29（開發中，未發行；WO-1.3.0）
+## V1.3.0 — 2026/10/29（正式 Release：tag `cyerp-auto-query-v1.3.0`；WO-1.3.0）
+
+使用者 2026-10-29 同意未經實機測試直接合併發行；盤點的 ERP 點選位置依截圖推定，第一次使用時請用測試底稿確認。
+
 
 - 庫存盤點：CY Web `STOCKTAKE_SYNC` 從 INVR11 品號盤點清單讀盤點底稿。流程是 F2 清單選底稿，選擇列印設「二者皆列印」，再到報表「欄位資訊」把儲位、批號、盤點數量切成 Y，最後匯出 XLSX。
 - `STOCKTAKE_WRITE` 在 CY Web 第二次確認後寫回：
