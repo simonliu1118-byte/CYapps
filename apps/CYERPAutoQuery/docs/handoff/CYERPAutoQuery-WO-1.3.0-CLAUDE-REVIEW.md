@@ -1,3 +1,16 @@
+## 2026-10-29 補充：寫回安全防護與未完成界線
+
+本節為最新補充，不取代先前 Windows CI 證據。
+
+- `e7986b6`：寫回前拒絕相同既有 ERP 序號重複指定，以及不同列鍵重複新增相同品號＋批號；冪等核對改以 decimal 數值比較，而非字串格式相等。
+- `11017d2`：新增上述重複資料與十進位等值測試。
+- `3cd669c`：新增批號回傳的 ERP 序號不得與不同品號／批號的原始列衝突，且不同工作列不得共用同一個回傳序號。
+- `7128557`：新增錯誤序號對應的 Fake Driver 回歸測試。
+- **此批提交沒有取得新 Windows CI 成功結果**。GitHub 工作流程列表未見以上 SHA 的 Build 觸發結果；先前 237/237 與 Build 成功不能外推至新增修改。
+- **不可宣稱可以交付最終 Claude 程式審查**：`ItemQueryService.Stocktake.cs` 真 Win32 Driver、INVR11 報表及 F2 翻頁、INVI14 單筆核對寫入、INVI06 新增與確認、MainForm 派工與 STOCK 進度尚未實作驗收。
+- `ErpAgentJob.SupportedTypes` 仍不得加入 `STOCKTAKE_SYNC` 或 `STOCKTAKE_WRITE`，直到真 Driver 與整合安全測試完備，並明確取得 ERP 測試授權。
+- 沒有合併、發行、部署或對正式 ERP 寫入。治理 PR #571 是未解除的前置依賴。
+
 # CYERPAutoQuery WO-1.3.0 — GPT 實作／Claude 最終審查 Handoff
 
 > **狀態：GPT 開發中，尚未具備正式 ERP Win32 讀取／寫回，禁止合併、正式發行或部署。** 本檔為所有 GPT 修改的唯一逐檔索引及後續 Claude 審查入口；Claude 最終意見在 §9 填寫，GPT 不代填。
