@@ -12,7 +12,15 @@ assert.ok(start >= 0 && end > start, 'canonical ledger toolbar must own loading 
 
 class TestNode {
   constructor(tag) { this.tag = tag; this.children = []; this.parentNode = null; this.hidden = false; }
-  append(child) { child.parentNode = this; this.children.push(child); }
+  append(child) {
+    // DOM append() MOVES an existing child; our tiny test node must too.
+    if (child.parentNode) {
+      const siblings = child.parentNode.children;
+      siblings.splice(siblings.indexOf(child), 1);
+    }
+    child.parentNode = this;
+    this.children.push(child);
+  }
   before(node) {
     const siblings = this.parentNode.children;
     siblings.splice(siblings.indexOf(this), 0, node);
