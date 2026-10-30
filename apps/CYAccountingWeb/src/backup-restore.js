@@ -8,7 +8,7 @@ export const ACCOUNTING_RESTORE_TABLES = [
   ['accounts', 'accounts', ['id','name','sort_order','is_default','color_slot','created_at','archived_at'], ['id','name','sortOrder','isDefault','colorSlot','createdAt','archivedAt']],
   ['categoryGroups', 'category_groups', ['id','kind','name','sort_order','created_at'], ['id','kind','name','sortOrder','createdAt']],
   ['categories', 'categories', ['id','kind','group_id','name','sort_order','is_favorite','created_at'], ['id','kind','groupId','name','sortOrder','isFavorite','createdAt']],
-  ['transactions', 'transactions', ['id','tx_date','account_name','kind','category_name','summary','amount','marker_color','created_at','updated_at'], ['id','txDate','accountName','kind','categoryName','summary','amount','markerColor','createdAt','updatedAt']],
+  ['transactions', 'transactions', ['id','tx_date','account_name','kind','category_name','summary','amount','marker_color','marker_target','created_at','updated_at'], ['id','txDate','accountName','kind','categoryName','summary','amount','markerColor','markerTarget','createdAt','updatedAt']],
   ['openingBalanceOverrides', 'opening_balance_overrides', ['month','account_name','amount','reason','created_at','updated_at','updated_by_employee_id','updated_by_employee_no','updated_by_name','updated_by_role'], ['month','accountName','amount','reason','createdAt','updatedAt','updatedByEmployeeId','updatedByEmployeeNo','updatedByName','updatedByRole']],
   ['openingBalanceAudit', 'opening_balance_audit', ['id','month','account_name','action','previous_amount','new_amount','reason','actor_employee_id','actor_employee_no','actor_name','actor_role','created_at'], ['id','month','accountName','action','previousAmount','newAmount','reason','actorEmployeeId','actorEmployeeNo','actorName','actorRole','createdAt']],
   ['appSettings', 'app_settings', ['key','value'], ['key','value']],
@@ -19,7 +19,7 @@ export const ACCOUNTING_RESTORE_TABLES = [
 // have passed the existing manifest/digest validator. Historical objects are not rewritten.
 export function normalizeAccountingRestoreData(backup) {
   const schema = Number(backup.manifest?.schemaVersion);
-  if (![6, 7, 8, 9, 10, 11, 12, 13, 14].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
+  if (![6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
   const original = backup.data;
   if (!original || Object.keys(original).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
   const data = { ...original };
@@ -28,6 +28,10 @@ export function normalizeAccountingRestoreData(backup) {
   // after validation of the original package digest, without mutating source data.
   if (schema < 14 && Array.isArray(data.transactions)) {
     data.transactions = data.transactions.map(row => row && ({ ...row, markerColor: null }));
+  }
+  // Schema 6–14 never recorded placement: all existing highlights were summaries.
+  if (schema < 15 && Array.isArray(data.transactions)) {
+    data.transactions = data.transactions.map(row => row && ({ ...row, markerTarget: 'summary' }));
   }
   for (const [key] of ACCOUNTING_RESTORE_TABLES) if (!Array.isArray(data[key])) throw restoreError('RESTORE_DATA_SHAPE');
   if (schema < 8 && data.excelImportRuns.length) throw restoreError('RESTORE_LEGACY_IMPORT_AUDIT_CONFLICT');
