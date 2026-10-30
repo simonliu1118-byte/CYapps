@@ -1293,7 +1293,8 @@ html[data-viewport="desktop"] .ledger-header-button {
 }
 
 /* Transaction marker colors and text-only highlight share one CSS owner. */
-.ledger-card td.summary .transaction-summary-highlight {
+.ledger-card td.summary .transaction-text-highlight,
+.ledger-card td.ledger-category .transaction-text-highlight {
   display: inline;
   padding: 1px 3px;
   border-radius: 3px;
@@ -1332,7 +1333,7 @@ html[data-viewport="desktop"] .ledger-header-button {
 .transaction-marker-picker {
   position: fixed;
   z-index: 2505;
-  width: 142px;
+  width: 164px;
   padding: 5px;
   border: 1px solid #cdd7e0;
   border-radius: 10px;
@@ -1340,6 +1341,28 @@ html[data-viewport="desktop"] .ledger-header-button {
   box-shadow: 0 10px 30px rgba(33, 52, 70, .24);
 }
 .transaction-marker-picker[hidden] { display: none; }
+
+.transaction-marker-picker-label {
+  display: block;
+  padding: 7px 6px 3px;
+  color: #586777;
+  font-size: 11px;
+  font-weight: 600;
+}
+.transaction-marker-targets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin: 3px 4px 5px; }
+.transaction-marker-target {
+  min-height: 30px;
+  background: #f6f8fb;
+  color: #293744;
+  border: 1px solid #d1dae4;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.transaction-marker-target[aria-pressed="true"] { color: #2550a8; background: #e5efff; border-color: #8bb2ee; font-weight: 700; }
+.transaction-marker-target:focus-visible { outline: 2px solid #357fe3; outline-offset: 1px; }
+
 .transaction-marker-option {
   display: flex;
   align-items: center;

@@ -107,7 +107,7 @@ async function handleListTransactions(url, db) {
   if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
   const [result, lockedThrough] = await Promise.all([
     db.prepare(`
-      SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, created_at, updated_at
+      SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at
       FROM transactions
       WHERE substr(tx_date, 1, 7) = ?
       ORDER BY tx_date DESC, created_at DESC, id DESC
@@ -135,7 +135,7 @@ async function handleCreateTransaction(request, db) {
   const id = Number(result.meta?.last_row_id);
   return json({ ok: true, id, transaction: {
     id, tx_date: values.txDate, account_name: values.accountName, kind: values.kind,
-    category_name: values.categoryName, summary: values.summary, amount: values.amount, marker_color: null,
+    category_name: values.categoryName, summary: values.summary, amount: values.amount, marker_color: null, marker_target: 'summary',
     created_at: now, updated_at: now
   } }, 201);
 }
@@ -168,20 +168,23 @@ async function handleUpdateTransaction(id, request, db) {
 async function handleSetTransactionMarker(id, request, db) {
   if (!validId(id)) return json({ ok: false, error: '交易編號錯誤。' }, 400);
   const body = await bodyJson(request);
-  if (!body || !Object.hasOwn(body, 'markerColor')
-    || !(body.markerColor === null || ['orange', 'pink', 'yellow', 'green'].includes(body.markerColor))) {
-    return json({ ok: false, error: '標記顏色無效。' }, 400);
+  const colorValid = body && Object.hasOwn(body, 'markerColor')
+    && (body.markerColor === null || ['orange', 'pink', 'yellow', 'green'].includes(body.markerColor));
+  // Legacy color-only callers keep targeting summary. Clearing the color resets
+  // presentation metadata to the default; no accounting fields can be edited.
+  const target = body?.markerColor === null ? 'summary' : (body?.markerTarget ?? 'summary');
+  if (!colorValid || !['summary', 'category'].includes(target)) {
+    return json({ ok: false, error: '標記顏色或位置無效。' }, 400);
   }
-  const row = await db.prepare('SELECT tx_date FROM transactions WHERE id = ?').bind(id).first();
+  const row = await db.prepare('SELECT id FROM transactions WHERE id = ?').bind(id).first();
   if (!row) return json({ ok: false, error: '找不到交易。' }, 404);
-  const month = String(row.tx_date).slice(0, 7);
-  if (isMonthLocked(month, await getLockedThrough(db))) {
-    return json({ ok: false, error: `${month} 已鎖定，無法修改標記。` }, 409);
-  }
+  // Accounting month locks intentionally do not apply to presentation markers.
+  // The outer Worker still requires a writable CYACC principal, correct book
+  // epoch, origin protections and no active recovery hold.
   const now = new Date().toISOString();
-  await db.prepare('UPDATE transactions SET marker_color = ?, updated_at = ? WHERE id = ?')
-    .bind(body.markerColor, now, id).run();
-  return json({ ok: true, id, markerColor: body.markerColor, updatedAt: now });
+  await db.prepare('UPDATE transactions SET marker_color = ?, marker_target = ?, updated_at = ? WHERE id = ?')
+    .bind(body.markerColor, target, now, id).run();
+  return json({ ok: true, id, markerColor: body.markerColor, markerTarget: target, updatedAt: now });
 }
 
 async function handleDeleteTransaction(id, db) {
