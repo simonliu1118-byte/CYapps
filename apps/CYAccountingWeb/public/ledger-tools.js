@@ -6,10 +6,12 @@ let cyLedgerSearch = '';
 let cyLedgerOpeningData = null;
 let cyLedgerRequestId = 0;
 let cyLedgerRenderedMonth = '';
+let cyLedgerSavedTarget = null;
 window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
 window.cyaccRenderLedgerMessage = renderLedgerMessage;
 window.cySyncLedgerPresentation = syncLedgerPresentation;
+window.cyaccRevealSavedTransaction = revealSavedTransaction;
 
 let cyLedgerToolsStarted = false;
 
@@ -26,6 +28,7 @@ function startLedgerTools() {
   cyLedgerToolsStarted = true;
   setupLedgerToolbar();
   bindLedgerToolbar();
+  window.addEventListener('cyacc:entry-submitted', () => { cyLedgerSavedTarget = null; });
 }
 
 function setupLedgerToolbar() {
@@ -631,6 +634,39 @@ function renderLedgerMessage(message, reason = 'status') {
   );
 }
 
+function revealSavedTransaction(id, month) {
+  if (!window.cyIsDesktopInteractionWorkspace?.() || month !== els.monthFilter?.value
+    || !Number.isSafeInteger(id) || id <= 0) return;
+  cyLedgerSavedTarget = { id, month };
+  // A summary filter must not hide the row the user just successfully saved.
+  if (cyLedgerSearch) {
+    cyLedgerSearch = '';
+    const search = document.querySelector('#ledgerSummarySearch');
+    if (search) search.value = '';
+    renderDesktopLedger();
+  } else scrollToSavedTransaction();
+}
+
+function scrollToSavedTransaction() {
+  if (!cyLedgerSavedTarget) return;
+  if (!window.cyIsDesktopInteractionWorkspace?.() || cyLedgerSavedTarget.month !== els.monthFilter?.value) {
+    cyLedgerSavedTarget = null;
+    return;
+  }
+  const row = els.transactionRows?.querySelector(`tr[data-transaction-id="${cyLedgerSavedTarget.id}"]`);
+  const wrap = document.querySelector('.ledger-card .table-wrap');
+  // Month loading may still be waiting for the POST acknowledgement. The next
+  // canonical row render completes the same reveal without another request.
+  if (!row || !wrap) return;
+  const rowRect = row.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const headerHeight = wrap.querySelector('thead')?.getBoundingClientRect().height || 0;
+  const top = wrap.scrollTop + rowRect.top - wrapRect.top - wrap.clientTop
+    - headerHeight - Math.max(0, (wrap.clientHeight - headerHeight - rowRect.height) / 2);
+  wrap.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+  cyLedgerSavedTarget = null;
+}
+
 function writeLedgerRows(html, detail = {}) {
   if (!els.transactionRows) return;
   els.transactionRows.innerHTML = html;
@@ -640,4 +676,5 @@ function writeLedgerRows(html, detail = {}) {
       ...detail
     }
   }));
+  scrollToSavedTransaction();
 }

@@ -73,7 +73,7 @@ assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-a
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
 assert.match(css, /\.ledger-balance-popover/);
-assert.match(read('public/opening-balances.css'), /width: min\(440px, calc\(100vw - 32px\)\)/);
+assert.match(read('public/opening-balances.css'), /width: min\(280px, calc\(100vw - 32px\)\)/);
 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(quick, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);

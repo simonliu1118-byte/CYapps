@@ -28,7 +28,8 @@ let writes = 0;
 const draft = { amount: '123', summary: '尚未儲存' };
 let edit = { id: 9, draft };
 let splitCalls = 0;
-const nodes = { '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.cy-entry-rail': rail, '#tabletEntryToggle': button,
+const amountInput = { inputMode: 'numeric' };
+const nodes = { '#amount': amountInput, '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.cy-entry-rail': rail, '#tabletEntryToggle': button,
   '.topbar': { getBoundingClientRect: () => ({ height: 60 }) }, '#readOnlyNotice': { classList: classes, getBoundingClientRect: () => ({ height: 30 }) } };
 const win = {
   setTimeout(fn) { fn(); return 1; },
@@ -40,7 +41,7 @@ const win = {
 const context = vm.createContext({ window: win, document: { documentElement: root, createElement: () => controls,
   querySelector: selector => nodes[selector] || null, querySelectorAll: () => [] },
   CY_ADAPTIVE_SPLIT_MEDIA: '(min-width: 1360px)', cyEntryTransactionEdit: edit,
-  applyAdaptiveSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, isDesktopInteractionWorkspace() { return !context.isTabletWorkspace(); }, renderSettingsAccountManager() {},
+  applyAdaptiveSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, isDesktopInteractionWorkspace() { return win.innerWidth >= 768 && !context.isTabletWorkspace(); }, renderSettingsAccountManager() {},
   cancelEntryTransactionEdit() { context.cyEntryTransactionEdit = null; }, api() { writes++; }
 });
 vm.runInContext(tabletCode, context);
@@ -84,7 +85,13 @@ assert.equal(root.dataset.tabletLayout, 'portrait', 'software keyboard does not 
 assert.equal(style.get('--tablet-visible-height'), '1100px', 'software keyboard must not collapse the tablet workspace into the visual viewport');
 assert.equal(context.cyEntryTransactionEdit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/entry toggling never writes accounting data');
+assert.equal(amountInput.inputMode, 'numeric', 'tablet keeps its numeric keyboard');
+win.innerWidth = 1440; coarse = false; listeners.get('resize')();
+assert.equal(amountInput.inputMode, 'text', 'desktop amount does not request a numeric Windows IME scope');
+win.innerWidth = 820; coarse = true; listeners.get('resize')();
+assert.equal(amountInput.inputMode, 'numeric', 'returning to tablet restores numeric keyboard');
 win.innerWidth = 375; listeners.get('resize')();
+assert.equal(amountInput.inputMode, 'numeric', 'phone keeps its numeric keyboard');
 assert.equal(controls.parentElement, entry, 'leaving tablet restores the hidden handle node to the entry card');
 assert.equal(favoriteGroup.parentElement, quickHost, 'phone restores existing quick-entry container');
 assert.equal(summaryGroup.parentElement, quickHost);
