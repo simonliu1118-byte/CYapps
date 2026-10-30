@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/30（台灣時間）。本文件描述**現行程式契約及歷史維運證據**。目前已部署 V0.25.18 Build 2／D1 **schema 15**；最新部署 SHA、驗收邊界與使用者待辦見 [WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)。Backup outer／inner `formatVersion` 均維持 **2**；尚未經受保護維運環境重新查證的每日排程／provider 健康不依文件或 CI 結果推定。
+更新：2026/10/30（台灣時間）。本文件描述**現行程式契約及歷史維運證據**。現行 V1.0.0 產品 source／D1 **schema 15**（資料庫結構承接已完成的 V0.25.18 Build 2；V1.0.0 正式部署須另以相同 source SHA 的 production Run 確認）；最新部署 SHA、驗收邊界與使用者待辦見 [WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)。Backup outer／inner `formatVersion` 均維持 **2**；尚未經受保護維運環境重新查證的每日排程／provider 健康不依文件或 CI 結果推定。
 
 **最新 schema / migration 摘要：** schema 12 查詢 covering indexes；schema 13 期初快照（衍生資料，不可攜備份）；schema 14 `transactions.marker_color`；schema 15 `transactions.marker_target`（summary/category）。**標記是顯示用 metadata**，改色／改位置不改帳務內容、也不使期初快照失效；已鎖月份仍可標記，但一般財務修改仍禁止，唯讀 USER 不可標記。現行新備份會保存這兩欄，舊 schema 6–13 還原時補空色彩，6–14 的標記位置預設 `summary`。schema 6–15 的合法來源可經 canonical normalizer 驗證還原到 schema 15；這是程式支援範圍，不表示每份真實歷史備份都已單獨驗收。
 
@@ -47,7 +47,7 @@ provider lifecycle 如啟用，期限須長於 application policy，避免提前
 | --- | --- |
 | Outer | `CYAccountingWebBackupSet / formatVersion 2` |
 | Inner | `CYAccountingWebBackup / formatVersion 2` |
-| 目前新備份 schema | **15**（截至 V0.25.18 Build 2） |
+| 目前新備份 schema | **15**（V1.0.0 沿用；無新增 migration） |
 | 物件 | `CYAccountingWeb/<backup-id>/manifest.json` 與 `data.json` |
 | Manifest | app/schema version、row counts、SHA-256、byte size、dataFormat／dataFormatVersion |
 
