@@ -11,7 +11,7 @@
 | 已驗證的前一代正式部署 | [GitHub Actions Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154)，V0.25.18 Build 2，`validate`／`deploy` 成功。V1.0.0 請以 [Production workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 查**同一新 SHA** 的 `deploy` 完成結果，不能沿用此舊 Run |
 | 資料庫結構 | schema **15**：0012 查詢索引、0013 期初快照、0014 螢光色、0015 標記位置；**V1.0.0 無新增 migration** |
 | Identity | CYACC consumer 1.0.6；CYID canonical contract 1.0.6、minimum 1.0.0；實際 provider runtime 不僅靠原始碼推定 |
-| Release 身分與來源 | V1.0.0 對應 `cyaccountingweb-v1.0.0`、`V1.0.0.txt` 與 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml)；須先有同 SHA 的 Production deploy success，再執行 Release workflow。既有 V0.22.15 tag 仍為歷史 |
+| Release 身分與來源 | V1.0.0 對應 `cyaccountingweb-v1.0.0`、`V1.0.0.txt` 與 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml)；須先有同 SHA 的 Production deploy success，再執行 Release workflow。V1.0.0 成功建立後，依使用者授權移除舊 V0.22.15 Release 與其附件，但保留歷史 Git tag。此清理只適用此特定版本，不是通用自動清理政策 |
 | 共通規則 | AITeam 與 CYapps `REPOSITORY_RULES.md` 完全一致，`COMMON_RULES_VERSION=2.11.0` |
 | 人工驗收 | 使用者確認 V0.25.18 Build 2 的月份切換體感改善與遮罩呈現可維持現狀。此為人工回饋，**不是**量測耗時或所有裝置的完整回歸驗收 |
 | 備份／帳務運行健康 | 公開 GitHub CI、deploy 不等於每日排程及備份副本已驗收；最近排程、Cloudflare 資源及資料正確性需在受保護維運環境另行回讀 |
