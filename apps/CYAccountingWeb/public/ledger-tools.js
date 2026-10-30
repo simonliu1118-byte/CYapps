@@ -95,6 +95,12 @@ function setupLedgerToolbar() {
 
   const tableWrap = card.querySelector('.table-wrap');
   if (tableWrap) {
+    // The scroll container holds the rows only. The loading overlay is a
+    // sibling pinned to the visible ledger viewport, never the scroll content.
+    const viewport = document.createElement('div');
+    viewport.className = 'ledger-table-viewport';
+    tableWrap.before(viewport);
+    viewport.append(tableWrap);
     const overlay = document.createElement('div');
     overlay.id = 'ledgerLoadingOverlay';
     overlay.className = 'ledger-loading-overlay';
@@ -102,7 +108,7 @@ function setupLedgerToolbar() {
     overlay.setAttribute('role', 'status');
     overlay.setAttribute('aria-live', 'polite');
     overlay.innerHTML = '<span class="ledger-loading-spinner" aria-hidden="true"></span><span>載入中…</span>';
-    tableWrap.append(overlay);
+    viewport.append(overlay);
   }
   setupLedgerUtilityMenu();
   syncLedgerMonthDisplay();
@@ -583,19 +589,24 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const accountVisual = ledgerAccountVisual(accountName);
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
-  const markerNames = { orange: '螢光橘', pink: '螢光粉', yellow: '螢光黃', green: '螢光綠' };
-  const markerColor = Object.hasOwn(markerNames, tx.marker_color) ? tx.marker_color : null;
+  // Highlight the selected field without allocating a color map or callback
+  // for every row. Keep the stored accounting category/summary unchanged.
+  const markerColor = tx.marker_color;
+  const markerName = markerColor === 'orange' ? '螢光橘'
+    : markerColor === 'pink' ? '螢光粉'
+    : markerColor === 'yellow' ? '螢光黃'
+    : markerColor === 'green' ? '螢光綠' : null;
   const markerTarget = tx.marker_target === 'category' ? 'category' : 'summary';
-  const highlightText = (value, target) => {
-    const escaped = escapeHtml(value || '');
-    return markerColor && markerTarget === target
-      ? `<mark class="transaction-text-highlight" data-marker-color="${markerColor}" title="${markerNames[markerColor]}：${target === 'category' ? '科目' : '摘要'}">${escaped}</mark>`
-      : escaped;
-  };
-  const highlightedCategory = highlightText(tx.category_name, 'category');
-  const highlightedSummary = highlightText(tx.summary, 'summary');
-  const markerButtonLabel = markerColor
-    ? `更改標記（${markerTarget === 'category' ? '科目' : '摘要'}：${markerNames[markerColor]}）` : '標記';
+  const summaryText = escapeHtml(tx.summary || '');
+  const categoryText = escapeHtml(tx.category_name || '');
+  const markTitle = markerName ? `${markerName}：${markerTarget === 'category' ? '科目' : '摘要'}` : '';
+  const highlightedCategory = markerName && markerTarget === 'category'
+    ? `<mark class="transaction-text-highlight" data-marker-color="${markerColor}" title="${markTitle}">${categoryText}</mark>`
+    : categoryText;
+  const highlightedSummary = markerName && markerTarget === 'summary'
+    ? `<mark class="transaction-text-highlight" data-marker-color="${markerColor}" title="${markTitle}">${summaryText}</mark>`
+    : summaryText;
+  const markerButtonLabel = markerName ? `更改標記（${markTitle}）` : '標記';
 
 
   return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}"${id < 0 ? ' aria-busy="true"' : ''}>
