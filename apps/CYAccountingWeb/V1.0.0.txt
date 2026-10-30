@@ -1,0 +1,20 @@
+CYAccountingWeb V1.0.0（Build 0）
+正式名稱：志遠記帳系統 CYACC Web
+發行日期：2026-10-30
+
+本版是使用者明確核准的第一個 1.x 正式產品世代，承接已正式部署、驗收可維持的 V0.25.18 Build 2 功能及現有使用者帳本。此為正式版身分升級，非重新建置帳務系統；原帳務與 Session 資料不因升版重建，D1 schema 維持 15。
+
+主要能力
+- 透過 CYID 進行中央登入、權限管理、Session 與驗證引導；USER 維持唯讀。
+- 網頁端跨桌機、手機、平板使用共用交易、帳戶、科目、期初餘額、月份鎖帳、統計、Excel 匯入匯出功能。
+- 交易可在操作欄選擇螢光橘／粉／黃／綠，將文字網底標記於「科目」或「摘要」，可取消。鎖帳月份僅允許標記 metadata 修改，不開放更改財務內容。
+- 桌機月份清單切換時，遮罩固定覆蓋中間可視清單，載入動畫居中；維持獨立捲動及既有期初餘額正確性。
+- Cloudflare Workers + D1 schema 15；與 R2／GCS 備份及隔離還原驗證路徑維持相容。Portable backup inner／outer formatVersion 均為 2，現行還原器支援 schema 6～15 的合規備份及正規化。
+
+相容性與安全
+- 本次 1.0.0 只更動版本身分、公開發行文件與 Release 命名；無新增 D1 migration、無帳務模型或 Worker API 的破壞性變更。
+- 正式發行以同一 main commit 完成 production deploy、完整 CI、套件安全掃描及 SHA-256 核對為條件；GitHub Release 只是可追溯原始碼封裝，不是正式帳務備份，也不含正式環境密鑰、資料或資源識別。
+- 深色模式暫緩；真實 iPad／Android、Windows 注音、備份排程健康等尚待進一步場景驗收，詳見 TODO。
+- 公開下載遵循本 repository 的 LICENSE；未因此改為開放原始碼。
+
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.

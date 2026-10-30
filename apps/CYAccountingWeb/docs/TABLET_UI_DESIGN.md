@@ -1,10 +1,10 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/15。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現行正式產品 **V0.25.5**，部署證據見 [WORK_HANDOFF](../WORK_HANDOFF.md)。以下 V0.22.28 記帳 rail、三列輸入、原生 touch picker 與設定配置持續保留；V0.23.0 起直／橫式增加共用統計入口，V0.23.1 共用圖表／統計頁籤、圓餅名稱／百分比及完整圖例，損益排除指定移轉並另列。新統計仍待真機驗收，不以桌機抽查代替。
+更新：2026/10/30（台灣時間）。本文件是平板**現行配置、版本歷史與待驗收項目**，不是永久規則；現行 V1.0.0 發行原始碼（承接已部署 V0.25.18 Build 2）／schema 15，成功部署依 [WORK_HANDOFF](../WORK_HANDOFF.md) 與 [README](../README.md)。原有平板直式／橫式的 rail、原生 picker、共用統計與收支圖表都保留；新交易功能與裝置驗收如下，不以桌機 CI 代替真機。
 
-原始設計來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`。規劃初期的自製 picker 已被後續實作收斂為 native/shared owner；目前不得把歷史設計稿中的自製 picker 建議當成現行需求。
+**最近共用變更：** V0.25.17 的桌機輸入／期初調整不改平板獨立 business owner；V0.25.18 的四種螢光標記可選**科目或摘要**文字、取消、鎖帳月份照樣可標記，使用同一 API／canonical row renderer；唯讀 USER 不可寫入。V1.0.0 繼承 V0.25.18 Build 2 的**固定整片遮罩＋置中 spinner 針對桌機的獨立可視清單**，平板仍保留現有 touch loading presentation，未宣稱兩種版面實體結構完全相同。
 
-V0.25.5 已移除手機測試用平板入口與所有 preview 專用狀態／viewport／返回按鈕／Excel 分支；下方歷史 preview 紀錄只供追溯。真實平板直橫式 owner 與 native share 保留。
+下方 V0.22.x／舊 preview 版本條目都是**歷史**，其中「下次 Release 才移除 preview」已在 V0.25.5 正式退場；不可視為目前未完成的功能。原始設計來源 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18` 只作來源追溯；實作以目前 canonical native picker／shared owner 為準。
 
 ## 現行配置
 
@@ -12,7 +12,7 @@ V0.25.5 已移除手機測試用平板入口與所有 preview 專用狀態／vie
 | --- | --- | --- |
 | 結構 | 左記帳、右看帳；記帳區已在 Build 2/3 縮窄 | 看帳主區，底部記帳 rail |
 | 表單 | 常駐左欄；帳戶／日期／科目／摘要／金額沿用共用欄位 | 底部記帳 rail 預設展開；把手由 rail 上緣向上凸出，收合顯示「↑ 展開新增」、展開顯示「↓ 收合隱藏」，收合時只剩凸起 tab；左側收入／支出沿用 canonical segmented-control 視覺，只改為 42px 窄、132px 高直式排列；右側三列為帳戶／科目／常用科目、日期／摘要／常用摘要、金額／儲存／清空或取消 |
-| 帳本 | 保留表格、完整金額與餘額，獨立捲動；固定欄寬，空月份與有資料月份一致；操作表頭置中 | 不顯示「記帳資料」標題；月摘要固定五格並放大；不顯示獨立收支欄，金額直接以綠色 `+`／紅色 `−` 表達；編輯／刪除為圖示按鈕且操作表頭置中；底部表單不應覆蓋最後一筆 |
+| 帳本 | 保留表格、完整金額與餘額，獨立捲動；固定欄寬，空／滿月份欄寬一致；交易「標記」共用四種螢光色及科目／摘要位置 | 不顯示「記帳資料」標題；月摘要固定五格；收支符號顯示於金額；操作含編輯、刪除及共用的螢光標記選單；底部表單不覆蓋最後一筆 |
 | 編輯 | 點編輯後帶入同一 entry owner | 點編輯後展開底部同一表單 |
 | 日期／月份 | 與手機 touch path 共用原生 date/month owner；月份使用 shared `ledgerMonthDisplay`＋原生 `type=month` | 同一 owner、同一月份顯示層；月份外觀為 bounded touch capsule；摘要搜尋使用原生 `type=search`、至少 16px，無額外搜尋／清除按鈕 |
 | 月份狀態／鎖帳 | canonical `lockedThrough` 與既有鎖帳設定 | 切月份顯示「載入中…」並暫停當月控制項；年月旁快速鎖帳只能將 `lockedThrough` 邊界逐月推進或退回，跳月、歷史已鎖與無初始邊界時按鈕停用 |
@@ -55,11 +55,11 @@ V0.25.5 已移除手機測試用平板入口與所有 preview 專用狀態／vie
 | 帳戶／日期／月份 | 原生／shared touch 元件；同一資料值與 change owner |
 | 收入／支出 | 共用既有 slider、純色畫布、entry kind 與鎖帳狀態 |
 | 交易編輯 | 共用 entry editor + canonical `persistTransactionUpdate` |
-| 交易新增 | 共用既有 submit path；optimistic create 尚未實作 |
+| 交易新增 | 共用 `public/app.js` 的 optimistic create、真實交易 ID 確認及失敗 rollback；同一寫入者跨裝置共用 |
 | 編輯取消／換月份 | 共用取消／草稿還原；不得因旋轉或鍵盤誤送資料 |
 | 帳戶排序 | 共用 Settings owner、pointer/touch sorting 與 rollback |
 | 科目排序 | 共用階層 renderer、分類按鈕、touch/pen reorder／跨分類 |
-| 交易列 | `public/ledger-tools.js` 唯一 canonical renderer |
+| 交易列／標記 | `public/ledger-tools.js` 唯一 canonical renderer，文字網底僅套在科目或摘要。已鎖月份可標記，不可變更原交易欄位；USER 仍唯讀 |
 | 設定／彈窗 | 共用既有 Settings surface；Tablet 只調 presentation |
 | Excel | 共用 endpoint／期初 snapshot；分享或下載依瀏覽器能力 |
 | 權限 | CYID + Worker server-side authorization；Tablet 無獨立 authority |
@@ -76,14 +76,16 @@ V0.25.5 已移除手機測試用平板入口與所有 preview 專用狀態／vie
 
 ## 尚待真機驗收
 
+目前自動 CI 覆蓋標記位置與色彩、鎖帳月份只改 metadata、舊備份 schema 相容；**尚未在真實平板完成全部操作與長摘要換行測試**。
+
 | 待驗收 | 通過條件 |
 | --- | --- |
 | iPad／Android 雙方向 | 欄位、表格、工具、設定與彈窗皆可達，無重疊或被遮住 |
 | 分割視窗／旋轉 | 草稿、目前年月、搜尋、編輯不遺失、不重複送出 |
 | 螢幕鍵盤 | 焦點、儲存／取消可達；鍵盤只改可視高度，不誤判方向 |
 | 原生選擇器 | date/month/select 可正常開啟、選值與收回，沒有 desktop picker 接管 |
-| 觸控 | 帳戶／科目排序、列表捲動、原生 picker、交易操作互不攔截 |
-| USER 權限 | 平板 presentation 不繞過 Worker server-side read-only gate |
+| 觸控 | 帳戶／科目排序、列表捲動、原生 picker、交易操作互不攔截；科目／摘要標記選單、四色與取消在直橫式均可操作 |
+| USER 權限／鎖帳 | 平板 presentation 不繞過 Worker server-side read-only gate；已鎖月份僅可變更標記（ADMIN／SUPER_ADMIN），原交易編輯與刪除仍不可 |
 | Excel | 真實瀏覽器分享／下載取得正確 XLSX |
 | 外接輸入 | 鍵盤、滑鼠／trackpad 與觸控切換時操作語意一致 |
 

@@ -1,3 +1,17 @@
+# CYAccountingWeb 版本與變更紀錄
+
+> 目前正式發行原始碼版本身分為 **V1.0.0（Build 0）**，使用者於 2026/10/30 明確核准 Major 升版；D1 schema **15**，無新增 migration。本版是 V0.25.18 Build 2 已穩定功能的正式產品世代，不是新帳本或新 API。歷史 [production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 僅證明**上一代**正式部署；1.0.0 本身須查 [Production](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 及 [Stable Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 的同 SHA 成功結果，不能由本文件取代驗證。所有歷史段落依當時版本解讀，不得當成現行權限／鎖帳政策。
+>
+> 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
+
+## V1.0.0 — 2026/10/30
+
+- **使用者授權的首個 1.x Major 正式版**：`VERSION=1.0.0`、`BUILD=0`；保留 V0.25.18 Build 2 所有已部署能力，既有正式交易、帳戶、Session、統計與備份契約不因版本號而重設。
+- D1 schema 維持 15（交易標記螢光色與科目／摘要位置；舊備份來源 schema 6～15 可依 canonical normalizer 還原）；portable backup formatVersion 維持 2，不加入新 migration。
+- 保留桌機中間帳本月份載入全區遮罩＋置中動畫、逐列渲染精簡、跨裝置交易列表、CYID 驗證和唯讀 USER／已鎖月僅可更改標記 metadata 的既有規則。
+- 彙整並核實專案 README、交接、TODO、備份／復原、平板設計及獨立 Release 說明；未宣稱全部真機、實際排程與所有歷史備份已重新人工驗收。
+- Release title 正名為 **CYAccountingWeb V1.0.0｜正式穩定版**；正式發行需相同 SHA 的 production deploy、必要 CI、public-package safety scan、SHA-256 封裝驗證。參見 [V1.0.0.txt](V1.0.0.txt)。
+
 ## V0.25.18 Build 2 — 2026/10/30
 
 - 桌機帳本切換月份時，將原本放在可捲動 `.table-wrap` 內的載入遮罩改為與清單並列、掛在固定可視區 `.ledger-table-viewport` 之下；遮罩完整覆蓋中間清單視窗，捲動到任意交易位置仍可在中央看到「載入中」動畫。
