@@ -95,7 +95,7 @@ jobs:
           python3 .github/scripts/scan-public-package.py "out/$asset"
           (cd out && sha256sum "$asset" > SHA256SUMS.txt && sha256sum --check SHA256SUMS.txt)
 
-      - name: Publish stable mobile Release
+      - name: Publish CYAccountingWeb stable Release
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -104,7 +104,7 @@ jobs:
           fi
           gh release create "$RELEASE_TAG" "out/CYAccountingWeb_V$RELEASE_VERSION-source.tar.gz" out/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" \
-            --title "CYAccountingWeb V$RELEASE_VERSION｜手機穩定版" \
+            --title "CYAccountingWeb V$RELEASE_VERSION｜正式穩定版" \
             --notes-file "apps/CYAccountingWeb/V$RELEASE_VERSION.txt" --latest=false
 
       - name: Remove generated CI files
