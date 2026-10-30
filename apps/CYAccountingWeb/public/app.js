@@ -29,7 +29,6 @@ const cyPendingTransactionUpdates = new Map();
 const cyPendingTransactionCreates = new Map();
 let cyTransactionCreateId = 0;
 let cyEntryDraftRevision = 0;
-window.cyaccSetTransactionMarker = setTransactionMarker;
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
@@ -91,6 +90,7 @@ async function startCyaccApp() {
     els.txDate.value = today;
     els.monthFilter.value = today.slice(0, 7);
     els.openingMonth.value = today.slice(0, 7);
+    window.cyaccSetTransactionMarker = setTransactionMarker;
     bindEvents();
     setEntryKind(state.kind);
 
