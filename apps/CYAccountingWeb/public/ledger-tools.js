@@ -6,6 +6,7 @@ let cyLedgerSearch = '';
 let cyLedgerOpeningData = null;
 let cyLedgerRequestId = 0;
 let cyLedgerRenderedMonth = '';
+const cyLedgerPeriodSearch = { criteria: null, pages: [], page: 0, requestId: 0, busy: false };
 let cyLedgerSavedTarget = null;
 window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
@@ -29,6 +30,7 @@ function startLedgerTools() {
   if (!document.querySelector('.ledger-card') || !document.querySelector('#monthFilter')) return;
   cyLedgerToolsStarted = true;
   setupLedgerToolbar();
+  setupLedgerPeriodSearch();
   bindLedgerToolbar();
   window.addEventListener('cyacc:entry-submitted', () => { cyLedgerSavedTarget = null; });
 }
@@ -81,6 +83,7 @@ function setupLedgerToolbar() {
       <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要" autocomplete="off" inputmode="search" enterkeyhint="search">
       <button class="secondary compact ledger-search-submit" type="submit">搜尋</button>
       <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
+      <button id="ledgerPeriodSearchButton" class="secondary compact" type="button">全帳簿搜尋</button>
     </form>
     <div class="ledger-view-tools">
       <button id="ledgerExcelExport" class="secondary compact" type="button" title="匯出目前月份完整帳簿（.xlsx）">匯出 Excel</button>
@@ -141,7 +144,171 @@ function setupLedgerUtilityMenu() {
   document.body.append(backdrop, sheet);
 }
 
+function setupLedgerPeriodSearch() {
+  const dialog = document.createElement('dialog');
+  dialog.id = 'ledgerPeriodSearchDialog';
+  dialog.className = 'modal ledger-period-search-dialog';
+  dialog.setAttribute('aria-labelledby', 'ledgerPeriodSearchTitle');
+  dialog.innerHTML = `
+    <div class="modal-header">
+      <h2 id="ledgerPeriodSearchTitle">全帳簿搜尋</h2>
+      <button type="button" class="icon-button" data-close-dialog="ledgerPeriodSearchDialog" aria-label="關閉">×</button>
+    </div>
+    <form id="ledgerPeriodSearchForm" class="ledger-period-search-form">
+      <div class="ledger-period-search-months">
+        <label><span>起始年月</span><input id="ledgerPeriodSearchStart" type="month" min="0001-01" max="9998-12" required></label>
+        <label><span>結束年月（最長 3 年）</span><input id="ledgerPeriodSearchEnd" type="month" min="0001-01" max="9998-12" required></label>
+      </div>
+      <div class="ledger-period-search-keyword">
+        <label><span>搜尋關鍵字</span><input id="ledgerPeriodSearchKeyword" type="search" maxlength="100" placeholder="摘要、科目或帳戶" autocomplete="off" required></label>
+        <button type="submit" class="primary">搜尋</button>
+      </div>
+    </form>
+    <div id="ledgerPeriodSearchMessage" class="ledger-period-search-message" role="status" aria-live="polite"></div>
+    <div id="ledgerPeriodSearchResults" class="ledger-period-search-results" hidden></div>
+    <div class="modal-actions ledger-period-search-actions">
+      <span id="ledgerPeriodSearchPage"></span>
+      <button id="ledgerPeriodSearchPrev" type="button" class="secondary compact" disabled>上一頁</button>
+      <button id="ledgerPeriodSearchNext" type="button" class="secondary compact" disabled>下一頁</button>
+      <button type="button" class="secondary compact" data-close-dialog="ledgerPeriodSearchDialog">關閉</button>
+    </div>`;
+  document.body.append(dialog);
+  document.querySelector('#ledgerPeriodSearchForm').addEventListener('submit', event => {
+    event.preventDefault();
+    void searchLedgerPeriod(true);
+  });
+  document.querySelector('#ledgerPeriodSearchForm').addEventListener('input', () => {
+    cyLedgerPeriodSearch.pages = [];
+    cyLedgerPeriodSearch.page = 0;
+    document.querySelector('#ledgerPeriodSearchResults').hidden = true;
+    document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
+    document.querySelector('#ledgerPeriodSearchPage').textContent = '';
+    setLedgerPeriodSearchBusy(false);
+  });
+  document.querySelector('#ledgerPeriodSearchPrev').addEventListener('click', () => {
+    if (cyLedgerPeriodSearch.busy || cyLedgerPeriodSearch.page === 0) return;
+    cyLedgerPeriodSearch.page -= 1;
+    renderLedgerPeriodSearch();
+  });
+  document.querySelector('#ledgerPeriodSearchNext').addEventListener('click', () => {
+    void searchLedgerPeriod(false);
+  });
+  document.querySelector('#ledgerPeriodSearchResults').addEventListener('click', event => {
+    const button = event.target.closest('[data-ledger-search-view]');
+    if (!button) return;
+    const row = cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page]?.transactions
+      .find(item => item.id === Number(button.dataset.ledgerSearchView));
+    if (!row) return;
+    const month = row.tx_date.slice(0, 7);
+    dialog.close();
+    if (els.monthFilter.value !== month) {
+      els.monthFilter.value = month;
+      els.monthFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    revealSavedTransaction(row.id, month);
+  });
+  dialog.addEventListener('close', () => {
+    cyLedgerPeriodSearch.requestId += 1;
+    document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
+    setLedgerPeriodSearchBusy(false);
+  });
+}
+
+function openLedgerPeriodSearch() {
+  if (!window.cyIsDesktopInteractionWorkspace?.()) return;
+  const dialog = document.querySelector('#ledgerPeriodSearchDialog');
+  const start = document.querySelector('#ledgerPeriodSearchStart');
+  const end = document.querySelector('#ledgerPeriodSearchEnd');
+  const keyword = document.querySelector('#ledgerPeriodSearchKeyword');
+  if (!start.value) start.value = els.monthFilter.value;
+  if (!end.value) end.value = els.monthFilter.value;
+  if (!keyword.value) keyword.value = document.querySelector('#ledgerSummarySearch')?.value || '';
+  dialog.showModal();
+  keyword.focus();
+}
+
+function setLedgerPeriodSearchBusy(busy) {
+  cyLedgerPeriodSearch.busy = busy;
+  document.querySelector('#ledgerPeriodSearchResults').setAttribute('aria-busy', String(busy));
+  document.querySelectorAll('#ledgerPeriodSearchForm input, #ledgerPeriodSearchForm button').forEach(control => { control.disabled = busy; });
+  document.querySelector('#ledgerPeriodSearchPrev').disabled = busy || cyLedgerPeriodSearch.page === 0;
+  document.querySelector('#ledgerPeriodSearchNext').disabled = busy || !cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page]?.nextCursor;
+}
+
+async function searchLedgerPeriod(reset) {
+  if (cyLedgerPeriodSearch.busy) return;
+  const message = document.querySelector('#ledgerPeriodSearchMessage');
+  let criteria = cyLedgerPeriodSearch.criteria;
+  if (reset) {
+    const start = document.querySelector('#ledgerPeriodSearchStart').value;
+    const end = document.querySelector('#ledgerPeriodSearchEnd').value;
+    const keyword = document.querySelector('#ledgerPeriodSearchKeyword').value.trim();
+    const monthIndex = value => Number(value.slice(0, 4)) * 12 + Number(value.slice(5, 7));
+    const validMonth = value => /^\d{4}-(0[1-9]|1[0-2])$/.test(value) && value >= '0001-01' && value <= '9998-12';
+    if (!validMonth(start) || !validMonth(end) || start > end) {
+      message.textContent = '請選擇有效的起訖年月，起月不可晚於訖月。';
+      return;
+    }
+    if (monthIndex(end) - monthIndex(start) + 1 > 36) {
+      message.textContent = '搜尋期間不可超過 3 年（36 個月）。';
+      return;
+    }
+    if (!keyword || keyword.length > 100) {
+      message.textContent = '請輸入搜尋關鍵字，最多 100 字。';
+      return;
+    }
+    criteria = { start, end, q: keyword };
+    cyLedgerPeriodSearch.criteria = criteria;
+    cyLedgerPeriodSearch.pages = [];
+    cyLedgerPeriodSearch.page = 0;
+    document.querySelector('#ledgerPeriodSearchResults').hidden = true;
+    document.querySelector('#ledgerPeriodSearchPage').textContent = '';
+  }
+  const page = reset ? 0 : cyLedgerPeriodSearch.page + 1;
+  const previous = cyLedgerPeriodSearch.pages[page - 1];
+  if (!reset && !previous?.nextCursor) return;
+  if (cyLedgerPeriodSearch.pages[page]) {
+    cyLedgerPeriodSearch.page = page;
+    renderLedgerPeriodSearch();
+    return;
+  }
+  const requestId = ++cyLedgerPeriodSearch.requestId;
+  const query = new URLSearchParams(criteria);
+  if (previous?.nextCursor) query.set('cursor', previous.nextCursor);
+  setLedgerPeriodSearchBusy(true);
+  message.textContent = '搜尋中…';
+  try {
+    const result = await api(`/api/transactions/search?${query.toString()}`);
+    if (requestId !== cyLedgerPeriodSearch.requestId) return;
+    cyLedgerPeriodSearch.pages[page] = result;
+    cyLedgerPeriodSearch.page = page;
+    renderLedgerPeriodSearch();
+  } catch (error) {
+    if (requestId === cyLedgerPeriodSearch.requestId) message.textContent = error.message || '搜尋失敗，請稍後再試。';
+  } finally {
+    if (requestId === cyLedgerPeriodSearch.requestId) setLedgerPeriodSearchBusy(false);
+  }
+}
+
+function renderLedgerPeriodSearch() {
+  const page = cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page];
+  const results = document.querySelector('#ledgerPeriodSearchResults');
+  const rows = page.transactions || [];
+  document.querySelector('#ledgerPeriodSearchMessage').textContent = rows.length ? '' : '這段期間沒有符合的記錄。';
+  document.querySelector('#ledgerPeriodSearchPage').textContent = rows.length
+    ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '';
+  results.hidden = rows.length === 0;
+  results.innerHTML = `<table><colgroup><col class="period-search-date"><col class="period-search-account"><col class="period-search-category"><col><col class="period-search-amount"><col class="period-search-action"></colgroup>
+    <thead><tr><th>日期</th><th>帳戶</th><th>科目</th><th>摘要</th><th class="num">金額</th><th></th></tr></thead>
+    <tbody>${rows.map(tx => `<tr><td>${escapeHtml(tx.tx_date.replaceAll('-', '/'))}</td><td>${escapeHtml(tx.account_name)}</td><td>${escapeHtml(tx.category_name)}</td><td>${escapeHtml(tx.summary || '')}</td>
+      <td class="num period-search-${tx.kind === 'income' ? 'income' : 'expense'}">${tx.kind === 'income' ? '+' : '−'}${money(tx.amount)}</td>
+      <td><button type="button" class="period-search-view" data-ledger-search-view="${Number(tx.id)}" aria-label="查看 ${escapeHtml(tx.tx_date)} 的這筆記錄">查看</button></td></tr>`).join('')}</tbody></table>`;
+  results.scrollTop = 0;
+  setLedgerPeriodSearchBusy(false);
+}
+
 function bindLedgerToolbar() {
+  document.querySelector('#ledgerPeriodSearchButton')?.addEventListener('click', openLedgerPeriodSearch);
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);

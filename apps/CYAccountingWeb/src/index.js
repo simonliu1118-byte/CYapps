@@ -1,3 +1,5 @@
+import { statisticsPeriod } from './statistics.js';
+
 const MAX_AMOUNT = 9_999_999;
 
 export default {
@@ -15,6 +17,7 @@ export default {
       if (!env.DB) return json({ ok: false, error: 'D1 尚未綁定。' }, 503);
 
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
+      if (url.pathname === '/api/transactions/search' && request.method === 'GET') return handleSearchTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
       const markerMatch = url.pathname.match(/^\/api\/transactions\/(\d+)\/marker$/);
@@ -115,6 +118,42 @@ async function handleListTransactions(url, db) {
     getLockedThrough(db)
   ]);
   return json({ ok: true, month, locked: isMonthLocked(month, lockedThrough), lockedThrough, transactions: result.results || [] });
+}
+
+async function handleSearchTransactions(url, db) {
+  const period = statisticsPeriod(url.searchParams.get('start') || '', url.searchParams.get('end') || '');
+  if (!period) return json({ ok: false, error: '請選擇有效的起訖年月，起月不可晚於訖月。' }, 400);
+  const monthIndex = month => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7));
+  if (monthIndex(period.end) - monthIndex(period.start) + 1 > 36) {
+    return json({ ok: false, error: '搜尋期間不可超過 3 年（36 個月）。' }, 400);
+  }
+  const keyword = String(url.searchParams.get('q') || '').trim();
+  if (!keyword || keyword.length > 100) return json({ ok: false, error: '請輸入搜尋關鍵字，最多 100 字。' }, 400);
+  let cursor = null;
+  const encodedCursor = url.searchParams.get('cursor');
+  if (encodedCursor) {
+    try { cursor = JSON.parse(atob(encodedCursor)); } catch { /* rejected below */ }
+    if (!Array.isArray(cursor) || cursor.length !== 2 || !isDate(cursor[0])
+      || cursor[0] < period.from || cursor[0] >= period.until || !validId(cursor[1])) {
+      return json({ ok: false, error: '搜尋分頁無效，請重新搜尋。' }, 400);
+    }
+  }
+  // The date index bounds every page. Keyset pagination avoids rescanning all
+  // earlier pages; a one-row lookahead replaces a second full-range COUNT.
+  const values = [period.from, period.until, keyword, keyword, keyword];
+  if (cursor) values.push(...cursor);
+  const result = await db.prepare(`SELECT id, tx_date, account_name, kind, category_name, summary, amount
+    FROM transactions
+    WHERE tx_date >= ? AND tx_date < ?
+      AND (instr(lower(summary), lower(?)) > 0 OR instr(lower(category_name), lower(?)) > 0
+        OR instr(lower(account_name), lower(?)) > 0)
+      ${cursor ? 'AND (tx_date, id) < (?, ?)' : ''}
+    ORDER BY tx_date DESC, id DESC LIMIT 51`).bind(...values).all();
+  const rows = result.results || [];
+  const transactions = rows.slice(0, 50);
+  const last = transactions.at(-1);
+  return json({ ok: true, start: period.start, end: period.end, keyword, transactions,
+    nextCursor: rows.length > 50 ? btoa(JSON.stringify([last.tx_date, last.id])) : null });
 }
 
 async function handleCreateTransaction(request, db) {
