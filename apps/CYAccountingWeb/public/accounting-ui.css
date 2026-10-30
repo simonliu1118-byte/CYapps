@@ -1292,12 +1292,16 @@ html[data-viewport="desktop"] .ledger-header-button {
   font-size: 11.5px;
 }
 
-/* Transaction metadata marker: a single source for the four semantic hues. */
-.ledger-card {
-  --cyacc-marker-orange: #ff920a;
-  --cyacc-marker-pink: #ff50a4;
-  --cyacc-marker-yellow: #ffe531;
-  --cyacc-marker-green: #63ed59;
+/* Transaction marker colors and text-only highlight share one CSS owner. */
+.ledger-card td.summary .transaction-summary-highlight {
+  display: inline;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: #17212b;
+  background: var(--cyacc-marker-color);
+  font: inherit;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 .transaction-marker-dot {
   display: inline-block;
