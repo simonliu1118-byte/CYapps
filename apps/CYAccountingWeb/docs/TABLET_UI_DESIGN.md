@@ -1,8 +1,8 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/30（台灣時間）。本文件是平板**現行配置、版本歷史與待驗收項目**，不是永久規則；目前已部署 **V0.25.18 Build 2／schema 15**，成功部署依 [WORK_HANDOFF](../WORK_HANDOFF.md) 與 [README](../README.md)。原有平板直式／橫式的 rail、原生 picker、共用統計與收支圖表都保留；新交易功能與裝置驗收如下，不以桌機 CI 代替真機。
+更新：2026/10/30（台灣時間）。本文件是平板**現行配置、版本歷史與待驗收項目**，不是永久規則；現行 V1.0.0 發行原始碼（承接已部署 V0.25.18 Build 2）／schema 15，成功部署依 [WORK_HANDOFF](../WORK_HANDOFF.md) 與 [README](../README.md)。原有平板直式／橫式的 rail、原生 picker、共用統計與收支圖表都保留；新交易功能與裝置驗收如下，不以桌機 CI 代替真機。
 
-**最近共用變更：** V0.25.17 的桌機輸入／期初調整不改平板獨立 business owner；V0.25.18 的四種螢光標記可選**科目或摘要**文字、取消、鎖帳月份照樣可標記，使用同一 API／canonical row renderer；唯讀 USER 不可寫入。V0.25.18 Build 2 的**固定整片遮罩＋置中 spinner 針對桌機的獨立可視清單**，平板仍保留現有 touch loading presentation，未宣稱兩種版面實體結構完全相同。
+**最近共用變更：** V0.25.17 的桌機輸入／期初調整不改平板獨立 business owner；V0.25.18 的四種螢光標記可選**科目或摘要**文字、取消、鎖帳月份照樣可標記，使用同一 API／canonical row renderer；唯讀 USER 不可寫入。V1.0.0 繼承 V0.25.18 Build 2 的**固定整片遮罩＋置中 spinner 針對桌機的獨立可視清單**，平板仍保留現有 touch loading presentation，未宣稱兩種版面實體結構完全相同。
 
 下方 V0.22.x／舊 preview 版本條目都是**歷史**，其中「下次 Release 才移除 preview」已在 V0.25.5 正式退場；不可視為目前未完成的功能。原始設計來源 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18` 只作來源追溯；實作以目前 canonical native picker／shared owner 為準。
 
