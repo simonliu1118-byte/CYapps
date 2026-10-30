@@ -1,3 +1,9 @@
+# CYAccountingWeb 版本與變更紀錄
+
+> 最新已正式部署版本：**V0.25.18 Build 2**／D1 **schema 15**；source `5b3442db6cd716cf002c8c1e278d526f978dd07b`，[production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 的 `validate`／`deploy` 均成功。本文件各節保留**當時版本**的能力與限制；後續 Build 對先前功能的擴充以最新節為準，例如 Build 1 已允許已鎖月份修改**標記 metadata**，不可用較早 V0.25.18 的「已鎖月份不可標記」說明推定當前行為。
+>
+> 2026/10/30 文件同步：此變更**未升** `VERSION`／`BUILD`，不額外部署網站、不建立 GitHub Release。正式基準、未完成驗收及備份格式分別見 [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
+
 ## V0.25.18 Build 2 — 2026/10/30
 
 - 桌機帳本切換月份時，將原本放在可捲動 `.table-wrap` 內的載入遮罩改為與清單並列、掛在固定可視區 `.ledger-table-viewport` 之下；遮罩完整覆蓋中間清單視窗，捲動到任意交易位置仍可在中央看到「載入中」動畫。
