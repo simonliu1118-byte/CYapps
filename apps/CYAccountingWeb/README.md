@@ -14,7 +14,7 @@
 | D1 schema | **15**（0012 查詢索引／0013 期初快照／0014 交易螢光顏色／0015 科目或摘要標記位置）；V1.0.0 **沒有新增 migration** |
 | CYID consumer | `CYID_CONSUMER_VERSION=1.0.6`；同 repo consumer contract 1.0.6、minimum 1.0.0；不得僅據 source 推定所有 provider runtime 版本 |
 | 共通規則 | AITeam `main` 與 CYapps 同步版 **2.11.0**；本 repo 治理依根 `GOVERNANCE_VERSION` |
-| 正式 Release 管理 | V1.0.0 發行目標 tag `cyaccountingweb-v1.0.0`，由獨立 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 以**同 SHA 成功 production deploy** 為前提建立；歷史 V0.22.15 tag 保留。請以 [Releases](https://github.com/simonliu1118-byte/CYapps/releases) 查公開發行狀態 |
+| 正式 Release 管理 | V1.0.0 發行目標 tag `cyaccountingweb-v1.0.0`，由獨立 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 以**同 SHA 成功 production deploy** 為前提建立；V1.0.0 Release 成功建立後，依使用者授權清理舊 V0.22.15 Release（含舊附件），**保留歷史 Git tag**。請以 [Releases](https://github.com/simonliu1118-byte/CYapps/releases) 查實際公開發行狀態 |
 | 正式帳務／備份執行情況 | 公開文件僅記錄程式契約及已確認的 deploy 結果。實際帳務、最近排程健康／副本 catalog／恢復狀態須在受保護維運環境另行回讀，不從 CI 成功推定 |
 
 正式網站部署與 GitHub Release 分離：日常更新只透過經審核的 `main` source 前進 `deploy/cyaccountingweb-production`，**不必每次建立 Release**。由 0.x.x 進入 1.0.0 的 Major 決策已由使用者批准；版本身分已設定為 Build 0。正式 Release 仍須以同 SHA 部署、完整 CI、安全掃描、SHA-256、`V1.0.0.txt` 驗證後建立；**不能把 Merge 或 PR 綠燈視為已發布 Release**。
