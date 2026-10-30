@@ -1,6 +1,6 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/30（台灣時間）。此處**只保留未完成或未完全驗收**的項目；正式版本 V0.25.18 Build 2／schema 15、部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，現行能力見 [README.md](README.md)。永久規則依正式三層來源。
+更新：2026/10/30（台灣時間）。此處**只保留未完成或未完全驗收**的項目；產品版本 V1.0.0 Build 0／schema 15、部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，現行能力見 [README.md](README.md)。永久規則依正式三層來源。
 
 ## 效能與 D1 讀取觀察
 
