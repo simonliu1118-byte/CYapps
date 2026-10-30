@@ -414,6 +414,7 @@ function renderDesktopLedger() {
     openingMap.set(String(item.name), Number.isFinite(value) ? value : 0);
   }
 
+  closeTransactionMarkerPicker();
   window.cyCloseLedgerBalancePopover?.();
   window.cyLedgerBalanceBreakdowns = new Map();
   const calculated = calculateLedgerBalances(allTransactions, openingMap);
