@@ -135,6 +135,7 @@ jobs:
           node tests/accounting-read-cost.mjs
           node tests/accounting-read-requests.mjs
           node tests/desktop-ui.mjs
+          node tests/login-ui.mjs
           node tests/deploy-config.mjs
           node tests/deployment-flow.mjs
           node tests/cyid-integration.mjs
