@@ -77,7 +77,6 @@ jobs:
           CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
           CF_CYID_APPLICATION_ID: CYACC_CI
           CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
-          CF_CYWEB_PORTAL_URL: https://portal.example.test/
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
