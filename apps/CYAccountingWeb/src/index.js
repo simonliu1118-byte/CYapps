@@ -142,7 +142,7 @@ async function handleSearchTransactions(url, db) {
   // earlier pages; a one-row lookahead replaces a second full-range COUNT.
   const values = [period.from, period.until, keyword, keyword, keyword];
   if (cursor) values.push(...cursor);
-  const result = await db.prepare(`SELECT id, tx_date, account_name, kind, category_name, summary, amount
+  const result = await db.prepare(`SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target
     FROM transactions
     WHERE tx_date >= ? AND tx_date < ?
       AND (instr(lower(summary), lower(?)) > 0 OR instr(lower(category_name), lower(?)) > 0
