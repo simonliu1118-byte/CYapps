@@ -9733,7 +9733,7 @@ html[data-tablet-layout="landscape"] .ledger-card td { padding:5px 4px !importan
 html[data-tablet-layout="landscape"] .ledger-card .kind-tag { min-width:38px !important; padding:2px 4px !important; font-size:11px !important; }
 html[data-tablet-layout="landscape"] .ledger-card th:nth-child(8),
 html[data-tablet-layout="landscape"] .ledger-card td:nth-child(8),
-html[data-tablet-layout="landscape"] .ledger-card .action-col { width:70px !important; }
+html[data-tablet-layout="landscape"] .ledger-card .action-col { width:98px !important; }
 html[data-tablet-layout="landscape"] .ledger-card td.action-col { padding-left:2px !important; padding-right:2px !important; text-align:center !important; white-space:nowrap !important; }
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action {
   display:inline-flex !important; align-items:center !important; justify-content:center !important; width:30px !important; min-width:30px !important;
