@@ -51,7 +51,7 @@ for (const basis of ['tx_date', 'created_at']) {
   before.push(await (await handleAccountingToolsApi(new Request(frequentUrl), { DB: db })).json());
 }
 for (const migration of ddl.slice(indexMigration)) sql.exec(migration);
-assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '13');
+assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '14');
 assert.throws(() => sql.exec(ddl.at(-1)), /already exists/, 'the forward migration is not silently applied twice');
 const plan = query => sql.prepare('EXPLAIN QUERY PLAN ' + query.sql).all(...query.args).map(row => row.detail).join('\n');
 for (const [i, basis] of ['tx_date', 'created_at'].entries()) {
