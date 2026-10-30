@@ -64,6 +64,7 @@ assert(/^[0-9a-f]{64}$/.test(backup.fileSha256), 'file checksum must be SHA-256'
 assert(backup.fileName === 'CYAccountingWeb_backup_20260925T033000Z.json', `filename mismatch: ${backup.fileName}`);
 assert(parsed.data.transactions[0].summary === '文具', 'transaction data missing');
 assert(parsed.data.transactions[0].markerColor === null, 'missing marker remains null in backup');
+assert(parsed.data.transactions[0].markerTarget === 'summary', 'historical transaction defaults to summary target');
 assert(parsed.data.openingBalanceOverrides[0].reason === '期初建帳', 'opening override missing');
 assert(parsed.data.openingBalanceAudit[0].action === 'set', 'opening audit missing');
 assert(parsed.data.accounts[0].archivedAt === null, 'account archive state missing');
