@@ -18,17 +18,23 @@ assert.equal(result.liveAccountingModified, false);
 assert.equal(JSON.stringify(source.db.prepare('SELECT * FROM transactions ORDER BY id').all()), unchanged);
 assert.ok(validated.data.transactions[0].summary.includes('DROP TABLE'), 'SQL-like values roundtrip through bound parameters');
 assert.equal(validated.data.transactions[0].markerColor, 'pink', 'backup must retain the chosen highlight color');
+assert.equal(validated.data.transactions[0].markerTarget, 'summary');
 assert.equal(source.db.prepare('SELECT marker_color FROM transactions WHERE id=1').get().marker_color, 'pink');
 const legacy13 = structuredClone(validated); legacy13.manifest.schemaVersion = 13;
-for (const tx of legacy13.data.transactions) delete tx.markerColor;
+for (const tx of legacy13.data.transactions) { delete tx.markerColor; delete tx.markerTarget; delete tx.markerTarget; }
 assert.ok(normalizeAccountingRestoreData(legacy13).data.transactions.every(tx => tx.markerColor === null),
   'schema 13 backups have no marker field and normalize to an unmarked transaction');
-assert.equal((await verify(legacy13)).fullRowRoundtrip, true, 'schema 13 portable backup must restore into schema 14');
+assert.equal((await verify(legacy13)).fullRowRoundtrip, true, 'schema 13 portable backup must restore into schema 15');
+const legacy14 = structuredClone(validated); legacy14.manifest.schemaVersion = 14;
+legacy14.data.transactions.forEach(tx => { delete tx.markerTarget; });
+assert.ok(normalizeAccountingRestoreData(legacy14).data.transactions.every(tx => tx.markerTarget === 'summary'),
+  'schema 14 highlights must remain on summaries');
+assert.equal((await verify(legacy14)).fullRowRoundtrip, true);
 const schema8 = structuredClone(validated); schema8.manifest.schemaVersion = 8;
 assert.equal((await verify(schema8)).sourceSchemaVersion, 8, 'current pre-rollout backups restore to the new schema');
 const schema11 = structuredClone(validated); schema11.manifest.schemaVersion = 11;
-assert.equal((await verify(schema11)).targetSchemaVersion, 14, 'pre-index backups restore without changing financial rows');
-for (const version of [5, 15]) {
+assert.equal((await verify(schema11)).targetSchemaVersion, 15, 'pre-index backups restore without changing financial rows');
+for (const version of [5, 16]) {
   const bad = structuredClone(validated); bad.manifest.schemaVersion = version;
   await assert.rejects(verify(bad), error => error.code === 'RESTORE_SCHEMA_UNSUPPORTED');
 }
@@ -50,7 +56,7 @@ for (const schemaVersion of [6, 7]) {
   delete old.manifest.recoveryContext;
   delete old.data.excelImportRuns;
   if (schemaVersion === 6) for (const row of old.data.accounts) delete row.colorSlot;
-  for (const row of old.data.transactions) delete row.markerColor;
+  for (const row of old.data.transactions) { delete row.markerColor; delete row.markerTarget; }
   const before = JSON.stringify(old);
   const proof = await verify(old);
   assert.equal(proof.fullRowRoundtrip, true);assert.equal(proof.sourceSchemaVersion, schemaVersion);
@@ -58,7 +64,7 @@ for (const schemaVersion of [6, 7]) {
   assert.equal(proof.normalization.accountColorSlotsAssigned,schemaVersion===6);
   assert.equal(JSON.stringify(old),before,'immutable historical source stays unchanged');
   const normalized=normalizeAccountingRestoreData(old).data;
-  assert.deepEqual(normalized.transactions,old.data.transactions.map(tx => ({ ...tx, markerColor: null })));assert.deepEqual(normalized.openingBalanceAudit,old.data.openingBalanceAudit);
+  assert.deepEqual(normalized.transactions,old.data.transactions.map(tx => ({ ...tx, markerColor: null, markerTarget: 'summary' })));assert.deepEqual(normalized.openingBalanceAudit,old.data.openingBalanceAudit);
   assert.deepEqual(normalized.appSettings,old.data.appSettings);
   if(schemaVersion===7)assert.deepEqual(normalized.accounts,old.data.accounts);
 }
