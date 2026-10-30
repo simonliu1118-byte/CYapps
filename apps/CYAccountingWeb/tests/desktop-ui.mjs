@@ -19,7 +19,8 @@ const css = [
   'excel-import.css',
   'backup.css',
   'desktop-migration.css',
-  'adaptive-ui.css'
+  'adaptive-ui.css',
+  'opening-balances.css'
 ].map(name => read('public/' + name)).join('\n');
 const appJs = read('public/app.js');
 const quick = read('public/quick-entry.js');
@@ -72,7 +73,7 @@ assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-a
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
 assert.match(css, /\.ledger-balance-popover/);
-assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(880px, calc\(100vw - 48px\)\) !important;/);
+assert.match(read('public/opening-balances.css'), /width: min\(440px, calc\(100vw - 32px\)\)/);
 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(quick, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
@@ -313,9 +314,9 @@ assert.match(adaptive, /grid\.insertBefore\(item, anchor\)/);
 assert.match(adaptive, /clearTouchWorkspaceEntryForm\(\)/);
 assert.match(adaptiveCss, /grid-template-columns: minmax\(0, 1fr\) 78px 68px !important/);
 assert.match(adaptiveCss, /#monthSummary[\s\S]*?grid-template-areas: "opening income expense ending net" !important/);
-assert.match(adaptiveCss, /\.opening-modal\s*\{\s*width: min\(880px/);
+assert.doesNotMatch(adaptiveCss, /\.opening-modal\s*\{\s*width: min\(880px/);
 assert.match(appJs, /class="opening-account-column"/);
-assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
+assert.match(appJs, /renderOpeningAccountAudit/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
 assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
 
@@ -473,3 +474,39 @@ vm.runInContext(adaptive.slice(adaptive.indexOf('function syncSettingsNavigation
 navContext.syncSettingsNavigation();assert.deepEqual(settingsNav.children.map(node=>node.name),['accounts','categories','quick','statistics','lock','data','backup']);assert.equal(settingsNavButtons.get('quick').textContent,'一般');assert.equal(settingsNavButtons.get('lock').textContent,'月份鎖帳');
 navDesktop=false;navContext.syncSettingsNavigation();assert.deepEqual(settingsNav.children.map(node=>node.name),['accounts','categories','statistics','data','quick','lock','backup']);assert.equal(settingsNavButtons.get('quick').textContent,'快速輸入');
 console.log('Settings navigation order/touch restoration and current locked month lifecycle passed.');
+
+// The opening balance renderer keeps account audit and read/edit presentation
+// under the existing owner; touch retains its separate collapsed audit section.
+const openingContext = vm.createContext({window:{matchMedia:()=>({matches:false})},document:{},
+  money:value=>`$${Number(value||0).toLocaleString('zh-TW')}`,
+  escapeHtml:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')});
+vm.runInContext(appJs.slice(0,appJs.indexOf("if (document.readyState"))
+  + appJs.slice(appJs.indexOf('function openingAccountRowHtml('),appJs.indexOf('async function saveLock(')),openingContext);
+const testAccount={name:'TEST_ACCOUNT',amount:12345,automaticAmount:12000,source:'override'};
+const testAudit=[
+  {accountName:'TEST_ACCOUNT',previousAmount:12000,newAmount:12345,action:'set',reason:'TEST_LATEST',createdAt:'2026-10-30T01:00:00Z',actorEmployeeNo:'TEST',actorName:'測試'},
+  {accountName:'OTHER_ACCOUNT',previousAmount:0,newAmount:10,action:'set',reason:'TEST_OTHER'},
+  {accountName:'TEST_ACCOUNT',previousAmount:10000,newAmount:12000,action:'set',reason:'TEST_OLDER',createdAt:'2026-10-29T01:00:00Z'}
+];
+vm.runInContext('cyOpeningDesktopPresentation=true',openingContext);
+let openingHtml=openingContext.openingAccountRowHtml(testAccount,testAudit);
+assert.match(openingHtml,/class="opening-amount">12,345/);
+assert.doesNotMatch(openingHtml,/<input/,'read mode shows a formatted amount rather than a disabled field');
+assert.match(openingHtml,/opening-account-audit-latest[\s\S]*TEST_LATEST[\s\S]*<details/);
+assert.match(openingHtml,/<details[\s\S]*TEST_OLDER/);
+assert.doesNotMatch(openingHtml,/<details[^>]*\sopen[ >]|TEST_OTHER/);
+assert.match(openingHtml,/2026\/10\/30\s09:00/,'audit dates use Taiwan time');
+assert.doesNotMatch(openingContext.openingAccountRowHtml({...testAccount,source:'automatic'},[]),/opening-account-audit|尚無/);
+assert.doesNotMatch(openingContext.openingAccountRowHtml(testAccount,[{...testAudit[0],reason:'<script>alert(1)</script>'}]),/<script>/);
+vm.runInContext('cyOpeningManualEdit=true',openingContext);
+openingHtml=openingContext.openingAccountRowHtml(testAccount,testAudit);
+assert.match(openingHtml,/<input type="number"[\s\S]*data-opening-account="TEST_ACCOUNT"/);
+assert.doesNotMatch(openingHtml,/class="opening-amount"| disabled/);
+vm.runInContext('cyOpeningDesktopPresentation=false;cyOpeningManualEdit=false',openingContext);
+openingHtml=openingContext.openingAccountRowHtml(testAccount,testAudit);
+assert.match(openingHtml,/<label class="opening-row"[\s\S]* disabled>/);
+assert.doesNotMatch(openingHtml,/opening-account-entry|opening-account-audit/);
+assert.match(openingContext.renderOpeningAudit(testAudit),/<details class="opening-audit">/);
+assert.doesNotMatch(adaptive,/setupDesktopManagementOpeningDialog/,'the dialog no longer uses a duplicate open observer');
+assert.match(markup,/openingCloseButton/);
+console.log('Opening dialog: formatted read/edit amounts, account-local latest/history, Taiwan dates, safe text, empty audit and unchanged touch renderer passed.');

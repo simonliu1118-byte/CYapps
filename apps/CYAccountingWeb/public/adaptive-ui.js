@@ -1227,7 +1227,6 @@ setupDesktopManagementConnectionStatus();
 const runDesktopManagement = () => {
   setupDesktopManagementConnectionStatus();
   setupDesktopManagementHeaderManagement();
-  setupDesktopManagementOpeningDialog();
   syncDesktopManagementCrudCopy();
 };
 
@@ -1330,31 +1329,6 @@ function openDesktopManagementManagement(tab, label) {
   if (typeof setSettingsTab === 'function') setSettingsTab(tab);
 }
 
-function setupDesktopManagementOpeningDialog() {
-  const dialog = document.querySelector('#openingDialog');
-  const monthInput = document.querySelector('#openingMonth');
-  const ledgerMonth = document.querySelector('#monthFilter');
-  const title = dialog?.querySelector('.modal-header h2');
-  if (!dialog || !monthInput || !ledgerMonth || !title) return;
-
-  const sync = () => {
-    if (!isDesktopInteractionWorkspace()) return;
-    const month = /^\d{4}-\d{2}$/.test(ledgerMonth.value || '') ? ledgerMonth.value : monthInput.value;
-    if (/^\d{4}-\d{2}$/.test(month || '')) {
-      if (monthInput.value !== month) {
-        monthInput.value = month;
-        monthInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      title.textContent = `${month.replace('-', '/')}期初餘額`;
-    }
-  };
-
-  sync();
-  const observer = new MutationObserver(() => {
-    if (dialog.open) sync();
-  });
-  observer.observe(dialog, { attributes: true, attributeFilter: ['open'] });
-}
 
 function syncDesktopManagementCrudCopy() {
   const editSave = document.querySelector('#editSaveButton');

@@ -47,7 +47,8 @@
   <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
   <link rel="stylesheet" href="/backup.css?rev=backup-refresh-feedback">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-independent-scroll">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=compact-opening-dialog">
+  <link rel="stylesheet" href="/opening-balances.css?rev=account-audit-layout">
   <link rel="stylesheet" href="/statistics.css?rev=transfer-settings-density">
   <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-account-light">
 </head>
@@ -55,7 +56,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.25.15</span></p>
+      <p>CYAccounting Web <span class="version">V0.25.16</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -128,7 +129,7 @@
     <div class="pane-heading opening-dialog-heading"><p class="hint">預設為自動計算；如需例外調整，請使用「手動調整」並填寫理由。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
     <div id="openingRows" class="opening-list"></div>
     <div id="openingMessage" class="dialog-message"></div>
-    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">手動調整</button></div>
+    <div class="modal-actions"><button id="openingCloseButton" class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">手動調整</button></div>
   </dialog>
 
   <dialog id="settingsDialog" class="modal settings-modal">
@@ -180,7 +181,7 @@
   </dialog>
 
   <script src="/auth.js?rev=cyweb-theme-owner" defer></script>
-  <script src="/app.js?rev=accounting-read-coalescing" defer></script>
+  <script src="/app.js?rev=opening-account-audit" defer></script>
   <script src="/quick-entry.js?rev=summary-selection-guard" defer></script>
   <script src="/ledger-tools.js?rev=pending-create-rows" defer></script>
   <script src="/input-confirmation.js?rev=identified-entry-results" defer></script>
@@ -190,7 +191,7 @@
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
   <script src="/backup-ui.js?rev=backup-refresh-feedback" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=cyweb-theme-owner" defer></script>
+  <script src="/adaptive-ui.js?rev=opening-dialog-lifecycle" defer></script>
   <script src="/statistics-ui.js?rev=transfer-settings-density" type="module"></script>
 </body>
 </html>

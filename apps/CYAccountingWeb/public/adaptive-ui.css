@@ -5535,112 +5535,7 @@
     border: 0 !important;
   }
 
-  /* Opening balance modal now follows the same desktop business language. */
-  .opening-modal {
-    width: min(720px, calc(100% - 40px));
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid #e4e8ee;
-    border-radius: 14px;
-    background: #fff;
-  }
 
-  .opening-modal .modal-header {
-    padding: 20px 22px 15px;
-    border-bottom: 1px solid #edf0f4;
-    background: #fff;
-  }
-
-  .opening-modal .modal-header h2 {
-    font-size: 18px;
-    font-weight: 600;
-  }
-
-  .opening-modal .modal-header p {
-    margin-top: 4px;
-    color: #7b8796;
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .opening-modal .opening-dialog-heading {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 18px;
-    margin: 0;
-    padding: 14px 22px 12px;
-    border-bottom: 1px solid #f0f2f5;
-    background: #fbfcfd;
-  }
-
-  .opening-modal .opening-dialog-heading .hint {
-    margin: 0;
-    color: #7b8796;
-    font-size: 12px;
-  }
-
-  .opening-modal .compact-label {
-    grid-template-columns: auto 155px;
-    gap: 8px;
-  }
-
-  .opening-modal .compact-label > span {
-    color: #667085;
-    font-weight: 500;
-  }
-
-  .opening-modal .compact-label input {
-    height: 36px;
-    background: #fff;
-  }
-
-  .opening-modal .opening-list {
-    max-height: 48vh;
-    margin: 0;
-    padding: 8px 22px 4px;
-    overflow: auto;
-  }
-
-  .opening-modal .opening-row {
-    min-height: 58px;
-    padding: 9px 0;
-    border-bottom: 1px solid #edf0f4;
-  }
-
-  .opening-modal .opening-row:last-child {
-    border-bottom: 0;
-  }
-
-  .opening-modal .opening-row input {
-    height: 38px;
-    background: #fbfcfd;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .opening-modal #openingMessage {
-    min-height: 18px;
-    margin: 2px 22px 0;
-    font-size: 12px;
-  }
-
-  .opening-modal .modal-actions {
-    margin: 0;
-    padding: 13px 22px 18px;
-    border-top: 1px solid #edf0f4;
-    background: #fff;
-  }
-
-  .opening-modal .modal-actions .secondary,
-  .opening-modal .modal-actions .primary {
-    min-height: 34px;
-    border-radius: 6px;
-    font-size: 12.5px;
-  }
-
-  .opening-modal .modal-actions .primary {
-    font-weight: 600;
-  }
 }
 
 @media (min-width: 1360px) {
@@ -5697,157 +5592,7 @@
 
 
 
-  /* Opening balance is a compact utility dialog, not a full settings page. */
-  .opening-modal {
-    width: min(880px, calc(100% - 40px));
-    max-height: min(760px, calc(100vh - 40px));
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid #e4e8ee;
-    border-radius: 12px;
-    background: #fff;
-  }
 
-  .opening-modal .modal-header {
-    align-items: center;
-    padding: 14px 16px 11px;
-    border-bottom: 1px solid #edf0f4;
-  }
-
-  .opening-modal .modal-header h2 {
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1.25;
-  }
-
-  .opening-modal .modal-header p {
-    display: none;
-  }
-
-  .opening-modal .icon-button {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 6px;
-    font-size: 22px;
-    line-height: 27px;
-  }
-
-  .opening-modal .opening-dialog-heading {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-    padding: 9px 16px;
-    border-bottom: 1px solid #f0f2f5;
-    background: #fbfcfd;
-  }
-
-  .opening-modal .opening-dialog-heading .hint {
-    margin: 0;
-    color: #8a94a3;
-    font-size: 10.5px;
-    line-height: 1.35;
-  }
-
-  .opening-modal .compact-label {
-    display: grid;
-    grid-template-columns: auto 140px;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .opening-modal .compact-label > span {
-    margin: 0;
-    color: #667085;
-    font-size: 11px;
-    font-weight: 500;
-  }
-
-  .opening-modal .compact-label input {
-    width: 140px;
-    height: 32px;
-    min-height: 32px;
-    padding: 4px 7px;
-    border-radius: 6px;
-    background: #fff;
-    font-size: 12.5px;
-  }
-
-  .opening-modal .opening-list {
-    max-height: min(330px, calc(100vh - 205px));
-    margin: 0;
-    padding: 4px 16px 2px;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
-  .opening-modal .opening-row {
-    grid-template-columns: minmax(0, 1fr) 138px;
-    gap: 10px;
-    min-height: 42px;
-    padding: 5px 0;
-    border-bottom: 1px solid #f0f2f5;
-  }
-
-  .opening-modal .opening-row:last-child {
-    border-bottom: 0;
-  }
-
-  .opening-modal .opening-row > span,
-  .opening-modal .opening-row > label,
-  .opening-modal .opening-row .opening-account-name {
-    min-width: 0;
-  }
-
-  .opening-modal .opening-row input {
-    width: 138px;
-    height: 32px;
-    min-height: 32px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: #fbfcfd;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .opening-modal .opening-row .historical {
-    font-size: 10px;
-  }
-
-  .opening-modal #openingMessage {
-    min-height: 0;
-    margin: 0 16px;
-    padding-top: 2px;
-    font-size: 11px;
-  }
-
-  .opening-modal #openingMessage:empty {
-    display: none;
-  }
-
-  .opening-modal .modal-actions {
-    gap: 6px;
-    margin: 0;
-    padding: 9px 16px 12px;
-    border-top: 1px solid #edf0f4;
-    background: #fff;
-  }
-
-  .opening-modal .modal-actions .secondary,
-  .opening-modal .modal-actions .primary {
-    min-height: 31px;
-    height: 31px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11.5px;
-    font-weight: 500;
-  }
-
-  .opening-modal #saveOpeningButton {
-    font-weight: 600;
-  }
 }
 
 /* Desktop settings cleanup and header alignment.
@@ -6122,14 +5867,6 @@
     min-height: 30px;
     height: 30px;
     padding: 3px 9px;
-  }
-
-  /* Opening-balance dialog keeps only controls that matter. */
-  .opening-modal .opening-dialog-heading {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    min-height: 48px;
   }
 
   /* Empty states should state the condition once, not explain the page. */
@@ -6467,60 +6204,7 @@
     font-size: 15px !important;
   }
 
-  /* Keep the desktop account and audit columns readable at the same dialog width. */
-  .opening-modal {
-    width: min(880px, calc(100vw - 48px)) !important;
-    max-width: 880px !important;
-  }
 
-  .opening-modal .opening-dialog-heading {
-    display: none !important;
-  }
-
-  .opening-modal .modal-header {
-    padding: 12px 13px 10px !important;
-  }
-
-  .opening-modal .modal-header h2 {
-    font-size: 15px !important;
-  }
-
-  .opening-modal .opening-list {
-    max-height: min(310px, calc(100vh - 150px)) !important;
-    padding: 3px 13px 2px !important;
-  }
-
-  .opening-modal .opening-row {
-    grid-template-columns: minmax(0, 1fr) 108px !important;
-    gap: 8px !important;
-    min-height: 38px !important;
-    padding: 4px 0 !important;
-  }
-
-  .opening-modal .opening-row input {
-    width: 108px !important;
-    height: 30px !important;
-    min-height: 30px !important;
-    padding: 3px 7px !important;
-    font-size: 13px !important;
-  }
-
-  .opening-modal #openingMessage {
-    margin-inline: 13px !important;
-  }
-
-  .opening-modal .modal-actions {
-    gap: 6px !important;
-    padding: 8px 13px 10px !important;
-  }
-
-  .opening-modal .modal-actions .secondary,
-  .opening-modal .modal-actions .primary {
-    height: 30px !important;
-    min-height: 30px !important;
-    padding: 4px 9px !important;
-    font-size: 12.5px !important;
-  }
 }
 
 /* Desktop manager redesign, inline naming and unified month pickers. */
@@ -11673,34 +11357,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.loss strong {
     color: #a54b45;
   }
-  .opening-modal {
-    width: min(880px, calc(100vw - 48px)) !important;
-    max-width: 880px !important;
-    max-height: min(760px, calc(100vh - 40px));
-  }
-  .opening-modal .opening-list {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-    gap: 18px;
-    max-height: min(520px, calc(100vh - 220px));
-    align-items: start;
-    padding: 12px 18px 12px;
-  }
-  .opening-modal .opening-account-column {
-    min-width: 0;
-  }
-  .opening-modal .opening-audit {
-    min-width: 0;
-    max-height: 490px;
-    margin: 0;
-    overflow-y: auto;
-    border-left: 1px solid #e4e9ee;
-    padding: 0 0 0 16px;
-  }
-  .opening-modal .opening-audit > summary {
-    font-size: 13px;
-    font-weight: 600;
-  }
+
 
 }
 
