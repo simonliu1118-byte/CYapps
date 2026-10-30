@@ -14,8 +14,8 @@ const js = read('public/login.js');
 assert.match(html, /viewport-fit=cover/);
 assert.match(html, /interactive-widget=resizes-content/);
 assert.doesNotMatch(html, /\sautofocus(?:\s|>)/);
-assert.match(html, /login\.css\?rev=landscape-recovery-title/);
-assert.match(html, /login\.js\?rev=visual-viewport-offset/);
+assert.match(html, /login\.css\?rev=cyweb-login-alignment/);
+assert.match(html, /login\.js\?rev=cyweb-login-alignment/);
 
 assert.match(css, /html,\s*body\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
 assert.match(css, /\.login-shell\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*var\(--login-visible-top, 0px\);[\s\S]*?height:\s*var\(--login-visible-height, 100vh\);[\s\S]*?overflow-y:\s*auto;/);
