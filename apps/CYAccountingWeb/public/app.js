@@ -500,28 +500,33 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
 
 // Reuse the canonical optimistic transaction mutation owner; marker values
 // never modify summary, amounts, or existing entry form fields.
-async function setTransactionMarker(id, color) {
+async function setTransactionMarker(id, color, requestedTarget = 'summary') {
   if (!Number.isSafeInteger(id) || id <= 0
     || !(color === null || ['orange', 'pink', 'yellow', 'green'].includes(color))) return;
+  const markerTarget = color === null ? 'summary' : requestedTarget;
+  if (!['summary', 'category'].includes(markerTarget)) return;
   if (document.body.dataset.cyaccReadOnly === 'true') return;
   const original = state.transactions.find(row => Number(row.id) === id);
-  if (!original || isLocked(String(original.tx_date).slice(0, 7))) {
-    showMessage('這筆交易無法修改標記。', true);
+  if (!original) {
+    showMessage('找不到這筆交易。', true);
     return;
   }
+  // Marker placement is presentation metadata and remains editable after month lock.
   if (cyPendingTransactionUpdates.has(id)) {
     showMessage('此筆交易正在更新，請稍後再試。', true);
     return;
   }
-  if ((original.marker_color || null) === color) return;
-  const updated = { ...original, marker_color: color };
+  if ((original.marker_color || null) === color
+    && (original.marker_target || 'summary') === markerTarget) return;
+  const updated = { ...original, marker_color: color, marker_target: markerTarget };
   cyPendingTransactionUpdates.set(id, { original, updated });
   cyTransactionMutationRevision += 1;
   state.transactions = mergePendingTransactionUpdates(state.transactions, els.monthFilter.value);
   renderOptimisticTransactionState();
   try {
     await api(`/api/transactions/${id}/marker`, {
-      method: 'PATCH', headers: jsonHeaders(), body: JSON.stringify({ markerColor: color })
+      method: 'PATCH', headers: jsonHeaders(),
+      body: JSON.stringify({ markerColor: color, markerTarget })
     });
   } catch (error) {
     state.transactions = state.transactions.filter(row => Number(row.id) !== id);
