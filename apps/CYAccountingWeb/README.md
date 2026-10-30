@@ -2,22 +2,22 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/30（台灣時間）。本文件只記錄現行專案入口、已部署能力與操作流程；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。本次為文件同步，不變更產品 `VERSION`／`BUILD`。
+更新：2026/10/30（台灣時間）。本文件只記錄現行專案入口、已部署能力與操作流程；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。使用者已確認正式 Major 升級至 V1.0.0，Build 歸零；只升版與文件，不重寫帳務邏輯。
 
 ## 正式基準
 
 | 項目 | 已確認現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式產品版號 | **V0.25.18 Build 2**（`VERSION=0.25.18`、`BUILD=2`） |
-| 最新成功正式部署 | [PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584)，source `5b3442db6cd716cf002c8c1e278d526f978dd07b`；[Production Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 的 `validate`／`deploy` 均為 success，登入入口和 semantic assets 檢查通過 |
-| D1 schema | **15**（0012 查詢索引／0013 期初快照／0014 交易螢光顏色／0015 科目或摘要標記位置）；Build 2 **沒有新增 migration** |
+| 產品版本身分 | **V1.0.0（Build 0）**，`VERSION=1.0.0`、`BUILD=0`。此為使用者核准之 Major 發行，功能承接 V0.25.18 Build 2 |
+| 已核對的上一代穩定部署基準 | V0.25.18 Build 2，[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584)，source `5b3442db6cd716cf002c8c1e278d526f978dd07b`；[Production Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 成功。**V1.0.0 實際是否已部署，以同 SHA 的新版 Deploy Run 為準** |
+| D1 schema | **15**（0012 查詢索引／0013 期初快照／0014 交易螢光顏色／0015 科目或摘要標記位置）；V1.0.0 **沒有新增 migration** |
 | CYID consumer | `CYID_CONSUMER_VERSION=1.0.6`；同 repo consumer contract 1.0.6、minimum 1.0.0；不得僅據 source 推定所有 provider runtime 版本 |
 | 共通規則 | AITeam `main` 與 CYapps 同步版 **2.11.0**；本 repo 治理依根 `GOVERNANCE_VERSION` |
-| 獨立公開 GitHub Release | 現有 **V0.22.15**，tag `cyaccountingweb-v0.22.15`；**不是**目前網站的產品版本，也不因網站部署自動更新 |
+| 正式 Release 管理 | V1.0.0 發行目標 tag `cyaccountingweb-v1.0.0`，由獨立 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 以**同 SHA 成功 production deploy** 為前提建立；歷史 V0.22.15 tag 保留。請以 [Releases](https://github.com/simonliu1118-byte/CYapps/releases) 查公開發行狀態 |
 | 正式帳務／備份執行情況 | 公開文件僅記錄程式契約及已確認的 deploy 結果。實際帳務、最近排程健康／副本 catalog／恢復狀態須在受保護維運環境另行回讀，不從 CI 成功推定 |
 
-正式網站部署與 GitHub Release 分離：日常更新只透過經審核的 `main` source 前進 `deploy/cyaccountingweb-production`，**不必每次建立 Release**。由 0.x.x 進入 1.0.0 是正式 Major 決策，目前未執行；即使提出 Release，也須另外核對 Build 身分、正式部署 SHA、安全掃描及發行版說明。
+正式網站部署與 GitHub Release 分離：日常更新只透過經審核的 `main` source 前進 `deploy/cyaccountingweb-production`，**不必每次建立 Release**。由 0.x.x 進入 1.0.0 的 Major 決策已由使用者批准；版本身分已設定為 Build 0。正式 Release 仍須以同 SHA 部署、完整 CI、安全掃描、SHA-256、`V1.0.0.txt` 驗證後建立；**不能把 Merge 或 PR 綠燈視為已發布 Release**。
 
 首次登入、Session、CYID Application Access 仍以 CYID canonical consumer contract 為準；首次驗證／正式密碼建立依 CYWEB 路徑，CYACCweb 不自行接管 Identity authority。
 
@@ -29,6 +29,7 @@
 | [WORK_HANDOFF.md](WORK_HANDOFF.md) | 正式基準、部署證據、owner、驗收及下一步 |
 | [TODO.md](TODO.md) | 未完成工作及仍待真機驗收項目 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本歷史；不作目前操作指南 |
+| [V1.0.0.txt](V1.0.0.txt) | V1.0.0 正式 Release 說明與相容界線 |
 | [docs/TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md) | 平板現行配置、交易標記、統計及真機驗收 |
 | [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md) | Backup 格式、schema 15、Phase D、Restore／DR 及正式切換邊界 |
 | [docs/recovery-workspace.md](docs/recovery-workspace.md) | 按需建立復原工作區與部署選項；一般網站發布不操作獨立還原庫 |
