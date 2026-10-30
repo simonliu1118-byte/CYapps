@@ -35,6 +35,7 @@ export function accountingFixture() {
     INSERT INTO excel_import_runs VALUES('TEST_IMPORT','2026-01-01','2026-02-01','TEST_IMPORT_REASON','TEST_SOURCE_SHA','TEST_BACKUP',0,3,'{"employeeNo":"TEST"}','2026-01-04');
   `);
   db.db.prepare('UPDATE transactions SET summary=? WHERE id=1').run("文字 <script> & '); DROP TABLE accounts; --");
+  db.db.prepare('UPDATE transactions SET marker_color=? WHERE id=1').run('pink');
   return db;
 }
 export function memoryProvider(kind) {
