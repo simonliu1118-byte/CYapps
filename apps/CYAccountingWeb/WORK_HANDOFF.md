@@ -2,19 +2,23 @@
 
 更新：2026/10/30（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
 
-## 最新狀態：V0.25.18 Build 2 已正式部署／D1 schema 15
+## 最新狀態：V1.0.0 發行基準／D1 schema 15
 
 | 項目 | 現行證據或邊界 |
 | --- | --- |
-| 正式版本 | `VERSION=0.25.18`、`BUILD=2`；[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584) 已合併 |
-| 正式 source SHA | `5b3442db6cd716cf002c8c1e278d526f978dd07b` |
-| 正式部署 | [GitHub Actions Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154)，相同 SHA、`deploy/cyaccountingweb-production` 事件，`validate` 與 `deploy` 都為 success；production login/semantic assets checks 成功 |
-| 資料庫結構 | schema **15**：0012 查詢索引、0013 期初快照、0014 螢光色、0015 標記位置；**Build 2 無新增 migration** |
+| 當前原始碼版本身分 | **V1.0.0 Build 0**，`VERSION=1.0.0`、`BUILD=0`；使用者明確授權 Major 升版。功能承接 [PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584) 的 V0.25.18 Build 2 |
+| 已完成的上一代正式 source SHA | `5b3442db6cd716cf002c8c1e278d526f978dd07b`（V0.25.18 Build 2）；新 V1.0.0 必須使用合併後完整新 SHA |
+| 已驗證的前一代正式部署 | [GitHub Actions Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154)，V0.25.18 Build 2，`validate`／`deploy` 成功。V1.0.0 請以 [Production workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 查**同一新 SHA** 的 `deploy` 完成結果，不能沿用此舊 Run |
+| 資料庫結構 | schema **15**：0012 查詢索引、0013 期初快照、0014 螢光色、0015 標記位置；**V1.0.0 無新增 migration** |
 | Identity | CYACC consumer 1.0.6；CYID canonical contract 1.0.6、minimum 1.0.0；實際 provider runtime 不僅靠原始碼推定 |
-| 公開 GitHub Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；網頁部署不自動建立 GitHub Release；目前**未發 V1.0.0** |
+| Release 身分與來源 | V1.0.0 對應 `cyaccountingweb-v1.0.0`、`V1.0.0.txt` 與 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml)；須先有同 SHA 的 Production deploy success，再執行 Release workflow。既有 V0.22.15 tag 仍為歷史 |
 | 共通規則 | AITeam 與 CYapps `REPOSITORY_RULES.md` 完全一致，`COMMON_RULES_VERSION=2.11.0` |
 | 人工驗收 | 使用者確認 V0.25.18 Build 2 的月份切換體感改善與遮罩呈現可維持現狀。此為人工回饋，**不是**量測耗時或所有裝置的完整回歸驗收 |
 | 備份／帳務運行健康 | 公開 GitHub CI、deploy 不等於每日排程及備份副本已驗收；最近排程、Cloudflare 資源及資料正確性需在受保護維運環境另行回讀 |
+
+### V1.0.0 發行範圍與驗證
+
+本次 Major 發行承接既有 V0.25.18 Build 2 UI、交易邏輯、schema 15 與備份格式 2；**不重設資料庫、不遷移帳務、不改版號之外的業務 API**。正式 Run／Release Tag 由 GitHub Actions 在 source 合併後產生，避免在同一 commit 文件內引用尚不存在的發行證據。實際發行狀態以 GitHub 對應 Run／Release 為權威，不得僅以本段主張上線。
 
 ### 近期版本與主要交付
 
