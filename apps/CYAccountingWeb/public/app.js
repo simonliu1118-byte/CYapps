@@ -32,6 +32,7 @@ let cyEntryDraftRevision = 0;
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
+let cyOpeningDesktopPresentation = false;
 let cyOpeningOriginalValues = new Map();
 
 if (document.readyState === 'loading') {
@@ -163,6 +164,10 @@ function bindEvents() {
   document.addEventListener('click', event => {
     const close = event.target.closest('[data-close-dialog]');
     if (!close) return;
+    if (close.id === 'openingCloseButton' && cyOpeningDesktopPresentation && cyOpeningManualEdit) {
+      cancelOpeningManualEdit();
+      return;
+    }
     document.querySelector(`#${CSS.escape(close.dataset.closeDialog)}`)?.close();
   });
 
@@ -187,6 +192,9 @@ function bindEvents() {
     addCategory(Number(input.dataset.newCategoryGroup), input);
   });
 
+  els.openingDialog?.addEventListener('close', () => {
+    if (cyOpeningDesktopPresentation && cyOpeningManualEdit) cancelOpeningManualEdit();
+  });
   els.openingMonth.addEventListener('change', loadOpeningBalances);
   els.saveOpeningButton.addEventListener('click', saveOpeningBalances);
   els.saveLockButton.addEventListener('click', () => saveLock(els.lockedThrough.value));
@@ -776,23 +784,103 @@ async function mutateSettings(path, options, successMessage) {
   }
 }
 
-function openingAccountRowHtml(item) {
+function openingAccountRowHtml(item, audit = []) {
   const manual = item.source === 'override';
   const badge = manual ? '<span class="opening-source manual">調整</span>' : '';
-  return `<label class="opening-row" data-opening-source="${manual ? 'manual' : 'automatic'}">
+  const amount = cyOpeningDesktopPresentation && !cyOpeningManualEdit
+    ? `<span class="opening-amount">${Number(item.amount || 0).toLocaleString('zh-TW')}</span>`
+    : `<input type="number" step="1" value="${Number(item.amount) || 0}"
+      aria-label="${escapeHtml(item.name)}期初餘額"
+      data-opening-account="${escapeHtml(item.name)}"
+      data-opening-automatic="${Number(item.automaticAmount) || 0}"${cyOpeningManualEdit ? '' : ' disabled'}>`;
+  const row = `<label class="opening-row" data-opening-source="${manual ? 'manual' : 'automatic'}">
     <span class="opening-account-copy">
       <span class="opening-account-title">${badge}<strong>${escapeHtml(item.name)}</strong></span>
     </span>
-    <input type="number" step="1" value="${Number(item.amount) || 0}"
-      data-opening-account="${escapeHtml(item.name)}"
-      data-opening-automatic="${Number(item.automaticAmount) || 0}" disabled>
+    ${amount}
   </label>`;
+  return cyOpeningDesktopPresentation
+    ? `<section class="opening-account-entry">${row}${renderOpeningAccountAudit(item, audit)}</section>` : row;
+}
+
+function openingAccountAuditEntryHtml(entry) {
+  const date = entry.createdAt ? new Date(entry.createdAt).toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }) : '';
+  const actor = [entry.actorEmployeeNo, entry.actorName].filter(Boolean).join(' ');
+  const action = entry.action === 'clear' ? '恢復自動 · ' : entry.action === 'migration' ? '舊資料移轉 · ' : '';
+  const amount = `${entry.previousAmount === null ? '—' : money(entry.previousAmount)} → ${entry.newAmount === null ? '—' : money(entry.newAmount)}`;
+  return `<div class="opening-account-audit-meta"><time>${escapeHtml(date)}</time>${actor ? ` · ${escapeHtml(actor)}` : ''}
+    <span class="opening-account-audit-change">${escapeHtml(action + amount)}</span></div>
+    ${entry.reason ? `<p class="opening-account-audit-reason">${escapeHtml(entry.reason)}</p>` : ''}`;
+}
+
+function renderOpeningAccountAudit(item, audit) {
+  const rows = audit.filter(entry => entry.accountName === item.name);
+  const latest = rows[0] || (item.source === 'override' ? {
+    action: 'set', previousAmount: null, newAmount: item.amount, reason: item.overrideReason,
+    createdAt: item.overrideUpdatedAt, actorEmployeeNo: item.overrideUpdatedByEmployeeNo,
+    actorName: item.overrideUpdatedByName
+  } : null);
+  if (!latest) return '';
+  // The initial shared response contains at most 30 monthly records. Only an
+  // explicit expansion needs the existing account-specific audit endpoint.
+  const truncated = audit.length >= 30;
+  const history = rows.length > 1 || truncated
+    ? `<details class="opening-account-history"${truncated ? ` data-opening-history-account="${escapeHtml(item.name)}"` : ''}>
+      <summary>查看全部紀錄</summary><div class="opening-account-history-list">${rows.slice(1).map(openingAccountAuditEntryHtml).join('')}</div></details>` : '';
+  return `<div class="opening-account-audit"><div class="opening-account-audit-latest">${openingAccountAuditEntryHtml(latest)}</div>${history}</div>`;
+}
+
+function renderOpeningBalanceRows() {
+  const data = state.openingData;
+  const rows = data.accounts.map(item => openingAccountRowHtml(item, data.audit || [])).join('');
+  els.openingRows.innerHTML = `<div class="opening-account-column">${rows}
+    <section id="openingManualPanel" class="opening-manual-panel"${cyOpeningManualEdit ? '' : ' hidden'}>
+      <label class="opening-reason-field">
+        <span>手動調整理由 <strong>必填</strong></span>
+        <textarea id="openingAdjustmentReason" maxlength="200" rows="2" placeholder="例如：銀行對帳差異調整"></textarea>
+      </label>
+      ${cyOpeningDesktopPresentation ? '' : `<div class="opening-manual-actions">
+        <button id="cancelOpeningManualButton" class="secondary" type="button">取消手動調整</button>
+      </div>`}
+    </section></div>${cyOpeningDesktopPresentation ? '' : renderOpeningAudit(data.audit || [])}`;
+  document.querySelector('#cancelOpeningManualButton')?.addEventListener('click', cancelOpeningManualEdit);
+  els.openingDialog?.querySelector('#openingCloseButton')?.replaceChildren(cyOpeningDesktopPresentation && cyOpeningManualEdit ? '取消' : '關閉');
+  els.openingRows.querySelectorAll('[data-opening-history-account]').forEach(details => {
+    details.addEventListener('toggle', async () => {
+      if (!details.open || details.dataset.loaded || details.dataset.loading) return;
+      details.dataset.loading = '1';
+      const list = details.querySelector('.opening-account-history-list');
+      list.textContent = '讀取中…';
+      try {
+        const result = await api(`/api/opening-balance-audit?month=${encodeURIComponent(data.month || els.openingMonth.value)}&account=${encodeURIComponent(details.dataset.openingHistoryAccount)}`);
+        if (!details.isConnected) return;
+        const entries = result.entries || [];
+        const latest = details.parentElement.querySelector('.opening-account-audit-latest');
+        if (entries[0]) latest.innerHTML = openingAccountAuditEntryHtml(entries[0]);
+        list.innerHTML = entries.slice(1).map(openingAccountAuditEntryHtml).join('') || '<p>沒有其他調整紀錄。</p>';
+        if (entries.length === 100) list.insertAdjacentHTML('beforeend', '<p>顯示最近 100 筆紀錄。</p>');
+        details.dataset.loaded = '1';
+      } catch (error) { list.textContent = error.message || '紀錄讀取失敗，請重新展開再試。'; }
+      finally { delete details.dataset.loading; }
+    });
+  });
 }
 
 async function loadOpeningBalances() {
   const month = els.openingMonth.value;
   if (!month) return;
   cyOpeningManualEdit = false;
+  cyOpeningDesktopPresentation = Boolean(window.cyIsDesktopInteractionWorkspace?.());
+  if (els.openingDialog) {
+    els.openingDialog.dataset.openingPresentation = cyOpeningDesktopPresentation ? 'desktop' : 'touch';
+    const title = els.openingDialog.querySelector('.modal-header h2');
+    if (title && cyOpeningDesktopPresentation) title.textContent = `${month.replace('-', '/')} 期初餘額`;
+    const close = els.openingDialog.querySelector('#openingCloseButton');
+    if (close) close.textContent = '關閉';
+  }
   cyOpeningOriginalValues = new Map();
   setDialogMessage(els.openingMessage, '');
   els.openingRows.innerHTML = '<div class="empty">載入中…</div>';
@@ -808,23 +896,7 @@ async function loadOpeningBalances() {
     }
 
     cyOpeningOriginalValues = new Map(data.accounts.map(item => [String(item.name), Number(item.amount) || 0]));
-    const rows = data.accounts.map(openingAccountRowHtml).join('');
-
-    const audit = renderOpeningAudit(data.audit || []);
-    els.openingRows.innerHTML = `<div class="opening-account-column">${rows}
-      <section id="openingManualPanel" class="opening-manual-panel" hidden>
-        <label class="opening-reason-field">
-          <span>手動調整理由 <strong>必填</strong></span>
-          <textarea id="openingAdjustmentReason" maxlength="200" rows="2" placeholder="例如：銀行對帳差異調整"></textarea>
-        </label>
-        <div class="opening-manual-actions">
-          <button id="cancelOpeningManualButton" class="secondary" type="button">取消手動調整</button>
-        </div>
-      </section>
-      </div>
-      ${audit}`;
-
-    document.querySelector('#cancelOpeningManualButton')?.addEventListener('click', cancelOpeningManualEdit);
+    renderOpeningBalanceRows();
     els.saveOpeningButton.disabled = Boolean(data.locked);
     els.saveOpeningButton.textContent = data.locked ? '已鎖帳' : '手動調整';
     if (data.locked) {
@@ -841,11 +913,12 @@ async function saveOpeningBalances() {
 
   if (!cyOpeningManualEdit) {
     cyOpeningManualEdit = true;
-    els.openingRows.querySelectorAll('[data-opening-account]').forEach(input => { input.disabled = false; });
+    if (cyOpeningDesktopPresentation) renderOpeningBalanceRows();
+    else els.openingRows.querySelectorAll('[data-opening-account]').forEach(input => { input.disabled = false; });
     const panel = document.querySelector('#openingManualPanel');
     if (panel) panel.hidden = false;
     els.saveOpeningButton.textContent = '儲存調整';
-    setDialogMessage(els.openingMessage, '手動調整會留下理由、操作者與時間；未修改的帳戶不會寫入。');
+    setDialogMessage(els.openingMessage, cyOpeningDesktopPresentation ? '' : '手動調整會留下理由、操作者與時間；未修改的帳戶不會寫入。');
     document.querySelector('#openingAdjustmentReason')?.focus();
     return;
   }
@@ -892,6 +965,7 @@ async function saveOpeningBalances() {
 
 function cancelOpeningManualEdit() {
   cyOpeningManualEdit = false;
+  if (cyOpeningDesktopPresentation && state.openingData?.accounts?.length) renderOpeningBalanceRows();
   for (const input of els.openingRows.querySelectorAll('[data-opening-account]')) {
     const name = String(input.dataset.openingAccount || '');
     input.value = String(Number(cyOpeningOriginalValues.get(name) || 0));
@@ -905,9 +979,8 @@ function cancelOpeningManualEdit() {
 
 function renderOpeningAudit(entries) {
   const rows = Array.isArray(entries) ? entries : [];
-  const expanded = window.cyIsDesktopInteractionWorkspace?.() ? ' open' : '';
   if (!rows.length) {
-    return `<details class="opening-audit"${expanded}><summary>調整紀錄</summary><div class="opening-audit-empty">目前沒有手動調整紀錄。</div></details>`;
+    return `<details class="opening-audit"><summary>調整紀錄</summary><div class="opening-audit-empty">目前沒有手動調整紀錄。</div></details>`;
   }
   const items = rows.slice(0, 12).map(entry => {
     const action = entry.action === 'clear' ? '恢復自動' : entry.action === 'migration' ? '舊資料移轉' : '手動設定';
@@ -918,7 +991,7 @@ function renderOpeningAudit(entries) {
       <small>${escapeHtml(entry.reason || '')}${actor ? ` · ${escapeHtml(actor)}` : ''}${entry.createdAt ? ` · ${escapeHtml(entry.createdAt.replace('T', ' ').replace('Z', ' UTC'))}` : ''}</small>
     </div>`;
   }).join('');
-  return `<details class="opening-audit"${expanded}><summary>調整紀錄（${rows.length}）</summary><div class="opening-audit-list">${items}</div></details>`;
+  return `<details class="opening-audit"><summary>調整紀錄（${rows.length}）</summary><div class="opening-audit-list">${items}</div></details>`;
 }
 
 async function saveLock(lockedThrough) {

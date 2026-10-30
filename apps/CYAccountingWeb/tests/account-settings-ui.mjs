@@ -64,6 +64,7 @@ context.renderCategories('租金');
 assert.match(context.els.categoryName.innerHTML, /value="租金">店務／租金<\/option>/);
 assert.doesNotMatch(context.els.categoryName.innerHTML, /門市收入/);
 
+vm.runInContext('var cyOpeningDesktopPresentation=false,cyOpeningManualEdit=false;', context);
 const automatic = context.openingAccountRowHtml({ name: '自動帳戶', amount: 50, automaticAmount: 50, source: 'automatic', automaticAnchorMonth: '2026-09' });
 assert.doesNotMatch(automatic, /<span class="opening-source|<small>|承接|歷史收支|>自動</);
 const manual = context.openingAccountRowHtml({ name: '<現金>', amount: 100, automaticAmount: 50, source: 'override', overrideReason: '對帳' });
