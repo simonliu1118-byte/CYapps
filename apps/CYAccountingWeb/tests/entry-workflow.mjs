@@ -100,3 +100,38 @@ scrolling.window.scrollY = 200; scrollEvents.get('scroll')(); assert.equal(backT
 backToTop.dispatchEvent({ type: 'click' }); assert.equal(scrollRequest.top, 0); assert.equal(scrollRequest.behavior, 'smooth');
 desktop = false; scrollEvents.get('resize')(); assert.equal(backToTop.hidden, true, 'mobile and tablet retain their presentation');
 console.log('Desktop back-to-top visibility and scroll action passed.');
+
+// A confirmed desktop save reveals its canonical row inside the ledger only.
+const ledger = read('ledger-tools.js');
+let desktopReveal = true, rowPresent = true, revealRenders = 0;
+const revealScrolls = [], searchField = { value: 'old filter' };
+const revealMonth = { value: '2026-10' };
+const savedRow = { getBoundingClientRect: () => ({ top: 900, height: 40 }) };
+const ledgerWrap = { scrollTop: 100, clientTop: 1, clientHeight: 500,
+  getBoundingClientRect: () => ({ top: 100 }),
+  querySelector: () => ({ getBoundingClientRect: () => ({ height: 30 }) }),
+  scrollTo: request => revealScrolls.push(request) };
+const revealContext = vm.createContext({
+  els: { monthFilter: revealMonth, transactionRows: { innerHTML: '', querySelector: selector => rowPresent && selector === 'tr[data-transaction-id="42"]' ? savedRow : null } },
+  window: { cyIsDesktopInteractionWorkspace: () => desktopReveal, dispatchEvent() {} },
+  document: { querySelector: selector => selector === '.ledger-card .table-wrap' ? ledgerWrap : selector === '#ledgerSummarySearch' ? searchField : null },
+  CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
+  renderDesktopLedger() { revealRenders++; revealContext.writeLedgerRows('TEST_FILTERED_ROWS'); }
+});
+vm.runInContext("let cyLedgerSavedTarget=null,cyLedgerSearch='';\n" + ledger.slice(ledger.indexOf('function revealSavedTransaction(')), revealContext);
+revealContext.revealSavedTransaction(42, '2026-10');
+assert.equal(revealScrolls.length, 1); assert.equal(revealScrolls[0].top, 654); assert.equal(revealScrolls[0].behavior, 'auto');
+revealContext.writeLedgerRows('TEST_RERENDER'); assert.equal(revealScrolls.length, 1, 'unrelated rerenders do not repeatedly pull the ledger');
+rowPresent = false; revealContext.revealSavedTransaction(42, '2026-10');
+assert.equal(revealScrolls.length, 1); rowPresent = true; revealContext.writeLedgerRows('TEST_MONTH_LOADED');
+assert.equal(revealScrolls.length, 2, 'a still-loading month reveals the row after canonical rendering');
+rowPresent = false; revealContext.revealSavedTransaction(42, '2026-10'); revealMonth.value = '2026-11';
+rowPresent = true; revealContext.writeLedgerRows('TEST_OTHER_MONTH'); revealMonth.value = '2026-10';
+revealContext.writeLedgerRows('TEST_RETURN'); assert.equal(revealScrolls.length, 2, 'changing month discards a deferred reveal');
+vm.runInContext("cyLedgerSearch='old filter'", revealContext);
+revealContext.revealSavedTransaction(42, '2026-10');
+assert.equal(searchField.value, ''); assert.equal(revealRenders, 1); assert.equal(revealScrolls.length, 3, 'save clears a summary filter so the saved row is visible');
+desktopReveal = false; revealContext.revealSavedTransaction(42, '2026-10');
+desktopReveal = true; revealContext.revealSavedTransaction(-1, '2026-10'); revealContext.revealSavedTransaction(42, '2026-11');
+assert.equal(revealScrolls.length, 3, 'touch, provisional IDs and another month never scroll');
+console.log('Confirmed desktop save: ledger-only scroll, delayed render, filter reset, one-shot/month guards and unchanged touch behavior passed.');

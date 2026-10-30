@@ -4204,6 +4204,10 @@ function setTabletEntryExpanded(expanded) {
 
 function syncTabletPickerOwnership(orientation) {
   const tablet = isTabletWorkspace();
+  // A numeric input scope can switch Windows IME off. Desktop amounts retain
+  // the user's text input mode; touch devices keep their numeric keyboard.
+  const amount = document.querySelector('#amount');
+  if (amount) amount.inputMode = isDesktopInteractionWorkspace() ? 'text' : 'numeric';
 
   if (tablet) {
     document.querySelectorAll('.desktopUi-date-picker').forEach(root => { root.cyDisposeDatePicker?.(); root.remove(); });

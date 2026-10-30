@@ -312,6 +312,7 @@ async function saveTransaction(event) {
   els.amount.value = '';
   const draftRevision = ++cyEntryDraftRevision;
   let saved = false;
+  let savedTransactionId = null;
   try {
     showMessage('儲存中…');
     window.dispatchEvent(new CustomEvent('cyacc:entry-submitted', { detail: { id, entry } }));
@@ -327,10 +328,11 @@ async function saveTransaction(event) {
     const result = await api('/api/transactions', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(body) });
     const confirmed = result.transaction;
     if (!Number.isSafeInteger(confirmed?.id) || confirmed.id <= 0) throw new Error('尚未確認存檔結果，請重新整理確認後再操作。');
-    // Never replace another request's row or navigate after an asynchronous write.
+    // Keep each response attached to its own row; month navigation stays with the user.
     state.transactions = state.transactions.filter(item => Number(item.id) !== id && Number(item.id) !== confirmed.id);
     if (state.transactionMonth === month) state.transactions.push(confirmed);
     saved = true;
+    savedTransactionId = confirmed.id;
     if (id === cyTransactionCreateId) showMessage('存檔成功');
     window.dispatchEvent(new CustomEvent('cyacc:entry-result', { detail: { id, entry, ok: true, message: '存檔成功' } }));
   } catch (error) {
@@ -359,6 +361,9 @@ async function saveTransaction(event) {
       catch { showMessage('存檔成功，餘額載入失敗，請重新整理。', true); }
     }
     window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded', { detail: { month: els.monthFilter.value } }));
+    if (id === cyTransactionCreateId && month === els.monthFilter.value) {
+      window.cyaccRevealSavedTransaction?.(savedTransactionId, month);
+    }
   }
 }
 

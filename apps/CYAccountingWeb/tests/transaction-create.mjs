@@ -16,12 +16,12 @@ const node = value => Object.assign(emitter(), { value, disabled: false, focus()
 const before = { id: 1, tx_date: '2026-10-01', account_name: 'TEST_ACCOUNT', category_name: 'TEST_CATEGORY', kind: 'expense', summary: 'before', amount: 7 };
 
 function fixture(width) {
-  const requests = [], renders = [], messages = [], openings = [], focused = [];
+  const requests = [], renders = [], messages = [], openings = [], focused = [], revealed = [];
   const els = { form: node(''), txDate: node('2026-10-02'), accountName: node('TEST_ACCOUNT'), categoryName: node('TEST_CATEGORY'), summary: node('first'), amount: node('12'), monthFilter: node('2026-10'), kindButtons: [], entryLockBadge: node(''), ledgerLockBadge: node('') };
   for (const key of ['saveButton', 'transactionRows', 'settingsButton', 'settingsDialog', 'addAccountButton', 'newAccountName', 'accountRows', 'addGroupButton', 'newGroupName', 'categoryManager', 'openingMonth', 'saveOpeningButton', 'saveLockButton', 'clearLockButton', 'lockedThrough']) els[key] = node('');
   els.settingsTabs = []; els.settingsKindButtons = [];
   els.summary.focus = () => focused.push('summary'); els.amount.focus = () => focused.push('amount');
-  const window = Object.assign(emitter(), { matchMedia: () => ({ matches: width < 768 }), cyaccRefreshLedgerView: async month => { openings.push(month); } });
+  const window = Object.assign(emitter(), { matchMedia: () => ({ matches: width < 768 }), cyaccRefreshLedgerView: async month => { openings.push(month); }, cyaccRevealSavedTransaction: (id,month) => revealed.push({id,month}) });
   const context = vm.createContext({ window, testEls: els, Event, CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
     document: { addEventListener() {}, querySelector: () => null, querySelectorAll: () => [] },
     renderDesktopLedger() { renders.push(context.snapshot()); }, showMessage(text, error) { messages.push({ text, error }); },
@@ -45,7 +45,7 @@ function fixture(width) {
   const submit = () => context.saveTransaction({ preventDefault() {} });
   const ack = (request, id) => request.resolve({ ok: true, transaction: { id, tx_date: request.body.txDate, account_name: request.body.accountName,
     category_name: request.body.categoryName, kind: request.body.kind, summary: request.body.summary, amount: request.body.amount, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' } });
-  return { context, window, els, requests, renders, messages, openings, focused, edit, submit, ack };
+  return { context, window, els, requests, renders, messages, openings, focused, revealed, edit, submit, ack };
 }
 
 for (const width of [400, 820, 1194, 1440]) {
@@ -64,6 +64,7 @@ for (const width of [400, 820, 1194, 1440]) {
   assert.deepEqual(f.focused, ['summary'], 'late acknowledgements never steal focus');
   assert.equal(f.requests.length, 1, 'ordinary success never reloads the same month');
   assert.equal(f.context.snapshot().rows.filter(row => row.id === 11).length, 1);
+  assert.deepEqual(f.revealed, [{id:11,month:'2026-10'}], 'only a confirmed server ID is revealed');
 
   const failed = f.submit(); f.edit('newer draft', '42');
   f.requests.at(-1).reject(new Error('TEST_FAILED')); await failed;
@@ -78,6 +79,7 @@ for (const width of [400, 820, 1194, 1440]) {
   f.ack(reqB, 13); await b; f.ack(reqA, 12); await a;
   assert.equal(f.context.snapshot().rows.filter(row => row.summary === 'same').length, 2, 'identical legitimate submissions survive reversed responses');
   assert.equal(f.context.pending(), 0);
+  assert.deepEqual(f.revealed.map(x=>x.id), [11,13], 'failed saves and older out-of-order acknowledgements never move the ledger');
 
   f.edit('programmatic', '25'); const programmatic = f.submit();
   f.els.summary.value = 'selected suggestion';
@@ -111,6 +113,7 @@ navigation.els.monthFilter.value = '2026-11'; const otherMonth = navigation.cont
 navigation.requests[1].resolve({ transactions: [], locked: false }); await otherMonth;
 navigation.ack(navigation.requests[0], 22); await saving;
 assert.equal(navigation.els.monthFilter.value, '2026-11');
+assert.equal(navigation.revealed.length, 0, 'an acknowledgement from another month cannot move the current ledger');
 assert.equal(navigation.context.snapshot().rows.length, 0);
 assert.ok(navigation.openings.includes('2026-11'), 'prior-month success refreshes the displayed carried opening balance');
 

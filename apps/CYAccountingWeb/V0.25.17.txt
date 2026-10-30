@@ -1,13 +1,29 @@
 CYAccountingWeb V0.25.17（Build 0）
 日期：2026-10-30
-狀態：桌機期初餘額視窗樣式調整，待合併與發布。
+狀態：桌機介面與連續記帳調整完成，待合併與發布。
 
-- 桌機視窗由 440px 縮為 280px，左右留白由 20px 縮為 14px，金額欄由 156px 縮為 110px。
+期初餘額視窗
+- 寬度由 440px 縮為 280px，左右留白由 20px 縮為 14px，金額欄由 156px 縮為 110px。
 - 桌機每列明確使用透明背景，消除共用外觀樣式帶入的灰色色塊；保留白底與帳戶間細分隔線。
-- 修改集中在既有 opening-balances.css；平板與手機樣式、帳務計算、調整紀錄及寫入流程維持原樣。
-- 更新資產 revision、既有部署探測及原有桌機寬度驗證。
+- 修改集中在既有 opening-balances.css。
 
-驗證：desktop UI、tablet UI、platform parity、部署設定與 build metadata 檢查；另以合成資料確認桌機背景優先序與觸控版不受影響。
-實際瀏覽器排版仍待驗收，不以 DOM 檢查取代視覺驗收。
+連續記帳
+- 桌機金額欄改用一般文字 inputMode，移除可能讓 Windows 輸入法切換英數的數字輸入模式提示；沿用同一輸入欄位、數字過濾與伺服器驗證。
+- 輸入模式設定由原有裝置切換流程管理；平板、手機保留 numeric，裝置切換時同步恢復。
+- 沿用原本送出時回摘要的單一焦點流程，不在非同步回覆後另行搶焦點。
+- 新增成功後，只有最新送出請求可依伺服器確認的交易編號定位右側清單。只捲動清單容器，不變更月份、分組或日期排序。
+- 若正使用摘要搜尋，成功定位時清除搜尋以免遮住記錄；月份尚在載入時，由既有清單渲染完成定位，不另發讀取請求。
+- 存檔失敗、較舊請求晚回覆、使用者已切換月份及觸控版本不自動定位。
+
+主責與驗證
+- app.js 管理寫入成功及請求／月份條件；ledger-tools.js 管理同一清單的定位；adaptive-ui.js 管理裝置輸入模式，不新增 renderer、wrapper 或 observer。
+- desktop-ui、tablet-ui、platform-parity、entry-workflow、transaction-create、frontend-architecture、deploy-config 與 metadata 檢查通過。
+- 合成資料驗證透明背景與觸控版排除；定位涵蓋成功 ID、失敗／反序回覆、延後渲染、搜尋清除、月份切換及不重複捲動。
+- 瀏覽器實際幾何、長紀錄換行，以及 Windows／Chrome／注音輸入法的實機往返狀態仍待驗收；不得以 DOM 或模擬焦點測試宣稱已通過實機 IME 驗證。
+- 更新資產 revision 及既有部署探測，不新增 workflow。帳務計算、鎖帳、調整紀錄與 API 不變。
+
+技術依據：Chromium Windows TSF 將 numeric inputMode 對應為數字輸入範圍；本次移除桌機提示，不嘗試以網頁程式強制切換作業系統輸入法。
+https://chromium.googlesource.com/chromium/src/+/main/ui/base/ime/win/tsf_input_scope.cc
+
 CYID Consumer Impact: NONE
 資料庫 Schema：13（不變）
