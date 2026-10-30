@@ -17,6 +17,8 @@ export default {
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
+      const markerMatch = url.pathname.match(/^\/api\/transactions\/(\d+)\/marker$/);
+      if (markerMatch && request.method === 'PATCH') return handleSetTransactionMarker(Number(markerMatch[1]), request, env.DB);
 
       let match = url.pathname.match(/^\/api\/transactions\/(\d+)$/);
       if (match && request.method === 'PUT') return handleUpdateTransaction(Number(match[1]), request, env.DB);
@@ -105,7 +107,7 @@ async function handleListTransactions(url, db) {
   if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
   const [result, lockedThrough] = await Promise.all([
     db.prepare(`
-      SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at
+      SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, created_at, updated_at
       FROM transactions
       WHERE substr(tx_date, 1, 7) = ?
       ORDER BY tx_date DESC, created_at DESC, id DESC
@@ -133,7 +135,7 @@ async function handleCreateTransaction(request, db) {
   const id = Number(result.meta?.last_row_id);
   return json({ ok: true, id, transaction: {
     id, tx_date: values.txDate, account_name: values.accountName, kind: values.kind,
-    category_name: values.categoryName, summary: values.summary, amount: values.amount,
+    category_name: values.categoryName, summary: values.summary, amount: values.amount, marker_color: null,
     created_at: now, updated_at: now
   } }, 201);
 }
@@ -160,6 +162,26 @@ async function handleUpdateTransaction(id, request, db) {
     WHERE id = ?
   `).bind(values.txDate, values.accountName, values.categoryName, values.summary, values.amount, new Date().toISOString(), id).run();
   return json({ ok: true });
+}
+
+// Marker metadata is independent from transaction summary and amounts.
+async function handleSetTransactionMarker(id, request, db) {
+  if (!validId(id)) return json({ ok: false, error: '交易編號錯誤。' }, 400);
+  const body = await bodyJson(request);
+  if (!body || !Object.hasOwn(body, 'markerColor')
+    || !(body.markerColor === null || ['orange', 'pink', 'yellow', 'green'].includes(body.markerColor))) {
+    return json({ ok: false, error: '標記顏色無效。' }, 400);
+  }
+  const row = await db.prepare('SELECT tx_date FROM transactions WHERE id = ?').bind(id).first();
+  if (!row) return json({ ok: false, error: '找不到交易。' }, 404);
+  const month = String(row.tx_date).slice(0, 7);
+  if (isMonthLocked(month, await getLockedThrough(db))) {
+    return json({ ok: false, error: `${month} 已鎖定，無法修改標記。` }, 409);
+  }
+  const now = new Date().toISOString();
+  await db.prepare('UPDATE transactions SET marker_color = ?, updated_at = ? WHERE id = ?')
+    .bind(body.markerColor, now, id).run();
+  return json({ ok: true, id, markerColor: body.markerColor, updatedAt: now });
 }
 
 async function handleDeleteTransaction(id, db) {

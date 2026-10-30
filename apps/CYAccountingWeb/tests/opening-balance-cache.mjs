@@ -93,6 +93,6 @@ assert.equal(cached('2026-02'),undefined);
 await opening(two,'2026-02');
 const backup=await buildBackupPackage(two);
 assert.ok(!Object.keys(backup.data).some(key=>/snapshot/i.test(key)),'derived snapshots are rebuilt, never portable financial data');
-assert.equal(backup.manifest.schemaVersion,13);
+assert.equal(backup.manifest.schemaVersion,14);
 sql.close();
 console.log('Shared monthly snapshots: warm read, current-month stability, prior/cross-month edits, manual/zero anchors, historical names, live locks, atomic rollback, concurrent publication and restore epoch passed.');

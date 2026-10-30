@@ -3144,7 +3144,7 @@ function setupTransactionSwipeSwipeActions() {
   rows.addEventListener('pointercancel', finish);
 
   rows.addEventListener('click', event => {
-    const action = event.target.closest('[data-edit-id], [data-delete-id]');
+    const action = event.target.closest('[data-edit-id], [data-delete-id], [data-marker-id]');
     if (action) {
       const row = action.closest('tr.ledger-row');
       window.setTimeout(() => closeTransactionSwipeSwipeRow(row), 0);

@@ -40,14 +40,14 @@
     }, 12000);
   </script>
   <link rel="stylesheet" href="/app.css?rev=app-shell">
-  <link rel="stylesheet" href="/accounting-ui.css?rev=ledger-header-controls">
+  <link rel="stylesheet" href="/accounting-ui.css?rev=transaction-summary-highlighter">
   <link rel="stylesheet" href="/quick-entry-settings.css?rev=settings-general">
   <link rel="stylesheet" href="/category-management.css?rev=category-management">
   <link rel="stylesheet" href="/excel-export.css?rev=excel-export">
   <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
   <link rel="stylesheet" href="/backup.css?rev=backup-refresh-feedback">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=compact-opening-dialog">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=transaction-marker-adaptive">
   <link rel="stylesheet" href="/opening-balances.css?rev=compact-white-list">
   <link rel="stylesheet" href="/statistics.css?rev=transfer-settings-density">
   <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-account-light">
@@ -56,7 +56,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.25.17</span></p>
+      <p>CYAccounting Web <span class="version">V0.25.18</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -181,9 +181,9 @@
   </dialog>
 
   <script src="/auth.js?rev=cyweb-theme-owner" defer></script>
-  <script src="/app.js?rev=saved-ledger-reveal" defer></script>
+  <script src="/app.js?rev=transaction-marker-mutation" defer></script>
   <script src="/quick-entry.js?rev=summary-selection-guard" defer></script>
-  <script src="/ledger-tools.js?rev=saved-row-location" defer></script>
+  <script src="/ledger-tools.js?rev=transaction-marker-renderer" defer></script>
   <script src="/input-confirmation.js?rev=identified-entry-results" defer></script>
   <script src="/quick-entry-settings.js?rev=settings-general" defer></script>
   <script src="/category-management.js?rev=category-management" defer></script>
@@ -191,7 +191,7 @@
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
   <script src="/backup-ui.js?rev=backup-refresh-feedback" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=desktop-ime-scope" defer></script>
+  <script src="/adaptive-ui.js?rev=transaction-marker-swipe" defer></script>
   <script src="/statistics-ui.js?rev=transfer-settings-density" type="module"></script>
 </body>
 </html>

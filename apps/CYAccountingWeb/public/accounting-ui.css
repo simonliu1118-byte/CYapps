@@ -1282,7 +1282,7 @@ html[data-viewport="desktop"] .ledger-header-button {
 }
 
 .ledger-card .action-col {
-  width: 82px;
+  width: 116px;
   padding-left: 3px;
   padding-right: 5px;
 }
@@ -1291,6 +1291,78 @@ html[data-viewport="desktop"] .ledger-header-button {
   padding: 2px 3px;
   font-size: 11.5px;
 }
+
+/* Transaction marker colors and text-only highlight share one CSS owner. */
+.ledger-card td.summary .transaction-summary-highlight {
+  display: inline;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: #17212b;
+  background: var(--cyacc-marker-color);
+  font: inherit;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.transaction-marker-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: baseline;
+  background: var(--cyacc-marker-color, transparent);
+  border: 1px solid rgba(27, 35, 42, .23);
+  box-sizing: border-box;
+}
+[data-marker-color="orange"] { --cyacc-marker-color: #ff920a; }
+[data-marker-color="pink"] { --cyacc-marker-color: #ff50a4; }
+[data-marker-color="yellow"] { --cyacc-marker-color: #ffe531; }
+[data-marker-color="green"] { --cyacc-marker-color: #63ed59; }
+.ledger-card .row-action.marker {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 22px;
+  min-height: 24px;
+  padding: 1px 3px;
+  color: #667684;
+}
+.ledger-card .row-action.marker span { font-size: 15px; line-height: 1; }
+.transaction-marker-picker {
+  position: fixed;
+  z-index: 2505;
+  width: 142px;
+  padding: 5px;
+  border: 1px solid #cdd7e0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(33, 52, 70, .24);
+}
+.transaction-marker-picker[hidden] { display: none; }
+.transaction-marker-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  color: #293744;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.transaction-marker-option:hover,
+.transaction-marker-option:focus-visible { background: #f0f4f8; }
+.transaction-marker-option .transaction-marker-dot {
+  margin-left: 6px;
+  width: 12px; height: 12px;
+  flex-basis: 12px;
+}
+.transaction-marker-clear { width: 12px; height: 12px; margin-left: 6px; border: 1px solid #8d9baa; border-radius: 50%; box-sizing: border-box; }
 
 .ledger-card .account-group-row td {
   padding: 5px 8px;

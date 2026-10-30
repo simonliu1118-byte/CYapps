@@ -12,6 +12,8 @@ window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
 window.cyaccRenderLedgerMessage = renderLedgerMessage;
 window.cySyncLedgerPresentation = syncLedgerPresentation;
 window.cyaccRevealSavedTransaction = revealSavedTransaction;
+window.cyaccOpenTransactionMarker = openTransactionMarkerPicker;
+window.cyCloseTransactionMarkerPicker = closeTransactionMarkerPicker;
 
 let cyLedgerToolsStarted = false;
 
@@ -413,6 +415,7 @@ function renderDesktopLedger() {
     openingMap.set(String(item.name), Number.isFinite(value) ? value : 0);
   }
 
+  window.cyCloseTransactionMarkerPicker?.();
   window.cyCloseLedgerBalancePopover?.();
   window.cyLedgerBalanceBreakdowns = new Map();
   const calculated = calculateLedgerBalances(allTransactions, openingMap);
@@ -580,17 +583,97 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const accountVisual = ledgerAccountVisual(accountName);
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
+  const markerNames = { orange: '螢光橘', pink: '螢光粉', yellow: '螢光黃', green: '螢光綠' };
+  const markerColor = Object.hasOwn(markerNames, tx.marker_color) ? tx.marker_color : null;
+  const summaryText = escapeHtml(tx.summary || '');
+  // Highlight only the visible summary glyphs, never the entire table cell.
+  const highlightedSummary = markerColor
+    ? `<mark class="transaction-summary-highlight" data-marker-color="${markerColor}" title="${markerNames[markerColor]}標記">${summaryText}</mark>`
+    : summaryText;
+  const markerButtonLabel = markerColor ? `更改標記（目前${markerNames[markerColor]}）` : '標記';
+
 
   return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}"${id < 0 ? ' aria-busy="true"' : ''}>
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
     <td class="ledger-account-name" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td>${escapeHtml(tx.category_name)}</td>
-    <td class="summary">${escapeHtml(tx.summary || '')}</td>
+    <td class="summary">${highlightedSummary}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button>`}</td>
+    <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button><button type="button" class="row-action marker" data-marker-id="${id}" aria-haspopup="menu" aria-label="${markerButtonLabel}" title="${markerButtonLabel}" ${locked || document.body.dataset.cyaccReadOnly === 'true' ? 'disabled' : ''}><span aria-hidden="true">●</span></button>`}</td>
   </tr>`;
+}
+
+// One fixed-position menu is reused across rows; never put a popup in the
+// vertically clipped ledger table or create an alternate transaction writer.
+let cyMarkerPicker = null;
+let cyMarkerPickerAnchor = null;
+function closeTransactionMarkerPicker() {
+  if (cyMarkerPicker) cyMarkerPicker.hidden = true;
+  cyMarkerPickerAnchor?.setAttribute('aria-expanded', 'false');
+  cyMarkerPickerAnchor = null;
+}
+function openTransactionMarkerPicker(button) {
+  const id = Number(button?.dataset.markerId);
+  if (!Number.isSafeInteger(id) || id <= 0 || button.disabled) return;
+  if (cyMarkerPickerAnchor === button && cyMarkerPicker && !cyMarkerPicker.hidden) {
+    closeTransactionMarkerPicker();
+    return;
+  }
+  closeTransactionMarkerPicker();
+  if (!cyMarkerPicker) {
+    cyMarkerPicker = document.createElement('div');
+    cyMarkerPicker.className = 'transaction-marker-picker';
+    cyMarkerPicker.setAttribute('role', 'menu');
+    cyMarkerPicker.setAttribute('aria-label', '選擇交易標記顏色');
+    cyMarkerPicker.hidden = true;
+    document.body.append(cyMarkerPicker);
+    document.addEventListener('pointerdown', event => {
+      if (!cyMarkerPicker?.hidden && !cyMarkerPicker.contains(event.target)
+        && !cyMarkerPickerAnchor?.contains(event.target)) closeTransactionMarkerPicker();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !cyMarkerPicker?.hidden) {
+        const anchor = cyMarkerPickerAnchor;
+        closeTransactionMarkerPicker();
+        anchor?.focus();
+      }
+    });
+    document.querySelector('.ledger-card .table-wrap')?.addEventListener('scroll', closeTransactionMarkerPicker, { passive: true });
+  }
+  cyMarkerPicker.replaceChildren();
+  const tx = state.transactions.find(row => Number(row.id) === id);
+  const options = [['orange', '螢光橘'], ['pink', '螢光粉'],
+    ['yellow', '螢光黃'], ['green', '螢光綠'], [null, '取消標記']];
+  for (const [color, label] of options) {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.setAttribute('role', 'menuitemradio');
+    option.setAttribute('aria-checked', String((tx?.marker_color || null) === color));
+    option.className = 'transaction-marker-option';
+    const swatch = document.createElement('span');
+    swatch.className = color ? 'transaction-marker-dot' : 'transaction-marker-clear';
+    if (color) swatch.dataset.markerColor = color;
+    swatch.setAttribute('aria-hidden', 'true');
+    option.append(swatch, document.createTextNode(label));
+    option.addEventListener('click', () => {
+      closeTransactionMarkerPicker();
+      window.cyaccSetTransactionMarker?.(id, color);
+    });
+    cyMarkerPicker.append(option);
+  }
+  cyMarkerPicker.hidden = false;
+  cyMarkerPickerAnchor = button;
+  button.setAttribute('aria-expanded', 'true');
+  const bounds = button.getBoundingClientRect();
+  const width = cyMarkerPicker.offsetWidth || 142;
+  const height = cyMarkerPicker.offsetHeight || 180;
+  const left = Math.max(8, Math.min(bounds.right - width, window.innerWidth - width - 8));
+  const top = bounds.bottom + height + 8 > window.innerHeight
+    ? Math.max(8, bounds.top - height - 6) : bounds.bottom + 6;
+  cyMarkerPicker.style.left = Math.round(left) + 'px';
+  cyMarkerPicker.style.top = Math.round(top) + 'px';
 }
 
 function updateLedgerHeader() {

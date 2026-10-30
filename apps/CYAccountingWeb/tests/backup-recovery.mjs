@@ -59,6 +59,7 @@ for(const version of [6,7]) {
   const legacy=structuredClone((await validateBackupSetBytes(await gcs.getObject(`CYAccountingWeb/${last.backupId}/manifest.json`),await gcs.getObject(`CYAccountingWeb/${last.backupId}/data.json`),last.backupId)));
   legacy.manifest.schemaVersion=version;delete legacy.manifest.recoveryContext;delete legacy.data.excelImportRuns;
   if(version===6)legacy.data.accounts.forEach(row=>{delete row.colorSlot;});
+  legacy.data.transactions.forEach(row=>{delete row.markerColor;});
   const untouched=JSON.stringify(legacy);
   const legacyTarget=await provision();
   const workspaceId=legacyTarget.db.prepare("SELECT value FROM meta WHERE key='recovery_workspace_id'").get().value;
