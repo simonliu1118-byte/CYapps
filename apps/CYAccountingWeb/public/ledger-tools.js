@@ -177,14 +177,16 @@ function setupLedgerPeriodSearch() {
     event.preventDefault();
     void searchLedgerPeriod(true);
   });
-  document.querySelector('#ledgerPeriodSearchForm').addEventListener('input', () => {
+  const clearResults = () => {
     cyLedgerPeriodSearch.pages = [];
     cyLedgerPeriodSearch.page = 0;
     document.querySelector('#ledgerPeriodSearchResults').hidden = true;
     document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
     document.querySelector('#ledgerPeriodSearchPage').textContent = '';
     setLedgerPeriodSearchBusy(false);
-  });
+  };
+  document.querySelector('#ledgerPeriodSearchForm').addEventListener('input', clearResults);
+  document.querySelector('#ledgerPeriodSearchForm').addEventListener('change', clearResults);
   document.querySelector('#ledgerPeriodSearchPrev').addEventListener('click', () => {
     if (cyLedgerPeriodSearch.busy || cyLedgerPeriodSearch.page === 0) return;
     cyLedgerPeriodSearch.page -= 1;
@@ -220,8 +222,11 @@ function openLedgerPeriodSearch() {
   const start = document.querySelector('#ledgerPeriodSearchStart');
   const end = document.querySelector('#ledgerPeriodSearchEnd');
   const keyword = document.querySelector('#ledgerPeriodSearchKeyword');
-  if (!start.value) start.value = els.monthFilter.value;
-  if (!end.value) end.value = els.monthFilter.value;
+  for (const input of [start, end]) {
+    if (input.value) continue;
+    input.value = els.monthFilter.value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   if (!keyword.value) keyword.value = document.querySelector('#ledgerSummarySearch')?.value || '';
   dialog.showModal();
   keyword.focus();
@@ -298,11 +303,12 @@ function renderLedgerPeriodSearch() {
   document.querySelector('#ledgerPeriodSearchPage').textContent = rows.length
     ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '';
   results.hidden = rows.length === 0;
-  results.innerHTML = `<table><colgroup><col class="period-search-date"><col class="period-search-account"><col class="period-search-category"><col><col class="period-search-amount"><col class="period-search-action"></colgroup>
-    <thead><tr><th>日期</th><th>帳戶</th><th>科目</th><th>摘要</th><th class="num">金額</th><th></th></tr></thead>
-    <tbody>${rows.map(tx => `<tr><td>${escapeHtml(tx.tx_date.replaceAll('-', '/'))}</td><td>${escapeHtml(tx.account_name)}</td><td>${escapeHtml(tx.category_name)}</td><td>${escapeHtml(tx.summary || '')}</td>
-      <td class="num period-search-${tx.kind === 'income' ? 'income' : 'expense'}">${tx.kind === 'income' ? '+' : '−'}${money(tx.amount)}</td>
-      <td><button type="button" class="period-search-view" data-ledger-search-view="${Number(tx.id)}" aria-label="查看 ${escapeHtml(tx.tx_date)} 的這筆記錄">查看</button></td></tr>`).join('')}</tbody></table>`;
+  results.innerHTML = `<table><colgroup><col class="period-search-context"><col><col class="period-search-value"></colgroup>
+    <thead><tr><th>日期／帳戶</th><th>科目／摘要</th><th class="num">金額</th></tr></thead>
+    <tbody>${rows.map(tx => `<tr><td><time class="period-search-date">${escapeHtml(tx.tx_date.replaceAll('-', '/'))}</time><span class="period-search-account">${escapeHtml(tx.account_name)}</span></td>
+      <td><span class="period-search-category">${escapeHtml(tx.category_name)}</span><span class="period-search-summary">${escapeHtml(tx.summary || '')}</span></td>
+      <td class="num"><span class="period-search-signed-amount period-search-${tx.kind === 'income' ? 'income' : 'expense'}">${tx.kind === 'income' ? '+' : '−'}${money(tx.amount)}</span>
+      <button type="button" class="period-search-view" data-ledger-search-view="${Number(tx.id)}" aria-label="查看 ${escapeHtml(tx.tx_date)} 的這筆記錄">查看</button></td></tr>`).join('')}</tbody></table>`;
   results.scrollTop = 0;
   setLedgerPeriodSearchBusy(false);
 }

@@ -84,7 +84,11 @@ const context = vm.createContext({ URLSearchParams, Event, Number, String,
 vm.runInContext("const cyLedgerPeriodSearch={criteria:null,pages:[],page:0,requestId:0,busy:false};\n" +
   source.slice(source.indexOf('function setupLedgerPeriodSearch()'), source.indexOf('function bindLedgerToolbar()')) + '\n' +
   appSource.split('\n').filter(line => /^function (escapeHtml|money)\(/.test(line)).join('\n'), context);
-context.setupLedgerPeriodSearch(); context.openLedgerPeriodSearch();
+context.setupLedgerPeriodSearch();
+let initialMonthChanges = 0;
+for (const name of ['Start','End']) nodes.get('#ledgerPeriodSearch' + name).addEventListener('change', () => { initialMonthChanges++; });
+context.openLedgerPeriodSearch();
+assert.equal(initialMonthChanges, 2, 'seeded months notify the existing picker label lifecycle');
 assert.equal(calls.length, 0, 'opening does not fetch historical data');
 assert.equal(nodes.get('#ledgerPeriodSearchKeyword').value, 'old keyword');
 const field = (id, value) => { nodes.get('#ledgerPeriodSearch' + id).value = value; };
@@ -111,4 +115,11 @@ const pending = context.searchLedgerPeriod(true); nodes.get('#ledgerPeriodSearch
 complete({ transactions: [row], nextCursor: null }); await pending;
 assert.equal(nodes.get('#ledgerPeriodSearchResults').hidden, true, 'a response after closing does not paint old results');
 assert.equal(vm.runInContext('cyLedgerPeriodSearch.busy', context), false);
+responses.push(() => ({ transactions: [row], nextCursor: 'TEST_CURSOR' }));
+await context.searchLedgerPeriod(true);
+assert.equal(nodes.get('#ledgerPeriodSearchResults').hidden, false);
+nodes.get('#ledgerPeriodSearchForm').dispatchEvent({ type: 'change' });
+assert.equal(nodes.get('#ledgerPeriodSearchResults').hidden, true, 'a custom month picker change clears results from the previous period');
+assert.equal(nodes.get('#ledgerPeriodSearchNext').disabled, true, 'old cursors cannot be reused after changing the period');
+
 console.log('Ledger period search: SQLite date index/36-month limit, literal keyword fields, complete keyset pages, CYID USER read, dialog validation/paging/escaping/view/error/close lifecycle passed.');
