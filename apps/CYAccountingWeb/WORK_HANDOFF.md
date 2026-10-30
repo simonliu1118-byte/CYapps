@@ -1,18 +1,33 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/29（台灣時間）。描述正式狀態與驗收，永久規則依正式三層來源。
+更新：2026/10/30（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
 
-## 最新狀態：V0.25.14 已部署，V0.25.15 重新整理提示待部署
+## 最新狀態：V0.25.18 Build 2 已正式部署／D1 schema 15
 
-- V0.25.13／schema13 已由 [PR #575](https://github.com/simonliu1118-byte/CYapps/pull/575) 合併，main source `6d238eb54faa188f9bbc0ece4cb92de871f4628d` 的 [dispatch run 40838160660](https://github.com/simonliu1118-byte/CYapps/actions/runs/40838160660) validate／deploy 成功。0012／0013 已套用，原資料與綁定核對通過；期初快照命中已有正式低讀取回讀。備份／實際還原與資源證據只保存在本機私人維運目錄。
-- V0.25.14 沿唯一 backup owner 補上「副本成功、健康檢查中斷」的 08:00 補驗；當天已健康則不重驗，補驗不重建備份、不改帳務。狀態頁合併副本查詢，固定 16 個 operational key 以四筆並行／五秒上限讀取；逾時保留有效備份狀態，真實健康失敗不隱藏。
-- schema13、CYID contract1.0.6、現有資源與權限保持；本批沒有 migration。需要必要 CI、當次受控部署及正式回讀，部署成功不等同下一次健康檢查已完成；相關待辦見 TODO。
-- V0.25.14 的 [PR #578](https://github.com/simonliu1118-byte/CYapps/pull/578) 已合併，main source `e9f43026de66768dc353e5bf4aaf8a522a637077` 的 [dispatch run719／40894084073](https://github.com/simonliu1118-byte/CYapps/actions/runs/40894084073) validate／deploy 成功；原綁定與 schema13 後驗不變。健康總狀態仍是舊紀錄，須等實際排程驗證，不直接寫成健康。診斷及後驗直接 D1 查詢合計29讀／0寫，私有用量證據另存。
-- 使用者追加 V0.25.15 備份視窗重新整理進度提示：同一載入函式顯示 spinner／「重新整理中…」，停用按鈕並在 finally 恢復；不新增請求或獨立 owner。完成／部署證據待該批必要 CI 及正式回讀。
-- 接續工作先用此摘要、來源 SHA 與新增差異；已確認且未變的規則／盤點不重讀整批。需要完整性或重新還原的驗證仍以實際內容為準，不能沿用舊成功取代。
-- 下列 V0.25.5 及更早的段落保留為歷史驗收，不作目前版本或目前綁定的證據。
+| 項目 | 現行證據或邊界 |
+| --- | --- |
+| 正式版本 | `VERSION=0.25.18`、`BUILD=2`；[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584) 已合併 |
+| 正式 source SHA | `5b3442db6cd716cf002c8c1e278d526f978dd07b` |
+| 正式部署 | [GitHub Actions Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154)，相同 SHA、`deploy/cyaccountingweb-production` 事件，`validate` 與 `deploy` 都為 success；production login/semantic assets checks 成功 |
+| 資料庫結構 | schema **15**：0012 查詢索引、0013 期初快照、0014 螢光色、0015 標記位置；**Build 2 無新增 migration** |
+| Identity | CYACC consumer 1.0.6；CYID canonical contract 1.0.6、minimum 1.0.0；實際 provider runtime 不僅靠原始碼推定 |
+| 公開 GitHub Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；網頁部署不自動建立 GitHub Release；目前**未發 V1.0.0** |
+| 共通規則 | AITeam 與 CYapps `REPOSITORY_RULES.md` 完全一致，`COMMON_RULES_VERSION=2.11.0` |
+| 人工驗收 | 使用者確認 V0.25.18 Build 2 的月份切換體感改善與遮罩呈現可維持現狀。此為人工回饋，**不是**量測耗時或所有裝置的完整回歸驗收 |
+| 備份／帳務運行健康 | 公開 GitHub CI、deploy 不等於每日排程及備份副本已驗收；最近排程、Cloudflare 資源及資料正確性需在受保護維運環境另行回讀 |
 
-## 歷史：部署模式變更
+### 近期版本與主要交付
+
+- **V0.25.15**：備份視窗重新整理進度提示已進入後續正式版本；原先「待部署」的說明已過時，但網路失敗／實際備份健康仍需分別驗收。
+- **V0.25.17／[PR #581](https://github.com/simonliu1118-byte/CYapps/pull/581)**：桌機期初視窗精簡、輸入與新增交易後定位；[production run 41051857611](https://github.com/simonliu1118-byte/CYapps/actions/runs/41051857611) validate/deploy 成功。Windows Chrome 注音輸入與極端內容仍須真機驗收。
+- **V0.25.18／[PR #582](https://github.com/simonliu1118-byte/CYapps/pull/582)**：交易操作欄新增螢光橘／粉／黃／綠及取消，僅於文字上顯示網底，不改原始帳務欄位；D1 migration 0014，備份與舊 schema 相容。 [production run 41070786666](https://github.com/simonliu1118-byte/CYapps/actions/runs/41070786666) 成功。
+- **V0.25.18 Build 1／[PR #583](https://github.com/simonliu1118-byte/CYapps/pull/583)**：標記位置可選**科目或摘要**；已鎖帳月份可新增／改色／換位置／取消標記（presentation metadata 專用 API），但一般編輯與刪除仍被鎖帳保護，USER 仍唯讀。D1 migration 0015，舊 schema 6–14 備份預設摘要；[production run 41076639700](https://github.com/simonliu1118-byte/CYapps/actions/runs/41076639700) 成功。
+- **V0.25.18 Build 2／[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584)**：將桌機月份遮罩移至中間帳本不捲動的可視區，spinner 維持視野中央；精簡每筆標記渲染，未改動 D1／API／期初餘額或原查詢次序。[production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 成功。
+- **外觀**：CYACCweb 暫時固定淺色；深色模式與三態切換依 [TODO](TODO.md) 擱置，不能因與 CYWEB 同風格而擅自恢復。
+- **後續工作**：待驗收項目見 [TODO.md](TODO.md)，Backup 格式與相容性看 [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)，平板看 [docs/TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md)。只有本節可當目前部署摘要。
+
+
+## 歷史：部署模式變更（保留當時記錄，現況以頂端為準）
 
 使用者於 2026/10/16 改採與 CY Web 相同的合併／發布分離：**本批合併後 main 不再自動部署**。PR 保留自動驗證；Work 在收到當次發布指示後，將 `deploy/cyaccountingweb-production` 前進到已審核的當前 main，或從 main dispatch `cyaccountingweb-deploy.yml`，才會上線。完整指令、GitHub UI 備援與成功判定統一看 [README 正式部署操作](README.md#正式部署操作)，避免後續只合併 PR 卻誤以為已部署。
 
