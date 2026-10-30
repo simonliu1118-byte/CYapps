@@ -1,6 +1,6 @@
 # 按需建立還原工作區
 
-更新：2026/10/30（台灣時間），現行 CYACCweb **V0.25.18 Build 2／schema 15**。本文件描述需要復原時的操作前置與資源安全界線，**不是**正式資料庫已經切換或新還原庫已經建立的證據。最新部署見 [WORK_HANDOFF.md](../WORK_HANDOFF.md)，還原格式與驗證邊界見 [BACKUP_ARCHITECTURE_HANDOFF.md](../BACKUP_ARCHITECTURE_HANDOFF.md)。
+更新：2026/10/30（台灣時間），現行 CYACCweb **V1.0.0 Build 0／schema 15**（承接已驗證的 V0.25.18 Build 2，無新增 DB migration）。本文件描述需要復原時的操作前置與資源安全界線，**不是**正式資料庫已經切換或新還原庫已經建立的證據。最新部署見 [WORK_HANDOFF.md](../WORK_HANDOFF.md)，還原格式與驗證邊界見 [BACKUP_ARCHITECTURE_HANDOFF.md](../BACKUP_ARCHITECTURE_HANDOFF.md)。
 
 一般發布預設使用 `disabled`：不建立、查找、遷移或綁定還原資料庫。既有資料庫會保留，清理另行確認。自動備份、08:00 補跑及記憶體內的還原驗證維持原流程。
 
