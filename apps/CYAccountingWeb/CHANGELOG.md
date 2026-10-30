@@ -12,6 +12,7 @@
 - 彙整並核實專案 README、交接、TODO、備份／復原、平板設計及獨立 Release 說明；未宣稱全部真機、實際排程與所有歷史備份已重新人工驗收。
 - Release title 正名為 **CYAccountingWeb V1.0.0｜正式穩定版**；正式發行需相同 SHA 的 production deploy、必要 CI、public-package safety scan、SHA-256 封裝驗證。參見 [V1.0.0.txt](V1.0.0.txt)。
 - 正式發行前修正過期的登入頁測試資源版本斷言，並加入 PR／Production CI，確保 Release 專屬全測試不再與主流程驗證分叉；此項**僅為測試與流程修正**，不改應用 runtime 或正式版 Build 身分。
+- 發行環境驗證補齊 `CF_CYWEB_PORTAL_URL` 的純測試佔位值，並加入 Release／Validate CI 設定對齊的靜態回歸；不使用正式 URL 或 Secret，應用與 schema 仍不變。
 
 ## V0.25.18 Build 2 — 2026/10/30
 

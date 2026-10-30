@@ -28,6 +28,13 @@ try {
     CF_BACKUP_TOPOLOGY: 'legacy_gcs',
     CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'acc.example.com'
   };
+  const releaseWorkflow = fs.readFileSync(path.resolve(PROJECT_ROOT, '../../.github/workflows/cyaccountingweb-release.yml'), 'utf8');
+  const releaseCiSection = releaseWorkflow.split('      - name: Prepare SQLite runtime and CI-only bundle config')[1]
+    ?.split('      - name: Package tracked public source')[0] || '';
+  for (const key of Object.keys(env)) {
+    assert.match(releaseCiSection, new RegExp('^\\s+' + key + ':', 'm'),
+      'Stable Release dry-run must provide canonical CI-only config key: ' + key);
+  }
   renderWrangler({ env, templatePath: TEMPLATE, outputPath: output });
   const renderedText = fs.readFileSync(output, 'utf8');
   const rendered = JSON.parse(renderedText);
