@@ -10845,6 +10845,9 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   stroke-linejoin: round;
 }
 
+/* The wrapper has no independent scroll: the table remains the sole scroll owner.
+   Desktop makes it the fixed-height ledger viewport for the loading backdrop. */
+.ledger-table-viewport { position: relative; min-width: 0; }
 .ledger-loading-overlay, .ledger-month-arrow-icon { display: none; }
 #desktopBackToTop { display: none; }
 @keyframes ledger-loading-spin { to { transform: rotate(360deg); } }
@@ -11021,11 +11024,24 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] .ledger-month-arrow-text { display: none; }
   html[data-viewport="desktop"] .ledger-month-arrow-icon { display: block; width: 14px; height: 14px; }
   html[data-viewport="desktop"] #ledgerMonthLoading { display: none; }
-  html[data-viewport="desktop"] .ledger-card .table-wrap {
+  html[data-viewport="desktop"] .ledger-card .ledger-table-viewport {
     position: relative;
-    min-height: 180px;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
-  html[data-viewport="desktop"] .ledger-loading-overlay:not([hidden]) {
+  html[data-viewport="desktop"] .ledger-card .ledger-table-viewport > .table-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  /* Absolutely position against the non-scrolling viewport, not the tall
+     content of .table-wrap. At every scrollTop the spinner stays centered. */
+  html[data-viewport="desktop"] .ledger-card .ledger-table-viewport > .ledger-loading-overlay:not([hidden]) {
     display: flex;
     position: absolute;
     inset: 0;
