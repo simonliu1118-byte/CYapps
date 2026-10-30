@@ -583,9 +583,11 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
   const markerNames = { orange: '螢光橘', pink: '螢光粉', yellow: '螢光黃', green: '螢光綠' };
   const markerColor = Object.hasOwn(markerNames, tx.marker_color) ? tx.marker_color : null;
-  const markerDot = markerColor
-    ? `<span class="transaction-marker-dot" data-marker-color="${markerColor}" role="img" aria-label="${markerNames[markerColor]}標記" title="${markerNames[markerColor]}標記"></span>`
-    : '';
+  const summaryText = escapeHtml(tx.summary || '');
+  // Highlight only the visible summary glyphs, never the entire table cell.
+  const highlightedSummary = markerColor
+    ? `<mark class="transaction-summary-highlight" data-marker-color="${markerColor}" title="${markerNames[markerColor]}標記">${summaryText}</mark>`
+    : summaryText;
   const markerButtonLabel = markerColor ? `更改標記（目前${markerNames[markerColor]}）` : '標記';
 
 
@@ -594,7 +596,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="ledger-account-name" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td>${escapeHtml(tx.category_name)}</td>
-    <td class="summary">${escapeHtml(tx.summary || '')}${markerDot}</td>
+    <td class="summary">${highlightedSummary}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
     <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button><button type="button" class="row-action marker" data-marker-id="${id}" aria-haspopup="menu" aria-label="${markerButtonLabel}" title="${markerButtonLabel}" ${locked || document.body.dataset.cyaccReadOnly === 'true' ? 'disabled' : ''}><span aria-hidden="true">●</span></button>`}</td>
