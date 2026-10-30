@@ -38,7 +38,8 @@ const styles = [
   'excel-import.css',
   'backup.css',
   'desktop-migration.css',
-  'adaptive-ui.css'
+  'adaptive-ui.css',
+  'ledger-search.css'
 ];
 const scripts = [
   'auth.js',
