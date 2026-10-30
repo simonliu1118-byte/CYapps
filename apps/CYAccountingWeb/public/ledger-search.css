@@ -10,11 +10,11 @@ html[data-viewport="desktop"] #ledgerSearchForm {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 .ledger-period-search-dialog {
-  width: min(560px, calc(100vw - 32px));
-  max-width: 560px;
+  width: min(400px, calc(100vw - 32px));
+  max-width: 400px;
   max-height: calc(100dvh - 48px);
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 12px;
   color: #202938;
   background: #fff;
@@ -41,6 +41,10 @@ html[data-viewport="desktop"] #ledgerSearchForm {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+}
+.ledger-period-search-months > label:last-child .cy-month-picker-popover {
+  left: auto;
+  right: 0;
 }
 .ledger-period-search-keyword {
   display: grid;
@@ -87,11 +91,18 @@ html[data-viewport="desktop"] #ledgerSearchForm {
 }
 .ledger-period-search-results th { position: sticky; top: 0; background: #f7f9fc; color: #475569; }
 .ledger-period-search-results .num { text-align: right; font-variant-numeric: tabular-nums; }
-.period-search-date { width: 79px; }
-.period-search-account { width: 64px; }
-.period-search-category { width: 76px; }
-.period-search-amount { width: 86px; }
-.period-search-action { width: 42px; }
+.period-search-context { width: 84px; }
+.period-search-value { width: 92px; }
+.period-search-date,
+.period-search-account,
+.period-search-category,
+.period-search-summary,
+.period-search-signed-amount { display: block; }
+.period-search-date,
+.period-search-signed-amount { white-space: nowrap; }
+.period-search-account { margin-top: 3px; color: #64748b; font-size: 12px; }
+.period-search-category { font-weight: 600; }
+.period-search-summary { margin-top: 3px; }
 .period-search-income { color: #216447; }
 .period-search-expense { color: #a53c37; }
 .period-search-view { padding: 3px 4px; border: 0; background: transparent; color: #315fa7; font-size: 12px; }
