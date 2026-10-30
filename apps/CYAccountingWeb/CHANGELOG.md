@@ -11,6 +11,7 @@
 - 保留桌機中間帳本月份載入全區遮罩＋置中動畫、逐列渲染精簡、跨裝置交易列表、CYID 驗證和唯讀 USER／已鎖月僅可更改標記 metadata 的既有規則。
 - 彙整並核實專案 README、交接、TODO、備份／復原、平板設計及獨立 Release 說明；未宣稱全部真機、實際排程與所有歷史備份已重新人工驗收。
 - Release title 正名為 **CYAccountingWeb V1.0.0｜正式穩定版**；正式發行需相同 SHA 的 production deploy、必要 CI、public-package safety scan、SHA-256 封裝驗證。參見 [V1.0.0.txt](V1.0.0.txt)。
+- 正式發行前修正過期的登入頁測試資源版本斷言，並加入 PR／Production CI，確保 Release 專屬全測試不再與主流程驗證分叉；此項**僅為測試與流程修正**，不改應用 runtime 或正式版 Build 身分。
 
 ## V0.25.18 Build 2 — 2026/10/30
 
