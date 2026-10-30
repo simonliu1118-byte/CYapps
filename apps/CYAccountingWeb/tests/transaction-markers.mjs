@@ -20,7 +20,8 @@ const initialBody = { txDate: '2026-10-15', accountName: account, kind: 'expense
 const createdResponse = await core.fetch(request('/api/transactions', 'POST', initialBody), env);
 assert.equal(createdResponse.status, 201);
 const created = await createdResponse.json();
-const id = created.id;
+// FixtureD1 reports SQLite lastInsertRowid, not the production D1 last_row_id alias.
+const id = db.db.prepare('SELECT id FROM transactions WHERE summary=?').get(initialBody.summary).id;
 assert.equal(created.transaction.marker_color, null);
 assert.equal(db.db.prepare('SELECT marker_color FROM transactions WHERE id=?').get(id).marker_color, null);
 
