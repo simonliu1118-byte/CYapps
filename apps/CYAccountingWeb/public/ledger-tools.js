@@ -13,6 +13,7 @@ window.cyaccRenderLedgerMessage = renderLedgerMessage;
 window.cySyncLedgerPresentation = syncLedgerPresentation;
 window.cyaccRevealSavedTransaction = revealSavedTransaction;
 window.cyaccOpenTransactionMarker = openTransactionMarkerPicker;
+window.cyCloseTransactionMarkerPicker = closeTransactionMarkerPicker;
 
 let cyLedgerToolsStarted = false;
 
@@ -414,7 +415,7 @@ function renderDesktopLedger() {
     openingMap.set(String(item.name), Number.isFinite(value) ? value : 0);
   }
 
-  closeTransactionMarkerPicker();
+  window.cyCloseTransactionMarkerPicker?.();
   window.cyCloseLedgerBalancePopover?.();
   window.cyLedgerBalanceBreakdowns = new Map();
   const calculated = calculateLedgerBalances(allTransactions, openingMap);
