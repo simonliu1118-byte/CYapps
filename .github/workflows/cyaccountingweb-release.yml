@@ -108,6 +108,19 @@ jobs:
             --title "CYAccountingWeb V$RELEASE_VERSION｜正式穩定版" \
             --notes-file "apps/CYAccountingWeb/V$RELEASE_VERSION.txt" --latest=false
 
+      # Explicitly authorized one-time cleanup. Removing a GitHub Release
+      # deletes its published assets but retains the historical Git tag.
+      # Only retire this exact CYAccountingWeb release after V1.0.0 exists.
+      - name: Retire legacy CYAccountingWeb V0.22.15 release
+        if: ${{ success() && env.RELEASE_VERSION == '1.0.0' }}
+        run: |
+          set -euo pipefail
+          legacy_tag='cyaccountingweb-v0.22.15'
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          if gh release view "$legacy_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$legacy_tag" --yes --repo "$GITHUB_REPOSITORY"
+          fi
+
       - name: Remove generated CI files
         if: always()
         working-directory: apps/CYAccountingWeb
