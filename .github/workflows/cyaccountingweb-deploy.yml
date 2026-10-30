@@ -103,6 +103,7 @@ jobs:
           node tests/entry-workflow.mjs
           node tests/transaction-create.mjs
           node tests/transaction-markers.mjs
+          node tests/ledger-loading-viewport.mjs
           node tests/statistics.mjs
           node tests/excel-transfer.mjs
           node tests/period-replacement.mjs
@@ -317,11 +318,11 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=transaction-marker-adaptive" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=ledger-viewport-overlay" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.css?rev=transaction-marker-adaptive" 'Canonical shared ledger presentation'
           verify_asset "$base/adaptive-ui.js?rev=transaction-marker-swipe" 'function setupDesktopEntryQuickTools'
           verify_asset "$base/adaptive-ui.js?rev=transaction-marker-swipe" 'data-desktop-ui-date-value'
-          verify_asset "$base/ledger-tools.js?rev=marker-target-category" 'id="ledgerMonthLoading"'
+          verify_asset "$base/ledger-tools.js?rev=ledger-viewport-render" 'id="ledgerMonthLoading"'
           verify_asset "$base/app.js?rev=marker-target-mutation" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
           verify_asset "$base/login.css?rev=cyweb-login-alignment" '.first-login-help'
           verify_asset "$base/login.js?rev=cyweb-login-alignment" 'async function loadFirstLoginPortal'
