@@ -355,7 +355,7 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=compact-opening-dialog" '#mobileEntrySecondaryButton'
           verify_asset "$base/quick-entry-settings.js?rev=settings-general" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
-          verify_asset "$base/opening-balances.css?rev=account-audit-layout" 'width: min(440px'
+          verify_asset "$base/opening-balances.css?rev=compact-white-list" 'width: min(280px'
           verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" 'setupBackupSettings'
           verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" '/api/backup/recovery/preview'
           verify_asset "$base/app.js?rev=opening-account-audit" 'x-cyacc-book-epoch'

@@ -1,0 +1,13 @@
+CYAccountingWeb V0.25.17（Build 0）
+日期：2026-10-30
+狀態：桌機期初餘額視窗樣式調整，待合併與發布。
+
+- 桌機視窗由 440px 縮為 280px，左右留白由 20px 縮為 14px，金額欄由 156px 縮為 110px。
+- 桌機每列明確使用透明背景，消除共用外觀樣式帶入的灰色色塊；保留白底與帳戶間細分隔線。
+- 修改集中在既有 opening-balances.css；平板與手機樣式、帳務計算、調整紀錄及寫入流程維持原樣。
+- 更新資產 revision、既有部署探測及原有桌機寬度驗證。
+
+驗證：desktop UI、tablet UI、platform parity、部署設定與 build metadata 檢查；另以合成資料確認桌機背景優先序與觸控版不受影響。
+實際瀏覽器排版仍待驗收，不以 DOM 檢查取代視覺驗收。
+CYID Consumer Impact: NONE
+資料庫 Schema：13（不變）

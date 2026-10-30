@@ -1,7 +1,7 @@
 /* Desktop opening balance presentation. Touch utility layouts stay in adaptive-ui.css. */
 html[data-viewport="desktop"] #openingDialog {
-  width: min(440px, calc(100vw - 32px));
-  max-width: 440px;
+  width: min(280px, calc(100vw - 32px));
+  max-width: 280px;
   max-height: calc(100dvh - 48px);
   padding: 0;
   overflow: hidden;
@@ -18,7 +18,7 @@ html[data-viewport="desktop"] #openingDialog[open] {
 html[data-viewport="desktop"] #openingDialog .modal-header {
   flex: 0 0 auto;
   align-items: center;
-  padding: 16px 20px 14px;
+  padding: 16px 14px 14px;
   border-bottom: 1px solid #e9edf2;
 }
 html[data-viewport="desktop"] #openingDialog .modal-header h2 {
@@ -46,7 +46,7 @@ html[data-viewport="desktop"] #openingDialog .opening-list {
   min-height: 0;
   max-height: calc(100dvh - 190px);
   margin: 0;
-  padding: 8px 20px;
+  padding: 8px 14px;
   overflow: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -62,13 +62,14 @@ html[data-viewport="desktop"] #openingDialog .opening-account-entry:last-of-type
   border-bottom: 0;
 }
 html[data-viewport="desktop"] #openingDialog .opening-row {
-  grid-template-columns: minmax(0, 1fr) 156px;
+  grid-template-columns: minmax(0, 1fr) 110px;
   align-items: center;
   gap: 12px;
   min-height: 40px;
   margin: 0;
   padding: 3px 0;
   border: 0;
+  background: transparent;
 }
 html[data-viewport="desktop"] #openingDialog .opening-row > span {
   margin: 0;
@@ -162,7 +163,7 @@ html[data-viewport="desktop"] #openingDialog .opening-reason-field textarea {
 html[data-viewport="desktop"] #openingDialog #openingMessage {
   min-height: 0;
   margin: 0;
-  padding: 4px 20px 8px;
+  padding: 4px 14px 8px;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -174,7 +175,7 @@ html[data-viewport="desktop"] #openingDialog .modal-actions {
   justify-content: flex-end;
   gap: 8px;
   margin: 0;
-  padding: 13px 20px;
+  padding: 13px 14px;
   border-top: 1px solid #e9edf2;
   background: #fff;
 }
