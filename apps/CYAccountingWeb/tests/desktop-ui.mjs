@@ -409,7 +409,7 @@ const ordering = vm.createContext({ Map, Set, Number, String, Boolean, Array, In
   writeLedgerRows: html => { ledgerRows.innerHTML = html; },
   renderLedgerRow(tx, balance) { renderedRows.push({ id: tx.id, balance }); return `<tr data-test-id="${tx.id}">${balance}</tr>`; }
 });
-vm.runInContext("let cyLedgerGroupByAccount = false, cyLedgerDateDescending = false, cyLedgerSearch = ''; let cyLedgerOpeningData = { accounts: [{name:'A',amount:1000},{name:'B',amount:2000}] };", ordering);
+vm.runInContext("const cyLedgerPeriodSearch = { active: false }; let cyLedgerGroupByAccount = false, cyLedgerDateDescending = false, cyLedgerSearch = ''; let cyLedgerOpeningData = { accounts: [{name:'A',amount:1000},{name:'B',amount:2000}] };", ordering);
 vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function renderDesktopLedger()'),
   ledgerSource.indexOf('const LEDGER_ACCOUNT_LIGHT_PALETTE')), ordering);
 vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function updateLedgerHeader()'),

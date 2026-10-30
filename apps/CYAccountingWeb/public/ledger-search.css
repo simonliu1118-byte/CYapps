@@ -68,44 +68,6 @@ html[data-viewport="desktop"] #ledgerSearchForm {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.ledger-period-search-results {
-  min-height: 0;
-  max-height: min(320px, 42dvh);
-  margin: 0 16px 12px;
-  overflow: auto;
-  scrollbar-width: thin;
-}
-.ledger-period-search-results table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-.ledger-period-search-results th,
-.ledger-period-search-results td {
-  padding: 7px 4px;
-  border-bottom: 1px solid #edf0f4;
-  text-align: left;
-  vertical-align: middle;
-  overflow-wrap: anywhere;
-}
-.ledger-period-search-results th { position: sticky; top: 0; background: #f7f9fc; color: #475569; }
-.ledger-period-search-results .num { text-align: right; font-variant-numeric: tabular-nums; }
-.period-search-context { width: 84px; }
-.period-search-value { width: 92px; }
-.period-search-date,
-.period-search-account,
-.period-search-category,
-.period-search-summary,
-.period-search-signed-amount { display: block; }
-.period-search-date,
-.period-search-signed-amount { white-space: nowrap; }
-.period-search-account { margin-top: 3px; color: #64748b; font-size: 12px; }
-.period-search-category { font-weight: 600; }
-.period-search-summary { margin-top: 3px; }
-.period-search-income { color: #216447; }
-.period-search-expense { color: #a53c37; }
-.period-search-view { padding: 3px 4px; border: 0; background: transparent; color: #315fa7; font-size: 12px; }
 .ledger-period-search-actions {
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -114,5 +76,11 @@ html[data-viewport="desktop"] #ledgerSearchForm {
   padding: 12px 16px;
   border-top: 1px solid #e5eaf0;
 }
+/* Pagination belongs to the central ledger head, not to the condition dialog. */
+.ledger-period-search-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid #e5eaf0; }
 #ledgerPeriodSearchPage { margin-right: auto; color: #64748b; font-size: 12px; }
+#ledgerPeriodSearchStatus { color: #475569; font-size: 12px; }
+.ledger-period-search-controls button { min-height: 30px; padding: 4px 9px; font-size: 12px; }
 .ledger-period-search-actions button { min-height: 32px; padding: 5px 9px; font-size: 12px; }
+
+.ledger-period-query-label { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

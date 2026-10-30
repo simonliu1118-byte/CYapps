@@ -6,7 +6,7 @@ let cyLedgerSearch = '';
 let cyLedgerOpeningData = null;
 let cyLedgerRequestId = 0;
 let cyLedgerRenderedMonth = '';
-const cyLedgerPeriodSearch = { criteria: null, pages: [], page: 0, requestId: 0, busy: false };
+const cyLedgerPeriodSearch = { criteria: null, pages: [], page: 0, requestId: 0, busy: false, active: false };
 let cyLedgerSavedTarget = null;
 window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
@@ -32,7 +32,10 @@ function startLedgerTools() {
   setupLedgerToolbar();
   setupLedgerPeriodSearch();
   bindLedgerToolbar();
-  window.addEventListener('cyacc:entry-submitted', () => { cyLedgerSavedTarget = null; });
+  window.addEventListener('cyacc:entry-submitted', () => {
+    cyLedgerSavedTarget = null;
+    if (cyLedgerPeriodSearch.active || cyLedgerPeriodSearch.busy) clearLedgerPeriodSearch();
+  });
 }
 
 function setupLedgerToolbar() {
@@ -82,8 +85,8 @@ function setupLedgerToolbar() {
       <span class="ledger-search-icon" aria-hidden="true">⌕</span>
       <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要" autocomplete="off" inputmode="search" enterkeyhint="search">
       <button class="secondary compact ledger-search-submit" type="submit">搜尋</button>
-      <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
       <button id="ledgerPeriodSearchButton" class="secondary compact" type="button">全帳簿搜尋</button>
+      <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
     </form>
     <div class="ledger-view-tools">
       <button id="ledgerExcelExport" class="secondary compact" type="button" title="匯出目前月份完整帳簿（.xlsx）">匯出 Excel</button>
@@ -95,6 +98,14 @@ function setupLedgerToolbar() {
   ledgerHead.className = 'ledger-sticky-head';
   card.insertBefore(ledgerHead, title);
   ledgerHead.append(title, toolbar);
+  const periodControls = document.createElement('div');
+  periodControls.id = 'ledgerPeriodSearchControls';
+  periodControls.className = 'ledger-period-search-controls';
+  periodControls.hidden = true;
+  periodControls.innerHTML = `<span id="ledgerPeriodSearchPage"></span><span id="ledgerPeriodSearchStatus" role="status" aria-live="polite"></span>
+    <button id="ledgerPeriodSearchPrev" type="button" class="secondary compact" disabled>上一頁</button>
+    <button id="ledgerPeriodSearchNext" type="button" class="secondary compact" disabled>下一頁</button>`;
+  ledgerHead.append(periodControls);
 
   const tableWrap = card.querySelector('.table-wrap');
   if (tableWrap) {
@@ -150,70 +161,59 @@ function setupLedgerPeriodSearch() {
   dialog.className = 'modal ledger-period-search-dialog';
   dialog.setAttribute('aria-labelledby', 'ledgerPeriodSearchTitle');
   dialog.innerHTML = `
-    <div class="modal-header">
-      <h2 id="ledgerPeriodSearchTitle">全帳簿搜尋</h2>
-      <button type="button" class="icon-button" data-close-dialog="ledgerPeriodSearchDialog" aria-label="關閉">×</button>
-    </div>
+    <div class="modal-header"><h2 id="ledgerPeriodSearchTitle">全帳簿搜尋</h2>
+      <button type="button" class="icon-button" data-close-dialog="ledgerPeriodSearchDialog" aria-label="關閉">×</button></div>
     <form id="ledgerPeriodSearchForm" class="ledger-period-search-form">
       <div class="ledger-period-search-months">
         <label><span>起始年月</span><input id="ledgerPeriodSearchStart" type="month" min="0001-01" max="9998-12" required></label>
-        <label><span>結束年月（最長 3 年）</span><input id="ledgerPeriodSearchEnd" type="month" min="0001-01" max="9998-12" required></label>
-      </div>
+        <label><span>結束年月（最長 3 年）</span><input id="ledgerPeriodSearchEnd" type="month" min="0001-01" max="9998-12" required></label></div>
       <div class="ledger-period-search-keyword">
         <label><span>搜尋關鍵字</span><input id="ledgerPeriodSearchKeyword" type="search" maxlength="100" placeholder="摘要、科目或帳戶" autocomplete="off" required></label>
-        <button type="submit" class="primary">搜尋</button>
-      </div>
-    </form>
+        <button type="submit" class="primary">搜尋</button></div></form>
     <div id="ledgerPeriodSearchMessage" class="ledger-period-search-message" role="status" aria-live="polite"></div>
-    <div id="ledgerPeriodSearchResults" class="ledger-period-search-results" hidden></div>
     <div class="modal-actions ledger-period-search-actions">
-      <span id="ledgerPeriodSearchPage"></span>
-      <button id="ledgerPeriodSearchPrev" type="button" class="secondary compact" disabled>上一頁</button>
-      <button id="ledgerPeriodSearchNext" type="button" class="secondary compact" disabled>下一頁</button>
-      <button type="button" class="secondary compact" data-close-dialog="ledgerPeriodSearchDialog">關閉</button>
-    </div>`;
+      <button type="button" class="secondary compact" data-close-dialog="ledgerPeriodSearchDialog">關閉</button></div>`;
   document.body.append(dialog);
-  document.querySelector('#ledgerPeriodSearchForm').addEventListener('submit', event => {
-    event.preventDefault();
-    void searchLedgerPeriod(true);
-  });
-  const clearResults = () => {
-    cyLedgerPeriodSearch.pages = [];
-    cyLedgerPeriodSearch.page = 0;
-    document.querySelector('#ledgerPeriodSearchResults').hidden = true;
-    document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
-    document.querySelector('#ledgerPeriodSearchPage').textContent = '';
-    setLedgerPeriodSearchBusy(false);
-  };
-  document.querySelector('#ledgerPeriodSearchForm').addEventListener('input', clearResults);
-  document.querySelector('#ledgerPeriodSearchForm').addEventListener('change', clearResults);
+  const form = document.querySelector('#ledgerPeriodSearchForm');
+  form.addEventListener('submit', event => { event.preventDefault(); void searchLedgerPeriod(true); });
+  const clearMessage = () => { document.querySelector('#ledgerPeriodSearchMessage').textContent = ''; };
+  form.addEventListener('input', clearMessage);
+  form.addEventListener('change', clearMessage);
   document.querySelector('#ledgerPeriodSearchPrev').addEventListener('click', () => {
     if (cyLedgerPeriodSearch.busy || cyLedgerPeriodSearch.page === 0) return;
     cyLedgerPeriodSearch.page -= 1;
-    renderLedgerPeriodSearch();
+    renderDesktopLedger();
+    document.querySelector('.ledger-card .table-wrap').scrollTop = 0;
   });
-  document.querySelector('#ledgerPeriodSearchNext').addEventListener('click', () => {
-    void searchLedgerPeriod(false);
-  });
-  document.querySelector('#ledgerPeriodSearchResults').addEventListener('click', event => {
+  document.querySelector('#ledgerPeriodSearchNext').addEventListener('click', () => { void searchLedgerPeriod(false); });
+  els.transactionRows.addEventListener('click', event => {
     const button = event.target.closest('[data-ledger-search-view]');
-    if (!button) return;
+    if (!button || !cyLedgerPeriodSearch.active) return;
     const row = cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page]?.transactions
-      .find(item => item.id === Number(button.dataset.ledgerSearchView));
+      .find(item => Number(item.id) === Number(button.dataset.ledgerSearchView));
     if (!row) return;
     const month = row.tx_date.slice(0, 7);
-    dialog.close();
-    if (els.monthFilter.value !== month) {
-      els.monthFilter.value = month;
-      els.monthFilter.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    revealSavedTransaction(row.id, month);
+    clearLedgerPeriodSearch(false);
+    renderLedgerMessage('載入中…');
+    els.monthFilter.value = month;
+    els.monthFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    revealSavedTransaction(Number(row.id), month);
   });
   dialog.addEventListener('close', () => {
+    if (!cyLedgerPeriodSearch.busy) return;
     cyLedgerPeriodSearch.requestId += 1;
-    document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
     setLedgerPeriodSearchBusy(false);
+    clearMessage();
   });
+}
+
+function setLedgerPeriodSearchFields(criteria) {
+  for (const [id, value] of [['Start', criteria.start], ['End', criteria.end], ['Keyword', criteria.q]]) {
+    const input = document.querySelector('#ledgerPeriodSearch' + id);
+    if (input.value === value) continue;
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 }
 
 function openLedgerPeriodSearch() {
@@ -222,59 +222,64 @@ function openLedgerPeriodSearch() {
   const start = document.querySelector('#ledgerPeriodSearchStart');
   const end = document.querySelector('#ledgerPeriodSearchEnd');
   const keyword = document.querySelector('#ledgerPeriodSearchKeyword');
-  for (const input of [start, end]) {
-    if (input.value) continue;
-    input.value = els.monthFilter.value;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-  if (!keyword.value) keyword.value = document.querySelector('#ledgerSummarySearch')?.value || '';
+  setLedgerPeriodSearchFields(cyLedgerPeriodSearch.criteria || {
+    start: start.value || els.monthFilter.value, end: end.value || els.monthFilter.value,
+    q: keyword.value || document.querySelector('#ledgerSummarySearch')?.value || ''
+  });
+  document.querySelector('#ledgerPeriodSearchMessage').textContent = '';
   dialog.showModal();
   keyword.focus();
 }
 
 function setLedgerPeriodSearchBusy(busy) {
   cyLedgerPeriodSearch.busy = busy;
-  document.querySelector('#ledgerPeriodSearchResults').setAttribute('aria-busy', String(busy));
   document.querySelectorAll('#ledgerPeriodSearchForm input, #ledgerPeriodSearchForm button').forEach(control => { control.disabled = busy; });
   document.querySelector('#ledgerPeriodSearchPrev').disabled = busy || cyLedgerPeriodSearch.page === 0;
   document.querySelector('#ledgerPeriodSearchNext').disabled = busy || !cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page]?.nextCursor;
 }
 
-async function searchLedgerPeriod(reset) {
+function clearLedgerPeriodSearch(render = true) {
+  cyLedgerPeriodSearch.requestId += 1;
+  cyLedgerPeriodSearch.active = false;
+  cyLedgerPeriodSearch.pages = [];
+  cyLedgerPeriodSearch.page = 0;
+  cyLedgerPeriodSearch.criteria = null;
+  cyLedgerSearch = '';
+  const keyword = document.querySelector('#ledgerPeriodSearchKeyword');
+  if (keyword) keyword.value = '';
+  const input = document.querySelector('#ledgerSummarySearch');
+  if (input) { input.value = ''; input.placeholder = '搜尋摘要'; }
+  const controls = document.querySelector('#ledgerPeriodSearchControls');
+  if (controls) controls.hidden = true;
+  const status = document.querySelector('#ledgerPeriodSearchStatus');
+  if (status) status.textContent = '';
+  setLedgerPeriodSearchBusy(false);
+  if (render) renderDesktopLedger();
+}
+
+async function searchLedgerPeriod(reset, criteriaOverride = null) {
   if (cyLedgerPeriodSearch.busy) return;
-  const message = document.querySelector('#ledgerPeriodSearchMessage');
+  const dialog = document.querySelector('#ledgerPeriodSearchDialog');
+  const message = document.querySelector(dialog.open ? '#ledgerPeriodSearchMessage' : '#ledgerPeriodSearchStatus');
   let criteria = cyLedgerPeriodSearch.criteria;
   if (reset) {
-    const start = document.querySelector('#ledgerPeriodSearchStart').value;
-    const end = document.querySelector('#ledgerPeriodSearchEnd').value;
-    const keyword = document.querySelector('#ledgerPeriodSearchKeyword').value.trim();
+    const start = criteriaOverride?.start ?? document.querySelector('#ledgerPeriodSearchStart').value;
+    const end = criteriaOverride?.end ?? document.querySelector('#ledgerPeriodSearchEnd').value;
+    const keyword = String(criteriaOverride?.q ?? document.querySelector('#ledgerPeriodSearchKeyword').value).trim();
     const monthIndex = value => Number(value.slice(0, 4)) * 12 + Number(value.slice(5, 7));
     const validMonth = value => /^\d{4}-(0[1-9]|1[0-2])$/.test(value) && value >= '0001-01' && value <= '9998-12';
-    if (!validMonth(start) || !validMonth(end) || start > end) {
-      message.textContent = '請選擇有效的起訖年月，起月不可晚於訖月。';
-      return;
-    }
-    if (monthIndex(end) - monthIndex(start) + 1 > 36) {
-      message.textContent = '搜尋期間不可超過 3 年（36 個月）。';
-      return;
-    }
-    if (!keyword || keyword.length > 100) {
-      message.textContent = '請輸入搜尋關鍵字，最多 100 字。';
-      return;
-    }
+    if (!validMonth(start) || !validMonth(end) || start > end) { message.textContent = '請選擇有效的起訖年月，起月不可晚於訖月。'; return; }
+    if (monthIndex(end) - monthIndex(start) + 1 > 36) { message.textContent = '搜尋期間不可超過 3 年（36 個月）。'; return; }
+    if (!keyword || keyword.length > 100) { message.textContent = '請輸入搜尋關鍵字，最多 100 字。'; return; }
     criteria = { start, end, q: keyword };
-    cyLedgerPeriodSearch.criteria = criteria;
-    cyLedgerPeriodSearch.pages = [];
-    cyLedgerPeriodSearch.page = 0;
-    document.querySelector('#ledgerPeriodSearchResults').hidden = true;
-    document.querySelector('#ledgerPeriodSearchPage').textContent = '';
   }
   const page = reset ? 0 : cyLedgerPeriodSearch.page + 1;
-  const previous = cyLedgerPeriodSearch.pages[page - 1];
-  if (!reset && !previous?.nextCursor) return;
-  if (cyLedgerPeriodSearch.pages[page]) {
+  const previous = reset ? null : cyLedgerPeriodSearch.pages[page - 1];
+  if (!reset && (!cyLedgerPeriodSearch.active || !previous?.nextCursor)) return;
+  if (!reset && cyLedgerPeriodSearch.pages[page]) {
     cyLedgerPeriodSearch.page = page;
-    renderLedgerPeriodSearch();
+    renderDesktopLedger();
+    document.querySelector('.ledger-card .table-wrap').scrollTop = 0;
     return;
   }
   const requestId = ++cyLedgerPeriodSearch.requestId;
@@ -285,9 +290,21 @@ async function searchLedgerPeriod(reset) {
   try {
     const result = await api(`/api/transactions/search?${query.toString()}`);
     if (requestId !== cyLedgerPeriodSearch.requestId) return;
+    if (reset) cyLedgerPeriodSearch.pages = [];
+    cyLedgerPeriodSearch.criteria = criteria;
     cyLedgerPeriodSearch.pages[page] = result;
     cyLedgerPeriodSearch.page = page;
-    renderLedgerPeriodSearch();
+    cyLedgerPeriodSearch.active = true;
+    cyLedgerSearch = '';
+    const input = document.querySelector('#ledgerSummarySearch');
+    input.value = criteria.q;
+    input.placeholder = '搜尋摘要、科目或帳戶';
+    setLedgerPeriodSearchFields(criteria);
+    message.textContent = '';
+    setLedgerPeriodSearchBusy(false);
+    if (dialog.open) dialog.close();
+    renderDesktopLedger();
+    document.querySelector('.ledger-card .table-wrap').scrollTop = 0;
   } catch (error) {
     if (requestId === cyLedgerPeriodSearch.requestId) message.textContent = error.message || '搜尋失敗，請稍後再試。';
   } finally {
@@ -297,20 +314,24 @@ async function searchLedgerPeriod(reset) {
 
 function renderLedgerPeriodSearch() {
   const page = cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page];
-  const results = document.querySelector('#ledgerPeriodSearchResults');
-  const rows = page.transactions || [];
-  document.querySelector('#ledgerPeriodSearchMessage').textContent = rows.length ? '' : '這段期間沒有符合的記錄。';
+  const rows = page?.transactions || [];
+  const criteria = cyLedgerPeriodSearch.criteria;
+  window.cyCloseTransactionMarkerPicker?.();
+  window.cyCloseLedgerBalancePopover?.();
+  window.cyLedgerBalanceBreakdowns = new Map();
+  els.monthSummary.innerHTML = `<span class="ledger-summary-search ledger-period-query-label"><strong>全帳簿搜尋</strong> ${escapeHtml(criteria.start.replace('-', '/'))}–${escapeHtml(criteria.end.replace('-', '/'))}　「${escapeHtml(criteria.q)}」</span>`;
+  const display = document.querySelector('#ledgerDisplayMonth');
+  if (display) display.textContent = '目前顯示｜全帳簿搜尋';
+  updateLedgerHeader();
+  document.querySelector('#ledgerPeriodSearchControls').hidden = false;
+  document.querySelector('#ledgerPeriodSearchStatus').textContent = '';
   document.querySelector('#ledgerPeriodSearchPage').textContent = rows.length
-    ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '';
-  results.hidden = rows.length === 0;
-  results.innerHTML = `<table><colgroup><col class="period-search-context"><col><col class="period-search-value"></colgroup>
-    <thead><tr><th>日期／帳戶</th><th>科目／摘要</th><th class="num">金額</th></tr></thead>
-    <tbody>${rows.map(tx => `<tr><td><time class="period-search-date">${escapeHtml(tx.tx_date.replaceAll('-', '/'))}</time><span class="period-search-account">${escapeHtml(tx.account_name)}</span></td>
-      <td><span class="period-search-category">${escapeHtml(tx.category_name)}</span><span class="period-search-summary">${escapeHtml(tx.summary || '')}</span></td>
-      <td class="num"><span class="period-search-signed-amount period-search-${tx.kind === 'income' ? 'income' : 'expense'}">${tx.kind === 'income' ? '+' : '−'}${money(tx.amount)}</span>
-      <button type="button" class="period-search-view" data-ledger-search-view="${Number(tx.id)}" aria-label="查看 ${escapeHtml(tx.tx_date)} 的這筆記錄">查看</button></td></tr>`).join('')}</tbody></table>`;
-  results.scrollTop = 0;
-  setLedgerPeriodSearchBusy(false);
+    ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '沒有符合的記錄';
+  if (rows.length) writeLedgerRows(rows.map(tx => renderLedgerRow(tx, null, new Map(), false, true)).join(''), {
+    reason: 'period-search', visibleCount: rows.length
+  });
+  else renderLedgerMessage('這段期間沒有符合的記錄。', 'period-search-empty');
+  setLedgerPeriodSearchBusy(cyLedgerPeriodSearch.busy);
 }
 
 function bindLedgerToolbar() {
@@ -318,24 +339,25 @@ function bindLedgerToolbar() {
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
+  els.monthFilter?.addEventListener('change', () => {
+    if (cyLedgerPeriodSearch.active || cyLedgerPeriodSearch.busy) clearLedgerPeriodSearch(false);
+  });
   document.querySelector('#ledgerQuickLockButton')?.addEventListener('click', handleLedgerQuickLock);
   const searchInput = document.querySelector('#ledgerSummarySearch');
   document.querySelector('#ledgerSearchForm')?.addEventListener('submit', event => {
     event.preventDefault();
+    if (cyLedgerPeriodSearch.active) {
+      void searchLedgerPeriod(true, { ...cyLedgerPeriodSearch.criteria, q: searchInput?.value || '' });
+      return;
+    }
     cyLedgerSearch = searchInput?.value.trim() || '';
     renderDesktopLedger();
   });
   searchInput?.addEventListener('input', () => {
-    if (searchInput.value !== '' || cyLedgerSearch === '') return;
-    cyLedgerSearch = '';
-    renderDesktopLedger();
+    if (searchInput.value !== '' || (!cyLedgerSearch && !cyLedgerPeriodSearch.active && !cyLedgerPeriodSearch.busy)) return;
+    clearLedgerPeriodSearch();
   });
-  document.querySelector('#ledgerSearchClear')?.addEventListener('click', () => {
-    const input = document.querySelector('#ledgerSummarySearch');
-    if (input) input.value = '';
-    cyLedgerSearch = '';
-    renderDesktopLedger();
-  });
+  document.querySelector('#ledgerSearchClear')?.addEventListener('click', () => clearLedgerPeriodSearch());
 
   document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', async () => {
     if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerOpening === 'function') {
@@ -586,6 +608,10 @@ function renderDesktopLedger() {
   if (!els.transactionRows || !els.monthFilter) return;
   const month = els.monthFilter.value;
   if (!/^\d{4}-\d{2}$/.test(month)) return;
+  if (cyLedgerPeriodSearch.active) {
+    if (window.cyIsDesktopInteractionWorkspace?.()) return renderLedgerPeriodSearch();
+    clearLedgerPeriodSearch(false);
+  }
 
   const allTransactions = Array.isArray(state.transactions) ? state.transactions : [];
   const openingMap = new Map();
@@ -739,10 +765,10 @@ function splitLedgerAccountName(value) {
   return [chars.slice(0, cut).join(''), chars.slice(cut).join('')];
 }
 
-function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly = false) {
+function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly = false, searchResult = false) {
   const locked = isLocked(String(tx.tx_date || '').slice(0, 7));
   const id = Number(tx.id);
-  if (Number.isInteger(id) && id > 0) {
+  if (balance !== null && Number.isInteger(id) && id > 0) {
     const accounts = [...accountBalances.entries()].map(([name, value]) => ({
       name: String(name || ''),
       value: Number(value) || 0
@@ -789,8 +815,8 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="ledger-category">${highlightedCategory}</td>
     <td class="summary">${highlightedSummary}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
-    <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col">${id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button><button type="button" class="row-action marker" data-marker-id="${id}" aria-haspopup="menu" aria-label="${markerButtonLabel}" title="${markerButtonLabel}" ${document.body.dataset.cyaccReadOnly === 'true' ? 'disabled' : ''}><span aria-hidden="true">●</span></button>`}</td>
+    ${balance === null ? '<td class="num ledger-balance" title="按查看回到該月檢視逐筆餘額">—</td>' : `<td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>`}
+    <td class="action-col">${searchResult ? `<button type="button" class="row-action" data-ledger-search-view="${id}">查看</button>` : id < 0 ? '<span class="hint" role="status">儲存中…</span>' : `<button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button><button type="button" class="row-action marker" data-marker-id="${id}" aria-haspopup="menu" aria-label="${markerButtonLabel}" title="${markerButtonLabel}" ${document.body.dataset.cyaccReadOnly === 'true' ? 'disabled' : ''}><span aria-hidden="true">●</span></button>`}</td>
   </tr>`;
 }
 
@@ -898,6 +924,11 @@ function updateLedgerHeader() {
   const row = document.querySelector('.ledger-card thead tr');
   if (!row) return;
   const desktop = Boolean(window.cyIsDesktopInteractionWorkspace?.());
+  if (cyLedgerPeriodSearch.active) {
+    row.dataset.desktopPresentation = String(desktop);
+    row.innerHTML = '<th aria-sort="descending">日期 ↓</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>';
+    return;
+  }
   row.dataset.desktopPresentation = String(desktop);
   const accountLabel = cyLedgerGroupByAccount ? (desktop ? '帳戶 [分組]' : '帳戶 ▲') : '帳戶';
   const accountTitle = cyLedgerGroupByAccount ? '點擊取消帳戶排列' : '點擊依帳戶排列';
