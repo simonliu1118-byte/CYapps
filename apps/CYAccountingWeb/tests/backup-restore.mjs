@@ -18,7 +18,7 @@ assert.equal(result.liveAccountingModified, false);
 assert.equal(JSON.stringify(source.db.prepare('SELECT * FROM transactions ORDER BY id').all()), unchanged);
 assert.ok(validated.data.transactions[0].summary.includes('DROP TABLE'), 'SQL-like values roundtrip through bound parameters');
 assert.equal(validated.data.transactions[0].markerColor, 'pink', 'backup must retain the chosen highlight color');
-assert.equal(source.db.db.prepare('SELECT marker_color FROM transactions WHERE id=1').get().marker_color, 'pink');
+assert.equal(source.db.prepare('SELECT marker_color FROM transactions WHERE id=1').get().marker_color, 'pink');
 const legacy13 = structuredClone(validated); legacy13.manifest.schemaVersion = 13;
 for (const tx of legacy13.data.transactions) delete tx.markerColor;
 assert.ok(normalizeAccountingRestoreData(legacy13).data.transactions.every(tx => tx.markerColor === null),
