@@ -20,7 +20,7 @@ function gateway(reply={code:0,msg:""}){
   calls++;
   assert.equal(url,"https://invoice-api.amego.tw/json/g0401");
   assert.equal(options.method,"POST");
-  assert.equal(options.redirect,"error");
+  assert.equal(options.redirect,"manual");
   const form=new URLSearchParams(options.body);
   const data=JSON.parse(form.get("data"));
   assert.equal(data.length,1);

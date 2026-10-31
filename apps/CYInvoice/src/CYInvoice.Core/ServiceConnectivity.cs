@@ -18,12 +18,9 @@ public sealed class ServiceConnectionException(string message, Exception? inner 
 // Service reachability is not Employee authorization. Providers retain their
 // original action-time authority checks and their existing protected fallback.
 public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http = null, Action? forgetRejectedAuthority = null,
-    CyIdOfflineCache? cyIdOffline = null, CloudEmployeeCacheStore? builtInCache = null, string? baseDirectory = null,
-    Func<long>? monotonicMilliseconds = null)
+    CyIdOfflineCache? cyIdOffline = null, CloudEmployeeCacheStore? builtInCache = null, string? baseDirectory = null)
 {
-    private long Now => (monotonicMilliseconds ?? (() => Environment.TickCount64))();
     private readonly SemaphoreSlim checkGate = new(1, 1);
-    private long nextAuthorityRefresh;
     private static readonly HttpClient SharedHttp = new() { Timeout = TimeSpan.FromSeconds(8) };
     private readonly HttpClient client = http ?? SharedHttp;
     public ServiceConnectionState? Current { get; private set; }
@@ -61,15 +58,13 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
         var rejected = cloudRequired && (cloud.Result.Rejected
             || Current is { CloudRejected: true } && cloud.Result.Problem.Length != 0);
         if (cloud.Result.Rejected) forgetRejectedAuthority?.Invoke();
-        if (cloud.Result.Problem.Length != 0) nextAuthorityRefresh = default;
         return Current = new(ame.Result.Problem.Length == 0, cloudRequired && cloud.Result.Problem.Length == 0,
             cloudRequired, ame.Result.Problem, cloud.Result.Problem, rejected);
     }
 
     private async Task CheckCloudAsync(Settings current, CancellationToken cancellationToken)
     {
-        var synchronize = current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady
-            && Now >= nextAuthorityRefresh;
+        var synchronize = current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady;
         if (synchronize && cyIdOffline is not null) await cyIdOffline.AuthorityGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -77,7 +72,22 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             var authorities = synchronize && binding is not null && cyIdOffline is not null ? cyIdOffline.AuthorityChecks(binding) : [];
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(current.CloudBaseUrl), "v1/runtime/sync"));
             request.Headers.Authorization = new("Bearer", settings.CloudDeviceToken(current));
-            request.Content = JsonContent.Create(new { synchronize, authorities });
+            var dataDirectory = baseDirectory is null ? null : Path.Combine(baseDirectory, "Data");
+            var seller = current.Environment == Environments.Test ? AmegoDefaults.TestInvoice : current.ProductionInvoice.Trim();
+            var accountKey = current.Environment + "|" + seller;
+            if (dataDirectory is not null && synchronize)
+                CloudAllowanceSubmissionService.RestorePendingIssues(dataDirectory, current.ProductionInvoice, current.CloudWorkspaceId);
+            var allowanceIds = dataDirectory is null || !synchronize ? [] : new InvoiceSyncIssueStore(dataDirectory).Unresolved(accountKey)
+                .Where(i => i.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal)).Select(i => i.OrderId)
+                .Concat(CloudAllowanceSubmissionService.PendingIds(dataDirectory, current.ProductionInvoice)).Distinct().Take(100).ToArray();
+            var cursorScope = "cloud-allowance-cursors:" + current.CloudWorkspaceId + ":" + new Uri(current.CloudBaseUrl).AbsoluteUri;
+            var stateStore = dataDirectory is null || !synchronize ? null : new InvoiceSyncStateStore(dataDirectory);
+            var savedCursors = stateStore?.Checkpoint(accountKey, cursorScope);
+            using var cursors = JsonDocument.Parse(string.IsNullOrEmpty(savedCursors) ? "{}" : savedCursors);
+            var issueCursor = cursors.RootElement.TryGetProperty("issue", out var ic) ? ic.GetString() ?? "" : "";
+            var voidCursor = cursors.RootElement.TryGetProperty("void", out var vc) ? vc.GetString() ?? "" : "";
+            request.Content = JsonContent.Create(new { synchronize, authorities, allowanceIds,
+                allowanceIssueCursor = issueCursor, allowanceVoidCursor = voidCursor });
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new CloudApiException("RUNTIME_SYNC_UNSUPPORTED",
@@ -108,7 +118,6 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 var code = permissions.GetProperty("code").GetString();
                 if (code == "IDENTITY_UNAVAILABLE")
                 {
-                    nextAuthorityRefresh = default;
                     throw new CloudApiException(code, "雲端驗證暫時無法連線。", System.Net.HttpStatusCode.ServiceUnavailable);
                 }
                 throw new InvalidDataException("中央權限已拒絕：" + code);
@@ -130,9 +139,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 || remote.GetProperty("applicationId").GetString() != binding.ApplicationId
                 || remote.GetProperty("workspaceId").GetString() != binding.WorkspaceId))
                 throw new InvalidDataException("CYID 綁定不一致。");
-            if (binding is null && (remote.GetProperty("provider").GetString() != "BUILT_IN"
-                || remote.GetProperty("workspaceId").GetString() != current.CloudWorkspaceId))
-                throw new InvalidDataException("雲端綁定不一致。");
+            if (binding is null) throw new InvalidDataException("此版本只支援 CYID 雲端帳號，舊 Built-in 已退役。");
             if (binding is not null)
             {
                 var updated = binding with { ConsumerVersion = remote.GetProperty("consumerVersion").GetString()! };
@@ -150,13 +157,58 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 if (binding is not null && cyIdOffline is not null)
                     cyIdOffline.InvalidateEmployees(permissions.GetProperty("invalidated").EnumerateArray()
                         .Select(id => id.GetString() ?? throw new InvalidDataException("權限失效清單無效。")).ToHashSet(StringComparer.Ordinal));
-                else if (remote.GetProperty("provider").GetString() == "BUILT_IN" && builtInCache is not null)
+            }
+            if (dataDirectory is not null && root.TryGetProperty("allowances", out var allowances))
+            {
+                if (allowances.ValueKind != JsonValueKind.Array || allowances.GetArrayLength() > 150)
+                    throw new InvalidDataException("Cloud 折讓同步回應無效");
+                var store = new InvoiceSyncIssueStore(dataDirectory);
+                var completedApplications = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var item in allowances.EnumerateArray())
                 {
-                    var snapshot = CloudEmployeeAuthorityClient.ReadSnapshot(permissions);
-                    if (snapshot.WorkspaceId != current.CloudWorkspaceId) throw new InvalidDataException("權限 Workspace 不一致。");
-                    builtInCache.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
+                    var id = item.GetProperty("application_id").GetString()!;
+                    var operation = item.GetProperty("operation").GetString()!;
+                    var state = item.GetProperty("execution_state").GetString()!;
+                    var status = item.GetProperty("status").GetString()!;
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(id, @"^[A-Za-z0-9_-]{8,100}$") ||
+                        operation is not ("issue" or "void") || state is not ("processing" or "problem" or "completed"))
+                        throw new InvalidDataException("Cloud 折讓操作識別無效");
+                    var itemEnvironment = item.TryGetProperty("environment",out var remoteEnvironment)
+                        ? Environments.FromCloud(remoteEnvironment.GetString() ?? "")
+                        : current.Environment; // previous Worker had no environment in the projection
+                    var itemAccount = itemEnvironment+"|"+(itemEnvironment==Environments.Test
+                        ? AmegoDefaults.TestInvoice : current.ProductionInvoice.Trim());
+                    var previousAccount = !item.TryGetProperty("environment",out _) ? null : itemEnvironment==Environments.Test
+                        ? Environments.Production+"|"+current.ProductionInvoice.Trim()
+                        : Environments.Test+"|"+AmegoDefaults.TestInvoice;
+                    var prior = store.CloudProjection(itemAccount, id, operation);
+                    var diagnosticSaved = true;
+                    if (prior?.Status != status || prior.ExecutionState != state) {
+                        var correlation = item.TryGetProperty("request_id", out var requestId) ? requestId.GetString() ?? "runtime" : "runtime";
+                        diagnosticSaved = IssueDiagnosticLog.RecordCloud(dataDirectory, operation, "state_synchronized", correlation, id,
+                            code: item.GetProperty("last_error").GetString(), status: status, executionState: state);
+                    }
+                    store.ApplyCloudAllowance(itemAccount, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "", previousAccount,
+                        item.TryGetProperty("originalInvoiceNumber", out var originalNumber) && originalNumber.ValueKind == JsonValueKind.String ? originalNumber.GetString() : null,
+                        item.TryGetProperty("originalOrderId", out var originalOrder) && originalOrder.ValueKind == JsonValueKind.String ? originalOrder.GetString() : null);
+                    if (!diagnosticSaved) {
+                        var currentIssue = store.Unresolved(itemAccount).FirstOrDefault(x => x.OrderId == id && x.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal));
+                        if (currentIssue is not null) store.UpdateMessage(currentIssue.Id, currentIssue.Message + "；程式同目錄 log 寫入失敗，請確認權限與磁碟空間。");
+                    }
+                    if (state == "completed" || status is "withdrawn" or "rejected")
+                        completedApplications.Add(id);
                 }
-                nextAuthorityRefresh = Now + 60_000;
+                CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, completedApplications);
+                if (stateStore is not null && root.TryGetProperty("allowanceCursors", out var nextCursors))
+                {
+                    foreach (var name in new[] { "issue", "void" })
+                    {
+                        var cursor = nextCursors.GetProperty(name).GetString() ?? throw new InvalidDataException("Cloud 折讓游標無效");
+                        if (cursor.Length != 0 && !System.Text.RegularExpressions.Regex.IsMatch(cursor, @"^[A-Za-z0-9_-]{8,100}$"))
+                            throw new InvalidDataException("Cloud 折讓游標無效");
+                    }
+                    stateStore.SaveCheckpoint(accountKey, cursorScope, nextCursors.GetRawText());
+                }
             }
         }
         catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException

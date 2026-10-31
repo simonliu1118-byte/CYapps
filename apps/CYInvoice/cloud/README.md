@@ -1,14 +1,14 @@
 # CYInvoice Cloud Reference Backend
 
-目前 canonical migration 為 0019；原始碼 SCHEMA_VERSION=19 僅為待部署目標。原 D1／Worker 仍依先前本機回報為 schema18。原 Worker 若需 18→19，必須先在另行授權的本機 MCP 完成原 D1 0019／備份及額度審核，再明確指定 CYINVOICE_SCHEMA_UPGRADE=18:19（workflow 的 schema_upgrade 選項）；四道折讓旗標必須全關，其他設定與 Secrets 保留。一般 code-only 部署不會默默改 runtime schema；未完成遷移或部署一律拒絕。操作清單見 ../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
+目前canonical migration為0022。使用者2026-10-27本機報告確認，原Worker Cloud 0.9.6已部署Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`，storageSchemaVersion／marker22，正常API／g0401／g0501三旗標均true、舊人工兩旗標未設定。原服務／綁定及其他設定保留，本批無migration或CYID D1操作。指定Local快照及原D1限定六表舊案盤點完成；真人財務驗收仍待完成。詳見[本機完成摘要](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不因本文件更新重做遠端操作。
 
-> **2026-10-18 最新 Source 狀態**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
+> **2026-10-18 歷史 Source checkpoint**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
 
 Cloudflare Worker + D1 reference implementation for CYInvoice coordination. **V3.0 source supports CYID-only online Employee authority; Local requires no Worker.** Requests with missing or disabled CYID authority fail closed before any Device or legacy account mutation. Built-in/self-hosted deployments are historical and are no longer available as current V3.0 Worker operation. Prior releases, migrations and historical records remain preserved; this code change does not delete any D1 tables.
 
-AMEGO remains authoritative for invoice / void / allowance business state. Existing Windows business calls still use the original local DPAPI-protected App Key. V3.0 introduces a staged encrypted CYID company-card store, but the Worker API is DISABLED by default and requires COMPANY_SETTINGS_ENABLED=true and a reviewed schema >=15; the company-card GET/UPDATE API only returns safe status, never secrets. Secure use of the new card by Windows AMEGO/MO paths is not yet shipped and must not be inferred from this route.
+AMEGO remains authoritative for invoice / void / allowance business state. Windows uses its DPAPI-protected settings; authorized CYID Devices synchronize the existing encrypted company card. Normal Cloud allowance sends use the persisted application environment and current reviewed card authority. Ordinary company-card GET/UPDATE returns safe status; credential synchronization has its own active-Device authorization and revision checks. The user has verified card selection/edit/sync/restart delivery, while actual financial keys and positive transactions remain unverified.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Windows V2.6.19 Build 0 is released; source and the original development Worker are Cloud 0.9.3 with CYID_ENABLED=true and the company D1 in CYID_ONLY profile. Predecessor PRs #216/#379 were merged through #380. Deployment and private maintenance evidence are summarized in [the current handoff](../docs/V3_1_HANDOFF.md); remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Historical baseline: Windows V2.6.19 Build 0 and Cloud 0.9.3 introduced the already activated CYID_ONLY company deployment. Current runtime status is the 0.9.6 completion summary above. Predecessor PRs #216/#379 were merged through #380. Deployment and private maintenance evidence are summarized in [the current handoff](../docs/V3_1_HANDOFF.md); remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## CYID-only D1 Employee table retirement (company maintenance completed 2026-10-13)
 
@@ -22,9 +22,9 @@ The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no long
 - Runtime compatibility removes a hidden `cloud_employees` SQL reference in CYID Device rename; Built-in Device rename still checks the Built-in Employee table.
 - Maintenance is **not** run by any CI, GitHub workflow or cloud deployment. The prerequisite is a separately approved, private, atomic and recoverable operation against the verified original business D1, after a compatible Worker deployment and read-only inventory. The source change itself does not execute maintenance; the company operation was separately approved and completed on 2026-10-13 without a test Worker. See `../docs/CLOUD_IDENTITY_LIFECYCLE.md` §20.
 
-## Current compatibility
+## Historical schema16 compatibility checkpoint
 
-V3.1-D source now includes canonical `0016_non_allowance_work_items.sql` and storage marker 16. The SQL behavior is unchanged from the reviewed draft. Work Item routes remain opt-in; a source merge does not enable `WORK_ITEMS_ENABLED` or deploy resources. Apply only to the verified original schema15/CYID_ONLY database after a private recoverable backup and continuity checks; do not replay 0014/0015. Actual remote state is recorded in private local MCP readback. The storage13 deployment details below are historical checkpoints.
+V3.1-D source included canonical `0016_non_allowance_work_items.sql` and storage marker 16. The SQL behavior is unchanged from the reviewed draft. Work Item routes remain opt-in; a source merge does not enable `WORK_ITEMS_ENABLED` or deploy resources. Apply only to the verified original schema15/CYID_ONLY database after a private recoverable backup and continuity checks; do not replay 0014/0015. Actual remote state is recorded in private local MCP readback. The storage13 deployment details below are historical checkpoints.
 
 - Service: `cyinvoice-cloud`
 - Cloud implementation source and original development Worker: `0.9.3`, CYID_ENABLED=true; company storage profile `CYID_ONLY`.
@@ -53,6 +53,12 @@ Remote actions must be deliberate:
 Use the reviewed development workflow below. The default config has no runnable remote D1 ID; do not replace its placeholder with a real identifier in Git. Direct remote commands require the preflight-generated private config and the same deployment/history gates.
 
 Do not infer remote deployment state from source or CI alone.
+
+### Normal allowance activation (completed 2026-10-27; Cloud 0.9.6, schema22)
+
+The user authorized normal g0401/g0501 activation on 2026-10-26 and reported its completion on 2026-10-27. The deployed source is `25ae151ed880cb6256a4cc1e01ce499145a802b7`; the three normal flags are true and the two legacy manual flags remain unset. The following describes the completed deployment mechanism; do not replay it merely to update documentation. Source readiness alone is not remote activation. Use the existing deployment owner with `CYINVOICE_DEPLOYMENT_MODE=deploy` and `CYINVOICE_ALLOWANCE_ACTIVATION=enable`, without a schema-upgrade intent. The same private checkpoint must cover before/deploy/after. It preserves the original Worker/D1, consumer scopes, services, secrets and unrelated vars; only the three normal allowance flags become true. Existing legacy manual/collision flags become false and absent ones remain absent. No migration or Identity D1 access is involved. See [the local MCP handoff](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md).
+
+Financial environment comes from the created application and is subsequently read from its persisted row, including recovery. `APP_ENV` is only a deployment label. AMEGO test credentials are the vendor's public pair; production uses the existing company card. Frozen card ownership, revision and authority checks remain unchanged.
 
 ### Preserving an already activated installation
 

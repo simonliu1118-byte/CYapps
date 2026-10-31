@@ -168,7 +168,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
             return false;
         }
 
-        using var form = new EmployeeAdminLoginForm(repository.Employees, "加入雲端空間權限驗證");
+        using var form = new EmployeeAdminLoginForm(repository.Employees);
         if (form.ShowDialog(this) != DialogResult.OK || form.AuthenticatedEmployee is null)
         {
             DialogResult = DialogResult.Cancel;

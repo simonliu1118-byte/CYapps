@@ -111,6 +111,19 @@ assert.equal(auth.body.principal.workspaceId, 'ws_identity');
 assert.equal(auth.body.principal.employeeId, 'emp_owner');
 assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
 
+// Pending summaries use the existing active Device/app scope, not a user
+// session. Actual details and mutations still require employee authentication.
+const listPathsBefore=paths.length;
+const listSessionsBefore=provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n;
+const deviceQueue=await call('/v1/work-items/list',{limit:20},tokens[0],{WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'22'});
+assert.equal(deviceQueue.status,200,JSON.stringify(deviceQueue));
+assert.deepEqual(deviceQueue.body.items,[]);
+assert.equal(paths.length,listPathsBefore,'opening the pending list must not initiate a CYID user login');
+assert.equal(provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n,listSessionsBefore);
+const protectedDetails=await call('/v1/work-items/get',{itemId:'wi_synthetic_missing'},tokens[0],{WORK_ITEMS_ENABLED:'true',SCHEMA_VERSION:'22'});
+assert.equal(protectedDetails.status,400);
+assert.equal(protectedDetails.body.error.code,'INVALID_LOGIN_REQUEST');
+
 // A V3.0 company card never activates just because the Worker contains its
 // source. It needs an explicit flag AND installed schema 0014+0015.
 // No real D1/Worker is modified by this synthetic exercise.
@@ -120,7 +133,7 @@ const companyCredentials = credentials;
 const cyIdReadsBeforeOversize = paths.length;
 const oversizeCompany = await call('/v1/company-settings/get',
   {...companyCredentials,extra:'x'.repeat(4096)}, tokens[0],
-  {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'15'});
+  {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'22'});
 assert.equal(oversizeCompany.status,413);
 assert.equal(oversizeCompany.body.error.code,'REQUEST_TOO_LARGE');
 const streamed = new Request('https://invoice.example.test/v1/device-recovery/preview',{
@@ -141,7 +154,7 @@ assert.equal(rejectedStream.status,413);
 assert.equal((await rejectedStream.json()).error.code,'REQUEST_TOO_LARGE');
 assert.equal(paths.length,cyIdReadsBeforeOversize,
   'Oversized V3 company/recovery payloads must never invoke CYID Login');
-const disabledProvision = await call('/v1/company-settings/provision',companyCredentials);
+const disabledProvision = await call('/v1/company-settings/sync',companyCredentials);
 assert.equal(disabledProvision.status,503);
 assert.equal(disabledProvision.body.error.code,'COMPANY_SETTINGS_NOT_READY');
 const disabledCard = await call('/v1/company-settings/get',companyCredentials);
@@ -155,7 +168,7 @@ assert.equal((await call('/v1/device-recovery/claim',credentials,tokens[0],
 assert.equal((await call('/v1/company-settings/get',companyCredentials,tokens[0],
   {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'13'})).status,503);
 // Canonical migration 0015 was already applied by database('migrations').
-const companyEnabled = {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'15',
+const companyEnabled = {COMPANY_SETTINGS_ENABLED:'true',SCHEMA_VERSION:'22',
   COMPANY_SETTINGS_KEY_HEX:'ab'.repeat(32)};
 const initialCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);
 assert.equal(initialCard.status,200);
@@ -165,13 +178,13 @@ const companyEdit = {...companyCredentials,expectedRevision:0,sellerInvoice:'123
   moExcelPassword:{action:'replace',value:'SYNTHETIC_MO_TEST_ONLY'}};
 const createdCard = await call('/v1/company-settings/update',companyEdit,tokens[0],companyEnabled);
 assert.equal(createdCard.status,200,JSON.stringify(createdCard.body));
-assert.deepEqual(createdCard.body.company,{sellerInvoice:'12345678',revision:1,
+assert.deepEqual(createdCard.body.company,{sellerInvoice:'12345678',companyName:'',revision:1,
   hasAmegoAppKey:true,hasMoExcelPassword:true});
-const liveCredentials = await call('/v1/company-settings/provision',
-  companyCredentials,tokens[0],companyEnabled);
+const liveCredentials = await call('/v1/company-settings/sync',
+  {knownRevision:0},tokens[0],companyEnabled);
 assert.equal(liveCredentials.status,200);
 assert.deepEqual(liveCredentials.body.credentials,{
-  sellerInvoice:'12345678',revision:1,
+  sellerInvoice:'12345678',companyName:'',revision:1,
   amegoAppKey:'SYNTHETIC_APP_KEY_FOR_TEST_ONLY',moExcelPassword:'SYNTHETIC_MO_TEST_ONLY'
 });
 const retrievedCard = await call('/v1/company-settings/get',companyCredentials,tokens[0],companyEnabled);
@@ -187,8 +200,8 @@ assert.equal((await call('/v1/company-settings/update',companyEdit,tokens[0],com
 provider.db.prepare("UPDATE employees SET role_key='ADMIN' WHERE employee_id='emp_user'").run();
 assert.equal((await call('/v1/company-settings/get',{employeeNo:'0002',password:pass},
   tokens[0],companyEnabled)).status,200);
-assert.equal((await call('/v1/company-settings/provision',
-  {employeeNo:'0002',password:pass},tokens[0],companyEnabled)).status,403);
+assert.equal((await call('/v1/company-settings/sync',
+  {knownRevision:0},tokens[0],companyEnabled)).status,200);
 assert.equal((await call('/v1/company-settings/update',{...companyEdit,employeeNo:'0002',password:pass,
   expectedRevision:1},tokens[0],companyEnabled)).status,403);
 provider.db.prepare("UPDATE employees SET role_key='USER' WHERE employee_id='emp_user'").run();
@@ -390,3 +403,17 @@ try {
 assert.equal(consumer.db.prepare('PRAGMA foreign_key_check').all().length, 0);
 console.log('PASS CYID real-provider authentication, runtime sync, device rename and invitations after physical Built-in table removal');
 
+
+// Exercise the real health handler rather than matching an old wrapper's source text.
+const {default:onboarding}=await moduleFrom('src/device-onboarding.ts');
+for(const storageSchema of ['21','22']){
+ const health=await onboarding.fetch(new Request('https://synthetic.invalid/v1/health'),{
+  DB:{prepare(sql){assert.equal(sql,'SELECT 1 AS ok');return{async first(){return{ok:1};}};}},
+  APP_ENV:'development',API_VERSION:'1',SCHEMA_VERSION:storageSchema,CYID_ENABLED:'true',IDENTITY:{fetch(){throw Error('health must not log in');}}
+ });
+ const body=await health.json();assert.equal(health.status,200);
+ assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.11');
+ const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
+ assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
+}

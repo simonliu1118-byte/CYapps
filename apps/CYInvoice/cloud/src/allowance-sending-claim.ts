@@ -5,8 +5,8 @@
 // service may invoke this immediately before its one and only provider POST.
 // An ambiguous database result is ALWAYS readback-only, never retry-send.
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
-import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
-import {loadAmegoCompanySettingsForGateway} from "./company-settings";
+import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext,StoredCloudAllowance} from "./allowance-frozen-store";
+import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from "./company-settings";
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {allowanceNumberFromSequence,hasCollisionReservationAudit} from "./allowance-number-reservation";
 
@@ -30,6 +30,9 @@ interface LedgerRow {
  request_hash:string;created_by_device_id:string;
 }
 export interface CloudAllowanceSendingClaim {
+ approvedRequest:StoredCloudAllowance;
+ managerActorId:string;
+ managerWorkspaceRole:AllowanceActor["workspaceRole"];
  applicationId:string;
  ledgerId:string;
  allowanceNumber:string;
@@ -128,7 +131,7 @@ export async function claimCloudAllowanceOneShotSending(
  // Do NOT accept browser-supplied official balances. Make new signed
  // invoice_query + allowance_query read-only calls for ALL historical numbers.
  const proof=await reconcileOfficialAllowanceForOriginal(frozen,{
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey
+  ...amegoCredentialsForEnvironment(company,ctx.environment)
  },transport,clock);
  const date=nowUtc(clock),at=date.toISOString();
  const checked=Date.parse(proof.officialCheckedAtUtc);
@@ -138,8 +141,7 @@ export async function claimCloudAllowanceOneShotSending(
  proof.requestedGross!==(BigInt(frozen.requestedGross)*10000000n).toString()||
  proof.approvalRecorded!==false||proof.numberReserved!==false||
  !Number.isFinite(checked)||checked>date.valueOf()+1000||
- date.valueOf()-checked>60_000||
- !(Date.parse(grant.valid_until_utc)>date.valueOf()))
+ date.valueOf()-checked>60_000)
   throw new Error("ALLOWANCE_SENDING_OFFICIAL_CHANGED_OR_GRANT_EXPIRED");
  const second=await authority.revalidate();
  if(!sameManager(first,second,t.workspaceId)||
@@ -164,10 +166,6 @@ export async function claimCloudAllowanceOneShotSending(
  AND request_hash=?6 AND created_by_device_id=?7
  AND seller_invoice=?8 AND environment=?9 AND allowance_day=?10
  AND sequence=?11 AND attempt=?16 AND collision_code IS NULL
- ${ledger.attempt>1?`AND EXISTS(SELECT 1 FROM allowance_manual_review_audit r
-   WHERE r.next_ledger_id=allowance_number_ledger.ledger_id
-   AND r.workspace_id=?3 AND r.application_id=?4
-   AND r.disposition='external_collision_reserved')`:""}
  AND EXISTS (
   SELECT 1 FROM allowance_applications a
   JOIN allowance_frozen_requests f ON f.application_id=a.application_id
@@ -186,7 +184,6 @@ export async function claimCloudAllowanceOneShotSending(
    AND p.reviewed_revision=?12-1
    AND p.manager_actor_id=?13 AND p.manager_device_id=?7
    AND p.request_hash=?6 AND p.official_snapshot_hash=?15
-   AND p.valid_until_utc>?1
    AND d.status='active' AND d.employee_authority_state='cloud'
    AND w.status='active'
   )
@@ -210,12 +207,13 @@ export async function claimCloudAllowanceOneShotSending(
   // every new invocation fails read-only at the ledger guard above.
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
  }
- if(result.meta.changes!==1)
+ if((!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0))
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
  const after=await authority.revalidate();
  if(!sameManager(first,after,t.workspaceId)||!await activeDevice(db,t))
   throw new Error("ALLOWANCE_SENDING_READBACK_ONLY");
- return {applicationId:t.applicationId,ledgerId:t.ledgerId,
+ return {approvedRequest:frozen,managerActorId:first.employeeId,managerWorkspaceRole:first.workspaceRole,
+  applicationId:t.applicationId,ledgerId:t.ledgerId,
   allowanceNumber:t.allowanceNumber,requestHash:frozen.requestHash,
   officialEvidenceHash:proof.officialEvidenceHash,status:"sending",
   claimedExactlyOnce:true,providerPostPerformed:false,

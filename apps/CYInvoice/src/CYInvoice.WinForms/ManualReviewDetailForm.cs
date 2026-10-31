@@ -1,3 +1,5 @@
+using CYInvoice.Core;
+
 namespace CYInvoice.WinForms;
 
 internal enum ManualReviewDetailAction
@@ -27,7 +29,8 @@ internal sealed class ManualReviewDetailForm : Form
         bool allowCancelReturn = false,
         bool allowAdministrativeClose = false,
         bool primaryDanger = false,
-        string secondaryActionText = "")
+        string secondaryActionText = "",
+        IReadOnlyList<InvoiceItem>? originalItems = null)
     {
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
@@ -39,7 +42,9 @@ internal sealed class ManualReviewDetailForm : Form
 
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var row in rows) AddRow(row.Key, row.Value);
+        foreach (var row in rows)
+            if (row.Key == "原發票商品" && originalItems is not null) AddProducts(originalItems);
+            else AddRow(row.Key, row.Value);
 
         var scroller = new Panel
         {
@@ -124,6 +129,32 @@ internal sealed class ManualReviewDetailForm : Form
         SelectedAction = action;
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    private void AddProducts(IReadOnlyList<InvoiceItem> items)
+    {
+        AddRow("原發票商品", "");
+        var row=details.RowCount-1;
+        var old=details.GetControlFromPosition(1,row)!;
+        details.Controls.Remove(old); old.Dispose();
+        var grid=new DataGridView {
+            Dock=DockStyle.Fill, ReadOnly=true, AllowUserToAddRows=false,
+            AllowUserToDeleteRows=false, AllowUserToResizeRows=false,
+            RowHeadersVisible=false, MultiSelect=false,
+            AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill,
+            BackgroundColor=Color.White, BorderStyle=BorderStyle.FixedSingle,
+            Height=28+Math.Clamp(items.Count,1,5)*26, MinimumSize=new Size(0,54),
+            Margin=new Padding(0,4,0,8), EnableHeadersVisualStyles=false
+        };
+        foreach (var title in new[] {"品名","數量","單價","金額"}) grid.Columns.Add(title,title);
+        grid.Columns[0].FillWeight=180;
+        for (var i=1;i<4;i++) { grid.Columns[i].FillWeight=65; grid.Columns[i].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight; }
+        grid.ColumnHeadersDefaultCellStyle.BackColor=SystemColors.Control;
+        foreach (var item in items) grid.Rows.Add(item.Description,
+            item.QuantityDecimal.Length>0?item.QuantityDecimal:item.Quantity.ToString(),
+            item.UnitPriceDecimal.Length>0?item.UnitPriceDecimal:item.UnitPrice.ToString(),
+            item.AmountDecimal.Length>0?item.AmountDecimal:item.Amount.ToString());
+        details.Controls.Add(grid,1,row);
     }
 
     private void AddRow(string label, string value)

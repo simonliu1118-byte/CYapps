@@ -538,6 +538,7 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         try
         {
+            await RefreshCompanyForUseAsync();
             var draft = BuildDraft(true);
             NameLookup lookup = new();
             if (draft.CompanyBuyer)
@@ -574,24 +575,26 @@ internal sealed class InvoiceEntryControl : UserControl
         finally { Enabled = true; }
     }
 
-    private Task ImportDigiwinAsync()
+    private async Task ImportDigiwinAsync()
     {
         using var dialog = FileDialog("Excel 檔案 (*.xlsx)|*.xlsx");
-        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
+            await RefreshCompanyForUseAsync();
             using var confirmation = ImportConfirmationForm.ForDigiwin(repository, service, recordsChanged, dialog.FileName);
             confirmation.ShowDialog(FindForm());
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "鼎新ERP 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        return Task.CompletedTask;
+        return;
     }
 
-    private Task ImportMoAsync()
+    private async Task ImportMoAsync()
     {
         string password;
         try
         {
+            await RefreshCompanyForUseAsync(requiresMoPassword: true);
             password = repository.Settings.MoPassword(repository.Settings.LoadOrCreate());
         }
         catch (Exception)
@@ -601,31 +604,49 @@ internal sealed class InvoiceEntryControl : UserControl
                 "尚未設定 MO店+ Excel 密碼",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
-            return Task.CompletedTask;
+            return;
         }
 
         using var dialog = FileDialog("Excel 檔案 (*.xls;*.xlsx;*.xlsm)|*.xls;*.xlsx;*.xlsm");
-        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
             using var confirmation = ImportConfirmationForm.ForMo(repository, service, recordsChanged, dialog.FileName, password);
             confirmation.ShowDialog(FindForm());
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "MO店+ 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        return Task.CompletedTask;
+        return;
     }
 
-    private Task ImportCoupangAsync()
+    private async Task ImportCoupangAsync()
     {
         using var dialog = FileDialog("Excel 檔案 (*.xls;*.xlsx;*.xlsm)|*.xls;*.xlsx;*.xlsm");
-        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
+            await RefreshCompanyForUseAsync();
             using var confirmation = ImportConfirmationForm.ForCoupang(repository, service, recordsChanged, dialog.FileName);
             confirmation.ShowDialog(FindForm());
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "酷澎匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        return Task.CompletedTask;
+        return;
+    }
+
+    private async Task RefreshCompanyForUseAsync(bool requiresMoPassword = false)
+    {
+        var before = repository.Settings.LoadOrCreate();
+        // MO imports also need the single company password in test mode.
+        if (before.CloudMode == CloudModes.LocalOnly || before.Environment == Environments.Test && !requiresMoPassword) return;
+        try
+        {
+            var card = await repository.RefreshCompanyCardAsync();
+            if (card is not null && (!card.HasAmegoAppKey || !card.HasMoExcelPassword))
+                throw new InvalidOperationException("公司卡尚未完整設定，請由超管補齊。");
+        }
+        catch (Exception error) when (repository.Connections.Current is { UsesExistingFallback: true } &&
+            (error is HttpRequestException or TaskCanceledException || error is CYInvoice.Core.Cloud.CloudApiException { StatusCode: >= System.Net.HttpStatusCode.InternalServerError }))
+        { /* Existing protected offline rules still authorize the operation itself. */ }
+        RefreshEnvironment();
     }
 
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };

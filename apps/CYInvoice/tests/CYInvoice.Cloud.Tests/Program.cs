@@ -6,17 +6,23 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("desktop decimal draft JSON matches the Workers financial contract fixture", () => { AllowanceDecimalContractTests.Run(); return Task.CompletedTask; }),
+    ("allowance log privacy, correlation, contract and state projection", AllowanceDiagnosticsTests.RunAsync),
+    ("Cloud allowance submit preserves task and original ID after lost receipt", CloudAllowanceSubmissionWorkflowTests.RunAsync),
+    ("single-company automatic Device synchronization and atomic DPAPI update", CloudCompanySynchronizationTests.RunAsync),
     ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
     ("revoked-device durable recovery wipes Logs and portable runtime", LocalResetCoordinatorTests.RunAsync),
-    ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),
+    ("identity runtime supports Local and CYID only and refuses retired Built-in authority", IdentityProviderFoundationTests.RunAsync),
     ("CYID gateway, protected offline authority and invalidation", CyIdIdentityProviderTests.RunAsync),
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),
     ("independent service states, existing 503 fallback, both-outage block and Local recovery", ServiceConnectivityTests.RunAsync),
     ("cloud company-card status does not replace Windows business credentials", CloudCompanySettingsUsageTests.RunAsync),
     ("V3 recovery transport, Unicode credentials and durable pending restart", CloudRecoveryClientTests.RunAsync),
     ("V3.1 manager read-only cloud Work Item list/get and strict server reply", CloudWorkItemClientTests.RunAsync),
-    ("V3.2 CYID allowance client create/list/review/approve/reserve and no retry", CloudAllowanceClientTests.RunAsync),
-    ("V3.2 Cloud manager collision reservation, evidence history and no retry", CloudAllowanceCollisionClientTests.RunAsync),
+    ("V3.2 CYID allowance client full details and single approval with automatic result", CloudAllowanceClientTests.RunAsync),
+    ("V3.2 E CYID void application and original-ID strict readback", CloudAllowanceClientTests.RunVoidAsync),
+    ("V3.2 E CYID employee offline/online original-ID no-blind-create readback", CloudAllowanceClientTests.RunVoidReconnectAsync),
+    ("V3.2 E CYID manager approves once without typed number or separate send", CloudAllowanceClientTests.RunVoidManagerAsync),
     ("V3.2 applicant frozen draft and original application ID envelope", CloudAllowanceSubmissionTests.RunAsync),
     ("V3.1 opaque local issue references and allowance separation", () => { CloudLocalWorkItemReferenceTests.Run(); return Task.CompletedTask; }),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
@@ -32,13 +38,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud pairing code requires email authorization OTP", TestPairingAsync),
     ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync),
     ("invitation join identifies Workspace before creating its Device", TestDirectJoinClientAsync),
-    ("connected device can issue, inspect, and revoke an invitation", TestInvitationManagementAsync),
-    ("central employee reconciliation sends only the existing Local SUPER_ADMIN profile", TestEmployeeReconciliationAsync),
-    ("central employee listing parses Workspace roles", TestEmployeeListAsync),
-    ("central employee update requires execution-time actor credentials", TestEmployeeAccountUpdateAsync),
-    ("central employee Email change requires OTP confirmation", TestEmployeeEmailUpdateAsync),
-    ("central enabled and password operations never send plaintext new password", TestEmployeeEnabledAndPasswordAsync),
-    ("cloud password recovery uses Email OTP and never sends plaintext password", TestEmployeePasswordRecoveryAsync)
+    ("connected device can issue, inspect, and revoke an invitation", TestInvitationManagementAsync)
 };
 
 var failures = new List<string>();
@@ -568,210 +568,6 @@ static async Task TestInvitationManagementAsync()
     var recent = await client.GetRecentJoinTicketsAsync();
     Equal(invitationId, recent.Invitation?.Id ?? string.Empty, "persisted invitation status");
     await client.RevokeInvitationAsync(invitationId, "0001", "test-password");
-}
-
-static async Task TestEmployeeReconciliationAsync()
-{
-    const string token = "cydev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-    var local = new EmployeeAccount(
-        "0001",
-        "X",
-        "owner@example.test",
-        EmployeeRoles.SuperAdmin,
-        true,
-        DateTimeOffset.Parse("2026-09-21T00:00:00Z"),
-        DateTimeOffset.Parse("2026-09-21T00:00:00Z"));
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal(HttpMethod.Post, request.Method, "employee reconciliation method");
-        Equal("/v1/employees/reconcile-local", request.RequestUri?.AbsolutePath ?? string.Empty,
-            "employee reconciliation path");
-        Equal("Bearer", request.Headers.Authorization?.Scheme ?? string.Empty, "employee reconciliation bearer scheme");
-        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "employee reconciliation Device token");
-        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var body = JsonDocument.Parse(payload);
-        var candidate = body.RootElement.GetProperty("localSuperAdmin");
-        Equal("0001", candidate.GetProperty("employeeNo").GetString() ?? string.Empty, "local SUPER_ADMIN employee number");
-        Equal("X", candidate.GetProperty("name").GetString() ?? string.Empty, "local SUPER_ADMIN name");
-        Equal("owner@example.test", candidate.GetProperty("email").GetString() ?? string.Empty, "local SUPER_ADMIN email");
-        True(!candidate.TryGetProperty("password", out _), "local password must never be sent to central employee reconciliation");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"reconciliation":{"state":"owner_created","employee":{"employeeId":"emp_1","employeeNo":"0001","name":"X","email":"owner@example.test","role":"SUPER_ADMIN","enabled":true}}}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeClient(http, new Uri("https://cloud.example.test/"), token);
-    var result = await client.ReconcileLocalSuperAdminAsync(local);
-    Equal("owner_created", result.State, "employee reconciliation state");
-    True(result.CentralRoleReady, "central role should be ready after owner creation");
-    Equal("SUPER_ADMIN", result.Employee?.Role ?? string.Empty, "central owner role");
-    Equal("0001", result.Employee?.EmployeeNo ?? string.Empty, "central owner employee number");
-}
-
-static async Task TestEmployeeListAsync()
-{
-    const string token = "cydev_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal(HttpMethod.Get, request.Method, "employee list method");
-        Equal("/v1/employees", request.RequestUri?.AbsolutePath ?? string.Empty, "employee list path");
-        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "employee list Device token");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"employees":[{"employeeId":"emp_x","employeeNo":"0001","name":"X","email":"x@example.test","role":"SUPER_ADMIN","enabled":true},{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"ADMIN","enabled":true}]}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeClient(http, new Uri("https://cloud.example.test/"), token);
-    var employees = await client.ListEmployeesAsync();
-    Equal(2, employees.Count, "central employee count");
-    Equal("SUPER_ADMIN", employees[0].Role, "first central employee role");
-    Equal("ADMIN", employees[1].Role, "second central employee role");
-}
-
-static async Task TestEmployeeAccountUpdateAsync()
-{
-    const string token = "cydev_1111111111111111111111111111111111111111111111111111111111111111";
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal(HttpMethod.Post, request.Method, "employee update method");
-        Equal("/v1/employees/update/challenge", request.RequestUri?.AbsolutePath ?? string.Empty, "employee update path");
-        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "employee update Device token");
-        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var body = JsonDocument.Parse(payload);
-        Equal("0001", body.RootElement.GetProperty("actorEmployeeNo").GetString() ?? string.Empty, "employee update actor");
-        Equal("actor-password", body.RootElement.GetProperty("actorPassword").GetString() ?? string.Empty, "employee update execution-time password");
-        Equal("0002", body.RootElement.GetProperty("targetEmployeeNo").GetString() ?? string.Empty, "employee update target");
-        Equal("Y Updated", body.RootElement.GetProperty("name").GetString() ?? string.Empty, "employee update name");
-        Equal("ADMIN", body.RootElement.GetProperty("role").GetString() ?? string.Empty, "employee update role");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"verificationRequired":false,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y Updated","email":"y@example.test","role":"ADMIN","enabled":true,"emailVerified":true,"credentialReady":true,"credentialVersion":1,"revision":2}}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
-    var result = await client.StartUpdateAsync(
-        "0001",
-        "actor-password",
-        new CloudEmployeeUpdateProposal("0002", "Y Updated", "y@example.test", "ADMIN"));
-    True(!result.VerificationRequired, "same Email update should commit without Email OTP");
-    Equal("Y Updated", result.Employee?.Name ?? string.Empty, "updated employee name");
-    Equal(2, result.Employee?.Revision ?? 0, "updated employee revision");
-}
-
-static async Task TestEmployeeEmailUpdateAsync()
-{
-    const string token = "cydev_2222222222222222222222222222222222222222222222222222222222222222";
-    const string challengeId = "otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb";
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/update/challenge", request.RequestUri?.AbsolutePath ?? string.Empty, "Email update challenge path");
-        return JsonResponse(HttpStatusCode.Created,
-            """{"ok":true,"verificationRequired":true,"challenge":{"challengeId":"otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb","maskedEmail":"ne***@example.test","expiresAt":"2026-09-22T06:10:00Z","resendAfter":"2026-09-22T06:01:00Z"}}""");
-    });
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/update/confirm", request.RequestUri?.AbsolutePath ?? string.Empty, "Email update confirm path");
-        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var body = JsonDocument.Parse(payload);
-        Equal(challengeId, body.RootElement.GetProperty("challengeId").GetString() ?? string.Empty, "Email update challenge ID");
-        Equal("123456", body.RootElement.GetProperty("otp").GetString() ?? string.Empty, "Email update OTP");
-        Equal("new@example.test", body.RootElement.GetProperty("email").GetString() ?? string.Empty, "Email update target address");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"verificationRequired":false,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"new@example.test","role":"ADMIN","enabled":true,"emailVerified":true,"credentialReady":true,"credentialVersion":1,"revision":3}}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
-    var proposal = new CloudEmployeeUpdateProposal("0002", "Y", "new@example.test", "ADMIN");
-    var started = await client.StartUpdateAsync("0001", "actor-password", proposal);
-    True(started.VerificationRequired, "changed Email must require OTP");
-    Equal(challengeId, started.Challenge?.ChallengeId ?? string.Empty, "Email update challenge parsed");
-
-    var updated = await client.ConfirmUpdateAsync("0001", "actor-password", proposal, challengeId, "123456");
-    Equal("new@example.test", updated.Email, "confirmed Email update");
-    True(updated.EmailVerified, "confirmed Email remains verified");
-}
-
-static async Task TestEmployeeEnabledAndPasswordAsync()
-{
-    const string token = "cydev_3333333333333333333333333333333333333333333333333333333333333333";
-    const string verifier = "pbkdf2-sha256$210000$00112233445566778899aabbccddeeff$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/enabled", request.RequestUri?.AbsolutePath ?? string.Empty, "enabled update path");
-        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var body = JsonDocument.Parse(payload);
-        True(!body.RootElement.GetProperty("enabled").GetBoolean(), "enabled update value");
-        Equal("actor-password", body.RootElement.GetProperty("actorPassword").GetString() ?? string.Empty, "enabled update execution-time password");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"USER","enabled":false,"emailVerified":true,"credentialReady":true,"credentialVersion":1,"revision":4}}""");
-    });
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/password", request.RequestUri?.AbsolutePath ?? string.Empty, "password update path");
-        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var body = JsonDocument.Parse(payload);
-        Equal(verifier, body.RootElement.GetProperty("credentialVerifier").GetString() ?? string.Empty, "password verifier payload");
-        True(!body.RootElement.TryGetProperty("newPassword", out _), "plaintext new password must never be uploaded");
-        return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"USER","enabled":true,"emailVerified":true,"credentialReady":true,"credentialVersion":2,"revision":5}}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
-    var disabled = await client.SetEnabledAsync("0001", "actor-password", "0002", false);
-    True(!disabled.Enabled, "disabled Employee response");
-
-    var passwordUpdated = await client.SetPasswordAsync("0001", "actor-password", "0002", verifier);
-    Equal(2, passwordUpdated.CredentialVersion, "password credential version");
-    Equal(5, passwordUpdated.Revision, "password update Employee revision");
-}
-
-static async Task TestEmployeePasswordRecoveryAsync()
-{
-    const string token = "cydev_4444444444444444444444444444444444444444444444444444444444444444";
-    const string challengeId = "otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb";
-    var handler = new QueueHandler();
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/password-recovery/challenge", request.RequestUri?.AbsolutePath ?? string.Empty,
-            "password recovery challenge path");
-        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "password recovery Device token");
-        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString() ?? string.Empty,
-            "password recovery employee");
-        Equal("x@example.test", body.RootElement.GetProperty("email").GetString() ?? string.Empty,
-            "password recovery Email cross-check");
-        return JsonResponse(HttpStatusCode.Created,
-            """{"ok":true,"challenge":{"challengeId":"otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb","maskedEmail":"x***@example.test","expiresAt":"2026-09-24T06:10:00Z","resendAfter":"2026-09-24T06:01:00Z"}}""");
-    });
-    handler.Enqueue(request =>
-    {
-        Equal("/v1/employees/password-recovery/confirm", request.RequestUri?.AbsolutePath ?? string.Empty,
-            "password recovery confirmation path");
-        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString() ?? string.Empty,
-            "password recovery employee");
-        Equal(challengeId, body.RootElement.GetProperty("challengeId").GetString() ?? string.Empty,
-            "password recovery challenge ID");
-        Equal("123456", body.RootElement.GetProperty("otp").GetString() ?? string.Empty,
-            "password recovery OTP");
-        True(body.RootElement.GetProperty("credentialVerifier").GetString()?.StartsWith("pbkdf2-sha256$", StringComparison.Ordinal) == true,
-            "password recovery must send a verifier");
-        True(!body.RootElement.TryGetProperty("newPassword", out _), "plaintext password must not be uploaded");
-        return JsonResponse(HttpStatusCode.OK, """{"ok":true,"passwordReset":true}""");
-    });
-
-    using var http = new HttpClient(handler);
-    var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
-    var challenge = await client.StartPasswordRecoveryAsync("0001", "x@example.test");
-    Equal(challengeId, challenge.ChallengeId, "password recovery challenge parsed");
-    await client.ConfirmPasswordRecoveryAsync("0001", challenge.ChallengeId, "123456", "NewPass123");
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)

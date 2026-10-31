@@ -1,3 +1,4 @@
+import {amegoTestAccount} from "./company-settings";
 // V3.2-C3b2a internal OFFICIAL evidence calculation only.
 // The signed invoice_query allowance summary is a discovery index, NOT proof
 // of amounts by original invoice. Each listed number MUST be resolved using
@@ -5,8 +6,8 @@
 // No public route, manager approval grant, ledger, g0401 or g0501.
 import type {StoredCloudAllowance} from "./allowance-frozen-store";
 import {queryOfficialInvoiceReadOnly} from "./amego-invoice-query";
-import {queryOfficialAllowanceDetail,fixed7,allowanceScale}
- from "./amego-allowance-detail";
+import {queryOfficialAllowanceDetail} from "./amego-allowance-detail";
+import {fixed7,allowanceScale,parseAllowanceFinancialJson} from "./allowance-decimal";
 
 const encoder=new TextEncoder();
 const day=(v:unknown):string|null=>{
@@ -30,7 +31,7 @@ function obj(x:unknown):Record<string,unknown>{
 }
 function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
  let request:Record<string,unknown>={};
- try{request=obj(JSON.parse(f.unnumberedTemplateJson));}
+ try{request=obj(parseAllowanceFinancialJson(f.unnumberedTemplateJson));}
  catch{fail("TEMPLATE_INVALID");}
  if(request.AllowanceNumber!==""||String(request.AllowanceType)!=="2"||
      day(request.AllowanceDate)!==f.allowanceDay||
@@ -64,6 +65,7 @@ function proveFrozenItems(f:StoredCloudAllowance,originDay:string):void{
    fail("TOTAL_MISMATCH");
 }
 export interface OfficialPerInvoiceProof {
+ invoiceDetail:unknown;
  applicationId:string;
  originalInvoiceNumber:string;
  officialInvoiceGross:string;
@@ -82,7 +84,7 @@ export async function reconcileOfficialAllowanceForOriginal(
  credentials:Readonly<{sellerInvoice:string;appKey:string}>,
  transport:typeof fetch=fetch,clock:()=>Date=()=>new Date()
 ):Promise<OfficialPerInvoiceProof>{
- if(credentials.sellerInvoice!==frozen.sellerInvoice||
+ if(credentials.sellerInvoice!==(frozen.environment==="test"?amegoTestAccount.sellerInvoice:frozen.sellerInvoice)||
      !/^[A-Z]{2}\d{8}$/.test(frozen.originalInvoiceNumber)||
      !Number.isSafeInteger(frozen.requestedGross)||frozen.requestedGross<=0)
    fail("INPUT_INVALID");
@@ -148,7 +150,9 @@ export async function reconcileOfficialAllowanceForOriginal(
     frozen.originalInvoiceNumber,snapshots,effective.toString(),
     requested.toString()]))));
  const hash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,"0")).join("");
- return {applicationId:frozen.applicationId,
+ return {invoiceDetail:{invoiceNumber:snapshot.invoiceNumber,invoiceDate:snapshot.invoiceDate,
+    gross:snapshot.totalAmount,tax:snapshot.invoiceTaxAmount,items:snapshot.originalProductItems,
+    allowances:snapshot.allowanceHistory},applicationId:frozen.applicationId,
    originalInvoiceNumber:frozen.originalInvoiceNumber,
    officialInvoiceGross:gross.toString(),officialEffectiveAlreadyAllowed:effective.toString(),
    officialRemainingBeforeRequest:(gross-effective).toString(),

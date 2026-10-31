@@ -16,7 +16,7 @@ on:
       schema_upgrade:
         description: 'Explicit marker rollout only AFTER the original D1 migration is applied; allowance flags must stay off'
         type: choice
-        options: ['none', '18:19']
+        options: ['none', '18:19', '19:20', '20:21', '21:22']
         default: 'none'
         required: true
   push:
@@ -95,17 +95,8 @@ jobs:
             exit 1
           fi
 
-      - name: Apply reviewed forward migration to original development D1
-        if: env.CYINVOICE_DEPLOYMENT_MODE == 'deploy'
-        env:
-          CI: 'true'
-        run: |
-          set -euo pipefail
-          if ! npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-migration.log" 2>&1; then
-            echo 'Migration failed. Preserve the current authority and inspect the protected recovery checkpoint; do not restore D1 automatically.'
-            exit 1
-          fi
-          echo 'Reviewed forward migrations applied to the original development D1.'
+      # D1 migrations are a separate, explicitly authorized local MCP operation.
+      # Applying every pending file here would skip the schema19 rollout stage.
 
       - name: Deploy reviewed development Worker with audited authority mode
         if: env.CYINVOICE_DEPLOYMENT_MODE != 'preflight'

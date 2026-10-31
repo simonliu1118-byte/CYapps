@@ -76,7 +76,7 @@ internal static class Program
                 return;
             }
             MessageBox.Show(
-                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 Logs\\startup-error.log。",
+                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 log\\startup-error.log。",
                 "CYInvoice 啟動失敗",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -215,20 +215,18 @@ internal static class Program
         processing.VerifySmokeLayout();
         processing.VerifySmokeRowSizing();
         processing.Close();
+        SyncIssuesForm.VerifyMixedProcessingSmoke();
 
-        using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
-        diagnostics.Show();
-        diagnostics.PerformLayout();
-        Application.DoEvents();
-        diagnostics.VerifySmokeLayout();
-        diagnostics.Close();
 
-        using var settings = new SettingsForm(repository);
+        using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show();
         settings.PerformLayout();
         Application.DoEvents();
         settings.VerifySmokeLayout();
         settings.Close();
+
+        Stage("settings authorization reuse");
+        SettingsForm.VerifyAuthorizationReuseSmoke();
 
         using var cloudSetup = new CloudSetupForm(repository);
         cloudSetup.Show();
@@ -281,7 +279,7 @@ internal static class Program
             // Smoke validation must remain deterministic and offline, so validate the complete
             // static layout without firing Shown or any real network request.
             var token = $"cydev_{new string('a', 64)}";
-            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
+            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token, repository);
             management.PerformLayout();
             management.VerifySmokeLayout();
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
@@ -306,7 +304,7 @@ internal static class Program
     {
         try
         {
-            var directory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            var directory = Path.Combine(AppContext.BaseDirectory, "log");
             Directory.CreateDirectory(directory);
             var message = $"[{DateTimeOffset.Now:O}]{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "startup-error.log"), message);

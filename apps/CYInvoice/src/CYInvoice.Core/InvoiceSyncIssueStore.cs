@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
@@ -6,6 +7,7 @@ namespace CYInvoice.Core.Storage;
 public static class InvoiceSyncIssueTypes
 {
     public const string InvoiceListFailed = "invoice_list_failed";
+    public const string AllowanceLimitExceeded = "allowance_limit_exceeded";
     public const string QueryFailed = "query_failed";
     public const string RemoteNotFound = "remote_not_found";
     public const string UnknownRemoteNotFound = "unknown_remote_not_found";
@@ -24,14 +26,20 @@ public sealed record InvoiceSyncIssue(
     DateTimeOffset CreatedUtc,
     DateTimeOffset? ResolvedUtc);
 
+// Read-only UI projection in the existing sync_state. Never an execution or authority owner.
+public sealed record CloudAllowanceProjection(string Status, string ExecutionState,
+    string OriginalInvoiceNumber = "", string OriginalOrderId = "");
+
 public sealed class InvoiceSyncIssueStore
 {
     private const string DeprecatedVoidPendingConfirmationIssueType = "void_pending_confirmation";
     private readonly string databasePath;
+    private readonly string dataDirectory;
 
     public InvoiceSyncIssueStore(string dataDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        this.dataDirectory = dataDirectory;
         databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
     }
 
@@ -115,7 +123,7 @@ public sealed class InvoiceSyncIssueStore
         string orderId,
         string issueType,
         string message,
-        DateTimeOffset createdUtc)
+        DateTimeOffset createdUtc, Exception? error = null)
     {
         accountKey = Required(accountKey, nameof(accountKey));
         issueType = Required(issueType, nameof(issueType));
@@ -160,6 +168,7 @@ public sealed class InvoiceSyncIssueStore
             update.Parameters.AddWithValue("$id", existingId.Value);
             if (update.ExecuteNonQuery() != 1) throw new InvalidDataException("sync issue update did not affect exactly one row");
             transaction.Commit();
+            WriteDiagnostic(connection, existingId.Value, "updated", issueType, message, error);
             return existingId.Value;
         }
 
@@ -181,7 +190,118 @@ public sealed class InvoiceSyncIssueStore
         insert.Parameters.AddWithValue("$created_utc", createdUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         var id = Convert.ToInt64(insert.ExecuteScalar(), CultureInfo.InvariantCulture);
         transaction.Commit();
+        WriteDiagnostic(connection, id, "created", issueType, message, error);
         return id;
+    }
+
+    private void WriteDiagnostic(SqliteConnection db,long id,string stage,string type,string message,Exception? error)
+    {
+        var saved=false;
+        try
+        {
+            if(error is not null){IssueDiagnosticLog.Record(dataDirectory,id,stage,type,error:error);saved=true;}
+            else saved=IssueDiagnosticLog.TryAppend(dataDirectory,id,stage,type,message);
+        }
+        catch(Exception failure)when(failure is IOException or UnauthorizedAccessException){ }
+        if(saved)return;
+        using var warning=db.CreateCommand();warning.CommandText="UPDATE sync_issues SET message=$message WHERE local_id=$id";
+        warning.Parameters.AddWithValue("$id",id);
+        warning.Parameters.AddWithValue("$message",message+"\n診斷寫入失敗，請保留目前訊息並檢查儲存空間／權限。");
+        warning.ExecuteNonQuery();
+    }
+
+    public CloudAllowanceProjection? CloudProjection(string accountKey, string applicationId, string operation = "issue")
+    {
+        var json = new InvoiceSyncStateStore(dataDirectory).Checkpoint(accountKey, "cloud-allowance:" + operation + ":" + applicationId);
+        return string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<CloudAllowanceProjection>(json);
+    }
+
+    public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
+        string state, string status, string error, string? previousAccountKey = null,
+        string? originalInvoiceNumber = null, string? originalOrderId = null)
+    {
+        var previous = CloudProjection(accountKey, applicationId, operation);
+        var projection = new CloudAllowanceProjection(status, state,
+            originalInvoiceNumber ?? previous?.OriginalInvoiceNumber ?? "",
+            originalOrderId ?? previous?.OriginalOrderId ?? "");
+        new InvoiceSyncStateStore(dataDirectory).SaveCheckpoint(accountKey,
+            "cloud-allowance:" + operation + ":" + applicationId, JsonSerializer.Serialize(projection));
+        var type = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_") +
+            (state == "problem" ? "problem" : "processing");
+        InvoiceSyncIssue? existing;
+        using (var lookup = Open(SqliteOpenMode.ReadOnly))
+        using (var query = lookup.CreateCommand())
+        {
+            query.CommandText = """
+                SELECT local_id,account_key,invoice_number,order_id,issue_type,message,created_utc,resolved_utc
+                FROM sync_issues WHERE account_key=$account AND order_id=$application
+                  AND issue_type IN ($processing,$problem) ORDER BY local_id DESC LIMIT 1
+                """;
+            var prefix = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_");
+            query.Parameters.AddWithValue("$account", accountKey);
+            query.Parameters.AddWithValue("$application", applicationId);
+            query.Parameters.AddWithValue("$processing", prefix + "processing");
+            query.Parameters.AddWithValue("$problem", prefix + "problem");
+            existing = Read(query).FirstOrDefault();
+        }
+        if (state == "completed" || status is "withdrawn" or "rejected")
+        {
+            if (existing?.ResolvedUtc is null && existing is not null) Resolve(existing.Id, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            var message = state == "problem" ? "折讓處理未完成：" + error :
+                status is "open" or "review" ? "等待主管核准" : "主管已核准，系統自動處理中";
+            if (existing is null)
+            {
+                Record(accountKey, "", applicationId, type, message, DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                using var db = Open(SqliteOpenMode.ReadWrite);
+                Configure(db);
+                using var sql = db.CreateCommand();
+                sql.CommandText = "UPDATE sync_issues SET issue_type=$type,message=$message WHERE local_id=$id AND TRIM(resolved_utc)='' AND (issue_type<>$type OR message<>$message)";
+                sql.Parameters.AddWithValue("$id", existing.Id);
+                sql.Parameters.AddWithValue("$type", type);
+                sql.Parameters.AddWithValue("$message", message);
+                sql.ExecuteNonQuery();
+            }
+        }
+        // Earlier runtime projections omitted environment. Resolve only this exact
+        // Cloud operation in the other current account; retain its historical row.
+        if (!string.IsNullOrEmpty(previousAccountKey) && previousAccountKey != accountKey)
+        {
+            using var staleDb = Open(SqliteOpenMode.ReadWrite);
+            Configure(staleDb);
+            using var stale = staleDb.CreateCommand();
+            stale.CommandText = """
+                UPDATE sync_issues SET resolved_utc=$now
+                WHERE account_key=$previous AND order_id=$application
+                  AND issue_type IN ($processing,$problem) AND TRIM(resolved_utc)=''
+                """;
+            var prefix = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_");
+            stale.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            stale.Parameters.AddWithValue("$previous", previousAccountKey);
+            stale.Parameters.AddWithValue("$application", applicationId);
+            stale.Parameters.AddWithValue("$processing", prefix + "processing");
+            stale.Parameters.AddWithValue("$problem", prefix + "problem");
+            stale.ExecuteNonQuery();
+        }
+    }
+
+    public void UpdateMessage(long issueId, string message)
+    {
+        using var connection = Open(SqliteOpenMode.ReadWrite);
+        Configure(connection);
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE sync_issues SET message=$message WHERE local_id=$id AND TRIM(resolved_utc)=''";
+        if (!IssueDiagnosticLog.TryAppend(dataDirectory, issueId, "updated", "sync_issue", message))
+            message += "\n診斷紀錄寫入失敗，請保留目前錯誤內容並檢查儲存空間／權限。";
+        command.Parameters.AddWithValue("$message", message);
+        command.Parameters.AddWithValue("$id", issueId);
+        if (command.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("原問題已結案或不存在，不能更新其他操作");
     }
 
     public int ResolveMatching(
@@ -210,13 +330,14 @@ public sealed class InvoiceSyncIssueStore
               AND (
                     ($invoice_number <> '' AND invoice_number = $invoice_number)
                  OR ($order_id <> '' AND order_id = $order_id)
-              );
+              )
+            RETURNING local_id, issue_type;
             """;
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", invoiceNumber);
         command.Parameters.AddWithValue("$order_id", orderId);
-        return command.ExecuteNonQuery();
+        return ReadResolvedWithDiagnostics(command);
     }
 
     public int ResolveAccountType(string accountKey, string issueType, DateTimeOffset resolvedUtc)
@@ -231,12 +352,26 @@ public sealed class InvoiceSyncIssueStore
             SET resolved_utc = $resolved_utc
             WHERE account_key = $account_key
               AND issue_type = $issue_type
-              AND TRIM(resolved_utc) = '';
+              AND TRIM(resolved_utc) = ''
+            RETURNING local_id, issue_type;
             """;
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$issue_type", issueType);
-        return command.ExecuteNonQuery();
+        return ReadResolvedWithDiagnostics(command);
+    }
+
+    // The database write succeeds independently of best-effort local logs.
+    // RETURNING avoids an extra table scan and records exact changed IDs.
+    private int ReadResolvedWithDiagnostics(SqliteCommand command)
+    {
+        var changed = new List<(long Id, string Type)>();
+        using (var reader = command.ExecuteReader())
+            while (reader.Read())
+                changed.Add((reader.GetInt64(0), reader.GetString(1)));
+        foreach (var (id, type) in changed)
+            IssueDiagnosticLog.TryAppend(dataDirectory, id, "resolved", type);
+        return changed.Count;
     }
 
     public void Resolve(long id, DateTimeOffset resolvedUtc)
@@ -248,6 +383,7 @@ public sealed class InvoiceSyncIssueStore
         command.Parameters.AddWithValue("$resolved_utc", resolvedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$id", id);
         if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException($"sync issue {id} not found");
+        IssueDiagnosticLog.TryAppend(dataDirectory, id, "resolved", "sync_issue");
     }
 
     public void Delete(long id)

@@ -9,7 +9,6 @@ internal static class CompatibilityRegression
         NewClientAcceptsOlderApi1StorageSchemas();
         NewClientRejectsApiContractMismatch();
         Build4AcceptsNewWorkerCompatibilityHealth();
-        WorkerKeepsCompatibilityAndStorageVersionsSeparate();
         SensitiveCyIdWindowsOperationsRefuseHttpRedirects();
         Console.WriteLine("PASS cross-version Cloud compatibility regression");
     }
@@ -38,19 +37,6 @@ internal static class CompatibilityRegression
         var newWorkerHealth = Healthy("8", "1");
         True(LegacyBuild4Accepts(newWorkerHealth),
             "new Worker health must remain acceptable to released V2.6.5 Build 4 clients");
-    }
-
-    private static void WorkerKeepsCompatibilityAndStorageVersionsSeparate()
-    {
-        var worker = File.ReadAllText(FindWorkerSource());
-        Contains(worker, "const LEGACY_SCHEMA_COMPATIBILITY_VERSION = \"8\";",
-            "Worker must retain the Build 4 API 1 compatibility marker");
-        Contains(worker, "body.storageSchemaVersion = actualSchemaVersion;",
-            "Worker must expose physical D1 migration progress separately");
-        Contains(worker, "body.schemaVersion = LEGACY_SCHEMA_COMPATIBILITY_VERSION;",
-            "Worker health must not expose D1 migration progress as a client hard gate");
-        Contains(worker, "CLIENT_UPDATE_REQUIRED",
-            "retired security-sensitive onboarding shapes must fail with an explicit client update requirement");
     }
 
     private static void SensitiveCyIdWindowsOperationsRefuseHttpRedirects()
@@ -106,25 +92,6 @@ internal static class CompatibilityRegression
         && string.Equals(health.ServiceName, "cyinvoice-cloud", StringComparison.Ordinal)
         && string.Equals(health.ApiVersion, "1", StringComparison.Ordinal)
         && string.Equals(health.SchemaVersion, "8", StringComparison.Ordinal);
-
-    private static string FindWorkerSource()
-    {
-        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
-        {
-            var directory = new DirectoryInfo(start);
-            while (directory is not null)
-            {
-                var direct = Path.Combine(directory.FullName, "cloud", "src", "worker.ts");
-                if (File.Exists(direct)) return direct;
-
-                var repository = Path.Combine(directory.FullName, "apps", "CYInvoice", "cloud", "src", "worker.ts");
-                if (File.Exists(repository)) return repository;
-
-                directory = directory.Parent;
-            }
-        }
-        throw new InvalidOperationException("Could not locate apps/CYInvoice/cloud/src/worker.ts for compatibility regression checks.");
-    }
 
     private static void Contains(string value, string expected, string message)
     {

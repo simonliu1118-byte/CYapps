@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using CYInvoice.Core.Cloud;
+using CYInvoice.Core.Storage;
+using Microsoft.Data.Sqlite;
 
 internal static class CloudAllowanceClientTests
 {
@@ -48,202 +50,94 @@ internal static class CloudAllowanceClientTests
         try{await op();}catch(T){return;}
         throw new InvalidOperationException("Expected "+typeof(T).Name);
     }
+    private static void ProjectionSkipsUnchangedWrites()
+    {
+        using var directory = new AuthorityTemporaryDirectory();
+        SqliteBootstrapper.EnsureMigrated(directory.Path);
+        var store = new InvoiceSyncIssueStore(directory.Path);
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","processing","approved","");
+        using var db = new SqliteConnection("Data Source=" + Path.Combine(directory.Path,SqliteBootstrapper.DatabaseFileName));
+        db.Open();using var sql = db.CreateCommand();
+        sql.CommandText = "CREATE TRIGGER reject_unchanged_projection BEFORE UPDATE ON sync_issues WHEN NEW.issue_type=OLD.issue_type AND NEW.message=OLD.message BEGIN SELECT RAISE(ABORT,'UNCHANGED_PROJECTION_WAS_WRITTEN'); END;";
+        sql.ExecuteNonQuery();
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","processing","approved","");
+        store.ApplyCloudAllowance("test|12345678",Id,"issue","problem","approved","SYNTHETIC_ERROR");
+        Equal(1,store.Unresolved("test|12345678").Count);
+        Equal("cloud_allowance_issue_problem",store.Unresolved("test|12345678").Single().IssueType);
+    }
+
     public static async Task RunAsync()
     {
-        using(var http=new HttpClient(new FakeHandler()))
+        ProjectionSkipsUnchangedWrites();
+        using var fake=new FakeHandler(); using var http=new HttpClient(fake);
+        foreach(var uri in new[]{"http://example.invalid/","https://example.invalid/?x=1","https://user:pass@example.invalid/","https://example.invalid/#secret"})
+            await Fail<ArgumentException>(()=>{_=new CloudAllowanceClient(http,new Uri(uri),Token);return Task.CompletedTask;});
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        using (var disabledHandler=new FakeHandler())
+        using (var disabledHttp=new HttpClient(disabledHandler))
         {
-            await Fail<ArgumentException>(async()=>{
-                _=new CloudAllowanceClient(http,
-                    new Uri("http://example.invalid"),Token);
-                await Task.CompletedTask;
-            });
-            await Fail<ArgumentException>(async()=>{
-                _=new CloudAllowanceClient(http,
-                    new Uri("https://example.invalid/?password=bad"),Token);
-                await Task.CompletedTask;
-            });
+            var disabledApi=new CloudAllowanceClient(disabledHttp,new Uri(Host),Token);
+            disabledHandler.Add(r=>{Check(r,"list");return Json(HttpStatusCode.ServiceUnavailable,new {ok=false,error=new {code="ALLOWANCES_NOT_READY"}});});
+            try { await disabledApi.ListAsync("0001","fake-password",limit:1); throw new InvalidOperationException("Disabled feature was accepted"); }
+            catch (CloudApiException error)
+            {
+                Equal("ALLOWANCES_NOT_READY",error.Code);
+                Equal("折讓功能尚未啟用。",error.Message);
+                Equal(1,disabledHandler.Calls); Equal(0,disabledHandler.Remaining);
+            }
         }
-        var fake=new FakeHandler();
-        var template=JsonSerializer.Serialize(new {AllowanceNumber="",AllowanceType=2,
-          AllowanceDate="20261019",TotalAmount=50,TaxAmount=0,
-          BuyerIdentifier="0000000000",BuyerName="Synthetic",
-          ProductItem=new[]{new{OriginalInvoiceNumber="AB12345678",
-           OriginalInvoiceDate=20261019,OriginalDescription="Synthetic",
-           Quantity=1,UnitPrice=50,Amount=50,Tax=0,TaxType=1}}});
-        fake.Add(r=>{
-            Check(r,"create");
-            using var d=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            Equal(Id,d.RootElement.GetProperty("applicationId").GetString());
-            Equal("test",d.RootElement.GetProperty("environment").GetString());
-            Equal(template,d.RootElement.GetProperty("unnumberedTemplateJson").GetString());
-            Equal("Synthetic reason",d.RootElement.GetProperty("reason").GetString());
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                status="open",revision=1,officialActionPerformed=false});
-        });
-        fake.Add(r=>{
-            Check(r,"get");
-            return Json(HttpStatusCode.OK,new{ok=true,application=new{
-                applicationId=Id,environment="test",status="open",
-                revision=1,requestedGross=50,allowanceDay="20261019",
-                reason="Synthetic reason"},officialActionPerformed=false});
-        });
-        fake.Add(r=>{
-            Check(r,"list");
-            return Json(HttpStatusCode.OK,new{ok=true,items=new[]{
-                new{applicationId=Id,status="review",revision=2,
-                    requestedGross="50",environment="test",
-                    updatedAt="2026-10-19T08:00:00.000Z"}}});
-        });
-        fake.Add(r=>{
-            Check(r,"review");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                status="review",revision=2,officialActionPerformed=false});
-        });
-        fake.Add(r=>{
-            Check(r,"preview");
-            return Json(HttpStatusCode.OK,new{ok=true,preview=new{
-                applicationId=Id,revision=2,originalInvoiceNumber="AB12345678",
-                requestedGross=50,officialUploadStatus=99,
-                officialSummaryComplete=true,officialAllowanceCount=0,
-                officialMutationPending=false,officialInvoiceCancelled=false,
-                canApprove=false,canAllocateNumber=false,
-                requiresIndependentOfficialReconciliation=true}});
-        });
-        fake.Add(r=>{
-            Check(r,"approve");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                status="approved",revision=3,validUntilUtc="2026-10-19T08:05:00.000Z",
-                officialActionPerformed=false});
-        });
-        fake.Add(r=>{
-            Check(r,"reserve");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                ledgerId="al_11111111-1111-4111-8111-111111111111",
-                allowanceNumber="A20261019001",status="reserved",
-                maySendWithoutFreshOfficialCheck=false});
-        });
-        fake.Add(r=>{
-            Check(r,"status");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                status="approved",revision=3,allowanceNumber="A20261019001",
-                ledgerStatus="reserved",officiallyConfirmed=false});
-        });
-        fake.Add(r=>{
-            Check(r,"attempt");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                ledgerId="al_11111111-1111-4111-8111-111111111111",
-                allowanceNumber="A20261019001",ledgerStatus="reserved",
-                recordedExactReadback=false,manuallyUnattributed=false,
-                proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false});
-        });
-        fake.Add(r=>{
-            Check(r,"send-once");
-            using var d=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            Equal(true,d.RootElement.GetProperty("confirmOnce").GetBoolean());
-            Equal(3,d.RootElement.GetProperty("expectedRevision").GetInt32());
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                allowanceNumber="A20261019001",ledgerStatus="sending",
-                issueKind="accepted_unconfirmed",
-                manualDisposition="full_match_unattributed",
-                recordedReadback=true,manualReviewRequired=true,
-                proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false});
-        });
-        fake.Add(r=>{
-            Check(r,"attempt");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                ledgerId="al_11111111-1111-4111-8111-111111111111",
-                allowanceNumber="A20261019001",ledgerStatus="sending",
-                recordedExactReadback=true,manuallyUnattributed=true,
-                proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false});
-        });
-        fake.Add(r=>{
-            Check(r,"send-once");
-            return Json(HttpStatusCode.Conflict,new{ok=false,
-                error=new{code="ALLOWANCE_SEND_READBACK_ONLY"}});
-        });
-        fake.Add(r=>{
-            Check(r,"manual-review");
-            using var d=JsonDocument.Parse(
-                r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
-            Equal(true,d.RootElement.GetProperty("confirmReview").GetBoolean());
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                reviewId="synthetic_review_001",
-                ledgerId="al_11111111-1111-4111-8111-111111111111",
-                ledgerStatus="sending",disposition="full_match_unattributed",
-                proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false});
-        });
-        fake.Add(r=>{
-            Check(r,"manual-history");
-            var review=new{reviewId="synthetic_review_001",
-                ledgerId="al_11111111-1111-4111-8111-111111111111",
-                ledgerStatus="sending",disposition="full_match_unattributed",
-                proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false};
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                items=new[]{review},proofOfThisPost=false,officiallyConfirmed=false,
-                safeToAutoRetry=false,canAllocateAnotherNumber=false});
-        });
-        fake.Add(r=>{
-            Check(r,"status");
-            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
-                status="approved",revision=3,allowanceNumber="A20261019001",
-                ledgerStatus="sending",officiallyConfirmed=true});
-        });
-        fake.Add(r=>{
-            Check(r,"create");
-            return Json(HttpStatusCode.Conflict,new{ok=false,
-                error=new{code="ALLOWANCE_OPERATION_UNCONFIRMED"}});
-        });
-        using var httpClient=new HttpClient(fake);
-        var api=new CloudAllowanceClient(httpClient,new Uri(Host),Token);
-        var draft=new CloudAllowanceDraft(Id,"test","AB12345678","20261019",50,template,"Synthetic reason");
-        var created=await api.CreateAsync(draft,"0001","fake-password");
-        Equal("open",created.Status);
-        Equal(1,created.Revision);
-        var detail=await api.GetAsync(Id,"0001","fake-password");
-        Equal("Synthetic reason",detail.Reason);
-        Equal(50L,detail.RequestedGross);
-        var page=await api.ListAsync("0001","fake-password");
-        Equal(1,page.Count);
-        Equal(Id,page[0].ApplicationId);
-        Equal("review",page[0].Status);
-        Equal("review",(await api.ReviewAsync(Id,1,"0001","fake-password")).Status);
-        var preview=await api.PreviewAsync(Id,2,"0001","fake-password");
-        Equal("AB12345678",preview.OriginalInvoiceNumber);
-        Equal(0,preview.OfficialAllowanceCount);
-        Equal("approved",(await api.ApproveAsync(Id,2,"0001","fake-password")).Status);
-        var reserved=await api.ReserveAsync(Id,3,"0001","fake-password");
-        Equal("A20261019001",reserved.AllowanceNumber);
-        var status=await api.StatusAsync(Id,"0001","fake-password");
-        Equal("reserved",status.LedgerStatus);
-        var attempt=await api.InspectAttemptAsync(Id,3,"0001","fake-password");
-        Equal("reserved",attempt.LedgerStatus);
-        var sent=await api.SendOnceAsync(Id,3,"0001","fake-password");
-        Equal("sending",sent.LedgerStatus);
-        Equal("full_match_unattributed",sent.ManualDisposition);
-        Equal(true,sent.RecordedReadback);
-        var after=await api.InspectAttemptAsync(Id,3,"0001","fake-password");
-        Equal("sending",after.LedgerStatus);
-        Equal(true,after.ManuallyUnattributed);
-        await Fail<CloudApiException>(()=>api.SendOnceAsync(Id,3,"0001","fake-password"));
-        var manual=await api.RecordManualReviewAsync(Id,3,"synthetic_review_001",
-            "full_match_unattributed","0001","fake-password");
-        Equal("sending",manual.LedgerStatus);
-        var history=await api.ManualHistoryAsync(Id,3,"0001","fake-password");
-        Equal(1,history.Count);
-        Equal("synthetic_review_001",history[0].ReviewId);
+        fake.Add(r=>{Check(r,"detail");return Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,
+            operation="issue",status="open",revision=1,rows=new[]{new {label="原發票",value="AA00000001"}},requestHash="",officialSnapshotHash=""});});
+        var detail=await api.OpenOperationAsync(Id,false,"0001","fake-password");
+        Equal(1,detail.Revision); Equal("原發票",detail.Rows[0].Key);
+        fake.Add(r=>{Check(r,"approve");using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().Result);
+            Equal(1,body.RootElement.GetProperty("expectedRevision").GetInt32());
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,status="approved",revision=3,executionState="completed"});});
+        var completed=await api.ApproveOperationAsync(detail,"0001","fake-password");
+        Equal("completed",completed.ExecutionState);Equal(2,fake.Calls);Equal(0,fake.Remaining);
+        fake.Add(r=>Json(HttpStatusCode.OK,new{ok=true,applicationId="wrong-identity",status="approved",executionState="completed"}));
+        await Fail<InvalidDataException>(()=>api.ApproveOperationAsync(detail,"0001","fake-password"));
+        fake.Add(r=>Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,status="approved",revision=3,executionState="completed",officiallyConfirmed=true,allowanceNumber="A20261022001",ledgerStatus="sending"}));
         await Fail<InvalidDataException>(()=>api.StatusAsync(Id,"0001","fake-password"));
-        await Fail<CloudApiException>(()=>api.CreateAsync(draft,"0001","fake-password"));
-        Equal(16,fake.Calls);
-        Equal(0,fake.Remaining);
-        // Invalid IDs and data never reach network; failure never retries.
-        await Fail<ArgumentException>(()=>api.ApproveAsync(Id,0,"0001","fake-password"));
-        await Fail<ArgumentException>(()=>api.CreateAsync(draft with{
-           Environment="evil"},"0001","fake-password"));
-        Equal(16,fake.Calls);
+        fake.Add(r=>Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,status="approved",revision=3,executionState="completed",officiallyConfirmed=true,allowanceNumber="A20261022001",ledgerStatus="confirmed"}));
+        Equal("confirmed",(await api.StatusAsync(Id,"0001","fake-password")).LedgerStatus);
+    }
+    public static async Task RunVoidAsync()
+    {
+        var id=CloudAllowanceClient.OriginalVoidApplicationId("ws_synthetic","test","ALW-001");
+        Equal(id,CloudAllowanceClient.OriginalVoidApplicationId("ws_synthetic","test","ALW-001"));
+        Equal(false,id==CloudAllowanceClient.OriginalVoidApplicationId("ws_synthetic","test","ALW-002"));
+        using var fake=new FakeHandler();using var http=new HttpClient(fake);
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        fake.Add(r=>{Check(r,"void-create");return Json(HttpStatusCode.OK,new{ok=true,applicationId=id,status="open",revision=1,claimed=false,readbackOnly=false,officiallyConfirmed=false,officialActionPerformed=false});});
+        var result=await api.CreateVoidApplicationAsync(new(id,"test","ALW-001","AA00000001","合成退貨"),"0001","fake-password");
+        Equal(id,result.ApplicationId);Equal(1,fake.Calls);
+    }
+    public static async Task RunVoidReconnectAsync()
+    {
+        using var fake=new FakeHandler();using var http=new HttpClient(fake);
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        var draft=new CloudAllowanceVoidDraft(Id,"test","ALW-001","AA00000001","合成退貨");
+        fake.Add(r=>{Check(r,"void-status");return Json(HttpStatusCode.NotFound,new{ok=false,error=new{code="VOID_APPLICATION_NOT_FOUND"}});});
+        fake.Add(r=>{Check(r,"void-create");return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,status="open",revision=1,claimed=false,readbackOnly=false,officiallyConfirmed=false,officialActionPerformed=false});});
+        await api.CreateOrReadVoidApplicationAsync(draft,"0001","fake-password");Equal(2,fake.Calls);
+        fake.Add(r=>{Check(r,"void-status");return Json(HttpStatusCode.ServiceUnavailable,new{ok=false,error=new{code="VOID_UNKNOWN"}});});
+        await Fail<CloudApiException>(()=>api.CreateOrReadVoidApplicationAsync(draft,"0001","fake-password"));
+        Equal(3,fake.Calls); // Unknown readback never creates a second request.
+    }
+    public static async Task RunVoidManagerAsync()
+    {
+        using var fake=new FakeHandler();using var http=new HttpClient(fake);
+        var api=new CloudAllowanceClient(http,new Uri(Host),Token);
+        fake.Add(r=>{Check(r,"detail");return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,
+            operation="void",status="open",revision=1,rows=new[]{new{label="原折讓",value="ALW-001"}},requestHash=new string('a',64),officialSnapshotHash=new string('b',64)});});
+        var detail=await api.OpenOperationAsync(Id,true,"0001","fake-password");
+        fake.Add(r=>{Check(r,"void-approve");using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().Result);
+            Equal(false,body.RootElement.TryGetProperty("confirmation",out _));
+            return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,status="approved",revision=2,executionState="processing"});});
+        Equal("processing",(await api.ApproveOperationAsync(detail,"0001","fake-password")).ExecutionState);
+        fake.Add(r=>Json(HttpStatusCode.ServiceUnavailable,new{ok=false,error=new{code="OFFICIAL_SEND_DISABLED"}}));
+        await Fail<CloudApiException>(()=>api.ApproveOperationAsync(detail,"0001","fake-password"));
+        Equal(3,fake.Calls);Equal(0,fake.Remaining);
     }
 }

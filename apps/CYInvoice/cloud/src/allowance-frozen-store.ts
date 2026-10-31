@@ -6,11 +6,34 @@
 import {encryptCompanyBusinessData,decryptCompanyBusinessData} from "./company-settings";
 
 export interface AllowanceActor {
+  authoritySnapshot?:string;
+  employeeNo?:string;
+  displayName?:string;
   workspaceId:string;
   employeeId:string;
   workspaceRole:"SUPER_ADMIN"|"ADMIN"|"USER";
 }
+export interface AllowanceParticipant { actorId:string;employeeNo:string;name:string; }
+// Cosmetic CYID snapshots are encrypted with the original request, never client supplied.
+export function readAllowanceParticipant(value:unknown,actorId:string):AllowanceParticipant|undefined {
+  if(value===undefined)return undefined;
+  if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("ALLOWANCE_PARTICIPANT_INVALID");
+  const p=value as Record<string,unknown>;
+  if(p.actorId!==actorId||typeof p.employeeNo!=="string"||!/^\d{4}$/.test(p.employeeNo)||
+     typeof p.name!=="string"||p.name.trim().length<1||p.name.length>100||/[\u0000-\u001f\u007f]/.test(p.name))
+    throw new Error("ALLOWANCE_PARTICIPANT_INVALID");
+  return {actorId,employeeNo:p.employeeNo,name:p.name.trim()};
+}
+export function allowanceActorParticipant(actor:AllowanceActor):AllowanceParticipant|undefined {
+  if(!actor.employeeNo||!actor.displayName)return undefined;
+  return readAllowanceParticipant({actorId:actor.employeeId,employeeNo:actor.employeeNo,name:actor.displayName},actor.employeeId);
+}
+export function allowanceParticipantText(actorId:string,p?:AllowanceParticipant):string {
+  return p?p.employeeNo+" "+p.name:actorId+"（姓名未取得）";
+}
 export interface AllowanceActorSource {
+  // Not a CYID Session: only the existing persisted business approval may run.
+  approvedOperation?: Readonly<{workspaceId:string;applicationId:string;operation:"issue"|"void"}>;
   revalidate():Promise<AllowanceActor|null>;
 }
 export interface NewCloudAllowance {
@@ -30,7 +53,7 @@ export interface CloudAllowanceContext {
 export interface StoredCloudAllowance {
   applicationId:string;workspaceId:string;environment:"production"|"test";
   status:"open"|"review"|"approved"|"rejected"|"withdrawn";
-  revision:number;requesterActorId:string;
+  revision:number;requesterActorId:string;requester?:AllowanceParticipant;
   sellerInvoice:string;companyRevision:number;
   originalInvoiceNumber:string;allowanceDay:string;
   requestedGross:number;requestHash:string;
@@ -162,6 +185,7 @@ async function activeDevice(db:D1Database,workspace:string,device:string):Promis
 export async function createEncryptedCloudAllowance(db:D1Database,
  input:NewCloudAllowance,ctx:CloudAllowanceContext,authority:AllowanceActorSource
 ):Promise<{applicationId:string;status:"open";revision:1}>{
+  if(authority.approvedOperation)throw new Error("LIVE_SESSION_REQUIRED_FOR_NEW_APPROVAL");
   checkInput(input,ctx);
   const first=await authority.revalidate();
   if(!validated(first,input.workspaceId))
@@ -172,7 +196,7 @@ export async function createEncryptedCloudAllowance(db:D1Database,
   const values=await hashes(input,ctx,company.seller_invoice);
   const ciphertext=await encryptCompanyBusinessData(ctx.encryptionKeyHex,
     input.workspaceId,field(input.applicationId,values.requestHash),
-    JSON.stringify({v:1,reason:input.reason??"",templateJson:input.unnumberedTemplateJson}));
+    JSON.stringify({v:1,reason:input.reason??"",templateJson:input.unnumberedTemplateJson,requester:allowanceActorParticipant(first)}));
   const second=await authority.revalidate();
   if(!sameActor(first,second,input.workspaceId))
     throw new Error("ALLOWANCE_ACTOR_CHANGED");
@@ -203,7 +227,9 @@ export async function createEncryptedCloudAllowance(db:D1Database,
       input.environment,company.revision,values.requestHash,
       values.originalFingerprint,input.allowanceDay,ciphertext,input.deviceId,at);
   const result=await db.batch([insertApp,insertFrozen]);
-  if(result.length!==2||result.some(r=>r.meta.changes!==1))
+  // D1 changes includes AFTER-trigger audit writes. SQL remains PK/CAS fenced;
+  // zero or invalid counts cannot confirm a mutation.
+  if(result.length!==2||result.some(r=>(!Number.isSafeInteger(r.meta.changes)||r.meta.changes<=0)))
     throw new Error("ALLOWANCE_ATOMIC_CREATE_NOT_CONFIRMED");
   // If authority disappeared during D1 I/O, surface an uncertain result.
   // Client must use the original ID for readback; never allocate another ID.
@@ -217,6 +243,9 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
  target:{workspaceId:string;applicationId:string;deviceId:string},
  ctx:CloudAllowanceContext,authority:AllowanceActorSource
 ):Promise<StoredCloudAllowance>{
+  const scope=authority.approvedOperation;
+  if(scope&&(scope.workspaceId!==target.workspaceId||scope.applicationId!==target.applicationId||scope.operation!=="issue"))
+    throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
   checkScope(target.workspaceId,target.applicationId,target.deviceId);
   const first=await authority.revalidate();
   if(!validated(first,target.workspaceId)||
@@ -235,6 +264,7 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     JOIN company_settings c ON c.workspace_id=a.workspace_id
     WHERE a.application_id=?1 AND a.workspace_id=?2 LIMIT 1`)
    .bind(target.applicationId,target.workspaceId).first<FrozenRow>();
+  if(scope&&row?.status!=="approved")throw new Error("APPROVED_OPERATION_NO_LONGER_ACTIVE");
   if(!row||ctx.environment!==row.environment||!SHA.test(row.request_hash)||
       row.request_hash!==row.frozen_hash||
       row.company_seller!==row.seller_invoice||
@@ -247,7 +277,7 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
   const plaintext=await decryptCompanyBusinessData(ctx.encryptionKeyHex,
     target.workspaceId,field(target.applicationId,row.request_hash),
     row.template_ciphertext);
-  let parsed:Record<string,unknown>,reason:string,templateJson:string;
+  let parsed:Record<string,unknown>,reason:string,templateJson:string,requester:AllowanceParticipant|undefined;
   try {
     // The AES-GCM ciphertext holds both business reason and AMEGO request
     // in one authenticated envelope; AMEGO still receives ONLY templateJson.
@@ -255,9 +285,10 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     if(!document||typeof document!=="object"||Array.isArray(document))
       throw new Error();
     const envelope=document as Record<string,unknown>;
-    if(Object.keys(envelope).sort().join(",")!=="reason,templateJson,v"||
+    if(!["reason,templateJson,v","reason,requester,templateJson,v"].includes(Object.keys(envelope).sort().join(","))||
        envelope.v!==1||typeof envelope.reason!=="string"||
        typeof envelope.templateJson!=="string")throw new Error();
+    requester=readAllowanceParticipant(envelope.requester,row.requester_actor_id);
     reason=envelope.reason;
     templateJson=envelope.templateJson;
     const data:unknown=JSON.parse(templateJson);
@@ -294,5 +325,5 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
     companyRevision:row.company_revision,
     originalInvoiceNumber:original,allowanceDay:row.allowance_day,
     requestedGross:request.requestedGross,requestHash:row.request_hash,
-    reason,unnumberedTemplateJson:templateJson};
+    reason,requester,unnumberedTemplateJson:templateJson};
 }

@@ -6,7 +6,26 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
+- **目前工程Source：V3.1.44 Build1／Cloud Source0.9.8（非正式Release）**：本輪先修同機折讓申請／核准、清單／詳情號碼及狀態；新增程式同目錄`log`，可直接壓縮交回查證，不含帳密、金鑰或原始交易內容。背景沿原Grant／coordinator恢復，不新增業務架構。實際原Worker仍0.9.7／schema22，新0.9.8待本機配套更新；未送真交易。見[現行計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)及[本機交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+
+
+- **前一已部署工程 Source：V3.1.44 Build 0／Cloud Source 0.9.7（非正式Release）**：本批修正（2026-10-28）：測試環境同步及本機保留改為今天加前兩天，逐日套用原有日期識別碼；陌生測試票不回查，正式環境保留期不變。折讓申請成功立即出現在原「待辦/處理中」；回覆不明只查回原ID一次，仍未知則保留原「上傳問題」及遮罩診斷，既有同步也會恢復舊版只留下marker的申請，不重新POST。 姓名來源及介面修正見[現行計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)；使用者2026-10-28本機完成報告確認原Worker已更新0.9.7，schema22及正常三旗標保留；V3.1.44工程包已下載核對，原EXE／Data未覆寫。真人驗收仍待使用者操作，不重跑維護。
+
+- **前一已部署工程 Source：V3.1.43 Build 0／Cloud 0.9.6（非正式 Release）**：使用者2026-10-27本機完成報告確認，原Worker已部署Source `25ae151ed880cb6256a4cc1e01ce499145a802b7`，正常折讓API／g0401／g0501三旗標均啟用；兩個舊人工旗標仍關閉，schema22及原服務／身分保留。舊人工完成入口已從Source及工程包移除。指定桌面Data快照及原D1限定六表的舊案盤點完成，該範圍無待收尾財務案；不代表其他安裝或裝置皆為0。工程包已由本機下載，桌面原EXE未覆寫，請使用V3.1.43測試。詳見[本機完成摘要](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；真人財務流程仍待驗收，正式Release仍V3.1.0。
+
+- **前一工程 Source：V3.1.39 Build 0（非正式 Release）**：V3.2-F 官方同步、跨期按需查回與歷史整合：沿用原 invoice_list／allowance_list／invoice_query，新增現有本機 SQLite 內的官方折讓查證狀態逐筆 append-only 歷程與原發票詳情唯讀查閱。唯讀歷程獨立於原發票清理；查證失敗保留「上傳問題」至成功恢復。未變更原清理規則、50 張發票／150 筆折讓上限或任何財務 POST。正式 Release V3.1.0 不變；真光貿、Cloud schema 與真機仍待驗收。
+
+- **前一工程 Source：V3.1.38 Build 0（非正式 Release）**：按使用者指示維持原舊發票清理機制，折讓列表有原發票號但本機找不到時，才依原號向光貿唯讀查回；官方存在且完整才補回原發票；查無或回覆不一致則在原「上傳問題」顯示，不造假、不變動保留期。沿用每日 150 筆折讓列表／50 張發票上限、Cloud g0501 禁止送出，正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.37 Build 4（非正式 Release）**：V3.2-F 每日折讓列表提升至 3×50＝150 筆、原發票查回 50 張（與已知舊折讓輪巡共用）；超限留下「上傳問題」提醒回來修改程式上限，正常完整重查後解決。既有舊折讓可用剩餘每日額度唯讀查證今天是否作廢；官方明細缺漏保留最後已知資料但禁止以此送出。未修改 Cloud/D1、真光貿或 g0501 送出；雙 Windows 真人驗收延期，正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.36 Build 2（非正式 Release）**：V3.2-F 新增官方 allowance_list 建立日唯讀發現，僅每日批次、最多 3 頁／20 張關聯發票；存在本機唯一紀錄才用原 invoice_query／詳情路徑更新。超量、不明、無法對應均不猜測；未涵蓋舊折讓今日作廢與保留期外資料，仍待 F 後續工程。雙 Windows 真人驗收上線後補做，Cloud g0501 未開放；正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.35 Build 0（非正式 Release）**：V3.2-F 起步，沿用既有 invoice_query 保存官方折讓摘要完整性與明細；官方折讓異動時清除 PDF／預覽快取，無額外 API 呼叫。真人雙 Windows 驗收依使用者指示於 V3.2 上線後補做，Cloud g0501 未開放、schema20 未部署；正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.34 Build 0（非正式 Release）**：Local g0501 跨待辦 ID 單次送出與 CYID→Local 回退防線；Cloud g0501 具原 ID 加密申請、主管核准、永久 Claim、單次 POST 與唯讀查回的內部工程碼及合成測試。已移除無法真正驗證裝置停送的清冊／快照輔助路徑，保留預設關閉、尚未接 HTTP 路由的 Cloud g0501 送出器。**已接 CYID Cloud 員工作廢申請／同原號固定 ID 查回、主管官方預覽／核准（沿用原 WinForms 視窗），結果不明不盲目重建。仍無 g0501 送出路由、schema20 未部署、未做真雙機／光貿驗收**；正式 Release V3.1.0 不變。
+
+- **前一工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
 
 - **前一工程 Source：V3.1.32 Build 0（非正式 Release）**：將已驗證的 0019 升格為 canonical migration，補齊非空 schema18 備份／回復與明確 18→19 部署標記驗證。原 D1／Worker 仍依先前本機回報為 schema18；本批沒有操作 Cloudflare、啟用折讓旗標或真光貿。正式 Release 仍 V3.1.0。
 

@@ -13,6 +13,7 @@ out/
 Data/
 Cache/
 Logs/
+log/
 *.log
 ERROR_*.log
 

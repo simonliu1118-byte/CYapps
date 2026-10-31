@@ -9,7 +9,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const fail = code => { throw new Error(code); };
 const check = (condition, code) => { if (!condition) fail(code); };
 const rowLimit = 10000;
-const migrationHistorySql = 'SELECT name FROM d1_migrations ORDER BY id LIMIT 20';
+const migrationHistorySql = 'SELECT name FROM d1_migrations ORDER BY id LIMIT 23';
 const uuid = value => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value ?? '');
 const tables = {
   workspaces: 'workspace_id, status, employee_revision',
@@ -150,24 +150,56 @@ export function preservedDeployConfig(config, settings, activating = false) {
     ...(services.length ? {services} : {})};
 }
 
+// An explicit, audited flag-only intent within the original deployment owner.
+// No migration, provider switch, resource creation or old manual caller is enabled.
+export function applyAllowanceActivation(config,settings,intent) {
+  if(!intent)return config;
+  check(intent==='enable','ALLOWANCE_ACTIVATION_INTENT_INVALID');
+  const vars=Object.fromEntries(settings.bindings.filter(b=>b.type==='plain_text').map(b=>[b.name,b.text]));
+  check(vars.CYID_ENABLED==='true' && vars.SCHEMA_VERSION==='22' && vars.COMPANY_SETTINGS_ENABLED==='true','ALLOWANCE_ACTIVATION_RUNTIME_INVALID');
+  check(settings.bindings.some(b=>b.name==='COMPANY_SETTINGS_KEY_HEX' && b.type==='secret_text'),
+    'ALLOWANCE_ACTIVATION_COMPANY_KEY_REQUIRED');
+  for(const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED','ALLOWANCE_G0501_SEND_ENABLED'])
+    vars[name]='true';
+  for(const name of ['ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
+    if(Object.hasOwn(vars,name))vars[name]='false';
+  return {...config,vars};
+}
+
 // Explicit rollout intent, not permission to mutate D1 or enable allowances.
 // Only the reviewed storage-contract transition is accepted. Existing code-only
 // deploys keep preserving the active schema marker and every runtime setting.
+const schemaUpgrades = {
+  '18:19': {from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'},
+  '19:20': {from:'19',to:'20',migration:'0020_allowance_void_coordination.sql'},
+  '20:21': {from:'20',to:'21',migration:'0021_allowance_automatic_execution.sql'},
+  '21:22': {from:'21',to:'22',migration:'0022_allowance_unsent_withdrawal.sql'},
+};
+const validSchemaUpgrade = upgrade => Object.values(schemaUpgrades).some(step =>
+  upgrade?.from === step.from && upgrade?.to === step.to && upgrade?.migration === step.migration);
+
 export function resolveSchemaUpgrade(settings, canonical, applied, operation, requested) {
   if (!requested) return undefined;
-  check(requested === '18:19' && operation === 'deploy', 'SCHEMA_UPGRADE_INTENT_INVALID');
+  check(Object.hasOwn(schemaUpgrades, requested) && operation === 'deploy', 'SCHEMA_UPGRADE_INTENT_INVALID');
+  const step = schemaUpgrades[requested];
   const plain = name => settings.bindings.find(b => b.name === name && b.type === 'plain_text')?.text;
-  check(plain('CYID_ENABLED') === 'true' && plain('SCHEMA_VERSION') === '18', 'SCHEMA_UPGRADE_SOURCE_INVALID');
-  check(canonical.length === 19 && canonical[18] === '0019_allowance_manual_review_audit.sql',
+  check(plain('CYID_ENABLED') === 'true' && plain('SCHEMA_VERSION') === step.from, 'SCHEMA_UPGRADE_SOURCE_INVALID');
+  check([19,20,21,22].includes(canonical.length) && canonical[18] === schemaUpgrades['18:19'].migration &&
+    (canonical.length === 19 || canonical[19] === schemaUpgrades['19:20'].migration) &&
+    (canonical.length < 21 || canonical[20] === schemaUpgrades['20:21'].migration) &&
+    (canonical.length < 22 || canonical[21] === schemaUpgrades['21:22'].migration) &&
+    canonical[Number(step.to)-1] === step.migration,
     'SCHEMA_UPGRADE_TARGET_INVALID');
-  checkMigrations(applied, canonical, true);
+  // A staged rollout requires the exact target prefix. In a schema20 source,
+  // 18:19 accepts exactly 0001..0019, never an incomplete or already-20 D1.
+  checkMigrations(applied, canonical.slice(0, Number(step.to)), true);
   for (const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED',
-    'ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED']) {
+    'ALLOWANCE_G0501_SEND_ENABLED','ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED']) {
     const bindings = settings.bindings.filter(b => b.name === name);
     check(bindings.length === 0 || (bindings.length === 1 && bindings[0].type === 'plain_text' &&
       bindings[0].text === 'false'), 'SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF');
   }
-  return {from:'18',to:'19',migration:'0019_allowance_manual_review_audit.sql'};
+  return {...step};
 }
 
 // Configuration preparation only: no CYID authority lookup, registration or switch.
@@ -239,9 +271,8 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     for (const name of ['SCHEMA_VERSION','COMPANY_SETTINGS_ENABLED','RECOVERY_ENABLED']) {
       const original = audit.settings.bindings.find(b => b.name === name && b.type === 'plain_text');
       const upgrade = name === 'SCHEMA_VERSION' && audit.operation === 'deploy' &&
-        audit.schemaUpgrade?.from === '18' && audit.schemaUpgrade?.to === '19' &&
-        audit.schemaUpgrade?.migration === '0019_allowance_manual_review_audit.sql' &&
-        original?.text === '18' && config.vars?.SCHEMA_VERSION === '19';
+        validSchemaUpgrade(audit.schemaUpgrade) &&
+        original?.text === audit.schemaUpgrade.from && config.vars?.SCHEMA_VERSION === audit.schemaUpgrade.to;
       check(!original || !Object.hasOwn(config.vars, name) || config.vars[name] === original.text || upgrade,
         'ACTIVE_RUNTIME_SETTING_CHANGE');
     }
@@ -249,16 +280,20 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
   const vars = { ...Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text])),
     ...config.vars, CYID_ENABLED:enabled };
   if (audit.schemaUpgrade) {
-    check(activeCyId && audit.operation === 'deploy' && audit.schemaUpgrade.from === '18' &&
-      audit.schemaUpgrade.to === '19' && audit.schemaUpgrade.migration === '0019_allowance_manual_review_audit.sql' &&
-      vars.SCHEMA_VERSION === '19', 'SCHEMA_UPGRADE_INTENT_INVALID');
+    check(activeCyId && audit.operation === 'deploy' && validSchemaUpgrade(audit.schemaUpgrade) &&
+      vars.SCHEMA_VERSION === audit.schemaUpgrade.to, 'SCHEMA_UPGRADE_INTENT_INVALID');
     for (const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED',
-      'ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
+      'ALLOWANCE_G0501_SEND_ENABLED','ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
       check(vars[name] === undefined || vars[name] === 'false', 'SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF');
     // Source rollout must not smuggle changes to scopes, custom vars or flags.
     const original = Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
-    check(original.SCHEMA_VERSION === '18', 'SCHEMA_UPGRADE_SOURCE_INVALID');
-    check(digest({...vars,SCHEMA_VERSION:'18'}) === digest(original), 'SCHEMA_UPGRADE_RUNTIME_SETTING_CHANGE');
+    check(original.SCHEMA_VERSION === audit.schemaUpgrade.from, 'SCHEMA_UPGRADE_SOURCE_INVALID');
+    check(digest({...vars,SCHEMA_VERSION:audit.schemaUpgrade.from}) === digest(original), 'SCHEMA_UPGRADE_RUNTIME_SETTING_CHANGE');
+  }
+  if(audit.allowanceActivation) {
+    check(activeCyId && audit.operation==='deploy' && !audit.schemaUpgrade,'ALLOWANCE_ACTIVATION_INTENT_INVALID');
+    const expected=applyAllowanceActivation(config,audit.settings,audit.allowanceActivation);
+    check(digest(vars)===digest(expected.vars),'ALLOWANCE_ACTIVATION_RUNTIME_SETTING_CHANGE');
   }
   const preserved = audit.settings.bindings.filter(b => b.type !== 'plain_text');
   const reviewed = audit.cyIdPreparation
@@ -347,6 +382,12 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
   const knownV32 = canonical.slice(-6).join('|') === v32.join('|');
   const v32Audit = [...v32,'0019_allowance_manual_review_audit.sql'];
   const knownV32Audit = canonical.slice(-7).join('|') === v32Audit.join('|');
+  const v32Void = [...v32Audit,'0020_allowance_void_coordination.sql'];
+  const knownV32Void = canonical.slice(-8).join('|') === v32Void.join('|');
+  const v32Automatic = [...v32Void,'0021_allowance_automatic_execution.sql'];
+  const knownV32Automatic = canonical.slice(-9).join('|') === v32Automatic.join('|');
+  const v32Withdrawal = [...v32Automatic,'0022_allowance_unsent_withdrawal.sql'];
+  const knownV32Withdrawal = canonical.slice(-10).join('|') === v32Withdrawal.join('|');
   const suffix = options => pending.length === options.length &&
     options.every((name,i) => pending[i] === name);
   check(pending.length === 0 ||
@@ -354,7 +395,10 @@ export function checkMigrations(applied, canonical, requireComplete = false) {
     (knownV30 && (suffix(v30) || suffix(v30.slice(1)) || suffix(v30.slice(2)))) ||
     (knownV31 && v31.some((_,i)=>suffix(v31.slice(i)))) ||
     (knownV32 && v32.some((_,i)=>suffix(v32.slice(i)))) ||
-    (knownV32Audit && v32Audit.some((_,i)=>suffix(v32Audit.slice(i)))),
+    (knownV32Audit && v32Audit.some((_,i)=>suffix(v32Audit.slice(i)))) ||
+    (knownV32Void && v32Void.some((_,i)=>suffix(v32Void.slice(i)))) ||
+    (knownV32Automatic && v32Automatic.some((_,i)=>suffix(v32Automatic.slice(i)))) ||
+    (knownV32Withdrawal && v32Withdrawal.some((_,i)=>suffix(v32Withdrawal.slice(i)))),
     'UNREVIEWED_PENDING_MIGRATIONS');
   check(!requireComplete || pending.length === 0, 'MIGRATION_NOT_COMPLETE');
   return pending;
@@ -435,7 +479,8 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   check(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID, 'CLOUDFLARE_CREDENTIALS_REQUIRED');
   const operation = env.CYINVOICE_DEPLOYMENT_MODE ?? 'preflight';
   check(['preflight','deploy','prepare-cyid','activate-cyid'].includes(operation), 'DEPLOYMENT_MODE_INVALID');
-  check(!env.CYINVOICE_SCHEMA_UPGRADE || (operation === 'deploy' && env.CYINVOICE_SCHEMA_UPGRADE === '18:19'),
+  check(!env.CYINVOICE_ALLOWANCE_ACTIVATION || (operation==='deploy' && !env.CYINVOICE_SCHEMA_UPGRADE && env.CYINVOICE_ALLOWANCE_ACTIVATION==='enable'), 'ALLOWANCE_ACTIVATION_INTENT_INVALID');
+  check(!env.CYINVOICE_SCHEMA_UPGRADE || (operation === 'deploy' && Object.hasOwn(schemaUpgrades, env.CYINVOICE_SCHEMA_UPGRADE)),
     'SCHEMA_UPGRADE_INTENT_INVALID');
   check(typeof env.CYID_WORKER_NAME === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(env.CYID_WORKER_NAME),
     'SHARED_CYID_PROVIDER_SETTING_REQUIRED');
@@ -476,11 +521,13 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     const results = await request(`/d1/database/${encodeURIComponent(audit.databaseId)}/query`,
       {sql:migrationHistorySql});
     check(Array.isArray(results) && results.length === 1 && results[0].success === true, 'D1_READ_RESULT_INVALID');
-    checkMigrations(results[0].results.map(r => r.name), canonical, true);
+    const applied = results[0].results.map(r => r.name);
     const upgrade = resolveSchemaUpgrade(audit.settings, canonical, results[0].results.map(r => r.name),
       operation, env.CYINVOICE_SCHEMA_UPGRADE);
     check(digest(upgrade ?? null) === digest(audit.schemaUpgrade ?? null), 'SCHEMA_UPGRADE_AUDIT_MISMATCH');
-    check(String(deployConfig.vars?.SCHEMA_VERSION) === String(canonical.length), 'DEPLOYMENT_SCHEMA_MARKER_MISMATCH');
+    check((audit.allowanceActivation??'')===(env.CYINVOICE_ALLOWANCE_ACTIVATION??''),'ALLOWANCE_ACTIVATION_AUDIT_MISMATCH');
+    checkMigrations(applied, canonical, !upgrade);
+    check(String(deployConfig.vars?.SCHEMA_VERSION) === String(upgrade?.to ?? canonical.length), 'DEPLOYMENT_SCHEMA_MARKER_MISMATCH');
     await deployReviewedVersion(audit, deployConfig, fs.readFileSync(bundlePath, 'utf8'), request,
       value => fs.writeFileSync(statePath, JSON.stringify(value), {mode:0o600}));
     return;
@@ -545,9 +592,15 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   const applied = (await query(migrationHistorySql)).map(r => r.name);
   const preparing = mode === 'before' && operation === 'prepare-cyid';
   const activating = mode === 'before' && operation === 'activate-cyid';
-  const pending = checkMigrations(applied, canonical, mode === 'after' || preparing || activating || vars.CYID_ENABLED === 'true');
-  const schemaUpgrade = mode === 'before'
-    ? resolveSchemaUpgrade(settings, canonical, applied, operation, env.CYINVOICE_SCHEMA_UPGRADE) : undefined;
+  const before = mode === 'after' ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : undefined;
+  if(before)check((before.allowanceActivation??'')===(env.CYINVOICE_ALLOWANCE_ACTIVATION??''),'ALLOWANCE_ACTIVATION_AUDIT_MISMATCH');
+  if (before) check(Boolean(before.schemaUpgrade) === Boolean(env.CYINVOICE_SCHEMA_UPGRADE) &&
+    (!before.schemaUpgrade || `${before.schemaUpgrade.from}:${before.schemaUpgrade.to}` === env.CYINVOICE_SCHEMA_UPGRADE),
+    'SCHEMA_UPGRADE_AUDIT_MISMATCH');
+  const schemaUpgrade = resolveSchemaUpgrade(before?.settings ?? settings, canonical, applied,
+    operation, env.CYINVOICE_SCHEMA_UPGRADE);
+  const pending = checkMigrations(applied, canonical, !schemaUpgrade &&
+    (mode === 'after' || preparing || activating || vars.CYID_ENABLED === 'true'));
   const state = await snapshot(query);
   if (state.storageProfile === 'CYID_ONLY')
     check(vars.CYID_ENABLED === 'true', 'CYID_ONLY_REQUIRES_CYID_AUTHORITY');
@@ -572,7 +625,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     if (mode === 'after') await new Promise(resolve => setTimeout(resolve, 1500));
   }
   check(healthOk, 'CLOUD_HEALTH_HTTP_FAILED');
-  checkHealth(health, { schema: schemaUpgrade?.from ?? applied.length,
+  checkHealth(health, { schema: (mode === 'before' ? schemaUpgrade?.from : schemaUpgrade?.to) ?? applied.length,
     ...(mode === 'after' ? { version: expectedVersion } : {}) });
   if (mode === 'before') {
     const capturedAt = new Date().toISOString();
@@ -581,12 +634,14 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     // Preserve runtime vars/services rather than deleting them with a static template.
     let deployConfig = preservedDeployConfig(runtimeConfig, settings, activating);
     if (schemaUpgrade) deployConfig.vars.SCHEMA_VERSION = schemaUpgrade.to;
+    deployConfig=applyAllowanceActivation(deployConfig,settings,env.CYINVOICE_ALLOWANCE_ACTIVATION);
     if (cyIdPreparation) deployConfig = prepareCyIdConfig(deployConfig, settings, cyIdPreparation, state.workspaces);
     const configPath = path.join(root, 'wrangler.deploy.generated.jsonc');
     fs.writeFileSync(configPath, JSON.stringify(deployConfig, null, 2), { mode: 0o600 });
     fs.writeFileSync(statePath, JSON.stringify({ sourceIdentity, databaseId, worker: config.name, state, retainedProbeCount:probes.length,
       bookmark, deployments, settings, routes, workerSubdomain, origin, capturedAt, operation,
       provider:providerCheckpoint, ...(schemaUpgrade ? {schemaUpgrade} : {}),
+      ...(env.CYINVOICE_ALLOWANCE_ACTIVATION ? {allowanceActivation:env.CYINVOICE_ALLOWANCE_ACTIVATION} : {}),
       ...(cyIdPreparation ? {cyIdPreparation} : {}), ...(cyIdActivation ? {cyIdActivation} : {}) }), { mode: 0o600 });
     console.log(`Private recovery checkpoint captured at ${capturedAt}; retrieve its bookmark by timestamp from the original D1 if recovery is needed. Never restore automatically.`);
     console.log(`Preflight passed: Cloud ${health.cloudVersion}; storage ${applied.length}; pending ${pending.length}; ` +
@@ -602,19 +657,17 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
       console.log(`CYID provider health: ${identity.serviceVersion ?? 'unknown'}; App access acceptance is separate from deployment metadata.`);
     }
   } else {
-    const before = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     check(before.worker === config.name && before.databaseId === databaseId && before.sourceIdentity === sourceIdentity,
       'AUDIT_SCOPE_MISMATCH');
     check(before.operation === operation, 'AUDIT_DEPLOYMENT_MODE_MISMATCH');
-    check(Boolean(before.schemaUpgrade) === Boolean(env.CYINVOICE_SCHEMA_UPGRADE) &&
-      (!before.schemaUpgrade || env.CYINVOICE_SCHEMA_UPGRADE === '18:19'), 'SCHEMA_UPGRADE_AUDIT_MISMATCH');
+    check(digest(before.schemaUpgrade ?? null) === digest(schemaUpgrade ?? null), 'SCHEMA_UPGRADE_AUDIT_MISMATCH');
     check(digest(before.provider) === digest(providerCheckpoint), 'CYID_PROVIDER_CHANGED');
     check(Date.now() - Date.parse(before.capturedAt) < 30 * 60 * 1000 &&
       Date.now() >= Date.parse(before.capturedAt), 'AUDIT_SNAPSHOT_EXPIRED');
     check(digest(routes) === digest(before.routes) && digest(workerSubdomain) === digest(before.workerSubdomain),
       'WORKER_ROUTES_CHANGED');
     checkContinuity(before.state, state);
-    if (before.schemaUpgrade)
+    if (before.schemaUpgrade || before.allowanceActivation)
       check(before.deploymentRequested && before.uploadedVersionId && versionId === before.uploadedVersionId,
         'SCHEMA_UPGRADE_NOT_DEPLOYED');
     if (before.uploadedVersionId && versionId === before.uploadedVersionId) {

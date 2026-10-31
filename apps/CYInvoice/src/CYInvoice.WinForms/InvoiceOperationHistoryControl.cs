@@ -47,7 +47,9 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     public void LoadRecord(
         InvoiceRecord record,
         InvoiceVoidHandledReview? handledReview = null,
-        InvoiceAllowanceManualReview? allowanceReview = null)
+        InvoiceAllowanceManualReview? allowanceReview = null,
+        IReadOnlyList<OfficialAllowanceObservation>? officialObservations = null,
+        LocalRepository? repository = null)
     {
         list.BeginUpdate();
         try
@@ -64,7 +66,9 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                         handledReview.Reason);
                 var row = NewRow("作廢", ShortDate(cancelText),
                     "已作廢(" + (parsed?.Reason ?? "原因未取得") + ")");
-                row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed);
+                row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed,
+                    EmployeeDisplayText.Format(repository, parsed?.UserEmployeeNo ?? "", handledReview?.RequesterName),
+                    EmployeeDisplayText.Format(repository, parsed?.ReviewerEmployeeNo ?? "", handledReview?.ReviewerName));
                 list.Items.Add(row);
             }
 
@@ -81,6 +85,22 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                 row.Tag = new AllowanceHistoryItem(record, allowance);
                 list.Items.Add(row);
             }
+
+            // Historical *observations* (not proof this app caused a POST).
+            // A previously queried invoice may already be pruned normally:
+            // the independent read-only audit remains in the same SQLite DB.
+            foreach (var observation in officialObservations ?? [])
+            {
+                var snapshot = observation.Snapshot;
+                var status = snapshot.CancelDate > 0 ? "已作廢（官方查證）" :
+                    snapshot.InvoiceStatus == UploadStatuses.Complete ? "有效（官方查證）" :
+                    "狀態待核對";
+                var row = NewRow("官方查證",
+                    observation.ObservedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture),
+                    observation.AllowanceNumber + " " + status);
+                row.Tag = observation;
+                list.Items.Add(row);
+            }
         }
         finally
         {
@@ -94,6 +114,20 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         if (list.SelectedItems.Count != 1) return;
         switch (list.SelectedItems[0].Tag)
         {
+            case OfficialAllowanceObservation observation:
+                var snapshot = observation.Snapshot;
+                MessageBox.Show(FindForm(),
+                    "折讓單號：" + observation.AllowanceNumber +
+                    "\n原發票：" + observation.InvoiceNumber +
+                    "\n系統查證時間：" + observation.ObservedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture) +
+                    "\n官方類型：" + snapshot.InvoiceType +
+                    "\n官方狀態碼：" + snapshot.InvoiceStatus.ToString(CultureInfo.InvariantCulture) +
+                    "\n官方作廢日期：" + (snapshot.CancelDate > 0 ? snapshot.CancelDate.ToString(CultureInfo.InvariantCulture) : "尚未觀察到") +
+                    "\n折讓未稅金額：" + snapshot.TotalAmount +
+                    "\n折讓稅額：" + snapshot.TaxAmount +
+                    "\n\n此為當次官方查回快照，不代表本程式完成該筆交易。",
+                    "官方折讓歷程（唯讀）", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                break;
             case VoidHistoryItem item:
                 using (var form = new VoidHistoryDetailForm(item)) form.ShowDialog(FindForm());
                 break;
@@ -198,7 +232,19 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         }
     }
 
-    internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason);
+    internal void VerifySmokeVoidNames()
+    {
+        var item = list.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<VoidHistoryItem>().Single();
+        using var detail = new VoidHistoryDetailForm(item);
+        static IEnumerable<Control> Descendants(Control control) => control.Controls.Cast<Control>()
+            .SelectMany(child => new[] { child }.Concat(Descendants(child)));
+        var labels = Descendants(detail).OfType<Label>().Select(x => x.Text).ToArray();
+        if (!labels.Contains("3002 測試申請員工") || !labels.Contains("0001 測試核准管理員"))
+            throw new InvalidOperationException("作廢歷程彈窗遺失申請或核准姓名。");
+    }
+
+    internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason,
+        string? RequesterDisplay = null, string? ReviewerDisplay = null);
     internal sealed record AllowanceHistoryItem(InvoiceRecord Record, InvoiceAllowanceResult Allowance);
 
 
@@ -210,7 +256,7 @@ internal sealed class VoidHistoryDetailForm : Form
     {
         Text = "作廢詳細資訊";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, 270);
+        ClientSize = new Size(430, 290);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -223,8 +269,8 @@ internal sealed class VoidHistoryDetailForm : Form
             new("發票號碼", item.InvoiceNumber),
             new("作廢時間", item.CancelDate),
         };
-        rows.Add(new("操作使用者", item.ParsedReason?.UserEmployeeNo is { Length: > 0 } user ? user : "未取得"));
-        rows.Add(new("覆核管理員", item.ParsedReason?.ReviewerEmployeeNo is { Length: > 0 } reviewer ? reviewer : "－"));
+        rows.Add(new("操作使用者", item.RequesterDisplay ?? EmployeeDisplayText.Format(null, item.ParsedReason?.UserEmployeeNo ?? "")));
+        rows.Add(new("覆核管理員", item.ReviewerDisplay ?? EmployeeDisplayText.Format(null, item.ParsedReason?.ReviewerEmployeeNo ?? "")));
         rows.Add(new("作廢原因", item.ParsedReason?.Reason is { Length: > 0 } reason ? reason : "本次資料未取得"));
         Build(rows);
     }
@@ -317,6 +363,12 @@ internal sealed class AllowanceHistoryDetailForm : Form
             new("稅額", Money(allowance.TaxAmount)),
             new("含稅總額", Money(InvoiceOperationHistoryControl.InclusiveAmount(allowance))),
         };
+        var review = new EmployeeAllowanceWorkflowService(repository).HandledReviewFor(record);
+        if (review is not null && string.Equals(review.ConfirmedAllowanceNumber, allowance.AllowanceNumber, StringComparison.OrdinalIgnoreCase)) {
+            rows.Add(new("申請員工", EmployeeDisplayText.Format(repository, review.RequesterEmployeeNo, review.RequesterName)));
+            if (review.LocalApproverEmployeeNo.Length != 0)
+                rows.Add(new("核准管理員", EmployeeDisplayText.Format(repository, review.LocalApproverEmployeeNo, review.LocalApproverName)));
+        }
         var body = VoidHistoryDetailForm.HistoryDetailLayout(rows, Font);
         var close = UiControls.StandardButton("關閉");
         close.Width = 90;

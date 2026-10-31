@@ -71,6 +71,21 @@ internal static class AdministrativeClosureTests
         Equal(true, ReloadIssue(setup).ResolvedUtc is not null);
     }
 
+    public static void ApprovedAllowanceCannotBeAdministrativelyClosed()
+    {
+        using var temporary = new AdministrativeClosureTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceAllowanceIssueTypes.ManualReview, allowance: true);
+        var record = setup.Repository.Invoices.LoadOrCreate().Single();
+        record.ExtensionData!["cyinvoice_allowance_manual_review"] = JsonSerializer.SerializeToElement(new { LocalApprovedUtc = Clock });
+        setup.Repository.Invoices.Save([record]);
+        var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
+        Equal(false, service.CanClose(setup.Issue));
+        Equal(false, service.CanClose(record));
+        Throws<InvalidOperationException>(() => service.Close(setup.Issue, "0001", "SuperPass1"));
+        Throws<InvalidOperationException>(() => service.Close(record, "0001", "SuperPass1"));
+        Equal(true, ReloadIssue(setup).ResolvedUtc is null);
+    }
+
     public static void ProcessingVoidCanCloseWithoutUploadIssue()
     {
         using var temporary = new AdministrativeClosureTemporaryDirectory();

@@ -46,19 +46,19 @@ function fakeHttp(record=officialInvoice,onCall=()=>{}){
   count++;onCall(url);
   assert.equal(url,"https://invoice-api.amego.tw/json/invoice_query");
   assert.equal(opts.method,"POST");
-  assert.equal(opts.redirect,"error");
+  assert.equal(opts.redirect,"manual");
   const form=new URLSearchParams(opts.body);
   assert.equal(form.get("invoice"),"12345678");
   assert.deepEqual(JSON.parse(form.get("data")),{type:"invoice",invoice_number:invoice});
   assert.equal(form.get("sign"),createHash("md5").update(
-   form.get("data")+form.get("time")+"SYNTHETIC_APP_KEY_DO_NOT_USE").digest("hex"));
+   form.get("data")+form.get("time")+"sHeq7t8G1wiQvhAuIM27").digest("hex"));
   return Response.json({code:0,data:[record]});
  }};
 }
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0019_allowance_manual_review_audit.sql");
+ assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
  for(const name of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+name,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES (?,'Synthetic')").run(ws);
@@ -149,7 +149,7 @@ const ledger=sql=>sql.prepare("SELECT COUNT(*) AS n FROM allowance_number_ledger
    assert.equal(fake.count,0);
   }
   const wrongRev=fakeHttp();
-  await assert.rejects(()=>approve(db,{...target,expectedRevision:1},
+  await assert.rejects(()=>approve(db,{...target,expectedRevision:0},
    ctx,identity(),wrongRev.send,()=>now),/ALLOWANCE_APPROVAL_TARGET_INVALID/);
   assert.equal(wrongRev.count,0);
   sql.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(devB);
