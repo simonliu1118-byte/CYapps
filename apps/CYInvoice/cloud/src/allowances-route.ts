@@ -20,7 +20,7 @@ const keys:Record<string,readonly string[]>={
  "void-create":["employeeNo","password","applicationId","environment","allowanceNumber","originalInvoiceNumber","reason"],
  "void-status":["employeeNo","password","applicationId"],
  "void-approve":["employeeNo","password","applicationId","expectedRevision","requestHash","expectedOfficialSnapshotHash"],
- detail:["employeeNo","password","applicationId","operation"],
+ detail:["employeeNo","password","applicationId","operation","allowanceNumber","originalInvoiceNumber","environment"],
  diagnostics:["employeeNo","password","applicationId","operation","afterEventId"]};
 const reply=(status:number,data:Record<string,unknown>)=>Response.json(
  {ok:status<300,...data},{status,headers:{
@@ -81,7 +81,13 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
  if(env.ALLOWANCE_API_ENABLED!=="true"||Number(env.SCHEMA_VERSION)<21||!env.COMPANY_SETTINGS_KEY_HEX)
   return reply(503,{error:{code:"ALLOWANCES_NOT_READY"}});
  const input=await read(req,action);
- if(!input||action!=="list"&&!id(input.applicationId))return reply(400,{error:{code:"INVALID_REQUEST"}});
+ if(!input)return reply(400,{error:{code:"INVALID_REQUEST"}});
+ const historyDetail=action==="detail"&&input.applicationId===undefined;
+ if(historyDetail?(input.operation!=="issue"||
+   typeof input.allowanceNumber!=="string"||!/^[A-Z0-9]{12}$/.test(input.allowanceNumber)||
+   typeof input.originalInvoiceNumber!=="string"||!/^[A-Z]{2}\d{8}$/.test(input.originalInvoiceNumber)||
+   !["test","production"].includes(input.environment as string)):
+   action!=="list"&&!id(input.applicationId))return reply(400,{error:{code:"INVALID_REQUEST"}});
  if(["approve","void-approve","withdraw"].includes(action)&&!rev(input.expectedRevision))
   return reply(400,{error:{code:"INVALID_REVISION"}});
  if((action==="approve"&&env.ALLOWANCE_G0401_SEND_ENABLED!=="true")||
@@ -99,6 +105,16 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
    return reply(403,{error:{code:"AUTHORITY_CHANGED"}});
   const target={workspaceId:binding.workspaceId,applicationId:input.applicationId as string,
    deviceId:dev.device_id,expectedRevision:input.expectedRevision as number};
+  if(historyDetail){
+   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
+   const linked=await env.DB.prepare(`SELECT l.application_id FROM allowance_number_ledger l
+    JOIN company_settings c ON c.workspace_id=l.workspace_id AND c.seller_invoice=l.seller_invoice
+    WHERE l.seller_invoice=c.seller_invoice AND l.environment=?1 AND l.allowance_number=?2
+     AND l.workspace_id=?3 AND l.status IN ('sending','confirmed') LIMIT 1`)
+    .bind(input.environment,input.allowanceNumber,binding.workspaceId).first<{application_id:string}>();
+   if(!linked)return reply(404,{error:{code:"NOT_FOUND"}});
+   target.applicationId=linked.application_id;
+  }
   let environment:unknown=input.environment;
   if(action!=="create"&&action!=="void-create"&&action!=="list"){
    const isVoid=action.startsWith("void-")||((action==="detail"||action==="diagnostics")&&input.operation==="void");
@@ -209,6 +225,8 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
    stage="detail_load";
    const isVoid=input.operation==="void";
    const f=isVoid?await loadCloudAllowanceVoidForManager(env.DB,target,ctx,authority):await loadEncryptedCloudAllowance(env.DB,target,ctx,authority);
+   if(historyDetail&&f.originalInvoiceNumber!==input.originalInvoiceNumber)
+    return reply(404,{error:{code:"NOT_FOUND"}});
    const c=await loadAmegoCompanySettingsForGateway(env.DB,target.workspaceId,ctx.encryptionKeyHex);
    stage="detail_official_invoice_query";
    const invoice=await queryOfficialInvoiceReadOnly({...amegoCredentialsForEnvironment(c,ctx.environment),originalInvoiceNumber:f.originalInvoiceNumber});

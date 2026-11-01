@@ -90,11 +90,22 @@ internal static class CloudAllowanceClientTests
             operation="issue",status="open",revision=1,rows=new[]{new {label="原發票",value="AA00000001"}},requestHash="",officialSnapshotHash=""});});
         var detail=await api.OpenOperationAsync(Id,false,"0001","fake-password");
         Equal(1,detail.Revision); Equal("原發票",detail.Rows[0].Key);
+        fake.Add(r=>{
+            Check(r,"detail");
+            using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal("A20261019001",body.RootElement.GetProperty("allowanceNumber").GetString());
+            Equal("AA00000001",body.RootElement.GetProperty("originalInvoiceNumber").GetString());
+            if(body.RootElement.TryGetProperty("applicationId",out _))throw new InvalidOperationException("History must resolve the exact number at the existing Cloud detail owner.");
+            return Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,operation="issue",status="approved",revision=2,
+                rows=new[]{new {label="申請原因",value="synthetic reason"},new {label="申請員工",value="0002 Synthetic"},new {label="核准管理員",value="0001 Manager"}},requestHash="",officialSnapshotHash=""});
+        });
+        var history=await api.OpenHistoryAsync("A20261019001","AA00000001","test","0001","fake-password");
+        Equal("synthetic reason",history!.Rows.Single(row=>row.Key=="申請原因").Value);
         fake.Add(r=>{Check(r,"approve");using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().Result);
             Equal(1,body.RootElement.GetProperty("expectedRevision").GetInt32());
             return Json(HttpStatusCode.OK,new{ok=true,applicationId=Id,status="approved",revision=3,executionState="completed"});});
         var completed=await api.ApproveOperationAsync(detail,"0001","fake-password");
-        Equal("completed",completed.ExecutionState);Equal(2,fake.Calls);Equal(0,fake.Remaining);
+        Equal("completed",completed.ExecutionState);Equal(3,fake.Calls);Equal(0,fake.Remaining);
         fake.Add(r=>Json(HttpStatusCode.OK,new{ok=true,applicationId="wrong-identity",status="approved",executionState="completed"}));
         await Fail<InvalidDataException>(()=>api.ApproveOperationAsync(detail,"0001","fake-password"));
         fake.Add(r=>Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,status="approved",revision=3,executionState="completed",officiallyConfirmed=true,allowanceNumber="A20261022001",ledgerStatus="sending"}));

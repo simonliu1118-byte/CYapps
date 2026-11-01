@@ -801,10 +801,14 @@ internal sealed class SyncIssuesForm : Form
         }
         if (SelectedIssue() is not { } issue) return;
         var needsManager = NeedsManagerApproval(issue) || IssueState(issue) is "人工確認" or "等待確認" or "可結案";
-        if (processing && !needsManager)
+        if (processing && !needsManager && !IsCloudAllowance(issue))
         {
-            using var status = new ManualReviewDetailForm("處理中", CommonDetailRows(issue)
-                .Append(new("處理狀態", IssueState(issue))));
+            var rows = IsAllowanceVoidManualReview(issue) ? AllowanceVoidDetailRows(issue) :
+                IsAllowanceManualReview(issue) ? AllowanceDetailRows(issue) :
+                IsVoidManualReview(issue) ? VoidDetailRows(issue) :
+                CommonDetailRows(issue).Append(new("處理狀態", IssueState(issue)));
+            using var status = new ManualReviewDetailForm("處理中", rows,
+                originalItems: TryFindIssueRecord(issue)?.Items);
             status.ShowDialog(this);
             return;
         }
@@ -812,7 +816,7 @@ internal sealed class SyncIssuesForm : Form
             ? new EmployeeAdminLoginForm(repository, requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
             : null;
         if (authorization is not null && authorization.ShowDialog(this) != DialogResult.OK) return;
-        if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!); return; }
+        if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!, readOnly: processing && !needsManager); return; }
         if (issue.ResolvedUtc is null && repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
             repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
         {
@@ -948,7 +952,7 @@ internal sealed class SyncIssuesForm : Form
         return new CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings), repository.DataDirectory);
     }
 
-    private async Task OpenCloudAllowanceAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization)
+    private async Task OpenCloudAllowanceAsync(InvoiceSyncIssue issue, EmployeeAdminLoginForm authorization, bool readOnly = false)
     {
         var login = authorization;
         SetManualReviewBusy(true);
@@ -965,11 +969,14 @@ internal sealed class SyncIssuesForm : Form
                 issueStore.CloudProjection(accountKey, issue.OrderId, isVoid ? "void" : "issue")?.ExecutionState ?? "processing", data.Status, "",
                 originalInvoiceNumber: Detail("原發票"), originalOrderId: Detail("訂單編號"));
             if (IsDisposed) return;
-            var canApprove = data.Status is "open" or "review";
-            var rows = data.Rows.Select(row => row.Key == "訂單編號" && accountKey.StartsWith("test|", StringComparison.Ordinal)
-                ? new KeyValuePair<string,string>(row.Key, TestOrderIdPrefix.StripIfPresent(row.Value)) : row);
+            var canApprove = !readOnly && data.Status is ("open" or "review");
+            var rows = data.Rows.Select(row => new KeyValuePair<string,string>(
+                row.Key == "核准管理員" ? "覆核主管" : row.Key,
+                row.Key == "訂單編號" && accountKey.StartsWith("test|", StringComparison.Ordinal)
+                    ? TestOrderIdPrefix.StripIfPresent(row.Value) : row.Value))
+                .Append(new("處理狀態", IssueState(issue)));
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: data.CanWithdraw, primaryDanger: true);
+                rows, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: !readOnly && data.CanWithdraw, primaryDanger: true);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
             if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
             {

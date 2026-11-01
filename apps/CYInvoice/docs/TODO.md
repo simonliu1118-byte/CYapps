@@ -10,15 +10,21 @@
 
 ## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
 
-**現行狀態（2026-10-29）：工程V3.1.44 Build4／Cloud Source0.9.11修正桌面與Cloud七位小數契約；新Source尚未部署。原Worker已是Cloud0.9.10／schema22，旗標／綁定保留，完成報告與線上bundle後驗已核對。下方舊看板與勾選保留歷史checkpoint，不得據此重跑已完成維護。**
+**現行狀態（2026-11-01）：使用者回報Cloud0.9.11已推送、原申請可正常送出。工程V3.1.45／BUILD0、Cloud Source0.9.12修正折讓歷程重複、類型／狀態摘要、原申請原因及人員缺漏、處理中完整詳情；0.9.12尚未部署。本批未重新連線Cloudflare或重試原案。下方舊看板保留歷史checkpoint，不得據此重跑維護。**
 
 使用者定案流程與全部驗收只在 [V3.2 唯一現行計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本看板只列狀態。原 PR #550，正式 Release 仍 V3.1.0。
 
-### 本輪小數契約返修（V3.1.44 Build4／Cloud Source0.9.11）
+### 折讓歷程與詳情（V3.1.45／Cloud Source0.9.12）
+
+- [x] 同折讓單只顯示一列業務類型與短狀態；原查證快照留詳情／稽核，不當獨立交易。
+- [x] 完成與處理中讀原完整詳情；Cloud人員及原因沿原加密申請／Grant，不取代成Local未知值。
+- [ ] 精確Source遠端CI、工程包與Cloud0.9.12配套；再由使用者驗收，包只提供GitHub連結。
+
+### 小數契約返修（V3.1.44 Build4／Cloud Source0.9.11，歷史）
 
 - [x] 原始JSON token精確解碼並沿BigInt／七位精度驗證；原草稿／requestHash／權威不改寫，g0401 numeric token原樣送出。
 - [x] 實際C# BuildDraft三組合成fixture由C#每次核對，Workers原生驗證／詳情／完整查回／簽章POST與非法精度／總額拒絕已覆蓋。
-- [ ] 精確Source必要CI／Build4包、原Worker0.9.11配套更新及唯一計畫所列真人驗收；包只提供GitHub連結。
+- [x] 精確Source必要CI／Build4包完成；2026-11-01使用者回報已推送且原申請可送出。其他真人驗收仍依唯一計畫，不外推完成。
 
 ### 已交付Workers原生請求返修（V3.1.44 Build3／Cloud0.9.10）
 

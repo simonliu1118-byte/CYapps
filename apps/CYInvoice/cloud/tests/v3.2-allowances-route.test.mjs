@@ -248,6 +248,15 @@ try{
  const approvedDetail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
  assert.equal(approvedDetail.status,200);
  assert.ok(approvedDetail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="1234 Synthetic"));
+ const historyQuery={operation:"issue",allowanceNumber:"A20261019001",originalInvoiceNumber:invoice,environment:"test"};
+ const historyDetail=await call(manager,"detail",historyQuery,rawDevB);
+ assert.equal(historyDetail.status,200,JSON.stringify(historyDetail));
+ assert.equal(historyDetail.body.applicationId,app1);
+ for(const label of ["申請員工","核准管理員","申請原因","本次折讓商品"])
+  assert.deepEqual(historyDetail.body.rows.find(r=>r.label===label),approvedDetail.body.rows.find(r=>r.label===label));
+ assert.equal((await call(employee,"detail",historyQuery)).status,403);
+ assert.equal((await call(manager,"detail",{...historyQuery,originalInvoiceNumber:"CD87654321"},rawDevB)).status,404);
+ assert.equal((await call(manager,"detail",{...historyQuery,environment:"production"},rawDevB)).status,404);
  assert.equal((await call({...employee,ALLOWANCE_G0401_SEND_ENABLED:"true"},"approve",{applicationId:app1,expectedRevision:1})).status,403);
  assert.equal(provider.calls.filter(x=>x.endsWith("/g0401")).length,1);
  assert.equal((await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB)).status,409);

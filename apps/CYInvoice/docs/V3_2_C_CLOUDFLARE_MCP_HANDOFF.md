@@ -1,6 +1,20 @@
-# 本輪待配套：Cloud0.9.11／V3.1.44 Build4
+# 本輪待配套：Cloud0.9.12／V3.1.45
 
-2026-10-29（Asia/Taipei）。原PR #550／同分支；0.9.11尚未部署，原Worker0.9.10已完成，不重跑。指定程式Source以本輪完成報告固定SHA及同SHA必要CI為準，不以浮動HEAD或後續文件提交代替。
+2026-11-01（Asia/Taipei）。原PR #550；使用者回報0.9.11已推送、原申請可送出及確認完成。本批0.9.12尚未部署，未重跑遠端後驗或原申請。指定Source以完成報告固定SHA與同SHA必要CI為準。
+
+- 本輪沿原allowances/detail handler新增原單號查找：依原公司／環境／單號Ledger定位已送出的申請，再核對原發票，保留原主管驗證。回傳原加密申請與Grant的原因、人員及商品；不擴張Device最小同步摘要，不建立第二套authority，不改財務送出／成功判定。
+- 桌面V3.1.45合併同單號歷程為一列「折讓」與短狀態，查證技術資料留詳情／原SQLite稽核；處理中使用完整詳情。這是顯示去重，沒有刪除正式資料。
+- 原Worker0.9.11→0.9.12仍循canonical before／deploy／after與新私有checkpoint，先確認實際現行版本；schema／marker22、history、原Bindings／Secrets／Routes／CYID scope與旗標保留。沒有migration、activation、CYID D1操作或真交易。工程包只給GitHub連結，不下載或覆寫原安裝。
+- 如由使用者另行交辦部署，沿原有界前後檢估算直接D1讀1200／寫0、服務8、控制面90，停止界線2000／0／12／110；先對照當批方案與共用餘額，限流即停。完整雜湊／安全稽核與線上程式查核仍依該批明確授權，不將過去單批同意視為持續授權，不重跑成功收據；私有計量與識別不公開。
+- 後驗應核對指定Source bundle、Cloud0.9.12／storage=ok／CYID／storageSchemaVersion22與原綁定連續性。回退保留原不可變程式與私有checkpoint，Worker回退不回退D1，不重建、重新核准或重送原案。
+
+以下0.9.11段落為歷史交付，已由使用者回報推送；不得再當本輪部署指令。
+
+---
+
+# 歷史配套：Cloud0.9.11／V3.1.44 Build4
+
+2026-10-29原交付紀錄（Asia/Taipei）。原PR #550／同分支；當時0.9.11尚未部署，原Worker0.9.10已完成；後於2026-11-01取得使用者成功回報。指定程式Source為 `55793669d842f89f42e4e81a384868b121a0f36d`，不以浮動HEAD或後續文件提交代替。
 
 - 小數解析改讀原JSON numeric token，仍用原七位規則與BigInt；原申請字串、加密內容、requestHash、Grant、Ledger不修改。既有C#產生的numeric小數草稿可由同一reader讀取，不新增格式版本或回填；g0401沿原owner只加已核准號碼，所有numeric token原樣，不轉成字串或先經JS Number重算。
 - 三組實際桌面BuildDraft合成fixture由C#與workerd同時驗證；七位精度、正負／範圍、原發票／買受人／逐項／稅額／總額、3xx拒絕與未知不重送保持。沒有新表、migration、排程、fallback或第二套財務owner。

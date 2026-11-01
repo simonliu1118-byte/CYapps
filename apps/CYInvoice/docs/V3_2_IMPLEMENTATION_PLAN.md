@@ -2,9 +2,12 @@
 
 更新：2026-10-29（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**工程 Source：V3.1.44 Build4／Cloud Source0.9.11，沿原 PR #550 修正桌面decimal JSON與Cloud七位小數契約。0.9.11尚未部署；實際原Worker0.9.10／schema22已以Source `27abeffe58b8921cd65a53c545cf7291188a5a27` 完成部署與後驗，原旗標及綁定保留。尚未合併或發布。** 同機流程與修正版仍待真人回報；跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
+**工程 Source：V3.1.45／BUILD0、Cloud Source0.9.12，沿原 PR #550 整理折讓歷程與詳情。0.9.12尚未部署；使用者2026-11-01回報0.9.11已推送、原申請可正常送出。本批未重新執行線上後驗或原案交易，尚未合併或發布。** 跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
 
 ## 1. 來源、現況與執行停點
+
+- V3.1.45：每張折讓只保留一列，類型「折讓」、摘要為短狀態。完成後不再列出多筆官方快照；Cloud歷程以原單號／環境／原發票連回原申請的detail handler，讀原原因、人員與商品；處理中折讓亦使用完整詳情。沿原主管驗證；不另建資料權威或刪除稽核，不把查回快照當成本程式執行證據。配套Cloud0.9.12尚待部署。
+- 2026-11-01使用者回報Build4／Cloud0.9.11修正後原申請可送出，並提供完成折讓畫面；其餘正向／跨機驗收不外推完成。
 
 - Build4：最新詳情已通過原票查詢，原草稿小數被Cloud安全整數number限制拒絕。以原始JSON token與BigInt保留七位精度，不改原草稿／雜湊／授權；原傳輸保持numeric token原樣，只加已核准號碼。實際C#產生、兩端共用且每次核對的三組合成fixture覆蓋負折扣／小數數量／大單價；未知結果、逐項與總額判定不放寬。既有申請只沿原ID讀取，不能為新格式另建或回填。
 - 本機Cloud0.9.10完成報告已核對：固定Source `27abeffe58b8921cd65a53c545cf7291188a5a27`、100%流量、canonical前後檢／bundle／health／身分與綁定連續性通過；schema22不變，未送真交易。維護完成不重跑，私有計量與回復證據不公開。
@@ -19,7 +22,7 @@
 - 指定桌面Data已加密備份及實際還原核對，副本有界唯讀盤點；原檔前後不變。該快照未核准／已核准Local草稿、Ledger、舊pending／Cloud提交marker、未知Void Claim及歷史財務查證等分類均0；原D1申請、核准、Ledger、作廢申請、Claim及attempts六表當次盤點亦無舊案。不外推未提供安裝、裝置、帳戶或其他表。無DELETE、authority回填、Claim解鎖或推定官方完成。
 - 舊網站人工完成按鈕／直接結案方法已在同Source工程包退役，歷史沿原清單及服務查證；未知Claim仍只查回。原桌面EXE未自動覆寫，需使用已下載V3.1.43包才能驗收新版。MCP未送真光貿交易；真人角色、金鑰及財務正向流程仍待驗。公司卡既有使用者驗收保留，雙Windows驗收仍按既定延期，不新增上線阻擋條件。詳見[本機完成摘要](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 - 已完成的schema18～22及Cloud維護只保留[交接摘要中的歷史索引](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md#已完成維護索引)；較舊Build返修細節留CHANGELOG及Git歷史，不再列為現行執行步驟。已套migration不重跑，歷史核准欠缺權威快照時不補造授權、不自動POST。
-- 工程VERSION=3.1.44、BUILD=4；正式Release仍V3.1.0。0.9.10／Build3指定Source已完成原Worker更新；新Source0.9.11尚未部署，無migration、資料修改、真交易或原案重試。維護不重跑，正式發布仍需當次明確授權，私有計量不公開。
+- 工程VERSION=3.1.45、BUILD=0；正式Release仍V3.1.0。0.9.11／Build4沿使用者成功回報歸檔；新Source0.9.12尚未部署，本批無migration、資料修改、真交易或原案重試。維護不重跑，正式發布仍需當次明確授權，私有計量不公開。
 
 ### 本批返修及驗收（2026-10-28）
 

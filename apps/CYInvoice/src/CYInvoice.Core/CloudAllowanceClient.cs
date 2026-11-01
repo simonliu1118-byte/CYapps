@@ -358,12 +358,32 @@ public sealed class CloudAllowanceClient
     {
         Credentials(employeeNo, password); ValidateId(id);
         using var doc = await SendAsync("detail", new { applicationId=id, operation=isVoid?"void":"issue", employeeNo,password }, token).ConfigureAwait(false);
-        var root=doc.RootElement;
-        if (Required(root,"applicationId")!=id || Required(root,"operation")!=(isVoid?"void":"issue"))
+        return ReadOperationDetail(doc.RootElement, id, isVoid ? "void" : "issue");
+    }
+
+    public async Task<CloudAllowanceOperationDetail?> OpenHistoryAsync(string allowanceNumber,
+        string originalInvoiceNumber, string environment, string employeeNo, string password,
+        CancellationToken token = default)
+    {
+        Credentials(employeeNo, password);
+        try
+        {
+            using var doc = await SendAsync("detail", new { allowanceNumber, originalInvoiceNumber,
+                environment, operation="issue", employeeNo, password }, token).ConfigureAwait(false);
+            return ReadOperationDetail(doc.RootElement, null, "issue");
+        }
+        catch (CloudApiException error) when (error.Code == "NOT_FOUND") { return null; }
+    }
+
+    private static CloudAllowanceOperationDetail ReadOperationDetail(JsonElement root, string? expectedId, string operation)
+    {
+        var id = Required(root, "applicationId");
+        ValidateId(id);
+        if (expectedId is not null && id != expectedId || Required(root,"operation") != operation)
             throw new InvalidDataException("Cloud 原申請身分不符");
         var rows=root.GetProperty("rows").EnumerateArray().Select(r => new KeyValuePair<string,string>(
             Required(r,"label"), r.GetProperty("value").GetString() ?? "－")).ToArray();
-        return new(id, isVoid?"void":"issue", Required(root,"status"), RequiredRevision(root), rows,
+        return new(id, operation, Required(root,"status"), RequiredRevision(root), rows,
             root.GetProperty("requestHash").GetString() ?? "", root.GetProperty("officialSnapshotHash").GetString() ?? "",
             root.TryGetProperty("canWithdraw", out var cancel) && cancel.ValueKind == JsonValueKind.True);
     }
