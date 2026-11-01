@@ -1,5 +1,14 @@
 # Shared Common Rules Changelog
 
+## 2.11.0 — 2026/10/29
+
+- 11.4 工作單交接新增「不做多餘的測試與防護」（使用者 2026-10-29）：
+  - 執行者只實作工作單要求的功能，以及實際會發生的錯誤處理。
+  - 不加重複驗證、不會發生的情境檢查、層層 fail-closed、自設上限、安全開關，也不為這些寫測試。
+  - 測試只涵蓋主要行為與指定案例。
+  - Claude 開工單時須寫入此限制；審查時可以直接刪除多餘部分。
+- 起因：CYERPAutoQuery WO-1.3.0，GPT 加了大量無用的防護與測試。
+
 ## 2.10.0 — 2026/10/21
 
 - 新增 11.4 工作單交接（使用者 2026-10-21：由 CY Web `PROJECT_RULES.md` §9 與 CYERPAutoQuery 抽出為共通規則）：只有在使用者指示 Claude 開立工作單轉交 GPT 製作時才適用；Claude 規劃並撰寫工作單、GPT 依單實作開 PR 並填完成報告、Claude 審查；工作單位置（單一專案 `docs/development/work-orders/`、monorepo `apps/<Project>/docs/work-orders/`）、執行者不得擴大或改變範圍且不合併不部署、審查者可直接修小問題。
