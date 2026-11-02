@@ -1581,18 +1581,21 @@ internal sealed partial class MainForm : Form
     /// also flashes on the taskbar until it is brought to the front (the summary itself opens
     /// on top). Logged.
     /// </summary>
-    private void Alarm(bool needsPerson)
+    /// <param name="keepRun">The run goes on (the 紙本發票待列印 box): the beep only — the mouse stays
+    /// locked and the taskbar does not flash (user LOG 2026-10-30: the box came up while ERP was being
+    /// typed into, the mouse was let go and the 單身 could not be read).</param>
+    private void Alarm(bool needsPerson, bool keepRun = false)
     {
         // A person is needed: the mouse is theirs again (the run may have kept it locked).
-        if (needsPerson) _automationSession?.End();
+        if (needsPerson && !keepRun) _automationSession?.End();
         var info = new NativeMethods.FLASHWINFO
         {
             cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.FLASHWINFO>(),
             hwnd = Handle,
             dwFlags = NativeMethods.FLASHW_UNTIL_FRONT
         };
-        NativeMethods.FlashWindowEx(ref info);
-        _log.Info("sound", $"end alert {(needsPerson ? "needs-person" : "done")}: beep and taskbar flash");
+        if (!keepRun) NativeMethods.FlashWindowEx(ref info);
+        _log.Info("sound", $"end alert {(needsPerson ? "needs-person" : "done")}: {(keepRun ? "beep only, run goes on" : "beep and taskbar flash")}");
         if (needsPerson) System.Media.SystemSounds.Hand.Play();
         _ = Task.Run(() =>
         {
