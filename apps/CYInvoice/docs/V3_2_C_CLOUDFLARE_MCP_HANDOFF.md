@@ -1,5 +1,7 @@
 # 本輪待配套：Cloud0.9.12／V3.1.45
 
+> 2026-11-03文件釐清（無遠端操作）：2026-11-01本機MCP完整before／deploy／after證據確認，Source `55793669d842f89f42e4e81a384868b121a0f36d` 已部署原Worker Cloud0.9.11、100%流量；schema／marker22、CYID_ONLY及原設定保留。`IDENTITY`與`IDENTITY_AUTHORITY`均連已核准的 **production CYID**，原RPC entrypoint與scope保留。Invoice的 `APP_ENV=development` 仍是原部署標籤及預檢條件，與CYID provider環境、原申請保存的光貿交易環境分開；詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target)。實際服務名稱／識別／收據留私有位置。本註記只引用既有部署證據，不宣稱今日重新遠端查證、不更新Worker或啟用任何功能；Cloud0.9.12待部署停點不變。
+
 2026-11-01（Asia/Taipei）。原PR #550；使用者回報0.9.11已推送、原申請可送出及確認完成。本批0.9.12尚未部署，未重跑遠端後驗或原申請。指定Source以完成報告固定SHA與同SHA必要CI為準。
 
 - 本輪沿原allowances/detail handler新增原單號查找：依原公司／環境／單號Ledger定位已送出的申請，再核對原發票，保留原主管驗證。回傳原加密申請與Grant的原因、人員及商品；不擴張Device最小同步摘要，不建立第二套authority，不改財務送出／成功判定。

@@ -1,6 +1,6 @@
 # CYInvoice Cloud Architecture Status
 
-本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**，不是 2026-10-21 的即時 Worker／D1 狀態；下方 storage13／Cloud0.9.3／V2.6.19 是當時快照。最新 V3.1.0 正式版、V3.1.25 Build 0 工程版與使用者本機 MCP 原 D1／Worker schema18 驗收狀態，請先讀 [TODO](TODO.md) 現行看板及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID 身分權威仍以 canonical Consumer Standard 和永久規則為準。
+本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**；下方storage13／Cloud0.9.3／V2.6.19與development身分服務描述是當時快照。2026-11-03文件核對：最近一次本機MCP完整部署證據為2026-11-01 Cloud0.9.11、schema／marker22，兩個身分服務綁定均為已核准的 **production CYID**；原CYInvoice `APP_ENV=development` 是另一個獨立的部署標籤，詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target)。本次未重查遠端。最新工程與部署停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，待辦見 [TODO](TODO.md) 及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID身分權威仍以canonical Consumer Standard和永久規則為準。
 
 > 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
 
@@ -17,7 +17,7 @@
 
 GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](V3_1_HANDOFF.md)。不等同 live deployment 或人工驗收。
 
-目前原 development 遠端部署證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。未執行的 Windows 全角色／多裝置實機矩陣仍待 RC 證據，不以 health 冒充人工通過。
+原development部署的歷史證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。這不是目前身分服務指向；後續部署及尚未驗收項目依現行交接／TODO，不以health冒充人工通過。
 
 本公司原 D1 的帳號 authority 已改由 CYID；CYInvoice 保留自己的業務 Workspace／Device 與資料。以下 Local／Built-in Employee 轉換、CRUD、帳號 OTP、移交等既有能力仍供 Local 或其他公司獨立新建的 Built-in D1 使用，不代表本公司已退役 D1 應重建帳號表。
 
