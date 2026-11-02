@@ -385,7 +385,7 @@ internal sealed partial class MainForm
         {
             _paperPanelShown = true;
             _log.Info("cyinvoice", $"paper invoices wait in the panel count={count}");
-            Alarm(needsPerson: true);
+            Alarm(needsPerson: true, keepRun: true);
         }
     }
 
