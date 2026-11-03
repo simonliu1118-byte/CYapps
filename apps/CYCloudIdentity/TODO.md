@@ -2,6 +2,14 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## 2026-11-03 測試期例外收斂（source-only，待審核及授權部署）
+
+- [x] CYID source 0.3.11 / consumer contract 1.0.7：還原 `allowVerifiedDeletion=false`、`recordCreateDeleteAudit=true`；移除 DELETE 後端已驗證帳號 bypass，交易內同時檢查 Email 驗證、first lifecycle 與永久 credential；保留 snapshot 相容欄位但一律回 false。
+- [x] 新增 synthetic Node 回歸：已驗證帳號／不一致 verified marker 均不能實體刪除、pending 依角色刪除與 Audit、刪除時驗證狀態變更拒絕、Email 寄送成功與失敗皆有 Audit；以 CI 實際結果為準。
+- [ ] 確認獨立 PR exact-head TypeScript／Node／本機 Worker + D1 / Governance CI，以及 CY Web mirror exact-sync。Web runtime 不需改動，mirror 合併順序在 CYID canonical 之後。
+- [ ] **正式部署須另案授權**：核對既有 production authority、deployed source/version、CY Web binding/consumer，以及新版本部署後唯讀 read-back；未操作真實員工資料，亦未進行 remote migration/deploy。
+- [ ] 如需實際真人 Email/瀏覽器驗收，另循受控授權，不在本 PR 操作真實 Employee。
+
 ## 測試期帳號刪除與 Audit 暫停 — 2026-10-15
 
 - 使用者明確要求：為反覆測試新增／Email 驗證流程，暫時允許刪除已驗證帳號，並暫停新增／刪除帳號 Audit；一次性測試例外，不改永久 PROJECT_RULES。
@@ -11,7 +19,7 @@
 - [x] Local TypeScript／95項Node回歸與實際本機Worker/D1新增→拒絕一般ADMIN刪已驗證→SA刪除→舊Session/密碼拒絕→同編號/Email重建→無繼承App Access／FK檢查通過；新增/刪除Audit為零、其他Audit保留，HTML/text初寄與重寄實際adapter pipeline通過（Email transport為stub）。
 - [ ] exact-head CI／正式既有provider部署；不重播authority、不建test Worker。
 - [ ] 受控真人新增→實際收信連結→驗證→新密碼登入→刪除→同編號／Email重建驗收；未操作真人帳號。
-- [ ] **第一版業務上線前恢復**：`src/account-lifecycle-testing.ts` 的 allowVerifiedDeletion=false、recordCreateDeleteAudit=true，更新consumer契約／Web mirror並部署，驗收已驗證帳號不可刪、pending刪除及新增／刪除Audit正常；完成後收斂本暫時例外。
+- [ ] **第一版業務上線前完成**：source 與契約修正已列於 2026-11-03 段落；仍須 exact-head CI、跨 repo mirror、另案核准正式部署／環境讀回及必要受控驗收，方能正式結案。
 
 ## Verification Email clickable CY Web link — 2026-10-13
 

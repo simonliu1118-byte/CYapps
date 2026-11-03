@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.0.7 — 2026-11-03
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Retire the explicitly temporary verified-account deletion override (§17.2): physical deletion is again limited to never-verified Employees without permanent credentials, including transactional verification-state guards. The optional snapshot `testingAccountDeletionAllowed` remains present but is always false, so existing consumers already honoring absent/false require no UI or API change. Restore `employee_created_pending_activation`, initial Email sent/failed and `employee_pending_activation_deleted` audit events. Provider source 0.3.11, minimum compatible contract remains 1.0.0. Source/PR verification and actual production deployment/readback are separate gates.
+
 ## 1.0.6 — 2026-10-15
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional private `ConsumerNotifications.notifySuperAdmin` RPC (§20) for fixed generic backup-health alerts. Current Super Admin recipient resolution, Email transport and budgets stay provider-owned; backup/incident state stays app-owned. No public route, arbitrary recipient/body, Session, permission grant or business-data storage is added. Provider 0.3.10 introduces a bounded delivery slot migration; existing consumers and minimum 1.0.0 remain supported.

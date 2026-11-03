@@ -1,10 +1,9 @@
-import { ACCOUNT_LIFECYCLE_TESTING, canDeleteVerifiedEmployee } from "./account-lifecycle-testing";
-import { sha256Hex } from "./crypto";
+import { ACCOUNT_LIFECYCLE_TESTING } from "./account-lifecycle-testing";
 import { createEmailSender, normalizeAddress } from "./email";
 import { issueInitialCredential } from "./initial-access";
 import { json, readJsonObject } from "./http";
 import { issueEmailOtp, type OtpIssueResult } from "./otp";
-import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin, liveCoreSuperAdmin } from "./admin-auth";
+import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin } from "./admin-auth";
 import {
   canManageEmployeeLifecycle,
   effectiveWorkspaceRole,
@@ -217,8 +216,7 @@ export async function handleDeleteEmployee(
       error: { code: "EMPLOYEE_MANAGEMENT_NOT_ALLOWED", message: "This Employee cannot be deleted by the current administrator." },
     });
   }
-  const verifiedDeletionAllowed = canDeleteVerifiedEmployee(request, env, actor);
-  if ((employee.activated_at || employee.credential_present !== 0) && !verifiedDeletionAllowed) {
+  if (employee.email_verified_at || employee.activated_at || employee.credential_present !== 0) {
     return json(env, requestId, 409, {
       error: {
         code: "EMPLOYEE_DELETE_NOT_ALLOWED",
@@ -227,23 +225,19 @@ export async function handleDeleteEmployee(
     });
   }
 
-  const token = request.headers.get("authorization")!.trim().replace(/^Bearer\s+/i, "").trim();
-  const values = [await sha256Hex(token), actor.workspaceId, actor.employeeId,
-    request.headers.get("x-identity-application")!.trim().toUpperCase(), employee.employee_id,
-    employee.revision, verifiedDeletionAllowed ? 1 : 0];
-  // Cascade removes credentials, first-login tickets, Sessions and App Access.
-  // The target revision and live core Super Admin Session are rechecked inside
-  // the delete transaction; authority transfer/revocation cannot race this bypass.
+  // Recheck the target's durable verification markers and revision inside
+  // the same D1 transaction that deletes the pending Employee and scoped OTPs.
   const statements = [env.DB.prepare(
     `DELETE FROM employees
-      WHERE workspace_id = ?2 AND employee_id = ?5 AND revision = ?6
-        AND employee_id <> ?3
+      WHERE workspace_id = ?1 AND employee_id = ?3 AND revision = ?4
+        AND employee_id <> ?2
         AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.super_admin_employee_id = employees.employee_id)
-        AND ((activated_at IS NULL AND NOT EXISTS (
+        AND email_verified_at IS NULL AND activated_at IS NULL
+        AND NOT EXISTS (
           SELECT 1 FROM employee_credentials c WHERE c.employee_id = employees.employee_id
-        )) OR (?7 = 1 AND EXISTS (${liveCoreSuperAdmin})))
+        )
       RETURNING employee_id, employee_no`
-  ).bind(...values), env.DB.prepare(
+  ).bind(actor.workspaceId, actor.employeeId, employee.employee_id, employee.revision), env.DB.prepare(
     `DELETE FROM email_otp_challenges
       WHERE purpose IN ('employee_email_verification', 'employee_password_reset')
         AND scope_key IN (?1, ?2)

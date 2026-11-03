@@ -65,7 +65,7 @@ Consumer UI distinguishes:
 - `停用` — previously completed lifecycle but currently disabled;
 - `啟用 · Email 待驗證` — activated account after authorized Email replacement/recovery.
 
-`activated_at` or equivalent internal marker may preserve historical first-lifecycle completion. The normal baseline permits physical deletion only before first verification/permanent credential creation. The explicitly approved temporary testing exception and its restoration conditions are defined in consumer standard §17.2; it does not replace the permanent lifecycle rules.
+`activated_at` or equivalent internal marker may preserve historical first-lifecycle completion. The normal baseline permits physical deletion only before first verification/permanent credential creation. The former testing exception has been retired; consumer standard §17.2 defines the pending-only DELETE and compatible false snapshot capability.
 
 ## 6. Activated-account Email recovery
 

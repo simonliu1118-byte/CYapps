@@ -397,32 +397,35 @@ existing login/resolve/logout and App Access contracts. Registering an applicati
 does not configure service bindings, enable a consumer's CYID flag, merge identity
 and business Workspaces, or authorize a production rollout.
 
-### 17.2 Temporary testing account deletion — 2026-10-15
+### 17.2 Pending-only account deletion and retired test capability
 
-Contract 1.0.5 adds optional `testingAccountDeletionAllowed: boolean` to the admin
-snapshot. An absent/false field retains the pending-only delete UI. During the
-explicitly approved testing period the existing `DELETE
-/v1/admin/identity/employees/{employeeId}` also accepts previously verified
-accounts, but only for the current Super Admin's core account application Session.
-Self-deletion, the protected Super Admin and foreign-Workspace targets remain
-forbidden. Normal ADMIN/Identity Admin retain only their existing pending-account
-management permissions. The server rechecks target revision and live core Super
-Admin Session/authority transactionally before deleting a verified account.
+Contract 1.0.7 closes the temporary 2026-10-15 verified-account deletion
+exception. The optional `testingAccountDeletionAllowed: boolean` admin snapshot
+field remains for existing consumers and now reports `false`; absent/false
+must keep the normal pending-only UI. No consumer may treat this field as
+permission to delete a verified Employee.
 
-Deletion removes the Employee and its provider-owned credentials, first-login
-material, Sessions and direct App Access by existing FK cascades; scoped Email
-verification/password-reset challenges are removed in the same transaction.
-Consumer-owned business history/member projections are retained and must never
-be rebound by employee number or email. Recreating the same number/email receives
-a fresh employeeId, no inherited Session or App/Module Access.
+`DELETE /v1/admin/identity/employees/{employeeId}` physically deletes only an
+Employee that has **never** completed first Email verification or created a
+permanent credential: `email_verified_at` and `activated_at` must both be
+null and no permanent credential may exist. The provider enforces these
+conditions again within the delete transaction. The current administrator
+must be authorized to manage the target; self-deletion, the protected Super
+Admin and foreign-Workspace targets remain forbidden. Completed Employees
+must instead be disabled/re-enabled while their identity and history remain.
 
-For this testing exception only, new-account creation (including its initial
-Email delivery result) and account deletion do not append Identity audit events.
-Existing audit history and other events, including password/verification, resend,
-role/access changes and application registration, remain intact. The source-owned
-`ACCOUNT_LIFECYCLE_TESTING` defaults must be restored to verified deletion=false
-and create/delete audit=true before the first business release. Root project TODO
-tracks restoration and actual acceptance; this is not a permanent rules change.
+Pending deletion cascades provider-owned initial credential, Sessions and
+direct App Access, and removes related scoped Email verification/password
+reset challenges in the same transaction. Other consumer business/history
+records are not deleted or rebound by Employee No or Email.
+
+Creating an Employee appends `employee_created_pending_activation`, plus
+`employee_activation_email_sent` or `employee_activation_email_failed`
+according to the initial Email delivery result. Successful pending deletion
+appends `employee_pending_activation_deleted`. Existing audit events and
+other audit-producing operations are unchanged. The former create/delete
+Audit suppression has ended; no former test-only verified-delete behavior
+remains in the provider's delete path.
 
 ## 18. Consumer adoption and update procedure
 

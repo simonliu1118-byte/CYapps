@@ -1,4 +1,4 @@
-import { canDeleteVerifiedEmployee } from "./account-lifecycle-testing";
+import { ACCOUNT_LIFECYCLE_TESTING } from "./account-lifecycle-testing";
 import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin, liveCoreSuperAdmin } from "./admin-auth";
 import { sha256Hex } from "./crypto";
 import { json, readJsonObject } from "./http";
@@ -208,7 +208,7 @@ export async function handleRoleAccessSnapshot(
       workspaceRole: actor.workspaceRole,
       isIdentityAdmin: actor.isIdentityAdmin,
     },
-    testingAccountDeletionAllowed: canDeleteVerifiedEmployee(request, env, actor),
+    testingAccountDeletionAllowed: ACCOUNT_LIFECYCLE_TESTING.allowVerifiedDeletion,
     employees: employeeRows as unknown as JsonValue,
     applications: applicationRows as unknown as JsonValue,
     directAccess: (directAccess.results ?? []) as JsonValue,
