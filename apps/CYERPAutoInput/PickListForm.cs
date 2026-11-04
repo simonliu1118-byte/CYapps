@@ -41,14 +41,15 @@ internal sealed class PickListForm : Form
         foreach (var item in _items) grid.Rows.Add(item.Code, item.Name, Quantity(item));
         var top = new Label { Dock = DockStyle.Top, Height = 34, Padding = new Padding(8, 8, 8, 0), Text = _heading };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(8) };
-        var close = new Button { Text = "關閉", AutoSize = true, DialogResult = DialogResult.OK };
-        var print = new Button { Text = "列印（A4）", AutoSize = true, Enabled = printer.Length > 0 && _items.Count > 0 };
-        print.Click += (_, _) => Print();
+        // 列印 prints on the A4 printer and closes; 取消 closes without printing (user, 2026-11-04).
+        var close = new Button { Text = "取消", AutoSize = true, DialogResult = DialogResult.Cancel };
+        var print = new Button { Text = printer.Length > 0 ? $"列印（A4：{printer}）" : "列印（未設定 A4 印表機）", AutoSize = true, Enabled = printer.Length > 0 && _items.Count > 0 };
+        print.Click += (_, _) => { if (Print()) { DialogResult = DialogResult.OK; Close(); } };
         buttons.Controls.AddRange([close, print]);
         Controls.Add(grid);
         Controls.Add(top);
         Controls.Add(buttons);
-        AcceptButton = close;
+        AcceptButton = print;
         CancelButton = close;
     }
 
@@ -57,18 +58,20 @@ internal sealed class PickListForm : Form
 
     private static string Quantity(PickItem item) => $"{ShipSheet.Show(item.Quantity)} {item.Unit}".TrimEnd();
 
-    private void Print()
+    /// <summary>Printed on the A4 printer; false (after saying why) when it was not.</summary>
+    private bool Print()
     {
         try
         {
             var pages = PrintTable(_printer, _heading, _items);
             _log.Info("pick-list", $"printed items={_items.Count} pages={pages}");
-            MessageBox.Show(this, $"撿貨總表已送到 {_printer}（{pages} 頁）。", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
             MessageBox.Show(this, $"撿貨總表沒有印出：{ex.Message}", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
         }
     }
 

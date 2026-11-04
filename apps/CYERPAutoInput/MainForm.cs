@@ -1131,22 +1131,10 @@ internal sealed partial class MainForm : Form
         PrintPackingSheet();
         var list = _pickList;
         _pickList = null;
-        // Only when ticked in 設定 › 一般 (user, 2026-10-28).
-        if (!_settings.PickList || list is null || list.Items.Count == 0) return;
+        // Always shown, printed only when 列印 is pressed (user, 2026-11-04: no setting, no
+        // printing by itself; 取消 when it is not wanted).
+        if (list is null || list.Items.Count == 0) return;
         var printer = SlipPrinter.Installed(_settings.A4Printer) ?? string.Empty;
-        if (printer.Length > 0)
-        {
-            try
-            {
-                var pages = PickListForm.PrintTable(printer, PickListForm.Heading(list, title), list.Items);
-                _log.Info("pick-list", $"printed items={list.Items.Count} pages={pages}");
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                _log.Warn("pick-list", $"not printed: {ex.GetType().Name}: {ex.Message}");
-                MessageBox.Show(this, $"撿貨總表沒有印出：{ex.Message}（可在撿貨總表視窗再按列印）", "撿貨總表", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }
         using var form = new PickListForm(list, title, printer, _log);
         form.ShowDialog(this);
     }
