@@ -26,6 +26,23 @@ internal static class Win32Automation
         return forms.Count > 0 ? forms : found;
     }
 
+    /// <summary>
+    /// COPI08 forms hidden or minimized (user, 2026-11-04: ERP minimized with 銷貨單建立作業 open;
+    /// restoring ERP brought back only its main window): the form class, any visibility.
+    /// </summary>
+    public static IReadOnlyList<nint> FindHiddenCopi08Windows()
+    {
+        var found = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if ((!NativeMethods.IsWindowVisible(hwnd) || NativeMethods.IsIconic(hwnd)) && IsCopi08Title(NativeMethods.WindowText(hwnd)) &&
+                NativeMethods.ClassName(hwnd).Equals(Copi08FormClass, StringComparison.OrdinalIgnoreCase))
+                found.Add(hwnd);
+            return true;
+        }, 0);
+        return found;
+    }
+
     public const string Copi08Code = "COPI08";
     private const string Copi08FormClass = "TfrmCopi08";
 

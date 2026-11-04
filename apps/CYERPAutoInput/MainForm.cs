@@ -1272,6 +1272,38 @@ internal sealed partial class MainForm : Form
         catch (Exception ex) { _log.Error("hotkey", ex); }
     }
 
+    /// <summary>
+    /// MO店+ › 單筆輸入 (user, 2026-11-04: F8 from the menu too): the Chrome windows, the front one
+    /// first, are read for an MO店+ order's page (the shown tab of each); its order as F8 does.
+    /// </summary>
+    private async Task ImportMoOrderFromChromeAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        var own = (uint)Environment.ProcessId;
+        var windows = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && !NativeMethods.IsIconic(hwnd) && NativeMethods.ClassName(hwnd) == "Chrome_WidgetWin_1" &&
+                Win32Automation.ProcessId(hwnd) != own && NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 400 && r.Height >= 300)
+                windows.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var window in windows)
+        {
+            var texts = await Task.Run(() => ChromePageText.Read(window, _log, out _, needDocument: false));
+            if (MoBatchScreens.DetailOrderSn(texts.Select(t => t.Text)) is { } orderSn)
+            {
+                _log.Info("mo", $"單筆輸入 from the menu: MO店+ order {orderSn}");
+                try { await ImportMoOrderFromPageAsync(orderSn); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _log.Error("mo", ex); }
+                return;
+            }
+        }
+        _log.Info("mo", $"單筆輸入: no MO店+ order page in {windows.Count} Chrome window(s)");
+        MessageBox.Show(this, "Chrome 裡沒有開著的 MO店+ 訂單頁。\n請先在 MO店+ 後台打開那張訂單（E001訂單管理 › 訂單明細），再按一次（或在那個頁面直接按 F8）。",
+            "MO店+ 單筆輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private async Task ImportShopeeScreenshotsAsync()
     {
         if (_automationCts is not null) return;
@@ -2517,6 +2549,9 @@ internal sealed partial class MainForm : Form
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls → 發票 → 預覽 → ERP）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            // F8's way from the menu (user, 2026-11-04).
+            menu.Items.Add("單筆輸入：Chrome 開著的訂單頁（同 F8）", null, async (_, _) => await ImportMoOrderFromChromeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")

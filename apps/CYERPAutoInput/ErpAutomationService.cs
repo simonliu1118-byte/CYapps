@@ -71,6 +71,16 @@ internal sealed class ErpAutomationService
         if (count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
         {
             await RestoreErpAsync(app, hidden, cancellationToken);
+            // The 銷貨單建立作業 that was open comes back after the main window, or stays hidden
+            // (user, 2026-11-04: 作業速查 was used though COPI08 was open, only minimized).
+            await WaitUntilAsync(() => SelectCopi08(out var shown) != 0 || shown > 0, 2500, cancellationToken);
+            root = SelectCopi08(out count);
+        }
+        if (count == 0 && Win32Automation.FindHiddenCopi08Windows() is { Count: > 0 } kept)
+        {
+            _log.Info("window", $"COPI08 hidden or minimized; restoring count={kept.Count}");
+            foreach (var h in kept) NativeMethods.ShowWindow(h, NativeMethods.SW_RESTORE);
+            await WaitUntilAsync(() => SelectCopi08(out var shown) != 0 || shown > 0, 3000, cancellationToken);
             root = SelectCopi08(out count);
         }
         if (count == 0)
@@ -150,10 +160,24 @@ internal sealed class ErpAutomationService
         InputSender.UnicodeText(Win32Automation.Copi08Code);
         await Delay(800, cancellationToken); // let ERP list the matching programs
         var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        for (var wait = 0; wait < 3 && !typed.Equals(Win32Automation.Copi08Code, StringComparison.OrdinalIgnoreCase); wait++)
+        {
+            await Delay(400, cancellationToken);
+            typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        }
         if (!typed.Equals(Win32Automation.Copi08Code, StringComparison.OrdinalIgnoreCase))
         {
+            // The search box can read back empty though COPI08 is in it and listed (user's
+            // screenshot 2026-11-04, read-back len=0): what the screen shows around it decides.
             _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
-            throw new InvalidOperationException("作業速查的搜尋框讀回內容不是 COPI08，已停止。");
+            var around = Rectangle.Intersect(new Rectangle(point.X - 120, point.Y - 60, 900, 260), new Rectangle(window.Left, window.Top, window.Width, window.Height));
+            IReadOnlyList<OcrToken> shown;
+            using (var image = ScreenCapture.Capture(around))
+                shown = await _textVision.RecognizeAsync(image, cancellationToken);
+            var text = Compact(string.Concat(shown.Select(t => t.Text))).ToUpperInvariant().Replace('O', '0').Replace("C0PI", "COPI", StringComparison.Ordinal);
+            _log.Info("window", $"作業速查 screen read: {_log.Value(text)}");
+            if (!text.Contains("COPI08", StringComparison.Ordinal))
+                throw new InvalidOperationException("作業速查的搜尋框讀回內容不是 COPI08，已停止。");
         }
         InputSender.Press(NativeMethods.VK_RETURN);
         _log.Info("window", "作業速查 COPI08 + Enter sent");
