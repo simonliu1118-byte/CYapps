@@ -189,6 +189,7 @@ public sealed class InvoiceDetailRefreshService
         record.BuyerName,
         record.DetailVat,
         record.Items,
+        OfficialAllowances = InvoiceAllowanceMetadata.OfficialFingerprint(record),
     });
 
     private static string EffectiveOrderId(InvoiceRecord record) =>
