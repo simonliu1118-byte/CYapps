@@ -498,22 +498,7 @@ internal sealed partial class ShopeeBatchRunner
 
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
-        // An order further down (the ones above passed over) is scrolled into view first.
-        for (var scroll = 0; !Visible(screen, first.Status) && scroll < 20; scroll++)
-        {
-            var page = screen.Area;
-            _inputs++;
-            Wheel(new Point(page.Left + page.Width / 2, page.Top + page.Height / 2), -3);
-            await Task.Delay(400, _token);
-            var (moved, found) = await WaitAsync("清單上的下一筆訂單", 15,
-                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == first.OrderSn));
-            if (!ReferenceEquals(screen, moved))
-            {
-                if (scroll > 0) screen.Dispose(); // the caller disposes the first screen
-                screen = moved;
-            }
-            first = found;
-        }
+        (screen, first) = await ScrollToAsync(screen, first, disposeFirst: false);
         if (Done.Contains(first.OrderSn))
             throw new ShopeeBatchStop($"訂單 {first.OrderSn} 已處理過，卻還在待處理清單上；為避免重複出貨，已停止。");
         // The carrier is not taken from the list (user, 2026-10-13: a long row's text came cut
@@ -521,7 +506,21 @@ internal sealed partial class ShopeeBatchRunner
         var order = new ShopeeBatchOrder { OrderSn = first.OrderSn };
         Click(screen, first.Status, "待出貨");
         // The order opens in a new tab of this window.
-        var (detail, _) = await WaitAsync("訂單明細頁", 30, s => ShopeeBatchScreens.IsOrderDetail(s.Boxes) && ShopeeBatchScreens.DetailOrderSn(s.Boxes).Length > 0 ? s : null);
+        static string? Detail(Screen s) => ShopeeBatchScreens.IsOrderDetail(s.Boxes) && ShopeeBatchScreens.DetailOrderSn(s.Boxes).Length > 0 ? "detail" : null;
+        Screen detail;
+        try { (detail, _) = await WaitAsync("訂單明細頁", 12, Detail); }
+        catch (ShopeeBatchStop) when (!_token.IsCancellationRequested)
+        {
+            // A click near the foot of the list did not open the order (user LOG 2026-11-04: the
+            // next order's 待出貨 at the bottom edge, 30 s with the list unchanged): the list is
+            // read again, the order brought well into view and clicked once more.
+            _log.Info("shopee-batch", $"order {order.OrderSn} did not open; 待出貨 clicked once more");
+            var (list, again) = await WaitAsync("清單上的訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            (list, again) = await ScrollToAsync(list, again, disposeFirst: true);
+            using (list) Click(list, again.Status, "待出貨（再按一次）");
+            (detail, _) = await WaitAsync("訂單明細頁", 30, Detail);
+        }
         using (detail)
         {
             var shown = ShopeeBatchScreens.DetailOrderSn(detail.Boxes);
@@ -529,6 +528,33 @@ internal sealed partial class ShopeeBatchRunner
                 throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}；已停止。");
         }
         return order;
+    }
+
+    /// <summary>
+    /// An order further down (the ones above passed over) scrolled into view, its 待出貨 in the
+    /// upper three quarters of the page (user LOG 2026-11-04: one clicked at the page's foot did
+    /// not open). Stops scrolling when the list no longer moves.
+    /// </summary>
+    private async Task<(Screen Screen, ShopeeListOrder Order)> ScrollToAsync(Screen screen, ShopeeListOrder order, bool disposeFirst)
+    {
+        for (var scroll = 0; !(Visible(screen, order.Status) && order.Status.CenterY < screen.Area.Height * 3 / 4) && scroll < 20; scroll++)
+        {
+            var page = screen.Area;
+            var before = order.Status.CenterY;
+            _inputs++;
+            Wheel(new Point(page.Left + page.Width / 2, page.Top + page.Height / 2), -3);
+            await Task.Delay(400, _token);
+            var (moved, found) = await WaitAsync("清單上的下一筆訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            if (!ReferenceEquals(screen, moved))
+            {
+                if (scroll > 0 || disposeFirst) screen.Dispose(); // the caller disposes the first screen
+                screen = moved;
+            }
+            order = found;
+            if (Math.Abs(found.Status.CenterY - before) < 5 && Visible(screen, order.Status)) break; // the end of the page
+        }
+        return (screen, order);
     }
 
     // ---- 安排出貨 → 列印寄件單 → 列印 ----

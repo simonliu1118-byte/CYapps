@@ -475,6 +475,64 @@ internal sealed partial class MainForm
         const string title = "MO店+ 訂單匯入";
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
+        if (!MoImportReady(title)) return;
+
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        using var files = new MoImportForm(path => ReadMoExport(path, password));
+        if (files.ShowDialog(this) != DialogResult.OK || files.BatchPath is null) return;
+        await ImportMoOrdersAsync(title, files, null);
+    }
+
+    /// <summary>
+    /// F8 on an MO店+ order's page (user, 2026-11-04: when a 全自動 stops, the slips are already
+    /// printed; that order is entered from its page, like 蝦皮's F8): the order is looked up in the
+    /// exports the 全自動 kept (only a batch with orders not entered keeps them, 7 days, newest
+    /// first), then CYInvoice and the preview as 匯入訂單匯出檔, for that order alone.
+    /// </summary>
+    private async Task ImportMoOrderFromPageAsync(string orderSn)
+    {
+        const string title = "MO店+ 單筆輸入（F8）";
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (!ErpWindowReady()) return;
+        if (!MoImportReady(title)) return;
+        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
+        var folders = Directory.Exists(MoPrintedDocuments.TempRoot)
+            ? Directory.GetDirectories(MoPrintedDocuments.TempRoot, "mo-*").OrderByDescending(f => f, StringComparer.Ordinal).ToList()
+            : [];
+        foreach (var folder in folders)
+        {
+            var exports = Directory.GetFiles(folder).Where(f => f.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (exports.Count == 0) continue;
+            var files = new MoImportForm(path => ReadMoExport(path, password));
+            files.Preload(exports);
+            if (!files.Accept() || !files.Orders.Any(o => o.OrderSn == orderSn))
+            {
+                files.Dispose();
+                continue;
+            }
+            using (files)
+            {
+                _log.Info("mo", $"F8 order {orderSn} found in {Path.GetFileName(folder)}");
+                await ImportMoOrdersAsync(title, files, orderSn);
+            }
+            return;
+        }
+        _log.Info("mo", $"F8 order {orderSn} not in any kept export folders={folders.Count}");
+        MessageBox.Show(this, $"找不到訂單 {orderSn} 的全自動匯出檔（只有還有訂單沒輸入 ERP 的全自動會保留匯出檔，7 天）。\n請改用「MO店+ › 匯入訂單匯出檔」。",
+            title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private static List<string[]> ReadMoExport(string path, string password)
+    {
+        using var stream = File.OpenRead(path);
+        return Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+            ? XlsxReader.ReadFirstSheet(stream)
+            : XlsReader.ReadFirstSheet(stream, password);
+    }
+
+    /// <summary>The settings 匯入訂單匯出檔 needs; false (after saying what is missing) when not set.</summary>
+    private bool MoImportReady(string title)
+    {
         var missing = new[]
         {
             _settings.MoOrderType.Length == 0 ? "MO店+ 銷貨單別" : null,
@@ -485,38 +543,36 @@ internal sealed partial class MainForm
         if (missing.Count > 0)
         {
             MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return false;
         }
         if (_settings.CyInvoicePath.Length == 0 || !File.Exists(_settings.CyInvoicePath))
         {
             using var dialog = new OpenFileDialog { Title = "選擇 CYInvoice.exe", Filter = "CYInvoice 程式 (CYInvoice.exe)|CYInvoice.exe|所有程式 (*.exe)|*.exe", CheckFileExists = true };
-            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            if (dialog.ShowDialog(this) != DialogResult.OK) return false;
             _settings.CyInvoicePath = dialog.FileName;
             _settingsStore.Save(_settings);
         }
+        return true;
+    }
 
-        var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
-        List<string[]> Read(string path)
-        {
-            using var stream = File.OpenRead(path);
-            return Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
-                ? XlsxReader.ReadFirstSheet(stream)
-                : XlsReader.ReadFirstSheet(stream, password);
-        }
-        using var files = new MoImportForm(Read);
-        if (files.ShowDialog(this) != DialogResult.OK || files.BatchPath is null) return;
+    /// <param name="only">One order of the exports (F8 on its page); null for all.</param>
+    private async Task ImportMoOrdersAsync(string title, MoImportForm files, string? only)
+    {
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var orders = files.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        _log.Info("mo", $"exports orders={files.Orders.Count} errors={files.Errors.Count} tracking_filled={files.Orders.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
+        var mo = files.Orders.Where(o => only is null || o.OrderSn == only).ToList();
+        var orders = mo.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
+        _log.Info("mo", $"exports orders={mo.Count} errors={files.Errors.Count} tracking_filled={mo.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
 
-        var invoice = await InvoiceMoAsync(title, files.BatchPath, files.Orders, orders, fullAuto: false);
+        var invoice = await InvoiceMoAsync(title, files.BatchPath!, mo, orders, fullAuto: false);
         // In the background: the paper prompt comes once 光貿 has the PDFs, over the preview.
         QueuePaperInvoices(invoice);
         SetStatus(string.Empty);
         // ERP whatever CYInvoice's environment (user, 2026-10-15: they switch it); the
         // environment is shown when asking before issuing and in the preview's notes.
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors, [.. invoice.Notes, .. files.Notes]);
+        // One order: only what is said about it.
+        bool Mine(string text) => only is null || text.Contains(only, StringComparison.Ordinal);
+        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors.Where(Mine).ToList(), [.. invoice.Notes, .. files.Notes.Where(Mine)]);
     }
 
     /// <summary>

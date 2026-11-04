@@ -1253,10 +1253,22 @@ internal sealed partial class MainForm : Form
             _log.Info("hotkey", $"{BrowserHotkey.KeyName} ignored: CY is busy");
             return;
         }
-        _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
         // A minimized CY would keep its dialog hidden too.
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-        try { await ImportShopeeScreenshotsAsync(); }
+        try
+        {
+            // An MO店+ order's page: that order from the 全自動's exports (user, 2026-11-04).
+            var browser = NativeMethods.GetForegroundWindow();
+            var texts = await Task.Run(() => ChromePageText.Read(browser, _log, out _, needDocument: false));
+            if (MoBatchScreens.DetailOrderSn(texts.Select(t => t.Text)) is { } moOrder)
+            {
+                _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed on MO店+ order {moOrder}");
+                await ImportMoOrderFromPageAsync(moOrder);
+                return;
+            }
+            _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
+            await ImportShopeeScreenshotsAsync();
+        }
         catch (Exception ex) { _log.Error("hotkey", ex); }
     }
 

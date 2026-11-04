@@ -109,4 +109,17 @@ public class MoBatchScreensTests
         Assert.Equal(875, MoBatchScreens.PrintDocumentButton(dialog, "列印出貨總表")!.Left);
         Assert.True(MoBatchScreens.ExportDone([B("匯出提醒", 222, 68), B("1~2筆，狀態：已完成", 240, 254), B("關閉", 790, 330)]));
     }
+
+    [Fact]
+    public void DetailOrderSnIsReadFromTheOrderPage()
+    {
+        // F8 on an order's page (user's screenshot 2026-11-04); test numbers.
+        string[] page = ["店+管理系統", "登出", "返回", "訂單編號：", "90000000000011", "建立日：2026-11-03 22:18:37", "配送方式：7-11店出",
+            "訂單商品(1)", "原廠編號: X00001", "訂單編號: 001", "子訂單編號: 001"];
+        Assert.Equal("90000000000011", MoBatchScreens.DetailOrderSn(page));
+        Assert.Equal("90000000000012", MoBatchScreens.DetailOrderSn(["店+管理系統", "訂單編號：90000000000012", "訂單商品(2)"]));
+        // Not an order page: the list, or another site.
+        Assert.Null(MoBatchScreens.DetailOrderSn(["店+管理系統", "我的訂單", "訂單編號：90000000000011"]));
+        Assert.Null(MoBatchScreens.DetailOrderSn(["訂單商品(1)", "子訂單編號: 001"]));
+    }
 }
