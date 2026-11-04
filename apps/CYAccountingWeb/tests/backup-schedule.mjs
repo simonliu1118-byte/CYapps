@@ -142,7 +142,7 @@ assert.equal(packageCalls, 21);
 await assert.rejects(buildRecoveryContext({ prepare() { return { bind() { return this; }, async all() { return { results: Array(20001).fill({}) }; } }; } }), error => error.code === 'BACKUP_RECOVERY_ROW_LIMIT');
 console.log('Backup scheduling: independent outage journal, 08:00 retry, atomic dedup, quota stop, partial copies, manual/day boundary, recovery hold and bounded export passed.');
 
-// A fresh same-day health result does not cause an extra full verification.
+// Each existing slot verifies one provider, without repeating the completed R2 proof.
 const freshDb = accountingFixture();
 try {
   const freshEnv = { ...env, DB: freshDb, BACKUP_R2: memoryR2Bucket() };
@@ -152,8 +152,23 @@ try {
   const freshRetry = await runScheduledBackup(freshEnv, { ...freshOptions, now: atMorning, cron: retry });
   assert.equal(freshRetry.reason, 'already_backed_up');
   assert.equal(freshRetry.health.status, 'healthy');
-  assert.equal(freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n, checkCount);
+  assert.equal(checkCount,1);
+  assert.equal(freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n,checkCount+1);
 } finally { freshDb.close(); }
+
+// A newer backup between slots invalidates the saved R2 proof, even when its
+// financial data happens to be identical. Match immutable package identity.
+const changedDb=accountingFixture();
+try {
+  const changedEnv={...env,DB:changedDb,BACKUP_R2:memoryR2Bucket()};
+  const changedOptions={...options,r2Provider:memoryProvider('cloudflare_r2'),gcsProvider:memoryProvider('google_cloud_storage')};
+  await runScheduledBackup(changedEnv,{...changedOptions,now:atNight,cron:primary});
+  await runTieredBackup(changedEnv,'manual',{...changedOptions,now:new Date(atNight.getTime()+3600000)});
+  const before=changedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n;
+  const result=await runScheduledBackup(changedEnv,{...changedOptions,now:atMorning,cron:retry});
+  assert.equal(result.health.status,'healthy');
+  assert.equal(changedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n,before+2,'new source must verify both copies');
+} finally {changedDb.close();}
 
 // Concurrent journal reads stay bounded and preserve chronological slot order.
 let active = 0, peak = 0;

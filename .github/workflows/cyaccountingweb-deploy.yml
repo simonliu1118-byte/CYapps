@@ -363,10 +363,10 @@ jobs:
           verify_asset "$base/ledger-search.css?rev=central-search-controls" 'width: min(400px'
           verify_asset "$base/ledger-tools.js?rev=central-ledger-search" 'function clearLedgerPeriodSearch'
           verify_asset "$base/opening-balances.css?rev=compact-white-list" 'width: min(280px'
-          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" 'setupBackupSettings'
-          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" '/api/backup/recovery/preview'
+          verify_asset "$base/backup-ui.js?rev=backup-health-progress" 'setupBackupSettings'
+          verify_asset "$base/backup-ui.js?rev=backup-health-progress" '/api/backup/recovery/preview'
           verify_asset "$base/app.js?rev=marker-target-mutation" 'x-cyacc-book-epoch'
-          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
+          verify_asset "$base/backup-ui.js?rev=backup-health-progress" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
           verify_asset "$base/ledger-tools.js?rev=central-ledger-search" 'data-mobile-ledger-action="backup" hidden'
           verify_asset "$base/ledger-tools.js?rev=central-ledger-search" 'class="ledger-message-row"'
           verify_asset "$base/app.js?rev=marker-target-mutation" "await api('/api/opening-balance-overrides'"
@@ -434,7 +434,8 @@ jobs:
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" "!window.cyIsDesktopInteractionWorkspace()) return;"
           verify_asset "$base/statistics-ui.js?rev=transfer-settings-density" 'renderIncomeStatement'
           verify_asset "$base/statistics.css?rev=transfer-settings-density" 'statistics-dialog'
-          verify_asset "$base/backup-ui.js?rev=backup-refresh-feedback" "重新整理中…"
+          verify_asset "$base/backup-ui.js?rev=backup-health-progress" "重新整理中…"
+          verify_asset "$base/backup-ui.js?rev=backup-health-progress" "BACKUP_HEALTH_INTERRUPTED"
           verify_asset "$base/backup.css?rev=backup-refresh-feedback" '@keyframes backup-refresh-spin'
           echo "CYACC production semantic frontend assets verified."
 

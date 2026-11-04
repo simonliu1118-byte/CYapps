@@ -1,0 +1,22 @@
+V1.0.3 — 備份可還原性檢查接續與警告分類
+
+問題與修正
+- 備份副本上傳成功與完整試還原是兩個階段。舊流程只有兩個 provider 全部完成才更新總狀態；中途停止後，早上仍從第一個 provider 重做，造成已有部分成功證據而總狀態持續逾期。
+- 沿用現有 03:30／08:00 台灣時間排程：03:30 備份後驗證 R2；08:00 驗證 GCS，正常情況每次只做一份完整 SQLite 試還原。沒有新增 cron、Worker、D1 或外部服務。
+- 在既有 backup_health_state 逐項保存進度。早上只重用同日、相同 backup ID／package digest、已成功且有 check ID 的結果；來源變更就重新驗證。正常等待早上檢查不算中斷，也不假稱 healthy。
+- 執行中止後，lease 到期會指出未完成的 provider。下一次排程先通知超管，再接續檢查；既有失敗通知的 incident 與去重機制保留。已知 provider 失敗不因總結果逾期或等待另一個時段而被隱藏。
+- 前端分別顯示狀態讀取失敗、檢查中斷、超過 36 小時未完成，以及副本試還原失敗；顯示最近檢查時間。登入過期交回共用 Session 流程，不再冒充備份事故。
+- 沒有隱藏或延長原 36 小時過期判斷，沒有把上傳成功當作可還原性通過。
+
+架構與資料
+- State／Business／Lifecycle owner 仍為 src/backup-service.js；完整試還原仍使用原 backup-restore-runtime.js 與 backup-restore.js。只在 public/backup-ui.js 呈現狀態，所有裝置共用同一後端語意。
+- 無新增 owner、observer、wrapper、第二驗證路徑、schema migration、正式帳務寫入或還原切換。Schema 15；CYID Consumer Impact: NONE。
+- 沿用 backup_health_state 主鍵單列與 backup_sets 日期索引／LIMIT 1／backup_copies 主鍵。正常每日兩個時段合計 13 次單列 operational 寫入（含 lease、checkpoint、兩份 proof、結案）；只有事故通知需要少量額外寫入。每次最多兩個 provider，沒有無上限重試。
+- 正常每日的試還原共讀取兩份儲存副本，各 manifest／data 共四個物件（不含備份上傳後原有的回讀校驗），沿原 8 MiB data 大小限制；試還原在記憶體 SQLite 內執行，不將備份資料寫回正式 D1。早上已有成功備份時不重新匯出帳本。
+- 開發僅透過既有登入後健康／目錄 API 查閱 operational 狀態，未下載正式備份，未寫入正式帳務。該 API 不提供 D1 rows_read 統計，因此不把傳回列數當作實際掃描量。正式資料與執行紀錄未提交 Git。
+
+驗證與限制
+- 回歸涵蓋正常分時檢查、等待期間不誤報、Worker 中斷後的 provider checkpoint、來源一致才接續、不中斷帳本、incident 通知，以及讀取失敗／登入過期／逾期的不同訊息。
+- 實際 workerd／WASM 測試使用 9,003 筆合成交易，驗證同一次呼叫兩份完整試還原仍使用各自的新空資料庫；不以合成測試取代正式 Cron 驗收。
+- 這次已確認的故障是部分試還原完成後總狀態未結案，並修正缺少接續機制。平台終止的底層錯誤尚無 Worker 執行 log 證據，不把 CPU／記憶體／子請求上限猜測寫成已確認事實。
+- 完整本機／CI 結果及正式發布 SHA 記錄於本次 PR。正式兩個時段完成與通知送達仍需排程實際驗收；不將部署成功冒充 Cron 已通過。
