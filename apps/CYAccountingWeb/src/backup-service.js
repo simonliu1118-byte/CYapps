@@ -153,7 +153,8 @@ export async function runScheduledBackup(env, options = {}) {
       if (health.status === 'healthy' && health.checkedAt
         && taipeiBackupDay(new Date(health.checkedAt)) === day) return { ...backup, health };
     }
-    return { ...backup, health: await checkBackupHealth(env, { ...options, backupFailed: backup.ok === false }) };
+    return { ...backup, health: await checkBackupHealth(env, { ...options,
+      deferGcs: slot === 'primary', resume: slot === 'retry', backupFailed: backup.ok === false }) };
   }
   catch (error) {
     console.error('cyaccounting_backup_health_failed', safeCode(error));
@@ -525,31 +526,73 @@ export async function checkBackupHealth(env, options = {}) {
   if (!claimed) return { skipped: true, reason: 'check_in_progress' };
   try {
     const previous = await env.DB.prepare('SELECT * FROM backup_health_state WHERE id=1').first();
+    const priorDetails = JSON.parse(previous.details_json || '[]');
+    if (previous.status === 'unknown' && priorDetails.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
+      && (!detail.resumeAfter || detail.resumeAfter < timestamp))) {
+      previous.incident_id ||= crypto.randomUUID();
+      // The previous invocation was terminated before it could report failure.
+      // The next scheduled owner delivers that incident before starting more work.
+      if (!previous.email_sent_at) {
+        await env.DB.prepare('UPDATE backup_health_state SET incident_id=? WHERE id=1 AND lease_token=?')
+          .bind(previous.incident_id, lease).run();
+        const delivery = await notifyBackupIncident(env, previous.incident_id);
+        previous.email_sent_at = delivery.sent ? timestamp : null;
+        await env.DB.prepare('UPDATE backup_health_state SET email_sent_at=?,email_error_code=? WHERE id=1 AND lease_token=?')
+          .bind(previous.email_sent_at, delivery.code, lease).run();
+      }
+    }
+    const continuing = options.resume
+      && priorDetails.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING' || detail.resumeAfter)
+      && previous.checked_at && taipeiBackupDay(new Date(previous.checked_at)) === taipeiBackupDay(now);
     const attemptId = crypto.randomUUID(), details = options.backupFailed
       ? [{ provider: '', status: 'failed', code: 'BACKUP_JOB_FAILED' }] : [];
+    // Commit progress before expensive provider I/O / SQLite work. A runtime
+    // termination cannot run catch/finally; the existing lease then exposes an
+    // interrupted check and the bounded morning run can resume the saved proof.
     for (const provider of [R2_PROVIDER, GCS_PROVIDER]) {
+      const knownFailure = options.deferGcs && provider === GCS_PROVIDER
+        && priorDetails.find(detail => detail.provider === provider && detail.status === 'failed');
+      details.push({provider, status:'pending', code:'BACKUP_HEALTH_CHECK_PENDING',...(knownFailure || {}),
+        ...(options.deferGcs && provider === GCS_PROVIDER
+          ? {resumeAfter:new Date(`${taipeiBackupDay(now)}T08:10:00+08:00`).toISOString()} : {})});
+    }
+    const saveProgress = () => env.DB.prepare(`UPDATE backup_health_state
+      SET status='unknown',checked_at=?,details_json=? WHERE id=1 AND lease_token=?`)
+      .bind(timestamp, JSON.stringify(details), lease).run();
+    await saveProgress();
+    for (const provider of [R2_PROVIDER, GCS_PROVIDER]) {
+      // The existing 03:30 / 08:00 slots each perform one full normal-case
+      // restore. Avoid combining export plus two SQLite restores in one job.
+      if (provider === GCS_PROVIDER && options.deferGcs) break;
       const source = await env.DB.prepare(`SELECT bs.*, bc.status AS copy_status FROM backup_sets bs
         LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id AND bc.provider = ?
         WHERE (? = 'cloudflare_r2' OR bs.gcs_expected = 1)
         ORDER BY bs.created_at DESC LIMIT 1`).bind(provider, provider).first();
       let code = '', check = null;
+      const saved = continuing && priorDetails.find(detail => detail.provider === provider
+        && detail.status === 'success' && !detail.code && detail.checkId
+        && detail.backupId === source?.backup_id && detail.packageSha256 === source?.package_sha256);
       if (!source) code = 'BACKUP_SOURCE_MISSING';
       else if (source.copy_status !== 'success') code = 'BACKUP_COPY_FAILED';
       else if (now.getTime() - Date.parse(source.created_at) > (provider === R2_PROVIDER ? 36 : 120) * 3_600_000
         || Date.parse(source.created_at) > now.getTime() + 300_000) code = 'BACKUP_COPY_STALE';
-      else {
+      else if (!saved) {
         check = await verifyStoredBackupCopy(env, source, provider, { type: 'scheduled_backup_health' }, attemptId, options);
         if (check.status !== 'success') code = check.result.code || 'RESTORE_VERIFY_FAILED';
       }
-      details.push({ provider, status: code ? 'failed' : 'success', code,
-        backupId: source?.backup_id || null, checkId: check?.id || null });
+      Object.assign(details.find(detail => detail.provider === provider), {
+        status: code ? 'failed' : 'success', code,
+        backupId: source?.backup_id || null, packageSha256: source?.package_sha256 || null,
+        checkId: saved?.checkId || check?.id || null });
+      await saveProgress();
     }
     const failed = details.some(detail => detail.status === 'failed');
+    const pending = details.some(detail => detail.status === 'pending');
     const incident = failed ? previous.incident_id || crypto.randomUUID() : null;
     const emailSentAt = failed && previous.incident_id === incident ? previous.email_sent_at : null;
     await env.DB.prepare(`UPDATE backup_health_state SET status=?, checked_at=?, details_json=?,
       incident_id=?, email_sent_at=?, email_error_code='' WHERE id=1 AND lease_token=?`)
-      .bind(failed ? 'failed' : 'healthy', timestamp, JSON.stringify(details), incident, emailSentAt, lease).run();
+      .bind(failed ? 'failed' : pending ? 'unknown' : 'healthy', timestamp, JSON.stringify(details), incident, emailSentAt, lease).run();
     if (failed && !emailSentAt) {
       const delivery = await notifyBackupIncident(env, incident);
       const sentAt = delivery.sent ? timestamp : null, code = delivery.code;
@@ -575,13 +618,20 @@ async function notifyBackupIncident(env, incident) {
 }
 
 export async function readBackupHealth(db, now = new Date()) {
-  const row = await db.prepare('SELECT status,checked_at,details_json,incident_id,email_sent_at,email_error_code FROM backup_health_state WHERE id=1').first();
+  const row = await db.prepare('SELECT status,checked_at,details_json,incident_id,email_sent_at,email_error_code,lease_until FROM backup_health_state WHERE id=1').first();
+  const details = JSON.parse(row?.details_json || '[]');
+  const interrupted = row?.status === 'unknown' && row.lease_until <= now.toISOString()
+    && details.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
+      && (!detail.resumeAfter || detail.resumeAfter < now.toISOString()));
   const stale = row?.checked_at && now.getTime() - Date.parse(row.checked_at) > 36 * 3_600_000;
-  return { status: stale ? 'failed' : row?.status || 'unknown', checkedAt: row?.checked_at || null,
-    incidentId: row?.incident_id || (stale ? 'check-overdue' : null),
-    issues: stale ? [{ provider: '', status: 'failed', code: 'BACKUP_HEALTH_OVERDUE' }]
-      : JSON.parse(row?.details_json || '[]').filter(detail => detail.status === 'failed')
-        .map(({provider, code}) => ({ provider, code })),
+  const issues = details.filter(detail => detail.status === 'failed'
+    || interrupted && detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
+      && (!detail.resumeAfter || detail.resumeAfter < now.toISOString()))
+    .map(({provider,code}) => ({provider,code:code === 'BACKUP_HEALTH_CHECK_PENDING' ? 'BACKUP_HEALTH_INTERRUPTED' : code}));
+  if (stale && !issues.length) issues.push({provider:'',code:'BACKUP_HEALTH_OVERDUE'});
+  return { status: interrupted || stale ? 'failed' : row?.status || 'unknown', checkedAt: row?.checked_at || null,
+    incidentId: row?.incident_id || (interrupted ? 'check-interrupted' : stale ? 'check-overdue' : null),
+    issues,
     emailSent: Boolean(row?.email_sent_at), emailPending: Boolean(row?.incident_id && !row?.email_sent_at) };
 }
 

@@ -59,7 +59,10 @@ async function sharedSessionUser() {
 async function showBackupHealthWarning() {
   let health;
   try { health = (await api('/api/backup/health')).health; }
-  catch { health = { status: 'failed', issues: [{ code: 'BACKUP_HEALTH_UNAVAILABLE' }] }; }
+  catch (error) {
+    if (error?.message === 'AUTH_REQUIRED') return; // Shared Session owner handles expiry.
+    health = { status: 'failed', issues: [{ code: 'BACKUP_HEALTH_UNAVAILABLE' }] };
+  }
   if (health?.status !== 'failed') return;
   let dialog = document.querySelector('#backupHealthWarning');
   if (!dialog) {
@@ -77,9 +80,20 @@ async function showBackupHealthWarning() {
   }
   const providers = [...new Set((health.issues || []).map(item => item.provider === 'cloudflare_r2' ? 'R2'
     : item.provider === 'google_cloud_storage' ? 'GCS' : '').filter(Boolean))];
-  dialog.querySelector('#backupHealthWarningText').textContent = providers.length
+  const codes = (health.issues || []).map(item => item.code);
+  const unavailable = codes.includes('BACKUP_HEALTH_UNAVAILABLE');
+  dialog.querySelector('#backupHealthWarningTitle').textContent = unavailable ? '備份檢查狀態無法讀取' : '備份異常警告';
+  let message = unavailable
+    ? '目前無法讀取備份檢查狀態，請稍後重新整理。這不代表備份失敗。'
+    : codes.includes('BACKUP_HEALTH_INTERRUPTED')
+    ? `${providers.join('／') || '備份'}可還原性檢查中斷，將於下次排程接續檢查；目前帳本不會自動還原或切換。`
+    : codes.includes('BACKUP_HEALTH_OVERDUE')
+    ? '備份可還原性檢查已超過 36 小時未完成，請通知維運人員確認。此警告不等同於備份上傳失敗。'
+    : providers.length
     ? `${providers.join('／')} 備份自動檢查未通過，請通知維運人員檢查備份／復原狀態。目前帳本不會自動還原或切換。`
-    : '備份自動檢查未完成或結果已逾期，請通知維運人員確認。';
+    : '備份檢查未通過，請通知維運人員確認。';
+  if (health.checkedAt) message += `\n最近檢查：${new Date(health.checkedAt).toLocaleString('zh-TW', {timeZone:'Asia/Taipei',hour12:false})}。`;
+  dialog.querySelector('#backupHealthWarningText').textContent = message;
   dialog.querySelector('.backup-health-delivery').textContent = health.emailSent ? '已寄出超級管理員通知信。'
     : health.emailPending ? '通知信尚未寄達，系統將於下次排程重試。' : '';
   if (!dialog.open) dialog.showModal();

@@ -35,10 +35,12 @@ try {
   db.db.prepare("INSERT INTO backup_policy_events(target_phase,r2_check_id,gcs_check_id,acceptance_json,actor_json,created_at) VALUES('phase_d',?,?,'{}','{}','2026-10-18')").run(checks[0].id,checks[1].id);
   let result=await runScheduledBackup(env,{...options,now:sunday});
   assert.equal(result.gcsExpected,false);
-  assert.equal(result.health.status,'healthy','unscheduled GCS validates its latest actual copy, never assumes a same-day pair');
+  assert.equal(result.health.status,'unknown','GCS verification is intentionally deferred to the existing morning slot');
+  assert.equal((await readBackupHealth(db,new Date(sunday.getTime()+3600000))).status,'unknown','planned deferred work is not an interrupted job');
   const completeSets = db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n;
   const catchUp = await runScheduledBackup(env,{...options,now:new Date(sunday.getTime()+4.5*3600000),cron:'0 0 * * *'});
   assert.equal(catchUp.reason,'already_backed_up','Phase D R2-only days do not require a same-day GCS copy');
+  assert.equal(catchUp.health.status,'healthy','morning validates the actual older GCS copy');
   assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n,completeSets);
   assert.equal(notifications.length,0,'healthy checks never send mail');
   const ledger=()=>JSON.stringify(db.db.prepare('SELECT * FROM transactions ORDER BY id').all());
@@ -73,7 +75,7 @@ try {
   db.db.exec("UPDATE backup_health_state SET lease_token='',lease_until=''");
   result=await checkBackupHealth(env,{...options,now:new Date(sunday.getTime()+6*86400000)});
   assert.ok(result.issues.every(item=>item.code==='BACKUP_COPY_STALE'));
-  assert.equal((await readBackupHealth(db,new Date(sunday.getTime()+8*86400000))).issues[0].code,'BACKUP_HEALTH_OVERDUE');
+  assert.equal((await readBackupHealth(db,new Date(sunday.getTime()+8*86400000))).issues[0].code,'BACKUP_COPY_STALE','expiry must not hide the known failed provider');
   // New failed backups cannot be hidden by choosing an older successful copy.
   const failing={...r2,async putObject(){throw new Error('TEST_STORAGE_DOWN');}};
   result=await runScheduledBackup(env,{...options,r2Provider:failing,now:new Date(sunday.getTime()+86400000)});
@@ -88,3 +90,44 @@ try {
   assert.match(readFileSync(new URL('../wrangler.template.jsonc',import.meta.url),'utf8'),/"entrypoint": "ConsumerNotifications"/);
 }finally{db.close();}
 console.log('Backup health: real SQLite roundtrip, independent Phase D copies, corrupt/stale/failed sources, scheduled integration, mail incidents/retry/dedup, lease, Super Admin guard and recovery hold passed.');
+
+// Simulate a Worker termination after the R2 proof has been committed but while
+// GCS work is suspended. The morning owner must resume GCS, not repeat R2.
+const resumedDb=accountingFixture(),resumedR2=memoryProvider(R2),resumedGcs=memoryProvider(GCS);
+const start=new Date('2026-10-18T19:30:00Z'),morning=new Date('2026-10-19T00:00:00Z');
+let started,proofs=0,mails=0;
+const gcsStarted=new Promise(resolve=>{started=resolve;});
+const resumedEnv={...env,DB:resumedDb,BACKUP_R2:memoryR2Bucket(),BACKUP_NOTIFICATIONS:{async notifySuperAdmin(){mails++;return {status:'delivered'};}}};
+const resumedOptions={r2Provider:resumedR2,gcsProvider:resumedGcs,async verifyRestore(backup){
+  proofs++;
+  if(proofs===2){started();return new Promise(()=>{});}
+  return verify(backup);
+}};
+try {
+  await runTieredBackup(resumedEnv,'scheduled',{...resumedOptions,now:start});
+  void checkBackupHealth(resumedEnv,{...resumedOptions,now:start});
+  await gcsStarted;
+  assert.equal((await readBackupHealth(resumedDb,start)).status,'unknown','running check is not a false failure');
+  const stopped=await readBackupHealth(resumedDb,morning);
+  assert.equal(stopped.status,'failed');
+  assert.deepEqual(stopped.issues,[{provider:GCS,code:'BACKUP_HEALTH_INTERRUPTED'}]);
+  const rows=JSON.stringify(resumedDb.db.prepare('SELECT * FROM transactions').all());
+  const sets=resumedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n;
+  const result=await runScheduledBackup(resumedEnv,{...resumedOptions,now:morning,cron:'0 0 * * *'});
+  assert.equal(result.health.status,'healthy');
+  assert.equal(proofs,3,'only GCS is verified by the catch-up invocation');
+  assert.equal(mails,1,'the terminated attempt is reported before resuming work');
+  assert.equal(resumedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n,sets,'no re-export');
+  assert.equal(JSON.stringify(resumedDb.db.prepare('SELECT * FROM transactions').all()),rows);
+  resumedDb.db.prepare("UPDATE backup_health_state SET status='failed',details_json=? WHERE id=1")
+    .run(JSON.stringify([{provider:GCS,status:'failed',code:'RESTORE_VERIFY_FAILED'}]));
+  const nextStart=new Date(start.getTime()+86400000),nextMorning=new Date(morning.getTime()+86400000);
+  const next=await runScheduledBackup(resumedEnv,{...resumedOptions,now:nextStart});
+  assert.equal(next.health.status,'failed','known GCS failure stays visible while the morning check is deferred');
+  assert.equal(next.health.issues[0].code,'RESTORE_VERIFY_FAILED');
+  const before=proofs;
+  const recovered=await runScheduledBackup(resumedEnv,{...resumedOptions,now:nextMorning,cron:'0 0 * * *'});
+  assert.equal(recovered.health.status,'healthy');
+  assert.equal(proofs,before+1,'known failure does not force a second R2 roundtrip');
+} finally {resumedDb.close();}
+console.log('Interrupted provider checkpoint, exact-source morning resumption, incident delivery and no accounting mutation passed.');

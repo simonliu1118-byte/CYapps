@@ -203,7 +203,7 @@ console.log('Backup launcher/dialog boundary, cancellation, typed confirmation a
 // Healthy boots stay silent; failed health opens one accessible warning, without
 // exposing operational identifiers or making any restore request.
 let warningCreated=0,shown=0,closed=0;
-const textNodes=new Map([['#backupHealthWarningText',{}],['.backup-health-delivery',{}]]);
+const textNodes=new Map([['#backupHealthWarningTitle',{}],['#backupHealthWarningText',{}],['.backup-health-delivery',{}]]);
 const warning={open:false,setAttribute(){},querySelector(selector){return selector==='button'?{addEventListener(name,fn){this.close=fn;}}:textNodes.get(selector);},showModal(){shown++;this.open=true;},close(){closed++;this.open=false;}};
 context.document.createElement=()=>{warningCreated++;return warning;};
 context.document.body={append(node){nodes.set('#backupHealthWarning',node);}};
@@ -214,6 +214,19 @@ await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.eq
 assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS.*自動檢查未通過/);
 assert.match(textNodes.get('.backup-health-delivery').textContent,/下次排程重試/);
 await context.showBackupHealthWarning();assert.equal(warningCreated,1);assert.equal(shown,1);
+context.api=async()=>{throw new Error('AUTH_REQUIRED');};
+await context.showBackupHealthWarning();assert.equal(shown,1,'session expiry does not become a backup incident');
+context.api=async()=>{throw new Error('TEST_NETWORK');};
+await context.showBackupHealthWarning();
+assert.match(textNodes.get('#backupHealthWarningTitle').textContent,/狀態無法讀取/);
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/不代表備份失敗/);
+context.api=async()=>({health:{status:'failed',checkedAt:'2026-01-01T19:30:00Z',issues:[{code:'BACKUP_HEALTH_OVERDUE'}]}});
+await context.showBackupHealthWarning();
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/36 小時/);
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/最近檢查/);
+context.api=async()=>({health:{status:'failed',issues:[{provider:'google_cloud_storage',code:'BACKUP_HEALTH_INTERRUPTED'}]}});
+await context.showBackupHealthWarning();
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS可還原性檢查中斷/);
 console.log('Healthy boot silence and single accessible Super Admin incident warning passed.');
 
 // A confirmed paired backup may outlast normal interactive reads. Completion
