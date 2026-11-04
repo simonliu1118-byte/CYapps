@@ -97,13 +97,13 @@ internal sealed partial class ShopeeBatchRunner
     {
         _pageTabs = true;
         Directory.CreateDirectory(folder);
-        status("MO店+ 單筆：開啟 Chrome…");
+        status("MO店+ 訂單頁讀取輸入：開啟 Chrome…");
         await OpenWindowAsync(MoUrl);
         var (first, _) = await WaitAsync("MO店+ 店+管理系統", 40, s => MoBatchScreens.SignedIn(s.Boxes) || s.Boxes.Any(b => b.Text.Contains("登入", StringComparison.Ordinal)) ? s : null);
         var signedIn = MoBatchScreens.SignedIn(first.Boxes);
         first.Dispose();
         if (!signedIn) throw new ShopeeBatchStop("MO店+ 後台還沒登入：請在這個 Chrome 視窗登入後再按一次 F8。");
-        status("MO店+ 單筆：匯出配送中訂單…");
+        status("MO店+ 訂單頁讀取輸入：匯出配送中訂單…");
         await OpenMyOrdersAsync("配送中");
         return await ExportAsync(folder, "配送中訂單");
     }

@@ -491,7 +491,7 @@ internal sealed partial class MainForm
     /// </summary>
     private async Task ImportMoOrderFromPageAsync(string orderSn)
     {
-        const string title = "MO店+ 單筆輸入（F8）";
+        const string title = "MO店+ 訂單頁讀取輸入";
         if (_automationCts is not null || _shopeeBatchRunning) return;
         if (!ErpWindowReady()) return;
         if (!MoImportReady(title)) return;
