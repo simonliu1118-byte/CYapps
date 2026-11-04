@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false, int HiLifeScale = 100);
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false, int HiLifeScale = 100, int PelicanScale = 80);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -920,9 +920,17 @@ internal sealed partial class ShopeeBatchRunner
         }
         if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
         else if (NoteOnStoreSlips && ShopeeBatchScreens.NoteRoom(order.Kind, order.Carrier))
-            await PrintPdfWithNoteAsync(order, order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale);
-        else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+            await PrintPdfWithNoteAsync(order, LabelScale(order.Kind), landscape: order.Kind == ShopeeBatchCarrier.Pelican);
+        else await PrintDialogAsync(LabelScale(order.Kind), pages: null);
     }
+
+    /// <summary>Chrome's 縮放 for a label printed from Shopee's 預覽列印 (宅配通 80 %, user 2026-11-04).</summary>
+    private int LabelScale(ShopeeBatchCarrier kind) => kind switch
+    {
+        ShopeeBatchCarrier.Hct => _print.HctScale,
+        ShopeeBatchCarrier.Pelican => _print.PelicanScale,
+        _ => _print.ShopeeScale
+    };
 
     /// <summary>
     /// Prints a saved 黑貓 label PDF on the A4 printer after asking for the paper (the main
@@ -1028,7 +1036,11 @@ internal sealed partial class ShopeeBatchRunner
     /// printer's resolution at the size Chrome would print it (user, 2026-10-26: not enlarged — the
     /// PDF is saved at the carrier's own 縮放), smaller only when it does not fit above the note.
     /// </summary>
-    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order, int scale)
+    /// <param name="landscape">
+    /// A label wider than tall (宅配通, user's screenshot 2026-11-04: two parts side by side, printed
+    /// across the 150 mm): laid out across the label, the words under it, then turned to print.
+    /// </param>
+    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order, int scale, bool landscape = false)
     {
         var printer = SlipPrinter.Installed(_printer) ?? throw new ShopeeBatchStop($"找不到名稱符合「{_printer}」的印表機，未列印。", true);
         var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "note-slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
@@ -1036,15 +1048,16 @@ internal sealed partial class ShopeeBatchRunner
         await PrintDialogAsync(scale, pages: null, target: PdfPrinter);
         var pdf = await SavedPdfAsync(folder);
         var label = SlipPrinter.Label(printer, 100, 150);
-        var widthMm = label.Width * 25.4 / label.Dpi - 4;
-        var heightMm = label.Height * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
+        var (across, down) = landscape ? (label.Height, label.Width) : (label.Width, label.Height);
+        var widthMm = across * 25.4 / label.Dpi - 4;
+        var heightMm = down * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
         GrayImage slip;
         // At the carrier's own 縮放 as Chrome prints it (user, 2026-10-27: 蝦皮 110 %); the words
         // under it may go smaller for it.
         var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false, factor: scale / 100.0);
         using (drawn.Image) slip = SlipPrinter.BlackWhite(drawn.Image);
         _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
-        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints);
+        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints, landscape: landscape);
         try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
@@ -1120,12 +1133,12 @@ internal sealed partial class ShopeeBatchRunner
     /// A 全家 slip (user, 2026-10-26: little room under it, so its words may go down to
     /// <see cref="SlipNote.FamilyMinPoints"/>; others not below <see cref="SlipNote.MinPoints"/>).
     /// </param>
-    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null)
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null, bool landscape = false)
     {
         try
         {
             var dpi = SlipPrinter.Print(printer, slip, (family ? "全家寄取貨單 " : "寄件單 ") + orderSn, _print.SlipNote,
-                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints));
+                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints), landscape);
             _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
             if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }
