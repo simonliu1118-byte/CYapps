@@ -93,7 +93,7 @@ internal sealed partial class MainForm : Form
         FormClosing += (_, _) => { _statePoll.Stop(); _browserHotkey?.Dispose(); _browserHotkey = null; };
         Shown += (_, _) => ApplyBrowserHotkey();
         // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
-        Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
+        Shown += (_, _) => { if (!UiSnapshot.Active) _ = Task.Run(() => MoPrintedDocuments.Prune(_log)); };
         Shown += (_, _) => StartUpdateChecks();
         // A printer out of paper, jammed or stuck after a print (user, 2026-10-27).
         PrintWatch.Warn = message => _log.Warn("print-watch", message);

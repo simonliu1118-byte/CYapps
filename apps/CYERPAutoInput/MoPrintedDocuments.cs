@@ -65,19 +65,49 @@ internal static class MoPrintedDocuments
     }
 
     /// <summary>
-    /// Temp folders older than <see cref="KeepDays"/> days go: MO店+ runs (mo-*), CYInvoice
-    /// requests／results and paper PDFs (invoice-*), and 全家 slip pages left by a stopped run
-    /// (slip-*), 酷澎 downloads (coupang-*). Run when the program starts and when MO店+ 全自動 starts.
+    /// Temp folders that have served their turn go (user, 2026-11-04: Temp had grown to 3.8 GB):
+    /// MO店+ runs (mo-*), CYInvoice requests／results and paper PDFs (invoice-*) and 酷澎 downloads
+    /// (coupang-*) after <see cref="KeepDays"/> days (重新列印, F8); a slip's working folder left by a
+    /// stopped run or a PDF still held when it was printed (slip-*, note-slip-*, blackcat-*,
+    /// coupang-slip-*) after a day; a downloaded update (update-V*, the zip and its unpacked copy)
+    /// once an hour old, as it is installed by then; ERP's 轉出至 Excel files after <see cref="KeepDays"/>
+    /// days. Run when the program starts and when MO店+ 全自動 starts.
     /// </summary>
     public static void Prune(AppLogger log)
     {
         if (!Directory.Exists(TempRoot)) return;
-        foreach (var folder in new[] { "mo-*", "invoice-*", "slip-*", "coupang-*" }.SelectMany(p => Directory.GetDirectories(TempRoot, p)))
-        {
-            if (Directory.GetCreationTime(folder) > DateTime.Now.AddDays(-KeepDays)) continue;
-            try { Directory.Delete(folder, recursive: true); log.Info("mo-batch", "old run folder removed"); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log.Warn("mo-batch", $"old run folder left: {ex.Message}"); }
-        }
+        var now = DateTime.Now;
+        (string Pattern, TimeSpan Age)[] rules =
+        [
+            ("mo-*", TimeSpan.FromDays(KeepDays)), ("invoice-*", TimeSpan.FromDays(KeepDays)), ("coupang-*", TimeSpan.FromDays(KeepDays)),
+            ("slip-*", TimeSpan.FromDays(1)), ("note-slip-*", TimeSpan.FromDays(1)), ("blackcat-*", TimeSpan.FromDays(1)),
+            ("update-V*", TimeSpan.FromHours(1))
+        ];
+        long freed = 0;
+        var removed = 0;
+        foreach (var (pattern, age) in rules)
+            foreach (var folder in Directory.GetDirectories(TempRoot, pattern))
+            {
+                // coupang-slip-* matches coupang-* too; the shorter wait wins.
+                if (pattern == "coupang-*" && Path.GetFileName(folder).StartsWith("coupang-slip-", StringComparison.Ordinal)
+                    ? Directory.GetCreationTime(folder) > now.AddDays(-1)
+                    : Directory.GetCreationTime(folder) > now - age)
+                    continue;
+                try
+                {
+                    var size = new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+                    Directory.Delete(folder, recursive: true);
+                    freed += size;
+                    removed++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log.Warn("temp", $"old folder left: {Path.GetFileName(folder)} {ex.Message}"); }
+            }
+        var export = Path.Combine(TempRoot, "erp-export");
+        if (Directory.Exists(export))
+            foreach (var file in Directory.GetFiles(export).Where(f => File.GetLastWriteTime(f) < now.AddDays(-KeepDays)))
+                try { freed += new FileInfo(file).Length; File.Delete(file); removed++; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log.Warn("temp", $"old export left: {ex.Message}"); }
+        if (removed > 0) log.Info("temp", $"old temp removed items={removed} freed_mb={freed / 1048576}");
     }
 }
 
