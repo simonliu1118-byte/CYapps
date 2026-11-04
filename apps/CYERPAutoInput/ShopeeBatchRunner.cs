@@ -31,6 +31,9 @@ internal sealed record ShopeeBatchChat(IReadOnlyList<ChatRule> Rules);
 /// </summary>
 internal sealed class ShopeeBatchSkip(string message) : Exception(message);
 
+/// <summary>The list is to be read again (the click opened another order, its tab closed).</summary>
+internal sealed class ShopeeBatchRetry() : Exception("retry");
+
 /// <summary>One line of the batch's closing list.</summary>
 internal sealed record ShopeeBatchNote(string OrderSn, string Message);
 
@@ -154,7 +157,9 @@ internal sealed partial class ShopeeBatchRunner
             status($"全自動：找待處理訂單（已完成 {Done.Count} 筆）…");
             Current = null;
             _shippedHint = false;
-            var order = await NextOrderAsync();
+            ShopeeBatchOrder? order;
+            try { order = await NextOrderAsync(); }
+            catch (ShopeeBatchRetry) { continue; }
             if (order is null) break;
             Current = order;
             status($"全自動：訂單 {order.OrderSn} 安排出貨…");
@@ -496,6 +501,9 @@ internal sealed partial class ShopeeBatchRunner
     private ShopeeListOrder? NextInList(Screen screen) =>
         ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn));
 
+    /// <summary>Times in a row the list's click opened another order.</summary>
+    private int _wrongOpens;
+
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
         (screen, first) = await ScrollToAsync(screen, first, disposeFirst: false);
@@ -521,12 +529,21 @@ internal sealed partial class ShopeeBatchRunner
             using (list) Click(list, again.Status, "待出貨（再按一次）");
             (detail, _) = await WaitAsync("訂單明細頁", 30, Detail);
         }
-        using (detail)
+        string shown;
+        using (detail) shown = ShopeeBatchScreens.DetailOrderSn(detail.Boxes);
+        if (shown != order.OrderSn)
         {
-            var shown = ShopeeBatchScreens.DetailOrderSn(detail.Boxes);
-            if (shown != order.OrderSn)
-                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}；已停止。");
+            // Another row's order opened (user LOG 2026-11-04: right after a 任選 order was passed
+            // over, the next click opened a different order and the batch stopped): nothing is done
+            // on a page only opened, so it is closed and the list read again, twice at most.
+            _log.Warn("shopee-batch", $"opened order {shown} instead of {order.OrderSn} attempt={_wrongOpens + 1}");
+            if (_wrongOpens >= 2)
+                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}（已重試 2 次）；已停止。");
+            _wrongOpens++;
+            await CloseOrderTabAsync(new ShopeeBatchOrder { OrderSn = shown });
+            throw new ShopeeBatchRetry();
         }
+        _wrongOpens = 0;
         return order;
     }
 

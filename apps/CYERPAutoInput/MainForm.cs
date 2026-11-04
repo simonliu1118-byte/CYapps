@@ -1415,6 +1415,7 @@ internal sealed partial class MainForm : Form
         {
             outcome = AutomationOutcome.NeedsAttention;
             problem = ex.Message;
+            _log.Warn("shopee-batch", $"stopped: {ex.Message}");
             shipped = ex.Shipped || runner.Current?.Shipped == true;
         }
         catch (Exception ex)
