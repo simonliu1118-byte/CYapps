@@ -8,7 +8,7 @@ import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, check
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
-assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21', '21:22']"));
+assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21', '21:22', '22:23']"));
 assert.doesNotMatch(workflow,/wrangler d1 migrations apply|deploy:with-migrations/,
   'Worker workflow must not apply later migrations between staged DB and marker gates');
 let activeReads = 0;
@@ -204,13 +204,13 @@ await assert.rejects(snapshot(async sql => {
 
 
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.12',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.13',
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.12', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.12', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.12', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+checkHealth(health, { version: '0.9.13', schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.13', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.13', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
 for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.12', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.13', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
@@ -539,7 +539,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:providerEnvironment,status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.12' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.13' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });
@@ -784,7 +784,7 @@ for(const name of ['CYID_D1_DATABASE_ID',...Object.keys(preparation).filter(n=>n
 const withdrawalCanonical=fs.readdirSync('migrations').filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
 const withdrawalSettings=structuredClone(upgradeSettings);
 withdrawalSettings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='21';
-assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','21:22'),
+assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical.slice(0,22),'deploy','21:22'),
  {from:'21',to:'22',migration:'0022_allowance_unsent_withdrawal.sql'});
 assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical.slice(0,21),'deploy','21:22'),/MIGRATION_NOT_COMPLETE/);
 withdrawalSettings.bindings.find(b=>b.name==='SCHEMA_VERSION').text='22';
@@ -813,3 +813,5 @@ assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,wi
  const old=structuredClone(active);old.bindings.push({name:'ALLOWANCE_MANUAL_REVIEW_ENABLED',type:'plain_text',text:'true'});
  assert.equal(applyAllowanceActivation({},old,'enable').vars.ALLOWANCE_MANUAL_REVIEW_ENABLED,'false');
 }
+
+assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','22:23'),{from:'22',to:'23',migration:'0023_allowance_return_decision.sql'});

@@ -96,7 +96,7 @@ function fakeOneShotProvider(allowanceNumber,collision=false,expectedKey="sHeq7t
 async function fixture(){
  const sql=new DatabaseSync(":memory:");
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
+ assert.equal(migrations.at(-1),"0023_allowance_return_decision.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);
@@ -173,7 +173,7 @@ const principal=(role,id)=>({workspaceId:"identity_workspace",employeeId:id,
  employeeNo:"1234",displayName:"Synthetic",workspaceRole:role,
  isIdentityAdmin:false,emailVerified:true,
  isWorkspaceSuperAdmin:role==="SUPER_ADMIN",credentialVersion:1,employeeRevision:1});
-function config(db,user,allowanceFlag="true",schema="21"){
+function config(db,user,allowanceFlag="true",schema="23"){
  return {DB:db,APP_ENV:"development",SCHEMA_VERSION:schema,
  ALLOWANCE_API_ENABLED:allowanceFlag,COMPANY_SETTINGS_KEY_HEX:context.encryptionKeyHex,
  CYID_ENABLED:"true",IDENTITY:{},
@@ -184,8 +184,7 @@ function config(db,user,allowanceFlag="true",schema="21"){
 async function call(env,action,body={},token=rawDevA,context){
  const req=new Request("https://fake.invalid/v1/allowances/"+action,{
   method:"POST",headers:{"authorization":"Bearer "+token,
-    "content-type":"application/json"},body:JSON.stringify({employeeNo:"1234",
-    password:"NOT_A_REAL_PASSWORD",...body})});
+    "content-type":"application/json"},body:JSON.stringify({...action==="view"?{}:{employeeNo:"1234",password:"NOT_A_REAL_PASSWORD"},...body})});
  const res=await handle(req,env,context);
  assert.ok(res);
  return {status:res.status,body:await res.json()};
@@ -222,7 +221,7 @@ try{
  globalThis.fetch=prodProvider.transport;
  const prodDetail=await call(environmentManager,"detail",{applicationId:prodId,operation:"issue"},rawDevB);
  assert.equal(prodDetail.status,200,JSON.stringify(prodDetail));
- assert.ok(prodProvider.calls.some(x=>x.endsWith("/invoice_query")));
+ assert.equal(prodProvider.calls.length,0,"Detail reads frozen data without provider dependency");
  const testOnProdId="application_test_on_production_worker";
  const testOnProd=await call({...environmentEmployee,APP_ENV:"production"},"create",{...input(testOnProdId),workspaceId:undefined,deviceId:undefined});
  assert.equal(testOnProd.status,200,JSON.stringify(testOnProd));
@@ -234,11 +233,11 @@ try{
  assert.equal((await call(employee,"detail",{applicationId:app1,operation:"issue"})).status,403);
  const provider=fakeOneShotProvider("A20261019001");globalThis.fetch=provider.transport;
  const detail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
- assert.equal(detail.status,200);assert.ok(detail.body.rows.some(r=>r.label==="原發票商品"));
- assert.ok(detail.body.rows.some(r=>r.label==="本次折讓商品"));
- assert.ok(detail.body.rows.some(r=>r.label==="訂單編號"&&r.value==="SYNTHETIC_ORDER"));
+ assert.equal(detail.status,200);assert.equal(provider.calls.length,0);
+ assert.ok(detail.body.tables.some(r=>r.title==="本次折讓商品"));
+
  assert.ok(detail.body.rows.some(r=>r.label==="申請員工"&&r.value==="1234 Synthetic"));
- assert.ok(detail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="尚未核准"));
+ assert.ok(detail.body.rows.some(r=>r.label==="覆核主管"&&r.value==="尚未核准"));
  assert.deepEqual(sql.prepare("SELECT status,revision FROM allowance_applications WHERE application_id=?").get(app1),Object.assign(Object.create(null),{status:"open",revision:1}));
  assert.equal((await call(manager,"approve",{applicationId:app1,expectedRevision:1},rawDevB)).status,503);
  assert.equal(sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_approvals").get().n,0);
@@ -247,12 +246,12 @@ try{
  assert.equal(approved.status,200,JSON.stringify(approved));assert.equal(approved.body.executionState,"completed");
  const approvedDetail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
  assert.equal(approvedDetail.status,200);
- assert.ok(approvedDetail.body.rows.some(r=>r.label==="核准管理員"&&r.value==="1234 Synthetic"));
+ assert.ok(approvedDetail.body.rows.some(r=>r.label==="覆核主管"&&r.value==="1234 Synthetic"));
  const historyQuery={operation:"issue",allowanceNumber:"A20261019001",originalInvoiceNumber:invoice,environment:"test"};
- const historyDetail=await call(manager,"detail",historyQuery,rawDevB);
+ const historyDetail=await call({...manager,cyIdContext:undefined},"view",historyQuery,rawDevB);
  assert.equal(historyDetail.status,200,JSON.stringify(historyDetail));
  assert.equal(historyDetail.body.applicationId,app1);
- for(const label of ["申請員工","核准管理員","申請原因","本次折讓商品"])
+ for(const label of ["申請員工","覆核主管","折讓原因","本次折讓商品"])
   assert.deepEqual(historyDetail.body.rows.find(r=>r.label===label),approvedDetail.body.rows.find(r=>r.label===label));
  assert.equal((await call(employee,"detail",historyQuery)).status,403);
  assert.equal((await call(manager,"detail",{...historyQuery,originalInvoiceNumber:"CD87654321"},rawDevB)).status,404);
@@ -266,20 +265,25 @@ try{
  // Manager cancellation retains the immutable grant and reserved number.
  const cancelledId="application_cancel_unsent";
  await f.prepare(cancelledId);
- const manager22=config(db,principal("ADMIN","manager"),"true","22");
- assert.equal((await call(manager,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,503);
- const employee22=config(db,principal("USER","employee"),"true","22");
- assert.equal((await call(employee22,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,409);
- const cancelled=await call(config(db,principal("ADMIN","different_manager"),"true","22"),"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB);
- assert.equal(cancelled.status,200,JSON.stringify(cancelled));
+ const manager22=config(db,principal("ADMIN","manager"),"true","23");
+ const returnInput={applicationId:cancelledId,expectedRevision:3,operation:"issue",reason:"合成退回原因"};
+ assert.equal((await call(manager22,"withdraw",returnInput,rawDevB)).status,409,"Approval removes return immediately, even before sending");
  assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=?").get(cancelledId).status,"reserved");
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM allowance_execution_approvals WHERE application_id=?").get(cancelledId).n,1);
- assert.equal(sql.prepare("SELECT to_status FROM allowance_application_audit_events WHERE application_id=? ORDER BY revision DESC").get(cancelledId).to_status,"withdrawn");
- assert.equal((await call(manager22,"withdraw",{applicationId:cancelledId,expectedRevision:3},rawDevB)).status,409);
- assert.equal((await call(manager22,"withdraw",{applicationId:app1,expectedRevision:3},rawDevB)).status,409);
+ const pendingId="application_pending_return";
+ assert.equal((await call(employee,"create",{...input(pendingId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
+ assert.equal((await call(manager22,"withdraw",{...returnInput,applicationId:pendingId,expectedRevision:1,reason:""},rawDevB)).status,400);
+ const returned=await call(manager22,"withdraw",{...returnInput,applicationId:pendingId,expectedRevision:1},rawDevB);
+ assert.equal(returned.status,200,JSON.stringify(returned));
+ const decision=sql.prepare("SELECT status,return_ciphertext FROM allowance_applications WHERE application_id=?").get(pendingId);
+ assert.equal(decision.status,"withdrawn");assert.ok(!decision.return_ciphertext.includes("合成退回原因"));
+ const returnedView=await call(manager22,"view",{applicationId:pendingId,operation:"issue"},rawDevB);
+ assert.equal(returnedView.status,200,JSON.stringify(returnedView));
+ assert.ok(returnedView.body.rows.some(r=>r.label==="退回原因"&&r.value==="合成退回原因"));
+ assert.equal(returnedView.body.canWithdraw,false);
+ assert.equal((await call({...manager22,ALLOWANCE_G0401_SEND_ENABLED:"true"},"approve",{applicationId:pendingId,expectedRevision:2},rawDevB)).status,409);
  const sendingId="application_cancel_sending";await f.prepare(sendingId);
  sql.prepare("UPDATE allowance_number_ledger SET status='sending' WHERE application_id=?").run(sendingId);
- assert.equal((await call(manager22,"withdraw",{applicationId:sendingId,expectedRevision:3},rawDevB)).status,409);
+ assert.equal((await call(manager22,"withdraw",{applicationId:sendingId,expectedRevision:3,reason:"合成退回原因",operation:"issue"},rawDevB)).status,409);
  assert.throws(()=>sql.prepare("UPDATE allowance_applications SET status='withdrawn',revision=4 WHERE application_id=?").run(sendingId),/TRANSITION_INVALID/);
  let voided=false,voidPosts=0;
  globalThis.fetch=async(url,options)=>{
@@ -293,6 +297,16 @@ try{
  };
  const voidId="void_route_synthetic_01";
  assert.equal((await call(employee,"void-create",{applicationId:voidId,environment:"test",allowanceNumber:"ALW-001",originalInvoiceNumber:invoice,reason:"SYNTHETIC RETURN"})).status,200);
+ const returnedVoid="void_pending_return_01";
+ assert.equal((await call(employee,"void-create",{applicationId:returnedVoid,environment:"test",allowanceNumber:"ALW-RETURN",originalInvoiceNumber:invoice,reason:"合成作廢原因"})).status,200);
+ const voidReturn={applicationId:returnedVoid,operation:"void",expectedRevision:1,reason:"合成主管退回"};
+ assert.equal((await call(manager,"withdraw",voidReturn,rawDevB)).status,200);
+ const voidRead=await call(employee,"void-status",{applicationId:returnedVoid});
+ assert.equal(voidRead.body.status,"withdrawn");assert.equal(voidRead.body.officiallyConfirmed,false);
+ const voidView=await call({...manager,cyIdContext:undefined},"view",{applicationId:returnedVoid,operation:"void"},rawDevB);
+ assert.equal(voidView.status,200,JSON.stringify(voidView));assert.ok(voidView.body.rows.some(row=>row.label==="退回原因"&&row.value==="合成主管退回"));
+ assert.equal((await call({...manager,ALLOWANCE_G0501_SEND_ENABLED:"true"},"void-approve",{applicationId:returnedVoid,expectedRevision:1},rawDevB)).status,409);
+ assert.equal(voidPosts,0);
  const vd=await call(manager,"detail",{applicationId:voidId,operation:"void"},rawDevB);
  assert.equal(vd.status,200);assert.ok(vd.body.rows.some(r=>r.label==="原折讓商品"));
  const body={applicationId:voidId,expectedRevision:1,requestHash:vd.body.requestHash,expectedOfficialSnapshotHash:vd.body.officialSnapshotHash};
@@ -347,16 +361,8 @@ try{
   let detailCalls=0;
   globalThis.fetch=async()=>{detailCalls++;throw new TypeError("TLS handshake failed SECRET_RAW_PROVIDER_PAYLOAD");};
   const detailFailure=await call(failAdmin,"detail",{applicationId:detailId,operation:"issue"},rawDevA);
-  assert.equal(detailFailure.status,409);assert.equal(detailFailure.body.error.stage,"detail_official_invoice_query");
-  assert.equal(detailFailure.body.error.officialQuery.failureKind,"tls");
-  assert.equal(detailFailure.body.error.officialQuery.responseReceived,false);
-  assert.equal(detailCalls,1);assert.ok(!JSON.stringify(detailFailure).includes("SECRET_RAW_PROVIDER_PAYLOAD"));
-  // A separate balance-check fetch must report its own phase.
-  detailCalls=0;
-  globalThis.fetch=async()=>{if(++detailCalls===1)return Response.json({code:0,data:[invoiceRecord]});throw new DOMException("SECRET_RAW_PROVIDER_PAYLOAD","TimeoutError");};
-  const balanceFailure=await call(failAdmin,"detail",{applicationId:detailId,operation:"issue"},rawDevA);
-  assert.equal(balanceFailure.body.error.stage,"detail_official_balance_check");
-  assert.equal(balanceFailure.body.error.officialQuery.failureKind,"timeout");assert.equal(detailCalls,2);
+  assert.equal(detailFailure.status,200,JSON.stringify(detailFailure));assert.equal(detailCalls,0);
+  assert.ok(detailFailure.body.tables.some(table=>table.title==="本次折讓商品"));
   assert.deepEqual(same.sql.prepare("SELECT * FROM allowance_applications WHERE application_id=?").get(detailId),beforeDetail);
   assert.equal(same.sql.prepare("SELECT COUNT(*) AS n FROM allowance_execution_events WHERE application_id=?").get(detailId).n,beforeEvents);
   for(const table of ["allowance_execution_approvals","allowance_number_ledger"])

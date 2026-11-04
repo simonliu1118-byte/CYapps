@@ -733,11 +733,13 @@ internal sealed class MainForm : Form
                 requestedMode == CloudModes.CloudTransition ? Color.FromArgb(166, 92, 0) : SystemColors.ControlText,
                 detail + $"{CloudCompatibility.SuccessSummary(health)}\n{onboardingText}");
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"MainForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
             SetCloudUnavailableState(requested, ExceptionDetails(error));
         }
@@ -756,9 +758,12 @@ internal sealed class MainForm : Form
                 new Uri(settings.CloudBaseUrl, UriKind.Absolute), token);
             await client.ReportUsageAsync(settings.CloudDeviceId, ApplicationVersion.ReadDisplay(), syncLifetime.Token);
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { }
-        catch (Exception)
+        catch (OperationCanceledException diagnosticError2) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"MainForm"); }
+        catch (Exception diagnosticError3)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"MainForm");
             // Usage metadata is best-effort. Its failure must not replace service availability checks,
             // overwrite the last confirmed server timestamp, or change authority/cache state.
         }
@@ -810,12 +815,14 @@ internal sealed class MainForm : Form
         {
             await repository.Connections.RequireAmegoAsync(syncLifetime.Token);
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError4) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"MainForm");
             return;
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
             var details = ExceptionDetails(error);
             SetAmegoConnectionState(
@@ -859,11 +866,13 @@ internal sealed class MainForm : Form
                 ? "公司統編查詢完成，但光貿未回傳公司名稱。請確認正式環境統編與 App Key。"
                 : string.Empty);
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError5) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError5,"MainForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
             environmentCompanyLabel.Text = EnvironmentCompanyText(
                 requestedEnvironment,
@@ -898,6 +907,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             return "正式環境 App Key 無法解密。\n" + ExceptionDetails(error);
         }
         return string.Empty;
@@ -929,7 +939,9 @@ internal sealed class MainForm : Form
         var wasConnected = repository.Connections.Current?.CloudAvailable == true;
         ServiceConnectionState state;
         try { state = await repository.Connections.CheckAsync(syncLifetime.Token); }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { return; }
+        catch (OperationCanceledException diagnosticError6) when (syncLifetime.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError6,"MainForm"); return; }
         finally { checkingConnections = false; }
         if (shuttingDown || IsDisposed) return;
         if (LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
@@ -942,7 +954,9 @@ internal sealed class MainForm : Form
         if (state.CloudAvailable && !wasConnected)
         {
             try { await repository.RefreshCompanyCardAsync(syncLifetime.Token); UpdateEnvironment(); invoicePage.RefreshEnvironment(); }
-            catch (Exception) { SetRuntimeModeState("公司卡同步待確認", Color.FromArgb(166,107,16), "保留本機設定，正式操作前會再確認公司卡。"); }
+            catch (Exception diagnosticError7)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError7,"MainForm"); SetRuntimeModeState("公司卡同步待確認", Color.FromArgb(166,107,16), "保留本機設定，正式操作前會再確認公司卡。"); }
         }
         var identitySettings = repository.Settings.LoadOrCreate();
         ownsAccountManagement = AllowsLocalAccountManagement(identitySettings);
@@ -993,11 +1007,13 @@ internal sealed class MainForm : Form
             if (run.Result is { Problems.Count: > 0 })
                 apiLabel.AccessibleDescription = $"啟動同步有 {run.Result.Problems.Count} 項未完整更新";
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError8) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError8,"MainForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             if (!shuttingDown) apiLabel.AccessibleDescription = "啟動同步失敗：" + error.Message;
         }
     }
@@ -1013,11 +1029,13 @@ internal sealed class MainForm : Form
             if (run.Result is { Problems.Count: > 0 })
                 apiLabel.AccessibleDescription = $"背景同步有 {run.Result.Problems.Count} 項未完整更新";
         }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError9) when (syncLifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError9,"MainForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MainForm");
             if (!shuttingDown) apiLabel.AccessibleDescription = "背景同步失敗：" + error.Message;
         }
     }

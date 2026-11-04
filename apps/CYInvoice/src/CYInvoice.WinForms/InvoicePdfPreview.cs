@@ -23,10 +23,13 @@ internal static class InvoicePdfPreview
         if (cached is not null)
         {
             try { return Decode(cached); }
-            catch (ArgumentException)
-            {
+            catch (ArgumentException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoicePdfPreview");
                 try { File.Delete(previewPath); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoicePdfPreview"); }
             }
         }
 
@@ -59,7 +62,9 @@ internal static class InvoicePdfPreview
         finally
         {
             try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoicePdfPreview"); }
         }
     }
 

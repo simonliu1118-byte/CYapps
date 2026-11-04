@@ -198,6 +198,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AccountManagementForm");
             ShowOperationError("無法新增使用者", error);
         }
     }
@@ -218,6 +219,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AccountManagementForm");
             ShowOperationError("無法修改使用者", error);
             Reload(target.EmployeeNo);
         }
@@ -243,6 +245,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AccountManagementForm");
             ShowOperationError("無法重設密碼", error);
         }
     }
@@ -262,6 +265,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AccountManagementForm");
             ShowOperationError($"無法{action}帳號", error);
             Reload(target.EmployeeNo);
         }
@@ -282,6 +286,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AccountManagementForm");
             ShowOperationError("無法變更權限", error);
             Reload(target.EmployeeNo);
         }

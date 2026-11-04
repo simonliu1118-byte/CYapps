@@ -67,6 +67,7 @@ internal sealed class InvoicePdfViewerForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoicePdfViewerForm");
             MessageBox.Show(
                 this,
                 $"PDF 內嵌檢視無法啟動。請確認 Windows 已安裝 Microsoft Edge WebView2 Runtime。\n\n{error.Message}",

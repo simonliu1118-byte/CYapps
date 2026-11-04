@@ -28,7 +28,13 @@ public sealed record InvoiceSyncIssue(
 
 // Read-only UI projection in the existing sync_state. Never an execution or authority owner.
 public sealed record CloudAllowanceProjection(string Status, string ExecutionState,
-    string OriginalInvoiceNumber = "", string OriginalOrderId = "");
+    string OriginalInvoiceNumber = "", string OriginalOrderId = "")
+{
+    public string AllowanceNumber { get; init; } = "";
+    public string Progress { get; init; } = "";
+    public IReadOnlyList<KeyValuePair<string,string>> DetailRows { get; init; } = [];
+    public IReadOnlyList<BusinessDetailTable> Tables { get; init; } = [];
+}
 
 public sealed class InvoiceSyncIssueStore
 {
@@ -202,7 +208,9 @@ public sealed class InvoiceSyncIssueStore
             if(error is not null){IssueDiagnosticLog.Record(dataDirectory,id,stage,type,error:error);saved=true;}
             else saved=IssueDiagnosticLog.TryAppend(dataDirectory,id,stage,type,message);
         }
-        catch(Exception failure)when(failure is IOException or UnauthorizedAccessException){ }
+        catch (Exception failure)when(failure is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(failure,"InvoiceSyncIssueStore"); }
         if(saved)return;
         using var warning=db.CreateCommand();warning.CommandText="UPDATE sync_issues SET message=$message WHERE local_id=$id";
         warning.Parameters.AddWithValue("$id",id);
@@ -218,12 +226,17 @@ public sealed class InvoiceSyncIssueStore
 
     public void ApplyCloudAllowance(string accountKey, string applicationId, string operation,
         string state, string status, string error, string? previousAccountKey = null,
-        string? originalInvoiceNumber = null, string? originalOrderId = null)
+        string? originalInvoiceNumber = null, string? originalOrderId = null,
+        string? allowanceNumber = null, string? progress = null)
     {
         var previous = CloudProjection(accountKey, applicationId, operation);
-        var projection = new CloudAllowanceProjection(status, state,
-            originalInvoiceNumber ?? previous?.OriginalInvoiceNumber ?? "",
-            originalOrderId ?? previous?.OriginalOrderId ?? "");
+        var projection = (previous ?? new CloudAllowanceProjection(status, state)) with {
+            Status=status, ExecutionState=state,
+            OriginalInvoiceNumber=originalInvoiceNumber ?? previous?.OriginalInvoiceNumber ?? "",
+            OriginalOrderId=originalOrderId ?? previous?.OriginalOrderId ?? "",
+            AllowanceNumber=allowanceNumber ?? previous?.AllowanceNumber ?? "",
+            Progress=progress ?? previous?.Progress ?? ""
+        };
         new InvoiceSyncStateStore(dataDirectory).SaveCheckpoint(accountKey,
             "cloud-allowance:" + operation + ":" + applicationId, JsonSerializer.Serialize(projection));
         var type = "cloud_allowance_" + (operation == "void" ? "void_" : "issue_") +
@@ -250,7 +263,7 @@ public sealed class InvoiceSyncIssueStore
         }
         else
         {
-            var message = state == "problem" ? "折讓處理未完成：" + error :
+            var message = progress is {Length:>0} ? progress : state == "problem" ? "折讓處理未完成：" + error :
                 status is "open" or "review" ? "等待主管核准" : "主管已核准，系統自動處理中";
             if (existing is null)
             {
@@ -288,6 +301,25 @@ public sealed class InvoiceSyncIssueStore
             stale.Parameters.AddWithValue("$problem", prefix + "problem");
             stale.ExecuteNonQuery();
         }
+    }
+
+    public void SaveCloudDetail(string accountKey, CYInvoice.Core.Cloud.CloudAllowanceOperationDetail detail)
+    {
+        var previous=CloudProjection(accountKey,detail.ApplicationId,detail.Operation) ?? new CloudAllowanceProjection(detail.Status,detail.ExecutionState);
+        var projection=previous with { Status=detail.Status, ExecutionState=detail.ExecutionState, DetailRows=detail.Rows.Concat(previous.DetailRows.Where(row=>!detail.Rows.Any(current=>current.Key==row.Key))).ToArray(), Tables=detail.Tables.Count>0?detail.Tables:previous.Tables,
+            OriginalInvoiceNumber=detail.Rows.FirstOrDefault(row=>row.Key=="原發票").Value ?? previous.OriginalInvoiceNumber,
+            AllowanceNumber=detail.Rows.FirstOrDefault(row=>row.Key=="折讓單號").Value ?? previous.AllowanceNumber,
+            Progress=detail.Rows.FirstOrDefault(row=>row.Key=="處理狀態").Value ?? previous.Progress };
+        new InvoiceSyncStateStore(dataDirectory).SaveCheckpoint(accountKey,"cloud-allowance:"+detail.Operation+":"+detail.ApplicationId,JsonSerializer.Serialize(projection));
+    }
+
+    public (string ApplicationId, CloudAllowanceProjection Projection)? CloudDetailForNumber(string accountKey,string allowanceNumber,string operation="issue")
+    {
+        using var db=Open(SqliteOpenMode.ReadOnly); using var query=db.CreateCommand();
+        query.CommandText="SELECT scope,checkpoint_json FROM sync_state WHERE account_key=$account AND scope LIKE $scope AND json_extract(checkpoint_json,'$.AllowanceNumber')=$number LIMIT 1";
+        query.Parameters.AddWithValue("$account",accountKey);query.Parameters.AddWithValue("$scope","cloud-allowance:"+operation+":%");query.Parameters.AddWithValue("$number",allowanceNumber);
+        using var reader=query.ExecuteReader();if(!reader.Read())return null;
+        return(reader.GetString(0).Split(':')[^1],JsonSerializer.Deserialize<CloudAllowanceProjection>(reader.GetString(1))!);
     }
 
     public void UpdateMessage(long issueId, string message)

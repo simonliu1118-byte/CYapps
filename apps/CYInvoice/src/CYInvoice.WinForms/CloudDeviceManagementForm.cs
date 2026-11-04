@@ -149,11 +149,13 @@ internal sealed class CloudDeviceManagementForm : Form
             deviceCount.Text = $"目前有 {result.ActiveDeviceCount} 台使用中的裝置";
             deviceStatus.Text = string.Empty;
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudDeviceManagementForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);
             deviceStatus.Text = CloudErrorMessage(error);
             if (!silent && !IsDisposed)
@@ -161,6 +163,7 @@ internal sealed class CloudDeviceManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);
             deviceStatus.Text = error.Message;
             if (!silent && !IsDisposed)
@@ -284,11 +287,13 @@ internal sealed class CloudDeviceManagementForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError2) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudDeviceManagementForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             if (!IsDisposed)
             {
                 var message = CloudErrorMessage(error);
@@ -299,6 +304,7 @@ internal sealed class CloudDeviceManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             if (!IsDisposed)
             {
                 deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);

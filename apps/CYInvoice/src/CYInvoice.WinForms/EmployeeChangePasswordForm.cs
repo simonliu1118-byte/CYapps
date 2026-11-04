@@ -130,12 +130,14 @@ internal sealed class EmployeeChangePasswordForm : Form
             DialogResult = DialogResult.OK;
             Close();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeChangePasswordForm");
             ValidationError("目前密碼不正確或新密碼格式無效", currentPassword);
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeChangePasswordForm");
             MessageBox.Show(this, error.Message, "無法變更密碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally

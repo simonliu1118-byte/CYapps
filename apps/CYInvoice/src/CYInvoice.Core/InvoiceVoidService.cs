@@ -122,7 +122,8 @@ public sealed class InvoiceVoidService
                     cancellationToken).ConfigureAwait(false);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceVoidService");
                 sendError = error;
             }
 
@@ -303,6 +304,7 @@ public sealed class InvoiceVoidService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceVoidService");
             queryError = error;
         }
 
@@ -424,6 +426,7 @@ public sealed class InvoiceVoidService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceVoidService");
             return error;
         }
     }

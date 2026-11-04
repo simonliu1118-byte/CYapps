@@ -202,6 +202,7 @@ public sealed class InvoiceDetailRefreshService
         try { return FixedDecimal.Parse(text).RoundInt64(); }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceDetailRefreshService");
             throw new InvalidDataException($"{field}格式錯誤：{text}", error);
         }
     }

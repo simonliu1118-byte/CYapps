@@ -153,9 +153,12 @@ internal sealed class EmployeeAdminLoginForm : Form
             DialogResult = DialogResult.OK;
             Close();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeAdminLoginForm"); }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAdminLoginForm");
             if (!IsDisposed) ValidationError(AuthenticationErrorMessage(error), password);
         }
         finally

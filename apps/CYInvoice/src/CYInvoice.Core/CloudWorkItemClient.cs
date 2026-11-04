@@ -164,6 +164,7 @@ public sealed class CloudWorkItemClient
         }
         catch (CloudApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound && ex.Code == "NOT_FOUND")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudWorkItemClient");
             return null;
         }
     }
@@ -308,6 +309,7 @@ public sealed class CloudWorkItemClient
         }
         catch (JsonException ex)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudWorkItemClient");
             throw new InvalidDataException("Invalid Cloud Work Item JSON reply.", ex);
         }
         var root = document.RootElement;

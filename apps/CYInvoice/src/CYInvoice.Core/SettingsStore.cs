@@ -82,6 +82,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         }
         catch (Exception error) when (error is not InvalidOperationException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsStore");
             throw new InvalidOperationException(
                 "目前無法讀取 MO店+ Excel 保護密碼，請由管理員至「設定」重新輸入後再匯入。",
                 error);
@@ -214,6 +215,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         }
         catch (Exception error) when (error is not InvalidOperationException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsStore");
             throw new InvalidOperationException("目前無法讀取待完成的雲端裝置初始化資料。", error);
         }
     }
@@ -283,6 +285,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         }
         catch (Exception error) when (error is not InvalidOperationException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsStore");
             throw new InvalidOperationException("目前無法讀取待完成的雲端裝置加入資料。", error);
         }
     }
@@ -360,6 +363,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         }
         catch (Exception error) when (error is not InvalidOperationException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsStore");
             throw new InvalidOperationException("無法讀取已保護的 Pending Recovery Token；不可另建 Token 重試。", error);
         }
     }

@@ -275,7 +275,8 @@ internal sealed class CloudJoinWorkspaceForm : Form
                     lifetime.Token);
             }
             catch (Exception error) when (CouldBeAmbiguousClaim(error))
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudJoinWorkspaceForm");
                 var recovered = await ProbeTokenAsync(attempt.DeviceToken);
                 if (recovered == RecoveryResult.Recovered) return;
                 if (recovered == RecoveryResult.Unavailable)
@@ -308,14 +309,17 @@ internal sealed class CloudJoinWorkspaceForm : Form
         }
         catch (CloudApiException error) when (error.StatusCode == HttpStatusCode.Unauthorized)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudJoinWorkspaceForm");
             return RecoveryResult.NotRegistered;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudJoinWorkspaceForm");
             return RecoveryResult.Unavailable;
         }
-        catch (TaskCanceledException) when (!lifetime.IsCancellationRequested)
+        catch (TaskCanceledException diagnosticError2) when (!lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudJoinWorkspaceForm");
             return RecoveryResult.Unavailable;
         }
     }
@@ -351,11 +355,13 @@ internal sealed class CloudJoinWorkspaceForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError3) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"CloudJoinWorkspaceForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudJoinWorkspaceForm");
             if (!IsDisposed)
             {
                 var message = CloudErrorMessage(error);
@@ -365,6 +371,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudJoinWorkspaceForm");
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true);
@@ -447,8 +454,9 @@ internal sealed class CloudJoinWorkspaceForm : Form
         {
             return string.Equals(NormalizeBaseUrl(left), NormalizeBaseUrl(right), StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception diagnosticError4)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"CloudJoinWorkspaceForm");
             return false;
         }
     }

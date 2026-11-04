@@ -30,9 +30,12 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
         if (Current is { CloudRejected: true })
             throw new ServiceConnectionException("雲端已拒絕目前裝置或綁定，不能使用單機備援。請確認授權後重新檢查。", null);
         try { await new AmegoConnectivityProbe(client).CheckAsync(cancellationToken).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException diagnosticError1) when (cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"ServiceConnectivity"); throw; }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ServiceConnectivity");
             throw new ServiceConnectionException("目前無法連線光貿，已停止開票、查詢及光貿相關操作。請恢復連線後重試。", error);
         }
     }
@@ -83,11 +86,13 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             var cursorScope = "cloud-allowance-cursors:" + current.CloudWorkspaceId + ":" + new Uri(current.CloudBaseUrl).AbsoluteUri;
             var stateStore = dataDirectory is null || !synchronize ? null : new InvoiceSyncStateStore(dataDirectory);
             var savedCursors = stateStore?.Checkpoint(accountKey, cursorScope);
+            var savedEvents=stateStore?.Checkpoint(accountKey,cursorScope+":events");
+            var allowanceEventCursor=long.TryParse(savedEvents,out var previousEvent)?previousEvent:0;
             using var cursors = JsonDocument.Parse(string.IsNullOrEmpty(savedCursors) ? "{}" : savedCursors);
             var issueCursor = cursors.RootElement.TryGetProperty("issue", out var ic) ? ic.GetString() ?? "" : "";
             var voidCursor = cursors.RootElement.TryGetProperty("void", out var vc) ? vc.GetString() ?? "" : "";
             request.Content = JsonContent.Create(new { synchronize, authorities, allowanceIds,
-                allowanceIssueCursor = issueCursor, allowanceVoidCursor = voidCursor });
+                allowanceIssueCursor = issueCursor, allowanceVoidCursor = voidCursor,allowanceEventCursor });
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new CloudApiException("RUNTIME_SYNC_UNSUPPORTED",
@@ -190,7 +195,9 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                     }
                     store.ApplyCloudAllowance(itemAccount, id, operation, state, status, item.GetProperty("last_error").GetString() ?? "", previousAccount,
                         item.TryGetProperty("originalInvoiceNumber", out var originalNumber) && originalNumber.ValueKind == JsonValueKind.String ? originalNumber.GetString() : null,
-                        item.TryGetProperty("originalOrderId", out var originalOrder) && originalOrder.ValueKind == JsonValueKind.String ? originalOrder.GetString() : null);
+                        item.TryGetProperty("originalOrderId", out var originalOrder) && originalOrder.ValueKind == JsonValueKind.String ? originalOrder.GetString() : null,
+                        item.TryGetProperty("allowanceNumber",out var allowanceNumber)&&allowanceNumber.ValueKind==JsonValueKind.String?allowanceNumber.GetString():null,
+                        item.TryGetProperty("progress",out var progress)&&progress.ValueKind==JsonValueKind.String?progress.GetString():null);
                     if (!diagnosticSaved) {
                         var currentIssue = store.Unresolved(itemAccount).FirstOrDefault(x => x.OrderId == id && x.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal));
                         if (currentIssue is not null) store.UpdateMessage(currentIssue.Id, currentIssue.Message + "；程式同目錄 log 寫入失敗，請確認權限與磁碟空間。");
@@ -199,6 +206,17 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                         completedApplications.Add(id);
                 }
                 CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, completedApplications);
+                if(root.TryGetProperty("allowanceEvents",out var events)) {
+                    var saved=true;
+                    foreach(var entry in events.EnumerateArray()) {
+                        string? Text(string key)=>entry.TryGetProperty(key,out var value)&&value.ValueKind==JsonValueKind.String?value.GetString():null;
+                        int? Number(string key)=>entry.TryGetProperty(key,out var value)&&value.ValueKind==JsonValueKind.Number&&value.TryGetInt32(out var number)?number:null;
+                        saved &= IssueDiagnosticLog.RecordCloud(dataDirectory,Text("operation")??"unknown","server_event",Text("request_id")??"runtime",Text("application_id"),
+                            httpStatus:Number("http_status"),responseReceived:Number("response_received") is { } received?received==1:null,
+                            code:Text("error_code"),serverStage:Text("stage"),attempt:Number("attempt"),providerCode:Number("provider_code"),serverAtUtc:Text("recorded_at"));
+                    }
+                    if(saved&&stateStore is not null&&root.TryGetProperty("allowanceEventCursor",out var cursor))stateStore.SaveCheckpoint(accountKey,cursorScope+":events",cursor.GetInt64().ToString());
+                }
                 if (stateStore is not null && root.TryGetProperty("allowanceCursors", out var nextCursors))
                 {
                     foreach (var name in new[] { "issue", "void" })
@@ -214,6 +232,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
         catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException
             && error is not CloudApiException && error is not CyIdAuthenticationException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ServiceConnectivity");
             throw new InvalidDataException("雲端同步回應或快取格式無效。", error);
         }
         finally { if (synchronize && cyIdOffline is not null) cyIdOffline.AuthorityGate.Release(); }
@@ -222,8 +241,12 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
     private static async Task<(string Problem, bool Rejected)> CheckServiceAsync(Func<Task> check, CancellationToken cancellationToken)
     {
         try { await check().ConfigureAwait(false); return ("", false); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception error) { return (error.Message, error is InvalidDataException or System.Text.Json.JsonException or UriFormatException
+        catch (OperationCanceledException diagnosticError2) when (cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"ServiceConnectivity"); throw; }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ServiceConnectivity"); return (error.Message, error is InvalidDataException or System.Text.Json.JsonException or UriFormatException
             || error is CloudApiException cloud && (cloud.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                 || cloud.Code is "DEVICE_REVOKED" or "DEVICE_INVALID" or "ACCESS_DENIED" or "UNAUTHORIZED")
             || error is CyIdAuthenticationException identity && identity.Code is "DEVICE_INVALID" or "IDENTITY_WORKSPACE_MISMATCH" or "IDENTITY_PROVIDER_MISMATCH" or "ACCESS_DENIED"); }

@@ -32,6 +32,8 @@ public sealed record InvoiceAllowanceManualReview(
 {
     public string RequesterName { get; init; } = "";
     public string LocalApproverName { get; init; } = "";
+    public string ReturnReason { get; init; } = "";
+    public string ReturnedByName { get; init; } = "";
 }
 
 public sealed record LocalAllowanceApprovalPreview(
@@ -170,8 +172,9 @@ public sealed class EmployeeAllowanceWorkflowService
                 "折讓申請等待主管核准。",
                 now());
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeAllowanceWorkflowService");
             ClearManualReview(fresh);
             syncRepository.UpsertMany([fresh]);
             throw;
@@ -198,7 +201,9 @@ public sealed class EmployeeAllowanceWorkflowService
             value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return null;
         try { return value.Deserialize<InvoiceAllowanceManualReview>(); }
-        catch (JsonException error) { throw new InvalidDataException("折讓人工處理紀錄格式錯誤", error); }
+        catch (JsonException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService"); throw new InvalidDataException("折讓人工處理紀錄格式錯誤", error); }
     }
 
     // B2 pre-send approval only: this NEVER calls g0401 or allocates a
@@ -385,6 +390,7 @@ public sealed class EmployeeAllowanceWorkflowService
             progress?.Invoke("正在依原核准查證並配號");
             var reservation = LocalReservationFor(issue) ?? await ReserveApprovedDraftAsync(
                 issue, manager.EmployeeNo, cancellationToken).ConfigureAwait(false);
+            progress?.Invoke("折讓單號："+reservation.AllowanceNumber+"\n正在送交光貿");
             var sender = new LocalAllowanceOneShotService(ledger, gateway ?? CreateAllowanceGateway(account),
                 (frozen, token) => ValidateLocalSendPreflightAsync(issue, manager.EmployeeNo, frozen, token),
                 (stage, code, error) => IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, stage,
@@ -412,6 +418,7 @@ public sealed class EmployeeAllowanceWorkflowService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService");
             // Persist the original operation before presenting an error. A
             // cancelled request may already have left the machine.
             var failed = FindIssueRecord(issue);
@@ -568,6 +575,7 @@ public sealed class EmployeeAllowanceWorkflowService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService");
             IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_readback_failed",InvoiceAllowanceIssueTypes.ManualReview,error:error);
             var latest=FindIssueRecord(issue);
             if (issue.AccountKey==CurrentAccountKey() && JsonSerializer.Serialize(ReadManualReview(latest))==JsonSerializer.Serialize(review))
@@ -605,12 +613,14 @@ public sealed class EmployeeAllowanceWorkflowService
         {
             fresh = await detailRefreshService.RefreshAsync(record, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"EmployeeAllowanceWorkflowService");
             throw;
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService");
             var message = "折讓狀態回查失敗：" + error.Message;
             SetConfirmationProblem(record, true);
             UpdateIssueMessage(record, message);
@@ -641,22 +651,23 @@ public sealed class EmployeeAllowanceWorkflowService
     public void CancelManualReview(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
-        string actorPassword)
+        string actorPassword, string returnReason)
     {
         ArgumentNullException.ThrowIfNull(issue);
         var manager = EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        if(string.IsNullOrWhiteSpace(returnReason))throw new InvalidOperationException("請填寫退回原因");
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
         // Initialize the existing ledger before the atomic cancellation guard.
         _ = new LocalAllowanceNumberStore(repository.DataDirectory);
-        if (review.AwaitingConfirmation || HasPendingMarker(record))
-            throw new InvalidOperationException("這筆折讓已標記人工操作完成並等待光貿確認，不能取消退回");
+        if (review.LocalApprovedUtc is not null || review.AwaitingConfirmation || HasPendingMarker(record))
+            throw new InvalidOperationException("主管已核准或交易已進入處理，不能取消退回");
 
         record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
-            review with { CancelledUtc = now().ToUniversalTime(), CancelledByEmployeeNo = manager.EmployeeNo });
+            review with { CancelledUtc = now().ToUniversalTime(), CancelledByEmployeeNo = manager.EmployeeNo, ReturnReason=returnReason.Trim(), ReturnedByName=manager.Name });
         ClearManualReview(record);
         ClearPending(record);
         syncRepository.UpsertMany([record], completedIssue: issue, cancelUnsentAllowance: true);
@@ -682,12 +693,14 @@ public sealed class EmployeeAllowanceWorkflowService
         {
             fresh = await detailRefreshService.RefreshAsync(record, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException diagnosticError3)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"EmployeeAllowanceWorkflowService");
             throw;
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService");
             var message = "折讓狀態回查失敗：" + error.Message;
             SetConfirmationProblem(record, true);
             UpdateIssueMessage(record, message);
@@ -939,6 +952,7 @@ public sealed class EmployeeAllowanceWorkflowService
         }
         catch (Exception exception) when (exception is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(exception,"EmployeeAllowanceWorkflowService");
             amount = default;
             error = exception.Message;
             return false;
@@ -989,6 +1003,7 @@ public sealed class EmployeeAllowanceWorkflowService
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceWorkflowService");
             throw new InvalidDataException("折讓人工處理資料格式錯誤", error);
         }
     }

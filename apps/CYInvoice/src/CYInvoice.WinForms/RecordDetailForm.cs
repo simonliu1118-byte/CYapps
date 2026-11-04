@@ -284,17 +284,20 @@ internal sealed class RecordDetailForm : Form
                     }
                 }
                 catch (EmployeeVoidAuthenticationDelayException error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
                     MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 catch (InvalidOperationException error) when (
                     error.Message == "員工編號或密碼錯誤" ||
                     error.Message == "發票號碼不符，請重新確認")
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
                     MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 catch (Exception error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
                     MessageBox.Show(this, error.Message, "作廢未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
@@ -323,11 +326,13 @@ internal sealed class RecordDetailForm : Form
             PopulateDetails();
             RefreshPreviewAfterQuery();
         }
-        catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (previewCancellation.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"RecordDetailForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             if (IsDisposed) return;
             latestStatusUnknown = true;
             Text = "發票詳細資訊 (最新狀態未確認)";
@@ -417,14 +422,17 @@ internal sealed class RecordDetailForm : Form
         }
         catch (EmployeeVoidAuthenticationDelayException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (InvalidOperationException error) when (error.Message == "員工編號或密碼錯誤")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             MessageBox.Show(this, error.Message, "折讓申請未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -749,11 +757,13 @@ internal sealed class RecordDetailForm : Form
             old?.Dispose();
             previewMessageHost.Visible = false;
         }
-        catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError2) when (previewCancellation.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"RecordDetailForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             if (!IsDisposed)
             {
                 previewStatus.Text = "預覽尚未取得：\r\n" + error.Message;
@@ -781,6 +791,7 @@ internal sealed class RecordDetailForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             MessageBox.Show(this, error.Message, "取得 PDF 失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -807,11 +818,13 @@ internal sealed class RecordDetailForm : Form
                 consumerPaper: !companyBuyer,
                 previewCancellation.Token);
         }
-        catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError3) when (previewCancellation.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"RecordDetailForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm");
             MessageBox.Show(this, error.Message, "列印發票失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
             UpdatePrinterStatus();
         }
@@ -1092,7 +1105,7 @@ internal sealed class RecordDetailForm : Form
         using (var approval=new ManualReviewDetailForm("作廢確認",[new("原發票商品", "")],originalItems:baseRecord.Items))
         {
             approval.Show(); Application.DoEvents();
-            var grid=approval.Controls.Cast<Control>().SelectMany(Descendants).OfType<DataGridView>().Single();
+            var grid=approval.Controls.Cast<Control>().SelectMany(Descendants).OfType<DataGridView>().Single(item=>item.Tag as string=="原發票商品");
             if (!grid.ReadOnly || grid.Rows.Count!=1 || grid.Columns.Count!=4 || grid.Rows[0].Cells[0].Value?.ToString()!="測試商品")
                 throw new InvalidOperationException("主管商品表格未顯示原始品項。");
             approval.Close();

@@ -69,7 +69,7 @@ function fakeOfficial(row=invoiceRecord,onCall=()=>{}){
 async function fixture(schema19=false,filename=":memory:",through21=true,through22=true){
  const sql=new DatabaseSync(filename);
  const migrations=readdirSync("migrations").filter(x=>/^\d{4}_.*\.sql$/.test(x)).sort();
- assert.equal(migrations.at(-1),"0022_allowance_unsent_withdrawal.sql");
+ assert.equal(migrations.at(-1),"0023_allowance_return_decision.sql");
  for(const f of migrations.filter(x=>x<"0014"))
   sql.exec(readFileSync("migrations/"+f,"utf8"));
  sql.prepare("INSERT INTO workspaces(workspace_id,display_name) VALUES(?,'Synthetic')").run(ws);

@@ -200,11 +200,13 @@ internal sealed class CloudSetupForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudSetupForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudSetupForm");
             if (!IsDisposed)
             {
                 var details = $"Cloud API 錯誤：{error.Code}\n{error.Message}";
@@ -214,6 +216,7 @@ internal sealed class CloudSetupForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudSetupForm");
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true, details: error.Message);
@@ -276,8 +279,9 @@ internal sealed class CloudSetupForm : Form
         {
             return string.Equals(NormalizeBaseUrl(left), NormalizeBaseUrl(right), StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudSetupForm");
             return false;
         }
     }

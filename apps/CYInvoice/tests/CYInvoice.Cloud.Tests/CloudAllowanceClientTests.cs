@@ -35,6 +35,7 @@ internal static class CloudAllowanceClientTests
            r.Headers.Authorization.Parameter!=Token)
             throw new InvalidOperationException("Cloud allowance route or Device token invalid.");
         using var obj=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        if(name=="view")return;
         if(obj.RootElement.GetProperty("employeeNo").GetString()!="0001"||
            obj.RootElement.GetProperty("password").GetString()!="fake-password"||
            obj.RootElement.TryGetProperty("workspaceId",out _))
@@ -91,15 +92,16 @@ internal static class CloudAllowanceClientTests
         var detail=await api.OpenOperationAsync(Id,false,"0001","fake-password");
         Equal(1,detail.Revision); Equal("原發票",detail.Rows[0].Key);
         fake.Add(r=>{
-            Check(r,"detail");
+            Check(r,"view");
             using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             Equal("A20261019001",body.RootElement.GetProperty("allowanceNumber").GetString());
+            if(body.RootElement.TryGetProperty("password",out _)||body.RootElement.TryGetProperty("employeeNo",out _))throw new Exception("Progress must not ask for manager credentials.");
             Equal("AA00000001",body.RootElement.GetProperty("originalInvoiceNumber").GetString());
             if(body.RootElement.TryGetProperty("applicationId",out _))throw new InvalidOperationException("History must resolve the exact number at the existing Cloud detail owner.");
             return Json(HttpStatusCode.OK,new {ok=true,applicationId=Id,operation="issue",status="approved",revision=2,
                 rows=new[]{new {label="申請原因",value="synthetic reason"},new {label="申請員工",value="0002 Synthetic"},new {label="核准管理員",value="0001 Manager"}},requestHash="",officialSnapshotHash=""});
         });
-        var history=await api.OpenHistoryAsync("A20261019001","AA00000001","test","0001","fake-password");
+        var history=await api.ViewHistoryAsync("A20261019001","AA00000001","test");
         Equal("synthetic reason",history!.Rows.Single(row=>row.Key=="申請原因").Value);
         fake.Add(r=>{Check(r,"approve");using var body=JsonDocument.Parse(r.Content!.ReadAsStringAsync().Result);
             Equal(1,body.RootElement.GetProperty("expectedRevision").GetInt32());

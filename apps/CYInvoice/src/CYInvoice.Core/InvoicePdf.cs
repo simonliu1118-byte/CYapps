@@ -79,8 +79,9 @@ internal static class InvoicePdfCache
             AmegoClient.ValidatePdf(bytes);
             return bytes;
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoicePdf");
             File.Delete(path);
             return null;
         }

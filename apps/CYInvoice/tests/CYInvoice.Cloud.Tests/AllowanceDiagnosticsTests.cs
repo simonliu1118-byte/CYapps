@@ -43,7 +43,7 @@ internal static class AllowanceDiagnosticsTests
         catch(CloudApiException error) { Check(error.Data["OfficialQuery"] is null,"reject an unrecognized diagnostic endpoint"); }
         Check(handler.Approvals==2,"reading details never approves");
         handler.Mode="diagnostics";
-        await api.ExportOperationDiagnosticsAsync("application_synthetic_log",false,"1234","SYNTHETIC_PASSWORD",maxPages:1);
+        await api.ReadOperationDiagnosticsToLogAsync("application_synthetic_log",false,"1234","SYNTHETIC_PASSWORD",maxPages:1);
         Check(handler.Diagnostics==1,"automatic failure diagnostics are a single bounded page");
         var text=string.Join("\n",Directory.EnumerateFiles(log,"cloud-*.jsonl").Select(File.ReadAllText));
         foreach(var line in text.Split('\n',StringSplitOptions.RemoveEmptyEntries)) {

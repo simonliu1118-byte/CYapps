@@ -21,7 +21,9 @@ internal static class EmployeeOperationAuthentication
     {
         AppPrincipal? principal = null;
         try { principal = repository.AuthenticatePrincipal(employeeNo, password ?? string.Empty); }
-        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local) { }
+        catch (InvalidOperationException diagnosticError1) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeOperationAuthentication"); }
         if (principal is null || !AppRoles.CanManageAccounts(principal.Role))
             throw new UnauthorizedAccessException("管理員驗證失敗");
         return principal.ToEmployeeAccount();
@@ -56,8 +58,9 @@ internal static class EmployeeOperationAuthentication
         {
             principal = repository.AuthenticatePrincipal(employeeNo, password);
         }
-        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
+        catch (InvalidOperationException diagnosticError2) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"EmployeeOperationAuthentication");
             // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
         }
 

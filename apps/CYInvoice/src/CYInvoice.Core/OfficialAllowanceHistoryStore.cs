@@ -57,7 +57,8 @@ public sealed class OfficialAllowanceHistoryStore(string dataDirectory)
             InvoiceAllowanceResult? snapshot;
             try { snapshot = JsonSerializer.Deserialize<InvoiceAllowanceResult>(reader.GetString(3)); }
             catch (JsonException error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"OfficialAllowanceHistoryStore");
                 throw new InvalidDataException("官方折讓歷史紀錄格式錯誤，不可當成確認狀態", error);
             }
             if (snapshot is null)

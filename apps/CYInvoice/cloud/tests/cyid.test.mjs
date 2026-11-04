@@ -215,6 +215,9 @@ const cachedUser = { employeeId: 'emp_user', credentialVersion: 1, employeeRevis
 const syncRequest = { synchronize: true, authorities: [cachedUser] };
 const sessionCount = provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n;
 let runtime = await call('/v1/runtime/sync', syncRequest);
+const allowanceRuntime=await call('/v1/runtime/sync',{...syncRequest,allowanceEventCursor:0},tokens[0],{SCHEMA_VERSION:'23',ALLOWANCE_API_ENABLED:'true'});
+assert.equal(allowanceRuntime.status,200,JSON.stringify(allowanceRuntime));
+assert.deepEqual(allowanceRuntime.body.allowanceEvents,[]);assert.equal(allowanceRuntime.body.allowanceEventCursor,0);
 assert.equal(runtime.status, 200);
 assert.equal(runtime.body.device.status, 'active');
 assert.deepEqual(runtime.body.permissions, { ok: true, invalidated: [] });
@@ -413,7 +416,7 @@ for(const storageSchema of ['21','22']){
  });
  const body=await health.json();assert.equal(health.status,200);
  assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
- assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.12');
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.13');
  const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
  assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
 }

@@ -166,7 +166,9 @@ public sealed class CloudCompanySettingsClient
         JsonDocument document;
         try { document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token)
             .ConfigureAwait(false); }
-        catch (JsonException ex) { throw new InvalidDataException(
+        catch (JsonException ex)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudCompanySettingsClient"); throw new InvalidDataException(
             "Invalid Cloud company settings JSON reply.", ex); }
         var root = document.RootElement;
         if (result.IsSuccessStatusCode && root.ValueKind == JsonValueKind.Object &&

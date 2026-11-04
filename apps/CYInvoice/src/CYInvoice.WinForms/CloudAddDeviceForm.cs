@@ -187,6 +187,7 @@ internal sealed class CloudAddDeviceForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAddDeviceForm");
             MessageBox.Show(this, error.Message, "無法複製配對碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
@@ -244,6 +245,7 @@ internal sealed class CloudAddDeviceForm : Form
         }
         catch (Exception error) when (error is CloudApiException or HttpRequestException or TaskCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAddDeviceForm");
             if (!IsDisposed) UpdateState("暫時無法更新新機加入狀態，稍後會自動重試。", error: true);
         }
         finally { statusChecking = false; }
@@ -276,6 +278,7 @@ internal sealed class CloudAddDeviceForm : Form
         }
         catch (Exception error) when (error is CloudApiException or HttpRequestException or TaskCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAddDeviceForm");
             if (!IsDisposed) UpdateState("暫時無法讀取先前的新機加入狀態。", error: true);
         }
     }
@@ -290,11 +293,13 @@ internal sealed class CloudAddDeviceForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudAddDeviceForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAddDeviceForm");
             if (!IsDisposed)
             {
                 var message = CloudDeviceManagementForm.CloudErrorMessage(error);
@@ -304,6 +309,7 @@ internal sealed class CloudAddDeviceForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAddDeviceForm");
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true);

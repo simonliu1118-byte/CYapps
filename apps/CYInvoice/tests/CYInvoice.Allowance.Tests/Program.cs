@@ -179,7 +179,7 @@ static async Task TestLocalVoidLifecycleAsync()
     var restarted=new EmployeeAllowanceVoidWorkflowService(setup.Repository, now: () => setup.Workflow.LocalApprovalFor(issue)!.ExpiresUtc);
     await restarted.ExecuteApprovedLocalVoidAsync(issue, api);
     Equal(1, api.PostCalls);
-    Throws<InvalidOperationException>(()=>restarted.CancelManualReview(issue,"2000","AdminPass1"));
+    Throws<InvalidOperationException>(()=>restarted.CancelManualReview(issue,"2000","AdminPass1","合成退回原因"));
     Throws<InvalidOperationException>(()=>restarted.CheckHistoricalAsync(issue,"2000","AdminPass1").GetAwaiter().GetResult());
     var closure=new InvoiceAdministrativeClosureService(setup.Repository,now:()=>DateTimeOffset.UtcNow.AddYears(1));
     Equal(false,closure.CanClose(issue));
@@ -257,7 +257,7 @@ static async Task TestLocalVoidRacesAsync()
     using var cancelTemporary=new TemporaryDirectory("g0501-cancel-race");
     var cancel=await CreateApiVoidAsync(cancelTemporary.Path);
     await ApproveApiVoidAsync(cancel.Setup,cancel.Issue,cancel.Api);
-    cancel.Api.OnQuery=()=>cancel.Setup.Workflow.CancelManualReview(cancel.Issue,"2000","AdminPass1");
+    cancel.Api.OnQuery=()=>cancel.Setup.Workflow.CancelManualReview(cancel.Issue,"2000","AdminPass1","合成退回原因");
     await ThrowsAsync<InvalidOperationException>(()=>cancel.Setup.Workflow.ExecuteApprovedLocalVoidAsync(cancel.Issue,cancel.Api));
     Equal(0,cancel.Api.PostCalls);
 }
@@ -360,7 +360,7 @@ static async Task TestLocalVoidCompetingIssueAsync()
     Throws<InvalidOperationException>(()=>resumed.CheckHistoricalAsync(
         competing,"2000","AdminPass1").GetAwaiter().GetResult());
     Throws<InvalidOperationException>(()=>resumed.CancelManualReview(
-        competing,"2000","AdminPass1"));
+        competing,"2000","AdminPass1","合成退回原因"));
     Equal(true,new InvoiceSyncIssueStore(setup.Repository.DataDirectory)
         .Unresolved(original.AccountKey).Any(item=>item.Id==alternateId));
     Equal(1,api.PostCalls);
@@ -390,8 +390,8 @@ static async Task TestLocalVoidRetentionAsync()
     using var cancelledTemporary=new TemporaryDirectory("g0501-retention-cancelled");
     var cancelled=await CreateApiVoidAsync(cancelledTemporary.Path);
     await ApproveApiVoidAsync(cancelled.Setup,cancelled.Issue,cancelled.Api);
-    cancelled.Setup.Workflow.CancelManualReview(cancelled.Issue,"2000","AdminPass1");
-    Equal(1,new InvoiceRetentionService(cancelled.Setup.Repository).Prune(new DateOnly(2026,10,21)).Deleted);
+    Throws<InvalidOperationException>(()=>cancelled.Setup.Workflow.CancelManualReview(cancelled.Issue,"2000","AdminPass1","合成退回原因"));
+    Equal(0,new InvoiceRetentionService(cancelled.Setup.Repository).Prune(new DateOnly(2026,10,21)).Deleted);
     Equal(true,cancelled.Setup.Workflow.LocalApprovalFor(cancelled.Issue) is not null);
 }
 
@@ -755,7 +755,7 @@ static async Task TestAllowanceVoidManagerCancelsLocallyAsync()
     var issue = UnresolvedAllowanceVoidIssues(setup.Repository).Single();
     var calls = setup.Gateway.QueryCalls;
 
-    setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+    setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1","合成退回原因");
 
     Equal(calls, setup.Gateway.QueryCalls);
     Equal(0, setup.Gateway.OtherCalls);

@@ -147,7 +147,8 @@ public static class MoImporter
                 itemAmount = ParseInteger(Value(row, columns, RawItemAmountHeader));
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MoImporter");
                 throw new InvalidDataException($"第 {rowIndex + 1} 列官方開立發票金額（依品項）格式錯誤", error);
             }
             orders[orderIndex].Items.Add(OfficialInvoiceItem(string.Join(" ", parts), quantityText, itemAmount, rowIndex));
@@ -199,6 +200,7 @@ public static class MoImporter
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MoImporter");
             throw new InvalidDataException($"第 {rowIndex + 1} 列數量格式錯誤", error);
         }
         if (quantity.ScaledValue <= 0)
@@ -249,7 +251,8 @@ public static class MoImporter
                 InvoiceValidator.Validate(draft);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MoImporter");
                 throw new InvalidDataException($"訂單 {order.OrderId}：{error.Message}", error);
             }
         }
@@ -359,7 +362,8 @@ public static class MoImporter
                 value = ParseInteger(text);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"MoImporter");
                 throw new InvalidDataException($"訂單 {orderId}：{label}格式錯誤", error);
             }
             if (Seen && Value != value)

@@ -12,7 +12,9 @@ internal static class EmployeeDisplayText
         if (string.IsNullOrEmpty(name)) {
             try { name = repository?.KnownEmployeeName(employeeNo)?.Trim(); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or
-                System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException or InvalidOperationException) { }
+                System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeDisplayText"); }
         }
         return string.IsNullOrEmpty(name) ? employeeNo + "（姓名未取得）" : employeeNo + " " + name;
     }

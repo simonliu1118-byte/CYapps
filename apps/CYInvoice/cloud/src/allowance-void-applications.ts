@@ -182,14 +182,15 @@ interface FrozenRow {
 // Every encrypted field is re-bound to an authenticated, keyed request hash.
 export async function loadCloudAllowanceVoidForManager(
  db:D1Database,t:{workspaceId:string;applicationId:string;deviceId:string},
- ctx:CloudAllowanceContext,authority:AllowanceActorSource
+ ctx:CloudAllowanceContext,authority:AllowanceActorSource|{deviceRead:true}
 ):Promise<TrustedCloudVoidRequest>{
- const scope=authority.approvedOperation;
+ const deviceRead="deviceRead" in authority;
+ const scope=deviceRead?undefined:authority.approvedOperation;
  if(scope&&(scope.workspaceId!==t.workspaceId||scope.applicationId!==t.applicationId||scope.operation!=="void"))
   throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
  validateTarget(t.workspaceId,t.applicationId,t.deviceId);
- const first=await authority.revalidate();
- if(!validActor(first,t.workspaceId)||!isManager(first)||
+ const first=deviceRead?null:await authority.revalidate();
+ if((!deviceRead&&(!validActor(first,t.workspaceId)||!isManager(first)))||
   !await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_PREVIEW_MANAGER_REQUIRED");
  const row=await db.prepare("SELECT application_id,workspace_id,environment,"+
@@ -204,7 +205,7 @@ export async function loadCloudAllowanceVoidForManager(
   throw new Error("VOID_PREVIEW_NOT_FOUND_OR_CORRUPT");
  const settings=await company(db,t.workspaceId);
  if(settings.seller_invoice!==row.seller_invoice||
-  settings.revision!==row.company_revision)
+  (!deviceRead&&settings.revision!==row.company_revision))
   throw new Error("VOID_PREVIEW_COMPANY_CHANGED");
  let frozen:{v?:unknown;allowanceNumber?:unknown;
   originalInvoiceNumber?:unknown;reason?:unknown;requester?:unknown};
@@ -228,8 +229,8 @@ export async function loadCloudAllowanceVoidForManager(
   ...identity,t.applicationId,frozen.originalInvoiceNumber,frozen.reason]);
  if(numberHash!==row.allowance_fingerprint||requestHash!==row.request_hash)
   throw new Error("VOID_PREVIEW_FROZEN_MISMATCH");
- const second=await authority.revalidate();
- if(!sameActor(first,second,t.workspaceId)||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
+ const second=deviceRead?null:await authority.revalidate();
+ if((!deviceRead&&!sameActor(first,second,t.workspaceId))||!await activeVoidDevice(db,t.workspaceId,t.deviceId))
   throw new Error("VOID_PREVIEW_AUTH_CHANGED");
  const current=await company(db,t.workspaceId);
  if(current.revision!==settings.revision||current.seller_invoice!==settings.seller_invoice||

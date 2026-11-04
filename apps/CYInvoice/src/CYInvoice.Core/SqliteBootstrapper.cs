@@ -50,8 +50,9 @@ public static class SqliteBootstrapper
                 invoices.Sum(record => record.Items.Count),
                 buyerNames.Count);
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"SqliteBootstrapper");
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             throw;
         }
@@ -464,6 +465,7 @@ public static class SqliteBootstrapper
         }
         catch (SqliteException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SqliteBootstrapper");
             throw new InvalidDataException("Existing CYInvoice.db failed validation and was left unchanged", error);
         }
     }

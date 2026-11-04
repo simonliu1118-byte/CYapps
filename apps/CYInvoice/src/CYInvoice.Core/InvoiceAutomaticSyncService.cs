@@ -43,6 +43,7 @@ public sealed class InvoiceAutomaticSyncService
         try { result = await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is not OperationCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
             // Financial recovery is independent of invoice-list availability.
             await ReconcileApprovedLocalAsync(cancellationToken).ConfigureAwait(false);
             throw;
@@ -69,6 +70,7 @@ public sealed class InvoiceAutomaticSyncService
         try { result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is not OperationCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
             await ReconcileApprovedLocalAsync(cancellationToken).ConfigureAwait(false);
             throw;
         }
@@ -84,6 +86,7 @@ public sealed class InvoiceAutomaticSyncService
         }
         catch (AllowanceSyncLimitExceededException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
             // Fail the daily pass (no LastSuccess marker) but keep a visible,
             // deduplicated action item in the existing Upload Issues screen.
             issueStore.Record(accountKey, string.Empty, string.Empty,
@@ -117,7 +120,8 @@ public sealed class InvoiceAutomaticSyncService
                 }
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
                 result = result with
                 {
                     Problems = [$"本機舊資料清理失敗：{error.Message}"],
@@ -206,7 +210,8 @@ public sealed class InvoiceAutomaticSyncService
                     ResolveVoidQueryIssue(accountKey, number, orderId);
                 }
                 catch (Exception error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
                     var message = "作廢狀態回查失敗：" + error.Message;
                     RecordVoidQueryIssue(accountKey, number, orderId, message);
                     problems.Add($"{number}: {message}");
@@ -221,7 +226,8 @@ public sealed class InvoiceAutomaticSyncService
                     problems.Add($"{number}: {reconciliation.Message}");
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
                 problems.Add($"{number}: 折讓狀態回查失敗：{error.Message}");
             }
         }
@@ -258,7 +264,8 @@ public sealed class InvoiceAutomaticSyncService
                     await voidWorkflow.ExecuteApprovedLocalVoidAsync(issue, cancellationToken: token).ConfigureAwait(false);
             }
             catch (Exception error) when (error is not OperationCanceledException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
                 // Workflow owns durable issue/evidence. Keep servicing other
                 // independent operations after one operation fails.
                 problems.Add($"{issue.Id}: {error.Message}");
@@ -275,6 +282,7 @@ public sealed class InvoiceAutomaticSyncService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAutomaticSyncService");
             problems.Add("舊版作廢待確認問題狀態清理失敗：" + error.Message);
         }
     }
@@ -291,8 +299,9 @@ public sealed class InvoiceAutomaticSyncService
                 message,
                 now());
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoiceAutomaticSyncService");
         }
     }
 
@@ -308,8 +317,9 @@ public sealed class InvoiceAutomaticSyncService
                 InvoiceSyncIssueTypes.QueryFailed,
                 InvoiceVoidSyncIssueTypes.PendingConfirmation);
         }
-        catch
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"InvoiceAutomaticSyncService");
         }
     }
 

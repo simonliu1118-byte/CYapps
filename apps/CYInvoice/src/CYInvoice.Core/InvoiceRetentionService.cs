@@ -258,6 +258,7 @@ public sealed class InvoiceRetentionService
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceRetentionService");
             throw new InvalidDataException("CYInvoice.db contains invalid invoice extra_json", error);
         }
     }

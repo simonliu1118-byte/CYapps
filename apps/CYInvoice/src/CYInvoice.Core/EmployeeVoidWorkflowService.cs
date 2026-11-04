@@ -137,7 +137,9 @@ public sealed class EmployeeVoidWorkflowService
             value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return null;
         try { return value.Deserialize<InvoiceVoidHandledReview>(); }
-        catch (JsonException error) { throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
+        catch (JsonException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeVoidWorkflowService"); throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
     }
 
     public async Task<InvoiceVoidResult> ApproveManualReviewAsync(
@@ -233,8 +235,9 @@ public sealed class EmployeeVoidWorkflowService
                 "紙本電子發票證明聯尚未收回，待管理員確認是否送出作廢。",
                 now());
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeVoidWorkflowService");
             ClearManualReview(record);
             syncRepository.UpsertMany([record]);
             throw;
@@ -363,6 +366,7 @@ public sealed class EmployeeVoidWorkflowService
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeVoidWorkflowService");
             throw new InvalidDataException("作廢人工確認資料格式錯誤", error);
         }
     }

@@ -28,7 +28,11 @@ public sealed record CloudAllowanceVoidDraft(string ApplicationId,string Environ
 public sealed record CloudAllowanceVoidState(string ApplicationId,string Status,int Revision,
     bool Claimed,bool ReadbackOnly);
 public sealed record CloudAllowanceOperationDetail(string ApplicationId, string Operation, string Status,
-    int Revision, IReadOnlyList<KeyValuePair<string,string>> Rows, string RequestHash, string OfficialSnapshotHash, bool CanWithdraw = false);
+    int Revision, IReadOnlyList<KeyValuePair<string,string>> Rows, string RequestHash, string OfficialSnapshotHash, bool CanWithdraw = false)
+{
+    public IReadOnlyList<BusinessDetailTable> Tables { get; init; } = [];
+    public string ExecutionState { get; init; } = "processing";
+}
 public sealed record CloudAllowanceExecution(string ApplicationId, string ExecutionState, string ErrorCode);
 
 public sealed class CloudAllowanceClient
@@ -127,7 +131,9 @@ public sealed class CloudAllowanceClient
                 .ConfigureAwait(false);
             document=await JsonDocument.ParseAsync(stream,cancellationToken:timeout.Token)
                 .ConfigureAwait(false);
-        }catch(JsonException ex){
+        }catch (JsonException ex)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudAllowanceClient");
             throw new InvalidDataException("Cloud allowance JSON response is invalid.",ex);
         }
         var root=document.RootElement;
@@ -167,7 +173,9 @@ public sealed class CloudAllowanceClient
                 _ => "折讓操作未完成（" + (Regex.IsMatch(code,@"^[A-Z0-9_]{3,100}$")?code:"UNKNOWN") + "），原申請已保留，請查看 log 紀錄。"
             },
             res.StatusCode);
-        } catch (Exception error) {
+        } catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAllowanceClient");
             if(officialQuery is not null)error.Data["OfficialQuery"]=officialQuery;
             if(serverCause is not null)error.Data["CloudCauseCode"]=serverCause;
             if(serverDiagnosticsSaved is not null)error.Data["CloudDiagnosticsSaved"]=serverDiagnosticsSaved.Value;
@@ -208,8 +216,8 @@ public sealed class CloudAllowanceClient
         var status=Required(root,"status");
         var revision=RequiredRevision(root);
         var claimed=claim.GetBoolean();
-        if(status is not ("open" or "approved") || revision!=(status=="open"?1:2) ||
-           only.GetBoolean()!=claimed || (requireOpen&&(status!="open"||claimed)))
+        if(status is not ("open" or "approved" or "withdrawn") || revision!=(status=="approved"?2:1) ||
+           (status=="withdrawn" && (claimed||official.GetBoolean())) || only.GetBoolean()!=claimed || (requireOpen&&(status!="open"||claimed)))
             throw new InvalidDataException("Cloud g0501 application state is inconsistent.");
         return new CloudAllowanceVoidState(id,status,revision,claimed,claimed);
     }
@@ -266,7 +274,9 @@ public sealed class CloudAllowanceClient
             return await ReadVoidApplicationAsync(draft.ApplicationId,
                 employeeNo,password,cancellationToken).ConfigureAwait(false);
         }
-        catch(CloudApiException ex) when(ex.Code=="VOID_APPLICATION_NOT_FOUND"){
+        catch (CloudApiException ex) when(ex.Code=="VOID_APPLICATION_NOT_FOUND")
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudAllowanceClient");
             return await CreateVoidApplicationAsync(draft,
                 employeeNo,password,cancellationToken).ConfigureAwait(false);
         }
@@ -361,18 +371,26 @@ public sealed class CloudAllowanceClient
         return ReadOperationDetail(doc.RootElement, id, isVoid ? "void" : "issue");
     }
 
-    public async Task<CloudAllowanceOperationDetail?> OpenHistoryAsync(string allowanceNumber,
-        string originalInvoiceNumber, string environment, string employeeNo, string password,
-        CancellationToken token = default)
+    public async Task<CloudAllowanceOperationDetail?> ViewAsync(string id, bool isVoid, CancellationToken token = default)
     {
-        Credentials(employeeNo, password);
-        try
+        ValidateId(id);
+        try {
+            using var doc = await SendAsync("view", new { applicationId=id, operation=isVoid?"void":"issue" }, token).ConfigureAwait(false);
+            return ReadOperationDetail(doc.RootElement, id, isVoid?"void":"issue");
+        } catch (CloudApiException error) when (error.Code == "NOT_FOUND")
         {
-            using var doc = await SendAsync("detail", new { allowanceNumber, originalInvoiceNumber,
-                environment, operation="issue", employeeNo, password }, token).ConfigureAwait(false);
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAllowanceClient"); return null; }
+    }
+
+    public async Task<CloudAllowanceOperationDetail?> ViewHistoryAsync(string allowanceNumber, string originalInvoiceNumber,
+        string environment, CancellationToken token = default)
+    {
+        try {
+            using var doc = await SendAsync("view", new { allowanceNumber, originalInvoiceNumber, environment, operation="issue" }, token).ConfigureAwait(false);
             return ReadOperationDetail(doc.RootElement, null, "issue");
-        }
-        catch (CloudApiException error) when (error.Code == "NOT_FOUND") { return null; }
+        } catch (CloudApiException error) when (error.Code == "NOT_FOUND")
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAllowanceClient"); return null; }
     }
 
     private static CloudAllowanceOperationDetail ReadOperationDetail(JsonElement root, string? expectedId, string operation)
@@ -383,19 +401,24 @@ public sealed class CloudAllowanceClient
             throw new InvalidDataException("Cloud 原申請身分不符");
         var rows=root.GetProperty("rows").EnumerateArray().Select(r => new KeyValuePair<string,string>(
             Required(r,"label"), r.GetProperty("value").GetString() ?? "－")).ToArray();
+        var tables = root.TryGetProperty("tables",out var tableData) ? tableData.EnumerateArray().Select(table => new BusinessDetailTable(
+            Required(table,"title"), table.GetProperty("columns").EnumerateArray().Select(value=>value.GetString()??"").ToArray(),
+            table.GetProperty("rows").EnumerateArray().Select(row=>(IReadOnlyList<string>)row.EnumerateArray().Select(value=>value.GetString()??"").ToArray()).ToArray())).ToArray() : [];
         return new(id, operation, Required(root,"status"), RequiredRevision(root), rows,
             root.GetProperty("requestHash").GetString() ?? "", root.GetProperty("officialSnapshotHash").GetString() ?? "",
-            root.TryGetProperty("canWithdraw", out var cancel) && cancel.ValueKind == JsonValueKind.True);
+            root.TryGetProperty("canWithdraw", out var cancel) && cancel.ValueKind == JsonValueKind.True) {
+                Tables=tables, ExecutionState=root.TryGetProperty("executionState",out var execution)?execution.GetString()??"processing":"processing"
+            };
     }
 
     public async Task<CloudAllowanceReceipt> WithdrawOperationAsync(CloudAllowanceOperationDetail detail,
-        string employeeNo, string password, CancellationToken token = default)
+        string employeeNo, string password, string reason, CancellationToken token = default)
     {
         Credentials(employeeNo,password); ValidateId(detail.ApplicationId);
-        if(detail.Operation!="issue" || !detail.CanWithdraw)throw new InvalidOperationException("此申請不能取消退回");
+        if(!detail.CanWithdraw || string.IsNullOrWhiteSpace(reason))throw new InvalidOperationException("尚未核准的申請才可取消退回，並須填寫原因");
         using var doc=await SendAsync("withdraw",new {applicationId=detail.ApplicationId,
-            expectedRevision=detail.Revision,employeeNo,password},token).ConfigureAwait(false);
-        return Receipt(doc.RootElement,detail.ApplicationId,"withdrawn",detail.Revision+1);
+            expectedRevision=detail.Revision,operation=detail.Operation,reason=reason.Trim(),employeeNo,password},token).ConfigureAwait(false);
+        return Receipt(doc.RootElement,detail.ApplicationId,"withdrawn",detail.Revision+(detail.Operation=="issue"?1:0));
     }
 
     public async Task<CloudAllowanceExecution> ApproveOperationAsync(CloudAllowanceOperationDetail detail,
@@ -413,18 +436,17 @@ public sealed class CloudAllowanceClient
         return new(detail.ApplicationId,state,root.TryGetProperty("errorCode",out var code)?code.GetString()??"":"");
     }
 
-    public async Task<string> ExportOperationDiagnosticsAsync(string id, bool isVoid,
+    public async Task ReadOperationDiagnosticsToLogAsync(string id, bool isVoid,
         string employeeNo,string password,CancellationToken token=default,int maxPages=int.MaxValue)
     {
         if(maxPages<1)throw new ArgumentOutOfRangeException(nameof(maxPages));
         Credentials(employeeNo,password);ValidateId(id);
-        var output=new StringBuilder();long cursor=0;var pages=0;
+        long cursor=0;var pages=0;
         do
         {
             using var doc=await SendAsync("diagnostics",new{applicationId=id,operation=isVoid?"void":"issue",afterEventId=cursor,employeeNo,password},token).ConfigureAwait(false);
             var root=doc.RootElement;
             if(Required(root,"applicationId")!=id)throw new InvalidDataException("診斷操作身分不符");
-            output.AppendLine(JsonSerializer.Serialize(root,new JsonSerializerOptions{WriteIndented=true}));
             if(root.TryGetProperty("events",out var events)&&events.ValueKind==JsonValueKind.Array) {
                 foreach(var entry in events.EnumerateArray()) {
                     string? Text(string key)=>entry.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString():null;
@@ -442,7 +464,6 @@ public sealed class CloudAllowanceClient
             if(next<=cursor)throw new InvalidDataException("診斷游標未前進，請保留目前紀錄");
             cursor=next;
         }while(true);
-        return output.ToString();
     }
 
     public async Task<CloudAllowanceStatus> StatusAsync(

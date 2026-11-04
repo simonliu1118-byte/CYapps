@@ -378,11 +378,14 @@ public sealed partial class AmegoClient : IAmegoGateway, IAmegoAllowanceGateway,
             var body = await PostSignedAsync(path, data, cancellationToken).ConfigureAwait(false);
             JsonDocument document;
             try { document = JsonDocument.Parse(body); }
-            catch (JsonException error) { throw new InvalidDataException("decode API response", error); }
+            catch (JsonException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AmegoClient"); throw new InvalidDataException("decode API response", error); }
             int responseCode;
             try { (responseCode, _) = ReadEnvelope(document.RootElement); }
-            catch
-            {
+            catch (Exception diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"AmegoClient");
                 document.Dispose();
                 throw;
             }

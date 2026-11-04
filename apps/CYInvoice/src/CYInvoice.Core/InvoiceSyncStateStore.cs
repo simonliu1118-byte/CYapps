@@ -91,7 +91,9 @@ public sealed class InvoiceSyncStateStore
         }
         if(Exists())return;
         using var add=db.CreateCommand(); add.Transaction=transaction; add.CommandText="ALTER TABLE sync_state ADD COLUMN checkpoint_json TEXT";
-        try{add.ExecuteNonQuery();}catch(SqliteException)when(Exists()){ }
+        try{add.ExecuteNonQuery();}catch (SqliteException diagnosticError1)when(Exists())
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoiceSyncStateStore"); }
     }
 
     private SqliteConnection Open(SqliteOpenMode mode)

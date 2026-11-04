@@ -191,17 +191,20 @@ public static class LocalResetCoordinator
         }
         catch (CloudApiException error) when (error.Code == "LAST_ACTIVE_DEVICE")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalResetCoordinator");
             DeleteMarker(baseDirectory);
             throw new LocalResetBlockedException(
                 "這是 Built-in Cloud Workspace 最後一台使用中的裝置。若要保留 Workspace，請先加入另一台 Device；若不再使用 Workspace，請先在中央管理端手動停用 Workspace，再回來重試。");
         }
         catch (CloudApiException error) when (error.Code is "SUPER_ADMIN_AUTH_FAILED" or "INVALID_EMPLOYEE_CREDENTIALS")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalResetCoordinator");
             DeleteMarker(baseDirectory);
             throw;
         }
         catch (Exception error) when (error is not LocalResetBlockedException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalResetCoordinator");
             // Once a revoke request may have reached Cloud, its result is intentionally treated as
             // ambiguous. Keep the marker and let a later startup verify the token's terminal state.
             throw new LocalResetRecoveryRequiredException(
@@ -270,6 +273,7 @@ public static class LocalResetCoordinator
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalResetCoordinator");
             return new LocalResetRecoveryResult(
                 LocalResetRecoveryDisposition.Blocked,
                 "先前的雲端退出仍無法安全確認。CYInvoice 不會刪除本機資料，也不會在狀態不明時繼續啟動。\n\n" + error.Message);

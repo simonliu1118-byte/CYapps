@@ -43,6 +43,7 @@ public static class InvoiceAllowanceMetadata
         try { return value.Deserialize<List<InvoiceAllowanceResult>>() ?? []; }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAllowanceMetadata");
             throw new InvalidDataException("官方折讓資料格式錯誤", error);
         }
     }
@@ -92,7 +93,8 @@ public static class InvoiceAllowanceMetadata
                 deducted=FixedDecimal.Add(deducted,inclusive);
             }
             catch (Exception error) when (error is FormatException or OverflowException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAllowanceMetadata");
                 throw new InvalidDataException("官方折讓金額無法核對",error);
             }
         }

@@ -157,9 +157,12 @@ public sealed class InvoiceSyncService
                 ResolveIssues(problems,key,new IssueIdentity(number,record.ApiOrderId),
                     InvoiceSyncIssueTypes.QueryFailed,InvoiceSyncIssueTypes.RemoteNotFound);
             }
-            catch(OperationCanceledException)when(cancellationToken.IsCancellationRequested){throw;}
-            catch(Exception error)
-            {
+            catch (OperationCanceledException diagnosticError1)when(cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoiceSyncService");throw;}
+            catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                 var absent=error is AmegoApiException{Code:71};
                 var message=absent?"查無原發票（未建立本機紀錄）":"折讓原發票查回失敗："+error.Message;
                 AddIssueProblem(problems,key,number,string.Empty,absent?InvoiceSyncIssueTypes.RemoteNotFound:InvoiceSyncIssueTypes.QueryFailed,message,error);
@@ -266,6 +269,7 @@ public sealed class InvoiceSyncService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
             TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.InvoiceListFailed, error.Message);
             throw;
         }
@@ -332,9 +336,12 @@ public sealed class InvoiceSyncService
                         ApplyQuery(record, query, account);
                         successfulQueries.Add(Identity(record, item));
                     }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    catch (OperationCanceledException diagnosticError2) when (cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"InvoiceSyncService"); throw; }
                     catch (Exception error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                         var issueType = error is AmegoApiException { Code: 71 }
                             ? InvoiceSyncIssueTypes.RemoteNotFound
                             : InvoiceSyncIssueTypes.QueryFailed;
@@ -367,9 +374,12 @@ public sealed class InvoiceSyncService
                     unchanged++;
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException diagnosticError3) when (cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"InvoiceSyncService"); throw; }
             catch (AmbiguousInvoiceMatchException error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                 AddIssueProblem(
                     problems,
                     accountKey,
@@ -380,7 +390,8 @@ public sealed class InvoiceSyncService
                 problems.Add($"{invoiceNumber}: {error.Message}");
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                 AddIssueProblem(
                     problems,
                     accountKey,
@@ -431,7 +442,8 @@ public sealed class InvoiceSyncService
                     }
                 }
                 catch (AmegoApiException error) when (error.Code == 71)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                     var issueType = record.InvoiceState == InvoiceStates.Unknown
                         ? InvoiceSyncIssueTypes.UnknownRemoteNotFound
                         : InvoiceSyncIssueTypes.RemoteNotFound;
@@ -445,7 +457,8 @@ public sealed class InvoiceSyncService
                     problems.Add($"{EffectiveOrderId(record)}: 光貿測試環境查無此筆，本機資料未刪除");
                 }
                 catch (Exception error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
                     AddIssueProblem(
                         problems,
                         accountKey,
@@ -464,6 +477,7 @@ public sealed class InvoiceSyncService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
             TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.LocalWriteFailed, error.Message);
             throw;
         }
@@ -877,6 +891,7 @@ public sealed class InvoiceSyncService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
             problems.Add($"同步異常記錄保存失敗：{error.Message}");
         }
     }
@@ -889,7 +904,9 @@ public sealed class InvoiceSyncService
         string message)
     {
         try { issueStore.Record(accountKey, invoiceNumber, orderId, issueType, message, now()); }
-        catch { }
+        catch (Exception diagnosticError4)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"InvoiceSyncService"); }
     }
 
     private void ResolveIssues(
@@ -904,6 +921,7 @@ public sealed class InvoiceSyncService
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
             problems.Add($"同步異常解決狀態保存失敗：{error.Message}");
         }
     }
@@ -911,13 +929,17 @@ public sealed class InvoiceSyncService
     private void ResolveAccountIssue(List<string> problems, string accountKey, string issueType)
     {
         try { issueStore.ResolveAccountType(accountKey, issueType, now()); }
-        catch (Exception error) { problems.Add($"同步異常解決狀態保存失敗：{error.Message}"); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService"); problems.Add($"同步異常解決狀態保存失敗：{error.Message}"); }
     }
 
     private void TryResolveAccountIssue(string accountKey, string issueType)
     {
         try { issueStore.ResolveAccountType(accountKey, issueType, now()); }
-        catch { }
+        catch (Exception diagnosticError5)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError5,"InvoiceSyncService"); }
     }
 
     private static string Delivery(string carrierType, string npoBan)
@@ -938,6 +960,7 @@ public sealed class InvoiceSyncService
         try { return FixedDecimal.Parse(text).RoundInt64(); }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceSyncService");
             throw new InvalidDataException($"{field}格式錯誤：{text}", error);
         }
     }

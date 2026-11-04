@@ -79,6 +79,7 @@ public sealed class LocalAllowanceOneShotService
         catch (AmegoApiException error) when (
             AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(error.Code))
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalAllowanceOneShotService");
             diagnostic?.Invoke("response_received", error.Code, error);
             // The automatic execution owner advances only after this rejection.
             ledger.MarkExternalCollision(sellerInvoice, environment, saved, error.Code);
@@ -89,20 +90,21 @@ public sealed class LocalAllowanceOneShotService
             error is HttpRequestException or TaskCanceledException or IOException or
             JsonException or InvalidDataException or AmegoApiException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalAllowanceOneShotService");
             diagnostic?.Invoke("response_unknown", error is AmegoApiException api ? api.Code : null, error);
             return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken).ConfigureAwait(false);
         }
 
         // ACK alone is insufficient. Full original-number content proof may
         // complete the approved operation without asserting POST attribution.
-        return await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken)
-            .ConfigureAwait(false);
+        var result=await ReconcileAsync(sellerInvoice, environment, saved, cancellationToken).ConfigureAwait(false);
+        return result.Outcome==LocalAllowanceSendOutcome.PendingOfficialReadback?result with { Message="光貿已接收，等待處理" }:result;
     }
 
     // The only automatic number-advance owner. An acknowledged 4040161 or
     // 4040162 transitions the original persisted attempt to occupied_external;
     // only that explicit rejection allows a new number. No artificial limit:
-    // the user may cancel, and the number generator enforces legal capacity.
+    // the number generator enforces legal capacity; approval cannot be returned.
     // A timeout, crash, unknown code or successful POST NEVER loops to g0401.
     public async Task<LocalAllowanceSendResult> SendWithAutomaticNumberAdvanceAsync(
         string sellerInvoice, string environment, LocalAllowanceReservation reservation,
@@ -124,7 +126,7 @@ public sealed class LocalAllowanceOneShotService
                     cancellationToken).ConfigureAwait(false);
             var outcome = await SendFirstAsync(sellerInvoice, environment, current,
                 cancellationToken).ConfigureAwait(false);
-            reportProgress?.Invoke(current.AllowanceNumber + "：" + outcome.Outcome);
+            reportProgress?.Invoke(current.AllowanceNumber + "：" + outcome.Message);
             if (outcome.Outcome != LocalAllowanceSendOutcome.ConfirmedNumberCollision)
                 return outcome;
             current = RequireCurrent(sellerInvoice, environment, current);
@@ -210,6 +212,7 @@ public sealed class LocalAllowanceOneShotService
             error is AmegoApiException or HttpRequestException or TaskCanceledException or
             IOException or JsonException or InvalidDataException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalAllowanceOneShotService");
             diagnostic?.Invoke("readback_failed", error is AmegoApiException api ? api.Code : null, error);
             return new(LocalAllowanceSendOutcome.Problem, saved.AllowanceNumber,
                 "官方查回失敗，原號保留且不重送；詳細紀錄已保存至上傳問題");

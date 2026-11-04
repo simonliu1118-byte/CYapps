@@ -132,7 +132,8 @@ public sealed class CloudAllowanceSubmissionService
             }
             catch (Exception error) when (error is HttpRequestException or
                    TaskCanceledException or CloudApiException or InvalidDataException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAllowanceSubmissionService");
                 TrackState(record, pending.ApplicationId, "unknown", "problem", error, "status_readback", 1);
                 throw new InvalidOperationException("原折讓申請尚無法確認，已保留在「上傳問題」並保存診斷；系統會依原申請查證，請勿重新建立。", error);
             }
@@ -188,6 +189,7 @@ public sealed class CloudAllowanceSubmissionService
         catch (Exception error) when (error is HttpRequestException or
                TaskCanceledException or CloudApiException or InvalidDataException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudAllowanceSubmissionService");
             TrackState(fresh, id, "unknown", "problem", error, "create_response", 1);
             try {
                 // Exactly one bounded original-ID readback. Never another create POST.
@@ -195,7 +197,9 @@ public sealed class CloudAllowanceSubmissionService
                 TrackState(fresh, id, state.Status, state.LedgerStatus == "confirmed" ? "completed" : "processing", stage: "create_readback", attempt: 2);
                 return new CloudAllowanceSubmissionResult(id, AlreadySubmitted: true, state.Status) { DiagnosticWriteProblem = api.DiagnosticWriteProblem };
             } catch (Exception readback) when (readback is HttpRequestException or
-                TaskCanceledException or CloudApiException or InvalidDataException) {
+                TaskCanceledException or CloudApiException or InvalidDataException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(readback,"CloudAllowanceSubmissionService");
                 TrackState(fresh, id, "unknown", "problem", readback, "create_readback", 2);
                 var code = error is CloudApiException cloud ? cloud.Code : error.GetType().Name;
                 throw new InvalidOperationException("折讓申請尚無法確認，已保留在「上傳問題」並保存診斷（" + code + "）。請勿重新建立或重送。", error);
@@ -222,7 +226,9 @@ public sealed class CloudAllowanceSubmissionService
                 error: error, attempt: attempt,
                 responseReceived: error?.Data["ResponseReceived"] as bool?,
                 requestId: error?.Data["CloudRequestId"] as string);
-        } catch (Exception logError) when (logError is IOException or UnauthorizedAccessException) {
+        } catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(logError,"CloudAllowanceSubmissionService");
             store.UpdateMessage(issue.Id, issue.Message + "；診斷寫入失敗：" + logError.GetType().Name + "，請保留本機 Data 供查證。");
         }
     }
@@ -267,7 +273,9 @@ public sealed class CloudAllowanceSubmissionService
                 marker.TemplateSha256.Length == 64)
                 return marker;
         }
-        catch (JsonException) { }
+        catch (JsonException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudAllowanceSubmissionService"); }
         throw new InvalidDataException("原折讓申請的本機 ID 記錄損壞，禁止重複建立");
     }
 

@@ -50,7 +50,8 @@ internal static class AllowanceWorkflowTests
         await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50, editedItems:DraftItems());
         var issue = AllowanceIssue(setup.Repository);
 
-        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+        Throws<InvalidOperationException>(()=>setup.Workflow.CancelManualReview(issue,"2000","AdminPass1",""));
+        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1","合成退回原因");
 
         Equal(1, setup.Gateway.QueryCalls);
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
@@ -158,7 +159,7 @@ internal static class AllowanceWorkflowTests
         Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
         Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
 
-        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1","合成退回原因"));
         Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
     }
 
@@ -260,12 +261,8 @@ internal static class AllowanceWorkflowTests
         Equal(3, setup.Gateway.QueryCalls);
         // B2 approval must never call a live provider issue API.
         Equal(0, setup.Gateway.VoidCalls);
-        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
-        var cancelled = setup.Repository.Invoices.LoadOrCreate().Single();
-        Equal(true, setup.Workflow.ManualReviewFor(cancelled) is null);
-        Equal(approved.LocalApprovedUtc, setup.Workflow.HandledReviewFor(cancelled)!.LocalApprovedUtc);
-        Equal("2000", setup.Workflow.HandledReviewFor(cancelled)!.CancelledByEmployeeNo);
-        Equal(true, setup.Workflow.HandledReviewFor(cancelled)!.CancelledUtc is not null);
+        Throws<InvalidOperationException>(()=>setup.Workflow.CancelManualReview(issue,"2000","AdminPass1","合成退回原因"));
+        Equal(approved.LocalApprovedUtc,setup.Workflow.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single())!.LocalApprovedUtc);
     }
 
     public static async Task LocalReservedCancellationNeverSendsAsync()
@@ -273,11 +270,10 @@ internal static class AllowanceWorkflowTests
         using var temporary = new AllowanceTemporaryDirectory();
         var setup = CreateSetup(temporary.Path);
         var (issue, reserved) = await PrepareReservedAsync(setup);
-        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+        Throws<InvalidOperationException>(()=>setup.Workflow.CancelManualReview(issue,"2000","AdminPass1","合成退回原因"));
         var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
-        Throws<InvalidOperationException>(() => ledger.MarkSending(AmegoDefaults.TestInvoice, Environments.Test, reserved));
-        Equal("reserved", ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test, reserved.WorkItemId)!.Status);
-        Equal(true, setup.Workflow.HandledReviewFor(setup.Repository.Invoices.LoadOrCreate().Single())!.CancelledUtc is not null);
+        Equal("reserved",ledger.FindLatest(AmegoDefaults.TestInvoice,Environments.Test,reserved.WorkItemId)!.Status);
+        Equal(true,setup.Workflow.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single())!.CancelledUtc is null);
     }
 
     public static async Task LocalOfficialChangedBeforeApprovalMustRePreviewAsync()
@@ -371,7 +367,7 @@ internal static class AllowanceWorkflowTests
             .FindLatest(AmegoDefaults.TestInvoice, Environments.Test, issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Equal(reserved, recovered);
         Equal(0, setup.Gateway.VoidCalls);
-        setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
+        Throws<InvalidOperationException>(()=>setup.Workflow.CancelManualReview(issue,"2000","AdminPass1","合成退回原因"));
     }
 
     public static async Task LocalReservationRequiresApprovalAndSameManagerAsync()
@@ -447,7 +443,7 @@ internal static class AllowanceWorkflowTests
         var ledger = new LocalAllowanceNumberStore(setup.Repository.DataDirectory);
         Equal("sending", ledger.FindLatest(AmegoDefaults.TestInvoice, Environments.Test,
             issue.Id.ToString(System.Globalization.CultureInfo.InvariantCulture))!.Status);
-        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1","合成退回原因"));
         var resumed = await setup.Workflow.ExecuteApprovedLocalDraftAsync(issue, fake);
         Equal(LocalAllowanceSendOutcome.Problem, resumed.Outcome);
         Equal(1, fake.IssueCalls);

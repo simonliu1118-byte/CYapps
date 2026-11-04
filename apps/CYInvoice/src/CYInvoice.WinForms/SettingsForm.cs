@@ -175,7 +175,9 @@ internal sealed class SettingsForm : Form
             UpdateCloudControls(); UpdateSelection();
             if (card is not null) cardStatus.Text += $"\n雲端公司卡已同步（版次 {card.Revision}）。";
         }
-        catch (Exception) { if (!IsDisposed) cardStatus.Text = "公司卡同步未完成；保留本機設定。請確認雲端連線後重新開啟設定。"; }
+        catch (Exception diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"SettingsForm"); if (!IsDisposed) cardStatus.Text = "公司卡同步未完成；保留本機設定。請確認雲端連線後重新開啟設定。"; }
         finally { resetFlowBusy=false; if(!IsDisposed)UpdateCloudControls(); }
     }
 
@@ -189,7 +191,9 @@ internal sealed class SettingsForm : Form
             repository.Settings.Save(latest);
             DialogResult = DialogResult.OK; Close();
         }
-        catch (Exception error) { MessageBox.Show(this,error.Message,"無法儲存設定",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsForm"); MessageBox.Show(this,error.Message,"無法儲存設定",MessageBoxButtons.OK,MessageBoxIcon.Warning); }
     }
 
     private async Task EditCompanyCardAsync()
@@ -200,7 +204,9 @@ internal sealed class SettingsForm : Form
         if (cloud)
         {
             try { card = await repository.RefreshCompanyCardAsync(); settings = repository.Settings.LoadOrCreate(); }
-            catch { MessageBox.Show(this,"請先恢復公司卡同步再編輯，避免覆寫未知的雲端版次。","無法編輯",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
+            catch (Exception diagnosticError2)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"SettingsForm"); MessageBox.Show(this,"請先恢復公司卡同步再編輯，避免覆寫未知的雲端版次。","無法編輯",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
         }
         using var editor = new Form { Text = "編輯公司卡", StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(520,320), FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -280,8 +286,9 @@ internal sealed class SettingsForm : Form
                 settings=repository.Settings.LoadOrCreate(); UpdateSelection();
                 saving=false; editor.DialogResult=DialogResult.OK;
             }
-            catch(Exception error)
-            {
+            catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsForm");
                 // Do not retry an uncertain mutation or retain an old actionable revision.
                 apply.Enabled=false;
                 MessageBox.Show(editor,error.Message == "權限不足" ? "權限不足，請重新開啟設定。" : error is CloudApiException { Code: "AUTH_INVALID" or "LOGIN_FAILED" or "ACCESS_DENIED" or "FORBIDDEN" or "SUPER_ADMIN_REQUIRED" }
@@ -376,6 +383,7 @@ internal sealed class SettingsForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SettingsForm");
             MessageBox.Show(this, error.Message, "裝置管理狀態確認失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

@@ -241,14 +241,15 @@ export async function createEncryptedCloudAllowance(db:D1Database,
 }
 export async function loadEncryptedCloudAllowance(db:D1Database,
  target:{workspaceId:string;applicationId:string;deviceId:string},
- ctx:CloudAllowanceContext,authority:AllowanceActorSource
+ ctx:CloudAllowanceContext,authority:AllowanceActorSource|{deviceRead:true}
 ):Promise<StoredCloudAllowance>{
-  const scope=authority.approvedOperation;
+  const deviceRead="deviceRead" in authority;
+  const scope=deviceRead?undefined:authority.approvedOperation;
   if(scope&&(scope.workspaceId!==target.workspaceId||scope.applicationId!==target.applicationId||scope.operation!=="issue"))
     throw new Error("APPROVED_OPERATION_SCOPE_MISMATCH");
   checkScope(target.workspaceId,target.applicationId,target.deviceId);
-  const first=await authority.revalidate();
-  if(!validated(first,target.workspaceId)||
+  const first=deviceRead?null:await authority.revalidate();
+  if((!deviceRead&&!validated(first,target.workspaceId))||
       !await activeDevice(db,target.workspaceId,target.deviceId))
     throw new Error("ALLOWANCE_READ_AUTH_REQUIRED");
   const row=await db.prepare(`SELECT a.application_id,a.workspace_id,a.environment,a.status,
@@ -268,9 +269,9 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
   if(!row||ctx.environment!==row.environment||!SHA.test(row.request_hash)||
       row.request_hash!==row.frozen_hash||
       row.company_seller!==row.seller_invoice||
-      row.company_revision!==row.company_settings_revision)
+      (!deviceRead&&row.company_revision!==row.company_settings_revision))
     throw new Error("ALLOWANCE_FROZEN_UNAVAILABLE");
-  if(first.workspaceRole==="USER"&&
+  if(first?.workspaceRole==="USER"&&
       (first.employeeId!==row.requester_actor_id||
        !["open","review"].includes(row.status)))
     throw new Error("ALLOWANCE_READ_AUTH_REQUIRED");
@@ -311,12 +312,12 @@ export async function loadEncryptedCloudAllowance(db:D1Database,
       values.referenceHash!==row.reference_hash||
       values.originalFingerprint!==row.original_invoice_fingerprint)
     throw new Error("ALLOWANCE_FROZEN_BINDING_MISMATCH");
-  const second=await authority.revalidate();
-  if(!sameActor(first,second,target.workspaceId)||
+  const second=deviceRead?null:await authority.revalidate();
+  if((!deviceRead&&!sameActor(first,second,target.workspaceId))||
       !await activeDevice(db,target.workspaceId,target.deviceId))
     throw new Error("ALLOWANCE_READ_AUTH_CHANGED");
   const company=await configuredCompany(db,target.workspaceId);
-  if(company.revision!==row.company_revision||
+  if((!deviceRead&&company.revision!==row.company_revision)||
       company.seller_invoice!==row.seller_invoice)
     throw new Error("ALLOWANCE_COMPANY_CHANGED");
   return {applicationId:row.application_id,workspaceId:row.workspace_id,

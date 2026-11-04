@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Globalization;
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
@@ -135,29 +136,36 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         var local = repository ?? LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         IReadOnlyList<KeyValuePair<string,string>>? requestRows = null;
         var settings = local.Settings.LoadOrCreate();
+        IReadOnlyList<BusinessDetailTable> requestTables=[];
         if (settings.CloudMode == CloudModes.CloudPreferred && settings.CloudIdentityProvider == "CYID")
         {
-            using var login = new EmployeeAdminLoginForm(local, requireOnline: true);
-            if (login.ShowDialog(FindForm()) != DialogResult.OK) return;
-            try
-            {
-                using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-                var api = new CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), local.Settings.CloudDeviceToken(settings), local.DataDirectory);
-                var detail = await api.OpenHistoryAsync(allowance.AllowanceNumber, record.InvoiceNumber,
-                    Environments.ToCloud(record.Environment), login.EnteredEmployeeNo, login.AuthenticatedPassword);
-                requestRows = detail?.Rows.Select(row => new KeyValuePair<string,string>(
-                    row.Key == "核准管理員" ? "覆核主管" : row.Key,
-                    row.Key == "訂單編號" && record.Environment == Environments.Test ? TestOrderIdPrefix.StripIfPresent(row.Value) : row.Value)).ToArray()
-                    ?? [new("申請員工", "未取得對應申請"), new("覆核主管", "未取得對應申請"), new("申請原因", "未取得對應申請")];
+            var store=new InvoiceSyncIssueStore(local.DataDirectory);
+            var account=record.Environment+"|"+record.SellerInvoice;
+            var saved=store.CloudDetailForNumber(account,allowance.AllowanceNumber);
+            requestRows=saved?.Projection.DetailRows; requestTables=saved?.Projection.Tables??[];
+            var voidRows=store.CloudDetailForNumber(account,allowance.AllowanceNumber,"void")?.Projection.DetailRows;
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var api = new CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), local.Settings.CloudDeviceToken(settings), local.DataDirectory);
+            try {
+                var detail=await api.ViewHistoryAsync(allowance.AllowanceNumber,record.InvoiceNumber,Environments.ToCloud(record.Environment));
+                if(detail is not null){store.SaveCloudDetail(account,detail);requestRows=detail.Rows;requestTables=detail.Tables;}
+                var voidId=CloudAllowanceClient.OriginalVoidApplicationId(settings.CloudWorkspaceId,Environments.ToCloud(record.Environment),allowance.AllowanceNumber);
+                var returned=await api.ViewAsync(voidId,true);
+                if(returned is not null){
+                    store.SaveCloudDetail(account,returned);
+                    voidRows=returned.Rows;
+                }
+            } catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
+                IssueDiagnosticLog.RecordCloud(local.DataDirectory,"history","read_failed","history-"+Guid.NewGuid().ToString("N"),error:error);
+                requestRows=(requestRows??[]).Append(new("讀取狀態","最新申請資料暫未取得，保留已知歷程")).ToArray();
             }
-            catch (Exception error)
-            {
-                MessageBox.Show(FindForm(), error.Message, "讀取折讓申請詳情失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
+            if(voidRows is not null)requestRows=(requestRows??[]).Concat(voidRows.Where(row=>row.Key is "申請員工" or "申請時間" or "作廢原因" or "覆核主管" or "核准時間" or "處理狀態" or "退回原因" or "退回主管" or "退回時間")
+                .Select(row=>new KeyValuePair<string,string>(row.Key.StartsWith("作廢",StringComparison.Ordinal)?row.Key:"作廢"+row.Key,row.Value))).ToArray();
         }
         if (IsDisposed) return;
-        using var form = new AllowanceHistoryDetailForm(record, allowance, local, requestRows, observedUtc);
+        using var form = new AllowanceHistoryDetailForm(record, allowance, local, requestRows, observedUtc,requestTables);
         form.ShowDialog(FindForm());
     }
 
@@ -262,6 +270,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
             return "?";
         }
     }
@@ -373,7 +382,7 @@ internal sealed class AllowanceHistoryDetailForm : Form
         InvoiceAllowanceResult allowance,
         LocalRepository repository,
         IReadOnlyList<KeyValuePair<string,string>>? requestRows = null,
-        DateTimeOffset? observedUtc = null)
+        DateTimeOffset? observedUtc = null, IReadOnlyList<BusinessDetailTable>? requestTables = null)
     {
         this.record = record ?? throw new ArgumentNullException(nameof(record));
         this.allowance = allowance ?? throw new ArgumentNullException(nameof(allowance));
@@ -408,14 +417,28 @@ internal sealed class AllowanceHistoryDetailForm : Form
             var matched = review is not null && string.Equals(review.ConfirmedAllowanceNumber, allowance.AllowanceNumber, StringComparison.OrdinalIgnoreCase);
             rows.Add(new("申請員工", EmployeeDisplayText.Format(repository, matched ? review!.RequesterEmployeeNo : "", matched ? review!.RequesterName : null)));
             rows.Add(new("覆核主管", EmployeeDisplayText.Format(repository, matched ? review!.LocalApproverEmployeeNo : "", matched ? review!.LocalApproverName : null)));
-            rows.Add(new("申請原因", matched ? review!.Reason : "未取得對應申請"));
+            rows.Add(new("折讓原因", matched ? review!.Reason : "未取得對應申請"));
+            if(matched&&review!.DraftItems is { } draft)requestTables=[..requestTables??[],AllowanceDetailPresentation.Draft(draft)];
+        }
+        if(repository.IdentityProvider.Kind==IdentityProviderKind.Local&&record.ExtensionData is { } metadata) {
+            var voidReview=metadata.Where(entry=>entry.Key.StartsWith("cyinvoice_allowance_void_handled_",StringComparison.Ordinal))
+                .Select(entry=>entry.Value.Deserialize<InvoiceAllowanceVoidManualReview>()).Where(review=>review?.AllowanceNumber==allowance.AllowanceNumber)
+                .OrderByDescending(review=>review!.RequestedUtc).FirstOrDefault();
+            if(voidReview is not null) {
+                rows.AddRange([new("作廢申請員工",EmployeeDisplayText.Format(repository,voidReview.RequesterEmployeeNo,voidReview.RequesterName)),
+                    new("作廢申請時間",voidReview.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")),new("作廢原因",voidReview.Reason),
+                    new("作廢覆核主管",EmployeeDisplayText.Format(repository,voidReview.ReviewerEmployeeNo,voidReview.ReviewerName)),
+                    new("作廢核准時間",voidReview.ApprovedUtc?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"未取得")]);
+                if(voidReview.ReturnedUtc is { } returned){rows.Add(new("作廢退回原因",voidReview.ReturnReason));rows.Add(new("作廢退回時間",returned.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));}
+            }
         }
         rows.Add(new("官方類型", allowance.InvoiceType));
         rows.Add(new("官方狀態碼", allowance.InvoiceStatus.ToString(CultureInfo.InvariantCulture)));
         rows.Add(new("官方作廢日期", allowance.CancelDate > 0 ? allowance.CancelDate.ToString(CultureInfo.InvariantCulture) : "尚未觀察到"));
         if (observedUtc is { } observed)
             rows.Add(new("系統查證時間", observed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture)));
-        var body = VoidHistoryDetailForm.HistoryDetailLayout(rows, Font, valueWidth: 380);
+        var data=AllowanceDetailPresentation.Build(record,rows,requestTables??[]);
+        var body=new BusinessDetailControl(data.Fields,data.Tables);
         var close = UiControls.StandardButton("關閉");
         close.Width = 90;
         close.DialogResult = DialogResult.OK;
@@ -453,6 +476,7 @@ internal sealed class AllowanceHistoryDetailForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
             MessageBox.Show(this, error.Message, "取得折讓 PDF 失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -487,14 +511,17 @@ internal sealed class AllowanceHistoryDetailForm : Form
         }
         catch (EmployeeVoidAuthenticationDelayException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
             MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (InvalidOperationException error) when (error.Message == "員工編號或密碼錯誤")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
             MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl");
             MessageBox.Show(this, error.Message, "折讓作廢申請未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -515,6 +542,8 @@ internal sealed class AllowanceHistoryDetailForm : Form
     private static string Money(string value)
     {
         try { return MoneyFormatter.Decimal(FixedDecimal.Parse(value).ToString()); }
-        catch (Exception error) when (error is FormatException or OverflowException) { return value; }
+        catch (Exception error) when (error is FormatException or OverflowException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceOperationHistoryControl"); return value; }
     }
 }

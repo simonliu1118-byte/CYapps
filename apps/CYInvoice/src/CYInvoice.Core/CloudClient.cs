@@ -115,6 +115,7 @@ public sealed class CloudClient
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             timer.Stop();
             return new CloudHealthResult(
                 true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
@@ -122,6 +123,7 @@ public sealed class CloudClient
         }
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             timer.Stop();
             return new CloudHealthResult(
                 true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
@@ -129,6 +131,7 @@ public sealed class CloudClient
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             if (cancellationToken.IsCancellationRequested) throw;
             timer.Stop();
             return new CloudHealthResult(
@@ -410,8 +413,9 @@ public sealed class CloudClient
         {
             document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
         }
-        catch (JsonException)
+        catch (JsonException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudClient");
             throw new CloudApiException(
                 "CLOUD_INVALID_RESPONSE",
                 $"Cloud API returned an invalid response ({(int)response.StatusCode}).",

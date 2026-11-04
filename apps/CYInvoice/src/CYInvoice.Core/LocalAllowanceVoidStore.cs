@@ -194,6 +194,7 @@ internal sealed class LocalAllowanceVoidStore
         }
         catch (SqliteException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"LocalAllowanceVoidStore");
             throw new InvalidOperationException("原折讓單已有送出紀錄，只能查回，禁止重送", error);
         }
     }

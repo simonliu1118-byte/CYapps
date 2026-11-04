@@ -241,6 +241,7 @@ internal sealed class RecordsControl : UserControl
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordsControl");
             MessageBox.Show(this, "讀取已開立發票清單失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -302,11 +303,13 @@ internal sealed class RecordsControl : UserControl
                     break;
             }
         }
-        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (shutdownToken.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"RecordsControl");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordsControl");
             MessageBox.Show(this, error.Message, "重新整理失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -364,8 +367,9 @@ internal sealed class RecordsControl : UserControl
             var unread = issues.Count(issue => lastRead is null || issue.CreatedUtc > lastRead.Value);
             uploadIssuesButton.Text = unread == 0 ? "上傳問題" : $"上傳問題 ({unread})";
         }
-        catch (Exception)
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"RecordsControl");
             uploadIssuesButton.Text = "上傳問題";
             processingButton.Text = "待辦/處理中";
         }
@@ -393,8 +397,9 @@ internal sealed class RecordsControl : UserControl
             Clipboard.SetText(number);
             ShowCopyFeedback($"✓ 已複製 {number}", success: true);
         }
-        catch (ExternalException)
+        catch (ExternalException diagnosticError3)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"RecordsControl");
             ShowCopyFeedback("複製失敗，請再試一次", success: false);
         }
     }
@@ -433,11 +438,13 @@ internal sealed class RecordsControl : UserControl
             detail.ShowDialog(FindForm());
             if (!IsDisposed) Reload();
         }
-        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError4) when (shutdownToken.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"RecordsControl");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecordsControl");
             MessageBox.Show(
                 this,
                 "目前無法向光貿確認這筆發票的最新資料，因此未開啟詳細資訊。\n\n" + error.Message,
@@ -468,12 +475,14 @@ internal sealed class RecordsControl : UserControl
             if (name.Length != 0 && accountKey.Length != 0) sellerCompanyNames[accountKey] = name;
             return name;
         }
-        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError5) when (shutdownToken.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError5,"RecordsControl");
             throw;
         }
-        catch (Exception)
+        catch (Exception diagnosticError6)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError6,"RecordsControl");
             return string.Empty;
         }
     }

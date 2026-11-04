@@ -1,3 +1,13 @@
+# 現行停點：Cloud Source0.9.13／V3.1.45 Build1（未部署）
+
+2026-11-04：使用者核准實作同機流程。完整設計與實作契約見[唯一計畫](V3_2_IMPLEMENTATION_PLAN.md#2026-11-04-現行實作契約取代下方舊版介面及退回說明)。新增0023 migration原申請表的加密退回決定與時間、事件索引；須新批次明確維護指示才能執行。0.9.12純程式部署方案停止，不可用舊schema22方案直接部署0.9.13。本輪無遠端D1、Cloudflare或真光貿操作，舊維護與私有證據保留。
+
+本次桌面需0.9.13／schema23配套才具備完整新詳情及退回；目前已部署0.9.11不冒充新版。未取得配套時安全停止主管新操作，已知同機資料仍可讀。部署仍須另行確認原Worker、原D1、綁定／Secrets／旗標、production CYID連續性、備份／可回復性、程式hash與新批次前後檢；不提供自動migration、回填授權、原案重建或重送。
+
+下文0.9.12為歷史未執行候選；不得作為現行部署步驟。
+
+---
+
 # 本輪待配套：Cloud0.9.12／V3.1.45
 
 > 2026-11-03文件釐清（無遠端操作）：2026-11-01本機MCP完整before／deploy／after證據確認，Source `55793669d842f89f42e4e81a384868b121a0f36d` 已部署原Worker Cloud0.9.11、100%流量；schema／marker22、CYID_ONLY及原設定保留。`IDENTITY`與`IDENTITY_AUTHORITY`均連已核准的 **production CYID**，原RPC entrypoint與scope保留。Invoice的 `APP_ENV=development` 仍是原部署標籤及預檢條件，與CYID provider環境、原申請保存的光貿交易環境分開；詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target)。實際服務名稱／識別／收據留私有位置。本註記只引用既有部署證據，不宣稱今日重新遠端查證、不更新Worker或啟用任何功能；Cloud0.9.12待部署停點不變。

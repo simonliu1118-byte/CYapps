@@ -95,7 +95,9 @@ public static class CyIdGateway
     {
         JsonDocument json;
         try { json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)); }
-        catch (JsonException) {
+        catch (JsonException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CyIdIdentityProvider");
             if ((int)response.StatusCode is >= 500 and <= 599)
                 throw new CyIdAuthenticationException("IDENTITY_UNAVAILABLE", response.StatusCode);
             throw new InvalidDataException("CYID 回應格式無效。");
@@ -256,21 +258,31 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
             offline.Remember(binding, principal, request.Password);
             return principal;
         }
-        catch (HttpRequestException) when (!request.RequireOnline) { return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !request.RequireOnline) {
+        catch (HttpRequestException diagnosticError2) when (!request.RequireOnline)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CyIdIdentityProvider"); return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException diagnosticError3) when (!cancellationToken.IsCancellationRequested && !request.RequireOnline)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"CyIdIdentityProvider");
             return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
         }
         catch (CyIdAuthenticationException error) when ((int?)error.StatusCode is >= 500 and <= 599
-            && error.Code == "IDENTITY_UNAVAILABLE" && !request.RequireOnline) {
+            && error.Code == "IDENTITY_UNAVAILABLE" && !request.RequireOnline)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CyIdIdentityProvider");
             return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
         }
-        catch (CyIdAuthenticationException error) {
+        catch (CyIdAuthenticationException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CyIdIdentityProvider");
             if (error.Code is "DEVICE_INVALID" or "IDENTITY_WORKSPACE_MISMATCH" or "IDENTITY_PROVIDER_MISMATCH") offline.Forget();
             else if (error.Code is "LOGIN_FAILED" or "AUTH_INVALID" or "ACCESS_DENIED") offline.Forget(request.EmployeeNo);
             if (error.Code is "LOGIN_FAILED" or "AUTH_INVALID") return null;
             throw;
         }
-        catch (Exception error) when (!cancellationToken.IsCancellationRequested && error is not (HttpRequestException or OperationCanceledException)) { offline.Forget(request.EmployeeNo); throw; }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested && error is not (HttpRequestException or OperationCanceledException))
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CyIdIdentityProvider"); offline.Forget(request.EmployeeNo); throw; }
     }
 
     private async Task<AppPrincipal?> FallbackAsync(CyIdBinding binding, IdentityAuthenticationRequest request,

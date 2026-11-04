@@ -462,7 +462,9 @@ internal sealed class InvoiceEntryControl : UserControl
             row.SubItems[4].Text = MoneyFormatter.Decimal(price.ToString());
             row.SubItems[5].Text = MoneyFormatter.Decimal(FixedDecimal.Multiply(quantity, price).ToString());
         }
-        catch (Exception error) when (error is FormatException or OverflowException) { row.SubItems[5].Text = "格式錯誤"; }
+        catch (Exception error) when (error is FormatException or OverflowException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); row.SubItems[5].Text = "格式錯誤"; }
         Items.Invalidate(row.Bounds);
     }
 
@@ -476,8 +478,9 @@ internal sealed class InvoiceEntryControl : UserControl
             taxTotal.Text = MoneyFormatter.Integer(totals.TaxAmount);
             invoiceTotal.Text = MoneyFormatter.Integer(totals.TotalAmount);
         }
-        catch (Exception)
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoiceEntryControl");
             salesTotal.Text = "—"; taxTotal.Text = "—"; invoiceTotal.Text = "—";
         }
     }
@@ -515,7 +518,9 @@ internal sealed class InvoiceEntryControl : UserControl
     private static FixedDecimal Parse(string value, string message)
     {
         try { return FixedDecimal.Parse(value); }
-        catch (Exception error) when (error is FormatException or OverflowException) { throw new InvalidOperationException(message, error); }
+        catch (Exception error) when (error is FormatException or OverflowException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); throw new InvalidOperationException(message, error); }
     }
 
     private void Preview()
@@ -531,7 +536,9 @@ internal sealed class InvoiceEntryControl : UserControl
             var buyer = draft.CompanyBuyer ? $"{draft.BuyerIdentifier}　{(draft.BuyerName.Length == 0 ? draft.BuyerIdentifier + "（名稱留空時使用統編）" : draft.BuyerName)}" : "一般消費者 (紙本)";
             MessageBox.Show(this, $"訂單編號：{draft.OrderId}\n買受人：{buyer}\n\n商品明細：\n{lines}\n\n發票總額：{MoneyFormatter.Integer(draft.TotalAmount)}", "發票預覽", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "無法預覽", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); MessageBox.Show(this, error.Message, "無法預覽", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     private async Task IssueAsync()
@@ -569,6 +576,7 @@ internal sealed class InvoiceEntryControl : UserControl
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl");
             recordsChanged();
             MessageBox.Show(this, error.Message, "開立未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
@@ -585,7 +593,9 @@ internal sealed class InvoiceEntryControl : UserControl
             using var confirmation = ImportConfirmationForm.ForDigiwin(repository, service, recordsChanged, dialog.FileName);
             confirmation.ShowDialog(FindForm());
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "鼎新ERP 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); MessageBox.Show(this, error.Message, "鼎新ERP 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         return;
     }
 
@@ -597,8 +607,9 @@ internal sealed class InvoiceEntryControl : UserControl
             await RefreshCompanyForUseAsync(requiresMoPassword: true);
             password = repository.Settings.MoPassword(repository.Settings.LoadOrCreate());
         }
-        catch (Exception)
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"InvoiceEntryControl");
             MessageBox.Show(this,
                 "請先至設定選單設定 MO店+ Excel 密碼。",
                 "尚未設定 MO店+ Excel 密碼",
@@ -614,7 +625,9 @@ internal sealed class InvoiceEntryControl : UserControl
             using var confirmation = ImportConfirmationForm.ForMo(repository, service, recordsChanged, dialog.FileName, password);
             confirmation.ShowDialog(FindForm());
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "MO店+ 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); MessageBox.Show(this, error.Message, "MO店+ 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         return;
     }
 
@@ -628,7 +641,9 @@ internal sealed class InvoiceEntryControl : UserControl
             using var confirmation = ImportConfirmationForm.ForCoupang(repository, service, recordsChanged, dialog.FileName);
             confirmation.ShowDialog(FindForm());
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "酷澎匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); MessageBox.Show(this, error.Message, "酷澎匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         return;
     }
 
@@ -645,7 +660,8 @@ internal sealed class InvoiceEntryControl : UserControl
         }
         catch (Exception error) when (repository.Connections.Current is { UsesExistingFallback: true } &&
             (error is HttpRequestException or TaskCanceledException || error is CYInvoice.Core.Cloud.CloudApiException { StatusCode: >= System.Net.HttpStatusCode.InternalServerError }))
-        { /* Existing protected offline rules still authorize the operation itself. */ }
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); /* Existing protected offline rules still authorize the operation itself. */ }
         RefreshEnvironment();
     }
 

@@ -115,7 +115,10 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         var item = await InspectVoidTargetAsync(issue, gateway ?? ApiGateway(), cancellationToken).ConfigureAwait(false);
         RequireLocalApiManager(employee, password);
         if (RequestHash(issue) != before) throw new InvalidOperationException("作廢申請或公司設定已變更");
-        return new(item.AllowanceNumber, ApiRequest(issue).Record.InvoiceNumber,
+        var request = ApiRequest(issue);
+        WriteReview(request.Record,request.Review with { OriginalAllowance=item });
+        syncRepository.UpsertMany([request.Record]);
+        return new(item.AllowanceNumber, request.Record.InvoiceNumber,
             item.BuyerName, item.TotalAmount, item.TaxAmount, Hash(item), item);
     }
 
@@ -175,7 +178,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             {
                 var count = store.AttemptCount(approval);
                 var problem = count is 0 or >= 3 || store.LastProviderCode(approval) is not (null or 0 or 4050132 or 4050141);
-                var message = problem ? "原號仍未作廢；歷史送出缺少嘗試證據、官方明確拒絕或已達安全重試上限，請匯出問題診斷" : "等待官方結果與下一次安全查證";
+                var message = problem ? "原號仍未作廢；歷史送出缺少嘗試證據、官方明確拒絕或已達安全重試上限，請查看程式同目錄 log" : "等待官方結果與下一次安全查證";
                 SetLocalVoidProblem(issue, problem, message);
                 return new(approval.AllowanceNumber, false, true, message);
             }
@@ -186,9 +189,12 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 var response = await api.VoidAllowanceOnceAsync(approval.AllowanceNumber, cancellationToken).ConfigureAwait(false);
                 code = response.Code;
             }
-            catch (AmegoApiException error) { code = error.Code; }
+            catch (AmegoApiException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService.Api"); code = error.Code; }
             catch (Exception error) when (error is HttpRequestException or OperationCanceledException or IOException or JsonException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService.Api");
                 IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "response_unknown", InvoiceAllowanceVoidIssueTypes.ManualReview, error: error, attempt: attempt, responseReceived: false);
             }
             if (code is not null) store.RecordResponse(approval, attempt, code);
@@ -203,12 +209,13 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 return new(approval.AllowanceNumber, true, true, "原折讓已由官方確認作廢");
             }
             var normalWait = code is 0 or 4050141 || InvoiceWorkQueue.IsPendingUpload(after.Status);
-            var messageAfter = normalWait ? "官方尚在處理作廢，系統會自動查回" : "作廢結果查證仍未確認；原號及嘗試證據已保存，系統會依安全條件查回／有限重試";
+            var messageAfter = code is 0 or 4050141 ? "光貿已接收，等待作廢處理" : normalWait ? "官方尚在處理作廢，系統會自動查回" : "作廢結果查證仍未確認；原號及嘗試證據已保存，系統會依安全條件查回／有限重試";
             SetLocalVoidProblem(issue, !normalWait, messageAfter);
             return new(approval.AllowanceNumber, false, true, messageAfter);
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService.Api");
             SetLocalVoidProblem(issue, true, "折讓作廢自動處理未完成：" + error.Message);
             IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, "execution_failed", InvoiceAllowanceVoidIssueTypes.ManualReview, error: error);
             throw;
@@ -246,7 +253,8 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         var manager = RequireLocalApiManager(employee, password);
         RequireNoApiClaim(issue);
         var requestHash = RequestHash(issue);
-        var officialHash = Hash(await InspectVoidTargetAsync(issue, gateway ?? ApiGateway(), cancellationToken).ConfigureAwait(false));
+        var originalAllowance = await InspectVoidTargetAsync(issue, gateway ?? ApiGateway(), cancellationToken).ConfigureAwait(false);
+        var officialHash = Hash(originalAllowance);
         if (officialHash != reviewedOfficialHash) throw new InvalidOperationException("官方折讓明細已變更，請重新預覽覆核");
         RequireLocalApiManager(employee, password);
         if (RequestHash(issue) != requestHash) throw new InvalidOperationException("作廢申請或公司設定已變更");
@@ -257,7 +265,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         new LocalAllowanceVoidStore(repository.DataDirectory).Approve(approval, now());
         var request = ApiRequest(issue);
         WriteReview(request.Record, request.Review with {
-            ReviewerEmployeeNo = manager.EmployeeNo, ReviewerName = manager.Name
+            ReviewerEmployeeNo = manager.EmployeeNo, ReviewerName = manager.Name, ApprovedUtc=approval.ExpiresUtc, OriginalAllowance = originalAllowance
         });
         syncRepository.UpsertMany([request.Record]);
         return approval;

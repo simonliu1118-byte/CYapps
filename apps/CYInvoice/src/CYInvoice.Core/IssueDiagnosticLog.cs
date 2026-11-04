@@ -38,6 +38,12 @@ public static class IssueDiagnosticLog
             ? Path.GetDirectoryName(Path.GetFullPath(dataDirectory))! : dataDirectory, "log");
     private static readonly Lock LogGate = new();
     private static string cleanedDay = "";
+    public static void RecordProblem(Exception error, string module,
+        [System.Runtime.CompilerServices.CallerMemberName] string operation = "")
+    {
+        RecordCloud(Path.Combine(AppContext.BaseDirectory,"Data"),module,"problem", "app-"+Guid.NewGuid().ToString("N"),
+            code:error is CloudApiException api?api.Code:SafeCode(error.Message),error:error,serverStage:operation);
+    }
     private static string PathFor(string dataDirectory, long issueId) =>
         Path.Combine(LogDirectory(dataDirectory), "issue-" + issueId.ToString(CultureInfo.InvariantCulture) + ".jsonl");
     private static IEnumerable<string> ReadPathsFor(string dataDirectory, long issueId)
