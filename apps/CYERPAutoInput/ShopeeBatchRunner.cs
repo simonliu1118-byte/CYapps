@@ -554,6 +554,7 @@ internal sealed partial class ShopeeBatchRunner
     /// </summary>
     private async Task<(Screen Screen, ShopeeListOrder Order)> ScrollToAsync(Screen screen, ShopeeListOrder order, bool disposeFirst)
     {
+        var ownScreen = false; // the screen in hand was read here (else it is the caller's)
         for (var scroll = 0; !(Visible(screen, order.Status) && order.Status.CenterY < screen.Area.Height * 3 / 4) && scroll < 20; scroll++)
         {
             var page = screen.Area;
@@ -565,11 +566,32 @@ internal sealed partial class ShopeeBatchRunner
                 s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
             if (!ReferenceEquals(screen, moved))
             {
-                if (scroll > 0 || disposeFirst) screen.Dispose(); // the caller disposes the first screen
+                if (ownScreen || disposeFirst) screen.Dispose(); // the caller disposes the first screen
                 screen = moved;
+                ownScreen = true;
             }
             order = found;
             if (Math.Abs(found.Status.CenterY - before) < 5 && Visible(screen, order.Status)) break; // the end of the page
+        }
+        // Chrome scrolls smoothly, and the list still settles after F5 (lines 170 → 165 in the user's
+        // LOG): page text read meanwhile gives the row where it was a moment ago (user, 2026-11-04:
+        // the click opened the order above, the 任選 one passed over). The order's place must read
+        // the same twice before it is clicked.
+        for (var check = 0; check < 10; check++)
+        {
+            await Task.Delay(300, _token);
+            var (again, found) = await WaitAsync("清單上的下一筆訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            var still = Math.Abs(found.Status.CenterY - order.Status.CenterY) < 2;
+            if (!ReferenceEquals(screen, again))
+            {
+                if (disposeFirst || ownScreen) screen.Dispose();
+                screen = again;
+                ownScreen = true;
+            }
+            order = found;
+            if (still) break;
+            _log.Info("shopee-batch", $"list still moving: order {order.OrderSn} at y={found.Status.CenterY}");
         }
         return (screen, order);
     }
