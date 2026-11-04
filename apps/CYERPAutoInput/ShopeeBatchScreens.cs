@@ -15,7 +15,7 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
-internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat, HiLife }
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven, FamilyMart, Hct, BlackCat, HiLife, Pelican }
 
 internal static partial class ShopeeBatchScreens
 {
@@ -144,6 +144,8 @@ internal static partial class ShopeeBatchScreens
         if (text.Contains("全家", StringComparison.Ordinal) || text.Contains("FAMILYMART", StringComparison.Ordinal)) return ShopeeBatchCarrier.FamilyMart;
         // 萊爾富 (user, 2026-10-29): 申請寄件編號 as 全家, its 寄取貨單 a PDF printed through Chrome.
         if (text.Contains("萊爾富", StringComparison.Ordinal) || text.Contains("HILIFE", StringComparison.Ordinal)) return ShopeeBatchCarrier.HiLife;
+        // 宅配通 (user, 2026-11-04): 安排取件 as 新竹物流, its label printed through Chrome at its own 縮放.
+        if (text.Contains("宅配通", StringComparison.Ordinal) || text.Contains("PELICAN", StringComparison.Ordinal)) return ShopeeBatchCarrier.Pelican;
         // 新竹物流 is 安排取件 (user, 2026-10-14): a pickup at the set address, then Shopee's label.
         if (text.Contains("新竹", StringComparison.Ordinal) || text.Contains("HCT", StringComparison.Ordinal)) return ShopeeBatchCarrier.Hct;
         // 黑貓宅急便 is 安排取件 too (user, 2026-10-26); its label is saved as a PDF and printed on A4.
@@ -153,17 +155,17 @@ internal static partial class ShopeeBatchScreens
 
     /// <summary>
     /// A Shopee label with room under it for the 寄件單下方文字 (user, 2026-10-26): 蝦皮店到店 (隔日到貨
-    /// too), 蝦皮店到宅 and 新竹物流; not 黑貓 (A4) nor 店到家.
+    /// too), 蝦皮店到宅, 新竹物流 and 宅配通; not 黑貓 (A4) nor 店到家.
     /// </summary>
     public static bool NoteRoom(ShopeeBatchCarrier kind, string carrier)
     {
         var text = ShopeeScreenshot.Compact(carrier);
-        return kind == ShopeeBatchCarrier.Hct || kind == ShopeeBatchCarrier.Shopee &&
+        return kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.Pelican || kind == ShopeeBatchCarrier.Shopee &&
             (text.Contains("店到店", StringComparison.Ordinal) || text.Contains("店到宅", StringComparison.Ordinal));
     }
 
     /// <summary>A courier that comes to the set address: 安排取件 with its address checked first.</summary>
-    public static bool IsPickup(ShopeeBatchCarrier kind) => kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.BlackCat;
+    public static bool IsPickup(ShopeeBatchCarrier kind) => kind is ShopeeBatchCarrier.Hct or ShopeeBatchCarrier.BlackCat or ShopeeBatchCarrier.Pelican;
 
     public static bool SupportedCarrier(string carrier) => CarrierKind(carrier) != ShopeeBatchCarrier.Other;
 

@@ -257,7 +257,7 @@ internal static partial class SlipPrinter
     /// too tall to leave room for it is printed as before, without the note (Noted false).
     /// No progress window.
     /// </summary>
-    public static (int DpiX, int DpiY, bool Noted) Print(string printer, GrayImage slip, string documentName, string note = "", float minPoints = SlipNote.MinPoints)
+    public static (int DpiX, int DpiY, bool Noted) Print(string printer, GrayImage slip, string documentName, string note = "", float minPoints = SlipNote.MinPoints, bool landscape = false)
     {
         using var bmp = new Bitmap(slip.Width, slip.Height, PixelFormat.Format24bppRgb);
         var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
@@ -297,18 +297,27 @@ internal static partial class SlipPrinter
             g.PixelOffsetMode = PixelOffsetMode.Half;
             g.SmoothingMode = SmoothingMode.None;
             used = ((int)Math.Round(g.DpiX), (int)Math.Round(g.DpiY));
-            // The graphics start at the printable area's corner; the page is centred on the paper.
-            var pageW = e.PageBounds.Width / 100f * g.DpiX;
-            var pageH = e.PageBounds.Height / 100f * g.DpiY;
-            var x = (int)Math.Round((pageW - bmp.Width) / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX);
-            var marginY = e.PageSettings.HardMarginY / 100f * g.DpiY;
-            var y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
+            // The graphics start at the printable area's corner: drawn in paper coordinates.
+            var paperW = e.PageBounds.Width / 100f * g.DpiX;
+            var paperH = e.PageBounds.Height / 100f * g.DpiY;
+            g.TranslateTransform(-e.PageSettings.HardMarginX / 100f * g.DpiX, -e.PageSettings.HardMarginY / 100f * g.DpiY);
+            var (pageW, pageH) = (paperW, paperH);
+            if (landscape && paperW < paperH)
+            {
+                // Laid out across the label (宅配通, user 2026-11-04), then turned a quarter (a
+                // driver whose paper is already wider than tall needs no turn).
+                g.TranslateTransform(paperW, 0);
+                g.RotateTransform(90);
+                (pageW, pageH) = (paperH, paperW);
+            }
+            var x = (int)Math.Round((pageW - bmp.Width) / 2);
+            var y = (int)Math.Round((pageH - bmp.Height) / 2);
             var dotsPerMm = g.DpiY / 25.4f;
-            var areaH = Math.Min(pageH, (float)SlipNote.LabelHeightMm * dotsPerMm);
+            var areaH = landscape ? pageH : Math.Min(pageH, (float)SlipNote.LabelHeightMm * dotsPerMm);
             var blockH = (float)SlipNote.BlockHeightMm * dotsPerMm;
             var gap = (float)SlipNote.GapMm * dotsPerMm;
             noted = hasNote && bmp.Height + gap + blockH <= areaH;
-            var areaTop = (pageH - areaH) / 2 - marginY;
+            var areaTop = (pageH - areaH) / 2;
             if (noted)
             {
                 // The slip at the top at its own size; the words get all the room under it
@@ -317,7 +326,7 @@ internal static partial class SlipPrinter
                 blockH = areaH - bmp.Height - gap;
                 fit = SlipNote.Fit(note, NoteWidthMm, blockH / dotsPerMm, minPoints);
                 noted = fit is not null;
-                if (!noted) y = (int)Math.Round((pageH - bmp.Height) / 2 - marginY);
+                if (!noted) y = (int)Math.Round((pageH - bmp.Height) / 2);
             }
             g.DrawImage(bmp, new Rectangle(Math.Max(0, x), Math.Max(0, y), bmp.Width, bmp.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel);
             if (noted && fit is { } f)
@@ -325,7 +334,7 @@ internal static partial class SlipPrinter
                 using var font = NoteFont(false, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
                 using var symbolFont = NoteFont(true, f.Points / 72f * g.DpiY, GraphicsUnit.Pixel);
                 var lineH = Math.Min((float)SlipNote.LineHeightMm(f.Points) * dotsPerMm, blockH / f.Lines.Count);
-                var centreX = pageW / 2 - e.PageSettings.HardMarginX / 100f * g.DpiX;
+                var centreX = pageW / 2;
                 // The lines centred in the block, each centred across it.
                 var top = areaTop + areaH - blockH + (blockH - lineH * f.Lines.Count) / 2;
                 // Pure black dots on the thermal head, no grey edges.

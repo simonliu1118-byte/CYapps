@@ -28,6 +28,20 @@ internal static partial class MoBatchScreens
     public static OcrBox? Text(IReadOnlyList<OcrBox> boxes, string text) =>
         boxes.Where(b => C(b) == text).OrderBy(b => b.Top).FirstOrDefault();
 
+    /// <summary>
+    /// An order's page in E001訂單管理 (user's screenshot 2026-11-04: 「訂單編號：66110300321221」
+    /// next to 建立日 and 配送方式, above 訂單商品): its 訂單編號, else null. For F8 on that page.
+    /// </summary>
+    public static string? DetailOrderSn(IEnumerable<string> texts)
+    {
+        var list = texts.Select(ShopeeScreenshot.Compact).ToList();
+        if (!list.Any(t => t.Contains("店+管理系統", StringComparison.Ordinal)) || !list.Any(t => t.StartsWith("訂單商品", StringComparison.Ordinal)))
+            return null;
+        // The label and the number may come as one piece of text or two; 子訂單編號 (001) is too short.
+        var m = Regex.Match(string.Concat(list), @"(?<!子)訂單編號[:：](\d{10,20})");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
     /// <summary>The order menu entry 「E001訂單管理」 (shown once 訂單管理 opens).</summary>
     public static OcrBox? OrderManagement(IReadOnlyList<OcrBox> boxes) =>
         boxes.FirstOrDefault(b => C(b).EndsWith("訂單管理", StringComparison.Ordinal) && C(b).StartsWith("E0", StringComparison.Ordinal) && b.Height < 60);

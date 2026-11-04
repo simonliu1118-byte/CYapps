@@ -4,7 +4,7 @@ namespace CYERPAutoInput;
 
 /// <summary>
 /// While CY types into ERP the physical mouse is ignored, so a nudge cannot move the focus to
-/// another field (user, 2026-10-11). A low-level mouse hook on its own thread drops every mouse
+/// another field (user, 2026-10-11); so is every physical key but Esc (user, 2026-11-04). A low-level mouse hook on its own thread drops every mouse
 /// event that is not injected; CY's own clicks (SendInput) and SetCursorPos still work. A
 /// physical Esc releases the lock from the hook thread itself, so the mouse comes back even if
 /// the UI thread were stuck; the normal Esc emergency stop then cancels the run.
@@ -34,6 +34,7 @@ internal sealed class PhysicalMouseLock : IDisposable
     /// </summary>
     public event Action? EscapePressed;
     private int _blocked;
+    private int _blockedKeys;
 
     /// <summary>
     /// The one place the physical mouse may move and click while locked (the 紙本發票待列印 box,
@@ -84,7 +85,7 @@ internal sealed class PhysicalMouseLock : IDisposable
         {
             if (mouse != 0) UnhookWindowsHookEx(mouse);
             if (keyboard != 0) UnhookWindowsHookEx(keyboard);
-            _log.Info("mouse-lock", $"physical mouse released blocked_events={_blocked}");
+            _log.Info("mouse-lock", $"physical mouse released blocked_events={_blocked} blocked_keys={_blockedKeys}");
         }
     }
 
@@ -114,12 +115,20 @@ internal sealed class PhysicalMouseLock : IDisposable
                 if (Interlocked.Exchange(ref _escapeRaised, 1) == 0 && EscapePressed is { } escape)
                     ThreadPool.QueueUserWorkItem(_ => escape());
             }
+            // The keyboard is locked too (user, 2026-11-04): while locked, a physical key other
+            // than Esc never reaches ERP or Chrome. Only key presses are dropped; a key let go
+            // still goes through, so a key held when the lock began is not left stuck down.
+            else if (!_released && (info.flags & LlkhfInjected) == 0)
+            {
+                Interlocked.Increment(ref _blockedKeys);
+                return 1;
+            }
         }
         return CallNextHookEx(0, code, wParam, lParam);
     }
 
     /// <summary>
-    /// The mouse free again while the keyboard hook stays (user, 2026-10-26: inside 蝦皮全自動 a
+    /// The mouse and keyboard free again while the hook still watches for Esc (user, 2026-10-26: inside 蝦皮全自動 a
     /// question for the person must not end the watch for Esc, or Esc stops nothing).
     /// </summary>
     public void Release()

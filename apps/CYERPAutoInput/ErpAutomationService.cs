@@ -71,6 +71,16 @@ internal sealed class ErpAutomationService
         if (count == 0 && Win32Automation.FindMinimizedErp() is var (app, hidden))
         {
             await RestoreErpAsync(app, hidden, cancellationToken);
+            // The 銷貨單建立作業 that was open comes back after the main window, or stays hidden
+            // (user, 2026-11-04: 作業速查 was used though COPI08 was open, only minimized).
+            await WaitUntilAsync(() => SelectCopi08(out var shown) != 0 || shown > 0, 2500, cancellationToken);
+            root = SelectCopi08(out count);
+        }
+        if (count == 0 && Win32Automation.FindHiddenCopi08Windows() is { Count: > 0 } kept)
+        {
+            _log.Info("window", $"COPI08 hidden or minimized; restoring count={kept.Count}");
+            foreach (var h in kept) NativeMethods.ShowWindow(h, NativeMethods.SW_RESTORE);
+            await WaitUntilAsync(() => SelectCopi08(out var shown) != 0 || shown > 0, 3000, cancellationToken);
             root = SelectCopi08(out count);
         }
         if (count == 0)
@@ -118,15 +128,27 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException("讀不到 ERP 主視窗位置。");
 
         var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
-        IReadOnlyList<OcrToken> tokens;
-        using (var image = ScreenCapture.Capture(ribbon))
-            tokens = await _textVision.RecognizeAsync(image, cancellationToken);
-        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "作業速查") is not { } label)
+        Rectangle? label = null;
+        // ERP just restored can still be under Chrome when the Ribbon is read (user LOG 2026-11-04:
+        // the read showed the Shopee page): brought to the front again and read again, three times.
+        for (var attempt = 1; attempt <= 3 && label is null; attempt++)
         {
-            _log.Warn("window", $"OCR did not find 作業速查 tokens={_log.Value(string.Join(" ", tokens.Select(t => t.Text)))}");
-            throw new InvalidOperationException("ERP 主視窗找不到「作業速查」。請確認 Ribbon 停在「我的ERP」。");
+            if (attempt > 1)
+            {
+                await Delay(800, cancellationToken);
+                Win32Automation.PrepareForeground(main, _log);
+                await Delay(400, cancellationToken);
+            }
+            IReadOnlyList<OcrToken> tokens;
+            using (var image = ScreenCapture.Capture(ribbon))
+                tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            label = RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "作業速查");
+            if (label is null)
+                _log.Warn("window", $"OCR did not find 作業速查 attempt={attempt} tokens={_log.Value(string.Join(" ", tokens.Select(t => t.Text)))}");
         }
-        var point = new Point(ribbon.Left + label.Left + label.Width / 2, ribbon.Top + label.Top + label.Height / 2);
+        if (label is not { } found)
+            throw new InvalidOperationException("ERP 主視窗找不到「作業速查」。請確認 Ribbon 停在「我的ERP」。");
+        var point = new Point(ribbon.Left + found.Left + found.Width / 2, ribbon.Top + found.Top + found.Height / 2);
         if (!Win32Automation.IsAreaShownBy(main, new Rectangle(point.X - 8, point.Y - 8, 16, 16)))
             throw new InvalidOperationException("ERP 主視窗的「作業速查」被其他視窗遮住，已停止。");
         InputSender.Click(point);
@@ -138,10 +160,24 @@ internal sealed class ErpAutomationService
         InputSender.UnicodeText(Win32Automation.Copi08Code);
         await Delay(800, cancellationToken); // let ERP list the matching programs
         var typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        for (var wait = 0; wait < 3 && !typed.Equals(Win32Automation.Copi08Code, StringComparison.OrdinalIgnoreCase); wait++)
+        {
+            await Delay(400, cancellationToken);
+            typed = (NativeMethods.ControlText(focus) ?? string.Empty).Trim();
+        }
         if (!typed.Equals(Win32Automation.Copi08Code, StringComparison.OrdinalIgnoreCase))
         {
+            // The search box can read back empty though COPI08 is in it and listed (user's
+            // screenshot 2026-11-04, read-back len=0): what the screen shows around it decides.
             _log.Warn("window", $"作業速查 read-back len={typed.Length} class={NativeMethods.ClassName(focus)}");
-            throw new InvalidOperationException("作業速查的搜尋框讀回內容不是 COPI08，已停止。");
+            var around = Rectangle.Intersect(new Rectangle(point.X - 120, point.Y - 60, 900, 260), new Rectangle(window.Left, window.Top, window.Width, window.Height));
+            IReadOnlyList<OcrToken> shown;
+            using (var image = ScreenCapture.Capture(around))
+                shown = await _textVision.RecognizeAsync(image, cancellationToken);
+            var text = Compact(string.Concat(shown.Select(t => t.Text))).ToUpperInvariant().Replace('O', '0').Replace("C0PI", "COPI", StringComparison.Ordinal);
+            _log.Info("window", $"作業速查 screen read: {_log.Value(text)}");
+            if (!text.Contains("COPI08", StringComparison.Ordinal))
+                throw new InvalidOperationException("作業速查的搜尋框讀回內容不是 COPI08，已停止。");
         }
         InputSender.Press(NativeMethods.VK_RETURN);
         _log.Info("window", "作業速查 COPI08 + Enter sent");
@@ -891,8 +927,20 @@ internal sealed class ErpAutomationService
             return isNew;
         }
         if (mode != ErpMode.Browse) throw new InvalidOperationException("無法可靠判斷 ERP 目前是檢視或輸入狀態。");
+        // ERP's print progress window can still be up right after 直接列印 (user LOG 2026-11-04: the
+        // MO店+ run's second order failed 0.4 s after the first one's print): waited for, a while.
         if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
-            throw new InvalidOperationException("ERP 目前有其他視窗開啟；未按 F5 新增。");
+        {
+            await WaitUntilAsync(() => Win32Automation.FindVisibleProcessPeerWindows(root).Count == 0, 15000, cancellationToken);
+            var open = Win32Automation.FindVisibleProcessPeerWindows(root);
+            if (open.Count > 0)
+            {
+                LogPeerWindows("before-new", open);
+                throw new InvalidOperationException("ERP 目前有其他視窗開啟（等了 15 秒仍未關閉）；未按 F5 新增。");
+            }
+            _log.Info("state", "other ERP window closed; going on");
+            await Delay(300, cancellationToken);
+        }
 
         // ERP's own 新增 shortcut in browse mode; no Ribbon coordinates involved.
         InputSender.Press(NativeMethods.VK_F5);

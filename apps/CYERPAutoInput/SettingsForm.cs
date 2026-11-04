@@ -17,6 +17,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _sevenLabelScale = new();
     private readonly TextBox _hiLifeLabelScale = new();
+    private readonly TextBox _pelicanLabelScale = new();
     private readonly TextBox _familyLabelScale = new();
     private readonly TextBox _familyLabelPages = new();
     private readonly TextBox _hctLabelScale = new();
@@ -240,7 +241,8 @@ internal sealed class SettingsForm : Form
             ("萊爾富縮放 %", _hiLifeLabelScale, _settings.HiLifeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家縮放 %", _familyLabelScale, _settings.FamilyLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
             ("全家列印頁", _familyLabelPages, _settings.FamilyLabelPages, 60),
-            ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+            ("新竹縮放 %", _hctLabelScale, _settings.HctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("宅配通縮放 %", _pelicanLabelScale, _settings.PelicanLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
         // 酷澎 宅配 寄件單 on the thermal printer (user, 2026-10-19: 22 %; 超商 print at 100 %).
         page.Controls.Add(Section("酷澎寄件單（熱感印表機，Chrome 列印視窗的縮放；超商固定 100%）",
             ("宅配縮放 %", _coupangHctLabelScale, _settings.CoupangHctLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
@@ -655,6 +657,14 @@ internal sealed class SettingsForm : Form
             return;
         }
         _settings.HiLifeLabelScale = hiLifeScale;
+        if (!int.TryParse(_pelicanLabelScale.Text.Trim(), out var pelicanScale) || pelicanScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "宅配通縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 3;
+            _pelicanLabelScale.Focus();
+            return;
+        }
+        _settings.PelicanLabelScale = pelicanScale;
         if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
         {
             MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);

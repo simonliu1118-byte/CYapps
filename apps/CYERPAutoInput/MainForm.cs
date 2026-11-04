@@ -93,7 +93,7 @@ internal sealed partial class MainForm : Form
         FormClosing += (_, _) => { _statePoll.Stop(); _browserHotkey?.Dispose(); _browserHotkey = null; };
         Shown += (_, _) => ApplyBrowserHotkey();
         // Old Temp folders go at start too, not only when MO店+ 全自動 runs (user, 2026-10-15).
-        Shown += (_, _) => { if (!UiSnapshot.Active) MoPrintedDocuments.Prune(_log); };
+        Shown += (_, _) => { if (!UiSnapshot.Active) _ = Task.Run(() => MoPrintedDocuments.Prune(_log)); };
         Shown += (_, _) => StartUpdateChecks();
         // A printer out of paper, jammed or stuck after a print (user, 2026-10-27).
         PrintWatch.Warn = message => _log.Warn("print-watch", message);
@@ -1253,11 +1253,55 @@ internal sealed partial class MainForm : Form
             _log.Info("hotkey", $"{BrowserHotkey.KeyName} ignored: CY is busy");
             return;
         }
-        _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
         // A minimized CY would keep its dialog hidden too.
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-        try { await ImportShopeeScreenshotsAsync(); }
+        try
+        {
+            // An MO店+ order's page: that order from the 全自動's exports (user, 2026-11-04).
+            var browser = NativeMethods.GetForegroundWindow();
+            var texts = await Task.Run(() => ChromePageText.Read(browser, _log, out _, needDocument: false));
+            if (MoBatchScreens.DetailOrderSn(texts.Select(t => t.Text)) is { } moOrder)
+            {
+                _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed on MO店+ order {moOrder}");
+                await ImportMoOrderFromPageAsync(moOrder);
+                return;
+            }
+            _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
+            await ImportShopeeScreenshotsAsync();
+        }
         catch (Exception ex) { _log.Error("hotkey", ex); }
+    }
+
+    /// <summary>
+    /// MO店+ › 訂單頁讀取輸入 (user, 2026-11-04: F8 from the menu too, named by the user): the Chrome windows, the front one
+    /// first, are read for an MO店+ order's page (the shown tab of each); its order as F8 does.
+    /// </summary>
+    private async Task ImportMoOrderFromChromeAsync()
+    {
+        if (_automationCts is not null || _shopeeBatchRunning) return;
+        var own = (uint)Environment.ProcessId;
+        var windows = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (NativeMethods.IsWindowVisible(hwnd) && !NativeMethods.IsIconic(hwnd) && NativeMethods.ClassName(hwnd) == "Chrome_WidgetWin_1" &&
+                Win32Automation.ProcessId(hwnd) != own && NativeMethods.GetWindowRect(hwnd, out var r) && r.Width >= 400 && r.Height >= 300)
+                windows.Add(hwnd);
+            return true;
+        }, 0);
+        foreach (var window in windows)
+        {
+            var texts = await Task.Run(() => ChromePageText.Read(window, _log, out _, needDocument: false));
+            if (MoBatchScreens.DetailOrderSn(texts.Select(t => t.Text)) is { } orderSn)
+            {
+                _log.Info("mo", $"訂單頁讀取輸入 from the menu: MO店+ order {orderSn}");
+                try { await ImportMoOrderFromPageAsync(orderSn); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _log.Error("mo", ex); }
+                return;
+            }
+        }
+        _log.Info("mo", $"訂單頁讀取輸入: no MO店+ order page in {windows.Count} Chrome window(s)");
+        MessageBox.Show(this, "Chrome 裡沒有開著的 MO店+ 訂單頁。\n請先在 MO店+ 後台打開那張訂單（E001訂單管理 › 訂單明細），再按一次（或在那個頁面直接按 F8）。",
+            "MO店+ 訂單頁讀取輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task ImportShopeeScreenshotsAsync()
@@ -1323,9 +1367,9 @@ internal sealed partial class MainForm : Form
         }
         else if (MessageBox.Show(this,
                 "全自動會開一個新的 Chrome 視窗，對「我的銷售 › 待出貨 › 待處理」的訂單逐筆：\n\n" +
-                "・按「安排出貨」（新竹物流、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%、萊爾富 " + _settings.HiLifeLabelScale + "%）\n" +
+                "・按「安排出貨」（新竹物流、宅配通、黑貓宅急便為「安排取件」，取件地址須與設定相同；黑貓寄件單另存 PDF 後請你放一張 A4 三格紙，印在最上面一格）並列印寄件單（" + _settings.ShopeeLabelPrinter + "，蝦皮 " + _settings.ShopeeLabelScale + "%、7-11 " + _settings.SevenLabelScale + "%、全家裁切成標籤直接列印（不行時第 " + _settings.FamilyLabelPages + " 頁 " + _settings.FamilyLabelScale + "%）、新竹 " + _settings.HctLabelScale + "%、宅配通 " + _settings.PelicanLabelScale + "%、萊爾富 " + _settings.HiLifeLabelScale + "%）\n" +
                 "・擷取訂單、輸入 ERP、儲存並列印\n\n" +
-                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、萊爾富、新竹物流與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
+                "目前處理蝦皮店到店（含隔日到貨）、蝦皮店到宅、7-ELEVEN、全家、萊爾富、新竹物流、宅配通與黑貓宅急便；遇到其他物流或任何問題會停下並發出聲音。\n" +
                 "過程中請勿操作電腦，按 Esc 可隨時停止。\n\n要開始嗎？",
                 ShopeeBatchTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
@@ -1342,7 +1386,7 @@ internal sealed partial class MainForm : Form
         var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
             new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages,
                 _settings.HctLabelScale, _settings.HctPickupAddress, SlipNote: _settings.SlipNote, SlipNoteAll: _settings.SlipNoteAllThermal,
-                HiLifeScale: _settings.HiLifeLabelScale), token,
+                HiLifeScale: _settings.HiLifeLabelScale, PelicanScale: _settings.PelicanLabelScale), token,
             new ShopeeBatchChat(_settings.ShopeeChatRules));
         runner.PrintBlackCat = (order, pdf) => PrintBlackCatLabelAsync(order, pdf, token);
         var outcome = AutomationOutcome.Stopped;
@@ -1371,6 +1415,7 @@ internal sealed partial class MainForm : Form
         {
             outcome = AutomationOutcome.NeedsAttention;
             problem = ex.Message;
+            _log.Warn("shopee-batch", $"stopped: {ex.Message}");
             shipped = ex.Shipped || runner.Current?.Shipped == true;
         }
         catch (Exception ex)
@@ -2505,6 +2550,9 @@ internal sealed partial class MainForm : Form
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("匯入訂單匯出檔（兩個 .xls → 發票 → 預覽 → ERP）", null, async (_, _) => await ImportMoAsync());
             menu.Items.Add("重新列印寄件單", null, async (_, _) => await ReprintMoAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            // F8's way from the menu (user, 2026-11-04).
+            menu.Items.Add("訂單頁讀取輸入（F8）", null, async (_, _) => await ImportMoOrderFromChromeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }
         else if (text == "酷澎商城")

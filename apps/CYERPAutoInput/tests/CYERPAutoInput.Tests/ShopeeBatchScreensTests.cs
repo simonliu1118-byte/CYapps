@@ -159,6 +159,12 @@ public sealed class ShopeeBatchScreensTests
         Assert.Equal(ShopeeBatchCarrier.SevenEleven, ShopeeBatchScreens.CarrierKind("7-ELEVEN"));
         Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("蝦皮店到店-隔日到貨"));
         Assert.Equal(ShopeeBatchCarrier.HiLife, ShopeeBatchScreens.CarrierKind("萊爾富"));
+        // 宅配通 (user's screenshots 2026-11-04): 安排取件 as 新竹, a label with room for the words.
+        Assert.Equal(ShopeeBatchCarrier.Pelican, ShopeeBatchScreens.CarrierKind("宅配通"));
+        Assert.True(ShopeeBatchScreens.IsPickup(ShopeeBatchCarrier.Pelican));
+        Assert.True(ShopeeBatchScreens.NoteRoom(ShopeeBatchCarrier.Pelican, "宅配通"));
+        var pickup = new List<OcrBox> { B("快遞取件詳情", 54, 50, 130, 26), B("577 309 561 253", 324, 108, 150, 26), B("列印寄件單", 546, 782, 112, 34) };
+        Assert.Equal("577309561253", ShopeeBatchScreens.DialogTracking(pickup));
         Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("OK超商"));
 
         List<OcrBox> dialog = [B("查看寄件編號", 35, 35), B("G12 345 678 9O1", 244, 89), B("寄件編號將於2026/10/1523:59失效", 245, 119), B("列印寄件單", 545, 711)];

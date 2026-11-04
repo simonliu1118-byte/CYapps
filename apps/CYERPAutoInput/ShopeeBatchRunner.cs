@@ -16,7 +16,7 @@ internal sealed class ShopeeBatchStop(string message, bool shipped = false) : Ex
 /// at 165 %), so every label sets them again.
 /// </summary>
 internal sealed record ShopeeBatchPrint(string Printer, int ShopeeScale, int SevenScale, int FamilyScale, string FamilyPages,
-    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false, int HiLifeScale = 100);
+    int HctScale = 95, string HctPickupAddress = "", int CoupangHctScale = 22, string SlipNote = "", bool SlipNoteAll = false, int HiLifeScale = 100, int PelicanScale = 80);
 
 /// <summary>
 /// 設定 › 發送訊息 › 蝦皮 (user, 2026-10-14): each rule whose words the 買家備註 mentions has its
@@ -30,6 +30,9 @@ internal sealed record ShopeeBatchChat(IReadOnlyList<ChatRule> Rules);
 /// so it stays in 待處理 and is passed over.
 /// </summary>
 internal sealed class ShopeeBatchSkip(string message) : Exception(message);
+
+/// <summary>The list is to be read again (the click opened another order, its tab closed).</summary>
+internal sealed class ShopeeBatchRetry() : Exception("retry");
 
 /// <summary>One line of the batch's closing list.</summary>
 internal sealed record ShopeeBatchNote(string OrderSn, string Message);
@@ -154,7 +157,9 @@ internal sealed partial class ShopeeBatchRunner
             status($"全自動：找待處理訂單（已完成 {Done.Count} 筆）…");
             Current = null;
             _shippedHint = false;
-            var order = await NextOrderAsync();
+            ShopeeBatchOrder? order;
+            try { order = await NextOrderAsync(); }
+            catch (ShopeeBatchRetry) { continue; }
             if (order is null) break;
             Current = order;
             status($"全自動：訂單 {order.OrderSn} 安排出貨…");
@@ -496,24 +501,12 @@ internal sealed partial class ShopeeBatchRunner
     private ShopeeListOrder? NextInList(Screen screen) =>
         ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn));
 
+    /// <summary>Times in a row the list's click opened another order.</summary>
+    private int _wrongOpens;
+
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
-        // An order further down (the ones above passed over) is scrolled into view first.
-        for (var scroll = 0; !Visible(screen, first.Status) && scroll < 20; scroll++)
-        {
-            var page = screen.Area;
-            _inputs++;
-            Wheel(new Point(page.Left + page.Width / 2, page.Top + page.Height / 2), -3);
-            await Task.Delay(400, _token);
-            var (moved, found) = await WaitAsync("清單上的下一筆訂單", 15,
-                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == first.OrderSn));
-            if (!ReferenceEquals(screen, moved))
-            {
-                if (scroll > 0) screen.Dispose(); // the caller disposes the first screen
-                screen = moved;
-            }
-            first = found;
-        }
+        (screen, first) = await ScrollToAsync(screen, first, disposeFirst: false);
         if (Done.Contains(first.OrderSn))
             throw new ShopeeBatchStop($"訂單 {first.OrderSn} 已處理過，卻還在待處理清單上；為避免重複出貨，已停止。");
         // The carrier is not taken from the list (user, 2026-10-13: a long row's text came cut
@@ -521,14 +514,86 @@ internal sealed partial class ShopeeBatchRunner
         var order = new ShopeeBatchOrder { OrderSn = first.OrderSn };
         Click(screen, first.Status, "待出貨");
         // The order opens in a new tab of this window.
-        var (detail, _) = await WaitAsync("訂單明細頁", 30, s => ShopeeBatchScreens.IsOrderDetail(s.Boxes) && ShopeeBatchScreens.DetailOrderSn(s.Boxes).Length > 0 ? s : null);
-        using (detail)
+        static string? Detail(Screen s) => ShopeeBatchScreens.IsOrderDetail(s.Boxes) && ShopeeBatchScreens.DetailOrderSn(s.Boxes).Length > 0 ? "detail" : null;
+        Screen detail;
+        try { (detail, _) = await WaitAsync("訂單明細頁", 12, Detail); }
+        catch (ShopeeBatchStop) when (!_token.IsCancellationRequested)
         {
-            var shown = ShopeeBatchScreens.DetailOrderSn(detail.Boxes);
-            if (shown != order.OrderSn)
-                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}；已停止。");
+            // A click near the foot of the list did not open the order (user LOG 2026-11-04: the
+            // next order's 待出貨 at the bottom edge, 30 s with the list unchanged): the list is
+            // read again, the order brought well into view and clicked once more.
+            _log.Info("shopee-batch", $"order {order.OrderSn} did not open; 待出貨 clicked once more");
+            var (list, again) = await WaitAsync("清單上的訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            (list, again) = await ScrollToAsync(list, again, disposeFirst: true);
+            using (list) Click(list, again.Status, "待出貨（再按一次）");
+            (detail, _) = await WaitAsync("訂單明細頁", 30, Detail);
         }
+        string shown;
+        using (detail) shown = ShopeeBatchScreens.DetailOrderSn(detail.Boxes);
+        if (shown != order.OrderSn)
+        {
+            // Another row's order opened (user LOG 2026-11-04: right after a 任選 order was passed
+            // over, the next click opened a different order and the batch stopped): nothing is done
+            // on a page only opened, so it is closed and the list read again, twice at most.
+            _log.Warn("shopee-batch", $"opened order {shown} instead of {order.OrderSn} attempt={_wrongOpens + 1}");
+            if (_wrongOpens >= 2)
+                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}（已重試 2 次）；已停止。");
+            _wrongOpens++;
+            await CloseOrderTabAsync(new ShopeeBatchOrder { OrderSn = shown });
+            throw new ShopeeBatchRetry();
+        }
+        _wrongOpens = 0;
         return order;
+    }
+
+    /// <summary>
+    /// An order further down (the ones above passed over) scrolled into view, its 待出貨 in the
+    /// upper three quarters of the page (user LOG 2026-11-04: one clicked at the page's foot did
+    /// not open). Stops scrolling when the list no longer moves.
+    /// </summary>
+    private async Task<(Screen Screen, ShopeeListOrder Order)> ScrollToAsync(Screen screen, ShopeeListOrder order, bool disposeFirst)
+    {
+        var ownScreen = false; // the screen in hand was read here (else it is the caller's)
+        for (var scroll = 0; !(Visible(screen, order.Status) && order.Status.CenterY < screen.Area.Height * 3 / 4) && scroll < 20; scroll++)
+        {
+            var page = screen.Area;
+            var before = order.Status.CenterY;
+            _inputs++;
+            Wheel(new Point(page.Left + page.Width / 2, page.Top + page.Height / 2), -3);
+            await Task.Delay(400, _token);
+            var (moved, found) = await WaitAsync("清單上的下一筆訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            if (!ReferenceEquals(screen, moved))
+            {
+                if (ownScreen || disposeFirst) screen.Dispose(); // the caller disposes the first screen
+                screen = moved;
+                ownScreen = true;
+            }
+            order = found;
+            if (Math.Abs(found.Status.CenterY - before) < 5 && Visible(screen, order.Status)) break; // the end of the page
+        }
+        // Chrome scrolls smoothly, and the list still settles after F5 (lines 170 → 165 in the user's
+        // LOG): page text read meanwhile gives the row where it was a moment ago (user, 2026-11-04:
+        // the click opened the order above, the 任選 one passed over). The order's place must read
+        // the same twice before it is clicked.
+        for (var check = 0; check < 10; check++)
+        {
+            await Task.Delay(300, _token);
+            var (again, found) = await WaitAsync("清單上的下一筆訂單", 15,
+                s => ShopeeBatchScreens.Orders(s.Boxes).FirstOrDefault(o => o.OrderSn == order.OrderSn));
+            var still = Math.Abs(found.Status.CenterY - order.Status.CenterY) < 2;
+            if (!ReferenceEquals(screen, again))
+            {
+                if (disposeFirst || ownScreen) screen.Dispose();
+                screen = again;
+                ownScreen = true;
+            }
+            order = found;
+            if (still) break;
+            _log.Info("shopee-batch", $"list still moving: order {order.OrderSn} at y={found.Status.CenterY}");
+        }
+        return (screen, order);
     }
 
     // ---- 安排出貨 → 列印寄件單 → 列印 ----
@@ -855,9 +920,17 @@ internal sealed partial class ShopeeBatchRunner
         }
         if (order.Kind == ShopeeBatchCarrier.BlackCat) await SaveBlackCatLabelAsync(order);
         else if (NoteOnStoreSlips && ShopeeBatchScreens.NoteRoom(order.Kind, order.Carrier))
-            await PrintPdfWithNoteAsync(order, order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale);
-        else await PrintDialogAsync(order.Kind == ShopeeBatchCarrier.Hct ? _print.HctScale : _print.ShopeeScale, pages: null);
+            await PrintPdfWithNoteAsync(order, LabelScale(order.Kind), landscape: order.Kind == ShopeeBatchCarrier.Pelican);
+        else await PrintDialogAsync(LabelScale(order.Kind), pages: null);
     }
+
+    /// <summary>Chrome's 縮放 for a label printed from Shopee's 預覽列印 (宅配通 80 %, user 2026-11-04).</summary>
+    private int LabelScale(ShopeeBatchCarrier kind) => kind switch
+    {
+        ShopeeBatchCarrier.Hct => _print.HctScale,
+        ShopeeBatchCarrier.Pelican => _print.PelicanScale,
+        _ => _print.ShopeeScale
+    };
 
     /// <summary>
     /// Prints a saved 黑貓 label PDF on the A4 printer after asking for the paper (the main
@@ -963,7 +1036,11 @@ internal sealed partial class ShopeeBatchRunner
     /// printer's resolution at the size Chrome would print it (user, 2026-10-26: not enlarged — the
     /// PDF is saved at the carrier's own 縮放), smaller only when it does not fit above the note.
     /// </summary>
-    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order, int scale)
+    /// <param name="landscape">
+    /// A label wider than tall (宅配通, user's screenshot 2026-11-04: two parts side by side, printed
+    /// across the 150 mm): laid out across the label, the words under it, then turned to print.
+    /// </param>
+    private async Task PrintPdfWithNoteAsync(ShopeeBatchOrder order, int scale, bool landscape = false)
     {
         var printer = SlipPrinter.Installed(_printer) ?? throw new ShopeeBatchStop($"找不到名稱符合「{_printer}」的印表機，未列印。", true);
         var folder = Path.Combine(AppContext.BaseDirectory, "Temp", "note-slip-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture));
@@ -971,15 +1048,16 @@ internal sealed partial class ShopeeBatchRunner
         await PrintDialogAsync(scale, pages: null, target: PdfPrinter);
         var pdf = await SavedPdfAsync(folder);
         var label = SlipPrinter.Label(printer, 100, 150);
-        var widthMm = label.Width * 25.4 / label.Dpi - 4;
-        var heightMm = label.Height * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
+        var (across, down) = landscape ? (label.Height, label.Width) : (label.Width, label.Height);
+        var widthMm = across * 25.4 / label.Dpi - 4;
+        var heightMm = down * 25.4 / label.Dpi - SlipNote.BlockHeightMm - SlipNote.GapMm - 2;
         GrayImage slip;
         // At the carrier's own 縮放 as Chrome prints it (user, 2026-10-27: 蝦皮 110 %); the words
         // under it may go smaller for it.
         var drawn = await MoSlipPdf.RenderFitAsync(pdf, widthMm, heightMm, label.Dpi, enlarge: false, factor: scale / 100.0);
         using (drawn.Image) slip = SlipPrinter.BlackWhite(drawn.Image);
         _log.Info("shopee-batch", $"store slip from PDF {slip.Width}x{slip.Height} dots at {label.Dpi} dpi");
-        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints);
+        PrintCutSlip(printer, slip, order.OrderSn, family: false, minPoints: SlipNote.FamilyMinPoints, landscape: landscape);
         try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
@@ -1055,12 +1133,12 @@ internal sealed partial class ShopeeBatchRunner
     /// A 全家 slip (user, 2026-10-26: little room under it, so its words may go down to
     /// <see cref="SlipNote.FamilyMinPoints"/>; others not below <see cref="SlipNote.MinPoints"/>).
     /// </param>
-    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null)
+    private void PrintCutSlip(string printer, GrayImage slip, string orderSn, bool family = true, float? minPoints = null, bool landscape = false)
     {
         try
         {
             var dpi = SlipPrinter.Print(printer, slip, (family ? "全家寄取貨單 " : "寄件單 ") + orderSn, _print.SlipNote,
-                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints));
+                minPoints ?? (family ? SlipNote.FamilyMinPoints : SlipNote.MinPoints), landscape);
             _log.Info("shopee-batch", $"family slip printed cut to the label ({slip.Width}x{slip.Height} dots at {dpi.DpiX}x{dpi.DpiY} dpi) note={dpi.Noted}");
             if (!dpi.Noted && SlipNote.Lines(_print.SlipNote).Count > 0) _log.Warn("shopee-batch", "slip too tall for the note block; printed without it");
         }

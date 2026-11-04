@@ -89,6 +89,25 @@ internal sealed partial class ShopeeBatchRunner
         return result;
     }
 
+    /// <summary>
+    /// F8 on an MO店+ order with no export kept (user, 2026-11-04): only 我的訂單 › 配送中 ›
+    /// 匯出報表 into <paramref name="folder"/>, in a Chrome window of its own. The .xls saved.
+    /// </summary>
+    public async Task<string> ExportMoShippedAsync(string folder, Action<string> status)
+    {
+        _pageTabs = true;
+        Directory.CreateDirectory(folder);
+        status("MO店+ 訂單頁讀取輸入：開啟 Chrome…");
+        await OpenWindowAsync(MoUrl);
+        var (first, _) = await WaitAsync("MO店+ 店+管理系統", 40, s => MoBatchScreens.SignedIn(s.Boxes) || s.Boxes.Any(b => b.Text.Contains("登入", StringComparison.Ordinal)) ? s : null);
+        var signedIn = MoBatchScreens.SignedIn(first.Boxes);
+        first.Dispose();
+        if (!signedIn) throw new ShopeeBatchStop("MO店+ 後台還沒登入：請在這個 Chrome 視窗登入後再按一次 F8。");
+        status("MO店+ 訂單頁讀取輸入：匯出配送中訂單…");
+        await OpenMyOrdersAsync("配送中");
+        return await ExportAsync(folder, "配送中訂單");
+    }
+
     /// <summary>訂單 › 訂單管理 › E001訂單管理 › 我的訂單, the tab, 處理提醒 全部, 配送方式 全部.</summary>
     private async Task OpenMyOrdersAsync(string tab)
     {
