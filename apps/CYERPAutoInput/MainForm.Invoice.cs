@@ -480,7 +480,7 @@ internal sealed partial class MainForm
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
         using var files = new MoImportForm(path => ReadMoExport(path, password));
         if (files.ShowDialog(this) != DialogResult.OK || files.BatchPath is null) return;
-        await ImportMoOrdersAsync(title, files, null);
+        await ImportMoOrdersAsync(title, files.Orders, files.Errors, files.Notes, files.BatchPath, files.FileName, null);
     }
 
     /// <summary>
@@ -513,13 +513,65 @@ internal sealed partial class MainForm
             using (files)
             {
                 _log.Info("mo", $"F8 order {orderSn} found in {Path.GetFileName(folder)}");
-                await ImportMoOrdersAsync(title, files, orderSn);
+                await ImportMoOrdersAsync(title, files.Orders, files.Errors, files.Notes, files.BatchPath!, files.FileName, orderSn);
             }
             return;
         }
-        _log.Info("mo", $"F8 order {orderSn} not in any kept export folders={folders.Count}");
-        MessageBox.Show(this, $"找不到訂單 {orderSn} 的全自動匯出檔（只有還有訂單沒輸入 ERP 的全自動會保留匯出檔，7 天）。\n請改用「MO店+ › 匯入訂單匯出檔」。",
-            title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        _log.Info("mo", $"F8 order {orderSn} not in any kept export folders={folders.Count}; exporting 配送中");
+        await ImportMoOrderFromShippedExportAsync(title, orderSn, password);
+    }
+
+    /// <summary>
+    /// No export kept for the order (user, 2026-11-04): MO店+ 我的訂單 › 配送中 › 匯出報表 in a
+    /// Chrome window of the program's own; that export has the order with its products, invoice
+    /// amounts and 物流單號, and is both files of the import for it.
+    /// </summary>
+    private async Task ImportMoOrderFromShippedExportAsync(string title, string orderSn, string password)
+    {
+        var folder = Path.Combine(MoPrintedDocuments.TempRoot, "mo-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + "-f8");
+        _shopeeBatchRunning = true;
+        Session.Pin(AutomationSession.BatchTitle);
+        Session.Begin(AutomationSession.BatchTitle);
+        var runner = new ShopeeBatchRunner(_automation.Ocr, _log,
+            new ShopeeBatchPrint(_settings.ShopeeLabelPrinter, _settings.ShopeeLabelScale, _settings.SevenLabelScale, _settings.FamilyLabelScale, _settings.FamilyLabelPages),
+            Session.EscapeToken);
+        string? file = null;
+        string? stopped = null;
+        try { file = await runner.ExportMoShippedAsync(folder, SetStatus); }
+        catch (ShopeeBatchStop stop) { stopped = stop.Message; }
+        catch (OperationCanceledException) { stopped = "已按 Esc 停止。"; }
+        finally
+        {
+            Session.Unpin();
+            Session.End(stopped is null ? AutomationOutcome.Done : AutomationOutcome.Stopped);
+            _shopeeBatchRunning = false;
+            SetStatus(string.Empty);
+        }
+        if (file is null)
+        {
+            _log.Warn("mo", $"F8 配送中 export failed: {stopped}");
+            MessageBox.Show(this, $"找不到訂單 {orderSn} 的全自動匯出檔，改匯出配送中訂單也沒有成功：{stopped}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        List<string[]> rows;
+        try { rows = ReadMoExport(file, password); }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"配送中匯出檔讀不到：{ex.Message}\n檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        var parsed = MoOrderImport.Parse(rows);
+        var tracking = MoOrderImport.ReadTracking(rows) ?? [];
+        if (!parsed.Orders.Any(o => o.OrderSn == orderSn))
+        {
+            _log.Info("mo", $"F8 order {orderSn} not in the 配送中 export orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+            MessageBox.Show(this, $"配送中匯出檔裡沒有訂單 {orderSn}" + (parsed.Errors.Count > 0 ? $"（{string.Join("；", parsed.Errors.Take(3))}）" : string.Empty) +
+                $"。\n請改用「MO店+ › 匯入訂單匯出檔」。檔案在：{file}", title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        _log.Info("mo", $"F8 order {orderSn} found in the 配送中 export");
+        var (orders, notes) = MoOrderImport.FillTracking(parsed.Orders, tracking);
+        await ImportMoOrdersAsync(title, orders, parsed.Errors, notes, file, Path.GetFileName(file), orderSn);
     }
 
     private static List<string[]> ReadMoExport(string path, string password)
@@ -556,15 +608,16 @@ internal sealed partial class MainForm
     }
 
     /// <param name="only">One order of the exports (F8 on its page); null for all.</param>
-    private async Task ImportMoOrdersAsync(string title, MoImportForm files, string? only)
+    private async Task ImportMoOrdersAsync(string title, IReadOnlyList<MoOrder> exported, IReadOnlyList<string> errors, IReadOnlyList<string> exportNotes,
+        string batchPath, string fileName, string? only)
     {
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
-        var mo = files.Orders.Where(o => only is null || o.OrderSn == only).ToList();
+        var mo = exported.Where(o => only is null || o.OrderSn == only).ToList();
         var orders = mo.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
-        _log.Info("mo", $"exports orders={mo.Count} errors={files.Errors.Count} tracking_filled={mo.Count(o => o.TrackingNumber.Length > 0)} notes={files.Notes.Count}");
+        _log.Info("mo", $"exports orders={mo.Count} errors={errors.Count} tracking_filled={mo.Count(o => o.TrackingNumber.Length > 0)} notes={exportNotes.Count}");
 
-        var invoice = await InvoiceMoAsync(title, files.BatchPath!, mo, orders, fullAuto: false);
+        var invoice = await InvoiceMoAsync(title, batchPath, mo, orders, fullAuto: false);
         // In the background: the paper prompt comes once 光貿 has the PDFs, over the preview.
         QueuePaperInvoices(invoice);
         SetStatus(string.Empty);
@@ -572,7 +625,7 @@ internal sealed partial class MainForm
         // environment is shown when asking before issuing and in the preview's notes.
         // One order: only what is said about it.
         bool Mine(string text) => only is null || text.Contains(only, StringComparison.Ordinal);
-        await PreviewAndRunAsync(MoOrderImport.Source, files.FileName, orders, files.Errors.Where(Mine).ToList(), [.. invoice.Notes, .. files.Notes.Where(Mine)]);
+        await PreviewAndRunAsync(MoOrderImport.Source, fileName, orders, errors.Where(Mine).ToList(), [.. invoice.Notes, .. exportNotes.Where(Mine)]);
     }
 
     /// <summary>
