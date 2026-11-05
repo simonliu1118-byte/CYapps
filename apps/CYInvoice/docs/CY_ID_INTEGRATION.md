@@ -1,17 +1,14 @@
 # CYInvoice × CY ID 整合設計基準
 
-2026-11-05現行修正註記：Cloud0.9.14／V3.1.46 Source退役CYInvoice APP_ENV及環境斷言，健康回報平台版本ID／建立時間；原Cloud0.9.13／schema23已回報完成部署，新0.9.14尚未部署。下方APP_ENV保留／development標籤敘述屬較早快照，現行機制依 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；CYID Provider契約與金融交易環境不變。
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
 
-文件現況註記更新：2026-11-03（原設計基準：2026-09-29；歷史設計段落保留原日期）
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
-本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
 
-最近一次本機MCP完整部署證據為2026-11-01 Cloud0.9.11：原Worker的 `IDENTITY` 與 `IDENTITY_AUTHORITY` 均連已核准的 **production CYID 身分服務**，原scope、CYID_ONLY與業務D1保留。原CYInvoice的 `APP_ENV=development` 是部署標籤及原部署預檢條件，不決定CYID服務或光貿交易環境；三者差異見 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target)。本次僅依既有私有部署證據修正文檔，未重查遠端；Cloud0.9.12仍待配套部署。最新停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+本repo直接引用canonical CYID package：目前契約1.0.6、minimum1.0.0；本App的CYID_CONSUMER_VERSION宣告為1.0.3，相容範圍以版本檔及canonical標準核對，不因文件整理擅改宣告或身份服務。
 
-以下Local／Built-in設計與development初次啟用描述保留V2.6～V3.0歷史脈絡，不代表本公司目前仍連development CYID。activate-cyid #42與2026-10-13 Cloud0.9.3部署／CYID_ONLY維護是已完成的較早checkpoint；其他舊段落中的「待切換／尚未實作」也須依現行交接及TODO判讀，不得據此重跑初次啟用或維護。
-
-CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.4）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
-
+## 歷史設計與演進證據
 ## 1. 產品目標
 
 CYInvoice 必須同時保留三種正式使用方式：

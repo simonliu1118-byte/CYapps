@@ -1,4 +1,12 @@
-# 待配套：V3.1.46／Cloud0.9.14 實際部署識別
+# 已完成配套：V3.1.46／Cloud0.9.14 實際部署識別
+
+2026-11-05本機MCP完成報告：固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 已部署原Worker Cloud0.9.14、100%流量。canonical before／deploy／after、原Workspace／Device／雜湊與安全稽核連續性、migration history、FK、原服務／Secrets／scope／Routes／財務旗標及線上bundle SHA均通過。schema／marker23保留，無migration或真交易；只退役consumer APP_ENV並加入原生版本資訊綁定，健康回應不再含environment且平台版本ID與控制面承接流量版本一致。
+
+本批用量在已公告停止界線內；實際計量、共享帳號差額、原0.9.13不可變版本／程式副本、Time Travel bookmark與原設定回復證據只留本機私有位置。未讀Secret值，未操作CYID D1、回復資料庫、重建／核准原案、清Claim或送真交易。使用者本輪另明確批准合併；以下「不合併／未部署」是上一個Source實作批次的歷史邊界，不是本輪最新授權。正式Release仍V3.1.0；本次未發布Release或覆寫桌面安裝。
+
+以下保留實作前的部署方案作稽核參考；本次維護已完成，不重跑成功步驟。
+
+## 歷史：V3.1.46／Cloud0.9.14 部署前方案
 
 2026-11-05。使用者已批准APP_ENV修正程式；本批僅Source／合成測試／CI，**未授權或執行線上部署**。原PR #550；原Cloud0.9.13／schema23已完成部署回報保留。以下方案不重跑0023，不更改正式Release V3.1.0。
 

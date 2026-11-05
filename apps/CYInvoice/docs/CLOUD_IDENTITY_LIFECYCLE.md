@@ -1,17 +1,12 @@
 # CYInvoice V3.0 Workspace／Device／Employee 身分生命週期定案
 
-2026-11-05現行修正註記：Cloud0.9.14／V3.1.46 Source退役CYInvoice APP_ENV及環境斷言，健康回報平台版本ID／建立時間；原Cloud0.9.13／schema23已回報完成部署，新0.9.14尚未部署。下方APP_ENV保留／development標籤敘述屬較早快照，現行機制依 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；CYID Provider契約與金融交易環境不變。
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
 
-歷史設計更新日期：2026-10-13（原設計基準：2026-09-29）
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
-> 2026-11-03現況註記：本文件下列版本／初次development啟用／Recovery待辦敘述保留原設計時點，不作為即時部署清單。最近一次2026-11-01本機MCP完整部署證據為Cloud0.9.11／schema22／CYID_ONLY，`IDENTITY`及`IDENTITY_AUTHORITY`均連已核准的production CYID；原Invoice `APP_ENV=development` 是獨立部署標籤。詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [現行本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。本次未重查遠端，未重做啟用或維護。
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
 
-現行 Windows 正式版 **V3.0.0 Build 0** 已發布（V2.6.19 為歷史）；CYID Consumer source 與原 development 啟用有既有驗證，但實機／Workspace 全矩陣及 0-Device recovery 仍依 [現行交接](V3_1_HANDOFF.md) 和唯一 [TODO.md](TODO.md) 的未完成項目追蹤。CYID 與 CYInvoice 不是同一個 D1；本文件 §19 保留早期 credential-only 提案，已由 §20 完整退役決策取代；2026-10-13 本公司原 D1 已完成 CYID_ONLY 維護、私有備份、本機還原與保留資料／FK 核對。0-Device recovery 仍未實作。具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
-
-本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
-
-CY ID 整合的專門邊界另見 `CY_ID_INTEGRATION.md`。本文件是設計／需求基準，不取代 `PROJECT_RULES.md`；治理衝突時仍依 repository／project governance 優先順序處理。
-
+## 歷史設計與演進證據
 ## 1. 核心不變量
 
 1. CYInvoice Cloud Workspace 是 CYInvoice 自己的 Device／同步／Work Item／業務協同範圍；即使採用 CY ID，也不與 CY ID Workspace 合併成同一個資料實體。

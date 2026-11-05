@@ -1,11 +1,12 @@
 # CYInvoice Cloud Architecture Status
 
-2026-11-05現行修正註記：Cloud0.9.14／V3.1.46 Source退役CYInvoice APP_ENV及環境斷言，健康回報平台版本ID／建立時間；原Cloud0.9.13／schema23已回報完成部署，新0.9.14尚未部署。下方APP_ENV保留／development標籤敘述屬較早快照，現行機制依 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；CYID Provider契約與金融交易環境不變。
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
 
-本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**；下方storage13／Cloud0.9.3／V2.6.19與development身分服務描述是當時快照。2026-11-03文件核對：最近一次本機MCP完整部署證據為2026-11-01 Cloud0.9.11、schema／marker22，兩個身分服務綁定均為已核准的 **production CYID**；原CYInvoice `APP_ENV=development` 是另一個獨立的部署標籤，詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target)。本次未重查遠端。最新工程與部署停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，待辦見 [TODO](TODO.md) 及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID身分權威仍以canonical Consumer Standard和永久規則為準。
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
-> 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
 
+## 歷史設計與演進證據
 ## 1. 歷史工程基準（不是目前 live 版號）
 
 - Windows 正式產品線：C# / WinForms。

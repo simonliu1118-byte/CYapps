@@ -1,6 +1,6 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-21。本檔保留雲端長期產品與架構藍圖，**不再將歷史 Phase A～E 視為現行版本執行順序**。最新正式 Release 為 **V3.1.0**；最新工程 Source 為 **V3.1.25 Build 0**。2026-10-21 原 CYInvoice D1／Worker schema18 與折讓 API 仍關閉的事實，以使用者本機 MCP 驗收報告為依據；本 GitHub 對話沒有重新查 Cloudflare。
+更新日期：2026-11-05。本文件只保留長期產品藍圖；目前工程V3.1.46、已部署Cloud0.9.14／schema23，正式Release仍V3.1.0。實際部署完成證據見MCP交接，不把舊Phase A～E當現行實作順序。
 
 版本與工作來源：**[V3.2 現行完整交付計畫](V3_2_IMPLEMENTATION_PLAN.md)** 唯一說明 A～H、合併後的四個交付批次與安全驗收；[TODO](TODO.md) 唯一保留跨版本待辦與工程狀態；[V3.0／V3.1 發行後真人驗收](POST_RELEASE_ACCEPTANCE.md) 仍獨立追蹤。永久規則以 `AGENTS.md` 指向的根與專案規則為準。
 

@@ -1,16 +1,28 @@
 # CYInvoice 待辦與驗證
 
-2026-11-05部署識別修正：V3.1.46／Cloud0.9.14 Source退役APP_ENV、使用平台版本資訊；本批未部署。原Cloud0.9.13／schema23已完成維護不重跑。後續受控程式部署及驗收見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；原同機流程與真人待驗項目不因本次修改結案。
+2026-11-05部署識別修正：V3.1.46／Cloud0.9.14 Source退役APP_ENV、使用平台版本資訊；本批原Worker已於2026-11-05由本機MCP完成部署、平台版本與線上程式SHA後驗；schema23不變。原0.9.13及本次成功維護均不重跑。完整完成摘要及後續驗收見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；原同機流程與真人待驗項目不因本次修改結案。
 
-更新日期：2026-10-28（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
+更新日期：2026-11-05（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
 - 本公司已使用 CYID。**以下為歷史 V2 註記**：其他公司舊 Built-in／Self-hosted 如需留存須用各自原 V2 相容配置；**V3.0 新版只支援 Local／CYID Cloud**，不再提供 Built-in／Self-hosted 現役模式，也不能復活本公司已退役的舊帳號表。
-- 現行交接：[V3_1_HANDOFF.md](V3_1_HANDOFF.md)；**V3.0／V3.1 發行後待驗收唯一清單**：[POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)。[RC_TEST.md](RC_TEST.md) 保留詳細歷史案例供操作參考，不另做第二份未驗收統計；私人資料不能放入公開 repo。
+- 現行維護交接：[MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；V3_1_HANDOFF保留已發行版本歷史；**V3.0／V3.1 發行後待驗收唯一清單**：[POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)。[RC_TEST.md](RC_TEST.md) 保留詳細歷史案例供操作參考，不另做第二份未驗收統計；私人資料不能放入公開 repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-本輪現行狀態（2026-11-05）：V3.1.45 Build1／Cloud0.9.13已完成同機流程實作與雲端配套部署，schema23及必要前後檢通過。固定部署Source d8f236ee5a030f19c7a41b80802bad8576d36934；詳細收據僅留私有紀錄。真人業務驗收仍待使用者，跨機協同留下一版。
+本輪現行狀態（2026-11-05）：V3.1.46／Cloud0.9.14已完成Source、必要CI及原Worker受控部署，schema23、原production CYID與旗標保留，平台版本／線上程式SHA後驗通過。固定部署Source fb381f5140f92e240f1c405f5ad38ad5a3a5efc9；詳細用量與回復證據留私有紀錄。正式Release仍V3.1.0，真人業務驗收未全部完成。
+
+## 現行待辦索引
+
+- [ ] 以V3.1.46／Cloud0.9.14完成同機真人正向流程、原角色、一次核准、自動執行／查回及重啟／異常展示的完整驗收；具體案例與需求差異只在 [唯一V3.2計畫](V3_2_IMPLEMENTATION_PLAN.md#6-驗證與未完項) 維護。
+- [ ] 跨機協同留下一版；雙Windows真人完整驗收依已批准決定延至3.2上線後，不把本批CI／無憑證拒絕／單機隔離測試算成跨機通過。
+- [ ] V3.0／V3.1延期真人驗收只在 [POST_RELEASE_ACCEPTANCE](POST_RELEASE_ACCEPTANCE.md) 補證據並勾選，RC_TEST僅作案例參考，不在此重複列同一清單。
+- [ ] 酷澎實際特殊樣本、一般跨機OrderID／Work Item／Audit與小型營運摘要等保留原後續需求；多公司仍是V4.0候選，不在本批增加功能或變更既定版本範圍。
+- [ ] 新正式Release須另有當次指示；本輪部署／合併授權不等於新Release授權。
+
+## 歷史工程看板與原需求沿革
+
+以下日期／版本段落保留原工程證據及尚待釐清的需求細節；舊checkbox只反映當時狀態，不是第二份現行待辦。現行完成／未完邊界依上方索引、唯一計畫及延期驗收清單判讀，不能據舊「尚未部署／未啟用」重做維護。後續版本候選仍保留，不擅自刪除需求。
 
 ## CYInvoice 3.2：完整折讓 API／跨機／離線／同步（正在開發）
 
@@ -425,7 +437,7 @@ Audit 沿用既有公開／敏感資料邊界，不保存密碼、Recovery Code�
 - [ ] V3 單公司 Workspace 升級時自動建立第一個 Company。
 - [ ] 視實際需求再做 Employee ↔ Company scope、Device 預設 Company、公司切換 UI、跨公司待辦／查詢／報表。
 
-## 9. 對外相容／自架準備
+## 9. 對外相容／自架準備（保留原後續提案，非現役V3模式）
 
 - [ ] Cloud API 穩定後撰寫 CYInvoice Self-hosted / Cloud Integration User Manual。
 - [ ] Guide 定義 Built-in Cloud 部署需求、endpoint、schema、Device auth、Employee authorization、錯誤碼、版本、idempotency／reconciliation 語意；不得要求 CY ID 才能完成基本部署。
@@ -447,7 +459,7 @@ Offline cache 整體簽章（7.2）、多公司（8）與營運摘要（10）保
 
 ## 12. 單機版明確不排入
 
-- 本機操作／稽核紀錄：不做；等 Cloud backend 後做跨機 Audit。
+- 不另建第二套本機財務／稽核資料權威；原SQLite歷史與現有log診斷保留。
 - 本機備份／還原：不做；CYInvoice 是中介層，官方資料以光貿為準。
 - 發票 Excel／CSV 匯出：不做；需要時使用光貿網站。
 - 管理員開機待辦提醒：不做；沒有持續登入，無法可靠知道開程式的人是管理員。

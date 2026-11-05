@@ -2,18 +2,10 @@
 
 本文件保留 C#／WinForms 歷次**功能需求與行為基準**，永久治理仍以 `PROJECT_RULES.md` 為準。原 V2.6 時期的實作／部署陳述留作歷史，不得取代現行進度。
 
-- **現行工程 Source：V3.1.43**；已發布的正式 Release 為 **V3.1.0**，未經使用者當次授權不得再發布。
-- **V3.2 不變的完成目標**：正式折讓 g0401、g0501、Local／CYID 跨機、離線、官方查回與同步、逐筆歷史／Audit、舊 UI 安全退役及雙機真測，詳見 [V3.2 唯一交付計畫](V3_2_IMPLEMENTATION_PLAN.md)；不能把這些未完成項移到 3.3。
-- **V3.3 與後續**：原一般多機／OrderID／Audit 與既定延期／大版本方向均保留，以 [TODO](TODO.md) 和 [Cloud 長期路線圖](CLOUD_ROADMAP.md) 分別確認，規劃重排不新增／刪除需求。
-- **依2026-10-23交回的本機MCP完成報告（作業日10-22）**：原D1 schema21／Worker marker21、指定Source `83e7b691` 已部署，五個折讓旗標關閉；第一階段結束。測試公司卡／API環境仍待驗證、真光貿驗收未開始；計量及私有證據限制見 [完成報告](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，不以結構升級當成g0401/g0501已驗收。
-
-## V3.2 現行需求入口（2026-10-22 使用者定案；整合中）
-
-主管一次核准、程式連續查證／配號／送出、明確佔號自動加號且不設換號次數上限；作廢一次核准立即執行、移除15分鐘／文字確認／永久單次作廢限制。等待主管、紙本或官方處理沿用既有「處理中」，真正異常進「上傳問題」並附可匯出的診斷。獨立系統診斷於診斷匯出接妥後同批退役。
-
-上述完整流程、異常分支、日誌、清理不變與驗收只在 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護。原 PR #550 本批已整合 Local／Cloud 一次核准與原同步自動恢復、有限作廢重試及 schema21 forward Source；工程測試與真業務驗收分開。本機MCP已完成原D1／Worker21維護，財務旗標仍關閉；下一階段尚未開始。以下V2.6人工流程與歷史工程敘述不得覆蓋此現行目標。
-
-2026-10-23定案、尚待實作：V3僅單一正式公司＋內建測試卡，設定以卡片選環境，不顯示運作模式；由CYInvoice超管編輯單一正式公司卡，一次保存至雲端，新CYID電腦自動取卡，其他裝置在登入／重連／選卡／批次作業前檢查版本並更新App Key／MO密碼，公司卡不定時輪詢。正式卡保留兩者完整綁定、加密與版次；CYWEB限定編輯取消，多公司排V4.0。唯一完整設計及驗收見[V3.2計畫§2.5](V3_2_IMPLEMENTATION_PLAN.md)，本檔不另複製流程。
+- 現行工程：**V3.1.46／BUILD0**；原Worker **Cloud0.9.14／schema23** 已完成本機MCP維護；正式Release **V3.1.0**。目前維護已停止，不因文件整理重做migration、原案或財務驗收。
+- 現行流程、取消退回、一次主管核准、連續自動處理、未知結果、公司卡與日誌只在 [V3.2唯一計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本檔保留基礎需求，不另複製一套階段狀態。
+- 既有同機功能保留，跨機協同下一版；雙Windows真人驗收仍按延期決定追蹤。待辦見 [TODO](TODO.md)，V3.0／V3.1延期項見 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md)，部署證據見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+- 下方歷史人工／V2.6操作敘述只解釋舊資料與演進；與現行V3.2流程有差異時依上述唯一計畫及實際owner，不復活已移除的UI或第二套交易流程。
 
 ## 1. 平台與基本開立
 
@@ -203,7 +195,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
+- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
 - V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. V2.6 時期尚未完成清單（歷史 Snapshot；最新狀態見 V3.2 計畫與 TODO）
