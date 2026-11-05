@@ -10,12 +10,12 @@ export class FixtureD1 {
     const statement = { sql, args: [], bind(...args) { this.args = args; return this; } };
     statement.first = async () => this.db.prepare(sql).get(...statement.args) || null;
     statement.all = async () => ({ results: this.db.prepare(sql).all(...statement.args) });
-    statement.run = async () => ({ success: true, meta: this.db.prepare(sql).run(...statement.args) });
+    statement.run = async () => {const result=this.db.prepare(sql).run(...statement.args);return {success:true,meta:{...result,last_row_id:Number(result.lastInsertRowid)}};};
     return statement;
   }
   async batch(statements) {
     this.db.exec('BEGIN');
-    try { const results=[];for(const statement of statements)results.push(await statement.run());this.db.exec('COMMIT');return results; }
+    try { const results=statements.map(statement=>{const result=this.db.prepare(statement.sql).run(...statement.args);return {success:true,meta:{...result,last_row_id:Number(result.lastInsertRowid)}};});this.db.exec('COMMIT');return results; }
     catch(error) {this.db.exec('ROLLBACK');throw error;}
   }
   close() { this.db.close(); }

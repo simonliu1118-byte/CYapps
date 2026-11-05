@@ -3,7 +3,7 @@ import { statisticsPeriod } from './statistics.js';
 const MAX_AMOUNT = 9_999_999;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context = {}) {
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith('/api/')) {
@@ -18,10 +18,13 @@ export default {
 
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
       if (url.pathname === '/api/transactions/search' && request.method === 'GET') return handleSearchTransactions(url, env.DB);
+      if (url.pathname === '/api/transactions/pending-confirmation' && request.method === 'GET') return await handlePendingTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
       const markerMatch = url.pathname.match(/^\/api\/transactions\/(\d+)\/marker$/);
       if (markerMatch && request.method === 'PATCH') return handleSetTransactionMarker(Number(markerMatch[1]), request, env.DB);
+      const confirmationMatch = url.pathname.match(/^\/api\/transactions\/(\d+)\/confirm$/);
+      if (confirmationMatch && request.method === 'POST') return await handleConfirmTransaction(Number(confirmationMatch[1]), request, env.DB, context.session);
 
       let match = url.pathname.match(/^\/api\/transactions\/(\d+)$/);
       if (match && request.method === 'PUT') return handleUpdateTransaction(Number(match[1]), request, env.DB);
@@ -110,7 +113,7 @@ async function handleListTransactions(url, db) {
   if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
   const [result, lockedThrough] = await Promise.all([
     db.prepare(`
-      SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at
+      SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, pending_confirmation, created_at, updated_at
       FROM transactions
       WHERE substr(tx_date, 1, 7) = ?
       ORDER BY tx_date DESC, created_at DESC, id DESC
@@ -142,7 +145,7 @@ async function handleSearchTransactions(url, db) {
   // earlier pages; a one-row lookahead replaces a second full-range COUNT.
   const values = [period.from, period.until, keyword, keyword, keyword];
   if (cursor) values.push(...cursor);
-  const result = await db.prepare(`SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target
+  const result = await db.prepare(`SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, pending_confirmation, updated_at
     FROM transactions
     WHERE tx_date >= ? AND tx_date < ?
       AND (instr(lower(summary), lower(?)) > 0 OR instr(lower(category_name), lower(?)) > 0
@@ -159,6 +162,7 @@ async function handleSearchTransactions(url, db) {
 async function handleCreateTransaction(request, db) {
   const body = await bodyJson(request);
   if (!body) return json({ ok: false, error: '資料格式錯誤。' }, 400);
+  if (Object.hasOwn(body,'pendingConfirmation') && typeof body.pendingConfirmation !== 'boolean') return json({ok:false,error:'待確認狀態無效。'},400);
   const values = normalizeTransactionBody(body);
   const validation = await validateTransaction(values, db);
   if (validation) return validation;
@@ -168,13 +172,13 @@ async function handleCreateTransaction(request, db) {
   }
   const now = new Date().toISOString();
   const result = await db.prepare(`
-    INSERT INTO transactions(tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(values.txDate, values.accountName, values.kind, values.categoryName, values.summary, values.amount, now, now).run();
+    INSERT INTO transactions(tx_date, account_name, kind, category_name, summary, amount, pending_confirmation, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(values.txDate, values.accountName, values.kind, values.categoryName, values.summary, values.amount, Number(values.pendingConfirmation), now, now).run();
   const id = Number(result.meta?.last_row_id);
   return json({ ok: true, id, transaction: {
     id, tx_date: values.txDate, account_name: values.accountName, kind: values.kind,
-    category_name: values.categoryName, summary: values.summary, amount: values.amount, marker_color: null, marker_target: 'summary',
+    category_name: values.categoryName, summary: values.summary, amount: values.amount, marker_color: null, marker_target: 'summary', pending_confirmation:Number(values.pendingConfirmation),
     created_at: now, updated_at: now
   } }, 201);
 }
@@ -189,18 +193,22 @@ async function handleUpdateTransaction(id, request, db) {
 
   const body = await bodyJson(request);
   if (!body) return json({ ok: false, error: '資料格式錯誤。' }, 400);
-  const values = normalizeTransactionBody({ ...body, kind: old.kind });
+  if (Object.hasOwn(body,'pendingConfirmation') && typeof body.pendingConfirmation !== 'boolean') return json({ok:false,error:'待確認狀態無效。'},400);
+  const pendingConfirmation = body.pendingConfirmation ?? Boolean(old.pending_confirmation);
+  if (old.pending_confirmation && !pendingConfirmation) return json({ok:false,error:'請使用待確認旁的確認按鈕完成確認。'},409);
+  const values = normalizeTransactionBody({ ...body, kind: old.kind, pendingConfirmation });
   const validation = await validateTransaction(values, db);
   if (validation) return validation;
   const newMonth = values.txDate.slice(0, 7);
   if (isMonthLocked(newMonth, lockedThrough)) return json({ ok: false, error: `${newMonth} 已鎖定，無法移入。` }, 409);
 
+  const now = new Date().toISOString();
   await db.prepare(`
     UPDATE transactions
-    SET tx_date = ?, account_name = ?, category_name = ?, summary = ?, amount = ?, updated_at = ?
+    SET tx_date = ?, account_name = ?, category_name = ?, summary = ?, amount = ?, pending_confirmation = ?, updated_at = ?
     WHERE id = ?
-  `).bind(values.txDate, values.accountName, values.categoryName, values.summary, values.amount, new Date().toISOString(), id).run();
-  return json({ ok: true });
+  `).bind(values.txDate, values.accountName, values.categoryName, values.summary, values.amount, Number(values.pendingConfirmation), now, id).run();
+  return json({ ok: true,transaction:{...old,tx_date:values.txDate,account_name:values.accountName,category_name:values.categoryName,summary:values.summary,amount:values.amount,pending_confirmation:Number(values.pendingConfirmation),updated_at:now} });
 }
 
 // Marker metadata is independent from transaction summary and amounts.
@@ -208,7 +216,7 @@ async function handleSetTransactionMarker(id, request, db) {
   if (!validId(id)) return json({ ok: false, error: '交易編號錯誤。' }, 400);
   const body = await bodyJson(request);
   const colorValid = body && Object.hasOwn(body, 'markerColor')
-    && (body.markerColor === null || ['orange', 'pink', 'yellow', 'green'].includes(body.markerColor));
+    && (body.markerColor === null || ['orange', 'yellow', 'green'].includes(body.markerColor));
   // Legacy color-only callers keep targeting summary. Clearing the color resets
   // presentation metadata to the default; no accounting fields can be edited.
   const target = body?.markerColor === null ? 'summary' : (body?.markerTarget ?? 'summary');
@@ -390,6 +398,8 @@ async function validateTransaction(values, db) {
   if (!values.categoryName) return json({ ok: false, error: '尚未選擇科目。' }, 400);
   if (!Number.isInteger(values.amount) || values.amount < 1) return json({ ok: false, error: '金額必須大於 0。' }, 400);
   if (values.amount > MAX_AMOUNT) return json({ ok: false, error: '金額最多 7 位數。' }, 400);
+  const summary=values.pendingConfirmation?withoutPendingPrefix(values.summary):values.summary;
+  if ([...summary].reduce((units,char)=>units+(char.charCodeAt(0)>255?2:1),0)>40) return json({ok:false,error:'摘要不可超過 20 個中文字或 40 個英數字元。'},400);
   const [account, category] = await Promise.all([
     db.prepare('SELECT id FROM accounts WHERE name = ? AND archived_at IS NULL').bind(values.accountName).first(),
     db.prepare('SELECT id FROM categories WHERE kind = ? AND name = ?').bind(values.kind, values.categoryName).first()
@@ -400,14 +410,70 @@ async function validateTransaction(values, db) {
 }
 
 function normalizeTransactionBody(body) {
+  const pendingConfirmation = body?.pendingConfirmation === true;
+  const summary = String(body?.summary || '').trim();
   return {
     txDate: String(body?.txDate || '').trim(),
     accountName: normalizeName(body?.accountName),
     kind: String(body?.kind || '').trim(),
     categoryName: normalizeName(body?.categoryName),
-    summary: String(body?.summary || '').trim(),
+    summary: pendingConfirmation ? '(待確認)' + withoutPendingPrefix(summary) : summary,
+    pendingConfirmation,
     amount: Number(body?.amount)
   };
+}
+
+function withoutPendingPrefix(summary) {
+  return String(summary || '').replace(/^(?:\(待確認\))+\s*/u,'').trim();
+}
+
+async function handlePendingTransactions(url, db) {
+  const keyword = String(url.searchParams.get('q') || '').trim();
+  if (keyword.length > 100) return json({ok:false,error:'關鍵字最多 100 字。'},400);
+  let cursor = null;
+  if (url.searchParams.get('cursor')) {
+    try {cursor=JSON.parse(atob(url.searchParams.get('cursor')));} catch { /* validated below */ }
+    if (!Array.isArray(cursor) || cursor.length!==2 || !isDate(cursor[0]) || !validId(cursor[1])) return json({ok:false,error:'搜尋分頁無效，請重新搜尋。'},400);
+  }
+  const args = keyword ? [keyword,keyword,keyword] : [];
+  if (cursor) args.push(...cursor);
+  const result=await db.prepare(`SELECT id,tx_date,account_name,kind,category_name,summary,amount,
+      marker_color,marker_target,pending_confirmation,updated_at FROM transactions
+    WHERE pending_confirmation = 1
+    ${keyword ? 'AND (instr(lower(summary),lower(?))>0 OR instr(lower(category_name),lower(?))>0 OR instr(lower(account_name),lower(?))>0)' : ''}
+    ${cursor ? 'AND (tx_date,id) < (?,?)' : ''}
+    ORDER BY tx_date DESC,id DESC LIMIT 51`).bind(...args).all();
+  const rows=result.results||[],transactions=rows.slice(0,50),last=transactions.at(-1);
+  return json({ok:true,keyword,transactions,nextCursor:rows.length>50?btoa(JSON.stringify([last.tx_date,last.id])):null});
+}
+
+async function handleConfirmTransaction(id, request, db, session) {
+  if (!['SUPER_ADMIN','ADMIN'].includes(session?.role)) return json({ok:false,error:'只有可記帳的管理員可以確認。'},403);
+  if (!validId(id)) return json({ok:false,error:'交易編號錯誤。'},400);
+  const body=await bodyJson(request);
+  if (!body || Object.keys(body).some(key=>!['categoryName','summary','expectedUpdatedAt'].includes(key))) return json({ok:false,error:'確認僅可填寫科目及摘要。'},400);
+  const row=await db.prepare('SELECT * FROM transactions WHERE id=?').bind(id).first();
+  if (!row) return json({ok:false,error:'找不到交易。'},404);
+  if (!row.pending_confirmation || body.expectedUpdatedAt !== row.updated_at) return json({ok:false,error:'此筆資料已更新或已確認，請重新整理。'},409);
+  const categoryName=normalizeName(body.categoryName),summary=withoutPendingPrefix(body.summary);
+  if (!categoryName || !summary) return json({ok:false,error:'請選擇科目並填寫摘要。'},400);
+  if ([...summary].reduce((sum,char)=>sum+(char.charCodeAt(0)>255?2:1),0)>40) return json({ok:false,error:'摘要不可超過 20 個中文字或 40 個英數字元。'},400);
+  if (!await db.prepare('SELECT id FROM categories WHERE kind=? AND name=?').bind(row.kind,categoryName).first()) return json({ok:false,error:'科目不存在或收支類型不符。'},400);
+  const now=new Date().toISOString();
+  const actor=JSON.stringify({employeeId:session.employee_id,employeeNo:session.employee_no,name:session.employee_name,role:session.role});
+  const result=await db.batch([
+    db.prepare(`INSERT INTO transaction_confirmation_audit(transaction_id,previous_category,previous_summary,category_name,summary,actor_json,created_at)
+      SELECT id,category_name,summary,?,?,?,? FROM transactions WHERE id=? AND pending_confirmation=1 AND updated_at=?`)
+      .bind(categoryName,summary,actor,now,id,body.expectedUpdatedAt),
+    db.prepare(`UPDATE transactions SET category_name=?,summary=?,pending_confirmation=0,
+      marker_target=CASE WHEN marker_color='pink' THEN 'summary' ELSE marker_target END,
+      marker_color=CASE WHEN marker_color='pink' THEN NULL ELSE marker_color END,updated_at=?
+      WHERE id=? AND pending_confirmation=1 AND updated_at=?`)
+      .bind(categoryName,summary,now,id,body.expectedUpdatedAt)
+  ]);
+  if (!result[1]?.meta?.changes) return json({ok:false,error:'此筆資料已更新，請重新整理。'},409);
+  return json({ok:true,transaction:{...row,category_name:categoryName,summary,pending_confirmation:0,
+    marker_color:row.marker_color==='pink'?null:row.marker_color,marker_target:row.marker_color==='pink'?'summary':row.marker_target,updated_at:now}});
 }
 
 async function normalizeAccountOrder(db) {

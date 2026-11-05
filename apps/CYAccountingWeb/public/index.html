@@ -47,8 +47,8 @@
   <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
   <link rel="stylesheet" href="/backup.css?rev=backup-refresh-feedback">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=ledger-viewport-overlay">
-  <link rel="stylesheet" href="/ledger-search.css?rev=central-search-controls">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=pending-entry-control">
+  <link rel="stylesheet" href="/ledger-search.css?rev=pending-search-controls">
   <link rel="stylesheet" href="/opening-balances.css?rev=compact-white-list">
   <link rel="stylesheet" href="/statistics.css?rev=transfer-settings-density">
   <link rel="stylesheet" href="/cyacc-appearance.css?rev=cyweb-account-light">
@@ -57,7 +57,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V1.0.4</span></p>
+      <p>CYAccounting Web <span class="version">V1.1.0</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -88,6 +88,7 @@
           <label class="account-source-field"><span>帳戶</span><select id="accountName" required></select></label>
           <label class="category-field"><span>科目</span><select id="categoryName" required></select></label>
           <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="40" placeholder="可留白，最多20個中文字"></label>
+          <div class="entry-pending-field"><label for="entryPendingConfirmation"><input id="entryPendingConfirmation" type="checkbox"><span>待確認</span></label></div>
           <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
           <button id="saveButton" class="primary" type="submit">儲存</button>
         </div>
@@ -182,9 +183,9 @@
   </dialog>
 
   <script src="/auth.js?rev=cyweb-theme-owner" defer></script>
-  <script src="/app.js?rev=marker-target-mutation" defer></script>
+  <script src="/app.js?rev=pending-confirmation-mutation" defer></script>
   <script src="/quick-entry.js?rev=summary-selection-guard" defer></script>
-  <script src="/ledger-tools.js?rev=central-ledger-search" defer></script>
+  <script src="/ledger-tools.js?rev=pending-confirmation-ledger" defer></script>
   <script src="/input-confirmation.js?rev=identified-entry-results" defer></script>
   <script src="/quick-entry-settings.js?rev=settings-general" defer></script>
   <script src="/category-management.js?rev=category-management" defer></script>
@@ -192,7 +193,7 @@
   <script src="/excel-import-ui.js?rev=excel-import-template" defer></script>
   <script src="/backup-ui.js?rev=backup-health-progress" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
-  <script src="/adaptive-ui.js?rev=transaction-marker-swipe" defer></script>
+  <script src="/adaptive-ui.js?rev=pending-entry-state" defer></script>
   <script src="/statistics-ui.js?rev=transfer-settings-density" type="module"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@ const context = vm.createContext({ CustomEvent: class { constructor(type, option
   setEntryKind(kind) { context.state.kind = kind; }, isLocked: () => locked,
   updateEntryLockState() {}, syncEntryUiAccountChoices() {},
   showMessage(text) { messages.push(text); }, jsonHeaders: () => ({}), renderDesktopLedger() {},
-  async api(path, request) { const body = JSON.parse(request.body); writes.push({ path, ...request, body }); if (fail) throw new Error('TEST_WRITE_FAILED'); return { transaction: { id: 10, tx_date: body.txDate } }; },
+  async api(path, request) { const body = JSON.parse(request.body); writes.push({ path, ...request, body }); if (fail) throw new Error('TEST_WRITE_FAILED'); return { transaction: { id: Number(path.split('/').at(-1))||10, tx_date: body.txDate } }; },
   switchTouchWorkspaceMobilePage() { throw new Error('desktop must not use mobile page navigation'); }
 });
 vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map(); const cyPendingTransactionCreates = new Map(); let cyTransactionCreateId = 0; let cyEntryDraftRevision = 0;\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);

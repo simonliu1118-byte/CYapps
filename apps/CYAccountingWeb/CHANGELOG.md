@@ -1,8 +1,15 @@
 # CYAccountingWeb 版本與變更紀錄
 
-> 目前正式發行原始碼版本身分為 **V1.0.0（Build 0）**，使用者於 2026/10/30 明確核准 Major 升版；D1 schema **15**，無新增 migration。本版是 V0.25.18 Build 2 已穩定功能的正式產品世代，不是新帳本或新 API。歷史 [production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 僅證明**上一代**正式部署；1.0.0 本身須查 [Production](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 及 [Stable Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 的同 SHA 成功結果，不能由本文件取代驗證。所有歷史段落依當時版本解讀，不得當成現行權限／鎖帳政策。
+> 歷史 V1.0.0 發行基準為 **V1.0.0（Build 0）**，使用者於 2026/10/30 明確核准 Major 升版；D1 schema **15**，無新增 migration。本版是 V0.25.18 Build 2 已穩定功能的正式產品世代，不是新帳本或新 API。歷史 [production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 僅證明**上一代**正式部署；1.0.0 本身須查 [Production](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 及 [Stable Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 的同 SHA 成功結果，不能由本文件取代驗證。所有歷史段落依當時版本解讀，不得當成現行權限／鎖帳政策。
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
+
+## V1.1.0 — 2026/11/05
+
+- 桌機新增待確認勾選、粉色摘要與不限日期的索引搜尋；手動標記移除粉色選項。
+- 摘要旁確認按鈕可填科目與摘要，鎖帳例外只適用此動作；成功後解除並保留稽核，取消不寫入。
+- Schema 16：狀態、部分索引、確認稽核；備份／還原共用既有 mapping 並支援舊備份。
+- 整合 PR #597，搜尋數量移至清單資訊列。完整邊界及驗證見 [V1.1.0.txt](V1.1.0.txt)。
 
 ## V1.0.0 — 2026/10/30
 

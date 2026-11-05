@@ -31,6 +31,7 @@ function startLedgerTools() {
   cyLedgerToolsStarted = true;
   setupLedgerToolbar();
   setupLedgerPeriodSearch();
+  setupPendingConfirmationDialog();
   bindLedgerToolbar();
   window.addEventListener('cyacc:entry-submitted', () => {
     cyLedgerSavedTarget = null;
@@ -86,6 +87,7 @@ function setupLedgerToolbar() {
       <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要" autocomplete="off" inputmode="search" enterkeyhint="search">
       <button class="secondary compact ledger-search-submit" type="submit">搜尋</button>
       <button id="ledgerPeriodSearchButton" class="secondary compact" type="button">全帳簿搜尋</button>
+      <button id="ledgerPendingSearchButton" class="secondary compact" type="button">搜尋待確認</button>
       <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
     </form>
     <div class="ledger-view-tools">
@@ -216,13 +218,76 @@ function setLedgerPeriodSearchFields(criteria) {
   }
 }
 
+function setupPendingConfirmationDialog() {
+  const dialog=document.createElement('dialog');
+  dialog.id='pendingConfirmationDialog';
+  dialog.className='modal pending-confirmation-dialog';
+  dialog.setAttribute('aria-labelledby','pendingConfirmationTitle');
+  dialog.innerHTML=`<div class="modal-header"><h2 id="pendingConfirmationTitle">確認待確認項目</h2>
+    <button type="button" class="icon-button" data-close-dialog="pendingConfirmationDialog" aria-label="關閉">×</button></div>
+    <p class="pending-confirmation-context"></p><form class="pending-confirmation-form">
+    <label>科目<select name="categoryName" required></select></label>
+    <label>摘要<input name="summary" type="text" maxlength="40" required></label>
+    <p class="dialog-message" role="status"></p><div class="modal-actions">
+      <button type="button" class="secondary" data-close-dialog="pendingConfirmationDialog">取消</button>
+      <button type="submit" class="primary">確認完成</button></div></form>`;
+  document.body.append(dialog);
+  let selected=null,busy=false;
+  const message=dialog.querySelector('[role="status"]');
+  const category=dialog.querySelector('[name="categoryName"]');
+  const summary=dialog.querySelector('[name="summary"]');
+  dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+  dialog.addEventListener('close',()=>{if(!busy)selected=null;});
+  els.transactionRows.addEventListener('click',event=>{
+    const button=event.target.closest('[data-confirm-transaction]');
+    if (!button||busy||document.body.dataset.cyaccReadOnly==='true') return;
+    const id=Number(button.dataset.confirmTransaction);
+    const rows=cyLedgerPeriodSearch.active?cyLedgerPeriodSearch.pages[cyLedgerPeriodSearch.page]?.transactions:state.transactions;
+    selected=rows?.find(row=>Number(row.id)===id&&Number(row.pending_confirmation)===1);
+    if (!selected) return;
+    category.replaceChildren(new Option('選擇科目',''));
+    for (const item of state.categories.filter(item=>item.kind===selected.kind)) {
+      category.add(new Option((item.group_name?item.group_name+'／':'')+item.name,item.name));
+    }
+    category.value=selected.category_name;
+    summary.value=pendingSummaryBody(selected.summary);
+    dialog.querySelector('.pending-confirmation-context').textContent=`${selected.tx_date} · ${selected.account_name} · ${money(selected.amount)}`;
+    message.textContent='';
+    dialog.showModal();
+    summary.focus();
+  });
+  dialog.querySelector('form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    if (!selected||busy) return;
+    busy=true;
+    const values={categoryName:category.value,summary:summary.value};
+    dialog.querySelectorAll('button,input,select').forEach(node=>{node.disabled=true;});
+    message.textContent='儲存中…';
+    try {await persistPendingConfirmation(selected,values);dialog.close();selected=null;}
+    catch(error){message.textContent=error.message||'確認失敗，請稍後再試。';}
+    finally {busy=false;dialog.querySelectorAll('button,input,select').forEach(node=>{node.disabled=false;});}
+  });
+  window.addEventListener('cyacc:transaction-confirmed',event=>{
+    const transaction=event.detail.transaction;
+    if (cyLedgerPeriodSearch.busy) {
+      cyLedgerPeriodSearch.requestId++;
+      setLedgerPeriodSearchBusy(false);
+    }
+    for (const page of cyLedgerPeriodSearch.pages) {
+      page.transactions=page.transactions.map(row=>Number(row.id)===Number(transaction.id)?transaction:row)
+        .filter(row=>cyLedgerPeriodSearch.criteria?.pending?Number(row.pending_confirmation)===1
+          : !cyLedgerPeriodSearch.criteria?.q || [row.summary,row.category_name,row.account_name].some(value=>String(value||'').toLowerCase().includes(cyLedgerPeriodSearch.criteria.q.toLowerCase())));
+    }
+  });
+}
+
 function openLedgerPeriodSearch() {
   if (!window.cyIsDesktopInteractionWorkspace?.()) return;
   const dialog = document.querySelector('#ledgerPeriodSearchDialog');
   const start = document.querySelector('#ledgerPeriodSearchStart');
   const end = document.querySelector('#ledgerPeriodSearchEnd');
   const keyword = document.querySelector('#ledgerPeriodSearchKeyword');
-  setLedgerPeriodSearchFields(cyLedgerPeriodSearch.criteria || {
+  setLedgerPeriodSearchFields((cyLedgerPeriodSearch.criteria?.pending?null:cyLedgerPeriodSearch.criteria) || {
     start: start.value || els.monthFilter.value, end: end.value || els.monthFilter.value,
     q: keyword.value || document.querySelector('#ledgerSummarySearch')?.value || ''
   });
@@ -262,7 +327,11 @@ async function searchLedgerPeriod(reset, criteriaOverride = null) {
   const dialog = document.querySelector('#ledgerPeriodSearchDialog');
   const message = document.querySelector(dialog.open ? '#ledgerPeriodSearchMessage' : '#ledgerPeriodSearchStatus');
   let criteria = cyLedgerPeriodSearch.criteria;
-  if (reset) {
+  if (reset && criteriaOverride?.pending) {
+    const q=String(criteriaOverride.q||'').trim();
+    if (q.length>100) {message.textContent='關鍵字最多 100 字。';return;}
+    criteria={pending:true,q};
+  } else if (reset) {
     const start = criteriaOverride?.start ?? document.querySelector('#ledgerPeriodSearchStart').value;
     const end = criteriaOverride?.end ?? document.querySelector('#ledgerPeriodSearchEnd').value;
     const keyword = String(criteriaOverride?.q ?? document.querySelector('#ledgerPeriodSearchKeyword').value).trim();
@@ -288,7 +357,7 @@ async function searchLedgerPeriod(reset, criteriaOverride = null) {
   setLedgerPeriodSearchBusy(true);
   message.textContent = '搜尋中…';
   try {
-    const result = await api(`/api/transactions/search?${query.toString()}`);
+    const result = await api(`/api/transactions/${criteria.pending?'pending-confirmation':'search'}?${query.toString()}`);
     if (requestId !== cyLedgerPeriodSearch.requestId) return;
     if (reset) cyLedgerPeriodSearch.pages = [];
     cyLedgerPeriodSearch.criteria = criteria;
@@ -299,7 +368,7 @@ async function searchLedgerPeriod(reset, criteriaOverride = null) {
     const input = document.querySelector('#ledgerSummarySearch');
     input.value = criteria.q;
     input.placeholder = '搜尋摘要、科目或帳戶';
-    setLedgerPeriodSearchFields(criteria);
+    if (!criteria.pending) setLedgerPeriodSearchFields(criteria);
     message.textContent = '';
     setLedgerPeriodSearchBusy(false);
     if (dialog.open) dialog.close();
@@ -319,27 +388,32 @@ function renderLedgerPeriodSearch() {
   window.cyCloseTransactionMarkerPicker?.();
   window.cyCloseLedgerBalancePopover?.();
   window.cyLedgerBalanceBreakdowns = new Map();
-  els.monthSummary.innerHTML = `<span class="ledger-summary-search ledger-period-query-label"><strong>全帳簿搜尋</strong> ${escapeHtml(criteria.start.replace('-', '/'))}–${escapeHtml(criteria.end.replace('-', '/'))}　「${escapeHtml(criteria.q)}」</span>`;
+  const label=criteria.pending?'待確認項目（不限日期）':`全帳簿搜尋 ${criteria.start.replace('-', '/')}–${criteria.end.replace('-', '/')}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-search ledger-period-query-label"><strong>${escapeHtml(label)}</strong>${criteria.q?`　「${escapeHtml(criteria.q)}」`:''}</span>`;
   const display = document.querySelector('#ledgerDisplayMonth');
-  if (display) display.textContent = '目前顯示｜全帳簿搜尋';
+  if (display) display.textContent = criteria.pending?'目前顯示｜待確認':'目前顯示｜全帳簿搜尋';
   updateLedgerHeader();
-  const controls = document.querySelector('#ledgerPeriodSearchControls');
-  controls.hidden = false;
+  const controls=document.querySelector('#ledgerPeriodSearchControls');
+  controls.hidden=false;
   controls.classList.remove('ledger-month-search-only');
-  const searchCount = document.querySelector('#ledgerSearchCount');
-  if (searchCount) { searchCount.textContent = ''; searchCount.hidden = true; }
+  const searchCount=document.querySelector('#ledgerSearchCount');
+  if (searchCount) {searchCount.textContent='';searchCount.hidden=true;}
   document.querySelector('#ledgerPeriodSearchStatus').textContent = '';
-  document.querySelector('#ledgerPeriodSearchPage').textContent = rows.length
+  document.querySelector('#ledgerPeriodSearchPage').textContent = criteria.pending
+    ? `第 ${cyLedgerPeriodSearch.page+1} 頁 · 本頁 ${rows.length} 筆` : rows.length
     ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '沒有符合的記錄';
   if (rows.length) writeLedgerRows(rows.map(tx => renderLedgerRow(tx, null, new Map(), false, true)).join(''), {
     reason: 'period-search', visibleCount: rows.length
   });
-  else renderLedgerMessage('這段期間沒有符合的記錄。', 'period-search-empty');
+  else renderLedgerMessage(criteria.pending?'本頁沒有待確認項目。':'這段期間沒有符合的記錄。', 'period-search-empty');
   setLedgerPeriodSearchBusy(cyLedgerPeriodSearch.busy);
 }
 
 function bindLedgerToolbar() {
   document.querySelector('#ledgerPeriodSearchButton')?.addEventListener('click', openLedgerPeriodSearch);
+  document.querySelector('#ledgerPendingSearchButton')?.addEventListener('click',()=>{
+    if (window.cyIsDesktopInteractionWorkspace?.()) void searchLedgerPeriod(true,{pending:true,q:''});
+  });
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
@@ -643,16 +717,10 @@ function renderDesktopLedger() {
   ).sort(compareLedgerDisplayOrder);
 
   els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>`;
-  const searchCount = document.querySelector('#ledgerSearchCount');
-  if (searchCount) {
-    searchCount.textContent = query ? `搜尋 ${visible.length}/${allTransactions.length} 筆` : '';
-    searchCount.hidden = !query;
-  }
-  const controls = document.querySelector('#ledgerPeriodSearchControls');
-  if (controls) {
-    controls.hidden = !query;
-    controls.classList.toggle('ledger-month-search-only', Boolean(query));
-  }
+  const searchCount=document.querySelector('#ledgerSearchCount');
+  if (searchCount) {searchCount.textContent=query?`搜尋 ${visible.length}/${allTransactions.length} 筆`:'';searchCount.hidden=!query;}
+  const controls=document.querySelector('#ledgerPeriodSearchControls');
+  if (controls) {controls.hidden=!query;controls.classList.toggle('ledger-month-search-only',Boolean(query));}
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerHeader();
@@ -816,7 +884,12 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const highlightedCategory = markerName && markerTarget === 'category'
     ? `<mark class="transaction-text-highlight" data-marker-color="${markerColor}" title="${markTitle}">${categoryText}</mark>`
     : categoryText;
-  const highlightedSummary = markerName && markerTarget === 'summary'
+  const pending=Number(tx.pending_confirmation)===1;
+  const pendingAction=pending&&id>0&&document.body.dataset.cyaccReadOnly!=='true'
+    ? `<button type="button" class="pending-confirm-button" data-confirm-transaction="${id}">確認</button>`:'';
+  const highlightedSummary = pending
+    ? `<mark class="transaction-text-highlight" data-marker-color="pink"><span>(待確認)</span>${pendingAction}${escapeHtml(pendingSummaryBody(tx.summary))}</mark>`
+    : markerName && markerTarget === 'summary'
     ? `<mark class="transaction-text-highlight" data-marker-color="${markerColor}" title="${markTitle}">${summaryText}</mark>`
     : summaryText;
   const markerButtonLabel = markerName ? `更改標記（${markTitle}）` : '標記';
@@ -902,7 +975,7 @@ function openTransactionMarkerPicker(button) {
   colorLabel.className = 'transaction-marker-picker-label';
   colorLabel.textContent = '螢光顏色';
   cyMarkerPicker.append(colorLabel);
-  const options = [['orange', '螢光橘'], ['pink', '螢光粉'],
+  const options = [['orange', '螢光橘'],
     ['yellow', '螢光黃'], ['green', '螢光綠'], [null, '取消標記']];
   for (const [color, label] of options) {
     const option = document.createElement('button');
