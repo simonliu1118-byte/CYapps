@@ -16,9 +16,12 @@ internal sealed partial class ItemQueryService
         new TabStrip(["基本選項", "進階選項", "系統選項"], Origin: 16, Pitch: 64));
 
     private const int F2WaitMs = 10000;
-    private static readonly string[] StocktakeColumns = ["儲位", "批號", "盤點數量"];
+    private static readonly (string Name, string Order)[] StocktakeColumns = [("儲位", "7"), ("批號", "11"), ("盤點數量", "14")];
 
-    /// <summary>Every 盤點底稿 in the F2 list; the condition window is closed afterwards.</summary>
+    /// <summary>
+    /// Every 盤點底稿 in the F2 list. The condition window stays open for the sheets read next
+    /// (user 2026-10-29: INVR11 was opened twice); <see cref="CloseStocktakeReportAsync"/> closes it.
+    /// </summary>
     public Task<IReadOnlyList<StocktakeSheet>> ListStocktakeSheetsAsync(IProgress<string> progress, CancellationToken cancellationToken) =>
         GuardErpMessagesAsync(async () =>
         {
@@ -38,12 +41,19 @@ internal sealed partial class ItemQueryService
                 _log.Info("stocktake", $"F2 sheets={sheets.Count}");
                 return (IReadOnlyList<StocktakeSheet>)sheets.Select(s => s.Sheet).ToList();
             }
-            finally
+            catch
             {
-                if (!await CloseReportWindowsAsync(report, null, leftover: false))
-                    _log.Warn("stocktake", "INVR11 conditions left open");
+                await CloseStocktakeReportAsync();
+                throw;
             }
         });
+
+    /// <summary>Closes INVR11 (condition window and report) left by the list or a failure.</summary>
+    public async Task CloseStocktakeReportAsync()
+    {
+        if (!await CloseReportWindowsAsync(StocktakeReport, null, leftover: false))
+            _log.Warn("stocktake", "INVR11 windows left open");
+    }
 
     /// <summary>One sheet's lines from the INVR11 report.</summary>
     public Task<StocktakeDetail> ReadStocktakeSheetAsync(string sheetNo, IProgress<string> progress, CancellationToken cancellationToken) =>
@@ -51,7 +61,7 @@ internal sealed partial class ItemQueryService
         {
             var sheets = await RunReportAsync(StocktakeReport, $"盤點底稿 {sheetNo}",
                 (dialog, ct) => FillStocktakeReportAsync(dialog, sheetNo, ct), progress, cancellationToken,
-                prepare: ShowStocktakeColumnsAsync)
+                prepare: ShowStocktakeColumnsAsync, reuseConditions: true)
                 ?? throw new InvalidDataException($"INVR11 盤點底稿 {sheetNo} 沒有資料。");
             var detail = StocktakeQuery.ParseExport(sheetNo, sheets);
             _log.Info("stocktake", $"INVR11 sheet={sheetNo} lines={detail.Rows.Count}");
@@ -149,6 +159,8 @@ internal sealed partial class ItemQueryService
             using (var image = ScreenCapture.Capture(p.ToRectangle()))
                 tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: false);
             total ??= StocktakeQuery.ParseF2Total(tokens);
+            if (total is null && page == 0) // the footer 「1 / 4」 was not read (V1.3.0 LOG: total=?)
+                _log.Info("stocktake", "F2 bottom lines=\"" + string.Join(" | ", StocktakeQuery.Lines(tokens).TakeLast(3).Select(l => l.Text)) + "\"");
             var read = StocktakeQuery.ParseF2(tokens);
             var added = 0;
             foreach (var row in read)
@@ -198,18 +210,31 @@ internal sealed partial class ItemQueryService
 
         async Task<Dictionary<string, (string Shown, Point Cell)>> ReadAsync()
         {
+            await ThrowIfErpMessageAsync(viewer); // SMReportPreviewC's own error box (V1.3.0: Access violation)
             IReadOnlyList<OcrToken> tokens;
             using (var image = ScreenCapture.Capture(d.ToRectangle()))
                 tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
             if (OcrWordFinder.FindWord(tokens, "顯示") is not { } header)
+            {
+                _log.Warn("stocktake", $"欄位資訊 tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
                 throw new InvalidOperationException("「欄位資訊」找不到「顯示」欄。");
+            }
+            var order = OcrWordFinder.FindWord(tokens, "順序");
             var x = header.Left + header.Width / 2;
             var result = new Dictionary<string, (string, Point)>();
-            foreach (var name in StocktakeColumns)
+            foreach (var (name, number) in StocktakeColumns)
             {
-                // Glyphs must be contiguous, so 「盤點數量」 is not found in 「盤點包裝數量」.
-                if (OcrWordFinder.FindWord(tokens, name) is not { } label)
+                // By name; OCR may misread it (V1.3.0 LOG: 「儲位」 missed), then by its 順序 number
+                // (screenshot 108: 儲位 7, 批號 11, 盤點數量 14).
+                var row = OcrWordFinder.FindWord(tokens, name) ?? (order is { } o
+                    ? tokens.Where(t => t.Text.Trim() == number && Math.Abs(t.Rect.Left + t.Rect.Width / 2 - (o.Left + o.Width / 2)) < 30)
+                        .Select(t => (Rectangle?)t.Rect).FirstOrDefault()
+                    : null);
+                if (row is not { } label)
+                {
+                    _log.Warn("stocktake", $"欄位資訊 tokens=\"{string.Join(" ", tokens.Select(t => t.Text))}\"");
                     throw new InvalidOperationException($"「欄位資訊」找不到「{name}」。");
+                }
                 var y = label.Top + label.Height / 2;
                 var shown = StocktakeQuery.CellText(tokens, y, x, Math.Max(12, header.Width / 2)).ToUpperInvariant();
                 result[name] = (shown, new Point(d.Left + x, d.Top + y));
@@ -218,17 +243,20 @@ internal sealed partial class ItemQueryService
             return result;
         }
 
-        foreach (var (name, (shown, cell)) in await ReadAsync())
+        // One cell at a time, slowly, each read back before the next: the report program crashed
+        // (Access violation in SMReportPreviewC) when three were clicked 0.25 s apart (V1.3.0, 2026-10-29).
+        foreach (var (name, _) in StocktakeColumns)
         {
+            var (shown, cell) = (await ReadAsync())[name];
             if (shown == "Y") continue;
             if (shown != "N")
                 throw new InvalidOperationException($"「欄位資訊」的「{name}」顯示欄讀不出 Y 或 N（讀到「{shown}」）。");
             SafeClick(columns, cell);
-            await Pace.Delay(250, cancellationToken);
+            _log.Info("stocktake", $"欄位資訊 {name} N clicked");
+            await Pace.Delay(1000, cancellationToken);
+            if ((await ReadAsync())[name].Shown != "Y")
+                throw new InvalidOperationException($"「欄位資訊」的「{name}」點了之後沒有變成 Y。");
         }
-        var after = await ReadAsync();
-        if (after.FirstOrDefault(r => r.Value.Shown != "Y") is { Key: { } off })
-            throw new InvalidOperationException($"「欄位資訊」的「{off}」沒有切成 Y。");
         await ClickButtonAsync(columns, "確定", "「欄位資訊」的「確定」", cancellationToken);
         if (!await WaitUntilAsync(() => !NativeMethods.IsWindow(columns) || !NativeMethods.IsWindowVisible(columns), 3000, cancellationToken))
             throw new InvalidOperationException("按「確定」後「欄位資訊」沒有關閉。");
