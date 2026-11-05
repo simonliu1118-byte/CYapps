@@ -28,6 +28,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
     private readonly System.Windows.Forms.Timer connectionTimer = new() { Interval = 60_000 };
     private bool checkingConnections;
+    private StartupCheckForm? startupCheck;
     private ConnectionBlockForm? connectionBlocker;
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
@@ -102,27 +103,36 @@ internal sealed class MainForm : Form
         ApplyConnectionControls(new(false, false, true));
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
-            // Existing bound devices are checked before an empty Employee cache
-            // can send startup into initial setup. Fresh installs retain the wizard.
-            var initial = repository.Settings.LoadOrCreate();
-            var checkedBoundDevice = initial.CloudMode != CloudModes.LocalOnly && initial.CloudDeviceId.Length != 0;
-            if (checkedBoundDevice)
+            try
             {
-                // The startup blocker also needs the existing recovery timer.
+                // Existing bound devices are checked before an empty Employee cache
+                // can send startup into initial setup. Fresh installs retain the wizard.
+                var initial = repository.Settings.LoadOrCreate();
+                var checkedBoundDevice = initial.CloudMode != CloudModes.LocalOnly && initial.CloudDeviceId.Length != 0;
+                if (checkedBoundDevice)
+                {
+                    // The startup blocker also needs the existing recovery timer.
+                    connectionTimer.Start();
+                    ShowStartupCheck();
+                    await RefreshConnectionsAsync();
+                    if (shuttingDown) return;
+                }
+                if (!EnsureInitialSetup()) return;
+                UpdateEnvironment();
+                invoicePage.RefreshEnvironment();
                 connectionTimer.Start();
-                await RefreshConnectionsAsync();
+                if (!checkedBoundDevice)
+                {
+                    ShowStartupCheck();
+                    await RefreshConnectionsAsync();
+                }
                 if (shuttingDown) return;
+                await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
+                if (shuttingDown) return;
+                await RunStartupSyncAsync();
+                if (!shuttingDown) syncTimer.Start();
             }
-            if (!EnsureInitialSetup()) return;
-            UpdateEnvironment();
-            invoicePage.RefreshEnvironment();
-            connectionTimer.Start();
-            if (!checkedBoundDevice) await RefreshConnectionsAsync();
-            if (shuttingDown) return;
-            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
-            if (shuttingDown) return;
-            await RunStartupSyncAsync();
-            if (!shuttingDown) syncTimer.Start();
+            finally { FinishStartupCheck(); }
         };
     }
 
@@ -975,6 +985,7 @@ internal sealed class MainForm : Form
                     : state.CloudAvailable ? "雲端可連線；權限操作仍依當次驗證。"
                     : "雲端暫時不可用。光貿正常時沿用原有可信快取驗證；中央帳號／裝置異動須等待雲端恢復。\n" + state.CloudProblem,
                 showToolTip: !state.CloudAvailable);
+        FinishStartupCheck();
         if (!state.BlockAll)
         {
             connectionBlocker?.RestoreConnection();
@@ -986,6 +997,19 @@ internal sealed class MainForm : Form
         try { blocker.ShowDialog(Form.ActiveForm ?? this); }
         finally { connectionBlocker = null; }
         if (blocker.ExitRequested && !shuttingDown) Close();
+    }
+
+    private void ShowStartupCheck()
+    {
+        startupCheck = new StartupCheckForm();
+        startupCheck.Show(this);
+    }
+
+    private void FinishStartupCheck()
+    {
+        var current = startupCheck;
+        startupCheck = null;
+        current?.Close();
     }
 
     private void ApplyConnectionControls(ServiceConnectionState state)
@@ -1044,6 +1068,7 @@ internal sealed class MainForm : Form
     {
         if (shuttingDown) return;
         shuttingDown = true;
+        FinishStartupCheck();
         syncTimer.Stop();
         connectionTimer.Stop();
         syncLifetime.Cancel();

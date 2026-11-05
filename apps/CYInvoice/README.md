@@ -7,7 +7,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程：**V3.1.46／BUILD0**；本機程式與必要Windows／Cloud／Governance CI通過，工程包不是正式Release。
+- 目前工程：**V3.1.47／BUILD0**；新增前景轉圈「啟動檢查中」提示，檢查結束自動收起。本機建置、啟動與96 DPI提示檢查通過；遠端封裝結果以對應PR的CI為準，工程包不是正式Release。
 - 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
 - 正式Release：**[V3.1.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.1.0)**。本次未建立新tag／Release或覆寫桌面安裝。
 - 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
