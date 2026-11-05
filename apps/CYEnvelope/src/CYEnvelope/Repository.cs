@@ -30,6 +30,10 @@ public sealed class Repository
         }
         if (Formats().Count == 0) SaveFormat(new EnvelopeFormat { Id = "format-15k" });
         else UpgradePristineBuiltIn();
+        // Add the new large stock envelope even to existing databases, without resetting 15K,
+        // user-customized formats, default selection or existing contacts.
+        if (!Formats().Any(f => f.Id == EnvelopeFormat.StandardLargeId))
+            SaveFormat(EnvelopeFormat.CreateStandardLarge());
         DailyBackup();
     }
 

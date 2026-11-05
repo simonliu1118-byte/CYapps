@@ -42,7 +42,26 @@ var path = Path.Combine(Path.GetTempPath(), "CYEnvelope-tests-" + Guid.NewGuid()
 try
 {
     var repository = new Repository(path);
-    Check(repository.Formats().Count == 1, "initial format");
+    Check(repository.Formats().Count == 2, "15K and standard-large stock formats are seeded");
+    var large = repository.Formats().Single(f => f.Id == EnvelopeFormat.StandardLargeId);
+    Check(large.Name == "標準大信封" && large.WidthMm == 120 && large.HeightMm == 230 &&
+          large.PreviewArtwork == EnvelopeFormat.StandardLargeArtworkId && !large.IsDefault &&
+          large.PostalCode.Rect.Y == 12 && large.Recipient.Rect.X == 44,
+          "new stock format and real-world positioning");
+    Check(repository.Formats().Single(f => f.IsDefault).Id == "format-15k", "existing 15K stays the default");
+    using (var artwork = typeof(EnvelopeRenderer).Assembly.GetManifestResourceStream("CYEnvelope.StandardLargePreview.png"))
+    {
+        Check(artwork is not null, "real red/white reference art is embedded in executable");
+        Check(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artwork!)).Equals(
+            "6E62EF7994E73941781EFFFB2497C48452F873509B9F209470D95BF865CE898E", StringComparison.Ordinal),
+            "embedded artwork matches approved red/white image SHA-256");
+    }
+    var largeData = new PrintData { Recipient = "範例收件人", Address = "高雄市範例路一號", PostalCode = "800" };
+    var largePreview = EnvelopeRenderer.Draw(large, largeData, true);
+    var largePrint = EnvelopeRenderer.Draw(large, largeData, false);
+    Check(largePreview.ContentBounds.Width > largePrint.ContentBounds.Width,
+          "preprinted red artwork appears ONLY in preview, not in the printer output");
+    Check(new Repository(path).Formats().Count == 2, "reopen does not duplicate stock formats");
     var contact = new Contact { Name = "測試對象" };
     contact.Addresses.Add(new ContactAddress { Label = "公司", Value = "高雄市新興區", PostalCode = "800" });
     contact.Addresses.Add(new ContactAddress { Label = "住家", Value = "台北市中正區", PostalCode = "100" });
@@ -55,7 +74,7 @@ try
     Check(reloaded.Addresses.Count == 2 && reloaded.Phones.Count == 1, "multiple addresses and phones");
     Check(reloaded.Addresses[1].LastPhoneId == reloaded.Phones[0].Id, "last phone per address");
     Check(reloaded.LastDeliveryIds.SequenceEqual(["delivery-1"]), "last mail option");
-    var format = repository.Formats().Single();
+    var format = repository.Formats().Single(f => f.Id == "format-15k");
     var originalRecipient = (format.Recipient.Rect.X, format.Recipient.Rect.Y,
         format.Recipient.Rect.Width, format.Recipient.Rect.Height);
     FormatGeometry.Rotate(format);
@@ -72,7 +91,7 @@ try
         "portrait roundtrip preserves postal boxes");
     format.Recipient.Rect.X += 1;
     repository.SaveFormat(format);
-    var reopened = new Repository(path).Formats().Single();
+    var reopened = new Repository(path).Formats().Single(f => f.Id == "format-15k");
     Check(reopened.Recipient.Rect.X == format.Recipient.Rect.X, "user-adjusted built-in format survives reopening");
     var preview = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, true);
     var output = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, false);
@@ -181,10 +200,10 @@ try
     };
     var legacy = new Repository(legacyPath);
     legacy.SaveFormat(Build3());
-    Check(new Repository(legacyPath).Formats().Single().Recipient.CenterHorizontally, "unedited Build 3 layout upgrades to the current defaults");
+    Check(new Repository(legacyPath).Formats().Single(f => f.Id == "format-15k").Recipient.CenterHorizontally, "unedited Build 3 layout upgrades to the current defaults");
     var edited = Build3(); edited.Address.Rect.X += 1;
     legacy.SaveFormat(edited);
-    Check(new Repository(legacyPath).Formats().Single().Address.Rect.X == 73, "edited layout is kept as the user left it");
+    Check(new Repository(legacyPath).Formats().Single(f => f.Id == "format-15k").Address.Rect.X == 73, "edited layout is kept as the user left it");
 
     var builtIn = new EnvelopeFormat();
     Check(EnvelopeRenderer.Overflows(builtIn, new PrintData { Recipient = "王小明", Address = "高雄市新興區中正三路1號" }).Count == 0,
