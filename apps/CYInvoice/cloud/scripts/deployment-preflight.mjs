@@ -43,7 +43,6 @@ export function checkSettings(settings, config, {allowCyId = false} = {}) {
     new Set(bindings.map(b => b.name)).size === bindings.length, 'BINDING_NAMES_INVALID');
   const named = name => bindings.filter(b => b.name === name);
   const plain = name => named(name).find(b => b.type === 'plain_text')?.text;
-  check(plain('APP_ENV') === 'development', 'DEVELOPMENT_ENVIRONMENT_REQUIRED');
   check(plain('API_VERSION') === '1', 'API_COMPATIBILITY_REQUIRED');
   check(named('CYID_ENABLED').length === 0 ||
     (named('CYID_ENABLED').length === 1 && ['false', ...(allowCyId ? ['true'] : [])].includes(plain('CYID_ENABLED'))),
@@ -52,8 +51,11 @@ export function checkSettings(settings, config, {allowCyId = false} = {}) {
     named('DB').length === 1 && named('DB')[0].type === 'd1' &&
     named('DB')[0].id === config.d1_databases?.[0]?.database_id, 'ORIGINAL_DATABASE_BINDING_REQUIRED');
   // Unknown resources must not be silently removed by the additive deployment.
-  check(bindings.every(b => ['plain_text', 'secret_text', 'd1', 'ratelimit', 'service'].includes(b.type)),
+  check(bindings.every(b => ['plain_text', 'secret_text', 'd1', 'ratelimit', 'service', 'version_metadata'].includes(b.type)),
     'UNREVIEWED_RESOURCE_BINDING');
+  const metadata = bindings.filter(b => b.type === 'version_metadata');
+  check(metadata.length <= 1 && metadata.every(b => b.name === 'CF_VERSION_METADATA'),
+    'VERSION_METADATA_BINDING_INVALID');
   const secrets = new Set(bindings.filter(b => b.type === 'secret_text').map(b => b.name));
   check(['BOOTSTRAP_KEY', 'OTP_PEPPER', 'EMAIL_FROM'].every(name => secrets.has(name)), 'RUNTIME_SECRETS_REQUIRED');
   const provider = plain('EMAIL_PROVIDER') ?? 'brevo';
@@ -74,7 +76,7 @@ export function checkSettings(settings, config, {allowCyId = false} = {}) {
 export function bindingState(bindings) {
   check(Array.isArray(bindings), 'SETTINGS_BINDINGS_INVALID');
   return bindings.map(b => {
-    if (b.type === 'secret_text') return { name:b.name, type:b.type };
+    if (b.type === 'secret_text' || b.type === 'version_metadata') return { name:b.name, type:b.type };
     if (b.type === 'plain_text') return { name:b.name, type:b.type, text:b.text };
     if (b.type === 'd1') return { name:b.name, type:b.type, id:b.id };
     if (b.type === 'ratelimit') return { name:b.name, type:b.type,
@@ -85,6 +87,8 @@ export function bindingState(bindings) {
   }).sort((a,b) => a.name.localeCompare(b.name));
 }
 
+const runtimeVars = bindings => Object.fromEntries(bindings
+  .filter(b => b.type === 'plain_text' && b.name !== 'APP_ENV').map(b => [b.name,b.text]));
 const identityScopeNames = ['IDENTITY_APPLICATION_ID', 'IDENTITY_WORKSPACE_ID', 'IDENTITY_CYINVOICE_WORKSPACE_ID'];
 const serviceBindings = bindings => bindings.filter(b => b.type === 'service');
 const configServices = services => (services ?? []).map(({binding, ...b}) => ({name:binding, type:'service', ...b}));
@@ -141,11 +145,12 @@ export function resolveActiveCyId(settings, worker, originalWorkspaces) {
 }
 
 export function preservedDeployConfig(config, settings, activating = false) {
-  const vars = Object.fromEntries(settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
+  const vars = runtimeVars(settings.bindings);
   const services = serviceBindings(settings.bindings).map(({name,type,...b}) => ({binding:name,...b}));
-  // Code updates preserve every active runtime var, including schema, feature
-  // gates and fixed scopes. First-time preparation still uses source defaults.
+  // Retire the consumer label; preserve schema, feature gates and fixed scopes.
+  // First-time preparation still uses source defaults.
   const merged = vars.CYID_ENABLED === 'true' ? {...config.vars,...vars} : {...vars,...config.vars};
+  delete merged.APP_ENV;
   return {...config, vars:{...merged,CYID_ENABLED:activating?'true':vars.CYID_ENABLED??'false'},
     ...(services.length ? {services} : {})};
 }
@@ -155,7 +160,7 @@ export function preservedDeployConfig(config, settings, activating = false) {
 export function applyAllowanceActivation(config,settings,intent) {
   if(!intent)return config;
   check(['enable','disable'].includes(intent),'ALLOWANCE_ACTIVATION_INTENT_INVALID');
-  const vars=Object.fromEntries(settings.bindings.filter(b=>b.type==='plain_text').map(b=>[b.name,b.text]));
+  const vars=runtimeVars(settings.bindings);
   check(vars.CYID_ENABLED==='true' && ['22','23'].includes(vars.SCHEMA_VERSION) && vars.COMPANY_SETTINGS_ENABLED==='true','ALLOWANCE_ACTIVATION_RUNTIME_INVALID');
   check(settings.bindings.some(b=>b.name==='COMPANY_SETTINGS_KEY_HEX' && b.type==='secret_text'),
     'ALLOWANCE_ACTIVATION_COMPANY_KEY_REQUIRED');
@@ -274,7 +279,8 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     verifyPreparedCyId(config, audit.settings, audit.cyIdActivation, audit.state?.workspaces);
   }
   check(typeof code === 'string' && code.length > 0 && !code.includes('PROBE_AUTH_KEY'), 'BUSINESS_BUNDLE_REQUIRED');
-  check(config.vars?.APP_ENV === 'development' && config.vars?.API_VERSION === '1' &&
+  check(config.version_metadata?.binding === 'CF_VERSION_METADATA', 'VERSION_METADATA_BINDING_REQUIRED');
+  check(config.vars?.API_VERSION === '1' &&
     (activating || activeCyId ? config.vars?.CYID_ENABLED === 'true' : config.vars?.CYID_ENABLED !== 'true'),
     'BUILT_IN_AUTHORITY_REQUIRED');
   const enabled = activating || activeCyId ? 'true' : 'false';
@@ -288,8 +294,8 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
         'ACTIVE_RUNTIME_SETTING_CHANGE');
     }
   }
-  const vars = { ...Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text])),
-    ...config.vars, CYID_ENABLED:enabled };
+  const vars = { ...runtimeVars(audit.settings.bindings), ...config.vars, CYID_ENABLED:enabled };
+  delete vars.APP_ENV;
   if (audit.schemaUpgrade) {
     check(activeCyId && audit.operation === 'deploy' && validSchemaUpgrade(audit.schemaUpgrade) &&
       vars.SCHEMA_VERSION === audit.schemaUpgrade.to, 'SCHEMA_UPGRADE_INTENT_INVALID');
@@ -297,7 +303,7 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
       'ALLOWANCE_G0501_SEND_ENABLED','ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
       check(vars[name] === undefined || vars[name] === 'false', 'SCHEMA_UPGRADE_ALLOWANCE_FLAGS_MUST_BE_OFF');
     // Source rollout must not smuggle changes to scopes, custom vars or flags.
-    const original = Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
+    const original = runtimeVars(audit.settings.bindings);
     check(original.SCHEMA_VERSION === audit.schemaUpgrade.from, 'SCHEMA_UPGRADE_SOURCE_INVALID');
     check(digest({...vars,SCHEMA_VERSION:audit.schemaUpgrade.from}) === digest(original), 'SCHEMA_UPGRADE_RUNTIME_SETTING_CHANGE');
   }
@@ -306,7 +312,7 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     const expected=applyAllowanceActivation(config,audit.settings,audit.allowanceActivation);
     check(digest(vars)===digest(expected.vars),'ALLOWANCE_ACTIVATION_RUNTIME_SETTING_CHANGE');
   }
-  const preserved = audit.settings.bindings.filter(b => b.type !== 'plain_text');
+  const preserved = audit.settings.bindings.filter(b => b.type !== 'plain_text' && b.type !== 'version_metadata');
   const reviewed = audit.cyIdPreparation
     ? prepareCyIdConfig(config, audit.settings, audit.cyIdPreparation, audit.state?.workspaces) : config;
   const expectedServices = audit.cyIdPreparation ? configServices(reviewed.services) : serviceBindings(preserved);
@@ -317,13 +323,14 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     check(identityScopeNames.every(name => vars[name] === audit.settings.bindings.find(b => b.name === name && b.type === 'plain_text')?.text),
       'CYID_SCOPE_PREPARATION_REQUIRED');
   if (activating) {
-    const originalVars = Object.fromEntries(audit.settings.bindings.filter(b => b.type === 'plain_text').map(b => [b.name,b.text]));
+    const originalVars = runtimeVars(audit.settings.bindings);
     check(digest({...vars,CYID_ENABLED:'false'}) === digest({...originalVars,CYID_ENABLED:'false'}),
       'CYID_ACTIVATION_VARIABLE_CHANGE');
   }
   const additions = expectedServices.filter(b => !preserved.some(existing => existing.name === b.name));
   check(!Object.keys(vars).some(name => preserved.some(b => b.name === name)), 'BINDING_NAMES_INVALID');
-  const expected = [...preserved, ...additions, ...Object.entries(vars).map(([name,text]) => ({type:'plain_text',name,text}))];
+  const metadata = {type:'version_metadata',name:'CF_VERSION_METADATA'};
+  const expected = [...preserved, ...additions, metadata, ...Object.entries(vars).map(([name,text]) => ({type:'plain_text',name,text}))];
   checkSettings({bindings:expected}, config, {allowCyId:activating || activeCyId});
   const prefix = `/workers/workers/${encodeURIComponent(config.name)}/versions`;
   const routing = `/workers/scripts/${encodeURIComponent(config.name)}`;
@@ -347,11 +354,11 @@ export async function deployReviewedVersion(audit, config, code, request, save, 
     main_module:'app.js', compatibility_date:config.compatibility_date,
     compatibility_flags:config.compatibility_flags ?? [],
     bindings:[...preserved.map(b => ({name:b.name,type:'inherit',version_id:original[0].version_id})),
-      ...additions,
+      ...additions, metadata,
       ...expected.filter(b => b.type === 'plain_text')],
     modules:[{name:'app.js',content_type:'application/javascript+module',content_base64:Buffer.from(code).toString('base64')}],
-    annotations:{'workers/message':activating ? 'CYInvoice approved development CYID activation; original Workspace retained' :
-      'CYInvoice reviewed development business code; Built-in retained'},
+    annotations:{'workers/message':activating ? 'CYInvoice reviewed CYID activation; original Workspace retained' :
+      'CYInvoice reviewed business code; original authority and resources retained'},
   });
   check(uuid(created?.id) && created.id !== original[0].version_id, 'UPLOADED_VERSION_ID_INVALID');
   // Save intent before deployment: a lost response is never retried automatically.
@@ -447,12 +454,14 @@ export function checkContinuity(before, after) {
   }
 }
 
-export function checkHealth(health, { version, schema }) {
+export function checkHealth(health, { version, schema, versionId }) {
   check(health?.ok === true && health.storage === 'ok' && health.service === 'cyinvoice-cloud' &&
-    health.environment === 'development' && String(health.apiVersion) === '1' &&
+    String(health.apiVersion) === '1' &&
     String(health.schemaVersion) === '8' && String(health.storageSchemaVersion) === String(schema),
     'CLOUD_HEALTH_CONTRACT_INVALID');
   if (version) check(health.cloudVersion === version, 'CLOUD_SOURCE_VERSION_MISMATCH');
+  if (versionId) check(health.deployment?.versionId === versionId &&
+    Number.isFinite(Date.parse(health.deployment?.createdAt)), 'CLOUD_DEPLOYMENT_VERSION_MISMATCH');
   const required = ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1'];
   if (version) required.push('cyid-consumer-v1', 'runtime-sync-v1');
   check(required.every(name => health.capabilities?.includes(name)), 'CLOUD_CAPABILITIES_MISSING');
@@ -637,11 +646,15 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     const response = await fetch(origin + '/v1/health', { signal: AbortSignal.timeout(15000) });
     health = await response.json();
     healthOk = response.ok;
-    if (response.ok && (mode === 'before' || health.cloudVersion === expectedVersion)) break;
+    if (response.ok && (mode === 'before' || health.cloudVersion === expectedVersion) &&
+      (!settings.bindings.some(b => b.type === 'version_metadata') ||
+        health.deployment?.versionId === deployments.deployments[0].versions[0].version_id)) break;
     if (mode === 'after') await new Promise(resolve => setTimeout(resolve, 1500));
   }
   check(healthOk, 'CLOUD_HEALTH_HTTP_FAILED');
   checkHealth(health, { schema: (mode === 'before' ? schemaUpgrade?.from : schemaUpgrade?.to) ?? applied.length,
+    ...(settings.bindings.some(b => b.type === 'version_metadata')
+      ? {versionId: deployments.deployments[0].versions[0].version_id} : {}),
     ...(mode === 'after' ? { version: expectedVersion } : {}) });
   if (mode === 'before') {
     const capturedAt = new Date().toISOString();

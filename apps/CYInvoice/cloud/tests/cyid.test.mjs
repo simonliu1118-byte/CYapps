@@ -71,7 +71,7 @@ const rate = { limit: async () => ({ success: true }) };
 const identityEnv = { DB: provider.d1, APP_ENV: 'test', API_VERSION: '1', LOGIN_RATE_LIMITER: rate };
 let providerBehavior;
 const paths = [];
-const env = { DB: consumer.d1, APP_ENV: 'test', API_VERSION: '1', SCHEMA_VERSION: '13', CYID_ENABLED: 'true',
+const env = { DB: consumer.d1, API_VERSION: '1', SCHEMA_VERSION: '13', CYID_ENABLED: 'true',
   IDENTITY_APPLICATION_ID: 'CYINVOICE', IDENTITY_WORKSPACE_ID: 'ws_identity', IDENTITY_CYINVOICE_WORKSPACE_ID: 'ws_invoice',
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: rate, WEB_LOGIN_IP_RATE_LIMIT: rate, WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT: rate,
   WEB_PASSWORD_RESET_IP_RATE_LIMIT: rate, IDENTITY_AUTHORITY: new ConsumerAuthoritySync(null, identityEnv), IDENTITY: { fetch: async request => {
@@ -409,6 +409,18 @@ console.log('PASS CYID real-provider authentication, runtime sync, device rename
 
 // Exercise the real health handler rather than matching an old wrapper's source text.
 const {default:onboarding}=await moduleFrom('src/device-onboarding.ts');
+{
+ let queries=0;
+ const response=await onboarding.fetch(new Request('https://synthetic.invalid/v1/health'),{
+  CF_VERSION_METADATA:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',timestamp:'2026-11-05T00:00:00.000Z',tag:'unused'},
+  APP_ENV:'wrong-legacy-label',API_VERSION:'1',SCHEMA_VERSION:'23',CYID_ENABLED:'true',
+  DB:{prepare(sql){queries++;assert.equal(sql,'SELECT 1 AS ok');return{async first(){return{ok:1};}};}}
+ });
+ const body=await response.json();
+ assert.deepEqual(body.deployment,{versionId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',createdAt:'2026-11-05T00:00:00.000Z'});
+ assert.equal(Object.hasOwn(body,'environment'),false);assert.equal(queries,1);
+}
+
 for(const storageSchema of ['21','22']){
  const health=await onboarding.fetch(new Request('https://synthetic.invalid/v1/health'),{
   DB:{prepare(sql){assert.equal(sql,'SELECT 1 AS ok');return{async first(){return{ok:1};}};}},
@@ -416,7 +428,8 @@ for(const storageSchema of ['21','22']){
  });
  const body=await health.json();assert.equal(health.status,200);
  assert.equal(body.schemaVersion,'8');assert.equal(body.storageSchemaVersion,storageSchema);
- assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.13');
+ assert.equal(body.identityProvider,'CYID');assert.equal(body.cloudVersion,'0.9.14');
+ assert.equal(Object.hasOwn(body,'environment'),false);assert.equal(body.deployment,null);
  const retired=await onboarding.fetch(new Request('https://synthetic.invalid/v1/direct-join/claim',{method:'POST'}),{APP_ENV:'development',API_VERSION:'1'});
  assert.equal(retired.status,426);assert.equal((await retired.json()).error.code,'CLIENT_UPDATE_REQUIRED');
 }

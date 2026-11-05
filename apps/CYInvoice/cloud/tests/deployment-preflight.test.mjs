@@ -28,7 +28,7 @@ for (const kind of ['gradual','changed','wrong-version','missing-bindings']) {
   },'synthetic-consumer'), /SINGLE_ACTIVE_DEPLOYMENT_REQUIRED|ACTIVE_DEPLOYMENT_CHANGED|ACTIVE_VERSION_BINDINGS_REQUIRED/);
 }
 
-const config = { d1_databases: [{ database_id: 'synthetic-consumer-db' }],
+const config = { version_metadata:{binding:'CF_VERSION_METADATA'}, d1_databases: [{ database_id: 'synthetic-consumer-db' }],
   ratelimits: [{ name: 'LOGIN', namespace_id: '1', simple: { limit: 12, period: 60 } }] };
 const settings = { bindings: [
   { name: 'APP_ENV', type: 'plain_text', text: 'development' },
@@ -39,7 +39,6 @@ const settings = { bindings: [
 ] };
 assert.equal(checkSettings(settings, config).APP_ENV, 'development');
 for (const [replacement, error] of [
-  [{ name: 'APP_ENV', type: 'plain_text', text: 'production' }, 'DEVELOPMENT_ENVIRONMENT_REQUIRED'],
   [{ name: 'DB', type: 'd1', id: 'another-db' }, 'ORIGINAL_DATABASE_BINDING_REQUIRED'],
   [{ name: 'LOGIN', type: 'ratelimit', namespace_id: 2, simple: { limit: 12, period: 60 } }, 'RATE_LIMIT_BINDING_CHANGED'],
 ]) {
@@ -204,13 +203,23 @@ await assert.rejects(snapshot(async sql => {
 
 
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.13',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.14',
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.13', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.13', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.13', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
-for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.13', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+checkHealth(health, { version: '0.9.14', schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.14', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.14', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+for (const field of ['apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.14', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+
+// The consumer label is never environment evidence. Real runtime version IDs
+// must agree with the active control-plane deployment when metadata is bound.
+checkSettings({bindings:settings.bindings.filter(b=>b.name!=='APP_ENV')},config);
+checkSettings({bindings:settings.bindings.map(b=>b.name==='APP_ENV'?{...b,text:'production'}:b)},config);
+checkHealth({...health,environment:undefined},{version:'0.9.14',schema:13});
+const deployment={versionId:activeId,createdAt:'2026-11-05T00:00:00.000Z'};
+checkHealth({...health,deployment},{version:'0.9.14',schema:13,versionId:activeId});
+for(const value of [null,{...deployment,versionId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}])
+ assert.throws(()=>checkHealth({...health,deployment:value},{schema:13,versionId:activeId}),/CLOUD_DEPLOYMENT_VERSION_MISMATCH/);
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
@@ -256,7 +265,8 @@ const validAudit = {worker:validConfig.name,databaseId:validConfig.d1_databases[
     {name:'IDENTITY',type:'service',service:'synthetic-provider',entrypoint:'default'},
     {name:'CUSTOM_POLICY',type:'plain_text',text:'preserved-policy'}]},
   routes:[],workerSubdomain:{enabled:true,previews_enabled:true}};
-for (const scenario of ['success','missing-secret','extra-probe-secret','wrong-db','wrong-service','wrong-rate-limit',
+validAudit.settings.bindings.push({name:'CF_VERSION_METADATA',type:'version_metadata'});
+for (const scenario of ['success','missing-metadata','retained-label','missing-secret','extra-probe-secret','wrong-db','wrong-service','wrong-rate-limit',
   'wrong-date','wrong-flags','changed-before-upload','changed-before-deploy','routes-changed','lost-upload-response','lost-deploy-response']) {
   const checkpoint=structuredClone(validAudit), operations=[];
   let current=activeId, uploadBody, saved, posts=0;
@@ -268,8 +278,10 @@ for (const scenario of ['success','missing-secret','extra-probe-secret','wrong-d
       if (scenario==='lost-upload-response') throw new Error('RESPONSE_LOST');
       assert.ok(body.bindings.filter(b=>b.type==='inherit').every(b=>b.version_id===activeId));
       assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),
-        validAudit.settings.bindings.filter(b=>b.type!=='plain_text').map(b=>b.name).sort());
+        validAudit.settings.bindings.filter(b=>b.type!=='plain_text'&&b.type!=='version_metadata').map(b=>b.name).sort());
       assert.equal(body.bindings.some(b=>b.type==='secret_text' || b.name==='PROBE_AUTH_KEY'),false);
+      assert.deepEqual(body.bindings.find(b=>b.type==='version_metadata'),{type:'version_metadata',name:'CF_VERSION_METADATA'});
+      assert.equal(body.bindings.some(b=>b.name==='APP_ENV'),false);
       assert.equal(body.modules.length,1); assert.equal(body.main_module,'app.js');
       return {id:deployedId};
     }
@@ -289,6 +301,8 @@ for (const scenario of ['success','missing-secret','extra-probe-secret','wrong-d
     if (route.endsWith('/versions/'+activeId)) return {id:activeId,bindings:validAudit.settings.bindings};
     if (route.endsWith('/versions/'+deployedId)) {
       const bindings=uploadBody ? uploadBody.bindings.map(b=>b.type==='inherit' ? structuredClone(validAudit.settings.bindings.find(x=>x.name===b.name)) : b) : validAudit.settings.bindings;
+      if (scenario==='missing-metadata') bindings.splice(bindings.findIndex(b=>b.type==='version_metadata'),1);
+      if (scenario==='retained-label') bindings.push({name:'APP_ENV',type:'plain_text',text:'development'});
       if (scenario==='missing-secret') bindings.splice(bindings.findIndex(b=>b.name==='OTP_PEPPER'),1);
       if (scenario==='extra-probe-secret') bindings.push({name:'PROBE_AUTH_KEY',type:'secret_text'});
       if (scenario==='wrong-db') bindings.find(b=>b.name==='DB').id='22222222-2222-4222-8222-222222222222';
@@ -392,7 +406,7 @@ for (const scenario of ['new','existing','partial','wrong-readback','scope-drift
     }
     if (body && route.endsWith('?deploy=false')) {
       posts++; uploaded=body;
-      const originalResources=checkpoint.settings.bindings.filter(b=>b.type!=='plain_text');
+      const originalResources=checkpoint.settings.bindings.filter(b=>b.type!=='plain_text'&&b.type!=='version_metadata');
       assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),originalResources.map(b=>b.name).sort());
       assert.ok(body.bindings.filter(b=>b.type==='inherit').every(b=>b.version_id===activeId));
       assert.equal(body.bindings.filter(b=>b.type==='service').length,scenario==='existing'?0:scenario==='partial'?1:2);
@@ -449,8 +463,8 @@ for(const scenario of ['success','unapproved-mode','missing-preparation','change
     if(body&&route.endsWith('?deploy=false')) {
       posts++;uploaded=body;assert.equal(saved.uploadAttempted,true);
       assert.equal(body.bindings.find(b=>b.name==='CYID_ENABLED').text,'true');
-      assert.ok(body.bindings.filter(b=>b.type!=='plain_text').every(b=>b.type==='inherit'&&b.version_id===activeId));
-      assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),checkpoint.settings.bindings.filter(b=>b.type!=='plain_text').map(b=>b.name).sort());
+      assert.ok(body.bindings.filter(b=>b.type!=='plain_text'&&b.type!=='version_metadata').every(b=>b.type==='inherit'&&b.version_id===activeId));
+      assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),checkpoint.settings.bindings.filter(b=>b.type!=='plain_text'&&b.type!=='version_metadata').map(b=>b.name).sort());
       if(scenario==='lost-upload') throw Error('RESPONSE_LOST');
       return {id:deployedId};
     }
@@ -539,7 +553,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:providerEnvironment,status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.13' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.14' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });
@@ -634,7 +648,7 @@ try {
       : {id:activeId,bindings:providerBindings};
     if(body && route.endsWith('?deploy=false')) {
       v3Uploaded=body;
-      assert.ok(body.bindings.filter(b=>b.type!=='plain_text').every(b=>b.type==='inherit'&&b.version_id===activeId));
+      assert.ok(body.bindings.filter(b=>b.type!=='plain_text'&&b.type!=='version_metadata').every(b=>b.type==='inherit'&&b.version_id===activeId));
       assert.ok(body.bindings.some(b=>b.name==='COMPANY_SETTINGS_KEY_HEX'&&b.type==='inherit'));
       for(const name of ['COMPANY_SETTINGS_ENABLED','RECOVERY_ENABLED'])
         assert.equal(body.bindings.find(b=>b.name===name).text,'true');
@@ -680,7 +694,7 @@ try {
   const upgradedConfig=JSON.parse(fs.readFileSync(generatedPath,'utf8'));
   assert.deepEqual(upgradedAudit.schemaUpgrade,{from,to,migration:canonical[Number(to)-1]});
   assert.equal(upgradedConfig.vars.SCHEMA_VERSION,to);
-  for(const b of upgradedAudit.settings.bindings.filter(b=>b.type==='plain_text'&&b.name!=='SCHEMA_VERSION'))
+  for(const b of upgradedAudit.settings.bindings.filter(b=>b.type==='plain_text'&&b.name!=='SCHEMA_VERSION'&&b.name!=='APP_ENV'))
     assert.equal(upgradedConfig.vars[b.name],b.text,'all other active vars preserved');
   reportedStorageSchema=to;
   await assert.rejects(main('after',statePath,upgradeEnv),/SCHEMA_UPGRADE_NOT_DEPLOYED/);
@@ -701,6 +715,11 @@ try {
   const originalFetch=globalThis.fetch;
   globalThis.fetch=async(url,options={})=>{
     const u=new URL(url),pathname=u.pathname;
+    if(pathname.endsWith('/v1/health') && u.hostname.startsWith('cyinvoice-cloud-dev.')) {
+      const response=await originalFetch(url,options);
+      return Response.json({...await response.json(),deployment:{versionId:v3Current,createdAt:'2026-11-05T00:00:00.000Z'}},
+        {status:response.status});
+    }
     if(options.method==='POST' && pathname.includes('/workers/'))
       return Response.json({success:true,result:await v3Request(pathname+u.search,JSON.parse(options.body))});
     if(pathname.endsWith('/versions/'+activeId) && !pathname.includes('/synthetic-provider/'))
@@ -803,7 +822,7 @@ assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,wi
  const before=structuredClone(active);
  const made=applyAllowanceActivation({vars:{SCHEMA_VERSION:'21',UNRELATED:'do-not-add'}},active,'enable');
  assert.deepEqual(active,before);
- assert.deepEqual(made.vars,{CYID_ENABLED:'true',SCHEMA_VERSION:'22',COMPANY_SETTINGS_ENABLED:'true',APP_ENV:'development',
+ assert.deepEqual(made.vars,{CYID_ENABLED:'true',SCHEMA_VERSION:'22',COMPANY_SETTINGS_ENABLED:'true',
   ALLOWANCE_API_ENABLED:'true',ALLOWANCE_G0401_SEND_ENABLED:'true',ALLOWANCE_G0501_SEND_ENABLED:'true'});
  assert.throws(()=>applyAllowanceActivation({},active,'other'),/INTENT_INVALID/);
  const wrong=structuredClone(active);wrong.bindings.find(x=>x.name==='SCHEMA_VERSION').text='21';

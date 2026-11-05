@@ -1,5 +1,7 @@
 # CYInvoice
 
+目前工程Source為 **V3.1.46／Cloud0.9.14（尚未部署）**：退役APP_ENV回報，改用平台版本資訊與實際流量版本核對。最近部署回報為Cloud0.9.13／schema23；下方較舊「目前工程Source」段落為歷史版本。最新配套停點見 [本機交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，正式Release仍V3.1.0。
+
 CY Windows 10/11 x64 電子發票工具。Public 可見不代表開放原始碼；使用、修改與散布權利以 repository 根目錄 `LICENSE` 為準。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.

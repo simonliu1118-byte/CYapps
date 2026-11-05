@@ -1,5 +1,11 @@
 # CYInvoice 版本紀錄
 
+## V3.1.46／Cloud Source0.9.14 — 2026/11/05（實際部署識別）
+
+移除CYInvoice健康檢查及一般API的APP_ENV環境標籤；健康檢查改讀Cloudflare版本資訊綁定，回傳實際執行版本ID與建立時間。部署owner移除只比對development字串的檢查，保留原Worker／D1／CYID／scope／Secrets／旗標及migration核對，並比對健康回應與實際承接流量的版本。下一次受控程式部署僅退役原APP_ENV、加入CF_VERSION_METADATA，schema23與財務環境不變；沒有migration、背景查詢或新增健康檢查SQL。
+
+Windows支援新舊健康回應，原連線狀態詳細提示顯示部署資訊，舊服務未提供時明示未提供。這是新的獨立修正，VERSION3.1.46／BUILD0、Cloud0.9.14；尚未部署、合併或正式Release。上一個Cloud0.9.13／schema23的已完成部署保留。
+
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
 ## Cloud0.9.13 配套部署 — 2026/11/05

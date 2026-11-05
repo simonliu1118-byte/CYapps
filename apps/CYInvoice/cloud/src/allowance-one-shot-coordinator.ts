@@ -14,7 +14,7 @@ export interface CloudExecutionResult {
  allowanceNumber?:string;ledgerStatus?:string;errorCode?:string;
 }
 export interface AllowanceExecutionEnv extends CyIdEnv {
- APP_ENV:string;SCHEMA_VERSION:string;COMPANY_SETTINGS_KEY_HEX?:string;
+ SCHEMA_VERSION:string;COMPANY_SETTINGS_KEY_HEX?:string;
  ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;
  ALLOWANCE_G0501_SEND_ENABLED?:string;
 }

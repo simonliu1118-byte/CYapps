@@ -1,5 +1,7 @@
 # CYInvoice V3.0 Workspace／Device／Employee 身分生命週期定案
 
+2026-11-05現行修正註記：Cloud0.9.14／V3.1.46 Source退役CYInvoice APP_ENV及環境斷言，健康回報平台版本ID／建立時間；原Cloud0.9.13／schema23已回報完成部署，新0.9.14尚未部署。下方APP_ENV保留／development標籤敘述屬較早快照，現行機制依 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；CYID Provider契約與金融交易環境不變。
+
 歷史設計更新日期：2026-10-13（原設計基準：2026-09-29）
 
 > 2026-11-03現況註記：本文件下列版本／初次development啟用／Recovery待辦敘述保留原設計時點，不作為即時部署清單。最近一次2026-11-01本機MCP完整部署證據為Cloud0.9.11／schema22／CYID_ONLY，`IDENTITY`及`IDENTITY_AUTHORITY`均連已核准的production CYID；原Invoice `APP_ENV=development` 是獨立部署標籤。詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [現行本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。本次未重查遠端，未重做啟用或維護。

@@ -12,7 +12,7 @@ import {loadAmegoCompanySettingsForGateway,amegoCredentialsForEnvironment} from 
 import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 import {queryOfficialInvoiceReadOnly,OfficialInvoiceQueryError} from "./amego-invoice-query";
 import {parseAllowanceFinancialJson} from "./allowance-decimal";
-interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;APP_ENV:string;
+interface Env extends CyIdEnv {DB:D1Database;SCHEMA_VERSION:string;
  ALLOWANCE_API_ENABLED?:string;ALLOWANCE_G0401_SEND_ENABLED?:string;ALLOWANCE_G0501_SEND_ENABLED?:string;COMPANY_SETTINGS_KEY_HEX?:string;}
 const keys:Record<string,readonly string[]>={
  create:["employeeNo","password","applicationId","environment","originalInvoiceNumber","allowanceDay","requestedGross","reason","unnumberedTemplateJson"],

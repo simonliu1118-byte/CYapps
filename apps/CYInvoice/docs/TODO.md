@@ -1,5 +1,7 @@
 # CYInvoice 待辦與驗證
 
+2026-11-05部署識別修正：V3.1.46／Cloud0.9.14 Source退役APP_ENV、使用平台版本資訊；本批未部署。原Cloud0.9.13／schema23已完成維護不重跑。後續受控程式部署及驗收見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；原同機流程與真人待驗項目不因本次修改結案。
+
 更新日期：2026-10-28（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。

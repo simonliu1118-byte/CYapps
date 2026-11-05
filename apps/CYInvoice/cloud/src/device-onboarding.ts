@@ -3,8 +3,8 @@ import { createEmailSender } from "./email";
 import { recordSecurityEvent, securityEventStatement } from "./security-audit";
 
 interface Env extends CyIdEnv {
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
   DB: D1Database;
-  APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
   BOOTSTRAP_KEY?: string;
@@ -49,7 +49,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.9.13";
+const CLOUD_VERSION = "0.9.14";
 const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
 const MINIMUM_CLIENT_VERSION = "2.6.5";
 const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";
@@ -102,7 +102,6 @@ function json(env: Env, requestId: string, status: number, body: Record<string, 
       service: SERVICE_NAME,
       cloudVersion: CLOUD_VERSION,
       apiVersion: env.API_VERSION,
-      environment: env.APP_ENV,
       requestId,
       timestamp: new Date().toISOString(),
       ...body,
@@ -954,6 +953,10 @@ export default {
       if (request.method === "GET" && ["/v1/health","/v1/health/storage","/v1/health/db"].includes(url.pathname)) {
         const healthy = await storageHealth(env);
         return json(env, requestId, healthy ? 200 : 503, {
+          deployment: env.CF_VERSION_METADATA ? {
+            versionId: env.CF_VERSION_METADATA.id,
+            createdAt: env.CF_VERSION_METADATA.timestamp,
+          } : null,
           storage: healthy ? "ok" : "unavailable",
           identityProvider: usesCyId(env) ? "CYID" : "BUILT_IN",
           schemaVersion: LEGACY_SCHEMA_COMPATIBILITY_VERSION,

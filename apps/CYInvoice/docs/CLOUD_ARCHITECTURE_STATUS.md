@@ -1,5 +1,7 @@
 # CYInvoice Cloud Architecture Status
 
+2026-11-05現行修正註記：Cloud0.9.14／V3.1.46 Source退役CYInvoice APP_ENV及環境斷言，健康回報平台版本ID／建立時間；原Cloud0.9.13／schema23已回報完成部署，新0.9.14尚未部署。下方APP_ENV保留／development標籤敘述屬較早快照，現行機制依 [Cloud README](../cloud/README.md#environment-labels-and-last-verified-identity-target) 與 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；CYID Provider契約與金融交易環境不變。
+
 本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**；下方storage13／Cloud0.9.3／V2.6.19與development身分服務描述是當時快照。2026-11-03文件核對：最近一次本機MCP完整部署證據為2026-11-01 Cloud0.9.11、schema／marker22，兩個身分服務綁定均為已核准的 **production CYID**；原CYInvoice `APP_ENV=development` 是另一個獨立的部署標籤，詳見 [環境說明](../cloud/README.md#environment-labels-and-last-verified-identity-target)。本次未重查遠端。最新工程與部署停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，待辦見 [TODO](TODO.md) 及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID身分權威仍以canonical Consumer Standard和永久規則為準。
 
 > 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。

@@ -1,3 +1,16 @@
+# 待配套：V3.1.46／Cloud0.9.14 實際部署識別
+
+2026-11-05。使用者已批准APP_ENV修正程式；本批僅Source／合成測試／CI，**未授權或執行線上部署**。原PR #550；原Cloud0.9.13／schema23已完成部署回報保留。以下方案不重跑0023，不更改正式Release V3.1.0。
+
+- 健康檢查與一般API移除CYInvoice的environment部署標籤。健康回應改為可選的deployment.versionId／createdAt，直接讀Cloudflare `version_metadata` 的 `CF_VERSION_METADATA`；沒有綁定的舊版本／本機回應明示未提供，不用自填字串補造。API_VERSION、schemaVersion舊相容標記與storageSchemaVersion部署marker保留；實際migration仍在部署查核時確認。
+- 原deployment-preflight owner完整before／deploy／after沿用：before可盤點尚無版本資訊綁定的原0.9.13；程式上傳只退役原plain-text APP_ENV並明確加入CF_VERSION_METADATA，不從舊版本繼承版本值。新的平台綁定須完整回讀，健康回應的versionId須與控制面實際承接100%流量的版本一致。版本來源不符即停止，不能只看Cloud版本字串相同。
+- 原Worker／業務D1／production CYID兩服務／entrypoint／scope、Secret繼承、Rate limits、Routes、schema／marker23與所有財務旗標保持；原checkpoint完整保留舊APP_ENV以供回復／漂移比對。CYID Provider自己既有的APP_ENV／健康契約未改；只退役CYInvoice consumer標籤，不刪CYID設定。光貿test／production仍由原申請保存的金融environment決定。
+- 不增加健康檢查SQL或管理API、不讀CYID D1；部署核對使用原有控制面／健康請求。後續若交辦遠端更新，須按當批實際額度／有界資料量估算並取得新部署授權，不能沿用原0.9.13維護同意。本批不提供固定計費量保證。
+- Windows原CloudClient／相容性owner讀新舊回應，原連線設定的詳細提示顯示平台版本／建立時間或未提供，不新增UI／輪詢。驗證涵蓋舊server、新server、移除APP_ENV、首次／後續版本資訊綁定、平台版本吻合／不符、原D1／CYID／Secret／flags連續性、原schema分段升級及健康檢查固定查詢量。
+- 後續部署回復保留原0.9.13不可變版本與原完整checkpoint；Worker回退不回退D1。不重建／核准／重送原案、清Claim、合併或Release。實際服務識別、回復資料及用量留私有紀錄。
+
+---
+
 # 已完成：Cloud0.9.13／V3.1.45 Build1 配套
 
 2026-11-05。Cloud0.9.13／schema23已依使用者指示完成部署，必要前後檢通過。部署程式Source固定為 `d8f236ee5a030f19c7a41b80802bad8576d36934`；後續文件提交不取代此身分。原有設定與身分綁定保留，折讓功能已恢復，可搭配V3.1.45 Build1進行真人驗收。

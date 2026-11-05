@@ -1,27 +1,33 @@
 # CYInvoice Cloud Reference Backend
 
-目前canonical migration為0022。最近一次本機MCP完整部署證據為2026-11-01：原Worker Cloud0.9.11、Source `55793669d842f89f42e4e81a384868b121a0f36d`、100%流量，storageSchemaVersion／marker22、CYID_ONLY與原設定保留。Cloud0.9.12為後續待配套Source，尚未部署；詳見[本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。2026-11-03本次僅整理文件，未重查遠端或重跑維護。
+Canonical migration為0023。現行工程Source為V3.1.46／Cloud0.9.14，尚未部署。原Cloud0.9.13／schema23已於2026-11-05回報部署完成，固定部署Source `d8f236ee5a030f19c7a41b80802bad8576d36934`；必要前後檢通過，原production CYID與財務設定保留。最新維護停點見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
 ## Environment labels and last verified identity target
 
-The 2026-11-01 local MCP before/deploy/after evidence confirms that both active
-`IDENTITY` and `IDENTITY_AUTHORITY` bindings target the approved **production CYID
-provider**, with the RPC entrypoint `ConsumerAuthoritySync` preserved. Actual
-service names, resource identifiers and scope values remain in private evidence.
-The three different environment settings have separate meanings:
+Cloud0.9.14 retires the Invoice `APP_ENV` variable and the deployment checks
+that required the literal `development`. Health and general API envelopes no
+longer present that label as an environment fact. The next reviewed deployment
+removes only this legacy plain-text binding and adds `CF_VERSION_METADATA`;
+the full original configuration remains in the private rollback checkpoint.
 
-| Setting | Meaning |
+| Evidence | Meaning |
 | --- | --- |
-| Invoice `APP_ENV=development` | Original Invoice Worker's deployment label, reported in health and other API metadata. The existing deployment preflight also checks this value to identify the original target. It does not select CYID or AMEGO credentials. |
-| `CYINVOICE_CYID_ENVIRONMENT=production` | Deployment input selecting the CYID provider environment to verify. The two active service bindings and approved scopes must match; changing this input alone does not switch identity authority. |
-| Persisted allowance application `environment` (`test` / `production`) | Financial environment selected for that application and reused during execution/recovery. Production uses the authorized company card; test uses the vendor's published test credentials. |
+| Health `deployment.versionId` / `createdAt` | Running version ID / creation timestamp from Cloudflare's native version metadata binding. Missing metadata is `null`; old clients remain compatible. |
+| Active deployment and binding readback | Existing deployment checks verify the original Worker / D1, production CYID services / scopes, inherited Secrets, flags, routes and applied migrations. Health's version ID must match the actual single version receiving traffic when metadata is bound. |
+| Persisted allowance application `environment` (`test` / `production`) | Financial environment belonging to the original application and reused during execution/recovery. It is unchanged by this deployment metadata correction. |
 
-The GitHub `development` deployment Environment and the original Worker's name
-are deployment infrastructure labels, not evidence of a development CYID
-connection or isolated business data. Changing Invoice `APP_ENV` alone would
-fail the current deployment checks; this documentation update changes no runtime
-configuration. Older development-provider preparation/activation sections below
-describe dated historical checkpoints, not the current identity target.
+Version metadata needs no network or D1 lookup. Health keeps its existing
+storage check; actual migration history remains a deployment-time check and
+`storageSchemaVersion` remains the runtime compatibility marker. The public
+response does not expose service names, D1 IDs, credentials or private scopes.
+The version tag is not echoed.
+
+The last completed deployment report confirms both identity bindings use the
+approved production CYID provider. Neither the GitHub `development` Environment
+nor the historical Invoice Worker name establishes that fact. CYID's own
+provider environment contract is unchanged. Historical development-provider
+preparation/activation sections below are dated checkpoints, not current
+consumer configuration. See Cloudflare's [version metadata documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/).
 
 > **2026-10-18 歷史 Source checkpoint**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
 
@@ -79,12 +85,14 @@ Do not infer remote deployment state from source or CI alone.
 
 The user authorized normal g0401/g0501 activation on 2026-10-26 and reported its completion on 2026-10-27. The deployed source is `25ae151ed880cb6256a4cc1e01ce499145a802b7`; the three normal flags are true and the two legacy manual flags remain unset. The following describes the completed deployment mechanism; do not replay it merely to update documentation. Source readiness alone is not remote activation. Use the existing deployment owner with `CYINVOICE_DEPLOYMENT_MODE=deploy` and `CYINVOICE_ALLOWANCE_ACTIVATION=enable`, without a schema-upgrade intent. The same private checkpoint must cover before/deploy/after. It preserves the original Worker/D1, consumer scopes, services, secrets and unrelated vars; only the three normal allowance flags become true. Existing legacy manual/collision flags become false and absent ones remain absent. No migration or Identity D1 access is involved. See [the local MCP handoff](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md).
 
-Financial environment comes from the created application and is subsequently read from its persisted row, including recovery. `APP_ENV` is only a deployment label. AMEGO test credentials are the vendor's public pair; production uses the existing company card. Frozen card ownership, revision and authority checks remain unchanged.
+Financial environment comes from the created application and is subsequently read from its persisted row, including recovery. The retired Invoice `APP_ENV` label does not select financial credentials. AMEGO test credentials are the vendor's public pair; production uses the existing company card. Frozen card ownership, revision and authority checks remain unchanged.
 
 ### Preserving an already activated installation
 
-The source storage template targets migration 0015. A code deployment of an
-already CYID-enabled installation preserves its active schema marker, company
+The source storage template is for local/CI use; the private generated config
+preserves the active schema marker. A code deployment retires the Invoice APP_ENV label and installs native version
+metadata. Apart from these reviewed changes, an already CYID-enabled
+installation preserves its active schema marker, company
 settings/recovery flags, fixed consumer scopes, service bindings and secrets.
 Changing those protected values requires a separate maintenance operation; the
 deployment audit rejects a stale generated configuration before upload.

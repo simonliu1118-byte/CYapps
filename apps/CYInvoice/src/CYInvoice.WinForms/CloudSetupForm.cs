@@ -249,7 +249,7 @@ internal sealed class CloudSetupForm : Form
         var workspace = onboarding.WorkspaceInitialized
             ? "CYInvoice Workspace 已啟用；新裝置請透過 CYID 邀請或授權配對加入。"
             : "CYID Workspace 尚未啟用，請檢查管理員的 CYID 與 CYInvoice Cloud 設定。";
-        return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}";
+        return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}\n{CloudCompatibility.DeploymentSummary(health)}";
     }
 
     private static string NormalizeBaseUrl(string value)

@@ -82,7 +82,6 @@ internal static class CompatibilityRegression
         "0.8.5",
         apiVersion,
         schemaVersion,
-        "test",
         12,
         string.Empty);
 

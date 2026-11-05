@@ -1,5 +1,7 @@
 # CYInvoice V3.2：完整折讓與流程收斂計畫
 
+2026-11-05新增獨立工程修正：**V3.1.46／BUILD0、Cloud Source0.9.14，尚未部署**。原Cloud0.9.13／schema23已完成配套，原同機流程不變。本次只退役CYInvoice APP_ENV與其環境斷言，健康回報平台實際版本，部署後與流量版本核對；Windows兼容舊回應。無migration、新送出owner、財務旗標變動、定期查詢或真交易。具體維護與驗收停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+
 更新：2026-11-05（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
 **工程 Source：V3.1.45／BUILD1、Cloud Source0.9.13，沿原 PR #550 整理折讓歷程與詳情。0.9.12候選停止部署，0.9.13／schema23已於2026-11-05完成部署；使用者2026-11-01回報0.9.11已推送、原申請可正常送出。本批已完成必要部署後驗，沒有原案交易，尚未合併或發布。** 跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。

@@ -215,7 +215,7 @@ export async function synchronizeCompanySettingsToDevice(
   return {company:row?status(row):null,...(credentials?{credentials}:{})};
 }
 
-// The application environment belongs to the frozen transaction, never APP_ENV.
+// The financial environment belongs to the persisted, frozen application.
 // These are AMEGO's published test credentials, identical to Windows AmegoDefaults.
 export const amegoTestAccount=Object.freeze({sellerInvoice:"12345678",appKey:"sHeq7t8G1wiQvhAuIM27"});
 export function amegoCredentialsForEnvironment(company:{sellerInvoice:string;amegoAppKey:string},

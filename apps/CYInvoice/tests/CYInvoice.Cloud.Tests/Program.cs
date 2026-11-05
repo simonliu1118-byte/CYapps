@@ -198,6 +198,18 @@ static async Task TestHealthAsync()
     Equal("CYID", health.IdentityProvider, "explicit CYID enrollment marker");
     Equal(string.Empty, CloudCompatibility.CyIdEnrollmentProblem(health), "CYID-only cloud permits enrollment");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
+    Equal(string.Empty, health.DeploymentVersionId, "old health has no deployment metadata");
+    True(CloudCompatibility.DeploymentSummary(health).Contains("未提供"), "old server reports missing metadata");
+    handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.9.14","apiVersion":"1","schemaVersion":"8","storage":"ok","identityProvider":"CYID","deployment":{"versionId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","createdAt":"2026-11-05T00:00:00.000Z"}}"""));
+    var deployed = await client.CheckHealthAsync();
+    Equal("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", deployed.DeploymentVersionId, "platform version ID");
+    Equal("2026-11-05T00:00:00.000Z", deployed.DeploymentCreatedAt, "platform creation time");
+    Equal(string.Empty, CloudCompatibility.Problem(deployed), "environment is not required");
+    True(CloudCompatibility.DeploymentSummary(deployed).Contains(deployed.DeploymentVersionId), "deployment details remain available");
+    handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
+        """{"ok":true,"service":"cyinvoice-cloud","apiVersion":"1","schemaVersion":"8","storage":"ok","deployment":null}"""));
+    Equal(string.Empty, (await client.CheckHealthAsync()).DeploymentVersionId, "local health without metadata remains readable");
 }
 
 static async Task TestStorageOutageAsync()
@@ -228,7 +240,6 @@ static Task TestCompatibilityAsync()
         "1.0.0",
         CloudCompatibility.ApiVersion,
         CloudCompatibility.SchemaVersion,
-        "test",
         12,
         string.Empty);
     True(CloudCompatibility.Problem(health).Contains("不是相容的 CYInvoice Cloud API", StringComparison.Ordinal),

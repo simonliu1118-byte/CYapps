@@ -13,7 +13,6 @@ import type { CyWebRecoveryRequest } from "./recovery-authority";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
-  APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
   // Feature remains disabled until the original D1 was safely upgraded.
