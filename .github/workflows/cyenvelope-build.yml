@@ -1,4 +1,4 @@
-name: CYEnvelope Build
+name: CYEnvelope WPF Check
 
 on:
   workflow_dispatch:
@@ -20,46 +20,161 @@ concurrency:
 jobs:
   windows-x64:
     runs-on: windows-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/CYEnvelope
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
 
-      - name: Read VERSION
+      - name: Validate version identity
         shell: pwsh
         run: |
           $version = (Get-Content ./VERSION -Raw).Trim()
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYEnvelope VERSION: $version" }
-          "CYENVELOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $build -notmatch '^\d+$') {
+            throw "Invalid CYEnvelope VERSION/BUILD: $version / $build"
+          }
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version: "1.22.x"
-          cache-dependency-path: apps/CYEnvelope/go.sum
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - name: Test
-        run: go test ./...
-
-      - name: Build portable package
+      - name: Fetch bundled fonts (pinned URL, SHA-256 verified)
         shell: pwsh
-        run: ./build.ps1
+        run: ./tools/fetch-fonts.ps1
 
-      - name: Scan engineering package for secrets and production bindings
+      - name: Build Windows application
+        shell: pwsh
+        run: dotnet build ./src/CYEnvelope/CYEnvelope.csproj -c Release --nologo -warnaserror
+
+      - name: Run Windows core checks
+        shell: pwsh
+        run: dotnet run --project ./tests/CYEnvelope.Tests/CYEnvelope.Tests.csproj -c Release --nologo
+
+      - name: Startup smoke
         shell: pwsh
         run: |
-          $package = Get-ChildItem ./dist/CYEnvelope_V*.zip | Select-Object -First 1
-          if (-not $package) { throw "CYEnvelope package not found for safety scan" }
-          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" $package.FullName
+          $exe = Join-Path (Get-Location) 'src/CYEnvelope/bin/Release/net10.0-windows/CYEnvelope.exe'
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 4
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "CYEnvelope exited during startup with code $($proc.ExitCode)" }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
 
-      - name: Upload CYEnvelope engineering package
+      - name: Build and scan portable test folder
+        shell: pwsh
+        run: ./build-csharp.ps1
+
+      - name: Review rendered Windows UI and final icon resources
+        shell: pwsh
+        run: |
+          dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -c Release -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
+          if ($LASTEXITCODE -ne 0) { throw 'Visual review checks failed' }
+
+      - name: Scan visual evidence
+        id: evidence
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path ./dist/visual-review) {
+            python ../../.github/scripts/scan-public-package.py ./dist/visual-review
+            if ($LASTEXITCODE -ne 0) { throw 'Visual evidence scan failed' }
+            "safe=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Upload Windows visual evidence
+        if: always() && steps.evidence.outputs.safe == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: CYEnvelope-v${{ env.CYENVELOPE_VERSION }}-windows-x64-run${{ github.run_number }}
-          path: apps/CYEnvelope/dist/CYEnvelope_V*.zip
+          name: CYEnvelope-windows-visual-review
+          path: apps/CYEnvelope/dist/visual-review/
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Identify test package
+        id: package
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          $build = [int](Get-Content ./BUILD -Raw).Trim()
+          $label = "V$version"
+          if ($build -gt 0) { $label += "-Build-$build" }
+          "label=$label" >> $env:GITHUB_OUTPUT
+
+      - name: Verify folder before upload
+        shell: pwsh
+        run: |
+          $entries = @(Get-ChildItem ./dist/stage -Force)
+          if ($entries.Count -ne 1 -or $entries[0].Name -ne 'CYEnvelope' -or -not $entries[0].PSIsContainer) {
+            throw 'Expected only the CYEnvelope portable folder in the artifact root'
+          }
+          python ../../.github/scripts/scan-public-package.py ./dist/stage
+          if ($LASTEXITCODE -ne 0) { throw 'Public package safety scan failed' }
+
+      - name: Upload scanned portable test folder
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
+          path: apps/CYEnvelope/dist/stage/*
           if-no-files-found: error
           retention-days: 3
+
+      - name: Download artifact to verify one-extraction layout
+        uses: actions/download-artifact@v8
+        with:
+          name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
+          path: apps/CYEnvelope/dist/verify-download
+
+      - name: Verify downloaded portable folder
+        shell: pwsh
+        run: |
+          $entries = @(Get-ChildItem ./dist/verify-download -Force)
+          if ($entries.Count -ne 1 -or $entries[0].Name -ne 'CYEnvelope' -or -not $entries[0].PSIsContainer) {
+            throw 'Artifact extraction did not produce exactly one CYEnvelope folder'
+          }
+          if (-not (Test-Path ./dist/verify-download/CYEnvelope/CYEnvelope.exe)) {
+            throw 'CYEnvelope.exe missing after one extraction'
+          }
+          $contents = @(Get-ChildItem ./dist/verify-download/CYEnvelope -Force | Select-Object -ExpandProperty Name)
+          $expected = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'FONT_LICENSES.txt', 'Runtime')
+          if (@(Compare-Object $expected $contents).Count -ne 0) {
+            throw "Unexpected portable folder contents: $($contents -join ', ')"
+          }
+          $runtime = @(Get-ChildItem ./dist/verify-download/CYEnvelope/Runtime -Force | Select-Object -ExpandProperty Name)
+          $expectedRuntime = @(
+            'CYEnvelope.exe', 'D3DCompiler_47_cor3.dll', 'e_sqlite3.dll', 'PenImc_cor3.dll',
+            'PresentationNative_cor3.dll', 'vcruntime140_cor3.dll', 'wpfgfx_cor3.dll'
+          )
+          if (@(Compare-Object $expectedRuntime $runtime).Count -ne 0) {
+            throw "Unexpected Runtime contents: $($runtime -join ', ')"
+          }
+          if (@(Get-ChildItem ./dist/verify-download/CYEnvelope -Filter '*.dll' -File).Count -ne 0) {
+            throw 'DLL found in the portable root'
+          }
+
+      - name: Startup smoke on downloaded EXE
+        shell: pwsh
+        run: |
+          $exe = Join-Path (Get-Location) 'dist/verify-download/CYEnvelope/CYEnvelope.exe'
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 4
+            $proc.Refresh()
+            if ($proc.HasExited) {
+              Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-3) } -ErrorAction SilentlyContinue |
+                Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error') -and $_.Message -match 'CYEnvelope' } |
+                Select-Object -First 3 -ExpandProperty Message | Write-Host
+              throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)"
+            }
+            if (-not (Test-Path ./dist/verify-download/CYEnvelope/Data/CYEnvelope.db)) {
+              throw 'Packaged app did not create its database in the outer CYEnvelope/Data folder'
+            }
+            if (Test-Path ./dist/verify-download/CYEnvelope/Runtime/Data) {
+              throw 'Packaged app created its database inside Runtime'
+            }
+          } finally {
+            if (-not $proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F | Out-Null }
+          }
