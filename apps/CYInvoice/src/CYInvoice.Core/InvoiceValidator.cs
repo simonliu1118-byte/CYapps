@@ -65,6 +65,7 @@ public static class InvoiceValidator
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceValidator");
             throw new InvalidOperationException($"第 {index + 1} 筆商品明細的品名與數量不可空白", error);
         }
         if (item.Description.Length == 0 || values.Quantity.ScaledValue <= 0)
@@ -79,6 +80,7 @@ public static class InvoiceValidator
         }
         catch (OverflowException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceValidator");
             throw new InvalidOperationException($"第 {index + 1} 筆商品金額超出範圍", error);
         }
         if (calculated != values.Amount)

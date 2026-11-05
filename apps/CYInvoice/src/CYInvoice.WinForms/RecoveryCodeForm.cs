@@ -104,6 +104,7 @@ internal sealed class RecoveryCodeForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RecoveryCodeForm");
             MessageBox.Show(this, error.Message, "無法複製復原碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

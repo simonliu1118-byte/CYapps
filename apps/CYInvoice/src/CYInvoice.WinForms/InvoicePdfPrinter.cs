@@ -20,8 +20,9 @@ internal static class InvoicePdfPrinter
                 .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray();
         }
-        catch (Exception)
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoicePdfPrinter");
             return [];
         }
     }
@@ -37,8 +38,9 @@ internal static class InvoicePdfPrinter
             var settings = new PrinterSettings { PrinterName = printerName };
             return settings.IsValid && settings.CanDuplex;
         }
-        catch (Exception)
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"InvoicePdfPrinter");
             return false;
         }
     }
@@ -138,8 +140,9 @@ internal static class InvoicePdfPrinter
             await completion.Task;
             await Task.Delay(250, timeout.Token);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError3) when (!cancellationToken.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"InvoicePdfPrinter");
             throw new TimeoutException("官方發票 PDF 載入逾時，尚未送出列印工作。");
         }
         finally

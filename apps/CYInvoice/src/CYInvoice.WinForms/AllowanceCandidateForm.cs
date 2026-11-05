@@ -109,6 +109,7 @@ internal sealed class AllowanceCandidateForm : Form
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AllowanceCandidateForm");
         }
         return $"{value.AllowanceNumber}｜{value.AllowanceDate}｜{value.InvoiceType}｜狀態 {value.InvoiceStatus}｜含稅 {amount}";
     }

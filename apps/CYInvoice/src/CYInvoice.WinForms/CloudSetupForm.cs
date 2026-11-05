@@ -200,11 +200,13 @@ internal sealed class CloudSetupForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudSetupForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudSetupForm");
             if (!IsDisposed)
             {
                 var details = $"Cloud API 錯誤：{error.Code}\n{error.Message}";
@@ -214,6 +216,7 @@ internal sealed class CloudSetupForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudSetupForm");
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true, details: error.Message);
@@ -246,7 +249,7 @@ internal sealed class CloudSetupForm : Form
         var workspace = onboarding.WorkspaceInitialized
             ? "CYInvoice Workspace 已啟用；新裝置請透過 CYID 邀請或授權配對加入。"
             : "CYID Workspace 尚未啟用，請檢查管理員的 CYID 與 CYInvoice Cloud 設定。";
-        return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}";
+        return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}\n{CloudCompatibility.DeploymentSummary(health)}";
     }
 
     private static string NormalizeBaseUrl(string value)
@@ -276,8 +279,9 @@ internal sealed class CloudSetupForm : Form
         {
             return string.Equals(NormalizeBaseUrl(left), NormalizeBaseUrl(right), StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudSetupForm");
             return false;
         }
     }

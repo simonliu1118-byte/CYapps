@@ -22,8 +22,15 @@ public static class InvoiceAllowanceMetadata
         // and the V3.1 manual reconciliation workflow. Completeness is a
         // separate signal: new V3.2 monetary caps MUST require the true
         // SummaryPresentKey, even when an older/synthetic query has allowances.
-        record.ExtensionData[OfficialAllowancesKey] =
-            JsonSerializer.SerializeToElement(allowances);
+        // An omitted official summary is unknown, not an authoritative
+        // empty history. Keep the last observed entries for future read-only
+        // reconciliation, but the false completeness marker forbids sending.
+        // Non-empty partial responses still advance legacy manual-review
+        // observations; only a missing/empty summary retains prior history.
+        if (summaryPresent || allowances.Count > 0 ||
+            !record.ExtensionData.ContainsKey(OfficialAllowancesKey))
+            record.ExtensionData[OfficialAllowancesKey] =
+                JsonSerializer.SerializeToElement(allowances);
     }
 
     public static IReadOnlyList<InvoiceAllowanceResult> ReadOfficial(InvoiceRecord record)
@@ -36,16 +43,23 @@ public static class InvoiceAllowanceMetadata
         try { return value.Deserialize<List<InvoiceAllowanceResult>>() ?? []; }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAllowanceMetadata");
             throw new InvalidDataException("官方折讓資料格式錯誤", error);
         }
+    }
+
+    public static bool HasCompleteSummary(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return record.ExtensionData is not null &&
+            record.ExtensionData.TryGetValue(SummaryPresentKey, out var marker) &&
+            marker.ValueKind == JsonValueKind.True;
     }
 
     public static FixedDecimal RemainingGross(InvoiceRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        if (record.ExtensionData is null ||
-            !record.ExtensionData.TryGetValue(SummaryPresentKey, out var marker) ||
-            marker.ValueKind != JsonValueKind.True)
+        if (!HasCompleteSummary(record))
             throw new InvalidOperationException(
                 "光貿尚未提供完整折讓摘要，不能確認本次可折讓金額，請重新查詢");
         if (record.Amount<=0)
@@ -79,7 +93,8 @@ public static class InvoiceAllowanceMetadata
                 deducted=FixedDecimal.Add(deducted,inclusive);
             }
             catch (Exception error) when (error is FormatException or OverflowException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceAllowanceMetadata");
                 throw new InvalidDataException("官方折讓金額無法核對",error);
             }
         }

@@ -42,8 +42,9 @@ public static class InvoiceOfficialMetadata
                 return DateTimeOffset.FromUnixTimeSeconds(value).ToLocalTime()
                     .ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture);
             }
-            catch (ArgumentOutOfRangeException)
-            {
+            catch (ArgumentOutOfRangeException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"InvoiceOfficialMetadata");
             }
         }
         return value.ToString(CultureInfo.InvariantCulture);

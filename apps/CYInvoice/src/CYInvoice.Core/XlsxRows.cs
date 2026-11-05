@@ -177,6 +177,7 @@ public static class XlsxRows
         }
         catch (XmlException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"XlsxRows");
             throw new InvalidDataException($"讀取 xlsx 內部檔案 {entry.FullName} 失敗", error);
         }
     }

@@ -23,6 +23,15 @@ public static class Environments
 {
     public const string Test = "test";
     public const string Production = "prod";
+
+    public static string ToCloud(string value) => value switch {
+        Test => Test, Production or "production" => "production",
+        _ => throw new InvalidDataException("使用環境無效")
+    };
+    public static string FromCloud(string value) => value switch {
+        Test => Test, "production" => Production,
+        _ => throw new InvalidDataException("雲端使用環境無效")
+    };
 }
 
 public static class RecordOrigins

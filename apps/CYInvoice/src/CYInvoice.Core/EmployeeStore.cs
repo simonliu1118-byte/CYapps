@@ -799,8 +799,9 @@ public sealed class EmployeeStore
                 bytes = Convert.FromHexString(value);
                 return true;
             }
-            catch (FormatException)
-            {
+            catch (FormatException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeStore");
                 bytes = [];
                 return false;
             }

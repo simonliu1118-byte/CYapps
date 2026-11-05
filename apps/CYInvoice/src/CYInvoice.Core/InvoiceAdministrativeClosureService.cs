@@ -39,10 +39,11 @@ public sealed class InvoiceAdministrativeClosureService
         ArgumentNullException.ThrowIfNull(issue);
         if (issue.ResolvedUtc is not null || !IsActiveWorkIssue(issue)) return false;
         if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal)) return false;
-        if (new LocalAllowanceVoidStore(repository.DataDirectory).Find(issue.AccountKey, issue.Id)?.Claimed == true) return false;
+        if (new LocalAllowanceVoidStore(repository.DataDirectory).Find(issue.AccountKey, issue.Id) is not null) return false;
 
         var record = TryFindIssueRecord(issue);
         if (record is null || (issue.IssueType == InvoiceSyncIssueTypes.QueryFailed && !HasActiveWork(record))) return false;
+        if (HasApprovedAllowance(record)) return false;
         return IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime));
     }
 
@@ -61,6 +62,7 @@ public sealed class InvoiceAdministrativeClosureService
         if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal))
             throw new UnauthorizedAccessException("這筆待處理作業屬於其他公司或環境，已停止結案");
 
+        if (!CanClose(issue)) throw new InvalidOperationException("這筆作業不可行政結案，系統會依原核准及官方結果處理");
         var record = FindIssueRecord(issue);
         if (issue.IssueType == InvoiceSyncIssueTypes.QueryFailed && !HasActiveWork(record))
             throw new InvalidOperationException("這筆回查問題沒有待處理的作廢或折讓作業");
@@ -71,7 +73,7 @@ public sealed class InvoiceAdministrativeClosureService
     public bool CanClose(InvoiceRecord selected)
     {
         var record = FindCurrentRecord(selected);
-        return HasActiveWork(record) && IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime));
+        return !HasApprovedAllowance(record) && HasActiveWork(record) && IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime));
     }
 
     public void Close(InvoiceRecord selected, string actorEmployeeNo, string actorPassword)
@@ -94,8 +96,19 @@ public sealed class InvoiceAdministrativeClosureService
     private static bool HasActiveWork(InvoiceRecord record) =>
         InvoiceVoidService.HasPendingMarker(record) || EmployeeAllowanceWorkflowService.HasPendingMarker(record);
 
+    // Legacy manual metadata can predate the current review DTO. Read only
+    // the approval marker so old unapproved work keeps its original closure.
+    private static bool HasApprovedAllowance(InvoiceRecord record) =>
+        record.ExtensionData is not null &&
+        record.ExtensionData.TryGetValue(AllowanceManualReviewMetadataKey, out var review) &&
+        review.ValueKind == System.Text.Json.JsonValueKind.Object &&
+        review.TryGetProperty("LocalApprovedUtc", out var approved) &&
+        approved.ValueKind is not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined);
+
     private void CloseRecord(InvoiceRecord record)
     {
+        if (HasApprovedAllowance(record))
+            throw new InvalidOperationException("折讓已核准，系統須依原核准與官方結果處理，不能行政結案");
         if (new LocalAllowanceVoidStore(repository.DataDirectory).HasClaimForInvoice(
                 CurrentAccountKey(), record.InvoiceNumber.Trim(), EffectiveOrderId(record)))
             throw new InvalidOperationException("折讓作廢已有送出紀錄，只能原號查回，不能行政結案");

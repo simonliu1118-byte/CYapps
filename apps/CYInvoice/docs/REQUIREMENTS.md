@@ -2,10 +2,10 @@
 
 本文件保留 C#／WinForms 歷次**功能需求與行為基準**，永久治理仍以 `PROJECT_RULES.md` 為準。原 V2.6 時期的實作／部署陳述留作歷史，不得取代現行進度。
 
-- **現行工程 Source：V3.1.25 Build 0**；已發布的正式 Release 為 **V3.1.0**，未經使用者當次授權不得再發布。
-- **V3.2 不變的完成目標**：正式折讓 g0401、g0501、Local／CYID 跨機、離線、官方查回與同步、逐筆歷史／Audit、舊 UI 安全退役及雙機真測，詳見 [V3.2 唯一交付計畫](V3_2_IMPLEMENTATION_PLAN.md)；不能把這些未完成項移到 3.3。
-- **V3.3 與後續**：原一般多機／OrderID／Audit 與既定延期／大版本方向均保留，以 [TODO](TODO.md) 和 [Cloud 長期路線圖](CLOUD_ROADMAP.md) 分別確認，規劃重排不新增／刪除需求。
-- 2026-10-21 **依使用者本機 MCP 回報**：原 CYInvoice D1 與 Worker schema18 已受控升級，`ALLOWANCE_API_ENABLED=false`；工程／CI 與實際光貿驗收仍分別記錄，不以 schema18 或 Source 當成 g0401/g0501 已完成的證據。
+- 現行工程：**V3.1.46／BUILD0**；原Worker **Cloud0.9.14／schema23** 已完成本機MCP維護；正式Release **V3.1.0**。目前維護已停止，不因文件整理重做migration、原案或財務驗收。
+- 現行流程、取消退回、一次主管核准、連續自動處理、未知結果、公司卡與日誌只在 [V3.2唯一計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護；本檔保留基礎需求，不另複製一套階段狀態。
+- 既有同機功能保留，跨機協同下一版；雙Windows真人驗收仍按延期決定追蹤。待辦見 [TODO](TODO.md)，V3.0／V3.1延期項見 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md)，部署證據見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+- 下方歷史人工／V2.6操作敘述只解釋舊資料與演進；與現行V3.2流程有差異時依上述唯一計畫及實際owner，不復活已移除的UI或第二套交易流程。
 
 ## 1. 平台與基本開立
 
@@ -45,7 +45,7 @@
 - 公司戶測試開票使用公開測試統編 `28080623`，送出前向光貿查詢其正式名稱。
 - 測試環境 API OrderID 使用 CYInvoice technical namespace，避免不同公司／執行個體互相撞號。
 - UI 與本機資料仍顯示原始可讀 OrderID，不暴露 technical prefix。
-- 測試環境同步不以 `invoice_list` 任意掃描共享測試池，只處理本機已知測試紀錄。
+- 測試環境取今天與前兩天，逐日依既有 OrderID 識別碼從 `invoice_list` 篩選 CYInvoice 測試票，另一台電腦不須先有開票紀錄即可抓回；無識別碼的陌生票不查回，已知本機舊票保留精確查回。識別碼只用於測試池辨識，不作為權限或成功證據。
 
 ## 5. Excel 匯入
 
@@ -87,7 +87,7 @@
 - 手動重新整理有 30 秒冷卻。
 - 每個本機日第一次正式環境自動同步，校對目前兩月發票期別＋上一期；同日後續回到最近 3 天。
 - 雙擊任何發票開啟詳細資訊前一律 `invoice_query` 該張；查詢失敗不得用舊 Cache 冒充最新資料。
-- 正式環境本機發票 Cache 只保留目前及上一期；測試環境只保留當日。
+- 正式環境本機發票 Cache 只保留目前及上一期；測試環境保留今天與前兩天；既有待辦／未知Claim保護不變。
 - 無法判定日期的紀錄不得靠猜測刪除。
 
 ## 7. 員工帳號與權限
@@ -107,11 +107,11 @@
 - 不需管理員覆核：`使用者編號-原因`，例如 `3015-消退`。
 - 需管理員覆核：`管理員編號-使用者編號-原因`，例如 `3001-3015-消退`。
 - 紙本發票需確認證明聯狀態；證明聯尚未收回時不直接送出 `/json/f0501`，而建立人工確認待辦。
-- 人工確認由管理員在「上傳問題」詳細待辦中執行「確認送出作廢」或「取消退回」。
+- V2人工確認曾由管理員在「上傳問題」執行；V3.2等待紙本／主管的現行分流以既有「處理中」為準，操作由原待辦詳情進入。
 - 作廢送出後若光貿未確認最終結果，標示 pending，不盲目重送；後續正常同步持續查詢。
 - 超過目前＋上一個兩月期別的作廢 pending，可由管理員手動結案；結案不呼叫光貿 API，也不得把本機狀態偽造成官方已作廢。
 
-## 9. 折讓暫行人工流程
+## 9. V2.6 折讓暫行人工流程（歷史；V3.2目標見現行計畫）
 
 ### 9.1 折讓申請
 
@@ -195,7 +195,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
+- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
 - V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. V2.6 時期尚未完成清單（歷史 Snapshot；最新狀態見 V3.2 計畫與 TODO）
@@ -241,7 +241,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 
 - 光貿與雲端驗證分開檢查，四種狀態依 CY_ID_INTEGRATION §14.2；雲端 503 暫時不可用納入原有降級，帳密／權限拒絕／Device 撤銷不得降級。
 - 純 Local 不查雲端，光貿正常可用、不可達阻擋全部業務至光貿恢復。
-- 雙斷線用一個原生 modal，保留重新檢查／關閉程式；MainForm 每 15 秒檢查，任一恢復即回對應狀態。光貿相關入口與核心都阻擋，Cloud-only 功能在 Cloud 可用時仍走原權限流程。
+- 雙斷線用一個原生 modal，保留重新檢查／關閉程式；MainForm 每 60 秒合併檢查連線／裝置／權限，啟動、重新連線及敏感操作前仍即時確認，任一恢復即回對應狀態。光貿相關入口與核心都阻擋，Cloud-only 功能在 Cloud 可用時仍走原權限流程。
 - 沿用原 Workspace、Device／Token、資料及輸入，不 reset／重建／改 Mode；恢復不自動重送開票，結果不明先回查。
 - 不新增第二套 identity authority、CYID D1 連線、server Session、離線配號／業務佇列、持久化 connectivity cache 或額外相容層。
 

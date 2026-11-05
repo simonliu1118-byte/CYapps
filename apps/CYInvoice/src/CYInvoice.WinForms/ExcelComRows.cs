@@ -43,12 +43,14 @@ internal static class ExcelComRows
                 cancellationToken.ThrowIfCancellationRequested();
                 completion.TrySetResult(ReadFirstWorksheet(fullPath, password, sourceName, cancellationToken));
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
+            catch (OperationCanceledException diagnosticError1) when (cancellationToken.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"ExcelComRows");
                 completion.TrySetCanceled(cancellationToken);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
                 completion.TrySetException(error);
             }
             finally
@@ -101,7 +103,8 @@ internal static class ExcelComRows
                 workbook = InvokeMethod(workbooks, "Open", filePath, 0, true, Type.Missing, password);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
                 var guidance = sourceName == "MO店+"
                     ? "請確認檔案是 MO店+ 原始 OrderExport 且保護密碼正確"
                     : $"請確認檔案是 {sourceName} 原始 Excel 且未損毀";
@@ -141,7 +144,8 @@ internal static class ExcelComRows
                             Convert.ToString(displayed, CultureInfo.InvariantCulture), raw);
                     }
                     catch (Exception error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
                         throw new InvalidDataException(
                             $"讀取 Excel 第 {rowIndex} 列第 {columnIndex} 欄內容失敗", Unwrap(error));
                     }
@@ -156,6 +160,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
             var actual = Unwrap(error);
             operationError = actual;
             if (actual is InvalidDataException or InvalidOperationException) throw;
@@ -198,6 +203,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
             throw new InvalidOperationException($"{message}，為保護電腦已停止匯入", Unwrap(error));
         }
     }
@@ -213,6 +219,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
             throw new InvalidDataException($"取得 Excel {collectionName} 數量失敗", Unwrap(error));
         }
         finally
@@ -248,6 +255,7 @@ internal static class ExcelComRows
         }
         catch (TargetInvocationException error) when (error.InnerException is not null)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
             ExceptionDispatchInfo.Capture(error.InnerException).Throw();
             throw;
         }
@@ -272,6 +280,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ExcelComRows");
             firstError ??= Unwrap(error);
         }
     }

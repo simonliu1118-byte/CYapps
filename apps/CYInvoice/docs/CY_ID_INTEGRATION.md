@@ -1,13 +1,14 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-10-13（原設計基準：2026-09-29）
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
 
-本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
-Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；development 經 activate-cyid #42 啟用，原 Windows CYID 帳密進設定由使用者回報成功。2026-10-13 [原 Worker 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) 已升級 Cloud 0.9.3，保留 CYID_ENABLED=true／全部 bindings；另行批准的本公司原 D1 CYID_ONLY 維護、私有備份／本機還原驗證與原資料／FK／health 核對完成。其餘全角色／多裝置實機矩陣仍待補，0-Device recovery 尚未實作；不宣稱已完成另一個 production promotion。最新停點見 [現行交接](V3_1_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。以下有日期的 source／準備／首次切換段落保留歷史脈絡，以本段及現行交接為目前狀態。
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
 
-CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.4）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
+本repo直接引用canonical CYID package：目前契約1.0.6、minimum1.0.0；本App的CYID_CONSUMER_VERSION宣告為1.0.3，相容範圍以版本檔及canonical標準核對，不因文件整理擅改宣告或身份服務。
 
+## 歷史設計與演進證據
 ## 1. 產品目標
 
 CYInvoice 必須同時保留三種正式使用方式：

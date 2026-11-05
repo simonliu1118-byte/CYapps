@@ -14,10 +14,11 @@ public sealed record CloudHealthResult(
     string CloudVersion,
     string ApiVersion,
     string SchemaVersion,
-    string Environment,
     long RoundTripMilliseconds,
     string ErrorCode,
-    string IdentityProvider = "");
+    string IdentityProvider = "",
+    string DeploymentVersionId = "",
+    string DeploymentCreatedAt = "");
 
 public sealed record CloudOnboardingStatus(bool WorkspaceInitialized, string State);
 
@@ -108,31 +109,36 @@ public sealed class CloudClient
                 ReadString(root, "cloudVersion"),
                 ReadString(root, "apiVersion"),
                 ReadString(root, "schemaVersion"),
-                ReadString(root, "environment"),
                 timer.ElapsedMilliseconds,
                 ReadErrorCode(root),
-                ReadString(root, "identityProvider"));
+                ReadString(root, "identityProvider"),
+                root.TryGetProperty("deployment", out var deployment) && deployment.ValueKind == JsonValueKind.Object
+                    ? ReadString(deployment, "versionId") : string.Empty,
+                deployment.ValueKind == JsonValueKind.Object ? ReadString(deployment, "createdAt") : string.Empty);
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             timer.Stop();
             return new CloudHealthResult(
-                true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                true, false, string.Empty, string.Empty, string.Empty, string.Empty,
                 timer.ElapsedMilliseconds, error.Code);
         }
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             timer.Stop();
             return new CloudHealthResult(
-                true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                true, false, string.Empty, string.Empty, string.Empty, string.Empty,
                 timer.ElapsedMilliseconds, "INVALID_RESPONSE");
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudClient");
             if (cancellationToken.IsCancellationRequested) throw;
             timer.Stop();
             return new CloudHealthResult(
-                false, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                false, false, string.Empty, string.Empty, string.Empty, string.Empty,
                 timer.ElapsedMilliseconds, "CLOUD_UNREACHABLE");
         }
     }
@@ -410,8 +416,9 @@ public sealed class CloudClient
         {
             document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
         }
-        catch (JsonException)
+        catch (JsonException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudClient");
             throw new CloudApiException(
                 "CLOUD_INVALID_RESPONSE",
                 $"Cloud API returned an invalid response ({(int)response.StatusCode}).",

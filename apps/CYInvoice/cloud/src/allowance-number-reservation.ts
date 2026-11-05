@@ -6,8 +6,6 @@
 import {loadEncryptedCloudAllowance} from "./allowance-frozen-store";
 import type {AllowanceActor,AllowanceActorSource,CloudAllowanceContext} from "./allowance-frozen-store";
 import {loadAmegoCompanySettingsForGateway} from "./company-settings";
-import {queryFrozenAllowanceByOriginalNumber} from "./amego-allowance-exact-readback";
-import {reconcileOfficialAllowanceForOriginal} from "./allowance-official-proof";
 
 export const MAX_ALLOWANCE_DAY_SEQUENCE=999+26*36*36;
 const DIGITS="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -100,252 +98,61 @@ export async function reserveApprovedCloudAllowanceNumber(
  db:D1Database,target:CloudAllowanceReserveTarget,ctx:CloudAllowanceContext,
  authority:AllowanceActorSource,clock:()=>Date=()=>new Date()
 ):Promise<CloudAllowanceReservedNumber>{
- if(typeof target.workspaceId!=="string"||!VALID_WS.test(target.workspaceId)||
-   typeof target.applicationId!=="string"||!VALID_ID.test(target.applicationId)||
-   typeof target.deviceId!=="string"||!VALID_DEVICE.test(target.deviceId)||
-   !Number.isSafeInteger(target.expectedRevision)||target.expectedRevision<3)
+ if(!VALID_WS.test(target.workspaceId)||!VALID_ID.test(target.applicationId)||
+    !VALID_DEVICE.test(target.deviceId)||!Number.isSafeInteger(target.expectedRevision)||target.expectedRevision<3)
   throw new Error("ALLOWANCE_RESERVE_TARGET_INVALID");
- const first=await authority.revalidate();
- requireManager(first,target.workspaceId);
+ const actor=await authority.revalidate();requireManager(actor,target.workspaceId);
  if(!await deviceReady(db,target))throw new Error("ALLOWANCE_RESERVE_DEVICE_REVOKED");
  const frozen=await loadEncryptedCloudAllowance(db,target,ctx,authority);
- if(frozen.status!=="approved"||frozen.revision!==target.expectedRevision||
-    !VALID_HASH.test(frozen.requestHash))
+ if(frozen.status!=="approved"||frozen.revision!==target.expectedRevision)
   throw new Error("ALLOWANCE_RESERVE_NOT_APPROVED");
- const grant=await db.prepare(`SELECT approval_id,application_id,workspace_id,
- reviewed_revision,manager_actor_id,manager_device_id,request_hash,
- valid_until_utc FROM allowance_execution_approvals
- WHERE application_id=?1 AND workspace_id=?2
- AND reviewed_revision=?3 AND request_hash=?4 LIMIT 1`)
- .bind(target.applicationId,target.workspaceId,target.expectedRevision-1,
-  frozen.requestHash).first<ApprovalRow>();
- if(!grant||grant.manager_actor_id!==first.employeeId||
-    grant.manager_device_id!==target.deviceId)
+ const grant=await db.prepare(`SELECT manager_actor_id,manager_device_id,request_hash
+  FROM allowance_execution_approvals WHERE application_id=?1 AND workspace_id=?2
+  AND reviewed_revision=?3 LIMIT 1`).bind(target.applicationId,target.workspaceId,target.expectedRevision-1)
+  .first<ApprovalRow>();
+ if(!grant||grant.manager_actor_id!==actor.employeeId||grant.manager_device_id!==target.deviceId||grant.request_hash!==frozen.requestHash)
   throw new Error("ALLOWANCE_RESERVE_GRANT_MISMATCH");
- const now=clock();
- if(!(now instanceof Date)||!Number.isFinite(now.valueOf()))
-  throw new Error("ALLOWANCE_RESERVE_CLOCK_INVALID");
- const at=now.toISOString();
- const company=await db.prepare(`SELECT seller_invoice,revision,amego_app_key_ciphertext
- FROM company_settings WHERE workspace_id=?1`)
- .bind(target.workspaceId).first<{
-   seller_invoice:string;revision:number;amego_app_key_ciphertext:string|null
- }>();
- if(!company||company.seller_invoice!==frozen.sellerInvoice||
-    company.revision!==frozen.companyRevision||!company.amego_app_key_ciphertext)
-  throw new Error("ALLOWANCE_RESERVE_COMPANY_CHANGED");
- const second=await authority.revalidate();
- if(!sameManager(first,second,target.workspaceId)||
-    !await deviceReady(db,target))
-  throw new Error("ALLOWANCE_RESERVE_AUTH_CHANGED");
- const existing=await latestLedger(db,target);
- // Returning an existing RESERVED number is read-only. The later one-shot
- // sender still MUST check a fresh official balance and win sending CAS.
- // Unknown/sending/confirmed/external-collision must NEVER reserve again here.
- if(existing){
-  if(existing.attempt>1&&!await hasCollisionReservationAudit(db,target,existing.ledger_id))
-   throw new Error("ALLOWANCE_RESERVE_COLLISION_AUDIT_REQUIRED");
-  const reserved=readbackOf(existing,frozen.requestHash,
-    frozen.allowanceDay,frozen.sellerInvoice,frozen.environment);
-  const after=await authority.revalidate();
-  if(!sameManager(first,after,target.workspaceId)||!await deviceReady(db,target))
-   throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
-  return reserved;
+ const previous=await latestLedger(db,target);
+ if(previous?.status==="reserved")return readbackOf(previous,frozen.requestHash,frozen.allowanceDay,frozen.sellerInvoice,frozen.environment);
+ if(previous){
+  if(previous.status!=="occupied_external"||!await hasCollisionReservationAudit(db,target,previous.ledger_id))
+   throw new Error("ALLOWANCE_RESERVE_PRIOR_UNSAFE_OR_NOT_RESERVABLE");
  }
- if(!(Date.parse(grant.valid_until_utc)>now.valueOf()))
-  throw new Error("ALLOWANCE_RESERVE_GRANT_EXPIRED");
- // SQL-time MAX+1 is the only allocator. The conditional INSERT plus
- // UNIQUE(day,sequence) serializes two independent devices; if the winner
- // cannot be established, return an ambiguous READBACK_REQUIRED outcome.
- const candidate=await db.prepare(`SELECT COALESCE(MAX(sequence),0)+1 AS n
- FROM allowance_number_ledger
- WHERE seller_invoice=?1 AND environment=?2 AND allowance_day=?3`)
- .bind(frozen.sellerInvoice,frozen.environment,frozen.allowanceDay)
- .first<{n:number}>();
- if(!candidate||!Number.isSafeInteger(candidate.n))
-  throw new Error("ALLOWANCE_RESERVE_SEQUENCE_UNAVAILABLE");
- const sequence=candidate.n;
- const number=allowanceNumberFromSequence(frozen.allowanceDay,sequence);
- const ledgerId="al_"+crypto.randomUUID();
- let result:D1Result;
- try{
-  result=await db.prepare(`INSERT INTO allowance_number_ledger
-   (ledger_id,application_id,workspace_id,seller_invoice,environment,
-    allowance_day,sequence,allowance_number,attempt,request_hash,status,
-    created_by_device_id,created_at,updated_at)
-   SELECT ?1,a.application_id,a.workspace_id,?4,?5,?6,?7,?8,
-     1,?9,'reserved',?10,?11,?11
-   FROM allowance_applications a
-   JOIN allowance_frozen_requests f ON f.application_id=a.application_id
-      AND f.workspace_id=a.workspace_id
-   JOIN allowance_execution_approvals p ON p.application_id=a.application_id
-   JOIN devices d ON d.device_id=?10 AND d.workspace_id=a.workspace_id
-   JOIN workspaces w ON w.workspace_id=a.workspace_id
-   JOIN company_settings c ON c.workspace_id=a.workspace_id
-   WHERE a.application_id=?2 AND a.workspace_id=?3
-    AND a.status='approved' AND a.revision=?12
-    AND a.request_hash=?9 AND f.request_hash=?9
-    AND f.seller_invoice=?4 AND f.environment=?5 AND f.allowance_day=?6
-    AND f.company_settings_revision=?13 AND c.revision=?13
-    AND c.seller_invoice=?4 AND c.amego_app_key_ciphertext IS NOT NULL
-    AND p.reviewed_revision=?12-1
-    AND p.request_hash=?9 AND p.manager_actor_id=?14
-    AND p.manager_device_id=?10 AND p.valid_until_utc>?11
-    AND d.status='active' AND d.employee_authority_state='cloud'
-    AND w.status='active'
-    AND NOT EXISTS (SELECT 1 FROM allowance_number_ledger old
-      WHERE old.application_id=?2)
-    AND ?7=(SELECT COALESCE(MAX(other.sequence),0)+1
-      FROM allowance_number_ledger other
-      WHERE other.seller_invoice=?4 AND other.environment=?5
-        AND other.allowance_day=?6)`)
-   .bind(ledgerId,target.applicationId,target.workspaceId,
-     frozen.sellerInvoice,frozen.environment,frozen.allowanceDay,
-     sequence,number,frozen.requestHash,target.deviceId,at,
-     target.expectedRevision,frozen.companyRevision,first.employeeId).run();
- }catch{throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");}
- if(result.meta.changes!==1)
-  throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
- // After any uncertain last-state readback, do not retry the INSERT or
- // assume a lost response means the number was not reserved.
- const last=await authority.revalidate();
- if(!sameManager(first,last,target.workspaceId)||!await deviceReady(db,target))
-  throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
- return {applicationId:target.applicationId,ledgerId,
-   allowanceNumber:number,sequence,attempt:1,status:"reserved",
-   requestHash:frozen.requestHash,maySendWithoutFreshOfficialCheck:false,
-   sentToAmego:false};
+ const candidate=await db.prepare(`SELECT COALESCE(MAX(sequence),0)+1 AS n FROM allowance_number_ledger
+  WHERE seller_invoice=?1 AND environment=?2 AND allowance_day=?3`)
+  .bind(frozen.sellerInvoice,frozen.environment,frozen.allowanceDay).first<{n:number}>();
+ if(!candidate)throw new Error("ALLOWANCE_RESERVE_SEQUENCE_UNAVAILABLE");
+ const sequence=candidate.n,number=allowanceNumberFromSequence(frozen.allowanceDay,sequence);
+ const ledgerId="al_"+crypto.randomUUID(),at=clock().toISOString(),attempt=(previous?.attempt??0)+1;
+ const fresh=await authority.revalidate();
+ if(!sameManager(actor,fresh,target.workspaceId)||!await deviceReady(db,target))
+  throw new Error("ALLOWANCE_RESERVE_AUTH_CHANGED");
+ const result=await db.prepare(`INSERT INTO allowance_number_ledger
+  (ledger_id,application_id,workspace_id,seller_invoice,environment,allowance_day,sequence,
+   allowance_number,attempt,request_hash,status,created_by_device_id,created_at,updated_at)
+  SELECT ?1,a.application_id,a.workspace_id,?4,?5,?6,?7,?8,?9,?10,'reserved',?11,?12,?12
+  FROM allowance_applications a JOIN company_settings c ON c.workspace_id=a.workspace_id
+  WHERE a.application_id=?2 AND a.workspace_id=?3 AND a.status='approved' AND a.revision=?13
+   AND a.request_hash=?10 AND a.manager_actor_id=?14 AND c.seller_invoice=?4 AND c.revision=?15
+   AND COALESCE((SELECT MAX(attempt) FROM allowance_number_ledger WHERE application_id=?2),0)=?9-1`)
+  .bind(ledgerId,target.applicationId,target.workspaceId,frozen.sellerInvoice,frozen.environment,
+   frozen.allowanceDay,sequence,number,attempt,frozen.requestHash,target.deviceId,at,
+   target.expectedRevision,actor.employeeId,frozen.companyRevision).run();
+ if((!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0))throw new Error("ALLOWANCE_RESERVE_READBACK_REQUIRED");
+ return {applicationId:target.applicationId,ledgerId,allowanceNumber:number,sequence,attempt,
+  status:"reserved",requestHash:frozen.requestHash,maySendWithoutFreshOfficialCheck:false,sentToAmego:false};
 }
 
 export async function hasCollisionReservationAudit(db:D1Database,
  t:CloudAllowanceReserveTarget,ledgerId:string):Promise<boolean>{
- return !!await db.prepare(`SELECT r.review_id FROM allowance_manual_review_audit r
- JOIN allowance_number_ledger old ON old.ledger_id=r.ledger_id
- JOIN allowance_number_ledger n ON n.ledger_id=r.next_ledger_id
- WHERE r.workspace_id=?1 AND r.application_id=?2 AND r.next_ledger_id=?3
- AND r.disposition='external_collision_reserved' AND old.status='occupied_external'
- AND n.application_id=old.application_id AND n.workspace_id=old.workspace_id
- AND n.attempt=old.attempt+1 AND n.request_hash=old.request_hash LIMIT 1`)
- .bind(t.workspaceId,t.applicationId,ledgerId).first();
-}
-
-// The same allocator owns first and manager-reviewed subsequent reservations.
-// This never posts to g0401, changes the old attempt, or unlocks an unknown.
-export async function reserveCloudAllowanceAfterExternalCollision(
- db:D1Database,t:CloudAllowanceReserveTarget,ctx:CloudAllowanceContext,
- authority:AllowanceActorSource,reviewId:string,previousNumber:string,confirmation:string,
- transport:typeof fetch=fetch,clock:()=>Date=()=>new Date()
-):Promise<CloudAllowanceReservedNumber>{
- if(!VALID_WS.test(t.workspaceId)||!VALID_ID.test(t.applicationId)||
- !VALID_DEVICE.test(t.deviceId)||!Number.isSafeInteger(t.expectedRevision)||
- t.expectedRevision<3||!/^[A-Za-z0-9_-]{12,100}$/.test(reviewId)||
- !/^A\d{8}[0-9A-Z]{3}$/.test(previousNumber)||
- confirmation!==`確認外部占號 ${previousNumber} 並預留下一號`)
-  throw new Error("ALLOWANCE_COLLISION_CONFIRMATION_REQUIRED");
- const first=await authority.revalidate();requireManager(first,t.workspaceId);
- if(!await deviceReady(db,t))throw new Error("ALLOWANCE_COLLISION_DEVICE_REVOKED");
- const frozen=await loadEncryptedCloudAllowance(db,t,ctx,authority);
- const old=await latestLedger(db,t);
- if(!old||old.status!=="occupied_external"||![4040161,4040162].includes(old.collision_code??0)||
- old.allowance_number!==previousNumber||old.request_hash!==frozen.requestHash||
- old.seller_invoice!==frozen.sellerInvoice||old.environment!==frozen.environment||
- old.allowance_day!==frozen.allowanceDay||!Number.isSafeInteger(old.attempt)||old.attempt<1||
- frozen.status!=="approved"||frozen.revision!==t.expectedRevision)
-  throw new Error("ALLOWANCE_COLLISION_NOT_ELIGIBLE");
- const grant=await db.prepare(`SELECT manager_actor_id,manager_device_id,
-  official_snapshot_hash,valid_until_utc FROM allowance_execution_approvals
-  WHERE workspace_id=?1 AND application_id=?2 AND reviewed_revision=?3
-  AND request_hash=?4 LIMIT 1`)
- .bind(t.workspaceId,t.applicationId,t.expectedRevision-1,frozen.requestHash)
- .first<{manager_actor_id:string;manager_device_id:string;
-  official_snapshot_hash:string;valid_until_utc:string}>();
- if(!grant||grant.manager_actor_id!==first.employeeId||grant.manager_device_id!==t.deviceId)
-  throw new Error("ALLOWANCE_COLLISION_GRANT_MISMATCH");
- const recorded=await db.prepare(`SELECT check_id FROM allowance_reconciliation_checks
-  WHERE ledger_id=?1 AND workspace_id=?2 AND application_id=?3
-  AND evidence_kind='external_collision' LIMIT 1`)
- .bind(old.ledger_id,t.workspaceId,t.applicationId).first();
- if(!recorded)throw new Error("ALLOWANCE_COLLISION_EVIDENCE_REQUIRED");
- const company=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
- if(company.revision!==frozen.companyRevision||company.sellerInvoice!==frozen.sellerInvoice)
-  throw new Error("ALLOWANCE_COLLISION_COMPANY_CHANGED");
- const external=await queryFrozenAllowanceByOriginalNumber({sellerInvoice:company.sellerInvoice,
-  appKey:company.amegoAppKey,allowanceNumber:previousNumber,allowanceDay:frozen.allowanceDay,
-  unnumberedTemplateJson:frozen.unnumberedTemplateJson},transport,clock,true);
- if(external.kind!=="verified_external_collision")
-  throw new Error("ALLOWANCE_COLLISION_NOT_DISTINCT");
- const proof=await reconcileOfficialAllowanceForOriginal(frozen,{
-  sellerInvoice:company.sellerInvoice,appKey:company.amegoAppKey},transport,clock);
- const now=clock(),at=now.toISOString();
- if(!(Date.parse(grant.valid_until_utc)>now.valueOf())||
-  proof.officialEvidenceHash!==grant.official_snapshot_hash||
-  proof.applicationId!==t.applicationId||proof.originalInvoiceNumber!==frozen.originalInvoiceNumber||
-  proof.requestedGross!==(BigInt(frozen.requestedGross)*10000000n).toString()||
-  [external.officialCheckedAtUtc,proof.officialCheckedAtUtc].some(value=>
-   !Number.isFinite(Date.parse(value))||now.valueOf()-Date.parse(value)>60_000||
-   Date.parse(value)>now.valueOf()+1000))
-  throw new Error("ALLOWANCE_COLLISION_OFFICIAL_CHANGED_OR_GRANT_EXPIRED");
- const current=await loadAmegoCompanySettingsForGateway(db,t.workspaceId,ctx.encryptionKeyHex);
- const second=await authority.revalidate();
- if(!sameManager(first,second,t.workspaceId)||!await deviceReady(db,t)||
- current.revision!==company.revision||current.sellerInvoice!==company.sellerInvoice||
- current.amegoAppKey!==company.amegoAppKey)
-  throw new Error("ALLOWANCE_COLLISION_AUTH_OR_COMPANY_CHANGED");
- const candidate=await db.prepare(`SELECT COALESCE(MAX(sequence),0)+1 AS n
-  FROM allowance_number_ledger WHERE seller_invoice=?1 AND environment=?2 AND allowance_day=?3`)
- .bind(frozen.sellerInvoice,frozen.environment,frozen.allowanceDay).first<{n:number}>();
- const sequence=candidate?.n??0,number=allowanceNumberFromSequence(frozen.allowanceDay,sequence);
- const nextId="al_"+crypto.randomUUID(),checkId="chk_"+crypto.randomUUID();
- try{
-  const result=await db.batch([
-   db.prepare(`INSERT INTO allowance_reconciliation_checks
-    (check_id,ledger_id,application_id,workspace_id,allowance_number,official_snapshot_hash,
-     checked_by_device_id,checked_by_actor_id,checked_at,evidence_kind)
-    VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,'external_collision')`)
-    .bind(checkId,old.ledger_id,t.applicationId,t.workspaceId,previousNumber,
-     external.officialSnapshotHash,t.deviceId,first.employeeId,at),
-   db.prepare(`INSERT INTO allowance_number_ledger
-    (ledger_id,application_id,workspace_id,seller_invoice,environment,allowance_day,
-     sequence,allowance_number,attempt,request_hash,status,created_by_device_id,created_at,updated_at)
-    SELECT ?1,l.application_id,l.workspace_id,l.seller_invoice,l.environment,l.allowance_day,
-     ?2,?3,l.attempt+1,l.request_hash,'reserved',?4,?5,?5
-    FROM allowance_number_ledger l JOIN allowance_applications a ON a.application_id=l.application_id
-    JOIN allowance_frozen_requests f ON f.application_id=a.application_id
-    JOIN allowance_execution_approvals p ON p.application_id=a.application_id
-    JOIN company_settings c ON c.workspace_id=a.workspace_id
-    JOIN devices d ON d.device_id=?4 AND d.workspace_id=a.workspace_id
-    JOIN workspaces w ON w.workspace_id=a.workspace_id
-    WHERE l.ledger_id=?6 AND l.workspace_id=?7 AND l.application_id=?8
-    AND l.status='occupied_external' AND l.collision_code IN (4040161,4040162)
-    AND l.allowance_number=?9 AND l.request_hash=?10 AND l.attempt=?11
-    AND a.status='approved' AND a.revision=?12 AND a.manager_actor_id=?13 AND a.request_hash=?10
-    AND f.workspace_id=?7 AND f.request_hash=?10 AND f.company_settings_revision=?14
-    AND c.revision=?14 AND c.seller_invoice=l.seller_invoice AND c.amego_app_key_ciphertext IS NOT NULL
-    AND p.workspace_id=?7 AND p.reviewed_revision=?12-1 AND p.request_hash=?10
-    AND p.manager_actor_id=?13 AND p.manager_device_id=?4 AND p.valid_until_utc>?5
-    AND p.official_snapshot_hash=?15 AND d.status='active'
-    AND d.employee_authority_state='cloud' AND w.status='active'
-    AND NOT EXISTS(SELECT 1 FROM allowance_number_ledger n WHERE n.application_id=?8 AND n.attempt>?11)
-    AND ?2=(SELECT COALESCE(MAX(n.sequence),0)+1 FROM allowance_number_ledger n
-     WHERE n.seller_invoice=l.seller_invoice AND n.environment=l.environment AND n.allowance_day=l.allowance_day)`)
-    .bind(nextId,sequence,number,t.deviceId,at,old.ledger_id,t.workspaceId,t.applicationId,
-     previousNumber,frozen.requestHash,old.attempt,t.expectedRevision,first.employeeId,
-     frozen.companyRevision,proof.officialEvidenceHash),
-   // VALUES is deliberate: a lost allocation CAS must make this source guard
-   // fail, rolling back the entire batch rather than committing a partial audit.
-   db.prepare(`INSERT INTO allowance_manual_review_audit
-    (review_id,application_id,workspace_id,ledger_id,allowance_number,ledger_status_at_review,
-     disposition,evidence_check_id,next_ledger_id,reviewed_by_actor_id,reviewed_by_device_id,reviewed_at)
-    VALUES(?1,?2,?3,?4,?5,'occupied_external','external_collision_reserved',?6,?7,?8,?9,?10)`)
-    .bind(reviewId,t.applicationId,t.workspaceId,old.ledger_id,previousNumber,
-     checkId,nextId,first.employeeId,t.deviceId,at)
-  ]);
-  if(result.some(r=>r.meta.changes!==1))throw new Error("conflict");
- }catch{throw new Error("ALLOWANCE_COLLISION_READBACK_REQUIRED");}
- const last=await authority.revalidate();
- if(!sameManager(first,last,t.workspaceId)||!await deviceReady(db,t))
-  throw new Error("ALLOWANCE_COLLISION_READBACK_REQUIRED");
- return {applicationId:t.applicationId,ledgerId:nextId,allowanceNumber:number,
-  sequence,attempt:old.attempt+1,status:"reserved",requestHash:frozen.requestHash,
-  maySendWithoutFreshOfficialCheck:false,sentToAmego:false};
+ // For a rejected ledger validate its own response; for its next reserved
+ // ledger validate the previous attempt. No fabricated official snapshot.
+ return !!await db.prepare(`SELECT r.ledger_id FROM allowance_number_ledger l
+ JOIN allowance_number_ledger rejected ON rejected.application_id=l.application_id
+  AND rejected.attempt=CASE WHEN l.status='occupied_external' THEN l.attempt ELSE l.attempt-1 END
+ JOIN allowance_number_rejections r ON r.ledger_id=rejected.ledger_id
+ WHERE l.ledger_id=?1 AND l.application_id=?2 AND l.workspace_id=?3
+  AND rejected.status='occupied_external' AND rejected.collision_code=r.provider_code
+  AND r.provider_code IN (4040161,4040162) LIMIT 1`)
+ .bind(ledgerId,t.applicationId,t.workspaceId).first();
 }

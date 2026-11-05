@@ -1,8 +1,10 @@
 # CYInvoice V3 多機協同與 CYWEB 裝置復原設計
 
-更新日期：2026-10-18（Asia/Taipei）。
+更新日期：2026-11-05（Asia/Taipei）。
 
-**V3.0 現行狀態**：Windows V3.0.0 Build 0 已正式發布；使用者確認 3.0 原 Cloudflare 安全升級已由本機 MCP 完成，這一輪未從本機 MCP 重新 readback，**不得依本文重跑 0014／0015／CYID_ONLY 退役**。CYWEB #192 復原 Source 已合併，私有 Binding 的實際可用性尚未在本輪查驗；真 Email／雙 Windows／DR-01～13 尚待實測。3.1 只做非折讓跨機 Work Item，3.2 才做折讓，其餘在 3.3。現行待辦以 [TODO.md](TODO.md) 最新章節、3.1 工程以 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)、真人驗收以 [RC_TEST.md](RC_TEST.md) 為準。
+工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。 本文件保留裝置復原與可攜備份的設計／案例；本次只做程式更新，未簽發／兌換復原碼、撤銷裝置或遠端還原。真人災復與異機金鑰驗收仍按唯一延期清單追蹤。
+
+**歷史：2026-10-18 V3.0狀態**：Windows V3.0.0 Build 0 已正式發布；使用者確認 3.0 原 Cloudflare 安全升級已由本機 MCP 完成，這一輪未從本機 MCP 重新 readback，**不得依本文重跑 0014／0015／CYID_ONLY 退役**。CYWEB #192 復原 Source 已合併，私有 Binding 的實際可用性尚未在本輪查驗；真 Email／雙 Windows／DR-01～13 尚待實測。3.1 只做非折讓跨機 Work Item，3.2 才做折讓，其餘在 3.3。現行待辦以 [TODO.md](TODO.md) 最新章節、3.1 工程以 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)、延期真人驗收以 [POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md) 為準，RC_TEST僅列案例。
 
 ## 1. 本次決策與範圍
 
@@ -10,7 +12,7 @@
 
 V3 的裝置管理與復原共用同一份 Device registry、邀請 lifecycle 與 audit owner。CYInvoice 的相關協同資料可以上自己的業務 D1；不將 CYID Credential、Session authority 或身分資料庫合併進來，也不以 Employee No 推定兩種 Workspace 是同一筆資料。
 
-本段設計當時採用的歷史基準為 Windows V2.6.19、Cloud0.9.3、CYID_ENABLED=true、CYID_ONLY；現行正式 Windows 版本已升為 V3.0.0。其他公司 Local／獨立 Built-in D1 的既有功能保留，這項 CYWEB 復原入口不套用於 Built-in 模式。
+本段設計當時採用的歷史基準為 Windows V2.6.19、Cloud0.9.3、CYID_ENABLED=true、CYID_ONLY；當時正式Windows版本為V3.0.0；目前版本見本文件首段與版本檔。其他公司 Local／獨立 Built-in D1 的既有功能保留，這項 CYWEB 復原入口不套用於 Built-in 模式。
 
 ## 2. 現有能力與真正缺口
 
@@ -147,13 +149,13 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
 | DR-13 | 3.0 新機復原不得重送任何 AMEGO 開票／作廢／人工折讓；未上雲的舊機資料遺失有明確提示。Work Item／跨機 revision／新折讓 API 的完整重整驗收**延至 3.1／3.2**，不得誤列為 3.0 未完工開發 |
 
-以上均為後續驗收需求，本輪只完成 source／schema／canonical 與設計核對，未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)。
+以上是需個別證據的案例，不能由本次程式部署／health或既有設計核對推定完成；未將 DR-01～DR-13 勾為通過。實機記錄入口見 [RC_TEST.md](RC_TEST.md)，工程停點見 [V3_1_HANDOFF.md](V3_1_HANDOFF.md)。
 
 ## 10. 原始碼與 canonical 參考
 
 - [CYID Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)：Identity authority、core／consumer App Access、Session scope、consumer business authorization。
 - [CYID session-auth](../../CYCloudIdentity/src/session-auth.ts)：provider Session 查詢綁定原 Application，不因改 header 變成跨 App Session。
 - [CYInvoice cyid.ts](../cloud/src/cyid.ts)：固定配置、withCyIdSession、Login／Resolve／finally Logout、Device scope。
-- [Worker dispatch](../cloud/src/app.ts)、[onboarding owner](../cloud/src/index.ts)、[Device lifecycle](../cloud/src/device-lifecycle.ts)：現行 Device／Employee gate、邀請／配對與最後 active Device。
+- [Worker dispatch](../cloud/src/app.ts)、[onboarding owner](../cloud/src/device-onboarding.ts)、[Device lifecycle](../cloud/src/device-lifecycle.ts)：現行 Device／Employee gate、邀請／配對與最後 active Device。
 - [Invitation／Audit schema](../cloud/migrations/0009_device_invites_and_audit.sql)、[CYID issuer migration](../cloud/migrations/0013_cyid_invitation_actor.sql)：既有來源／FK／constraints 與不可改寫的歷史 migrations。
 - [Windows direct join](../src/CYInvoice.WinForms/CloudDirectJoinForm.cs)、[SettingsStore](../src/CYInvoice.Core/SettingsStore.cs)：protected Pending Token、scope discovery 與正式設定寫入。

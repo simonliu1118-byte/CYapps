@@ -85,7 +85,9 @@ internal sealed class ConnectionBlockForm : Form
                         throw new InvalidOperationException("關閉阻擋視窗不能略過連線檢查");
                     ((Button)buttons.Controls[1]).PerformClick();
                 }
-                catch (Exception error) { failure = error; dialog.RestoreConnection(); }
+                catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ConnectionBlockForm"); failure = error; dialog.RestoreConnection(); }
             }));
             dialog.ShowDialog(owner);
             if (failure is not null) throw failure;

@@ -43,5 +43,8 @@ public static class CloudCompatibility
     public static string SuccessSummary(CloudHealthResult health) =>
         $"連線正常｜API {health.ApiVersion}｜相容層 {health.SchemaVersion}｜{Math.Max(0, health.RoundTripMilliseconds)} ms";
 
+    public static string DeploymentSummary(CloudHealthResult health) =>
+        $"部署版本：{Display(health.DeploymentVersionId)}\n版本建立時間：{Display(health.DeploymentCreatedAt)}";
+
     private static string Display(string value) => string.IsNullOrWhiteSpace(value) ? "未提供" : value;
 }

@@ -1,5 +1,11 @@
 # CYInvoice Windows 候選版驗證清單
 
+2026-11-05現況索引：本檔保留歷史案例與操作參考，不能當成另一份已完成／未完成看板。 工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
+
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
+
+## 歷史交接與驗證參考
+
 > **2026-10-18 V3.0 接續提醒**：原 V2.6.19 正式 Release 驗收保留歷史意義；3.0 開發僅 Local／CYID、公司卡及災難復原。CYWEB #192 已合併 Source、Cloudflare 正式 D1／Worker／私有 Binding 由本機 MCP 處理，3.0 本機 MCP 切換已由使用者確認完成（本輪未遠端 readback）；舊操作清單已自現行文件移除，以免誤執行。復原新 Device **成功 claim** 會原子撤銷 Workspace 內其他舊 Device；未成功與單純過期不撤銷。DR-01～13 真機證據未驗收，不能沿用 V2.6.19 的 CI 放行決策。
 
 

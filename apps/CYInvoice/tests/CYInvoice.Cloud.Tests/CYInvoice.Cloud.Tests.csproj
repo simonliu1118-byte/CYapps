@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\CYInvoice.Core\CYInvoice.Core.csproj" />
+    <EmbeddedResource Include="..\..\cloud\tests\fixtures\allowance-desktop-decimal.json" LogicalName="AllowanceDecimalContract.json" />
   </ItemGroup>
 </Project>

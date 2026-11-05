@@ -189,6 +189,8 @@ public sealed class InvoiceDetailRefreshService
         record.BuyerName,
         record.DetailVat,
         record.Items,
+        OfficialAllowanceSummaryPresent = InvoiceAllowanceMetadata.HasCompleteSummary(record),
+        OfficialAllowances = InvoiceAllowanceMetadata.ReadOfficial(record),
     });
 
     private static string EffectiveOrderId(InvoiceRecord record) =>
@@ -200,6 +202,7 @@ public sealed class InvoiceDetailRefreshService
         try { return FixedDecimal.Parse(text).RoundInt64(); }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceDetailRefreshService");
             throw new InvalidDataException($"{field}格式錯誤：{text}", error);
         }
     }

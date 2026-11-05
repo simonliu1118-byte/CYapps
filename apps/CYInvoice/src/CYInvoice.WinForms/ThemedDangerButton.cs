@@ -14,7 +14,9 @@ internal sealed class ThemedDangerButton : RoundedButton
 
     protected override ButtonColors ResolveColors()
     {
-        if (!Enabled) return RoundedButtonSurface.SecondaryColors(false, false, false);
+        if (!Enabled) return SystemInformation.HighContrast
+            ? RoundedButtonSurface.SecondaryColors(false,false,false)
+            : new ButtonColors(Color.FromArgb(248,234,234), Color.FromArgb(180,55,55), Color.FromArgb(143,38,38));
         var fill = Pressed ? Color.FromArgb(143, 38, 38)
             : Hovered ? Color.FromArgb(158, 45, 45) : Color.FromArgb(180, 55, 55);
         return new ButtonColors(fill, Color.FromArgb(143, 38, 38), Color.White);

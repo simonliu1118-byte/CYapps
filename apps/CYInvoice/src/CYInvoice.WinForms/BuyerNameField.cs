@@ -166,11 +166,13 @@ internal sealed class BuyerNameField : TextBox
             SetLookupState(lookup);
             LookupCompleted?.Invoke(ban, lookup);
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (token.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"BuyerNameField");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"BuyerNameField");
             if (currentGeneration != generation || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
             ClearLookupState();
             if (forceApi) ApplyLookupText(preservedName);

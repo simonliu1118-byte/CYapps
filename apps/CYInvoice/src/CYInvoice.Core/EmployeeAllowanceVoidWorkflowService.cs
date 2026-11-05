@@ -13,7 +13,16 @@ public sealed record InvoiceAllowanceVoidManualReview(
     string AllowanceNumber,
     string RequesterEmployeeNo,
     string Reason,
-    DateTimeOffset RequestedUtc);
+    DateTimeOffset RequestedUtc, bool ConfirmationProblem = false)
+{
+    public string RequesterName { get; init; } = "";
+    public string ReviewerEmployeeNo { get; init; } = "";
+    public string ReviewerName { get; init; } = "";
+    public string ReturnReason { get; init; } = "";
+    public DateTimeOffset? ReturnedUtc { get; init; }
+    public DateTimeOffset? ApprovedUtc { get; init; }
+    public AllowanceQueryItem? OriginalAllowance { get; init; }
+}
 
 public sealed record EmployeeAllowanceVoidWorkflowResult(
     InvoiceRecord Record,
@@ -29,12 +38,14 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceDetailRefreshService detailRefreshService;
     private readonly Func<DateTimeOffset> now;
+    private readonly IAmegoAllowanceVoidGateway? allowanceGateway;
 
     public EmployeeAllowanceVoidWorkflowService(
         LocalRepository repository,
         InvoiceDetailRefreshService? detailRefreshService = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null, IAmegoAllowanceVoidGateway? allowanceGateway = null)
     {
+        this.allowanceGateway = allowanceGateway;
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         syncRepository = new InvoiceSyncRepository(repository.DataDirectory);
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
@@ -74,6 +85,44 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         if (matched[0].InvoiceStatus != UploadStatuses.Complete)
             throw new InvalidOperationException("只有已完成的折讓單可以提出作廢申請");
 
+        if (repository.IdentityProvider.Kind == IdentityProviderKind.CyId)
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            var id = CYInvoice.Core.Cloud.CloudAllowanceClient.OriginalVoidApplicationId(settings.CloudWorkspaceId, Environments.ToCloud(settings.Environment), allowanceNumber);
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            var client = new CYInvoice.Core.Cloud.CloudAllowanceClient(http, new Uri(settings.CloudBaseUrl), repository.Settings.CloudDeviceToken(settings),repository.DataDirectory);
+            var details=await ApiGateway().QueryAllowanceAsync(allowanceNumber,cancellationToken).ConfigureAwait(false);
+            var tables=new List<BusinessDetailTable>();
+            if(details.Data is { } original && original.ProductItems.ValueKind==JsonValueKind.Array) {
+                static string Value(JsonElement item,string name)=>item.TryGetProperty(name,out var value)?value.ToString():"－";
+                tables.Add(new("原折讓商品",["品名","數量","單價","稅別","未稅金額","稅額"],original.ProductItems.EnumerateArray()
+                    .Select(item=>(IReadOnlyList<string>)new[] {"original_description","quantity","unit_price","tax_type","amount","tax"}.Select(name=>Value(item,name)).ToArray()).ToArray()));
+            }
+            issueStore.ApplyCloudAllowance(CurrentAccountKey(),id,"void","processing","open","",originalInvoiceNumber:fresh.InvoiceNumber,
+                originalOrderId:fresh.OrderId,allowanceNumber:allowanceNumber,progress:"待主管核准");
+            issueStore.SaveCloudDetail(CurrentAccountKey(),new(id,"void","open",1,[new("原發票",fresh.InvoiceNumber),new("折讓單號",allowanceNumber),
+                new("申請員工",employee.EmployeeNo+" "+employee.Name),new("申請時間",now().ToUniversalTime().ToString("O")),new("作廢原因",reason),
+                new("原折讓未稅金額",details.Data?.TotalAmount??"未取得"),new("原折讓稅額",details.Data?.TaxAmount??"未取得")],"","") {Tables=tables});
+            CYInvoice.Core.Cloud.CloudAllowanceVoidState state;
+            try { state = await client.CreateOrReadVoidApplicationAsync(new(id, Environments.ToCloud(settings.Environment), allowanceNumber,
+                fresh.InvoiceNumber, reason), employeeNo, password, cancellationToken).ConfigureAwait(false); }
+            catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService");issueStore.ApplyCloudAllowance(CurrentAccountKey(),id,"void","problem","unknown",error is CYInvoice.Core.Cloud.CloudApiException api?api.Code:error.GetType().Name);throw;}
+            issueStore.ApplyCloudAllowance(CurrentAccountKey(),id,"void",state.Status=="withdrawn"?"completed":"processing",state.Status,"",allowanceNumber:allowanceNumber);
+            return new(fresh, new(allowanceNumber, employee.EmployeeNo, reason, now().ToUniversalTime()),
+                state.Status != "open", "原折讓作廢申請已送交主管，請從處理中開啟詳情核准");
+        }
+
+        if (!IsLocalApiMode)
+            throw new InvalidOperationException("此交易須由原CYID雲端提出申請，舊網站人工入口已退役。");
+
+        // Check the official number before idempotently returning an old
+        // application: a claimed g0501 is not just "waiting for review".
+        var accountKey = CurrentAccountKey();
+        if (new LocalAllowanceVoidStore(repository.DataDirectory)
+            .HasClaimForAllowance(accountKey, allowanceNumber))
+            throw new InvalidOperationException("原折讓單號已有不可重送的作廢紀錄，請依原申請查回");
         var existing = ReadReview(fresh);
         if (existing is not null)
         {
@@ -86,7 +135,6 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 Message: "這張折讓單已有作廢申請等待管理員處理");
         }
 
-        var accountKey = CurrentAccountKey();
         var invoiceNumber = fresh.InvoiceNumber.Trim();
         var orderId = EffectiveOrderId(fresh);
         if (issueStore.HasUnresolved(accountKey, invoiceNumber, orderId, InvoiceAllowanceVoidIssueTypes.ManualReview))
@@ -96,7 +144,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             allowanceNumber,
             employee.EmployeeNo,
             reason,
-            now().ToUniversalTime());
+            now().ToUniversalTime()) { RequesterName = employee.Name };
         WriteReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
@@ -106,11 +154,12 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
                 invoiceNumber,
                 orderId,
                 InvoiceAllowanceVoidIssueTypes.ManualReview,
-                $"折讓單 {allowanceNumber} 作廢申請等待管理員至光貿網站人工處理。",
+                $"折讓單 {allowanceNumber} 作廢申請等待主管核准。",
                 now());
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeAllowanceVoidWorkflowService");
             ClearReview(fresh);
             syncRepository.UpsertMany([fresh]);
             throw;
@@ -120,7 +169,7 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             Reload(fresh),
             review,
             AlreadyQueued: false,
-            Message: "折讓作廢申請已送交管理員人工處理");
+            Message: "折讓作廢申請已送交主管核准");
     }
 
     public InvoiceAllowanceVoidManualReview? ManualReviewFor(InvoiceRecord record)
@@ -129,28 +178,60 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
         return ReadReview(record);
     }
 
-    public void MarkManualCompleted(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
+    public async Task<LocalAllowanceVoidResult> CheckHistoricalAsync(
+        InvoiceSyncIssue issue,string actorEmployeeNo,string actorPassword,
+        IAmegoAllowanceVoidGateway? gateway=null,CancellationToken cancellationToken=default)
     {
-        ArgumentNullException.ThrowIfNull(issue);
-        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
-        RequireIssue(issue);
-        var record = FindIssueRecord(issue);
-        _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
+        EmployeeOperationAuthentication.AuthenticateManager(repository,actorEmployeeNo,actorPassword);
+        var request=ApiRequest(issue);
         RequireNoApiClaim(issue);
-        issueStore.Resolve(issue.Id, now());
-        ClearReview(record);
-        syncRepository.UpsertMany([record]);
+        var before=RequestHash(issue);
+        var api=gateway??ApiGateway();
+        try
+        {
+            await InspectVoidTargetAsync(issue,api,cancellationToken).ConfigureAwait(false);
+            var status=await api.ReadAllowanceVoidStatusAsync(request.Review.AllowanceNumber,cancellationToken).ConfigureAwait(false);
+            EmployeeOperationAuthentication.AuthenticateManager(repository,actorEmployeeNo,actorPassword);
+            if (before!=RequestHash(issue))throw new InvalidOperationException("查證期間原申請或公司設定已改變");
+            if (!status.OfficiallyVoided || status.AllowanceNumber!=request.Review.AllowanceNumber)
+                return new(request.Review.AllowanceNumber,false,false,"官方尚未確認原折讓作廢，保留舊待辦繼續查證；沒有送出作廢。");
+            var record=Reload(request.Record);
+            record.ExtensionData ??= new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+            record.ExtensionData["cyinvoice_allowance_void_handled_" + issue.Id]=JsonSerializer.SerializeToElement(request.Review);
+            ClearReview(record);
+            IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_void_confirmed",InvoiceAllowanceVoidIssueTypes.ManualReview,code:99);
+            syncRepository.UpsertMany([record],completedIssue:issue);
+            return new(request.Review.AllowanceNumber,true,true,"已查證官方原折讓作廢，原申請及歷史已保留。");
+        }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService");
+            IssueDiagnosticLog.Record(repository.DataDirectory,issue.Id,"historical_readback_failed",InvoiceAllowanceVoidIssueTypes.ManualReview,error:error);
+            var failed=Reload(request.Record);
+            if (ReadReview(failed) is { } current && RequestHash(issue)==before)
+            {
+                WriteReview(failed,current with {ConfirmationProblem=true});
+                syncRepository.UpsertMany([failed]);
+                issueStore.UpdateMessage(issue.Id,"舊折讓作廢官方查證未完成："+error.Message);
+            }
+            throw;
+        }
     }
 
-    public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
+    public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword,string returnReason)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        var manager=EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        if(string.IsNullOrWhiteSpace(returnReason))throw new InvalidOperationException("請填寫退回原因");
         RequireIssue(issue);
         var record = FindIssueRecord(issue);
         _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");
+        if(LocalApprovalFor(issue) is not null)throw new InvalidOperationException("主管核准後不能取消退回");
         RequireNoApiClaim(issue);
         issueStore.Resolve(issue.Id, now());
+        record.ExtensionData ??= new Dictionary<string,JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData["cyinvoice_allowance_void_handled_" + issue.Id]=JsonSerializer.SerializeToElement(ReadReview(record)! with {
+            ReturnReason=returnReason.Trim(),ReturnedUtc=now().ToUniversalTime(),ReviewerEmployeeNo=manager.EmployeeNo,ReviewerName=manager.Name });
         ClearReview(record);
         syncRepository.UpsertMany([record]);
     }
@@ -161,7 +242,9 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
             value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return null;
         try { return value.Deserialize<InvoiceAllowanceVoidManualReview>(); }
-        catch (JsonException error) { throw new InvalidDataException("折讓作廢申請資料格式損壞", error); }
+        catch (JsonException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeAllowanceVoidWorkflowService"); throw new InvalidDataException("折讓作廢申請資料格式損壞", error); }
     }
 
     private static void WriteReview(InvoiceRecord record, InvoiceAllowanceVoidManualReview review)

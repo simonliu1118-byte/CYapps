@@ -13,7 +13,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $ForbiddenPathPatterns = @(
-    '^apps/CYInvoice/(?:Data|Cache|Logs|dist|build|out)/',
+    '^apps/CYInvoice/(?:Data|Cache|Logs|log|dist|build|out)/',
     '(?:^|/)(?:settings|invoices|buyer_names)\.json$',
     '\.(?:exe|dll|zip|7z|msi|xls|xlsx|pdf|log)$'
 )

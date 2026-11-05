@@ -33,7 +33,7 @@ public sealed class InvoiceRetentionService
     {
         var account = CurrentAccount();
         var cutoff = account.Environment == Environments.Test
-            ? today
+            ? InvoiceSyncService.RecentRangeStart(today)
             : InvoiceAutomaticSyncService.TwoPeriodRangeStart(today);
         var accountKey = account.Environment + "|" + account.SellerInvoice;
         var voidHistory = new LocalAllowanceVoidStore(repository.DataDirectory).HistoryIssueIds(accountKey);
@@ -258,6 +258,7 @@ public sealed class InvoiceRetentionService
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceRetentionService");
             throw new InvalidDataException("CYInvoice.db contains invalid invoice extra_json", error);
         }
     }

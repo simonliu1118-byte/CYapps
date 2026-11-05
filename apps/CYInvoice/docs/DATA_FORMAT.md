@@ -1,9 +1,9 @@
 # CYInvoice 本機資料格式
 
-本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
+本文件記錄C#／WinForms本機資料格式與相容演進，更新2026-11-05。永久規則以PROJECT_RULES.md及根三層治理為準；本機SQLite schema_version=1與遠端D1 schema23是不同版本序列，不能互換。
 
-- 目前工程測試基準：**V2.6.16**。
-- 最新公開正式 Release：**V2.4.2**。
+- 目前工程基準：**V3.1.46／BUILD0**。
+- 正式Release：**V3.1.0**；工程版與正式包分開。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。
 - 舊 `invoices.json`／`buyer_names.json` 只作首次 SQLite 遷移來源與保留備份，不再是主要寫入資料。
@@ -13,6 +13,7 @@
 程式會使用／建立：
 
 - `Data/`
+- `log/`：目前IssueDiagnosticLog的遮罩診斷；舊Logs保留既有用途。
 - `Cache/InvoicePDF/`
 - `Cache/InvoicePreview/`
 - `Cache/AllowancePDF/`（第一次取得折讓 PDF 時建立）
@@ -278,3 +279,11 @@ Cloud→Local destructive reset 的既有完整 Data replacement 也移除 CYID 
 ## V2.6.16 服務連線狀態
 
 ServiceConnectionState 僅為當次執行記憶體狀態；不新增持久化檔案、資料庫 schema、Token 或 Workspace 身分。光貿／雲端可用性不是 Employee 授權。已知 Device／綁定拒絕會由現行 stores 清身分快取；雙斷線不清發票、settings、pending 或 PDF。正式業務未知結果資料語意不變；恢復不 replay。連線矩陣及既有降級條件以 CY_ID_INTEGRATION §14.2 描述為準。
+
+## V3.1.46 現行資料owner與部署診斷
+
+- Local資料格式以 `SqliteBootstrapper.cs`、`SettingsModels.cs`、`InvoiceStore`、`IssueStore`及`sync_state`的現行實作為準；新增功能沿原owner與additive欄位，不另建第二套狀態庫。
+- Cloud折讓申請／Grant／Ledger／Claim／Audit在原業務D1，schema23包含加密取消退回決定與既有事件游標索引。原migration不可重寫；完整欄位見 `cloud/migrations/`，維護完成紀錄見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。本機投影只供顯示，不取代Cloud授權或官方結果。
+- `CloudHealthResult`讀取可選的platform deployment.versionId／createdAt，不再消費APP_ENV環境標籤。缺少metadata與網路／storage錯誤仍沿原相容性owner處理；查詢量不增加。
+- 問題日誌位於程式根目錄log，沿原IssueDiagnosticLog。真實帳密、Token、金鑰、姓名、買受人、商品、金額、原始請求／回覆與執行資料不進Public repository。
+- 本文件較舊V2.x欄位／Cache段落說明首次引入與舊資料相容；目前折讓流程與環境／公司卡行為只在 [唯一計畫](V3_2_IMPLEMENTATION_PLAN.md) 維護。

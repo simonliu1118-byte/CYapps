@@ -28,11 +28,12 @@ try{
     updated_by_device_id,environment,kind,reference_hash,actor_id,created_at,updated_at)
     VALUES('wi_synthetic_read',?,?,?,'test','VOID',?,'synthetic_actor',?,?)`)
     .run(ws,deviceId,deviceId,"a".repeat(64),createdAt,createdAt);
+  let afterList=null;
   class Statement{
     constructor(sql){this.sql=sql;this.args=[]}
     bind(...args){this.args=args;return this}
     async first(){return db.prepare(this.sql).get(...this.args)??null}
-    async all(){return {results:db.prepare(this.sql).all(...this.args)}}
+    async all(){const results=db.prepare(this.sql).all(...this.args);if(afterList){const f=afterList;afterList=null;f()}return {results}}
   }
   const d1={prepare:sql=>new Statement(sql)};
   let role="ADMIN", flips=false, revalidations=0;
@@ -85,6 +86,36 @@ try{
     "Device ID stays in the original D1 audit only");
   assert.equal((await call("get",{itemId:"wi_other_missing"})).status,404);
   assert.equal((await call("get",{itemId:"wi_synthetic_read",workspaceId:"wrong"})).status,400);
+  // The existing Device can read pending summaries without a user password;
+  // source hashes/details, archived history and transitions remain protected.
+  let available=true,accessReads=0,denyAfterFirst=false;
+  const deviceEnv={...env,cyIdContext:undefined,IDENTITY_AUTHORITY:{invalidateCache:async()=>{
+    accessReads++;
+    return {workspaceId:"identity_ws",applicationId:"CYINVOICE",available:available&&(!denyAfterFirst||accessReads===1),invalidated:[]};
+  }}};
+  async function deviceList(body={},extra={}){
+    const response=await handleWorkItems(new Request("https://synthetic.test/v1/work-items/list",{
+      method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify(body)
+    }),{...deviceEnv,...extra});
+    return {status:response.status,body:await response.json()};
+  }
+  const publicQueue=await deviceList({limit:1});
+  assert.equal(publicQueue.status,200);
+  assert.deepEqual(Object.keys(publicQueue.body.items[0]).sort(),Object.keys(queue.body.items[0]).sort());
+  assert.equal(JSON.stringify(publicQueue.body).includes("reference_hash"),false);
+  assert.equal(JSON.stringify(publicQueue.body).includes("synthetic_actor"),false);
+  assert.equal((await deviceList({status:"closed"})).status,403);
+  assert.equal((await deviceList({workspaceId:"wrong"})).status,400);
+  assert.equal((await deviceList({employeeNo:"0001",password:"WrongPass12"})).status,401);
+  assert.equal((await call("get",{itemId:"wi_synthetic_read"},{cyIdContext:undefined})).status,401);
+  available=false;
+  assert.equal((await deviceList()).status,403);
+  available=true;denyAfterFirst=true;accessReads=0;
+  assert.equal((await deviceList()).status,403,"app access revoked during list must not leak summaries");
+  denyAfterFirst=false;
+  afterList=()=>db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(deviceId);
+  assert.equal((await deviceList()).status,401,"device revoked during list must not leak summaries");
+  db.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(deviceId);
   flips=true;revalidations=0;
   assert.equal((await call("list")).status,409,"revoked CYID role during read must not leak data");
   flips=false;role="ADMIN";
@@ -92,4 +123,4 @@ try{
   assert.equal((await call("list")).status,401);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
 }finally{db.close()}
-console.log("CYInvoice V3.1 manager-only read queue gate, privacy, revocation and CAS source tests passed");
+console.log("CYInvoice Device pending summaries, manager-only details, privacy, revocation and CAS tests passed");

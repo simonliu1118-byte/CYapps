@@ -1,9 +1,12 @@
 # CYInvoice Cloud Architecture Status
 
-本文件保留 **V2.6～V3.0 歷史 Cloud 架構與切換證據**，不是 2026-10-21 的即時 Worker／D1 狀態；下方 storage13／Cloud0.9.3／V2.6.19 是當時快照。最新 V3.1.0 正式版、V3.1.25 Build 0 工程版與使用者本機 MCP 原 D1／Worker schema18 驗收狀態，請先讀 [TODO](TODO.md) 現行看板及 [V3.2 計畫](V3_2_IMPLEMENTATION_PLAN.md)。長期產品藍圖見 `CLOUD_ROADMAP.md`，CYID 身分權威仍以 canonical Consumer Standard 和永久規則為準。
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
 
-> 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
+
+## 歷史設計與演進證據
 ## 1. 歷史工程基準（不是目前 live 版號）
 
 - Windows 正式產品線：C# / WinForms。
@@ -17,7 +20,7 @@
 
 GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](V3_1_HANDOFF.md)。不等同 live deployment 或人工驗收。
 
-目前原 development 遠端部署證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。未執行的 Windows 全角色／多裝置實機矩陣仍待 RC 證據，不以 health 冒充人工通過。
+原development部署的歷史證據為 [2026-10-13 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)：Cloud 0.9.3／API 1／compatibility marker 8／storage Schema 13，全部 bindings 與 CYID_ENABLED=true 保留。另行批准的原 D1 退役維護、私有備份／本機還原驗證及保留資料逐筆／FK／health 核對完成；Run #8 等為歷史。這不是目前身分服務指向；後續部署及尚未驗收項目依現行交接／TODO，不以health冒充人工通過。
 
 本公司原 D1 的帳號 authority 已改由 CYID；CYInvoice 保留自己的業務 Workspace／Device 與資料。以下 Local／Built-in Employee 轉換、CRUD、帳號 OTP、移交等既有能力仍供 Local 或其他公司獨立新建的 Built-in D1 使用，不代表本公司已退役 D1 應重建帳號表。
 

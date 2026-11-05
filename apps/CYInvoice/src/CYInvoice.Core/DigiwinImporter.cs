@@ -71,7 +71,8 @@ public static class DigiwinImporter
             FixedDecimal quantity;
             try { quantity = FixedDecimal.Parse(CleanNumber(quantityText)); }
             catch (Exception error) when (error is FormatException or OverflowException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"DigiwinImporter");
                 throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量格式錯誤", error);
             }
             if (quantity.ScaledValue <= 0) throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量必須大於 0");
@@ -105,7 +106,9 @@ public static class DigiwinImporter
         var draft = new InvoiceDraft { OrderId = order.OrderId, TotalAmount = order.TotalAmount };
         draft.Items.AddRange(order.Items);
         try { InvoiceValidator.Validate(draft); }
-        catch (Exception error) { throw new InvalidDataException($"鼎新銷貨單 {order.OrderId}：{error.Message}", error); }
+        catch (Exception error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"DigiwinImporter"); throw new InvalidDataException($"鼎新銷貨單 {order.OrderId}：{error.Message}", error); }
         return order;
     }
 
@@ -149,6 +152,7 @@ public static class DigiwinImporter
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"DigiwinImporter");
             throw new InvalidDataException(message, error);
         }
     }

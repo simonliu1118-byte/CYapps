@@ -2,9 +2,9 @@
 
 此文件只記錄非敏感的 Email Provider 工程狀態與切換原則。不得寫入 API Key、SMTP 密碼、真實收件人 Email、OTP、Cloudflare Secret 或其他機密資料。
 
-更新日期：2026-10-09。最新工作停點見 [現行交接](V3_1_HANDOFF.md)，本文件不另維護進度清單。
+更新日期：2026-11-05。原Cloud0.9.14部署已核對原Email Provider／Secret名稱繼承，未讀值、未更換供應商，也未測寄新郵件；因此不把下面2026-10-09帳號／網域與寄達紀錄當成今日重新驗證。最新工程／維護停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)，待驗項只在TODO／延期驗收清單追蹤。
 
-## 目前狀態
+## 歷史帳號與寄信證據（2026-10-09）
 
 - 已建立 Resend 帳號，登入方式為 GitHub Sign-In。
 - 目前尚未持有可供 CYInvoice 驗證寄件的自有網域，因此 Resend 暫不作為正式 OTP 寄件來源。
@@ -14,9 +14,9 @@
 - Resend 保留為已實作的可切換 Provider；日後取得自有網域並完成網域驗證後，可切回 Resend。
 - 所有 Provider API Key 都不得提交至 repository；只能放在 Cloudflare Worker Secret 或等價的後端 Secret Store。
 
-## 目前 V3.0 原則
+## 現行Email transport邊界
 
-CYInvoice 的 OTP lifecycle 由 CYInvoice Cloud 自己管理；Email Provider 只負責寄送郵件。
+CYInvoice裝置配對／邀請／復原的郵件沿原consumer owner；中央Employee帳號／密碼／Email驗證由CYID／CYWEB管理。Email Provider只負責郵件傳輸，不能取代身份或App Access權威。
 
 因此 Windows Client 與 Cloud API contract 不得綁定特定寄信廠商。Email Sender 必須維持 provider-neutral，可由 reference backend 切換不同供應商，而不影響 Windows 端的 Workspace／Device／SUPER_ADMIN／OTP 流程。
 

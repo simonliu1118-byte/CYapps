@@ -444,7 +444,8 @@ internal sealed partial class CloudDirectJoinForm : Form
             }
             catch (Exception error) when (error is HttpRequestException or TaskCanceledException
                                           or CloudApiException { Code: "PAIRING_ALREADY_USED" or "OTP_ALREADY_USED" })
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDirectJoinForm");
                 if (await TryRecoverAsync(endpoint, attempt.DeviceToken)) return;
                 throw new InvalidOperationException(
                     "加入結果尚未確認，裝置憑證已保留。請重新開啟此流程，先嘗試找回裝置。",
@@ -485,6 +486,7 @@ internal sealed partial class CloudDirectJoinForm : Form
         }
         catch (CloudApiException error) when (error.StatusCode == HttpStatusCode.Unauthorized)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDirectJoinForm");
             return false;
         }
     }
@@ -536,11 +538,13 @@ internal sealed partial class CloudDirectJoinForm : Form
         {
             await work();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudDirectJoinForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDirectJoinForm");
             if (!IsDisposed)
             {
                 status.Text = error.Message;

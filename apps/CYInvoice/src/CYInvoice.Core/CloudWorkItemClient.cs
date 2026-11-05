@@ -164,16 +164,17 @@ public sealed class CloudWorkItemClient
         }
         catch (CloudApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound && ex.Code == "NOT_FOUND")
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudWorkItemClient");
             return null;
         }
     }
 
     public async Task<CloudWorkItemPage> ListAsync(
-        string employeeNo, string password, int limit = 20,
+        string? employeeNo = null, string? password = null, int limit = 20,
         string? kind = null, string? status = null,
         CloudWorkItemCursor? cursor = null, CancellationToken cancellationToken = default)
     {
-        ValidateCredentials(employeeNo,password);
+        if(employeeNo is not null || password is not null) ValidateCredentials(employeeNo!,password!);
         if(limit is < 1 or > 50 ||
            (kind is not null && kind is not ("VOID" or "UPLOAD_ISSUE")) ||
            (status is not null && status is not ("open" or "review" or "closed")))
@@ -186,9 +187,8 @@ public sealed class CloudWorkItemClient
         }
         // Work Item scope is exclusively derived from the active Cloud Device;
         // never send a client-selected workspace or an original invoice.
-        var query=new Dictionary<string,object?>{
-            ["limit"]=limit,["employeeNo"]=employeeNo,["password"]=password
-        };
+        var query=new Dictionary<string,object?>{ ["limit"]=limit };
+        if(employeeNo is not null){query["employeeNo"]=employeeNo;query["password"]=password;}
         if(kind is not null)query["kind"]=kind;
         if(status is not null)query["status"]=status;
         if(cursor is not null)query["cursor"]=new{
@@ -309,6 +309,7 @@ public sealed class CloudWorkItemClient
         }
         catch (JsonException ex)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(ex,"CloudWorkItemClient");
             throw new InvalidDataException("Invalid Cloud Work Item JSON reply.", ex);
         }
         var root = document.RootElement;

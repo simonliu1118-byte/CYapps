@@ -112,8 +112,9 @@ internal sealed class RotateRecoveryCodeForm : Form
             DialogResult = DialogResult.OK;
             Close();
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"RotateRecoveryCodeForm");
             MessageBox.Show(this, "目前密碼不正確。", "無法重新產生復原碼",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             password.Focus();
@@ -121,6 +122,7 @@ internal sealed class RotateRecoveryCodeForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"RotateRecoveryCodeForm");
             MessageBox.Show(this, error.Message, "無法重新產生復原碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

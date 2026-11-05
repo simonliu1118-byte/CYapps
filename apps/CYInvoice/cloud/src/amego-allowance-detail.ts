@@ -4,20 +4,7 @@
 // cross-invoice summary totals as this invoice's remaining balance.
 // No retry, no state change, no g0401/g0501. Never expose raw buyer fields.
 import {signOfficialInvoiceQuery} from "./amego-invoice-query";
-
-export const allowanceScale=10000000n;
-export const decimalPattern=/^-?(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,7}))?$/;
-export function fixed7(x:unknown,signed=false):bigint {
-  if(typeof x!=="string" && (typeof x!=="number" ||
-      !Number.isFinite(x) || !Number.isSafeInteger(x)))
-    throw new Error("OFFICIAL_DETAIL_AMOUNT_INVALID");
-  const m=decimalPattern.exec(String(x));
-  if(!m || (!signed && String(x).startsWith("-")))
-    throw new Error("OFFICIAL_DETAIL_AMOUNT_INVALID");
-  const negative=String(x).startsWith("-");
-  const whole=BigInt(m[1]),fraction=BigInt((m[2]??"").padEnd(7,"0"));
-  return (whole*allowanceScale+fraction)*(negative?-1n:1n);
-}
+import {fixed7,parseAllowanceFinancialJson} from "./allowance-decimal";
 function validDay(s:string):boolean{
  if(!/^\d{8}$/.test(s))return false;
  const y=+s.slice(0,4),m=+s.slice(4,6),d=+s.slice(6,8);
@@ -97,14 +84,15 @@ export async function queryOfficialAllowanceDetail(
  let response:Response;
  try{
   response=await transport("https://invoice-api.amego.tw/json/allowance_query",{
-   method:"POST",redirect:"error",headers:{
+   method:"POST",redirect:"manual",headers:{
     "content-type":"application/x-www-form-urlencoded",accept:"application/json"},
    body:form.toString(),signal:AbortSignal.timeout(8000)
   });
  }catch{throw new Error("OFFICIAL_DETAIL_UNAVAILABLE");}
+ if(response.status>=300&&response.status<400)throw new Error("OFFICIAL_DETAIL_REDIRECT_REJECTED");
  if(!response.ok)throw new Error("OFFICIAL_DETAIL_HTTP_FAILED");
  let dataRoot:Record<string,unknown>;
- try{dataRoot=obj(JSON.parse(await readBounded(response)));}
+ try{dataRoot=obj(parseAllowanceFinancialJson(await readBounded(response)));}
  catch(e){
   if(e instanceof Error&&e.message==="OFFICIAL_DETAIL_TOO_LARGE")throw e;
   throw new Error("OFFICIAL_DETAIL_INCOMPLETE");
