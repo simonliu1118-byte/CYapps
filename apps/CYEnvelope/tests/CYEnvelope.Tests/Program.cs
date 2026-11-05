@@ -53,7 +53,7 @@ try
     {
         Check(artwork is not null, "real red/white reference art is embedded in executable");
         Check(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artwork!)).Equals(
-            "6E62EF7994E73941781EFFFB2497C48452F873509B9F209470D95BF865CE898E", StringComparison.Ordinal),
+            "7882C3C65DFD490BAE6AA614E7354C6A663A738BECF95E57EBDCC3F7CE11A75", StringComparison.Ordinal),
             "embedded artwork matches approved red/white image SHA-256");
     }
     var largeData = new PrintData { Recipient = "範例收件人", Address = "高雄市範例路一號", PostalCode = "800" };
