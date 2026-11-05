@@ -78,6 +78,11 @@ html[data-viewport="desktop"] #ledgerSearchForm {
 }
 /* Pagination belongs to the central ledger head, not to the condition dialog. */
 .ledger-period-search-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid #e5eaf0; }
+.ledger-period-search-controls[hidden], .ledger-period-search-controls [hidden] { display: none !important; }
+.ledger-period-search-controls.ledger-month-search-only #ledgerPeriodSearchPage,
+.ledger-period-search-controls.ledger-month-search-only #ledgerPeriodSearchStatus,
+.ledger-period-search-controls.ledger-month-search-only button { display: none; }
+#ledgerSearchCount { flex: 0 0 auto; white-space: nowrap; }
 #ledgerPeriodSearchPage { margin-right: auto; color: #64748b; font-size: 12px; }
 #ledgerPeriodSearchStatus { color: #475569; font-size: 12px; }
 .ledger-period-search-controls button { min-height: 30px; padding: 4px 9px; font-size: 12px; }
