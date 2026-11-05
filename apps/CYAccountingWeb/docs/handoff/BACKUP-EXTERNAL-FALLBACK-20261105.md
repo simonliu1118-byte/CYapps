@@ -69,3 +69,14 @@ Claude 審查請核對：來源凍結與 Phase D、CAS／中止／晚到結果�
 - 發布前 main 已進到 V1.1.0（#601，來源 b44fe85），故本批整合後版本採 V1.1.1 Build 0，避免覆蓋或回退版本。
 - 保留 schema 16 的 pending_confirmation 與 transaction_confirmation_audit；canonical export mapper、完整／分批 SQLite 及 static WASM migration 列表同步整合。新分批合成案例包含非零待確認旗標與一筆確認稽核，必須完整回讀通過。
 - 本批相對當前 main 不新增 migration、不改待確認業務規則；原 V1.0.3.txt 歷史不改寫。正式部署與外部實測結果待下節補入。
+
+## 正式發布與首次外部驗收結果
+
+- 使用者授權後，PR #596 已合併；產品來源 main `93202bba49f8676ff7906bea2c6e051a06ddb6a8`，版本 V1.1.1 Build 0。
+- 整合 head `807a41fedef2fd2b14b3b61fd90a2380ae9801a0` 的 [CI 42041349940](https://github.com/simonliu1118-byte/CYapps/actions/runs/42041349940) 及 [Governance 42041349939](https://github.com/simonliu1118-byte/CYapps/actions/runs/42041349939) 均通過。
+- [正式部署 42041834602](https://github.com/simonliu1118-byte/CYapps/actions/runs/42041834602) 從 main dispatch，validate／deploy 均 success；既有 Identity、migration、secure login 及 semantic assets gates 均通過。獨立 health 回讀 ok=true，正式 schema=16；目前 /api/health 沒有 version/sourceCommit 欄位，不冒稱由該端點確認版本。
+- [首次正式外部試還原 42042206636](https://github.com/simonliu1118-byte/CYapps/actions/runs/42042206636) 手動從 main 啟動，verify job success。獨立讀取最新兩筆 operational proof，R2／GCS 都是 external success，fullRowRoundtrip／integrityCheck／foreignKeyCheck 皆通過；兩份歷史來源 schema15 正確還原到 target schema16，沒有改寫原備份。
+- 正式健康投影為 healthy、verified=true、externalStatus=success；平台已註冊單一五分鐘 Cron。分時備援未因本次外部成功而被強制觸發；正式 Free CPU／memory 的完整備援驗收仍待真實需求觸發，不能由外部成功冒充。
+- 本次外部檢查未產生 Artifact。檢查步驟公開日誌共7行，移除時間戳／終端色碼後全數符合固定指令、shell／env、公開站點設定與成功訊息白名單，沒有未預期輸出；不把原始日誌、備份內容、來源 ID、digest 或實際帳務筆數寫入本文件。
+- 獨立唯讀驗收查詢只讀兩筆 proof、一筆 health、一筆 schema：D1 API 實際 rows_read=4、rows_written=0，與預估4列一致，沒有掃交易表。這是本次獨立回讀的用量，不是整個部署／外部工作的總用量；外部工作自身會寫入兩筆 proof 及一筆健康投影，未修改正式帳務。
+- 不建立 Release、不切換帳本。Claude 事後複審及每週資料外洩檢查仍保留；付費後退場 TODO 不變。
