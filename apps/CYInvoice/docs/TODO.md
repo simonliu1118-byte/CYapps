@@ -24,7 +24,7 @@
 | **V3.2 批次 1 工程進行中** | **V3.1.26 Build 1**：沿唯一 Cloud Coordinator 接入獨立預設關閉的主管 send-once HTTP、attempt 唯讀查證及 Windows 操作（尚待精確 CI 與人工 Audit／Local 撞號整合） | 以同一個主要功能 PR 集中補測試修正；不啟用 Cloudflare 旗標，不做真光貿交易 |
 | V3.2-C／遠端 schema18 | C1～C6 Source／CI 已合併；**依使用者本機 MCP 驗收報告**，原 CYInvoice D1 已有 0017／0018 且原 Worker schema18，九個折讓入口旗標仍關閉、新六表為空、備份已私有保存 | 不重套 0014～0018；C7 尚須受控送出入口、人工處置、角色／兩裝置與光貿測試 |
 | V3.2-D／E | 離線／回線撞號與正式 g0501 未完成 | 「批次 2」整合，依真相依 1～2 個功能 PR |
-| V3.2-F／G | 官方低頻同步、完整歷史及舊 UI 退役未完成 | 「批次 3」整合；新流程驗收前保留舊 UI |
+| V3.2-F／G | F 首項：既有 invoice_query 折讓歷史及摘要完整性已參與同步／詳細回查的變更比對、SQLite 儲存和 PDF／預覽快取失效（工程 Source／Fake AMEGO 測試）。主動發現遠端僅折讓異動的低頻 allowance_list、跨機同步與 G 舊 UI 退役仍未完成 | 下一步 F 官方低頻 allowance_list／對帳（限流與隔離），後續 G 僅在新流程真人驗收後退役舊入口；不誤稱 F/G 已結案 |
 | V3.2-H | 真光貿測試公司卡、雙 Windows、Cloudflare 受控驗收與最終 Release 未完成 | 「批次 4」集中驗收；公司卡／真交易／遠端操作須本機 MCP 當次授權 |
 
 - **現行執行順序與完成標準**：只看 [V3.2 完整交付計畫](V3_2_IMPLEMENTATION_PLAN.md) §3～§5 的 **4 個主要交付批次**；下方 C1、C3c3、C4a 等小片是已完成來源索引，不再依片名重開 PR。
