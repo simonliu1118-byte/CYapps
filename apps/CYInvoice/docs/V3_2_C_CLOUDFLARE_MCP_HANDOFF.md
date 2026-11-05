@@ -1,5 +1,11 @@
 # 現行停點：Cloud Source0.9.13／V3.1.45 Build1（未部署）
 
+## 2026-11-05 已交辦部署（執行前準備）
+
+使用者明確交辦Cloud配套部署。本批維護沿原deployment-preflight owner與同批私有checkpoint，分三段：以同一0.9.13 bundle暫停三個正常折讓旗標並保持marker22；對原D1套用唯一0023及migration history；保持旗標關閉執行22→23 marker更新；最後恢復原三個正常旗標true。每段均執行before／deploy／after，原Secret、D1、服務、scope、Routes及production CYID保留；舊人工旗標仍關閉或未設定。維護工具補上disable intent與schema23恢復，並且暫停階段只接受原marker對應的完整migration prefix，不把未套用0023視為完成。
+
+預估直接D1讀4,000列、寫2,000列內，服務健康檢查20次內、控制面300次內。依共用用量及當批界線計量；資料核對有界、逐次保存進度、限流即停。先保存不可變原Worker版本與Time Travel bookmark；不自動還原D1、不讀明文憑證、不重建原申請、不核准或重送真交易。實際識別、計量與回復證據只保存私有位置。這是部署準備，完成需以後續實際收據為準。
+
 2026-11-04：使用者核准實作同機流程。完整設計與實作契約見[唯一計畫](V3_2_IMPLEMENTATION_PLAN.md#2026-11-04-現行實作契約取代下方舊版介面及退回說明)。新增0023 migration原申請表的加密退回決定與時間、事件索引；須新批次明確維護指示才能執行。0.9.12純程式部署方案停止，不可用舊schema22方案直接部署0.9.13。本輪無遠端D1、Cloudflare或真光貿操作，舊維護與私有證據保留。
 
 本次桌面需0.9.13／schema23配套才具備完整新詳情及退回；目前已部署0.9.11不冒充新版。未取得配套時安全停止主管新操作，已知同機資料仍可讀。部署仍須另行確認原Worker、原D1、綁定／Secrets／旗標、production CYID連續性、備份／可回復性、程式hash與新批次前後檢；不提供自動migration、回填授權、原案重建或重送。

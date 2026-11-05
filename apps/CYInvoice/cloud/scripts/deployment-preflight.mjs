@@ -154,16 +154,25 @@ export function preservedDeployConfig(config, settings, activating = false) {
 // No migration, provider switch, resource creation or old manual caller is enabled.
 export function applyAllowanceActivation(config,settings,intent) {
   if(!intent)return config;
-  check(intent==='enable','ALLOWANCE_ACTIVATION_INTENT_INVALID');
+  check(['enable','disable'].includes(intent),'ALLOWANCE_ACTIVATION_INTENT_INVALID');
   const vars=Object.fromEntries(settings.bindings.filter(b=>b.type==='plain_text').map(b=>[b.name,b.text]));
-  check(vars.CYID_ENABLED==='true' && vars.SCHEMA_VERSION==='22' && vars.COMPANY_SETTINGS_ENABLED==='true','ALLOWANCE_ACTIVATION_RUNTIME_INVALID');
+  check(vars.CYID_ENABLED==='true' && ['22','23'].includes(vars.SCHEMA_VERSION) && vars.COMPANY_SETTINGS_ENABLED==='true','ALLOWANCE_ACTIVATION_RUNTIME_INVALID');
   check(settings.bindings.some(b=>b.name==='COMPANY_SETTINGS_KEY_HEX' && b.type==='secret_text'),
     'ALLOWANCE_ACTIVATION_COMPANY_KEY_REQUIRED');
   for(const name of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED','ALLOWANCE_G0501_SEND_ENABLED'])
-    vars[name]='true';
+    vars[name]=intent==='enable'?'true':'false';
   for(const name of ['ALLOWANCE_MANUAL_REVIEW_ENABLED','ALLOWANCE_EXTERNAL_COLLISION_ENABLED'])
     if(Object.hasOwn(vars,name))vars[name]='false';
   return {...config,vars};
+}
+
+// A maintenance pause keeps the active marker and requires that exact applied
+// prefix. New migrations remain pending until the separate reviewed SQL step.
+export function requiredDeploymentMigrations(settings,canonical,intent) {
+  if(intent!=='disable')return canonical;
+  const schema=settings.bindings.find(b=>b.type==='plain_text'&&b.name==='SCHEMA_VERSION')?.text;
+  check(['22','23'].includes(schema)&&canonical.length>=Number(schema),'ALLOWANCE_ACTIVATION_RUNTIME_INVALID');
+  return canonical.slice(0,Number(schema));
 }
 
 // Explicit rollout intent, not permission to mutate D1 or enable allowances.
@@ -484,7 +493,7 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
   check(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID, 'CLOUDFLARE_CREDENTIALS_REQUIRED');
   const operation = env.CYINVOICE_DEPLOYMENT_MODE ?? 'preflight';
   check(['preflight','deploy','prepare-cyid','activate-cyid'].includes(operation), 'DEPLOYMENT_MODE_INVALID');
-  check(!env.CYINVOICE_ALLOWANCE_ACTIVATION || (operation==='deploy' && !env.CYINVOICE_SCHEMA_UPGRADE && env.CYINVOICE_ALLOWANCE_ACTIVATION==='enable'), 'ALLOWANCE_ACTIVATION_INTENT_INVALID');
+  check(!env.CYINVOICE_ALLOWANCE_ACTIVATION || (operation==='deploy' && !env.CYINVOICE_SCHEMA_UPGRADE && ['enable','disable'].includes(env.CYINVOICE_ALLOWANCE_ACTIVATION)), 'ALLOWANCE_ACTIVATION_INTENT_INVALID');
   check(!env.CYINVOICE_SCHEMA_UPGRADE || (operation === 'deploy' && Object.hasOwn(schemaUpgrades, env.CYINVOICE_SCHEMA_UPGRADE)),
     'SCHEMA_UPGRADE_INTENT_INVALID');
   check(typeof env.CYID_WORKER_NAME === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(env.CYID_WORKER_NAME),
@@ -531,8 +540,9 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
       operation, env.CYINVOICE_SCHEMA_UPGRADE);
     check(digest(upgrade ?? null) === digest(audit.schemaUpgrade ?? null), 'SCHEMA_UPGRADE_AUDIT_MISMATCH');
     check((audit.allowanceActivation??'')===(env.CYINVOICE_ALLOWANCE_ACTIVATION??''),'ALLOWANCE_ACTIVATION_AUDIT_MISMATCH');
-    checkMigrations(applied, canonical, !upgrade);
-    check(String(deployConfig.vars?.SCHEMA_VERSION) === String(upgrade?.to ?? canonical.length), 'DEPLOYMENT_SCHEMA_MARKER_MISMATCH');
+    const required=requiredDeploymentMigrations(audit.settings,canonical,env.CYINVOICE_ALLOWANCE_ACTIVATION);
+    checkMigrations(applied, required, !upgrade);
+    check(String(deployConfig.vars?.SCHEMA_VERSION) === String(upgrade?.to ?? required.length), 'DEPLOYMENT_SCHEMA_MARKER_MISMATCH');
     await deployReviewedVersion(audit, deployConfig, fs.readFileSync(bundlePath, 'utf8'), request,
       value => fs.writeFileSync(statePath, JSON.stringify(value), {mode:0o600}));
     return;
@@ -604,7 +614,8 @@ export async function main(mode, statePath, env = process.env, bundlePath) {
     'SCHEMA_UPGRADE_AUDIT_MISMATCH');
   const schemaUpgrade = resolveSchemaUpgrade(before?.settings ?? settings, canonical, applied,
     operation, env.CYINVOICE_SCHEMA_UPGRADE);
-  const pending = checkMigrations(applied, canonical, !schemaUpgrade &&
+  const required=requiredDeploymentMigrations(before?.settings??settings,canonical,env.CYINVOICE_ALLOWANCE_ACTIVATION);
+  const pending = checkMigrations(applied, required, !schemaUpgrade &&
     (mode === 'after' || preparing || activating || vars.CYID_ENABLED === 'true'));
   const state = await snapshot(query);
   if (state.storageProfile === 'CYID_ONLY')

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade, applyAllowanceActivation } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade, applyAllowanceActivation, requiredDeploymentMigrations } from '../scripts/deployment-preflight.mjs';
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
@@ -815,3 +815,25 @@ assert.throws(()=>resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,wi
 }
 
 assert.deepEqual(resolveSchemaUpgrade(withdrawalSettings,withdrawalCanonical,withdrawalCanonical,'deploy','22:23'),{from:'22',to:'23',migration:'0023_allowance_return_decision.sql'});
+
+// Pause uses only the current exact prefix; restoring after schema23 preserves all other bindings.
+{
+ const canonical=fs.readdirSync('migrations').filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort();
+ for(const schema of ['22','23']) {
+  const settings={bindings:[{name:'CYID_ENABLED',type:'plain_text',text:'true'},
+   {name:'SCHEMA_VERSION',type:'plain_text',text:schema},{name:'COMPANY_SETTINGS_ENABLED',type:'plain_text',text:'true'},
+   {name:'COMPANY_SETTINGS_KEY_HEX',type:'secret_text'},{name:'CUSTOM_POLICY',type:'plain_text',text:'keep'},
+   ...['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED','ALLOWANCE_G0501_SEND_ENABLED'].map(name=>({name,type:'plain_text',text:'true'}))]};
+  const original=structuredClone(settings);
+  const paused=applyAllowanceActivation({},settings,'disable');
+  assert.equal(paused.vars.SCHEMA_VERSION,schema);assert.equal(paused.vars.CUSTOM_POLICY,'keep');
+  for(const key of ['ALLOWANCE_API_ENABLED','ALLOWANCE_G0401_SEND_ENABLED','ALLOWANCE_G0501_SEND_ENABLED'])assert.equal(paused.vars[key],'false');
+  assert.deepEqual(settings,original);
+  const prefix=requiredDeploymentMigrations(settings,canonical,'disable');
+  assert.equal(prefix.length,Number(schema));checkMigrations(prefix,prefix,true);
+  if(schema==='22')assert.throws(()=>checkMigrations(canonical,prefix,true),/MIGRATION_HISTORY_NOT_CANONICAL_PREFIX/);
+  const restored=applyAllowanceActivation({},settings,'enable');
+  assert.equal(restored.vars.SCHEMA_VERSION,schema);
+  assert.equal(restored.vars.CUSTOM_POLICY,'keep');assert.equal(restored.vars.ALLOWANCE_API_ENABLED,'true');
+ }
+}
