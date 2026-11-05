@@ -2,18 +2,15 @@ using System.Drawing.Drawing2D;
 
 namespace CYInvoice.WinForms;
 
-internal sealed class StartupCheckForm : Form
+internal sealed class StartupCheckOverlay : UserControl
 {
-    public StartupCheckForm()
+    public StartupCheckOverlay()
     {
-        Text = "啟動檢查中";
+        AccessibleName = "啟動檢查中";
         Font = new Font("Microsoft JhengHei UI", 10F);
-        ClientSize = new Size(280, 90);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        ControlBox = false;
-        ShowIcon = false;
-        ShowInTaskbar = false;
-        StartPosition = FormStartPosition.Manual;
+        Size = new Size(180, 52);
+        TabStop = false;
+        Anchor = AnchorStyles.None;
         BackColor = Color.White;
         var row = new FlowLayoutPanel {
             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false,
@@ -27,13 +24,6 @@ internal sealed class StartupCheckForm : Form
         row.Anchor = AnchorStyles.None;
         layout.Controls.Add(row);
         Controls.Add(layout);
-    }
-
-    protected override void OnLoad(EventArgs e)
-    {
-        if (Owner is { } owner)
-            Location = new Point(owner.Left + (owner.Width - Width) / 2, owner.Top + (owner.Height - Height) / 2);
-        base.OnLoad(e);
     }
 
     // WinForms has no native circular progress control. Use the same small arc

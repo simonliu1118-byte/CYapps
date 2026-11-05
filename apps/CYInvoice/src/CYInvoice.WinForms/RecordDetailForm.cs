@@ -1273,8 +1273,10 @@ internal sealed class RecordDetailForm : Form
         confirmCarrier.PerformLayout();
         confirmCarrier.VerifySmokeLayout();
         using var allowance = new AllowanceRequestForm();
-        allowance.PerformLayout();
+        allowance.Show();
+        Application.DoEvents();
         allowance.VerifySmokeLayout();
+        allowance.Close();
         var editable = new InvoiceRecord
         {
             InvoiceNumber = "AA12345678", InvoiceDate = "2026/09/16",
@@ -1291,9 +1293,11 @@ internal sealed class RecordDetailForm : Form
                 "PREVIOUS-001", "20260916", "5", "100")
         ], summaryPresent: true);
         using var editor = new AllowanceRequestForm(editable);
-        editor.PerformLayout();
+        editor.Show();
+        Application.DoEvents();
         editor.VerifySmokeLayout();
         editor.VerifySmokeOriginalInvoiceEditing();
+        editor.Close();
     }
 
     private static IEnumerable<Control> Descendants(Control root)

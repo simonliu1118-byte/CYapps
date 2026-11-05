@@ -19,6 +19,8 @@ internal sealed class NativeListViewHost : UserControl
     private bool scrollNeeded;
     private bool notifyingViewport;
     private bool viewportNotificationQueued;
+    private bool tableAppearanceConfigured;
+    private int rowActionColumn = -1;
 
     public NativeListViewHost(float fontSize = 10F, int rowHeight = 27)
     {
@@ -209,23 +211,35 @@ internal sealed class NativeListViewHost : UserControl
         Fit();
     }
 
-    public void ConfigureRowAction(int columnIndex, string text, Action<ListViewItem> execute)
+    public void ConfigureTableAppearance()
     {
+        if (tableAppearanceConfigured) return;
+        tableAppearanceConfigured = true;
+        List.OwnerDraw = true;
+        List.DrawColumnHeader += (_, e) => DrawHeader(e, List.Font, alignToNativeGridLines: List.GridLines);
+        List.DrawItem += (_, e) => { if (List.View != View.Details) e.DrawDefault = true; };
+        List.DrawSubItem += (_, e) => { if (e.ColumnIndex != rowActionColumn) e.DrawDefault = true; };
+    }
+
+    public void ConfigureRowAction(int columnIndex, string text, Action<ListViewItem> execute,
+        Func<ListViewItem, bool>? isActionRow = null)
+    {
+        ConfigureTableAppearance();
+        rowActionColumn = columnIndex;
         ListViewItem? hot = null;
         ListViewItem? pressed = null;
         Rectangle Bounds(ListViewItem item) => Rectangle.Inflate(item.SubItems[columnIndex].Bounds, -4, -2);
         ListViewItem? Hit(Point location)
         {
             var hit = List.HitTest(location);
-            return hit.Item is not null && hit.SubItem is not null && hit.Item.SubItems.IndexOf(hit.SubItem) == columnIndex &&
+            return hit.Item is not null && (isActionRow?.Invoke(hit.Item) ?? true) &&
+                hit.SubItem is not null && hit.Item.SubItems.IndexOf(hit.SubItem) == columnIndex &&
                 Bounds(hit.Item).Contains(location) ? hit.Item : null;
         }
-        List.OwnerDraw = true;
-        List.DrawColumnHeader += (_, e) => DrawHeader(e, List.Font, alignToNativeGridLines: List.GridLines);
-        List.DrawItem += (_, e) => { if (List.View != View.Details) e.DrawDefault = true; };
         List.DrawSubItem += (_, e) =>
         {
-            if (e.ColumnIndex != columnIndex || e.Item is null) { e.DrawDefault = true; return; }
+            if (e.ColumnIndex != columnIndex || e.Item is null) return;
+            if (!(isActionRow?.Invoke(e.Item) ?? true)) { e.DrawDefault = true; return; }
             using var brush = new SolidBrush(e.Item.Selected ? SystemColors.Highlight : e.Item.BackColor);
             e.Graphics.FillRectangle(brush, e.Bounds);
             RoundedButtonSurface.DrawRowAction(e.Graphics, Bounds(e.Item), List.Font, text, List.DeviceDpi,

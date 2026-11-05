@@ -28,7 +28,7 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
     private readonly System.Windows.Forms.Timer connectionTimer = new() { Interval = 60_000 };
     private bool checkingConnections;
-    private StartupCheckForm? startupCheck;
+    private StartupCheckOverlay? startupCheck;
     private ConnectionBlockForm? connectionBlocker;
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
@@ -1001,15 +1001,32 @@ internal sealed class MainForm : Form
 
     private void ShowStartupCheck()
     {
-        startupCheck = new StartupCheckForm();
-        startupCheck.Show(this);
+        if (startupCheck is not null || shuttingDown || IsDisposed) return;
+        startupCheck = new StartupCheckOverlay();
+        startupCheck.Location = new Point((ClientSize.Width - startupCheck.Width) / 2,
+            (ClientSize.Height - startupCheck.Height) / 2);
+        Controls.Add(startupCheck);
+        startupCheck.BringToFront();
     }
 
     private void FinishStartupCheck()
     {
         var current = startupCheck;
         startupCheck = null;
-        current?.Close();
+        current?.Dispose();
+    }
+
+    internal void VerifySmokeStartupCheck()
+    {
+        ShowStartupCheck();
+        var current = startupCheck ?? throw new InvalidOperationException("啟動提示未建立");
+        if (current.Parent != this || !current.Visible ||
+            Math.Abs(current.Left + current.Width / 2 - ClientSize.Width / 2) > 2 ||
+            Math.Abs(current.Top + current.Height / 2 - ClientSize.Height / 2) > 2)
+            throw new InvalidOperationException("啟動提示必須是主視窗內的置中控制項");
+        FinishStartupCheck();
+        if (!current.IsDisposed || Controls.Contains(current) || startupCheck is not null)
+            throw new InvalidOperationException("啟動提示未完整移除");
     }
 
     private void ApplyConnectionControls(ServiceConnectionState state)

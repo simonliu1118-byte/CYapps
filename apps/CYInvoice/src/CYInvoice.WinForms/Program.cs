@@ -211,6 +211,7 @@ internal static class Program
         form.PerformLayout();
         Application.DoEvents();
         form.VerifySmokeLayout();
+        form.VerifySmokeStartupCheck();
         form.Close();
 
         Stage("allowance native tables and editing");

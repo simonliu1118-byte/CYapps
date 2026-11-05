@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
@@ -11,10 +12,13 @@ namespace CYInvoice.WinForms;
 internal sealed class AllowanceRequestForm : Form
 {
     private const int WindowWidth = 700;
-    private const int WindowHeight = 650;
+    private const int VisibleProductRows = 5;
+    private const int MaximumReasonCharacters = 20;
+    private static readonly object PlaceholderRow = new();
     private readonly InvoiceRecord? original;
     private readonly FixedDecimal? remaining;
-    private readonly TextBox reason = UiControls.TextBox(100);
+    private readonly TextBox reason = UiControls.TextBox(MaximumReasonCharacters);
+    private readonly Label reasonCounter = new() { Text = "0 / 20", AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = Color.DimGray };
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(128);
     private readonly CheckBox grossPrices = new() {
@@ -37,6 +41,8 @@ internal sealed class AllowanceRequestForm : Form
     private readonly Button submit = UiControls.StandardButton("提出申請");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private bool calculating;
+    private TableLayoutPanel root = null!;
+    private readonly Label historyTitle = new() { Text = "既有折讓", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
 
     public AllowanceRequestForm(InvoiceRecord? invoice = null)
     {
@@ -44,14 +50,15 @@ internal sealed class AllowanceRequestForm : Form
         if(invoice is not null)remaining=InvoiceAllowanceMetadata.RemainingGross(invoice);
         Text="折讓申請";
         StartPosition=FormStartPosition.CenterParent;
-        ClientSize=new Size(WindowWidth,WindowHeight);
-        MinimumSize=new Size(680,600);
+        ClientSize=new Size(WindowWidth,540);
+        MinimumSize=new Size(680,500);
         FormBorderStyle=FormBorderStyle.Sizable;
         MaximizeBox=true;
         ShowInTaskbar=false;
         Font=new Font("Microsoft JhengHei UI",10F);
         ShowIcon=false;
-        reason.Multiline=true; reason.ScrollBars=ScrollBars.Vertical;
+        reason.Multiline=false;
+        reason.TextChanged += (_, _) => reasonCounter.Text = $"{reason.Text.EnumerateRunes().Count()} / {MaximumReasonCharacters}";
         reason.TextAlign=HorizontalAlignment.Left;
         employeeNo.TextAlign=HorizontalAlignment.Left;
         password.TextAlign=HorizontalAlignment.Left;
@@ -60,7 +67,7 @@ internal sealed class AllowanceRequestForm : Form
         productEditor.Committed += (_, _) => UpdateTotals();
         productEditor.NavigationRequested += (row, column, _) => BeginInvoke((Action)(() => {
             if (column < 2) BeginProductEdit(row, column + 1);
-            else if (row + 1 < products.Items.Count) BeginProductEdit(row + 1, 0);
+            else if (row + 1 < ProductRows().Count) BeginProductEdit(row + 1, 0);
             else reason.Focus();
         }));
         ConfigureTables();
@@ -71,7 +78,8 @@ internal sealed class AllowanceRequestForm : Form
         if(invoice is not null)LoadOriginal(invoice);
         grossPrices.CheckedChanged += (_, _) => ConvertPrices();
         reset.Click+=(_,_)=>ResetProducts();
-        Shown+=(_,_)=>reason.Focus();
+        Shown+=(_,_)=> { ApplyMeasuredLayout(); reason.Focus(); };
+        EnsurePlaceholderRows();
     }
 
     public string Reason=>reason.Text.Trim().ReplaceLineEndings(" ");
@@ -87,7 +95,9 @@ internal sealed class AllowanceRequestForm : Form
             list.GridLines = true;
             list.Sorting = SortOrder.None;
             list.ShowItemToolTips = true;
+            list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         }
+        historyHost.ConfigureTableAppearance();
         foreach (var label in new[] { "折讓單號", "日期", "未稅金額", "稅額", "含稅金額", "狀態" })
             officialHistory.Columns.Add(label);
         for (var i = 2; i < 5; i++) officialHistory.Columns[i].TextAlign = HorizontalAlignment.Right;
@@ -101,7 +111,8 @@ internal sealed class AllowanceRequestForm : Form
             productEditor.Commit(false);
             products.Items.Remove(row);
             UpdateTotals();
-        });
+        }, row => !IsPlaceholder(row));
+        products.ItemSelectionChanged += (_, e) => { if (e.IsSelected && e.Item is { } item && IsPlaceholder(item)) item.Selected = false; };
         products.MouseUp += (_, e) => {
             if (e.Button != MouseButtons.Left) return;
             var hit = products.HitTest(e.Location);
@@ -119,27 +130,27 @@ internal sealed class AllowanceRequestForm : Form
     private void BeginProductEdit(int row, int column)
     {
         productEditor.Commit(false);
-        if (row < 0 || row >= products.Items.Count || column is < 0 or > 2) return;
+        if (row < 0 || row >= products.Items.Count || IsPlaceholder(products.Items[row]) || column is < 0 or > 2) return;
         productEditor.Begin(row, column, products.Items[row].SubItems[column].Text, column == 0 ? 256 : 64);
     }
 
     private void BuildLayout()
     {
-        var root=new TableLayoutPanel {
+        root=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=1,RowCount=6,
             Padding=new Padding(14,12,14,10)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,62));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute,100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,190));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute,72));
         root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,45));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,106));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute,50));
         var header=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=2,RowCount=2
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,75));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         balance.Text=remaining is null
             ?"請選擇要折讓的商品並修改數量或單價。"
             :$"原發票 {original!.Amount:N0} 元｜剩餘可折讓 {remaining.Value} 元";
@@ -151,15 +162,19 @@ internal sealed class AllowanceRequestForm : Form
         },0,1);
         header.SetColumnSpan(header.GetControlFromPosition(0,1)!,2);
         root.Controls.Add(header,0,0);
-        root.Controls.Add(historyHost,0,1);
-        root.Controls.Add(productsHost,0,2);
+        historyTitle.Text = officialHistory.Items.Count == 0 ? "既有折讓（尚無折讓紀錄）" : "既有折讓";
+        root.Controls.Add(TableSection(historyTitle, historyHost, 12),0,1);
+        root.Controls.Add(TableSection(new Label { Text = "本次折讓商品" }, productsHost, 8),0,2);
         var sumRow=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=2
         };
-        sumRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,155));
+        sumRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,84));
         sumRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         sumRow.Controls.Add(reset,0,0);
         sumRow.Controls.Add(totals,1,0);
+        reset.Dock = DockStyle.None;
+        reset.Anchor = AnchorStyles.Left;
+        reset.Size = new Size(72,28);
         root.Controls.Add(sumRow,0,3);
         var credentials=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=4,RowCount=2
@@ -169,9 +184,16 @@ internal sealed class AllowanceRequestForm : Form
                 i%2==0?80:50));
         for(var i=0;i<2;i++)credentials.RowStyles.Add(
             new RowStyle(SizeType.Percent,50));
-        Credentials(credentials,"折讓原因",reason,0,0);
-        credentials.SetColumnSpan(reason,3);
-        reason.Dock=DockStyle.Fill;
+        var reasonLine = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        reasonLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        reasonLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        reason.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        reason.Dock = DockStyle.None;
+        reasonLine.Controls.Add(reason,0,0);
+        reasonLine.Controls.Add(reasonCounter,1,0);
+        Credentials(credentials,"折讓原因",reasonLine,0,0);
+        credentials.SetColumnSpan(reasonLine,3);
+        reasonLine.Dock=DockStyle.Fill;
         Credentials(credentials,"員工編號",employeeNo,0,1);
         Credentials(credentials,"員工密碼",password,2,1);
         employeeNo.Anchor=AnchorStyles.Left; employeeNo.Width=90; password.Anchor=AnchorStyles.Left; password.Width=180;
@@ -187,6 +209,64 @@ internal sealed class AllowanceRequestForm : Form
         root.Controls.Add(buttons,0,5);
         Controls.Add(root);
         CancelButton=cancel;
+    }
+
+    private static TableLayoutPanel TableSection(Label title, NativeListViewHost host, int bottomGap)
+    {
+        title.Dock = DockStyle.Fill;
+        title.TextAlign = ContentAlignment.MiddleLeft;
+        title.Margin = Padding.Empty;
+        var section = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(0,0,0,bottomGap),
+        };
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute,24));
+        section.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        section.Controls.Add(title,0,0);
+        section.Controls.Add(host,0,1);
+        return section;
+    }
+
+    private void ApplyMeasuredLayout()
+    {
+        var historySection = (TableLayoutPanel)historyHost.Parent!;
+        var productsSection = (TableLayoutPanel)productsHost.Parent!;
+        root.RowStyles[1].Height = historySection.RowStyles[0].Height +
+            historyHost.HeightForRows(Math.Clamp(officialHistory.Items.Count,1,3)) + historySection.Margin.Vertical;
+        root.RowStyles[2].Height = productsSection.RowStyles[0].Height +
+            productsHost.HeightForRows(VisibleProductRows) + productsSection.Margin.Vertical;
+        var height = (int)Math.Ceiling(root.RowStyles.Cast<RowStyle>().Where(row => row.SizeType == SizeType.Absolute).Sum(row => row.Height)) +
+            root.Padding.Vertical + cancel.Height + cancel.Margin.Vertical + 8;
+        ClientSize = new Size(ClientSize.Width,height);
+        MinimumSize = SizeFromClientSize(new Size(660,height));
+    }
+
+    private static bool IsPlaceholder(ListViewItem row) => ReferenceEquals(row.Tag,PlaceholderRow);
+    private List<ListViewItem> ProductRows() => products.Items.Cast<ListViewItem>().Where(row => !IsPlaceholder(row)).ToList();
+
+    private void RemovePlaceholderRows()
+    {
+        for (var i=products.Items.Count-1;i>=0;i--)
+            if (IsPlaceholder(products.Items[i])) products.Items.RemoveAt(i);
+    }
+
+    private void EnsurePlaceholderRows()
+    {
+        RemovePlaceholderRows();
+        for (var i=products.Items.Count;i<VisibleProductRows;i++)
+            products.Items.Add(new ListViewItem(["","","","","","",""]) { Tag=PlaceholderRow });
+        productsHost.SetScrollNeeded(ProductRows().Count>VisibleProductRows);
+        foreach (ListViewItem row in products.Items)
+        {
+            row.UseItemStyleForSubItems = false;
+            var background = row.Index%2==0 ? Color.White : Color.FromArgb(238,244,250);
+            var readOnlyBackground = row.Index%2==0 ? Color.FromArgb(244,244,244) : Color.FromArgb(235,240,245);
+            for (var column=0;column<row.SubItems.Count;column++)
+            {
+                row.SubItems[column].BackColor = column is 3 or 4 or 5 ? readOnlyBackground : background;
+                row.SubItems[column].ForeColor = SystemColors.ControlText;
+            }
+        }
     }
 
     private static void Credentials(TableLayoutPanel table,string name,
@@ -231,6 +311,7 @@ internal sealed class AllowanceRequestForm : Form
 
     private void AddProduct(string name,string quantity,string price,string taxKind)
     {
+        RemovePlaceholderRows();
         if(products.Items.Count>=50){
             MessageBox.Show(this,"折讓明細最多 50 筆。","無法新增");
             return;
@@ -251,7 +332,7 @@ internal sealed class AllowanceRequestForm : Form
         calculating = true;
         try
         {
-            foreach (ListViewItem row in products.Items)
+            foreach (var row in ProductRows())
             {
                 if (Convert.ToString(row.SubItems[3].Text) != "應稅")
                     continue;
@@ -281,7 +362,7 @@ internal sealed class AllowanceRequestForm : Form
         FixedDecimal Tax,FixedDecimal Gross) Calculate()
     {
         if(original is null)throw new InvalidOperationException("缺少原發票資料");
-        if(products.Items.Count==0)throw new InvalidOperationException("請至少留下 1 個折讓品項");
+        if(ProductRows().Count==0)throw new InvalidOperationException("請至少留下 1 個折讓品項");
         var origDate=original.InvoiceDate.Replace("/","").Replace("-","");
         if(!int.TryParse(origDate,NumberStyles.None,CultureInfo.InvariantCulture,
             out var date)||origDate.Length!=8)
@@ -289,7 +370,7 @@ internal sealed class AllowanceRequestForm : Form
         var items=new List<AllowanceProductItem>();
         var net=new FixedDecimal(0);
         var tax=new FixedDecimal(0);
-        foreach(ListViewItem row in products.Items){
+        foreach(var row in ProductRows()){
             var description=(Convert.ToString(row.SubItems[0].Text)??"").Trim();
             if(description.Length==0||description.Length>256)
                 throw new InvalidOperationException("商品名稱不可空白或超過 256 字");
@@ -360,7 +441,7 @@ internal sealed class AllowanceRequestForm : Form
             totals.ForeColor=Color.Firebrick;
             totals.Text="請完成商品數量、單價與課稅別後再送出";
         }
-        finally{calculating=false;}
+        finally{calculating=false; EnsurePlaceholderRows();}
     }
 
     private void Submit()
@@ -369,6 +450,9 @@ internal sealed class AllowanceRequestForm : Form
         if(Reason.Length==0){
             ValidationError("請輸入折讓原因。",reason);
             return;
+        }
+        if(Reason.EnumerateRunes().Count()>MaximumReasonCharacters){
+            ValidationError("折讓原因最多 20 字。",reason); return;
         }
         try {
             var sum=Calculate();
@@ -411,12 +495,12 @@ internal sealed class AllowanceRequestForm : Form
     {
         if (ShowIcon || productsHost.HeaderClicksEnabled || historyHost.HeaderClicksEnabled || reset.Text != "重置")
             throw new InvalidOperationException("折讓申請必須無圖示、固定應稅且提供重置。 ");
-        if (original is null || remaining is null || products.Items.Count != 2)
+        if (original is null || remaining is null || ProductRows().Count != 2)
             throw new InvalidOperationException("折讓視窗未帶入原發票及官方剩餘額");
         var initial = Calculate().Gross;
         products.Items.RemoveAt(1);
         ResetProducts();
-        if (products.Items.Count != 2 || Calculate().Gross != initial)
+        if (ProductRows().Count != 2 || Calculate().Gross != initial)
             throw new InvalidOperationException("重置未還原原商品與金額。");
         products.Items.RemoveAt(1);
         products.Items[0].SubItems[2].Text = "100.1234567";
@@ -459,8 +543,11 @@ internal sealed class AllowanceRequestForm : Form
             credentials.GetRow(employeeNo) != credentials.GetRow(password) ||
             employeeNo.Bounds.Right > password.Bounds.Left || password.Bounds.Right > credentials.ClientSize.Width)
             throw new InvalidOperationException("員工編號與密碼必須同列對齊且不超出視窗。");
-        if(Text!="折讓申請"||ClientSize.Width!=WindowWidth||
-           ClientSize.Height!=WindowHeight||CancelButton!=cancel||
+        if (productsHost.VisibleRowCapacity()!=VisibleProductRows || reason.Multiline ||
+            reason.MaxLength!=MaximumReasonCharacters || reset.Width>=cancel.Width ||
+            historyHost.PointToScreen(Point.Empty).Y+historyHost.Height >= productsHost.PointToScreen(Point.Empty).Y)
+            throw new InvalidOperationException($"折讓版面不正確：rows={productsHost.VisibleRowCapacity()}, multiline={reason.Multiline}, max={reason.MaxLength}, reset={reset.Width}, cancel={cancel.Width}, historyBottom={historyHost.PointToScreen(Point.Empty).Y+historyHost.Height}, productsTop={productsHost.PointToScreen(Point.Empty).Y}");
+        if(Text!="折讓申請"||ClientSize.Width!=WindowWidth||CancelButton!=cancel||
            !password.UseSystemPasswordChar||products.Columns.Count!=7||
             officialHistory.Columns.Count != 6 ||
             (products.Columns["unit_price"]?.Text != "未稅單價" &&

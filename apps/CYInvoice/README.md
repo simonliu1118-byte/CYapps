@@ -7,7 +7,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程：**V3.1.48／BUILD0**；折讓上下表改用既有NativeListViewHost並填滿可用寬度，表頭不可點擊排序；開立與折讓共用格內編輯器。保留前景「啟動檢查中」轉圈提示。遠端封裝結果以對應PR的CI為準，工程包不是正式Release。
+- 目前工程：**V3.1.48 Build 1**；啟動提示直接嵌入主視窗，不另開提示視窗；折讓兩表分區、共用中性表頭，商品固定五列、溢出捲動，小型重置及單行20字原因。折讓單號格式維持原樣。遠端封裝結果以對應PR的CI為準，工程包不是正式Release。
 - 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
 - 正式Release：**[V3.1.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.1.0)**。本次未建立新tag／Release或覆寫桌面安裝。
 - 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
