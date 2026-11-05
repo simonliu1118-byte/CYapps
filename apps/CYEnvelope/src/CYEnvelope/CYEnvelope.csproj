@@ -19,6 +19,7 @@
     <Content Include="../../BUILD" Link="BUILD" CopyToOutputDirectory="Always" />
     <Resource Include="../../assets/ENV.ico" Link="ENV.ico" />
     <EmbeddedResource Include="postal.tsv" />
+    <EmbeddedResource Include="../../assets/standard-large-120x230.png" LogicalName="CYEnvelope.StandardLargePreview.png" />
     <Content Include="Fonts/FONT_LICENSES.txt" Link="FONT_LICENSES.txt" CopyToOutputDirectory="Always" />
   </ItemGroup>
   <!-- Bundled fonts are fetched by tools/fetch-fonts.ps1 (pinned URL + SHA-256) and are not stored in Git.

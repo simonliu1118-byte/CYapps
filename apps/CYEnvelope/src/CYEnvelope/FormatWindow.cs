@@ -266,7 +266,7 @@ public sealed class FormatWindow : Window
     }
     private void Delete()
     {
-        if (_working.Id == "format-15k" || _working.IsDefault)
+        if (_working.Id is "format-15k" or EnvelopeFormat.StandardLargeId || _working.IsDefault)
         {
             MessageBox.Show(this, "內建或目前預設格式不可刪除。", "無法刪除", MessageBoxButton.OK, MessageBoxImage.Information); return;
         }

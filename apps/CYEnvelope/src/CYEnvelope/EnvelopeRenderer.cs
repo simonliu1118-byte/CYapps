@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.IO;
+using System.Windows.Media.Imaging;
 using System.Windows;
 using System.Windows.Media;
 
@@ -13,6 +15,20 @@ public static class EnvelopeRenderer
     private static readonly Brush Ink = Brushes.Black;
     private static readonly Pen Red = new(new SolidColorBrush(Color.FromRgb(176, 61, 64)), .24 * DipPerMm);
     private static readonly Pen Black = new(Ink, .35 * DipPerMm);
+    private static readonly Lazy<BitmapSource> LargeArtwork = new(LoadLargeArtwork);
+
+    private static BitmapSource LoadLargeArtwork()
+    {
+        using var stream = typeof(EnvelopeRenderer).Assembly.GetManifestResourceStream("CYEnvelope.StandardLargePreview.png")
+            ?? throw new InvalidOperationException("Missing embedded standard-large envelope artwork.");
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
+    }
 
     // printerOrigin: the printer's imageable-area origin (DIP), removed so millimetres stay paper-relative.
     public static DrawingVisual Draw(EnvelopeFormat format, PrintData data, bool preview, string? highlight = null,
@@ -96,6 +112,22 @@ public static class EnvelopeRenderer
 
     private static void DrawPrintedEnvelopeReference(DrawingContext dc, EnvelopeFormat f)
     {
+        if (f.PreviewArtwork == EnvelopeFormat.StandardLargeArtworkId)
+        {
+            // The user-supplied photograph, rectified and converted to pure red/white; do not
+            // re-create its preprinted text/table using code. This method runs ONLY for preview.
+            var image = LargeArtwork.Value;
+            if (f.Landscape)
+            {
+                dc.PushTransform(new TranslateTransform(f.WidthMm * DipPerMm, 0));
+                dc.PushTransform(new RotateTransform(90));
+                dc.DrawImage(image, new Rect(0, 0, f.HeightMm * DipPerMm, f.WidthMm * DipPerMm));
+                dc.Pop(); dc.Pop();
+            }
+            else
+                dc.DrawImage(image, new Rect(0, 0, f.WidthMm * DipPerMm, f.HeightMm * DipPerMm));
+            return;
+        }
         // Fixed preprinted artwork: never derive the paper's red ink from editable text boxes.
         // Visible geometry traced proportionally from the user's 393px 15K product photograph.
         // The label obscures the lower section; the frame's lower end remains an approximation.
