@@ -20,8 +20,11 @@ internal sealed class AllowanceRequestForm : Form
     private readonly CheckBox grossPrices = new() {
         Text = "以含稅單價輸入", AutoSize = true
     };
-    private readonly DataGridView officialHistory = UiControls.Grid();
-    private readonly DataGridView products = UiControls.Grid();
+    private readonly NativeListViewHost historyHost = new(10F, 27);
+    private readonly NativeListViewHost productsHost = new(10F, 27);
+    private readonly NativeListCellEditor productEditor;
+    private ListView officialHistory => historyHost.List;
+    private ListView products => productsHost.List;
     private readonly Label totals = new() {
         Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,
         ForeColor=Color.Black,AutoEllipsis=true
@@ -53,25 +56,20 @@ internal sealed class AllowanceRequestForm : Form
         employeeNo.TextAlign=HorizontalAlignment.Left;
         password.TextAlign=HorizontalAlignment.Left;
         password.UseSystemPasswordChar=true;
-        officialHistory.ReadOnly = true;
-        officialHistory.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        foreach (var label in new[] { "折讓單號", "日期", "未稅金額", "稅額", "含稅金額", "狀態" }) officialHistory.Columns.Add(label, label);
-        var widths = new[] { 132, 96, 96, 72, 100, 100 };
-        for (var i = 0; i < widths.Length; i++) officialHistory.Columns[i].Width = widths[i];
-        UiControls.FitGridColumns(officialHistory, 0);
-        for (var i = 2; i < 5; i++) officialHistory.Columns[i].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        productEditor = new NativeListCellEditor(products);
+        productEditor.Committed += (_, _) => UpdateTotals();
+        productEditor.NavigationRequested += (row, column, _) => BeginInvoke((Action)(() => {
+            if (column < 2) BeginProductEdit(row, column + 1);
+            else if (row + 1 < products.Items.Count) BeginProductEdit(row + 1, 0);
+            else reason.Focus();
+        }));
+        ConfigureTables();
         foreach (var item in invoice is null ? [] : InvoiceAllowanceMetadata.ReadOfficial(invoice))
-            officialHistory.Rows.Add(item.AllowanceNumber, InvoiceOperationHistoryControl.FormatAllowanceDate(item.AllowanceDate), item.TotalAmount, item.TaxAmount,
-                InvoiceOperationHistoryControl.InclusiveAmount(item), item.CancelDate > 0 ? "已作廢" : item.InvoiceStatus == UploadStatuses.Complete ? "已完成" : "待核對");
+            officialHistory.Items.Add(new ListViewItem([item.AllowanceNumber, InvoiceOperationHistoryControl.FormatAllowanceDate(item.AllowanceDate), item.TotalAmount, item.TaxAmount,
+                InvoiceOperationHistoryControl.InclusiveAmount(item), item.CancelDate > 0 ? "已作廢" : item.InvoiceStatus == UploadStatuses.Complete ? "已完成" : "待核對"]));
         BuildLayout();
         if(invoice is not null)LoadOriginal(invoice);
         grossPrices.CheckedChanged += (_, _) => ConvertPrices();
-        products.CellEndEdit+=(_,_)=>UpdateTotals();
-        products.CellValueChanged+=(_,_)=>UpdateTotals();
-        products.CurrentCellDirtyStateChanged+=(_,_)=>{
-            if(products.IsCurrentCellDirty)products.CommitEdit(DataGridViewDataErrorContexts.Commit);
-        };
-        products.DataError+=(_,eventArgs)=>{eventArgs.ThrowException=false;};
         reset.Click+=(_,_)=>ResetProducts();
         Shown+=(_,_)=>reason.Focus();
     }
@@ -82,43 +80,51 @@ internal sealed class AllowanceRequestForm : Form
     public string EmployeeNo=>employeeNo.Text.Trim();
     public string Password=>password.Text;
 
+    private void ConfigureTables()
+    {
+        foreach (var list in new[] { officialHistory, products })
+        {
+            list.GridLines = true;
+            list.Sorting = SortOrder.None;
+            list.ShowItemToolTips = true;
+        }
+        foreach (var label in new[] { "折讓單號", "日期", "未稅金額", "稅額", "含稅金額", "狀態" })
+            officialHistory.Columns.Add(label);
+        for (var i = 2; i < 5; i++) officialHistory.Columns[i].TextAlign = HorizontalAlignment.Right;
+        historyHost.ConfigureFillColumns(0, [132, 96, 96, 72, 100, 100]);
+        var names = new[] { "description", "quantity", "unit_price", "tax_type", "amount", "tax", "delete" };
+        var labels = new[] { "品名", "數量", "未稅單價", "課稅別", "未稅金額", "稅額", "操作" };
+        for (var i = 0; i < names.Length; i++)
+            products.Columns.Add(new ColumnHeader { Name = names[i], Text = labels[i], TextAlign = i is 1 or 2 or 4 or 5 ? HorizontalAlignment.Right : HorizontalAlignment.Left });
+        productsHost.ConfigureFillColumns(0, [150, 76, 132, 66, 96, 72, 48]);
+        productsHost.ConfigureRowAction(6, "刪除", row => {
+            productEditor.Commit(false);
+            products.Items.Remove(row);
+            UpdateTotals();
+        });
+        products.MouseUp += (_, e) => {
+            if (e.Button != MouseButtons.Left) return;
+            var hit = products.HitTest(e.Location);
+            var column = hit.Item is not null && hit.SubItem is not null ? hit.Item.SubItems.IndexOf(hit.SubItem) : -1;
+            if (hit.Item is not null && column is >= 0 and <= 2) BeginProductEdit(hit.Item.Index, column);
+            else productEditor.Commit(false);
+        };
+        products.KeyDown += (_, e) => {
+            if (e.KeyCode != Keys.Enter || products.FocusedItem is null) return;
+            e.Handled = e.SuppressKeyPress = true;
+            BeginProductEdit(products.FocusedItem.Index, 0);
+        };
+    }
+
+    private void BeginProductEdit(int row, int column)
+    {
+        productEditor.Commit(false);
+        if (row < 0 || row >= products.Items.Count || column is < 0 or > 2) return;
+        productEditor.Begin(row, column, products.Items[row].SubItems[column].Text, column == 0 ? 256 : 64);
+    }
+
     private void BuildLayout()
     {
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="description",HeaderText="品名",FillWeight=240
-        });
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="quantity",HeaderText="數量",FillWeight=65
-        });
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="unit_price",HeaderText="未稅單價",FillWeight=100
-        });
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="tax_type",HeaderText="課稅別",FillWeight=60,ReadOnly=true
-        });
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="amount",HeaderText="未稅金額",ReadOnly=true,FillWeight=100
-        });
-        products.Columns.Add(new DataGridViewTextBoxColumn {
-            Name="tax",HeaderText="稅額",ReadOnly=true,FillWeight=75
-        });
-        products.Columns.Add(new DataGridViewButtonColumn {
-            Name="delete",HeaderText="操作",Text="刪除",UseColumnTextForButtonValue=true,
-            FillWeight=65
-        });
-        products.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
-        var widths = new[] { 150, 76, 132, 66, 96, 72, 48 };
-        for(var i=0;i<widths.Length;i++) products.Columns[i].Width=widths[i];
-        for(var i=1;i<6;i++) if(i!=3) products.Columns[i].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
-        products.Columns[0].MinimumWidth=118;
-        UiControls.FitGridColumns(products,0);
-        products.EditMode=DataGridViewEditMode.EditOnEnter;
-        products.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
-        products.CellContentClick+=(_,e)=>{
-            if(e.RowIndex>=0&&e.ColumnIndex==products.Columns["delete"]!.Index){
-                products.Rows.RemoveAt(e.RowIndex);UpdateTotals();
-            }
-        };
         var root=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=1,RowCount=6,
             Padding=new Padding(14,12,14,10)
@@ -145,8 +151,8 @@ internal sealed class AllowanceRequestForm : Form
         },0,1);
         header.SetColumnSpan(header.GetControlFromPosition(0,1)!,2);
         root.Controls.Add(header,0,0);
-        root.Controls.Add(officialHistory,0,1);
-        root.Controls.Add(products,0,2);
+        root.Controls.Add(historyHost,0,1);
+        root.Controls.Add(productsHost,0,2);
         var sumRow=new TableLayoutPanel {
             Dock=DockStyle.Fill,ColumnCount=2
         };
@@ -199,9 +205,9 @@ internal sealed class AllowanceRequestForm : Form
     private void ResetProducts()
     {
         if (original is null) return;
-        products.CancelEdit();
+        productEditor.Commit(true);
         calculating=true;
-        try { products.Rows.Clear(); LoadOriginal(original); }
+        try { products.Items.Clear(); LoadOriginal(original); }
         finally { calculating=false; }
         UpdateTotals();
     }
@@ -211,7 +217,7 @@ internal sealed class AllowanceRequestForm : Form
         // Use the invoice's original input convention. Source DetailVat=1
         // prices are already gross, so do not silently convert on first load.
         grossPrices.Checked = invoice.DetailVat == 1;
-        products.Columns["unit_price"]!.HeaderText =
+        products.Columns["unit_price"]!.Text =
             grossPrices.Checked ? "含稅單價" : "未稅單價";
         foreach(var item in invoice.Items){
             var qty=item.QuantityDecimal.Length>0
@@ -225,14 +231,14 @@ internal sealed class AllowanceRequestForm : Form
 
     private void AddProduct(string name,string quantity,string price,string taxKind)
     {
-        if(products.Rows.Count>=50){
+        if(products.Items.Count>=50){
             MessageBox.Show(this,"折讓明細最多 50 筆。","無法新增");
             return;
         }
         if (taxKind is not ("" or "1"))
             throw new InvalidOperationException("目前折讓申請僅支援應稅商品，不變更原發票稅別。");
         var kind="應稅";
-        products.Rows.Add(name,quantity,price,kind,"","","");
+        products.Items.Add(new ListViewItem([name,quantity,price,kind,"","","刪除"]));
         UpdateTotals();
     }
 
@@ -240,20 +246,20 @@ internal sealed class AllowanceRequestForm : Form
     {
         // Complete editing before switching. The visible taxable unit prices
         // change convention; zero-rated/exempt unit prices are unchanged.
-        products.EndEdit();
+        productEditor.Commit(false);
         if (calculating) return;
         calculating = true;
         try
         {
-            foreach (DataGridViewRow row in products.Rows)
+            foreach (ListViewItem row in products.Items)
             {
-                if (Convert.ToString(row.Cells["tax_type"].Value) != "應稅")
+                if (Convert.ToString(row.SubItems[3].Text) != "應稅")
                     continue;
-                var value = Convert.ToString(row.Cells["unit_price"].Value) ?? "";
+                var value = Convert.ToString(row.SubItems[2].Text) ?? "";
                 try
                 {
                     var price = FixedDecimal.Parse(value);
-                    row.Cells["unit_price"].Value = FixedDecimal.MultiplyRatio(
+                    row.SubItems[2].Text = FixedDecimal.MultiplyRatio(
                         price, grossPrices.Checked ? 105 : 100,
                         grossPrices.Checked ? 100 : 105).ToString();
                 }
@@ -264,7 +270,7 @@ internal sealed class AllowanceRequestForm : Form
                     // fail validation rather than quietly resetting the price.
                 }
             }
-            products.Columns["unit_price"]!.HeaderText =
+            products.Columns["unit_price"]!.Text =
                 grossPrices.Checked ? "含稅單價" : "未稅單價";
         }
         finally { calculating = false; }
@@ -275,7 +281,7 @@ internal sealed class AllowanceRequestForm : Form
         FixedDecimal Tax,FixedDecimal Gross) Calculate()
     {
         if(original is null)throw new InvalidOperationException("缺少原發票資料");
-        if(products.Rows.Count==0)throw new InvalidOperationException("請至少留下 1 個折讓品項");
+        if(products.Items.Count==0)throw new InvalidOperationException("請至少留下 1 個折讓品項");
         var origDate=original.InvoiceDate.Replace("/","").Replace("-","");
         if(!int.TryParse(origDate,NumberStyles.None,CultureInfo.InvariantCulture,
             out var date)||origDate.Length!=8)
@@ -283,15 +289,15 @@ internal sealed class AllowanceRequestForm : Form
         var items=new List<AllowanceProductItem>();
         var net=new FixedDecimal(0);
         var tax=new FixedDecimal(0);
-        foreach(DataGridViewRow row in products.Rows){
-            var description=(Convert.ToString(row.Cells["description"].Value)??"").Trim();
+        foreach(ListViewItem row in products.Items){
+            var description=(Convert.ToString(row.SubItems[0].Text)??"").Trim();
             if(description.Length==0||description.Length>256)
                 throw new InvalidOperationException("商品名稱不可空白或超過 256 字");
-            var quantity=FixedDecimal.Parse(Convert.ToString(row.Cells["quantity"].Value)??"");
-            var price=FixedDecimal.Parse(Convert.ToString(row.Cells["unit_price"].Value)??"");
+            var quantity=FixedDecimal.Parse(Convert.ToString(row.SubItems[1].Text)??"");
+            var price=FixedDecimal.Parse(Convert.ToString(row.SubItems[2].Text)??"");
             if(quantity.ScaledValue<=0)
                 throw new InvalidOperationException("數量必須大於 0");
-            var kind=Convert.ToString(row.Cells["tax_type"].Value);
+            var kind=Convert.ToString(row.SubItems[3].Text);
             var taxType=kind switch {"零稅率"=>2,"免稅"=>3,"應稅"=>1,
                 _=>throw new InvalidOperationException("請選擇課稅別")};
             // Gross-entry mode: keep the exact typed gross unit price so the
@@ -315,8 +321,8 @@ internal sealed class AllowanceRequestForm : Form
                         new FixedDecimal(checked(-itemNet.ScaledValue)))
                     : FixedDecimal.FromInt64(
                         FixedDecimal.MultiplyRatio(itemNet, 5, 100).RoundInt64());
-            row.Cells["amount"].Value=itemNet.ToString();
-            row.Cells["tax"].Value=itemTax.ToString();
+            row.SubItems[4].Text=itemNet.ToString();
+            row.SubItems[5].Text=itemTax.ToString();
             net=FixedDecimal.Add(net,itemNet);
             tax=FixedDecimal.Add(tax,itemTax);
             items.Add(new AllowanceProductItem {
@@ -359,7 +365,7 @@ internal sealed class AllowanceRequestForm : Form
 
     private void Submit()
     {
-        products.EndEdit();
+        productEditor.Commit(false);
         if(Reason.Length==0){
             ValidationError("請輸入折讓原因。",reason);
             return;
@@ -403,17 +409,17 @@ internal sealed class AllowanceRequestForm : Form
 
     internal void VerifySmokeOriginalInvoiceEditing()
     {
-        if (ShowIcon || products.Columns["tax_type"] is not DataGridViewTextBoxColumn { ReadOnly: true } || reset.Text != "重置")
+        if (ShowIcon || productsHost.HeaderClicksEnabled || historyHost.HeaderClicksEnabled || reset.Text != "重置")
             throw new InvalidOperationException("折讓申請必須無圖示、固定應稅且提供重置。 ");
-        if (original is null || remaining is null || products.Rows.Count != 2)
+        if (original is null || remaining is null || products.Items.Count != 2)
             throw new InvalidOperationException("折讓視窗未帶入原發票及官方剩餘額");
         var initial = Calculate().Gross;
-        products.Rows.RemoveAt(1);
+        products.Items.RemoveAt(1);
         ResetProducts();
-        if (products.Rows.Count != 2 || Calculate().Gross != initial)
+        if (products.Items.Count != 2 || Calculate().Gross != initial)
             throw new InvalidOperationException("重置未還原原商品與金額。");
-        products.Rows.RemoveAt(1);
-        products.Rows[0].Cells["unit_price"].Value = "100.1234567";
+        products.Items.RemoveAt(1);
+        products.Items[0].SubItems[2].Text = "100.1234567";
         var net = Calculate();
         if (initial.ScaledValue <= 0 || net.Gross.ToString() != "105" ||
             net.Gross.ScaledValue > remaining.Value.ScaledValue ||
@@ -421,10 +427,10 @@ internal sealed class AllowanceRequestForm : Form
             throw new InvalidOperationException("未稅輸入／七位小數／額度計算失敗");
         grossPrices.Checked = true;
         var gross = Calculate();
-        if (products.Columns["unit_price"]?.HeaderText != "含稅單價" ||
+        if (products.Columns["unit_price"]?.Text != "含稅單價" ||
             gross.Gross != net.Gross || gross.Lines[0].GrossUnitPrice is null)
             throw new InvalidOperationException("未稅轉含稅單價未同步明細與總額");
-        products.Rows[0].Cells["unit_price"].Value = "105";
+        products.Items[0].SubItems[2].Text = "105";
         gross = Calculate();
         if (gross.Gross.ToString() != "105" ||
             gross.Lines[0].UnitPrice != 100m ||
@@ -434,7 +440,7 @@ internal sealed class AllowanceRequestForm : Form
             throw new InvalidOperationException("含稅輸入沒有正確自動換算未稅送出內容");
         grossPrices.Checked = false;
         var backToNet = Calculate();
-        if (products.Columns["unit_price"]?.HeaderText != "未稅單價" ||
+        if (products.Columns["unit_price"]?.Text != "未稅單價" ||
             backToNet.Gross.ToString() != "105" ||
             backToNet.Lines[0].GrossUnitPrice is not null)
             throw new InvalidOperationException("含稅轉未稅單價或總額計算失敗");
@@ -442,6 +448,13 @@ internal sealed class AllowanceRequestForm : Form
 
     internal void VerifySmokeLayout()
     {
+        foreach (var host in new[] { historyHost, productsHost })
+        {
+            if (host.HeaderClicksEnabled || host.HorizontalScrollVisible ||
+                host.List.Sorting != SortOrder.None ||
+                (host.List.IsHandleCreated && Math.Abs(host.List.Columns.Cast<ColumnHeader>().Sum(column => column.Width) - host.List.ClientSize.Width) > 1))
+                throw new InvalidOperationException($"折讓原生表格配置不正確：header={host.HeaderClicksEnabled}, horizontal={host.HorizontalScrollVisible}, columns={host.List.Columns.Cast<ColumnHeader>().Sum(column => column.Width)}, viewport={host.List.ClientSize.Width}。");
+        }
         if (employeeNo.Parent is not TableLayoutPanel credentials || password.Parent != credentials ||
             credentials.GetRow(employeeNo) != credentials.GetRow(password) ||
             employeeNo.Bounds.Right > password.Bounds.Left || password.Bounds.Right > credentials.ClientSize.Width)
@@ -449,9 +462,9 @@ internal sealed class AllowanceRequestForm : Form
         if(Text!="折讓申請"||ClientSize.Width!=WindowWidth||
            ClientSize.Height!=WindowHeight||CancelButton!=cancel||
            !password.UseSystemPasswordChar||products.Columns.Count!=7||
-            !officialHistory.ReadOnly || officialHistory.Columns.Count != 6 ||
-            (products.Columns["unit_price"]?.HeaderText != "未稅單價" &&
-             products.Columns["unit_price"]?.HeaderText != "含稅單價") ||
+            officialHistory.Columns.Count != 6 ||
+            (products.Columns["unit_price"]?.Text != "未稅單價" &&
+             products.Columns["unit_price"]?.Text != "含稅單價") ||
             grossPrices.Parent is null)
             throw new InvalidOperationException("折讓編輯視窗基本配置不正確");
     }

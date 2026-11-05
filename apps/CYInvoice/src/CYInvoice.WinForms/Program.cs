@@ -213,6 +213,22 @@ internal static class Program
         form.VerifySmokeLayout();
         form.Close();
 
+        Stage("allowance native tables and editing");
+        var allowanceInvoice = new InvoiceRecord {
+            InvoiceNumber = "AA00000001", InvoiceDate = "20261105", Amount = 1050,
+            Items = [new InvoiceItem { Description = "Synthetic item 1", Quantity = 1, UnitPrice = 100 },
+                new InvoiceItem { Description = "Synthetic item 2", Quantity = 1, UnitPrice = 200 }],
+        };
+        CYInvoice.Core.Invoicing.InvoiceAllowanceMetadata.ApplyQuery(allowanceInvoice, []);
+        using (var allowance = new AllowanceRequestForm(allowanceInvoice))
+        {
+            allowance.Show();
+            Application.DoEvents();
+            allowance.VerifySmokeLayout();
+            allowance.VerifySmokeOriginalInvoiceEditing();
+            allowance.Close();
+        }
+
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         Stage("upload issues rows");
         using var syncIssues = new SyncIssuesForm(repository, startupSmokeTest: true);
