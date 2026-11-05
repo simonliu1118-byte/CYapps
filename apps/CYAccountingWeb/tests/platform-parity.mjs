@@ -45,7 +45,7 @@ for (const width of [375, 820, 1440]) {
   vm.runInContext(piece(adaptive, 'function isTabletWorkspace()', 'function tabletWorkspaceOrientation()'), context);
   await context.saveEntryTransactionEdit();
   assert.equal(writes.length, 1);
-  for (const write of writes) assert.deepEqual(write, { path: '/api/transactions/1', method: 'PUT', body: { txDate: '2026-09-02', accountName: '現金', categoryName: '一般收入', summary: '對帳', amount: 777 } });
+  for (const write of writes) assert.deepEqual(write, { path: '/api/transactions/1', method: 'PUT', body: { txDate: '2026-09-02', accountName: '現金', categoryName: '一般收入', summary: '對帳', pendingConfirmation: false, amount: 777 } });
   writes.length = 0;
   context.state.transactions = [tx];
   lockedMonth = '2026-08';

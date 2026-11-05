@@ -17,7 +17,7 @@ const before = { id: 1, tx_date: '2026-10-01', account_name: 'TEST_ACCOUNT', cat
 
 function fixture(width) {
   const requests = [], renders = [], messages = [], openings = [], focused = [], revealed = [];
-  const els = { form: node(''), txDate: node('2026-10-02'), accountName: node('TEST_ACCOUNT'), categoryName: node('TEST_CATEGORY'), summary: node('first'), amount: node('12'), monthFilter: node('2026-10'), kindButtons: [], entryLockBadge: node(''), ledgerLockBadge: node('') };
+  const els = { form: node(''), txDate: node('2026-10-02'), accountName: node('TEST_ACCOUNT'), categoryName: node('TEST_CATEGORY'), summary: node('first'),pendingConfirmation:{...node(''),checked:false}, amount: node('12'), monthFilter: node('2026-10'), kindButtons: [], entryLockBadge: node(''), ledgerLockBadge: node('') };
   for (const key of ['saveButton', 'transactionRows', 'settingsButton', 'settingsDialog', 'addAccountButton', 'newAccountName', 'accountRows', 'addGroupButton', 'newGroupName', 'categoryManager', 'openingMonth', 'saveOpeningButton', 'saveLockButton', 'clearLockButton', 'lockedThrough']) els[key] = node('');
   els.settingsTabs = []; els.settingsKindButtons = [];
   els.summary.focus = () => focused.push('summary'); els.amount.focus = () => focused.push('amount');
@@ -44,7 +44,7 @@ function fixture(width) {
   const edit = (summary, amount = '12') => { els.summary.value = summary; els.amount.value = amount; els.form.dispatchEvent(new Event('input')); };
   const submit = () => context.saveTransaction({ preventDefault() {} });
   const ack = (request, id) => request.resolve({ ok: true, transaction: { id, tx_date: request.body.txDate, account_name: request.body.accountName,
-    category_name: request.body.categoryName, kind: request.body.kind, summary: request.body.summary, amount: request.body.amount, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' } });
+    category_name: request.body.categoryName, kind: request.body.kind, summary: request.body.summary,pending_confirmation:Number(request.body.pendingConfirmation), amount: request.body.amount, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' } });
   return { context, window, els, requests, renders, messages, openings, focused, revealed, edit, submit, ack };
 }
 
@@ -141,3 +141,13 @@ const pendingRow = piece(ledger, 'function renderLedgerRow(', 'function updateLe
 assert.match(pendingRow, /id < 0 \? '<span class="hint" role="status">儲存中/);
 assert.match(read('adaptive-ui.js'), /function beginEntryTransactionEdit\(id\) \{\s+if \(!Number\.isSafeInteger\(Number\(id\)\) \|\| Number\(id\) <= 0\) return;/);
 console.log('Shared optimistic creation: immediate rows/focus, concurrent identical writes, rollback/draft preservation, month/read races, server roundtrip and lock guard passed.');
+
+// Pending state participates in the existing optimistic create / failed-draft rollback.
+{
+  const f=fixture(1440);f.els.pendingConfirmation.checked=true;f.els.summary.value='(待確認)TEST_PENDING';
+  const saving=f.submit();assert.equal(f.requests[0].body.pendingConfirmation,true);
+  assert.equal(f.context.snapshot().rows.find(row=>row.id<0).pending_confirmation,1);
+  assert.equal(f.els.pendingConfirmation.checked,false);
+  f.requests[0].reject(new Error('TEST_PENDING_SAVE_FAILURE'));await saving;
+  assert.equal(f.els.pendingConfirmation.checked,true);assert.equal(f.els.summary.value,'(待確認)TEST_PENDING');
+}

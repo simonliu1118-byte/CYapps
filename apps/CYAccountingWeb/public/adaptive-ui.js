@@ -611,7 +611,7 @@ function setupEntryUiSummaryLimit() {
   const entryForm = document.querySelector('#transactionForm');
   entryForm?.addEventListener('submit', event => {
     const summary = document.querySelector('#summary');
-    if (!summary || summaryWeightedUnits(summary.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
+    if (!summary || summaryWeightedUnits(els.pendingConfirmation?.checked?pendingSummaryBody(summary.value):summary.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (typeof showMessage === 'function') showMessage('摘要不可超過 20 個中文字或 40 個英數字元。', true);
@@ -622,8 +622,11 @@ function setupEntryUiSummaryLimit() {
 }
 
 function enforceEntryUiSummary(input) {
-  if (summaryWeightedUnits(input.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
-  const trimmed = entryUiTrimWeighted(input.value, CY_ENTRY_UI_SUMMARY_UNITS);
+  const pending=Boolean(els.pendingConfirmation?.checked);
+  const value=pending?pendingSummaryBody(input.value):input.value;
+  if (summaryWeightedUnits(value) <= CY_ENTRY_UI_SUMMARY_UNITS && (!pending || input.value.startsWith('(待確認)'))) return;
+  const limited=entryUiTrimWeighted(value,CY_ENTRY_UI_SUMMARY_UNITS);
+  const trimmed = pending?pendingSummaryText(limited,true):limited;
   const cursor = input.selectionStart ?? trimmed.length;
   input.value = trimmed;
   try { input.setSelectionRange(Math.min(cursor, trimmed.length), Math.min(cursor, trimmed.length)); } catch { /* no-op */ }
@@ -3835,6 +3838,8 @@ function clearTouchWorkspaceEntryForm() {
   renderAccounts();
   renderCategories();
   els.summary.value = '';
+  if (els.pendingConfirmation) {els.pendingConfirmation.checked=false;els.pendingConfirmation.disabled=false;}
+  els.summary.maxLength=40;
   els.amount.value = '';
   updateEntryLockState();
   els.summary.blur();
@@ -3903,7 +3908,7 @@ function setupEntryTransactionEditing() {
   });
   document.addEventListener('click', event => {
     if (!isDesktopInteractionWorkspace() || !cyEntryTransactionEdit) return;
-    const navigation = event.target.closest('#settingsButton, #headerAccountManagerButton, #headerCategoryManagerButton, #logoutButton, [data-statistics-open], #ledgerOpeningBalanceButton, #ledgerQuickLockButton, #ledgerExcelExport, [data-delete-id]');
+    const navigation = event.target.closest('#settingsButton, #headerAccountManagerButton, #headerCategoryManagerButton, #logoutButton, [data-statistics-open], #ledgerOpeningBalanceButton, #ledgerQuickLockButton, #ledgerExcelExport, [data-delete-id], [data-confirm-transaction]');
     if (navigation) cancelEntryTransactionEdit({ restoreDraftOnly: true });
   }, true);
   let desktop = isDesktopInteractionWorkspace();
@@ -3957,6 +3962,11 @@ function beginEntryTransactionEdit(id) {
   els.categoryName.value = tx.category_name;
   els.txDate.value = tx.tx_date;
   els.summary.value = tx.summary || '';
+  if (els.pendingConfirmation) {
+    els.pendingConfirmation.checked=Boolean(tx.pending_confirmation);
+    els.pendingConfirmation.disabled=Boolean(tx.pending_confirmation);
+  }
+  els.summary.maxLength=tx.pending_confirmation?48:40;
   els.amount.value = String(tx.amount || '');
 
   els.kindButtons.forEach(button => { button.disabled = true; });
@@ -4004,7 +4014,7 @@ async function saveEntryTransactionEdit() {
     const editedId = edit.id;
     await persistTransactionUpdate(edit.id, {
       txDate: els.txDate.value, accountName: els.accountName.value,
-      categoryName: els.categoryName.value, summary: els.summary.value, amount
+      categoryName: els.categoryName.value, summary: els.summary.value, amount,pendingConfirmation:Boolean(els.pendingConfirmation?.checked)
     }, () => {
       cancelEntryTransactionEdit({ restoreDraftOnly: true });
       const searchInput = document.querySelector('#ledgerSummarySearch');
@@ -4057,6 +4067,7 @@ function captureEntryTransactionDraft() {
     accountName: els.accountName.value,
     categoryName: els.categoryName.value,
     summary: els.summary.value,
+    pendingConfirmation:Boolean(els.pendingConfirmation?.checked),
     amount: els.amount.value
   };
 }
@@ -4070,6 +4081,8 @@ function restoreEntryTransactionDraft(draft) {
   els.categoryName.value = draft.categoryName || els.categoryName.value;
   els.txDate.value = draft.txDate || els.txDate.value;
   els.summary.value = draft.summary || '';
+  if (els.pendingConfirmation) {els.pendingConfirmation.checked=Boolean(draft.pendingConfirmation);els.pendingConfirmation.disabled=false;}
+  els.summary.maxLength=draft.pendingConfirmation?48:40;
   els.amount.value = draft.amount || '';
 }
 

@@ -13,7 +13,7 @@ export async function buildBackupPackage(db, now = new Date()) {
   const accounts = await readPaged(db, budget, 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount);
   const groups = await readPaged(db, budget, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup);
   const categories = await readPaged(db, budget, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory);
-  const transactions = await readPaged(db, budget, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at FROM transactions ORDER BY id', mapTransaction);
+  const transactions = await readPaged(db, budget, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, pending_confirmation, created_at, updated_at FROM transactions ORDER BY id', mapTransaction);
   const openingOverrides = await readPaged(db, budget, 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride);
   const openingAudit = await readPaged(db, budget, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit);
   const settings = await readPaged(db, budget, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting);
@@ -25,6 +25,9 @@ export async function buildBackupPackage(db, now = new Date()) {
       actor: JSON.parse(row.actor_json), createdAt: String(row.created_at)
     })) : [];
 
+  const confirmationAudit = Number(schemaRow?.value || 0) >= 16 ? await readPaged(db,budget,
+    'SELECT id,transaction_id,previous_category,previous_summary,category_name,summary,actor_json,created_at FROM transaction_confirmation_audit ORDER BY id',
+    row=>({id:Number(row.id),transactionId:Number(row.transaction_id),previousCategory:String(row.previous_category),previousSummary:String(row.previous_summary),categoryName:String(row.category_name),summary:String(row.summary),actor:JSON.parse(row.actor_json),createdAt:String(row.created_at)})) : [];
   const data = {
     accounts,
     categoryGroups: groups,
@@ -33,7 +36,8 @@ export async function buildBackupPackage(db, now = new Date()) {
     openingBalanceAudit: openingAudit,
     transactions,
     appSettings: settings,
-    excelImportRuns: importRuns
+    excelImportRuns: importRuns,
+    transactionConfirmationAudit:confirmationAudit
   };
   const counts = Object.fromEntries(Object.entries(data).map(([key, rows]) => [key, rows.length]));
   const totalRowCount = Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -123,6 +127,7 @@ function mapTransaction(row) {
     amount: Number(row.amount),
     markerColor: row.marker_color ?? null,
     markerTarget: row.marker_target === 'category' ? 'category' : 'summary',
+    pendingConfirmation:Number(row.pending_confirmation || 0),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };

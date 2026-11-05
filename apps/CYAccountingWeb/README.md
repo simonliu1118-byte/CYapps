@@ -2,16 +2,16 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/30（台灣時間）。本文件只記錄現行專案入口、已部署能力與操作流程；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。使用者已確認正式 Major 升級至 V1.0.0，Build 歸零；只升版與文件，不重寫帳務邏輯。
+更新：2026/11/05（台灣時間）。本文件只記錄現行專案入口、已部署能力與操作流程；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。最新 V1.1.0 新增待確認工作流程；一般帳務金額與期初計算沿用既有服務。
 
 ## 正式基準
 
 | 項目 | 已確認現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本身分 | **V1.0.0（Build 0）**，`VERSION=1.0.0`、`BUILD=0`。此為使用者核准之 Major 發行，功能承接 V0.25.18 Build 2 |
-| 已核對的上一代穩定部署基準 | V0.25.18 Build 2，[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584)，source `5b3442db6cd716cf002c8c1e278d526f978dd07b`；[Production Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 成功。**V1.0.0 實際是否已部署，以同 SHA 的新版 Deploy Run 為準** |
-| D1 schema | **15**（0012 查詢索引／0013 期初快照／0014 交易螢光顏色／0015 科目或摘要標記位置）；V1.0.0 **沒有新增 migration** |
+| 產品版本身分 | **V1.1.0（Build 0）**，`VERSION=1.1.0`、`BUILD=0`；新增待確認記帳、索引搜尋及鎖帳確認工作流程。發布仍以同 SHA Production Deploy 成功為準 |
+| 歷史上一代穩定部署基準 | V0.25.18 Build 2，[PR #584](https://github.com/simonliu1118-byte/CYapps/pull/584)，source `5b3442db6cd716cf002c8c1e278d526f978dd07b`；[Production Run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 成功。**V1.0.0 實際是否已部署，以同 SHA 的新版 Deploy Run 為準** |
+| D1 schema | **16**；0016 新增待確認狀態、部分索引與確認稽核。舊資料預設非待確認，沒有批次轉換歷史粉色 |
 | CYID consumer | `CYID_CONSUMER_VERSION=1.0.6`；同 repo consumer contract 1.0.6、minimum 1.0.0；不得僅據 source 推定所有 provider runtime 版本 |
 | 共通規則 | AITeam `main` 與 CYapps 同步版 **2.11.0**；本 repo 治理依根 `GOVERNANCE_VERSION` |
 | 正式 Release 管理 | V1.0.0 發行目標 tag `cyaccountingweb-v1.0.0`，由獨立 [Stable Release workflow](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 以**同 SHA 成功 production deploy** 為前提建立；V1.0.0 Release 成功建立後，依使用者授權清理舊 V0.22.15 Release（含舊附件），**保留歷史 Git tag**。請以 [Releases](https://github.com/simonliu1118-byte/CYapps/releases) 查實際公開發行狀態 |
@@ -21,6 +21,10 @@
 
 首次登入、Session、CYID Application Access 仍以 CYID canonical consumer contract 為準；首次驗證／正式密碼建立依 CYWEB 路徑，CYACCweb 不自行接管 Identity authority。
 
+## 待確認工作流程
+
+桌機輸入時勾選「待確認」，摘要會自動加上「(待確認)」及螢光粉。按「搜尋待確認」可跨所有日期查閱，清除回到原月份；按摘要旁的「確認」填寫科目與摘要後解除。此確認動作可處理鎖帳月份，但只修改科目、摘要並保留稽核；確認後仍依一般鎖帳規則。手動標記不再提供粉色，既有歷史粉色不推定為待確認。
+
 ## 文件入口
 
 | 文件 | 用途 |
@@ -29,6 +33,7 @@
 | [WORK_HANDOFF.md](WORK_HANDOFF.md) | 正式基準、部署證據、owner、驗收及下一步 |
 | [TODO.md](TODO.md) | 未完成工作及仍待真機驗收項目 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本歷史；不作目前操作指南 |
+| [V1.1.0.txt](V1.1.0.txt) | 待確認功能、schema 16、搜尋成本及相容邊界 |
 | [V1.0.0.txt](V1.0.0.txt) | V1.0.0 正式 Release 說明與相容界線 |
 | [docs/TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md) | 平板現行配置、交易標記、統計及真機驗收 |
 | [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md) | Backup 格式、schema 15、Phase D、Restore／DR 及正式切換邊界 |
