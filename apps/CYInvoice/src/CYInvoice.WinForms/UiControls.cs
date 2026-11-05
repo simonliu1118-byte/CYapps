@@ -229,21 +229,19 @@ internal static class UiControls
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(246, 246, 246);
         grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(246, 246, 246);
         grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+        grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
         grid.RowsDefaultCellStyle.BackColor = Color.White;
         grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(247, 247, 247);
+        grid.ColumnAdded += (_, e) => e.Column.SortMode = DataGridViewColumnSortMode.NotSortable;
         return grid;
     }
 
-    public static void ReserveVerticalScrollBar(DataGridView grid, int flexibleColumnIndex)
+    public static void FitGridColumns(DataGridView grid, int flexibleColumnIndex)
     {
-        void LayoutColumns()
-        {
-            if (flexibleColumnIndex < 0 || flexibleColumnIndex >= grid.Columns.Count) return;
-            var fixedWidth = grid.Columns.Cast<DataGridViewColumn>().Where((_, index) => index != flexibleColumnIndex).Sum(column => column.Width);
-            var available = grid.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - fixedWidth - 3;
-            grid.Columns[flexibleColumnIndex].Width = Math.Max(grid.Columns[flexibleColumnIndex].MinimumWidth, available);
-        }
-        grid.Layout += (_, _) => LayoutColumns();
-        grid.SizeChanged += (_, _) => LayoutColumns();
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        foreach (DataGridViewColumn column in grid.Columns)
+            column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+        // Native fill uses the actual viewport, including scrollbar changes.
+        grid.Columns[flexibleColumnIndex].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
     }
 }

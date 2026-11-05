@@ -58,6 +58,7 @@ internal sealed class AllowanceRequestForm : Form
         foreach (var label in new[] { "折讓單號", "日期", "未稅金額", "稅額", "含稅金額", "狀態" }) officialHistory.Columns.Add(label, label);
         var widths = new[] { 132, 96, 96, 72, 100, 100 };
         for (var i = 0; i < widths.Length; i++) officialHistory.Columns[i].Width = widths[i];
+        UiControls.FitGridColumns(officialHistory, 0);
         for (var i = 2; i < 5; i++) officialHistory.Columns[i].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         foreach (var item in invoice is null ? [] : InvoiceAllowanceMetadata.ReadOfficial(invoice))
             officialHistory.Rows.Add(item.AllowanceNumber, InvoiceOperationHistoryControl.FormatAllowanceDate(item.AllowanceDate), item.TotalAmount, item.TaxAmount,
@@ -106,11 +107,11 @@ internal sealed class AllowanceRequestForm : Form
             FillWeight=65
         });
         products.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.None;
-        var widths = new[] { 150, 76, 132, 54, 96, 72, 48 };
+        var widths = new[] { 150, 76, 132, 66, 96, 72, 48 };
         for(var i=0;i<widths.Length;i++) products.Columns[i].Width=widths[i];
         for(var i=1;i<6;i++) if(i!=3) products.Columns[i].DefaultCellStyle.Alignment=DataGridViewContentAlignment.MiddleRight;
-        products.Columns[0].MinimumWidth=140;
-        UiControls.ReserveVerticalScrollBar(products,0);
+        products.Columns[0].MinimumWidth=118;
+        UiControls.FitGridColumns(products,0);
         products.EditMode=DataGridViewEditMode.EditOnEnter;
         products.SelectionMode=DataGridViewSelectionMode.FullRowSelect;
         products.CellContentClick+=(_,e)=>{

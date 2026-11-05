@@ -41,7 +41,7 @@ internal sealed class BusinessDetailControl : UserControl
             grid.Columns.Add(column);
         }
         var flexible = metadata ? 1 : 0;
-        if (grid.Columns.Count > flexible) { grid.Columns[flexible].MinimumWidth = metadata ? 180 : 110; UiControls.ReserveVerticalScrollBar(grid, flexible); }
+        if (grid.Columns.Count > flexible) { grid.Columns[flexible].MinimumWidth = metadata ? 180 : 110; UiControls.FitGridColumns(grid, flexible); }
         foreach (var row in table.Rows) grid.Rows.Add(row.Cast<object>().ToArray());
         grid.Dock = DockStyle.Top;
         grid.Margin = new Padding(0, 0, 0, 4);

@@ -335,7 +335,7 @@ internal sealed class ImportConfirmationForm : Form
         grid.Columns.Add(Column("發票總額", 100, true));
         grid.Columns.Add(Column("項目數", 66, true));
         grid.Columns.Add(Column("檢查狀態", 210));
-        UiControls.ReserveVerticalScrollBar(grid, 9);
+        UiControls.FitGridColumns(grid, 9);
     }
 
     private void ConfigureEvents()
