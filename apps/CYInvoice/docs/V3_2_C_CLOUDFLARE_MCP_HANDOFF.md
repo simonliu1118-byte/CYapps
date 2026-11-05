@@ -1,6 +1,6 @@
 # 已完成配套：V3.1.46／Cloud0.9.14 實際部署識別
 
-2026-11-06桌面工程補充：PR #602返修為V3.1.48 Build1，包含主視窗內啟動提示、折讓五列商品／分區表頭／小型重置／單行20字原因，單號格式保持。這批僅Windows介面，不需要Cloudflare操作；原Worker0.9.14／schema23完成狀態及固定部署Source均不變，不重跑下列成功維護。
+2026-11-06桌面工程補充：PR #602現為V3.1.49／BUILD0，詳情整併為原發票／本次折讓／審核三區，保留前批主視窗內啟動提示、申請五列商品／分區表頭／小型重置／單行20字原因，單號格式保持。這批僅Windows介面，不需要Cloudflare操作；原Worker0.9.14／schema23完成狀態及固定部署Source均不變，不重跑下列成功維護。
 
 2026-11-05本機MCP完成報告：固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 已部署原Worker Cloud0.9.14、100%流量。canonical before／deploy／after、原Workspace／Device／雜湊與安全稽核連續性、migration history、FK、原服務／Secrets／scope／Routes／財務旗標及線上bundle SHA均通過。schema／marker23保留，無migration或真交易；只退役consumer APP_ENV並加入原生版本資訊綁定，健康回應不再含environment且平台版本ID與控制面承接流量版本一致。
 

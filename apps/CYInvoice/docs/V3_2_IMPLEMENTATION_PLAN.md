@@ -2,11 +2,13 @@
 
 2026-11-05新增獨立工程修正：**V3.1.46／BUILD0、Cloud Source0.9.14，已於2026-11-05完成原Worker部署與完整後驗**。原Cloud0.9.13／schema23已完成配套，原同機流程不變。本次只退役CYInvoice APP_ENV與其環境斷言，健康回報平台實際版本，部署後與流量版本核對；Windows兼容舊回應。無migration、新送出owner、財務旗標變動、定期查詢或真交易。具體維護與驗收停點見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
-更新：2026-11-05（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
+更新：2026-11-06（Asia/Taipei）。本檔是 V3.2 範圍、使用者已定案流程、後續實作順序與驗收的唯一現行計畫；TODO 只保留狀態與連結，REQUIREMENTS 只索引本計畫，不複製第二份流程。永久治理仍依 REPOSITORY_RULES.md、REPO_POLICY.md、CYInvoice/PROJECT_RULES.md。
 
-**現行工程Source：V3.1.48 Build1、Cloud0.9.14。原PR #550的同機流程保留，schema23配套與本次APP_ENV退役均已完成維護；固定部署Source fb381f5140f92e240f1c405f5ad38ad5a3a5efc9。正式Release仍V3.1.0。** 跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
+**現行工程Source：V3.1.49／BUILD0、Cloud0.9.14。原PR #550的同機流程保留，schema23配套與本次APP_ENV退役均已完成維護；固定部署Source fb381f5140f92e240f1c405f5ad38ad5a3a5efc9。正式Release仍V3.1.0。** 跨機協同下一版，不切LocalOnly、不改交易owner。Source／合成驗證、遠端維護及真光貿驗收分開記錄。
 
 2026-11-06介面返修：啟動檢查使用主視窗內控制項，沒有獨立提示視窗；完成／錯誤／退出由原MainForm清理。原因最多20字，只供程式內部查閱，與人員分欄保存；使用者取消將人員與原因編入單號／官方欄位的舊提案，配號格式維持原樣。以下較舊700×650等尺寸記錄僅屬歷史。
+
+2026-11-06詳情設計採用：原發票資訊、本次折讓資訊、審核資訊三區直排；原商品與本次商品分表且明示稅制，分別展示金額，未知原資料不拿本次商品代替。一般筆數完整顯示，多筆商品表最多五列再捲動，視窗縮小時由外層捲動保留審核資料。既有核准、進度、完成歷程共用同一折讓renderer，其他業務不改。核准前可依原摘要／核准預覽的可確認餘額與原申請顯示預估剩餘，完成後不重扣；未取得的原稅額不推算。操作仍交回原業務owner，沒有新授權或送出流程。
 
 ### 2026-11-04 現行實作契約（取代下方舊版介面及退回說明）
 

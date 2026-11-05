@@ -819,7 +819,8 @@ internal sealed class SyncIssuesForm : Form
                 IsVoidManualReview(issue) ? VoidDetailRows(issue) :
                 CommonDetailRows(issue).Append(new("處理狀態", IssueState(issue)));
             var presentation=LocalAllowancePresentation(issue,rows);
-            using var status = new ManualReviewDetailForm("處理中", presentation.Fields,tables:presentation.Tables);
+            using var status = new ManualReviewDetailForm("處理中", presentation.Fields,tables:presentation.Tables,
+                allowanceDetails:IsAllowanceManualReview(issue)||IsAllowanceVoidManualReview(issue));
             status.ShowDialog(this);
             return;
         }
@@ -987,7 +988,7 @@ internal sealed class SyncIssuesForm : Form
             var canApprove = !readOnly && data.Status is ("open" or "review");
             var presentation=AllowanceDetailPresentation.Build(TryFindIssueRecord(issue),issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.DetailRows??data.Rows,issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.Tables??data.Tables);
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: canApprove && data.CanWithdraw, primaryDanger: true,tables:presentation.Tables);
+                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: canApprove && data.CanWithdraw, primaryDanger: isVoid,tables:presentation.Tables,allowanceDetails:true);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
             if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
             {
@@ -1069,7 +1070,7 @@ internal sealed class SyncIssuesForm : Form
         if(IsDisposed)return;
         if(fields.Count==0)fields=CommonDetailRows(issue).Append(new("處理狀態",saved?.Progress.Length>0?saved.Progress:issue.Message)).ToArray();
         var dataView=AllowanceDetailPresentation.Build(TryFindIssueRecord(issue),fields,tables);
-        using var detail=new ManualReviewDetailForm(isVoid?"折讓作廢詳情":"折讓詳情",dataView.Fields,tables:dataView.Tables);
+        using var detail=new ManualReviewDetailForm(isVoid?"折讓作廢詳情":"折讓詳情",dataView.Fields,tables:dataView.Tables,allowanceDetails:true);
         using var refreshTimer=new System.Windows.Forms.Timer { Interval=1500 };
         var refreshing=false;
         var previous=System.Text.Json.JsonSerializer.Serialize(new { dataView.Fields,dataView.Tables });
@@ -1229,7 +1230,7 @@ internal sealed class SyncIssuesForm : Form
                 new KeyValuePair<string,string>("原折讓稅額", preview.TaxAmount),
                 new KeyValuePair<string,string>("原折讓商品", FormatAllowanceItems(preview.OriginalAllowance?.ProductItems)) });
             var display=LocalAllowancePresentation(issue,rows);
-            using var detail=new ManualReviewDetailForm("折讓作廢詳情", display.Fields, "核准並作廢",allowCancelReturn:true,primaryDanger:true,tables:display.Tables);
+            using var detail=new ManualReviewDetailForm("折讓作廢詳情", display.Fields, "核准並作廢",allowCancelReturn:true,primaryDanger:true,tables:display.Tables,allowanceDetails:true);
             if(detail.ShowDialog(this)!=DialogResult.OK)return;
             if(detail.SelectedAction==ManualReviewDetailAction.CancelReturn){SetManualReviewBusy(false);CancelManualReview(issue,login);return;}
             if(detail.SelectedAction!=ManualReviewDetailAction.Primary)return;
@@ -1327,7 +1328,7 @@ internal sealed class SyncIssuesForm : Form
                     new KeyValuePair<string,string>("最新可折含稅額", preview.OfficialRemainingGross),
                     new KeyValuePair<string,string>("官方折讓歷史", FormatAllowances(preview.OfficialHistory)) }));
             using var approvalDetail = new ManualReviewDetailForm("折讓開立詳情",display.Fields,
-                "核准並開立",allowCancelReturn:true,primaryDanger: true,tables:display.Tables);
+                "核准並開立",allowCancelReturn:true,tables:display.Tables,allowanceDetails:true);
             if (approvalDetail.ShowDialog(this) != DialogResult.OK)return;
             if(approvalDetail.SelectedAction==ManualReviewDetailAction.CancelReturn){SetManualReviewBusy(false);CancelManualReview(issue,login);return;}
             if(approvalDetail.SelectedAction != ManualReviewDetailAction.Primary) return;

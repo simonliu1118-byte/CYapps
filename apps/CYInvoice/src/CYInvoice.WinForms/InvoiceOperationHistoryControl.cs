@@ -393,9 +393,10 @@ internal sealed class AllowanceHistoryDetailForm : Form
 
         Text = "折讓詳細資訊";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(570, 430);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
+        ClientSize = new Size(840, 700);
+        MinimumSize = new Size(720,500);
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         MinimizeBox = false;
         ShowInTaskbar = false;
         ShowIcon = false;
@@ -438,7 +439,7 @@ internal sealed class AllowanceHistoryDetailForm : Form
         if (observedUtc is { } observed)
             rows.Add(new("系統查證時間", observed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture)));
         var data=AllowanceDetailPresentation.Build(record,rows,requestTables??[]);
-        var body=new BusinessDetailControl(data.Fields,data.Tables);
+        var body=new AllowanceDetailControl(data.Fields,data.Tables);
         var close = UiControls.StandardButton("關閉");
         close.Width = 90;
         close.DialogResult = DialogResult.OK;

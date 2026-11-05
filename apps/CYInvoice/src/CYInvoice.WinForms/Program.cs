@@ -215,6 +215,7 @@ internal static class Program
         form.Close();
 
         Stage("allowance native tables and editing");
+        AllowanceDetailControl.VerifySmokeSections();
         var allowanceInvoice = new InvoiceRecord {
             InvoiceNumber = "AA00000001", InvoiceDate = "20261105", Amount = 1050,
             Items = [new InvoiceItem { Description = "Synthetic item 1", Quantity = 1, UnitPrice = 100 },
