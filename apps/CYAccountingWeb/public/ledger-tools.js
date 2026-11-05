@@ -102,7 +102,7 @@ function setupLedgerToolbar() {
   periodControls.id = 'ledgerPeriodSearchControls';
   periodControls.className = 'ledger-period-search-controls';
   periodControls.hidden = true;
-  periodControls.innerHTML = `<span id="ledgerPeriodSearchPage"></span><span id="ledgerPeriodSearchStatus" role="status" aria-live="polite"></span>
+  periodControls.innerHTML = `<span id="ledgerSearchCount" class="ledger-summary-search" role="status" aria-live="polite" hidden></span><span id="ledgerPeriodSearchPage"></span><span id="ledgerPeriodSearchStatus" role="status" aria-live="polite"></span>
     <button id="ledgerPeriodSearchPrev" type="button" class="secondary compact" disabled>上一頁</button>
     <button id="ledgerPeriodSearchNext" type="button" class="secondary compact" disabled>下一頁</button>`;
   ledgerHead.append(periodControls);
@@ -323,7 +323,11 @@ function renderLedgerPeriodSearch() {
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = '目前顯示｜全帳簿搜尋';
   updateLedgerHeader();
-  document.querySelector('#ledgerPeriodSearchControls').hidden = false;
+  const controls = document.querySelector('#ledgerPeriodSearchControls');
+  controls.hidden = false;
+  controls.classList.remove('ledger-month-search-only');
+  const searchCount = document.querySelector('#ledgerSearchCount');
+  if (searchCount) { searchCount.textContent = ''; searchCount.hidden = true; }
   document.querySelector('#ledgerPeriodSearchStatus').textContent = '';
   document.querySelector('#ledgerPeriodSearchPage').textContent = rows.length
     ? `第 ${cyLedgerPeriodSearch.page + 1} 頁 · ${cyLedgerPeriodSearch.page * 50 + 1}–${cyLedgerPeriodSearch.page * 50 + rows.length} 筆` : '沒有符合的記錄';
@@ -638,7 +642,17 @@ function renderDesktopLedger() {
     : [...allTransactions]
   ).sort(compareLedgerDisplayOrder);
 
-  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>`;
+  const searchCount = document.querySelector('#ledgerSearchCount');
+  if (searchCount) {
+    searchCount.textContent = query ? `搜尋 ${visible.length}/${allTransactions.length} 筆` : '';
+    searchCount.hidden = !query;
+  }
+  const controls = document.querySelector('#ledgerPeriodSearchControls');
+  if (controls) {
+    controls.hidden = !query;
+    controls.classList.toggle('ledger-month-search-only', Boolean(query));
+  }
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerHeader();
