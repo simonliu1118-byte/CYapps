@@ -228,6 +228,10 @@ context.api=async()=>({health:{status:'failed',issues:[{provider:'google_cloud_s
 await context.showBackupHealthWarning();
 assert.match(textNodes.get('#backupHealthWarningText').textContent,/GCS可還原性檢查中斷/);
 console.log('Healthy boot silence and single accessible Super Admin incident warning passed.');
+context.api=async()=>({health:{status:'warning',verified:true,issues:[{code:'EXTERNAL_CHECK_INCOMPLETE'}]}});
+await context.showBackupHealthWarning();
+assert.match(textNodes.get('#backupHealthWarningText').textContent,/分時備援已完整驗證/);
+assert.equal(textNodes.get('.backup-health-delivery').textContent,'');
 
 // A confirmed paired backup may outlast normal interactive reads. Completion
 // refreshes the status once, without retrying the backup POST after a delay.

@@ -16,21 +16,28 @@ import openingSnapshots from '../migrations/0013_opening_balance_snapshots.sql';
 import markers from '../migrations/0014_transaction_markers.sql';
 import markerTarget from '../migrations/0015_transaction_marker_target.sql';
 import pendingConfirmation from '../migrations/0016_pending_confirmation.sql';
-import { verifyRestoreIntoEmptySqlite } from './backup-restore.js';
+import { verifyRestoreIntoEmptySqlite, advanceRestoreSqlite } from './backup-restore.js';
 
 const schemas = [initial, sessions, runs, catalog, archive, opening, colors, imports, phaseD, recovery, health, readIndexes, openingSnapshots, markers, markerTarget, pendingConfirmation];
-export async function verifyRestoreInMemory(backup) {
-  // Each verification owns a new SQLite database in the pinned WASM engine.
-  // It has no D1 binding and closes the database on success or failure.
-  const SQL = await initSqlJs({
+async function sqliteEngine() {
+  return initSqlJs({
     instantiateWasm(imports, ready) {
       const instance = new WebAssembly.Instance(wasmModule, imports);
       ready(instance, wasmModule);
       return instance.exports;
-    },
-    print() {}, printErr() {}
+    }, print() {}, printErr() {}
   });
-  const sandbox = new SQL.Database();
-  try { return await verifyRestoreIntoEmptySqlite(sandbox, schemas, backup); }
-  finally { sandbox.close(); }
+}
+export async function verifyRestoreInMemory(backup) {
+  const SQL = await sqliteEngine();
+  const db = new SQL.Database();
+  try { return await verifyRestoreIntoEmptySqlite(db, schemas, backup); }
+  finally { db.close(); }
+}
+export async function advanceRestoreSnapshot(snapshot, backup, cursor) {
+  const SQL = await sqliteEngine();
+  const db = snapshot ? new SQL.Database(snapshot) : new SQL.Database();
+  try {
+    return await advanceRestoreSqlite(db, schemas, backup, cursor);
+  } finally { db.close(); }
 }

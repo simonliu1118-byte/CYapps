@@ -4,6 +4,12 @@
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
 
+## V1.1.1 — 2026/11/05（外部備份檢查）
+
+- 在 V1.1.0 待確認功能及 schema 16 基礎上整合 PR #596；保留待確認旗標與確認稽核的備份、完整／分批回讀及舊 schema 相容處理。
+- 公開 Actions 使用短效 OIDC 完整試還原，Worker 每次最多 500 筆分時備援；只有兩邊都異常才通知超管。單一五分鐘排程仍只在 03:30 備份、08:00 補跑。
+- 使用者 2026/11/05 授權合併部署，發布結果及限制見 [handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。未新增本批 migration，不改待確認操作規則。
+
 ## V1.1.0 — 2026/11/05
 
 - 桌機新增待確認勾選、粉色摘要與不限日期的索引搜尋；手動標記移除粉色選項。
