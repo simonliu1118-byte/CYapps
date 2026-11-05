@@ -63,7 +63,7 @@ async function showBackupHealthWarning() {
     if (error?.message === 'AUTH_REQUIRED') return; // Shared Session owner handles expiry.
     health = { status: 'failed', issues: [{ code: 'BACKUP_HEALTH_UNAVAILABLE' }] };
   }
-  if (health?.status !== 'failed') return;
+  if (!['failed','warning'].includes(health?.status)) return;
   let dialog = document.querySelector('#backupHealthWarning');
   if (!dialog) {
     dialog = document.createElement('dialog');
@@ -81,10 +81,19 @@ async function showBackupHealthWarning() {
   const providers = [...new Set((health.issues || []).map(item => item.provider === 'cloudflare_r2' ? 'R2'
     : item.provider === 'google_cloud_storage' ? 'GCS' : '').filter(Boolean))];
   const codes = (health.issues || []).map(item => item.code);
-  const unavailable = codes.includes('BACKUP_HEALTH_UNAVAILABLE');
-  dialog.querySelector('#backupHealthWarningTitle').textContent = unavailable ? '備份檢查狀態無法讀取' : '備份異常警告';
+  const unavailable = codes.includes('BACKUP_HEALTH_UNAVAILABLE')
+    || health.status !== 'failed' && codes.includes('VERIFICATION_STATE_UNAVAILABLE');
+  dialog.querySelector('#backupHealthWarningTitle').textContent = unavailable ? '備份檢查狀態無法讀取'
+    : codes.includes('EXTERNAL_CHECK_INCOMPLETE') ? '外部備份檢查未完成' : '備份異常警告';
   let message = unavailable
     ? '目前無法讀取備份檢查狀態，請稍後重新整理。這不代表備份失敗。'
+    : codes.includes('VERIFICATION_STATE_UNAVAILABLE')
+    ? '備份檢查工作區連續無法使用，外部與分時備援都無法完成驗證。請維運人員確認；目前帳本不會自動還原或切換。'
+    : codes.includes('EXTERNAL_CHECK_INCOMPLETE')
+    ? health.verified ? '外部檢查未完成；分時備援已完整驗證備份。此情況不寄出超管通知信。'
+      : `外部檢查未完成，分時備援將接續檢查${health.processedRows ? `（已核對 ${Number(health.processedRows).toLocaleString()} 筆）` : ''}。只在兩種檢查都異常時通知超管。`
+    : codes.includes('BOTH_CHECKS_FAILED')
+    ? '外部與分時備援檢查都未完成，請維運人員確認。此警告不等同於備份上傳失敗，目前帳本不會自動還原或切換。'
     : codes.includes('BACKUP_HEALTH_INTERRUPTED')
     ? `${providers.join('／') || '備份'}可還原性檢查中斷，將於下次排程接續檢查；目前帳本不會自動還原或切換。`
     : codes.includes('BACKUP_HEALTH_OVERDUE')

@@ -38,5 +38,19 @@ try {
   const reports=await paired.json();
   assert.equal(reports.length,2);
   assert.ok(reports.every(report=>report.fullRowRoundtrip&&report.counts.transactions===9003), 'two large provider checks in one invocation keep separate empty databases');
+  // Separate workerd invocations reopen the R2 snapshot rather than relying on
+  // a warm isolate. One small batch is committed per call, including context.
+  await worker.fetch('/batch/start',{method:'POST',body:JSON.stringify(validated)});
+  let batchProof, calls=0;
+  do {
+    const response=await worker.fetch('/batch/step');
+    assert.equal(response.status,200,await response.clone().text());
+    const result=await response.json(); batchProof=result.proof;
+    assert.ok(!result.written || result.written<=500);
+    assert.ok(++calls<150);
+  } while(!batchProof);
+  assert.ok(calls>20);
+  assert.equal(batchProof.counts.transactions,9003);
+  assert.equal(batchProof.fullRowRoundtrip,true);
 } finally { await worker.stop(); }
 console.log('Actual Workers/workerd runtime restores and validates a fresh isolated SQLite database using static WASM.');

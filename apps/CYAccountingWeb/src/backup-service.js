@@ -1,3 +1,7 @@
+import { runBackupVerification, readVerificationHealth, VERIFICATION_CRON } from './backup-verification.js';
+import { backupPackageDigest } from './backup-package.js';
+export { backupPackageDigest } from './backup-package.js';
+export { handleVerificationApi as handleBackupVerificationApi } from './backup-verification.js';
 import { recoveryPage } from './backup-recovery-page.js';
 import { buildRecoveryContext, assertRecoveryContext, recoveryDigest } from './backup-recovery-context.js';
 import { recoveryWorkspace, restoreIntoRecoveryD1, recoveryEvent, RECOVERY_CONFIRMATION } from './backup-recovery.js';
@@ -45,7 +49,7 @@ export async function handleBackupApi(request, env, session, options = {}) {
       return html?recoveryPage(result):json({ok:true,...result});
     } catch(error) { return request.headers.get('accept')?.includes('text/html')?recoveryPage({error:safeMessage(error),code:safeCode(error)},409):json({ok:false,error:safeMessage(error),code:safeCode(error)},409); }
   }
-  if (url.pathname === '/api/backup/health' && request.method === 'GET') return json({ ok: true, health: await readBackupHealth(env.DB) });
+  if (url.pathname === '/api/backup/health' && request.method === 'GET') return json({ ok: true, health: await readBackupHealth(env) });
   if (url.pathname === '/api/backup/status' && request.method === 'GET') {
     return parallelBackupStatus(env, options);
   }
@@ -79,15 +83,23 @@ export async function handleBackupApi(request, env, session, options = {}) {
 }
 
 export async function runScheduledBackup(env, options = {}) {
-  const cron = options.cron || PRIMARY_CRON;
+  let cron = options.cron || PRIMARY_CRON;
+  if (cron === VERIFICATION_CRON) {
+    const now = options.now instanceof Date ? options.now : new Date();
+    const time = new Date(now.getTime()+8*3600000).toISOString().slice(11,16);
+    // One platform Cron consumes one Free-plan schedule slot. Keep the actual
+    // backup/export windows at 03:30 and 08:00, not every five minutes.
+    if (time === '03:30') cron = PRIMARY_CRON;
+    else if (time === '08:00') cron = RETRY_CRON;
+    else return resolveTieredBackupTopology(env) === PARALLEL_DUAL_PROVIDER
+      ? checkBackupHealth(env, options) : { skipped:true, reason:'legacy_verification_not_enabled' };
+  }
   if (![PRIMARY_CRON, RETRY_CRON].includes(cron)) return { skipped: true, reason: 'unknown_schedule' };
   if (resolveTieredBackupTopology(env) === LEGACY_GCS) return cron === PRIMARY_CRON
     ? runLegacyScheduledBackup(env) : { skipped: true, reason: 'legacy_retry_not_enabled' };
   if (!env?.DB) return { skipped: true, reason: 'not_configured' };
   const now = options.now instanceof Date ? options.now : new Date();
   const day = taipeiBackupDay(now), slot = cron === RETRY_CRON ? 'retry' : 'primary';
-  const hex = await recoveryDigest(`scheduled-backup:${day}:${slot}`);
-  const incident = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
   let databaseError;
   try {
     const hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
@@ -118,7 +130,8 @@ export async function runScheduledBackup(env, options = {}) {
     const code = quota ? 'D1_DAILY_LIMIT_EXCEEDED' : !databaseReady ? 'BACKUP_DATABASE_UNAVAILABLE' : safeCode(error);
     console.error('cyaccounting_tiered_backup_failed', /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : 'BACKUP_FAILED');
     backup = { ok: false, error: code, backupId: error?.backupResult?.backupId || '' };
-    // Stop all further D1 work on a quota error; notification uses CYID instead.
+    // Stop all further D1 work on a quota error; the independent coordinator
+    // records unavailable sources without querying the exhausted database.
     if (quota) databaseReady = false;
   }
   Object.assign(attempt, { status: backup.skipped ? 'skipped' : backup.ok ? 'success' : 'failed',
@@ -131,8 +144,7 @@ export async function runScheduledBackup(env, options = {}) {
     if (!saved) throw new Error('attempt changed');
   } catch {
     console.error('cyaccounting_backup_attempt_log_failed');
-    const delivery = await notifyBackupIncident(env, incident);
-    backup = { ...backup, attemptLogError: 'BACKUP_ATTEMPT_LOG_FAILED', emailSent: delivery.sent };
+    backup = { ...backup, attemptLogError: 'BACKUP_ATTEMPT_LOG_FAILED' };
   }
   // Fixed-key cleanup only: never scan the bucket or remove backup packages.
   try {
@@ -140,26 +152,14 @@ export async function runScheduledBackup(env, options = {}) {
     await env.BACKUP_R2.delete(['primary', 'retry'].map(name => `${ATTEMPT_PREFIX}${expired}/${name}.json`));
   } catch { console.warn('cyaccounting_backup_attempt_cleanup_failed'); }
   if (backup.skipped && (slot !== 'retry' || backup.reason !== 'already_backed_up')) return backup;
-  if (!databaseReady) {
-    const delivery = await notifyBackupIncident(env, incident);
-    return { ...backup, emailSent: delivery.sent };
-  }
-  // A failed new backup must not suppress verification / incident notification.
+  // Heavy verification never runs in the export/upload invocation. Prepare the
+  // immutable source job; independent five-minute wake-ups own fallback work.
   try {
-    if (backup.skipped) {
-      // A successful copy does not prove that the later health check finished.
-      // Catch up that check without exporting or uploading the accounting data again.
-      const health = await readBackupHealth(env.DB, now);
-      if (health.status === 'healthy' && health.checkedAt
-        && taipeiBackupDay(new Date(health.checkedAt)) === day) return { ...backup, health };
-    }
-    return { ...backup, health: await checkBackupHealth(env, { ...options,
-      deferGcs: slot === 'primary', resume: slot === 'retry', backupFailed: backup.ok === false }) };
-  }
-  catch (error) {
-    console.error('cyaccounting_backup_health_failed', safeCode(error));
-    const delivery = await notifyBackupIncident(env, crypto.randomUUID());
-    return { ...backup, health: { status: 'failed', code: 'BACKUP_HEALTH_CHECK_FAILED', emailSent: delivery.sent } };
+    return { ...backup, health: await runBackupVerification(env, { ...options, prepare:true,
+      databaseUnavailable:!databaseReady }) };
+  } catch {
+    console.error('cyaccounting_backup_verification_prepare_failed');
+    return { ...backup, health:{ status:'warning', code:'VERIFICATION_PREPARE_FAILED' } };
   }
 }
 
@@ -513,126 +513,13 @@ async function verifyStoredBackupCopy(env, source, providerName, actor, attemptI
 }
 
 
-// One scheduled health owner: same immutable-byte + fresh SQLite verifier as
-// controlled restore, with independent newest R2/GCS sources under Phase D.
+// Backup-service remains the public orchestration surface; its verification
+// coordinator is shared by the schedule, machine endpoint and health UI.
 export async function checkBackupHealth(env, options = {}) {
-  const now = options.now instanceof Date ? options.now : new Date();
-  const timestamp = now.toISOString(), lease = crypto.randomUUID();
-  const hold = await env.DB.prepare("SELECT value FROM meta WHERE key='recovery_hold'").first();
-  if (hold?.value === '1') return { skipped: true, reason: 'recovery_workspace' };
-  const claimed = await env.DB.prepare(`UPDATE backup_health_state SET lease_token = ?, lease_until = ?
-    WHERE id = 1 AND lease_until <= ? RETURNING id`)
-    .bind(lease, new Date(now.getTime() + 600_000).toISOString(), timestamp).first();
-  if (!claimed) return { skipped: true, reason: 'check_in_progress' };
-  try {
-    const previous = await env.DB.prepare('SELECT * FROM backup_health_state WHERE id=1').first();
-    const priorDetails = JSON.parse(previous.details_json || '[]');
-    if (previous.status === 'unknown' && priorDetails.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
-      && (!detail.resumeAfter || detail.resumeAfter < timestamp))) {
-      previous.incident_id ||= crypto.randomUUID();
-      // The previous invocation was terminated before it could report failure.
-      // The next scheduled owner delivers that incident before starting more work.
-      if (!previous.email_sent_at) {
-        await env.DB.prepare('UPDATE backup_health_state SET incident_id=? WHERE id=1 AND lease_token=?')
-          .bind(previous.incident_id, lease).run();
-        const delivery = await notifyBackupIncident(env, previous.incident_id);
-        previous.email_sent_at = delivery.sent ? timestamp : null;
-        await env.DB.prepare('UPDATE backup_health_state SET email_sent_at=?,email_error_code=? WHERE id=1 AND lease_token=?')
-          .bind(previous.email_sent_at, delivery.code, lease).run();
-      }
-    }
-    const continuing = options.resume
-      && priorDetails.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING' || detail.resumeAfter)
-      && previous.checked_at && taipeiBackupDay(new Date(previous.checked_at)) === taipeiBackupDay(now);
-    const attemptId = crypto.randomUUID(), details = options.backupFailed
-      ? [{ provider: '', status: 'failed', code: 'BACKUP_JOB_FAILED' }] : [];
-    // Commit progress before expensive provider I/O / SQLite work. A runtime
-    // termination cannot run catch/finally; the existing lease then exposes an
-    // interrupted check and the bounded morning run can resume the saved proof.
-    for (const provider of [R2_PROVIDER, GCS_PROVIDER]) {
-      const knownFailure = options.deferGcs && provider === GCS_PROVIDER
-        && priorDetails.find(detail => detail.provider === provider && detail.status === 'failed');
-      details.push({provider, status:'pending', code:'BACKUP_HEALTH_CHECK_PENDING',...(knownFailure || {}),
-        ...(options.deferGcs && provider === GCS_PROVIDER
-          ? {resumeAfter:new Date(`${taipeiBackupDay(now)}T08:10:00+08:00`).toISOString()} : {})});
-    }
-    const saveProgress = () => env.DB.prepare(`UPDATE backup_health_state
-      SET status='unknown',checked_at=?,details_json=? WHERE id=1 AND lease_token=?`)
-      .bind(timestamp, JSON.stringify(details), lease).run();
-    await saveProgress();
-    for (const provider of [R2_PROVIDER, GCS_PROVIDER]) {
-      // The existing 03:30 / 08:00 slots each perform one full normal-case
-      // restore. Avoid combining export plus two SQLite restores in one job.
-      if (provider === GCS_PROVIDER && options.deferGcs) break;
-      const source = await env.DB.prepare(`SELECT bs.*, bc.status AS copy_status FROM backup_sets bs
-        LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id AND bc.provider = ?
-        WHERE (? = 'cloudflare_r2' OR bs.gcs_expected = 1)
-        ORDER BY bs.created_at DESC LIMIT 1`).bind(provider, provider).first();
-      let code = '', check = null;
-      const saved = continuing && priorDetails.find(detail => detail.provider === provider
-        && detail.status === 'success' && !detail.code && detail.checkId
-        && detail.backupId === source?.backup_id && detail.packageSha256 === source?.package_sha256);
-      if (!source) code = 'BACKUP_SOURCE_MISSING';
-      else if (source.copy_status !== 'success') code = 'BACKUP_COPY_FAILED';
-      else if (now.getTime() - Date.parse(source.created_at) > (provider === R2_PROVIDER ? 36 : 120) * 3_600_000
-        || Date.parse(source.created_at) > now.getTime() + 300_000) code = 'BACKUP_COPY_STALE';
-      else if (!saved) {
-        check = await verifyStoredBackupCopy(env, source, provider, { type: 'scheduled_backup_health' }, attemptId, options);
-        if (check.status !== 'success') code = check.result.code || 'RESTORE_VERIFY_FAILED';
-      }
-      Object.assign(details.find(detail => detail.provider === provider), {
-        status: code ? 'failed' : 'success', code,
-        backupId: source?.backup_id || null, packageSha256: source?.package_sha256 || null,
-        checkId: saved?.checkId || check?.id || null });
-      await saveProgress();
-    }
-    const failed = details.some(detail => detail.status === 'failed');
-    const pending = details.some(detail => detail.status === 'pending');
-    const incident = failed ? previous.incident_id || crypto.randomUUID() : null;
-    const emailSentAt = failed && previous.incident_id === incident ? previous.email_sent_at : null;
-    await env.DB.prepare(`UPDATE backup_health_state SET status=?, checked_at=?, details_json=?,
-      incident_id=?, email_sent_at=?, email_error_code='' WHERE id=1 AND lease_token=?`)
-      .bind(failed ? 'failed' : pending ? 'unknown' : 'healthy', timestamp, JSON.stringify(details), incident, emailSentAt, lease).run();
-    if (failed && !emailSentAt) {
-      const delivery = await notifyBackupIncident(env, incident);
-      const sentAt = delivery.sent ? timestamp : null, code = delivery.code;
-      await env.DB.prepare(`UPDATE backup_health_state SET email_sent_at=?, email_error_code=?
-        WHERE id=1 AND lease_token=? AND incident_id=?`).bind(sentAt, code, lease, incident).run();
-    }
-    return await readBackupHealth(env.DB, now);
-  } finally {
-    await env.DB.prepare("UPDATE backup_health_state SET lease_token='',lease_until='' WHERE id=1 AND lease_token=?").bind(lease).run();
-  }
+  return runBackupVerification(env, options);
 }
-
-async function notifyBackupIncident(env, incident) {
-  try {
-    if (typeof env.BACKUP_NOTIFICATIONS?.notifySuperAdmin !== 'function') throw new Error('missing binding');
-    const result = await env.BACKUP_NOTIFICATIONS.notifySuperAdmin({
-      workspaceId: String(env.CYID_WORKSPACE_ID || ''), applicationId: String(env.CYID_APPLICATION_ID || ''),
-      type: 'backup_health_failed', eventId: incident
-    });
-    return ['delivered','already_delivered'].includes(result?.status)
-      ? { sent: true, code: '' } : { sent: false, code: 'NOTIFICATION_DEFERRED' };
-  } catch { return { sent: false, code: 'NOTIFICATION_DELIVERY_FAILED' }; }
-}
-
-export async function readBackupHealth(db, now = new Date()) {
-  const row = await db.prepare('SELECT status,checked_at,details_json,incident_id,email_sent_at,email_error_code,lease_until FROM backup_health_state WHERE id=1').first();
-  const details = JSON.parse(row?.details_json || '[]');
-  const interrupted = row?.status === 'unknown' && row.lease_until <= now.toISOString()
-    && details.some(detail => detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
-      && (!detail.resumeAfter || detail.resumeAfter < now.toISOString()));
-  const stale = row?.checked_at && now.getTime() - Date.parse(row.checked_at) > 36 * 3_600_000;
-  const issues = details.filter(detail => detail.status === 'failed'
-    || interrupted && detail.code === 'BACKUP_HEALTH_CHECK_PENDING'
-      && (!detail.resumeAfter || detail.resumeAfter < now.toISOString()))
-    .map(({provider,code}) => ({provider,code:code === 'BACKUP_HEALTH_CHECK_PENDING' ? 'BACKUP_HEALTH_INTERRUPTED' : code}));
-  if (stale && !issues.length) issues.push({provider:'',code:'BACKUP_HEALTH_OVERDUE'});
-  return { status: interrupted || stale ? 'failed' : row?.status || 'unknown', checkedAt: row?.checked_at || null,
-    incidentId: row?.incident_id || (interrupted ? 'check-interrupted' : stale ? 'check-overdue' : null),
-    issues,
-    emailSent: Boolean(row?.email_sent_at), emailPending: Boolean(row?.incident_id && !row?.email_sent_at) };
+export async function readBackupHealth(env, now = new Date()) {
+  return readVerificationHealth(env, now);
 }
 
 async function recentRestoreChecks(db) {
@@ -721,14 +608,6 @@ function normalizeCopyRow(row) {
     versionToken: String(row.version_token || ''),
     lastError: String(row.last_error || '')
   };
-}
-
-export async function backupPackageDigest(backupSet) {
-  const combined = new Uint8Array(backupSet.manifestBytes.byteLength + backupSet.dataBytes.byteLength);
-  combined.set(backupSet.manifestBytes, 0);
-  combined.set(backupSet.dataBytes, backupSet.manifestBytes.byteLength);
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
-  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function safeMessage(error) {

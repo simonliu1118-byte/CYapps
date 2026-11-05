@@ -1,0 +1,42 @@
+name: CYAccountingWeb Backup Verification
+
+on:
+  schedule:
+    - cron: '10 20 * * *' # 04:10 Asia/Taipei
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cyaccountingweb-backup-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: apps/CYAccountingWeb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: apps/CYAccountingWeb
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          # No dependency or workspace cache in this data-processing workflow.
+      - name: Install pinned dependencies before accessing any backup
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify both immutable copies without public data output
+        env:
+          CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
+        run: node scripts/verify-backups-external.mjs
+      # No artifacts, summaries, caches, debug dumps or backups are uploaded.

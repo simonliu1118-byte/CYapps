@@ -18,6 +18,7 @@ on:
       - "apps/CYAccountingWeb/**"
       - ".github/workflows/cyaccountingweb-deploy.yml"
       - ".github/workflows/cyaccountingweb-release.yml"
+      - ".github/workflows/cyaccountingweb-backup-verify.yml"
   push:
     branches:
       - deploy/cyaccountingweb-production
@@ -50,6 +51,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Scan public verification source for credential leakage
+        run: >-
+          python3 ../../.github/scripts/scan-public-package.py
+          src/backup-verification.js src/backup-verification-auth.js
+          scripts/verify-backups-external.mjs
+          ../../.github/workflows/cyaccountingweb-backup-verify.yml
+          docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md
+
       - name: Validate JavaScript syntax
         run: |
           node --check src/index.js
@@ -69,6 +78,9 @@ jobs:
           node --check src/backup-package.js
           node --check src/gcs-backup.js
           node --check src/backup-service.js
+          node --check src/backup-verification.js
+          node --check src/backup-verification-auth.js
+          node --check scripts/verify-backups-external.mjs
           node --check src/backup-recovery-page.js
           node --check src/backup-recovery.js
           node --check src/backup-recovery-context.js
@@ -114,6 +126,8 @@ jobs:
           node tests/backup-service.mjs
           node tests/backup-phase-d.mjs
           node tests/backup-health.mjs
+          node tests/backup-verification.mjs
+          node tests/backup-verification-runner.mjs
           node tests/backup-schedule.mjs
           node tests/backup-recovery.mjs
           node tests/backup-recovery-worker.mjs
@@ -161,6 +175,7 @@ jobs:
           CF_CYWEB_PORTAL_URL: https://portal.example.test/
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
+          CF_BACKUP_VERIFY_REPOSITORY_ID: "1"
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
         run: node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
 
@@ -198,6 +213,7 @@ jobs:
       CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
       CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
       CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
+      CF_BACKUP_VERIFY_REPOSITORY_ID: ${{ github.repository_id }}
       CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
 
     steps:

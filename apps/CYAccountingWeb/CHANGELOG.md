@@ -4,6 +4,13 @@
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
 
+## V1.0.3 Build 1 — 2026/11/05（待審查／發布）
+
+- 接續同一試還原中斷修復：公開 GitHub Actions 使用短效 OIDC，完整驗證凍結的 R2／GCS 來源，只回報固定文字與少量證據，不輸出／上傳帳務內容。
+- 單一五分鐘 Cron 保留 03:30 備份、08:00 補跑；外部未完成則分批保存隔離 SQLite 快照，每次最多 500 筆，完整驗證後才通過。
+- 僅外部與備援均異常時寄超管信；外部單獨未完成在網頁提示。沿用 CYID 通知去重，保留正式免費 CPU 驗收與 Paid 後退場待辦。無 schema／帳務變更。
+- 完整交接與測試邊界：[handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。本段不代表正式部署完成；頂部 V1.0.0 發行段落為歷史。
+
 ## V1.0.0 — 2026/10/30
 
 - **使用者授權的首個 1.x Major 正式版**：`VERSION=1.0.0`、`BUILD=0`；保留 V0.25.18 Build 2 所有已部署能力，既有正式交易、帳戶、Session、統計與備份契約不因版本號而重設。

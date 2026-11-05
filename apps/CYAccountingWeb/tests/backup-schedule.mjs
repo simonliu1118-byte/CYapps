@@ -22,8 +22,8 @@ try {
   let result = await runScheduledBackup({ ...env, DB: quotaDb }, { ...options, now: atNight, cron: primary });
   assert.equal(result.error, 'D1_DAILY_LIMIT_EXCEEDED');
   assert.equal(quotaReads, 1, 'quota stops further D1 work and health scans');
-  assert.equal(result.emailSent, true);
-  assert.match(notifications[0].eventId, /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.equal(Boolean(result.emailSent), false);
+  assert.equal(notifications.length,0,'backup failure alone waits for both verification channels');
   let attempts = await journal();
   assert.equal(attempts.length, 1);
   assert.equal(attempts[0].status, 'failed');
@@ -33,7 +33,7 @@ try {
   result = await runScheduledBackup({ ...env, DB: quotaDb }, { ...options, now: atNight, cron: primary });
   assert.equal(result.reason, 'attempt_already_recorded');
   assert.equal(JSON.stringify((await journal())[0]), first, 'redelivery preserves the failure');
-  assert.equal(notifications.length, 1);
+  assert.equal(notifications.length, 0);
   // At 08:00 the quota has reset. Exactly one normal canonical backup is made.
   result = await runScheduledBackup(env, { ...options, now: atMorning, cron: retry });
   assert.equal(result.ok, true);
@@ -64,12 +64,8 @@ try {
   assert.deepEqual([one.reason, two.reason].sort(), ['already_backed_up', 'attempt_already_recorded'].sort());
   assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n, count);
   assert.equal(r2.objects.size + gcs.objects.size, objectsBeforeRetry, 'health catch-up does not upload another backup');
-  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n, checksBeforeRetry + 2,
-    'one canonical health check verifies both existing provider copies');
-  const healthAfterRetry = db.db.prepare('SELECT status,checked_at,lease_until FROM backup_health_state WHERE id=1').get();
-  assert.equal(healthAfterRetry.status, 'healthy');
-  assert.equal(healthAfterRetry.checked_at, nextMorning.toISOString());
-  assert.equal(healthAfterRetry.lease_until, '');
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n, checksBeforeRetry,
+    'backup slots prepare sources without running a complete SQLite check');
   assert.equal(JSON.stringify(db.db.prepare('SELECT * FROM transactions ORDER BY id').all()), ledger);
 
   // Partial provider failure requires another paired backup on required GCS days.
@@ -141,34 +137,6 @@ await assert.rejects(buildBackupPackage(huge), error => error.code === 'BACKUP_E
 assert.equal(packageCalls, 21);
 await assert.rejects(buildRecoveryContext({ prepare() { return { bind() { return this; }, async all() { return { results: Array(20001).fill({}) }; } }; } }), error => error.code === 'BACKUP_RECOVERY_ROW_LIMIT');
 console.log('Backup scheduling: independent outage journal, 08:00 retry, atomic dedup, quota stop, partial copies, manual/day boundary, recovery hold and bounded export passed.');
-
-// Each existing slot verifies one provider, without repeating the completed R2 proof.
-const freshDb = accountingFixture();
-try {
-  const freshEnv = { ...env, DB: freshDb, BACKUP_R2: memoryR2Bucket() };
-  const freshOptions = { ...options, r2Provider: memoryProvider('cloudflare_r2'), gcsProvider: memoryProvider('google_cloud_storage') };
-  await runScheduledBackup(freshEnv, { ...freshOptions, now: atNight, cron: primary });
-  const checkCount = freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n;
-  const freshRetry = await runScheduledBackup(freshEnv, { ...freshOptions, now: atMorning, cron: retry });
-  assert.equal(freshRetry.reason, 'already_backed_up');
-  assert.equal(freshRetry.health.status, 'healthy');
-  assert.equal(checkCount,1);
-  assert.equal(freshDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n,checkCount+1);
-} finally { freshDb.close(); }
-
-// A newer backup between slots invalidates the saved R2 proof, even when its
-// financial data happens to be identical. Match immutable package identity.
-const changedDb=accountingFixture();
-try {
-  const changedEnv={...env,DB:changedDb,BACKUP_R2:memoryR2Bucket()};
-  const changedOptions={...options,r2Provider:memoryProvider('cloudflare_r2'),gcsProvider:memoryProvider('google_cloud_storage')};
-  await runScheduledBackup(changedEnv,{...changedOptions,now:atNight,cron:primary});
-  await runTieredBackup(changedEnv,'manual',{...changedOptions,now:new Date(atNight.getTime()+3600000)});
-  const before=changedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n;
-  const result=await runScheduledBackup(changedEnv,{...changedOptions,now:atMorning,cron:retry});
-  assert.equal(result.health.status,'healthy');
-  assert.equal(changedDb.db.prepare('SELECT COUNT(*) AS n FROM backup_restore_checks').get().n,before+2,'new source must verify both copies');
-} finally {changedDb.close();}
 
 // Concurrent journal reads stay bounded and preserve chronological slot order.
 let active = 0, peak = 0;

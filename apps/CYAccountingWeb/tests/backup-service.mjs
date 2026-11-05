@@ -77,6 +77,7 @@ const r2Bucket = {
     if (!stored) return null;
     return {
       ...stored.object,
+      body: new Response(stored.bytes).body,
       async arrayBuffer() {
         return stored.bytes.buffer.slice(stored.bytes.byteOffset, stored.bytes.byteOffset + stored.bytes.byteLength);
       }

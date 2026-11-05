@@ -6,35 +6,30 @@ const BACKUP_PREFIX = 'CYAccountingWeb_backup_';
 const PAGE_SIZE = 1000;
 const encoder = new TextEncoder();
 
+// Canonical read-back mapping shared by full and incremental trial restores.
+export const ACCOUNTING_EXPORT_TABLES = [
+  ['accounts', 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount],
+  ['categoryGroups', 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup],
+  ['categories', 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory],
+  ['transactions', 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at FROM transactions ORDER BY id', mapTransaction],
+  ['openingBalanceOverrides', 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride],
+  ['openingBalanceAudit', 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit],
+  ['appSettings', 'SELECT key, value FROM app_settings ORDER BY key', mapSetting],
+  ['excelImportRuns', 'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', mapImportRun]
+];
+
 export async function buildBackupPackage(db, now = new Date()) {
   // A failed query stops the export; no parallel reads continue after quota exhaustion.
   const budget = { remaining: 20000 };
   const schemaRow = await db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first();
-  const accounts = await readPaged(db, budget, 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount);
-  const groups = await readPaged(db, budget, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup);
-  const categories = await readPaged(db, budget, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory);
-  const transactions = await readPaged(db, budget, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at FROM transactions ORDER BY id', mapTransaction);
-  const openingOverrides = await readPaged(db, budget, 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride);
-  const openingAudit = await readPaged(db, budget, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit);
-  const settings = await readPaged(db, budget, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting);
-  const importRuns = Number(schemaRow?.value || 0) >= 8 ? await readPaged(db, budget,
-    'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', row => ({
-      id: String(row.id), startDate: String(row.start_date), endExclusive: String(row.end_exclusive),
-      reason: String(row.reason), sourceSha256: String(row.source_sha256), backupId: String(row.backup_id),
-      deletedCount: Number(row.deleted_count), insertedCount: Number(row.inserted_count),
-      actor: JSON.parse(row.actor_json), createdAt: String(row.created_at)
-    })) : [];
-
-  const data = {
-    accounts,
-    categoryGroups: groups,
-    categories,
-    openingBalanceOverrides: openingOverrides,
-    openingBalanceAudit: openingAudit,
-    transactions,
-    appSettings: settings,
-    excelImportRuns: importRuns
-  };
+  const exported = {};
+  for (const [key, sql, mapper] of ACCOUNTING_EXPORT_TABLES) {
+    exported[key] = key === 'excelImportRuns' && Number(schemaRow?.value || 0) < 8
+      ? [] : await readPaged(db, budget, sql, mapper);
+  }
+  const data = {accounts:exported.accounts,categoryGroups:exported.categoryGroups,categories:exported.categories,
+    openingBalanceOverrides:exported.openingBalanceOverrides,openingBalanceAudit:exported.openingBalanceAudit,
+    transactions:exported.transactions,appSettings:exported.appSettings,excelImportRuns:exported.excelImportRuns};
   const counts = Object.fromEntries(Object.entries(data).map(([key, rows]) => [key, rows.length]));
   const totalRowCount = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const canonicalData = JSON.stringify(data);
@@ -165,5 +160,20 @@ function mapSetting(row) {
 
 async function sha256HexBytes(bytes) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function mapImportRun(row) { return {
+      id: String(row.id), startDate: String(row.start_date), endExclusive: String(row.end_exclusive),
+      reason: String(row.reason), sourceSha256: String(row.source_sha256), backupId: String(row.backup_id),
+      deletedCount: Number(row.deleted_count), insertedCount: Number(row.inserted_count),
+      actor: JSON.parse(row.actor_json), createdAt: String(row.created_at)
+    }; }
+
+export async function backupPackageDigest(backupSet) {
+  const combined = new Uint8Array(backupSet.manifestBytes.byteLength + backupSet.dataBytes.byteLength);
+  combined.set(backupSet.manifestBytes, 0);
+  combined.set(backupSet.dataBytes, backupSet.manifestBytes.byteLength);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
   return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }

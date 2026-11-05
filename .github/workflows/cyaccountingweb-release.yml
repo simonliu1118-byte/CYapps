@@ -80,6 +80,7 @@ jobs:
           CF_CYWEB_PORTAL_URL: https://portal.example.test/
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
+          CF_BACKUP_VERIFY_REPOSITORY_ID: "1"
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
         run: |
           node scripts/prepare-sqljs.mjs

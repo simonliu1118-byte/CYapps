@@ -1,8 +1,14 @@
 # CYAccountingWeb 工作交接
 
-更新：2026/10/30（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
+更新：2026/11/05（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
 
-## 最新狀態：V1.0.0 發行基準／D1 schema 15
+## 最新開發：V1.0.3 Build 1 備份外部檢查與分時備援
+
+本批使用者已確認先用公開 repository：GitHub 04:10 優先做完整試還原，Worker 每五分鐘以 500 筆批次備援；只有兩邊都異常才透過 CYID 通知超管。保留原 03:30 備份與 08:00 補跑，平台改用一個 Cron。尚未合併／部署，不宣稱正式 Free CPU 驗收通過。
+
+Claude 交接、資料邊界、用量及驗證：[BACKUP-EXTERNAL-FALLBACK-20261105.md](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。未改 schema 15／帳務資料／CYID consumer contract。日後付費退場待辦已加入 TODO。以下 V1.0.0 及更早段落均為歷史，不代表這次部署結果。
+
+## 歷史：V1.0.0 發行基準／D1 schema 15
 
 | 項目 | 現行證據或邊界 |
 | --- | --- |

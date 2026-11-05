@@ -31,6 +31,10 @@ export function createR2BackupStorageProvider(env) {
   }
 
   async function getObject(key) {
+    return new Uint8Array(await new Response(await getObjectStream(key)).arrayBuffer());
+  }
+
+  async function getObjectStream(key) {
     let object;
     try {
       object = await bucket.get(String(key));
@@ -40,7 +44,7 @@ export function createR2BackupStorageProvider(env) {
     if (!object || typeof object.arrayBuffer !== 'function') {
       throw new R2ProviderError('Cloudflare R2 找不到備份物件。', 'R2_OBJECT_NOT_FOUND');
     }
-    return new Uint8Array(await object.arrayBuffer());
+    return object.body;
   }
 
   async function listObjects(prefix) {
@@ -80,6 +84,7 @@ export function createR2BackupStorageProvider(env) {
     kind: 'cloudflare_r2',
     putObject,
     getObject,
+    getObjectStream,
     listObjects,
     deleteObject
   });

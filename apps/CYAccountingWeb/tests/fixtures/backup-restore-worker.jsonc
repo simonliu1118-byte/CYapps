@@ -3,5 +3,6 @@
   "main": "backup-restore-worker.js",
   "compatibility_date": "2026-09-22",
   "define": { "globalThis.WorkerGlobalScope": "undefined" },
+  "r2_buckets": [{ "binding":"SNAPSHOTS", "bucket_name":"synthetic-restore-snapshots" }],
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }]
 }
