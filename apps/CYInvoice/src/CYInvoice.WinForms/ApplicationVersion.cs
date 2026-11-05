@@ -28,7 +28,9 @@ internal static class ApplicationVersion
     private static string ReadFile(string name)
     {
         try { return File.ReadAllText(Path.Combine(AppContext.BaseDirectory, name)).Trim(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return string.Empty; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ApplicationVersion"); return string.Empty; }
     }
 
     internal static void VerifySmokeVersion()

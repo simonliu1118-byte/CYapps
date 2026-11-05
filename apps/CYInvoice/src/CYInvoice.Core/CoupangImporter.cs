@@ -65,7 +65,8 @@ public static class CoupangImporter
                 quantity = FixedDecimal.Parse(CleanNumber(Value(row, columns, "數量")));
             }
             catch (Exception error) when (error is FormatException or OverflowException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CoupangImporter");
                 throw new InvalidDataException($"第 {rowIndex + 1} 列數量格式錯誤", error);
             }
             if (quantity.ScaledValue <= 0)
@@ -78,7 +79,8 @@ public static class CoupangImporter
                 amount = ParseInteger(Value(row, columns, "應開立予買家之發票金額"));
             }
             catch (Exception error) when (error is FormatException or OverflowException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CoupangImporter");
                 throw new InvalidDataException($"第 {rowIndex + 1} 列應開立予買家之發票金額格式錯誤", error);
             }
             if (amount <= 0)
@@ -147,7 +149,8 @@ public static class CoupangImporter
                 InvoiceValidator.Validate(draft);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CoupangImporter");
                 throw new InvalidDataException($"訂單 {order.OrderId}：{error.Message}", error);
             }
         }

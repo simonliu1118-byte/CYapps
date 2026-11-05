@@ -1,3 +1,5 @@
+using CYInvoice.Core;
+
 namespace CYInvoice.WinForms;
 
 internal enum ManualReviewDetailAction
@@ -11,15 +13,8 @@ internal enum ManualReviewDetailAction
 
 internal sealed class ManualReviewDetailForm : Form
 {
-    private readonly TableLayoutPanel details = new()
-    {
-        Dock = DockStyle.Top,
-        AutoSize = true,
-        ColumnCount = 2,
-        RowCount = 0,
-        Margin = Padding.Empty,
-    };
-
+    private BusinessDetailControl content = null!;
+    private TableLayoutPanel layout = null!;
     public ManualReviewDetailForm(
         string title,
         IEnumerable<KeyValuePair<string, string>> rows,
@@ -27,30 +22,25 @@ internal sealed class ManualReviewDetailForm : Form
         bool allowCancelReturn = false,
         bool allowAdministrativeClose = false,
         bool primaryDanger = false,
-        string secondaryActionText = "")
+        string secondaryActionText = "",
+        IReadOnlyList<InvoiceItem>? originalItems = null,
+        IReadOnlyList<BusinessDetailTable>? tables = null)
     {
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(570, 430);
+        ClientSize = new Size(700, 640);
         MinimumSize = new Size(500, 360);
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
 
-        details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
-        details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var row in rows) AddRow(row.Key, row.Value);
-
-        var scroller = new Panel
-        {
-            Dock = DockStyle.Fill,
-            AutoScroll = true,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.White,
-            Padding = new Padding(10),
-            Margin = Padding.Empty,
-        };
-        scroller.Controls.Add(details);
+        var fields = rows.ToArray();
+        var allTables = (tables ?? []).ToList();
+        if (originalItems is not null) {
+            fields = fields.Where(row => row.Key != "原發票商品").ToArray();
+            allTables.Insert(0, BusinessDetailControl.Products("原發票商品", originalItems));
+        }
+        content = new BusinessDetailControl(fields, allTables);
 
         var close = UiControls.StandardButton("關閉");
         close.Width = 96;
@@ -110,7 +100,8 @@ internal sealed class ManualReviewDetailForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.Controls.Add(scroller, 0, 0);
+        layout = root;
+        root.Controls.Add(content, 0, 0);
         root.Controls.Add(actions, 0, 1);
         Controls.Add(root);
         AcceptButton = null;
@@ -119,33 +110,23 @@ internal sealed class ManualReviewDetailForm : Form
 
     public ManualReviewDetailAction SelectedAction { get; private set; }
 
+    public void UpdateContent(IReadOnlyList<KeyValuePair<string,string>> fields,IReadOnlyList<BusinessDetailTable> tables)
+    {
+        var position=content.AutoScrollPosition;
+        layout.SuspendLayout();
+        layout.Controls.Remove(content);
+        content.Dispose();
+        content=new BusinessDetailControl(fields,tables);
+        layout.Controls.Add(content,0,0);
+        layout.ResumeLayout(true);
+        content.AutoScrollPosition=new Point(-position.X,-position.Y);
+    }
+
     private void Complete(ManualReviewDetailAction action)
     {
         SelectedAction = action;
         DialogResult = DialogResult.OK;
         Close();
-    }
-
-    private void AddRow(string label, string value)
-    {
-        var row = details.RowCount++;
-        details.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        details.Controls.Add(new Label
-        {
-            Text = label,
-            AutoSize = true,
-            Margin = new Padding(0, 2, 8, 2),
-            Font = new Font(Font, FontStyle.Bold),
-            ForeColor = Color.FromArgb(70, 70, 70),
-        }, 0, row);
-        details.Controls.Add(new Label
-        {
-            Text = string.IsNullOrWhiteSpace(value) ? "－" : value.Trim(),
-            AutoSize = true,
-            MaximumSize = new Size(400, 0),
-            Margin = new Padding(0, 2, 0, 2),
-            ForeColor = SystemColors.ControlText,
-        }, 1, row);
     }
 
     private static void CenterActions(FlowLayoutPanel panel)

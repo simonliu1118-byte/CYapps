@@ -141,7 +141,8 @@ public sealed class AllowancePdfService
                 File.Delete(path);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AllowancePdf");
                 // A stale cache file must never block opening the current official version.
                 // Because the official-data fingerprint is part of the active path, this file
                 // cannot be reused even when Windows temporarily prevents its deletion.
@@ -277,7 +278,10 @@ public sealed class AllowancePdfService
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            try { File.Delete(path); } catch (Exception deleteError) when (deleteError is IOException or UnauthorizedAccessException) { }
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AllowancePdf");
+            try { File.Delete(path); } catch (Exception deleteError) when (deleteError is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(deleteError,"AllowancePdf"); }
             return null;
         }
     }
@@ -294,7 +298,9 @@ public sealed class AllowancePdfService
         {
             if (File.Exists(temporary))
             {
-                try { File.Delete(temporary); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+                try { File.Delete(temporary); } catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AllowancePdf"); }
             }
         }
     }

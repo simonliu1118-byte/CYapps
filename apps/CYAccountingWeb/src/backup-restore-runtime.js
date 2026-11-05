@@ -15,9 +15,10 @@ import readIndexes from '../migrations/0012_transaction_read_indexes.sql';
 import openingSnapshots from '../migrations/0013_opening_balance_snapshots.sql';
 import markers from '../migrations/0014_transaction_markers.sql';
 import markerTarget from '../migrations/0015_transaction_marker_target.sql';
+import pendingConfirmation from '../migrations/0016_pending_confirmation.sql';
 import { verifyRestoreIntoEmptySqlite, advanceRestoreSqlite } from './backup-restore.js';
 
-const schemas = [initial, sessions, runs, catalog, archive, opening, colors, imports, phaseD, recovery, health, readIndexes, openingSnapshots, markers, markerTarget];
+const schemas = [initial, sessions, runs, catalog, archive, opening, colors, imports, phaseD, recovery, health, readIndexes, openingSnapshots, markers, markerTarget, pendingConfirmation];
 async function sqliteEngine() {
   return initSqlJs({
     instantiateWasm(imports, ready) {

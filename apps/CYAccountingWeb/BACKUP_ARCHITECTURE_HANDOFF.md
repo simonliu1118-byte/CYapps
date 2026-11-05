@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-> V1.0.3 Build 1 變更：自動檢查已改為同一協調器管理外部／分批備援，以下舊 Cron 與 D1 health owner 說明屬歷史；本批 canonical 實作與待驗收邊界見 [最新 handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。尚未宣稱部署。
+> V1.1.1 變更（承接 V1.1.0 待確認旗標／確認稽核、schema 16）：自動檢查已改為同一協調器管理外部／分批備援，以下舊 Cron 與 D1 health owner 說明屬歷史；本批 canonical 實作與待驗收邊界見 [最新 handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。尚未宣稱部署。
 
 
 更新：2026/10/30（台灣時間）。本文件描述**現行程式契約及歷史維運證據**。現行 V1.0.0 產品 source／D1 **schema 15**（資料庫結構承接已完成的 V0.25.18 Build 2；V1.0.0 正式部署須另以相同 source SHA 的 production Run 確認）；最新部署 SHA、驗收邊界與使用者待辦見 [WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)。Backup outer／inner `formatVersion` 均維持 **2**；尚未經受保護維運環境重新查證的每日排程／provider 健康不依文件或 CI 結果推定。

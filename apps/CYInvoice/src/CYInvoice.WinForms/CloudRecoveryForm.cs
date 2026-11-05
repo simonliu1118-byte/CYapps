@@ -195,8 +195,9 @@ internal sealed class CloudRecoveryForm : Form
                 confirmed, pending, code.Text.Trim(), employeeNo.Text.Trim(),
                 password.Text, ApplicationVersion.ReadDisplay(), lifetime.Token);
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudRecoveryForm");
             // A timeout can occur AFTER all old Devices were revoked.
             // Persist and reuse the original pending Token on the next attempt.
             status.Text = "復原結果尚未確認：Pending Device Token 已安全保留。"
@@ -241,9 +242,12 @@ internal sealed class CloudRecoveryForm : Form
         cancel.Enabled = false;
         UseWaitCursor = true;
         try { await callback(); }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (OperationCanceledException diagnosticError2) when (lifetime.IsCancellationRequested)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudRecoveryForm"); }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudRecoveryForm");
             if (!IsDisposed)
             {
                 status.Text = error.Message;

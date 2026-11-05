@@ -1,5 +1,11 @@
 # CYInvoice V3.1：非折讓跨機協作交接
 
+2026-11-05現況索引：本檔保留已發行V3.1的非折讓Work Item交接，不作目前Worker版本或折讓部署步驟。 工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
+
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
+
+## 歷史交接與驗證參考
+
 更新日期：2026-10-19（Asia/Taipei）
 
 ## V3.1.0 正式發布與延期驗收（最新狀態）

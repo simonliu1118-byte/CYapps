@@ -21,10 +21,25 @@ internal static class EmployeeOperationAuthentication
     {
         AppPrincipal? principal = null;
         try { principal = repository.AuthenticatePrincipal(employeeNo, password ?? string.Empty); }
-        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local) { }
+        catch (InvalidOperationException diagnosticError1) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeOperationAuthentication"); }
         if (principal is null || !AppRoles.CanManageAccounts(principal.Role))
             throw new UnauthorizedAccessException("管理員驗證失敗");
         return principal.ToEmployeeAccount();
+    }
+
+    // A durable business approval is executed by the local workflow, not by
+    // retaining a login. Revoked managers or a changed authority stop writes.
+    internal static EmployeeAccount RequireApprovedLocalManager(LocalRepository repository, string employeeNo)
+    {
+        if (repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly ||
+            repository.IdentityProvider.Kind != IdentityProviderKind.Local)
+            throw new UnauthorizedAccessException("原 Local 核准的執行權威已改變");
+        var manager = repository.Employees.Find(employeeNo);
+        if (manager is null || !manager.Enabled || !EmployeeRoles.CanManageAccounts(manager.Role))
+            throw new UnauthorizedAccessException("原核准主管已停用或失去主管權限");
+        return manager;
     }
 
     private static AppPrincipal AuthenticatePrincipal(
@@ -43,8 +58,9 @@ internal static class EmployeeOperationAuthentication
         {
             principal = repository.AuthenticatePrincipal(employeeNo, password);
         }
-        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
+        catch (InvalidOperationException diagnosticError2) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"EmployeeOperationAuthentication");
             // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
         }
 

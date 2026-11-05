@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.59 — 2026/11/05
+
+- CYEnvelope 改以 C#／WPF（.NET 10）為唯一維護主線，停止開發 Go／Win32 V0.1.x；以 V0.3.0 + BUILD 為後續版本基準，合併原始碼不等於正式 Release。
+- 明確定義 Windows x64 portable package、3 天 CI Artifact 與視覺／實機試印驗證要求；字體由每個信封格式分別保存，預覽與列印使用同一設定，內建字體依固定來源與 SHA-256 驗證，不將字體 binary 納入 Git。
+- 僅更新 CYEnvelope 專案規則，不變更其他 App 的永久規則。
+
 ## 2.3.58 — 2026/10/29
 
 - CYERPAutoQuery 依 WO-1.3.0 使用者核准，於只讀原則中限定開放庫存盤點寫回：

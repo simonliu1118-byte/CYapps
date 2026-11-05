@@ -184,7 +184,7 @@ export default {
       const toolsResponse = await handleAccountingToolsApi(request, env);
       if (toolsResponse) return toolsResponse;
 
-      return coreWorker.fetch(request, env);
+      return coreWorker.fetch(request, env, {session:resolved.session});
     } catch (error) {
       console.error('cyaccounting_request_failed', error instanceof Error ? error.message : 'unknown_error');
       return json({ ok: false, error: '系統處理失敗，請稍後再試。' }, 500);

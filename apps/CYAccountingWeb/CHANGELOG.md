@@ -1,15 +1,21 @@
 # CYAccountingWeb 版本與變更紀錄
 
-> 目前正式發行原始碼版本身分為 **V1.0.0（Build 0）**，使用者於 2026/10/30 明確核准 Major 升版；D1 schema **15**，無新增 migration。本版是 V0.25.18 Build 2 已穩定功能的正式產品世代，不是新帳本或新 API。歷史 [production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 僅證明**上一代**正式部署；1.0.0 本身須查 [Production](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 及 [Stable Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 的同 SHA 成功結果，不能由本文件取代驗證。所有歷史段落依當時版本解讀，不得當成現行權限／鎖帳政策。
+> 歷史 V1.0.0 發行基準為 **V1.0.0（Build 0）**，使用者於 2026/10/30 明確核准 Major 升版；D1 schema **15**，無新增 migration。本版是 V0.25.18 Build 2 已穩定功能的正式產品世代，不是新帳本或新 API。歷史 [production run 41079799154](https://github.com/simonliu1118-byte/CYapps/actions/runs/41079799154) 僅證明**上一代**正式部署；1.0.0 本身須查 [Production](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-deploy.yml) 及 [Stable Release](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyaccountingweb-release.yml) 的同 SHA 成功結果，不能由本文件取代驗證。所有歷史段落依當時版本解讀，不得當成現行權限／鎖帳政策。
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
 
-## V1.0.3 Build 1 — 2026/11/05（待審查／發布）
+## V1.1.1 — 2026/11/05（外部備份檢查）
 
-- 接續同一試還原中斷修復：公開 GitHub Actions 使用短效 OIDC，完整驗證凍結的 R2／GCS 來源，只回報固定文字與少量證據，不輸出／上傳帳務內容。
-- 單一五分鐘 Cron 保留 03:30 備份、08:00 補跑；外部未完成則分批保存隔離 SQLite 快照，每次最多 500 筆，完整驗證後才通過。
-- 僅外部與備援均異常時寄超管信；外部單獨未完成在網頁提示。沿用 CYID 通知去重，保留正式免費 CPU 驗收與 Paid 後退場待辦。無 schema／帳務變更。
-- 完整交接與測試邊界：[handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。本段不代表正式部署完成；頂部 V1.0.0 發行段落為歷史。
+- 在 V1.1.0 待確認功能及 schema 16 基礎上整合 PR #596；保留待確認旗標與確認稽核的備份、完整／分批回讀及舊 schema 相容處理。
+- 公開 Actions 使用短效 OIDC 完整試還原，Worker 每次最多 500 筆分時備援；只有兩邊都異常才通知超管。單一五分鐘排程仍只在 03:30 備份、08:00 補跑。
+- 使用者 2026/11/05 授權合併部署，發布結果及限制見 [handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。未新增本批 migration，不改待確認操作規則。
+
+## V1.1.0 — 2026/11/05
+
+- 桌機新增待確認勾選、粉色摘要與不限日期的索引搜尋；手動標記移除粉色選項。
+- 摘要旁確認按鈕可填科目與摘要，鎖帳例外只適用此動作；成功後解除並保留稽核，取消不寫入。
+- Schema 16：狀態、部分索引、確認稽核；備份／還原共用既有 mapping 並支援舊備份。
+- 整合 PR #597，搜尋數量移至清單資訊列。完整邊界及驗證見 [V1.1.0.txt](V1.1.0.txt)。
 
 ## V1.0.0 — 2026/10/30
 

@@ -24,8 +24,12 @@ public sealed class LocalAllowanceNumberStore
         databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
         if (!File.Exists(databasePath))
             throw new FileNotFoundException("Initialize CYInvoice SQLite before allocating allowances", databasePath);
-        using var connection = Open();
+    }
+
+    internal static void EnsureSchema(SqliteConnection connection, SqliteTransaction transaction)
+    {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             CREATE TABLE IF NOT EXISTS allowance_number_ledger (
                 seller_invoice TEXT NOT NULL,
@@ -93,6 +97,25 @@ public sealed class LocalAllowanceNumberStore
             BEGIN SELECT RAISE(ABORT,'ALLOWANCE_COLLISION_REVIEW_APPEND_ONLY'); END;
             """;
         command.ExecuteNonQuery();
+        // Local forward-only evidence. Unlike the legacy human-review table,
+        // these rows prove an explicit provider number REJECTION, not an
+        // official query snapshot. Old history and triggers are preserved.
+        command.CommandText = """
+            CREATE TABLE IF NOT EXISTS allowance_local_number_rejections (
+                seller_invoice TEXT NOT NULL, environment TEXT NOT NULL,
+                work_item_id TEXT NOT NULL, allowance_number TEXT NOT NULL,
+                provider_code INTEGER NOT NULL CHECK(provider_code IN (4040161,4040162)),
+                recorded_utc TEXT NOT NULL,
+                PRIMARY KEY (seller_invoice, environment, allowance_number)
+            );
+            CREATE TRIGGER IF NOT EXISTS allowance_local_number_rejections_no_update
+            BEFORE UPDATE ON allowance_local_number_rejections
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_NUMBER_REJECTION_APPEND_ONLY'); END;
+            CREATE TRIGGER IF NOT EXISTS allowance_local_number_rejections_no_delete
+            BEFORE DELETE ON allowance_local_number_rejections
+            BEGIN SELECT RAISE(ABORT,'ALLOWANCE_NUMBER_REJECTION_APPEND_ONLY'); END;
+            """;
+        command.ExecuteNonQuery();
     }
 
     public LocalAllowanceReservation Reserve(
@@ -100,29 +123,24 @@ public sealed class LocalAllowanceNumberStore
         DateOnly date, AllowanceIssueRequest template,
         string approverEmployeeNo, DateTimeOffset approvedAtUtc) =>
         ReserveCore(sellerInvoice,environment,workItemId,date,template,
-            approverEmployeeNo,approvedAtUtc,null,null);
+            approverEmployeeNo,approvedAtUtc,null);
 
-    // This is deliberately INTERNAL: caller must revalidate the manager,
-    // immutable approval and exact provider-origin collision evidence.
-    // It never posts g0401 and cannot release a 'sending' Ledger.
-    internal LocalAllowanceReservation ReserveAfterVerifiedExternalCollision(
+    // The only number-advance path for a frozen original manager approval.
+    // A durable provider code is required, not a fabricated query hash.
+    internal LocalAllowanceReservation ReserveAfterDefinitiveRejection(
         string sellerInvoice, string environment, string workItemId,
         DateOnly date, AllowanceIssueRequest template,
         string approverEmployeeNo, DateTimeOffset approvedAtUtc,
-        LocalAllowanceReservation previous,string officialSnapshotSha256) =>
-        ReserveCore(sellerInvoice,environment,workItemId,date,template,
-            approverEmployeeNo,approvedAtUtc,previous,officialSnapshotSha256);
+        LocalAllowanceReservation previous) =>
+        ReserveCore(sellerInvoice, environment, workItemId, date, template,
+            approverEmployeeNo, approvedAtUtc, previous);
 
     private LocalAllowanceReservation ReserveCore(
         string sellerInvoice, string environment, string workItemId,
         DateOnly date, AllowanceIssueRequest template,
         string approverEmployeeNo, DateTimeOffset approvedAtUtc,
-        LocalAllowanceReservation? reviewedCollision,string? officialSnapshotSha256)
+        LocalAllowanceReservation? reviewedCollision)
     {
-        if (reviewedCollision is not null &&
-            (officialSnapshotSha256 is null || officialSnapshotSha256.Length!=64 ||
-             officialSnapshotSha256.Any(c=>c is not (>= '0' and <= '9' or >= 'a' and <= 'f'))))
-            throw new InvalidDataException("Verified official collision snapshot SHA256 required");
         sellerInvoice = Require(sellerInvoice, nameof(sellerInvoice));
         environment = Require(environment, nameof(environment));
         workItemId = Require(workItemId, nameof(workItemId));
@@ -142,6 +160,7 @@ public sealed class LocalAllowanceNumberStore
         var dateText = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         using var connection = Open();
         using var transaction = connection.BeginTransaction(deferred: false);
+        RequireOpenWorkItem(connection, transaction, workItemId);
         LocalAllowanceReservation? latest = null;
         string? originalTemplate = null;
         var previousAttempt = 0;
@@ -191,6 +210,28 @@ public sealed class LocalAllowanceNumberStore
 
         if (reviewedCollision is not null && latest is null)
             throw new InvalidOperationException("Missing original collision attempt");
+        if (reviewedCollision is not null)
+        {
+            // The status alone is insufficient for a new automatic number.
+            // It must have been atomically paired with an explicit AMEGO
+            // number-rejection code by this Local ledger.
+            using var evidence = connection.CreateCommand();
+            evidence.Transaction = transaction;
+            evidence.CommandText = """
+                SELECT provider_code FROM allowance_local_number_rejections
+                WHERE seller_invoice=$seller AND environment=$env
+                  AND work_item_id=$work AND allowance_number=$previous
+                """;
+            evidence.Parameters.AddWithValue("$seller", sellerInvoice);
+            evidence.Parameters.AddWithValue("$env", environment);
+            evidence.Parameters.AddWithValue("$work", workItemId);
+            evidence.Parameters.AddWithValue("$previous", reviewedCollision.AllowanceNumber);
+            var code = evidence.ExecuteScalar();
+            if (code is null || !AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(
+                Convert.ToInt32(code, CultureInfo.InvariantCulture)))
+                throw new InvalidOperationException(
+                    "Original number has no durable provider rejection evidence; stop and inspect");
+        }
         int next;
         using (var sequence = connection.CreateCommand())
         {
@@ -248,38 +289,6 @@ public sealed class LocalAllowanceNumberStore
             if (insert.ExecuteNonQuery() != 1)
                 throw new InvalidDataException("Failed to reserve allowance number");
         }
-        if (reviewedCollision is not null)
-        {
-            // One atomic transaction: the new immutable reservation cannot
-            // exist without a privacy-minimized, append-only manager review.
-            using var audit=connection.CreateCommand();
-            audit.Transaction=transaction;
-            audit.CommandText="""
-                INSERT INTO allowance_local_collision_reviews (
-                    seller_invoice,environment,work_item_id,previous_number,
-                    new_number,previous_attempt,official_snapshot_sha256,
-                    manager_employee_no,reviewed_at_utc)
-                SELECT seller_invoice,environment,work_item_id,allowance_number,
-                    $new,attempt,$hash,approver_employee_no,$now
-                FROM allowance_number_ledger
-                WHERE seller_invoice=$seller AND environment=$env
-                  AND work_item_id=$work AND allowance_number=$old
-                  AND attempt=$attempt AND status='occupied_external'
-                  AND approver_employee_no=$manager AND approved_at_utc=$approved;
-                """;
-            audit.Parameters.AddWithValue("$new",number);
-            audit.Parameters.AddWithValue("$hash",officialSnapshotSha256!);
-            audit.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O",CultureInfo.InvariantCulture));
-            audit.Parameters.AddWithValue("$seller",sellerInvoice);
-            audit.Parameters.AddWithValue("$env",environment);
-            audit.Parameters.AddWithValue("$work",workItemId);
-            audit.Parameters.AddWithValue("$old",reviewedCollision.AllowanceNumber);
-            audit.Parameters.AddWithValue("$attempt",previousAttempt);
-            audit.Parameters.AddWithValue("$manager",approverEmployeeNo);
-            audit.Parameters.AddWithValue("$approved",approvedAtUtc.ToString("O",CultureInfo.InvariantCulture));
-            if (audit.ExecuteNonQuery()!=1)
-                throw new InvalidOperationException("Collision review was not durably recorded");
-        }
         transaction.Commit();
         return new LocalAllowanceReservation(workItemId, number, payloadJson, "reserved", next,
             approverEmployeeNo, approvedAtUtc);
@@ -313,6 +322,14 @@ public sealed class LocalAllowanceNumberStore
 
     // Must commit immediately BEFORE sending the frozen payload. Never mark
     // an already-sending operation as safe for retry after a crash or timeout.
+    internal int AttemptNumber(string sellerInvoice, string environment, string workItemId)
+    {
+        using var db=Open();using var sql=db.CreateCommand();
+        sql.CommandText="SELECT COALESCE(MAX(attempt),0) FROM allowance_number_ledger WHERE seller_invoice=$seller AND environment=$env AND work_item_id=$work";
+        sql.Parameters.AddWithValue("$seller",sellerInvoice);sql.Parameters.AddWithValue("$env",environment);sql.Parameters.AddWithValue("$work",workItemId);
+        return Convert.ToInt32(sql.ExecuteScalar());
+    }
+
     public void MarkSending(string sellerInvoice, string environment, LocalAllowanceReservation reservation) =>
         Move(sellerInvoice, environment, reservation, "reserved", "sending");
 
@@ -323,7 +340,8 @@ public sealed class LocalAllowanceNumberStore
     {
         if (!AmegoAllowanceErrorCodes.IsAllowanceNumberOccupied(confirmedAmegoCode))
             throw new ArgumentException("No confirmed AMEGO number collision", nameof(confirmedAmegoCode));
-        Move(sellerInvoice, environment, reservation, "sending", "occupied_external");
+        Move(sellerInvoice, environment, reservation, "sending", "occupied_external",
+            confirmedAmegoCode);
     }
 
     // Record official *content* proof separately from transaction-origin proof.
@@ -367,22 +385,33 @@ public sealed class LocalAllowanceNumberStore
             throw new InvalidOperationException("Local allowance Ledger changed; no readback audit written");
     }
 
-    // Reserved for a later independent, auditable origin-attribution flow.
-    // Neither code=0 nor a matching allowance_query authorizes calling this.
-    // No current Local API can establish attributable g0401 origin proof.
-    // Keep the historical entrypoint fail-closed rather than letting a
-    // caller treat code=0 or a matching number as success.
+    // A full original-number/item/status match is durable content evidence.
+    // It completes this approved operation without claiming who originated it.
     public void MarkOfficiallyConfirmed(string sellerInvoice, string environment,
-        LocalAllowanceReservation reservation) =>
-        throw new InvalidOperationException(
-            "g0401 origin not attributable: preserve sending and seek audited human reconciliation");
+        LocalAllowanceReservation reservation)
+    {
+        using var db = Open();
+        using var sql = db.CreateCommand();
+        sql.CommandText = "SELECT COUNT(*) FROM allowance_local_readback_audit WHERE seller_invoice=$seller AND environment=$env AND work_item_id=$work AND allowance_number=$number AND result_kind='full_match_unattributed'";
+        sql.Parameters.AddWithValue("$seller", sellerInvoice);
+        sql.Parameters.AddWithValue("$env", environment);
+        sql.Parameters.AddWithValue("$work", reservation.WorkItemId);
+        sql.Parameters.AddWithValue("$number", reservation.AllowanceNumber);
+        if (Convert.ToInt64(sql.ExecuteScalar()) == 0)
+            throw new InvalidOperationException("缺少完整官方比對證據，不能結案");
+        Move(sellerInvoice, environment, reservation, "sending", "confirmed");
+    }
 
     private void Move(string sellerInvoice, string environment,
-        LocalAllowanceReservation reservation, string from, string to)
+        LocalAllowanceReservation reservation, string from, string to,
+        int? confirmedRejectionCode = null)
     {
         ArgumentNullException.ThrowIfNull(reservation);
         using var connection = Open();
+        using var transaction = connection.BeginTransaction(deferred: false);
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        if (from == "reserved") RequireOpenWorkItem(connection, transaction, reservation.WorkItemId);
         command.CommandText = """
             UPDATE allowance_number_ledger SET status=$to
             WHERE seller_invoice=$seller AND environment=$environment
@@ -398,6 +427,36 @@ public sealed class LocalAllowanceNumberStore
         command.Parameters.AddWithValue("$payload", reservation.PayloadJson);
         if (command.ExecuteNonQuery() != 1)
             throw new InvalidOperationException("Allowance operation state changed or was already sent; reconcile with AMEGO");
+        if (confirmedRejectionCode is int code)
+        {
+            using var proof = connection.CreateCommand();
+            proof.Transaction = transaction;
+            proof.CommandText = """
+                INSERT INTO allowance_local_number_rejections
+                (seller_invoice,environment,work_item_id,allowance_number,
+                 provider_code,recorded_utc)
+                VALUES($seller,$environment,$work,$number,$code,$at)
+                """;
+            proof.Parameters.AddWithValue("$seller", Require(sellerInvoice, nameof(sellerInvoice)));
+            proof.Parameters.AddWithValue("$environment", Require(environment, nameof(environment)));
+            proof.Parameters.AddWithValue("$work", reservation.WorkItemId);
+            proof.Parameters.AddWithValue("$number", reservation.AllowanceNumber);
+            proof.Parameters.AddWithValue("$code", code);
+            proof.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            if (proof.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("Provider rejection proof was not saved");
+        }
+        transaction.Commit();
+    }
+
+    private static void RequireOpenWorkItem(SqliteConnection connection, SqliteTransaction transaction, string workItemId)
+    {
+        using var guard = connection.CreateCommand();
+        guard.Transaction = transaction;
+        guard.CommandText = "SELECT COUNT(*) FROM sync_issues WHERE local_id=CAST($work AS INTEGER) AND CAST(local_id AS TEXT)=$work AND TRIM(resolved_utc)<>''";
+        guard.Parameters.AddWithValue("$work", workItemId);
+        if (Convert.ToInt64(guard.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            throw new InvalidOperationException("原折讓申請已結束，不能配號或送出");
     }
 
     private SqliteConnection Open()

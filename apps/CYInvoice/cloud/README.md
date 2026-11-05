@@ -1,14 +1,41 @@
 # CYInvoice Cloud Reference Backend
 
-目前 canonical migration 為 0019；原始碼 SCHEMA_VERSION=19 僅為待部署目標。原 D1／Worker 仍依先前本機回報為 schema18。原 Worker 若需 18→19，必須先在另行授權的本機 MCP 完成原 D1 0019／備份及額度審核，再明確指定 CYINVOICE_SCHEMA_UPGRADE=18:19（workflow 的 schema_upgrade 選項）；四道折讓旗標必須全關，其他設定與 Secrets 保留。一般 code-only 部署不會默默改 runtime schema；未完成遷移或部署一律拒絕。操作清單見 ../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md。
+Canonical migration為0023。現行工程Source為V3.1.46／Cloud0.9.14，已於2026-11-05由本機MCP完成部署與完整前後查核，固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`、schema／marker23、100%流量。平台版本ID與承接流量版本一致，線上bundle SHA吻合；原服務、Secrets與財務旗標保留。原Cloud0.9.13／schema23已於2026-11-05回報部署完成，固定部署Source `d8f236ee5a030f19c7a41b80802bad8576d36934`；必要前後檢通過，原production CYID與財務設定保留。最新維護停點見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
-> **2026-10-18 最新 Source 狀態**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
+## Environment labels and last verified identity target
+
+Cloud0.9.14 retires the Invoice `APP_ENV` variable and the deployment checks
+that required the literal `development`. Health and general API envelopes no
+longer present that label as an environment fact. The completed reviewed deployment
+removed only this legacy plain-text binding and added `CF_VERSION_METADATA`;
+the full original configuration remains in the private rollback checkpoint.
+
+| Evidence | Meaning |
+| --- | --- |
+| Health `deployment.versionId` / `createdAt` | Running version ID / creation timestamp from Cloudflare's native version metadata binding. Missing metadata is `null`; old clients remain compatible. |
+| Active deployment and binding readback | Existing deployment checks verify the original Worker / D1, production CYID services / scopes, inherited Secrets, flags, routes and applied migrations. Health's version ID must match the actual single version receiving traffic when metadata is bound. |
+| Persisted allowance application `environment` (`test` / `production`) | Financial environment belonging to the original application and reused during execution/recovery. It is unchanged by this deployment metadata correction. |
+
+Version metadata needs no network or D1 lookup. Health keeps its existing
+storage check; actual migration history remains a deployment-time check and
+`storageSchemaVersion` remains the runtime compatibility marker. The public
+response does not expose service names, D1 IDs, credentials or private scopes.
+The version tag is not echoed.
+
+The last completed deployment report confirms both identity bindings use the
+approved production CYID provider. Neither the GitHub `development` Environment
+nor the historical Invoice Worker name establishes that fact. CYID's own
+provider environment contract is unchanged. Historical development-provider
+preparation/activation sections below are dated checkpoints, not current
+consumer configuration. See Cloudflare's [version metadata documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/).
+
+> **2026-10-18 歷史 Source checkpoint**：CYInvoice V3.0.0 Build 0 已正式發布；3.1 的非折讓 Work Item 程式已按 #482／#483／#485／#486／#487／#489／#490／#491 合併 `main`，包括 VOID／UPLOAD_ISSUE、管理員跨機待辦與 append-only 稽核草稿。**3.1 的 `cloud/drafts/0016_non_allowance_work_items.sql` 尚未成為正式 migration、遠端原 D1 未因 Source 合併而升級，`WORK_ITEMS_ENABLED` 預設關閉。** 3.1 真正 D1／Worker 升級要留到開發最後，由使用者本機 Cloudflare MCP 處理。以下 V2.6.19／Cloud 0.9.3 段落為歷史快照；現況以 [3.1 交接](../docs/V3_1_HANDOFF.md) 為準。
 
 Cloudflare Worker + D1 reference implementation for CYInvoice coordination. **V3.0 source supports CYID-only online Employee authority; Local requires no Worker.** Requests with missing or disabled CYID authority fail closed before any Device or legacy account mutation. Built-in/self-hosted deployments are historical and are no longer available as current V3.0 Worker operation. Prior releases, migrations and historical records remain preserved; this code change does not delete any D1 tables.
 
-AMEGO remains authoritative for invoice / void / allowance business state. Existing Windows business calls still use the original local DPAPI-protected App Key. V3.0 introduces a staged encrypted CYID company-card store, but the Worker API is DISABLED by default and requires COMPANY_SETTINGS_ENABLED=true and a reviewed schema >=15; the company-card GET/UPDATE API only returns safe status, never secrets. Secure use of the new card by Windows AMEGO/MO paths is not yet shipped and must not be inferred from this route.
+AMEGO remains authoritative for invoice / void / allowance business state. Windows uses its DPAPI-protected settings; authorized CYID Devices synchronize the existing encrypted company card. Normal Cloud allowance sends use the persisted application environment and current reviewed card authority. Ordinary company-card GET/UPDATE returns safe status; credential synchronization has its own active-Device authorization and revision checks. The user has verified card selection/edit/sync/restart delivery, while actual financial keys and positive transactions remain unverified.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Windows V2.6.19 Build 0 is released; source and the original development Worker are Cloud 0.9.3 with CYID_ENABLED=true and the company D1 in CYID_ONLY profile. Predecessor PRs #216/#379 were merged through #380. Deployment and private maintenance evidence are summarized in [the current handoff](../docs/V3_1_HANDOFF.md); remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; historical architecture evidence is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Historical baseline: Windows V2.6.19 Build 0 and Cloud 0.9.3 introduced the already activated CYID_ONLY company deployment. The last verified runtime and identity target are summarized above. Predecessor PRs #216/#379 were merged through #380. Current deployment evidence is summarized in [the local MCP handoff](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md); remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## CYID-only D1 Employee table retirement (company maintenance completed 2026-10-13)
 
@@ -22,9 +49,9 @@ The Chihyuan CYInvoice installation has switched to CYID. **Its own** D1 no long
 - Runtime compatibility removes a hidden `cloud_employees` SQL reference in CYID Device rename; Built-in Device rename still checks the Built-in Employee table.
 - Maintenance is **not** run by any CI, GitHub workflow or cloud deployment. The prerequisite is a separately approved, private, atomic and recoverable operation against the verified original business D1, after a compatible Worker deployment and read-only inventory. The source change itself does not execute maintenance; the company operation was separately approved and completed on 2026-10-13 without a test Worker. See `../docs/CLOUD_IDENTITY_LIFECYCLE.md` §20.
 
-## Current compatibility
+## Historical schema16 compatibility checkpoint
 
-V3.1-D source now includes canonical `0016_non_allowance_work_items.sql` and storage marker 16. The SQL behavior is unchanged from the reviewed draft. Work Item routes remain opt-in; a source merge does not enable `WORK_ITEMS_ENABLED` or deploy resources. Apply only to the verified original schema15/CYID_ONLY database after a private recoverable backup and continuity checks; do not replay 0014/0015. Actual remote state is recorded in private local MCP readback. The storage13 deployment details below are historical checkpoints.
+V3.1-D source included canonical `0016_non_allowance_work_items.sql` and storage marker 16. The SQL behavior is unchanged from the reviewed draft. Work Item routes remain opt-in; a source merge does not enable `WORK_ITEMS_ENABLED` or deploy resources. Apply only to the verified original schema15/CYID_ONLY database after a private recoverable backup and continuity checks; do not replay 0014/0015. Actual remote state is recorded in private local MCP readback. The storage13 deployment details below are historical checkpoints.
 
 - Service: `cyinvoice-cloud`
 - Cloud implementation source and original development Worker: `0.9.3`, CYID_ENABLED=true; company storage profile `CYID_ONLY`.
@@ -36,7 +63,7 @@ V3.1-D source now includes canonical `0016_non_allowance_work_items.sql` and sto
 
 `wrangler.jsonc` contains a local/CI D1 placeholder and the source storage configuration. Remote development uses the existing Worker's bound D1 after verifying its deployment environment and database metadata; its concrete ID is injected only into a private generated config. Applied migrations are immutable; future changes must use new forward migrations.
 
-> Current development [deployment](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) verified Cloud 0.9.3 / API 1 / compatibility marker 8 / storage 13 with CYID enabled and original bindings preserved. Separately approved CYID_ONLY D1 maintenance retained original business history and Device Token hashes with clean FK readback. Runs #8/#12/#39/#42 below are historical rollout/preparation/activation checkpoints. Full live acceptance and 0-Device recovery remain pending.
+> Historical 2026-10-13 [deployment](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643) verified Cloud 0.9.3 / API 1 / compatibility marker 8 / storage 13 with CYID enabled and original bindings preserved. Separately approved CYID_ONLY D1 maintenance retained original business history and Device Token hashes with clean FK readback. Runs #8/#12/#39/#42 below are historical rollout/preparation/activation checkpoints. Later runtime, identity target and pending acceptance are tracked by the current handoff and TODO, not this historical snapshot.
 
 ## Development commands
 
@@ -54,10 +81,18 @@ Use the reviewed development workflow below. The default config has no runnable 
 
 Do not infer remote deployment state from source or CI alone.
 
+### Normal allowance activation (completed 2026-10-27; Cloud 0.9.6, schema22)
+
+The user authorized normal g0401/g0501 activation on 2026-10-26 and reported its completion on 2026-10-27. The deployed source is `25ae151ed880cb6256a4cc1e01ce499145a802b7`; the three normal flags are true and the two legacy manual flags remain unset. The following describes the completed deployment mechanism; do not replay it merely to update documentation. Source readiness alone is not remote activation. Use the existing deployment owner with `CYINVOICE_DEPLOYMENT_MODE=deploy` and `CYINVOICE_ALLOWANCE_ACTIVATION=enable`, without a schema-upgrade intent. The same private checkpoint must cover before/deploy/after. It preserves the original Worker/D1, consumer scopes, services, secrets and unrelated vars; only the three normal allowance flags become true. Existing legacy manual/collision flags become false and absent ones remain absent. No migration or Identity D1 access is involved. See [the local MCP handoff](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md).
+
+Financial environment comes from the created application and is subsequently read from its persisted row, including recovery. The retired Invoice `APP_ENV` label does not select financial credentials. AMEGO test credentials are the vendor's public pair; production uses the existing company card. Frozen card ownership, revision and authority checks remain unchanged.
+
 ### Preserving an already activated installation
 
-The source storage template targets migration 0015. A code deployment of an
-already CYID-enabled installation preserves its active schema marker, company
+The source storage template is for local/CI use; the private generated config
+preserves the active schema marker. A code deployment retires the Invoice APP_ENV label and installs native version
+metadata. Apart from these reviewed changes, an already CYID-enabled
+installation preserves its active schema marker, company
 settings/recovery flags, fixed consumer scopes, service bindings and secrets.
 Changing those protected values requires a separate maintenance operation; the
 deployment audit rejects a stale generated configuration before upload.
@@ -298,6 +333,12 @@ Per the user's2026-10-11 decision, the expired undeployed no-D1 probe may remain
 
 ### Prepare the existing CYID binding (Built-in retained)
 
+**Historical 2026-10-12 preparation:** this section records the former development
+provider setup before activation and later production-provider alignment. Its
+shared-secret and development-provider instructions are not the current target
+selection procedure. For an already activated installation, use the preservation
+and environment sections above and the current local MCP handoff.
+
 The same development workflow offers `mode=prepare-cyid` (or the reviewed `cyinvoice/cloud-dev-prepare-cyid` branch). It deploys the real business bundle with `CYID_ENABLED=false`; it adds only the two approved CYID Service Bindings and the three scope vars. Original Secrets, D1, rate limits and unrelated services inherit from the exact active version. Existing matching bindings are inherited; conflicting targets, entrypoints or scope vars stop before upload. Ordinary `deploy` cannot introduce these bindings or change the scope.
 
 The common Cloudflare Account/API Token Secrets remain unchanged. All CYInvoice, CYID development/production and CYACCweb deployment workflows read one `development` Environment Secret, `CYID_WORKER_NAME`. This is the same original development provider name used by the previous variable; copy its existing value once to the same-named Secret before merging the shared-input change. The CYACC resolver still derives and verifies its production target; sharing the base input does not bind CYInvoice to production or share Application IDs.
@@ -322,6 +363,10 @@ Central application registration is a separate Provider-owned core-portal Super 
 Development Provider0.3.7 (#158, 38197480766) and CY Web0.7.23 (#138, 38197908123) are deployed with canonical1.0.4. Registration/scope/binding configuration is complete; actual private Fetcher/RPC, Employee/App Access/Role/Email readiness, original Windows continuity, RC AA/AB/AC and reviewed authority cutover remain pending. Configuration success does not prove authorization. Preserve the original portable installations/data and validate Built-in continuity before a controlled activation; no new Invoice Workspace or rejoin is required. Production cutover/Release remain separately approved.
 
 ### Activate the prepared development CYID authority
+
+**Historical activation only:** the current installation is already CYID_ONLY
+and its last verified identity target is production CYID. Do not repeat this
+initial activation or infer a current development-provider binding from it.
 
 Historical activation checkpoint: #420 source70514413/treec8fb38c1 passed all checks and merged2543222d. [Development activation #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325), source8488ce3d/same tested tree, passed before/upload/100% deployment/after readback with CYID_ENABLED=true. Original Cloud0.9.2/API1/marker8/schema13, Workspace1/Device4/Token hashes/employee/history/FK/routes retained; migration skipped/private cleanup passed. Recovery UTC2026-10-12T05:05:10.603Z. The user subsequently reported successful CYID credentials access to settings on the original Windows installation; the full role/multi-device matrix remains pending. The current deployment and company storage status are the 0.9.3/CYID_ONLY baseline above. The #39 paragraph above is the prior Built-in preparation checkpoint, not the current authority flag.
 

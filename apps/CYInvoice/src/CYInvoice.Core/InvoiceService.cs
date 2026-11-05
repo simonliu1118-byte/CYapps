@@ -87,10 +87,12 @@ public sealed class InvoiceService
         }
         catch (AmegoApiException error) when (error.Code == 99)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
             return string.Empty;
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
             throw new InvalidOperationException("API 健康檢查失敗", error);
         }
 
@@ -155,7 +157,8 @@ public sealed class InvoiceService
                     cancellationToken).ConfigureAwait(false);
             }
             catch (AmegoApiException error) when (error.Code == 99)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 throw new InvalidOperationException("光貿尚未提供這張發票的官方 PDF，請稍後再試", error);
             }
             await InvoicePdfCache.WriteAsync(cachePath, bytes, cancellationToken).ConfigureAwait(false);
@@ -401,7 +404,8 @@ public sealed class InvoiceService
                         cancellationToken).ConfigureAwait(false);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 record.LastChecked = FormatDateTime(now());
                 if (record.InvoiceState == InvoiceStates.Unknown && error is AmegoApiException { Code: 71 })
                 {
@@ -412,7 +416,8 @@ public sealed class InvoiceService
                     SaveStatus(record.Id, CreateStatusUpdate(record));
                 }
                 catch (Exception saveError)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(saveError,"InvoiceService");
                     problems.Add($"{record.OriginalOrderId}: 本機保存失敗：{saveError.Message}");
                 }
                 problems.Add($"{record.OriginalOrderId}: {error.Message}");
@@ -424,7 +429,8 @@ public sealed class InvoiceService
                 VerifyStoredQueryResult(record, query.Data);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 problems.Add($"{record.OriginalOrderId}: {error.Message}");
                 continue;
             }
@@ -435,7 +441,8 @@ public sealed class InvoiceService
                 SaveStatus(record.Id, CreateStatusUpdate(record));
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 problems.Add($"{record.OriginalOrderId}: 本機保存失敗：{error.Message}");
                 continue;
             }
@@ -447,7 +454,8 @@ public sealed class InvoiceService
                     RememberBuyerName(record, new NameLookup(LookupSucceeded: true), record.BuyerName);
                 }
                 catch (Exception error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                     problems.Add($"{record.OriginalOrderId}: 買方名稱記憶失敗：{error.Message}");
                 }
             }
@@ -462,7 +470,8 @@ public sealed class InvoiceService
                 status = await gateway.StatusAsync([record.InvoiceNumber], cancellationToken).ConfigureAwait(false);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 problems.Add($"{record.InvoiceNumber}: {error.Message}");
                 continue;
             }
@@ -490,7 +499,8 @@ public sealed class InvoiceService
                 SaveStatus(record.Id, CreateStatusUpdate(record));
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 problems.Add($"{record.OriginalOrderId}: 上傳狀態保存失敗：{error.Message}");
             }
         }
@@ -566,12 +576,14 @@ public sealed class InvoiceService
                         }
                     }
                     catch (AmegoApiException error) when (error.Code == 71)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                         // AMEGO explicitly confirmed that the previous uncertain OrderID is not present.
                         // It is therefore safe to let AMEGO decide the new issue request normally.
                     }
                     catch (Exception error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                         throw new InvalidOperationException(
                             "上一筆相同 OrderID 的開立結果尚未確認，回查光貿失敗，本次未重送：" + error.Message,
                             error);
@@ -631,12 +643,14 @@ public sealed class InvoiceService
                     RequireNewIssueResult(records, record, response.InvoiceNumber);
                 }
                 catch (Exception error) when (error is AmegoApiException or DuplicateIssueResultException)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                     PersistFailed(record, error);
                     throw;
                 }
                 catch (Exception issueError)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(issueError,"InvoiceService");
                     QueryResponse? query = null;
                     Exception? queryError;
                     try
@@ -648,12 +662,14 @@ public sealed class InvoiceService
                         queryError = null;
                     }
                     catch (DuplicateIssueResultException error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                         PersistFailed(record, error);
                         throw;
                     }
                     catch (Exception error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                         queryError = error;
                     }
 
@@ -665,7 +681,8 @@ public sealed class InvoiceService
                             PersistOpened(record, lookup, draft.BuyerName);
                         }
                         catch (Exception saveError)
-                        {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(saveError,"InvoiceService");
                             throw new LocalPersistenceException(record, saveError);
                         }
                         return new IssueResult(record, Opened: true);
@@ -678,7 +695,8 @@ public sealed class InvoiceService
                         SaveStatus(record.Id, CreateStatusUpdate(record));
                     }
                     catch (Exception saveError)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(saveError,"InvoiceService");
                         throw new InvalidOperationException(
                             $"開立結果不明且本機狀態保存失敗：{saveError.Message}；原始錯誤：{issueError.Message}",
                             issueError);
@@ -697,7 +715,8 @@ public sealed class InvoiceService
                         SaveStatus(record.Id, CreateStatusUpdate(record));
                     }
                     catch (Exception error)
-                    {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                         saveError = error;
                         record.ErrorMessage += "；本機狀態保存失敗：" + error.Message;
                     }
@@ -717,7 +736,8 @@ public sealed class InvoiceService
                     ApplyQueryResult(record, query.Data, 0, string.Empty);
                 }
                 catch (Exception queryError)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(queryError,"InvoiceService");
                     record.InvoiceState = InvoiceStates.Opened;
                     record.ErrorMessage = "發票已開立；嚴格回查待確認：" + queryError.Message;
                     record.LastChecked = FormatDateTime(now());
@@ -728,7 +748,8 @@ public sealed class InvoiceService
                     PersistOpened(record, lookup, draft.BuyerName);
                 }
                 catch (Exception saveError)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(saveError,"InvoiceService");
                     throw new LocalPersistenceException(record, saveError);
                 }
                 return new IssueResult(record, Opened: true);
@@ -770,7 +791,9 @@ public sealed class InvoiceService
         record.UploadStatusText = string.Empty;
         record.ErrorMessage = error.Message;
         try { SaveStatus(record.Id, CreateStatusUpdate(record)); }
-        catch (Exception saveError) { throw new AggregateException(error, saveError); }
+        catch (Exception saveError)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(saveError,"InvoiceService"); throw new AggregateException(error, saveError); }
     }
 
     private (IAmegoGateway Gateway, string Environment) GetGateway()
@@ -786,7 +809,8 @@ public sealed class InvoiceService
                 appKey = repository.Settings.ProductionAppKey(settings);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
                 throw new InvalidOperationException("解密正式 App Key 失敗", error);
             }
             if (invoice.Length == 0 || appKey.Trim().Length == 0)
@@ -819,10 +843,12 @@ public sealed class InvoiceService
         }
         catch (AmegoApiException error) when (error.Code == 99)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
             return new NameLookup(LookupSucceeded: true);
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceService");
             throw new InvalidOperationException("查詢買受人名稱失敗", error);
         }
         var apiName = response.Data.FirstOrDefault(item => item.Ban.Trim() == ban)?.Name.Trim() ?? string.Empty;

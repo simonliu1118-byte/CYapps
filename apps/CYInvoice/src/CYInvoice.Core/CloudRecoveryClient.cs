@@ -145,7 +145,9 @@ public sealed class CloudRecoveryClient
         JsonDocument doc;
         try {
             doc = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false);
-        } catch (JsonException) {
+        } catch (JsonException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudRecoveryClient");
             throw new CloudApiException("CLOUD_INVALID_RESPONSE",
                 $"Recovery API returned an invalid response ({(int)response.StatusCode}).", response.StatusCode);
         }

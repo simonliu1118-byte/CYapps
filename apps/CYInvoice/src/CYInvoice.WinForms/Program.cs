@@ -41,6 +41,16 @@ internal static class Program
         {
             if (smokeTest) Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
             ApplicationConfiguration.Initialize();
+            if(!smokeTest) {
+                Application.ThreadException += (_,eventArgs) => {
+                    IssueDiagnosticLog.RecordProblem(eventArgs.Exception,"WinForms");
+                    MessageBox.Show("操作未完成，問題已自動記錄於程式同目錄 log。","程式發生問題",MessageBoxButtons.OK,MessageBoxIcon.Error);
+                };
+                AppDomain.CurrentDomain.UnhandledException += (_,eventArgs) => {
+                    if(eventArgs.ExceptionObject is Exception error)IssueDiagnosticLog.RecordProblem(error,"Runtime");
+                };
+                TaskScheduler.UnobservedTaskException += (_,eventArgs) => IssueDiagnosticLog.RecordProblem(eventArgs.Exception,"BackgroundTask");
+            }
             UiControls.InstallGlobalEnterNavigation();
             if (smokeTest)
             {
@@ -55,7 +65,9 @@ internal static class Program
             using var instance = new Mutex(false, @"Local\CYInvoice-" + directoryKey);
             bool acquired;
             try { acquired = instance.WaitOne(0); }
-            catch (AbandonedMutexException) { acquired = true; }
+            catch (AbandonedMutexException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"Program"); acquired = true; }
             if (!acquired)
             {
                 MessageBox.Show("這個資料夾的 CYInvoice 已經開啟，請使用原本的視窗。", "CYInvoice");
@@ -68,6 +80,7 @@ internal static class Program
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"Program");
             WriteStartupError(error);
             if (smokeTest)
             {
@@ -76,7 +89,7 @@ internal static class Program
                 return;
             }
             MessageBox.Show(
-                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 Logs\\startup-error.log。",
+                $"CYInvoice 啟動失敗。\n\n錯誤原因：{error.Message}\n\n詳細紀錄已寫入程式旁的 log\\startup-error.log。",
                 "CYInvoice 啟動失敗",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -135,6 +148,7 @@ internal static class Program
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"Program");
             WriteStartupError(error);
             var recoveryPending = LocalResetCoordinator.HasPendingReset(AppContext.BaseDirectory);
             var title = recoveryPending ? "雲端退出待確認" : "無法完成本機重設";
@@ -167,7 +181,9 @@ internal static class Program
             MessageBox.Show("先前程序尚未結束，清除標記已保留。請關閉先前程序後重新啟動。", "裝置清除待完成");
             return false;
         }
-        catch (ArgumentException) { return true; }
+        catch (ArgumentException diagnosticError2)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"Program"); return true; }
     }
 
     private static void RunStartupSmokeTest()
@@ -215,20 +231,18 @@ internal static class Program
         processing.VerifySmokeLayout();
         processing.VerifySmokeRowSizing();
         processing.Close();
+        SyncIssuesForm.VerifyMixedProcessingSmoke();
 
-        using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
-        diagnostics.Show();
-        diagnostics.PerformLayout();
-        Application.DoEvents();
-        diagnostics.VerifySmokeLayout();
-        diagnostics.Close();
 
-        using var settings = new SettingsForm(repository);
+        using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show();
         settings.PerformLayout();
         Application.DoEvents();
         settings.VerifySmokeLayout();
         settings.Close();
+
+        Stage("settings authorization reuse");
+        SettingsForm.VerifyAuthorizationReuseSmoke();
 
         using var cloudSetup = new CloudSetupForm(repository);
         cloudSetup.Show();
@@ -281,7 +295,7 @@ internal static class Program
             // Smoke validation must remain deterministic and offline, so validate the complete
             // static layout without firing Shown or any real network request.
             var token = $"cydev_{new string('a', 64)}";
-            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
+            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token, repository);
             management.PerformLayout();
             management.VerifySmokeLayout();
             using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
@@ -295,8 +309,9 @@ internal static class Program
             {
                 if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, recursive: true);
             }
-            catch (Exception)
-            {
+            catch (Exception diagnosticError3)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"Program");
                 // Smoke cleanup failure must not hide the actual UI validation result.
             }
         }
@@ -306,13 +321,14 @@ internal static class Program
     {
         try
         {
-            var directory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            var directory = Path.Combine(AppContext.BaseDirectory, "log");
             Directory.CreateDirectory(directory);
             var message = $"[{DateTimeOffset.Now:O}]{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "startup-error.log"), message);
         }
-        catch (Exception)
+        catch (Exception diagnosticError4)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"Program");
             // 啟動錯誤已發生；寫入診斷檔失敗時不可再遮蔽原始錯誤提示。
         }
     }

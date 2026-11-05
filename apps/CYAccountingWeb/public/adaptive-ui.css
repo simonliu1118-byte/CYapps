@@ -1,3 +1,4 @@
+.entry-pending-field { display: none; }
 /* CYAccountingWeb adaptive UI styles functional module. */
 
 /* Shared adaptive presentation. Accounting behavior and API contracts remain unchanged. */
@@ -10916,6 +10917,20 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     height: 28px !important;
     font-size: 16px !important;
   }
+  html[data-viewport="desktop"] .entry-card .entry-grid > .entry-pending-field {
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    min-height: 24px;
+  }
+  html[data-viewport="desktop"] .entry-pending-field label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: #833d66;
+  }
+  html[data-viewport="desktop"] .entry-pending-field input { width:16px; height:16px; margin:0; }
   html[data-viewport="desktop"] .entry-card .entry-grid > label:not(.account-source-field) {
     display: grid !important;
     grid-template-columns: 44px minmax(0, 1fr);

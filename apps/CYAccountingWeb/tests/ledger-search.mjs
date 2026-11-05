@@ -67,10 +67,10 @@ sql.close();
 const source = fs.readFileSync(new URL('../public/ledger-tools.js', import.meta.url), 'utf8');
 const appSource = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const nodes = new Map(), calls = [], responses = [], viewed = [];
-const node = () => ({ value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, listeners: new Map(),
+const node = () => ({ value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, listeners: new Map(),classList:{remove(){},toggle(){},add(){}},
   setAttribute() {}, addEventListener(type, fn) { const list=this.listeners.get(type)||[];list.push(fn);this.listeners.set(type,list); }, focus() {},
   dispatchEvent(event) { this.listeners.get(event.type)?.forEach(fn=>fn(event)); }, querySelector: () => null });
-for (const id of ['ledgerPeriodSearchForm','ledgerPeriodSearchStart','ledgerPeriodSearchEnd','ledgerPeriodSearchKeyword','ledgerPeriodSearchMessage','ledgerPeriodSearchControls','ledgerPeriodSearchPage','ledgerPeriodSearchStatus','ledgerPeriodSearchPrev','ledgerPeriodSearchNext','ledgerSummarySearch','ledgerSearchForm','ledgerSearchClear']) nodes.set('#' + id, node());
+for (const id of ['ledgerPeriodSearchForm','ledgerPeriodSearchStart','ledgerPeriodSearchEnd','ledgerPeriodSearchKeyword','ledgerPeriodSearchMessage','ledgerPeriodSearchControls','ledgerSearchCount','ledgerPeriodSearchPage','ledgerPeriodSearchStatus','ledgerPeriodSearchPrev','ledgerPeriodSearchNext','ledgerSummarySearch','ledgerSearchForm','ledgerSearchClear']) nodes.set('#' + id, node());
 nodes.set('.ledger-card .table-wrap', {scrollTop:200}); nodes.set('.ledger-card thead tr',node());
 nodes.get('#ledgerSummarySearch').value = 'old keyword';
 const month = Object.assign(node(), { value: '2026-10' }), transactionRows=node(), monthSummary=node();
@@ -156,3 +156,9 @@ month.value='2026-09';month.dispatchEvent({type:'change'});assert.equal(vm.runIn
 queue([row]);await context.searchLedgerPeriod(true,{start:'2024-01',end:'2026-12',q:'needle'});desktop=false;context.renderDesktopLedger();
 assert.equal(vm.runInContext('cyLedgerPeriodSearch.active',context),false);assert.match(transactionRows.innerHTML,/MONTHLY_SNAPSHOT/);
 console.log('Ledger search: indexed 36-month API and shared auth; central rows, clear/month restore, popup removal, marker display, truthful balances, paging/errors/cancellation, view and touch exit passed.');
+
+// PR597: monthly result count shares the central info row, never the money summary.
+desktop=true;context.clearLedgerPeriodSearch();vm.runInContext("cyLedgerSearch='MONTHLY';",context);context.renderDesktopLedger();
+assert.equal(nodes.get('#ledgerSearchCount').textContent,'搜尋 1/1 筆');
+assert.equal(nodes.get('#ledgerSearchCount').hidden,false);
+assert.ok(!monthSummary.innerHTML.includes('搜尋 1/1'));

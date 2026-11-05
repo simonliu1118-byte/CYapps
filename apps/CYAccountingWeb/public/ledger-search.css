@@ -1,14 +1,36 @@
 /* The ledger toolbar owns the action; only desktop exposes this entry point. */
-#ledgerPeriodSearchButton { display: none; }
-html[data-viewport="desktop"] #ledgerPeriodSearchButton {
+#ledgerPeriodSearchButton,
+#ledgerPendingSearchButton { display: none; }
+html[data-viewport="desktop"] #ledgerPeriodSearchButton,
+html[data-viewport="desktop"] #ledgerPendingSearchButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
 }
 html[data-viewport="desktop"] #ledgerSearchForm {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
 }
+.pending-confirm-button {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 5px;
+  padding: 1px 6px;
+  min-height: 22px;
+  font-size: 12px;
+  line-height: 1.3;
+  border: 1px solid #c875a1;
+  border-radius: 5px;
+  background: #fff8fc;
+  color: #843c66;
+}
+html:not([data-viewport="desktop"]) .pending-confirm-button { display: none; }
+.pending-confirmation-dialog { width: min(400px,calc(100vw - 32px)); }
+.pending-confirmation-context { margin: 10px 0; color: #4c5b70; font-size: 13px; }
+.pending-confirmation-form { display: grid; gap: 12px; }
+.pending-confirmation-form label { display: grid; gap: 5px; }
+.pending-confirmation-form .dialog-message:empty { display:none; }
 .ledger-period-search-dialog {
   width: min(400px, calc(100vw - 32px));
   max-width: 400px;
@@ -78,6 +100,11 @@ html[data-viewport="desktop"] #ledgerSearchForm {
 }
 /* Pagination belongs to the central ledger head, not to the condition dialog. */
 .ledger-period-search-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid #e5eaf0; }
+.ledger-period-search-controls[hidden], .ledger-period-search-controls [hidden] { display: none !important; }
+.ledger-period-search-controls.ledger-month-search-only #ledgerPeriodSearchPage,
+.ledger-period-search-controls.ledger-month-search-only #ledgerPeriodSearchStatus,
+.ledger-period-search-controls.ledger-month-search-only button { display: none; }
+#ledgerSearchCount { flex: 0 0 auto; white-space: nowrap; }
 #ledgerPeriodSearchPage { margin-right: auto; color: #64748b; font-size: 12px; }
 #ledgerPeriodSearchStatus { color: #475569; font-size: 12px; }
 .ledger-period-search-controls button { min-height: 30px; padding: 4px 9px; font-size: 12px; }

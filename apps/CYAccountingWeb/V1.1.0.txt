@@ -1,0 +1,33 @@
+V1.1.0 — 待確認記帳與鎖帳確認工作流程
+
+版本：新增完整待確認狀態、索引搜尋及確認能力，採 Minor 1.1.0、Build 0；D1 schema 16。CYID consumer 1.0.6，CYID Consumer Impact: NONE。
+
+操作
+- 桌機輸入區可勾選「待確認」，摘要自動加上半形「(待確認)」，存檔後摘要呈螢光粉。系統文字不占原摘要 20 個中文字／40 個英數字元的編輯額度。
+- 粉色保留給待確認；手動標記選單只提供橘、黃、綠及取消。既有手動粉色不批次變更，也不因顏色或摘要文字而推定為待確認。
+- 搜尋列依序為搜尋、全帳簿搜尋、搜尋待確認、清除。待確認搜尋不限日期，在同一中央清單與分頁呈現；清除恢復原月份 snapshot。
+- 摘要「(待確認)」右邊提供獨立確認按鈕，可選擇同收支類型的科目並填寫摘要。取消不寫入；等伺服器儲存成功後才解除狀態及粉色，並由已載入的結果移除，不重抓清單。
+- 待確認的確認動作不受月份鎖帳限制，只可更新科目及摘要；日期、帳戶、收支、金額維持原值。完成後回到一般鎖帳規則。一般修改不能用取消勾選繞過確認動作。
+- USER 可查閱，ADMIN／SUPER_ADMIN 可確認；CYID、唯讀、origin、帳本 epoch、recovery hold 仍由原入口強制。
+- 新操作入口限桌機；手機／兩種平板配置維持原樣，共用資料、API、權限及帳本列 renderer。
+
+資料、可重建性與成本
+- 新增 transactions.pending_confirmation，預設 0，不回填或推測歷史狀態；部分索引 idx_transactions_pending_confirmation(tx_date DESC,id DESC) WHERE pending_confirmation=1。
+- 依既有約一萬筆量級估算，一次索引建置掃描約一萬筆既有交易；新欄位採 SQLite 常數預設值，沒有逐筆財務 UPDATE 或歷史狀態轉換。D1 Free 每日讀取 500 萬／寫入 10 萬，約一萬列讀取為每日讀取額度 0.2%；DDL 仍可能計讀寫，正式結果以回傳計量為準。來源：https://developers.cloudflare.com/d1/platform/pricing/ 。
+- 待確認搜尋不帶關鍵字時，每頁一個 SELECT、LIMIT 51（50 筆及一筆 lookahead），以日期／ID keyset 接續；只走待確認部分索引，不做 COUNT、OFFSET、逐月查詢或整本下載。加關鍵字時，候選上限是待確認集合，不宣稱任何關鍵字都只掃 51 列。
+- 傳回 51 筆不等於 D1 只計 51 次讀取；計量包含索引與資料列讀取。首次頁面成本估約數十至百列量級，實際以 D1 rows_read 為準。清除、已載入頁面及確認後移除不新增交易 GET。
+- 確認依交易主鍵讀取一列、依科目驗證，再以同一原子 batch 附加稽核及更新一列。pending／updated_at 條件防止重複確認或覆蓋已變更資料。稽核保留前後科目、摘要、操作者與時間，不因原交易日後刪除而移除。
+- 期初與收支金額算法不變。只在目前月份的科目／摘要確認後通知既有統計 owner 更新分類；不把搜尋子集合拿來計算餘額。
+- portable backup／controlled recovery 共用原 mapping，完整保存狀態與確認稽核；schema 6–15 的舊備份補預設 0 與空稽核，歷史粉色及帳務值原樣保存。新增 schema 16 migration，沒有新增 D1、Worker 或其他雲端資源。
+
+架構與並行工作
+- State／交易 Mutation 仍為 public/app.js；Ledger rows、Toolbar、搜尋與確認視窗仍由 public/ledger-tools.js 管理；編輯草稿仍由 adaptive-ui.js 管理。確認只呼叫 app.js writer，不新增列 renderer、observer、DOM 搬移、retry bootstrap 或第二帳務 writer。
+- Server orchestration 仍為 src/app.js，交易 domain 仍為 src/index.js；操作者只從已解析 CYID session 傳入。
+- 保留並整合 PR #597 的搜尋數量資訊列位置；版本及正式發布證據見當次 PR。備份中斷調查／PR #596 屬獨立工作，不在此功能內替換其流程。
+
+驗證與邊界
+- 本機既有應用程式／語法／契約／metadata 與新待確認測試通過；SQLite query plan 證明使用部分索引，跨超過三年的 113 筆合成待確認資料在一萬筆普通交易中分頁無重複、無遺漏。
+- 覆蓋鎖帳下確認、一般編輯仍鎖定、欄位範圍、科目收支、USER 拒絕、可信 actor、並行／重複提交、原子失敗回復、append-only 稽核、備份與舊 schema 還原。
+- 實際 HTML／完整 canonical app 與 Ledger 模組的合成 DOM 驗證勾選文字、按鈕順序、確認取消、等待 server 成功、cached 結果移除、清除恢復、PR #597 的搜尋數量位置與觸控入口隱藏。
+- 受控瀏覽器無法連至本機預覽，未把合成 DOM 驗證宣稱為真機幾何驗收。實際桌面、平板及手機操作仍需使用者驗收。
+- 開發與測試使用合成資料；未查詢正式交易、未確認正式項目、未手動改寫正式帳務。正式 migration／部署及 CI 結果以當次 PR 證據為準。

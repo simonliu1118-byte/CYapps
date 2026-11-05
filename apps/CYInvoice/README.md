@@ -1,78 +1,17 @@
 # CYInvoice
 
+
 CY Windows 10/11 x64 電子發票工具。Public 可見不代表開放原始碼；使用、修改與散布權利以 repository 根目錄 `LICENSE` 為準。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- **目前工程 Source：V3.1.33 Build 0（非正式 Release）**：Local 折讓作廢已接通官方預覽、原主管凍結核准、原號文字確認、SQLite 單次 g0501 與 D0501／99 唯讀觀察；結果不明與已送出待辦不得重送或直接結案。CYID 作廢／離線回線及真測仍未完成，本批未操作 Cloudflare／真光貿；正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.32 Build 0（非正式 Release）**：將已驗證的 0019 升格為 canonical migration，補齊非空 schema18 備份／回復與明確 18→19 部署標記驗證。原 D1／Worker 仍依先前本機回報為 schema18；本批沒有操作 Cloudflare、啟用折讓旗標或真光貿。正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.31 Build 0（非正式 Release）**：Cloud 明確外部占號查證、主管文字覆核、原 Ledger 下一號預留及不可變前後號稽核已接通 Windows。沿用唯一 g0401 coordinator，不重送未知交易、不把原號吻合視為成功。schema19 仍為待審草案；原 D1／Worker／旗標與真光貿未變，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.30 Build 1（非正式 Release，待精確 CI）**：V3.2 B/C Cloud 人工異常分類使用待審 schema19 草案的 append-only、CYID 主管專用 API 和 Windows 稽核介面，皆為待驗工程碼；正式 D1 仍 schema18、Worker 原旗標關閉，沒有真光貿或新正式發行。
-
-- **前一工程 Source：V3.1.29 Build 0（非正式 Release）**：V3.2 B/C Local 主管人工介面已接入原 `occupied_external` 安全改配號；需重新登入、正確文字確認及後端再驗光貿，成功僅原 Ledger 下一號 `reserved`。同號同內容仍不是本次成功證據；Cloudflare、真光貿與正式 Release 不變。
-
-- **前一工程 Source：V3.1.28 Build 1（非正式 Release）**：Local 僅在明確外部撞號、官方不同買方與不同原發票及同主管雙重即時覆核後，於原 SQLite 原 Ledger 保留舊號並追加下一號預留及不可變稽核；不自動重送。原 Cloudflare／光貿不變，正式 Release V3.1.0。
-
-- **前一工程 Source：V3.1.27 Build 1（非正式 Release，待 CI）**：V3.2 B/C 修正 Local 原號回查不能證明本次 g0401 POST 的成功歸因，維持 Ledger `sending` 並寫入 Local append-only 官方完整內容快照雜湊 Audit；Cloudflare 原 D1／Worker 與兩道送出旗標不變、無真交易。正式 Release V3.1.0。
-
-- **前一工程 Source：V3.1.26 Build 1（非正式 Release）**：V3.2 批次 1 接入 Cloud 主管單次 g0401 執行入口與 Ledger 原 ID 唯讀查證。既有折讓 API 閘門及新增獨立送出閘門預設都關閉；原 D1／Worker 未因本原始碼工作而修改，未做真光貿交易，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.25 Build 0（非正式 Release）**：C7a 補 Cloud 單次送出後不可歸因結果的六類人工審查狀態與合成測試。據 2026-10-21 使用者本機 MCP 驗收報告，原 D1 schema18／原 Worker 已受控更新，但 `ALLOWANCE_API_ENABLED=false`；無真 g0401/g0501，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.24 Build 1（非正式 Release）**：C6 將正式 D1 migration 0017／0018 加入 GitHub canonical 來源，CI 覆蓋從 schema16 的備份／回滾與預檢；**原 Cloudflare D1 仍是 schema16（未由本回合查證），原 Worker 未部署**。本機 MCP 交接見 [V3.2-C Cloudflare 作業清單](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.23 Build 0（非正式 Release）**：C4e 補 AES-GCM 綁定 Cloud 折讓原因與官方模板、CYID 權限後 GET、主管查閱原因；正式 Cloud migration／Worker 與真光貿送出仍未啟用，正式 Release V3.1.0。
-
-- **前一工程 Source：V3.1.22 Build 1（非正式 Release）**：C4d 從原折讓編輯器接 CYID Cloud 申請、先持久化原 application ID 再第一次寫入、未知結果唯讀查回；跨機原因加密展示、正式 schema17/18／Worker 與實際雙機仍待完成。正式 Release V3.1.0。
-
-- **前一工程 Source：V3.1.21 Build 0（非正式 Release）**：C5 加入非空 schema16 SQLite→草稿17/18、失敗 rollback／備份還原演練；正式 migration 尚未升格，C4d 申請建立仍待接通，原 Cloudflare D1/Worker 不變，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.20 Build 0（非正式 Release）**：C4c 新增 WinForms 跨機主管折讓待辦與唯讀官方預覽；仍不提供 Cloud 官方送出，C4d 申請建立串接、正式 schema17/18 及 Cloudflare MCP 留後續安全審核，正式 Release V3.1.0。
-
-- **前一工程 Source：V3.1.19 Build 1（非正式 Release）**：C4b 在 Windows Core 加入 CYID Cloud 折讓 Client、原 application ID readback、安全不可自動重試契約與隔離測試；正式 WinForms、schema17/18 及原 Worker/D1 尚未更新。正式 Release 仍為 V3.1.0。
-
-- **前一工程 Source：V3.1.18 Build 1（非正式 Release）**：C4a 新增 feature-gated CYID Cloud 折讓申請及主管覆核 API，原 schema16 未更新時一律 503；不公開 g0401/g0501。Windows 跨機用戶端、migration 審核／本機 MCP 操作仍未完成，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.17 Build 0（非正式 Release）**：C3c3b 已有 Cloud 內部單次發送 coordinator；正式 CYID HTTP API、WinForms、D1 migration 未接，且原號全項吻合仍無法自動推論正式交易歸因。禁止正式 g0401 或 D1／Worker 操作，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.16 Build 0（非正式 Release）**：3.2-C3c3a 回收 #440 光貿 g0401 單次簽名 transport，另實作官方原號完整 Frozen 明細查回驗證；仍未接到 C3c2 CAS 或公開路由，不呼叫真光貿、不更新 D1／Worker，不可將單獨查回當作正式核准或可再次送出。正式 Release 仍是 V3.1.0。
-
-- **前一工程 Source：V3.1.15 Build 1（非正式 Release）**：3.2-C3c2 內部 Cloud Ledger 完整官方 preflight 與 reserved→sending 單次 CAS，阻擋重入／撤權／官方變動；未接任何 g0401 POST、未動正式 D1／Worker 或正式 Release。
-
-- **前一工程 Source：V3.1.14 Build 0（非正式 Release）**：3.2-C3c1 從 #440 回收安全每日配號機制，接到 C1/C2 獨立折讓批准與 Ledger；只預留首次號碼，未進行任何正式光貿 g0401／g0501、Cloudflare 變更或 D1 migration。正式 Release 仍為 V3.1.0。
-
-- **前一工程 Source：V3.1.13 Build 1（非正式 Release）**：3.2-C3b2b 把凍結折讓、官方逐原發票餘額證據與 CYID 管理員安全檢查整合成原子 Grant＋revision CAS 內部服務。尚未接公開 Cloud API、正式 D1、配號或 g0401/g0501；正式 Release 仍是 V3.1.0。
-
-- **前一工程 Source：V3.1.12 Build 2（非正式 Release）**：3.2-C3b2a 按真光貿查詢協定逐張折讓號核對每筆原發票金額／稅額，產生內部安全證據但不核准、不配號、不送出；正式 Cloudflare 與正式 D1 未改，正式 Release 仍 V3.1.0。
-
-- **前一工程 Source：V3.1.11 Build 0（非正式 Release）**：3.2-C3b1 以 #440 的光貿 `invoice_query` 唯讀 adapter 與測試，安全串接 C3a 加密折讓資料供 CYID 主管內部預覽。官方摘要不能當作完整餘額或核准證據；沒有 Cloud route／正式 D1／g0401／g0501，正式 Release 仍為 V3.1.0。
-
-- **前一工程 Source：V3.1.10 Build 1（非正式 Release）**：3.2-C3a Cloud 折讓 Frozen template 真正使用現有 AES-GCM 加密 helper 加以封存，並提供內部、雙重驗權的原 ID 安全讀回；仍未安裝任何公開 Cloud route、未動正式 D1/Worker、未發送 g0401/g0501。正式 Release 仍為 V3.1.0。
-
-- **前一工程 Source／測試包：V3.1.9 Build 0（非正式 Release）**：3.2-C2 以 #440 草稿為來源，加上 `cloud/drafts/0018_allowance_frozen_ledger.sql` 與 schema16 隔離測試。無正式 Cloudflare Migration、官方 AMEGO 操作或 Cloud API 上線；正式 Release 仍為 V3.1.0。
-
-- **V3.1.8 Build 0（前一工程切片，非正式 Release）**：3.2-C1 先從正式 schema16 建立折讓申請及不可變稽核的 SQL 草稿與隔離測試，未新增 canonical migration、未操作正式 Cloudflare。正式 Release 仍是 V3.1.0。
-
-
-- **V3.1.7 Build 1 歷史工程版本**（engineering，非正式 Release）：3.2-B2d 已把 Local 折讓草稿核准／原號預留接到 Windows 一次性 g0401 操作入口。每次正式送出須由原核准管理員重新登入、明確確認，再由 Core 重驗凍結核准與光貿最新折讓及有效餘額；SQLite 先鎖定 sending，網路逾時／回覆不明僅能原號唯讀查回，不重新發送／換號；confirmed 不自動結案。**Windows 真人驗收、光貿正式測試環境及正式發行尚未完成**。詳見 [V3.1.7 工程說明](release-notes/V3.1.7.txt) 與 [3.2 計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。正式 Release 仍為 V3.1.0。
-
-- **CYInvoice V3.1.0 Build 0 正式發行**：新增 CYID 非折讓跨機例外工作項目，包含員工手動回報、管理員跨 Device 清單／依 ID 查回、人工覆核及封存、revision CAS 與 append-only Audit。原 CYInvoice D1／Worker schema16 啟用已由使用者本機 MCP 回報完成，不代表真人跨機驗收通過；人工封存不代表光貿官方成功，3.2 折讓不含在內。版本說明 [V3.1.0](release-notes/V3.1.0.txt)；V3.0 與 V3.1 **唯一發行後待驗收清單**：[POST_RELEASE_ACCEPTANCE.md](docs/POST_RELEASE_ACCEPTANCE.md)，ZIP 附同一份「發行後待驗收.md」。
-
-- V3.0.3 歷史工程基準：修正「回報跨機」按鈕僅允許尚未結案且支援的非折讓例外，排除折讓與未知類型；Windows 功能於本批維持不變。真實 Email／實體雙機／獨立金鑰異機還原仍未實測。[V3.0.3 工程版內容](release-notes/V3.0.3.txt) 保留當時的部署前狀態。
-- V2.6.18 Build 1 在原重新整理範圍內修復有完整官方與送出證據的舊雙成功：先備份、保留原成功，多餘嘗試改為上傳問題中的開立失敗；差異或證據不足保留原資料。
-- 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
-- 正式版將由 `CYapps/main` 的 `VERSION=3.1.0`／`BUILD=1` 重新建置並提供 ZIP／SHA-256；V3.0.0 舊 tag／commit 歷史供追溯，依使用者要求僅在 V3.1.0 新 Release 成功後處理舊發行頁。V2.6.19 Release 不受影響。
-- V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 head 已經由 #380 合併 main，最新工程 CI／測試包與人工停點見 [現行交接](docs/V3_1_HANDOFF.md)。
-- V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
-- C#／WinForms 自 V2.0.0 起為唯一正式產品線。
-- 版本來源為 `VERSION`／`BUILD`；正式 Release 必須由 `main` 重新建置與驗證。
-- 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
-- Go／Win32 V1.1.0 只保留為歷史公開回退版本。
+- 目前工程：**V3.1.46／BUILD0**；本機程式與必要Windows／Cloud／Governance CI通過，工程包不是正式Release。
+- 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
+- 正式Release：**[V3.1.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.1.0)**。本次未建立新tag／Release或覆寫桌面安裝。
+- 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
+- 版本歷史只在 [CHANGELOG](CHANGELOG.md) 保存；目前工程待辦見 [TODO](docs/TODO.md)、流程見 [V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)、維護完成證據見 [MCP交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
 ## 現行主要功能
 
@@ -116,17 +55,13 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 作廢結果不明／等待官方確認時不盲目重送。
 - 超過目前＋上一個兩月期別的舊 pending，可由管理員在詳細待辦中手動結案；此動作只停止本機追蹤，不代表光貿已完成作廢。
 
-### 折讓（保留既有人工流程）
+### 折讓與折讓作廢（目前先完成同機流程）
 
-- 發票詳細資訊可提出人工折讓申請：原因、含稅折讓總額、員工帳密。
-- 申請建立後進入「上傳問題」，由管理員至光貿網站人工處理。
-- 管理員標記人工操作完成後，CYInvoice 共用 `invoice_query.allowance[]` 回查，不新增第二套折讓查詢流程。
-- 系統以提出申請當下的折讓單號基線及含稅金額比對新折讓資料；無法唯一判定時保留待辦，不猜測結案。
-- 已完成折讓會出現在發票詳細資訊的「作廢 / 折讓紀錄」。
-- 折讓詳細資訊可透過 `/json/allowance_file` 取得官方 PDF；支援 A4、A4 (地址+A5)、A5 三種官方版型，沿用既有版型選擇器與 WebView2 PDF Viewer。
-- 折讓 PDF Cache 以官方 `allowance[]` 資料指紋版本化；官方狀態、日期、類型或金額變更後不會誤用舊 PDF。
-- 已完成折讓可由一般使用者提出「折讓作廢」申請。Local 管理員可在待辦明細預覽官方原號、核准後重新登入並輸入「作廢 原折讓單號」，單次送出 `/json/g0501`；核准有效 15 分鐘。已送出或結果不明時只可查回原號，不可重送、取消或人工／行政結案；D0501／99 僅證明官方原號已作廢，尚無本次 POST 歸因證據。尚未 API 送出時保留既有光貿網站人工路徑；CYID 的 g0501 與真實交易驗收仍待完成。
-- 發票作廢、折讓與折讓作廢的舊待辦超過兩期後，均可由管理員只在本機手動結案。
+- 使用者從原發票或折讓提出申請，核對商品、金額、原因並驗證員工帳密；成功後進入原待辦等待主管核准。
+- 主管一次核准後由原coordinator連續配號／送交光貿／原號查回。核准前可填原因取消退回；核准後移除取消退回與再次送出操作，不能用第二次密碼或手動送出繞過原狀態。
+- 正常等待主管／官方處理留在「處理中」；真正異常留「上傳問題」。結果不明沿原ID／原號查回，不清Claim、換申請或盲目重送。財務送出／不明案件不能以一般舊待辦結案功能偽裝完成。
+- 歷程同張折讓單顯示一列；完整詳情保留原申請員工、覆核主管、原因、商品與執行事件，缺舊資料不補造人員。官方PDF與版本化Cache沿原查詢／檢視器。
+- 完整授權、例外及驗收見 [唯一V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)；本次維護未執行真光貿交易，部署成功不等於所有真人流程驗收通過。
 
 ### PDF 與列印
 
@@ -142,39 +77,28 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - 同步／查詢／解析等技術問題。
 - 發票開立失敗紀錄。
 - 紙本作廢人工確認。
-- 折讓人工處理。
-- 折讓作廢人工處理。
+- 折讓處理中的異常。
+- 折讓作廢處理中的異常。
 - 結果不明、回查失敗或需人工判定的 pending；正常等待顯示在「處理中」。
 
 只有「開立失敗」列可勾選清除；人工待辦一律雙擊開啟詳細視窗處理。
 
-「上傳問題」旁的「處理中」沿用相同清單與雙擊明細，顯示正常上傳等待、光貿明確確認處理中的作廢，以及人工操作完成且正常等待官方確認的折讓。資料由現有發票狀態與待辦投影，沒有第二套 pending 資料庫。完成後從處理中移除；回查失敗、折讓金額／候選衝突仍保留在上傳問題。處理中項目不能勾選刪除或直接標記成功；超過保留期的作廢／折讓仍保留管理員結案入口。舊折讓未保存明確確認分類時，先留在上傳問題，經正常回查後再分類。
+「上傳問題」旁的「處理中」沿用相同清單與雙擊明細，顯示正常上傳等待、光貿明確確認處理中的作廢，以及人工操作完成且正常等待官方確認的折讓。資料由現有發票狀態與待辦投影，沒有第二套 pending 資料庫。完成後從處理中移除；回查失敗、折讓金額／候選衝突仍保留在上傳問題。處理中項目不能勾選刪除或直接標記成功；一般舊待辦的本機結案不代表官方成功；財務已送出／不明折讓及作廢不適用人工結案。舊折讓未保存明確確認分類時，先留在上傳問題，經正常回查後再分類。
 
 ### Local／CYID Cloud 與裝置復原
 
-- Workspace／Device、配對碼／邀請碼、whole-device Employee Transition 與中央 Employee 管理已實作。
+- CYInvoice自行管理Workspace／Device及配對／邀請；中央Employee／帳密／App Access由CYWEB／CYID管理，舊Built-in Employee Transition不屬V3現役操作。
 - 本版提供 Local／CYID Cloud；正式 role 為 SUPER_ADMIN / ADMIN / USER。歷史 Built-in／Self-hosted 原版本保留，新版不以舊帳號降級放行。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- 本版相容後端為 **Cloud 0.9.3／API 1／compatibility marker 8／storage schema 15**；維運須先完成對應遷移與功能設定，Windows 發布不會部署 Worker 或變更 D1。歷史部署與待補實機證據見 [TODO](docs/TODO.md) 及 [現行交接](docs/V3_1_HANDOFF.md)。
-- 公司卡以角色分離管理；超管確認後才將同版次憑證套用到單一授權 Windows 並以 DPAPI 保存，不自動覆寫其他電腦。
+- 本版配套後端為 **Cloud0.9.14／API1／legacy相容標記8／storage marker23**；實際D1 migration與平台版本由原部署owner核對，健康檢查不再回報自填APP_ENV。詳見 [維護交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+- 單一正式公司卡由CYInvoice超管管理；授權裝置沿原登入／重連／選卡／批次作業前版本檢查同步，憑證在雲端加密、本機DPAPI保存，不新增定期輪詢。
 - CYWEB 超管可重新驗證後簽發短效裝置復原邀請；新裝置接管原公司成功時，才撤銷所有其他舊裝置。Pending Token／scope 與遺失回覆讀回機制避免盲目重簽或重建裝置身分。
 - 本版採隔離／虛擬機軟體驗收，未將真實寄信或實際異機還原標為通過。跨機 Work Item／審核、正式折讓 API 與後續項目留待 3.1／3.2／3.3；不合併 PR #440。完整內容與限制見 [V3.0.0 發行摘要](release-notes/V3.0.0.txt)。
 
-### 系統診斷（V2.6.3）
+### 問題診斷
 
-入口：`設定 → 系統診斷`。
-
-診斷頁以唯讀方式顯示：
-
-- 程式、Windows／.NET 與 x64 狀態。
-- 目前測試／正式環境與公司／App Key 設定是否完整（不顯示 App Key）。
-- 光貿服務連線與目前帳號 API 驗證。
-- SQLite quick_check 與本機資料筆數摘要。
-- 每日完整同步最後成功時間、最近官方回查時間。
-- 未解決待辦／同步問題與開立失敗數量。
-- WebView2 Runtime、Excel COM、發票印表機與 Cache 大小。
-- 可重新檢查並複製不含密碼、App Key、發票內容與完整本機路徑的診斷摘要。
+原「系統診斷／匯出診斷」獨立介面已退役。例外與Cloud執行事件沿原IssueDiagnosticLog寫入程式同目錄log，使用原設定／同步／待辦的同一資料owner；不新增診斷視窗或背景輪詢。帳密、Token、金鑰與原始交易內容不寫入診斷。
 
 ## 實機驗證重點
 
@@ -182,9 +106,9 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - 帳號管理、權限驗證、密碼規則與復原碼。
 - MO店+ 未設定 Excel 密碼時不得先開選檔視窗。
 - 直接作廢、紙本未收回人工覆核、CancelReason 格式及官方回查。
-- 人工折讓建立、管理員處理、`invoice_query.allowance[]` 自動比對。
+- 同機折讓申請、主管一次核准、自動處理、原號查回與完整詳情。
 - 折讓 PDF 三種版型的光貿實際回傳與官方資料變更後 Cache 換版。
-- 折讓作廢人工待辦的建立、取消退回與人工完成。
+- 折讓作廢核准前取消退回、核准後自動處理及未知結果只查回。
 - 「上傳問題／處理中」分流、數量、開立失敗清除、正常等待轉完成／錯誤與各類詳細待辦。
 - 超過兩期 pending 的管理員結案。
 - `設定 → 系統診斷` 的實機資訊、重新檢查與複製摘要。
@@ -195,7 +119,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 
 以下不是遺漏，而是目前產品範圍決策：
 
-- 本機操作／稽核紀錄：等有雲端資料庫後做跨機稽核。
+- 不另建第二套本機財務／稽核權威；現有SQLite歷史與log診斷保留。
 - 本機備份／還原：CYInvoice 是中介層，發票／折讓官方資料以光貿為準，不另外做使用者備份系統。
 - 發票 Excel／CSV 匯出：需要時使用光貿網站；業務單號另回填 ERP。
 - 管理員開機待辦提醒：目前沒有持續登入，無法以「誰打開程式」判定管理員身分。
@@ -204,15 +128,9 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 
 ## 尚未完成／延後項目
 
-- 正式折讓 API 自動開立 `/json/g0401`。
-- 正式折讓作廢 API `/json/g0501`。
-- `allowance_query`／`allowance_status` 等獨立折讓同步模型；現階段仍共用 `invoice_query`。
-- 折讓單號自動產生與跨裝置防重。
-- Cloud Work Item、跨機原子結案、離線 OrderID 防撞與 audit viewer 留待後續版本；本版裝置復原已完成隔離驗證，完整實體雙機與實際異機還原仍待實測。
-- CYID 真實 Email 送達仍待實測；公司卡已有 MO 密碼管理與單機授權套用，小型營運摘要仍屬後續功能。
-- 酷澎未出貨、公司統編、多商品／多數量、折扣等尚缺可靠實際樣本的格式。
-
-雲端上線需求見 [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)。詳細待辦見 [docs/TODO.md](docs/TODO.md)。
+- 同機真人業務完整驗收、跨機協同下一版及既有雙Windows延期項目，依 [TODO](docs/TODO.md) 與 [唯一V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md) 追蹤；不能把Source／CI／部署通過當成真人全部完成。
+- V3.0／V3.1已批准延期的Email、異機金鑰／復原、角色及DPI證據，只在 [發行後待驗收](docs/POST_RELEASE_ACCEPTANCE.md) 勾選。
+- 酷澎特殊樣本、一般跨機OrderID／Audit、營運摘要、對外整合與多公司等原定後續需求保留於TODO／長期路線圖，不在README維護第二張進度表。
 
 ## 技術基準
 
@@ -257,7 +175,7 @@ apps/CYInvoice/
 - [功能基準](docs/REQUIREMENTS.md)
 - [CYInvoice 永久規則](PROJECT_RULES.md)
 - [待辦與後續規劃](docs/TODO.md)
-- [CYID Consumer 接入交接與待決架構](docs/CY_ID_INTEGRATION.md#13-cyid-consumer-接入交接--2026-10-10)
+- [CYID 整合現況與歷史接入交接](docs/CY_ID_INTEGRATION.md)
 - [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)
 - [RC／實機測試](docs/RC_TEST.md)
 - [本機資料格式與安全規則](docs/DATA_FORMAT.md)

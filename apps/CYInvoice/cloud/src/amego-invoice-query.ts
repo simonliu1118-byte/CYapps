@@ -16,6 +16,7 @@ export interface OfficialAllowanceHistorySummary {
 }
 export interface OfficialInvoiceSnapshot {
   invoiceNumber: string;
+  orderId: string;
   uploadStatus: number;
   voidPending: boolean;
   hasUnsettledMutation: boolean;
@@ -47,6 +48,40 @@ const endpoint="https://invoice-api.amego.tw/json/invoice_query";
 const encoder=new TextEncoder();
 const digits=/^[0-9]{8}$/;
 const invoicePattern=/^[A-Z]{2}[0-9]{8}$/;
+export interface OfficialQueryDiagnostic {
+  endpoint:"invoice_query";
+  phase:"input_validation"|"request"|"response_read"|"response_parse"|"response_validation";
+  failureKind:string;
+  errorName:string;
+  transportCode:string|null;
+  elapsedMs:number;
+  responseReceived:boolean;
+  httpStatus:number|null;
+  providerCode:number|null;
+}
+export class OfficialInvoiceQueryError extends Error {
+  constructor(code:string,readonly diagnostic:OfficialQueryDiagnostic){super(code);}
+}
+// Inspect only bounded exception chains; export classifications, never messages,
+// stack, URLs, request bodies, credentials or the original Error/cause object.
+function transportFailure(error:unknown):Pick<OfficialQueryDiagnostic,"failureKind"|"errorName"|"transportCode">{
+  let current=error;
+  let errorName="Unknown",transportCode:string|null=null,failureKind="unknown";
+  for(let depth=0;depth<3&&current instanceof Error;depth++){
+    if(depth===0&&["Error","TypeError","TimeoutError","AbortError","SyntaxError"].includes(current.name))errorName=current.name;
+    const code=(current as Error&{code?:unknown}).code;
+    if(typeof code==="string"&&/^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|CERT_HAS_EXPIRED|DEPTH_ZERO_SELF_SIGNED_CERT|ERR_TLS_CERT_ALTNAME_INVALID|UNABLE_TO_VERIFY_LEAF_SIGNATURE)$/.test(code))transportCode=code;
+    const message=current.message.slice(0,2048);
+    if(current.name==="TimeoutError"||code==="ETIMEDOUT"||code==="UND_ERR_CONNECT_TIMEOUT")failureKind="timeout";
+    else if(failureKind==="unknown"&&current.name==="AbortError")failureKind="aborted";
+    else if(failureKind==="unknown"&&(/^(ENOTFOUND|EAI_AGAIN)$/.test(String(code))||/DNS lookup failed/i.test(message)))failureKind="dns";
+    else if(failureKind==="unknown"&&(/^(CERT_HAS_EXPIRED|DEPTH_ZERO_SELF_SIGNED_CERT|ERR_TLS_CERT_ALTNAME_INVALID|UNABLE_TO_VERIFY_LEAF_SIGNATURE)$/.test(String(code))||/TLS handshake|certificate verify failed/i.test(message)))failureKind="tls";
+    else if(failureKind==="unknown"&&/redirect.*(?:not allowed|mode.*error)|unexpected redirect/i.test(message))failureKind="redirect";
+    else if(failureKind==="unknown"&&/^(ECONNREFUSED|ECONNRESET)$/.test(String(code)))failureKind="connection";
+    current=current.cause;
+  }
+  return {failureKind,errorName,transportCode};
+}
 function md5Hex(value:string):string {
   const data=encoder.encode(value);
   const size=Math.ceil((data.length+9)/64)*64;
@@ -165,6 +200,28 @@ export async function queryOfficialInvoiceReadOnly(
   transport:typeof fetch=fetch,
   now:()=>Date=()=>new Date(),
 ):Promise<OfficialInvoiceSnapshot>{
+  const started=performance.now();
+  const diagnostic:OfficialQueryDiagnostic={endpoint:"invoice_query",phase:"input_validation",
+    failureKind:"unknown",errorName:"Unknown",transportCode:null,elapsedMs:0,responseReceived:false,httpStatus:null,providerCode:null};
+  try{return await queryOfficialInvoice(input,transport,now,diagnostic);}
+  catch(error){
+    const code=error instanceof Error&&/^OFFICIAL_[A-Z0-9_]{3,90}$/.test(error.message)?error.message:
+      diagnostic.phase==="request"?"OFFICIAL_QUERY_UNAVAILABLE":"OFFICIAL_QUERY_INVALID_RESPONSE";
+    if(diagnostic.phase!=="request"&&diagnostic.errorName==="Unknown"){
+      const failure=transportFailure(error);diagnostic.errorName=failure.errorName;
+      if(failure.failureKind!=="unknown")diagnostic.failureKind=failure.failureKind;
+      if(failure.transportCode)diagnostic.transportCode=failure.transportCode;
+    }
+    diagnostic.elapsedMs=Math.max(0,Math.round(performance.now()-started));
+    throw new OfficialInvoiceQueryError(code,diagnostic);
+  }
+}
+async function queryOfficialInvoice(
+  input:OfficialInvoiceQueryInput,
+  transport:typeof fetch,
+  now:()=>Date,
+  diagnostic:OfficialQueryDiagnostic,
+):Promise<OfficialInvoiceSnapshot>{
   if(!digits.test(input.sellerInvoice)||!invoicePattern.test(input.originalInvoiceNumber)||
      typeof input.appKey!=="string"||input.appKey.length<8||input.appKey.length>256)
     throw new Error("OFFICIAL_QUERY_INPUT_INVALID");
@@ -176,19 +233,37 @@ export async function queryOfficialInvoiceReadOnly(
   const body=new URLSearchParams({invoice:input.sellerInvoice,data,time:String(time),
     sign:signOfficialInvoiceQuery(data,time,input.appKey)});
   let response:Response;
+  diagnostic.phase="request";
   try {
     response=await transport(endpoint,{method:"POST",
       headers:{"content-type":"application/x-www-form-urlencoded",
         "accept":"application/json"},body:body.toString(),
-      signal:AbortSignal.timeout(8000),redirect:"error"});
-  }catch {throw new Error("OFFICIAL_QUERY_UNAVAILABLE");}
+      signal:AbortSignal.timeout(8000),redirect:"manual"});
+  }catch(error){Object.assign(diagnostic,transportFailure(error));throw new Error("OFFICIAL_QUERY_UNAVAILABLE");}
+  diagnostic.responseReceived=true;diagnostic.httpStatus=response.status;
+  if(response.status>=300&&response.status<400){
+    diagnostic.failureKind="redirect";
+    throw new Error("OFFICIAL_QUERY_REDIRECT_REJECTED");
+  }
+  diagnostic.failureKind="http";
   if(!response.ok)throw new Error("OFFICIAL_QUERY_HTTP_FAILED");
+  diagnostic.failureKind="response";
   let root:Record<string,unknown>;
-  try{root=obj(JSON.parse(await limitedText(response))); }
+  try{
+    diagnostic.phase="response_read";
+    const text=await limitedText(response);
+    diagnostic.phase="response_parse";
+    root=obj(JSON.parse(text));
+  }
   catch(e){
+    const failure=transportFailure(e);
+    Object.assign(diagnostic,failure,{failureKind:failure.failureKind==="unknown"?"response":failure.failureKind});
     if(e instanceof Error && e.message==="OFFICIAL_QUERY_RESPONSE_TOO_LARGE")throw e;
     throw new Error("OFFICIAL_QUERY_INVALID_RESPONSE");
   }
+  diagnostic.phase="response_validation";
+  diagnostic.providerCode=number(root.code);
+  if(diagnostic.providerCode!==null&&diagnostic.providerCode>9999999)diagnostic.providerCode=null;
   if(number(root.code)!==0)throw new Error("OFFICIAL_QUERY_REJECTED");
   const results=Array.isArray(root.data)?root.data:[root.data];
   if(results.length!==1)throw new Error("OFFICIAL_QUERY_AMBIGUOUS");
@@ -228,7 +303,7 @@ export async function queryOfficialInvoiceReadOnly(
     new Uint8Array(encoder.encode(JSON.stringify(record))));
   const snapshotSha256=Array.from(new Uint8Array(digest),
     n=>n.toString(16).padStart(2,"0")).join("");
-  return {invoiceNumber,uploadStatus:status,voidPending,hasUnsettledMutation,cancelDate:cancel,
+  return {invoiceNumber,orderId:typeof record.order_id==="string"?record.order_id:typeof record.OrderId==="string"?record.OrderId:"",uploadStatus:status,voidPending,hasUnsettledMutation,cancelDate:cancel,
     totalAmount:gross,
     invoiceDate:record.date??record.invoice_date??null,
     detailVat:record.detail_vat??null,

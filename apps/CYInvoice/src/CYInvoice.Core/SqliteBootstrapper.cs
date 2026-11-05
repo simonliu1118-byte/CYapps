@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Invoicing;
 using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
@@ -26,6 +27,7 @@ public static class SqliteBootstrapper
         {
             _ = ValidateExistingDatabase(databasePath);
             RoleVocabularySchemaMigration.Ensure(databasePath);
+            EnsureBusinessSchema(databasePath);
             return ValidateExistingDatabase(databasePath);
         }
 
@@ -38,6 +40,7 @@ public static class SqliteBootstrapper
         try
         {
             CreateDatabase(temporaryPath, invoices, buyerNames, productionInvoice);
+            EnsureBusinessSchema(temporaryPath);
             VerifyMigration(temporaryPath, invoices, buyerNames, productionInvoice);
             File.Move(temporaryPath, databasePath);
             return new SqliteBootstrapResult(
@@ -47,11 +50,26 @@ public static class SqliteBootstrapper
                 invoices.Sum(record => record.Items.Count),
                 buyerNames.Count);
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"SqliteBootstrapper");
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             throw;
         }
+    }
+
+    // Startup is the sole schema lifecycle owner. Business stores never run
+    // DDL from constructors, checkpoint reads or ordinary invoice updates.
+    private static void EnsureBusinessSchema(string databasePath)
+    {
+        using var connection = Open(databasePath, SqliteOpenMode.ReadWrite);
+        ConfigureWritableConnection(connection);
+        using var transaction = connection.BeginTransaction(deferred: false);
+        LocalAllowanceNumberStore.EnsureSchema(connection, transaction);
+        LocalAllowanceVoidStore.EnsureSchema(connection, transaction);
+        InvoiceSyncRepository.EnsureOfficialAllowanceAudit(connection, transaction);
+        InvoiceSyncStateStore.EnsureCheckpointColumn(connection, transaction);
+        transaction.Commit();
     }
 
     private static List<InvoiceRecord> ReadLegacyInvoices(string path)
@@ -447,6 +465,7 @@ public static class SqliteBootstrapper
         }
         catch (SqliteException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"SqliteBootstrapper");
             throw new InvalidDataException("Existing CYInvoice.db failed validation and was left unchanged", error);
         }
     }

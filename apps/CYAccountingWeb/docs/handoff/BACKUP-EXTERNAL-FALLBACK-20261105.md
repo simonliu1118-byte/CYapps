@@ -1,6 +1,6 @@
-# CYAccountingWeb V1.0.3 Build 1：外部試還原及分時備援
+# CYAccountingWeb V1.1.1：外部試還原及分時備援
 
-日期：2026/11/05（台灣時間）。交付 Claude 審查；本文件不代表已合併、部署或正式排程驗收。CYID Consumer Impact: NONE。VERSION 沿用 1.0.3，BUILD=1：接續修復同一個試還原中斷問題。
+日期：2026/11/05（台灣時間）。交付 Claude 審查；本文件不代表已合併、部署或正式排程驗收。CYID Consumer Impact: NONE。VERSION=1.1.1、BUILD=0：與最新 V1.1.0 main 整合後發布；原 PR 初稿為 V1.0.3 Build 1。
 
 ## 使用者確認範圍
 
@@ -20,7 +20,7 @@
 | 呈現 | public/backup-ui.js | 同一 health API，區分外部未完成、備援已通過、兩邊異常、狀態不可讀 |
 | 通知 | CYID ConsumerNotifications | 沿用固定 type／事件去重，不傳帳務或 Email |
 
-移除原 03:30 做一整份 R2、08:00 做一整份 GCS 的排程驗證路徑及中斷立即寄信行為。手動／受控復原仍使用原完整 verifier。新增的外部與分批 fallback 是使用者明確同意的免費方案暫時執行方式，不新增 observer、裝置 renderer、帳務 writer 或 Identity authority。原 `backup_health_state` 不再擁有 job；只保存少量結案狀態投影及 R2 協調器故障計數，供 R2 故障時保留獨立通知途徑。無 schema migration，schema 15。
+移除原 03:30 做一整份 R2、08:00 做一整份 GCS 的排程驗證路徑及中斷立即寄信行為。手動／受控復原仍使用原完整 verifier。新增的外部與分批 fallback 是使用者明確同意的免費方案暫時執行方式，不新增 observer、裝置 renderer、帳務 writer 或 Identity authority。原 `backup_health_state` 不再擁有 job；只保存少量結案狀態投影及 R2 協調器故障計數，供 R2 故障時保留獨立通知途徑。無 schema migration，schema 16。
 
 ## 排程與續跑
 
@@ -62,3 +62,10 @@
 Worker bundle dry-run 通過（僅 CI placeholder 設定，沒有部署）；新增 workflow 只在 main 生效。部署時 `CF_BACKUP_VERIFY_REPOSITORY_ID` 使用 `github.repository_id` 注入，沿現有 development Environment 的 custom domain 變數，沒有新增 Cloudflare/GCS key 給 GitHub。
 
 Claude 審查請核對：來源凍結與 Phase D、CAS／中止／晚到結果、完整欄列核對是否無退化、Public 資料邊界、免費 CPU 驗收、讀寫成本、CYID 去重。PR 通過後仍須依當次發布授權走既有 deployment workflow；本次未合併、部署或建立 Release。
+
+## 2026/11/05 合併發布整合
+
+- 使用者明確授權 PR #596 與 CYWEB PR #433 合併部署；Claude 事後複審仍待，不代填通過。
+- 發布前 main 已進到 V1.1.0（#601，來源 b44fe85），故本批整合後版本採 V1.1.1 Build 0，避免覆蓋或回退版本。
+- 保留 schema 16 的 pending_confirmation 與 transaction_confirmation_audit；canonical export mapper、完整／分批 SQLite 及 static WASM migration 列表同步整合。新分批合成案例包含非零待確認旗標與一筆確認稽核，必須完整回讀通過。
+- 本批相對當前 main 不新增 migration、不改待確認業務規則；原 V1.0.3.txt 歷史不改寫。正式部署與外部實測結果待下節補入。

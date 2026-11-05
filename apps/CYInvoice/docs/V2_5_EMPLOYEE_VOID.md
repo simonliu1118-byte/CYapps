@@ -1,6 +1,13 @@
 # CYInvoice V2.5 員工帳戶與發票作廢設計
 
-> **V2.5 歷史設計**：下文保存當時工程與設計，不作現行版本／操作指令。現行 V2.6.14 使用 USER role、Identity Provider、半形等待作廢文字、共通子視窗無 title-bar icon、直接 CancelReason「使用者編號-原因」與覆核「管理員編號-使用者編號-原因」，正常官方等待分流至處理中。現行契約見 [REQUIREMENTS.md](REQUIREMENTS.md)、[DATA_FORMAT.md](DATA_FORMAT.md)，驗收／待辦見 [現行交接](CLOUD_WORK_HANDOFF.md)／[TODO.md](TODO.md)。
+更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
+
+工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
+
+本文件以下保留歷史設計／驗證及資料相容脈絡；舊「目前／尚未／Built-in一等模式」依當時版本解讀，不作現役V3操作或部署指令。現役模式為Local／CYID Cloud，帳號權威依canonical CYID契約，不以舊development Provider或退役帳號表降級。
+
+## 歷史設計與演進證據
+> **V2.5 歷史設計**：下文保存當時工程與設計，不作現行版本／操作指令。現行 V2.6.14 使用 USER role、Identity Provider、半形等待作廢文字、共通子視窗無 title-bar icon、直接 CancelReason「使用者編號-原因」與覆核「管理員編號-使用者編號-原因」，正常官方等待分流至處理中。現行契約見 [REQUIREMENTS.md](REQUIREMENTS.md)、[DATA_FORMAT.md](DATA_FORMAT.md)，驗收／待辦見 [現行交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)／[TODO.md](TODO.md)。
 
 本文件記錄 CYInvoice V2.5 已確認的產品設計與工程實作基準。它是設計／需求文件，不是新的永久治理規則；永久規則仍以根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與 `apps/CYInvoice/PROJECT_RULES.md` 為準。
 

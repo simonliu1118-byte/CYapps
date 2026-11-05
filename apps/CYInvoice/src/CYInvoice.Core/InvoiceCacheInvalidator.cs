@@ -25,6 +25,7 @@ public static class InvoiceCacheInvalidator
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceCacheInvalidator");
             problems.Add($"快取掃描失敗：{error.Message}");
             return;
         }
@@ -38,7 +39,8 @@ public static class InvoiceCacheInvalidator
                 File.Delete(path);
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceCacheInvalidator");
                 problems.Add($"{name} 快取刪除失敗：{error.Message}");
             }
         }

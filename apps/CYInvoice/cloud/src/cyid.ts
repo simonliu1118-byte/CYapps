@@ -120,10 +120,12 @@ export async function withCyIdSession<T>(env: CyIdEnv, employeeNo: unknown, pass
         throw new CyIdError(502, "IDENTITY_UNAVAILABLE");
       return principal;
     };
+    let emailProfile:{revision:number;email:string}|undefined;
     const verifiedEmail = async () => {
       const principal = await revalidate();
       if (principal.workspaceRole !== "SUPER_ADMIN" || !principal.emailVerified)
         throw new CyIdError(403, "ACCESS_DENIED");
+      if(emailProfile?.revision===principal.employeeRevision)return emailProfile.email;
       const snapshot = await identityRequest(env, "/v1/admin/identity/snapshot", undefined, token, "GET");
       if (!Array.isArray(snapshot.employees)) throw new CyIdError(502, "IDENTITY_UNAVAILABLE");
       const employee = snapshot.employees.map(object).find(e => e.employee_id === principal.employeeId);
@@ -131,7 +133,8 @@ export async function withCyIdSession<T>(env: CyIdEnv, employeeNo: unknown, pass
           || !employee.email_normalized.includes("@") || /[\r\n\s]/.test(employee.email_normalized))
         throw new CyIdError(502, "IDENTITY_UNAVAILABLE");
       if (snapshot.workspaceId !== principal.workspaceId) throw new CyIdError(502, "IDENTITY_UNAVAILABLE");
-      return employee.email_normalized;
+      emailProfile={revision:principal.employeeRevision,email:employee.email_normalized};
+      return emailProfile.email;
     };
     return await work(await revalidate(), revalidate, verifiedEmail);
   } finally {

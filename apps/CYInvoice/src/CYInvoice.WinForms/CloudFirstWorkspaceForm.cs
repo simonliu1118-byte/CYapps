@@ -263,7 +263,8 @@ internal sealed class CloudFirstWorkspaceForm : Form
                     lifetime.Token);
             }
             catch (Exception error) when (CouldBeAmbiguousBootstrap(error))
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudFirstWorkspaceForm");
                 if (await TryRecoverPendingIdentityAsync()) return;
                 throw;
             }
@@ -296,14 +297,17 @@ internal sealed class CloudFirstWorkspaceForm : Form
         }
         catch (CloudApiException error) when (error.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudFirstWorkspaceForm");
             return false;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudFirstWorkspaceForm");
             return false;
         }
-        catch (TaskCanceledException) when (!lifetime.IsCancellationRequested)
+        catch (TaskCanceledException diagnosticError2) when (!lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudFirstWorkspaceForm");
             return false;
         }
     }
@@ -345,11 +349,13 @@ internal sealed class CloudFirstWorkspaceForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError3) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"CloudFirstWorkspaceForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudFirstWorkspaceForm");
             if (!IsDisposed)
             {
                 var message = CloudErrorMessage(error);
@@ -359,6 +365,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudFirstWorkspaceForm");
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true);
@@ -437,8 +444,9 @@ internal sealed class CloudFirstWorkspaceForm : Form
         {
             return string.Equals(NormalizeBaseUrl(left), NormalizeBaseUrl(right), StringComparison.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception diagnosticError4)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"CloudFirstWorkspaceForm");
             return false;
         }
     }

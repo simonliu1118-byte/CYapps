@@ -33,8 +33,8 @@ assert.equal((await verify(legacy14)).fullRowRoundtrip, true);
 const schema8 = structuredClone(validated); schema8.manifest.schemaVersion = 8;
 assert.equal((await verify(schema8)).sourceSchemaVersion, 8, 'current pre-rollout backups restore to the new schema');
 const schema11 = structuredClone(validated); schema11.manifest.schemaVersion = 11;
-assert.equal((await verify(schema11)).targetSchemaVersion, 15, 'pre-index backups restore without changing financial rows');
-for (const version of [5, 16]) {
+assert.equal((await verify(schema11)).targetSchemaVersion, 16, 'pre-index backups restore without changing financial rows');
+for (const version of [5, 17]) {
   const bad = structuredClone(validated); bad.manifest.schemaVersion = version;
   await assert.rejects(verify(bad), error => error.code === 'RESTORE_SCHEMA_UNSUPPORTED');
 }

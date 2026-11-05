@@ -78,9 +78,9 @@ export async function withAuthorizedCyWebRecovery<T>(
     throw new CyIdError(403, "RECOVERY_SCOPE_MISMATCH");
 
   return withCyIdSession(env, input.employeeNo, input.password,
-    async (_initial, revalidate, verifiedEmail) => {
+    async (initial, revalidate, verifiedEmail) => {
+      checkAuthority(initial, input);
       const verifyNow = async (): Promise<CyWebRecoveryAuthority> => {
-        checkAuthority(await revalidate(), input);
         const email = await verifiedEmail();
         checkAuthority(await revalidate(), input);
 

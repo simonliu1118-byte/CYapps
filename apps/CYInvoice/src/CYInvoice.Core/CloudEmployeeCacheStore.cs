@@ -339,6 +339,7 @@ public sealed class CloudEmployeeCacheStore
         }
         catch (Exception error) when (error is not InvalidDataException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudEmployeeCacheStore");
             throw new InvalidDataException("Cloud Employee 離線登入憑證無法解密。", error);
         }
     }
@@ -376,8 +377,9 @@ public sealed class CloudEmployeeCacheStore
             bytes = Convert.FromHexString(value);
             return true;
         }
-        catch (FormatException)
+        catch (FormatException diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudEmployeeCacheStore");
             bytes = [];
             return false;
         }

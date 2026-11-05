@@ -262,7 +262,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.402'
 
       - name: Run Windows-client cloud contract tests
         working-directory: apps/CYInvoice
@@ -284,7 +284,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.402'
 
       - name: Restore Windows solution
         run: dotnet restore CYInvoice.sln

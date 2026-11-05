@@ -2,7 +2,6 @@ import { createEmailSender } from "./email";
 
 interface Env {
   DB: D1Database;
-  APP_ENV: string;
   API_VERSION: string;
   OTP_PEPPER?: string;
   EMAIL_PROVIDER?: string;
@@ -49,7 +48,6 @@ function json(env: Env, id: string, status: number, body: Record<string, JsonVal
     service: "cyinvoice-cloud",
     cloudVersion: "0.8.5",
     apiVersion: env.API_VERSION,
-    environment: env.APP_ENV,
     requestId: id,
     timestamp: new Date().toISOString(),
     ...body,

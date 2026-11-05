@@ -58,6 +58,9 @@ const f=fixture();
 try {
   const insert=f.db.db.prepare("INSERT INTO transactions(tx_date,account_name,kind,category_name,summary,amount,created_at,updated_at) VALUES('2026-01-01','現金','income','一般收入',?,10,'2026-01-01','2026-01-01')");
   f.db.db.exec('BEGIN');for(let i=0;i<1800;i++)insert.run('SYNTHETIC_'+i);f.db.db.exec('COMMIT');
+  f.db.db.exec(`UPDATE transactions SET pending_confirmation=1 WHERE id=1;
+    INSERT INTO transaction_confirmation_audit(transaction_id,previous_category,previous_summary,category_name,summary,actor_json,created_at)
+    VALUES(2,'一般支出','TEST_BEFORE','一般支出','TEST_AFTER','{"employeeNo":"TEST"}','2026-11-05');`);
   const ledger=JSON.stringify(f.db.db.prepare('SELECT * FROM transactions').all());
   const scheduled=await runScheduledBackup(f.env,{...f.options,now:start,cron:'*/5 * * * *'});
   assert.equal(scheduled.health.status,'unknown');

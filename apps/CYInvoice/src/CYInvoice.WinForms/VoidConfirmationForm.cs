@@ -5,7 +5,7 @@ namespace CYInvoice.WinForms;
 internal sealed class VoidConfirmationForm : Form
 {
     private const string ResponsibilityText =
-        "本人已核對本次作廢之發票號碼、交易事實、作廢原因及紙本電子發票證明聯收回狀況。\r\n\r\n本人了解發票作廢應依相關法令及公司作業規範辦理；如因本人故意、操作錯誤或疏失致生相關問題，願依實際責任歸屬、相關法令及公司規定負應負之責任。\r\n\r\n按下「確認作廢」即表示本人已閱讀、理解並同意上述聲明。";
+        "本人已核對本次作廢之發票號碼、交易事實、作廢原因及紙本電子發票證明聯收回狀況。\r\n\r\n本人了解發票作廢應依相關法令及公司作業規範辦理；\r\n如因本人故意、操作錯誤或疏失致生相關問題，願依實際責任歸屬、相關法令及公司規定負應負之責任。\r\n\r\n按下「確認作廢」即表示本人已閱讀、理解並同意上述聲明。";
     private const string UncollectedWarningText = "尚未收回：需由管理員確認後才會送出作廢";
     private const int WindowWidth = 560;
     private const int PaperWindowHeight = 390;
@@ -34,7 +34,7 @@ internal sealed class VoidConfirmationForm : Form
         ForeColor = Color.FromArgb(185, 108, 0),
         Visible = false,
         Margin = Padding.Empty,
-        Font = new Font("Microsoft JhengHei UI", 8.5F),
+        Font = new Font("Microsoft JhengHei UI", 10.5F, FontStyle.Bold),
     };
     private readonly Button confirm = UiControls.DangerButton("確認作廢");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -51,6 +51,7 @@ internal sealed class VoidConfirmationForm : Form
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        uncollected.ForeColor = Color.Firebrick;
         BuildLayout();
         Shown += (_, _) => invoiceNumber.Focus();
     }
@@ -109,7 +110,7 @@ internal sealed class VoidConfirmationForm : Form
             MaximumSize = new Size(205, 0),
             TextAlign = ContentAlignment.TopLeft,
             ForeColor = Color.FromArgb(65, 65, 65),
-            Font = new Font(Font.FontFamily, 9F, FontStyle.Bold),
+            Font = new Font(Font.FontFamily, 11F),
             Margin = Padding.Empty,
             Tag = "void-responsibility",
         };
@@ -223,7 +224,7 @@ internal sealed class VoidConfirmationForm : Form
         AutoSize = false,
         Margin = new Padding(0, 2, 0, 2),
         UseVisualStyleBackColor = true,
-        Font = new Font("Microsoft JhengHei UI", 9F),
+        Font = new Font("Microsoft JhengHei UI", 11F),
     };
 
     private static void ConfigureInputField(TextBox field)
@@ -319,13 +320,18 @@ internal sealed class VoidConfirmationForm : Form
     internal void VerifySmokeLayout()
     {
         var responsibility = FindTaggedResponsibility(this);
+        if (Math.Abs(notDelivered.Font.SizeInPoints - 11F) > 0.1F ||
+            Math.Abs(collected.Font.SizeInPoints - 11F) > 0.1F ||
+            Math.Abs(uncollected.Font.SizeInPoints - 11F) > 0.1F || uncollected.ForeColor != Color.Firebrick ||
+            !uncollectedWarning.Font.Bold || uncollectedWarning.Font.SizeInPoints < 10.5F)
+            throw new InvalidOperationException("證明聯選項及尚未收回提醒的字級／警示色不正確。");
         if (Text != "發票作廢確認" || ShowIcon || invoiceNumber.Text.Length != 0 || password.Text.Length != 0 ||
             invoiceNumber.TextAlign != HorizontalAlignment.Left || employeeNo.TextAlign != HorizontalAlignment.Left ||
             password.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
             ClientSize.Height != (paperInvoice ? PaperWindowHeight : CarrierWindowHeight) || AcceptButton is not null || CancelButton != cancel ||
             !password.UseSystemPasswordChar || confirm is not ThemedDangerButton || confirm.FlatStyle != FlatStyle.Flat ||
             confirm.UseVisualStyleBackColor || confirm.Width != CompactButtonWidth || confirm.Height != UiControls.StandardButtonHeight ||
-            responsibility is null || !responsibility.Font.Bold || !responsibility.Text.Contains("同意上述聲明", StringComparison.Ordinal))
+            responsibility is null || responsibility.Font.SizeInPoints < 10.5F || !responsibility.Text.Contains("同意上述聲明", StringComparison.Ordinal))
             throw new InvalidOperationException("發票作廢確認視窗基本配置不正確");
         if (paperInvoice)
         {

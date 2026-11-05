@@ -33,6 +33,7 @@ public static class InvoicePreviewCache
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoicePreviewCache");
             return null;
         }
     }
@@ -54,7 +55,9 @@ public static class InvoicePreviewCache
         finally
         {
             try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoicePreviewCache"); }
         }
     }
 

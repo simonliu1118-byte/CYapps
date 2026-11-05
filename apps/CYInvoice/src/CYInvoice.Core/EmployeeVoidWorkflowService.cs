@@ -22,14 +22,21 @@ public static class InvoiceVoidIssueTypes
 public sealed record InvoiceVoidManualReview(
     string RequesterEmployeeNo,
     string Reason,
-    DateTimeOffset RequestedUtc);
+    DateTimeOffset RequestedUtc)
+{
+    public string RequesterName { get; init; } = "";
+}
 
 public sealed record InvoiceVoidHandledReview(
     string RequesterEmployeeNo,
     string Reason,
     DateTimeOffset RequestedUtc,
     string ReviewerEmployeeNo,
-    DateTimeOffset SubmittedUtc);
+    DateTimeOffset SubmittedUtc)
+{
+    public string RequesterName { get; init; } = "";
+    public string ReviewerName { get; init; } = "";
+}
 
 public sealed record EmployeeVoidWorkflowResult(
     bool ManualReviewRequired,
@@ -104,7 +111,7 @@ public sealed class EmployeeVoidWorkflowService
             throw new InvalidOperationException("這張發票已有折讓作業待處理，不能同時作廢");
 
         if (paperInvoice && paperReceiptState == PaperInvoiceReceiptStates.Uncollected)
-            return QueueManualReview(stored, employee.EmployeeNo, reason);
+            return QueueManualReview(stored, employee, reason);
 
         var cancelReason = CancelReason(employee.EmployeeNo, reason);
         var result = await voidService.VoidAsync(stored, cancelReason, cancellationToken).ConfigureAwait(false);
@@ -130,7 +137,9 @@ public sealed class EmployeeVoidWorkflowService
             value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return null;
         try { return value.Deserialize<InvoiceVoidHandledReview>(); }
-        catch (JsonException error) { throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
+        catch (JsonException error)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeVoidWorkflowService"); throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
     }
 
     public async Task<InvoiceVoidResult> ApproveManualReviewAsync(
@@ -162,7 +171,7 @@ public sealed class EmployeeVoidWorkflowService
                     review.Reason,
                     review.RequestedUtc,
                     manager.EmployeeNo,
-                    now().ToUniversalTime()));
+                    now().ToUniversalTime()) { RequesterName = review.RequesterName, ReviewerName = manager.Name });
             ClearManualReview(latest);
             syncRepository.UpsertMany([latest]);
             issueStore.Resolve(issue.Id, now());
@@ -191,7 +200,7 @@ public sealed class EmployeeVoidWorkflowService
 
     private EmployeeVoidWorkflowResult QueueManualReview(
         InvoiceRecord record,
-        string requesterEmployeeNo,
+        EmployeeAccount requester,
         string reason)
     {
         ValidateCurrentAccount(record);
@@ -211,7 +220,7 @@ public sealed class EmployeeVoidWorkflowService
                 Message: "這張發票已在人工確認中，尚未向光貿送出作廢");
         }
 
-        var review = new InvoiceVoidManualReview(requesterEmployeeNo, reason, now().ToUniversalTime());
+        var review = new InvoiceVoidManualReview(requester.EmployeeNo, reason, now().ToUniversalTime()) { RequesterName = requester.Name };
         record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[ManualReviewMetadataKey] = JsonSerializer.SerializeToElement(review);
         syncRepository.UpsertMany([record]);
@@ -226,8 +235,9 @@ public sealed class EmployeeVoidWorkflowService
                 "紙本電子發票證明聯尚未收回，待管理員確認是否送出作廢。",
                 now());
         }
-        catch
+        catch (Exception diagnosticError1)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"EmployeeVoidWorkflowService");
             ClearManualReview(record);
             syncRepository.UpsertMany([record]);
             throw;
@@ -356,6 +366,7 @@ public sealed class EmployeeVoidWorkflowService
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"EmployeeVoidWorkflowService");
             throw new InvalidDataException("作廢人工確認資料格式錯誤", error);
         }
     }

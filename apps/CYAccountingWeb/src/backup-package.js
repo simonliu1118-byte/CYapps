@@ -11,11 +11,12 @@ export const ACCOUNTING_EXPORT_TABLES = [
   ['accounts', 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount],
   ['categoryGroups', 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup],
   ['categories', 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory],
-  ['transactions', 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, created_at, updated_at FROM transactions ORDER BY id', mapTransaction],
+  ['transactions', 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, marker_color, marker_target, pending_confirmation, created_at, updated_at FROM transactions ORDER BY id', mapTransaction],
   ['openingBalanceOverrides', 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride],
   ['openingBalanceAudit', 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit],
   ['appSettings', 'SELECT key, value FROM app_settings ORDER BY key', mapSetting],
-  ['excelImportRuns', 'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', mapImportRun]
+  ['excelImportRuns', 'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', mapImportRun],
+  ['transactionConfirmationAudit', 'SELECT id,transaction_id,previous_category,previous_summary,category_name,summary,actor_json,created_at FROM transaction_confirmation_audit ORDER BY id', mapConfirmationAudit]
 ];
 
 export async function buildBackupPackage(db, now = new Date()) {
@@ -24,12 +25,13 @@ export async function buildBackupPackage(db, now = new Date()) {
   const schemaRow = await db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first();
   const exported = {};
   for (const [key, sql, mapper] of ACCOUNTING_EXPORT_TABLES) {
-    exported[key] = key === 'excelImportRuns' && Number(schemaRow?.value || 0) < 8
+    exported[key] = (key === 'excelImportRuns' && Number(schemaRow?.value || 0) < 8)
+      || (key === 'transactionConfirmationAudit' && Number(schemaRow?.value || 0) < 16)
       ? [] : await readPaged(db, budget, sql, mapper);
   }
   const data = {accounts:exported.accounts,categoryGroups:exported.categoryGroups,categories:exported.categories,
     openingBalanceOverrides:exported.openingBalanceOverrides,openingBalanceAudit:exported.openingBalanceAudit,
-    transactions:exported.transactions,appSettings:exported.appSettings,excelImportRuns:exported.excelImportRuns};
+    transactions:exported.transactions,appSettings:exported.appSettings,excelImportRuns:exported.excelImportRuns,transactionConfirmationAudit:exported.transactionConfirmationAudit};
   const counts = Object.fromEntries(Object.entries(data).map(([key, rows]) => [key, rows.length]));
   const totalRowCount = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const canonicalData = JSON.stringify(data);
@@ -118,6 +120,7 @@ function mapTransaction(row) {
     amount: Number(row.amount),
     markerColor: row.marker_color ?? null,
     markerTarget: row.marker_target === 'category' ? 'category' : 'summary',
+    pendingConfirmation:Number(row.pending_confirmation || 0),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
@@ -177,3 +180,5 @@ export async function backupPackageDigest(backupSet) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', combined));
   return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }
+
+function mapConfirmationAudit(row) { return {id:Number(row.id),transactionId:Number(row.transaction_id),previousCategory:String(row.previous_category),previousSummary:String(row.previous_summary),categoryName:String(row.category_name),summary:String(row.summary),actor:JSON.parse(row.actor_json),createdAt:String(row.created_at)}; }

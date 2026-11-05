@@ -390,6 +390,7 @@ public sealed class InvoiceStore
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceStore");
             throw new InvalidDataException("CYInvoice.db contains invalid extra_json", error);
         }
     }

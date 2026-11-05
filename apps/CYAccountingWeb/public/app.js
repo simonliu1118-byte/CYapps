@@ -53,6 +53,7 @@ async function startCyaccApp() {
     accountName: document.querySelector('#accountName'),
     categoryName: document.querySelector('#categoryName'),
     summary: document.querySelector('#summary'),
+    pendingConfirmation: document.querySelector('#entryPendingConfirmation'),
     amount: document.querySelector('#amount'),
     saveButton: document.querySelector('#saveButton'),
     saveMessage: document.querySelector('#saveMessage'),
@@ -139,6 +140,10 @@ function bindEvents() {
   els.amount.addEventListener('input', numericInput);
   els.txDate.addEventListener('change', updateEntryLockState);
   els.form.addEventListener('submit', saveTransaction);
+  els.pendingConfirmation?.addEventListener('change', () => {
+    els.summary.value = pendingSummaryText(els.summary.value,els.pendingConfirmation.checked);
+    els.summary.maxLength = els.pendingConfirmation.checked ? 48 : 40;
+  });
   const markEntryDraftChanged = () => { cyEntryDraftRevision += 1; };
   els.form.addEventListener('input', markEntryDraftChanged, true);
   els.form.addEventListener('change', markEntryDraftChanged, true);
@@ -290,7 +295,7 @@ async function saveTransaction(event) {
   const entry = {
     txDate: els.txDate.value, accountName: els.accountName.value,
     categoryName: els.categoryName.value, kind: state.kind,
-    summary: els.summary.value, amount: els.amount.value
+    summary: els.summary.value, amount: els.amount.value,pendingConfirmation:Boolean(els.pendingConfirmation?.checked)
   };
   let body;
   try {
@@ -306,12 +311,14 @@ async function saveTransaction(event) {
   const id = --cyTransactionCreateId;
   const month = body.txDate.slice(0, 7);
   const row = { id, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName,
-    kind: body.kind, summary: body.summary, amount: body.amount, created_at: new Date().toISOString() };
+    kind: body.kind, summary: body.summary, amount: body.amount,pending_confirmation:Number(body.pendingConfirmation), created_at: new Date().toISOString() };
   let finish;
   const settled = new Promise(resolve => { finish = resolve; });
   cyPendingTransactionCreates.set(id, { row, settled });
   cyTransactionMutationRevision += 1;
   els.summary.value = '';
+  if (els.pendingConfirmation) els.pendingConfirmation.checked = false;
+  els.summary.maxLength=40;
   els.amount.value = '';
   const draftRevision = ++cyEntryDraftRevision;
   let saved = false;
@@ -345,6 +352,8 @@ async function saveTransaction(event) {
       && els.txDate.value === entry.txDate && els.accountName.value === entry.accountName
       && els.categoryName.value === entry.categoryName) {
       els.summary.value = entry.summary;
+      if (els.pendingConfirmation) els.pendingConfirmation.checked=entry.pendingConfirmation;
+      els.summary.maxLength=entry.pendingConfirmation?48:40;
       els.amount.value = entry.amount;
       cyEntryDraftRevision += 1;
     }
@@ -433,12 +442,21 @@ function summaryWeightedUnits(value) {
   return Array.from(String(value || '')).reduce((units, char) => units + summaryCharacterUnits(char), 0);
 }
 
+function pendingSummaryBody(value) {
+  return String(value || '').replace(/^(?:\(待確認\))+\s*/u,'').trim();
+}
+function pendingSummaryText(value,pending) {
+  return (pending?'(待確認)':'')+pendingSummaryBody(value);
+}
+
 function manualTransactionValues(values, original = null) {
+  const pendingConfirmation = values.pendingConfirmation ?? Boolean(original?.pending_confirmation);
   const body = {
     txDate: String(values.txDate || ''),
     accountName: String(values.accountName || ''),
     categoryName: String(values.categoryName || ''),
-    summary: String(values.summary || '').trim(),
+    summary: pendingConfirmation?pendingSummaryText(values.summary,true):String(values.summary || '').trim(),
+    pendingConfirmation,
     amount: Number(values.amount)
   };
   if (isLocked(body.txDate.slice(0, 7)) || (original && isLocked(String(original.tx_date || '').slice(0, 7)))) {
@@ -447,7 +465,7 @@ function manualTransactionValues(values, original = null) {
   if (!Number.isInteger(body.amount) || body.amount < 1 || body.amount > 9_999_999) {
     throw new Error('金額必須為 1～9,999,999。');
   }
-  if (summaryWeightedUnits(body.summary) > 40) {
+  if (summaryWeightedUnits(pendingConfirmation?pendingSummaryBody(body.summary):body.summary) > 40) {
     throw new Error('摘要不可超過 20 個中文字或 40 個英數字元。');
   }
   return body;
@@ -473,14 +491,15 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
   if (!original) throw new Error('找不到交易。');
   if (cyPendingTransactionUpdates.has(id)) throw new Error('此筆交易仍在儲存中。');
   const body = manualTransactionValues(values, original);
-  const updated = { ...original, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName, summary: body.summary, amount: body.amount };
+  const updated = { ...original, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName, summary: body.summary, amount: body.amount,pending_confirmation:Number(body.pendingConfirmation) };
   cyPendingTransactionUpdates.set(id, { original, updated });
   cyTransactionMutationRevision += 1;
   state.transactions = mergePendingTransactionUpdates(state.transactions, els.monthFilter.value);
   try {
     onOptimistic?.();
     renderOptimisticTransactionState();
-    await api(`/api/transactions/${id}`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
+    const result=await api(`/api/transactions/${id}`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
+    if (result?.transaction) Object.assign(updated,result.transaction);
     if (String(original.tx_date).slice(0, 7) !== body.txDate.slice(0, 7)) {
       try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
       catch { showMessage('修改已儲存，餘額載入失敗，請重新整理。', true); }
@@ -498,11 +517,41 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
   }
 }
 
+async function persistPendingConfirmation(original,values) {
+  const id=Number(original?.id);
+  if (!Number.isSafeInteger(id)||id<=0||!original.pending_confirmation) throw new Error('此筆資料不是待確認項目。');
+  if (cyPendingTransactionUpdates.has(id)) throw new Error('此筆資料仍在儲存中。');
+  const summary=pendingSummaryBody(values.summary);
+  if (!values.categoryName||!summary) throw new Error('請選擇科目並填寫摘要。');
+  if (summaryWeightedUnits(summary)>40) throw new Error('摘要不可超過 20 個中文字或 40 個英數字元。');
+  cyPendingTransactionUpdates.set(id,{original,updated:original});
+  cyTransactionMutationRevision++;
+  try {
+    const result=await api(`/api/transactions/${id}/confirm`,{method:'POST',headers:jsonHeaders(),
+      body:JSON.stringify({categoryName:values.categoryName,summary,expectedUpdatedAt:original.updated_at})});
+    const transaction=result.transaction;
+    if (!transaction || transaction.pending_confirmation) throw new Error('尚未確認儲存結果，請重新整理。');
+    cyPendingTransactionUpdates.get(id).updated=transaction;
+    if (state.transactionMonth===transaction.tx_date.slice(0,7)) {
+      state.transactions=state.transactions.filter(row=>Number(row.id)!==id);
+      state.transactions.push(transaction);
+    }
+    window.dispatchEvent(new CustomEvent('cyacc:transaction-confirmed',{detail:{transaction}}));
+    renderOptimisticTransactionState();
+    if (state.transactionMonth===transaction.tx_date.slice(0,7)) window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded',{detail:{month:els.monthFilter.value}}));
+    showMessage('確認完成');
+    return transaction;
+  } finally {
+    cyPendingTransactionUpdates.delete(id);
+    cyTransactionMutationRevision++;
+  }
+}
+
 // Reuse the canonical optimistic transaction mutation owner; marker values
 // never modify summary, amounts, or existing entry form fields.
 async function setTransactionMarker(id, color, requestedTarget = 'summary') {
   if (!Number.isSafeInteger(id) || id <= 0
-    || !(color === null || ['orange', 'pink', 'yellow', 'green'].includes(color))) return;
+    || !(color === null || ['orange', 'yellow', 'green'].includes(color))) return;
   const markerTarget = color === null ? 'summary' : requestedTarget;
   if (!['summary', 'category'].includes(markerTarget)) return;
   if (document.body.dataset.cyaccReadOnly === 'true') return;

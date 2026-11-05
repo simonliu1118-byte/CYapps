@@ -137,7 +137,7 @@ await assert.rejects(() => run(db, { ...payload, deviceToken: token1 }),
 // DR-09: a previously authorized issuer can race with recovery. Extract the
 // actual Worker SQL, not a weaker reimplementation: no pairing grant,
 // ordinary invitation grant or JOIN claim may commit after issuer revocation.
-const workerSource = readFileSync("src/index.ts", "utf8");
+const workerSource = readFileSync("src/device-onboarding.ts", "utf8");
 function actualSql(body, marker) {
   const start = body.indexOf("`" + marker);
   assert.ok(start >= 0, "Expected Worker SQL marker: " + marker);

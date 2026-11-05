@@ -2,7 +2,6 @@ import { createEmailSender } from "./email";
 
 interface Env {
   DB: D1Database;
-  APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
   WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT: RateLimit;
@@ -63,7 +62,6 @@ function json(env: Env, requestId: string, status: number, body: Record<string, 
     service: SERVICE_NAME,
     cloudVersion: CLOUD_VERSION,
     apiVersion: env.API_VERSION,
-    environment: env.APP_ENV,
     requestId,
     timestamp: new Date().toISOString(),
     ...body,

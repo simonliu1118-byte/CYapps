@@ -2,13 +2,17 @@
 
 更新：2026/11/05（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
 
-## 最新開發：V1.0.3 Build 1 備份外部檢查與分時備援
+## V1.1.1 備份外部檢查與分時備援
 
-本批使用者已確認先用公開 repository：GitHub 04:10 優先做完整試還原，Worker 每五分鐘以 500 筆批次備援；只有兩邊都異常才透過 CYID 通知超管。保留原 03:30 備份與 08:00 補跑，平台改用一個 Cron。尚未合併／部署，不宣稱正式 Free CPU 驗收通過。
+使用者 2026/11/05 明確授權 PR #596 合併部署。整合最新 V1.1.0 main，保留待確認功能及 schema 16；只有兩個驗證管道都異常才通知超管。正式發布版本改為 V1.1.1 Build 0，避免回退版本。詳細測試、用量與發布證據：[handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。部署仍待執行回讀，不能由本段推定完成。
 
-Claude 交接、資料邊界、用量及驗證：[BACKUP-EXTERNAL-FALLBACK-20261105.md](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。未改 schema 15／帳務資料／CYID consumer contract。日後付費退場待辦已加入 TODO。以下 V1.0.0 及更早段落均為歷史，不代表這次部署結果。
+## 最新工作：V1.1.0 待確認流程／D1 schema 16
 
-## 歷史：V1.0.0 發行基準／D1 schema 15
+待確認勾選、中央不限日期搜尋、摘要旁確認按鈕已實作。鎖帳例外僅允許確認待確認項目的科目／摘要，使用原子 batch 與 append-only 稽核；確認後恢復一般鎖帳規則。部分索引與 keyset 分頁不下載整本帳簿。詳細操作、owner、成本、備份相容及驗證見 [V1.1.0.txt](V1.1.0.txt)。PR #597 的搜尋數量移位一併整合。發布證據以同 SHA Production Deploy 與當次 PR 為準；尚待使用者真機驗收。
+
+以下為既有 V1.0.0 發行交接，依當時版本解讀。
+
+## V1.0.0 發行基準／D1 schema 15
 
 | 項目 | 現行證據或邊界 |
 | --- | --- |

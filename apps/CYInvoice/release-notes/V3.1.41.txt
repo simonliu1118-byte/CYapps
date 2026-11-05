@@ -1,0 +1,7 @@
+CYInvoice V3.1.41 工程版本
+
+## V3.1.41 — 2026/10/22（schema20結構升格與分段部署）
+
+- 0020移至唯一canonical migration，移除draft副本；4表／3索引／15觸發器保留永久Claim與append-only Audit，不新增g0501送出HTTP路由。
+- 原部署owner嚴格支援18:19及19:20。canonical20下18:19必須對應精確schema19，19:20必須對應精確schema20；禁止跳版、缺遷移、重用意圖、checkpoint不符及其他vars／Bindings更動。補齊before／deploy／after、四旗標關閉、保留設定及失敗拒絕回歸。
+- 本機MCP依獨立授權及原5,000 read／500 write／30 requests預算逐段升級，DB後驗才改marker；Local停送／未知Claim／單一送出權威仍為日後啟用前阻塞，不再阻塞結構升級。真光貿、合併及Release不在本批；雙Windows真人驗收延至3.2上線後。

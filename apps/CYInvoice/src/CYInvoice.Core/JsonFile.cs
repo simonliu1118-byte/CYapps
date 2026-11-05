@@ -27,6 +27,7 @@ internal static class JsonFile
         }
         catch (JsonException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"JsonFile");
             throw new InvalidDataException($"decode {Path.GetFileName(path)}", error);
         }
     }

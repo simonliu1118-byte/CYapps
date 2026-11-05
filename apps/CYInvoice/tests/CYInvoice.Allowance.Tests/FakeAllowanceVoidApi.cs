@@ -10,6 +10,7 @@ internal sealed class FakeAllowanceVoidApi : IAmegoAllowanceVoidGateway
     public int QueryCalls {get;private set;}
     public int PostCalls {get;private set;}
     public bool LoseReply {get;set;}
+    public Action? OnPost {get;set;}
     public Action? OnQuery {get;set;}
     public Func<Task>? BeforeQueryAsync {get;set;}
     public async Task<AllowanceQueryResponse> QueryAllowanceAsync(string number,CancellationToken cancellationToken=default)
@@ -20,6 +21,7 @@ internal sealed class FakeAllowanceVoidApi : IAmegoAllowanceVoidGateway
     public Task<AllowanceIssueResponse> VoidAllowanceOnceAsync(string number,CancellationToken cancellationToken=default)
     {
         PostCalls++;
+        OnPost?.Invoke();
         return LoseReply ? Task.FromException<AllowanceIssueResponse>(new HttpRequestException("synthetic lost response"))
             : Task.FromResult(new AllowanceIssueResponse(0,""));
     }

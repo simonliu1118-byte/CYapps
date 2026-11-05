@@ -2,6 +2,7 @@
 // durably numbered g0401 request. Caller must first win the atomic D1
 // "reserved -> sending" fence; a lost reply is permanently ambiguous.
 import {signOfficialInvoiceQuery} from "./amego-invoice-query";
+import {parseAllowanceFinancialJson,numberedAllowanceJson} from "./allowance-decimal";
 const URL="https://invoice-api.amego.tw/json/g0401";
 const TE=new TextEncoder();
 type ObjectValue=Record<string,unknown>;
@@ -43,7 +44,7 @@ async function limited(response:Response):Promise<string>{
 }
 // Called ONCE after the D1 send fence. Never retries / issues a new number.
 export async function postNumberedAllowanceOnce(
-  input:OneShotAllowanceIssue,transport:typeof fetch=fetch,now:()=>Date=()=>new Date()
+  input:OneShotAllowanceIssue,transport:typeof fetch=fetch,now:()=>Date=()=>new Date(),observe?:(status?:number)=>Promise<void>
 ):Promise<OneShotAllowanceOutcome>{
   if(!/^[0-9]{8}$/.test(input.sellerInvoice)||
     !/^A[0-9]{8}(?:[0-9]{3}|[A-Z][0-9A-Z]{2})$/.test(input.allowanceNumber)||
@@ -53,7 +54,7 @@ export async function postNumberedAllowanceOnce(
     typeof input.unnumberedTemplateJson!=="string"||
     input.unnumberedTemplateJson.length<2||input.unnumberedTemplateJson.length>32768)
     throw new Error("G0401_REQUEST_INVALID");
-  const template=record(JSON.parse(input.unnumberedTemplateJson));
+  const template=record(parseAllowanceFinancialJson(input.unnumberedTemplateJson));
   if(template.AllowanceNumber!==""||template.AllowanceDate!==input.allowanceDay||
     template.AllowanceType!==2||!Array.isArray(template.ProductItem)||
     template.ProductItem.length<1||template.ProductItem.length>50||
@@ -63,7 +64,7 @@ export async function postNumberedAllowanceOnce(
   const date=now();
   if(!(date instanceof Date)||!Number.isFinite(date.valueOf()))
     throw new Error("G0401_CLOCK_INVALID");
-  const data=JSON.stringify([{...template,AllowanceNumber:input.allowanceNumber}]);
+  const data=numberedAllowanceJson(input.unnumberedTemplateJson,input.allowanceNumber);
   const timestamp=Math.floor(date.valueOf()/1000);
   const form=new URLSearchParams({invoice:input.sellerInvoice,data,
     time:String(timestamp),sign:signOfficialInvoiceQuery(data,timestamp,input.appKey)});
@@ -71,11 +72,15 @@ export async function postNumberedAllowanceOnce(
   // Fail-closed: a transport exception may have occurred AFTER the provider
   // accepted the request. Never classify it as a safe definite rejection.
   try{
-    response=await transport(URL,{method:"POST",redirect:"error",
+    response=await transport(URL,{method:"POST",redirect:"manual",
       headers:{"content-type":"application/x-www-form-urlencoded",
         "accept":"application/json"},body:form.toString(),
       signal:AbortSignal.timeout(8000)});
   }catch{return{kind:"unknown_result"};}
+  await observe?.(response.status);
+  // Workers supports manual, not error. Never forward a signed POST to a
+  // Location target or turn a redirect into rejection/collision/retry authority.
+  if(response.status>=300&&response.status<400)return{kind:"unknown_result"};
   if(!response.ok)return{kind:"unknown_result"};
   let root:ObjectValue;
   try{

@@ -119,7 +119,9 @@ internal sealed class NativeListViewHost : UserControl
         if (List.Items.Count > 0)
         {
             try { actualRowHeight = Math.Max(actualRowHeight, List.GetItemRect(0).Height); }
-            catch (ArgumentException) { }
+            catch (ArgumentException diagnosticError1)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"NativeListViewHost"); }
         }
         return headerHeight + (Math.Max(1, rowCount) * actualRowHeight) + 2;
     }

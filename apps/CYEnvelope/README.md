@@ -1,47 +1,71 @@
 # CYEnvelope
 
-志遠專用的 Windows 信封套印工具。程式、資料模型、測試、資源與封裝均位於本目錄；不引用 `CYInvoice` 的程式碼或資料。
+志遠專用 Windows 信封套印工具，以 C#／WPF（.NET 10）開發。目前測試版本 V0.3.0，尚未正式發行（試印通過後才發正式版）。
 
-## V0.1.1
+Go 版（V0.1.x）已依使用者決定停止開發，程式碼自本分支移除；歷史保留在 Git 與 `V0.1.0.txt`、`V0.1.1.txt`。不遷移 Go 版測試資料。
 
-- 15K 標準信封（105 × 222 mm），直式套印。
-- 收件人即時篩選、同名多地址、每筆地址記住上次電話。
-- 臺灣市話、手機、0800 與分機格式化。
-- 離線三碼郵遞區號（中華郵政 368 筆地區表）。
-- 6–7 個郵件種類勾記、方框文字與每格式預設值。
-- 格式即時示意與毫米座標、字體、字級設定。
-- Windows 原生印表機列舉、內容視窗及 GDI 套印。
-- SQLite 本機資料庫；按下「列印」先保存，才送 Windows 列印。
-- 修正中文輸入法搭配收件人即時清單時，游標被重設而使字序錯亂的問題。
-- 依實際 15K 信封重畫主畫面預覽，並更新內建 15K 初始座標。
-- 改用「印表機＋直式信封」多尺寸應用程式圖示。
+## 用途
 
-目前預覽依提供的 15K 信封照片重畫；實際套印位置仍可在「格式設定」依印表機進紙差異精校。
+每月印對帳單信封時，不必再從 ERP 一筆筆複製客戶名稱、地址、郵遞區號、電話到 Word 套版，也不必手動調整平信／掛號勾選而跑版。本程式是輕量的信封列印輔助工具，位置印得大致準確即可；最重要的是**列印資料庫**：
 
-## 開發
+- 按下「列印」＝把這筆存進資料庫；下個月只要輸入客戶名稱的一部分（例如「高美」）就列出名稱含該字的客戶，選取後帶出上次的地址、電話與郵件種類。
+- 貼上不含郵遞區號的地址，程式依離線資料判斷三碼郵遞區號（只使用三碼）；判斷不出來時區號欄加紅框並彈出提示，由使用者自己填；沒有三碼郵遞區號不能列印；填過的區號會隨地址存進資料庫。
+- 列印送出後自動清空，方便輸入下一筆；「重印上一筆」把剛才列印的資料帶回（仍需自己按列印）。
+- 一家客戶可有多組地址與電話。列印時若地址或電話是該客戶沒有的新資料，會跳出視窗問「新增為另一筆」或「覆蓋」，不會默默改資料。
+- 郵件種類可在左側勾選，或直接點信封預覽左側的表格，兩種方式同步；「內附對帳單」等方框文字可維護清單，點預覽上的黑框即可選用。
 
-需求：Go 1.22 或更新版。
+操作方式見 `使用說明.txt`，各版變更見 `V0.2.0.txt`、`V0.3.0.txt`，待辦見 `TODO.md`，第二階段（CY ID 與 Built-in Cloud）的設計草案見 `CY_ID_INTEGRATION.md`（尚未實作）。
+
+## 結構
+
+- `src/CYEnvelope/`：WPF 程式。`EnvelopeRenderer.cs` 以毫米座標繪製，預覽與列印共用；`Postal.cs`＋`postal.tsv` 為離線三碼郵遞區號；`PhoneFormatting.cs` 為臺灣電話格式；`Repository.cs` 為 SQLite 保存（客戶名稱搜尋、每日備份、損毀偵測）；`ContactSaver.cs` 決定列印時如何存入客戶。
+- `src/CYEnvelope.Launcher/`：可攜資料夾根目錄的原生啟動程式，開啟 `Runtime/CYEnvelope.exe`。
+- `tests/CYEnvelope.Tests/`：核心檢查（郵遞區號、電話、保存、繪製、溢出判斷）。
+- `tests/CYEnvelope.VisualReview/`：Windows 上的實際視窗擷取、表單可見性、圖示與最終 EXE 資源驗證。
+- `tools/fetch-fonts.ps1`＋`tools/fonts.json`：下載內建字體（固定網址、驗證大小與 SHA-256；字體檔不進 Git）。
+- `build-csharp.ps1`：先取得字體，再重建可攜測試資料夾並執行公開封包安全掃描。
+
+## 字體
+
+信封字體隨信封格式（版型）保存：每個格式各有位置、字級與字體，字體套用到該格式的收件人、地址、電話、郵遞區號與方框文字，預覽與列印相同。可選：標楷體、新細明體（Windows 內建，未安裝時標示）、思源黑體 Noto Sans TC、思源宋體 Noto Serif TC 與霞鶩文楷 TC（內建於程式，皆為 SIL Open Font License 1.1）。內建字體的來源、雜湊與授權全文見 `tools/fonts.json`、`src/CYEnvelope/Fonts/FONT_LICENSES.txt`，可攜資料夾根目錄附 `FONT_LICENSES.txt`。字體檔在建置時下載，第一次在本機建置前請先執行 `./tools/fetch-fonts.ps1`（`build-csharp.ps1` 會自動執行）；沒有字體檔的建置仍可編譯，只是設定中標示「此版本未內建」。
+
+## 版面（15K 預設）
+
+由左至右：收件人（置中於印好的中央框、位於上半部）、電話、地址。地址第一個字比收件人第一個字低 5 mm，電話與地址頂端同高，電話在收件人框與地址之間。中華郵政規定收件人姓名書於中央、地址書於右側（[國內郵件直式信封書寫方式](https://www.post.gov.tw/post/internet/Postal/index.jsp?ID=21001)），該頁未規定電話位置，電話位置為本專案依信封空間所定，可在「格式設定」調整。
+
+## 信封素材與列印
+
+紅色底圖只在預覽顯示，不送往印表機；實際只印黑字、勾記與方框文字的黑框。「校正列印」可在普通紙印出各欄位外框、範例文字與毫米刻度（含格式的印表機偏移），疊在信封上對光檢查位置。列印前會向驅動程式要求信封尺寸並確認實際採用的紙張，扣除印表機可列印區原點，讓毫米座標以紙張邊緣為準。
+
+15K 底圖依使用者提供的 393×393 商品照片重畫：左上郵票框、右上六格郵遞區號、左側郵件種類表與中央狹長紅框。照片下半部被標籤遮住，中央框下緣為暫估；收到完整掃描前不宣稱一比一。15K 實際套印位置仍須在目標印表機試印校正。
+
+## 開發驗證
+
+需要 .NET 10 SDK 與 PowerShell。Windows：
 
 ```powershell
-./build.ps1
+./tools/fetch-fonts.ps1   # 第一次建置前，下載內建字體
 ```
-
-或：
 
 ```powershell
-$env:GOOS='windows'
-$env:GOARCH='amd64'
-$env:CGO_ENABLED='0'
-go test ./...
-go build -buildvcs=false -trimpath -ldflags '-H windowsgui -s -w' -o dist/CYEnvelope/CYEnvelope.exe ./cmd/CYEnvelope
+dotnet build .\src\CYEnvelope\CYEnvelope.csproj
+dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
+dotnet run --project .\tests\CYEnvelope.VisualReview\CYEnvelope.VisualReview.csproj -- .\dist\visual-review .\dist\stage\CYEnvelope .\assets\ENV.ico
 ```
+
+非 Windows 可加 `-p:EnableWindowsTargeting=true` 做編譯檢查；核心檢查與畫面驗證需在 Windows 執行。
+
+CI（`CYEnvelope WPF Check`）在 Windows 上建置、執行核心檢查與啟動檢查，以 `build-csharp.ps1` 建立並掃描可攜資料夾，產生畫面證據，並重新下載 Artifact 驗證一次解壓縮的結構與封裝後啟動。測試包名稱為 `CYEnvelope-V<版本>[-Build-N]-windows-x64-test`，解壓縮一次後開啟 `CYEnvelope/CYEnvelope.exe`，不需另裝 .NET。Artifact 保留 3 天。
+
+Windows 125%／150% 顯示縮放、實機操作與 15K 試印仍須另行驗收；96 DPI 擷取圖不代表所有 DPI。
 
 ## 資料位置
 
-可攜版會在 EXE 同層使用：
+可攜資料夾根目錄的 `Data/CYEnvelope.db` 保存聯絡人、格式、方框文字與設定；`Data/Backups/` 每天（有資料時）自動保留一份備份，最多 14 份。實際聯絡人資料不得進 Git 或測試包。
 
-- `Data/CYEnvelope.db`：聯絡人、格式、方框文字與設定
-- `Logs/CYEnvelope.log`：執行紀錄
-- `Cache/`：保留供後續快取功能
+## 來源與規範
 
-備份時關閉程式，再複製整個 `Data` 目錄即可。
+依根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`；介面依 AITeam `main` 的 CY Desktop Visual Guide。`assets/ENV.ico`、`assets/ENV.svg` 取自 AITeam `shared/cy-visual/icon-family/apps/envelope/`：
+
+- `ENV.ico` SHA-256 `9d6f1534cb6a1e81efe96f6468db8b885b0076e10e94b85929414d86c90c6256`
+- `ENV.svg` SHA-256 `b82bdeeaf4ebde71cb1a125603dc0ee4100c35f66568c6cbb7081b8dc308cc47`

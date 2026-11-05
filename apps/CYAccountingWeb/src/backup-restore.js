@@ -8,21 +8,26 @@ export const ACCOUNTING_RESTORE_TABLES = [
   ['accounts', 'accounts', ['id','name','sort_order','is_default','color_slot','created_at','archived_at'], ['id','name','sortOrder','isDefault','colorSlot','createdAt','archivedAt']],
   ['categoryGroups', 'category_groups', ['id','kind','name','sort_order','created_at'], ['id','kind','name','sortOrder','createdAt']],
   ['categories', 'categories', ['id','kind','group_id','name','sort_order','is_favorite','created_at'], ['id','kind','groupId','name','sortOrder','isFavorite','createdAt']],
-  ['transactions', 'transactions', ['id','tx_date','account_name','kind','category_name','summary','amount','marker_color','marker_target','created_at','updated_at'], ['id','txDate','accountName','kind','categoryName','summary','amount','markerColor','markerTarget','createdAt','updatedAt']],
+  ['transactions', 'transactions', ['id','tx_date','account_name','kind','category_name','summary','amount','marker_color','marker_target','pending_confirmation','created_at','updated_at'], ['id','txDate','accountName','kind','categoryName','summary','amount','markerColor','markerTarget','pendingConfirmation','createdAt','updatedAt']],
   ['openingBalanceOverrides', 'opening_balance_overrides', ['month','account_name','amount','reason','created_at','updated_at','updated_by_employee_id','updated_by_employee_no','updated_by_name','updated_by_role'], ['month','accountName','amount','reason','createdAt','updatedAt','updatedByEmployeeId','updatedByEmployeeNo','updatedByName','updatedByRole']],
   ['openingBalanceAudit', 'opening_balance_audit', ['id','month','account_name','action','previous_amount','new_amount','reason','actor_employee_id','actor_employee_no','actor_name','actor_role','created_at'], ['id','month','accountName','action','previousAmount','newAmount','reason','actorEmployeeId','actorEmployeeNo','actorName','actorRole','createdAt']],
   ['appSettings', 'app_settings', ['key','value'], ['key','value']],
-  ['excelImportRuns', 'excel_import_runs', ['id','start_date','end_exclusive','reason','source_sha256','backup_id','deleted_count','inserted_count','actor_json','created_at'], ['id','startDate','endExclusive','reason','sourceSha256','backupId','deletedCount','insertedCount','actor','createdAt']]
+  ['excelImportRuns', 'excel_import_runs', ['id','start_date','end_exclusive','reason','source_sha256','backup_id','deleted_count','inserted_count','actor_json','created_at'], ['id','startDate','endExclusive','reason','sourceSha256','backupId','deletedCount','insertedCount','actor','createdAt']],
+  ['transactionConfirmationAudit','transaction_confirmation_audit',['id','transaction_id','previous_category','previous_summary','category_name','summary','actor_json','created_at'],['id','transactionId','previousCategory','previousSummary','categoryName','summary','actor','createdAt']]
 ];
 
 // Portable schema compatibility is applied only after the immutable source bytes
 // have passed the existing manifest/digest validator. Historical objects are not rewritten.
 export function normalizeAccountingRestoreData(backup) {
   const schema = Number(backup.manifest?.schemaVersion);
-  if (![6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
+  if (![6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].includes(schema)) throw restoreError('RESTORE_SCHEMA_UNSUPPORTED');
   const original = backup.data;
   if (!original || Object.keys(original).some(key => !ACCOUNTING_RESTORE_TABLES.some(([name]) => name === key))) throw restoreError('RESTORE_DATA_SHAPE');
   const data = { ...original };
+  if (schema < 16) {
+    if (!('transactionConfirmationAudit' in data)) data.transactionConfirmationAudit=[];
+    if (Array.isArray(data.transactions)) data.transactions=data.transactions.map(row=>row&&({...row,pendingConfirmation:row.pendingConfirmation??0}));
+  }
   if (schema < 8 && !('excelImportRuns' in data)) data.excelImportRuns = [];
   // Historical schema 6–13 packages contain no marker column. Normalize only
   // after validation of the original package digest, without mutating source data.

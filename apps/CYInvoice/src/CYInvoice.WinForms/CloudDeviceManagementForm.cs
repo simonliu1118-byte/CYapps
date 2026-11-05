@@ -9,6 +9,7 @@ internal sealed class CloudDeviceManagementForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private readonly CloudDeviceLifecycleClient lifecycleClient;
     private readonly string endpoint;
+    private readonly LocalRepository repository;
     private readonly string deviceToken;
     private readonly DataGridView deviceGrid = new();
     private readonly Label deviceCount = UiControls.Label("正在讀取使用中的裝置…");
@@ -23,8 +24,9 @@ internal sealed class CloudDeviceManagementForm : Form
     private bool deviceLoading;
     private bool resourcesDisposed;
 
-    public CloudDeviceManagementForm(string baseUrl, string deviceToken)
+    public CloudDeviceManagementForm(string baseUrl, string deviceToken, LocalRepository repository)
     {
+        this.repository = repository;
         endpoint = baseUrl;
         this.deviceToken = deviceToken;
         lifecycleClient = new CloudDeviceLifecycleClient(httpClient, new Uri(baseUrl), deviceToken);
@@ -147,11 +149,13 @@ internal sealed class CloudDeviceManagementForm : Form
             deviceCount.Text = $"目前有 {result.ActiveDeviceCount} 台使用中的裝置";
             deviceStatus.Text = string.Empty;
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError1) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"CloudDeviceManagementForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);
             deviceStatus.Text = CloudErrorMessage(error);
             if (!silent && !IsDisposed)
@@ -159,6 +163,7 @@ internal sealed class CloudDeviceManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);
             deviceStatus.Text = error.Message;
             if (!silent && !IsDisposed)
@@ -220,7 +225,7 @@ internal sealed class CloudDeviceManagementForm : Form
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
-        using var credentials = new CloudDeviceRevokeAuthenticationForm(selected.DisplayName, selected.Current);
+        using var credentials = new EmployeeAdminLoginForm(repository, requiredRole: AppRole.SuperAdmin, requireOnline: true);
         if (credentials.ShowDialog(this) != DialogResult.OK) return;
 
         if (selected.Current)
@@ -235,8 +240,8 @@ internal sealed class CloudDeviceManagementForm : Form
 
             LocalResetApplication.Schedule(new LocalResetExecutionRequest(
                 LocalResetKind.BuiltInCloud,
-                credentials.EmployeeNo,
-                credentials.Password));
+                credentials.EnteredEmployeeNo,
+                credentials.AuthenticatedPassword));
             return;
         }
 
@@ -244,8 +249,8 @@ internal sealed class CloudDeviceManagementForm : Form
         {
             var result = await lifecycleClient.RevokeAsync(
                 selected.DeviceId,
-                credentials.EmployeeNo,
-                credentials.Password,
+                credentials.EnteredEmployeeNo,
+                credentials.AuthenticatedPassword,
                 lifetime.Token);
             await LoadDevicesAsync(silent: true);
             deviceStatus.ForeColor = SystemColors.ControlText;
@@ -261,10 +266,12 @@ internal sealed class CloudDeviceManagementForm : Form
         if (selected is not { Status: "active" }) return;
         using var form = new CloudDeviceRenameForm(selected.DisplayName);
         if (form.ShowDialog(this) != DialogResult.OK) return;
+        using var login = new EmployeeAdminLoginForm(repository, requiredRole: AppRole.SuperAdmin, requireOnline: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         await RunBusyAsync(async () =>
         {
             var result = await lifecycleClient.RenameAsync(selected.DeviceId, form.DeviceName,
-                form.EmployeeNo, form.Password, lifetime.Token);
+                login.EnteredEmployeeNo, login.AuthenticatedPassword, lifetime.Token);
             await LoadDevicesAsync(silent: true);
             deviceStatus.Text = $"裝置名稱已改為「{result.DisplayName}」。";
         });
@@ -280,11 +287,13 @@ internal sealed class CloudDeviceManagementForm : Form
         {
             await action();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException diagnosticError2) when (lifetime.IsCancellationRequested)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"CloudDeviceManagementForm");
         }
         catch (CloudApiException error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             if (!IsDisposed)
             {
                 var message = CloudErrorMessage(error);
@@ -295,6 +304,7 @@ internal sealed class CloudDeviceManagementForm : Form
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"CloudDeviceManagementForm");
             if (!IsDisposed)
             {
                 deviceStatus.ForeColor = Color.FromArgb(180, 0, 0);
@@ -327,7 +337,8 @@ internal sealed class CloudDeviceManagementForm : Form
     internal static string CloudErrorMessage(CloudApiException error) => error.Code switch
     {
         "UNAUTHORIZED" => "目前這台電腦的雲端裝置身分無效，請重新加入 Workspace。",
-        "SUPER_ADMIN_AUTH_FAILED" => "超級管理員員工編號或密碼錯誤。",
+        "SUPER_ADMIN_AUTH_FAILED" or "LOGIN_FAILED" or "AUTH_INVALID" => "帳號或密碼錯誤",
+        "ACCESS_DENIED" or "MANAGER_AUTH_REQUIRED" or "SUPER_ADMIN_REQUIRED" or "FORBIDDEN" => "權限不足",
         "LAST_ACTIVE_DEVICE" => "最後一台使用中的裝置不能撤銷，請先加入另一台可信任裝置。",
         "DEVICE_NOT_FOUND" => "找不到所選裝置，請重新整理清單。",
         "DEVICE_UNAVAILABLE" => "裝置或超管權限已變更，請重新整理清單再試。",

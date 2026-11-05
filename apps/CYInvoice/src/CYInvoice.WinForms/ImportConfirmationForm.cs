@@ -456,11 +456,13 @@ internal sealed class ImportConfirmationForm : Form
                 buyerName.Focus();
             }
         }
-        catch (OperationCanceledException) when (closing)
+        catch (OperationCanceledException diagnosticError1) when (closing)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError1,"ImportConfirmationForm");
         }
         catch (Exception error)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ImportConfirmationForm");
             var actual = ExcelComRows.Unwrap(error);
             WriteImportError(actual);
             SetBusy(false, "匯入失敗：" + ShortError(actual));
@@ -477,8 +479,9 @@ internal sealed class ImportConfirmationForm : Form
             var record = $"[{DateTimeOffset.Now:O}] {source} 匯入失敗{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "import-error.log"), record);
         }
-        catch (Exception)
+        catch (Exception diagnosticError2)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError2,"ImportConfirmationForm");
         }
     }
 
@@ -518,7 +521,8 @@ internal sealed class ImportConfirmationForm : Form
                     result = (await service.LookupBuyerNameAsync(ban, timeout.Token), null);
                 }
                 catch (Exception error)
-                {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ImportConfirmationForm");
                     result = (new NameLookup(), error);
                 }
                 cache.Add(ban, result);
@@ -588,6 +592,7 @@ internal sealed class ImportConfirmationForm : Form
         }
         catch (Exception caught)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(caught,"ImportConfirmationForm");
             lookup = new NameLookup();
             error = caught;
         }
@@ -657,6 +662,7 @@ internal sealed class ImportConfirmationForm : Form
         }
         catch (Exception caught)
         {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(caught,"ImportConfirmationForm");
             lookup = new NameLookup();
             error = caught;
         }
@@ -747,22 +753,25 @@ internal sealed class ImportConfirmationForm : Form
                 success += result.Opened ? 1 : 0;
                 failed += result.Opened ? 0 : 1;
             }
-            catch (UnknownInvoiceResultException)
-            {
+            catch (UnknownInvoiceResultException diagnosticError3)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError3,"ImportConfirmationForm");
                 entry.Selected = false;
                 entry.Finished = true;
                 entry.Status = "開立結果待確認，禁止重送";
                 failed++;
             }
-            catch (LocalPersistenceException)
-            {
+            catch (LocalPersistenceException diagnosticError4)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError4,"ImportConfirmationForm");
                 entry.Selected = false;
                 entry.Finished = true;
                 entry.Status = "已開立；本機保存失敗";
                 failed++;
             }
             catch (Exception error)
-            {
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ImportConfirmationForm");
                 entry.Selected = false;
                 entry.Status = StatusForIssueError(error);
                 failed++;
@@ -828,7 +837,9 @@ internal sealed class ImportConfirmationForm : Form
     {
         if (!entry.Company) return new InvoiceTotals(entry.TotalAmount, 0, entry.TotalAmount);
         try { return InvoiceCalculator.CalculateTotals(entry.Items, companyBuyer: true, pricesExcludeTax: false); }
-        catch { return new InvoiceTotals(0, 0, entry.TotalAmount); }
+        catch (Exception diagnosticError5)
+        {
+            CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(diagnosticError5,"ImportConfirmationForm"); return new InvoiceTotals(0, 0, entry.TotalAmount); }
     }
 
     private void SelectionChanged(int rowIndex, int columnIndex)
