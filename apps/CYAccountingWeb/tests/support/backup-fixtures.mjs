@@ -43,6 +43,7 @@ export function memoryProvider(kind) {
   return { kind, objects, deleted,
     async putObject(key, bytes) { objects.set(key, new Uint8Array(bytes)); return { versionToken: 'TEST_VERSION' }; },
     async getObject(key) { if (!objects.has(key)) throw new Error('TEST_OBJECT_MISSING'); return objects.get(key); },
+    async getObjectStream(key) { return new Response(await this.getObject(key)).body; },
     async listObjects(prefix) { return [...objects.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key, versionToken: 'TEST_VERSION', timeCreated: key.replace(/^CYAccountingWeb\/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z\/.*$/, '$1-$2-$3T$4:$5:$6Z') })); },
     async deleteObject(key) { deleted.push(key); objects.delete(key); }
   };
@@ -56,14 +57,15 @@ export function memoryR2Bucket() {
       const prior = objects.get(key), condition = options.onlyIf;
       if (condition?.etagDoesNotMatch === '*' && prior) return null;
       if (condition?.etagMatches && condition.etagMatches !== prior?.etag) return null;
-      const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+      const bytes = typeof value === 'string' ? new TextEncoder().encode(value)
+        : value instanceof ReadableStream ? new Uint8Array(await new Response(value).arrayBuffer()) : new Uint8Array(value);
       const object = { key, etag: String(++sequence), version: String(sequence), size: bytes.length,
         uploaded: new Date(), customMetadata: options.customMetadata || {}, bytes };
       objects.set(key, object); return object;
     },
     async get(key) {
       calls.push(['get', key]); const object = objects.get(key); if (!object) return null;
-      return { ...object, async text() { return new TextDecoder().decode(object.bytes); },
+      return { ...object, body:new Response(object.bytes).body, async text() { return new TextDecoder().decode(object.bytes); },
         async arrayBuffer() { return object.bytes.slice().buffer; } };
     },
     async delete(keys) { for (const key of Array.isArray(keys) ? keys : [keys]) { calls.push(['delete', key]); objects.delete(key); } },

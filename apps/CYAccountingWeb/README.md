@@ -36,7 +36,7 @@
 | [V1.1.0.txt](V1.1.0.txt) | 待確認功能、schema 16、搜尋成本及相容邊界 |
 | [V1.0.0.txt](V1.0.0.txt) | V1.0.0 正式 Release 說明與相容界線 |
 | [docs/TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md) | 平板現行配置、交易標記、統計及真機驗收 |
-| [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md) | Backup 格式、schema 15、Phase D、Restore／DR 及正式切換邊界 |
+| [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md) | Backup 格式、schema 16、Phase D、Restore／DR 及正式切換邊界 |
 | [docs/recovery-workspace.md](docs/recovery-workspace.md) | 按需建立復原工作區與部署選項；一般網站發布不操作獨立還原庫 |
 | [docs/archive/](docs/archive/) | 歷史快照；不重播為現行基準 |
 
@@ -137,4 +137,6 @@ V0.24.0 新增桌機備份頁隔離還原驗證及 Phase D 啟用：R2 每日保
 
 V0.24.1：Phase D 頁面退場 Phase C 驗收／測試用呈現；桌機在日期、摘要或金額按 Ctrl＋↑↓ 都能調整日期。統計、報表、看帳與 Excel 依正負顯示淨利／淨損，零元顯示損益。
 
-V0.25.5：每日原備份排程後自動回讀 R2／GCS 最近應有副本，驗證 immutable bytes、隔離 SQLite 完整欄列／資料庫檢查。異常持續至檢查恢復，透過 CYID private `ConsumerNotifications` 通知目前超管並於超管進入主頁時警告；同事件去重，寄信失敗保留重試。正常介面移除手動驗證按鈕與結果說明，底部左還原操作／右緊急復原。統計／損益設定改緊密收入／支出雙欄，窄畫面單欄；手機預覽入口與舊本地 Session 表退場。
+V1.1.1 開發：備份可還原性改為外部完整檢查優先、分時 SQLite 備援；只有兩路都異常才通知超管。公開 repo 的資料處理邊界、日後升級 Paid 的退場計畫與尚待正式驗收項目見 [Claude handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。是否上線依正式部署結果，不由本段推定。
+
+歷史 V0.25.5：每日原備份排程後自動回讀 R2／GCS 最近應有副本，驗證 immutable bytes、隔離 SQLite 完整欄列／資料庫檢查。異常持續至檢查恢復，透過 CYID private `ConsumerNotifications` 通知目前超管並於超管進入主頁時警告；同事件去重，寄信失敗保留重試。正常介面移除手動驗證按鈕與結果說明，底部左還原操作／右緊急復原。統計／損益設定改緊密收入／支出雙欄，窄畫面單欄；手機預覽入口與舊本地 Session 表退場。

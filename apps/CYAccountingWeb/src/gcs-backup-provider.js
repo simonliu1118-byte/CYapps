@@ -114,6 +114,10 @@ export function createGcsBackupStorageProvider(env, options = {}) {
   }
 
   async function getObject(key) {
+    return new Uint8Array(await new Response(await getObjectStream(key)).arrayBuffer());
+  }
+
+  async function getObjectStream(key) {
     const token = await accessToken();
     const response = await fetchImpl(
       `${STORAGE_API}/b/${encodeURIComponent(config.bucket)}/o/${encodeURIComponent(String(key))}?alt=media`,
@@ -122,7 +126,7 @@ export function createGcsBackupStorageProvider(env, options = {}) {
     if (!response.ok) {
       throw new GcsProviderError('Google Cloud Storage 備份回讀失敗。', `GCS_DOWNLOAD_${response.status}`);
     }
-    return new Uint8Array(await response.arrayBuffer());
+    return response.body;
   }
 
   async function listObjects(prefix) {
@@ -175,6 +179,7 @@ export function createGcsBackupStorageProvider(env, options = {}) {
     kind: 'google_cloud_storage',
     putObject,
     getObject,
+    getObjectStream,
     listObjects,
     deleteObject
   });

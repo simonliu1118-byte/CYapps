@@ -6,7 +6,7 @@ import { handleAccountLifecycleApi } from './account-lifecycle.js';
 import { handleOpeningBalanceApi } from './opening-balances.js';
 import { handleExcelExportApi } from './excel-export.js';
 import { handleExcelImportApi } from './excel-import.js';
-import { handleBackupApi, runScheduledBackup, recoveryLanding } from './backup-service.js';
+import { handleBackupApi, runScheduledBackup, recoveryLanding, handleBackupVerificationApi } from './backup-service.js';
 import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
@@ -87,6 +87,10 @@ export default {
       if (!url.pathname.startsWith('/api/')) {
         const response = await boundedAssetFetch(request, env);
         return shouldDisableBrowserCache(url.pathname) ? noCache(response) : response;
+      }
+
+      if (url.pathname.startsWith('/api/backup/verification/')) {
+        return await handleBackupVerificationApi(request, env);
       }
 
       if (url.pathname === '/api/health' && request.method === 'GET') {

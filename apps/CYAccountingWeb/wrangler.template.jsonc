@@ -49,6 +49,7 @@
     }
   ],
   "vars": {
+    "BACKUP_VERIFY_REPOSITORY_ID": "__CF_BACKUP_VERIFY_REPOSITORY_ID__",
     "BACKUP_TOPOLOGY": "__CF_BACKUP_TOPOLOGY__",
     "CYID_APPLICATION_ID": "__CF_CYID_APPLICATION_ID__",
     "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__",
@@ -56,8 +57,7 @@
   },
   "triggers": {
     "crons": [
-      "30 19 * * *",
-      "0 0 * * *"
+      "*/5 * * * *"
     ]
   }
 }
