@@ -336,13 +336,18 @@ export async function handleVerificationApi(request, env, options = {}) {
       const text = await request.text();
       if (text.length > 8192) return response({ok:false,code:'VERIFICATION_RESULT_INVALID'},400);
       const body = JSON.parse(text);
+      if (!Array.isArray(body.results)) return response({ok:false,code:'VERIFICATION_RESULT_INVALID'},400);
       const lock = await acquire(env,now,options);
       if (!lock) return response({ok:false,code:'VERIFICATION_BUSY'},409);
       const active = lock.state;
-      if (active.id !== state.id || active.external.run !== identity.run) throw new Error('changed');
-      let success = Array.isArray(body.results) && body.results.length === active.sources.length;
+      if (active.id !== state.id || active.external.run !== identity.run) {
+        active.lease = null;
+        await saveState(env,active,lock.etag);
+        return response({ok:false,code:'VERIFICATION_JOB_MISMATCH'},409);
+      }
+      let success = body.results.length === active.sources.length;
       for (const item of active.sources) {
-        const result = body.results?.find(result => result.provider === item.provider);
+        const result = body.results.find(result => result?.provider === item.provider);
         if (item.code || result?.status !== 'success' || result.packageSha256 !== item.packageSha256
           || result.dataSha256 !== item.dataSha256 || result.manifestSha256 !== item.manifestSha256) { success = false; continue; }
         try { await recordProof(env,active,'external',item,result.proof); }
