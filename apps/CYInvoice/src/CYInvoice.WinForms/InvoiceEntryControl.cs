@@ -45,10 +45,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private int pressedDeleteRow = -1;
     private NameLookup? cachedLookup;
     private string cachedBan = string.Empty;
-    private TextBox? cellEditor;
-    private int editorRow = -1;
-    private int editorColumn = -1;
-    private bool committingEditor;
+    private readonly NativeListCellEditor itemEditor;
     private TableLayoutPanel? rootLayout;
     private TableLayoutPanel? itemsLayout;
     private TableLayoutPanel? remarkLayout;
@@ -65,6 +62,10 @@ internal sealed class InvoiceEntryControl : UserControl
         this.repository = repository;
         this.service = service;
         this.recordsChanged = recordsChanged;
+        itemEditor = new NativeListCellEditor(Items);
+        itemEditor.Committed += (row, _) => { CalculateRow(row); Recalculate(); };
+        itemEditor.NavigationRequested += (row, column, key) =>
+            BeginInvoke((Action)(() => MoveToNextItemField(row, column, key == Keys.Enter && column == 4)));
         Dock = DockStyle.Fill;
         BackColor = Color.White;
         Padding = new Padding(18, 4, 18, 4);
@@ -293,7 +294,6 @@ internal sealed class InvoiceEntryControl : UserControl
         Items.MouseDown += (_, eventArgs) => HandleItemMouseDown(eventArgs);
         Items.MouseUp += (_, eventArgs) => HandleItemMouseUp(eventArgs);
         Items.MouseLeave += (_, _) => { UpdateDeleteHotState(-1); UpdateDeletePressedState(-1); };
-        Items.MouseWheel += (_, _) => CommitCellEditor(false);
         Items.KeyDown += (_, eventArgs) =>
         {
             if (eventArgs.KeyCode != Keys.Enter || Items.FocusedItem is null || IsPlaceholder(Items.FocusedItem)) return;
@@ -318,13 +318,13 @@ internal sealed class InvoiceEntryControl : UserControl
         var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
         if (row < 0 || row >= Items.Items.Count || IsPlaceholder(Items.Items[row]))
         {
-            CommitCellEditor(false);
+            itemEditor.Commit(false);
             QueueClearItemSelection();
             return;
         }
         if (column == 6 && hit.Item is { } hitItem && DeleteButtonBounds(hitItem).Contains(eventArgs.Location))
         {
-            CommitCellEditor(false);
+            itemEditor.Commit(false);
             if (pressedRow == row) DeleteRow(row);
             else QueueClearItemSelection();
             return;
@@ -334,7 +334,7 @@ internal sealed class InvoiceEntryControl : UserControl
             BeginCellEdit(row, column);
             return;
         }
-        CommitCellEditor(false);
+        itemEditor.Commit(false);
         QueueClearItemSelection();
     }
 
@@ -375,7 +375,7 @@ internal sealed class InvoiceEntryControl : UserControl
         taxInclusive.Checked = true;
         buyerBan.Clear(); buyerName.Clear(); buyerNameField.ClearLookupState(); remark.Clear();
         cachedLookup = null; cachedBan = string.Empty;
-        CommitCellEditor(true);
+        itemEditor.Commit(true);
         Items.Items.Clear();
         AddRow(false);
         EnsurePlaceholderRows();
@@ -406,7 +406,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void UpdateHeaders()
     {
-        CommitCellEditor(false);
+        itemEditor.Commit(false);
         var mode = taxExclusive.Checked ? "未稅" : "含稅";
         Items.Columns[4].Text = $"單價 ({mode})";
         Items.Columns[5].Text = $"金額 ({mode})";
@@ -417,7 +417,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void AddRow(bool focus)
     {
-        CommitCellEditor(false);
+        itemEditor.Commit(false);
         if (ActualRows().Count >= InvoiceLimits.MaximumItems)
         {
             MessageBox.Show(this, $"商品明細最多 {InvoiceLimits.MaximumItems} 筆", "無法新增", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -492,7 +492,7 @@ internal sealed class InvoiceEntryControl : UserControl
             OrderId = orderId.Text.Trim(), CompanyBuyer = companyBuyer.Checked, BuyerIdentifier = buyerBan.Text.Trim(),
             BuyerName = buyerName.Text.Trim(), PricesExcludeTax = taxExclusive.Checked, MainRemark = remark.Text,
         };
-        CommitCellEditor(false);
+        itemEditor.Commit(false);
         var rows = ActualRows();
         for (var index = 0; index < rows.Count; index++)
         {
@@ -708,73 +708,13 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void BeginCellEdit(int rowIndex, int columnIndex)
     {
-        CommitCellEditor(false);
+        itemEditor.Commit(false);
         if (rowIndex < 0 || rowIndex >= Items.Items.Count || columnIndex is not (1 or 3 or 4)) return;
         var row = Items.Items[rowIndex];
         if (IsPlaceholder(row)) return;
-        var bounds = row.SubItems[columnIndex].Bounds;
-        if (bounds.Width <= 8 || bounds.Height <= 4) return;
         ClearItemSelection();
         var value = columnIndex == 4 ? Clean(Cell(row, columnIndex)) : Cell(row, columnIndex);
-        var editor = new TextBox
-        {
-            Text = value, AutoSize = false, BorderStyle = BorderStyle.FixedSingle, Font = Items.Font,
-            MaxLength = columnIndex == 1 ? 256 : 64,
-            TextAlign = columnIndex is 3 or 4 ? HorizontalAlignment.Right : HorizontalAlignment.Left,
-            Bounds = Rectangle.Inflate(bounds, -1, -1),
-        };
-        editorRow = rowIndex;
-        editorColumn = columnIndex;
-        cellEditor = editor;
-        editor.KeyDown += CellEditorKeyDown;
-        editor.Leave += (_, _) => CommitCellEditor(false);
-        Items.Controls.Add(editor);
-        editor.BringToFront();
-        editor.Focus();
-        editor.SelectAll();
-    }
-
-    private void CellEditorKeyDown(object? sender, KeyEventArgs eventArgs)
-    {
-        if (eventArgs.KeyCode == Keys.Escape)
-        {
-            eventArgs.Handled = true;
-            eventArgs.SuppressKeyPress = true;
-            CommitCellEditor(true);
-            Items.Focus();
-            return;
-        }
-        if (eventArgs.KeyCode is not (Keys.Enter or Keys.Tab)) return;
-        eventArgs.Handled = true;
-        eventArgs.SuppressKeyPress = true;
-        var row = editorRow;
-        var column = editorColumn;
-        var addRowAfterPriceEnter = eventArgs.KeyCode == Keys.Enter && column == 4;
-        CommitCellEditor(false);
-        BeginInvoke((Action)(() => MoveToNextItemField(row, column, addRowAfterPriceEnter)));
-    }
-
-    private void CommitCellEditor(bool cancel)
-    {
-        if (cellEditor is null || committingEditor) return;
-        committingEditor = true;
-        var editor = cellEditor;
-        var rowIndex = editorRow;
-        var columnIndex = editorColumn;
-        cellEditor = null;
-        editorRow = -1;
-        editorColumn = -1;
-        try
-        {
-            if (!cancel && rowIndex >= 0 && rowIndex < Items.Items.Count && !IsPlaceholder(Items.Items[rowIndex]))
-            {
-                Items.Items[rowIndex].SubItems[columnIndex].Text = editor.Text.Trim();
-                CalculateRow(Items.Items[rowIndex]);
-                Recalculate();
-            }
-            editor.Dispose();
-        }
-        finally { committingEditor = false; }
+        itemEditor.Begin(rowIndex, columnIndex, value, columnIndex == 1 ? 256 : 64);
     }
 
     private void MoveToNextItemField(int rowIndex, int columnIndex, bool addRowIfMissing = false)
@@ -791,13 +731,13 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void QueueClearItemSelection()
     {
-        if (cellEditor is not null || !Items.IsHandleCreated || Items.IsDisposed) return;
+        if (itemEditor.Editor is not null || !Items.IsHandleCreated || Items.IsDisposed) return;
         Items.BeginInvoke((Action)ClearItemSelection);
     }
 
     private void ClearItemSelection()
     {
-        if (cellEditor is not null && cellEditor.ContainsFocus) return;
+        if (itemEditor.Editor is not null && itemEditor.Editor.ContainsFocus) return;
         while (Items.SelectedItems.Count > 0) Items.SelectedItems[0].Selected = false;
         Items.FocusedItem = null;
     }
@@ -915,25 +855,25 @@ internal sealed class InvoiceEntryControl : UserControl
         var editBounds = Items.Items[0].SubItems[1].Bounds;
         HandleItemMouseUp(new MouseEventArgs(MouseButtons.Left, 1, editBounds.Left + 4, editBounds.Top + (editBounds.Height / 2), 0));
         Application.DoEvents();
-        if (cellEditor is null || cellEditor.IsDisposed || !cellEditor.ContainsFocus || cellEditor.Bounds.Top < editBounds.Top || cellEditor.Bounds.Bottom > editBounds.Bottom)
+        if (itemEditor.Editor is null || itemEditor.Editor.IsDisposed || !itemEditor.Editor.ContainsFocus || itemEditor.Editor.Bounds.Top < editBounds.Top || itemEditor.Editor.Bounds.Bottom > editBounds.Bottom)
             throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持焦點或輸入框高度未貼合資料列");
-        CommitCellEditor(true);
+        itemEditor.Commit(true);
         BeginCellEdit(ActualRows()[0].Index, 4);
-        if (cellEditor is null) throw new InvalidOperationException("單價欄無法進入編輯狀態");
-        cellEditor.Text = "100";
-        CellEditorKeyDown(cellEditor, new KeyEventArgs(Keys.Enter));
+        if (itemEditor.Editor is null) throw new InvalidOperationException("單價欄無法進入編輯狀態");
+        itemEditor.Editor.Text = "100";
+        itemEditor.HandleKey(new KeyEventArgs(Keys.Enter));
         Application.DoEvents();
-        if (ActualRows().Count != 2 || cellEditor is null || editorRow != ActualRows()[1].Index || editorColumn != 1)
+        if (ActualRows().Count != 2 || itemEditor.Editor is null || itemEditor.RowIndex != ActualRows()[1].Index || itemEditor.ColumnIndex != 1)
             throw new InvalidOperationException("最後一列單價按 Enter 後未新增明細並移至新品名欄");
-        CommitCellEditor(true);
+        itemEditor.Commit(true);
         var rowsBeforeExistingNext = ActualRows().Count;
         BeginCellEdit(ActualRows()[0].Index, 4);
-        if (cellEditor is null) throw new InvalidOperationException("單價欄無法再次進入編輯狀態");
-        CellEditorKeyDown(cellEditor, new KeyEventArgs(Keys.Enter));
+        if (itemEditor.Editor is null) throw new InvalidOperationException("單價欄無法再次進入編輯狀態");
+        itemEditor.HandleKey(new KeyEventArgs(Keys.Enter));
         Application.DoEvents();
-        if (ActualRows().Count != rowsBeforeExistingNext || cellEditor is null || editorRow != ActualRows()[1].Index || editorColumn != 1)
+        if (ActualRows().Count != rowsBeforeExistingNext || itemEditor.Editor is null || itemEditor.RowIndex != ActualRows()[1].Index || itemEditor.ColumnIndex != 1)
             throw new InvalidOperationException("單價按 Enter 後未移至既有下一列品名欄，或意外新增明細");
-        CommitCellEditor(true);
+        itemEditor.Commit(true);
         if (!UiControls.HasLogicalSize(addItemButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) || !UiControls.HasLogicalSize(issueButton, 190, 46) || issueButton is not PrimaryActionButton)
             throw new InvalidOperationException("商品新增或主開立按鈕尺寸／樣式不正確");
         var actionCenter = issueButton.Top + (issueButton.Height / 2);
@@ -948,7 +888,7 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException("金額總計文字、列高或稅額分隔線配置不正確");
         UpdateDeleteHotState(0); UpdateDeletePressedState(0);
         if (hotDeleteRow != 0 || pressedDeleteRow != 0) throw new InvalidOperationException("商品刪除按鈕未建立滑過與按下狀態");
-        UpdateDeleteHotState(-1); UpdateDeletePressedState(-1); CommitCellEditor(true); AddRow(false);
+        UpdateDeleteHotState(-1); UpdateDeletePressedState(-1); itemEditor.Commit(true); AddRow(false);
         var rowsBeforeDelete = ActualRows().Count;
         var deleteBounds = DeleteButtonBounds(ActualRows()[^1]);
         var deletePoint = new Point(deleteBounds.Left + deleteBounds.Width / 2, deleteBounds.Top + deleteBounds.Height / 2);

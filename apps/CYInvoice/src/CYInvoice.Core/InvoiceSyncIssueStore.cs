@@ -259,6 +259,10 @@ public sealed class InvoiceSyncIssueStore
         }
         if (state == "completed" || status is "withdrawn" or "rejected")
         {
+            // Clear the exact confirmed operation before resolving its local
+            // issue. A failed write leaves the issue recoverable; an unknown
+            // response never enters this branch and cannot unlock an invoice.
+            if(operation=="issue")new InvoiceStore(dataDirectory).ClearCloudAllowancePending(accountKey,projection.OriginalInvoiceNumber,applicationId);
             if (existing?.ResolvedUtc is null && existing is not null) Resolve(existing.Id, DateTimeOffset.UtcNow);
         }
         else

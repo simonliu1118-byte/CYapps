@@ -57,6 +57,7 @@ internal sealed class ConnectionBlockForm : Form
         foreach (var state in new[] { new ServiceConnectionState(false, false, true),
             new ServiceConnectionState(false, false, false), new ServiceConnectionState(true, false, true, CloudRejected: true) })
         {
+            Console.WriteLine($"Startup smoke connection block: cloudRequired={state.CloudRequired}, rejected={state.CloudRejected}");
             ConnectionBlockForm? current = null;
             var retries = 0;
             using var dialog = new ConnectionBlockForm(state, () => {
@@ -67,6 +68,7 @@ internal sealed class ConnectionBlockForm : Form
             current = dialog;
             Exception? failure = null;
             dialog.Shown += (_, _) => dialog.BeginInvoke((Action)(() => {
+                Console.WriteLine("Startup smoke connection block: shown callback");
                 try
                 {
                     var layout = (TableLayoutPanel)dialog.Controls[0];
@@ -81,21 +83,26 @@ internal sealed class ConnectionBlockForm : Form
                             UiControls.StandardButtonWidth, UiControls.StandardButtonHeight)))
                         throw new InvalidOperationException("連線阻擋視窗必須為原生 modal、文字完整及共通按鈕尺寸");
                     dialog.Close();
+                    Console.WriteLine("Startup smoke connection block: close rejected");
                     if (!dialog.Visible || dialog.IsDisposed || dialog.ExitRequested)
                         throw new InvalidOperationException("關閉阻擋視窗不能略過連線檢查");
                     ((Button)buttons.Controls[1]).PerformClick();
+                    if(retries!=1)throw new InvalidOperationException($"連線檢查按鈕未觸發：visible={dialog.Visible}, enabled={dialog.Enabled}, buttonEnabled={buttons.Controls[1].Enabled}, canSelect={buttons.Controls[1].CanSelect}");
+                    Console.WriteLine("Startup smoke connection block: recheck clicked");
                 }
                 catch (Exception error)
         {
             CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"ConnectionBlockForm"); failure = error; dialog.RestoreConnection(); }
             }));
             dialog.ShowDialog(owner);
+            Console.WriteLine("Startup smoke connection block: restored");
             if (failure is not null) throw failure;
             if (retries != 1 || dialog.ExitRequested)
                 throw new InvalidOperationException("重新檢查恢復時應解除原阻擋視窗，不重啟程式");
         }
 
         using var exitDialog = new ConnectionBlockForm(new(false, false, true), () => Task.CompletedTask);
+        Console.WriteLine("Startup smoke connection block: exit");
         exitDialog.Shown += (_, _) => exitDialog.BeginInvoke((Action)(() =>
             ((Button)((FlowLayoutPanel)((TableLayoutPanel)exitDialog.Controls[0]).GetControlFromPosition(0, 1)!).Controls[0]).PerformClick()));
         exitDialog.ShowDialog(owner);

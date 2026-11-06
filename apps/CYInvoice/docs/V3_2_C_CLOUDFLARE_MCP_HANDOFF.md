@@ -1,4 +1,10 @@
-# 已完成配套：V3.1.46／Cloud0.9.14 實際部署識別
+# 待部署配套：V3.1.50／Cloud0.9.15 提出者撤回
+
+V3.1.50／BUILD7、Cloud Source0.9.15：一般提出者驗證後可開啟自己待核准的折讓，只提供取消退回及關閉；主管保留核准與取消退回，主管自己提出也適用。雲端依可信 requester actor ID 與原 revision／Grant／Ledger／Device 條件原子撤回；一般員工不能核准、撤回他人或已核准／未知送出項目。折讓作廢權限不擴張。 處理中內容顯示「提出者帳號 姓名：折讓原因」，狀態只留狀態欄；沿原同機紀錄／既有可信快取，不新增逐筆網路讀取，跨機缺資料明示未取得。詳情原發票與本次折讓商品表加序號，原因列入審核資訊。退回原因單行最多20字；啟動圈圈40px、文字14pt，修正建立時未啟動動畫，隱藏／銷毀停止。 確認退回成功後，由原投影 owner 以帳戶、原發票及 application ID 清除本機 pending metadata，隨即刷新開啟詳情的單筆 metadata；不等待背景輪詢，不增加 Cloud／D1／光貿查詢、不重寫發票金額與商品。未知結果保留鎖；舊回應不能清掉較新申請。
+
+Cloud0.9.15僅Source配套、尚未部署；原Worker仍Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變。無migration、旗標／Binding／CYID變更或真交易，不自動合併或Release。必要CI以PR #602最新Source為準；125%／150%DPI及真人驗收仍待完成。正式Release仍V3.1.0。
+
+本批只更新程式，不跑migration，schema／marker23不變；依既有canonical部署owner保存原不可變版本、設定、原業務D1有界前後指紋及回復證據。核對原production CYID、全部Bindings／Secrets／原財務旗標；不新增Worker／D1、不碰CYID D1、不做真光貿交易。最新Source必要CI通過後，先估當次用量、按既有共同規則取得本批具體部署授權，再部署原Worker並驗證0.9.15；前批0.9.14成功維護不重跑。本文下方為已完成歷史證據，不代表0.9.15已生效。
 
 2026-11-05本機MCP完成報告：固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 已部署原Worker Cloud0.9.14、100%流量。canonical before／deploy／after、原Workspace／Device／雜湊與安全稽核連續性、migration history、FK、原服務／Secrets／scope／Routes／財務旗標及線上bundle SHA均通過。schema／marker23保留，無migration或真交易；只退役consumer APP_ENV並加入原生版本資訊綁定，健康回應不再含environment且平台版本ID與控制面承接流量版本一致。
 

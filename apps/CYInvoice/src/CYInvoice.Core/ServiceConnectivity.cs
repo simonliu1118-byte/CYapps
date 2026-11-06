@@ -168,7 +168,6 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                 if (allowances.ValueKind != JsonValueKind.Array || allowances.GetArrayLength() > 150)
                     throw new InvalidDataException("Cloud 折讓同步回應無效");
                 var store = new InvoiceSyncIssueStore(dataDirectory);
-                var completedApplications = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var item in allowances.EnumerateArray())
                 {
                     var id = item.GetProperty("application_id").GetString()!;
@@ -202,10 +201,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
                         var currentIssue = store.Unresolved(itemAccount).FirstOrDefault(x => x.OrderId == id && x.IssueType.StartsWith("cloud_allowance_", StringComparison.Ordinal));
                         if (currentIssue is not null) store.UpdateMessage(currentIssue.Id, currentIssue.Message + "；程式同目錄 log 寫入失敗，請確認權限與磁碟空間。");
                     }
-                    if (state == "completed" || status is "withdrawn" or "rejected")
-                        completedApplications.Add(id);
                 }
-                CloudAllowanceSubmissionService.CompleteProjection(dataDirectory, current.ProductionInvoice, completedApplications);
                 if(root.TryGetProperty("allowanceEvents",out var events)) {
                     var saved=true;
                     foreach(var entry in events.EnumerateArray()) {

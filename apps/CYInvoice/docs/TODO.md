@@ -1,8 +1,16 @@
 # CYInvoice 待辦與驗證
 
+2026-11-06最新工程：V3.1.50／BUILD7、Cloud Source0.9.15。提出者撤回、清單人員／原因、退回即時解鎖、啟動轉圈與詳情序號／審核區返修見 [唯一V3.2計畫](V3_2_IMPLEMENTATION_PLAN.md#22-折讓開立主管一次核准程式連續完成)。原Worker仍0.9.14／schema23；0.9.15待完成必要CI及當批受控部署，停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。未合併或Release；125%／150%DPI與真人驗收保留。
+
+2026-11-06本次返修：V3.1.48 Build1 將啟動提示嵌入主視窗、折讓兩表分區與共用表頭、商品固定五列、小型重置、原因單行20字。原單號格式保持；取消將人員與原因編入單號／官方欄位的舊待辦。當次本機驗證見CHANGELOG；精確commit必要CI與真人畫面驗收分開追蹤。
+
+本次表格修正（2026-11-06）：V3.1.48／BUILD0 將折讓上下兩表改用既有NativeListViewHost並填滿實際可用寬度，表頭不可點擊排序；原開立格內編輯整理為NativeListCellEditor，由開立與折讓共用。本機原開立與折讓編輯／重置／換算、不同尺寸與捲軸狀態已驗證。Cloud與交易流程不變，工程包僅提供GitHub連結，真人畫面驗收待使用者。
+
+本次桌面小改善（2026-11-05）：V3.1.47／BUILD0 新增前景轉圈「啟動檢查中」提示，檢查結束或退出時清理；Cloud 維持已部署0.9.14／schema23，刷新頻率不變。工程包只提供 GitHub 連結，真人啟動驗收待使用者。
+
 2026-11-05部署識別修正：V3.1.46／Cloud0.9.14 Source退役APP_ENV、使用平台版本資訊；本批原Worker已於2026-11-05由本機MCP完成部署、平台版本與線上程式SHA後驗；schema23不變。原0.9.13及本次成功維護均不重跑。完整完成摘要及後續驗收見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；原同機流程與真人待驗項目不因本次修改結案。
 
-更新日期：2026-11-05（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
+更新日期：2026-11-06（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；**V3.1.0 Build 0 已取得使用者當次正式發布授權**，精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -314,7 +322,7 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] `allowance_query`／`allowance_status` 正式查詢與同步模型；目前刻意共用 `invoice_query`。
 - [ ] 部分折讓、多次折讓、品項／數量／金額規則。
 - [ ] 發票與折讓之間的 idempotency、timeout、結果不明與同步安全規則。
-- [ ] 自動折讓／折讓作廢時，確認 AMEGO 正式可保存且可依折讓單號查回的欄位，再決定如何保存 `管理員編號-使用者編號-原因`；若官方沒有合適欄位，不濫用未文件化欄位。
+- [x] **2026-11-06使用者取消此舊提案**：不將`管理員編號-使用者編號-原因`編入折讓單號或未文件化官方欄位；單號格式維持原樣，原申請及核准紀錄保留人員與原因。
 - [ ] 雲端化完成後移除暫行人工折讓與人工折讓作廢路徑，收斂為正式 API 流程。
 
 `/json/allowance_file` 折讓 PDF 已完成工程實作，後續只需實機驗證與雲端化時確認多裝置 Cache 行為。

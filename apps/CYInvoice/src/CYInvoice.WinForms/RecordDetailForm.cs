@@ -201,6 +201,7 @@ internal sealed class RecordDetailForm : Form
         previewMessageHost.Layout += (_, _) => LayoutPreviewMessage();
         paperPreviewHost.Layout += (_, _) => LayoutA4Preview();
         FormClosed += (_, _) => previewCancellation.Cancel();
+        Activated += (_,_) => RefreshAllowanceState();
         UpdateActionAvailability();
     }
 
@@ -454,6 +455,16 @@ internal sealed class RecordDetailForm : Form
     }
 
     internal void ApplyServiceState() => UpdateActionAvailability();
+
+    internal void RefreshAllowanceState()
+    {
+        if(IsDisposed||voidBusy||allowanceBusy)return;
+        try { repository.Invoices.RefreshExtensionData(record); }
+        catch(Exception error)when(error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) {
+            IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm.AllowanceState");return;
+        }
+        UpdateActionAvailability();
+    }
 
     private void UpdateActionAvailability()
     {
@@ -1273,8 +1284,10 @@ internal sealed class RecordDetailForm : Form
         confirmCarrier.PerformLayout();
         confirmCarrier.VerifySmokeLayout();
         using var allowance = new AllowanceRequestForm();
-        allowance.PerformLayout();
+        allowance.Show();
+        Application.DoEvents();
         allowance.VerifySmokeLayout();
+        allowance.Close();
         var editable = new InvoiceRecord
         {
             InvoiceNumber = "AA12345678", InvoiceDate = "2026/09/16",
@@ -1291,9 +1304,11 @@ internal sealed class RecordDetailForm : Form
                 "PREVIOUS-001", "20260916", "5", "100")
         ], summaryPresent: true);
         using var editor = new AllowanceRequestForm(editable);
-        editor.PerformLayout();
+        editor.Show();
+        Application.DoEvents();
         editor.VerifySmokeLayout();
         editor.VerifySmokeOriginalInvoiceEditing();
+        editor.Close();
     }
 
     private static IEnumerable<Control> Descendants(Control root)

@@ -135,7 +135,9 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
    if(Number(env.SCHEMA_VERSION)<23)return reply(503,{error:{code:"ALLOWANCE_DETAIL_UPDATE_REQUIRED"}});
    const operation=input.operation==="void"?"void":"issue";
    if(input.operation!=="void"&&input.operation!=="issue")return reply(400,{error:{code:"INVALID_OPERATION"}});
-   if(action==="detail"&&(!actor||!manager(actor)))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
+   // The frozen issue loader authorizes USER by immutable requester actor ID
+   // and pending status. Void/history detail retains its manager-only policy.
+   if(action==="detail"&&(!actor||operation==="void"&&!manager(actor)))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
    const view=await allowanceView(env.DB,target,ctx,operation,action==="view"?{deviceRead:true}:authority);
    if(historyDetail&&view.rows.find(row=>row.label==="原發票")?.value!==input.originalInvoiceNumber)return reply(404,{error:{code:"NOT_FOUND"}});
    if(!await checkDevice(env.DB,dev.device_id,binding.workspaceId))return reply(403,{error:{code:"DEVICE_INVALID"}});
@@ -145,8 +147,8 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
   if(action==="withdraw"){
    if(input.operation!=="issue"&&input.operation!=="void")return reply(400,{error:{code:"INVALID_OPERATION"}});
    if(Number(env.SCHEMA_VERSION)<23)return reply(503,{error:{code:"ALLOWANCE_RETURN_UPDATE_REQUIRED"}});
-   if(!manager(actor))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
-   if(typeof input.reason!=="string"||!input.reason.trim()||input.reason.length>500||/[\x00-\x1f\x7f]/.test(input.reason))
+   if(!manager(actor)&&(input.operation!=="issue"||actor.workspaceRole!=="USER"))return reply(403,{error:{code:"MANAGER_REQUIRED"}});
+   if(typeof input.reason!=="string"||!input.reason.trim()||input.reason.length>20||/[\x00-\x1f\x7f]/.test(input.reason))
     return reply(400,{error:{code:"RETURN_REASON_REQUIRED"}});
    const operation=input.operation==="void"?"void":"issue",at=new Date().toISOString();
    const ciphertext=await encryptCompanyBusinessData(ctx.encryptionKeyHex,target.workspaceId,"allowance-return/"+operation+"/"+target.applicationId,
@@ -157,14 +159,16 @@ export async function handleAllowances(req:Request,env:Env,context?:ExecutionCon
     `UPDATE allowance_applications SET status='withdrawn',revision=revision+1,manager_actor_id=NULL,
       actor_id=?4,updated_by_device_id=?5,updated_at=?6,returned_at=?6,return_ciphertext=?7,execution_state='completed'
       WHERE application_id=?1 AND workspace_id=?2 AND revision=?3 AND status IN ('open','review') AND returned_at IS NULL
+      AND (?8=1 OR requester_actor_id=?4)
       AND NOT EXISTS(SELECT 1 FROM allowance_execution_approvals g WHERE g.application_id=?1)
       AND NOT EXISTS(SELECT 1 FROM allowance_number_ledger l WHERE l.application_id=?1)
       AND EXISTS(SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id WHERE d.device_id=?5 AND d.workspace_id=?2 AND d.status='active' AND w.status='active')`:
     `UPDATE allowance_void_requests SET returned_at=?6,return_ciphertext=?7,execution_state='completed'
       WHERE application_id=?1 AND workspace_id=?2 AND revision=?3 AND status='open' AND returned_at IS NULL
+      AND ?8=1
       AND NOT EXISTS(SELECT 1 FROM allowance_void_approvals g WHERE g.application_id=?1)
       AND EXISTS(SELECT 1 FROM devices d JOIN workspaces w ON w.workspace_id=d.workspace_id WHERE d.device_id=?5 AND d.workspace_id=?2 AND d.status='active' AND w.status='active')`;
-   const result=await env.DB.prepare(sql).bind(target.applicationId,target.workspaceId,target.expectedRevision,actor.employeeId,dev.device_id,at,ciphertext).run();
+   const result=await env.DB.prepare(sql).bind(target.applicationId,target.workspaceId,target.expectedRevision,actor.employeeId,dev.device_id,at,ciphertext,manager(actor)?1:0).run();
    if(!Number.isSafeInteger(result.meta.changes)||result.meta.changes<=0)return reply(409,{error:{code:"RETURN_NOT_PENDING"}});
    try {await recordExecutionEvent(env.DB,target,operation,"returned",requestId,()=>new Date());}catch{console.warn("ALLOWANCE_RETURN_DIAGNOSTIC_FAILED");}
    return reply(200,{applicationId:target.applicationId,status:"withdrawn",revision:target.expectedRevision+(operation==="issue"?1:0)});

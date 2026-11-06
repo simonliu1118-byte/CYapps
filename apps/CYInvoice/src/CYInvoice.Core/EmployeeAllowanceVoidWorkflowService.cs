@@ -222,7 +222,8 @@ public sealed partial class EmployeeAllowanceVoidWorkflowService
     {
         ArgumentNullException.ThrowIfNull(issue);
         var manager=EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
-        if(string.IsNullOrWhiteSpace(returnReason))throw new InvalidOperationException("請填寫退回原因");
+        if(string.IsNullOrWhiteSpace(returnReason)||returnReason.Length>20||returnReason.Any(char.IsControl))
+            throw new InvalidOperationException("請填寫單行退回原因，最多 20 字");
         RequireIssue(issue);
         var record = FindIssueRecord(issue);
         _ = ReadReview(record) ?? throw new InvalidOperationException("這筆折讓作廢申請資料已不存在");

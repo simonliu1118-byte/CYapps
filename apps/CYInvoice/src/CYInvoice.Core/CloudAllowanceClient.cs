@@ -415,7 +415,7 @@ public sealed class CloudAllowanceClient
         string employeeNo, string password, string reason, CancellationToken token = default)
     {
         Credentials(employeeNo,password); ValidateId(detail.ApplicationId);
-        if(!detail.CanWithdraw || string.IsNullOrWhiteSpace(reason))throw new InvalidOperationException("尚未核准的申請才可取消退回，並須填寫原因");
+        if(!detail.CanWithdraw || string.IsNullOrWhiteSpace(reason)||reason.Length>20||reason.Any(char.IsControl))throw new InvalidOperationException("尚未核准的申請才可取消退回；原因須為單行，最多 20 字");
         using var doc=await SendAsync("withdraw",new {applicationId=detail.ApplicationId,
             expectedRevision=detail.Revision,operation=detail.Operation,reason=reason.Trim(),employeeNo,password},token).ConfigureAwait(false);
         return Receipt(doc.RootElement,detail.ApplicationId,"withdrawn",detail.Revision+(detail.Operation=="issue"?1:0));
