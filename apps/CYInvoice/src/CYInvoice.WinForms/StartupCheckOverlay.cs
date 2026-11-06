@@ -34,8 +34,17 @@ internal sealed class StartupCheckOverlay : UserControl
         using var before=new Bitmap(spinner.Width,spinner.Height);
         using var after=new Bitmap(spinner.Width,spinner.Height);
         spinner.DrawToBitmap(before,spinner.ClientRectangle);
-        var started=System.Diagnostics.Stopwatch.StartNew();
-        while(started.ElapsedMilliseconds<180) { Application.DoEvents();Thread.Sleep(5); }
+        // Test-only native modal pump: DoEvents waits for an empty message
+        // queue and can starve on a headless runner while animation paints.
+        // The product still has only the MainForm-owned overlay, no dialog.
+        using(var measurement=new Form { ShowInTaskbar=false,ShowIcon=false,
+            FormBorderStyle=FormBorderStyle.None,Opacity=0,Size=new Size(1,1),
+            StartPosition=FormStartPosition.CenterParent })
+        using(var sample=new System.Windows.Forms.Timer { Interval=180 }) {
+            sample.Tick+=(_,_)=> { sample.Stop();measurement.DialogResult=DialogResult.OK; };
+            measurement.Shown+=(_,_)=>sample.Start();
+            measurement.ShowDialog(FindForm());
+        }
         spinner.DrawToBitmap(after,spinner.ClientRectangle);
         var changed=false;
         for(var y=0;y<before.Height&&!changed;y++)

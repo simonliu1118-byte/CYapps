@@ -1,6 +1,6 @@
 # CYInvoice 待辦與驗證
 
-2026-11-06最新工程：V3.1.50／BUILD3、Cloud Source0.9.15。提出者撤回、清單人員／原因、退回即時解鎖、啟動轉圈與詳情序號／審核區返修見 [唯一V3.2計畫](V3_2_IMPLEMENTATION_PLAN.md#22-折讓開立主管一次核准程式連續完成)。原Worker仍0.9.14／schema23；0.9.15待完成必要CI及當批受控部署，停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。未合併或Release；125%／150%DPI與真人驗收保留。
+2026-11-06最新工程：V3.1.50／BUILD4、Cloud Source0.9.15。提出者撤回、清單人員／原因、退回即時解鎖、啟動轉圈與詳情序號／審核區返修見 [唯一V3.2計畫](V3_2_IMPLEMENTATION_PLAN.md#22-折讓開立主管一次核准程式連續完成)。原Worker仍0.9.14／schema23；0.9.15待完成必要CI及當批受控部署，停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。未合併或Release；125%／150%DPI與真人驗收保留。
 
 2026-11-06本次返修：V3.1.48 Build1 將啟動提示嵌入主視窗、折讓兩表分區與共用表頭、商品固定五列、小型重置、原因單行20字。原單號格式保持；取消將人員與原因編入單號／官方欄位的舊待辦。當次本機驗證見CHANGELOG；精確commit必要CI與真人畫面驗收分開追蹤。
 
