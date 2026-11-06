@@ -407,6 +407,7 @@ internal sealed class MainForm : Form
 
     internal void VerifySmokeLayout()
     {
+        Console.WriteLine("Startup smoke layout: main controls");
         // Exercise the real constructor's pending state while the native UI
         // pumps messages, before any successful connection state is supplied.
         foreach (var pair in new[] { (Tab: invoiceTab, Page: (Control)invoicePage), (Tab: recordsTab, Page: (Control)recordsPage) })
@@ -498,6 +499,7 @@ internal sealed class MainForm : Form
         tabs.SelectedTab = invoiceTab;
         Application.DoEvents();
 
+        Console.WriteLine("Startup smoke layout: setup and employee authentication");
         using var firstSetup = new InitialSetupForm(repository);
         firstSetup.Show(this);
         firstSetup.PerformLayout();
@@ -512,6 +514,7 @@ internal sealed class MainForm : Form
         employeeLogin.VerifySmokeLayout();
         employeeLogin.Close();
         EmployeeAdminLoginForm.VerifyAuthenticationSmoke(this);
+        Console.WriteLine("Startup smoke layout: settings and account dialogs");
 
         using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show(this);
@@ -571,6 +574,7 @@ internal sealed class MainForm : Form
         recovery.VerifySmokeLayout();
         recovery.Close();
 
+        Console.WriteLine("Startup smoke layout: import and invoice detail");
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
         RecordDetailForm.VerifySmokeLayout(repository, service);
         if (connectionTimer.Interval != 60_000 || connectionTimer.Enabled)
@@ -587,9 +591,11 @@ internal sealed class MainForm : Form
         ApplyConnectionControls(new(true, false, true, CloudRejected: true));
         if (invoicePage.Enabled || recordsPage.Enabled || accountManagementButton.Enabled || settingsButton.Enabled)
             throw new InvalidOperationException("已知授權拒絕不能開放功能");
+        Console.WriteLine("Startup smoke layout: connection block and settings authorization");
         ConnectionBlockForm.VerifySmoke(this);
         ApplyConnectionControls(new(true, false, false));
         VerifySettingsAuthenticationSmoke();
+        Console.WriteLine("Startup smoke layout: completed");
     }
 
     private void VerifySettingsAuthenticationSmoke()
@@ -1018,13 +1024,16 @@ internal sealed class MainForm : Form
 
     internal void VerifySmokeStartupCheck()
     {
+        Console.WriteLine("Startup smoke overlay: show and position");
         ShowStartupCheck();
         var current = startupCheck ?? throw new InvalidOperationException("啟動提示未建立");
         if (current.Parent != this || !current.Visible ||
             Math.Abs(current.Left + current.Width / 2 - ClientSize.Width / 2) > 2 ||
             Math.Abs(current.Top + current.Height / 2 - ClientSize.Height / 2) > 2)
             throw new InvalidOperationException("啟動提示必須是主視窗內的置中控制項");
+        Console.WriteLine("Startup smoke overlay: actual animation frames");
         current.VerifyAnimation();
+        Console.WriteLine("Startup smoke overlay: dispose");
         FinishStartupCheck();
         if (!current.IsDisposed || Controls.Contains(current) || startupCheck is not null)
             throw new InvalidOperationException("啟動提示未完整移除");
