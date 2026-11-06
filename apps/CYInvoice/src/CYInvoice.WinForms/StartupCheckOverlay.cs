@@ -33,19 +33,23 @@ internal sealed class StartupCheckOverlay : UserControl
     {
         using var before=new Bitmap(spinner.Width,spinner.Height);
         using var after=new Bitmap(spinner.Width,spinner.Height);
-        spinner.DrawToBitmap(before,spinner.ClientRectangle);
-        // Test-only native modal pump: DoEvents waits for an empty message
-        // queue and can starve on a headless runner while animation paints.
+        Console.WriteLine("Startup smoke animation: first shared paint frame");
+        using(var graphics=Graphics.FromImage(before))spinner.DrawFrame(graphics);
+        // Test-only native modal pump. Capture the same paint owner directly:
+        // WM_PRINT/DoEvents on a headless desktop must not own test completion.
         // The product still has only the MainForm-owned overlay, no dialog.
         using(var measurement=new Form { ShowInTaskbar=false,ShowIcon=false,
-            FormBorderStyle=FormBorderStyle.None,Opacity=0,Size=new Size(1,1),
-            StartPosition=FormStartPosition.CenterParent })
-        using(var sample=new System.Windows.Forms.Timer { Interval=180 }) {
-            sample.Tick+=(_,_)=> { sample.Stop();measurement.DialogResult=DialogResult.OK; };
-            measurement.Shown+=(_,_)=>sample.Start();
+            FormBorderStyle=FormBorderStyle.None,Size=new Size(1,1),
+            StartPosition=FormStartPosition.Manual,Location=new Point(-32000,-32000) })
+        using(var sample=new System.Threading.Timer(_=>measurement.BeginInvoke((Action)(()=> {
+            Console.WriteLine("Startup smoke animation: sample deadline");
+            measurement.DialogResult=DialogResult.OK;
+        })),null,Timeout.Infinite,Timeout.Infinite)) {
+            measurement.Shown+=(_,_)=> { Console.WriteLine("Startup smoke animation: native pump");sample.Change(250,Timeout.Infinite); };
             measurement.ShowDialog(FindForm());
         }
-        spinner.DrawToBitmap(after,spinner.ClientRectangle);
+        Console.WriteLine("Startup smoke animation: second shared paint frame");
+        using(var graphics=Graphics.FromImage(after))spinner.DrawFrame(graphics);
         var changed=false;
         for(var y=0;y<before.Height&&!changed;y++)
             for(var x=0;x<before.Width&&!changed;x++) changed=before.GetPixel(x,y)!=after.GetPixel(x,y);
@@ -98,14 +102,19 @@ internal sealed class StartupCheckOverlay : UserControl
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            DrawFrame(e.Graphics);
+        }
+
+        internal void DrawFrame(Graphics graphics)
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
             var size = Math.Min(Width, Height) - 6;
             if (size <= 0) return;
             var box = new Rectangle((Width - size) / 2, (Height - size) / 2, size, size);
             using var track = new Pen(Color.FromArgb(220, 230, 244), 3.5F);
             using var arc = new Pen(SystemColors.Highlight, 3.5F) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            e.Graphics.DrawEllipse(track, box);
-            e.Graphics.DrawArc(arc, box, angle, 100);
+            graphics.DrawEllipse(track, box);
+            graphics.DrawArc(arc, box, angle, 100);
         }
 
     }
