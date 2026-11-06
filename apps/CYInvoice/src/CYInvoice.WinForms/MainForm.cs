@@ -593,6 +593,7 @@ internal sealed class MainForm : Form
             throw new InvalidOperationException("已知授權拒絕不能開放功能");
         Console.WriteLine("Startup smoke layout: connection block and settings authorization");
         ConnectionBlockForm.VerifySmoke(this);
+        Console.WriteLine("Startup smoke layout: settings authorization cancel");
         ApplyConnectionControls(new(true, false, false));
         VerifySettingsAuthenticationSmoke();
         Console.WriteLine("Startup smoke layout: completed");
@@ -608,6 +609,7 @@ internal sealed class MainForm : Form
             exposedSettings |= Application.OpenForms.OfType<SettingsForm>().Any();
             if (Application.OpenForms.OfType<EmployeeAdminLoginForm>().FirstOrDefault() is not { } login) return;
             prompted = true;
+            Console.WriteLine("Startup smoke settings authorization: cancel verified login dialog");
             cancelLogin.Stop();
             login.DialogResult = DialogResult.Cancel;
         };
