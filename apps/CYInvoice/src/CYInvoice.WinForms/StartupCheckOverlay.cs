@@ -4,10 +4,13 @@ namespace CYInvoice.WinForms;
 
 internal sealed class StartupCheckOverlay : UserControl
 {
-    private readonly System.Windows.Forms.Timer animation=new() { Interval=40 };
+    private readonly System.Threading.Timer animation;
+    private volatile bool animationEnabled;
+    private int frameQueued;
     private readonly StartupSpinner spinner=new() { Size=new Size(40,40),Margin=new Padding(0,0,16,0) };
     public StartupCheckOverlay()
     {
+        animation=new System.Threading.Timer(_=>QueueFrame(),null,Timeout.Infinite,Timeout.Infinite);
         AccessibleName = "啟動檢查中";
         Font = new Font("Microsoft JhengHei UI", 14F);
         Size = new Size(270, 76);
@@ -19,7 +22,6 @@ internal sealed class StartupCheckOverlay : UserControl
             FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty,
         };
         row.Controls.Add(spinner);
-        animation.Tick+=(_,_)=>spinner.Advance();
         row.Controls.Add(new Label {
             Text = "啟動檢查中", AutoSize = true, Margin = new Padding(0, 7, 0, 0),
         });
@@ -34,7 +36,27 @@ internal sealed class StartupCheckOverlay : UserControl
         // MainForm calls this after attaching the overlay. Handle creation can
         // precede final inherited visibility, especially without a desktop.
         CreateControl();
-        animation.Enabled=IsHandleCreated&&Visible;
+        SetAnimationEnabled(IsHandleCreated&&Visible);
+    }
+
+    private void SetAnimationEnabled(bool enabled)
+    {
+        animationEnabled=enabled;
+        animation?.Change(enabled?0:Timeout.Infinite,enabled?40:Timeout.Infinite);
+    }
+
+    private void QueueFrame()
+    {
+        if(!animationEnabled||Interlocked.CompareExchange(ref frameQueued,1,0)!=0)return;
+        try {
+            BeginInvoke((Action)(()=> {
+                Interlocked.Exchange(ref frameQueued,0);
+                if(animationEnabled&&!IsDisposed&&!Disposing&&IsHandleCreated&&Visible)spinner.Advance();
+            }));
+        } catch(InvalidOperationException) {
+            // A native handle can disappear between scheduling and dispatch.
+            Interlocked.Exchange(ref frameQueued,0);
+        }
     }
 
     internal void VerifyAnimation()
@@ -42,7 +64,7 @@ internal sealed class StartupCheckOverlay : UserControl
         using var before=new Bitmap(spinner.Width,spinner.Height);
         using var after=new Bitmap(spinner.Width,spinner.Height);
         Console.WriteLine("Startup smoke animation: first shared paint frame");
-        Console.WriteLine($"Startup smoke animation state: enabled={animation.Enabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
+        Console.WriteLine($"Startup smoke animation state: enabled={animationEnabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
         using(var graphics=Graphics.FromImage(before))spinner.DrawFrame(graphics);
         // Test-only native modal pump. Capture the same paint owner directly:
         // WM_PRINT/DoEvents on a headless desktop must not own test completion.
@@ -58,16 +80,16 @@ internal sealed class StartupCheckOverlay : UserControl
             measurement.ShowDialog(FindForm());
         }
         Console.WriteLine("Startup smoke animation: second shared paint frame");
-        Console.WriteLine($"Startup smoke animation state: enabled={animation.Enabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
+        Console.WriteLine($"Startup smoke animation state: enabled={animationEnabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
         using(var graphics=Graphics.FromImage(after))spinner.DrawFrame(graphics);
         var changed=false;
         for(var y=0;y<before.Height&&!changed;y++)
             for(var x=0;x<before.Width&&!changed;x++) changed=before.GetPixel(x,y)!=after.GetPixel(x,y);
         if(!changed)throw new InvalidOperationException("啟動圈圈未實際更新畫面");
         Visible=false;
-        if(animation.Enabled)throw new InvalidOperationException("隱藏的啟動圈圈仍在運作");
+        if(animationEnabled)throw new InvalidOperationException("隱藏的啟動圈圈仍在運作");
         Visible=true;
-        if(!animation.Enabled)throw new InvalidOperationException("啟動圈圈未恢復轉動");
+        if(!animationEnabled)throw new InvalidOperationException("啟動圈圈未恢復轉動");
     }
 
     // Visibility belongs to this overlay. A nested paint control does not
@@ -75,24 +97,24 @@ internal sealed class StartupCheckOverlay : UserControl
     protected override void OnVisibleChanged(EventArgs e)
     {
         base.OnVisibleChanged(e);
-        if(!Disposing)animation.Enabled=IsHandleCreated&&Visible;
+        if(!Disposing)SetAnimationEnabled(IsHandleCreated&&Visible);
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        animation.Enabled=Visible;
+        SetAnimationEnabled(Visible);
     }
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
-        if(!Disposing)animation.Stop();
+        if(!Disposing)SetAnimationEnabled(false);
         base.OnHandleDestroyed(e);
     }
 
     protected override void Dispose(bool disposing)
     {
-        if(disposing)animation.Dispose();
+        if(disposing) { animationEnabled=false;animation.Dispose(); }
         base.Dispose(disposing);
     }
 

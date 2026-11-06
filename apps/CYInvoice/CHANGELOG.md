@@ -1,8 +1,8 @@
 # CYInvoice 版本紀錄
 
-## V3.1.50 Build 6 — 2026/11/06（提出者撤回與狀態即時更新）
+## V3.1.50 Build 7 — 2026/11/06（提出者撤回與狀態即時更新）
 
-V3.1.50／BUILD6、Cloud Source0.9.15：一般提出者驗證後可開啟自己待核准的折讓，只提供取消退回及關閉；主管保留核准與取消退回，主管自己提出也適用。雲端依可信 requester actor ID 與原 revision／Grant／Ledger／Device 條件原子撤回；一般員工不能核准、撤回他人或已核准／未知送出項目。折讓作廢權限不擴張。
+V3.1.50／BUILD7、Cloud Source0.9.15：一般提出者驗證後可開啟自己待核准的折讓，只提供取消退回及關閉；主管保留核准與取消退回，主管自己提出也適用。雲端依可信 requester actor ID 與原 revision／Grant／Ledger／Device 條件原子撤回；一般員工不能核准、撤回他人或已核准／未知送出項目。折讓作廢權限不擴張。
 
 處理中內容顯示「提出者帳號 姓名：折讓原因」，狀態只留狀態欄；沿原同機紀錄／既有可信快取，不新增逐筆網路讀取，跨機缺資料明示未取得。詳情原發票與本次折讓商品表加序號，原因列入審核資訊。退回原因單行最多20字；啟動圈圈40px、文字14pt，修正建立時未啟動動畫，隱藏／銷毀停止。
 
@@ -10,7 +10,7 @@ V3.1.50／BUILD6、Cloud Source0.9.15：一般提出者驗證後可開啟自己�
 
 Cloud0.9.15僅Source配套、尚未部署；原Worker仍Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變。無migration、旗標／Binding／CYID變更或真交易，不自動合併或Release。必要CI以PR #602最新Source為準；125%／150%DPI及真人驗收仍待完成。正式Release仍V3.1.0。
 
-Build 1 同步修正部署預檢合成健康回應：版本改由 package.json 取得，仍嚴格比對來源及線上版本，不放寬預檢。Build 0 的舊版測試資料失敗已定位。Build 2／3細分紀錄定位Windows CI停在動畫量測的DoEvents迴圈；Build 4改用限時原生modal pump量測，保留實際幀差及隱藏停止斷言，正式啟動不會建立量測視窗。Build 5量測直接使用同一paint owner繪製前後畫面，實際WinForms Timer更新角度；獨立單次截止透過原生modal loop送回UI關閉量測，不依賴WM_PRINT或DoEvents結束，仍不允許靜止畫面通過。Build 6由MainForm完成掛載後明確啟動原動畫Timer，避免HandleCreated早於最終繼承可見狀態，並保留CI角度／啟用狀態證據。最新Source必要CI另行驗證。
+動畫由同一個System.Threading.Timer排入UI thread更新，最多一個待處理畫格，UI忙碌不累積回呼；隱藏／銷毀停用，關閉期間的待處理畫格不操作已失效控制項。實際量測保留前後畫面差異與啟停斷言；版本預檢fixture依package.json產生，正式版本比對仍嚴格。必要CI以最新Source為準。
 
 ## V3.1.49 — 2026/11/06（折讓詳情三區）
 

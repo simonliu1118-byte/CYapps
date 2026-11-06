@@ -1,6 +1,6 @@
 # CYInvoice Cloud Architecture Status
 
-更新：2026-11-06。V3.1.50／BUILD6、Cloud Source0.9.15：一般提出者驗證後可開啟自己待核准的折讓，只提供取消退回及關閉；主管保留核准與取消退回，主管自己提出也適用。雲端依可信 requester actor ID 與原 revision／Grant／Ledger／Device 條件原子撤回；一般員工不能核准、撤回他人或已核准／未知送出項目。折讓作廢權限不擴張。 Cloud0.9.15僅Source配套、尚未部署；原Worker仍Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變。無migration、旗標／Binding／CYID變更或真交易，不自動合併或Release。必要CI以PR #602最新Source為準；125%／150%DPI及真人驗收仍待完成。正式Release仍V3.1.0。
+更新：2026-11-06。V3.1.50／BUILD7、Cloud Source0.9.15：一般提出者驗證後可開啟自己待核准的折讓，只提供取消退回及關閉；主管保留核准與取消退回，主管自己提出也適用。雲端依可信 requester actor ID 與原 revision／Grant／Ledger／Device 條件原子撤回；一般員工不能核准、撤回他人或已核准／未知送出項目。折讓作廢權限不擴張。 Cloud0.9.15僅Source配套、尚未部署；原Worker仍Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變。無migration、旗標／Binding／CYID變更或真交易，不自動合併或Release。必要CI以PR #602最新Source為準；125%／150%DPI及真人驗收仍待完成。正式Release仍V3.1.0。
 
 工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 
