@@ -29,11 +29,20 @@ internal sealed class StartupCheckOverlay : UserControl
         Controls.Add(layout);
     }
 
+    internal void StartAnimation()
+    {
+        // MainForm calls this after attaching the overlay. Handle creation can
+        // precede final inherited visibility, especially without a desktop.
+        CreateControl();
+        animation.Enabled=IsHandleCreated&&Visible;
+    }
+
     internal void VerifyAnimation()
     {
         using var before=new Bitmap(spinner.Width,spinner.Height);
         using var after=new Bitmap(spinner.Width,spinner.Height);
         Console.WriteLine("Startup smoke animation: first shared paint frame");
+        Console.WriteLine($"Startup smoke animation state: enabled={animation.Enabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
         using(var graphics=Graphics.FromImage(before))spinner.DrawFrame(graphics);
         // Test-only native modal pump. Capture the same paint owner directly:
         // WM_PRINT/DoEvents on a headless desktop must not own test completion.
@@ -49,6 +58,7 @@ internal sealed class StartupCheckOverlay : UserControl
             measurement.ShowDialog(FindForm());
         }
         Console.WriteLine("Startup smoke animation: second shared paint frame");
+        Console.WriteLine($"Startup smoke animation state: enabled={animation.Enabled}, visible={Visible}, handle={IsHandleCreated}, angle={spinner.Angle}");
         using(var graphics=Graphics.FromImage(after))spinner.DrawFrame(graphics);
         var changed=false;
         for(var y=0;y<before.Height&&!changed;y++)
@@ -91,6 +101,7 @@ internal sealed class StartupCheckOverlay : UserControl
     private sealed class StartupSpinner : Control
     {
         private float angle;
+        internal float Angle=>angle;
 
         public StartupSpinner()
         {

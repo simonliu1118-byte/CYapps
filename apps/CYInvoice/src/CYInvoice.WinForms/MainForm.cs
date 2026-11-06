@@ -1015,6 +1015,7 @@ internal sealed class MainForm : Form
             (ClientSize.Height - startupCheck.Height) / 2);
         Controls.Add(startupCheck);
         startupCheck.BringToFront();
+        startupCheck.StartAnimation();
     }
 
     private void FinishStartupCheck()

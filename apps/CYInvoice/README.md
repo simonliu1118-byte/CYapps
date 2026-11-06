@@ -7,7 +7,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程：**V3.1.50／BUILD5、Cloud Source0.9.15待部署**；提出者可撤回自己的待核准折讓，主管保留核准及退回。清單顯示帳號、姓名與原因；兩個商品表有序號、原因列入審核資訊；啟動圈圈與文字放大並修正轉動，退回原因單行20字，確認退回後立即恢復可折讓。詳見 [V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。工程包不是正式Release。
+- 目前工程：**V3.1.50／BUILD6、Cloud Source0.9.15待部署**；提出者可撤回自己的待核准折讓，主管保留核准及退回。清單顯示帳號、姓名與原因；兩個商品表有序號、原因列入審核資訊；啟動圈圈與文字放大並修正轉動，退回原因單行20字，確認退回後立即恢復可折讓。詳見 [V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)。工程包不是正式Release。
 - 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
 - 正式Release：**[V3.1.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.1.0)**。本次未建立新tag／Release或覆寫桌面安裝。
 - 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
