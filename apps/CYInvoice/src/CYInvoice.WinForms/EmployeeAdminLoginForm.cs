@@ -246,6 +246,12 @@ internal sealed class EmployeeAdminLoginForm : Form
         if (form.AuthenticatedPrincipal?.Role != AppRole.SuperAdmin || form.DialogResult != DialogResult.OK ||
             provider.Calls != 5 || !provider.RequiredOnline || form.AuthenticatedPassword.Length != 0)
             throw new InvalidOperationException("只有當次帳密與指定角色均驗證成功才能關閉驗證窗。");
+        provider.Role=AppRole.User;
+        using var requester=new EmployeeAdminLoginForm(provider,requiredRole:null,requireOnline:true,errorReporter:errors.Add);
+        requester.Show(owner);requester.employeeNo.Text="0002";requester.password.Text="SyntheticPass1";
+        requester.AuthenticateAsync().GetAwaiter().GetResult();
+        if(requester.AuthenticatedPrincipal?.Role!=AppRole.User||requester.DialogResult!=DialogResult.OK)
+            throw new InvalidOperationException("提出者入口必須接受已驗證的一般員工，不提升其角色");
     }
 
     private sealed class AuthenticationProbeProvider : IIdentityProvider

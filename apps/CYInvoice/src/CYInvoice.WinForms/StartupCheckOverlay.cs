@@ -4,11 +4,13 @@ namespace CYInvoice.WinForms;
 
 internal sealed class StartupCheckOverlay : UserControl
 {
+    private readonly System.Windows.Forms.Timer animation=new() { Interval=40 };
+    private readonly StartupSpinner spinner=new() { Size=new Size(40,40),Margin=new Padding(0,0,16,0) };
     public StartupCheckOverlay()
     {
         AccessibleName = "啟動檢查中";
-        Font = new Font("Microsoft JhengHei UI", 10F);
-        Size = new Size(180, 52);
+        Font = new Font("Microsoft JhengHei UI", 14F);
+        Size = new Size(270, 76);
         TabStop = false;
         Anchor = AnchorStyles.None;
         BackColor = Color.White;
@@ -16,9 +18,10 @@ internal sealed class StartupCheckOverlay : UserControl
             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false,
             FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty,
         };
-        row.Controls.Add(new StartupSpinner { Size = new Size(28, 28), Margin = new Padding(0, 0, 12, 0) });
+        row.Controls.Add(spinner);
+        animation.Tick+=(_,_)=>spinner.Advance();
         row.Controls.Add(new Label {
-            Text = "啟動檢查中", AutoSize = true, Margin = new Padding(0, 4, 0, 0),
+            Text = "啟動檢查中", AutoSize = true, Margin = new Padding(0, 7, 0, 0),
         });
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1 };
         row.Anchor = AnchorStyles.None;
@@ -26,25 +29,62 @@ internal sealed class StartupCheckOverlay : UserControl
         Controls.Add(layout);
     }
 
+    internal void VerifyAnimation()
+    {
+        using var before=new Bitmap(spinner.Width,spinner.Height);
+        using var after=new Bitmap(spinner.Width,spinner.Height);
+        spinner.DrawToBitmap(before,spinner.ClientRectangle);
+        var started=System.Diagnostics.Stopwatch.StartNew();
+        while(started.ElapsedMilliseconds<180) { Application.DoEvents();Thread.Sleep(5); }
+        spinner.DrawToBitmap(after,spinner.ClientRectangle);
+        var changed=false;
+        for(var y=0;y<before.Height&&!changed;y++)
+            for(var x=0;x<before.Width&&!changed;x++) changed=before.GetPixel(x,y)!=after.GetPixel(x,y);
+        if(!changed)throw new InvalidOperationException("啟動圈圈未實際更新畫面");
+        Visible=false;
+        if(animation.Enabled)throw new InvalidOperationException("隱藏的啟動圈圈仍在運作");
+        Visible=true;
+        if(!animation.Enabled)throw new InvalidOperationException("啟動圈圈未恢復轉動");
+    }
+
+    // Visibility belongs to this overlay. A nested paint control does not
+    // reliably receive visibility changes of every ancestor on WinForms.
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if(!Disposing)animation.Enabled=IsHandleCreated&&Visible;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        animation.Enabled=Visible;
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        if(!Disposing)animation.Stop();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if(disposing)animation.Dispose();
+        base.Dispose(disposing);
+    }
+
     // WinForms has no native circular progress control. Use the same small arc
     // animation as the CY desktop updater; paint has no application side effects.
     private sealed class StartupSpinner : Control
     {
-        private readonly System.Windows.Forms.Timer timer = new() { Interval = 40 };
         private float angle;
 
         public StartupSpinner()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             TabStop = false;
-            timer.Tick += (_, _) => { angle = (angle + 12) % 360; Invalidate(); };
         }
-
-        protected override void OnVisibleChanged(EventArgs e)
-        {
-            base.OnVisibleChanged(e);
-            timer.Enabled = Visible;
-        }
+        internal void Advance() { angle=(angle+12)%360;Invalidate(); }
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -53,16 +93,11 @@ internal sealed class StartupCheckOverlay : UserControl
             var size = Math.Min(Width, Height) - 6;
             if (size <= 0) return;
             var box = new Rectangle((Width - size) / 2, (Height - size) / 2, size, size);
-            using var track = new Pen(Color.FromArgb(220, 230, 244), 2.5F);
-            using var arc = new Pen(SystemColors.Highlight, 2.5F) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var track = new Pen(Color.FromArgb(220, 230, 244), 3.5F);
+            using var arc = new Pen(SystemColors.Highlight, 3.5F) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             e.Graphics.DrawEllipse(track, box);
             e.Graphics.DrawArc(arc, box, angle, 100);
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing) timer.Dispose();
-            base.Dispose(disposing);
-        }
     }
 }

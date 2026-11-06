@@ -1,6 +1,6 @@
 # CYInvoice Cloud Reference Backend
 
-Canonical migration為0023。現行工程Source為V3.1.46／Cloud0.9.14，已於2026-11-05由本機MCP完成部署與完整前後查核，固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`、schema／marker23、100%流量。平台版本ID與承接流量版本一致，線上bundle SHA吻合；原服務、Secrets與財務旗標保留。原Cloud0.9.13／schema23已於2026-11-05回報部署完成，固定部署Source `d8f236ee5a030f19c7a41b80802bad8576d36934`；必要前後檢通過，原production CYID與財務設定保留。最新維護停點見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
+Canonical migration為0023。現行工程Source V3.1.50／Cloud0.9.15，提出者可讀取／撤回自己待核准g0401申請，依原可信CYID actor與revision／Grant／Ledger原子限制；核准及g0501權限保留。Source測試與線上部署分開。Cloud0.9.15僅Source配套、尚未部署；原Worker仍Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變。無migration、旗標／Binding／CYID變更或真交易，不自動合併或Release。必要CI以PR #602最新Source為準；125%／150%DPI及真人驗收仍待完成。正式Release仍V3.1.0。 最新停點見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
 ## Environment labels and last verified identity target
 

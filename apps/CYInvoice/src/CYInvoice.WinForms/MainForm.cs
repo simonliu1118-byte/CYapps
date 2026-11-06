@@ -1024,6 +1024,7 @@ internal sealed class MainForm : Form
             Math.Abs(current.Left + current.Width / 2 - ClientSize.Width / 2) > 2 ||
             Math.Abs(current.Top + current.Height / 2 - ClientSize.Height / 2) > 2)
             throw new InvalidOperationException("啟動提示必須是主視窗內的置中控制項");
+        current.VerifyAnimation();
         FinishStartupCheck();
         if (!current.IsDisposed || Controls.Contains(current) || startupCheck is not null)
             throw new InvalidOperationException("啟動提示未完整移除");

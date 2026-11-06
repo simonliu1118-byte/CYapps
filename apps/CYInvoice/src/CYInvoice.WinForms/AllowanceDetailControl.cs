@@ -9,7 +9,7 @@ internal sealed class AllowanceDetailControl : UserControl
         "原發票", "原發票號碼", "發票號碼", "訂單編號", "原發票日期", "買受人", "統一編號", "使用環境", "原發票含稅金額", "目前可折讓含稅額",
     ];
     private static readonly HashSet<string> AllowanceFields = [
-        "折讓單號", "折讓日期", "折讓原因", "作廢原因", "折讓作廢原因", "本次未稅金額", "本次稅額", "本次含稅折讓",
+        "折讓單號", "折讓日期", "本次未稅金額", "本次稅額", "本次含稅折讓",
         "未稅折讓金額", "稅額", "含稅折讓總額", "原折讓未稅金額", "原折讓稅額", "最新可折含稅額", "未稅金額", "含稅總額",
     ];
     private readonly TableLayoutPanel sections = new() {
@@ -121,15 +121,21 @@ internal sealed class AllowanceDetailControl : UserControl
         list.GridLines=true;
         list.Sorting=SortOrder.None;
         list.ShowItemToolTips=true;
+        var numbered=table.Title is "原發票商品" or "本次折讓商品" or "原折讓商品";
+        if(numbered)list.Columns.Add("序號",56,HorizontalAlignment.Center);
         for(var i=0;i<table.Columns.Count;i++) {
             var title=table.Columns[i];
             list.Columns.Add(title,100,title.Contains("金額")||title.Contains("單價")||title.Contains("數量")||title.Contains("稅額")
                 ?HorizontalAlignment.Right:HorizontalAlignment.Left);
         }
-        foreach(var row in table.Rows)list.Items.Add(new ListViewItem(row.ToArray()));
+        for(var index=0;index<table.Rows.Count;index++) {
+            var row=table.Rows[index];
+            list.Items.Add(new ListViewItem(numbered ? new[]{(index+1).ToString()}.Concat(row).ToArray() : row.ToArray()));
+        }
         host.ConfigureTableAppearance();
-        host.ConfigureFillColumns(0,table.Columns.Select((title,i)=>i==0?200:title.Contains("單價")?132:
-            title.Contains("數量")?76:title is "稅別" or "課稅別"?66:title.Contains("單號")?128:title.Contains("日期")?100:title=="稅額"?80:110).ToArray());
+        var widths=table.Columns.Select((title,i)=>i==0?200:title.Contains("單價")?132:
+            title.Contains("數量")?76:title is "稅別" or "課稅別"?66:title.Contains("單號")?128:title.Contains("日期")?100:title=="稅額"?80:110).ToArray();
+        host.ConfigureFillColumns(numbered?1:0,numbered?new[]{56}.Concat(widths).ToArray():widths);
         AddRow(section,host);
         void MeasureRows() {
             if(host.IsDisposed)return;
@@ -184,9 +190,13 @@ internal sealed class AllowanceDetailControl : UserControl
             throw new InvalidOperationException("折讓詳情缺少三個分區");
         var source=Descendants(groups[0]).OfType<ListView>().Single();
         var current=Descendants(groups[1]).OfType<ListView>().Single();
-        if(source.Items.Count!=2||source.Items[0].Text!="原商品甲"||source.Items[1].SubItems[3].Text!="650"||
-            current.Items.Count!=1||current.Items[0].Text!="本次折讓品名")
+        if(source.Columns[0].Text!="序號"||current.Columns[0].Text!="序號"||
+            source.Items.Count!=2||source.Items[0].SubItems[1].Text!="原商品甲"||source.Items[1].Text!="2"||source.Items[1].SubItems[4].Text!="650"||
+            current.Items.Count!=1||current.Items[0].Text!="1"||current.Items[0].SubItems[1].Text!="本次折讓品名")
             throw new InvalidOperationException("原發票商品與本次折讓商品未各自取自原紀錄");
+        if(!Descendants(groups[2]).OfType<Label>().Any(label=>label.Text=="部分退貨")||
+            Descendants(groups[1]).OfType<Label>().Any(label=>label.Text=="折讓原因"))
+            throw new InvalidOperationException("折讓原因必須放在審核資訊");
         var missing=AllowanceDetailPresentation.Build(null,fields,tables);
         form.UpdateContent(missing.Fields,missing.Tables);Application.DoEvents();
         if(!Descendants(form).OfType<Label>().Any(label=>label.Text=="原發票商品資料未取得"))

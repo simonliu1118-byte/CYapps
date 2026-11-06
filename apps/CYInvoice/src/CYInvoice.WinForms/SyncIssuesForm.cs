@@ -504,7 +504,18 @@ internal sealed class SyncIssuesForm : Form
                 var identity = cloudAllowance ? CloudInvoiceIdentity(issue, pendingRecords.GetValueOrDefault(issue.OrderId), invoiceRecords) : (issue.InvoiceNumber, issue.OrderId);
                 row.SubItems.Add(identity.Item1.Length == 0 ? "尚未取得" : identity.Item1);
                 row.SubItems.Add(identity.Item2.Length == 0 ? "尚未取得" : identity.Item2);
-                row.SubItems.Add(issue.Message);
+                var summary=issue.Message;
+                if(processing&&cloudAllowance&&!issue.IssueType.Contains("_void_",StringComparison.Ordinal)) {
+                    var projection=issueStore.CloudProjection(accountKey,issue.OrderId);
+                    var applicant=projection?.DetailRows.FirstOrDefault(field=>field.Key=="申請員工").Value;
+                    var reason=projection?.DetailRows.FirstOrDefault(field=>field.Key=="折讓原因").Value;
+                    summary=$"{(string.IsNullOrEmpty(applicant)?"提出者未取得":applicant)}：{(string.IsNullOrEmpty(reason)?"原因未取得":reason)}";
+                } else if(processing&&IsAllowanceManualReview(issue)) {
+                    var original=invoiceRecords.FirstOrDefault(record=>record.InvoiceNumber==issue.InvoiceNumber&&record.OrderId==issue.OrderId);
+                    var review=original is null?null:allowanceWorkflow.ManualReviewFor(original);
+                    if(review is not null)summary=$"{EmployeeDisplayText.Format(repository,review.RequesterEmployeeNo,review.RequesterName)}：{review.Reason}";
+                }
+                row.SubItems.Add(summary);
                 row.SubItems.Add(state);
                 row.Tag = issue;
                 var stateCell = row.SubItems[5];
@@ -825,10 +836,26 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
         using var authorization = needsManager || IsCloudAllowance(issue) || issue.ResolvedUtc is null && IsManualReview(issue)
-            ? new EmployeeAdminLoginForm(repository, requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            ? new EmployeeAdminLoginForm(repository,
+                requiredRole:IsAllowanceManualReview(issue)||IsCloudAllowance(issue)&&!issue.IssueType.Contains("_void_",StringComparison.Ordinal)?null:AppRole.Admin,
+                requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
             : null;
         if (authorization is not null && authorization.ShowDialog(this) != DialogResult.OK) return;
         if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!, readOnly: processing && !needsManager); return; }
+        if(IsAllowanceManualReview(issue)&&authorization?.AuthenticatedPrincipal is { } actor&&!AppRoles.CanManageAccounts(actor.Role)) {
+            var record=TryFindIssueRecord(issue);
+            var review=record is null?null:allowanceWorkflow.ManualReviewFor(record);
+            if(review is null||review.RequesterEmployeeNo!=actor.EmployeeNo) {
+                MessageBox.Show(this,"只能查看及撤回自己提出的待核准折讓申請。","權限不足");return;
+            }
+            var presentation=LocalAllowancePresentation(issue,AllowanceDetailRows(issue));
+            using var detail=new ManualReviewDetailForm("折讓開立詳情",presentation.Fields,
+                allowCancelReturn:issue.ResolvedUtc is null&&review.LocalApprovedUtc is null&&!review.AwaitingConfirmation,
+                tables:presentation.Tables,allowanceDetails:true);
+            if(detail.ShowDialog(this)==DialogResult.OK&&detail.SelectedAction==ManualReviewDetailAction.CancelReturn)
+                CancelManualReview(issue,authorization);
+            return;
+        }
         if (issue.ResolvedUtc is null && repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
             repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
         {
@@ -985,10 +1012,11 @@ internal sealed class SyncIssuesForm : Form
                 originalInvoiceNumber: Detail("原發票"), originalOrderId: Detail("訂單編號"));
             issueStore.SaveCloudDetail(accountKey,data);
             if (IsDisposed) return;
-            var canApprove = !readOnly && data.Status is ("open" or "review");
+            var pending=!readOnly&&data.Status is ("open" or "review");
+            var canApprove=pending&&login.AuthenticatedPrincipal is { } actor&&AppRoles.CanManageAccounts(actor.Role);
             var presentation=AllowanceDetailPresentation.Build(TryFindIssueRecord(issue),issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.DetailRows??data.Rows,issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.Tables??data.Tables);
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: canApprove && data.CanWithdraw, primaryDanger: isVoid,tables:presentation.Tables,allowanceDetails:true);
+                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: pending && data.CanWithdraw, primaryDanger: isVoid,tables:presentation.Tables,allowanceDetails:true);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
             if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
             {
@@ -997,9 +1025,11 @@ internal sealed class SyncIssuesForm : Form
                 operation = "withdraw";
                 await api.WithdrawOperationAsync(data,login.EnteredEmployeeNo,login.AuthenticatedPassword,returned.Reason);
                 issueStore.ApplyCloudAllowance(accountKey,issue.OrderId,isVoid?"void":"issue","completed","withdrawn","");
+                RefreshOpenInvoiceDetails();
                 ReloadAll();return;
             }
             if(detail.SelectedAction != ManualReviewDetailAction.Primary)return;
+            if(!canApprove)throw new UnauthorizedAccessException("只有主管可以核准折讓");
             operation = "approve";
             var result = await api.ApproveOperationAsync(data, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             var state = result.ExecutionState == "completed" ? "已完成" : result.ExecutionState == "processing" ? "處理中" : "上傳問題";
@@ -1471,6 +1501,7 @@ internal sealed class SyncIssuesForm : Form
                 voidWorkflow.CancelManualReview(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
                 MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+            RefreshOpenInvoiceDetails();
             ReloadAll();
         }
         catch (Exception error)
@@ -1479,6 +1510,11 @@ internal sealed class SyncIssuesForm : Form
             MessageBox.Show(this, error.Message, "取消退回失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
+    }
+
+    private static void RefreshOpenInvoiceDetails()
+    {
+        foreach(var detail in Application.OpenForms.OfType<RecordDetailForm>().ToArray())detail.RefreshAllowanceState();
     }
 
     private void UpdateCrossDeviceButton()

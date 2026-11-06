@@ -201,6 +201,7 @@ internal sealed class RecordDetailForm : Form
         previewMessageHost.Layout += (_, _) => LayoutPreviewMessage();
         paperPreviewHost.Layout += (_, _) => LayoutA4Preview();
         FormClosed += (_, _) => previewCancellation.Cancel();
+        Activated += (_,_) => RefreshAllowanceState();
         UpdateActionAvailability();
     }
 
@@ -454,6 +455,16 @@ internal sealed class RecordDetailForm : Form
     }
 
     internal void ApplyServiceState() => UpdateActionAvailability();
+
+    internal void RefreshAllowanceState()
+    {
+        if(IsDisposed||voidBusy||allowanceBusy)return;
+        try { repository.Invoices.RefreshExtensionData(record); }
+        catch(Exception error)when(error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) {
+            IssueDiagnosticLog.RecordProblem(error,"RecordDetailForm.AllowanceState");return;
+        }
+        UpdateActionAvailability();
+    }
 
     private void UpdateActionAvailability()
     {
