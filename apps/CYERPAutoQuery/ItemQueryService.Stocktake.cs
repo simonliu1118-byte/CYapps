@@ -143,12 +143,16 @@ internal sealed partial class ItemQueryService
 
         var sheets = new List<(StocktakeSheet Sheet, Rectangle Rect)>();
         int? total = null;
+        var advanced = false;
         for (var page = 0; page < 30; page++)
         {
             IReadOnlyList<OcrToken> tokens;
             using (var image = ScreenCapture.Capture(p.ToRectangle()))
                 tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: false);
-            total ??= StocktakeQuery.ParseF2Total(tokens);
+            var observedTotal = StocktakeQuery.ParseF2Total(tokens);
+            if (total is { } previous && observedTotal is { } current && previous != current)
+                throw new InvalidDataException("盤點底稿清單在讀取期間變動，請重新同步。");
+            total ??= observedTotal;
             var read = StocktakeQuery.ParseF2(tokens);
             var added = 0;
             foreach (var row in read)
@@ -158,18 +162,18 @@ internal sealed partial class ItemQueryService
                 else sheets[at] = row; // where it is on screen now
             }
             _log.Info("stocktake", $"F2 page={page} read={read.Count} total={total?.ToString() ?? "?"}");
-            if (total is null || sheets.Count >= total || (page > 0 && added == 0)) break;
+            // Never label a first page as the complete ERP inventory when OCR missed the footer.
+            if (total is null) { await Pace.Delay(250, cancellationToken); continue; }
+            if (sheets.Count >= total || (advanced && added == 0)) break;
             // Page down from the last row read.
             var last = read.LastOrDefault();
             if (last.Sheet is null) break;
             SafeClick(f2, new Point(p.Left + last.Rect.Left + 20, p.Top + last.Rect.Top + last.Rect.Height / 2));
             InputSender.Press(NativeMethods.VK_NEXT);
+            advanced = true;
             await Pace.Delay(400, cancellationToken);
         }
-        if (total is { } n && sheets.Count < n)
-            throw new InvalidDataException($"「F2開窗查詢」共 {n} 張盤點底稿，只讀到 {sheets.Count} 張。");
-        if (sheets.Count == 0)
-            throw new InvalidDataException("「F2開窗查詢」讀不到任何盤點底稿。");
+        StocktakeQuery.RequireCompleteInventory(total, sheets.Count);
         return (f2, sheets);
     }
 

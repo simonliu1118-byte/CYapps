@@ -164,3 +164,7 @@
 - 單元測試：`dotnet test tests/CYERPAutoQuery.Tests/CYERPAutoQuery.Tests.csproj`（純邏輯，任何 OS 可跑）。
 - OCR 模型：`tools/fetch-ocr-models.ps1` 依 `tools/ocr-models.json` 下載並核對 SHA-256。
 - 圖示：`tools/fetch-canonical-icon.ps1` 從 AITeam CY Icon Family 固定 revision 下載 `AutoQ.ico` 並核對 SHA-256（不進 Git）。
+
+## V1.3.1 盤點清單完整性（開發中，未發行）
+
+配合 CY Web V0.12.1 的過去盤點紀錄，成功同步會提供 listComplete=true；F2 必須有可確認的總筆數且讀取張數一致。明確 0/0 可以回報空清單，未知／缺頁／讀取期間變動則停止。兩端都更新後，WEB 才會依完整清單歸檔已清除的盤點單；本工具不執行 ERP 清除。驗證、發布前提見 [handoff](docs/handoff/CYERPAutoQuery-STOCKTAKE-INVENTORY-131-20261107.md)。

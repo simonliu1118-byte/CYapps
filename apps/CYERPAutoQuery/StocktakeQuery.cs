@@ -101,6 +101,17 @@ internal static class StocktakeQuery
         return null;
     }
 
+    /// <summary>Only a known, exact footer count proves a complete inventory, including 0/0.</summary>
+    public static void RequireCompleteInventory(int? total, int count)
+    {
+        if (total is null)
+            throw new InvalidDataException("讀不到盤點底稿清單總筆數，無法確認清單完整，請重新同步。");
+        if (total < 0 || total > 200)
+            throw new InvalidDataException("盤點底稿清單超過 200 張上限或筆數不正確。");
+        if (count != total)
+            throw new InvalidDataException($"「F2開窗查詢」共 {total} 張盤點底稿，只讀到 {count} 張，無法確認清單完整。");
+    }
+
     // ---- INVI06 detail grid ------------------------------------------------------------------
 
     /// <summary>

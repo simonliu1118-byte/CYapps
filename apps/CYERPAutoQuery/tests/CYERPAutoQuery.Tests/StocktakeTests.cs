@@ -61,6 +61,34 @@ public class StocktakeTests
     }
 
     [Fact]
+    public void InventoryRequiresAKnownExactCountAndAcceptsAnExplicitEmptyFooter()
+    {
+        Assert.Equal(0, StocktakeQuery.ParseF2Total([T("0 / 0", 125, 485)]));
+        StocktakeQuery.RequireCompleteInventory(0, 0);
+        StocktakeQuery.RequireCompleteInventory(4, 4);
+        StocktakeQuery.RequireCompleteInventory(200, 200);
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.RequireCompleteInventory(null, 3));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.RequireCompleteInventory(4, 3));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.RequireCompleteInventory(0, 1));
+        Assert.Throws<InvalidDataException>(() => StocktakeQuery.RequireCompleteInventory(201, 201));
+    }
+
+    [Fact]
+    public void SyncBodyConfirmsTheCompleteInventoryEvenWhenThereAreNoSheetsOrDetails()
+    {
+        var empty = new StocktakeSyncResult([], [], TimeSpan.Zero);
+        var body = JsonNode.Parse(ErpAgentProtocol.StocktakeSyncBody(empty, "synthetic"))!;
+        Assert.Equal("NOT_FOUND", body["outcome"]!.GetValue<string>());
+        Assert.True(body["listComplete"]!.GetValue<bool>());
+        Assert.Empty(body["sheets"]!.AsArray());
+        Assert.Empty(body["details"]!.AsArray());
+        var skipped = new StocktakeSyncResult([new StocktakeSheet("990001", new DateOnly(2026, 10, 29))], [], TimeSpan.Zero);
+        body = JsonNode.Parse(ErpAgentProtocol.StocktakeSyncBody(skipped, "synthetic"))!;
+        Assert.True(body["listComplete"]!.GetValue<bool>());
+        Assert.Single(body["sheets"]!.AsArray());
+    }
+
+    [Fact]
     public void GridHeaderSeparatesBatchFromBatchCheckAndFindsTheNewRow()
     {
         // Screenshot 111: … 批號盤點 批號 盤點數量 …
