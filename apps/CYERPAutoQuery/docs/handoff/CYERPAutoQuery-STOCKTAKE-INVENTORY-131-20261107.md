@@ -17,9 +17,10 @@
 - CY Web V0.12.1 的 full sync 可帶 server-only `knownSheets` 快照，**不在 claim 傳給 Agent**。只有 full sync、成功且 `listComplete:true` 才會把快照內已消失的同代底稿歸檔；單張 refresh 不歸檔。
 - 舊 Agent 沒有 `listComplete`：新 WEB 照常同步，但不做歸檔。新 Agent 對舊 WEB 多一個欄位，舊 WEB 可忽略。因此可以先部署任一端，兩端都更新後才啟用歸檔；這是 rollout 的最小相容欄位，不是第二套盤點流程。正式支援的 Agent 最低版本提升並停用舊 Agent 後，可取消接受「未帶完整旗標」的相容窗口。
 - CYID Consumer Impact: NONE。盤點資料不得出現在 Public source／log／artifact；測試僅合成資料。
+- 配套 [CYWEB PR #443](https://github.com/simonliu1118-byte/chihyuan-web/pull/443)；本 Agent 為 [CYapps PR #604](https://github.com/simonliu1118-byte/CYapps/pull/604)。兩邊交接文件互相連結，沒有把開 PR 當成審查通過。
 
 ## 驗證及待辦
 
-- 本機 `dotnet test` 無法執行：系統只有 .NET runtime，沒有 SDK。未將這個結果稱為通過；由本次 PR 的 Linux／Windows CI 執行單元測試及 Windows GUI 建置，結果以最新提交為準。
+- 本機 `dotnet test` 無法執行：系統只有 .NET runtime，沒有 SDK。Windows CI 已通過 Unit tests／Build／Publish（run `42263544302`，程式提交 `233812dc2f45bfb8116cffa748189551585381c3`），governance 亦通過。本次僅補交接證據及跨 repo PR 連結，無新增程式變更；最新提交檢查仍以 PR 為準。
 - 未做正式 ERP OCR／翻頁／空清單實機驗收；尤其 0/0 footer 需在實際 ERP 版本核對。無法確認 footer 時會停止，不會誤送完整旗標。
 - Claude 最終審查仍待填；執行者不得代填通過。Agent 正式發行仍須另行授權，不能因 CI 通過就觸發自動更新。
