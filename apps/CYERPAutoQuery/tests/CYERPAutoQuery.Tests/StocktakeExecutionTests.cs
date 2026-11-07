@@ -11,10 +11,9 @@ public class StocktakeExecutionTests
         public List<string> Calls = [];
         public bool Confirmed;
         public string? FailAdd;
-        public IReadOnlyList<StocktakeSheet>? Sheets;
 
         public Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<StocktakeSheet>>(Sheets ?? [new("990001", new DateOnly(2026, 10, 1)), new("990002", new DateOnly(2026, 10, 2))]);
+            Task.FromResult<IReadOnlyList<StocktakeSheet>>([new("990001", new DateOnly(2026, 10, 1)), new("990002", new DateOnly(2026, 10, 2))]);
         public Task<StocktakeDetail> ReadSheetAsync(string sheetNo, CancellationToken ct)
         {
             Calls.Add("read " + sheetNo);
@@ -42,17 +41,6 @@ public class StocktakeExecutionTests
     }
 
     private static StocktakeLine Line(string seq, string batch, string qty) => new(seq, "X0001", "測試品", "", "假倉", "", "盒", batch, qty);
-
-    [Fact]
-    public async Task AnExplicitlyEmptyInventoryDoesNotAttemptToReadADeletedSheet()
-    {
-        var erp = new FakeErp { Sheets = [] };
-        var result = await new StocktakeExecution(erp).SyncAsync(new ErpAgentJob("j", "")
-            { QueryType = ErpAgentJob.StocktakeSyncType, SkipSheets = ["990001"] }, default);
-        Assert.Empty(result.Sheets);
-        Assert.Empty(result.Details);
-        Assert.Empty(erp.Calls);
-    }
     private static ErpAgentJob Write(params StocktakeWriteRow[] rows) =>
         new("job", "") { QueryType = ErpAgentJob.StocktakeWriteType, SheetNo = "990001", StocktakeRows = rows };
 

@@ -2,11 +2,10 @@
 
 > 更新：2026-10-29。目前正式版 **V1.3.0**（`VERSION=1.3.0`、`BUILD=0`，tag `cyerp-auto-query-v1.3.0`）；較舊的 Release 已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
-## V1.3.1 配套開發（2026-11-07，待審查／未發行）
+## 待 Claude：ERP 盤點完整清單配套（2026-11-07）
 
-- 使用者要求 CY Web 的盤點單在完整同步確認 ERP 已清除時轉入紀錄。新增 listComplete=true 及嚴格清單總數驗證，支援明確 0/0 空清單；WEB 決定歸檔，不新增 ERP 寫入。
-- 舊正式 Release 仍為 V1.3.0；V1.3.1 需 Windows CI 與 Claude 審查後，再由使用者授權合併／正式發行。Agent 與 WEB 任一端先更新仍相容，只有新版 Agent＋WEB 才啟用自動歸檔。
-- 詳見 [配套 handoff](docs/handoff/CYERPAutoQuery-STOCKTAKE-INVENTORY-131-20261107.md)。
+- 使用者指定只留 [需求 handoff](docs/handoff/CYERPAutoQuery-STOCKTAKE-ARCHIVE-HANDOFF-20261107.md)，CYERPAutoQuery 由 Claude 實作；GPT 原先程式／測試／版本變更已撤回，本 PR 僅文件。此對話只授權合併部署 WEB，不合併或發行 Agent。
+- 配合 WEB PR #443 的 `listComplete:true` 完整清單契約；現有 Agent 仍同步，但不觸發 WEB 自動歸檔。待 Claude 完成完整性驗證、空清單及翻頁實機測試後，再由使用者授權發行。
 
 ## 現況
 

@@ -35,7 +35,6 @@ internal static partial class ErpAgentProtocol
             ["outcome"] = result.Details.Count > 0 ? "FOUND" : "NOT_FOUND",
             ["elapsedMs"] = (long)result.Elapsed.TotalMilliseconds,
             ["agentVersion"] = agentVersion,
-            ["listComplete"] = true,
             ["sheets"] = new JsonArray(result.Sheets.Select(s => (JsonNode)new JsonObject
             {
                 ["sheetNo"] = s.SheetNo, ["date"] = s.Date.ToString("yyyy-MM-dd")
