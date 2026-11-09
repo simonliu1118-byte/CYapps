@@ -226,7 +226,7 @@ internal static class Program
         form.PerformLayout();
         Application.DoEvents();
         Stage("main event pump completed");
-        form.VerifySmokeLayout();
+        form.VerifySmokeLayout(Stage);
         Stage("main detail verification completed");
         form.Close();
 
