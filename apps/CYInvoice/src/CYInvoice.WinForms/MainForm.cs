@@ -395,8 +395,9 @@ internal sealed class MainForm : Form
         return false;
     }
 
-    internal void VerifySmokeLayout()
+    internal void VerifySmokeLayout(Action<string>? stage = null)
     {
+        stage?.Invoke("main smoke: begin checks");
         // Exercise the real constructor's pending state while the native UI
         // pumps messages, before any successful connection state is supplied.
         foreach (var pair in new[] { (Tab: invoiceTab, Page: (Control)invoicePage), (Tab: recordsTab, Page: (Control)recordsPage) })
@@ -407,6 +408,7 @@ internal sealed class MainForm : Form
                 || accountManagementButton.Enabled || forgotPasswordButton.Enabled)
                 throw new InvalidOperationException("啟動檢查完成前，原生頁面必須已呈現且受保護操作仍停用。");
         }
+        stage?.Invoke("main smoke: initial tabs");
         tabs.SelectedTab = invoiceTab;
         ApplyConnectionControls(new(true, true, true));
 
@@ -464,6 +466,7 @@ internal sealed class MainForm : Form
             runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
             runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動檢查中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
+        stage?.Invoke("main smoke: main header");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
         if (settingsButton.Right != tabHost.ClientSize.Width - HeaderButtonGap ||
@@ -477,17 +480,20 @@ internal sealed class MainForm : Form
         tabs.SelectedTab = invoiceTab;
         tabs.PerformLayout();
         Application.DoEvents();
+        stage?.Invoke("main smoke: invoice page");
         invoicePage.VerifySmokeLayout();
         if (ExcelComRows.AutomationLcid != 1033)
             throw new InvalidOperationException("Excel COM 未使用相容的 en-US LCID 1033");
         tabs.SelectedTab = recordsTab;
         tabs.PerformLayout();
         Application.DoEvents();
+        stage?.Invoke("main smoke: records page");
         recordsPage.VerifySmokeLayout();
         recordsPage.VerifySmokeFailedRecords();
         tabs.SelectedTab = invoiceTab;
         Application.DoEvents();
 
+        stage?.Invoke("main smoke: initial setup");
         using var firstSetup = new InitialSetupForm(repository);
         firstSetup.Show(this);
         firstSetup.PerformLayout();
@@ -495,14 +501,17 @@ internal sealed class MainForm : Form
         firstSetup.VerifySmokeLayout();
         firstSetup.Close();
 
+        stage?.Invoke("main smoke: employee login");
         using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
         employeeLogin.Show(this);
         employeeLogin.PerformLayout();
         Application.DoEvents();
         employeeLogin.VerifySmokeLayout();
         employeeLogin.Close();
+        stage?.Invoke("main smoke: employee auth verification");
         EmployeeAdminLoginForm.VerifyAuthenticationSmoke(this);
 
+        stage?.Invoke("main smoke: settings");
         using var settings = new SettingsForm(repository, startupSmokeTest: true);
         settings.Show(this);
         settings.PerformLayout();
@@ -512,6 +521,7 @@ internal sealed class MainForm : Form
 
         var now = DateTimeOffset.UtcNow;
         var smokeAdmin = new EmployeeAccount("0000", "測試超管", string.Empty, EmployeeRoles.SuperAdmin, true, now, now);
+        stage?.Invoke("main smoke: account management");
         using var management = new AccountManagementForm(repository.Employees, smokeAdmin);
         management.Show(this);
         management.PerformLayout();
@@ -526,6 +536,7 @@ internal sealed class MainForm : Form
         employeeEdit.VerifySmokeLayout();
         employeeEdit.Close();
 
+        stage?.Invoke("main smoke: password and recovery forms");
         using var passwordReset = new EmployeePasswordResetForm("0001", "測試員工");
         passwordReset.Show(this);
         passwordReset.PerformLayout();
@@ -561,7 +572,9 @@ internal sealed class MainForm : Form
         recovery.VerifySmokeLayout();
         recovery.Close();
 
+        stage?.Invoke("main smoke: import confirmation");
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
+        stage?.Invoke("main smoke: record detail");
         RecordDetailForm.VerifySmokeLayout(repository, service);
         if (connectionTimer.Interval != 60_000 || connectionTimer.Enabled)
             throw new InvalidOperationException("連線恢復檢查必須由主視窗的 60 秒 Timer 管理，smoke 不啟動網路檢查");
@@ -577,9 +590,12 @@ internal sealed class MainForm : Form
         ApplyConnectionControls(new(true, false, true, CloudRejected: true));
         if (invoicePage.Enabled || recordsPage.Enabled || accountManagementButton.Enabled || settingsButton.Enabled)
             throw new InvalidOperationException("已知授權拒絕不能開放功能");
+        stage?.Invoke("main smoke: connection block");
         ConnectionBlockForm.VerifySmoke(this);
         ApplyConnectionControls(new(true, false, false));
+        stage?.Invoke("main smoke: settings authentication");
         VerifySettingsAuthenticationSmoke();
+        stage?.Invoke("main smoke: completed");
     }
 
     private void VerifySettingsAuthenticationSmoke()
