@@ -17,10 +17,16 @@ internal sealed record CyInvoiceOrder(
     string PdfFile);
 
 /// <summary>What the platform export says about an order's invoice, to check CYInvoice's answer against.</summary>
-internal sealed record InvoiceExpectation(decimal Total, string BuyerTaxId, string InvoiceNo = "")
+/// <param name="Hold">Why the order is not to be issued by CYInvoice (empty: it may be).</param>
+internal sealed record InvoiceExpectation(decimal Total, string BuyerTaxId, string InvoiceNo = "", string Hold = "")
 {
     public static InvoiceExpectation Of(MoOrder o) => new(o.InvoiceTotal, o.BuyerTaxId, o.InvoiceNo);
-    public static InvoiceExpectation Of(CoupangOrder o) => new(o.InvoiceTotal, o.BuyerTaxId);
+
+    // CYInvoice V2.6.21 adds 應開立予買家之發票金額 up row by row: an order whose rows each carry the
+    // whole amount would be issued at twice or more (user, 2026-11-09: 240 issued as 480). Held
+    // until CYInvoice takes it once (docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md).
+    public static InvoiceExpectation Of(CoupangOrder o) => new(o.InvoiceTotal, o.BuyerTaxId,
+        Hold: o.RepeatedTotal ? $"酷澎多品項訂單每列都是整張金額 {o.InvoiceTotal:0.##} 元，CYInvoice 目前會逐列相加開成 {o.InvoiceTotal * o.Lines.Count:0.##} 元，所以沒有自動開立；請在 CYInvoice 手動開 {o.InvoiceTotal:0.##} 元後填入發票" : "");
 }
 
 internal sealed record CyInvoiceResult(string RequestId, string Version, string Environment, IReadOnlyList<CyInvoiceOrder> Orders)

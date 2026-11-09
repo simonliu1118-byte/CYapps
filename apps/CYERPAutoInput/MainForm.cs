@@ -2289,6 +2289,10 @@ internal sealed partial class MainForm : Form
                     catch (Exception abandonError) when (abandonError is not OperationCanceledException)
                     {
                         _log.Error("import", abandonError);
+                        // Left to a person, who may finish and save it: the next import of this
+                        // order warns before entering it again (user, 2026-11-09).
+                        try { ledger.Record(order.LedgerKey, LedgerStatus.Unfinished, createdNumber.Length > 0 ? $"{order.Header.GetValueOrDefault("order_type", string.Empty)}-{createdNumber}".TrimStart('-') : string.Empty); }
+                        catch (Exception ledgerError) when (ledgerError is IOException or UnauthorizedAccessException) { _log.Error("ledger", ledgerError); }
                         stoppedAt = $"訂單 {order.OrderSn}：{ex.Message}；無法安全放棄這張 ERP 單據（{abandonError.Message}），請人工處理";
                         return;
                     }

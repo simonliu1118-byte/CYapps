@@ -53,6 +53,12 @@ internal sealed partial class MainForm
         foreach (var o in imported.Where(o => o.HandoffReason.Length > 0))
             outcome.Notes.Add($"訂單 {o.OrderSn} 轉人工（{o.HandoffReason}），發票沒有交給 CYInvoice，請手動處理。");
         var targets = imported.Where(o => o.HandoffReason.Length == 0 && source.ContainsKey(o.OrderSn)).Select(o => o.OrderSn).Distinct().ToList();
+        foreach (var id in targets.Where(id => source[id].Hold.Length > 0).ToList())
+        {
+            outcome.Notes.Add($"訂單 {id}：{source[id].Hold}。");
+            _log.Warn("cyinvoice", $"order held from CYInvoice: {source[id].Hold}");
+            targets.Remove(id);
+        }
         if (targets.Count == 0) return outcome;
 
         var folder = Path.Combine(MoPrintedDocuments.TempRoot, "invoice-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));

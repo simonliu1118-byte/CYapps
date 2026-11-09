@@ -9,7 +9,12 @@ internal enum LedgerStatus
     /// <summary>CY finished the input without saving (auto-save off): a person was to save it.</summary>
     Entered,
     /// <summary>CY entered the header only and handed the order to a person.</summary>
-    HandedOff
+    HandedOff,
+    /// <summary>
+    /// The input stopped half way and the document could not be abandoned (user, 2026-11-09:
+    /// a 酷澎 order failed so on 11-06, was finished by hand, and came back in the next export).
+    /// </summary>
+    Unfinished
 }
 
 internal sealed record LedgerEntry(LedgerStatus Status, string Document, DateTime Time)
@@ -18,6 +23,7 @@ internal sealed record LedgerEntry(LedgerStatus Status, string Document, DateTim
     {
         LedgerStatus.Saved => $"已於 {Time:yyyy/MM/dd HH:mm} 儲存為 {DisplayDocument}",
         LedgerStatus.Entered => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入 {DisplayDocument}（未由本程式儲存）",
+        LedgerStatus.Unfinished => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入 {DisplayDocument} 時中斷（交給人工處理，可能已人工補完儲存）",
         _ => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入單頭 {DisplayDocument} 後轉人工"
     };
 
@@ -25,6 +31,7 @@ internal sealed record LedgerEntry(LedgerStatus Status, string Document, DateTim
     {
         LedgerStatus.Saved => "已儲存過",
         LedgerStatus.Entered => "曾輸入（未儲存）",
+        LedgerStatus.Unfinished => "曾輸入中斷",
         _ => "曾轉人工"
     };
 

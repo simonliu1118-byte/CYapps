@@ -993,13 +993,30 @@ internal sealed partial class ShopeeBatchRunner
             if (watch.Elapsed.TotalSeconds > 60) throw new ShopeeBatchStop("等不到萊爾富 Hi-Life 寄取貨單（60 秒）。", true);
             await Task.Delay(500, _token);
         }
-        using (slip)
+        // The slip's words come in pieces (user LOG 2026-11-07: checked at the first 27 lines, the
+        // 訂單編號 not among them yet, and the batch stopped): read again for a while, then with OCR.
+        bool Shows(Screen s) => ShopeeBatchScreens.ShowsOrderSnLoosely(s.Boxes, order.OrderSn) && ShopeeBatchScreens.ShowsNumber(s.Boxes, order.Tracking);
+        var checkedAt = Stopwatch.StartNew();
+        while (!Shows(slip))
         {
-            if (!ShopeeBatchScreens.ShowsOrderSnLoosely(slip.Boxes, order.OrderSn))
-                throw new ShopeeBatchStop($"萊爾富寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
-            if (!ShopeeBatchScreens.ShowsNumber(slip.Boxes, order.Tracking))
-                throw new ShopeeBatchStop($"萊爾富寄取貨單上讀不到寄件代碼 {order.Tracking}，未列印。", true);
+            var sn = ShopeeBatchScreens.ShowsOrderSnLoosely(slip.Boxes, order.OrderSn);
+            if (checkedAt.Elapsed.TotalSeconds > 8)
+            {
+                _log.Info("shopee-batch", $"Hi-Life slip text order_found={sn} tracking_found={ShopeeBatchScreens.ShowsNumber(slip.Boxes, order.Tracking)} lines={slip.Boxes.Count}; reading it with OCR");
+                slip.Dispose();
+                slip = await ReadAsync(ocr: true);
+                if (Shows(slip)) break;
+                var ocrSn = ShopeeBatchScreens.ShowsOrderSnLoosely(slip.Boxes, order.OrderSn);
+                slip.Dispose();
+                throw new ShopeeBatchStop(ocrSn
+                    ? $"萊爾富寄取貨單上讀不到寄件代碼 {order.Tracking}，未列印。"
+                    : $"萊爾富寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
+            }
+            await Task.Delay(600, _token);
+            slip.Dispose();
+            slip = await ReadAsync();
         }
+        slip.Dispose();
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
         if (NoteOnStoreSlips) await PrintPdfWithNoteAsync(order, _print.HiLifeScale);
         else await PrintDialogAsync(_print.HiLifeScale, pages: null);
