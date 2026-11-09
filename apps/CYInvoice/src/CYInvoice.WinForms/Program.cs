@@ -220,10 +220,14 @@ internal static class Program
 
         Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
+        Stage("main constructed");
         form.Show();
+        Stage("main shown");
         form.PerformLayout();
         Application.DoEvents();
+        Stage("main event pump completed");
         form.VerifySmokeLayout();
+        Stage("main detail verification completed");
         form.Close();
 
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
