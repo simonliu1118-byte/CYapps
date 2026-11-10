@@ -290,7 +290,9 @@ internal static class Program
         ApplicationIcon.VerifyCanonicalForSmoke();
         ApplicationVersion.VerifySmokeVersion();
         UpdateCheck.VerifySmokeCases();
+        Stage("isolated installer smoke begins");
         AppUpdater.VerifyInstallerSmoke();
+        Stage("isolated installer smoke complete");
         Stage("rounded buttons");
         RoundedButtonSmokeTests.Verify();
         Stage("five-row history");
