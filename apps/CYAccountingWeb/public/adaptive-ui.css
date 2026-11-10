@@ -10917,20 +10917,52 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     height: 28px !important;
     font-size: 16px !important;
   }
+  /* Keep the pending toggle directly under the summary input, not squeezed into a vertical right-edge column. */
   html[data-viewport="desktop"] .entry-card .entry-grid > .entry-pending-field {
     display: flex;
     grid-column: 1 / -1;
-    justify-content: flex-end;
-    min-height: 24px;
+    grid-row: auto;
+    align-items: center;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 20px;
+    padding-left: 52px; /* 44px summary caption + 8px field gap */
   }
   html[data-viewport="desktop"] .entry-pending-field label {
     display: inline-flex;
+    flex-flow: row nowrap;
     align-items: center;
+    justify-content: flex-start;
     gap: 5px;
-    font-size: 13px;
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 1.2;
     color: #833d66;
+    cursor: pointer;
   }
-  html[data-viewport="desktop"] .entry-pending-field input { width:16px; height:16px; margin:0; }
+  html[data-viewport="desktop"] .entry-pending-field label > span {
+    display: inline-block !important;
+    min-height: 0 !important;
+    white-space: nowrap !important;
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+  }
+  html[data-viewport="desktop"] .entry-pending-field input[type="checkbox"] {
+    flex: 0 0 14px;
+    width: 14px !important;
+    min-width: 14px !important;
+    max-width: 14px !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   html[data-viewport="desktop"] .entry-card .entry-grid > label:not(.account-source-field) {
     display: grid !important;
     grid-template-columns: 44px minmax(0, 1fr);
