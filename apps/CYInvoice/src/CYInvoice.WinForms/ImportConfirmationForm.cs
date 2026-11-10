@@ -9,6 +9,47 @@ namespace CYInvoice.WinForms;
 
 internal sealed class ImportConfirmationForm : Form
 {
+    private sealed class ImportSpinner : Control
+    {
+        private int frame;
+
+        public ImportSpinner()
+        {
+            Size = new Size(48, 48);
+            BackColor = Color.White;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer, true);
+        }
+
+        public void Advance()
+        {
+            frame = (frame + 1) % 12;
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            base.OnPaint(eventArgs);
+            eventArgs.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var centerX = ClientSize.Width / 2F;
+            var centerY = ClientSize.Height / 2F;
+            for (var index = 0; index < 12; index++)
+            {
+                var angle = (float)(index * Math.PI / 6);
+                var opacity = 65 + ((index + frame) % 12) * 16;
+                using var pen = new Pen(Color.FromArgb(opacity, 37, 99, 235), 3.5F)
+                {
+                    StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                    EndCap = System.Drawing.Drawing2D.LineCap.Round,
+                };
+                var dx = (float)Math.Cos(angle);
+                var dy = (float)Math.Sin(angle);
+                eventArgs.Graphics.DrawLine(pen, centerX + dx * 13, centerY + dy * 13,
+                    centerX + dx * 20, centerY + dy * 20);
+            }
+        }
+    }
+
     private sealed class Entry
     {
         public required string OrderId { get; init; }
@@ -37,6 +78,33 @@ internal sealed class ImportConfirmationForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private readonly List<Entry> entries = [];
     private readonly DataGridView grid = UiControls.Grid();
+    private readonly Panel gridHost = new() { Dock = DockStyle.Fill, Margin = Padding.Empty };
+    private readonly Panel importOverlay = new()
+    {
+        Size = new Size(388, 112),
+        BackColor = Color.White,
+        BorderStyle = BorderStyle.FixedSingle,
+        Visible = false,
+    };
+    private readonly ImportSpinner importSpinner = new();
+    private readonly Label importTitle = new()
+    {
+        Text = "匯入處理中",
+        Font = new Font("Microsoft JhengHei UI", 13F, FontStyle.Bold),
+        ForeColor = Color.FromArgb(31, 41, 55),
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+    };
+    private readonly Label importDetail = new()
+    {
+        Text = "正在讀取與整理 Excel，請稍候…",
+        Font = new Font("Microsoft JhengHei UI", 9.5F),
+        ForeColor = Color.FromArgb(102, 112, 133),
+        TextAlign = ContentAlignment.MiddleLeft,
+        Dock = DockStyle.Fill,
+        AutoEllipsis = true,
+    };
+    private readonly System.Windows.Forms.Timer importAnimation = new() { Interval = 80 };
     private readonly TextBox buyerBan = UiControls.TextBox(8);
     private readonly BuyerNameField buyerNameField = new(200);
     private TextBox buyerName => buyerNameField;
@@ -90,6 +158,12 @@ internal sealed class ImportConfirmationForm : Form
         MaximizeBox = true;
         BuildLayout();
         ConfigureEvents();
+        importAnimation.Tick += (_, _) => importSpinner.Advance();
+        FormClosed += (_, _) =>
+        {
+            importAnimation.Stop();
+            importAnimation.Dispose();
+        };
         Shown += async (_, _) => await LoadAsync();
     }
 
@@ -185,6 +259,7 @@ internal sealed class ImportConfirmationForm : Form
         heading.Controls.Add(UiControls.Label("請先逐張核對；取消、未勾選或資料有問題的訂單都不會送出。"), 1, 0);
 
         ConfigureGrid();
+        ConfigureImportOverlay();
         issue.Text = IssueButtonCaption();
         UiControls.ApplyIssueButtonTheme(issue,
             repository.Settings.LoadOrCreate().Environment == Environments.Production);
@@ -202,7 +277,7 @@ internal sealed class ImportConfirmationForm : Form
         actions.Resize += (_, _) => PositionActions();
 
         root.Controls.Add(heading, 0, 0);
-        root.Controls.Add(grid, 0, 1);
+        root.Controls.Add(gridHost, 0, 1);
         root.Controls.Add(editor, 0, 2);
         root.Controls.Add(summary, 0, 3);
         root.Controls.Add(progressArea, 0, 4);
@@ -210,6 +285,39 @@ internal sealed class ImportConfirmationForm : Form
         Controls.Add(root);
         originalBuyerReference.Resize += (_, _) => UpdateOriginalReferenceTooltip();
         PositionActions();
+    }
+
+    private void ConfigureImportOverlay()
+    {
+        gridHost.Controls.Add(grid);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16, 12, 16, 12),
+            Margin = Padding.Empty,
+            ColumnCount = 2,
+            RowCount = 2,
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        importSpinner.Anchor = AnchorStyles.None;
+        layout.Controls.Add(importSpinner, 0, 0);
+        layout.SetRowSpan(importSpinner, 2);
+        layout.Controls.Add(importTitle, 1, 0);
+        layout.Controls.Add(importDetail, 1, 1);
+        importOverlay.Controls.Add(layout);
+        gridHost.Controls.Add(importOverlay);
+        gridHost.Resize += (_, _) => CenterImportOverlay();
+        CenterImportOverlay();
+    }
+
+    private void CenterImportOverlay()
+    {
+        importOverlay.Location = new Point(
+            Math.Max(0, (gridHost.ClientSize.Width - importOverlay.Width) / 2),
+            Math.Max(0, (gridHost.ClientSize.Height - importOverlay.Height) / 2));
     }
 
     private Control BuildStandardEditor()
@@ -439,6 +547,7 @@ internal sealed class ImportConfirmationForm : Form
     private async Task LoadAsync()
     {
         SetBusy(true, $"正在唯讀解析 {source} 原始 Excel…");
+        await Task.Yield(); // Render the spinner before invoking a potentially slow file reader.
         try
         {
             entries.AddRange(await loadOrders(lifetime.Token));
@@ -945,6 +1054,19 @@ internal sealed class ImportConfirmationForm : Form
         cancel.Enabled = !busy || !issuing;
         progress.Visible = busy;
         progressText.Text = message;
+        var importing = busy && !issuing;
+        importDetail.Text = message;
+        importOverlay.Visible = importing;
+        if (importing)
+        {
+            CenterImportOverlay();
+            importOverlay.BringToFront();
+            importAnimation.Start();
+        }
+        else
+        {
+            importAnimation.Stop();
+        }
         if (!busy) progress.Style = ProgressBarStyle.Blocks;
         else { progress.Style = ProgressBarStyle.Marquee; progress.MarqueeAnimationSpeed = 40; }
         UpdateEditorAvailability();
