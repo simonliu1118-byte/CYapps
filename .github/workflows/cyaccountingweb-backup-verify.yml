@@ -2,7 +2,7 @@ name: CYAccountingWeb Backup Verification
 
 on:
   schedule:
-    - cron: '10 20 * * *' # 04:10 Asia/Taipei
+    - cron: '45 19 * * *' # 03:45 Asia/Taipei; the Worker accepts the external check until 12:00
   workflow_dispatch:
 
 permissions:
