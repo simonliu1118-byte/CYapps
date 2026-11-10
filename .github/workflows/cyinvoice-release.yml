@@ -218,6 +218,37 @@ jobs:
             --notes-file ./dist/release-notes.md `
             --latest
 
+      # One-time V3.1.48 approval: remove only the superseded V3.1.0
+      # download after verifying this exact formal release ZIP + SHA-256.
+      # Preserve the historical tag, V2.6.19 rollback and Go V1.1.0.
+      - name: Retire superseded CYInvoice V3.1.0 release after V3.1.48 verification
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true' && env.CYINVOICE_VERSION == '3.1.48'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $newTag = 'cyinvoice-v3.1.48'
+          $oldTag = 'cyinvoice-v3.1.0'
+          $zipName = 'CYInvoice_V3.1.48.zip'
+          $checksumName = 'CYInvoice_V3.1.48.zip.sha256'
+          $assetNames = @(gh release view $newTag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or $assetNames -notcontains $zipName -or $assetNames -notcontains $checksumName) {
+            throw "V3.1.48 formal ZIP and checksum are not both verified. Preserve V3.1.0."
+          }
+          gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "V3.1.0 Release already absent; historic tag remains untouched."
+            exit 0
+          }
+          gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --yes
+          if ($LASTEXITCODE -ne 0) { throw "Failed to remove superseded V3.1.0 Release." }
+          gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "V3.1.0 Release still exists after deletion." }
+          $historicTag = (& git ls-remote --tags origin 'refs/tags/cyinvoice-v3.1.0')
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($historicTag)) {
+            throw "V3.1.0 historical Git tag must remain after deleting its Release."
+          }
+          Write-Host "Verified V3.1.48; removed V3.1.0 Release and kept V3.1.0 Git tag."
+
       # Explicit one-time user instruction for V3.1.0 only. Never remove the
       # previous download until this run published AND verified the new assets.
       # Deliberately retain the historical cyinvoice-v3.0.0 Git tag.
