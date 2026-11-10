@@ -38,6 +38,9 @@ const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/c
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
 assert.equal(version, JSON.parse(read('src/build-metadata.json')).appVersion);
+assert.match(markup, /class="summary-field"[^\n]*id="summary"[^\n]*\n\s*<div class="entry-pending-field">/, 'pending checkbox stays immediately after summary input in the canonical form');
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.entry-card \.entry-grid > \.entry-pending-field \{[^}]*justify-content: flex-start;[^}]*padding-left: 52px;/, 'pending checkbox aligns below the desktop summary input');
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.entry-pending-field label > span \{[^}]*white-space: nowrap !important;[^}]*writing-mode: horizontal-tb !important;/, 'pending label must not wrap vertically');
 assert.match(build, /^(0|[1-9]\d*)$/);
 assert.match(adaptiveCss, /html\[data-viewport="desktop"\] body \{\s*display: flex;/);
 assert.match(adaptiveCss, /\.shell\.cy-split-layout \{[\s\S]*?overflow: hidden;/);
