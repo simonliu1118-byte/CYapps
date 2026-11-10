@@ -289,6 +289,7 @@ internal static class Program
         Stage("icon/version");
         ApplicationIcon.VerifyCanonicalForSmoke();
         ApplicationVersion.VerifySmokeVersion();
+        UpdateCheck.VerifySmokeCases();
         Stage("rounded buttons");
         RoundedButtonSmokeTests.Verify();
         Stage("five-row history");
