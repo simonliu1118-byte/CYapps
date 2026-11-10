@@ -68,7 +68,8 @@ try {
   const early=new Date('2026-11-04T20:15:00Z');
   await runScheduledBackup(f.env,{...f.options,now:early,cron:'*/5 * * * *'});assert.equal((await state(f)).fallback.status,'waiting');
   assert.equal(f.db.db.prepare('SELECT COUNT(*) AS n FROM backup_sets').get().n,1,'five-minute ticks do not export another backup');
-  let now=new Date('2026-11-04T21:00:00Z'),ticks=0,result;
+  await runScheduledBackup(f.env,{...f.options,now:new Date('2026-11-05T03:55:00Z'),cron:'*/5 * * * *'});assert.equal((await state(f)).fallback.status,'waiting','external may still claim until 12:00 Taipei');
+  let now=new Date('2026-11-05T04:00:00Z'),ticks=0,result;
   do {
     result=await runBackupVerification(f.env,{...f.options,now});
     now=new Date(now.getTime()+300000);ticks++;
@@ -151,7 +152,7 @@ const outage=fixture();
 try {
   await runScheduledBackup(outage.env,outage.options);
   outage.bucket.get=async()=>{throw new Error('TEST_R2_OUTAGE');};
-  let now=new Date('2026-11-04T21:00:00Z');
+  let now=new Date('2026-11-05T04:00:00Z');
   for(let i=0;i<3;i++) {
     await runBackupVerification(outage.env,{...outage.options,now});
     now=new Date(now.getTime()+300000);

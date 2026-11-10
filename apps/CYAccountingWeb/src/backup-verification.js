@@ -4,6 +4,11 @@ import { validateBackupSetBytes } from './gcs-backup.js';
 import { backupPackageDigest } from './backup-package.js';
 import { authenticateBackupVerifier } from './backup-verification-auth.js';
 import metadata from './build-metadata.json' with { type:'json' };
+// GitHub scheduled runs start hours late (observed 3–6.5 h). The external check
+// starts at 03:45 and may claim the job until 12:00 Taipei; only then does the
+// Worker fallback begin (user 2026-11-10).
+const EXTERNAL_CLAIM_UNTIL = '12:00:00';
+const externalDeadline = now => new Date(`${workDay(now)}T${EXTERNAL_CLAIM_UNTIL}+08:00`).toISOString();
 
 // Operational metadata/snapshots live outside backup packages and the ledger.
 // One CAS-protected owner controls both verification channels and notifications.
@@ -57,7 +62,7 @@ async function startState(env, now, previous, options) {
   }
   return { id:crypto.randomUUID(), day:workDay(now), createdAt:now.toISOString(), sources,
     lastSuccessAt:done(previous || {external:{},fallback:{}}) ? previous.completedAt : previous?.lastSuccessAt || null,
-    external:{ status:'waiting', deadline:new Date(`${workDay(now)}T05:00:00+08:00`).toISOString() },
+    external:{ status:'waiting', deadline:externalDeadline(now) },
     fallback:{ status:'waiting', providerIndex:0, phase:'download', part:0, step:0, failures:0, rows:0 },
     lease:null, incidentId:null, emailSentAt:null };
 }
@@ -169,7 +174,7 @@ async function coordinatorUnavailable(env,now,scheduled) {
     if (prior?.coordinator==='r2' && prior.health
       && now.getTime()-Date.parse(prior.health.checkedAt)<=36*3600000) return {...prior.health,status:'warning',issues:unavailable.issues};
     if (prior?.coordinator==='unavailable' && prior.day===workDay(now) && prior.failures>=3
-      && now.toISOString()>=new Date(`${workDay(now)}T05:00:00+08:00`).toISOString()) {
+      && now.toISOString()>=externalDeadline(now)) {
       return {...unavailable,status:'failed',emailSent:Boolean(prior.emailSent),emailPending:!prior.emailSent};
     }
     return unavailable;
@@ -178,7 +183,7 @@ async function coordinatorUnavailable(env,now,scheduled) {
   if (!prior) return unavailable;
   const slot=Math.floor(now.getTime()/300000);
   const consecutive=prior.coordinator==='unavailable' && prior.day===workDay(now) ? prior.failures+(prior.slot===slot?0:1) : 1;
-  const failed=consecutive>=3 && now.toISOString()>=new Date(`${workDay(now)}T05:00:00+08:00`).toISOString();
+  const failed=consecutive>=3 && now.toISOString()>=externalDeadline(now);
   const record={coordinator:'unavailable',day:workDay(now),slot,failures:consecutive,
     incidentId:prior.coordinator==='unavailable' && prior.day===workDay(now) ? prior.incidentId : crypto.randomUUID(),emailSent:prior.day===workDay(now) && Boolean(prior.emailSent)};
   const persist=()=>env.DB.prepare("UPDATE backup_health_state SET status=?,checked_at=?,details_json=? WHERE id=1")
