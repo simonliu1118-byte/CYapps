@@ -54,6 +54,36 @@ internal static class UpdateCheck
         return best;
     }
 
+    internal static void VerifySmokeCases()
+    {
+        const string releases = """
+            [
+              {
+                "tag_name":"cyinvoice-v3.1.50","draft":false,"prerelease":false,
+                "assets":[
+                  {"name":"CYInvoice_V3.1.50.zip","browser_download_url":"https://github.com/simonliu1118-byte/CYapps/releases/download/cyinvoice-v3.1.50/CYInvoice_V3.1.50.zip"},
+                  {"name":"CYInvoice_V3.1.50.zip.sha256","browser_download_url":"https://github.com/simonliu1118-byte/CYapps/releases/download/cyinvoice-v3.1.50/CYInvoice_V3.1.50.zip.sha256"}
+                ]
+              },
+              {"tag_name":"cyerp-auto-input-v9.9.9","draft":false,"prerelease":false,"assets":[]},
+              {"tag_name":"cyinvoice-v3.1.51","draft":false,"prerelease":true,"assets":[]},
+              {"tag_name":"cyinvoice-v3.1.52","draft":true,"prerelease":false,"assets":[]},
+              {"tag_name":"cyinvoice-v3.1.53","draft":false,"prerelease":false,"assets":[{"name":"CYInvoice_V3.1.53.zip","browser_download_url":"https://example.org/invalid.zip"}]}
+            ]
+            """;
+        var offer = Newest(releases, new Version(3, 1, 49));
+        if (offer?.Version != new Version(3, 1, 50) ||
+            Newest(releases, new Version(3, 1, 50)) is not null)
+            throw new InvalidOperationException("自動更新必須只選擇較新的 CYInvoice 正式 ZIP 與檢查碼");
+        const string hash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+        if (ExpectedSha256(hash + "  CYInvoice_V3.1.50.zip", "CYInvoice_V3.1.50.zip") != hash ||
+            ExpectedSha256(hash + "  other.zip", "CYInvoice_V3.1.50.zip") is not null)
+            throw new InvalidOperationException("自動更新 SHA-256 格式驗證失敗");
+        if (UpdateOutcome.Parse("ok\\n3.1.50\\n") is not { Ok: true, Version: "3.1.50" } ||
+            UpdateOutcome.Parse("not-a-status\\n3.1.50") is not null)
+            throw new InvalidOperationException("自動更新回復狀態解析失敗");
+    }
+
     /// <summary>Only this repository's own Release downloads for that tag are fetched.</summary>
     private static bool IsReleaseDownload(string url, string tag) =>
         url.StartsWith($"https://github.com/{Repository}/releases/download/{tag}/", StringComparison.Ordinal);
