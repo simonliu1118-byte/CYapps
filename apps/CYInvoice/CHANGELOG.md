@@ -1,5 +1,13 @@
 # CYInvoice 版本紀錄
 
+## V3.1.49 — 2026/11/10（修復 CYERPAutoInput 介面、自動更新）
+
+- 正式 V3 主線重新整合原 PR #445 的 `--autoinput-query／issue／pdf` 相容介面，維持 `cyinvoice-autoinput-request/1`、`cyinvoice-autoinput-result/1` JSON 契約與單一資料目錄寫入者。已開發票查詢不重送、開立前鎖定環境及防重、資料結果不明不冒充未開立；PDF 只輸出官方紙本並沿用原 Cache 驗證，酷澎一般消費者紙本 A4。保留 V3.1.48 之酷澎多品項金額與鼎新稅外加修正。
+- 新增 CYInvoice 自動更新：僅偵測本 repo `cyinvoice-vX.Y.Z` 正式 GitHub Release，必須同時有正式 ZIP 和 SHA-256；更新前下載、核雜湊、驗 ZIP 內版號／BUILD=0、禁止含設定／發票／Cache／Logs／Temp 等個資路徑。只有不在開立、同步或外部 AutoInput 處理中，且沒有其他視窗時才顯示倒數 10 秒更新；可延後 30 分鐘。關閉後才複製程式檔、備份既有程式並在失敗時還原，之後提示結果。
+- 本版需手動安裝一次；下一個正式 Release 起才可由本版自動升級。保留既有本機設定、憑證、SQLite 與發票紀錄，不執行 Cloudflare Worker／D1 部署或正式發票交易。
+- 核心 AutoInput 契約、API 環境隔離、PDF 與原子結果檔回歸測試；Windows 啟動 smoke 新增更新來源過濾、SHA-256 與回復狀態測試。CYID Consumer Impact: NONE。
+
+
 ## V3.1.48 — 2026/11/10（共用 Excel 匯入處理提示）
 
 - 鼎新 ERP、MO店+、酷澎三個匯入入口共用的確認視窗，在檔案解析、訂單整理及公司統編查詢期間，於清單中央顯示「匯入處理中」及持續旋轉的圓形提示，附目前處理階段文字；讀取完成、取消或失敗時停止動畫並關閉提示。

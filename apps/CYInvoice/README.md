@@ -7,9 +7,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程：**V3.1.46／BUILD0**；本機程式與必要Windows／Cloud／Governance CI通過，工程包不是正式Release。
+- 目前程式版本以 `VERSION`／`BUILD` 為唯一來源。本輪目標正式版為 **V3.1.49／BUILD0**，正式建置與驗證結果以 GitHub Release workflow 為準。
 - 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
-- 正式Release：**[V3.1.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v3.1.0)**。本次未建立新tag／Release或覆寫桌面安裝。
+- 正式 Release：[CYInvoice 最新版下載頁](https://github.com/simonliu1118-byte/CYapps/releases/latest)；V3.1.49 首次安裝須手動下載，之後才能使用內建自動更新。
 - 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
 - 版本歷史只在 [CHANGELOG](CHANGELOG.md) 保存；目前工程待辦見 [TODO](docs/TODO.md)、流程見 [V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)、維護完成證據見 [MCP交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
@@ -26,6 +26,21 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 一般消費者固定含稅；公司統編可切換含稅／未稅。
 - 固定精度金額計算、防重複開票、結果不明禁止盲目重送。
 - 測試環境使用 CYInvoice 專用 OrderID namespace，並依測試隱私規則去識別化。
+
+### CYERPAutoInput 本機呼叫介面
+
+- V3.1.49 起重新提供 `CYInvoice.exe --autoinput-query <request.json> --result <result.json>`、`--autoinput-issue`、`--autoinput-pdf`。request/result 使用 `cyinvoice-autoinput-request/1`／`cyinvoice-autoinput-result/1`。
+- 來源僅 MO店+（`mo`）或酷澎（`coupang`），原始 Excel 與 request/result 路徑須為絕對路徑；命令列不接受指定正式／測試環境，由 CYInvoice 已保存的設定決定。
+- 若 CYInvoice 已開啟，同一資料夾的次程序透過使用者本機的命名管道交由主程式處理，不另開第二個 SQLite writer。已開立／結果不明均須查回或轉人工，不得自動重複開票。
+- `--autoinput-pdf` 僅讀取本機記錄並使用既有官方 PDF 驗證／快取，不會開立發票。酷澎一般消費者紙本使用官方 A4 整張；有統編可選支援的版型。
+- 此介面由 CYERPAutoInput 使用；正式開立仍需由該程式明確啟動，並經 CYInvoice 既有光貿與環境權限安全檢查。
+
+### 自動更新（V3.1.49 起）
+
+- 約在啟動 20 秒後查詢新版本，之後約每 4 小時檢查一次。僅接受本 repo `cyinvoice-vX.Y.Z` 正式 Release 中，成對的 `CYInvoice_VX.Y.Z.zip` 及 SHA-256。
+- 新版下載後先核對 SHA-256、封裝結構與版本；若發票處理、背景同步、CYERPAutoInput 連線或其他視窗正在操作，更新會延後至閒置。倒數 10 秒可選擇稍後更新（延後 30 分鐘）。
+- 更新程序等 CYInvoice 完全結束才覆蓋程式檔，保留 `Data`、`Cache`、`log`、`Logs`、`Temp`、本機設定、SQLite 與 DPAPI 憑證；出錯時嘗試還原舊執行檔，保留日誌與更新結果。
+- **V3.1.49 必須由使用者先手動安裝一次**，不會神奇地讓 V3.1.48 自行更新。
 
 ### 本機資料與同步
 

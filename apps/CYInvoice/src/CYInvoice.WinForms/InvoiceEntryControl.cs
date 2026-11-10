@@ -541,8 +541,13 @@ internal sealed class InvoiceEntryControl : UserControl
             CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"InvoiceEntryControl"); MessageBox.Show(this, error.Message, "無法預覽", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
+    private bool manualIssueInProgress;
+    internal bool IsManualIssueInProgress => manualIssueInProgress;
+
     private async Task IssueAsync()
     {
+        if (manualIssueInProgress) return;
+        manualIssueInProgress = true;
         try
         {
             await RefreshCompanyForUseAsync();
@@ -580,7 +585,7 @@ internal sealed class InvoiceEntryControl : UserControl
             recordsChanged();
             MessageBox.Show(this, error.Message, "開立未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-        finally { Enabled = true; }
+        finally { Enabled = true; manualIssueInProgress = false; }
     }
 
     private async Task ImportDigiwinAsync()

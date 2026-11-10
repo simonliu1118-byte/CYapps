@@ -6,7 +6,7 @@ using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private static readonly Size DefaultClientSize = new(1264, 760);
     private const int WmNcHitTest = 0x0084;
@@ -22,6 +22,7 @@ internal sealed class MainForm : Form
     private const int BannerSideWidth = 450;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly AutoInputPipeServer autoInputPipe;
     private readonly InvoiceSyncCoordinator syncCoordinator;
     private readonly HttpClient cloudHealthHttpClient = new();
     private readonly CancellationTokenSource syncLifetime = new();
@@ -86,6 +87,11 @@ internal sealed class MainForm : Form
 
         repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         service = new InvoiceService(repository);
+        autoInputPipe = new AutoInputPipeServer(new AutoInputProcessor(repository, service), () =>
+        {
+            if (!IsDisposed && IsHandleCreated)
+                BeginInvoke((Action)(() => { if (!IsDisposed) recordsPage?.Reload(); }));
+        });
         var syncService = new InvoiceSyncService(repository);
         var automaticSyncService = new InvoiceAutomaticSyncService(repository, syncService);
         syncCoordinator = new InvoiceSyncCoordinator(syncService, automaticService: automaticSyncService);
@@ -93,7 +99,19 @@ internal sealed class MainForm : Form
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
         connectionTimer.Tick += async (_, _) => await RefreshConnectionsAsync();
-        FormClosing += (_, _) => StopBackgroundSync();
+        FormClosing += (_, eventArgs) =>
+        {
+            if (autoInputPipe.IsProcessing &&
+                !LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            {
+                eventArgs.Cancel = true;
+                MessageBox.Show(this, "外部批次發票正在處理中，為避免遺失開立結果，完成前不能關閉。",
+                    "AutoInput 正在處理", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            StopBackgroundSync();
+            autoInputPipe.Dispose();
+        };
         BuildShell();
         SetAmegoConnectionState("啟動檢查中", Color.FromArgb(128, 128, 128), "正在確認連線與裝置狀態，完成後自動開放操作。");
         UpdateEnvironment();
@@ -114,6 +132,8 @@ internal sealed class MainForm : Form
                 if (shuttingDown) return;
             }
             if (!EnsureInitialSetup()) return;
+            autoInputPipe.Start();
+            StartUpdateChecks();
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
             connectionTimer.Start();
@@ -1100,6 +1120,8 @@ internal sealed class MainForm : Form
         if (disposing)
         {
             StopBackgroundSync();
+            autoInputPipe.Dispose();
+            StopUpdateChecks();
             syncTimer.Dispose();
             connectionTimer.Dispose();
             cloudHealthHttpClient.Dispose();

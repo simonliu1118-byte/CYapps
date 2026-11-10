@@ -1,0 +1,16 @@
+CYInvoice V3.1.49 正式版
+
+修復 CYERPAutoInput 與 CYInvoice V3 整合
+- 正式支援 --autoinput-query、--autoinput-issue、--autoinput-pdf，採相同 JSON request/result 契約、單一主程式命名管道與序列化發票處理。
+- 自動開票維持環境一致性、已開票防重、疑似成功不重送；查詢結果不明僅經既有官方回查程序處理，不能憑訊息推論未開立。
+- 酷澎多品項總額修正、鼎新稅外加核對及三平台匯入等待提示均保留。
+
+新增 CYInvoice 自動更新
+- 執行後自動尋找本 repository 的 CYInvoice 正式 GitHub Release，新版本 ZIP 必須附 SHA-256，下載並核對檔案內容，更新範圍只限程式檔。
+- 有發票開立、同步、外部 AutoInput 或設定視窗時不得更新；程式閒置後以倒數通知，可延後 30 分鐘。關閉程式後才安裝，失敗會試圖還原原程式檔並顯示結果。
+- 保存原資料夾內本機設定、DPAPI 憑證、SQLite、發票紀錄、Log、Cache 等私人資料。V3.1.49 必須手動安裝一次，往後版本才自動更新。
+
+本次發行
+- VERSION=3.1.49、BUILD=0。必須從 main 重新建置、執行 Windows x64／核心／Cloud 契約／啟動測試、套件與機密掃描，附正式 ZIP 與 SHA-256。
+- 新版正式附件驗證成功後，依使用者此次明確授權刪除已被取代的 V3.1.48 GitHub Release 與下載檔，歷史 tag 與 commit 保留。
+- 不自動部署 Cloudflare Worker／D1，不執行真實 AMEGO 開票。既有真人跨機／財務驗收仍依 docs/POST_RELEASE_ACCEPTANCE.md，不將 CI 視為真人驗收。
