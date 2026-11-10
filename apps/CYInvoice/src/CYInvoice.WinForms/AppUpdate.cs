@@ -32,7 +32,7 @@ internal sealed class AppUpdater
     private static HttpClient CreateClient()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("CYInvoice", AppVersionInfo.Version));
+        http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("CYInvoice", ApplicationVersion.Read()));
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         return http;
     }
@@ -40,7 +40,7 @@ internal sealed class AppUpdater
     /// <summary>The program folder of an unpacked newer Release, ready to be put in place; null when there is none.</summary>
     public async Task<(ReleaseOffer Offer, string Folder)?> PrepareAsync(CancellationToken cancellationToken, Action<ReleaseOffer>? found = null)
     {
-        var current = Version.Parse(AppVersionInfo.Version);
+        var current = Version.Parse(ApplicationVersion.Read());
         var json = await Http.GetStringAsync(UpdateCheck.ReleasesUrl, cancellationToken);
         if (UpdateCheck.Newest(json, current) is not { } offer)
         {
