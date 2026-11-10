@@ -412,6 +412,8 @@ public sealed class InvoiceService
         finally { issueGate.Release(); }
     }
 
+    public bool HasActiveInvoiceOperation => issueGate.CurrentCount == 0;
+
     public async Task<IReadOnlyList<InvoiceRecord>> RefreshAllAsync(
         CancellationToken cancellationToken = default)
     {
