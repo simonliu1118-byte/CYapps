@@ -4,6 +4,11 @@
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
 
+## V1.1.2 — 2026/11/10（待確認欄位版面）
+
+- 桌機左側記帳欄的「待確認」核取方塊改為小型橫向排列，緊接摘要輸入欄下方並對齊文字輸入起點；修正靠右擠壓造成的直排。
+- 僅調整桌機 CSS 與資產快取識別，勾選狀態、摘要前綴、儲存與確認流程保持既有實作。手機／平板布局不變。此版未合併或部署，等待 PR 驗證與實機目視。
+
 ## V1.1.1 — 2026/11/05（外部備份檢查）
 
 - 在 V1.1.0 待確認功能及 schema 16 基礎上整合 PR #596；保留待確認旗標與確認稽核的備份、完整／分批回讀及舊 schema 相容處理。
