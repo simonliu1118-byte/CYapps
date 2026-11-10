@@ -36,6 +36,7 @@ public sealed class InvoiceSyncCoordinator
     }
 
     public TimeSpan ManualCooldownRemaining => CalculateManualCooldownRemaining();
+    public bool IsRunning => gate.CurrentCount == 0;
 
     public Task<InvoiceSyncRunResult> RunStartupAsync(CancellationToken cancellationToken = default) =>
         RunAsync(manual: false, automatic: true, cancellationToken);
