@@ -178,14 +178,20 @@ internal sealed class AppUpdater
         try
         {
             File.WriteAllText(script, body, new UTF8Encoding(true));
-            using var process = Process.Start(new ProcessStartInfo
+            var start = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \\"" + script + "\\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = work,
-            }) ?? throw new InvalidOperationException("Cannot start synthetic update installer");
+            };
+            start.ArgumentList.Add("-NoProfile");
+            start.ArgumentList.Add("-ExecutionPolicy");
+            start.ArgumentList.Add("Bypass");
+            start.ArgumentList.Add("-File");
+            start.ArgumentList.Add(script);
+            using var process = Process.Start(start)
+                ?? throw new InvalidOperationException("Cannot start synthetic update installer");
             if (!process.WaitForExit(30_000))
             {
                 process.Kill(entireProcessTree: true);
