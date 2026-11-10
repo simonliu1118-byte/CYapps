@@ -144,6 +144,68 @@ internal sealed class AppUpdater
         Log($"update V{version.ToString(3)} will be applied after exit restart={restart}");
     }
 
+    // Windows CI uses isolated synthetic files: checks updater actually replaces only executable
+    // content and leaves a private Data directory untouched. Never runs against installation data.
+    internal static void VerifyInstallerSmoke()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cyinvoice-update-smoke-" + Guid.NewGuid().ToString("N"));
+        var target = Path.Combine(root, "installed");
+        var work = Path.Combine(root, "work");
+        var source = Path.Combine(work, "unpacked", "CYInvoice");
+        var outcome = Path.Combine(target, "Temp", "update-result.txt");
+        Directory.CreateDirectory(Path.Combine(target, "Data"));
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(work);
+        var exe = Path.Combine(target, "CYInvoice.exe");
+        var dataFile = Path.Combine(target, "Data", "CYInvoice.db");
+        File.WriteAllText(exe, "old binary");
+        File.WriteAllText(dataFile, "private synthetic data");
+        File.WriteAllText(Path.Combine(source, "CYInvoice.exe"), "new binary");
+        File.WriteAllText(Path.Combine(source, "VERSION"), "9.9.9");
+        File.WriteAllText(Path.Combine(source, "BUILD"), "0");
+        static string Q(string value) => "'" + value.Replace("'", "''") + "'";
+        var script = Path.Combine(work, "apply-update-smoke.ps1");
+        var body = ApplyScript
+            .Replace("@PID@", int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .Replace("@SOURCE@", Q(source))
+            .Replace("@TARGET@", Q(target))
+            .Replace("@EXE@", Q(exe))
+            .Replace("@WORK@", Q(work))
+            .Replace("@OUTCOME@", Q(outcome))
+            .Replace("@PROGRAM@", Q(Program))
+            .Replace("@VERSION@", Q("9.9.9"))
+            .Replace("@RESTART@", "$false");
+        try
+        {
+            File.WriteAllText(script, body, new UTF8Encoding(true));
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \\"" + script + "\\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = work,
+            }) ?? throw new InvalidOperationException("Cannot start synthetic update installer");
+            if (!process.WaitForExit(30_000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new InvalidOperationException("Synthetic update installer timed out");
+            }
+            if (process.ExitCode != 0 ||
+                File.ReadAllText(exe) != "new binary" ||
+                File.ReadAllText(dataFile) != "private synthetic data" ||
+                !File.Exists(outcome) ||
+                UpdateOutcome.Parse(File.ReadAllText(outcome)) is not { Ok: true, Version: "9.9.9" })
+                throw new InvalidOperationException("Update installer failed to replace program files or preserve private data");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private const string Program = "CYInvoice";
 
     /// <summary>The script <see cref="ApplyAfterExit"/> runs; @NAME@ are filled in, quoted.</summary>
