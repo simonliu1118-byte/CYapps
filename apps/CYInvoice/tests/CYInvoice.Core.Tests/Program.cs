@@ -97,6 +97,11 @@ var tests = new (string Name, Action Run)[]
     ("Excel display artifacts fall back to stable raw values", TestSpreadsheetCellValues),
     ("Coupang import uses headers and groups order items", TestCoupangGrouping),
     ("Coupang import keeps seven-place fractional unit price", TestCoupangFractionalUnitPrice),
+    ("Coupang repeated whole-order amount is not doubled", TestCoupangWholeOrderTotal),
+    ("Coupang inconsistent multi-item amounts fail closed", TestCoupangInconsistentTotals),
+    ("Digiwin tax-exclusive consumer uses inclusive details", TestDigiwinTaxExcludedConsumer),
+    ("Digiwin tax-exclusive company retains untaxed details", TestDigiwinTaxExcludedCompany),
+    ("Digiwin tax-exclusive mismatched tax fails closed", TestDigiwinTaxExcludedMismatch),
     ("Digiwin import preserves negative detail and original company reference", TestDigiwinNegativeDiscount),
     ("Digiwin consumer clears source buyer name", TestDigiwinConsumerClearsBuyerName),
     ("Digiwin import rejects detail total mismatch", TestDigiwinTotalMismatch),
@@ -1010,13 +1015,14 @@ static void TestCoupangGrouping()
     [
         ["統一編號", "應開立予酷澎之發票金額", "訂購人姓名", "數量", "顯示產品名稱", "應開立予買家之發票金額", "訂單編號"],
         ["", "0", "買家", "1", "商品甲", "100", "ORDER-1"],
-        ["", "0", "買家", "2", "商品乙", "400", "ORDER-1"],
+        ["", "0", "買家", "2", "商品乙", "100", "ORDER-2"],
     ];
     var orders = CoupangImporter.ParseRows(rows);
-    Equal(1, orders.Count);
-    Equal(2, orders[0].Items.Count);
-    Equal(500L, orders[0].TotalAmount);
-    Equal(200L, orders[0].Items[1].UnitPrice);
+    Equal(2, orders.Count);
+    Equal(1, orders[0].Items.Count);
+    Equal(100L, orders[0].TotalAmount);
+    Equal(100L, orders[1].TotalAmount);
+    Equal(50L, orders[1].Items[0].UnitPrice);
 }
 
 static void TestCoupangFractionalUnitPrice()
@@ -1030,6 +1036,71 @@ static void TestCoupangFractionalUnitPrice()
     Equal("33.3333333", item.UnitPriceDecimal);
     Equal("100", item.AmountDecimal);
     Equal(true, item.AllowSubtotalRounding);
+}
+
+static void TestCoupangWholeOrderTotal()
+{
+    IReadOnlyList<IReadOnlyList<string>> rows =
+    [
+        ["訂單編號", "顯示產品名稱", "數量", "訂購人姓名", "應開立予買家之發票金額", "應開立予酷澎之發票金額", "統一編號", "銷售價格"],
+        ["ORDER-240", "商品甲", "1", "買家", "240", "0", "", "120"],
+        ["ORDER-240", "商品乙", "1", "買家", "240", "0", "", "120"],
+    ];
+    var order = CoupangImporter.ParseRows(rows).Single();
+    Equal(240L, order.TotalAmount);
+    Equal(120L, order.Items[0].Amount);
+    Equal(120L, order.Items[1].Amount);
+}
+
+static void TestCoupangInconsistentTotals()
+{
+    IReadOnlyList<IReadOnlyList<string>> rows =
+    [
+        ["訂單編號", "顯示產品名稱", "數量", "訂購人姓名", "應開立予買家之發票金額", "應開立予酷澎之發票金額", "統一編號", "銷售價格"],
+        ["ORDER-X", "商品甲", "1", "買家", "120", "0", "", "120"],
+        ["ORDER-X", "商品乙", "1", "買家", "240", "0", "", "120"],
+    ];
+    Throws<InvalidDataException>(() => CoupangImporter.ParseRows(rows));
+}
+
+static (IReadOnlyList<IReadOnlyList<string>> Head, IReadOnlyList<IReadOnlyList<string>> Detail)
+    DigiwinTaxExcludedRows(string ban = "", string tax = "81")
+{
+    IReadOnlyList<IReadOnlyList<string>> head =
+    [
+        ["銷貨單號", "客戶全名", "統一編號", "本幣合計", "課稅別", "營業稅率", "本幣銷貨金額", "本幣銷貨稅額"],
+        ["ORDER-TAX", "買家", ban, "1701", "2:外加", "5.00%", "1620", tax],
+    ];
+    IReadOnlyList<IReadOnlyList<string>> detail =
+    [
+        ["品名", "數量", "金額", "單位", "本幣未稅金額", "本幣稅額"],
+        ["商品", "1", "1620", "箱", "1620", "81"],
+    ];
+    return (head, detail);
+}
+
+static void TestDigiwinTaxExcludedConsumer()
+{
+    var (head, detail) = DigiwinTaxExcludedRows();
+    var order = DigiwinImporter.ParseRows(head, detail);
+    Equal(false, order.PricesExcludeTax);
+    Equal(1701L, order.TotalAmount);
+    Equal(1701L, order.Items[0].Amount);
+}
+
+static void TestDigiwinTaxExcludedCompany()
+{
+    var (head, detail) = DigiwinTaxExcludedRows("12345675");
+    var order = DigiwinImporter.ParseRows(head, detail);
+    Equal(true, order.PricesExcludeTax);
+    Equal(1701L, order.TotalAmount);
+    Equal(1620L, order.Items[0].Amount);
+}
+
+static void TestDigiwinTaxExcludedMismatch()
+{
+    var (head, detail) = DigiwinTaxExcludedRows(tax: "80");
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, detail));
 }
 
 static void TestDigiwinNegativeDiscount()

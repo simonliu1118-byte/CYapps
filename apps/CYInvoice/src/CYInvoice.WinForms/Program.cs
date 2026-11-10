@@ -196,7 +196,20 @@ internal static class Program
             Console.Error.WriteLine(error);
             Environment.Exit(1);
         }, null, TimeSpan.FromSeconds(120), Timeout.InfiniteTimeSpan);
-        void Stage(string name) { stage = name; Console.WriteLine("Startup smoke: " + name); }
+        void Stage(string name)
+        {
+            stage = name;
+            Console.WriteLine("Startup smoke: " + name);
+            // Diagnostic only: no business data or credentials are written.
+            try
+            {
+                var folder = Path.Combine(AppContext.BaseDirectory, "log");
+                Directory.CreateDirectory(folder);
+                File.AppendAllText(Path.Combine(folder, "startup-smoke-stage.log"), name + Environment.NewLine);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
         Stage("icon/version");
         ApplicationIcon.VerifyCanonicalForSmoke();
         ApplicationVersion.VerifySmokeVersion();
@@ -207,10 +220,14 @@ internal static class Program
 
         Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
+        Stage("main constructed");
         form.Show();
+        Stage("main shown");
         form.PerformLayout();
         Application.DoEvents();
-        form.VerifySmokeLayout();
+        Stage("main event pump completed");
+        form.VerifySmokeLayout(Stage);
+        Stage("main detail verification completed");
         form.Close();
 
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());

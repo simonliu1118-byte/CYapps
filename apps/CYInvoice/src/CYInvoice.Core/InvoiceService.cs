@@ -360,6 +360,7 @@ public sealed class InvoiceService
             order.Items,
             order.TotalAmount,
             string.Empty);
+        draft.PricesExcludeTax = company && order.PricesExcludeTax;
         return IssueAsync(
             draft,
             new IssueOptions(

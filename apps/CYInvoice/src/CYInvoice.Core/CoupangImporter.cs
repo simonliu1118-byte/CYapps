@@ -7,6 +7,8 @@ public sealed class CoupangOrder
     public string BuyerName { get; set; } = string.Empty;
     public List<InvoiceItem> Items { get; } = [];
     public long TotalAmount { get; set; }
+    internal List<long> BuyerAmounts { get; } = [];
+    internal List<long> SalesAmounts { get; } = [];
 }
 
 public static class CoupangImporter
@@ -106,22 +108,32 @@ public static class CoupangImporter
                 throw new InvalidDataException($"訂單 {orderId} 的買方資料在不同列不一致");
             }
 
-            var amountDecimal = FixedDecimal.FromInt64(amount);
-            var unitPrice = FixedDecimal.Divide(amountDecimal, quantity);
-            var expected = FixedDecimal.Multiply(quantity, unitPrice);
-            orders[orderIndex].Items.Add(new InvoiceItem
+            // Coupang repeats the whole-order buyer invoice amount on every product row.
+            var saleText = columns.ContainsKey("銷售價格") ? Value(row, columns, "銷售價格") : string.Empty;
+            long salesAmount = -1;
+            if (saleText.Length > 0)
+            {
+                try
+                {
+                    var unitSale = FixedDecimal.Parse(CleanNumber(saleText));
+                    if (unitSale.ScaledValue < 0) throw new FormatException();
+                    salesAmount = FixedDecimal.Multiply(unitSale, quantity).RoundInt64();
+                }
+                catch (Exception error) when (error is FormatException or OverflowException)
+                {
+                    throw new InvalidDataException($"第 {rowIndex + 1} 列銷售價格格式錯誤", error);
+                }
+            }
+            var order = orders[orderIndex];
+            order.BuyerAmounts.Add(amount);
+            order.SalesAmounts.Add(salesAmount);
+            order.Items.Add(new InvoiceItem
             {
                 Description = description,
                 Quantity = double.Parse(quantity.ToString(), System.Globalization.CultureInfo.InvariantCulture),
                 QuantityDecimal = quantity.ToString(),
-                UnitPrice = unitPrice.RoundInt64(),
-                UnitPriceDecimal = unitPrice.ToString(),
                 TaxType = "1",
-                Amount = amount,
-                AmountDecimal = amountDecimal.ToString(),
-                AllowSubtotalRounding = expected != amountDecimal,
             });
-            orders[orderIndex].TotalAmount = checked(orders[orderIndex].TotalAmount + amount);
         }
 
         if (orders.Count == 0)
@@ -133,6 +145,35 @@ public static class CoupangImporter
             if (order.Items.Count > InvoiceLimits.MaximumItems)
             {
                 throw new InvalidDataException($"訂單 {order.OrderId} 超過 {InvoiceLimits.MaximumItems} 筆商品");
+            }
+            if (order.Items.Count > 1)
+            {
+                var total = order.BuyerAmounts[0];
+                if (order.BuyerAmounts.Any(value => value != total))
+                {
+                    throw new InvalidDataException($"訂單 {order.OrderId} 多品項買家發票金額不一致，請人工核對");
+                }
+                if (order.SalesAmounts.Any(value => value < 0))
+                {
+                    throw new InvalidDataException($"訂單 {order.OrderId} 多品項缺少銷售價格，無法核對明細");
+                }
+                var remainder = total;
+                for (var index = 0; index < order.Items.Count; index++)
+                {
+                    var itemAmount = index == order.Items.Count - 1 ? remainder : order.SalesAmounts[index];
+                    if (itemAmount <= 0 || itemAmount > remainder)
+                    {
+                        throw new InvalidDataException($"訂單 {order.OrderId} 商品金額無法安全對齊買家發票總額");
+                    }
+                    SetItemAmount(order.Items[index], itemAmount);
+                    remainder = checked(remainder - itemAmount);
+                }
+                order.TotalAmount = total;
+            }
+            else
+            {
+                order.TotalAmount = order.BuyerAmounts[0];
+                SetItemAmount(order.Items[0], order.TotalAmount);
             }
             var company = order.BuyerBan.Length != 0;
             var draft = new InvoiceDraft
@@ -155,6 +196,18 @@ public static class CoupangImporter
             }
         }
         return orders;
+    }
+
+    private static void SetItemAmount(InvoiceItem item, long amount)
+    {
+        var quantity = FixedDecimal.Parse(item.QuantityDecimal);
+        var value = FixedDecimal.FromInt64(amount);
+        var unitPrice = FixedDecimal.Divide(value, quantity);
+        item.UnitPrice = unitPrice.RoundInt64();
+        item.UnitPriceDecimal = unitPrice.ToString();
+        item.Amount = amount;
+        item.AmountDecimal = value.ToString();
+        item.AllowSubtotalRounding = FixedDecimal.Multiply(quantity, unitPrice) != value;
     }
 
     private static Dictionary<string, int> HeaderMap(IReadOnlyList<string> row)

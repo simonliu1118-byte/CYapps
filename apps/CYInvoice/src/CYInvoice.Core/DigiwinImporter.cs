@@ -11,6 +11,7 @@ public sealed class DigiwinOrder
     public string OriginalBuyerName { get; init; } = string.Empty;
     public List<InvoiceItem> Items { get; } = [];
     public long TotalAmount { get; set; }
+    public bool PricesExcludeTax { get; set; }
 }
 
 public static class DigiwinImporter
@@ -41,6 +42,28 @@ public static class DigiwinImporter
         var originalName = Value(headData[0], headColumns, "客戶全名");
         var total = ParseInteger(Value(headData[0], headColumns, "本幣合計"), "鼎新單頭資料的本幣合計格式錯誤");
         if (total <= 0) throw new InvalidDataException("鼎新單頭資料的本幣合計必須大於 0");
+        var taxCategory = Value(headData[0], headColumns, "課稅別");
+        var taxExcluded = taxCategory.StartsWith("2:", StringComparison.Ordinal) &&
+            taxCategory.Contains("外加", StringComparison.Ordinal);
+        if (taxCategory.Contains("外加", StringComparison.Ordinal) && !taxExcluded)
+            throw new InvalidDataException("鼎新課稅別無法安全辨識，請人工確認");
+        long sourceSales = 0;
+        long sourceTax = 0;
+        if (taxExcluded)
+        {
+            foreach (var header in new[] { "本幣銷貨金額", "本幣銷貨稅額", "營業稅率" })
+                if (!headColumns.ContainsKey(header))
+                    throw new InvalidDataException($"鼎新稅外加缺少單頭欄位：{header}");
+            if (Value(headData[0], headColumns, "營業稅率") != "5.00%")
+                throw new InvalidDataException("鼎新稅外加只支援一般應稅 5%，請人工確認");
+            sourceSales = ParseInteger(Value(headData[0], headColumns, "本幣銷貨金額"), "鼎新未稅金額格式錯誤");
+            sourceTax = ParseInteger(Value(headData[0], headColumns, "本幣銷貨稅額"), "鼎新稅額格式錯誤");
+            if (sourceSales <= 0 || sourceTax < 0 || checked(sourceSales + sourceTax) != total)
+                throw new InvalidDataException("鼎新單頭未稅、稅額、含稅合計不一致");
+            var computedTax = FixedDecimal.MultiplyRatio(FixedDecimal.FromInt64(sourceSales), 1, 20).RoundInt64();
+            if (computedTax != sourceTax)
+                throw new InvalidDataException($"鼎新稅額 {sourceTax} 與計算稅額 {computedTax} 不一致，請人工確認");
+        }
 
         var detailHeaderIndex = FindHeaderRow(detailRows, DetailHeaders);
         if (detailHeaderIndex < 0) throw new InvalidDataException("鼎新單身資料找不到必要欄位：品名、數量、金額");
@@ -55,8 +78,15 @@ public static class DigiwinImporter
             OriginalBuyerBan = originalBan,
             OriginalBuyerName = originalName,
             TotalAmount = total,
+            PricesExcludeTax = taxExcluded && originalBan.Length != 0,
         };
 
+        if (taxExcluded)
+            foreach (var header in new[] { "本幣未稅金額", "本幣稅額" })
+                if (!detailColumns.ContainsKey(header))
+                    throw new InvalidDataException($"鼎新稅外加缺少單身欄位：{header}");
+        long detailNetTotal = 0;
+        long detailTaxTotal = 0;
         for (var rowIndex = detailHeaderIndex + 1; rowIndex < detailRows.Count; rowIndex++)
         {
             var row = detailRows[rowIndex];
@@ -78,6 +108,16 @@ public static class DigiwinImporter
             if (quantity.ScaledValue <= 0) throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量必須大於 0");
 
             var amount = ParseInteger(amountText, $"鼎新單身資料第 {rowIndex + 1} 列金額格式錯誤");
+            if (taxExcluded)
+            {
+                var net = ParseInteger(Value(row, detailColumns, "本幣未稅金額"), $"鼎新單身第 {rowIndex + 1} 列未稅金額格式錯誤");
+                var tax = ParseInteger(Value(row, detailColumns, "本幣稅額"), $"鼎新單身第 {rowIndex + 1} 列稅額格式錯誤");
+                if (net != amount || tax < 0)
+                    throw new InvalidDataException($"鼎新單身第 {rowIndex + 1} 列金額與未稅／稅額資料不一致");
+                detailNetTotal = checked(detailNetTotal + net);
+                detailTaxTotal = checked(detailTaxTotal + tax);
+                if (!order.PricesExcludeTax) amount = checked(net + tax);
+            }
             var amountValue = FixedDecimal.FromInt64(amount);
             var unitPrice = FixedDecimal.Divide(amountValue, quantity);
             var expected = FixedDecimal.Multiply(quantity, unitPrice);
@@ -100,10 +140,13 @@ public static class DigiwinImporter
         if (order.Items.Count > InvoiceLimits.MaximumItems)
             throw new InvalidDataException($"鼎新銷貨單 {order.OrderId} 超過 {InvoiceLimits.MaximumItems} 筆商品");
         var detailTotal = order.Items.Aggregate(0L, (sum, item) => checked(sum + item.Amount));
-        if (detailTotal != order.TotalAmount)
-            throw new InvalidDataException($"鼎新銷貨單 {order.OrderId} 金額不一致：單身金額合計 {detailTotal}，單頭本幣合計 {order.TotalAmount}");
+        if (taxExcluded && (detailNetTotal != sourceSales || detailTaxTotal != sourceTax))
+            throw new InvalidDataException($"鼎新稅外加單身未稅／稅額與單頭不一致：{detailNetTotal}+{detailTaxTotal} / {sourceSales}+{sourceTax}");
+        var expectedDetailTotal = order.PricesExcludeTax ? sourceSales : order.TotalAmount;
+        if (detailTotal != expectedDetailTotal)
+            throw new InvalidDataException($"鼎新銷貨單 {order.OrderId} 金額不一致：單身金額合計 {detailTotal}，預期明細合計 {expectedDetailTotal}");
 
-        var draft = new InvoiceDraft { OrderId = order.OrderId, TotalAmount = order.TotalAmount };
+        var draft = new InvoiceDraft { OrderId = order.OrderId, TotalAmount = order.TotalAmount, CompanyBuyer = order.BuyerBan.Length != 0, BuyerIdentifier = order.BuyerBan, PricesExcludeTax = order.PricesExcludeTax };
         draft.Items.AddRange(order.Items);
         try { InvoiceValidator.Validate(draft); }
         catch (Exception error)

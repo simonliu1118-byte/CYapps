@@ -199,7 +199,7 @@ jobs:
           - 完整版本內容請參閱發行包內的 V$env:CYINVOICE_VERSION.txt 與專案 CHANGELOG。
           - 下載 $zipName 後解壓縮，直接執行 CYInvoice.exe。
           - 發行包與 SHA-256 由本次正式 Release workflow 重新建置與驗證。
-          - 既有 V2.6.19 與歷史 Go／Win32 V1.1.0 Release 保留，不覆寫。
+          - 保留 V2.6.19 作為舊版備援；V3.1.0 與歷史 Go／Win32 V1.1.0 的 GitHub Release 將於新正式版附件驗證成功後清理，Git tag 保留。
 
           $summary
           "@ | Set-Content -Path ./dist/release-notes.md -Encoding utf8
@@ -217,6 +217,39 @@ jobs:
             --title "CYInvoice V$env:CYINVOICE_VERSION" `
             --notes-file ./dist/release-notes.md `
             --latest
+
+      # One-time V3.1.48 approval: retire V3.1.0 and V1.1.0 Release downloads
+      # only after verifying this exact formal release ZIP + SHA-256.
+      # Preserve both historical Git tags and the V2.6.19 fallback.
+      - name: Retire superseded CYInvoice V3.1.0 and V1.1.0 releases after V3.1.48 verification
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true' && env.CYINVOICE_VERSION == '3.1.48'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $newTag = 'cyinvoice-v3.1.48'
+          $oldTags = @('cyinvoice-v3.1.0', 'cyinvoice-v1.1.0')
+          $zipName = 'CYInvoice_V3.1.48.zip'
+          $checksumName = 'CYInvoice_V3.1.48.zip.sha256'
+          $assetNames = @(gh release view $newTag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or $assetNames -notcontains $zipName -or $assetNames -notcontains $checksumName) {
+            throw "V3.1.48 formal ZIP and checksum are not both verified. Preserve V3.1.0."
+          }
+          foreach ($oldTag in $oldTags) {
+            gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "$oldTag Release already absent; historic tag remains untouched."
+              continue
+            }
+            gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --yes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to remove superseded $oldTag Release." }
+            gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+            if ($LASTEXITCODE -eq 0) { throw "$oldTag Release still exists after deletion." }
+            $historicTag = (& git ls-remote --tags origin "refs/tags/$oldTag")
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($historicTag)) {
+              throw "$oldTag historical Git tag must remain after deleting its Release."
+            }
+            Write-Host "Verified V3.1.48; removed $oldTag Release and preserved its Git tag."
+          }
 
       # Explicit one-time user instruction for V3.1.0 only. Never remove the
       # previous download until this run published AND verified the new assets.
