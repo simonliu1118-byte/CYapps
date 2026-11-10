@@ -159,7 +159,7 @@ internal sealed class ImportConfirmationForm : Form
         BuildLayout();
         ConfigureEvents();
         importAnimation.Tick += (_, _) => importSpinner.Advance();
-        FormClosed += (_, _) =>
+        Disposed += (_, _) =>
         {
             importAnimation.Stop();
             importAnimation.Dispose();
