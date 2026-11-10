@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-11-04（V1.2.4 正式 Release，tag `cyerp-auto-input-v1.2.4`：全自動結束一律顯示撿貨總表、按列印才用 A4 印；前一版 V1.2.3 內容見 CHANGELOG；V1.2.3 Release 依使用者要求刪除）。之後的修改依規則升 Z 或 Build；正式發布一律往前推新版本號，不去掉 Build 沿用同號（使用者 2026-11-04）。**新 session 接手先看 §0。**
+> 更新：2026-11-10（V1.2.6 正式 Release，tag `cyerp-auto-input-v1.2.6`，內容為 V1.2.5 Build 0–2：酷澎多品項發票金額只算一次並依 CYInvoice 版本（3.1.48 起）自動開立、酷澎全自動只處理這次安排配送的訂單、輸入中斷記入防重複紀錄、萊爾富寄取貨單重讀、存檔後單號重讀，見 CHANGELOG；V1.2.4 Release 依使用者要求刪除）。待確認：CYInvoice V3.1.48（main 線）原始碼沒有 `--autoinput-*` 介面，使用者實際搭配的 CYInvoice 需同時有介面與酷澎金額修正，見 docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md。之後的修改依規則升 Z 或 Build；正式發布一律往前推新版本號（使用者 2026-11-04）。**新 session 接手先看 §0。**
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 

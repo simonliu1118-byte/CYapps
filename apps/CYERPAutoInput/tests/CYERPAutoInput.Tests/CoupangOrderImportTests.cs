@@ -54,8 +54,12 @@ public class CoupangOrderImportTests
         var order = CoupangOrderImport.ToImported(parsed, Mapping);
         Assert.Equal([new ImportedItem("X00010", "1", "120"), new ImportedItem("X00011", "1", "120")], order.Items);
         Assert.Equal("240", order.HeaderValues()["cod"]);
-        // CYInvoice adds the rows up: such an order is held from it.
+        // A CYInvoice before V3.1.48 adds the rows up: such an order is held from it.
         Assert.NotEmpty(InvoiceExpectation.Of(parsed).Hold);
+        Assert.False(CyInvoiceLink.TakesCoupangTotalOnce("2.6.21+0"));
+        Assert.True(CyInvoiceLink.TakesCoupangTotalOnce("3.1.48+0"));
+        Assert.True(CyInvoiceLink.TakesCoupangTotalOnce("3.2.0"));
+        Assert.False(CyInvoiceLink.TakesCoupangTotalOnce(""));
 
         // Rows with amounts of their own are added up as before, and not held.
         var own = Assert.Single(CoupangOrderImport.Parse(

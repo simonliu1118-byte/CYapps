@@ -53,12 +53,6 @@ internal sealed partial class MainForm
         foreach (var o in imported.Where(o => o.HandoffReason.Length > 0))
             outcome.Notes.Add($"訂單 {o.OrderSn} 轉人工（{o.HandoffReason}），發票沒有交給 CYInvoice，請手動處理。");
         var targets = imported.Where(o => o.HandoffReason.Length == 0 && source.ContainsKey(o.OrderSn)).Select(o => o.OrderSn).Distinct().ToList();
-        foreach (var id in targets.Where(id => source[id].Hold.Length > 0).ToList())
-        {
-            outcome.Notes.Add($"訂單 {id}：{source[id].Hold}。");
-            _log.Warn("cyinvoice", $"order held from CYInvoice: {source[id].Hold}");
-            targets.Remove(id);
-        }
         if (targets.Count == 0) return outcome;
 
         var folder = Path.Combine(MoPrintedDocuments.TempRoot, "invoice-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
@@ -87,6 +81,17 @@ internal sealed partial class MainForm
 
         var results = query.Orders.GroupBy(o => o.OrderId).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
         var toIssue = targets.Where(id => results.TryGetValue(id, out var r) && r.Status == "skipped").ToList();
+        // A 酷澎 order with the whole amount on every row is issued only by a CYInvoice that takes
+        // it once (V3.1.48, user 2026-11-10); an older one would issue it at twice or more.
+        var held = new HashSet<string>(StringComparer.Ordinal);
+        if (!CyInvoiceLink.TakesCoupangTotalOnce(query.Version))
+            foreach (var id in toIssue.Where(id => source[id].Hold.Length > 0).ToList())
+            {
+                outcome.Notes.Add($"訂單 {id}：{source[id].Hold}（CYInvoice 版本 {query.Version} 還沒有這項修正）。");
+                _log.Warn("cyinvoice", $"order held from CYInvoice version={query.Version}");
+                toIssue.Remove(id);
+                held.Add(id);
+            }
         var existing = targets.Count(id => results.TryGetValue(id, out var r) && r.Status == "existing");
         if (toIssue.Count > 0)
         {
@@ -135,7 +140,7 @@ internal sealed partial class MainForm
         }
 
         var filled = 0;
-        foreach (var order in imported.Where(o => targets.Contains(o.OrderSn)))
+        foreach (var order in imported.Where(o => targets.Contains(o.OrderSn) && !held.Contains(o.OrderSn)))
         {
             if (!results.TryGetValue(order.OrderSn, out var r))
             {

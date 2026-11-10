@@ -1,5 +1,7 @@
 # 交接：CYInvoice 酷澎多品項訂單發票金額重複相加
 
+> 狀態（2026-11-10）：CYInvoice 已在分支 `cyinvoice/fix-import-amounts-20261109`（V3.1.48）修正 `CoupangImporter`；CYERPAutoInput V1.2.6 對回報 3.1.48 以上的 CYInvoice 照常自動開立。**尚待確認**：該 V3 線原始碼找不到 `--autoinput-query／issue／pdf` 介面（介面目前只在 V2.6.21 的 `cyinvoice/feat-autoinput-interface`）；請 CYInvoice 確認本程式呼叫的版本同時具備介面與這項修正，確認後本檔彙整回 README／WORK_HANDOFF 並刪除。
+
 > 由 CYERPAutoInput session 撰寫（2026-11-09），請使用者轉交 CYInvoice session。CYInvoice 修正並出工程測試包後，CYERPAutoInput 會拿掉暫時的擋開立，並把本檔彙整回 README／WORK_HANDOFF／CHANGELOG 後刪除。
 
 ## 現象（使用者 2026-11-09）
