@@ -79,8 +79,8 @@ internal static class UpdateCheck
         if (ExpectedSha256(hash + "  CYInvoice_V3.1.50.zip", "CYInvoice_V3.1.50.zip") != hash ||
             ExpectedSha256(hash + "  other.zip", "CYInvoice_V3.1.50.zip") is not null)
             throw new InvalidOperationException("自動更新 SHA-256 格式驗證失敗");
-        if (UpdateOutcome.Parse("ok\\n3.1.50\\n") is not { Ok: true, Version: "3.1.50" } ||
-            UpdateOutcome.Parse("not-a-status\\n3.1.50") is not null)
+        if (UpdateOutcome.Parse("ok\n3.1.50\n") is not { Ok: true, Version: "3.1.50" } ||
+            UpdateOutcome.Parse("not-a-status\n3.1.50") is not null)
             throw new InvalidOperationException("自動更新回復狀態解析失敗");
     }
 
