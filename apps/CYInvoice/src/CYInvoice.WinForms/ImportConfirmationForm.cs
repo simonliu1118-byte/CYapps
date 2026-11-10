@@ -602,6 +602,7 @@ internal sealed class ImportConfirmationForm : Form
             lifetime.Token.ThrowIfCancellationRequested();
             var entry = entries[index];
             progressText.Text = $"正在查詢公司統編與準備逐張確認資料…（{index + 1}/{entries.Count}）";
+            importDetail.Text = progressText.Text;
             if (!entry.Company)
             {
                 if (digiwinMode)
@@ -1109,6 +1110,21 @@ internal sealed class ImportConfirmationForm : Form
 
     private static string IssueButtonCaption(bool production) => production ? "確認開立" : "確認測試開立";
 
+    private static void VerifyImportIndicator(ImportConfirmationForm form)
+    {
+        if (form.importOverlay.Parent != form.gridHost ||
+            form.importTitle.Text != "匯入處理中")
+            throw new InvalidOperationException("匯入等待畫面未放置於清單中央");
+        form.SetBusy(true, "正在唯讀解析 Excel…");
+        if (!form.importAnimation.Enabled || form.importDetail.Text != "正在唯讀解析 Excel…" ||
+            form.issue.Enabled)
+            throw new InvalidOperationException("匯入等待動畫、文字或防止提前開立的狀態不正確");
+        form.importSpinner.Advance();
+        form.SetBusy(false, string.Empty);
+        if (form.importAnimation.Enabled)
+            throw new InvalidOperationException("匯入結束後未停止轉圈圈動畫");
+    }
+
     internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
     {
         using var form = new ImportConfirmationForm(
@@ -1121,6 +1137,14 @@ internal sealed class ImportConfirmationForm : Form
         form.PerformLayout();
         form.RefreshSummary();
         form.PositionActions();
+        VerifyImportIndicator(form);
+        using (var coupangForm = new ImportConfirmationForm(
+            InvoiceSources.Coupang, repository, service, () => { },
+            _ => Task.FromResult<IReadOnlyList<Entry>>([])))
+        {
+            coupangForm.CreateControl();
+            VerifyImportIndicator(coupangForm);
+        }
 
         if (IssueButtonCaption(false) != "確認測試開立" || IssueButtonCaption(true) != "確認開立" ||
             form.issue.Text.Contains('張'))
@@ -1144,6 +1168,7 @@ internal sealed class ImportConfirmationForm : Form
             _ => Task.FromResult<IReadOnlyList<Entry>>([]));
         digiwinForm.CreateControl();
         digiwinForm.PerformLayout();
+        VerifyImportIndicator(digiwinForm);
         if (digiwinForm.buyerBan.BorderStyle != digiwinForm.buyerNameField.BorderStyle ||
             Math.Abs(digiwinForm.buyerBan.Height - digiwinForm.buyerNameField.Height) > 1 ||
             digiwinForm.buyerBan.Margin != digiwinForm.buyerNameField.Margin)
