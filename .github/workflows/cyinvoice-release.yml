@@ -165,8 +165,15 @@ jobs:
               -Wait `
               -PassThru
             if ($process.ExitCode -ne 0) {
-              $startupLog = Join-Path $smokeRoot "CYInvoice/Logs/startup-error.log"
-              if (Test-Path -LiteralPath $startupLog -PathType Leaf) { Get-Content -LiteralPath $startupLog | Write-Error }
+              $stageLog = Join-Path $smokeRoot "CYInvoice/log/startup-smoke-stage.log"
+              if (Test-Path -LiteralPath $stageLog -PathType Leaf) {
+                Write-Host "Extracted package startup stages:"
+                Get-Content -LiteralPath $stageLog | Write-Host
+              }
+              foreach ($logName in @("CYInvoice/log/startup-error.log", "CYInvoice/Logs/startup-error.log")) {
+                $startupLog = Join-Path $smokeRoot $logName
+                if (Test-Path -LiteralPath $startupLog -PathType Leaf) { Get-Content -LiteralPath $startupLog | Write-Host }
+              }
               throw "Packaged CYInvoice startup smoke test failed with exit code $($process.ExitCode)"
             }
           }
