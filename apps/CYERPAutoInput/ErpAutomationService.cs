@@ -778,8 +778,19 @@ internal sealed class ErpAutomationService
 
             if (DetectMode(root) != ErpMode.Browse) continue;
             var number = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
+            // Right after F12 the number box can still be redrawing (user LOG 2026-11-05／11-08:
+            // browse at 0.16 s, then the number read differently): read again for up to 2 s.
+            for (var again = 0; again < 8 && result.SalesOrderNumber.Length > 0 && number != result.SalesOrderNumber; again++)
+            {
+                _log.Info("document", $"saved number read {_log.Value(number)} expected {_log.Value(result.SalesOrderNumber)}; reading again");
+                await Delay(250, cancellationToken);
+                number = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
+            }
             if (result.SalesOrderNumber.Length > 0 && number != result.SalesOrderNumber)
-                throw new InvalidOperationException("ERP 已回到檢視狀態，但顯示的單號與輸入時取得的不同；請人工確認。");
+            {
+                _log.Warn("document", $"saved number {_log.Value(number)} differs from {_log.Value(result.SalesOrderNumber)}");
+                throw new InvalidOperationException($"ERP 已回到檢視狀態，但顯示的單號（{number}）與輸入時取得的（{result.SalesOrderNumber}）不同；請人工確認。");
+            }
             result.Saved = true;
             _log.Info("document", $"saved and verified document={_log.Value(result.DocumentKey)}");
             return;

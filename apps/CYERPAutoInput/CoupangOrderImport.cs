@@ -11,7 +11,8 @@ internal sealed record CoupangOrder(
     string Carrier,
     string TrackingNumber,
     string BuyerTaxId,
-    decimal Shipping)
+    decimal Shipping,
+    bool RepeatedTotal = false)
 {
     /// <summary>應開立予買家之發票金額 summed over the rows (includes the shipping).</summary>
     public decimal InvoiceTotal => Lines.Sum(l => l.InvoiceAmount);
@@ -110,10 +111,28 @@ internal static class CoupangOrderImport
             if (!TryAmount(shippingText, out var shipping) || shipping < 0)
                 problems.Add($"運費「{shippingText}」無法辨識。");
 
+            // Several products: 應開立予買家之發票金額 may be the whole order's on every row (user's
+            // export 2026-11-09: two products at 120, 240 on both rows). Then it is taken once, split
+            // over the products at their 銷售價格 (the last takes what is left).
+            var repeated = false;
+            if (problems.Count == 0 && lines.Count > 1 && lines.Select(l => l.InvoiceAmount).Distinct().Count() == 1)
+            {
+                var whole = lines[0].InvoiceAmount;
+                var listed = lines.Sum(l => l.Price * l.Quantity) + shipping;
+                if (whole <= listed && whole * lines.Count > listed)
+                {
+                    repeated = true;
+                    var split = lines.Select(l => l with { InvoiceAmount = l.Price * l.Quantity }).ToList();
+                    var rest = whole - split.Take(split.Count - 1).Sum(l => l.InvoiceAmount);
+                    split[^1] = split[^1] with { InvoiceAmount = rest };
+                    lines = split;
+                }
+            }
+
             if (problems.Count == 0)
             {
                 string First(string name) => orderRows.Select(r => Cell(r, name)).FirstOrDefault(v => v.Length > 0) ?? string.Empty;
-                var order = new CoupangOrder(excelRow, orderSn, lines, First("快遞公司"), First("寄件單號"), First("統一編號"), shipping);
+                var order = new CoupangOrder(excelRow, orderSn, lines, First("快遞公司"), First("寄件單號"), First("統一編號"), shipping, repeated);
                 if (order.Discount < 0)
                     problems.Add($"買家發票金額（{Number(order.InvoiceTotal)}）高於銷售價格合計加運費（{Number(order.InvoiceTotal + order.Discount)}），金額對不上。");
                 else orders.Add(order);

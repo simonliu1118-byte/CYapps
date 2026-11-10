@@ -37,6 +37,43 @@ public class CoupangOrderImportTests
     }
 
     [Fact]
+    public void Several_products_with_the_whole_amount_on_every_row_count_it_once()
+    {
+        // User's export 2026-11-09 (numbers made up): two products at 120, 240 on both rows.
+        var result = CoupangOrderImport.Parse(
+        [
+            Header,
+            Row("90000000000009", "X00010", "240", "120", "0"),
+            Row("90000000000009", "X00011", "240", "120", "0")
+        ]);
+        Assert.Empty(result.Errors);
+        var parsed = Assert.Single(result.Orders);
+        Assert.True(parsed.RepeatedTotal);
+        Assert.Equal(240m, parsed.InvoiceTotal);
+        Assert.Equal(0m, parsed.Discount);
+        var order = CoupangOrderImport.ToImported(parsed, Mapping);
+        Assert.Equal([new ImportedItem("X00010", "1", "120"), new ImportedItem("X00011", "1", "120")], order.Items);
+        Assert.Equal("240", order.HeaderValues()["cod"]);
+        // A CYInvoice before V3.1.48 adds the rows up: such an order is held from it.
+        Assert.NotEmpty(InvoiceExpectation.Of(parsed).Hold);
+        Assert.False(CyInvoiceLink.TakesCoupangTotalOnce("2.6.21+0"));
+        Assert.True(CyInvoiceLink.TakesCoupangTotalOnce("3.1.48+0"));
+        Assert.True(CyInvoiceLink.TakesCoupangTotalOnce("3.2.0"));
+        Assert.False(CyInvoiceLink.TakesCoupangTotalOnce(""));
+
+        // Rows with amounts of their own are added up as before, and not held.
+        var own = Assert.Single(CoupangOrderImport.Parse(
+        [
+            Header,
+            Row("90000000000010", "X00010", "100", "120", "0"),
+            Row("90000000000010", "X00011", "120", "120", "0")
+        ]).Orders);
+        Assert.False(own.RepeatedTotal);
+        Assert.Equal(220m, own.InvoiceTotal);
+        Assert.Empty(InvoiceExpectation.Of(own).Hold);
+    }
+
+    [Fact]
     public void Free_shipping_and_a_discount_give_only_the_discount_item()
     {
         var result = CoupangOrderImport.Parse([Header, Row("90000000000002", "X00002", "180", "100", "0", qty: "2")]);

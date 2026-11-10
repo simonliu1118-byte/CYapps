@@ -81,6 +81,17 @@ internal sealed partial class MainForm
 
         var results = query.Orders.GroupBy(o => o.OrderId).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
         var toIssue = targets.Where(id => results.TryGetValue(id, out var r) && r.Status == "skipped").ToList();
+        // A 酷澎 order with the whole amount on every row is issued only by a CYInvoice that takes
+        // it once (V3.1.48, user 2026-11-10); an older one would issue it at twice or more.
+        var held = new HashSet<string>(StringComparer.Ordinal);
+        if (!CyInvoiceLink.TakesCoupangTotalOnce(query.Version))
+            foreach (var id in toIssue.Where(id => source[id].Hold.Length > 0).ToList())
+            {
+                outcome.Notes.Add($"訂單 {id}：{source[id].Hold}（CYInvoice 版本 {query.Version} 還沒有這項修正）。");
+                _log.Warn("cyinvoice", $"order held from CYInvoice version={query.Version}");
+                toIssue.Remove(id);
+                held.Add(id);
+            }
         var existing = targets.Count(id => results.TryGetValue(id, out var r) && r.Status == "existing");
         if (toIssue.Count > 0)
         {
@@ -129,7 +140,7 @@ internal sealed partial class MainForm
         }
 
         var filled = 0;
-        foreach (var order in imported.Where(o => targets.Contains(o.OrderSn)))
+        foreach (var order in imported.Where(o => targets.Contains(o.OrderSn) && !held.Contains(o.OrderSn)))
         {
             if (!results.TryGetValue(order.OrderSn, out var r))
             {
@@ -704,7 +715,9 @@ internal sealed partial class MainForm
         var runNotes = new List<string>(result.Notes);
         if (result.Accepted.Count > 0 || result.Arranged.Count > 0)
             runNotes.Insert(0, $"Wing：確認訂單 {result.Accepted.Count} 筆、安排配送並列印寄件單 {result.Arranged.Count} 筆。");
-        await CoupangToErpAsync(title, file, runNotes);
+        // Only the orders this run arranged (user, 2026-11-09: 配送指示 also lists earlier orders the
+        // carrier has not picked up yet, and one of them was entered again).
+        await CoupangToErpAsync(title, file, runNotes, result.Arranged.ToHashSet(StringComparer.Ordinal));
     }
 
     /// <summary>酷澎 › 列印寄件單 (user, 2026-10-20): the Wing 寄件詳情 the user opened, printed.</summary>
@@ -744,7 +757,11 @@ internal sealed partial class MainForm
     }
 
     /// <summary>A downloaded 酷澎 DeliveryList → CYInvoice (酷澎 entry, paper in the background) → ERP or the preview.</summary>
-    private async Task CoupangToErpAsync(string title, string file, List<string> runNotes)
+    /// <param name="thisRun">
+    /// 全自動: the orders 配送準備 listed and this run arranged; the DeliveryList's others are an
+    /// earlier run's, left alone. Null (匯入訂單匯出檔): every order of the file.
+    /// </param>
+    private async Task CoupangToErpAsync(string title, string file, List<string> runNotes, IReadOnlySet<string>? thisRun = null)
     {
         CoupangImportResult parsed;
         try
@@ -760,6 +777,19 @@ internal sealed partial class MainForm
             return;
         }
         _log.Info("coupang-batch", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+        if (thisRun is not null)
+        {
+            var earlier = parsed.Orders.Where(o => !thisRun.Contains(o.OrderSn)).Select(o => o.OrderSn).ToList();
+            var missing = thisRun.Where(sn => !parsed.Orders.Any(o => o.OrderSn == sn) && !parsed.Errors.Any(e => e.Contains(sn, StringComparison.Ordinal))).ToList();
+            _log.Info("coupang-batch", $"this run arranged={thisRun.Count} in_export={thisRun.Count - missing.Count} earlier_left={earlier.Count}");
+            if (earlier.Count > 0)
+                runNotes.Add($"配送指示上另有 {earlier.Count} 筆不是這次安排配送的（較早的訂單，物流還沒取件），這次不處理：{string.Join("、", earlier)}");
+            if (missing.Count > 0)
+                runNotes.Add($"這次安排配送的 {missing.Count} 筆在下載的 Excel 裡找不到，請人工確認：{string.Join("、", missing)}");
+            parsed = new CoupangImportResult(
+                parsed.Orders.Where(o => thisRun.Contains(o.OrderSn)).ToList(),
+                parsed.Errors.Where(e => thisRun.Any(sn => e.Contains(sn, StringComparison.Ordinal))).ToList());
+        }
         if (parsed.Orders.Count == 0 && parsed.Errors.Count == 0)
         {
             Session.End(AutomationOutcome.Done);

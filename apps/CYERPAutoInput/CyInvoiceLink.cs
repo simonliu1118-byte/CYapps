@@ -17,10 +17,16 @@ internal sealed record CyInvoiceOrder(
     string PdfFile);
 
 /// <summary>What the platform export says about an order's invoice, to check CYInvoice's answer against.</summary>
-internal sealed record InvoiceExpectation(decimal Total, string BuyerTaxId, string InvoiceNo = "")
+/// <param name="Hold">Why the order is not to be issued by CYInvoice (empty: it may be).</param>
+internal sealed record InvoiceExpectation(decimal Total, string BuyerTaxId, string InvoiceNo = "", string Hold = "")
 {
     public static InvoiceExpectation Of(MoOrder o) => new(o.InvoiceTotal, o.BuyerTaxId, o.InvoiceNo);
-    public static InvoiceExpectation Of(CoupangOrder o) => new(o.InvoiceTotal, o.BuyerTaxId);
+
+    // CYInvoice before V3.1.48 adds 應開立予買家之發票金額 up row by row: an order whose rows each
+    // carry the whole amount would be issued at twice or more (user, 2026-11-09: 240 issued as
+    // 480). Held from such a CYInvoice (see TakesCoupangTotalOnce).
+    public static InvoiceExpectation Of(CoupangOrder o) => new(o.InvoiceTotal, o.BuyerTaxId,
+        Hold: o.RepeatedTotal ? $"酷澎多品項訂單每列都是整張金額 {o.InvoiceTotal:0.##} 元，舊版 CYInvoice 會逐列相加開成 {o.InvoiceTotal * o.Lines.Count:0.##} 元，所以沒有自動開立；請在 CYInvoice 手動開 {o.InvoiceTotal:0.##} 元後填入發票" : "");
 }
 
 internal sealed record CyInvoiceResult(string RequestId, string Version, string Environment, IReadOnlyList<CyInvoiceOrder> Orders)
@@ -148,6 +154,16 @@ internal static class CyInvoiceLink
     /// A paper invoice to print — CYInvoice's rule per entry (user, 2026-10-15): MO店+ only for a
     /// buyer with 統編 (a consumer's goes to the member carrier); 酷澎 always paper.
     /// </summary>
+    /// <summary>
+    /// CYInvoice V3.1.48 takes a 酷澎 order's whole amount once when every row repeats it
+    /// (its fix of 2026-11-09); versions before add the rows up.
+    /// </summary>
+    public static bool TakesCoupangTotalOnce(string version)
+    {
+        var core = version.Split('+', '-', ' ')[0];
+        return Version.TryParse(core, out var v) && v >= new Version(3, 1, 48);
+    }
+
     public static bool IsPaper(CyInvoiceOrder result, string source = Mo) => source == Coupang || result.BuyerBan.Length > 0;
 
     /// <summary>How long to wait for CYInvoice: a minute per order plus one (the handoff's suggestion).</summary>
