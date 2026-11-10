@@ -199,7 +199,7 @@ jobs:
           - 完整版本內容請參閱發行包內的 V$env:CYINVOICE_VERSION.txt 與專案 CHANGELOG。
           - 下載 $zipName 後解壓縮，直接執行 CYInvoice.exe。
           - 發行包與 SHA-256 由本次正式 Release workflow 重新建置與驗證。
-          - 保留 V2.6.19 作為舊版備援；V3.1.0 與歷史 Go／Win32 V1.1.0 的 GitHub Release 將於新正式版附件驗證成功後清理，Git tag 保留。
+          - 以當次明確核准的清理範圍為準；舊版 GitHub Releases 只有在新版附件驗證成功後才移除，歷史 Git tags 保留。
 
           $summary
           "@ | Set-Content -Path ./dist/release-notes.md -Encoding utf8
@@ -217,6 +217,35 @@ jobs:
             --title "CYInvoice V$env:CYINVOICE_VERSION" `
             --notes-file ./dist/release-notes.md `
             --latest
+
+      # One-time V3.1.49 approval: retire the superseded V3.1.48
+      # download only after verifying the new formal ZIP and checksum.
+      - name: Retire CYInvoice V3.1.48 Release after verifying V3.1.49
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true' && env.CYINVOICE_VERSION == '3.1.49'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $newTag = 'cyinvoice-v3.1.49'
+          $oldTag = 'cyinvoice-v3.1.48'
+          $assets = @(gh release view $newTag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0 -or
+              $assets -notcontains 'CYInvoice_V3.1.49.zip' -or
+              $assets -notcontains 'CYInvoice_V3.1.49.zip.sha256') {
+            throw "V3.1.49 ZIP and SHA-256 are not verified; preserve V3.1.48."
+          }
+          gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "V3.1.48 Release already absent; historical tag retained."
+            exit 0
+          }
+          gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --yes
+          if ($LASTEXITCODE -ne 0) { throw "Could not retire V3.1.48 Release." }
+          gh release view $oldTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "V3.1.48 Release still exists." }
+          $historicTag = (& git ls-remote --tags origin 'refs/tags/cyinvoice-v3.1.48')
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($historicTag)) {
+            throw "Historical V3.1.48 Git tag must be retained."
+          }
 
       # One-time V3.1.48 approval: retire V3.1.0 and V1.1.0 Release downloads
       # only after verifying this exact formal release ZIP + SHA-256.
