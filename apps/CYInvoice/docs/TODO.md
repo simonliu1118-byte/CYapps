@@ -2,7 +2,7 @@
 
 2026-11-05部署識別修正：V3.1.46／Cloud0.9.14 Source退役APP_ENV、使用平台版本資訊；本批原Worker已於2026-11-05由本機MCP完成部署、平台版本與線上程式SHA後驗；schema23不變。原0.9.13及本次成功維護均不重跑。完整完成摘要及後續驗收見 [本機交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；原同機流程與真人待驗項目不因本次修改結案。
 
-更新日期：2026-11-11（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；最新正式 Release 為 **V3.1.49**（`cyinvoice-v3.1.49`），精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
+更新日期：2026-11-11（Asia/Taipei）。本檔保留工程／產品待辦與歷史 checkpoint；最新正式 Release 為 **V3.1.50**（`cyinvoice-v3.1.50`），精確 Release 結果以 GitHub tag／CI 為準。V3.0+V3.1 真人未驗收項**僅**在 [唯一的發行後待驗收清單](POST_RELEASE_ACCEPTANCE.md) 勾選及追蹤，本檔／舊 RC 表不得代替真人已完成證據。下方較舊 V3.0.0／schema15／0016 草稿描述保留歷史，不是目前狀態。
 
 - [V2.6.19 歷史 Release](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyinvoice-v2.6.19) 與 [歷史 Release CI #38336787968](https://github.com/simonliu1118-byte/CYapps/actions/runs/38336787968) 已完成。沿用使用者接受本批本地／隔離測試及精確 source CI 的決定；人工折讓歷史缺欄位留 V3.0，不重新打開本批 Release gate。
 - 本公司 CYID activation 已完成；2026-10-13 另經獨立批准完成私有加密備份／本地還原核對 → 原 Worker 相容升級 → 原 D1 四張舊帳號／轉換表退役 → 保留資料逐筆核對。部署證據：[Development Deploy #38396129643](https://github.com/simonliu1118-byte/CYapps/actions/runs/38396129643)；完成範圍見 §7.7。這是原 development 維護，不是另一個 production 環境或新 Windows Release。
@@ -10,11 +10,12 @@
 - 現行維護交接：[MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；V3_1_HANDOFF保留已發行版本歷史；**V3.0／V3.1 發行後待驗收唯一清單**：[POST_RELEASE_ACCEPTANCE.md](POST_RELEASE_ACCEPTANCE.md)。[RC_TEST.md](RC_TEST.md) 保留詳細歷史案例供操作參考，不另做第二份未驗收統計；私人資料不能放入公開 repo。
 - 不建立／上傳／部署 Cloudflare 測試 Worker、測試版本或 handler；舊測試資源不重試刪除，不為補驗變更真實帳號或撤銷原裝置。本次維護授權不延伸為持續刪表／發布授權。
 
-本輪現行狀態（2026-11-05）：V3.1.46／Cloud0.9.14已完成Source、必要CI及原Worker受控部署，schema23、原production CYID與旗標保留，平台版本／線上程式SHA後驗通過。固定部署Source fb381f5140f92e240f1c405f5ad38ad5a3a5efc9；詳細用量與回復證據留私有紀錄。當時正式Release仍V3.1.0（2026-11-10起最新正式Release為V3.1.49），真人業務驗收未全部完成。
+本輪現行狀態（2026-11-05）：V3.1.46／Cloud0.9.14已完成Source、必要CI及原Worker受控部署，schema23、原production CYID與旗標保留，平台版本／線上程式SHA後驗通過。固定部署Source fb381f5140f92e240f1c405f5ad38ad5a3a5efc9；詳細用量與回復證據留私有紀錄。當時正式Release仍V3.1.0（之後正式Release依序為V3.1.49、V3.1.50），真人業務驗收未全部完成。
 
 ## 現行待辦索引
 
-- [ ] V3.1.50 工程包：實機確認啟動時標題列旋轉提示持續到啟動完成，以及酷澎／鼎新選檔後立即出現「匯入處理中」並涵蓋公司卡同步與讀檔；通過後再另行指示合併與正式 Release。
+- [x] V3.1.50：啟動旋轉提示涵蓋整段啟動流程、酷澎／鼎新選檔後立即顯示「匯入處理中」並涵蓋公司卡同步；使用者測試包驗收後合併 [#614](https://github.com/simonliu1118-byte/CYapps/pull/614) 並正式發行。GPT 舊轉圈 PR [#612](https://github.com/simonliu1118-byte/CYapps/pull/612) 已由 #614 取代關閉。
+- [ ] **PR [#602](https://github.com/simonliu1118-byte/CYapps/pull/602)（`cyinvoice/fix-startup-loading`）仍有未合併功能**，不可直接丟棄：折讓申請共用原生表格與 NativeListCellEditor（原工程V3.1.48）、折讓版面返修（V3.1.48 Build 1）、折讓詳情三區（V3.1.49）、提出者撤回與狀態即時更新（V3.1.50 Build 7）及配套 Cloud Source 0.9.15（未部署）。其版號已被 main 的 V3.1.47～V3.1.50 另作他用，整合時須依現行 main 重新編號；其中 StartupCheckOverlay 啟動提示已由 V3.1.50 BusySpinner 取代，整合時刪除，不得形成第二套啟動提示。
 
 - [ ] 以V3.1.46／Cloud0.9.14完成同機真人正向流程、原角色、一次核准、自動執行／查回及重啟／異常展示的完整驗收；具體案例與需求差異只在 [唯一V3.2計畫](V3_2_IMPLEMENTATION_PLAN.md#6-驗證與未完項) 維護。
 - [ ] 跨機協同留下一版；雙Windows真人完整驗收依已批准決定延至3.2上線後，不把本批CI／無憑證拒絕／單機隔離測試算成跨機通過。

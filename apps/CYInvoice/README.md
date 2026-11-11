@@ -7,9 +7,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前程式版本以 `VERSION`／`BUILD` 為唯一來源：工程版 **V3.1.50／BUILD0**（啟動與匯入等待提示修正，測試中）；最新正式 Release 為 **V3.1.49**，正式建置與驗證結果以 GitHub Release workflow 為準。
+- 目前程式版本以 `VERSION`／`BUILD` 為唯一來源：**V3.1.50／BUILD0**，已於 2026-11-11 正式發行（`cyinvoice-v3.1.50`，啟動與匯入等待提示修正）；正式建置與驗證結果以 GitHub Release workflow 為準。
 - 原Worker：**Cloud0.9.14／API1／schema與marker23／CYID_ONLY**。2026-11-05已由本機MCP部署為100%流量；平台版本ID、線上程式SHA、原資料／D1／production CYID／Secrets／scope／Routes／旗標前後核對通過。固定程式Source為 `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`；文件提交不取代部署Source。
-- 正式 Release：[CYInvoice 最新版下載頁](https://github.com/simonliu1118-byte/CYapps/releases/latest)；V3.1.49 首次安裝須手動下載，之後才能使用內建自動更新。
+- 正式 Release：[CYInvoice 最新版下載頁](https://github.com/simonliu1118-byte/CYapps/releases/latest)；V3.1.49 起內建自動更新；仍在 V3.1.48 以前的安裝須先手動下載一次。
 - 同機折讓與作廢的一次主管核准、自動處理及完整詳情已實作；完整真人業務驗收尚未全部完成。跨機協同依現行計畫留下一版，雙Windows真人驗收依既有延期決定追蹤。
 - 版本歷史只在 [CHANGELOG](CHANGELOG.md) 保存；目前工程待辦見 [TODO](docs/TODO.md)、流程見 [V3.2計畫](docs/V3_2_IMPLEMENTATION_PLAN.md)、維護完成證據見 [MCP交接](docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。
 
