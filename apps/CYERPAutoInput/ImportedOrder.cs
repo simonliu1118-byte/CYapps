@@ -4,6 +4,23 @@ namespace CYERPAutoInput;
 
 internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice)
 {
+    /// <summary>
+    /// A platform code ending in 箱 (user, 2026-11-11: 「A00201箱」 is A00201 sold by the box,
+    /// 「A00201」 by the piece): the ERP 品號 without it and 單位 箱; any other code as it is, no unit.
+    /// </summary>
+    public static (string Code, string Unit) SplitBoxUnit(string code)
+    {
+        var text = (code ?? string.Empty).Trim();
+        return text.Length > 1 && text.EndsWith('箱') ? (text[..^1].TrimEnd(), "箱") : (text, string.Empty);
+    }
+
+    /// <summary>ERP 單位 to pick with F2 (箱 for a 「…箱」 code); empty for the item's own unit.</summary>
+    public string Unit { get; init; } = string.Empty;
+
+    /// <summary>The item with a 「…箱」 code turned into its 品號 and 單位 箱.</summary>
+    public ImportedItem WithBoxUnit() =>
+        SplitBoxUnit(ItemCode) is { Unit.Length: > 0 } box ? this with { ItemCode = box.Code, Unit = box.Unit } : this;
+
     /// <summary>For the parts of a bundle: the bundle's first code, so its lines stay together in that order.</summary>
     public string? SortKey { get; init; }
     /// <summary>
@@ -114,7 +131,10 @@ internal static partial class Bundles
 
     public static bool IsBundle(string code) => Parts(code).Where(p => !IsGift(p)).Count() > 1;
 
-    /// <summary>A part 「A00173(贈)」 (half- or full-width brackets, 贈 or 赠): its code, and whether it is free.</summary>
+    /// <summary>
+    /// A part 「A00173(贈)」 (half- or full-width brackets, 贈 or 赠) or 「A00173贈」 without them (user,
+    /// 2026-11-11): its code, and whether it is free. A 「…箱」 code may be free too (A00173箱贈).
+    /// </summary>
     public static (string Code, bool Gift) SplitGift(string part)
     {
         var match = GiftSuffix().Match(part.Trim());
@@ -202,7 +222,7 @@ internal static partial class Bundles
 
     private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
-    [GeneratedRegex(@"^(?<code>.*?[0-9A-Za-z])\s*[(（]\s*[贈赠]品?\s*[)）]$")]
+    [GeneratedRegex(@"^(?<code>.*?[0-9A-Za-z箱])\s*(?:[(（]\s*[贈赠]品?\s*[)）]|[贈赠]品?)$")]
     private static partial Regex GiftSuffix();
 }
 

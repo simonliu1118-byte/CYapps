@@ -113,6 +113,7 @@ internal sealed class SettingsForm : Form
         _tabs.TabPages.Add(GiftPage());
         _tabs.TabPages.Add(FreightPage());
         _tabs.TabPages.Add(DefaultsPage());
+        _tabs.TabPages.Add(NamingPage());
         root.Controls.Add(_tabs, 0, 1);
 
         var buttons = new FlowLayoutPanel
@@ -516,6 +517,35 @@ internal sealed class SettingsForm : Form
     /// 滿件贈送 (user, 2026-10-14): cards of 品號, 滿幾件, 送幾件 and the platforms; an imported
     /// order gets floor(件數 ÷ 滿幾件) × 送幾件 in that item's 贈/備品量.
     /// </summary>
+    /// <summary>
+    /// 品號命名 (user, 2026-11-11: the words in a platform's code are easily forgotten): how the
+    /// codes written in the platforms' back ends are entered into ERP. Read only; examples made up.
+    /// </summary>
+    private static TabPage NamingPage()
+    {
+        var page = Page("品號命名");
+        page.AutoScroll = true;
+        var flow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        void Heading(string text) => flow.Controls.Add(new Label
+        {
+            Text = text, AutoSize = true, Font = new Font("Microsoft JhengHei UI", 10.5F, FontStyle.Bold), Margin = new Padding(0, 10, 0, 2)
+        });
+        void Body(string text) => flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(640, 0), Margin = new Padding(14, 0, 0, 2) });
+        Body("在蝦皮「商品選項貨號」、MO店+「原廠編號」、酷澎「公司商品代碼」照下面的寫法命名，程式輸入 ERP 時會自動處理（例子裡的品號都是假的）。");
+        Heading("1. 整箱：品號後面加「箱」");
+        Body("例：X00001箱 → ERP 品號 X00001、單位選「箱」，數量與單價照平台。沒有加「箱」的 X00001 就是單支（ERP 預設單位）。");
+        Heading("2. 贈品：品號後面加「贈」或「(贈)」");
+        Body("括號可加可不加，全形、半形都可以。例：X00001+X00002贈 或 X00001+X00002(贈) → X00001 照價賣；X00002 不收錢，數量放在「贈/備品量」。單獨寫 X00002(贈) 就是一列數量 0、單價 0，購買數量放在贈/備品量。");
+        Heading("3. 組合：多個品號用「+」連起來");
+        Body("例：X00001+X00002 賣 2 組 → X00001 2 個、X00002 2 個，單價由 ERP 帶原價；組合售價和原價的差額打在「促銷組合品號」（設定 › 平台匯入）。");
+        Heading("4. 一組幾個：品號後面加「x數字」");
+        Body("x、X、×、* 都可以。在組合裡：X00001+X00003x2 → 每組 X00001 1 個、X00003 2 個。單獨一個品號（只有蝦皮）：X00003x2 → 數量乘 2、單價除以 2。");
+        Heading("5. 可以一起用");
+        Body("例：X00001箱+X00002(贈)、X00004x3+X00005(贈)。");
+        page.Controls.Add(flow);
+        return page;
+    }
+
     private TabPage GiftPage()
     {
         var page = Page("滿件贈送");

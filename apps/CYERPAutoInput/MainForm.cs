@@ -2108,13 +2108,15 @@ internal sealed partial class MainForm : Form
         _details.EndEdit();
         _details.Rows.Clear();
         // A handed-off order stops before the details; items it cannot enter are left out.
-        var items = ImportedItem.InEntryOrder(order.Items.Where(i => i.ItemCode.Length > 0),
+        // 「A00201箱」 → A00201, 單位 箱 (user, 2026-11-11), picked with F2 in ERP.
+        var items = ImportedItem.InEntryOrder(order.Items.Where(i => i.ItemCode.Length > 0).Select(i => i.WithBoxUnit()),
             [_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
         var rowCount = Math.Max(DefaultDetailRows, items.Count + 1);
         for (var i = 0; i < rowCount; i++) _details.Rows.Add();
         for (var i = 0; i < items.Count; i++)
         {
             _details["ItemCode", i].Value = items[i].ItemCode;
+            if (items[i].Unit.Length > 0) _details["Unit", i].Value = items[i].Unit;
             _details["Quantity", i].Value = items[i].Quantity;
             _details["UnitPrice", i].Value = items[i].UnitPrice;
             _details["BundleKey", i].Value = items[i].BundleTotal is not null || (items[i].SortKey is not null && items[i].UnitPrice.Length == 0) ? items[i].SortKey : null;
@@ -2124,7 +2126,8 @@ internal sealed partial class MainForm : Form
         }
         // 滿件贈送 (user, 2026-10-14): the free quantity per the settings' cards.
         var giftMissing = new List<string>();
-        foreach (var (row, gift) in GiftRules.Gifts(order.Source, items.Select(i => (i.ItemCode, i.Quantity)).ToList(), _settings.GiftRules, giftMissing))
+        // A box line is not the piece's: 滿件贈送 counts pieces only.
+        foreach (var (row, gift) in GiftRules.Gifts(order.Source, items.Select(i => (i.Unit.Length > 0 ? i.ItemCode + i.Unit : i.ItemCode, i.Quantity)).ToList(), _settings.GiftRules, giftMissing))
         {
             // Added to a 「(贈)」 quantity already on the row.
             var marked = decimal.TryParse(items[row].GiftQuantity, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0;

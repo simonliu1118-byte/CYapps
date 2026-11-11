@@ -32,6 +32,10 @@ public class ImportedItemTests
     [InlineData("A00173(贈)", "A00173", true)]
     [InlineData("A00173（贈）", "A00173", true)]
     [InlineData("A00173 (贈品)", "A00173", true)]
+    [InlineData("A00173贈", "A00173", true)]
+    [InlineData("A00173 贈品", "A00173", true)]
+    [InlineData("A00173箱贈", "A00173箱", true)]
+    [InlineData("A00173x2贈", "A00173x2", true)]
     [InlineData("A00173", "A00173", false)]
     [InlineData("贈", "贈", false)]
     public void Reads_a_gift_mark(string part, string code, bool gift) =>
@@ -68,5 +72,18 @@ public class ImportedItemTests
         var items = Bundles.Expand([new("A00173(贈)", "1", "0")], "P900", problems);
         Assert.Empty(problems);
         Assert.Equal([new ImportedItem("A00173", "0", "0") { GiftQuantity = "1" }], items);
+    }
+
+    [Fact]
+    public void A_code_ending_in_box_is_the_item_by_the_box()
+    {
+        // User 2026-11-11: 「A00201箱」 is A00201 with 單位 箱; 「A00201」 stays the piece.
+        Assert.Equal(("X00201", "箱"), ImportedItem.SplitBoxUnit("X00201箱"));
+        Assert.Equal(("X00201", "箱"), ImportedItem.SplitBoxUnit(" X00201箱 "));
+        Assert.Equal(("X00201", ""), ImportedItem.SplitBoxUnit("X00201"));
+        Assert.Equal(("箱", ""), ImportedItem.SplitBoxUnit("箱"));
+        var box = new ImportedItem("X00201箱", "2", "2700").WithBoxUnit();
+        Assert.Equal(("X00201", "箱", "2", "2700"), (box.ItemCode, box.Unit, box.Quantity, box.UnitPrice));
+        Assert.Equal("", new ImportedItem("X00201", "1", "95").WithBoxUnit().Unit);
     }
 }
