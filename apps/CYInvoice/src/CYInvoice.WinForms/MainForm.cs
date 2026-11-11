@@ -42,6 +42,7 @@ internal sealed partial class MainForm : Form
     private readonly Label runtimeModeLabel = new();
     private readonly Label runtimeSeparatorLabel = new() { Text = "/" };
     private readonly Label apiLabel = new();
+    private readonly BusySpinner startupSpinner = new(22) { Visible = false, AccessibleName = "啟動處理中" };
     private readonly ToolTip apiToolTip = new();
     private readonly ToolTip runtimeModeToolTip = new();
     private readonly ToolTip environmentToolTip = new();
@@ -120,29 +121,42 @@ internal sealed partial class MainForm : Form
         ApplyConnectionControls(new(false, false, true));
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
-            // Existing bound devices are checked before an empty Employee cache
-            // can send startup into initial setup. Fresh installs retain the wizard.
-            var initial = repository.Settings.LoadOrCreate();
-            var checkedBoundDevice = initial.CloudMode != CloudModes.LocalOnly && initial.CloudDeviceId.Length != 0;
-            if (checkedBoundDevice)
+            // One indicator covers the whole startup sequence (connection, setup, runtime
+            // mode, device report and startup sync). Shown runs before the first WM_PAINT,
+            // so paint once before work starts or the window stays unpainted meanwhile.
+            startupSpinner.Start();
+            Refresh();
+            try
             {
-                // The startup blocker also needs the existing recovery timer.
+                // Existing bound devices are checked before an empty Employee cache
+                // can send startup into initial setup. Fresh installs retain the wizard.
+                var initial = repository.Settings.LoadOrCreate();
+                var checkedBoundDevice = initial.CloudMode != CloudModes.LocalOnly && initial.CloudDeviceId.Length != 0;
+                if (checkedBoundDevice)
+                {
+                    // The startup blocker also needs the existing recovery timer.
+                    connectionTimer.Start();
+                    await RefreshConnectionsAsync();
+                    if (shuttingDown) return;
+                }
+                if (!EnsureInitialSetup()) return;
+                autoInputPipe.Start();
+                StartUpdateChecks();
+                UpdateEnvironment();
+                invoicePage.RefreshEnvironment();
                 connectionTimer.Start();
-                await RefreshConnectionsAsync();
+                if (!checkedBoundDevice) await RefreshConnectionsAsync();
                 if (shuttingDown) return;
+                await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
+                if (shuttingDown) return;
+                await RunStartupSyncAsync();
+                if (!shuttingDown) syncTimer.Start();
             }
-            if (!EnsureInitialSetup()) return;
-            autoInputPipe.Start();
-            StartUpdateChecks();
-            UpdateEnvironment();
-            invoicePage.RefreshEnvironment();
-            connectionTimer.Start();
-            if (!checkedBoundDevice) await RefreshConnectionsAsync();
-            if (shuttingDown) return;
-            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
-            if (shuttingDown) return;
-            await RunStartupSyncAsync();
-            if (!shuttingDown) syncTimer.Start();
+            finally
+            {
+                startupSpinner.Stop();
+                if (!startupSpinner.IsDisposed) startupSpinner.Visible = false;
+            }
         };
     }
 
@@ -207,6 +221,10 @@ internal sealed partial class MainForm : Form
         runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
         runtimeStatusLayout.Controls.Add(runtimeSeparatorLabel, 2, 0);
         runtimeStatusLayout.Controls.Add(apiLabel, 3, 0);
+        startupSpinner.Anchor = AnchorStyles.Right;
+        startupSpinner.Margin = new Padding(0, 0, 8, 0);
+        startupSpinner.BackColor = banner.BackColor;
+        runtimeStatusLayout.Controls.Add(startupSpinner, 0, 0);
 
         bannerLayout.Controls.Add(environmentTags, 0, 0);
         bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
@@ -476,6 +494,7 @@ internal sealed partial class MainForm : Form
             runtimeStatusLayout.GetColumn(runtimeModeLabel) != 1 ||
             runtimeStatusLayout.GetColumn(runtimeSeparatorLabel) != 2 ||
             runtimeStatusLayout.GetColumn(apiLabel) != 3 ||
+            runtimeStatusLayout.GetColumn(startupSpinner) != 0 || startupSpinner.Visible || startupSpinner.IsSpinning ||
             runtimeStatusLayout.GetRow(runtimeModeLabel) != 0 ||
             runtimeStatusLayout.GetRow(runtimeSeparatorLabel) != 0 ||
             runtimeStatusLayout.GetRow(apiLabel) != 0 ||
