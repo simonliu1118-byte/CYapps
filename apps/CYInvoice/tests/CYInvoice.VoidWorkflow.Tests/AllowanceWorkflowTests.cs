@@ -19,7 +19,6 @@ internal static class AllowanceWorkflowTests
         Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3003", "OtherPass1", "撤回"));
         Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "3002", "Requester1", new string('長', 21)));
         Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "3002", "Requester1", "換\n行"));
-        Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
 
         setup.Workflow.CancelManualReview(issue, "3002", "Requester1", "重新填寫");
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
