@@ -6,6 +6,30 @@ using CYInvoice.Core.Storage;
 
 internal static class AllowanceWorkflowTests
 {
+    public static async Task RequesterCanWithdrawOnlyOwnPendingAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Repository.Employees.CreateEmployee("0001", "3002", "合成提出者", "requester@example.invalid", "Requester1");
+        setup.Repository.Employees.CreateEmployee("0001", "3003", "其他員工", "other@example.invalid", "OtherPass1");
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3002", "Requester1", "部分退貨", 50, editedItems: DraftItems());
+        var issue = AllowanceIssue(setup.Repository);
+        var initialQueries = setup.Gateway.QueryCalls;
+        Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3003", "OtherPass1", "撤回"));
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "3002", "Requester1", new string('長', 21)));
+        Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "3002", "Requester1", "換\n行"));
+        Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
+
+        setup.Workflow.CancelManualReview(issue, "3002", "Requester1", "重新填寫");
+        var stored = setup.Repository.Invoices.LoadOrCreate().Single();
+        Equal(null, setup.Workflow.ManualReviewFor(stored));
+        Equal(false, HasPending(stored));
+        Equal("3002", setup.Workflow.HandledReviewFor(stored)?.CancelledByEmployeeNo);
+        Equal(0, new InvoiceSyncIssueStore(setup.Repository.DataDirectory).Unresolved(AccountKey()).Count);
+        Equal(initialQueries, setup.Gateway.QueryCalls);
+    }
+
     public static async Task WrongCredentialsMakeZeroQueryAsync()
     {
         using var temporary = new AllowanceTemporaryDirectory();
