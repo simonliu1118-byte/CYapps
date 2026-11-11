@@ -23,6 +23,7 @@ var tests = new (string Name, Action Run)[]
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
+    ("requester can withdraw only own pending local allowance", () => AllowanceWorkflowTests.RequesterCanWithdrawOnlyOwnPendingAsync().GetAwaiter().GetResult()),
     ("Local manager denied before official allowance preview when credentials invalid", () => AllowanceWorkflowTests.LocalManagerMustAuthenticateBeforeOfficialPreviewAsync().GetAwaiter().GetResult()),
     ("Local manager approval immediately forbids cancellation and retains audit", () => AllowanceWorkflowTests.LocalManagerApprovesFreshLockedDraftAsync().GetAwaiter().GetResult()),
     ("Local approval rejects official snapshot changes and requires another review", () => AllowanceWorkflowTests.LocalOfficialChangedBeforeApprovalMustRePreviewAsync().GetAwaiter().GetResult()),
