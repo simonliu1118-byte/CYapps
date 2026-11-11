@@ -824,10 +824,35 @@ internal sealed class SyncIssuesForm : Form
             return;
         }
         using var authorization = needsManager || IsCloudAllowance(issue) || issue.ResolvedUtc is null && IsManualReview(issue)
-            ? new EmployeeAdminLoginForm(repository, requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            ? new EmployeeAdminLoginForm(repository,
+                requiredRole: IsAllowanceManualReview(issue) ? null : AppRole.Admin,
+                requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
             : null;
         if (authorization is not null && authorization.ShowDialog(this) != DialogResult.OK) return;
         if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!, readOnly: processing && !needsManager); return; }
+        // A non-manager may view only their own unapproved LOCAL G0401 request,
+        // with a withdraw button and no approval or other administrative action.
+        // Cloud G0401 uses manager-only until its 0.9.15 server authorization is deployed.
+        if (IsAllowanceManualReview(issue) && authorization?.AuthenticatedPrincipal is { } principal &&
+            !AppRoles.CanManageAccounts(principal.Role))
+        {
+            var selected = TryFindIssueRecord(issue);
+            var review = selected is null ? null : allowanceWorkflow.ManualReviewFor(selected);
+            if (review is null || review.RequesterEmployeeNo != principal.EmployeeNo)
+            {
+                MessageBox.Show(this, "只能查看及撤回自己提出的待核准折讓申請。", "權限不足");
+                return;
+            }
+            var presentation = LocalAllowancePresentation(issue, AllowanceDetailRows(issue));
+            using var detail = new ManualReviewDetailForm("折讓開立詳情", presentation.Fields,
+                allowCancelReturn: issue.ResolvedUtc is null &&
+                    review.LocalApprovedUtc is null && !review.AwaitingConfirmation,
+                tables: presentation.Tables);
+            if (detail.ShowDialog(this) == DialogResult.OK &&
+                detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
+                CancelManualReview(issue, authorization);
+            return;
+        }
         if (issue.ResolvedUtc is null && repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
             repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
         {
