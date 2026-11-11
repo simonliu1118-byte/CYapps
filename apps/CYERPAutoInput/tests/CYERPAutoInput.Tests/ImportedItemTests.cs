@@ -32,6 +32,10 @@ public class ImportedItemTests
     [InlineData("A00173(贈)", "A00173", true)]
     [InlineData("A00173（贈）", "A00173", true)]
     [InlineData("A00173 (贈品)", "A00173", true)]
+    [InlineData("A00173贈", "A00173", true)]
+    [InlineData("A00173 贈品", "A00173", true)]
+    [InlineData("A00173箱贈", "A00173箱", true)]
+    [InlineData("A00173x2贈", "A00173x2", true)]
     [InlineData("A00173", "A00173", false)]
     [InlineData("贈", "贈", false)]
     public void Reads_a_gift_mark(string part, string code, bool gift) =>

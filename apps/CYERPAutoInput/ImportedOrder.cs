@@ -131,7 +131,10 @@ internal static partial class Bundles
 
     public static bool IsBundle(string code) => Parts(code).Where(p => !IsGift(p)).Count() > 1;
 
-    /// <summary>A part 「A00173(贈)」 (half- or full-width brackets, 贈 or 赠): its code, and whether it is free.</summary>
+    /// <summary>
+    /// A part 「A00173(贈)」 (half- or full-width brackets, 贈 or 赠) or 「A00173贈」 without them (user,
+    /// 2026-11-11): its code, and whether it is free. A 「…箱」 code may be free too (A00173箱贈).
+    /// </summary>
     public static (string Code, bool Gift) SplitGift(string part)
     {
         var match = GiftSuffix().Match(part.Trim());
@@ -219,7 +222,7 @@ internal static partial class Bundles
 
     private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
-    [GeneratedRegex(@"^(?<code>.*?[0-9A-Za-z])\s*[(（]\s*[贈赠]品?\s*[)）]$")]
+    [GeneratedRegex(@"^(?<code>.*?[0-9A-Za-z箱])\s*(?:[(（]\s*[贈赠]品?\s*[)）]|[贈赠]品?)$")]
     private static partial Regex GiftSuffix();
 }
 
