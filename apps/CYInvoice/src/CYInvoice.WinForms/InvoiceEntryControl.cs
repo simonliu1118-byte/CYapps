@@ -99,9 +99,9 @@ internal sealed class InvoiceEntryControl : UserControl
         var digiwin = UiControls.ImportButton("鼎新ERP", ImportBrand.Digiwin);
         var moShop = UiControls.ImportButton("MO店+", ImportBrand.MoShop);
         var coupang = UiControls.ImportButton("酷澎商城", ImportBrand.Coupang);
-        digiwin.Click += async (_, _) => await ImportDigiwinAsync();
+        digiwin.Click += (_, _) => ImportDigiwin();
         moShop.Click += async (_, _) => await ImportMoAsync();
-        coupang.Click += async (_, _) => await ImportCoupangAsync();
+        coupang.Click += (_, _) => ImportCoupang();
         buttons.Controls.Add(digiwin);
         buttons.Controls.Add(moShop);
         buttons.Controls.Add(coupang);
@@ -588,14 +588,14 @@ internal sealed class InvoiceEntryControl : UserControl
         finally { Enabled = true; manualIssueInProgress = false; }
     }
 
-    private async Task ImportDigiwinAsync()
+    private void ImportDigiwin()
     {
         using var dialog = FileDialog("Excel 檔案 (*.xlsx)|*.xlsx");
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
-            await RefreshCompanyForUseAsync();
-            using var confirmation = ImportConfirmationForm.ForDigiwin(repository, service, recordsChanged, dialog.FileName);
+            using var confirmation = ImportConfirmationForm.ForDigiwin(repository, service, recordsChanged, dialog.FileName,
+                () => RefreshCompanyForUseAsync());
             confirmation.ShowDialog(FindForm());
         }
         catch (Exception error)
@@ -636,14 +636,14 @@ internal sealed class InvoiceEntryControl : UserControl
         return;
     }
 
-    private async Task ImportCoupangAsync()
+    private void ImportCoupang()
     {
         using var dialog = FileDialog("Excel 檔案 (*.xls;*.xlsx;*.xlsm)|*.xls;*.xlsx;*.xlsm");
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
-            await RefreshCompanyForUseAsync();
-            using var confirmation = ImportConfirmationForm.ForCoupang(repository, service, recordsChanged, dialog.FileName);
+            using var confirmation = ImportConfirmationForm.ForCoupang(repository, service, recordsChanged, dialog.FileName,
+                () => RefreshCompanyForUseAsync());
             confirmation.ShowDialog(FindForm());
         }
         catch (Exception error)

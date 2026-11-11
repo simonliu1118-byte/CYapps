@@ -9,47 +9,6 @@ namespace CYInvoice.WinForms;
 
 internal sealed class ImportConfirmationForm : Form
 {
-    private sealed class ImportSpinner : Control
-    {
-        private int frame;
-
-        public ImportSpinner()
-        {
-            Size = new Size(48, 48);
-            BackColor = Color.White;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        public void Advance()
-        {
-            frame = (frame + 1) % 12;
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs eventArgs)
-        {
-            base.OnPaint(eventArgs);
-            eventArgs.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            var centerX = ClientSize.Width / 2F;
-            var centerY = ClientSize.Height / 2F;
-            for (var index = 0; index < 12; index++)
-            {
-                var angle = (float)(index * Math.PI / 6);
-                var opacity = 65 + ((index + frame) % 12) * 16;
-                using var pen = new Pen(Color.FromArgb(opacity, 37, 99, 235), 3.5F)
-                {
-                    StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                    EndCap = System.Drawing.Drawing2D.LineCap.Round,
-                };
-                var dx = (float)Math.Cos(angle);
-                var dy = (float)Math.Sin(angle);
-                eventArgs.Graphics.DrawLine(pen, centerX + dx * 13, centerY + dy * 13,
-                    centerX + dx * 20, centerY + dy * 20);
-            }
-        }
-    }
-
     private sealed class Entry
     {
         public required string OrderId { get; init; }
@@ -75,6 +34,7 @@ internal sealed class ImportConfirmationForm : Form
     private readonly InvoiceService service;
     private readonly Action recordsChanged;
     private readonly Func<CancellationToken, Task<IReadOnlyList<Entry>>> loadOrders;
+    private readonly Func<Task>? prepareImport;
     private readonly CancellationTokenSource lifetime = new();
     private readonly List<Entry> entries = [];
     private readonly DataGridView grid = UiControls.Grid();
@@ -86,7 +46,7 @@ internal sealed class ImportConfirmationForm : Form
         BorderStyle = BorderStyle.FixedSingle,
         Visible = false,
     };
-    private readonly ImportSpinner importSpinner = new();
+    private readonly BusySpinner importSpinner = new();
     private readonly Label importTitle = new()
     {
         Text = "匯入處理中",
@@ -104,7 +64,6 @@ internal sealed class ImportConfirmationForm : Form
         Dock = DockStyle.Fill,
         AutoEllipsis = true,
     };
-    private readonly System.Windows.Forms.Timer importAnimation = new() { Interval = 80 };
     private readonly TextBox buyerBan = UiControls.TextBox(8);
     private readonly BuyerNameField buyerNameField = new(200);
     private TextBox buyerName => buyerNameField;
@@ -141,15 +100,16 @@ internal sealed class ImportConfirmationForm : Form
         LocalRepository repository,
         InvoiceService service,
         Action recordsChanged,
-        Func<CancellationToken, Task<IReadOnlyList<Entry>>> loadOrders)
+        Func<CancellationToken, Task<IReadOnlyList<Entry>>> loadOrders,
+        Func<Task>? prepareImport = null)
     {
         this.source = source;
         this.repository = repository;
         this.service = service;
         this.recordsChanged = recordsChanged;
         this.loadOrders = loadOrders;
+        this.prepareImport = prepareImport;
         digiwinMode = source == InvoiceSources.Digiwin;
-        Text = $"CYInvoice｜{source} 開立發票匯入確認｜{EnvironmentName()}";
         Font = new Font("Microsoft JhengHei UI", 10F);
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(1080, digiwinMode ? 640 : 610);
@@ -157,13 +117,8 @@ internal sealed class ImportConfirmationForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         BuildLayout();
+        ApplyEnvironment();
         ConfigureEvents();
-        importAnimation.Tick += (_, _) => importSpinner.Advance();
-        Disposed += (_, _) =>
-        {
-            importAnimation.Stop();
-            importAnimation.Dispose();
-        };
         Shown += async (_, _) => await LoadAsync();
     }
 
@@ -192,7 +147,8 @@ internal sealed class ImportConfirmationForm : Form
         LocalRepository repository,
         InvoiceService service,
         Action recordsChanged,
-        string filePath) =>
+        string filePath,
+        Func<Task> prepareImport) =>
         new(InvoiceSources.Coupang, repository, service, recordsChanged, async cancellationToken =>
         {
             var orders = await PlatformImportReader.ReadCoupangExportAsync(filePath, cancellationToken);
@@ -206,13 +162,14 @@ internal sealed class ImportConfirmationForm : Form
                 ApplyBuyerName = value => order.BuyerName = value,
                 IssueAsync = (lookup, token) => service.IssueCoupangWithLookupAsync(order, lookup, token),
             }).ToArray();
-        });
+        }, prepareImport);
 
     public static ImportConfirmationForm ForDigiwin(
         LocalRepository repository,
         InvoiceService service,
         Action recordsChanged,
-        string filePath) =>
+        string filePath,
+        Func<Task> prepareImport) =>
         new(InvoiceSources.Digiwin, repository, service, recordsChanged, async cancellationToken =>
         {
             var order = await PlatformImportReader.ReadDigiwinExportAsync(filePath, cancellationToken);
@@ -236,7 +193,14 @@ internal sealed class ImportConfirmationForm : Form
                     IssueAsync = (lookup, token) => service.IssueDigiwinWithLookupAsync(order, lookup, token),
                 },
             ];
-        });
+        }, prepareImport);
+
+    private void ApplyEnvironment()
+    {
+        Text = $"CYInvoice｜{source} 開立發票匯入確認｜{EnvironmentName()}";
+        issue.Text = IssueButtonCaption();
+        UiControls.ApplyIssueButtonTheme(issue, IsProductionEnvironment());
+    }
 
     private void BuildLayout()
     {
@@ -260,9 +224,6 @@ internal sealed class ImportConfirmationForm : Form
 
         ConfigureGrid();
         ConfigureImportOverlay();
-        issue.Text = IssueButtonCaption();
-        UiControls.ApplyIssueButtonTheme(issue,
-            repository.Settings.LoadOrCreate().Environment == Environments.Production);
         var editor = digiwinMode ? BuildDigiwinEditor() : BuildStandardEditor();
 
         ConfigureSummary();
@@ -546,10 +507,20 @@ internal sealed class ImportConfirmationForm : Form
 
     private async Task LoadAsync()
     {
-        SetBusy(true, $"正在唯讀解析 {source} 原始 Excel…");
-        await Task.Yield(); // Render the spinner before invoking a potentially slow file reader.
+        var readMessage = $"正在唯讀解析 {source} 原始 Excel…";
+        SetBusy(true, prepareImport is null ? readMessage : "正在確認公司設定與連線…");
+        // Shown runs before the first WM_PAINT; paint the waiting state now so it is
+        // visible during the whole load, including any synchronous start of the work.
+        Refresh();
         try
         {
+            if (prepareImport is not null)
+            {
+                await prepareImport();
+                if (closing) return;
+                ApplyEnvironment();
+                SetBusy(true, readMessage);
+            }
             entries.AddRange(await loadOrders(lifetime.Token));
             if (closing) return;
             if (entries.Count == 0) throw new InvalidDataException("Excel 沒有可匯入的訂單");
@@ -1062,11 +1033,11 @@ internal sealed class ImportConfirmationForm : Form
         {
             CenterImportOverlay();
             importOverlay.BringToFront();
-            importAnimation.Start();
+            importSpinner.Start();
         }
         else
         {
-            importAnimation.Stop();
+            importSpinner.Stop();
         }
         if (!busy) progress.Style = ProgressBarStyle.Blocks;
         else { progress.Style = ProgressBarStyle.Marquee; progress.MarqueeAnimationSpeed = 40; }
@@ -1116,12 +1087,12 @@ internal sealed class ImportConfirmationForm : Form
             form.importTitle.Text != "匯入處理中")
             throw new InvalidOperationException("匯入等待畫面未放置於清單中央");
         form.SetBusy(true, "正在唯讀解析 Excel…");
-        if (!form.importAnimation.Enabled || form.importDetail.Text != "正在唯讀解析 Excel…" ||
+        if (!form.importSpinner.IsSpinning || form.importDetail.Text != "正在唯讀解析 Excel…" ||
             form.issue.Enabled)
             throw new InvalidOperationException("匯入等待動畫、文字或防止提前開立的狀態不正確");
         form.importSpinner.Advance();
         form.SetBusy(false, string.Empty);
-        if (form.importAnimation.Enabled)
+        if (form.importSpinner.IsSpinning)
             throw new InvalidOperationException("匯入結束後未停止轉圈圈動畫");
     }
 
