@@ -500,6 +500,12 @@ internal sealed partial class MainForm : Form
         SetAmegoConnectionState("啟動檢查中", Color.Gray, "Synthetic smoke waiting");
         if (!startupSpinner.Visible || !startupSpinner.IsAnimating)
             throw new InvalidOperationException("啟動檢查中沒有顯示並運轉轉圈動畫");
+        // The rest of the smoke uses modal login and setup dialogs, not a live
+        // connection request. Leave the indicator idle to avoid a synthetic
+        // 80 ms paint timer running throughout unrelated modal tests.
+        SetAmegoConnectionState("光貿連線正常", Color.Green, "Synthetic smoke connected");
+        if (startupSpinner.Visible || startupSpinner.IsAnimating)
+            throw new InvalidOperationException("模擬連線完成後的轉圈動畫未停止");
         stage?.Invoke("main smoke: main header");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
