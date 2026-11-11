@@ -31,6 +31,19 @@ internal static class Program
             contact.LastDeliveryIds.Add("delivery-1"); repository.SaveContact(contact);
             var main = new MainWindow(); main.Show(); Flush();
             Capture(main, "01-main-empty");
+            // Capture both stock layouts. Format selection stays in FormatWindow; 15K must not be replaced.
+            var largeFormat = repository.Formats().Single(f => f.Id == EnvelopeFormat.StandardLargeId);
+            Assert(largeFormat.Name == "標準大信封", "standard-large layout is available alongside 15K");
+            var largePage = new RenderTargetBitmap((int)(largeFormat.WidthMm * EnvelopeRenderer.DipPerMm),
+                (int)(largeFormat.HeightMm * EnvelopeRenderer.DipPerMm), 96, 96, PixelFormats.Pbgra32);
+            var largeWhite = new DrawingVisual();
+            using (var dc = largeWhite.RenderOpen()) dc.DrawRectangle(Brushes.White, null, new System.Windows.Rect(0, 0, largePage.Width, largePage.Height));
+            largePage.Render(largeWhite);
+            largePage.Render(EnvelopeRenderer.Draw(largeFormat, new PrintData
+            {
+                Recipient = "王小明", Address = "高雄市新興區範例路一號", PostalCode = "800"
+            }, true));
+            Save(largePage, "01c-standard-large-preview.png");
             var previewLayer = (Canvas)main.FindName("DirectLayer");
             var rows = previewLayer.Children.OfType<Button>().Where(b => b.Tag is string id && id.StartsWith("delivery-")).ToList();
             Assert(rows.Count == 7 && previewLayer.Visibility == Visibility.Visible, "Mail types are clickable on the envelope preview");
