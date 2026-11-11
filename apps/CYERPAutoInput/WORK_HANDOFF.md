@@ -4,40 +4,20 @@
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
-## 0. 目前進度與下一步（2026-10-15，給下一個 session）
+## 0. 目前進度與下一步（2026-11-11，給下一個 session）
 
 工作方式（使用者指定，沿用）：
-- 一律正體中文。使用者實機測試、每輪傳 LOG（`logs/CYERPAutoInput_日期.log`）與截圖；修好就推到 PR #424 的 branch `cyerp-auto-input/shopee-batch`，等 CI 成功，把 Windows 測試包 Artifact 連結貼成 PR 留言（結尾加 Claude Code 簽名）並回覆使用者。Artifact 保留 3 天。
-- 使用者說「先不要發，湊多一點項目」時只推 `cyerp-auto-input/next-wip`（沒有 PR、不跑 CI）。未交付的修正不加 Build（目前仍是 Build 26）。
-- 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就暫時在 `docs/` 寫交接檔（使用者轉給 CYInvoice session，對方做完會出工程測試包）；完成後依共通文件分工彙整回 README（功能／介面）、本文件（狀態）、CHANGELOG（變更），刪掉交接檔（使用者 2026-10-15）。
-- Commit 身分依 REPOSITORY_RULES：`simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。2026-10-14～15 有數個 Build 26 commit 誤用 `Claude <noreply@anthropic.com>`，未改寫歷史（PR 以 squash merge 合併時只留一個提交）；之後一律用規定身分。
-- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（286 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
+- 一律正體中文。使用者每天實機使用，有問題傳 LOG（`logs/CYERPAutoInput_日期.log`）、截圖或匯出檔；修好推 branch `cyerp-auto-input/shopee-batch`，手動觸發 `cyerp-auto-input-build.yml`，把 Actions run 連結（Artifact 測試包）回覆使用者。
+- 版本：新的修改項目 Z＋1、返修 Build＋1。使用者說「發 release」時：開 PR → 等 CI（governance、windows-x64）→ squash merge → 在 main 觸發 `cyerp-auto-input-release.yml` → 確認 zip 與 .sha256 → 依要求以 `cyerp-auto-input-release-cleanup.yml`（input `tag`）刪舊版 → branch 從新的 main 重新開始。**正式發布一律往前推新版本號，不去掉 Build 沿用同號**（使用者 2026-11-04：例如 V1.2.7 Build 2 發成 V1.2.8）。使用者說「先不要發版」時只打測試包。
+- 只動 CYERPAutoInput 相關檔案；CYInvoice 的程式不改，要它調整就在 `docs/` 寫交接檔（使用者轉給 CYInvoice session），完成後彙整回 README／本文件／CHANGELOG 再刪交接檔。
+- 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（337 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`（雲端容器沒有 `assets/Auto.ico` 時放一個不提交的暫時圖示即可編譯，該檔已在 .gitignore）。
 
-**A. MO店+ 全自動（主線）**
-- 流程（`MainForm.RunMoBatchAsync` → `ShopeeBatchRunner.RunMoAsync`）：開始前共用 ERP 檢查（`ErpWindowReady`：`SelectCopi08` 選得到 COPI08 或沒開（開始時 `ResolveCopi08Async` 從作業速查開），ERP 不能有對話框；其他作業視窗不算）→ 自己的 Chrome 視窗 → 我的訂單「未出貨」匯出（Temp\mo-日期時間）→ 批次出貨：各配送方式全選 → 批次出貨 → 併箱 → 確認出貨 → 批次出貨記錄依時間讀最上面一筆 → 列印文件 → 存標籤（新竹另存出貨總表）→ 最後一種出貨完直接「我的訂單 › 配送中」匯出（還有其他配送方式時才回批次出貨頁）→ 兩個匯出檔直接帶入（`MoImportForm.Accept`，對不起來才開匯入視窗）→ CYInvoice 開發票（一律，見 B）→ 全部乾淨（都有發票、無待確認、沒輸入過、自動儲存開）就不開預覽：列印（全家／7-11 熱感、新竹 A4 放紙提醒）→ 批次 ERP → 完成清單；否則開預覽確認後同樣列印 → ERP。
-- 已實機通過：到「列印標籤」存 PDF（2026-10-14）；存標籤後關「注意」、配送中匯出、帶入兩檔（2026-10-15，停在當時的提示，該提示已拿掉）。
-- 待實測：整條全自動（含 CYInvoice、不開預覽、列印、批次 ERP、表格完成清單）；新竹／7-11 的批次出貨與 PDF；多種配送方式同批；7-11 熱感實印（`SlipImage.FindFramedSlips`，實檔外框 83×122 mm，原尺寸）。
-- 選單：全自動／匯入訂單匯出檔、重新列印寄件單。「匯入訂單匯出檔」自 V0.3.2 起就是原「測試：發票」（`ImportMoAsync`，兩檔 → CYInvoice 查詢／開立 → 紙本背景 → 預覽 → ERP；使用者 2026-10-19）。
-
-**B. CYInvoice 發票整合**（功能與呼叫介面見 README「MO店+ 發票（CYInvoice）」；原本三份 docs/CYINVOICE_*_HANDOFF.md 已於 2026-10-15 依使用者要求彙整回 README／本文件／CHANGELOG 並刪除，原文在 Git 歷史 commit `d5244bad` 以前）
-- CYInvoice：V2.6.21 Build 0（Draft PR #445，branch `cyinvoice/feat-autoinput-interface`，commit `283e9f26`），工程測試版、未合併發行；工程包 Artifact 2026-10-18 過期（過期請 CYInvoice 端重出，不可換用正式 V2.6.19）。契約要改時在本專案寫需求交 CYInvoice（PR #445），對方做完出工程包；不在 AUTO 另寫開票。
-- CYInvoice 已確認（2026-10-15）：有統編→紙本、無統編→會員載具（pdf 對 B2C 回 skipped）；`orderId` 永遠是 MO 原始編號；`totalAmount` 為 MO 應開發票整單金額；CLI 用最後儲存的環境、request 不能切換；PDF 經其 PDF Cache 驗證後原子複製、不呼叫開立、單次約 55 秒內回應。
-- 使用者實測（2026-10-15，CYInvoice 測試環境）：「測試：發票」選兩個訂單檔 → 開立 → 帶回預覽 → 開始輸入 ERP 全部正確。使用者決定：全自動直接開立不詢問、最後列完成清單。
-- 待實測：全自動整條串 CYInvoice、紙本 PDF → A4 列印；正式環境在 CYInvoice 正式發行後使用。測試前 CYInvoice 要切測試環境並儲存，建議獨立 portable 資料夾。
-
-**完成清單**：所有批次（蝦皮全自動、MO店+／酷澎／蝦皮匯入）共用 `BatchSummaryForm`，2026-10-15 起為「狀態／訂單編號／說明」表格（`BatchSummary` 純邏輯，有測試），需人工的列在前、橘色；複製為 Tab 分欄。
-
-**D. 酷澎全自動（使用者 2026-10-15 先口述流程與截圖，未開始；等真的有酷澎訂單再逐步核對實作）**
-1. 後台 Coupang Wing（wing.coupang.com）。首頁可能隨機出現彈窗（2026-10-15 樣本：「出貨管理升級！設定更方便、期限更清楚」，下方有「今天不再顯示此內容」勾選與「關閉」）。使用者實測：可以不理會，直接點左側「訂單/出貨 › 我的訂單」即可。實作時先照此直接點；若點不到（被遮住、頁面沒換），再按彈窗的「關閉」。
-2. 左側「訂單/出貨 › 我的訂單」，預設在「訂單確認」分頁，訂單列在下方表格：全選 → 右下角「確認訂單」（確認後狀態變為待安排配送）。
-2b. 已實作並實機通過到列印寄件單（V0.3.3，2026-10-19）：入口「酷澎商城 › 全自動」（`MainForm.RunCoupangBatchAsync` → `ShopeeBatchRunner.RunCoupangAsync`：`ConfirmCoupangOrdersAsync`、`ArrangeCoupangShippingAsync`／`ChooseShipMethodAsync`（原生 select 用鍵盤 Home／Down＋Enter，讀 ComboBox 值核對）／`ArrangeChannelAsync`（發票提醒、`ArrangeDialog` 取貨地址＝`HctPickupAddress`、`PickupDetails` 全部成功 → `PrintCoupangSlipsAsync` 熱感 宅配 `CoupangHctLabelScale` 22%／超商 100%，`PrintDialogAsync(sheetsAllowed)`）、配送指示 `DownloadListExcelAsync`）→ `CoupangToErpAsync`（已在 ledger 的略過、CYInvoice 酷澎、非正式環境開預覽）。使用者 2026-10-19 截圖：確認接受訂單／配送處理完成／配送準備下拉（宅配-嘉里、宅配-新竹物流、便利商店-全家、便利商店-7-11）／請確認發票開立需求／安排出貨（取貨地址）／取貨詳情（列印寄件單）／配送指示（待出貨清單、下載Excel）。超商的安排出貨與寄件單畫面尚未看過。
-3. 「配送準備」分頁：每筆有「安排配送」，也可右下角選配送方式（例：宅配 - 嘉里）後「批次安排配送」。細節等有訂單時使用者帶著做再告知。
-4. 「配送指示」分頁：全選 → 「下載Excel」→ 存 Temp → CYInvoice 開發票 → 帶回發票 → ERP 輸入（同 MO店+）。此頁另有右下角「批次列印寄件單」（選配送方式），寄件單列印方式待確認。
-- 發票：紙本或載具是 CYInvoice 依開立入口的既有規則（使用者 2026-10-15）：MO店+ 入口開會員載具，沒統編的不印；酷澎入口一律開紙本，沒統編印無統編版本、有統編印有統編版本。AUTO 目前只對有統編的訂單取 PDF（`CyInvoiceLink.IsPaper` 看 `buyerBan`，是照 MO店+ 寫的）；做酷澎時改為依來源（酷澎全部取 PDF），並先向 CYInvoice 確認 `--autoinput-pdf` 對酷澎無統編的紙本發票也回 `ready`（2026-10-15 的回報寫的是只輸出有公司統編的紙本，B2C 回 `skipped`）。
-- 2026-10-15 先做的測試入口：「酷澎商城 › 測試：正在配送全選下載 Excel → 發票 → 列印 → ERP」（`ShopeeBatchRunner.DownloadCoupangExcelAsync` 只找頁面上的「下載Excel」，頁面由使用者開好；`MainForm.TestCoupangAsync`；發票走共用 `InvoiceAsync(source: coupang)`，酷澎一律紙本、全部取 PDF；沒統編的 PDF 雙面長邊列印 `SlipPrinter.PrintPages(duplex)`）。CYInvoice 已於 2026-10-15 調整（PR #445 commit `b9d06600`，V2.6.21 Build 0 工程包 run 554，2026-10-18 過期）：`--autoinput-pdf` 依本機紀錄為紙本輸出（酷澎 B2C 也 `ready`），消費者紙本一律 A4 整張（style0）並要求雙面；`orderId`＝訂單編號、`totalAmount`＝應開立予買家之發票金額合計、`source: coupang` 契約同 MO。CYInvoice 讀檔需七欄（見 README），Wing「配送指示」真實下載檔尚未比對。尚未實機：下載鈕、Chrome 另存新檔、下載檔格式、消費者紙本官方 PDF 的頁數／頁序與雙面列印（CYInvoice 提醒：正式自動列印前要用實際 PDF 確認）。原交接文件 docs/CYINVOICE_COUPANG_HANDOFF.md 已彙整回本文件與 README 後刪除（Git 歷史 commit `5c242d8c`）。
-- 共用：開始前 ERP 檢查（`ErpWindowReady`）、完成清單表格、背景紙本佇列、`source: "coupang"`（CYInvoice 契約已預留）。
-
-**C. 其他待辦**：蝦皮全自動的 7-11／全家實測、黑貓 A4（§6）、無人值守（Roadmap 5）。合併與正式發布都要使用者同意。
+目前狀態：
+- 正式版 V1.2.8（2026-11-11）。蝦皮、MO店+、酷澎全自動與各匯入每天實機使用；功能說明見 README「全自動共通」「平台訂單匯入」。
+- **未結：CYInvoice 自動輸入介面**。2026-11-10 MO店+ 全自動在呼叫 CYInvoice 查詢後 2 分多鐘沒有回應（使用者按 Esc；當時 9 筆已出貨、寄件單已印，發票與 ERP 未做，可用匯入或訂單頁讀取輸入補）。CYInvoice V3.1.48（main 線，已含酷澎多品項金額修正）的原始碼找不到 `--autoinput-query／issue／pdf` 介面，介面只在 V2.6.21（`cyinvoice/feat-autoinput-interface`）。需使用者／CYInvoice 確認實際搭配的版本同時有介面與修正；交接檔 `docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md`。本程式對回報 3.1.48 以上的 CYInvoice 才自動開立「酷澎每列重複整張金額」的訂單。
+- 提議過、使用者未回覆：等 CYInvoice 時狀態列顯示秒數，CYInvoice 開了視窗卻沒回應時提早提示（避免乾等最多「每筆 60 秒＋60 秒」）。
+- 已知、未改（停下交人工，需更多畫面資訊）：ERP 單身格線辨識偶爾失敗、MO店+ 明細欄位捲動不到、MO店+ 配送中匯出偶爾沒出現另存新檔、酷澎「統一編號」欄偶爾拿不到焦點（皆 2026-11-05～09 LOG）。
+- 尚未實機確認：宅配通加下方文字的橫向版面（V1.2.3）、整箱「箱」F2 選單位（V1.2.8）、酷澎「只處理這次安排配送」的訂單編號比對（V1.2.6；LOG 記 `this run arranged／in_export／earlier_left`）、萊爾富寄取貨單重讀（V1.2.6）。
 
 ## 1. 接手時先讀
 
@@ -45,21 +25,22 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.39）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. 工作 branch `cyerp-auto-input/shopee-batch` 的實際 source（PR #424；`main` 已於 2026-10-13 合併進此 branch）
+5. 工作 branch `cyerp-auto-input/shopee-batch` 的實際 source（每次正式發布合併後從 `main` 重新開始）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
-- Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：`V0.2.9`（2026-10-12 由 PR #423 squash merge），正式 Release `cyerp-auto-input-v0.2.9`。`CYERPAutoInput Release` workflow：只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。舊 Release `cyerp-auto-input-v0.2.7` 依使用者要求以 `CYERPAutoInput Release Cleanup` workflow（只從 main、只接受本專案 tag）刪除。之前的合併：PR #421（V0.2.5–V0.2.7）、PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
-- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 26（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入、預覽勾選與共用結果清單）。使用者交代的下一輪項目已在 Build 19 完成，2026-10-14 實單測試後再決定合併與發布；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
-- VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
-- 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
-- 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。正式版：GitHub Release（`CYERPAutoInput_VX.Y.Z.zip`＋SHA-256）。
-- OCR 模型 Release：2026-10-11 使用者同意後從 `main` 執行 `CYERPAutoInput OCR Model Mirror`（之後的建置優先從該 Release 取模型）。
+- Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`。
+- `main`：V1.2.8（2026-11-11，PR #611 squash merge），正式 Release `cyerp-auto-input-v1.2.8`，舊 Release 依使用者要求逐版刪除（目前只留最新一版）。之前：V1.2.6（PR #606）、V1.2.4（PR #594）、V1.2.3（PR #593）、V1.2.1（PR #592）、V1.2.0（PR #577）、V1.1.0、V1.0.0；更早見 CHANGELOG 開頭。
+- 工作 branch：`cyerp-auto-input/shopee-batch`（每次合併後從 main 重新開始；不另開長期 PR）。`CYERPAutoInput Release` workflow 只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。
+- VERSION／BUILD 見同名檔；新功能 Z＋1（Build 歸零），返修 Build＋1。
+- 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。
+- 測試包：Actions Artifact（保留 3 天）。正式版：GitHub Release（`CYERPAutoInput_VX.Y.Z.zip`＋SHA-256），已安裝的會自動更新。
 
 ## 3. 目前功能（細節見 README）
+
+- V1.0～V1.2.8 新增（細節見 README「全自動共通」與各平台段落）：蝦皮全自動支援萊爾富、宅配通、黑貓（A4 三格）；全熱感紙出貨明細與「印出貨明細」；寄件單下方文字；理貨表、撿貨總表（一律顯示、按列印才印）；紙本發票待列印小視窗；列印佇列檢查；MO店+ 訂單頁讀取輸入（F8）；全自動鍵盤鎖定；Temp 自動清理；酷澎只處理這次安排配送的訂單與多品項金額；輸入中斷記入防重複紀錄；品號命名（箱、贈、+、x數字）與設定說明頁。
 
 - 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續；設定的折價券／運費／促銷組合品號不查批號）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」（讀「列印」周圍與 ERP 彈出視窗，最多重試 20 秒）→ 設定「儲存單據後自動清除表單」時清空（`ClearFormIfSaved` 唯一入口）。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
@@ -73,6 +54,8 @@
 - 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單。LOG 一律診斷模式、只存本機 `logs/`（主畫面已無開啟 LOG 的連結）。進階模式隱藏中。
 
 ## 4. 實機驗證狀態
+
+> 本節以下多為 V0.2～V0.3 時期的紀錄（保留作背景）；V1.x 的現況與待實機確認項目見 §0。
 
 已實機通過（使用者回報／LOG）：
 
