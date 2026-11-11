@@ -9,47 +9,6 @@ namespace CYInvoice.WinForms;
 
 internal sealed class ImportConfirmationForm : Form
 {
-    private sealed class ImportSpinner : Control
-    {
-        private int frame;
-
-        public ImportSpinner()
-        {
-            Size = new Size(48, 48);
-            BackColor = Color.White;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-                ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        public void Advance()
-        {
-            frame = (frame + 1) % 12;
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs eventArgs)
-        {
-            base.OnPaint(eventArgs);
-            eventArgs.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            var centerX = ClientSize.Width / 2F;
-            var centerY = ClientSize.Height / 2F;
-            for (var index = 0; index < 12; index++)
-            {
-                var angle = (float)(index * Math.PI / 6);
-                var opacity = 65 + ((index + frame) % 12) * 16;
-                using var pen = new Pen(Color.FromArgb(opacity, 37, 99, 235), 3.5F)
-                {
-                    StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                    EndCap = System.Drawing.Drawing2D.LineCap.Round,
-                };
-                var dx = (float)Math.Cos(angle);
-                var dy = (float)Math.Sin(angle);
-                eventArgs.Graphics.DrawLine(pen, centerX + dx * 13, centerY + dy * 13,
-                    centerX + dx * 20, centerY + dy * 20);
-            }
-        }
-    }
-
     private sealed class Entry
     {
         public required string OrderId { get; init; }
@@ -86,7 +45,7 @@ internal sealed class ImportConfirmationForm : Form
         BorderStyle = BorderStyle.FixedSingle,
         Visible = false,
     };
-    private readonly ImportSpinner importSpinner = new();
+    private readonly BusySpinner importSpinner = new();
     private readonly Label importTitle = new()
     {
         Text = "匯入處理中",
@@ -104,7 +63,6 @@ internal sealed class ImportConfirmationForm : Form
         Dock = DockStyle.Fill,
         AutoEllipsis = true,
     };
-    private readonly System.Windows.Forms.Timer importAnimation = new() { Interval = 80 };
     private readonly TextBox buyerBan = UiControls.TextBox(8);
     private readonly BuyerNameField buyerNameField = new(200);
     private TextBox buyerName => buyerNameField;
@@ -158,12 +116,6 @@ internal sealed class ImportConfirmationForm : Form
         MaximizeBox = true;
         BuildLayout();
         ConfigureEvents();
-        importAnimation.Tick += (_, _) => importSpinner.Advance();
-        Disposed += (_, _) =>
-        {
-            importAnimation.Stop();
-            importAnimation.Dispose();
-        };
         Shown += async (_, _) => await LoadAsync();
     }
 
@@ -1062,11 +1014,11 @@ internal sealed class ImportConfirmationForm : Form
         {
             CenterImportOverlay();
             importOverlay.BringToFront();
-            importAnimation.Start();
+            importSpinner.StartAnimation();
         }
         else
         {
-            importAnimation.Stop();
+            importSpinner.StopAnimation();
         }
         if (!busy) progress.Style = ProgressBarStyle.Blocks;
         else { progress.Style = ProgressBarStyle.Marquee; progress.MarqueeAnimationSpeed = 40; }
@@ -1116,17 +1068,18 @@ internal sealed class ImportConfirmationForm : Form
             form.importTitle.Text != "匯入處理中")
             throw new InvalidOperationException("匯入等待畫面未放置於清單中央");
         form.SetBusy(true, "正在唯讀解析 Excel…");
-        if (!form.importAnimation.Enabled || form.importDetail.Text != "正在唯讀解析 Excel…" ||
+        if (!form.importSpinner.IsAnimating || form.importDetail.Text != "正在唯讀解析 Excel…" ||
             form.issue.Enabled)
             throw new InvalidOperationException("匯入等待動畫、文字或防止提前開立的狀態不正確");
         form.importSpinner.Advance();
         form.SetBusy(false, string.Empty);
-        if (form.importAnimation.Enabled)
+        if (form.importSpinner.IsAnimating)
             throw new InvalidOperationException("匯入結束後未停止轉圈圈動畫");
     }
 
     internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
     {
+        BusySpinner.VerifyAnimationSmoke();
         using var form = new ImportConfirmationForm(
             "測試",
             repository,
