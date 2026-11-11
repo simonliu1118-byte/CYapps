@@ -42,6 +42,7 @@ internal sealed partial class MainForm : Form
     private readonly Label runtimeModeLabel = new();
     private readonly Label runtimeSeparatorLabel = new() { Text = "/" };
     private readonly Label apiLabel = new();
+    private readonly BusySpinner startupSpinner = new() { Size = new Size(22, 22), Visible = false };
     private readonly ToolTip apiToolTip = new();
     private readonly ToolTip runtimeModeToolTip = new();
     private readonly ToolTip environmentToolTip = new();
@@ -192,7 +193,7 @@ internal sealed partial class MainForm : Form
         runtimeStatusLayout.Dock = DockStyle.Fill;
         runtimeStatusLayout.Margin = Padding.Empty;
         runtimeStatusLayout.Padding = new Padding(0, 0, 14, 0);
-        runtimeStatusLayout.ColumnCount = 4;
+        runtimeStatusLayout.ColumnCount = 5;
         runtimeStatusLayout.RowCount = 1;
         ConfigureRuntimeText(runtimeModeLabel);
         ConfigureRuntimeText(runtimeSeparatorLabel);
@@ -203,10 +204,15 @@ internal sealed partial class MainForm : Form
         runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
         runtimeStatusLayout.Controls.Add(runtimeSeparatorLabel, 2, 0);
         runtimeStatusLayout.Controls.Add(apiLabel, 3, 0);
+        startupSpinner.Anchor = AnchorStyles.None;
+        startupSpinner.Margin = new Padding(6, 0, 0, 0);
+        startupSpinner.BackColor = banner.BackColor;
+        runtimeStatusLayout.Controls.Add(startupSpinner, 4, 0);
 
         bannerLayout.Controls.Add(environmentTags, 0, 0);
         bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
@@ -476,6 +482,8 @@ internal sealed partial class MainForm : Form
             runtimeStatusLayout.GetColumn(runtimeModeLabel) != 1 ||
             runtimeStatusLayout.GetColumn(runtimeSeparatorLabel) != 2 ||
             runtimeStatusLayout.GetColumn(apiLabel) != 3 ||
+            runtimeStatusLayout.GetColumn(startupSpinner) != 4 ||
+            !startupSpinner.Visible || !startupSpinner.IsAnimating ||
             runtimeStatusLayout.GetRow(runtimeModeLabel) != 0 ||
             runtimeStatusLayout.GetRow(runtimeSeparatorLabel) != 0 ||
             runtimeStatusLayout.GetRow(apiLabel) != 0 ||
@@ -486,6 +494,12 @@ internal sealed partial class MainForm : Form
             runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
             runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動檢查中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
+        SetAmegoConnectionState("光貿連線正常", Color.Green, "Synthetic smoke connected");
+        if (startupSpinner.Visible || startupSpinner.IsAnimating)
+            throw new InvalidOperationException("連線狀態完成後啟動轉圈動畫沒有停止");
+        SetAmegoConnectionState("啟動檢查中", Color.Gray, "Synthetic smoke waiting");
+        if (!startupSpinner.Visible || !startupSpinner.IsAnimating)
+            throw new InvalidOperationException("啟動檢查中沒有顯示並運轉轉圈動畫");
         stage?.Invoke("main smoke: main header");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
@@ -922,6 +936,10 @@ internal sealed partial class MainForm : Form
     private void SetAmegoConnectionState(string text, Color foreground, string details, bool showToolTip = false)
     {
         apiLabel.Text = text;
+        var starting = text == "啟動檢查中";
+        startupSpinner.Visible = starting;
+        if (starting) startupSpinner.StartAnimation();
+        else startupSpinner.StopAnimation();
         apiLabel.BackColor = Color.Transparent;
         apiLabel.ForeColor = foreground;
         apiLabel.AccessibleDescription = details;
