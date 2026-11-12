@@ -297,8 +297,6 @@ internal static class Program
         RoundedButtonSmokeTests.Verify();
         Stage("five-row history");
         InvoiceOperationHistoryControl.VerifySmokeFiveRows();
-        Stage("three-section allowance detail");
-        AllowanceDetailControl.VerifySmokeSections();
 
         Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
@@ -311,6 +309,11 @@ internal static class Program
         form.VerifySmokeLayout(Stage);
         Stage("main detail verification completed");
         form.Close();
+
+        // Keep extra modeless allowance rendering after the primary MainForm modal/auth smoke.
+        // Running it first can disturb focus routing in legacy authentication smoke dialogs.
+        Stage("three-section allowance detail");
+        AllowanceDetailControl.VerifySmokeSections();
 
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         Stage("upload issues rows");
