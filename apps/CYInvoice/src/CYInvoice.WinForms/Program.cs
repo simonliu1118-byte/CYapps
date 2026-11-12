@@ -297,6 +297,8 @@ internal static class Program
         RoundedButtonSmokeTests.Verify();
         Stage("five-row history");
         InvoiceOperationHistoryControl.VerifySmokeFiveRows();
+        Stage("three-section allowance detail");
+        AllowanceDetailControl.VerifySmokeSections();
 
         Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
