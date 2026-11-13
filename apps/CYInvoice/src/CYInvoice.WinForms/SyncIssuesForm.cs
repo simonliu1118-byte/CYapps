@@ -504,7 +504,16 @@ internal sealed class SyncIssuesForm : Form
                 var identity = cloudAllowance ? CloudInvoiceIdentity(issue, pendingRecords.GetValueOrDefault(issue.OrderId), invoiceRecords) : (issue.InvoiceNumber, issue.OrderId);
                 row.SubItems.Add(identity.Item1.Length == 0 ? "尚未取得" : identity.Item1);
                 row.SubItems.Add(identity.Item2.Length == 0 ? "尚未取得" : identity.Item2);
-                row.SubItems.Add(issue.Message);
+                var summary = issue.Message;
+                if (processing && IsAllowanceManualReview(issue))
+                {
+                    var original = invoiceRecords.FirstOrDefault(record =>
+                        record.InvoiceNumber == issue.InvoiceNumber && record.OrderId == issue.OrderId);
+                    var review = original is null ? null : allowanceWorkflow.ManualReviewFor(original);
+                    if (review is not null)
+                        summary = $"{EmployeeDisplayText.Format(repository, review.RequesterEmployeeNo, review.RequesterName)}：{review.Reason}";
+                }
+                row.SubItems.Add(summary);
                 row.SubItems.Add(state);
                 row.Tag = issue;
                 var stateCell = row.SubItems[5];
@@ -819,15 +828,41 @@ internal sealed class SyncIssuesForm : Form
                 IsVoidManualReview(issue) ? VoidDetailRows(issue) :
                 CommonDetailRows(issue).Append(new("處理狀態", IssueState(issue)));
             var presentation=LocalAllowancePresentation(issue,rows);
-            using var status = new ManualReviewDetailForm("處理中", presentation.Fields,tables:presentation.Tables);
+            using var status = new ManualReviewDetailForm("處理中", presentation.Fields,tables:presentation.Tables,
+                allowanceDetails: IsAllowanceManualReview(issue) || IsAllowanceVoidManualReview(issue));
             status.ShowDialog(this);
             return;
         }
         using var authorization = needsManager || IsCloudAllowance(issue) || issue.ResolvedUtc is null && IsManualReview(issue)
-            ? new EmployeeAdminLoginForm(repository, requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
+            ? new EmployeeAdminLoginForm(repository,
+                requiredRole: IsAllowanceManualReview(issue) ? null : AppRole.Admin,
+                requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
             : null;
         if (authorization is not null && authorization.ShowDialog(this) != DialogResult.OK) return;
         if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!, readOnly: processing && !needsManager); return; }
+        // A non-manager may view only their own unapproved LOCAL G0401 request,
+        // with a withdraw button and no approval or other administrative action.
+        // Cloud G0401 uses manager-only until its 0.9.15 server authorization is deployed.
+        if (IsAllowanceManualReview(issue) && authorization?.AuthenticatedPrincipal is { } principal &&
+            !AppRoles.CanManageAccounts(principal.Role))
+        {
+            var selected = TryFindIssueRecord(issue);
+            var review = selected is null ? null : allowanceWorkflow.ManualReviewFor(selected);
+            if (review is null || review.RequesterEmployeeNo != principal.EmployeeNo)
+            {
+                MessageBox.Show(this, "只能查看及撤回自己提出的待核准折讓申請。", "權限不足");
+                return;
+            }
+            var presentation = LocalAllowancePresentation(issue, AllowanceDetailRows(issue));
+            using var detail = new ManualReviewDetailForm("折讓開立詳情", presentation.Fields,
+                allowCancelReturn: issue.ResolvedUtc is null &&
+                    review.LocalApprovedUtc is null && !review.AwaitingConfirmation,
+                tables: presentation.Tables, allowanceDetails: true);
+            if (detail.ShowDialog(this) == DialogResult.OK &&
+                detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
+                CancelManualReview(issue, authorization);
+            return;
+        }
         if (issue.ResolvedUtc is null && repository.IdentityProvider.Kind == IdentityProviderKind.Local &&
             repository.Settings.LoadOrCreate().CloudMode == CloudModes.LocalOnly)
         {
@@ -1125,6 +1160,7 @@ internal sealed class SyncIssuesForm : Form
         try
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
+            RefreshOpenInvoiceDetails();
             ReloadAll();
         }
         catch (Exception error)
@@ -1229,7 +1265,7 @@ internal sealed class SyncIssuesForm : Form
                 new KeyValuePair<string,string>("原折讓稅額", preview.TaxAmount),
                 new KeyValuePair<string,string>("原折讓商品", FormatAllowanceItems(preview.OriginalAllowance?.ProductItems)) });
             var display=LocalAllowancePresentation(issue,rows);
-            using var detail=new ManualReviewDetailForm("折讓作廢詳情", display.Fields, "核准並作廢",allowCancelReturn:true,primaryDanger:true,tables:display.Tables);
+            using var detail=new ManualReviewDetailForm("折讓作廢詳情", display.Fields, "核准並作廢",allowCancelReturn:true,primaryDanger:true,tables:display.Tables,allowanceDetails:true);
             if(detail.ShowDialog(this)!=DialogResult.OK)return;
             if(detail.SelectedAction==ManualReviewDetailAction.CancelReturn){SetManualReviewBusy(false);CancelManualReview(issue,login);return;}
             if(detail.SelectedAction!=ManualReviewDetailAction.Primary)return;
@@ -1327,7 +1363,7 @@ internal sealed class SyncIssuesForm : Form
                     new KeyValuePair<string,string>("最新可折含稅額", preview.OfficialRemainingGross),
                     new KeyValuePair<string,string>("官方折讓歷史", FormatAllowances(preview.OfficialHistory)) }));
             using var approvalDetail = new ManualReviewDetailForm("折讓開立詳情",display.Fields,
-                "核准並開立",allowCancelReturn:true,primaryDanger: true,tables:display.Tables);
+                "核准並開立",allowCancelReturn:true,tables:display.Tables,allowanceDetails:true);
             if (approvalDetail.ShowDialog(this) != DialogResult.OK)return;
             if(approvalDetail.SelectedAction==ManualReviewDetailAction.CancelReturn){SetManualReviewBusy(false);CancelManualReview(issue,login);return;}
             if(approvalDetail.SelectedAction != ManualReviewDetailAction.Primary) return;
@@ -1478,6 +1514,13 @@ internal sealed class SyncIssuesForm : Form
             MessageBox.Show(this, error.Message, "取消退回失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetManualReviewBusy(false); }
+    }
+
+    private static void RefreshOpenInvoiceDetails()
+    {
+        // Only reread the local invoice projection; no new Cloud request.
+        foreach (var detail in Application.OpenForms.OfType<RecordDetailForm>().ToArray())
+            detail.RefreshAllowanceState();
     }
 
     private void UpdateCrossDeviceButton()

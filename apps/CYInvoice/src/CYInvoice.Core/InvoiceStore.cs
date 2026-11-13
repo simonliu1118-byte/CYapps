@@ -17,6 +17,29 @@ public sealed record StatusUpdate(
 
 public sealed class InvoiceStore
 {
+    // Read-only, single-record refresh for an already open invoice detail window.
+    // Never fetch Cloud/AMEGO or rewrite the whole invoice and items table.
+    public void RefreshExtensionData(InvoiceRecord record)
+    {
+        lock (gate)
+        {
+            using var db = Open(SqliteOpenMode.ReadOnly);
+            using var query = db.CreateCommand();
+            query.CommandText = """
+                SELECT extra_json FROM invoices
+                WHERE record_id=$id AND environment=$environment
+                  AND seller_invoice=$seller AND invoice_number=$invoice
+                LIMIT 1
+                """;
+            query.Parameters.AddWithValue("$id", record.Id);
+            query.Parameters.AddWithValue("$environment", record.Environment);
+            query.Parameters.AddWithValue("$seller", record.SellerInvoice);
+            query.Parameters.AddWithValue("$invoice", record.InvoiceNumber);
+            if (query.ExecuteScalar() is string json)
+                record.ExtensionData = ParseExtensionData(json);
+        }
+    }
+
     private readonly Lock gate = new();
     private readonly string dataDirectory;
     private readonly string databasePath;

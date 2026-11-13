@@ -66,6 +66,8 @@ internal sealed partial class MainForm : Form
         Margin = new Padding(0, 0, 6, 0),
     };
     private bool shuttingDown;
+    // Only set by the startup smoke to observe the real Settings login dialog.
+    private Action<EmployeeAdminLoginForm>? settingsSmokeLoginShown;
 
     public MainForm(bool startupSmokeTest = false)
     {
@@ -335,6 +337,8 @@ internal sealed partial class MainForm : Form
     private void OpenSettings()
     {
         using var login = new EmployeeAdminLoginForm(repository, requiredRole: AppRole.SuperAdmin);
+        if (settingsSmokeLoginShown is { } onShown)
+            login.Shown += (_, _) => onShown(login);
         if (login.ShowDialog(this) != DialogResult.OK) return;
         using var form = new SettingsForm(repository, login);
         if (form.ShowDialog(this) != DialogResult.OK) return;
@@ -641,18 +645,16 @@ internal sealed partial class MainForm : Form
     {
         var prompted = false;
         var exposedSettings = false;
-        using var cancelLogin = new System.Windows.Forms.Timer { Interval = 20 };
-        cancelLogin.Tick += (_, _) =>
+        // Observe the actual dialog's Shown event instead of polling OpenForms
+        // with a timer while the button handler is inside ShowDialog.
+        settingsSmokeLoginShown = login =>
         {
-            exposedSettings |= Application.OpenForms.OfType<SettingsForm>().Any();
-            if (Application.OpenForms.OfType<EmployeeAdminLoginForm>().FirstOrDefault() is not { } login) return;
             prompted = true;
-            cancelLogin.Stop();
-            login.DialogResult = DialogResult.Cancel;
+            exposedSettings |= Application.OpenForms.OfType<SettingsForm>().Any();
+            login.BeginInvoke((Action)(() => login.DialogResult = DialogResult.Cancel));
         };
-        cancelLogin.Start();
-        settingsButton.PerformClick();
-        cancelLogin.Stop();
+        try { settingsButton.PerformClick(); }
+        finally { settingsSmokeLoginShown = null; }
         if (!prompted || exposedSettings || Application.OpenForms.OfType<SettingsForm>().Any())
             throw new InvalidOperationException("開啟設定必須先驗證超管；取消驗證不得開啟設定或同步公司卡。");
     }

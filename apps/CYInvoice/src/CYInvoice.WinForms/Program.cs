@@ -310,6 +310,11 @@ internal static class Program
         Stage("main detail verification completed");
         form.Close();
 
+        // Keep extra modeless allowance rendering after the primary MainForm modal/auth smoke.
+        // Running it first can disturb focus routing in legacy authentication smoke dialogs.
+        Stage("three-section allowance detail");
+        AllowanceDetailControl.VerifySmokeSections();
+
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         Stage("upload issues rows");
         using var syncIssues = new SyncIssuesForm(repository, startupSmokeTest: true);
