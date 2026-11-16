@@ -27,6 +27,7 @@
 ## 下一步
 
 - WO-1.3.0 部署後以 1～3 個追蹤商品觀察一輪排程（各來源單次請求、間隔、分組結果）；之後依使用結果再開下一張（例如 Grok BOT 串接判斷 API）。
+- [ ] 部署流程改為與 CYAccountingWeb 一致（使用者 2026-11-16）：首次上線先用手填的 `CF_IDENTITY_SERVICE`／`CF_CYID_WORKSPACE_ID`；之後改用 `apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs` 從正式 CYID 讀取並核對 service、Workspace ID，部署環境只保留本 App 自己的值。配合全站 CYID 部署命名統一一起處理。
 - 整體路線見 `docs/work-orders/README.md`。
 
 ## 已知限制
