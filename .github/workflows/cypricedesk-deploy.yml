@@ -72,7 +72,9 @@ jobs:
       - name: Set fetcher signing secret
         env:
           CYPD_FETCHER_SECRET: ${{ secrets.CYPD_FETCHER_SECRET }}
-        run: printf '%s' "$CYPD_FETCHER_SECRET" | npx wrangler secret put CYPD_FETCHER_SECRET --config wrangler.deploy.jsonc
+        run: |
+          if [ -z "$CYPD_FETCHER_SECRET" ]; then echo "CYPD_FETCHER_SECRET not set; auto query stays disabled."; exit 0; fi
+          printf '%s' "$CYPD_FETCHER_SECRET" | npx wrangler secret put CYPD_FETCHER_SECRET --config wrangler.deploy.jsonc
 
       - name: Remove production generated files
         if: always()
