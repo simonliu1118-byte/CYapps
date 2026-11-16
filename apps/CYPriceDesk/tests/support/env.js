@@ -6,7 +6,7 @@ import {createFakeIdentity, APPLICATION_ID, WORKSPACE_ID} from './fake-identity.
 export const FETCHER_SECRET = 'test-secret';
 
 const PUBLIC_DIR = new URL('../../public/', import.meta.url).pathname;
-const TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'};
+const TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png'};
 
 const ASSETS = {
   async fetch(request) {
