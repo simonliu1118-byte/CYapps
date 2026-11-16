@@ -930,6 +930,13 @@ internal sealed class ErpAutomationService
     {
         _createdByF5 = false;
         var mode = DetectMode(root);
+        // Just maximized, the form can read as neither for a moment (user LOG 2026-11-13: 0.1 s
+        // after the maximize): read again for up to 2 s before giving up.
+        for (var again = 0; again < 8 && mode == ErpMode.Unknown; again++)
+        {
+            await Delay(250, cancellationToken);
+            mode = DetectMode(root);
+        }
         if (mode == ErpMode.Input)
         {
             var owner = ReadOwnerFields(root);
