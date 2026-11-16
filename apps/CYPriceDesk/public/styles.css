@@ -1,12 +1,12 @@
 /* CY Web business style (values taken from CY Web app.css / forms.css / overlay.css / data-view.css):
    white left navigation, top title bar, white panels with thin borders, grey table headers.
-   Accent is indigo #3B4CCA (user decision for WO-1.3.0). */
+   Accent is petrol blue #0f5e73 (user decision for WO-1.3.0). */
 :root {
   color-scheme: light;
   --bg: #f6f6f9; --surface: #fff; --surface-muted: #f8f8fb; --surface-sunken: #f1f1f6;
   --border: #e3e3ec; --border-strong: #c9cad8; --border-input: #8e91a6;
   --text: #282a3a; --text-muted: #676b7e; --text-subtle: #8a8ea2;
-  --accent: #3b4cca; --accent-hover: #2f3db0; --accent-soft: #eceefb; --on-accent: #fff; --focus: rgba(59, 76, 202, .32);
+  --accent: #0f5e73; --accent-hover: #0b4b5c; --accent-soft: #e6f0f2; --on-accent: #fff; --focus: rgba(15, 94, 115, .32);
   --success: #1f7a4d; --success-soft: #e8f5ee; --warning: #8a5300; --warning-soft: #fff4e0;
   --danger: #b42318; --danger-soft: #fdecea; --info: #1d6496; --info-soft: #e6f1f8;
   --backdrop: rgba(21, 22, 36, .45); --shadow-sm: 0 1px 2px rgba(40, 42, 58, .05); --shadow-lg: 0 16px 40px rgba(40, 42, 58, .16);
