@@ -8,6 +8,8 @@ import {
 import {handleRecordsApi} from './records.js';
 import {handleSearchApi} from './search.js';
 import {handleClassificationsApi} from './classifications.js';
+import {handleTrackingApi} from './tracking.js';
+import {runScheduled} from './tracking-run.js';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -52,8 +54,14 @@ export default {
     }
     const response = await handleRecordsApi(request, env, url, principal)
       || await handleSearchApi(request, env, url)
-      || await handleClassificationsApi(request, env, url, principal);
+      || await handleClassificationsApi(request, env, url, principal)
+      || await handleTrackingApi(request, env, url, principal);
     return response || json({error: '找不到此功能'}, 404);
+  },
+
+  // Cron */10: runs at most one due tracked product (see tracking-run.js).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runScheduled(env));
   }
 };
 

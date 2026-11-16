@@ -134,8 +134,14 @@ function auditEntry(row) {
   const after = row.after_json ? JSON.parse(row.after_json) : null;
   const before = row.before_json ? JSON.parse(row.before_json) : null;
   const record = after || before;
+  const trackedLabels = {'tracked.create': () => `${record.name}（${record.model}）`, 'tracked.update': () => `${record.name}（${record.model}）`, 'tracked.run': () => `${record.name}（${record.model}）`,
+    'tracked.price': () => `${record.name}：${before?.myPrice ?? '未設定'} → ${after.myPrice}`,
+    'judgment.update': () => `${record.name} · ${record.source} · ${{same: '同規格', other_package: '其他包裝', not_same: '不是同一商品'}[record.verdict]} · ${record.title}`,
+    'judgment.delete': () => `${record.name} · ${record.source} · 恢復 ${record.title}`};
   const detail = row.action === 'record.import'
     ? `新增 ${after.added} 筆、更新 ${after.updated} 筆、略過 ${after.skipped} 筆`
+    : trackedLabels[row.action]
+      ? trackedLabels[row.action]()
     : row.action.startsWith('classification.')
       ? [record.source, record.model, record.listingKey].filter(Boolean).join(' · ')
       : [record.product, record.spec, record.platform].filter(Boolean).join(' · ');

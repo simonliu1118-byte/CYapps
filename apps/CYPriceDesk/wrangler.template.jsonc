@@ -34,6 +34,9 @@
       "service": "__CF_IDENTITY_SERVICE__"
     }
   ],
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
   "vars": {
     "CYID_APPLICATION_ID": "__CF_CYID_APPLICATION_ID__",
     "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__",
