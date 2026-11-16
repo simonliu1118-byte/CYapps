@@ -38,10 +38,13 @@ function validateValues(values) {
   if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
     throw new Error('CF_CYWEB_PORTAL_URL must be a plain HTTPS root URL.');
   }
-  let fetcher;
-  try { fetcher = new URL(values.CF_CYPD_FETCHER_URL); } catch { throw new Error('CF_CYPD_FETCHER_URL must be HTTPS.'); }
-  if (fetcher.protocol !== 'https:' || !fetcher.hostname || fetcher.username || fetcher.password || fetcher.search || fetcher.hash) {
-    throw new Error('CF_CYPD_FETCHER_URL must be an HTTPS URL without credentials, query or fragment.');
+  // The fetcher is optional: without it the site runs with auto query and scheduling shown as not configured.
+  if (values.CF_CYPD_FETCHER_URL) {
+    let fetcher;
+    try { fetcher = new URL(values.CF_CYPD_FETCHER_URL); } catch { throw new Error('CF_CYPD_FETCHER_URL must be HTTPS.'); }
+    if (fetcher.protocol !== 'https:' || !fetcher.hostname || fetcher.username || fetcher.password || fetcher.search || fetcher.hash) {
+      throw new Error('CF_CYPD_FETCHER_URL must be an HTTPS URL without credentials, query or fragment.');
+    }
   }
   const hostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
   if (!hostname.test(values.CF_CYPRICEDESK_CUSTOM_DOMAIN)) throw new Error('CF_CYPRICEDESK_CUSTOM_DOMAIN must be a valid hostname.');
@@ -50,7 +53,7 @@ function validateValues(values) {
 export function renderWrangler({ env = process.env, templatePath = DEFAULT_TEMPLATE, outputPath }) {
   if (!outputPath) throw new Error('An output path is required.');
   let rendered = fs.readFileSync(templatePath, 'utf8');
-  const values = Object.fromEntries(Object.keys(REQUIRED).map(name => [name, requireValue(env, name)]));
+  const values = Object.fromEntries(Object.keys(REQUIRED).map(name => [name, name === 'CF_CYPD_FETCHER_URL' ? String(env[name] || '').trim() : requireValue(env, name)]));
   validateValues(values);
   for (const [name, placeholder] of Object.entries(REQUIRED)) {
     rendered = rendered.replaceAll(placeholder, JSON.stringify(values[name]).slice(1, -1));
