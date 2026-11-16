@@ -9,7 +9,7 @@
 | 階段 | 工作單 | 內容 |
 | --- | --- | --- |
 | 1 | `WO-1.1.0.md` | 手動查價原型搬到 Cloudflare Worker＋D1＋CYID；價格紀錄全站一份、有使用權者皆可查價與編輯、所有寫入留 audit |
-| 2 | `WO-1.2.0.md`（待開） | 自動查價：sandbox `ScraplingProbe` 的 Python 抓價程式（momo、飛比蝦皮、飛比酷澎）移入本專案 `fetcher/`，部署於 Vercel，只接受 Worker 簽章請求；Worker 端查詢畫面、規格分類（D1）、查到的結果一鍵加入價格紀錄 |
+| 2 | `WO-1.2.0.md` | 自動查價：sandbox `ScraplingProbe` 的 Python 抓價程式（momo、飛比蝦皮、飛比酷澎）移入本專案 `fetcher/`，部署於 Vercel，只接受 Worker 簽章請求；Worker 端查詢畫面、規格分類（D1）、查到的結果一鍵加入價格紀錄 |
 | 3 | `WO-1.3.0.md`（待開） | 追蹤商品：設定自己的商品、售價與各來源查詢條件；Cron 定期查價、保存每次結果、同規格比較與定價參考 |
 
 sandbox 的 `ScraplingProbe`（PR #31 與相關分支）在第 2 階段合併後刪除。
