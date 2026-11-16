@@ -95,7 +95,7 @@ function renderDetail() {
     <div><span>型號</span>${esc(p.model)}</div><div><span>規格屬性</span>${attrText(p.attributes)}</div><div><span>包裝</span>${packText(p)}</div>
     <div><span>自己的商品連結</span>${p.myUrl?`<a href="${esc(p.myUrl)}" target="_blank" rel="noopener noreferrer">開啟</a>`:'—'}</div>
     <div><span>momo 關鍵字</span>${esc(p.momoKeyword)||'—'}</div><div><span>飛比關鍵字</span>${esc(p.feebeeKeyword)||'—'}</div>
-    <div><span>上次查價</span>${when(p.lastRunAt)}${lastRun?`<small class="muted">momo：${esc(STATUS[lastRun.momoStatus]||lastRun.momoStatus)}；飛比：${esc(STATUS[lastRun.feebeeStatus]||lastRun.feebeeStatus)}</small>`:''}</div>
+    <div><span>上次查價</span>${when(p.lastRunAt)}${lastRun?`<small class="muted run-status">momo：${esc(STATUS[lastRun.momoStatus]||lastRun.momoStatus)}；飛比：${esc(STATUS[lastRun.feebeeStatus]||lastRun.feebeeStatus)}</small>`:''}</div>
     <div><span>下次查價</span>${p.active?when(p.nextRunAt):'已停用'}</div></div></section>
   <section class="panel"><div class="panel-head"><h2>自己的售價 <small>${p.myPrice===null?'未設定':money(p.myPrice)}</small></h2><button class="btn" id="tr-price" type="button">修改售價</button></div>
     ${priceChanges.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>時間</th><th>操作者</th><th class="num">改前</th><th class="num">改後</th><th>備註</th></tr></thead><tbody>${priceChanges.map(c=>`<tr><td data-label="時間">${when(c.at)}</td><td data-label="操作者">${esc(c.actorName)}</td><td data-label="改前" class="num">${c.oldPrice===null?'—':money(c.oldPrice)}</td><td data-label="改後" class="num">${money(c.newPrice)}</td><td data-label="備註">${esc(c.note)||'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">尚無售價紀錄。</p>'}</section>
