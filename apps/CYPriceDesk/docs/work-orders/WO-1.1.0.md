@@ -1,6 +1,6 @@
 # WO-1.1.0 價格觀測室改為 Cloudflare Worker＋D1＋CYID（第一階段：手動查價上雲）
 
-- 狀態：待執行
+- 狀態：已實作，待審查（尚未合併、尚未部署）
 - 分支：`cypricedesk/feature-cloud-worker`　PR：（執行者填）
 - 依據：`REPOSITORY_RULES.md`、`REPO_POLICY.md` §2–§4.1、`apps/CYPriceDesk/PROJECT_RULES.md`、`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`（contract 1.0.6）
 - 整體路線：見本目錄 `README.md`
@@ -139,5 +139,48 @@ CREATE INDEX idx_audit_at ON audit_log(at DESC);
 部署由使用者授權後另行進行（需先在 CY Web 註冊 CYPriceDesk Application、建立 D1、設定 GitHub Environment）。
 
 ## 8. 完成報告（執行者填）
+
+### 8.1 驗收清單結果
+
+- [x] 未登入：`/` 與 `/index.html` 302 `/login`；`/api/records`、`/api/audit` 401；`/login` 可開啟（`tests/worker.test.js`）。
+- [x] 登入成功設定 `cypd_session`（HttpOnly、Secure、SameSite=Lax、Path=/、Expires）；first-login-required 與錯誤密碼不建立 Session，first-login 轉 `/login?error=first-login`，登入頁以 `/api/auth/portal` 取得 `CYWEB_PORTAL_URL` 顯示前往 CY Web 連結（worker 測試＋Playwright 截圖流程）。
+- [x] resolve 被拒後下一個請求即 401 並清 cookie；`/` 302 `/login`（worker 測試）。
+- [x] 登出先呼叫 provider logout，再清 cookie、302 `/login`（worker 測試檢查 provider 最後一次呼叫為 logout、Session 已撤銷）。
+- [x] 新增／修改／刪除／匯入走 API；每個寫入與其 audit 在同一個 `DB.batch()`（測試包裝 `batch` 驗證語句數為 2、2、4、2）；revision 衝突回 409，修改與刪除各驗證一次。
+- [x] 原有比較、CSV、範例模式行為不變：`core.test.js` 原封不動通過；`app-flow.test.js` 的事件流程改對真實 Worker 執行並通過。
+- [x] 前端沒有 localStorage 正式資料讀寫（`price-desk:v1`、跨分頁保護已移除）；provider token 只在 HttpOnly cookie，不出現在前端、URL、audit（測試檢查 `audit_log` 不含 `cyid_`）。
+- [x] 本機：`npm test`、`npm run build`、public-package scan、`wrangler deploy --dry-run`（placeholder 設定）通過。**PR CI 綠燈尚未確認**（尚未開 PR；見 8.2 的 governance 偏離）。
+- [x] `VERSION`=1.1.0、`BUILD`=0、`package.json` version=1.1.0、`CYID_CONSUMER_VERSION`=1.0.6；README／TODO／WORK_HANDOFF／CHANGELOG 已更新。
+- [x] 截圖（1440／390）：登入頁、比價總覽、新增對話框、操作紀錄，見 8.4。
+- [x] commit 身分 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。
+
+### 8.2 偏離與需審查決定的事項
+
+1. **Governance Check 會失敗（需審查決定）**：新增 `CYID_CONSUMER_VERSION` 後，`governance-check.yml` 要求同專案 `PROJECT_RULES.md` 含 `CONSUMER_INTEGRATION_STANDARD.md`，目前 `apps/CYPriceDesk/PROJECT_RULES.md` 沒有。工單 §3.7 明定 `PROJECT_RULES.md` 不改，且修改它依 `REPO_POLICY.md` 需走 `governance/*` branch 並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，所以本分支未動。本機實測：暫時在 `PROJECT_RULES.md` 加入含該檔名的一行後，governance 的結構檢查通過（已還原）。建議審查者另開 `governance/*` PR，在 `PROJECT_RULES.md` 採用 CYID consumer standard（CYACC 的做法），或決定本分支改由其他方式處理；在此之前本 PR 的 Governance Check 預期為紅。
+2. `wrangler.template.jsonc` 設 `"workers_dev": false`（CYACC 為 true），避免多一個 workers.dev 入口繞過自訂網域；`compatibility_date` 與 CYACC 相同。
+3. 欄位對照：D1 欄位與 §3.3 完全一致，`checked_at` 對應 `core.js` 的 `checkedAt`，其餘同名，沒有調整。
+4. API 回應格式：成功回純 JSON 物件（`{records}`、`{record}`、`{entries}`、`/api/me` 為工單指定的三個欄位）；錯誤回 `{error}`。新增另有 `GET /api/auth/portal`（公開，供登入頁取得 CY Web 連結，沿用 CYACC 的 `account-portal` 作法）。
+5. `POST /api/records` 沿用原前端語意：相同商品規格＋連結且較新則合併更新（audit 為 `record.update`），較舊則回 422；`PUT` 重複連結回 422。這些訊息與原前端相同，只是判斷搬到伺服器。
+6. 未移植 CYACC adapter 的 Tablet 特例、recovery、角色／寫入權限判斷與 login 後的二次 resolve（`verifyFreshLoginSession`）；保留 provider 回應驗證、first-login fail closed、timeout 與錯誤正規化。cookie 保留 `Max-Age` 與明確 `Expires`。
+7. 保留 CYACC 的 HTTP→HTTPS 308（localhost 例外）。注意 `wrangler dev` 會把 request host 改成 custom domain 路由，所以 `npm run dev` 加了 `--local-upstream localhost:8787`，否則本機會被導向 https。
+8. `tests/ui.test.cjs`（Playwright 腳本）原本依賴 localStorage 與跨分頁覆蓋保護，已改成對 `tests/support/local-server.mjs`（真實 Worker＋假 IDENTITY＋node:sqlite）執行，跨分頁改為 409 提示並加入操作紀錄檢查；這個 local server 同時用來產生截圖。這是工單 §5 允許的「用 Worker 測試替身起本機 server」，不是新增功能。
+9. 部署 workflow 在 deploy 前多跑一次 `npm test`；Environment 名稱與變數清單見 README（Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CF_IDENTITY_SERVICE`；Variables：`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`）。
+
+### 8.3 指令輸出摘要（apps/CYPriceDesk，Node v22.23.4）
+
+- `npm install`：新增 38 個套件，產生並提交 `package-lock.json`（只含 registry.npmjs.org）。
+- `npm test`：12 tests，pass 12、fail 0（core 5、Worker 5、前端事件流程 2；node:sqlite 實驗性警告可忽略）。
+- `node --check`：`src/*.js`、`public/*.js`、`scripts/*.mjs`、`tests/support/*` 全部通過。
+- `npm run build`：`Static Site built in dist/`；`python3 ../../.github/scripts/scan-public-package.py dist`：`Public artifact safety scan passed.`
+- `node scripts/render-wrangler.mjs`（placeholder 值）＋`npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc`：wrangler 4.163.0，Read 5 files from assets，bindings 為 DB、IDENTITY、ASSETS 與三個 vars，`--dry-run: exiting now.`。
+- `npx wrangler d1 migrations apply DB --local`：`0001_initial.sql` 成功（5 commands）。
+- `wrangler dev`（placeholder 設定）實測：`/login` 200（由 ASSETS 提供）、`/` 302 `/login`、`/api/records` 401、`/styles.css` 200。
+- Playwright（真實 Chromium，對 local server）`tests/ui.test.cjs`：`passed: true`，16 項檢查含桌面／平板／手機無水平溢出與無 JavaScript 錯誤。
+- Governance 結構檢查（從 `governance-check.yml` 抽出的 python 在 repo 根目錄執行）：因 8.2 第 1 點失敗；暫時加入採用字串後 `Local governance structure OK`。公開 package scanner 自我測試通過。
+
+### 8.4 截圖（不在 repo 內）
+
+`/tmp/claude-0/-home-user/04d2ad10-f9b3-5958-aff8-f556061b5368/scratchpad/wo110/`：`login-1440.png`、`login-390.png`、`overview-1440.png`、`overview-390.png`、`add-dialog-1440.png`、`add-dialog-390.png`、`audit-1440.png`、`audit-390.png`（假資料、假身分「測試員工」）。
+
 
 ## 9. 審查紀錄（審查者填）
