@@ -132,3 +132,10 @@
 
 
 ## 9. 審查紀錄（審查者填）
+
+### 2026-11-16 審查（Claude）— 結論：通過
+
+- 簽章：Worker（Web Crypto）與 fetcher（`hmac.compare_digest`）格式一致，300 秒時效、未設 secret 回 503，符合 3.1。簽章未涵蓋路徑，同一 body 可在 5 分鐘內改送另一端點；只影響查詢類型、無寫入，不處理。
+- 節流：條件式 UPDATE 搶占 15 秒間隔、blocked 冷卻 30 分鐘、飛比 shopee／coupang 共用同一筆快取，正確。fetcher 連線失敗回 `network_error` 不快取，可接受。
+- 偏離 1（標題變動不提示複核）：WO-1.3.0 會在分類表加入判斷當時的標題，屆時補上；其餘偏離同意。
+- 本機重跑：`npm test` 26/26、fetcher unittest 18/18；截圖已檢視（momo、飛比蝦皮、分類、加入紀錄預填）。
