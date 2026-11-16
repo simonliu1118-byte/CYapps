@@ -20,15 +20,6 @@ async function api(method,path,body) {
   return data;
 }
 
-// ---- page switching (hash) ----
-function showPage() {
-  const auto=location.hash==='#auto-query';
-  $('overview').hidden=auto;$('auto-query').hidden=!auto;
-  document.querySelectorAll('.nav-page').forEach(a=>a.classList.toggle('active',(a.getAttribute('href')==='#auto-query')===auto));
-  window.scrollTo(0,0);
-}
-window.addEventListener('hashchange',showPage);
-
 // ---- products ----
 function toProducts(list) {
   return list.map(r=>source==='momo'
@@ -64,13 +55,13 @@ const checkedText=res=>res.checkedAt?`查價時間：${esc(displayTime(res.check
 function renderDisclaimer() {
   const box=$('aq-disclaimer');
   box.hidden=source==='momo';
-  if(source!=='momo')box.innerHTML=`<strong>注意：</strong>${DISCLAIMER}${source==='shopee'?'蝦皮多規格商品無法由此確認逐規格 SKU 售價，需另行核價。':''}不與 momo、其他平台價格統計混算。`;
+  if(source!=='momo')box.textContent=`${DISCLAIMER}${source==='shopee'?'蝦皮多規格商品無法由此確認逐規格 SKU 售價，需另行核價。':''}不與 momo、其他平台價格統計混算。`;
 }
 function classify(){effective=products.map(p=>classification(p,rules.get(p.key)));}
 function render() {
   const rows=filtered(sorted(effective),selections);
   const feebee=source!=='momo';
-  $('aq-results').innerHTML=effective.length?`<div class="aq-table-wrap"><table class="aq-table"><thead><tr><th>商品</th><th>${feebee?'商品級參考價':'公開展示價'}</th><th>${feebee?'賣家／來源':'來源'}</th><th>連結</th><th>規格解析</th><th>操作</th></tr></thead><tbody>${rows.map(rowHtml).join('')||'<tr><td colspan="6" class="aq-empty">沒有符合目前篩選的商品。</td></tr>'}</tbody></table></div>`:'';
+  $('aq-results').innerHTML=effective.length?`<div class="table-wrap"><table class="data-table"><thead><tr><th>商品</th><th class="num">${feebee?'商品級參考價':'公開展示價'}</th><th>${feebee?'賣家／來源':'來源'}</th><th>連結</th><th>規格解析</th><th>操作</th></tr></thead><tbody>${rows.map(rowHtml).join('')||'<tr><td colspan="6" class="muted">沒有符合目前篩選的商品。</td></tr>'}</tbody></table></div>`:'';
   $('aq-analysis').hidden=!effective.length;
   if(effective.length){renderFacets();$('aq-count').textContent=`目前顯示 ${rows.length} 筆；已排除 ${effective.filter(x=>x.excluded).length} 筆；待確認 ${effective.filter(x=>!x.ready&&!x.excluded).length} 筆`;renderGroups(rows);}
   const pager=$('aq-pager');
@@ -82,31 +73,29 @@ function rowHtml(p) {
   const sellerText=p.source==='momo'?'momo':p.merchant+(p.seller?'－'+p.seller:'');
   const pack=p.quantity?`${p.quantity} ${esc(p.unit)}`:'未確認';
   return `<tr class="${p.excluded?'is-excluded':''}" data-key="${esc(p.key)}">
-    <td data-label="商品"><div class="aq-name">${esc(p.title)}</div><small>${esc(p.note)}</small></td>
-    <td data-label="價格" class="aq-price">${p.price===null?'<span class="aq-dim">未取得</span>':money(p.price)}</td>
+    <td data-label="商品">${esc(p.title)}<small>${esc(p.note)}</small></td>
+    <td data-label="價格" class="num">${p.price===null?'<span class="muted">未取得</span>':money(p.price)}</td>
     <td data-label="來源">${esc(sellerText)}</td>
     <td data-label="連結"><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${p.source==='momo'?'商品頁':'飛比來源'}</a></td>
-    <td data-label="規格解析"><div class="aq-model"><strong>${esc(p.model||'未辨識型號')}</strong><span class="aq-tag">${esc(p.status)}</span></div><div class="aq-spec">規格：${attrText(p.attributes)} · 包裝：${pack}</div><div class="aq-unit">${p.unitPrice===null?'單價待確認':`${money(p.unitPrice)}／${esc(p.unit)}`}</div><div class="aq-class-actions"><button type="button" data-edit="${esc(p.key)}">編輯分類</button><button type="button" class="text-button" data-exclude="${esc(p.key)}">${p.excluded?'取消排除':'不使用'}</button></div></td>
-    <td data-label="操作"><button type="button" class="button secondary small" data-add="${esc(p.key)}">加入價格紀錄</button></td>
+    <td data-label="規格解析"><strong>${esc(p.model||'未辨識型號')}</strong> <span class="chip ${p.ready?'success':'warning'}">${esc(p.status)}</span><div class="aq-spec">規格：${attrText(p.attributes)} · 包裝：${pack}</div><div class="aq-unit">${p.unitPrice===null?'單價待確認':`${money(p.unitPrice)}／${esc(p.unit)}`}</div></td>
+    <td><div class="row-actions"><button type="button" class="btn small" data-edit="${esc(p.key)}">編輯分類</button><button type="button" class="btn small" data-exclude="${esc(p.key)}">${p.excluded?'取消排除':'不使用'}</button><button type="button" class="btn small" data-add="${esc(p.key)}">加入價格紀錄</button></div></td>
   </tr>`;
 }
 function renderFacets() {
   const available=facets(effective);
   $('aq-facets').innerHTML=available.length
-    ?available.map(f=>`<label class="aq-facet">${esc(f.label)}<select data-facet="${esc(f.key)}" aria-label="${esc(f.label)}篩選"><option value="">全部</option>${f.values.map(v=>`<option value="${esc(v)}" ${selections[f.key]===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`).join('')+'<button type="button" class="aq-clear" id="aq-clear-facets">清除篩選</button>'
-    :'<p class="aq-dim">暫無可辨識的分類條件。人工補充分類後會自動出現在這裡。</p>';
+    ?available.map(f=>`<label class="aq-facet">${esc(f.label)}<select data-facet="${esc(f.key)}" aria-label="${esc(f.label)}篩選"><option value="">全部</option>${f.values.map(v=>`<option value="${esc(v)}" ${selections[f.key]===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`).join('')+'<button type="button" class="btn small" id="aq-clear-facets">清除篩選</button>'
+    :'<p class="muted">暫無可辨識的分類條件。</p>';
   for(const k of Object.keys(selections))if(!available.some(f=>f.key===k&&f.values.includes(selections[k])))delete selections[k];
 }
 function renderGroups(rows) {
   const summary=groups(rows.filter(x=>!x.excluded));
-  $('aq-group-count').textContent=`${summary.length} 個可比較群組（使用每單位推算價；不含待確認／已排除）`;
+  $('aq-group-count').textContent=`${summary.length} 個可比較群組（每單位推算價；不含待確認／已排除）`;
   $('aq-groups').innerHTML=summary.length?summary.map(g=>{
-    const st=g.statistics,span=st.max-st.min;
-    const metrics=[['筆數',st.count],['最低價',money(st.min)],['最高價',money(st.max)],['平均價',money(st.mean)],['中位數',money(st.median)],['樣本標準差',st.stddev===null?'至少兩筆才計算':money(st.stddev)]];
-    return `<article class="aq-group"><h4>${esc(g.model)} ｜每 ${esc(g.unit)} 價格</h4><p class="aq-dim">${attrText(g.attributes)}</p>
-      <div class="aq-metrics">${metrics.map(([n,v])=>`<div class="aq-metric"><span>${n}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
-      ${st.count>1?`<div class="aq-range">${g.items.map(e=>`<div class="aq-range-row"><span>${esc(e.label)}</span><div class="aq-track"><i style="left:${(span?((e.unitPrice-st.min)/span)*94:47)+3}%" title="${esc(money(e.unitPrice))}／${esc(g.unit)}"></i></div><span>${esc(money(e.unitPrice))}</span></div>`).join('')}</div>`:''}</article>`;
-  }).join(''):'<p class="aq-dim">目前沒有具備明確型號、包裝數量與價格的可比群組。可以編輯分類後重新計算。</p>';
+    const st=g.statistics;
+    return `<div class="aq-group"><h4>${esc(g.model)} ｜每 ${esc(g.unit)} 價格</h4><div class="muted">${attrText(g.attributes)}</div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th class="num">筆數</th><th class="num">最低價</th><th class="num">最高價</th><th class="num">平均價</th><th class="num">中位數</th><th class="num">樣本標準差</th></tr></thead><tbody><tr><td data-label="筆數" class="num">${st.count}</td><td data-label="最低價" class="num">${money(st.min)}</td><td data-label="最高價" class="num">${money(st.max)}</td><td data-label="平均價" class="num">${money(st.mean)}</td><td data-label="中位數" class="num">${money(st.median)}</td><td data-label="標準差" class="num">${st.stddev===null?'—':money(st.stddev)}</td></tr></tbody></table></div></div>`;
+  }).join(''):'<p class="muted">目前沒有具備明確型號、包裝數量與價格的可比群組。</p>';
 }
 
 // ---- search ----
@@ -201,4 +190,4 @@ $('aq-results').addEventListener('click',async e=> {
 });
 $('aq-analysis').addEventListener('change',e=>{if(e.target.dataset.facet){selections[e.target.dataset.facet]=e.target.value;render();}});
 $('aq-analysis').addEventListener('click',e=>{if(e.target.id==='aq-clear-facets'){selections={};render();}});
-renderDisclaimer();showPage();
+renderDisclaimer();

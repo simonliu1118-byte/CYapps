@@ -2,6 +2,15 @@
 
 > 本文件只記錄歷史，不是規則來源。版本來源為 `VERSION` 與 `BUILD`。
 
+## V1.3.0（Build 0）
+
+升 Minor：新增追蹤商品與定期查價。依據 `docs/work-orders/WO-1.3.0.md`。
+
+- 新增「追蹤商品」：自動分組（同規格／其他包裝／待確認／無關）、人工判斷（依追蹤商品＋來源＋商品識別保存，標題變了回到待確認）、自己的售價與修改紀錄、立即查價。
+- Worker Cron `*/10`：臺北 08:00–22:00、每次最多 1 個到期商品、查完隨機 7–14 天後再查；`/api/search` 與排程共用 `querySource`（快取、間隔、冷卻）。
+- `migrations/0003_tracked_products.sql`（儲存方案 B）；`wrangler.template.jsonc` 加 `triggers.crons`。
+- 整站介面改為 CY Web 簡潔商務風格（主色靛藍 `#3B4CCA`，使用者指定），移除行銷式文字與裝飾。
+
 ## V1.2.0（Build 0）
 
 升 Minor：新增自動查價能力。依據 `docs/work-orders/WO-1.2.0.md`。

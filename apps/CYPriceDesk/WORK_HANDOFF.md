@@ -17,6 +17,8 @@
 - 部署用的 D1 ID、Identity service 名稱、Application／Workspace ID、網域由 GitHub Environment `cypricedesk-production` 注入，source 只放 placeholder。合併 `main` 不部署，只有 `workflow_dispatch` 從 `main` 才部署。
 
 - 自動查價（V1.2.0）：`fetcher/`（Vercel Python，只接受 HMAC 簽章請求）→ Worker `src/search.js`（D1 快取 10 分鐘、同上游間隔 15 秒、blocked 冷卻 30 分鐘）→ `public/search.js`。簽章格式 Worker（`src/fetcher-client.js`）與 fetcher（`fetcher/api/index.py`）必須一致，兩邊測試共用同一組向量。解析邏輯（`fetcher/momo.py`、`fetcher/feebee.py`、`public/catalog-core.js`）由 sandbox 原樣搬移，改動前先看對應測試。
+- 追蹤商品（V1.3.0）：`src/grouping.js`（純函式分組，改規則先看 `tests/tracking.test.js`）、`src/tracking-run.js`（單次查價＋`runScheduled`）、`src/tracking.js`（API）、`public/tracked.js`。排程與手動查價共用 `runTracked`，查詢走 `src/search.js` 的 `querySource`，不另寫快取或節流。`next_run_at`／`last_run_at` 為 epoch 毫秒，其餘新表時間為 ISO 文字。
+- 介面採 CY Web 風格，樣式集中在 `public/styles.css`（token 在檔頭，主色 `#3B4CCA`）；新頁面沿用 `.panel`、`.data-table`、`.btn`、`.dialog-surface`，不要另建第二套。
 - 測試與 CI 不得連線 momo、飛比或任何外部網站；Worker 測試以 `tests/support/fake-fetcher.js` 取代 `globalThis.fetch`。
 
 ## 驗證界線

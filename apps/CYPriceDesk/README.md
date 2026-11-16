@@ -1,9 +1,9 @@
 # CYPriceDesk — 價格觀測室
 
-**V1.2.0：** 新增自動查價（momo、飛比蝦皮、飛比酷澎）、人工規格分類與一鍵加入價格紀錄；追蹤商品與定期查價屬 WO-1.3.0。**V1.1.0：** 手動查價工具已搬到 Cloudflare Worker＋D1，以 CYID（CYCloud Identity）登入。價格紀錄全站只有一份，有 CYPriceDesk Application Access 的人都能查看、新增、修改、刪除、匯入與匯出，每次寫入都留下 append-only 操作紀錄。自動查價與追蹤商品屬後續工作單（見 `docs/work-orders/README.md`）。
+**V1.3.0：** 新增追蹤商品（定期自動查價、同規格比價、自己的售價紀錄），整站介面改為 CY Web 簡潔商務風格（主色靛藍 `#3B4CCA`）。**V1.2.0：** 新增自動查價（momo、飛比蝦皮、飛比酷澎）、人工規格分類與一鍵加入價格紀錄。**V1.1.0：** 手動查價工具已搬到 Cloudflare Worker＋D1，以 CYID（CYCloud Identity）登入。價格紀錄全站只有一份，有 CYPriceDesk Application Access 的人都能查看、新增、修改、刪除、匯入與匯出，每次寫入都留下 append-only 操作紀錄。自動查價與追蹤商品屬後續工作單（見 `docs/work-orders/README.md`）。
 
 - 正式原始碼位置：`simonliu1118-byte/CYapps` 的 `apps/CYPriceDesk/`。
-- 版本來源：`VERSION`（`1.2.0`）、`BUILD`（`0`）；`CYID_CONSUMER_VERSION` 為 `1.0.6`。這只是工程識別，不表示已有正式 GitHub Release 或產品驗收。
+- 版本來源：`VERSION`（`1.3.0`）、`BUILD`（`0`）；`CYID_CONSUMER_VERSION` 為 `1.0.6`。這只是工程識別，不表示已有正式 GitHub Release 或產品驗收。
 - 規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與 `PROJECT_RULES.md`；本文件只描述現況。
 
 ## 架構
@@ -13,7 +13,8 @@
    │
 Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
    ├─ IDENTITY（private Service Binding）→ CYCloud Identity：login／resolve／logout
-   ├─ DB（D1）：price_records、audit_log、search_cache、upstream_state、listing_classifications
+   ├─ DB（D1）：price_records、audit_log、search_cache、upstream_state、listing_classifications、tracked_*（見「追蹤商品」）
+   ├─ Cron（*/10 * * * *）→ scheduled()：定期查價
    └─ CYPD_FETCHER_URL（HTTPS，HMAC 簽章）→ fetcher/（Vercel，Python）→ momo、飛比
 ```
 
@@ -23,13 +24,15 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 | `src/identity.js` | CYID login／resolve／logout 與 `cypd_session` cookie，由 CYAccountingWeb 的 adapter 移植 |
 | `src/records.js` | 價格紀錄 API、D1 存取、audit 寫入（每個寫入與其 audit 在同一個 `DB.batch()`） |
 | `src/search.js`、`src/fetcher-client.js` | `GET /api/search`：D1 快取、間隔、冷卻，再以簽章呼叫 fetcher |
+| `src/tracking.js`、`src/tracking-run.js`、`src/grouping.js` | 追蹤商品 API、單次查價與排程、自動分組（純函式） |
 | `src/classifications.js` | 人工規格分類 API（D1、全站共用、依來源隔離、寫 audit） |
 | `fetcher/` | Python 抓價服務（Vercel）：`api/index.py`、`momo.py`、`feebee.py`、`tests/` |
+| `public/tracked.js`、`public/shell.js` | 追蹤商品頁；頁面切換、使用者選單 |
 | `public/search.js`、`public/catalog-core.js` | 自動查價頁；規格解析與單價統計（瀏覽器與 Worker 共用） |
 | `public/core.js` | 驗證、臺北時間、分組、價格比較、CSV、「相同商品規格＋連結保留較新查價」的唯一實作；瀏覽器與 Worker 共用同一份 |
 | `public/app.js` | 前端 state、API 呼叫與 render；範例模式只存在記憶體 |
 | `public/index.html`／`login.html`／`styles.css` | 主畫面、獨立登入頁（PC／手機共用）、RWD |
-| `migrations/0001_initial.sql` | D1 schema |
+| `migrations/` | D1 schema（`0001` 價格紀錄、`0002` 自動查價、`0003` 追蹤商品） |
 | `wrangler.template.jsonc`、`scripts/render-wrangler.mjs` | 只含 `__PLACEHOLDER__` 的設定模板，與部署時由環境變數產生設定的 script |
 | `scripts/build.mjs` | 產生可供 public-package scan 的 `dist/` |
 | `tests/` | `core.test.js`（計價規則）、`worker.test.js`（Worker＋假 IDENTITY＋node:sqlite D1 替身）、`app-flow.test.js`（真實前端事件流程對真實 Worker）、`ui.test.cjs`（Playwright，另備） |
@@ -66,7 +69,7 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 - 平台篩選只隱藏其他列，最低價基準仍取同商品規格的全部平台。超過 7 天的查價提示更新。
 - CSV／TSV 貼上與 CSV 檔案匯入（預覽驗證）、CSV 匯出。
 - 「看看範例」的資料只在瀏覽器記憶體，不會寫入正式資料。
-- 「操作紀錄」列出最近 50 筆新增、修改、刪除與匯入。
+- 「操作紀錄」列出最近 50 筆新增、修改、刪除、匯入、人工分類與追蹤商品相關操作。
 
 ## 自動查價（V1.2.0）
 
@@ -89,12 +92,47 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 
 來源限制：momo 為公開搜尋展示價，飛比為商品級第三方參考價；兩者都不等於結帳價、會員價或逐規格價格，也可能被站方限制（此時進入冷卻、不重試）。
 
+## 追蹤商品（V1.3.0）
+
+側欄「追蹤商品」（`#tracked`）：設定要追蹤的商品（名稱、型號、規格屬性、包裝數量與單位、自己的售價與連結、momo／飛比關鍵字、啟用或停用），系統定期自動查價，結果作為調整定價的依據。
+
+**自動分組**（沿用 `catalog-core.js` 的 `parseTitle`，判斷在 `src/grouping.js`）：
+
+| 分組 | 條件 | 顯示 |
+| --- | --- | --- |
+| 同規格 | 型號相同，且包裝數量、單位、已設定的規格屬性都一致 | 進入比價；momo、飛比蝦皮、飛比酷澎各自列出，也顯示總最低價，每筆標來源 |
+| 其他包裝 | 型號相同但數量或單位不同 | 依「數量＋單位」分組顯示價格範圍，不與自己的售價比較 |
+| 待確認 | 解析不出型號或數量、標題同時出現多個規格、規格屬性不明或不同 | 等人工判斷 |
+| 無關 | 標題不含型號（或是別的型號，如 15301 對 1530-0） | 不顯示，只計數 |
+
+**人工判斷**：待確認或分組有誤的商品可標記「同規格」「其他包裝（填數量＋單位）」「不是同一商品」。判斷以「追蹤商品＋來源＋商品識別（momo 品號、飛比來源連結）」保存，下次查價自動套用；記下當時標題，標題變了就回到待確認；「不是同一商品」不再顯示，可在「已排除」恢復。判斷 API 與介面共用，供之後 Grok BOT 使用。
+
+**排程**：Worker Cron `*/10 * * * *`，只在臺北時間 08:00–22:00 執行，每次最多處理 1 個到期（`next_run_at <= now`，依 `next_run_at` 排序）的啟用商品；查 momo 第 1 頁與飛比一次（走與 `/api/search` 同一個 `querySource`：10 分鐘快取、15 秒間隔、30 分鐘冷卻）。查完 `next_run_at` 為隨機 7–14 天後的 08:00–22:00；新增商品為未來 0–7 天內隨機，讓 1000 個商品自然分散。任一來源被節流、冷卻或失敗，該商品延後 1 小時，其他來源結果照存。詳情頁「立即查價」走同一流程。
+
+**儲存（方案 B，不自動刪除，至少保留 5 年）**：`price_observations`（同規格每一筆）、`group_summaries`（每次的同規格與各其他包裝組的筆數、最低、中位數、最高）、`tracked_runs`（每次查價與各來源狀態）只增不刪；`latest_candidates` 每個追蹤商品只留最近一次完整候選清單，重新查價時依來源覆蓋。估算：1000 個商品約每日 100 次查價、200 次請求；5 年約 150 萬筆、300 MB。
+
+**自己的售價**：只能經「修改售價」更新，每次留紀錄（時間、操作者、改前、改後、備註）並寫 audit。
+
+| API | 說明 |
+| --- | --- |
+| `GET／POST /api/tracked` | 列表（含最近一次同規格最低價、中位數、待確認筆數）／新增 |
+| `GET／PUT /api/tracked/:id` | 詳情（售價紀錄、最近候選、同規格歷次、最近一次狀態）／編輯（帶 `revision`，衝突 409；不能改售價） |
+| `PUT /api/tracked/:id/price` | 改售價 `{price, note, revision}` |
+| `POST /api/tracked/:id/run` | 立即查價 |
+| `PUT／DELETE /api/tracked/:id/judgments` | 人工判斷 `{source, listingKey, verdict: same｜other_package｜not_same, packageQuantity, packageUnit}`／恢復（`?source=&listingKey=`） |
+
+新增、修改、改售價、判斷、立即查價都寫 audit（`tracked.*`、`judgment.*`）；排程自動查價的紀錄在 `tracked_runs`（`trigger='schedule'`），不寫 audit。
+
+## 介面（V1.3.0）
+
+整站採 CY Web 簡潔商務風格（取其視覺語言與數值，不引入框架）：白底左側導覽、頂部頁名與右上角使用者選單（姓名、登出）、白色面板與細框線、灰底表頭資料表、分段按鈕、對話框右上 × 與底部靠右按鈕；主色為靛藍 `#3B4CCA`（使用者指定），圖示為暫用的佔位圖，之後換正式圖示。手機版（≤820px）導覽改為抽屜，表格（≤680px）改為逐筆卡片。
+
 ## 本機開發與驗證
 
 ```sh
 cd apps/CYPriceDesk
 npm install
-npm test            # node --test：core、catalog-core、Worker、自動查價、前端事件流程
+npm test            # node --test：core、catalog-core、Worker、自動查價、追蹤商品、前端事件流程
 python -m unittest discover -s fetcher/tests   # 需先 pip install -r fetcher/requirements.txt
 npm run build       # 產生 dist/
 python3 ../../.github/scripts/scan-public-package.py dist

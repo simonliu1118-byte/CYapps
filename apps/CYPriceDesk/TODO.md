@@ -2,7 +2,11 @@
 
 > 本文件是唯一目前進度與待辦入口，不是永久規則來源。
 
-## 目前基準 — V1.2.0（Build 0）
+## 目前基準 — V1.3.0（Build 0）
+
+- WO-1.3.0 已實作於分支 `cypricedesk/feature-tracked-products`（建立於 V1.2.0 之上）：追蹤商品、Cron 定期查價、自動分組與人工判斷、自己的售價紀錄、CY Web 風格介面。本機 `npm test`、Python unittest、build、scan、`wrangler deploy --dry-run`（含 crons）通過；**尚未部署、未對 momo／飛比做實機測試**。細節見 `docs/work-orders/WO-1.3.0.md` §8。
+
+### V1.2.0 基準
 
 - WO-1.2.0 已實作於分支 `cypricedesk/feature-auto-query`：`fetcher/`（Vercel Python）、Worker 快取／間隔／冷卻、自動查價頁、D1 人工分類、一鍵加入價格紀錄。本機 `npm test`、Python unittest、build、scan、`wrangler deploy --dry-run` 通過；**尚未部署、未對 momo／飛比做實機測試**（測試一律離線 fixture）。細節見 `docs/work-orders/WO-1.2.0.md` §8。
 
@@ -22,12 +26,12 @@
 
 ## 下一步
 
-- WO-1.3.0（待開）：追蹤商品、Cron 定期查價、同規格比較與定價參考。
+- WO-1.3.0 部署後以 1～3 個追蹤商品觀察一輪排程（各來源單次請求、間隔、分組結果）；之後依使用結果再開下一張（例如 Grok BOT 串接判斷 API）。
 - 整體路線見 `docs/work-orders/README.md`。
 
 ## 已知限制
 
-- 自動查價只有手動觸發的站內查詢；尚無追蹤商品、排程或通知。飛比為商品級第三方參考價，來源價格更新時間未確認。
+- 尚無通知、圖表、追蹤資料匯出，也未串接蝦皮賣家 API 或 Grok BOT。飛比為商品級第三方參考價，來源價格更新時間未確認。
 - sandbox `ScraplingProbe` 於本單合併後由審查者刪除。
 - 無角色差異（有使用權者皆可寫入）、無 Backup／Restore、無 Excel。
 - 金額固定為新臺幣；優惠券、會員價記在備註，不自動扣抵。
