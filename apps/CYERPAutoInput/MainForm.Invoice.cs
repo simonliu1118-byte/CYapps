@@ -388,7 +388,7 @@ internal sealed partial class MainForm
             _paperPanel = new PaperPanel();
             _paperPanel.PrintRequested += async () => await PrintFromPanelAsync();
         }
-        var bounds = _paperPanel.Show($"紙本發票 {count} 張待列印\n{kinds}");
+        var bounds = _paperPanel.Show($"紙本發票 {count} 張待列印，請放入 A4 白紙\n{kinds}");
         if (bounds.IsEmpty) return;
         PhysicalMouseLock.Allowed = bounds;
         InputSender.ParkAt = new Point(bounds.Left + bounds.Width / 2, bounds.Bottom - 20);

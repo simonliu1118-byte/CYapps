@@ -58,11 +58,8 @@ internal sealed class PaperPanel : IDisposable
             Dock = DockStyle.Top, Height = 44, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Microsoft JhengHei UI", 10.5F)
         };
-        private readonly Button _print = new()
-        {
-            Text = "A4 白紙放好了，開始列印", Dock = DockStyle.Bottom, Height = 40, FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(234, 88, 12), ForeColor = Color.White, Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold)
-        };
+        // The same 「好了」 as every paper prompt (PaperPromptForm.ReadyButton).
+        private readonly Button _print = PaperPromptForm.ReadyButton(14F);
 
         public PanelForm(Action pressed)
         {
@@ -74,7 +71,8 @@ internal sealed class PaperPanel : IDisposable
             BackColor = Color.FromArgb(32, 32, 36);
             Padding = new Padding(10, 6, 10, 10);
             Size = new Size(360, 104);
-            _print.FlatAppearance.BorderSize = 0;
+            _print.Dock = DockStyle.Bottom;
+            _print.Height = 40;
             _print.Click += (_, _) => pressed();
             Controls.Add(_text);
             Controls.Add(_print);

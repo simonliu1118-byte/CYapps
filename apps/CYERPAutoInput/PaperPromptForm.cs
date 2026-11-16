@@ -37,21 +37,10 @@ internal sealed class PaperPromptForm : Form
         Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
         using (var path = Rounded(new Rectangle(Point.Empty, Size), 20)) Region = new Region(path);
 
-        var ok = new Button
-        {
-            Text = "好了",
-            Size = new Size(260, 70),
-            Location = new Point((Width - 260) / 2, 190),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = CyVisualTheme.Accent,
-            ForeColor = Color.White,
-            Font = new Font("Microsoft JhengHei UI", 22F, FontStyle.Bold),
-            DialogResult = DialogResult.OK,
-            Cursor = Cursors.Hand
-        };
-        ok.FlatAppearance.BorderSize = 0;
-        ok.FlatAppearance.MouseOverBackColor = CyVisualTheme.AccentHover;
-        ok.FlatAppearance.MouseDownBackColor = CyVisualTheme.AccentPressed;
+        var ok = ReadyButton(22F);
+        ok.Size = new Size(260, 70);
+        ok.Location = new Point((Width - 260) / 2, 190);
+        ok.DialogResult = DialogResult.OK;
         var stop = new LinkLabel
         {
             Text = "停止（Esc）",
@@ -75,6 +64,27 @@ internal sealed class PaperPromptForm : Form
             Close();
         };
         Shown += (_, _) => { Activate(); ok.Focus(); };
+    }
+
+    /// <summary>
+    /// The 「好了」 of every paper prompt (user, 2026-11-16: the 紙本發票待列印 box had a button of its
+    /// own look): this dialog's and <see cref="PaperPanel"/>'s are the same.
+    /// </summary>
+    public static Button ReadyButton(float points)
+    {
+        var button = new Button
+        {
+            Text = "好了",
+            FlatStyle = FlatStyle.Flat,
+            BackColor = CyVisualTheme.Accent,
+            ForeColor = Color.White,
+            Font = new Font("Microsoft JhengHei UI", points, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = CyVisualTheme.AccentHover;
+        button.FlatAppearance.MouseDownBackColor = CyVisualTheme.AccentPressed;
+        return button;
     }
 
     protected override void OnPaint(PaintEventArgs e)
