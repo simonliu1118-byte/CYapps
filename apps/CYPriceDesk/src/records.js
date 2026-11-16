@@ -108,7 +108,7 @@ export async function handleRecordsApi(request, env, url, actor) {
     }
 
     if (path === '/api/audit' && method === 'GET') {
-      const limit = Number(url.searchParams.get('limit')) || 50;
+      const limit = Math.min(Math.max(Math.trunc(Number(url.searchParams.get('limit'))) || 50, 1), 200);
       const rows = (await DB.prepare('SELECT * FROM audit_log ORDER BY at DESC, id DESC LIMIT ?').bind(limit).all()).results;
       return json({entries: rows.map(auditEntry)});
     }

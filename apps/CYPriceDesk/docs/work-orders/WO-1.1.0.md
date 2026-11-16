@@ -184,3 +184,12 @@ CREATE INDEX idx_audit_at ON audit_log(at DESC);
 
 
 ## 9. 審查紀錄（審查者填）
+
+### 2026-11-16 審查（Claude）— 結論：通過（待 governance PR 合併後 CI 轉綠）
+
+- CYID：login／resolve／logout 對照 consumer standard §7–§13 無缺漏；first-login fail closed、provider 回應驗證、cookie HttpOnly＋Secure＋SameSite=Lax＋Expires、resolve 失敗清 cookie、provider 故障 503 保留 cookie，皆符合。
+- 寫入與 audit 同 batch；修改／刪除以 revision 條件更新，audit 以 `changes() > 0` 綁定，正確。
+- 匯入與 POST 合併更新未帶 revision 條件，極少數同時編輯時後寫覆蓋；原型可接受，記錄於此。
+- 偏離 2–9 同意。偏離 1（PROJECT_RULES 需採用 CYID standard）由審查者另開 `governance/cypricedesk-cloud-worker` PR 處理。
+- 審查者直接修正：`GET /api/audit` 的 `limit` 限制在 1–200。
+- 本機重跑：`npm test` 12/12、build、public-package scan 通過；截圖已檢視（登入頁、總覽、新增、操作紀錄）。
