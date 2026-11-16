@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.60 — 2026/11/16
+
+- CYPriceDesk 改為 Cloudflare Workers＋Static Assets＋D1，採用 CYID consumer standard（non-core consumer）。
+- 業務授權：價格紀錄全站一份；有 Application Access 者皆可查價與編輯，所有寫入留 append-only audit（使用者 2026-11-16）。
+- 部署採合併與發布分離，deployment-specific 值由 Deployment Environment 注入。僅更新 CYPriceDesk 專案規則，不變更其他 App。
+
 ## 2.3.59 — 2026/11/05
 
 - CYEnvelope 改以 C#／WPF（.NET 10）為唯一維護主線，停止開發 Go／Win32 V0.1.x；以 V0.3.0 + BUILD 為後續版本基準，合併原始碼不等於正式 Release。
