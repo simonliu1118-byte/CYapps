@@ -1,6 +1,6 @@
 # WO-1.3.0 追蹤商品：定期自動查價、同規格比價與自己的售價紀錄（第三階段）
 
-- 狀態：待執行
+- 狀態：已實作，待審查
 - 分支：`cypricedesk/feature-tracked-products`（自 `cypricedesk/feature-auto-query` 分出）　PR：（執行者填）
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`（governance 2.3.60）、WO-1.1.0、WO-1.2.0、本目錄 `README.md`
 
@@ -111,5 +111,53 @@
 部署後以 1～3 個追蹤商品觀察一輪排程；確認各來源單次請求、間隔與分組結果。
 
 ## 8. 完成報告（執行者填）
+
+### 8.1 驗收清單結果
+
+- [x] 2.3 自動分組與 2.4 人工判斷：`src/grouping.js` 純函式，`tests/tracking.test.js` 表格式涵蓋同規格、其他包裝（12 入 vs 6 入／1 盒）、多規格標題（0.5 吋／1 吋）、多型號、缺數量、規格屬性不明或不同進待確認，型號不同（15301 對 1530、1530-1 對 1530-0）與不含型號為無關；人工「不是同一商品」下次查價仍排除，標題變了回到待確認。
+- [x] 排程：`runScheduled`／`runTracked` 有測試——時間窗外（22:00～07:59 臺北）不執行、一次只處理 1 個到期商品（依 `next_run_at`）、查完 `next_run_at` 落在 7–14 天且 08:00–22:00、新增為 0–7 天、被節流時延後 1 小時且其他來源結果照存；手動「立即查價」呼叫同一個 `runTracked`。
+- [x] 儲存：`price_observations`、`group_summaries`、`tracked_runs` 只增不刪；`latest_candidates` 依來源覆蓋（測試檢查兩次查價後筆數與 run 數）。
+- [x] 售價修改寫 `my_price_changes`＋audit；追蹤商品新增／修改、判斷新增／恢復、立即查價皆在同一個 `DB.batch()` 寫 audit（`tracked.*`、`judgment.*`），revision 衝突回 409。
+- [x] 本機：`npm ci`、`npm test` 32/32、`node --check`、`npm run build`、public-package scan、fetcher unittest 18/18、placeholder 設定 `wrangler deploy --dry-run`（渲染後設定含 `triggers.crons: ["*/10 * * * *"]`，Worker 匯出 `scheduled`）通過。既有 `tests/ui.test.cjs`（Playwright）更新選擇器後通過。**PR CI 尚未確認**（未開 PR）。
+- [x] `VERSION`=1.3.0、`BUILD`=0、`package.json`／`package-lock.json` 1.3.0；README／TODO／WORK_HANDOFF／CHANGELOG 已更新。
+- [x] 介面符合 3.4（見 8.4 的取值與一項偏離）。
+- [x] 截圖（1440／390）見 8.5。
+- [x] commit 身分 `simonliu1118-byte`。全程未連線 momo、飛比或任何購物網站；測試與截圖的 fetcher 皆為假實作。
+
+### 8.2 審查者提供的追加決定
+
+- 介面主色為**靛藍**（icon 漸層 `#3B4CCA` → `#2F3DB0`）：主要按鈕、側欄作用中項目、連結、焦點外框、選取狀態使用 `#3B4CCA`（hover `#2F3DB0`，淡底 `#ECEEFB`）；不再使用舊的深綠／萊姆色。其餘維持 CY Web 的中性灰白。favicon、登入頁與側欄品牌方塊為暫用佔位（靛藍底「CY」或長條圖），之後換正式圖示。
+
+### 8.3 偏離與需審查決定的事項
+
+1. **主色**：3.4 寫「主要動作實心深色」，依 8.2 的追加決定以靛藍實心；CY Web 本身的主色是另一個藍（`#3D63D2`），未採用。
+2. **規格屬性不同進待確認**：工單未規定「型號、數量、單位都相同但規格屬性（例如 1 吋對 0.5 吋）不同」要進哪組，實作為待確認（由人判斷「不是同一商品」即不再顯示）。
+3. **型號前綴**：追蹤商品型號 `1530` 時，標題型號 `1530-0` 視為同型號家族（再由規格屬性決定）；`15301`、`1530-1` 對 `1530-0` 仍為無關。這是為了使用者描述的「1530 有 1 吋也有 0.5 吋」情境；若要嚴格相等，刪 `grouping.js` 的 `startsWith(model + '-')` 一行。
+4. **延後 1 小時的條件**：工單只寫「節流或冷卻」，實作為「任何來源狀態不是 `ok`／`no_match`／`no_price`」（含 `blocked`、`provider_refused`、`network_error`），避免連線失敗後被排到 7–14 天後。
+5. **排程不寫 audit**：自動排程沒有 CYID principal，`tracked_runs.trigger='schedule'` 即為 append-only 紀錄，避免一天 100 筆灌滿操作紀錄；手動「立即查價」寫 `tracked.run` audit（操作者為登入者）。
+6. **判斷只能針對 `latest_candidates` 內的商品**（標題快照取自伺服器，不採用 client 傳入）；判斷或恢復時同時更新該列的分組，所以詳情頁立即反映，但不回改已存的 `price_observations`／`group_summaries`，下一次查價才進入同規格歷史。
+7. **欄位名稱**：`latest_candidates` 的分組欄位為 `grp`（`group` 是 SQL 保留字）；`next_run_at`／`last_run_at` 為 epoch 毫秒（與 1.2.0 的快取時間一致），其他新表時間為 ISO 文字。`tracked_runs.id` 為 `crypto.randomUUID()`。
+8. **列表統計**：「同規格最低價與中位數」由 `latest_candidates` 的同規格列即時計算（所以人工判斷後立即更新），「售價相對最低價」定義為（自己的售價 − 最低價）÷ 最低價。
+9. **編輯追蹤商品不能改售價**（售價只能經「修改售價」，才會有紀錄）；工單未提供刪除，只有啟用／停用。
+10. **介面**：登入後側欄僅「比價總覽、追蹤商品、自動查價、操作紀錄」；「匯入」與「匯出」在比價總覽工具列，頂部沒有主題切換、通知（CY Web 有，工單未要求）。表格改為 CY Web 式灰底表頭資料表，窄版（≤680px）逐筆卡片；移除行銷文字、eyebrow、統計大卡片、價格長條與平台圖示，統計改成一行文字。自動查價的單價彙整改為表格，移除範圍長條圖。`ui.test.cjs` 因按鈕／class 改名同步更新選擇器。
+11. 未修改 workflow（`cypricedesk-*.yml` 不需要變動，deploy 的 `wrangler deploy` 會帶出 crons）。`PROJECT_RULES.md` 未動。
+
+### 8.4 指令輸出摘要（apps/CYPriceDesk，Node v22）
+
+- `npm test`：32 tests，pass 32、fail 0（原 26＋追蹤商品 6：分組、人工判斷、排程時間、售價與 audit、立即查價與判斷套用、排程流程）。
+- `npm run build`＋`python3 ../../.github/scripts/scan-public-package.py dist`：`Public artifact safety scan passed.`
+- `/tmp/cypd-venv/bin/python -m unittest discover -s fetcher/tests`：18 tests OK。
+- placeholder 設定 render＋`npx wrangler deploy --dry-run`：bindings 為 DB、IDENTITY、ASSETS 與四個 vars，`--dry-run: exiting now.`；渲染設定含 crons。
+
+### 8.5 截圖（不在 repo 內）
+
+`/tmp/claude-0/-home-user/04d2ad10-f9b3-5958-aff8-f556061b5368/scratchpad/wo130/`（本機 server＋假 fetcher＋種子假資料「3M 紙膠帶 半吋 12入／1530-0」，含同規格、其他包裝、待確認、無關 15301、已排除、歷次價格與 3 筆售價紀錄；假身分「測試員工」）。每張都有 `-1440.png` 與 `-390.png`：
+
+- `login`：登入頁；`overview`：比價總覽；`auto-query`：自動查價（momo 結果與單價彙整）
+- `tracked-list`：追蹤商品列表；`tracked-detail`：商品詳情（含待確認、其他包裝、已排除）
+- `judge-dialog`：「其他包裝」判斷對話框；`judged`：判斷操作後畫面
+- `price-dialog`：修改售價；`price-history`：售價修改紀錄；`tracked-edit-dialog`、`tracked-add-dialog`：編輯與新增；`tracked-list-after`：立即查價後的列表
+
+全部流程無 JavaScript 錯誤、各頁無水平溢出（腳本逐張檢查）。
 
 ## 9. 審查紀錄（審查者填）
