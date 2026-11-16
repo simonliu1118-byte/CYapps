@@ -3,38 +3,23 @@ import {groupsOf,groupKey,compareOffers,money,displayTime,localTime,validateOffe
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=(name)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${({box:'<path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10M7 5l10 5"/>',tag:'<path d="M3 3h8l10 10-8 8L3 11V3Z"/><circle cx="7.5" cy="7.5" r="1"/>',layers:'<path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',edit:'<path d="m16 3 5 5-12 12H4v-5L16 3Zm-2 2 5 5"/>',trash:'<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',link:'<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>',bars:'<path d="M4 21h16M7 17V9m5 8V3m5 14v-5"/>'})[name]||''}</svg>`;
-const STORAGE_KEY='price-desk:v1';
-let offers=[],demoMode=false,demoOffers=[],basis='price',editingId=null,deletingId=null,importData=null,storageBlocked=false,toastTimer,lastStoredRaw=null;
-try {
-  const raw=localStorage.getItem(STORAGE_KEY);lastStoredRaw=raw;
-  if(raw) {
-    const saved=JSON.parse(raw);
-    if(saved.version!==1 || !Array.isArray(saved.offers)) throw new Error('不支援的資料格式');
-    offers=saved.offers.map(o=> {
-      if(typeof o.id!=='string' || !o.id) throw new Error('資料識別碼有誤');
-      return {...validateOffer(o),id:o.id};
-    });
-    if(new Set(offers.map(o=>o.id)).size!==offers.length) throw new Error('資料識別碼重複');
-  }
-} catch(e) {
-  storageBlocked=true;
-  $('storage-warning').hidden=false;
-  $('storage-warning').textContent='此瀏覽器的資料目前無法讀取或儲存。請先匯出可讀資料，或改用允許本機儲存的瀏覽器；原始資料不會被覆寫。';
-}
+const SAVED_TEXT='價格紀錄儲存於雲端，登入者共用';
+let offers=[],demoMode=false,demoOffers=[],basis='price',editingId=null,deletingId=null,importData=null,toastTimer;
 const currentOffers=()=>demoMode?demoOffers:offers;
+// All formal data lives on the server; a 401 means the session is gone, so go back to the login page.
+async function api(method,path,body) {
+  const response=await fetch(path,{method,headers:body===undefined?{}:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(response.status===401){location.href='/login';throw new Error(data.error||'尚未登入');}
+  if(!response.ok){const error=new Error(data.error||'操作失敗，請稍後再試。');error.status=response.status;throw error;}
+  return data;
+}
+async function reload(){offers=(await api('GET','/api/records')).records;render();}
 function toast(message) {
   clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.add('visible');
   toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),4200);
 }
-function persist(next) {
-  if(demoMode){demoOffers=next;render();return true;}
-  if(storageBlocked){toast('此瀏覽器目前無法儲存，請更換瀏覽器或啟用本機儲存。');return false;}
-  try {
-    if(localStorage.getItem(STORAGE_KEY)!==lastStoredRaw){toast('另一個分頁已更新資料，請重新整理，避免覆蓋較新的紀錄。');return false;}
-    const raw=JSON.stringify({version:1,offers:next});localStorage.setItem(STORAGE_KEY,raw);lastStoredRaw=raw;offers=next;
-    $('save-status').textContent='已儲存於此瀏覽器';render();return true;
-  } catch(e) {toast('儲存失敗，可能已達瀏覽器容量限制。本次變更尚未儲存。');return false;}
-}
+function demoCommit(next){demoOffers=next;render();}
 function sampleOffers() {
   const ago=m=>new Date(Date.now()-m*60000).toISOString();
   return [
@@ -105,7 +90,7 @@ function render() {
 }
 function clearFilters(){ $('search').value='';$('platform-filter').value='';render(); }
 function loadDemo(){demoMode=true;demoOffers=sampleOffers();clearFilters();$('save-status').textContent='範例操作不會寫入你的資料';}
-function exitDemo(){demoMode=false;clearFilters();$('save-status').textContent='資料儲存在此瀏覽器';}
+function exitDemo(){demoMode=false;clearFilters();$('save-status').textContent=SAVED_TEXT;}
 function openOffer(id=null) {
   if(!id && demoMode) exitDemo();
   editingId=id;$('offer-form').reset();$('offer-error').hidden=true;
@@ -116,28 +101,51 @@ function openOffer(id=null) {
   } else $('time-input').value=localTime(Date.now());
   $('offer-dialog').showModal();
 }
-$('offer-form').addEventListener('submit',e=> {
+$('offer-form').addEventListener('submit',async e=> {
   e.preventDefault();$('offer-error').hidden=true;
   try {
     const offer=validateOffer(Object.fromEntries(new FormData(e.target)));
-    let next,notification;
-    if(editingId) {
-      const duplicate=currentOffers().find(x=>x.id!==editingId && groupKey(x)===groupKey(offer) && offer.url && x.url===offer.url);
-      if(duplicate) throw new Error('此商品規格已有相同連結，請改為編輯那筆查價。');
-      next=currentOffers().map(o=>o.id===editingId?{...offer,id:editingId}:o);notification='查價已更新';
+    let notification;
+    if(demoMode) {
+      let next;
+      if(editingId) {
+        const duplicate=demoOffers.find(x=>x.id!==editingId && groupKey(x)===groupKey(offer) && offer.url && x.url===offer.url);
+        if(duplicate) throw new Error('此商品規格已有相同連結，請改為編輯那筆查價。');
+        next=demoOffers.map(o=>o.id===editingId?{...offer,id:editingId}:o);notification='查價已更新';
+      } else {
+        const result=upsertOffers(demoOffers,[offer]);
+        if(result.skipped) throw new Error('此連結已有較新的查價時間，請更新時間或編輯原紀錄。');
+        next=result.offers;notification=result.updated?'相同連結的查價已更新':'查價已新增';
+      }
+      demoCommit(next);notification+='（範例操作）';
+    } else if(editingId) {
+      await api('PUT',`/api/records/${editingId}`,{...offer,revision:offers.find(o=>o.id===editingId).revision});
+      await reload();notification='查價已更新';
     } else {
-      const result=upsertOffers(currentOffers(),[offer]);
-      if(result.skipped) throw new Error('此連結已有較新的查價時間，請更新時間或編輯原紀錄。');
-      next=result.offers;notification=result.updated?'相同連結的查價已更新':'查價已新增';
+      const {result}=await api('POST','/api/records',offer);
+      await reload();notification=result==='created'?'查價已新增':'相同連結的查價已更新';
     }
-    if(persist(next)) {$('offer-dialog').close();toast(demoMode?`${notification}（範例操作）`:notification);}
-  } catch(error){$('offer-error').hidden=false;$('offer-error').textContent=error.message;}
+    $('offer-dialog').close();toast(notification);
+  } catch(error){
+    $('offer-error').hidden=false;$('offer-error').textContent=error.message;
+    if(error.status===409) await reload().catch(()=>{});
+  }
 });
 $('url-input').addEventListener('input',()=> { const found=inferPlatform($('url-input').value);if(found)$('platform-input').value=found; });
 $('price-input').addEventListener('input',()=> {if(!$('time-input').value)$('time-input').value=localTime(Date.now());});
 $('set-now').onclick=()=>{$('time-input').value=localTime(Date.now());};
 function openDelete(id){deletingId=id;const record=currentOffers().find(x=>x.id===id);$('delete-description').textContent=`${record.product} · ${record.platform}${record.seller?` · ${record.seller}`:''}。刪除後會立即更新比價結果。`;$('delete-dialog').showModal();}
-$('confirm-delete').onclick=()=> {if(persist(currentOffers().filter(x=>x.id!==deletingId))){$('delete-dialog').close();toast('查價已刪除');}};
+$('confirm-delete').onclick=async()=> {
+  try {
+    if(demoMode) demoCommit(demoOffers.filter(x=>x.id!==deletingId));
+    else {await api('DELETE',`/api/records/${deletingId}?revision=${offers.find(x=>x.id===deletingId).revision}`);await reload();}
+    toast('查價已刪除');
+  } catch(error) {
+    toast(error.message);
+    if(error.status===409||error.status===404) await reload().catch(()=>{});
+  }
+  $('delete-dialog').close();
+};
 function openImport(){if(demoMode)exitDemo();$('paste-input').value='';$('csv-file').value='';resetImport();$('import-dialog').showModal();}
 function resetImport(){importData=null;$('confirm-import').disabled=true;$('import-preview').innerHTML='';$('import-error').hidden=true;}
 $('paste-input').addEventListener('input',resetImport);
@@ -162,10 +170,13 @@ $('preview-btn').onclick=()=> {
     $('confirm-import').disabled=false;
   }catch(error){$('import-error').hidden=false;$('import-error').textContent=error.message;}
 };
-$('confirm-import').onclick=()=> {
+$('confirm-import').onclick=async()=> {
   if(!importData)return;
-  const result=upsertOffers(offers,importData);
-  if(persist(result.offers)){$('import-dialog').close();toast(`已新增 ${result.added} 筆、更新 ${result.updated} 筆${result.skipped?`；略過 ${result.skipped} 筆舊資料`:''}`);}
+  try {
+    const result=await api('POST','/api/records/import',{offers:importData});
+    await reload();$('import-dialog').close();
+    toast(`已新增 ${result.added} 筆、更新 ${result.updated} 筆${result.skipped?`；略過 ${result.skipped} 筆舊資料`:''}`);
+  } catch(error){$('import-error').hidden=false;$('import-error').textContent=error.message;}
 };
 $('export-btn').onclick=()=> {
   if(demoMode||!offers.length)return;
@@ -176,5 +187,24 @@ for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.datas
 for(const b of document.querySelectorAll('[data-basis]'))b.onclick=()=>{basis=b.dataset.basis;document.querySelectorAll('[data-basis]').forEach(x=>{const on=x.dataset.basis===basis;x.classList.toggle('selected',on);x.setAttribute('aria-pressed',String(on));});render();};
 $('search').addEventListener('input',render);$('platform-filter').addEventListener('change',render);
 $('add-btn').onclick=()=>openOffer();$('import-btn').onclick=openImport;$('sidebar-import').onclick=openImport;$('demo-btn').onclick=loadDemo;$('exit-demo').onclick=exitDemo;
-window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY)toast('另一個分頁已更新資料，請重新整理後再編輯。');});
-render();
+const ACTION_LABELS={'record.create':'新增','record.update':'修改','record.delete':'刪除','record.import':'匯入'};
+async function openAudit() {
+  $('audit-body').textContent='載入中…';$('audit-dialog').showModal();
+  try {
+    const {entries}=await api('GET','/api/audit?limit=50');
+    $('audit-body').innerHTML=entries.length?entries.map(x=>`<div class="audit-item"><span class="audit-action">${esc(ACTION_LABELS[x.action]||x.action)}</span><div><div class="audit-detail">${esc(x.detail)}</div><div class="audit-meta">${displayTime(x.at)} · ${esc(x.actor)}</div></div></div>`).join(''):'<p class="audit-empty">尚無操作紀錄。</p>';
+  } catch(error){$('audit-body').textContent=error.message;}
+}
+$('audit-btn').onclick=openAudit;$('sidebar-audit').onclick=openAudit;
+const ready=(async()=> {
+  try {
+    const me=await api('GET','/api/me');
+    const name=me.displayName||me.employeeNo;
+    $('user-name').textContent=name;$('user-avatar').textContent=[...name][0]||'';
+    $('side-user').innerHTML=`${esc(name)}<small>員工編號 ${esc(me.employeeNo)}</small>`;
+    await reload();
+  } catch(error) {
+    $('storage-warning').hidden=false;$('storage-warning').textContent=`無法載入價格紀錄：${error.message}`;
+    $('groups').innerHTML='';
+  }
+})();

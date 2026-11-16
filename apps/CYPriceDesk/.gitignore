@@ -10,3 +10,8 @@ artifacts/
 *.tar.gz
 *.csv
 *.tsv
+.wrangler/
+# Generated deployment configuration
+wrangler.generated.jsonc
+wrangler.ci.generated.jsonc
+wrangler.deploy.jsonc
