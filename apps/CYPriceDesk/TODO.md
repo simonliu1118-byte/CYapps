@@ -2,30 +2,37 @@
 
 > 本文件是唯一目前進度與待辦入口，不是永久規則來源。
 
-## 目前基準 — 2026-10-12（Asia/Taipei）
+## 目前基準 — V1.3.0（Build 0）
 
-- 初始原型已於 2026-10-11 完成 Sites owner-private 部署；匿名瀏覽器顯示 ChatGPT 登入閘門。
-- 2026-10-11 的四個部署資產回傳 HTTP 200，逐位元符合當次原型 source。
-- 7 項本機規則／事件流程測試通過：新增、更新、刪除、比較、CSV 匯入與匯出、本機保存、舊資料不覆蓋及跨分頁覆蓋保護。
-- Chromium 未安裝且 Cloud Browser 不能讀取本機頁面，因此尚未完成完整瀏覽器引擎／實際裝置驗收；不將事件模擬測試標示為瀏覽器測試通過。
-- 使用者確認本專案先作獨立原型，CYWEB 只提供程式目錄外連；未決定正式架構、CYID 接入或正式雲端資料庫。
-- 本輪保存至 `CYapps/apps/CYPriceDesk/`，原網站 asset 與本機儲存 key 沿用初始原型。
+- WO-1.3.0 已實作於分支 `cypricedesk/feature-tracked-products`（建立於 V1.2.0 之上）：追蹤商品、Cron 定期查價、自動分組與人工判斷、自己的售價紀錄、CY Web 風格介面。本機 `npm test`、Python unittest、build、scan、`wrangler deploy --dry-run`（含 crons）通過；**尚未部署、未對 momo／飛比做實機測試**。細節見 `docs/work-orders/WO-1.3.0.md` §8。
 
-## 待確認需求
+### V1.2.0 基準
 
-- [ ] 核心使用者、商品數量與比較單位：型號、容量、組合、單入／多入、公司貨等。
-- [ ] 價格定義：一般價、會員價、折價券、運費、數量折扣、滿額條件與時效。
-- [ ] 查價資料來源：手動、CSV、受許可的 API 或其他方式；尚未承諾自動擷取平台。
-- [ ] 更新頻率、歷史紀錄、異動通知或排程是否必要。
-- [ ] 是否需要多人共用、跨裝置同步、備份／還原及雲端保存。
-- [ ] 需求定案後決定併入 CYWEB 或獨立發展，再評估 CYID 與正式部署。
+- WO-1.2.0 已實作於分支 `cypricedesk/feature-auto-query`：`fetcher/`（Vercel Python）、Worker 快取／間隔／冷卻、自動查價頁、D1 人工分類、一鍵加入價格紀錄。本機 `npm test`、Python unittest、build、scan、`wrangler deploy --dry-run` 通過；**尚未部署、未對 momo／飛比做實機測試**（測試一律離線 fixture）。細節見 `docs/work-orders/WO-1.2.0.md` §8。
 
-## 下一輪驗收
+### V1.1.0 基準
 
-- [ ] 同一 ChatGPT 帳號進入 Sites，確認實際新增、修改、刪除及重新整理保存。
-- [ ] 蝦皮／momo 同規格商品，確認最低價、並列最低、未知價格、零元價格及運費未知處理。
-- [ ] CSV 預覽錯誤、更新較新／較舊紀錄、匯出後重新匯入。
-- [ ] 桌面、平板、手機版面與觸控；Playwright 腳本已提供，結果仍待執行。
-- [ ] 使用者確認 CYWEB「CY 程式」的新入口能另開私有 Sites；其他 CYWEB 角色可看到連結不代表取得 Sites 權限。
+- WO-1.1.0 已實作於分支 `cypricedesk/feature-cloud-worker`：手動查價搬到 Cloudflare Worker＋D1＋CYID，價格紀錄全站一份，所有寫入留 audit。細節見 `docs/work-orders/WO-1.1.0.md` §8 完成報告。
+- 本機驗證（假 IDENTITY＋node:sqlite D1 替身）：`npm test`、`npm run build`、public-package scan、`wrangler deploy --dry-run`（placeholder 設定）通過；Playwright 於真實 Chromium 通過。
+- **尚未部署、尚未實機驗證**；PR 審查與使用者授權前不合併、不部署。
 
-合併、CI 與 CYWEB 入口部署的精確紀錄以本輪 GitHub PR／Actions 為準；如果對話中斷，先讀這些結果，不以此處尚未記錄的工作推論已成功。
+## 待使用者完成（部署前）
+
+- [ ] 在 CY Web／CYID 註冊 CYPriceDesk Application 並授權使用者 Application Access。
+- [ ] 建立 Cloudflare D1、GitHub Environment `cypricedesk-production`（名稱清單見 README）與自訂網域。
+- [ ] 授權後從 `main` 手動觸發 `CYPriceDesk Deploy`，再做實機驗證：登入、首次登入導向 CY Web、停用帳號後 401、新增／修改／刪除／匯入、操作紀錄、舊站 CSV 匯出後匯入。
+- [ ] 決定舊 Sites 站何時關閉（本專案不處理）。
+- [ ] Vercel 建立 fetcher 專案（Root Directory `apps/CYPriceDesk/fetcher`）並設 `CYPD_FETCHER_SECRET`；GitHub Environment 加 secret `CYPD_FETCHER_SECRET` 與 variable `CF_CYPD_FETCHER_URL`；部署後各來源（momo、飛比蝦皮、飛比酷澎）單次實測。
+
+## 下一步
+
+- WO-1.3.0 部署後以 1～3 個追蹤商品觀察一輪排程（各來源單次請求、間隔、分組結果）；之後依使用結果再開下一張（例如 Grok BOT 串接判斷 API）。
+- [ ] 部署流程改為與 CYAccountingWeb 一致（使用者 2026-11-16）：首次上線先用手填的 `CF_IDENTITY_SERVICE`／`CF_CYID_WORKSPACE_ID`；之後改用 `apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs` 從正式 CYID 讀取並核對 service、Workspace ID，部署環境只保留本 App 自己的值。配合全站 CYID 部署命名統一一起處理。
+- 整體路線見 `docs/work-orders/README.md`。
+
+## 已知限制
+
+- 尚無通知、圖表、追蹤資料匯出，也未串接蝦皮賣家 API 或 Grok BOT。飛比為商品級第三方參考價，來源價格更新時間未確認。
+- sandbox `ScraplingProbe` 於本單合併後由審查者刪除。
+- 無角色差異（有使用權者皆可寫入）、無 Backup／Restore、無 Excel。
+- 金額固定為新臺幣；優惠券、會員價記在備註，不自動扣抵。

@@ -1,4 +1,4 @@
-name: CYPriceDesk Prototype Check
+name: CYPriceDesk Check
 
 on:
   pull_request:
@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prototype:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: apps/CYPriceDesk
@@ -26,16 +26,43 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/CYPriceDesk/package-lock.json
       - name: Verify source version
         run: |
           node --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync('package.json','utf8'));if(p.version!==fs.readFileSync('VERSION','utf8').trim()||!/^\d+$/.test(fs.readFileSync('BUILD','utf8').trim()))process.exit(1)"
-      - name: Validate price and app flows
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install fetcher dependencies
+        run: pip install -r fetcher/requirements.txt
+      - name: Run fetcher tests
+        run: python -m unittest discover -s fetcher/tests
+      - name: Run tests
         run: npm test
-      - name: Check application JavaScript
+      - name: Check JavaScript syntax
         run: |
-          node --check public/core.js
-          node --check public/app.js
-      - name: Build prototype
+          for f in src/*.js public/*.js scripts/*.mjs; do node --check "$f"; done
+      - name: Build static package
         run: npm run build
       - name: Validate public static package
         run: python3 ../../.github/scripts/scan-public-package.py dist
+      - name: Render CI-only Cloudflare config
+        env:
+          CF_WORKER_NAME: cypricedesk-ci
+          CF_D1_DATABASE_NAME: cypricedesk-ci-db
+          CF_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
+          CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
+          CF_CYID_APPLICATION_ID: CYPRICEDESK_CI
+          CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
+          CF_CYWEB_PORTAL_URL: https://portal.example.test/
+          CF_CYPD_FETCHER_URL: https://fetcher.example.test
+          CF_CYPRICEDESK_CUSTOM_DOMAIN: pricedesk.example.com
+        run: node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
+      - name: Validate Worker bundle
+        run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
+      - name: Remove CI-only generated files
+        if: always()
+        run: rm -f wrangler.ci.generated.jsonc

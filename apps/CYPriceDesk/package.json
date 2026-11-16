@@ -1,7 +1,19 @@
 {
-  "name": "private-price-desk",
-  "version": "1.0.0",
+  "name": "cypricedesk",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "scripts": { "build": "node scripts/build.mjs", "test": "node --test tests/core.test.js tests/app-flow.test.js" }
+  "description": "CYPriceDesk - Cloudflare Workers + D1 + CYID",
+  "scripts": {
+    "test": "node --test tests/core.test.js tests/catalog-core.test.js tests/app-flow.test.js tests/worker.test.js tests/search.test.js tests/tracking.test.js",
+    "build": "node scripts/build.mjs",
+    "config:render": "node scripts/render-wrangler.mjs --output wrangler.generated.jsonc",
+    "dev": "npm run config:render && wrangler dev --config wrangler.generated.jsonc --port 8787 --local-upstream localhost:8787",
+    "deploy": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler deploy --config wrangler.deploy.jsonc",
+    "db:migrate:local": "npm run config:render && wrangler d1 migrations apply DB --local --config wrangler.generated.jsonc",
+    "db:migrate:remote": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
 }
