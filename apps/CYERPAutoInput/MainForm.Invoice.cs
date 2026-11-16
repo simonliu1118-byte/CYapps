@@ -388,7 +388,7 @@ internal sealed partial class MainForm
             _paperPanel = new PaperPanel();
             _paperPanel.PrintRequested += async () => await PrintFromPanelAsync();
         }
-        var bounds = _paperPanel.Show($"紙本發票 {count} 張待列印\n{kinds}");
+        var bounds = _paperPanel.Show($"紙本發票 {count} 張待列印，請放入 A4 白紙\n{kinds}");
         if (bounds.IsEmpty) return;
         PhysicalMouseLock.Allowed = bounds;
         InputSender.ParkAt = new Point(bounds.Left + bounds.Width / 2, bounds.Bottom - 20);
@@ -457,7 +457,10 @@ internal sealed partial class MainForm
             var r = j.Invoice;
             try
             {
-                var pages = await MoSlipPdf.RenderPagesAsync(j.Pdf!, string.Empty, 300);
+                // Drawn off the UI thread: a print from the 紙本發票待列印 box runs while ERP is being
+                // typed into, which waits on this thread (user LOG 2026-11-13: a 頁籤 timed out meanwhile).
+                var pdf = j.Pdf!;
+                var pages = await Task.Run(() => MoSlipPdf.RenderPagesAsync(pdf, string.Empty, 300));
                 // A consumer's paper invoice (酷澎) goes on both sides, long edge (CYInvoice 2026-10-15).
                 var duplex = j.Outcome.Source == CyInvoiceLink.Coupang && r.BuyerBan.Length == 0;
                 _log.Info("cyinvoice", $"paper invoice pdf pages={pages.Count} duplex={duplex}");
@@ -484,7 +487,7 @@ internal sealed partial class MainForm
     private async Task ImportMoAsync()
     {
         const string title = "MO店+ 訂單匯入";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         if (!MoImportReady(title)) return;
 
@@ -503,7 +506,7 @@ internal sealed partial class MainForm
     private async Task ImportMoOrderFromPageAsync(string orderSn)
     {
         const string title = "MO店+ 訂單頁讀取輸入";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         if (!MoImportReady(title)) return;
         var password = LocalSecret.Unprotect(_settings.MoPasswordProtected);
@@ -649,7 +652,7 @@ internal sealed partial class MainForm
     private async Task RunCoupangBatchAsync()
     {
         const string title = "酷澎全自動";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
@@ -724,7 +727,7 @@ internal sealed partial class MainForm
     private async Task PrintCoupangSlipAsync()
     {
         const string title = "酷澎列印寄件單";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (_settings.ShopeeLabelPrinter.Length == 0)
         {
             MessageBox.Show(this, "請先在「設定 › 印表機」勾選熱感標籤印表機。", title, MessageBoxButtons.OK, MessageBoxIcon.Information);

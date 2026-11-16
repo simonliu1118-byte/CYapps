@@ -759,6 +759,11 @@ internal sealed partial class MainForm : Form
     {
         _lastRunResult = null;
         if (_automationCts is not null) return false;
+        if (_batchFinishing && !batch)
+        {
+            MessageBox.Show(this, "全自動／批次正在收尾（紙本發票、撿貨總表、結果清單），請先處理完再開始。", "請稍候", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
         var snapshot = CreateSnapshot(out var validationError);
         if (snapshot is null)
         {
@@ -1020,7 +1025,7 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private async Task PrintShownShipSheetAsync()
     {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         var printer = SlipPrinter.Installed(_settings.ShopeeLabelPrinter);
         if (printer is null)
         {
@@ -1120,6 +1125,7 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private async Task FinishBatchAsync(string title)
     {
+        _batchFinishing = true;
         if (_printProblems.Count > 0)
         {
             var problems = string.Join("\n", _printProblems.Distinct());
@@ -1140,7 +1146,21 @@ internal sealed partial class MainForm : Form
     }
 
     /// <summary>After the results are closed: paper prompts may come again.</summary>
-    private void EndBatchHold() => _paperHold = Math.Max(0, _paperHold - 1);
+    private void EndBatchHold()
+    {
+        _paperHold = Math.Max(0, _paperHold - 1);
+        _batchFinishing = false;
+    }
+
+    /// <summary>
+    /// From a batch's end until its results are closed (user LOG 2026-11-13: a 酷澎 batch waited for
+    /// its paper invoice while another input was started; its 結果清單 then came up over that
+    /// input's message and neither could be closed): nothing new starts.
+    /// </summary>
+    private bool _batchFinishing;
+
+    /// <summary>An input, a 全自動 or a batch's end is under way: a new one does not start.</summary>
+    private bool Busy => _automationCts is not null || _shopeeBatchRunning || _batchFinishing;
 
     /// <summary>
     /// Paper invoices of the batch first (user, 2026-10-27): waits while jobs remain, asking
@@ -1150,12 +1170,24 @@ internal sealed partial class MainForm : Form
     private async Task FinishPaperInvoicesAsync()
     {
         HidePaperPanel();
-        if (_paperJobs.Count == 0 && _paperNotes.Count == 0) return;
+        if (_paperJobs.Count == 0) return;
         _paperNextAsk = DateTime.MinValue;
         var deadline = DateTime.Now.AddMinutes(2);
-        while ((_paperJobs.Count > 0 || _paperNotes.Count > 0) && DateTime.Now < deadline)
+        // The batch still holds the paper prompts (_paperHold), so they are asked for here
+        // directly (user LOG 2026-11-13: the PDF was ready at once, yet the end waited the whole
+        // two minutes and another input was started meanwhile).
+        while (_paperJobs.Count > 0 && DateTime.Now < deadline)
         {
-            if (!_paperBusy) await PaperTickAsync();
+            if (!_paperBusy)
+            {
+                _paperBusy = true;
+                try
+                {
+                    if (DateTime.Now >= _paperNextAsk && _paperJobs.Any(j => j.Pdf is null)) await AskPaperPdfsAsync();
+                    if (_paperJobs.Any(j => j.Pdf is not null)) await PrintReadyPaperAsync(null);
+                }
+                finally { _paperBusy = false; }
+            }
             await Task.Delay(500);
         }
         if (_paperJobs.Count > 0) _log.Warn("paper", $"batch end: {_paperJobs.Count} paper invoice(s) still waiting; going on");
@@ -1235,7 +1267,7 @@ internal sealed partial class MainForm : Form
     private async void OnBrowserHotkey()
     {
         // Only from an idle CY: not while ERP is being typed into or another CY window is open.
-        if (_automationCts is not null || _shopeeBatchRunning ||
+        if (Busy ||
             Application.OpenForms.Cast<Form>().Any(f => f != this && f.Visible && f is not AutomationOverlay))
         {
             _log.Info("hotkey", $"{BrowserHotkey.KeyName} ignored: CY is busy");
@@ -1266,7 +1298,7 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private async Task ImportMoOrderFromChromeAsync()
     {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         var own = (uint)Environment.ProcessId;
         var windows = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
@@ -1331,7 +1363,7 @@ internal sealed partial class MainForm : Form
     /// </param>
     private async Task RunShopeeBatchAsync(bool resume = false)
     {
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
@@ -1444,13 +1476,16 @@ internal sealed partial class MainForm : Form
             : $"全自動已停止：已完成 {runner.Done.Count} 筆");
         // Esc is the person's own stop: no sound for it.
         if (outcome != AutomationOutcome.Cancelled) Alarm(needsPerson: outcome != AutomationOutcome.Done || runner.Notes.Count > 0);
-        await FinishBatchAsync(ShopeeBatchTitle);
-        using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
-            [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
-             new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
-            stopped);
-        summary.ShowDialog(this);
-        EndBatchHold();
+        try
+        {
+            await FinishBatchAsync(ShopeeBatchTitle);
+            using var summary = new BatchSummaryForm(ShopeeBatchTitle, headline,
+                [new BatchSummarySection($"需要人工處理 {runner.Notes.Count} 筆：", runner.Notes.Select(n => $"訂單 {n.OrderSn}：{n.Message}").ToList()),
+                 new BatchSummarySection($"已用聊聊通知買家 {runner.Chats.Count} 筆（括號內為買家備註裡的關鍵字）：", runner.Chats.Select(c => $"訂單 {c}").ToList())],
+                stopped);
+            summary.ShowDialog(this);
+        }
+        finally { EndBatchHold(); }
     }
 
     /// <summary>
@@ -1671,7 +1706,7 @@ internal sealed partial class MainForm : Form
     private async Task RunMoBatchAsync()
     {
         const string title = "MO店+ 全自動";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
@@ -1944,7 +1979,7 @@ internal sealed partial class MainForm : Form
     private async Task ReprintMoAsync()
     {
         const string title = "MO店+ 重新列印";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         MoPrintedDocuments.Prune(_log);
         using var form = new MoReprintForm(MoPrintedDocuments.All());
         if (form.ShowDialog(this) != DialogResult.OK || form.Selected.Count == 0) return;
@@ -2003,7 +2038,7 @@ internal sealed partial class MainForm : Form
     private async Task ImportCoupangAsync()
     {
         const string title = "酷澎訂單匯入";
-        if (_automationCts is not null || _shopeeBatchRunning) return;
+        if (Busy) return;
         if (!ErpWindowReady()) return;
         var missing = new[]
         {
@@ -2292,6 +2327,13 @@ internal sealed partial class MainForm : Form
                     catch (Exception abandonError) when (abandonError is not OperationCanceledException)
                     {
                         _log.Error("import", abandonError);
+                        // No document was made (it failed before 新增, ERP never left 檢視; user LOG
+                        // 2026-11-13): nothing to abandon, the order is only failed.
+                        if (createdNumber.Length == 0 && _automation.SelectCopi08(out _) != 0 && _automation.ProbeStatus().Mode != ErpMode.Input)
+                        {
+                            failed.Add($"{order.OrderSn}：{ex.Message}");
+                            continue;
+                        }
                         // Left to a person, who may finish and save it: the next import of this
                         // order warns before entering it again (user, 2026-11-09).
                         try { ledger.Record(order.LedgerKey, LedgerStatus.Unfinished, createdNumber.Length > 0 ? $"{order.Header.GetValueOrDefault("order_type", string.Empty)}-{createdNumber}".TrimStart('-') : string.Empty); }
@@ -2323,19 +2365,22 @@ internal sealed partial class MainForm : Form
             if (rest.Count > 0) stopped += $"\r\n未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）";
         }
         SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
-        await FinishBatchAsync($"{source}批次");
-        using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
-        [
-            new($"已完成 {done.Count} 張：", done),
-            new($"需回補物流單號 {noTracking.Count} 張（送貨地址(一) 空白）：", noTracking),
-            new("需人工確認：", review),
-            new($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff),
-            new($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates),
-            new($"失敗 {failed.Count} 張（未儲存，已略過）：", failed),
-            new("其他事項：", notes ?? [])
-        ], stopped);
-        summary.ShowDialog(this);
-        EndBatchHold();
+        try
+        {
+            await FinishBatchAsync($"{source}批次");
+            using var summary = new BatchSummaryForm($"{source}批次結果", $"已儲存 {done.Count} / {orders.Count} 張。",
+            [
+                new($"已完成 {done.Count} 張：", done),
+                new($"需回補物流單號 {noTracking.Count} 張（送貨地址(一) 空白）：", noTracking),
+                new("需人工確認：", review),
+                new($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff),
+                new($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates),
+                new($"失敗 {failed.Count} 張（未儲存，已略過）：", failed),
+                new("其他事項：", notes ?? [])
+            ], stopped);
+            summary.ShowDialog(this);
+        }
+        finally { EndBatchHold(); }
         return true;
     }
 
