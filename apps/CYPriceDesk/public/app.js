@@ -91,16 +91,21 @@ function render() {
 function clearFilters(){ $('search').value='';$('platform-filter').value='';render(); }
 function loadDemo(){demoMode=true;demoOffers=sampleOffers();clearFilters();$('save-status').textContent='範例操作不會寫入你的資料';}
 function exitDemo(){demoMode=false;clearFilters();$('save-status').textContent=SAVED_TEXT;}
-function openOffer(id=null) {
+function openOffer(id=null,prefill=null) {
   if(!id && demoMode) exitDemo();
   editingId=id;$('offer-form').reset();$('offer-error').hidden=true;
   $('offer-dialog-title').textContent=id?'編輯查價':'新增查價';
   if(id) {
     const record=currentOffers().find(x=>x.id===id);
     for(const [k,value] of Object.entries(record)) if($('offer-form').elements[k]) $('offer-form').elements[k].value=k==='checkedAt'?(value?localTime(value):localTime(Date.now())):value??'';
-  } else $('time-input').value=localTime(Date.now());
+  } else {
+    // Auto query hands over a result: spec is left for the user, the check time is now.
+    for(const [k,value] of Object.entries(prefill||{})) if($('offer-form').elements[k]) $('offer-form').elements[k].value=value??'';
+    $('time-input').value=localTime(Date.now());
+  }
   $('offer-dialog').showModal();
 }
+window.cypdAddOffer=prefill=>openOffer(null,prefill);
 $('offer-form').addEventListener('submit',async e=> {
   e.preventDefault();$('offer-error').hidden=true;
   try {
@@ -187,7 +192,7 @@ for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.datas
 for(const b of document.querySelectorAll('[data-basis]'))b.onclick=()=>{basis=b.dataset.basis;document.querySelectorAll('[data-basis]').forEach(x=>{const on=x.dataset.basis===basis;x.classList.toggle('selected',on);x.setAttribute('aria-pressed',String(on));});render();};
 $('search').addEventListener('input',render);$('platform-filter').addEventListener('change',render);
 $('add-btn').onclick=()=>openOffer();$('import-btn').onclick=openImport;$('sidebar-import').onclick=openImport;$('demo-btn').onclick=loadDemo;$('exit-demo').onclick=exitDemo;
-const ACTION_LABELS={'record.create':'新增','record.update':'修改','record.delete':'刪除','record.import':'匯入'};
+const ACTION_LABELS={'record.create':'新增','record.update':'修改','record.delete':'刪除','record.import':'匯入','classification.update':'分類','classification.delete':'移除分類'};
 async function openAudit() {
   $('audit-body').textContent='載入中…';$('audit-dialog').showModal();
   try {
@@ -200,7 +205,7 @@ const ready=(async()=> {
   try {
     const me=await api('GET','/api/me');
     const name=me.displayName||me.employeeNo;
-    $('user-name').textContent=name;$('user-avatar').textContent=[...name][0]||'';
+    document.querySelectorAll('[data-user-name]').forEach(x=>{x.textContent=name;});$('user-avatar').textContent=[...name][0]||'';
     $('side-user').innerHTML=`${esc(name)}<small>員工編號 ${esc(me.employeeNo)}</small>`;
     await reload();
   } catch(error) {

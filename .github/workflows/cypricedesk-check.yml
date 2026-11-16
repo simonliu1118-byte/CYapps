@@ -31,8 +31,15 @@ jobs:
       - name: Verify source version
         run: |
           node --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync('package.json','utf8'));if(p.version!==fs.readFileSync('VERSION','utf8').trim()||!/^\d+$/.test(fs.readFileSync('BUILD','utf8').trim()))process.exit(1)"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Install fetcher dependencies
+        run: pip install -r fetcher/requirements.txt
+      - name: Run fetcher tests
+        run: python -m unittest discover -s fetcher/tests
       - name: Run tests
         run: npm test
       - name: Check JavaScript syntax
@@ -51,6 +58,7 @@ jobs:
           CF_CYID_APPLICATION_ID: CYPRICEDESK_CI
           CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
           CF_CYWEB_PORTAL_URL: https://portal.example.test/
+          CF_CYPD_FETCHER_URL: https://fetcher.example.test
           CF_CYPRICEDESK_CUSTOM_DOMAIN: pricedesk.example.com
         run: node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
       - name: Validate Worker bundle

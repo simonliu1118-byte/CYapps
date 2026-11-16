@@ -6,6 +6,8 @@ import {
   resolveIdentitySession
 } from './identity.js';
 import {handleRecordsApi} from './records.js';
+import {handleSearchApi} from './search.js';
+import {handleClassificationsApi} from './classifications.js';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -48,7 +50,9 @@ export default {
     if (pathname === '/api/me' && method === 'GET') {
       return json({employeeNo: principal.employeeNo, displayName: principal.displayName, workspaceRole: principal.workspaceRole});
     }
-    const response = await handleRecordsApi(request, env, url, principal);
+    const response = await handleRecordsApi(request, env, url, principal)
+      || await handleSearchApi(request, env, url)
+      || await handleClassificationsApi(request, env, url, principal);
     return response || json({error: '找不到此功能'}, 404);
   }
 };

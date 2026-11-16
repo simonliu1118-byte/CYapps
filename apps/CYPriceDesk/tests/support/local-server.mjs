@@ -1,10 +1,13 @@
 // Local server for browser checks: the real Worker with a fake IDENTITY (accepts any login as 「測試員工」)
-// and an in-memory node:sqlite D1. Usage: PORT=4173 SEED=1 node tests/support/local-server.mjs
+// and an in-memory node:sqlite D1. The price fetcher is a fake returning fixture data (no network).
+// Usage: PORT=4173 SEED=1 [NO_GAP=1] node tests/support/local-server.mjs   (NO_GAP drops the 15 s upstream spacing, for screenshots)
 import http from 'node:http';
 import worker from '../../src/index.js';
 import {createTestEnv} from './env.js';
+import {installFakeFetcher} from './fake-fetcher.js';
 
 const {env} = createTestEnv({acceptAnyLogin: true});
+installFakeFetcher();
 if (process.env.SEED) {
   const ago = hours => new Date(Date.now() - hours * 3600_000).toISOString();
   const rows = [
@@ -27,6 +30,7 @@ const port = Number(process.env.PORT) || 4173;
 http.createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
+  if (process.env.NO_GAP) env.DB.sqlite.exec('UPDATE upstream_state SET last_request_at=0');
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks);
   const response = await worker.fetch(new Request(`http://localhost:${port}${req.url}`, {method: req.method, headers: req.headers, body, redirect: 'manual'}), env);
   const headers = {};

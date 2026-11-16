@@ -1,12 +1,9 @@
 // Price record API on D1. Validation, grouping and the "keep the newer check" rule all come from
 // public/core.js, the single implementation shared with the browser.
 import {validateOffer, upsertOffers, groupKey} from '../public/core.js';
+import {ApiError, json, readBody} from './http.js';
 
 const FIELDS = ['product', 'spec', 'platform', 'seller', 'url', 'price', 'shipping', 'checkedAt', 'note'];
-
-class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
 
 const toOffer = row => ({
   id: row.id, product: row.product, spec: row.spec, platform: row.platform, seller: row.seller, url: row.url,
@@ -15,19 +12,6 @@ const toOffer = row => ({
 const fieldsOf = offer => Object.fromEntries(FIELDS.map(k => [k, offer[k]]));
 const same = (a, b) => FIELDS.every(k => a[k] === b[k]);
 const params = o => [o.product, o.spec, o.platform, o.seller, o.url, o.price, o.shipping, o.checkedAt, o.note];
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'}
-  });
-}
-
-async function readBody(request) {
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') throw new ApiError(400, '資料格式不正確');
-  return body;
-}
 
 function validated(raw) {
   try { return validateOffer(raw); } catch (error) { throw new ApiError(400, error.message); }
@@ -47,7 +31,7 @@ const deleteStmt = (DB, id, revision) => DB.prepare('DELETE FROM price_records W
 
 // The audit row is written in the same batch as its change. With `afterChange` it is only inserted when the
 // preceding revision-guarded statement really changed a row.
-const auditStmt = (DB, actor, now, action, entityId, before, after, afterChange = false) => DB.prepare(
+export const auditStmt = (DB, actor, now, action, entityId, before, after, afterChange = false) => DB.prepare(
   `INSERT INTO audit_log (at,actor_employee_id,actor_name,action,entity_id,before_json,after_json) SELECT ?,?,?,?,?,?,?${afterChange ? ' WHERE changes() > 0' : ''}`
 ).bind(now, actor.employeeId, actor.displayName, action, entityId, before && JSON.stringify(before), after && JSON.stringify(after));
 
@@ -152,6 +136,8 @@ function auditEntry(row) {
   const record = after || before;
   const detail = row.action === 'record.import'
     ? `新增 ${after.added} 筆、更新 ${after.updated} 筆、略過 ${after.skipped} 筆`
-    : [record.product, record.spec, record.platform].filter(Boolean).join(' · ');
+    : row.action.startsWith('classification.')
+      ? [record.source, record.model, record.listingKey].filter(Boolean).join(' · ')
+      : [record.product, record.spec, record.platform].filter(Boolean).join(' · ');
   return {id: row.id, at: row.at, actor: row.actor_name, action: row.action, detail};
 }

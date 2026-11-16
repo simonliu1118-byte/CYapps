@@ -3,6 +3,8 @@ import path from 'node:path';
 import {createD1} from './fake-d1.js';
 import {createFakeIdentity, APPLICATION_ID, WORKSPACE_ID} from './fake-identity.js';
 
+export const FETCHER_SECRET = 'test-secret';
+
 const PUBLIC_DIR = new URL('../../public/', import.meta.url).pathname;
 const TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'};
 
@@ -21,7 +23,8 @@ export function createTestEnv(options) {
     identity,
     env: {
       DB, ASSETS, IDENTITY: identity,
-      CYID_APPLICATION_ID: APPLICATION_ID, CYID_WORKSPACE_ID: WORKSPACE_ID, CYWEB_PORTAL_URL: 'https://portal.example.test/'
+      CYID_APPLICATION_ID: APPLICATION_ID, CYID_WORKSPACE_ID: WORKSPACE_ID, CYWEB_PORTAL_URL: 'https://portal.example.test/',
+      CYPD_FETCHER_URL: 'https://fetcher.example.test', CYPD_FETCHER_SECRET: FETCHER_SECRET
     }
   };
 }

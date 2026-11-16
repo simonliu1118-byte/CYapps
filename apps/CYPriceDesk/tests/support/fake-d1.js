@@ -1,10 +1,11 @@
-// In-memory D1 stand-in on node:sqlite. Applies the real migration file and mimics prepare/bind/all/first/run/batch.
+// In-memory D1 stand-in on node:sqlite. Applies the real migration files and mimics prepare/bind/all/first/run/batch.
 import {DatabaseSync} from 'node:sqlite';
 import fs from 'node:fs';
 
 export function createD1() {
   const db = new DatabaseSync(':memory:');
-  db.exec(fs.readFileSync(new URL('../../migrations/0001_initial.sql', import.meta.url), 'utf8'));
+  const dir = new URL('../../migrations/', import.meta.url);
+  for (const file of fs.readdirSync(dir).sort()) db.exec(fs.readFileSync(new URL(file, dir), 'utf8'));
   const statement = (sql, params = []) => ({
     bind: (...values) => statement(sql, values),
     all: async () => ({results: db.prepare(sql).all(...params)}),

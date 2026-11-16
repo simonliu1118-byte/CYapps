@@ -16,7 +16,10 @@
 - 價格紀錄全站一份；所有寫入與其 audit 在同一個 `DB.batch()`；同時編輯以 `revision` 檢查（409）。
 - 部署用的 D1 ID、Identity service 名稱、Application／Workspace ID、網域由 GitHub Environment `cypricedesk-production` 注入，source 只放 placeholder。合併 `main` 不部署，只有 `workflow_dispatch` 從 `main` 才部署。
 
+- 自動查價（V1.2.0）：`fetcher/`（Vercel Python，只接受 HMAC 簽章請求）→ Worker `src/search.js`（D1 快取 10 分鐘、同上游間隔 15 秒、blocked 冷卻 30 分鐘）→ `public/search.js`。簽章格式 Worker（`src/fetcher-client.js`）與 fetcher（`fetcher/api/index.py`）必須一致，兩邊測試共用同一組向量。解析邏輯（`fetcher/momo.py`、`fetcher/feebee.py`、`public/catalog-core.js`）由 sandbox 原樣搬移，改動前先看對應測試。
+- 測試與 CI 不得連線 momo、飛比或任何外部網站；Worker 測試以 `tests/support/fake-fetcher.js` 取代 `globalThis.fetch`。
+
 ## 驗證界線
 
-- 假 IDENTITY＋node:sqlite 替身的測試、`wrangler deploy --dry-run` 與本機 Playwright 不能替代部署後的實機驗證（真實 CYID、真實 D1、自訂網域）。未實際執行前保持待驗收，不把推測寫成成功。
+- 假 fetcher、假 IDENTITY＋node:sqlite 替身的測試、`wrangler deploy --dry-run` 與本機 Playwright 不能替代部署後的實機驗證（真實 CYID、真實 D1、自訂網域）。未實際執行前保持待驗收，不把推測寫成成功。
 - 舊 ChatGPT Sites 站與其 localStorage 資料不在本專案處理；搬遷方式見 `README.md`。

@@ -2,6 +2,16 @@
 
 > 本文件只記錄歷史，不是規則來源。版本來源為 `VERSION` 與 `BUILD`。
 
+## V1.2.0（Build 0）
+
+升 Minor：新增自動查價能力。依據 `docs/work-orders/WO-1.2.0.md`。
+
+- 新增 `fetcher/`（Vercel Python）：momo（never-primp）與飛比抓價，解析邏輯自 sandbox ScraplingProbe 原樣搬移；只接受 HMAC-SHA256 簽章請求。
+- Worker 新增 `GET /api/search`（D1 快取 10 分鐘、同上游 15 秒間隔、blocked 後冷卻 30 分鐘、飛比蝦皮／酷澎共用一次抓取）與 `/api/classifications`（人工分類，D1、全站共用、依來源隔離、寫 audit）。
+- 新增「自動查價」頁（momo、飛比蝦皮、飛比酷澎分開查詢）、規格解析與單位價統計、查到的結果一鍵加入價格紀錄。
+- `migrations/0002_auto_query.sql`；`wrangler.template.jsonc` 加 `CYPD_FETCHER_URL`；`CYPD_FETCHER_SECRET` 為 Worker secret。
+- CI 加 Python 3.12 fetcher 測試；部署 workflow 於 deploy 後寫入 `CYPD_FETCHER_SECRET`。
+
 ## V1.1.0（Build 0）
 
 升 Minor：儲存與登入方式改變，使用者明顯感受。依據 `docs/work-orders/WO-1.1.0.md`。

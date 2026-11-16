@@ -29,6 +29,7 @@ jobs:
       CF_CYID_APPLICATION_ID: ${{ vars.CF_CYID_APPLICATION_ID }}
       CF_CYID_WORKSPACE_ID: ${{ vars.CF_CYID_WORKSPACE_ID }}
       CF_CYWEB_PORTAL_URL: ${{ vars.CF_CYWEB_PORTAL_URL }}
+      CF_CYPD_FETCHER_URL: ${{ vars.CF_CYPD_FETCHER_URL }}
       CF_CYPRICEDESK_CUSTOM_DOMAIN: ${{ vars.CF_CYPRICEDESK_CUSTOM_DOMAIN }}
     steps:
       - name: Checkout source
@@ -57,7 +58,7 @@ jobs:
 
       - name: Mask deployment resource identifiers
         run: |
-          node -e 'for (const key of ["CF_WORKER_NAME","CF_D1_DATABASE_NAME","CF_D1_DATABASE_ID","CF_IDENTITY_SERVICE","CF_CYID_APPLICATION_ID","CF_CYID_WORKSPACE_ID","CF_CYPRICEDESK_CUSTOM_DOMAIN"]) { if (process.env[key]) console.log("::add-mask::" + process.env[key]); }'
+          node -e 'for (const key of ["CF_WORKER_NAME","CF_D1_DATABASE_NAME","CF_D1_DATABASE_ID","CF_IDENTITY_SERVICE","CF_CYID_APPLICATION_ID","CF_CYID_WORKSPACE_ID","CF_CYPRICEDESK_CUSTOM_DOMAIN","CF_CYPD_FETCHER_URL"]) { if (process.env[key]) console.log("::add-mask::" + process.env[key]); }'
 
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
@@ -67,6 +68,11 @@ jobs:
 
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
+
+      - name: Set fetcher signing secret
+        env:
+          CYPD_FETCHER_SECRET: ${{ secrets.CYPD_FETCHER_SECRET }}
+        run: printf '%s' "$CYPD_FETCHER_SECRET" | npx wrangler secret put CYPD_FETCHER_SECRET --config wrangler.deploy.jsonc
 
       - name: Remove production generated files
         if: always()

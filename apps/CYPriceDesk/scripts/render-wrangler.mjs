@@ -15,6 +15,7 @@ const REQUIRED = {
   CF_CYID_APPLICATION_ID: '__CF_CYID_APPLICATION_ID__',
   CF_CYID_WORKSPACE_ID: '__CF_CYID_WORKSPACE_ID__',
   CF_CYWEB_PORTAL_URL: '__CF_CYWEB_PORTAL_URL__',
+  CF_CYPD_FETCHER_URL: '__CF_CYPD_FETCHER_URL__',
   CF_CYPRICEDESK_CUSTOM_DOMAIN: '__CF_CUSTOM_DOMAIN__'
 };
 
@@ -36,6 +37,11 @@ function validateValues(values) {
   try { url = new URL(values.CF_CYWEB_PORTAL_URL); } catch { throw new Error('CF_CYWEB_PORTAL_URL must be HTTPS.'); }
   if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
     throw new Error('CF_CYWEB_PORTAL_URL must be a plain HTTPS root URL.');
+  }
+  let fetcher;
+  try { fetcher = new URL(values.CF_CYPD_FETCHER_URL); } catch { throw new Error('CF_CYPD_FETCHER_URL must be HTTPS.'); }
+  if (fetcher.protocol !== 'https:' || !fetcher.hostname || fetcher.username || fetcher.password || fetcher.search || fetcher.hash) {
+    throw new Error('CF_CYPD_FETCHER_URL must be an HTTPS URL without credentials, query or fragment.');
   }
   const hostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
   if (!hostname.test(values.CF_CYPRICEDESK_CUSTOM_DOMAIN)) throw new Error('CF_CYPRICEDESK_CUSTOM_DOMAIN must be a valid hostname.');
