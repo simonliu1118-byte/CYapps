@@ -1,4 +1,4 @@
-"""Price fetcher for CYPriceDesk (Vercel Python runtime).
+"""Price fetcher for CYPriceDesk (Vercel Flask preset: root app.py is the entrypoint; no rewrites).
 
 No web pages and no cache: it only answers HMAC-signed requests from the Worker.
 Caching, throttling and the block cooldown live in the Worker (D1).
@@ -13,7 +13,7 @@ from functools import wraps
 
 from flask import Flask, jsonify, request
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import feebee  # noqa: E402
 import momo  # noqa: E402
 
