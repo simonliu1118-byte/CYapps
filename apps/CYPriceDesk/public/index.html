@@ -3,23 +3,21 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0f5e73"><meta name="robots" content="noindex,nofollow">
-  <meta name="description" content="私有的競品價格比較工作臺，集中記錄商品、平台價格與查價時間。">
+  <meta name="description" content="私有的競品價格觀測工具：查價、追蹤商品、三平台比價與價格走勢。">
   <title>價格觀測室 · Price Desk</title>
   <link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="apple-touch-icon" href="/icon-256.png">
-  <link rel="stylesheet" href="/styles.css"><script type="module" src="/shell.js"></script><script type="module" src="/app.js"></script><script type="module" src="/search.js"></script><script type="module" src="/tracked.js"></script>
+  <link rel="stylesheet" href="/styles.css"><script type="module" src="/shell.js"></script><script type="module" src="/app.js"></script><script type="module" src="/search.js"></script><script type="module" src="/tracked.js"></script><script type="module" src="/pending.js"></script>
 </head>
 <body>
 <div class="app-shell">
   <aside class="nav" id="nav">
-    <a class="brand" href="#overview"><img class="brand-mark" src="/icon.svg" alt=""><span><span class="brand-name">價格觀測室</span><span class="brand-sub">志遠企業管理系統</span></span></a>
+    <a class="brand" href="#search"><img class="brand-mark" src="/icon.svg" alt=""><span><span class="brand-name">價格觀測室</span><span class="brand-sub">志遠企業管理系統</span></span></a>
     <div class="nav-groups">
-      <div class="nav-group"><span class="nav-label">價格</span>
-        <a class="nav-item nav-page active" href="#overview" data-title="比價總覽"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>比價總覽</a>
+      <div class="nav-group">
+        <a class="nav-item nav-page active" href="#search" data-title="查價"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>查價</a>
         <a class="nav-item nav-page" href="#tracked" data-title="追蹤商品"><svg viewBox="0 0 24 24"><path d="M4 21h16M7 17V9m5 8V3m5 14v-5"/></svg>追蹤商品</a>
-        <a class="nav-item nav-page" href="#auto-query" data-title="自動查價"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>自動查價</a>
-      </div>
-      <div class="nav-group"><span class="nav-label">系統</span>
-        <button class="nav-item" id="sidebar-audit" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>操作紀錄</button>
+        <a class="nav-item nav-page" href="#pending" data-title="待確認"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>待確認<span class="nav-badge" id="pending-badge" hidden></span></a>
+        <a class="nav-item nav-page" href="#audit" data-title="操作紀錄"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>操作紀錄</a>
       </div>
     </div>
   </aside>
@@ -27,80 +25,59 @@
   <div class="workspace">
     <header class="topbar">
       <button class="menu-toggle" id="menu-toggle" type="button" aria-label="開啟選單"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-      <h1 id="page-title">比價總覽</h1>
+      <h1 id="page-title">查價</h1>
       <div class="account topbar-end" id="account">
         <button class="account-trigger" id="account-trigger" type="button" aria-haspopup="menu" aria-expanded="false"><span class="avatar" data-user-avatar></span><strong data-user-name></strong><svg viewBox="0 0 24 24" width="14" height="14"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="account-popover" id="account-popover" role="menu" hidden><form action="/api/auth/logout" method="post"><button type="submit" role="menuitem">登出</button></form></div>
       </div>
     </header>
 
-    <main class="page" id="overview">
-      <div id="storage-warning" class="notice error" hidden></div>
-      <div id="demo-banner" class="notice" hidden><span>範例模式：以下價格為示意資料，並非平台即時行情。</span><button class="btn small" id="exit-demo" type="button">返回我的資料</button></div>
-      <div class="toolbar">
-        <div class="toolbar-group"><label class="search"><input id="search" type="search" placeholder="搜尋商品、規格或賣家" aria-label="搜尋商品"></label><select id="platform-filter" aria-label="篩選平台"><option value="">所有平台</option></select><div class="segmented" role="group" aria-label="價格比較基準"><button class="selected" data-basis="price" aria-pressed="true" type="button">商品價格</button><button data-basis="total" aria-pressed="false" type="button">含運總價</button></div></div>
-        <div class="toolbar-group"><button class="btn quiet" id="demo-btn" type="button">看看範例</button><button class="btn" id="import-btn" type="button">匯入</button><button class="btn" id="export-btn" type="button">匯出 CSV</button><button class="btn primary" id="add-btn" type="button">新增查價</button></div>
+    <main class="page" id="search">
+      <form id="s-form" class="s-form">
+        <label class="search"><input id="s-keyword" name="keyword" type="search" maxlength="80" required placeholder="關鍵字，例如：3M 1530-0" aria-label="搜尋商品關鍵字"></label>
+        <select id="s-source" aria-label="查詢來源"><option value="all">全部來源</option><option value="momo">momo</option><option value="shopee">蝦皮</option><option value="coupang">酷澎</option></select>
+        <button class="btn primary" id="s-submit" type="submit">查價</button>
+      </form>
+      <div id="s-recent" class="recent"></div>
+      <div id="s-result" hidden>
+        <div id="s-status" class="s-status" aria-live="polite"></div>
+        <div class="s-bar"><div class="segmented" id="s-filter" role="group" aria-label="來源篩選"></div><p id="s-summary" class="muted"></p></div>
+        <div class="table-wrap"><table class="data-table wide" id="s-table"><thead><tr>
+          <th><button class="sort" type="button" data-sort="source">來源</button></th>
+          <th><button class="sort" type="button" data-sort="title">商品名稱</button></th>
+          <th>賣家</th>
+          <th class="num"><button class="sort" type="button" data-sort="price">價格</button></th>
+          <th>規格</th><th>操作</th></tr></thead><tbody id="s-body"></tbody></table></div>
+        <div class="s-more"><button class="btn" id="s-more" type="button" hidden>載入更多 momo</button></div>
+        <p id="s-disclaimer" class="footnote" hidden>蝦皮、酷澎來自飛比的商品級第三方參考價，來源價格更新時間未確認，非即時或逐規格價格。</p>
       </div>
-      <p class="summary-line" id="stats"></p>
-      <div id="groups"><div class="empty"><p>載入價格紀錄中…</p></div></div>
-      <p class="muted"><span id="save-status">價格紀錄儲存於雲端，登入者共用</span> · 金額為新臺幣，時間為臺北時間</p>
     </main>
 
     <main class="page" id="tracked" hidden>
       <section id="tracked-list-view" class="sections">
         <div class="toolbar">
-          <div class="toolbar-group"><label class="search"><input id="tr-search" type="search" placeholder="搜尋名稱或型號" aria-label="搜尋追蹤商品"></label><div class="segmented" role="group" aria-label="篩選"><button class="selected" data-tr-filter="all" type="button">全部</button><button data-tr-filter="pending" type="button">有待確認</button><button data-tr-filter="inactive" type="button">已停用</button></div></div>
-          <div class="toolbar-group"><button class="btn primary" id="tr-add" type="button">新增追蹤商品</button></div>
+          <div class="toolbar-group"><label class="search"><input id="tr-search" type="search" placeholder="搜尋名稱或型號" aria-label="搜尋追蹤商品"></label><select id="tr-sort" aria-label="排序"><option value="attention">最需要注意</option><option value="name">名稱</option><option value="last">上次查價</option></select></div>
+          <div class="toolbar-group"><div class="segmented" role="group" aria-label="篩選"><button class="selected" data-tr-filter="all" type="button">全部</button><button data-tr-filter="attention" type="button">需注意</button><button data-tr-filter="pending" type="button">有待確認</button><button data-tr-filter="inactive" type="button">已停用</button></div><button class="btn primary" id="tr-add" type="button">新增追蹤商品</button></div>
         </div>
         <div id="tr-list"></div>
       </section>
       <section id="tracked-detail-view" class="sections" hidden></section>
     </main>
 
-    <main class="page" id="auto-query" hidden>
-      <section class="panel" aria-labelledby="aq-title">
-        <div class="panel-head"><h2 id="aq-title">查價結果</h2><div class="segmented" role="group" aria-label="查詢來源"><button class="selected" data-source="momo" aria-pressed="true" type="button">momo</button><button data-source="shopee" aria-pressed="false" type="button">飛比蝦皮</button><button data-source="coupang" aria-pressed="false" type="button">飛比酷澎</button></div></div>
-        <form id="aq-form" class="aq-form"><label class="search"><input id="aq-keyword" name="keyword" type="search" maxlength="80" required placeholder="關鍵字，例如：羅技 M331" aria-label="搜尋商品關鍵字"></label><select id="aq-sort" aria-label="排序方式"><option value="relevance">相關程度優先</option><option value="asc">價格低到高</option><option value="desc">價格高到低</option></select><button class="btn primary" id="aq-submit" type="submit">查詢價格</button></form>
-        <p id="aq-disclaimer" class="notice warning" hidden></p>
-        <div id="aq-status" class="aq-status" aria-live="polite"><p class="aq-empty">輸入關鍵字，即可查看搜尋結果。</p></div>
-        <div id="aq-results"></div>
-        <nav id="aq-pager" class="aq-pager" aria-label="結果分頁" hidden><button class="btn small" id="aq-prev" type="button">上一頁</button><span id="aq-page"></span><button class="btn small" id="aq-next" type="button">下一頁</button></nav>
-      </section>
-      <section id="aq-analysis" class="panel" hidden>
-        <div class="panel-head"><h2>規格與單位價格 <small id="aq-group-count"></small></h2></div>
-        <div id="aq-facets" class="aq-facets"></div>
-        <p id="aq-count" class="muted"></p>
-        <div id="aq-groups"></div>
-      </section>
+    <main class="page" id="pending" hidden>
+      <p class="muted">所有追蹤商品中，程式無法判斷是否為同規格的候選商品。判斷後之後查價會自動套用。</p>
+      <div id="pending-list" class="sections"></div>
+    </main>
+
+    <main class="page" id="audit" hidden>
+      <div id="audit-list"></div>
     </main>
   </div>
 </div>
 
-<dialog id="offer-dialog" aria-labelledby="offer-dialog-title">
-  <form id="offer-form" class="dialog-surface">
-    <div class="dialog-header"><h2 id="offer-dialog-title">新增查價</h2><button type="button" class="dialog-close" data-close="offer-dialog" aria-label="關閉">×</button></div>
-    <div class="dialog-body">
-      <div class="form-grid">
-        <label class="wide">商品名稱 <span class="required">*</span><input name="product" id="product-input" required maxlength="200" list="product-suggestions"><datalist id="product-suggestions"></datalist></label>
-        <label class="wide">規格／型號<input name="spec" maxlength="200"></label>
-        <label class="wide">商品連結<input name="url" id="url-input" type="url" maxlength="2048" placeholder="https://"></label>
-        <label>平台 <span class="required">*</span><input name="platform" id="platform-input" list="platform-suggestions" required maxlength="200"><datalist id="platform-suggestions"><option value="蝦皮"><option value="momo"><option value="PChome"><option value="Yahoo"><option value="其他"></datalist></label>
-        <label>賣家／通路<input name="seller" maxlength="200"></label>
-        <label>商品價格（NT$）<input name="price" id="price-input" type="number" min="0" max="1000000000" step="0.01" placeholder="尚未查價可留白"></label>
-        <label>運費（NT$）<input name="shipping" type="number" min="0" max="1000000000" step="0.01" placeholder="免運填 0，未知留白"></label>
-        <label class="wide">查價時間（臺北時間）<input name="checkedAt" id="time-input" type="datetime-local"></label>
-        <div class="wide"><button class="btn small" type="button" id="set-now">設為現在</button></div>
-        <label class="wide">備註<textarea name="note" rows="2" maxlength="1000"></textarea></label>
-      </div>
-      <div class="form-error" id="offer-error" role="alert" hidden></div>
-    </div>
-    <div class="dialog-footer"><button class="btn" type="button" data-close="offer-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
-  </form>
-</dialog>
-
 <dialog id="class-dialog" aria-labelledby="class-title">
   <form id="class-form" class="dialog-surface">
-    <div class="dialog-header"><h2 id="class-title">人工商品分類</h2><button type="button" class="dialog-close" data-close="class-dialog" aria-label="關閉">×</button></div>
+    <div class="dialog-header"><h2 id="class-title">設定規格</h2><button type="button" class="dialog-close" data-close="class-dialog" aria-label="關閉">×</button></div>
     <div class="dialog-body">
       <p class="muted"><span id="class-source"></span>　<span id="class-listing"></span></p>
       <div class="form-grid">
@@ -112,36 +89,8 @@
       </div>
       <div class="form-error" id="class-error" role="alert" hidden></div>
     </div>
-    <div class="dialog-footer"><button class="btn quiet" type="button" id="class-reset">清除人工分類</button><button class="btn" type="button" data-close="class-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
+    <div class="dialog-footer"><button class="btn quiet" type="button" id="class-reset">清除人工設定</button><button class="btn" type="button" data-close="class-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
   </form>
-</dialog>
-
-<dialog id="import-dialog" class="dialog-large" aria-labelledby="import-title">
-  <div class="dialog-surface">
-    <div class="dialog-header"><h2 id="import-title">匯入查價資料</h2><button class="dialog-close" data-close="import-dialog" aria-label="關閉" type="button">×</button></div>
-    <div class="dialog-body">
-      <div class="panel-actions"><label class="btn">選擇 CSV 檔<input type="file" id="csv-file" accept=".csv,.tsv,text/csv,text/tab-separated-values" hidden></label><button class="btn quiet" id="sample-csv" type="button">填入格式範例</button></div>
-      <label class="paste-label">查價資料<textarea id="paste-input" rows="7" spellcheck="false" placeholder="商品,規格,平台,價格,運費,查價時間,連結,賣家,備註"></textarea></label>
-      <p class="hint">標題列至少需含「商品、平台、價格」或「商品、平台、連結」。</p>
-      <div id="import-preview" aria-live="polite"></div><div id="import-error" class="form-error" role="alert" hidden></div>
-    </div>
-    <div class="dialog-footer"><button class="btn" id="preview-btn" type="button">預覽資料</button><button class="btn primary" id="confirm-import" type="button" disabled>確認匯入</button></div>
-  </div>
-</dialog>
-
-<dialog id="delete-dialog" class="dialog-mini" aria-labelledby="delete-title">
-  <div class="dialog-surface">
-    <div class="dialog-header"><h2 id="delete-title">刪除此筆查價？</h2><button class="dialog-close" data-close="delete-dialog" aria-label="關閉" type="button">×</button></div>
-    <div class="dialog-body"><p id="delete-description"></p></div>
-    <div class="dialog-footer"><button class="btn" data-close="delete-dialog" type="button">取消</button><button class="btn danger" id="confirm-delete" type="button">刪除</button></div>
-  </div>
-</dialog>
-
-<dialog id="audit-dialog" aria-labelledby="audit-title">
-  <div class="dialog-surface">
-    <div class="dialog-header"><h2 id="audit-title">操作紀錄（最近 50 筆）</h2><button class="dialog-close" data-close="audit-dialog" aria-label="關閉" type="button">×</button></div>
-    <div id="audit-body" class="dialog-body" aria-live="polite"></div>
-  </div>
 </dialog>
 
 <dialog id="tracked-dialog" aria-labelledby="tracked-title">
@@ -149,17 +98,28 @@
     <div class="dialog-header"><h2 id="tracked-title">新增追蹤商品</h2><button type="button" class="dialog-close" data-close="tracked-dialog" aria-label="關閉">×</button></div>
     <div class="dialog-body">
       <div class="form-grid">
-        <label class="wide">名稱 <span class="required">*</span><input name="name" required maxlength="200"></label>
-        <label>型號 <span class="required">*</span><input name="model" required maxlength="80" placeholder="例如 1530-0"></label>
-        <label>規格屬性（每行「名稱=內容」）<textarea name="attributes" rows="2" placeholder="尺寸=0.5吋"></textarea></label>
-        <label>包裝數量 <span class="required">*</span><input name="packageQuantity" type="number" min="1" step="any" max="100000" required></label>
-        <label>包裝單位 <span class="required">*</span><input name="packageUnit" required maxlength="20" placeholder="入、捲、盒"></label>
-        <label id="tr-price-field">自己的售價（NT$）<input name="myPrice" type="number" min="0" step="0.01"></label>
-        <label>自己的商品連結<input name="myUrl" type="url" maxlength="2048" placeholder="https://"></label>
-        <label>momo 查詢關鍵字<input name="momoKeyword" maxlength="80"></label>
-        <label>飛比查詢關鍵字<input name="feebeeKeyword" maxlength="80"></label>
-        <label class="check wide"><input name="active" type="checkbox" checked>啟用定期查價</label>
+        <label class="wide"><span>名稱 <span class="required">*</span></span><input name="name" required maxlength="200"></label>
+        <label><span>型號 <span class="required">*</span></span><input name="model" required maxlength="80" placeholder="例如 1530-0"></label>
+        <label>CY Web 品號<input name="cywebItemNo" maxlength="40"></label>
+        <label class="wide">規格屬性（每行「名稱=內容」）<textarea name="attributes" rows="2" placeholder="尺寸=0.5吋"></textarea></label>
+        <label><span>包裝數量 <span class="required">*</span></span><input name="packageQuantity" type="number" min="1" step="any" max="100000" required></label>
+        <label><span>包裝單位 <span class="required">*</span></span><input name="packageUnit" required maxlength="20" placeholder="入、捲、盒"></label>
+        <label class="wide"><span>查詢關鍵字（三個來源共用） <span class="required">*</span></span><input name="keyword" required maxlength="80" placeholder="例如 3M 1530-0"></label>
       </div>
+      <div class="platform-fields">
+        <div class="pf-head"><span></span><span>我的售價（NT$，空白＝不比價）</span><span>我的商品連結（選填）</span></div>
+        <div class="pf-row" style="--c:#EE4D2D"><strong>蝦皮</strong><input name="price_shopee" type="number" min="0" step="0.01" aria-label="蝦皮售價"><input name="url_shopee" type="url" maxlength="2048" placeholder="https://" aria-label="蝦皮連結"></div>
+        <div class="pf-row" style="--c:#B5179E"><strong>momo（MO店+）</strong><input name="price_momo" type="number" min="0" step="0.01" aria-label="momo 售價"><input name="url_momo" type="url" maxlength="2048" placeholder="https://" aria-label="momo 連結"></div>
+        <div class="pf-row" style="--c:#346AFF"><strong>酷澎</strong><input name="price_coupang" type="number" min="0" step="0.01" aria-label="酷澎售價"><input name="url_coupang" type="url" maxlength="2048" placeholder="https://" aria-label="酷澎連結"></div>
+        <p class="hint" id="tr-price-hint" hidden>售價只能在商品詳情的「調整售價」修改。</p>
+      </div>
+      <details class="advanced"><summary>進階：個別來源關鍵字</summary>
+        <div class="form-grid">
+          <label>momo 關鍵字<input name="momoKeyword" maxlength="80" placeholder="空白＝用共用關鍵字"></label>
+          <label>飛比關鍵字（蝦皮、酷澎共用）<input name="feebeeKeyword" maxlength="80" placeholder="空白＝用共用關鍵字"></label>
+        </div>
+      </details>
+      <label class="check"><input name="active" type="checkbox" checked>啟用定期查價</label>
       <div class="form-error" id="tracked-error" role="alert" hidden></div>
     </div>
     <div class="dialog-footer"><button class="btn" type="button" data-close="tracked-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
@@ -168,8 +128,9 @@
 
 <dialog id="price-dialog" class="dialog-small" aria-labelledby="price-title">
   <form id="price-form" class="dialog-surface">
-    <div class="dialog-header"><h2 id="price-title">修改售價</h2><button type="button" class="dialog-close" data-close="price-dialog" aria-label="關閉">×</button></div>
+    <div class="dialog-header"><h2 id="price-title">調整售價</h2><button type="button" class="dialog-close" data-close="price-dialog" aria-label="關閉">×</button></div>
     <div class="dialog-body">
+      <p class="muted" id="price-platform"></p>
       <div class="form-grid">
         <label class="wide">新售價（NT$）<input name="price" type="number" min="0" step="0.01" required></label>
         <label class="wide">備註<input name="note" maxlength="200"></label>
@@ -178,6 +139,33 @@
     </div>
     <div class="dialog-footer"><button class="btn" type="button" data-close="price-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
   </form>
+</dialog>
+
+<dialog id="manual-dialog" aria-labelledby="manual-title">
+  <form id="manual-form" class="dialog-surface">
+    <div class="dialog-header"><h2 id="manual-title">新增手動比價</h2><button type="button" class="dialog-close" data-close="manual-dialog" aria-label="關閉">×</button></div>
+    <div class="dialog-body">
+      <div class="form-grid">
+        <label><span>平台 <span class="required">*</span></span><select name="platform"><option value="shopee">蝦皮</option><option value="momo">momo</option><option value="coupang">酷澎</option><option value="other">其他</option></select></label>
+        <label>賣家<input name="seller" maxlength="200"></label>
+        <label><span>價格（NT$） <span class="required">*</span></span><input name="price" type="number" min="0" step="0.01" required></label>
+        <label><span>查價日期 <span class="required">*</span></span><input name="checkedAt" type="date" required></label>
+        <label class="wide">商品連結<input name="url" type="url" maxlength="2048" placeholder="https://"></label>
+        <label class="wide">備註<input name="note" maxlength="500"></label>
+      </div>
+      <p class="hint">查價日期在最近 30 天內，才計入該平台的同規格比較；「其他」平台只列出，不計入。</p>
+      <div class="form-error" id="manual-error" role="alert" hidden></div>
+    </div>
+    <div class="dialog-footer"><button class="btn" type="button" data-close="manual-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
+  </form>
+</dialog>
+
+<dialog id="delete-dialog" class="dialog-mini" aria-labelledby="delete-title">
+  <div class="dialog-surface">
+    <div class="dialog-header"><h2 id="delete-title">刪除手動比價？</h2><button class="dialog-close" data-close="delete-dialog" aria-label="關閉" type="button">×</button></div>
+    <div class="dialog-body"><p id="delete-description"></p></div>
+    <div class="dialog-footer"><button class="btn" data-close="delete-dialog" type="button">取消</button><button class="btn danger" id="confirm-delete" type="button">刪除</button></div>
+  </div>
 </dialog>
 
 <dialog id="package-dialog" class="dialog-mini" aria-labelledby="package-title">

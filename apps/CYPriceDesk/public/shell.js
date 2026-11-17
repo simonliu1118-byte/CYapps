@@ -1,12 +1,13 @@
-// App shell: hash-based page switching, page title, phone navigation drawer and the account menu.
+// App shell: hash-based page switching (a hash like #tracked/<id> belongs to the #tracked page), page title,
+// phone navigation drawer and the account menu.
 const $ = id => document.getElementById(id);
-const PAGES = {'#overview': 'overview', '#tracked': 'tracked', '#auto-query': 'auto-query'};
+const PAGES = ['search', 'tracked', 'pending', 'audit'];
 
 function showPage() {
-  const current = PAGES[location.hash] || 'overview';
-  for (const id of Object.values(PAGES)) $(id).hidden = id !== current;
+  const current = PAGES.find(id => location.hash.split('/')[0] === `#${id}`) || 'search';
+  for (const id of PAGES) $(id).hidden = id !== current;
   for (const a of document.querySelectorAll('.nav-page')) {
-    const on = PAGES[a.getAttribute('href')] === current;
+    const on = a.getAttribute('href') === `#${current}`;
     a.classList.toggle('active', on);
     if (on) $('page-title').textContent = a.dataset.title;
   }
@@ -17,7 +18,6 @@ function closeNav() { $('nav').classList.remove('open'); $('nav-backdrop').class
 window.addEventListener('hashchange', showPage);
 $('menu-toggle').onclick = () => { $('nav').classList.add('open'); $('nav-backdrop').classList.add('open'); };
 $('nav-backdrop').onclick = closeNav;
-$('sidebar-audit').addEventListener('click', closeNav);
 
 const setMenu = open => { $('account-popover').hidden = !open; $('account-trigger').setAttribute('aria-expanded', String(open)); };
 $('account-trigger').onclick = () => setMenu($('account-popover').hidden);

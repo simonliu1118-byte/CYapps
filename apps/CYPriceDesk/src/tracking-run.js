@@ -1,8 +1,8 @@
-// One price check of a tracked product, and the scheduled entry point (WO-1.3.0 §2.6, §2.7).
+// One price check of a tracked product, and the scheduled entry point (WO-1.3.0 §2.6, §2.7; keywords per WO-1.4.0 §2.3).
 import {querySource} from './search.js';
 import {classifyListing} from './grouping.js';
 import {calcStats} from '../public/catalog-core.js';
-import {auditStmt} from './records.js';
+import {auditStmt} from './audit.js';
 import {fetcherConfigured} from './fetcher-client.js';
 
 const HOUR_MS = 3600 * 1000;
@@ -12,10 +12,15 @@ const USABLE = ['ok', 'no_match', 'no_price'];
 
 export const toTracked = row => ({
   id: row.id, name: row.name, model: row.model, attributes: JSON.parse(row.attributes_json),
-  packageQuantity: row.package_quantity, packageUnit: row.package_unit, myPrice: row.my_price, myUrl: row.my_url,
-  momoKeyword: row.momo_keyword, feebeeKeyword: row.feebee_keyword, active: Boolean(row.active),
-  nextRunAt: row.next_run_at, lastRunAt: row.last_run_at, revision: row.revision
+  packageQuantity: row.package_quantity, packageUnit: row.package_unit, cywebItemNo: row.cyweb_item_no,
+  keyword: row.keyword, momoKeyword: row.momo_keyword, feebeeKeyword: row.feebee_keyword,
+  myPrices: {shopee: row.my_price_shopee, momo: row.my_price_momo, coupang: row.my_price_coupang},
+  myUrls: {shopee: row.my_url_shopee, momo: row.my_url_momo, coupang: row.my_url_coupang},
+  active: Boolean(row.active), nextRunAt: row.next_run_at, lastRunAt: row.last_run_at, revision: row.revision
 });
+
+// An override wins; otherwise the shared keyword is used. shopee and coupang share the Feebee query.
+export const effectiveKeywords = p => ({momo: p.momoKeyword || p.keyword, feebee: p.feebeeKeyword || p.keyword});
 
 // A random moment 08:00-22:00 Taipei time, a whole number of days (minDays..maxDays) after `now`, never before `now`.
 export function randomRunTime(now, minDays, maxDays, rand = Math.random) {
@@ -49,20 +54,17 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
   const judgments = new Map((await DB.prepare('SELECT * FROM listing_judgments WHERE product_id=?').bind(product.id).all()).results
     .map(j => [`${j.source}\u001f${j.listing_key}`, {verdict: j.verdict, packageQuantity: j.package_quantity, packageUnit: j.package_unit, titleSnapshot: j.title_snapshot}]));
 
-  const statuses = {momo: 'skipped', feebee: 'skipped'};
+  const keywords = effectiveKeywords(product);
+  const statuses = {};
   const usable = {};
-  if (product.momoKeyword) {
-    const result = await querySource(env, 'momo', product.momoKeyword, 1);
-    statuses.momo = result.status;
-    if (USABLE.includes(result.status)) usable.momo = result;
-  }
-  if (product.feebeeKeyword) {
-    const shopee = await querySource(env, 'shopee', product.feebeeKeyword, 1);
-    statuses.feebee = shopee.status;
-    if (USABLE.includes(shopee.status)) {
-      usable.shopee = shopee;
-      usable.coupang = await querySource(env, 'coupang', product.feebeeKeyword, 1);
-    }
+  const momo = await querySource(env, 'momo', keywords.momo, 1);
+  statuses.momo = momo.status;
+  if (USABLE.includes(momo.status)) usable.momo = momo;
+  const shopee = await querySource(env, 'shopee', keywords.feebee, 1);
+  statuses.feebee = shopee.status;
+  if (USABLE.includes(shopee.status)) {
+    usable.shopee = shopee;
+    usable.coupang = await querySource(env, 'coupang', keywords.feebee, 1);
   }
 
   const runId = crypto.randomUUID();
@@ -88,7 +90,7 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
   for (const [key, list] of others) summaries.push(summaryOf(`other:${key}`, `${list[0].quantity} ${list[0].unit}`, list.map(c => c.price)));
 
   const finished = new Date().toISOString();
-  const nextRunAt = Object.values(statuses).every(s => s === 'skipped' || USABLE.includes(s))
+  const nextRunAt = Object.values(statuses).every(s => USABLE.includes(s))
     ? randomRunTime(now, 7, 14, rand) : now + HOUR_MS;
   const statements = [
     DB.prepare('INSERT INTO tracked_runs (id,product_id,started_at,finished_at,momo_status,feebee_status,trigger) VALUES (?,?,?,?,?,?,?)')

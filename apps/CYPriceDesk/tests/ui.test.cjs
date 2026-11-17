@@ -1,86 +1,184 @@
-const { chromium } = require('playwright');
+// Browser flow for the V1.4.0 pages against tests/support/local-server.mjs (seeded; fake IDENTITY and fake fetcher, no network):
+//   PORT=4173 SEED=1 NO_GAP=1 node tests/support/local-server.mjs &   then   node tests/ui.test.cjs
+// With SHOT_DIR=<dir> it also writes the WO-1.4.0 §5 screenshots (1440 and 390 wide).
+const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
-(async()=>{
-  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
-  const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
-  const page=await context.newPage();
-  const failures=[];page.on('pageerror',e=>failures.push(e.message));
-  const base=process.env.TEST_BASE_URL||'http://127.0.0.1:4173';
-  fs.mkdirSync('artifacts',{recursive:true});
-  const checkedAt=new Date(Date.now()+8*3600000).toISOString().slice(0,16);
-  const priceText=()=>page.locator('.group-summary').first().innerText();
-  const count=()=>page.locator('[data-offer-id]').count();
-  async function add(values){
-    await page.locator('#add-btn').click();
-    for(const [name,value]of Object.entries(values))await page.locator(`#offer-form [name="${name}"]`).fill(String(value));
-    await page.locator('#offer-form button[type="submit"]').click();
-    await page.locator('#offer-dialog').waitFor({state:'hidden'});
+
+const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:4173';
+const SHOT = process.env.SHOT_DIR;
+const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
+
+(async () => {
+  const browser = await chromium.launch({headless: true, args: ['--no-sandbox']});
+  const page = await (await browser.newContext({viewport: DESKTOP})).newPage();
+  const failures = [];
+  page.on('pageerror', e => failures.push(e.message));
+  page.on('response', r => { if (r.status() >= 500) failures.push(`${r.status()} ${r.url()}`); });
+  if (SHOT) fs.mkdirSync(SHOT, {recursive: true});
+
+  // Checks that the page does not scroll sideways at phone width; writes both screenshots when SHOT_DIR is set.
+  async function snap(name, {full = true, prep, locator} = {}) {
+    for (const [label, size] of [['desktop', DESKTOP], ['mobile', MOBILE]]) {
+      await page.setViewportSize(size);
+      await page.waitForTimeout(250);
+      if (prep) await prep();
+      if (label === 'mobile') assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: horizontal page scroll at 390px`);
+      if (SHOT) {
+        const path = `${SHOT}/${name}-${label}.png`;
+        await (locator ? page.locator(locator).screenshot({path}) : page.screenshot({path, fullPage: full}));
+      }
+    }
+    await page.setViewportSize(DESKTOP);
   }
-  // Run against tests/support/local-server.mjs (fake IDENTITY accepts any login).
-  await page.goto(base);await page.fill('[name="employeeNo"]','0001');await page.fill('[name="password"]','password1');await page.click('button[type="submit"]');
-  await page.waitForSelector('#empty-action');
-  assert.equal(await count(),0);
-  await page.locator('#empty-demo').click();
-  assert.equal(await page.locator('#demo-banner').isVisible(),true);assert.equal(await count(),7);
-  await page.screenshot({path:'artifacts/desktop-demo.png',fullPage:true});
-  await page.locator('[data-basis="total"]').click();
-  assert((await page.locator('.group').nth(1).innerText()).includes('$729'));
-  await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'artifacts/mobile-demo.png',fullPage:true});
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.setViewportSize({width:1440,height:1000});
-  await page.locator('#exit-demo').click();assert.equal(await count(),0);
-  await page.locator('[data-basis="price"]').click();
-  await add({product:'驗證耳機',spec:'A1 黑色',url:'https://shopee.tw/product/test-1',seller:'測試商城'});
-  assert.equal(await count(),1);assert((await priceText()).includes('—'));
-  assert((await page.locator('.data-table').innerText()).includes('待查價'));
-  await page.locator('[data-edit]').first().click();
-  await page.locator('#price-input').fill('990');await page.locator('[name="shipping"]').fill('60');
-  await page.locator('#set-now').click();await page.locator('#offer-form button[type="submit"]').click();await page.locator('#offer-dialog').waitFor({state:'hidden'});
-  await add({product:'驗證耳機',spec:'A1 黑色',url:'https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=test-2',seller:'測試 momo',price:1090,shipping:0});
-  assert.equal(await count(),2);assert((await priceText()).includes('$990'));
-  assert((await page.locator('.data-table').innerText()).includes('+$100'));
-  await page.locator('[data-basis="total"]').click();assert((await priceText()).includes('$1,050'));
-  assert((await page.locator('.data-table').innerText()).includes('+$40'));
-  await page.locator('#platform-filter').selectOption('momo');
-  assert.equal(await count(),1);assert((await priceText()).includes('$1,050'));
-  assert.equal(await page.locator('.chip.accent').count(),0);
-  await page.locator('#platform-filter').selectOption('');
-  await page.locator('#import-btn').click();
-  await page.locator('#paste-input').fill('商品,規格,平台,價格\n驗證耳機,A1 黑色,蝦皮,-10');
-  await page.locator('#preview-btn').click();assert.equal(await page.locator('#import-error').isVisible(),true);
-  assert.equal(await page.locator('#confirm-import').isDisabled(),true);
-  await page.locator('#paste-input').fill(`商品,規格,平台,價格,運費,查價時間,連結,賣家,備註\n驗證耳機,A1 黑色,PChome,899,,${checkedAt},https://24h.pchome.com.tw/prod/test-3,測試通路,運費未知\n驗證耳機,A2 白色,momo,1299,0,${checkedAt},https://www.momoshop.com.tw/goods/test-4,測試通路,不同規格`);
-  await page.locator('#preview-btn').click();assert.equal(await page.locator('#confirm-import').isEnabled(),true);
-  await page.locator('#confirm-import').click();await page.locator('#import-dialog').waitFor({state:'hidden'});assert.equal(await count(),4);
-  assert.equal(await page.locator('.group').count(),2);
-  assert((await priceText()).includes('$1,050'));
-  assert((await page.locator('.group').first().innerText()).includes('運費未知，未列入比較'));
-  await page.locator('[data-basis="price"]').click();assert((await priceText()).includes('$899'));
-  await page.reload();await page.waitForSelector('[data-offer-id]');assert.equal(await count(),4);
-  const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#export-btn').click()]);
-  const downloadPath=await download.path();assert(fs.readFileSync(downloadPath,'utf8').includes('驗證耳機'));
-  await page.locator('#search').fill('不存在的商品');assert.equal(await count(),0);
-  await page.locator('#empty-action').click();assert.equal(await count(),4);
-  await page.locator('[data-delete]').first().click();await page.locator('#confirm-delete').click();await page.locator('#delete-dialog').waitFor({state:'hidden'});assert.equal(await count(),3);
-  await page.locator('[data-edit]').first().click();await page.locator('#price-input').fill('880');await page.locator('#set-now').click();await page.locator('#offer-form button[type="submit"]').click();await page.locator('#offer-dialog').waitFor({state:'hidden'});
-  assert((await priceText()).includes('$880'));
-  // A stale tab cannot overwrite a newer revision (409).
-  const other=await context.newPage();await other.goto(base);await other.waitForSelector('[data-offer-id]');
-  await other.locator('[data-edit]').first().click();await other.locator('#price-input').fill('870');await other.locator('#offer-form button[type="submit"]').click();await other.locator('#offer-dialog').waitFor({state:'hidden'});
-  await page.locator('[data-edit]').first().click();await page.locator('#price-input').fill('860');await page.locator('#offer-form button[type="submit"]').click();await page.locator('#offer-error').waitFor({state:'visible'});
-  assert.equal(await page.locator('#offer-dialog').isVisible(),true);assert((await page.locator('#offer-error').innerText()).includes('資料已被他人更新'));
-  await page.reload();await page.waitForSelector('[data-offer-id]');assert((await priceText()).includes('$870'));
-  await page.locator('#sidebar-audit').click();await page.locator('.audit-item').first().waitFor();assert((await page.locator('#audit-body').innerText()).includes('匯入'));
-  await page.locator('[data-close="audit-dialog"]').click();
-  await page.setViewportSize({width:768,height:1024});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.screenshot({path:'artifacts/tablet-flow.png',fullPage:true});
-  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.screenshot({path:'artifacts/mobile-flow.png',fullPage:true});
-  assert.deepEqual(failures,[]);
-  const result={passed:true,checks:['範例與正式資料隔離','商品連結待查價','新增與編輯','最低價與價差','含運比較排除未知運費','篩選仍保持全平台最低價基準','錯誤匯入阻擋','批次匯入','不同規格分組','重新整理後保存','CSV 匯出','搜尋與刪除','他人已更新時 409 提示','操作紀錄','桌面／平板／手機無水平溢出','無 JavaScript 錯誤']};
-  fs.writeFileSync('artifacts/ui-results.json',JSON.stringify(result,null,2));
-  console.log(JSON.stringify(result,null,2));await browser.close();
-})().catch(e=>{console.error(e);process.exit(1);});
+  const nav = href => page.locator(`.nav-page[href="${href}"]`).click();
+  const text = selector => page.locator(selector).innerText();
+  const rowOf = (selector, hasText) => page.locator(selector, {hasText}).first();
+
+  // ---- login, 查價 is the default page with exactly four nav items ----
+  await page.goto(base);
+  await page.fill('[name="employeeNo"]', '0001'); await page.fill('[name="password"]', 'password1'); await page.click('button[type="submit"]');
+  await page.waitForSelector('#s-form');
+  assert.equal(await page.locator('.nav-page').count(), 4);
+  assert.equal(await page.locator('#page-title').innerText(), '查價');
+  await page.waitForFunction(() => document.getElementById('pending-badge').textContent === '3');
+  assert.equal(await page.locator('#s-recent [data-keyword]').count(), 3);
+  await snap('search-recent');
+
+  // ---- 查價: one table for all sources, sort, filter ----
+  await page.locator('#s-recent [data-keyword]').first().click();
+  await page.waitForSelector('#s-body tr[data-i]');
+  assert.equal(await page.locator('#s-body tr[data-i]').count(), 10);
+  const tags = await page.locator('#s-body .src-tag').allInnerTexts();
+  for (const t of ['momo', '蝦皮', '酷澎']) assert(tags.includes(t), t);
+  assert((await text('#s-status')).includes('momo 6 筆'));
+  assert.equal(await page.locator('#s-source').inputValue(), 'all');
+  assert((await rowOf('#s-body tr', '展示品').innerText()).includes('$88'));        // default: price ascending
+  await page.locator('[data-sort="price"]').click();
+  assert((await page.locator('#s-body tr').first().innerText()).includes('$480'));  // descending
+  await page.locator('[data-sort="title"]').click();
+  assert.equal(await page.locator('#s-table th[aria-sort="ascending"]').count(), 1);
+  await page.locator('[data-sort="price"]').click();
+  await page.locator('#s-filter [data-filter="momo"]').click();
+  assert.equal(await page.locator('#s-body tr[data-i]').count(), 6);
+  await page.locator('#s-filter [data-filter="all"]').click();
+  assert.equal(await page.locator('#s-body tr[data-i]').count(), 10);
+  assert((await text('#s-summary')).includes('同規格摘要'));
+  await snap('search-results');
+
+  // ---- 設定規格, 不使用, 加入追蹤 ----
+  await rowOf('#s-body tr', '0.5吋／1吋').locator('[data-act="spec"]').click();
+  await page.fill('#class-form [name="model"]', '1530-0'); await page.fill('#class-form [name="quantity"]', '12'); await page.fill('#class-form [name="unit"]', '入');
+  await page.locator('#class-form button[type="submit"]').click();
+  await page.locator('#class-dialog').waitFor({state: 'hidden'});
+  assert((await rowOf('#s-body tr', '0.5吋／1吋').innerText()).includes('人工設定'));
+  await rowOf('#s-body tr', '3M 15301').locator('[data-act="exclude"]').click();
+  await page.waitForSelector('#s-body tr.is-excluded');
+  await page.locator('#s-body tr.is-excluded [data-act="exclude"]').click();
+  await page.waitForSelector('#s-body tr.is-excluded', {state: 'detached'});
+
+  await rowOf('#s-body tr', '示範藥局').locator('[data-act="track"]').click();
+  const form = '#tracked-form';
+  assert.deepEqual(await page.evaluate(() => { const f = document.getElementById('tracked-form').elements; return [f.keyword.value, f.model.value, f.packageQuantity.value, f.packageUnit.value, f.name.value]; }),
+    ['3M 1530-0', '1530-0', '12', '入', '3M 1530-0 通氣膠帶 半吋 12入']);
+  await page.fill(`${form} [name="price_shopee"]`, '330'); await page.fill(`${form} [name="price_momo"]`, '310');
+  await page.locator(`${form} .advanced summary`).click();
+  await page.fill(`${form} [name="momoKeyword"]`, 'UI momo 關鍵字');
+  await page.locator(`${form} button[type="submit"]`).click();
+  await page.locator('#tracked-dialog').waitFor({state: 'hidden'});
+  assert((await text('#toast')).includes('已新增追蹤商品'));
+
+  // ---- 追蹤商品 list: three platform columns, 最需要注意 order, filters ----
+  await nav('#tracked');
+  await page.waitForFunction(() => document.querySelectorAll('#tr-list tr[data-id]').length === 4);
+  assert((await page.locator('#tr-list tr[data-id]').first().innerText()).includes('3M 紙膠帶'));   // largest positive gap first
+  assert((await rowOf('#tr-list tr', '3M 紙膠帶').innerText()).includes('+25.5%'));
+  assert((await page.locator('#tr-list tbody tr').nth(1).innerText()).includes('羅技'));            // pending count breaks the 0-gap tie
+  const newRow = await rowOf('#tr-list tr', '通氣膠帶 半吋 12入').innerText();
+  assert(newRow.includes('我的 $330.00') && newRow.includes('我的 $310.00'));
+  await page.locator('[data-tr-filter="attention"]').click();
+  assert.equal(await page.locator('#tr-list tr[data-id]').count(), 1);
+  await page.locator('[data-tr-filter="pending"]').click();
+  assert.equal(await page.locator('#tr-list tr[data-id]').count(), 2);
+  await page.locator('[data-tr-filter="inactive"]').click();
+  assert.equal(await page.locator('#tr-list tr[data-id]').count(), 1);
+  await page.locator('[data-tr-filter="all"]').click();
+  await snap('tracked-list');
+
+  // ---- detail: platform cards, chart toggles, tooltip ----
+  await rowOf('#tr-list tr', '3M 紙膠帶').click();
+  await page.waitForSelector('#chart-box svg polyline');
+  assert.equal(await page.locator('.pcard').count(), 3);
+  assert((await page.locator('.pcard').first().innerText()).includes('+25.5%'));
+  const lines = () => page.locator('#chart-box svg polyline').count();
+  assert.equal(await lines(), 3);                                  // lowest price of each platform
+  await page.locator('[data-line="shopee:median"]').click();
+  assert.equal(await lines(), 4);
+  await snap('detail');
+  const overlay = await page.locator('.chart-plot .overlay').boundingBox();
+  const hover = () => page.locator('.chart-plot .overlay').hover({position: {x: (overlay.width) * 0.72, y: overlay.height / 2}});
+  await hover();
+  await page.locator('.chart-tip').waitFor({state: 'visible'});
+  const tip = await text('.chart-tip');
+  for (const part of ['蝦皮 最低價', '蝦皮 中位數', 'momo 最低價', '酷澎 最低價', '蝦皮 我的售價', 'momo 我的售價']) assert(tip.includes(part), part);
+  await snap('chart-tooltip', {locator: '#chart-box', prep: async () => { await page.locator('#chart-box').scrollIntoViewIfNeeded(); const b = await page.locator('.chart-plot .overlay').boundingBox(); await page.mouse.move(b.x + b.width * 0.72, b.y + b.height / 2); }});
+  await page.locator('[data-range="1y"]').click();
+  assert.equal(await page.locator('#chart-box [data-range="1y"].selected').count(), 1);
+  await page.locator('[data-range="3m"]').click();
+
+  // ---- 調整售價 (one platform) ----
+  await page.locator('[data-price="momo"]').click();
+  await page.fill('#price-form [name="note"]', '介面測試');
+  await snap('price-dialog', {full: false, prep: async () => { await page.fill('#price-form [name="price"]', '295'); }});
+  await page.locator('#price-form button[type="submit"]').click();
+  await page.locator('#price-dialog').waitFor({state: 'hidden'});
+  assert((await page.locator('.pcard').nth(1).innerText()).includes('$295.00'));
+  assert((await text('#tracked-detail-view')).includes('介面測試'));
+  assert.equal(await lines(), 4);                                  // chart toggles survive the refresh
+
+  // ---- 手動比價: add, edit, delete ----
+  await page.locator('#manual-add').click();
+  const manual = '#manual-form';
+  await page.selectOption(`${manual} [name="platform"]`, 'coupang');
+  await page.fill(`${manual} [name="seller"]`, 'UI 賣家'); await page.fill(`${manual} [name="price"]`, '260'); await page.fill(`${manual} [name="note"]`, '現場看到');
+  await snap('manual-form', {full: false});
+  await page.locator(`${manual} button[type="submit"]`).click();
+  await page.locator('#manual-dialog').waitFor({state: 'hidden'});
+  assert((await rowOf('.panel tr', 'UI 賣家').innerText()).includes('計入'));
+  assert((await page.locator('.pcard').nth(2).innerText()).includes('$260.00'));    // lowest for 酷澎 is now the manual price
+  await rowOf('.panel tr', 'UI 賣家').locator('[data-manual-edit]').click();
+  await page.fill(`${manual} [name="price"]`, '265');
+  await page.locator(`${manual} button[type="submit"]`).click();
+  await page.locator('#manual-dialog').waitFor({state: 'hidden'});
+  assert((await rowOf('.panel tr', 'UI 賣家').innerText()).includes('$265.00'));
+  assert((await rowOf('.panel tr', '示範旗艦店').innerText()).includes('已過期，不計入'));
+  await rowOf('.panel tr', 'UI 賣家').locator('[data-manual-del]').click();
+  await page.locator('#confirm-delete').click();
+  await page.waitForFunction(() => !document.getElementById('tracked-detail-view').innerText.includes('UI 賣家'));
+
+  // ---- judging in the detail page updates the nav badge ----
+  assert.equal(await page.locator('#pending-badge').innerText(), '3');
+  await rowOf('#tracked-detail-view tr', '0.5吋／1吋').locator('[data-judge="same"]').click();
+  await page.waitForFunction(() => document.getElementById('pending-badge').textContent === '2');
+  assert((await text('[data-tab="pending"]')).includes('1'));
+
+  // ---- 待確認 page: grouped by product, judge in place ----
+  await nav('#pending');
+  await page.waitForFunction(() => document.querySelectorAll('#pending-list .panel').length === 2);
+  assert.equal(await page.locator('#pending-list .panel a[href^="#tracked/"]').count(), 2);
+  await snap('pending');
+  await rowOf('#pending-list .panel', '羅技').locator('[data-judge="not_same"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('#pending-list .panel').length === 1);
+  assert.equal(await page.locator('#pending-badge').innerText(), '1');
+
+  // ---- 操作紀錄 ----
+  await nav('#audit');
+  await page.waitForSelector('#audit-list tr');
+  const audit = await text('#audit-list');
+  for (const part of ['調整售價', '手動比價新增', '手動比價刪除', '判斷', '追蹤新增', '設定規格']) assert(audit.includes(part), part);
+  await snap('audit');
+
+  assert.deepEqual(failures, []);
+  console.log(JSON.stringify({passed: true, checks: ['查價合併表格與排序、篩選', '設定規格、不使用、加入追蹤', '追蹤商品列表三平台與注意度排序', '走勢圖切換與浮動框', '調整售價', '手動比價新增修改刪除', '判斷與待確認頁、導覽徽章', '操作紀錄', '390px 無橫向捲動']}, null, 2));
+  await browser.close();
+})().catch(e => { console.error(e); process.exit(1); });

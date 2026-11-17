@@ -2,7 +2,12 @@
 
 > 本文件是唯一目前進度與待辦入口，不是永久規則來源。
 
-## 目前基準 — V1.3.0（Build 0）
+## 目前基準 — V1.4.0（Build 0）
+
+- WO-1.4.0 已實作於分支 `cypricedesk/v1.4.0-redesign`：統一查價、三平台售價比價、單張多線走勢圖、待確認佇列、手動比價（見 `docs/work-orders/WO-1.4.0.md`）。本機測試與截圖已完成；**尚未部署、未對 momo／飛比做實機測試**。
+- **下一版：CY Web 商品匯入與我的售價改以 CY Web 為準**（取代 CSV 批次匯入；本版「CY Web 品號」欄位只儲存與顯示，供下一版連結）。價格異動提醒留待之後版本。
+
+## V1.3.0 基準
 
 - WO-1.3.0 已實作於分支 `cypricedesk/feature-tracked-products`（建立於 V1.2.0 之上）：追蹤商品、Cron 定期查價、自動分組與人工判斷、自己的售價紀錄、CY Web 風格介面。本機 `npm test`、Python unittest、build、scan、`wrangler deploy --dry-run`（含 crons）通過；**尚未部署、未對 momo／飛比做實機測試**。細節見 `docs/work-orders/WO-1.3.0.md` §8。
 

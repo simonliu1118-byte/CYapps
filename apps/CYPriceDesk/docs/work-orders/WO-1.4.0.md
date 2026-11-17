@@ -1,6 +1,6 @@
 # WO-1.4.0 介面改版：統一查價、三平台售價比價、單張多線走勢圖與待確認佇列（第四階段）
 
-- 狀態：待實作
+- 狀態：已實作，待審查
 - 分支：`cypricedesk/v1.4.0-redesign`（自 `main` 分出）　PR：（執行者填）
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`、WO-1.1.0～WO-1.3.0、本目錄 `README.md`
 
@@ -149,8 +149,36 @@ V1.3.2 上線實測後：
 ## 7. 完成報告（執行者填）
 
 ### 7.1 驗收清單結果
+
+- [x] 2.1～2.9 全部符合（導覽四頁含徽章、查價合併表、追蹤商品三平台與注意度排序、詳情、走勢圖、待確認頁、風格與手機）。
+- [x] 手動比價、售價調整、追蹤商品、判斷的寫入都有 audit，且與資料變更在同一個 D1 batch（`tests/tracking.test.js` 驗證 batch 內語句數與 audit 動作）。
+- [x] `wrangler d1 migrations apply DB --local` 從空庫套用 0001～0004 成功。
+- [x] `npm test`、`tests/ui.test.cjs`、fetcher unittest、build、public-package scan、`wrangler deploy --dry-run` 通過。
+- [x] 文件依 3.4 更新（`VERSION` 1.4.0、`BUILD` 0、`package.json`、CHANGELOG、README、TODO、WORK_HANDOFF、本目錄 README、PROJECT_RULES）。
+- [x] 截圖如 §5（1440／390，見 7.4）。
+- [x] commit 身分 `simonliu1118-byte`（noreply email）。
+
 ### 7.2 偏離與需審查決定的事項
+
+- 查價「全部」採前端依序呼叫既有 `/api/search`（momo 與飛比並行，蝦皮後接酷澎以共用快取），未新增合併 API（§3.2 允許擇一）。
+- 「最近查價」取自 `search_cache`，該表只保留 1 天，所以只涵蓋最近一天內的關鍵字；排程查價用的關鍵字也會出現在其中（全站共用）。
+- 操作紀錄改為獨立頁面（原為對話框），顯示最近 100 筆。
+- 手機表格一律改為橫向捲動（移除 V1.3 的卡片式堆疊，因為卡片式會隱藏可排序的表頭）。查價結果表在 390 寬時價格欄需向右捲動才看得到。
+- 「同規格摘要」沿用既有每單位推算價（`catalog-core.js` 的 `groups`），表上方一行最多列兩組、其餘以「另有 N 組」帶過；原本的規格分面篩選下拉已移除（§2.2 未列）。
+- 調整售價需填新價格，不提供「清除售價」；平台要停止比價目前只能在建立時留空。
+- 詳情頁移除「歷次同規格價格」表（由走勢圖取代）；走勢圖資料來自 `price_observations`，判斷改變不會回頭改寫歷史觀測。
+- `group_summaries` 仍照舊寫入但前端已不使用，留待審查決定是否移除。
+- 刪除 `tests/core.test.js`、`tests/app-flow.test.js`（對應已移除的比價總覽與 CSV），由 `tests/compare.test.js` 取代；`tests/ui.test.cjs` 需以 `SEED=1` 的本機 server 執行。
+
 ### 7.3 指令輸出摘要
+
+- `npm test`：tests 33、pass 33、fail 0。
+- `python -m unittest discover -s fetcher/tests`：Ran 18 tests，OK（fetcher 未改；本機先依 `requirements.txt` 安裝相依套件）。
+- `tests/ui.test.cjs`（`PORT=4173 SEED=1 NO_GAP=1 node tests/support/local-server.mjs`）：`passed: true`，另斷言各頁在 390px 無橫向捲動、無 pageerror／5xx。
+- CI 同款檢查：`node --check src/*.js public/*.js scripts/*.mjs` 全部通過；`npm run build` 成功；`python3 ../../.github/scripts/scan-public-package.py dist` → Public artifact safety scan passed；以 CI 假值 render 設定後 `wrangler deploy --dry-run` 通過；`wrangler d1 migrations apply DB --local` 0001～0004 皆成功。
+
 ### 7.4 截圖
+
+輸出於 `/tmp/claude-0/-home-user/04d2ad10-f9b3-5958-aff8-f556061b5368/scratchpad/wo140/`（不在 repo），每張都有 `-desktop`（1440）與 `-mobile`（390）：`search-results`、`search-recent`、`tracked-list`、`detail`（三平台卡＋走勢圖＋候選）、`chart-tooltip`、`pending`、`manual-form`、`price-dialog`、`audit`。
 
 ## 8. 審查紀錄（審查者填）
