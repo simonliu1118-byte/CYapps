@@ -3,7 +3,7 @@
 ## 2.3.62 — 2026/11/17
 
 - 公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job 層 `env`，GitHub variables 傳入的部署識別碼因此外洩。`REPO_POLICY.md` 新增規則：deploy workflow 不得經由 GitHub variables 傳遞部署識別碼，須部署時從 Cloudflare 解析並先遮蔽，或改用 secrets。
-- 新增共用解析器 `.github/scripts/resolve-deploy-runtime.mjs`（含測試與 `deploy-resolver-check.yml`），CYPriceDesk、CYAccountingWeb 部署改用；CYID 的 `CYID_D1_DATABASE_ID` 由 variable 改為 secret。不變更任何 App 版本（使用者 2026-11-17）。
+- 新增共用解析器 `.github/scripts/resolve-deploy-runtime.mjs`（含測試與 `deploy-resolver-check.yml`），CYPriceDesk、CYAccountingWeb 部署改用；CYID 的 `CYID_D1_DATABASE_ID` 由 variable 改為 secret（CYID Consumer Impact: NONE，consumer 契約、API 與版本不變）。不變更任何 App 版本（使用者 2026-11-17）。
 
 ## 2.3.61 — 2026/11/17
 
