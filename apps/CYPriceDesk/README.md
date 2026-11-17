@@ -26,7 +26,7 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 | `src/search.js`、`src/fetcher-client.js` | `GET /api/search`：D1 快取、間隔、冷卻，再以簽章呼叫 fetcher |
 | `src/tracking.js`、`src/tracking-run.js`、`src/grouping.js` | 追蹤商品 API、單次查價與排程、自動分組（純函式） |
 | `src/classifications.js` | 人工規格分類 API（D1、全站共用、依來源隔離、寫 audit） |
-| `fetcher/` | Python 抓價服務（Vercel）：`api/index.py`、`momo.py`、`feebee.py`、`tests/` |
+| `fetcher/` | Python 抓價服務（Vercel）：`app.py`（Vercel Flask 預設入口）、`momo.py`、`feebee.py`、`tests/` |
 | `public/tracked.js`、`public/shell.js` | 追蹤商品頁；頁面切換、使用者選單 |
 | `public/search.js`、`public/catalog-core.js` | 自動查價頁；規格解析與單價統計（瀏覽器與 Worker 共用） |
 | `public/core.js` | 驗證、臺北時間、分組、價格比較、CSV、「相同商品規格＋連結保留較新查價」的唯一實作；瀏覽器與 Worker 共用同一份 |

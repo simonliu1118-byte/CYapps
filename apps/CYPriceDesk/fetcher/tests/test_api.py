@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from api.index import app, sign  # noqa: E402
+from app import app, sign  # noqa: E402
 
 SECRET = "test-secret"
 BODY = json.dumps({"keyword": "羅技 M331", "page": 1}, ensure_ascii=False, separators=(",", ":")).encode()

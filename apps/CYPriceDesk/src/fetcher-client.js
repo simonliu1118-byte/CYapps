@@ -1,5 +1,5 @@
 // Calls the Vercel fetcher with an HMAC-SHA256 signature over `timestamp + "." + raw body`
-// (hex digest, key = CYPD_FETCHER_SECRET). fetcher/api/index.py verifies the same format.
+// (hex digest, key = CYPD_FETCHER_SECRET). fetcher/app.py verifies the same format.
 const TIMEOUT_MS = 25000;
 
 export async function signBody(secret, timestamp, body) {

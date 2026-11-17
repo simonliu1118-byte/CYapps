@@ -1,4 +1,4 @@
-// Replaces globalThis.fetch with a fake of the Vercel fetcher: verifies the HMAC headers like fetcher/api/index.py
+// Replaces globalThis.fetch with a fake of the Vercel fetcher: verifies the HMAC headers like fetcher/app.py
 // and answers with fixture JSON. No real network access.
 import {signBody} from '../../src/fetcher-client.js';
 import {FETCHER_SECRET} from './env.js';
