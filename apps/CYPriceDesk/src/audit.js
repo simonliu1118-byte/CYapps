@@ -13,7 +13,7 @@ const VERDICT = {same: '同規格', other_package: '其他包裝', not_same: '�
 function detailOf(action, before, after) {
   const record = after || before;
   if (action.startsWith('tracked.') && action !== 'tracked.price') return `${record.name}（${record.model}）`;
-  if (action === 'tracked.price') return `${record.name} · ${PLATFORM_LABEL[record.platform]}：${before?.myPrice ?? '未設定'} → ${after.myPrice}`;
+  if (action === 'tracked.price') return `${record.name} · ${PLATFORM_LABEL[record.platform]}：${before?.myPrice ?? '未設定'} → ${after.myPrice ?? '停止比價'}`;
   if (action.startsWith('manual.')) return `${record.name} · ${PLATFORM_LABEL[record.platform]} · ${record.price}${record.seller ? ` · ${record.seller}` : ''}`;
   if (action === 'judgment.update') return `${record.name} · ${PLATFORM_LABEL[record.source]} · ${VERDICT[record.verdict]} · ${record.title}`;
   if (action === 'judgment.delete') return `${record.name} · ${PLATFORM_LABEL[record.source]} · 恢復 ${record.title}`;

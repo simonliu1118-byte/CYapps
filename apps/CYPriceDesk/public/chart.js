@@ -66,7 +66,7 @@ export function createChart(root, data, today, state) {
       return {...l, pts: points};
     }).filter(l => l.pts.length);
     const dots = state.on.has('manual') ? data.manual.map(m => ({...m, n: dayNumber(m.day)})).filter(m => clamp(m.n)) : [];
-    const values = [...shown.flatMap(l => l.pts.map(p => p.value)), ...dots.map(d => d.price)];
+    const values = [...shown.flatMap(l => l.pts.map(p => p.value)).filter(v => v !== null), ...dots.map(d => d.price)];
     empty.hidden = values.length > 0;
     svg.toggleAttribute('hidden', values.length === 0);
     if (!values.length) { view = null; return; }
@@ -96,9 +96,15 @@ export function createChart(root, data, today, state) {
     for (const l of [...shown].sort((a, b) => order[a.kind] - order[b.kind])) {
       const color = PLATFORM_COLOR[l.platform];
       if (l.kind === 'mine') {
-        let d = '';
-        l.pts.forEach((p, i) => { d += i === 0 ? `M${x(p.n)} ${y(p.value)}` : `H${x(p.n)}V${y(p.value)}`; });
-        el('path', {d: `${d}H${x(end)}`, fill: 'none', stroke: color, 'stroke-width': 5, 'stroke-opacity': .45, 'stroke-linejoin': 'round'});
+        // A blank price (stopped comparing) lifts the pen until the next price.
+        let d = '', prev = null;
+        for (const p of l.pts) {
+          if (prev !== null) d += `H${x(p.n)}`;
+          if (p.value !== null) d += prev !== null ? `V${y(p.value)}` : `M${x(p.n)} ${y(p.value)}`;
+          prev = p.value;
+        }
+        if (prev !== null) d += `H${x(end)}`;
+        if (d) el('path', {d, fill: 'none', stroke: color, 'stroke-width': 5, 'stroke-opacity': .45, 'stroke-linejoin': 'round'});
       } else {
         el('polyline', {points: l.pts.map(p => `${x(p.n)},${y(p.value)}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2, ...(l.kind === 'median' ? {'stroke-dasharray': '6 4'} : {})});
         if (l.kind === 'min') for (const p of l.pts) el('circle', {cx: x(p.n), cy: y(p.value), r: 3, fill: color});
@@ -124,7 +130,7 @@ export function createChart(root, data, today, state) {
     const target = view.start + (px - MARGIN.l) / (width - MARGIN.l - MARGIN.r) * (view.end - view.start);
     const n = view.eventDays.reduce((best, d) => Math.abs(d - target) < Math.abs(best - target) ? d : best);
     const day = dayFrom(n);
-    const rows = view.shown.map(l => ({l, hit: valueAt(l.points, day)})).filter(r => r.hit).map(({l, hit}) => {
+    const rows = view.shown.map(l => ({l, hit: valueAt(l.points, day)})).filter(r => r.hit && r.hit.value !== null).map(({l, hit}) => {
       const stale = l.kind !== 'mine' && hit.day !== day ? `<small>（${esc(hit.day.slice(5).replace('-', '/'))}）</small>` : '';
       return `<div class="tt-row" style="--c:${PLATFORM_COLOR[l.platform]}"><i class="sw sw-${l.kind}"></i><span>${PLATFORM_LABEL[l.platform]} ${KIND_LABEL[l.kind]}</span><b>${money(hit.value)}</b>${stale}</div>`;
     });

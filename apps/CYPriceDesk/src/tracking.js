@@ -163,10 +163,11 @@ export async function handleTrackingApi(request, env, url, actor) {
       const before = toTracked(await getProduct(DB, id));
       if (Number(body.revision) !== before.revision) throw conflict();
       const newPrice = price(body.price, '售價');
-      if (newPrice === null) throw new ApiError(400, '請填入售價');
       const note = String(body.note ?? '').trim().slice(0, 200);
       const now = new Date().toISOString();
       const oldPrice = before.myPrices[body.platform];
+      // A blank price stops comparing on that platform; the change is still recorded.
+      if (newPrice === null && oldPrice === null) throw new ApiError(400, '請填入售價');
       const [result] = await DB.batch([
         DB.prepare(`UPDATE tracked_products SET ${PRICE_COLUMN[body.platform]}=?,revision=revision+1,updated_at=?,updated_by=? WHERE id=? AND revision=?`).bind(newPrice, now, actor.employeeId, id, before.revision),
         DB.prepare('INSERT INTO my_price_changes (product_id,platform,at,actor_employee_id,actor_name,old_price,new_price,note) SELECT ?,?,?,?,?,?,?,? WHERE changes() > 0')

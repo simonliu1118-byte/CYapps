@@ -118,7 +118,7 @@ function renderDetail() {
       <td class="num">${money(m.price)}</td><td>${esc(m.checkedAt)}</td><td>${manualStatus(m)}</td><td>${esc(m.note) || '—'}</td>
       <td><div class="row-actions"><button class="btn small" type="button" data-manual-edit="${esc(m.id)}">修改</button><button class="btn small" type="button" data-manual-del="${esc(m.id)}">刪除</button></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">尚無手動比價。看到其他賣場的價格，可以手動記一筆。</p>'}</section>
   <section class="panel"><div class="panel-head"><h2>售價調整紀錄</h2></div>
-    ${priceChanges.length ? `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>時間</th><th>平台</th><th>操作者</th><th class="num">改前</th><th class="num">改後</th><th>備註</th></tr></thead><tbody>${priceChanges.map(c => `<tr><td>${when(c.at)}</td><td>${tag(c.platform)}</td><td>${esc(c.actorName)}</td><td class="num">${money0(c.oldPrice)}</td><td class="num">${money(c.newPrice)}</td><td>${esc(c.note) || '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">尚無售價紀錄。</p>'}</section>`;
+    ${priceChanges.length ? `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>時間</th><th>平台</th><th>操作者</th><th class="num">改前</th><th class="num">改後</th><th>備註</th></tr></thead><tbody>${priceChanges.map(c => `<tr><td>${when(c.at)}</td><td>${tag(c.platform)}</td><td>${esc(c.actorName)}</td><td class="num">${money0(c.oldPrice)}</td><td class="num">${c.newPrice === null ? '停止比價' : money(c.newPrice)}</td><td>${esc(c.note) || '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">尚無售價紀錄。</p>'}</section>`;
   createChart($('chart-box'), detail.chart, detail.today, chartState);
 }
 

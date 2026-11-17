@@ -1,6 +1,6 @@
 # WO-1.4.0 介面改版：統一查價、三平台售價比價、單張多線走勢圖與待確認佇列（第四階段）
 
-- 狀態：已實作，待審查
+- 狀態：審查通過，待使用者確認合併與部署
 - 分支：`cypricedesk/v1.4.0-redesign`（自 `main` 分出）　PR：（執行者填）
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`、WO-1.1.0～WO-1.3.0、本目錄 `README.md`
 
@@ -182,3 +182,14 @@ V1.3.2 上線實測後：
 輸出於 `/tmp/claude-0/-home-user/04d2ad10-f9b3-5958-aff8-f556061b5368/scratchpad/wo140/`（不在 repo），每張都有 `-desktop`（1440）與 `-mobile`（390）：`search-results`、`search-recent`、`tracked-list`、`detail`（三平台卡＋走勢圖＋候選）、`chart-tooltip`、`pending`、`manual-form`、`price-dialog`、`audit`。
 
 ## 8. 審查紀錄（審查者填）
+
+### 2026-11-17 審查（Claude）— 結論：通過（含審查修正）
+
+- 逐張檢視 §7.4 截圖（1440／390）與主要程式：查價合併表、三平台卡、單張走勢圖（顏色、虛線中位數、階梯售價、浮動框）、候選分頁、手動比價 30 天規則、待確認頁皆符合 §2。
+- 偏離事項（§7.2）接受：前端依序呼叫 `/api/search`、最近查價只涵蓋一天、操作紀錄獨立頁、手機表格橫向捲動、移除「歷次同規格價格」表；`group_summaries` 暫留並記入 `TODO.md`。
+- 審查修正（同分支 commit）：
+  1. 手機 390 查價表價格欄被擠到畫面外：賣家併入「商品／賣家」欄（同候選商品表），表格內操作按鈕不換行。
+  2. 調整售價不能清空，與 §2.3「空白＝不比價」不符：改為可留空（原本無售價時仍需填），調價紀錄顯示「停止比價」，走勢圖該平台售價線中斷。
+  3. `PROJECT_RULES.md` 的修改移出本分支，改走 `governance/*` 分支（依共通規則，專案規則變更另走治理流程）。
+- 驗證：`npm test` 33／33、`tests/ui.test.cjs` passed（重啟乾淨的本機伺服器後連續兩次通過；一次在重用過的伺服器狀態下於走勢圖 overlay 取不到 boundingBox，屬測試資料狀態問題）、build、public-package scan 通過；以 Playwright 另行確認留空售價 API 回 200、詳情頁該平台顯示「未設定」且無 pageerror。
+

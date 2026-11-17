@@ -12,6 +12,7 @@
 - 商品詳情：三張平台卡、單張多線走勢圖（原生 SVG，可切換各線、3 個月／1 年／全部、浮動數值框）、候選商品分頁籤、手動比價表、售價調整紀錄。
 - 待確認頁（`GET /api/pending`）：所有追蹤商品的待確認候選依商品分組，直接判斷。
 - 比價規則與走勢圖資料整理集中於 `public/compare.js`（Worker 與瀏覽器共用）；`public/core.js` 只留 Worker 與介面仍使用的部分。
+- 審查修正：手機查價表賣家併入商品欄，價格欄不需捲動即可看到；表格內操作按鈕不換行。調整售價可留空，表示該平台停止比價（記入調價紀錄，走勢圖該段中斷）。
 - `migrations/0004_redesign.sql`：重建 `tracked_products`、`my_price_changes`（加 `platform`），新增 `manual_comparisons`，移除 `price_records`。正式庫無業務資料，不搬移舊資料。
 
 ## V1.3.2 — 2026-11-17

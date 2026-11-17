@@ -4,14 +4,14 @@
 
 ## 1. 專案定位
 
-- 價格觀測室：查價與追蹤商品整合的價格比較工具，目標是以追蹤商品的定期查價結果作為調整定價的依據（使用者 2026-11-16）。
+- 價格觀測室：手動查價與自動查價整合的價格比較工具，目標是以追蹤商品的定期查價結果作為調整定價的依據（使用者 2026-11-16）。
 - 目前為內部測試階段的原型；功能範圍依工作單逐步擴充。
 
 ## 2. 技術架構
 
 - 後端採 Cloudflare Workers，靜態網站由 Workers Static Assets 提供；前端採瀏覽器原生 HTML／CSS／JavaScript。
 - 資料庫採 Cloudflare D1，binding 固定為 `DB`；schema 以 `migrations/` 為唯一版本來源，不得只在 Dashboard 手動修改。
-- 比價、注意度排序、手動比價計入與走勢圖資料整理以 `public/compare.js` 為唯一實作（規格解析為 `public/catalog-core.js`），Worker 與瀏覽器共用，不建立第二套。
+- 驗證、分組、比價與 CSV 規則以 `public/core.js` 為唯一實作，Worker 與瀏覽器共用，不建立第二套。
 
 ## 3. CYCloud Identity consumer contract
 
@@ -21,8 +21,8 @@
 
 ## 4. 業務授權與資料
 
-- 追蹤商品、比價與價格資料全站只有一份，不分使用者（使用者 2026-11-16）。
-- 有 CYPriceDesk Application Access 的人都可以查價、新增與修改追蹤商品、調整售價、手動比價與判斷，不依 Workspace Role 區分（使用者 2026-11-16）。
+- 價格紀錄全站只有一份，不分使用者（使用者 2026-11-16）。
+- 有 CYPriceDesk Application Access 的人都可以查價、新增、修改、刪除、匯入與匯出，不依 Workspace Role 區分（使用者 2026-11-16）。
 - 所有寫入都必須寫 append-only audit，與資料變更在同一個 D1 batch 內；操作者只取自已解析的 CYID principal。
 
 ## 5. 公開安全與部署

@@ -1,6 +1,6 @@
 # CYPriceDesk — 價格觀測室
 
-**V1.4.0：** 介面改版：統一查價、三平台（蝦皮／momo／酷澎）售價比價、單張多線走勢圖、待確認頁、手動比價；移除比價總覽與手動價格紀錄（含 CSV）。**V1.3.0：** 新增追蹤商品（定期自動查價、同規格比價、自己的售價紀錄），整站介面改為 CY Web 簡潔商務風格（主色已於 V1.4.0 改為 petrol `#0F5E73`）。**V1.2.0：** 新增自動查價（momo、飛比蝦皮、飛比酷澎）、人工規格分類與一鍵加入價格紀錄。**V1.1.0：** 手動查價工具已搬到 Cloudflare Worker＋D1，以 CYID（CYCloud Identity）登入。價格紀錄全站只有一份，有 CYPriceDesk Application Access 的人都能查看、新增、修改、刪除、匯入與匯出，每次寫入都留下 append-only 操作紀錄。自動查價與追蹤商品屬後續工作單（見 `docs/work-orders/README.md`）。
+價格觀測室：查詢 momo、蝦皮、酷澎的市場價格，並追蹤自己的商品——系統每 7～14 天自動查價一次，依同規格比較自己在三個平台的售價與市場最低價，作為調整定價的依據。正式站 https://price.chihyuancm.com/（V1.3.2 起上線，以 CYID 登入）。業務資料全站只有一份，有 CYPriceDesk Application Access 的人都能使用全部功能，每次寫入都留下 append-only 操作紀錄。各版內容見 `CHANGELOG.md`，路線見 `docs/work-orders/README.md`。
 
 - 正式原始碼位置：`simonliu1118-byte/CYapps` 的 `apps/CYPriceDesk/`。
 - 版本來源：`VERSION`（`1.4.0`）、`BUILD`（`0`）；`CYID_CONSUMER_VERSION` 為 `1.0.6`。這只是工程識別，不表示已有正式 GitHub Release 或產品驗收。
@@ -121,12 +121,10 @@ Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRE
 
 Variables：`CF_WORKER_NAME`、`CF_IDENTITY_SERVICE`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`、`CF_CYPD_FETCHER_URL`
 
-### 首次部署前需要使用者完成
+### 部署後
 
-1. 在 CY Web／CYID 註冊 CYPriceDesk Application，取得 Application ID 並授權使用者 Application Access。
-2. 建立 Cloudflare D1 database，記下名稱與 ID。
-3. 建立 GitHub Environment `cypricedesk-production` 並填入上列 Secrets／Variables。
-4. 決定自訂網域並完成 Cloudflare 設定。
-5. 回報後再從 `main` 手動觸發部署；實機驗證（登入、停用帳號後 401、查價、追蹤商品、手動比價與操作紀錄）在部署後另行進行。
+- CYID Application、D1、Environment、自訂網域與 Vercel fetcher 已於 2026-11-16～17 設定完成；目前的部署設定為手填值（`CF_IDENTITY_SERVICE` 直接填正式 CYID Worker 名稱），之後改與 CYAccountingWeb 一致，見 `TODO.md`。
+- 公開 repo 的部署 log 會印出 job 層 `env` 的部署識別值；每次部署後刪除該次 run 的 log，直到改用部署時查詢（見 `TODO.md`）。
+- 部署後實機確認：登入、查價（各來源）、追蹤商品、立即查價、手動比價、待確認與操作紀錄。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved. 授權以 repository 根 `LICENSE` 為準。

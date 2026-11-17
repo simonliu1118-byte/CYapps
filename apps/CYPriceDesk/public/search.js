@@ -126,12 +126,11 @@ function render() {
   const rows = visibleRows();
   $('s-body').innerHTML = rows.length ? rows.map(p => `<tr class="${p.excluded ? 'is-excluded' : ''}" data-i="${p.i}">
     <td>${tag(p.source)}</td>
-    <td><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.title)}</a></td>
-    <td>${esc(p.seller) || '—'}</td>
+    <td><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.title)}</a>${p.seller ? `<small>${esc(p.seller)}</small>` : ''}</td>
     <td class="num">${p.price === null ? '<span class="muted">未取得</span>' : money(p.price)}</td>
     <td>${specCell(p)}</td>
     <td><div class="row-actions"><button type="button" class="btn small" data-act="spec">設定規格</button><button type="button" class="btn small" data-act="exclude">${p.excluded ? '取消排除' : '不使用'}</button><button type="button" class="btn small" data-act="track">加入追蹤</button></div></td></tr>`).join('')
-    : `<tr><td colspan="6" class="muted">${effective.length ? '沒有符合篩選的商品。' : '沒有查到商品。'}</td></tr>`;
+    : `<tr><td colspan="5" class="muted">${effective.length ? '沒有符合篩選的商品。' : '沒有查到商品。'}</td></tr>`;
   for (const b of document.querySelectorAll('#s-table .sort')) b.parentElement.setAttribute('aria-sort', b.dataset.sort === sortKey ? (sortDir > 0 ? 'ascending' : 'descending') : 'none');
   renderSummary(rows);
   $('s-more').hidden = !momoNext;

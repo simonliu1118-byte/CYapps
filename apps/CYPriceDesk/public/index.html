@@ -44,8 +44,7 @@
         <div class="s-bar"><div class="segmented" id="s-filter" role="group" aria-label="來源篩選"></div><p id="s-summary" class="muted"></p></div>
         <div class="table-wrap"><table class="data-table wide" id="s-table"><thead><tr>
           <th><button class="sort" type="button" data-sort="source">來源</button></th>
-          <th><button class="sort" type="button" data-sort="title">商品名稱</button></th>
-          <th>賣家</th>
+          <th><button class="sort" type="button" data-sort="title">商品／賣家</button></th>
           <th class="num"><button class="sort" type="button" data-sort="price">價格</button></th>
           <th>規格</th><th>操作</th></tr></thead><tbody id="s-body"></tbody></table></div>
         <div class="s-more"><button class="btn" id="s-more" type="button" hidden>載入更多 momo</button></div>
@@ -132,7 +131,7 @@
     <div class="dialog-body">
       <p class="muted" id="price-platform"></p>
       <div class="form-grid">
-        <label class="wide">新售價（NT$）<input name="price" type="number" min="0" step="0.01" required></label>
+        <label class="wide">新售價（NT$，留空＝不在此平台比價）<input name="price" type="number" min="0" step="0.01"></label>
         <label class="wide">備註<input name="note" maxlength="200"></label>
       </div>
       <div class="form-error" id="price-error" role="alert" hidden></div>
