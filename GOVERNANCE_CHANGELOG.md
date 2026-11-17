@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.61 — 2026/11/17
+
+- CYPriceDesk 專案規則配合 V1.4.0 改版：移除手動價格紀錄與 CSV 後，共用實作改為 `public/compare.js`（比價、注意度、手動比價計入、走勢圖資料）與 `public/catalog-core.js`（規格解析）；業務授權文字改為追蹤商品、售價、手動比價與判斷，授權範圍不變（使用者 2026-11-16、11-17）。
+- 專案定位由「原型」改為已上線、內部使用。僅更新 CYPriceDesk 專案規則，不變更其他 App。
+
 ## 2.3.60 — 2026/11/16
 
 - CYPriceDesk 改為 Cloudflare Workers＋Static Assets＋D1，採用 CYID consumer standard（non-core consumer）。
