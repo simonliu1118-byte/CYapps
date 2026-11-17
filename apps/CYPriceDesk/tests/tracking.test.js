@@ -72,31 +72,103 @@ const momoResults = titles => ({status: 'ok', raw_count: titles.length, checked_
   results: titles.map(([title, code, price]) => ({title, code, price, relevance: 1, match_label: '型號相關', url: 'https://www.momoshop.com.tw/product/' + code}))});
 const feebeeResults = (...items) => ({status: 'ok', checked_at: '2026-11-16T02:00:00+00:00', source_url: 'https://feebee.com.tw/s/x/',
   markets: {shopee: {status: 'ok', results: items.map(([title, price, seller], i) => ({title, price, url: 'https://feebee.com.tw/p/' + i, merchant: '蝦皮購物', seller}))}, coupang: {status: 'ok', results: []}}});
-const product = {name: '3M 紙膠帶 半吋 12入', model: '1530-0', attributes: {尺寸: '0.5吋'}, packageQuantity: 12, packageUnit: '入', myPrice: 320, momoKeyword: '3M 1530-0', feebeeKeyword: '3M 1530-0 紙膠帶'};
+const product = {name: '3M 紙膠帶 半吋 12入', model: '1530-0', attributes: {尺寸: '0.5吋'}, packageQuantity: 12, packageUnit: '入', cywebItemNo: 'A-100', keyword: '3M 1530-0',
+  myPrices: {shopee: 320, momo: 300, coupang: ''}, myUrls: {shopee: 'https://shopee.tw/example'}};
 const TITLES = [['3M 1530-0 通氣膠帶 半吋 12入', 'A1', 259], ['3M 1530-0 通氣膠帶 半吋 6入', 'A2', 140], ['3M 1530-0 通氣膠帶 12入', 'A3', 250], ['3M 15301 膠帶 半吋 12入', 'A4', 99], ['3M 1530-0 通氣膠帶 半吋 12入 限量', 'A5', 275]];
 
-test('追蹤商品：建立、修改、改售價都寫紀錄與 audit；revision 衝突回 409', async t => {
+test('追蹤商品：建立、修改、改售價（分平台）都寫紀錄與 audit，且與資料同一個 batch；revision 衝突回 409', async t => {
   const a = await setup();
   t.after(a.fetcher.restore);
-  assert.equal((await a.call('POST', '/api/tracked', {...product, momoKeyword: '', feebeeKeyword: ''})).status, 400);
+  const batches = [];
+  const batch = a.env.DB.batch;
+  a.env.DB.batch = async list => {batches.push(list.length);return batch(list);};
+  assert.equal((await a.call('POST', '/api/tracked', {...product, keyword: ''})).status, 400);
   const created = await (await a.call('POST', '/api/tracked', product)).json();
   const id = created.product.id;
-  assert.equal(created.product.myPrice, 320);
+  assert.deepEqual(created.product.myPrices, {shopee: 320, momo: 300, coupang: null});
+  assert.equal(created.product.cywebItemNo, 'A-100');
   const soon = created.product.nextRunAt - Date.now();
   assert(soon >= -1000 && soon <= 8 * DAY);
-  const edited = await a.call('PUT', `/api/tracked/${id}`, {...product, name: '改名', myPrice: 1, revision: 1});
+  const edited = await a.call('PUT', `/api/tracked/${id}`, {...product, name: '改名', myPrices: {shopee: 1}, momoKeyword: 'momo 專用', revision: 1});
   assert.equal(edited.status, 200);
   const body = await edited.json();
-  assert.equal(body.product.name, '改名');assert.equal(body.product.myPrice, 320); // 售價不能由編輯改
+  assert.equal(body.product.name, '改名');assert.equal(body.product.myPrices.shopee, 320); // 售價不能由編輯改
+  assert.equal(body.product.momoKeyword, 'momo 專用');
   assert.equal((await a.call('PUT', `/api/tracked/${id}`, {...product, revision: 1})).status, 409);
-  const priced = await a.call('PUT', `/api/tracked/${id}/price`, {price: 350, note: '調價', revision: 2});
+  assert.equal((await a.call('PUT', `/api/tracked/${id}/price`, {price: 350, revision: 2})).status, 400); // 缺平台
+  const priced = await a.call('PUT', `/api/tracked/${id}/price`, {platform: 'coupang', price: 280, note: '新增酷澎', revision: 2});
   assert.equal(priced.status, 200);
-  assert.equal((await a.call('PUT', `/api/tracked/${id}/price`, {price: 360, revision: 2})).status, 409);
+  assert.equal((await a.call('PUT', `/api/tracked/${id}/price`, {platform: 'shopee', price: 360, revision: 2})).status, 409);
   const d = await (await a.call('GET', `/api/tracked/${id}`)).json();
-  assert.deepEqual(d.priceChanges.map(c => [c.oldPrice, c.newPrice, c.note, c.actorName]), [[320, 350, '調價', '測試員工'], [null, 320, '建立追蹤商品', '測試員工']]);
+  assert.deepEqual(d.priceChanges.map(c => [c.platform, c.oldPrice, c.newPrice, c.note, c.actorName]),
+    [['coupang', null, 280, '新增酷澎', '測試員工'], ['momo', null, 300, '建立追蹤商品', '測試員工'], ['shopee', null, 320, '建立追蹤商品', '測試員工']]);
+  assert.deepEqual(batches, [4, 2, 3]);   // 建立：商品＋兩筆售價＋audit，修改，改售價
   assert.deepEqual(a.sql.prepare("SELECT action FROM audit_log WHERE action LIKE 'tracked.%' ORDER BY id").all().map(x => x.action), ['tracked.create', 'tracked.update', 'tracked.price']);
   const entries = (await (await a.call('GET', '/api/audit')).json()).entries;
-  assert(entries.some(e => e.action === 'tracked.price' && e.detail.includes('320 → 350')));
+  assert(entries.some(e => e.action === 'tracked.price' && e.detail.includes('酷澎：未設定 → 280')));
+});
+
+test('手動比價：新增、修改、刪除各一筆 audit 且同一 batch；日期與 revision 檢查；30 天內才計入平台比較', async t => {
+  const a = await setup();
+  t.after(a.fetcher.restore);
+  const id = (await (await a.call('POST', '/api/tracked', product)).json()).product.id;
+  const batches = [];
+  const batch = a.env.DB.batch;
+  a.env.DB.batch = async list => {batches.push(list.length);return batch(list);};
+  const day = offset => new Date(Date.now() + 8 * HOUR - offset * DAY).toISOString().slice(0, 10);
+  const manual = {platform: 'shopee', seller: '示範店', url: 'https://shopee.tw/x', price: 250, checkedAt: day(0), note: '現場看到'};
+  assert.equal((await a.call('POST', `/api/tracked/${id}/manual`, {...manual, platform: 'pchome'})).status, 400);
+  assert.equal((await a.call('POST', `/api/tracked/${id}/manual`, {...manual, checkedAt: day(-1)})).status, 400);   // 明天
+  const created = await a.call('POST', `/api/tracked/${id}/manual`, manual);
+  assert.equal(created.status, 201);
+  const mid = (await created.json()).manual.id;
+  const listed = async () => (await (await a.call('GET', '/api/tracked')).json()).products[0];
+  assert.deepEqual([(await listed()).platforms.shopee.min, (await listed()).platforms.shopee.warn], [250, true]);
+  assert.equal((await a.call('PUT', `/api/tracked/${id}/manual/${mid}`, {...manual, price: 255, revision: 1})).status, 200);
+  assert.equal((await a.call('PUT', `/api/tracked/${id}/manual/${mid}`, {...manual, price: 1, revision: 1})).status, 409);
+  assert.equal((await a.call('PUT', `/api/tracked/${id}/manual/${mid}`, {...manual, price: 255, checkedAt: day(31), revision: 2})).status, 200);
+  const detail = await (await a.call('GET', `/api/tracked/${id}`)).json();
+  assert.deepEqual(detail.manual.map(m => [m.price, m.counted]), [[255, false]]);            // 超過 30 天，不計入
+  assert.equal(detail.platforms.shopee.min, null);
+  assert.equal((await a.call('DELETE', `/api/tracked/${id}/manual/${mid}?revision=2`)).status, 409);
+  assert.equal((await a.call('DELETE', `/api/tracked/${id}/manual/${mid}?revision=3`)).status, 200);
+  assert.deepEqual(batches, [2, 2, 2, 2]);
+  assert.deepEqual(a.sql.prepare("SELECT action FROM audit_log WHERE action LIKE 'manual.%' ORDER BY id").all().map(x => x.action), ['manual.create', 'manual.update', 'manual.update', 'manual.delete']);
+});
+
+test('列表：三平台各自比較與「最需要注意」資料；待確認清單與導覽數字；最近查價', async t => {
+  const a = await setup();
+  t.after(a.fetcher.restore);
+  a.fetcher.respond = ({path}) => path === '/v1/momo' ? momoResults(TITLES) : feebeeResults(['3M 1530-0 通氣膠帶 半吋 12入', 262, '示範藥局']);
+  const id = (await (await a.call('POST', '/api/tracked', product)).json()).product.id;
+  await a.call('POST', `/api/tracked/${id}/run`);
+  const p = (await (await a.call('GET', '/api/tracked')).json()).products[0];
+  assert.deepEqual([p.platforms.shopee.min, p.platforms.momo.min, p.platforms.coupang.min], [262, 259, null]);
+  assert.deepEqual([p.platforms.shopee.warn, p.platforms.momo.warn, p.platforms.coupang.warn], [true, true, false]);   // 320 vs 262、300 vs 259
+  assert.equal(Math.round(p.attention * 1000), 221);
+  assert.equal(p.pendingCount, 1);
+  const pending = await (await a.call('GET', '/api/pending')).json();
+  assert.deepEqual([pending.count, pending.products.length, pending.products[0].candidates[0].listingKey], [1, 1, 'A3']);
+  await a.call('PUT', `/api/tracked/${id}/judgments`, {source: 'momo', listingKey: 'A3', verdict: 'not_same'});
+  assert.equal((await (await a.call('GET', '/api/pending')).json()).count, 0);
+  assert.deepEqual((await (await a.call('GET', '/api/search/recent')).json()).keywords.sort(), ['3M 1530-0'].sort());
+  const detail = await (await a.call('GET', `/api/tracked/${id}`)).json();
+  assert.equal(detail.chart.platforms.momo.min.length, 1);
+  assert.deepEqual(detail.chart.platforms.shopee.mine.map(x => x.value), [320]);
+});
+
+test('查詢關鍵字：共用關鍵字為預設，個別覆寫優先；蝦皮與酷澎共用飛比關鍵字', async t => {
+  const a = await setup();
+  t.after(a.fetcher.restore);
+  a.fetcher.respond = ({path}) => path === '/v1/momo' ? momoResults(TITLES) : feebeeResults();
+  const shared = (await (await a.call('POST', '/api/tracked', product)).json()).product.id;
+  await a.call('POST', `/api/tracked/${shared}/run`);
+  assert.deepEqual(a.fetcher.calls.map(c => [c.path, c.payload.keyword]), [['/v1/momo', '3M 1530-0'], ['/v1/feebee', '3M 1530-0']]);
+  a.open();
+  a.fetcher.calls.length = 0;
+  const override = (await (await a.call('POST', '/api/tracked', {...product, name: '覆寫', momoKeyword: 'momo 專用', feebeeKeyword: '飛比專用'})).json()).product.id;
+  await a.call('POST', `/api/tracked/${override}/run`);
+  assert.deepEqual(a.fetcher.calls.map(c => [c.path, c.payload.keyword]), [['/v1/momo', 'momo 專用'], ['/v1/feebee', '飛比專用']]);
 });
 
 test('立即查價：分組、儲存方式 B；判斷下次查價自動套用；標題變了回待確認', async t => {
@@ -120,7 +192,7 @@ test('立即查價：分組、儲存方式 B；判斷下次查價自動套用；
   assert.equal((await a.call('PUT', `/api/tracked/${id}/judgments`, {source: 'momo', listingKey: 'nope', verdict: 'same'})).status, 404);
   assert.equal((await groups()).A5, 'excluded');
   const listed = (await (await a.call('GET', '/api/tracked')).json()).products[0];
-  assert.deepEqual([listed.sameCount, listed.sameMin, listed.pendingCount], [3, 250, 0]);
+  assert.deepEqual([listed.platforms.momo.count, listed.platforms.momo.min, listed.pendingCount], [2, 250, 0]);
 
   // Next run: the judgments apply without asking again; A3's title changes, so it is pending again.
   a.open();

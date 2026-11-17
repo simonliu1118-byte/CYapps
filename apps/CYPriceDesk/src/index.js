@@ -5,7 +5,8 @@ import {
   logoutCyid,
   resolveIdentitySession
 } from './identity.js';
-import {handleRecordsApi} from './records.js';
+import {handleAuditApi} from './audit.js';
+import {handlePendingApi} from './pending.js';
 import {handleSearchApi} from './search.js';
 import {handleClassificationsApi} from './classifications.js';
 import {handleTrackingApi} from './tracking.js';
@@ -52,10 +53,11 @@ export default {
     if (pathname === '/api/me' && method === 'GET') {
       return json({employeeNo: principal.employeeNo, displayName: principal.displayName, workspaceRole: principal.workspaceRole});
     }
-    const response = await handleRecordsApi(request, env, url, principal)
+    const response = await handleAuditApi(request, env, url)
       || await handleSearchApi(request, env, url)
       || await handleClassificationsApi(request, env, url, principal)
-      || await handleTrackingApi(request, env, url, principal);
+      || await handleTrackingApi(request, env, url, principal)
+      || await handlePendingApi(request, env, url);
     return response || json({error: '找不到此功能'}, 404);
   },
 

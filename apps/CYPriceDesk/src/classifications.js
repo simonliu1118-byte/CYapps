@@ -1,6 +1,6 @@
 // Manual listing classifications: shared by everyone, isolated per source, every change audited.
 import {ApiError, json, readBody} from './http.js';
-import {auditStmt} from './records.js';
+import {auditStmt} from './audit.js';
 import {sanitizeAttributes} from '../public/catalog-core.js';
 
 const SOURCES = ['momo', 'shopee', 'coupang'];

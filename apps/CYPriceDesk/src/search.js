@@ -76,7 +76,13 @@ export async function querySource(env, source, keyword, page = 1) {
 }
 
 export async function handleSearchApi(request, env, url) {
-  if (url.pathname !== '/api/search' || request.method !== 'GET') return null;
+  if (request.method !== 'GET') return null;
+  // The last 10 distinct keywords still in the shared cache (kept for one day), newest first.
+  if (url.pathname === '/api/search/recent') {
+    const rows = (await env.DB.prepare('SELECT keyword FROM search_cache GROUP BY keyword ORDER BY MAX(fetched_at) DESC LIMIT 10').all()).results;
+    return json({keywords: rows.map(r => r.keyword)});
+  }
+  if (url.pathname !== '/api/search') return null;
   try {
     const source = url.searchParams.get('source');
     if (!SOURCES[source]) throw new ApiError(400, '不支援的查詢來源');
