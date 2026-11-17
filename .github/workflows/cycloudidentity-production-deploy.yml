@@ -51,7 +51,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DEV_CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
-      DEV_CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      DEV_CYID_D1_DATABASE_ID: ${{ secrets.CYID_D1_DATABASE_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6

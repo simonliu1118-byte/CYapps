@@ -13,7 +13,7 @@
 
 - 本專案自 2026-11-17 起由獨立對話負責；目前進度與待辦只看 `TODO.md`。
 - 正式部署：Worker `cypricedesk`、D1 `cypricedesk-db`、網域 `price.chihyuancm.com`、GitHub Environment `cypricedesk-production`、Vercel 專案 `cypricedesk-fetcher`（Root Directory `apps/CYPriceDesk/fetcher`）。實際 ID 與權杖不寫入任何文件。
-- 部署 workflow `.github/workflows/cypricedesk-deploy.yml` 只能從 `main` 手動觸發；部署後刪除該次 run 的 log（原因見 `TODO.md`）。
+- 部署 workflow `.github/workflows/cypricedesk-deploy.yml` 只能從 `main` 手動觸發；部署識別碼由 workflow 在部署時從 Cloudflare 解析並先遮蔽，GitHub 只保留 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`。「部署後刪除 run log」待改版後第一次部署 log 驗證乾淨即停止（待驗證，見 `TODO.md`），驗證前仍照舊刪除。
 - 版本 Major 只由使用者決定；commit 身分 `simonliu1118-byte`（noreply email）；PR 以 squash 合併。
 - 介面主色 petrol `#0F5E73`；平台色 蝦皮 `#EE4D2D`、momo `#B5179E`、酷澎 `#346AFF`（使用者 2026-11-17）。
 
@@ -22,7 +22,7 @@
 - Cloudflare Worker（`src/`）＋Workers Static Assets（`public/`）＋D1（`DB`）＋CYID private Service Binding（`IDENTITY`）。前端為原生 HTML／CSS／JS。
 - `public/compare.js` 是三平台比價、注意度排序、手動比價計入規則與走勢圖資料整理的唯一實作，瀏覽器與 Worker 共用；`public/core.js` 只剩金額／時間格式與連結驗證。
 - 業務資料全站一份；所有寫入與其 audit 在同一個 `DB.batch()`；同時編輯以 `revision` 檢查（409）。
-- 部署用的 D1 ID、Identity service 名稱、Application／Workspace ID、網域由 GitHub Environment `cypricedesk-production` 注入，source 只放 placeholder。合併 `main` 不部署，只有 `workflow_dispatch` 從 `main` 才部署。
+- 部署用的 Worker／D1／Identity service／Application／Workspace ID／入口與 fetcher 網址在部署時由 `.github/scripts/resolve-deploy-runtime.mjs` 依公開主機名稱從 Cloudflare 解析並先 `::add-mask::`，不放 GitHub variables；source 只放 placeholder。要改 binding 須先在 Cloudflare 改。合併 `main` 不部署，只有 `workflow_dispatch` 從 `main` 才部署。
 
 - 自動查價（V1.2.0）：`fetcher/`（Vercel Python，只接受 HMAC 簽章請求）→ Worker `src/search.js`（D1 快取 10 分鐘、同上游間隔 15 秒、blocked 冷卻 30 分鐘）→ `public/search.js`。簽章格式 Worker（`src/fetcher-client.js`）與 fetcher（`fetcher/app.py`）必須一致，兩邊測試共用同一組向量。解析邏輯（`fetcher/momo.py`、`fetcher/feebee.py`、`public/catalog-core.js`）由 sandbox 原樣搬移，改動前先看對應測試。
 - 追蹤商品（V1.3.0）：`src/grouping.js`（純函式分組，改規則先看 `tests/tracking.test.js`）、`src/tracking-run.js`（單次查價＋`runScheduled`）、`src/tracking.js`（API）、`public/tracked.js`（V1.4.0 起另有 `chart.js`、`candidates.js`、`pending.js`、`src/manual.js`）。排程與手動查價共用 `runTracked`，查詢走 `src/search.js` 的 `querySource`，不另寫快取或節流。`next_run_at`／`last_run_at` 為 epoch 毫秒，其餘新表時間為 ISO 文字。

@@ -1,0 +1,39 @@
+name: Deploy Resolver Check
+
+# 部署識別碼解析器（.github/scripts/resolve-deploy-runtime.mjs）及其測試；使用假 fetch，不連任何外部網路。
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/resolve-deploy-runtime*.mjs"
+      - ".github/workflows/deploy-resolver-check.yml"
+      - ".github/workflows/cypricedesk-deploy.yml"
+      - ".github/workflows/cyaccountingweb-deploy.yml"
+      - ".github/workflows/cyaccountingweb-backup-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-resolver-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check resolver syntax
+        run: node --check .github/scripts/resolve-deploy-runtime.mjs
+      - name: Run resolver tests
+        run: node --test .github/scripts/resolve-deploy-runtime.test.mjs
+      - name: Deploy workflows must not read identifiers from GitHub variables
+        run: |
+          if grep -nE 'vars\.(CF_|CYID_D1)' .github/workflows/cypricedesk-deploy.yml .github/workflows/cyaccountingweb-deploy.yml .github/workflows/cyaccountingweb-backup-verify.yml .github/workflows/cycloudidentity-deploy.yml .github/workflows/cycloudidentity-production-deploy.yml | grep -v 'vars.CF_BACKUP_TOPOLOGY'; then
+            echo "Deployment identifiers must not come from GitHub variables." >&2
+            exit 1
+          fi

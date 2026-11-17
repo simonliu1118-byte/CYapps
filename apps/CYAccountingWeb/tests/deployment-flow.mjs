@@ -130,6 +130,9 @@ test('workflow wiring keeps deployment explicit, serialized, guarded and documen
   const guard = deploy.indexOf('node scripts/verify-deployment.mjs source');
   assert.ok(guard > 0 && guard < deploy.indexOf('node scripts/provision-recovery-d1.mjs'));
   assert.match(deploy, /resolve-cyid-production-runtime\.mjs --require-account-portal/);
+  assert.doesNotMatch(workflow, /vars\.CF_(?!BACKUP_TOPOLOGY\b)|\bMask deployment resource identifiers\b/, 'deployment identifiers must not pass through GitHub variables');
+  const resolver = deploy.indexOf('.github/scripts/resolve-deploy-runtime.mjs --app cyaccountingweb');
+  assert.ok(resolver > 0 && resolver < deploy.indexOf('node scripts/provision-recovery-d1.mjs') && resolver < deploy.indexOf('node scripts/render-wrangler.mjs'), 'identifiers are resolved and masked before any step uses them');
   assert.match(deploy, /Verify production secure login entry/);
   assert.match(deploy, /Verify production semantic frontend assets/);
   assert.match(workflow, /recovery_workspace:[\s\S]*?default: disabled[\s\S]*?- disabled[\s\S]*?- prepare/);
