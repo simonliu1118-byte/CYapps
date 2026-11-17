@@ -1,7 +1,7 @@
 # WO-1.4.0 介面改版：統一查價、三平台售價比價、單張多線走勢圖與待確認佇列（第四階段）
 
-- 狀態：審查通過，待使用者確認合併與部署
-- 分支：`cypricedesk/v1.4.0-redesign`（自 `main` 分出）　PR：（執行者填）
+- 狀態：已合併（#625）並部署（2026-11-17）；實機驗證待進行
+- 分支：`cypricedesk/v1.4.0-redesign`（自 `main` 分出）　PR：#625
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`、WO-1.1.0～WO-1.3.0、本目錄 `README.md`
 
 ## 0. 執行限制（必讀）

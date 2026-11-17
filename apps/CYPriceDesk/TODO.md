@@ -4,14 +4,14 @@
 
 ## 目前基準
 
-- 正式站：V1.3.2（https://price.chihyuancm.com/），2026-11-17 部署；Vercel fetcher `cypricedesk-fetcher` 已連線，使用者實測 momo、飛比蝦皮查得到結果。
-- **V1.4.0（Build 0）**：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。分支 `cypricedesk/v1.4.0-redesign`，本機測試與截圖通過、審查通過；**待使用者確認後合併、部署**。部署會套用 `0004_redesign.sql`（重建追蹤商品相關表、移除 `price_records`；2026-11-17 正式庫無業務資料）。
+- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel fetcher `cypricedesk-fetcher` 已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
+- V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則同步為 governance 2.3.61（#626）。
 
 ## 待辦
 
 ### V1.4.0 上線
 
-- [ ] 合併、從 `main` 手動部署、刪除該次部署 run 的 log。
+- [x] 合併、從 `main` 手動部署、刪除該次部署 run 的 log（2026-11-17）。
 - [ ] 實機驗證：查價「全部」三來源合併、設定規格、加入追蹤、三平台售價與調整（含留空停止比價）、手動比價、走勢圖、待確認頁、立即查價與排程一輪。
 
 ### 下一版（使用者 2026-11-17 定案方向）
