@@ -1,0 +1,40 @@
+name: CY Web Consumer Check
+
+# CY Web's production deploy imports the CYID production resolver from CYapps main at deploy time
+# (chihyuan-web scripts/resolve-production-identity.mjs, audit-account-portal.mjs). A change here can
+# therefore break CY Web deploys without any CY Web CI running. This job runs CY Web's dependent tests
+# against the PR's version of the shared scripts (governance 2.3.64).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs"
+      - "apps/CYCloudIdentity/scripts/render-production-config.mjs"
+      - ".github/workflows/cyweb-consumer-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cyweb-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: cyapps
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: simonliu1118-byte/chihyuan-web
+          ref: main
+          path: cyweb
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Run CY Web tests that import the shared CYID resolver
+        working-directory: cyweb
+        env:
+          CYAPPS_SOURCE_ROOT: ${{ github.workspace }}/cyapps
+        run: node --test scripts/audit-account-portal.test.mjs scripts/resolve-deploy-runtime.test.mjs

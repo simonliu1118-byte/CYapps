@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.64 — 2026/11/18
+
+- 部署維運規則（使用者 2026-11-18：「之後不想再碰到這類問題」）。`REPO_POLICY.md` 新增：不得以命名慣例推導資源；刪除 Cloudflare 資源時同輪清掉所有引用；跨 App／跨 repo 的測試觸發路徑；共用 provider 設定的命名；部署流程變更須實際部署並比對 log。
+- 新增 `cyweb-consumer-check.yml`：CY Web 部署時引用的 CYID 正式核對程式變更時，以 PR 版本跑 CY Web 的依賴測試（起因：#630 移除開發版部署時，依賴它的 CYInvoice 測試未被觸發，#631 修正）。CYID Consumer Impact: NONE。
+
 ## 2.3.63 — 2026/11/18
 
 - CYID 命名整理第一步（使用者 2026-11-18）：CYID 正式版名稱推導（CYAccountingWeb `resolve-cyid-production-runtime.mjs`、CYCloudIdentity `render-production-config.mjs`）可直接接受正式名稱（`-prod`／`-production` 原樣使用），開發版名稱仍相容；之後解析出的 Worker 仍須驗證為正式版。

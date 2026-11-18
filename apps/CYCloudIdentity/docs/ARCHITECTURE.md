@@ -123,3 +123,15 @@ OTP remains a shared engine for bootstrap, password recovery, activated Email ve
 ### 1.0.2 runtime cleanup
 
 Legacy Group endpoints/projections and compatibility role aliases are retired from runtime. Applied migrations and historical tables remain intact. Login parses/reads Employee authority once and selects permanent credential or purpose-scoped first-login exchange; Employee PATCH uses one guarded handler for pending and verified lifecycle. Email OTP and initial Email delivery share one global/Workspace budget reservation/settlement operation. No HTTP handler re-enters another handler.
+
+## Production Worker deployment-lookup variables (2026-11-18)
+
+The production CYID Worker carries three manually configured `plain_text` variables that the CYID runtime itself never reads. They exist only so consumer deploy tooling (`apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs`, also imported by CY Web's deploy) can verify it is talking to the production provider. `render-production-config.mjs` preserves them on every production deploy.
+
+| Variable | Meaning | Read by |
+| --- | --- | --- |
+| `CYACC_SERVICE_BINDING_TARGET` | The production CYID Worker's own name | CYACC and CY Web deploy verification |
+| `CYACC_APPLICATION_ID` | CYAccountingWeb's Application ID (CYACC-specific) | CYACC deploy |
+| `CYACC_WORKSPACE_ID` | The company-wide shared Workspace ID (not CYACC-specific) | CYACC, CY Web and other consumer deploys |
+
+The `CYACC_` prefix is historical (CYACC was the first consumer). The user decided on 2026-11-18 not to rename them; new shared values must use app-neutral names (`REPO_POLICY.md`).
