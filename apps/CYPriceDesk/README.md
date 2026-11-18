@@ -124,7 +124,7 @@ Variables：無（部署識別碼全部在部署時從 Cloudflare 解析並先�
 ### 部署後
 
 - CYID Application、D1、Environment、自訂網域與 Vercel fetcher 已於 2026-11-16～17 設定完成；部署識別碼改為部署時從 Cloudflare 解析（見上）。
-- 「每次部署後刪除該次 run 的 log」的做法，待改版後第一次部署的 log 經檢查確認不含識別碼即停止（**待驗證**，見 `TODO.md`）；驗證完成前仍照舊刪除。
+- 2026-11-18 改版後第一次部署的 log 已確認不含識別碼，「每次部署後刪除該次 run 的 log」的做法已停止。
 - 部署後實機確認：登入、查價（各來源）、追蹤商品、立即查價、手動比價、待確認與操作紀錄。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved. 授權以 repository 根 `LICENSE` 為準。

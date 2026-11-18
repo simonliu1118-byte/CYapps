@@ -13,7 +13,7 @@
 
 - 本專案自 2026-11-17 起由獨立對話負責；目前進度與待辦只看 `TODO.md`。
 - 正式部署：Worker `cypricedesk`、D1 `cypricedesk-db`、網域 `price.chihyuancm.com`、GitHub Environment `cypricedesk-production`、Vercel 專案 `cypricedesk-fetcher`（Root Directory `apps/CYPriceDesk/fetcher`）。實際 ID 與權杖不寫入任何文件。
-- 部署 workflow `.github/workflows/cypricedesk-deploy.yml` 只能從 `main` 手動觸發；部署識別碼由 workflow 在部署時從 Cloudflare 解析並先遮蔽，GitHub 只保留 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`。「部署後刪除 run log」待改版後第一次部署 log 驗證乾淨即停止（待驗證，見 `TODO.md`），驗證前仍照舊刪除。
+- 部署 workflow `.github/workflows/cypricedesk-deploy.yml` 只能從 `main` 手動觸發；部署識別碼由 workflow 在部署時從 Cloudflare 解析並先遮蔽，GitHub 只保留 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`。2026-11-18 首次部署 log 已驗證乾淨，不再需要部署後刪除 run log。
 - 版本 Major 只由使用者決定；commit 身分 `simonliu1118-byte`（noreply email）；PR 以 squash 合併。
 - 介面主色 petrol `#0F5E73`；平台色 蝦皮 `#EE4D2D`、momo `#B5179E`、酷澎 `#346AFF`（使用者 2026-11-17）。
 

@@ -24,10 +24,11 @@
 
 - [ ] 價格異動提醒（某平台市場最低低於我的售價超過一定比例時通知，可接 CY Web 通知）；等資料累積後再定門檻。
 - [ ] 部署流程改為與 CYAccountingWeb 一致（使用者 2026-11-16）：改用 `apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs` 從正式 CYID 讀取並核對 service、Workspace ID，部署環境只保留本 App 自己的值；配合全站 CYID 部署命名統一一起處理。
-- [ ] **部署 log 識別值——待驗證**（使用者 2026-11-16 選方案 2；governance 2.3.62 實作）：CYPriceDesk、CYAccountingWeb 部署已改為由公開主機名稱經 Cloudflare API 解析並先 `::add-mask::`（共用 `.github/scripts/resolve-deploy-runtime.mjs`），CYID D1 ID 改為 secret。CY Web 已於 chihyuan-web 完成。
-  - [ ] 合併後第一次 CYPriceDesk 部署：檢查該次 run 的完整 log 不含 Worker／D1／Identity service／Application／Workspace／入口與 fetcher 網址／workers.dev 子網域；確認乾淨後，停止「每次部署後刪除 run log」。未驗證前仍照舊刪除。
-  - [ ] 第一次 CYAccountingWeb、CYID（development／production）部署同樣檢查。
-  - [ ] 驗證乾淨後，使用者可刪除 GitHub variables（CYPriceDesk Environment `cypricedesk-production`）：`CF_IDENTITY_SERVICE`、`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPD_FETCHER_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`。
+- [x] **部署 log 識別值**（使用者 2026-11-16 選方案 2；governance 2.3.62 實作）：CYPriceDesk、CYAccountingWeb 部署已改為由公開主機名稱經 Cloudflare API 解析並先 `::add-mask::`（共用 `.github/scripts/resolve-deploy-runtime.mjs`），CYID D1 ID 改為 secret。CY Web 已於 chihyuan-web 完成。
+  - [x] 2026-11-18 合併（#628）後首次 CYPriceDesk 部署：完整 log 不含 Worker／D1／Identity service／Application／Workspace／fetcher 網址／workers.dev 子網域。**自此停止「每次部署後刪除 run log」**。
+  - [x] 同日首次 CYAccountingWeb 部署：log 乾淨（只出現 CI 假值）。
+  - [ ] CYID（development／production）首次部署時同樣檢查（需先建立 secret，見下）。
+  - [ ] 使用者可刪除 GitHub variables（CYPriceDesk Environment `cypricedesk-production`）：`CF_IDENTITY_SERVICE`、`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPD_FETCHER_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`。
   - [ ] CYAccountingWeb（Environment `development`）可刪除：`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_R2_BACKUP_BUCKET`、`CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN`；`CF_BACKUP_TOPOLOGY` 是模式開關（`legacy_gcs`／`parallel_dual_provider`），不是識別碼，保留。
   - [ ] CYID：需先建立 secret `CYID_D1_DATABASE_ID`（值同現有 variable），確認 development／production 部署成功後再刪除同名 variable。
 - [ ] `group_summaries` 自 V1.4.0 起前端不再使用（走勢圖改由 `price_observations` 計算），仍照常寫入；確認不需要後可移除。
