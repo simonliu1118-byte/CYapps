@@ -4,7 +4,7 @@
 
 ## 目前基準
 
-- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel fetcher `cypricedesk-fetcher` 已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
+- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
 - V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則同步為 governance 2.3.61（#626）。
 
 ## 待辦
@@ -35,8 +35,7 @@
 
 ### 待使用者手動處理
 
-- [ ] 刪除 sandbox 分支 `governance/scrapling-probe-init`、`claude/upbeat-ramanujan-3fwh1c`（自動化推送刪除被斷線）。
-- [ ] 刪除 Vercel 舊專案 `momo-keyword-price-prototype`（原型；正式抓價服務是 `cypricedesk-fetcher`，不要刪）。
+- [x] 刪除 Vercel 舊原型專案與 sandbox 兩個原型分支（使用者 2026-11-18 完成）。
 
 ## 已知限制
 
