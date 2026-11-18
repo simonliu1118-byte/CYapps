@@ -35,8 +35,8 @@
 
 ### 待使用者手動處理
 
-- [ ] 刪除 sandbox 分支 `governance/scrapling-probe-init`、`claude/upbeat-ramanujan-3fwh1c`（自動化推送刪除被斷線）。
-- [ ] 刪除 Vercel 舊專案 `momo-keyword-price-prototype`（原型；正式抓價服務是 `cypricedesk-fetcher`，不要刪）。
+- [x] 刪除 sandbox 分支 `governance/scrapling-probe-init`、`claude/upbeat-ramanujan-3fwh1c`（使用者 2026-11-18 完成）。
+- [x] 刪除 Vercel 舊專案 `momo-keyword-price-prototype`（使用者 2026-11-18 完成；正式抓價服務 `cypricedesk-fetcher` 保留）。
 
 ## 已知限制
 

@@ -15,4 +15,4 @@
 
 三個階段合併於 CYapps #621（2026-11-16，原 #619、#620 併入）；首次上線先不設定抓價服務，自動查價與排程待 Vercel fetcher 設定後啟用。
 
-sandbox 的 `ScraplingProbe` 原型：PR #31 已於 2026-11-17 關閉（未合併，sandbox `main` 不含此專案）；兩個原型分支與 Vercel 舊專案 `momo-keyword-price-prototype` 待使用者手動刪除（見 `TODO.md`）。
+sandbox 的 `ScraplingProbe` 原型：PR #31 已於 2026-11-17 關閉（未合併，sandbox `main` 不含此專案）；兩個原型分支與 Vercel 舊專案 `momo-keyword-price-prototype` 已由使用者於 2026-11-18 刪除。
