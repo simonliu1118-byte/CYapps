@@ -788,7 +788,7 @@ for (const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-deploy.yml
 }
 assert.equal(fs.existsSync(path.resolve('../../CYCloudIdentity/scripts/private-binding-probe.mjs')),false);
 
-for(const file of ['cycloudidentity-deploy.yml','cycloudidentity-production-deploy.yml','cyaccountingweb-deploy.yml']) {
+for(const file of ['cycloudidentity-production-deploy.yml','cyaccountingweb-deploy.yml']) {   // cycloudidentity-deploy.yml no longer deploys (development CYID removed, governance 2.3.63)
   const workflow=fs.readFileSync(path.resolve('../../../.github/workflows',file),'utf8');
   assert.ok(workflow.includes('${{ secrets.CYID_WORKER_NAME }}'));
   assert.equal(workflow.includes('${{ vars.CYID_WORKER_NAME }}'),false);

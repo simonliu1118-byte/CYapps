@@ -5,6 +5,10 @@ on:
     paths:
       - 'apps/CYInvoice/cloud/**'
       - '.github/workflows/cyinvoice-cloud-dev-deploy.yml'
+      # The CYInvoice tests also assert these workflows; run them when the workflows change.
+      - '.github/workflows/cycloudidentity-deploy.yml'
+      - '.github/workflows/cycloudidentity-production-deploy.yml'
+      - '.github/workflows/cyaccountingweb-deploy.yml'
   workflow_dispatch:
     inputs:
       mode:
