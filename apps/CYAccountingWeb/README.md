@@ -119,7 +119,7 @@ gh run list --workflow cyaccountingweb-deploy.yml --branch deploy/cyaccountingwe
 gh run view <RUN_ID> --json status,conclusion,jobs,url
 ```
 
-dispatch 的 run 請改查 `--branch main --event workflow_dispatch`。同目標發布共用 `cyaccountingweb-production` 鎖、不取消進行中的 deploy。若排隊期間 main 已前進，來源檢查會在遠端資源準備／migration 前停止；重新核對新版 CI 後，把發布分支前進到新 main 再發布。部署仍使用既有 GitHub `development` Environment 中的正式設定；此名稱是歷史設定 scope，不表示另建測試服務。
+dispatch 的 run 請改查 `--branch main --event workflow_dispatch`。同目標發布共用 `cyaccountingweb-production` 鎖、不取消進行中的 deploy。若排隊期間 main 已前進，來源檢查會在遠端資源準備／migration 前停止；重新核對新版 CI 後，把發布分支前進到新 main 再發布。部署仍使用既有 GitHub `development` Environment 中的正式設定；此名稱是歷史設定 scope，不表示另建測試服務。 Worker、D1、R2 識別碼不放 GitHub variables：部署時由 `.github/scripts/resolve-deploy-runtime.mjs` 依公開主機名稱 `acc.chihyuancm.com` 從 Cloudflare 解析並先遮蔽（`CF_BACKUP_TOPOLOGY` 是模式開關，仍為 variable）；因此此主機名稱必須已由既有正式 Worker 服務，全新環境的首次建立須另行處理。
 
 `.github/workflows/cyaccountingweb-release.yml` 仍只用於另外明確授權的 Stable Release；會重新驗證、掃描公開 source package 與 SHA-256，並要求同一 source SHA 已有成功的正式 deploy job。更新發布分支只部署網站，不建立 tag 或 GitHub Release。
 

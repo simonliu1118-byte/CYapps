@@ -37,6 +37,6 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Verify both immutable copies without public data output
         env:
-          CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
+          CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.chihyuancm.com
         run: node scripts/verify-backups-external.mjs
       # No artifacts, summaries, caches, debug dumps or backups are uploaded.

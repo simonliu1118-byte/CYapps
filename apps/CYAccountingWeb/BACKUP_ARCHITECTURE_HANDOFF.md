@@ -107,7 +107,7 @@ V0.24.1 在 Phase D 生效後退場 Phase C 驗收／測試用 UI 與已完成�
 
 1. 取得實際切換來源／時間與使用者授權，維護期間先做目前正式帳本 paired backup 並回讀。保留原 DB、全部 audit 與復原證據。
 2. 確認目標 verified record、完整資料／政策／鎖帳狀態、epoch 及 schema；再次核對，不能只看 HTTP 成功。
-3. 在受保護部署環境將 CF_D1_DATABASE_ID／NAME 指向已驗證目標；於核准的維護切換解除該目標 recovery_hold。正式 DB binding 名稱維持 DB，CYID、R2、GCS 設定維持 canonical owners。
+3. 先在 Cloudflare 將正式 Worker 的 DB binding 指向已驗證目標（部署時 CF_D1_DATABASE_ID／NAME 由公開主機名稱經 Cloudflare 解析，不再由 GitHub variables 提供）；於核准的維護切換解除該目標 recovery_hold。正式 DB binding 名稱維持 DB，CYID、R2、GCS 設定維持 canonical owners。
 4. 經正常 CI 部署，驗證登入、角色、月帳、鎖帳、統計及 Excel。舊頁送出不符 epoch 回 409 並重新載入；未解除 hold 的目標拒絕一般 API。
 5. 如驗證失敗，部署環境切回保留的原 DB；不自動刪除任何 DB 或 audit。需要新一次演練時，另行準備新空白工作區，不在已還原目標上覆寫。
 

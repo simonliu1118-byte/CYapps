@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.62 — 2026/11/17
+
+- 公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job 層 `env`，GitHub variables 傳入的部署識別碼因此外洩。`REPO_POLICY.md` 新增規則：deploy workflow 不得經由 GitHub variables 傳遞部署識別碼，須部署時從 Cloudflare 解析並先遮蔽，或改用 secrets。
+- 新增共用解析器 `.github/scripts/resolve-deploy-runtime.mjs`（含測試與 `deploy-resolver-check.yml`），CYPriceDesk、CYAccountingWeb 部署改用；CYID 的 `CYID_D1_DATABASE_ID` 由 variable 改為 secret（CYID Consumer Impact: NONE，consumer 契約、API 與版本不變）。不變更任何 App 版本（使用者 2026-11-17）。
+
 ## 2.3.61 — 2026/11/17
 
 - CYPriceDesk 專案規則配合 V1.4.0 改版：移除手動價格紀錄與 CSV 後，共用實作改為 `public/compare.js`（比價、注意度、手動比價計入、走勢圖資料）與 `public/catalog-core.js`（規格解析）；業務授權文字改為追蹤商品、售價、手動比價與判斷，授權範圍不變（使用者 2026-11-16、11-17）。

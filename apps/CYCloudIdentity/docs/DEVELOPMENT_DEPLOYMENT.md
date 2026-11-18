@@ -22,7 +22,7 @@ The deployment workflow uses the existing repository Environment named `developm
 
 Existing-provider upgrade inputs:
 
-- `CYID_WORKER_NAME` is a shared development Environment Secret; `CYID_D1_DATABASE_ID` remains the Provider-owned original database variable. Consumer deployment reads the Provider DB binding metadata only for exclusion and never queries Identity D1.
+- `CYID_WORKER_NAME` is a shared development Environment Secret; `CYID_D1_DATABASE_ID` is a Provider-owned original database Environment Secret (it is no longer a GitHub variable, so it is masked in public logs). Consumer deployment reads the Provider DB binding metadata only for exclusion and never queries Identity D1.
 - Environment secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` allow the provider-owned deployment audit and Worker upgrade. They are not exposed to PR validation.
 
 Runtime vars, existing D1 metadata, rate limit namespaces/limits, service bindings and Secret names are read from the existing Worker. Existing Secret values are neither read nor replaced. The bootstrap/Email Secrets already configured on the Worker remain there; GitHub copies are not replayed during an upgrade. First provisioning and future schema migrations are separate reviewed work, outside this code-only upgrade path.

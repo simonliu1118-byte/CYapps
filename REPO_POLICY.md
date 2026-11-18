@@ -27,6 +27,7 @@
 - **Public Build／Artifact／Release 與 Production Deploy 必須分離。** 公開建置流程不得取得、注入或烘焙正式環境的 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
 - 正式 Cloudflare D1 database ID、Worker／Service Binding 實際 service 名稱、R2／KV／Queue 等 deployment-specific resource identifiers 原則上由 Deployment Environment 在部署時注入；不得打包進公開 Release／Artifact。若公開 source 需要展示設定格式，只能使用 placeholder／template。
 - Production Deploy 可在 CI Runner 暫時產生正式部署設定，但該設定不得 commit 回 Git、不得保存為公開 Artifact／Release asset，也不得把實際值寫入 log。
+- **Deploy workflow 不得經由 GitHub variables 傳遞部署識別碼**（Worker／D1／R2／Service 名稱與 ID、Application／Workspace ID、網域與服務網址等）：公開 repo 的 Actions log 會在任何 `::add-mask::` 之前明文印出 job／step 的 `env` 區塊。識別碼須在部署時由公開主機名稱向 Cloudflare 解析、先 `::add-mask::` 再使用，或改用 secrets（自動遮蔽）；模式開關等非識別碼字串不在此限。
 - 任何會公開 `actions/upload-artifact` 或 `gh release create` 產物的 workflow，都必須在公開前執行 repository 共用的 public-package safety scan；掃描未通過時必須阻止上傳／Release，不得以 warning 略過。
 - 新增或修改公開發行流程時，應確認 scanner 本身仍能辨識常見 credential 檔、private key、OAuth/refresh token、Cloudflare credential assignment 與含 concrete binding 的 deployment config；不得只掃 source 而不掃最終 package。
 

@@ -85,7 +85,7 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 
 1. Vercel 建立專案，Root Directory 指到 `apps/CYPriceDesk/fetcher`（Python 3.12、`requirements.txt`、`vercel.json`）。
 2. 在 Vercel 專案設定環境變數 `CYPD_FETCHER_SECRET`（隨機長字串）。
-3. GitHub Environment `cypricedesk-production` 新增 secret `CYPD_FETCHER_SECRET`（同一個值）與 variable `CF_CYPD_FETCHER_URL`（Vercel 網址，HTTPS）。部署 workflow 會在 deploy 後以 `wrangler secret put` 從 stdin 寫入 Worker secret，不印出。
+3. GitHub Environment `cypricedesk-production` 新增 secret `CYPD_FETCHER_SECRET`（同一個值）。fetcher 網址（HTTPS）設在 Cloudflare Worker 的變數 `CYPD_FETCHER_URL`（不放 GitHub variable）。部署 workflow 會在 deploy 後以 `wrangler secret put` 從 stdin 寫入 Worker secret，不印出。
 
 來源限制：momo 為公開搜尋展示價，飛比為商品級第三方參考價；兩者都不等於結帳價、會員價或逐規格價格，也可能被站方限制（此時進入冷卻、不重試）。
 
@@ -113,18 +113,18 @@ python3 ../../.github/scripts/scan-public-package.py dist
 
 ## 部署
 
-部署採合併與發布分離：PR 只驗證；合併 `main` 不會部署；只有從 `main` 手動觸發 `CYPriceDesk Deploy`（`workflow_dispatch`）才會部署。它會核對 `github.sha` 等於遠端 `main`、由 GitHub Environment 產生部署設定、套用 D1 migration 後 `wrangler deploy`。部署用的 D1 ID、Identity service 名稱、Application／Workspace ID 與自訂網域一律由 Environment 注入，source 只放 placeholder，不得 commit。
+部署採合併與發布分離：PR 只驗證；合併 `main` 不會部署；只有從 `main` 手動觸發 `CYPriceDesk Deploy`（`workflow_dispatch`）才會部署。它會核對 `github.sha` 等於遠端 `main`、由 GitHub Environment 產生部署設定、套用 D1 migration 後 `wrangler deploy`。部署用的 Worker 名稱、D1 名稱與 ID、Identity service 名稱、Application／Workspace ID、入口網址與 fetcher 網址**不經 GitHub variables**（公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job `env`）：workflow 只帶公開主機名稱 `price.chihyuancm.com`，由 `.github/scripts/resolve-deploy-runtime.mjs` 以 Cloudflare API（唯讀 GET）查出目前服務該主機名稱的 Worker 與其 bindings（`DB` d1、`IDENTITY` service、`CYID_APPLICATION_ID`／`CYID_WORKSPACE_ID`／`CYWEB_PORTAL_URL`／`CYPD_FETCHER_URL` plain_text）、`/d1/database/{id}` 與帳號 workers.dev 子網域，先全部 `::add-mask::` 再寫入 `GITHUB_ENV`，之後才渲染設定。要改任何 binding，須先在 Cloudflare 改，部署才會沿用；source 只放 placeholder，不得 commit。
 
 ### GitHub Environment `cypricedesk-production`
 
 Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`
 
-Variables：`CF_WORKER_NAME`、`CF_IDENTITY_SERVICE`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`、`CF_CYPD_FETCHER_URL`
+Variables：無（部署識別碼全部在部署時從 Cloudflare 解析並先遮蔽；舊的 `CF_*` variables 待首次部署 log 驗證乾淨後可刪除，清單見 `TODO.md`）。
 
 ### 部署後
 
-- CYID Application、D1、Environment、自訂網域與 Vercel fetcher 已於 2026-11-16～17 設定完成；目前的部署設定為手填值（`CF_IDENTITY_SERVICE` 直接填正式 CYID Worker 名稱），之後改與 CYAccountingWeb 一致，見 `TODO.md`。
-- 公開 repo 的部署 log 會印出 job 層 `env` 的部署識別值；每次部署後刪除該次 run 的 log，直到改用部署時查詢（見 `TODO.md`）。
+- CYID Application、D1、Environment、自訂網域與 Vercel fetcher 已於 2026-11-16～17 設定完成；部署識別碼改為部署時從 Cloudflare 解析（見上）。
+- 「每次部署後刪除該次 run 的 log」的做法，待改版後第一次部署的 log 經檢查確認不含識別碼即停止（**待驗證**，見 `TODO.md`）；驗證完成前仍照舊刪除。
 - 部署後實機確認：登入、查價（各來源）、追蹤商品、立即查價、手動比價、待確認與操作紀錄。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved. 授權以 repository 根 `LICENSE` 為準。

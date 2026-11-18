@@ -22,15 +22,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CF_IDENTITY_SERVICE: ${{ vars.CF_IDENTITY_SERVICE }}
-      CF_WORKER_NAME: ${{ vars.CF_WORKER_NAME }}
-      CF_D1_DATABASE_NAME: ${{ vars.CF_D1_DATABASE_NAME }}
-      CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
-      CF_CYID_APPLICATION_ID: ${{ vars.CF_CYID_APPLICATION_ID }}
-      CF_CYID_WORKSPACE_ID: ${{ vars.CF_CYID_WORKSPACE_ID }}
-      CF_CYWEB_PORTAL_URL: ${{ vars.CF_CYWEB_PORTAL_URL }}
-      CF_CYPD_FETCHER_URL: ${{ vars.CF_CYPD_FETCHER_URL }}
-      CF_CYPRICEDESK_CUSTOM_DOMAIN: ${{ vars.CF_CYPRICEDESK_CUSTOM_DOMAIN }}
+      # 公開主機名稱（原始碼已公開）；其餘部署識別碼不經 GitHub variables，改由下方步驟從 Cloudflare 解析並先遮蔽。
+      CF_CYPRICEDESK_CUSTOM_DOMAIN: price.chihyuancm.com
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -56,9 +49,9 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Mask deployment resource identifiers
-        run: |
-          node -e 'for (const key of ["CF_WORKER_NAME","CF_D1_DATABASE_NAME","CF_D1_DATABASE_ID","CF_IDENTITY_SERVICE","CF_CYID_APPLICATION_ID","CF_CYID_WORKSPACE_ID","CF_CYPRICEDESK_CUSTOM_DOMAIN","CF_CYPD_FETCHER_URL"]) { if (process.env[key]) console.log("::add-mask::" + process.env[key]); }'
+      - name: Resolve deployment identifiers from Cloudflare (masked)
+        working-directory: .
+        run: node .github/scripts/resolve-deploy-runtime.mjs --app cypricedesk --hostname "$CF_CYPRICEDESK_CUSTOM_DOMAIN"
 
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc

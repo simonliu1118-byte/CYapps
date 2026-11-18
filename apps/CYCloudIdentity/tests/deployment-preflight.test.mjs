@@ -135,7 +135,7 @@ test('workflow has no original-provider secret, migration or authority write and
   const deployment = workflow.split('  deploy-development:')[1];
   assert.match(workflow, /default: preflight/);
   assert.match(workflow, /group: cycloudidentity-development\n  cancel-in-progress: false/);
-  assert.match(deployment, /CYID_D1_DATABASE_ID: \$\{\{ vars\.CYID_D1_DATABASE_ID \}\}/);
+  assert.match(deployment, /CYID_D1_DATABASE_ID: \$\{\{ secrets\.CYID_D1_DATABASE_ID \}\}/);
   assert.doesNotMatch(deployment, /secret put|migrations apply|CYID_OTP_PEPPER|CYID_BOOTSTRAP_SECRET|CYID_BREVO_API_KEY|CYID_RESEND_API_KEY/);
   const guards = deployment.match(/if: \(github\.event_name == 'push' && github\.ref == 'refs\/heads\/deploy\/cycloudidentity-development'\) \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.mode == 'upgrade'\)/g);
   assert.equal(guards.length, 2);
