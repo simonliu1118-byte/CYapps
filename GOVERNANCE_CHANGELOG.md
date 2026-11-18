@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.65 — 2026/11/18
+
+- CY Web 鏡像的 CYID 契約文件（`CONSUMER_SYNC_MANIFEST.json` 所列）變更後，須同輪在 chihyuan-web 同步鏡像；`cyweb-consumer-check.yml` 在這些檔案變更時提醒（起因：#632 補寫 CYID `ARCHITECTURE.md` 後，CY Web 所有 PR 的 Governance Check 因鏡像不一致而失敗）。CYID Consumer Impact: NONE。
+
 ## 2.3.64 — 2026/11/18
 
 - 部署維運規則（使用者 2026-11-18：「之後不想再碰到這類問題」）。`REPO_POLICY.md` 新增：不得以命名慣例推導資源；刪除 Cloudflare 資源時同輪清掉所有引用；跨 App／跨 repo 的測試觸發路徑；共用 provider 設定的命名；部署流程變更須實際部署並比對 log。

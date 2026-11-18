@@ -30,7 +30,7 @@
 - **Deploy workflow 不得經由 GitHub variables 傳遞部署識別碼**（Worker／D1／R2／Service 名稱與 ID、Application／Workspace ID、網域與服務網址等）：公開 repo 的 Actions log 會在任何 `::add-mask::` 之前明文印出 job／step 的 `env` 區塊。識別碼須在部署時由公開主機名稱向 Cloudflare 解析、先 `::add-mask::` 再使用，或改用 secrets（自動遮蔽）；模式開關等非識別碼字串不在此限。
 - 部署流程不得以命名慣例推導另一個資源（例如由 `-dev` 名稱推出 `-prod`）；所用資源一律以實際名稱，或由正式網域向 Cloudflare 查得的現行綁定為準（2026-11-18，起因：開發版 CYID 刪除後，推導來源只剩舊名稱）。
 - 刪除 Cloudflare 資源（Worker／D1／R2／KV）或整個環境時，同一輪工作必須移除或改寫所有引用它的 workflow、GitHub secret／variable、測試與文件；不得留下只會失敗、平常又不執行的部署流程。
-- 測試若讀取其他 App 的 workflow 或共用腳本，該測試所屬 workflow 的 PR 觸發路徑必須包含那些檔案；其他 repository 在部署時引用的本 repo 腳本（目前為 CY Web 引用的 `apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs` 與其依賴），變更時必須由 `cyweb-consumer-check.yml` 執行對方的依賴測試。
+- 測試若讀取其他 App 的 workflow 或共用腳本，該測試所屬 workflow 的 PR 觸發路徑必須包含那些檔案；其他 repository 在部署時引用的本 repo 腳本（目前為 CY Web 引用的 `apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs` 與其依賴），變更時必須由 `cyweb-consumer-check.yml` 執行對方的依賴測試。CY Web 另鏡像 `apps/CYCloudIdentity/CONSUMER_SYNC_MANIFEST.json` 所列的 CYID 契約文件；這些檔案合併後，同一輪必須在 chihyuan-web 執行 `scripts/sync-cyid-consumer-contract.sh` 並合併，否則 CY Web 所有 PR 的 Governance Check 都會失敗（`cyweb-consumer-check.yml` 會提醒）。
 - 掛在共用 provider（如 CYID 正式 Worker）上供多個 consumer 讀取的設定，新增時須用不綁特定 App 的名稱，並在該 provider 文件寫明讀取者；既有 `CYACC_*` 三個變數維持原名（使用者 2026-11-18），用途記於 CYCloudIdentity 文件。
 - 部署流程或部署識別值的處理方式變更後，必須實際部署一次，並下載該次完整 log 以實際值比對確認未外洩，才算完成。
 - 任何會公開 `actions/upload-artifact` 或 `gh release create` 產物的 workflow，都必須在公開前執行 repository 共用的 public-package safety scan；掃描未通過時必須阻止上傳／Release，不得以 warning 略過。

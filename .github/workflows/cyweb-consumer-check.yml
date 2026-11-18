@@ -11,6 +11,15 @@ on:
       - "apps/CYAccountingWeb/scripts/resolve-cyid-production-runtime.mjs"
       - "apps/CYCloudIdentity/scripts/render-production-config.mjs"
       - ".github/workflows/cyweb-consumer-check.yml"
+      # Files CY Web mirrors under docs/contracts/cyid (apps/CYCloudIdentity/CONSUMER_SYNC_MANIFEST.json).
+      - "apps/CYCloudIdentity/CONSUMER_SYNC_MANIFEST.json"
+      - "apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION"
+      - "apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION"
+      - "apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md"
+      - "apps/CYCloudIdentity/docs/CONSUMER_CONTRACT_CHANGELOG.md"
+      - "apps/CYCloudIdentity/docs/AUTH_CONTRACT.md"
+      - "apps/CYCloudIdentity/docs/ROLE_AND_ACCESS_MODEL.md"
+      - "apps/CYCloudIdentity/docs/ARCHITECTURE.md"
 
 permissions:
   contents: read
@@ -33,6 +42,15 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
+      - name: Remind to sync CY Web's CYID contract mirror after merge
+        working-directory: cyapps
+        run: |
+          files=$(python3 -c 'import json;print(" ".join(["apps/CYCloudIdentity/"+f["source"] for f in json.load(open("apps/CYCloudIdentity/CONSUMER_SYNC_MANIFEST.json"))["files"]]+["apps/CYCloudIdentity/CONSUMER_SYNC_MANIFEST.json"]))')
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only FETCH_HEAD HEAD -- $files || true)
+          if [ -n "$changed" ]; then
+            echo "::warning::CY Web mirrors these CYID files; after merging, run 'bash scripts/sync-cyid-consumer-contract.sh' in chihyuan-web, or every CY Web PR fails Governance Check: $(echo $changed | tr '\n' ' ')"
+          fi
       - name: Run CY Web tests that import the shared CYID resolver
         working-directory: cyweb
         env:
