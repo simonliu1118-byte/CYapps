@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.63 — 2026/11/18
+
+- CYID 命名整理第一步（使用者 2026-11-18）：CYID 正式版名稱推導（CYAccountingWeb `resolve-cyid-production-runtime.mjs`、CYCloudIdentity `render-production-config.mjs`）可直接接受正式名稱（`-prod`／`-production` 原樣使用），開發版名稱仍相容；之後解析出的 Worker 仍須驗證為正式版。
+- 開發版 CYID（Worker 與 D1）已於 2026-10-29 清除：`cycloudidentity-deploy.yml` 只保留 PR 驗證，移除部署與預檢；正式版部署不再讀 `CYID_D1_DATABASE_ID`（原用於與已刪除的開發 D1 做隔離比對）。CYID Consumer Impact: NONE。
+
 ## 2.3.62 — 2026/11/17
 
 - 公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job 層 `env`，GitHub variables 傳入的部署識別碼因此外洩。`REPO_POLICY.md` 新增規則：deploy workflow 不得經由 GitHub variables 傳遞部署識別碼，須部署時從 Cloudflare 解析並先遮蔽，或改用 secrets。

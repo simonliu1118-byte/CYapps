@@ -41,6 +41,8 @@ export function parseCyidProductionSettings(payload, configuredService) {
 export function deriveCyidProductionServiceName(developmentService) {
   const source = String(developmentService || '').trim();
   if (!WORKER_NAME.test(source)) throw new Error('CYID development Worker name has an invalid format.');
+  // A production name is accepted as-is (naming cleanup 2026-11-18); the provider is still verified as production.
+  if (/-(prod|production)$/.test(source)) return source;
   if (source.endsWith('-development')) return source.slice(0, -'-development'.length) + '-production';
   if (source.endsWith('-dev')) return source.slice(0, -'-dev'.length) + '-prod';
   return source + '-prod';

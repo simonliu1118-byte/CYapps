@@ -30,7 +30,7 @@
   - [ ] CYID（development／production）首次部署時同樣檢查（需先建立 secret，見下）。
   - [ ] 使用者可刪除 GitHub variables（CYPriceDesk Environment `cypricedesk-production`）：`CF_IDENTITY_SERVICE`、`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPD_FETCHER_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`。
   - [ ] CYAccountingWeb（Environment `development`）可刪除：`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_R2_BACKUP_BUCKET`、`CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN`；`CF_BACKUP_TOPOLOGY` 是模式開關（`legacy_gcs`／`parallel_dual_provider`），不是識別碼，保留。
-  - [ ] CYID：需先建立 secret `CYID_D1_DATABASE_ID`（值同現有 variable），確認 development／production 部署成功後再刪除同名 variable。
+  - [x] CYID：開發版 CYID 已不存在（2026-11-18 確認），開發版部署已移除，`CYID_D1_DATABASE_ID`（secret 與 variable）都不再使用（governance 2.3.63）。
 - [ ] `group_summaries` 自 V1.4.0 起前端不再使用（走勢圖改由 `price_observations` 計算），仍照常寫入；確認不需要後可移除。
 
 ### 待使用者手動處理

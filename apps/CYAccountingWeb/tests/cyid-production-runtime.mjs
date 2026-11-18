@@ -9,6 +9,8 @@ import {
 assert.equal(deriveCyidProductionServiceName('cyid-development'), 'cyid-production');
 assert.equal(deriveCyidProductionServiceName('cyid-dev'), 'cyid-prod');
 assert.equal(deriveCyidProductionServiceName('cyid'), 'cyid-prod');
+assert.equal(deriveCyidProductionServiceName('cyid-prod'), 'cyid-prod');
+assert.equal(deriveCyidProductionServiceName('cyid-production'), 'cyid-production');
 
 const developmentService = 'cyid-development-provider';
 const service = 'cyid-development-provider-prod';
