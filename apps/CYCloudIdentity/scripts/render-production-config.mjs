@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 export function productionWorkerName(developmentName) {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(developmentName ?? '')) throw new Error('INVALID_DEVELOPMENT_WORKER_NAME');
-  const name = developmentName.endsWith('-development') ? developmentName.replace(/-development$/, '-production')
+  // A production name is accepted as-is (naming cleanup 2026-11-18); development names still map for compatibility.
+  const name = /-(prod|production)$/.test(developmentName) ? developmentName
+    : developmentName.endsWith('-development') ? developmentName.replace(/-development$/, '-production')
     : developmentName.endsWith('-dev') ? developmentName.replace(/-dev$/, '-prod') : `${developmentName}-prod`;
   if (name.length > 63) throw new Error('INVALID_PRODUCTION_WORKER_NAME');
   return name;

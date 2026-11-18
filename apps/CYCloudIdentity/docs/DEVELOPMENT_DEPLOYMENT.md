@@ -2,6 +2,8 @@
 
 > Development only. Production deployment, production DNS/custom domain and paid-tier changes remain out of scope.
 
+> **2026-11-18：開發版 CYID 已不存在**（Worker 與 D1 於 2026-10-29 清除）。`cycloudidentity-deploy.yml` 只保留 PR 驗證工作（改名為 CYCloud Identity Development Validate），部署、預檢與 `CYID_D1_DATABASE_ID` 都已移除。以下內容為歷史紀錄。正式版部署仍用 secret `CYID_WORKER_NAME` 推得正式 Worker；該值現在可直接填正式名稱（`-prod`／`-production` 原樣使用），開發版名稱仍相容。
+
 ## Latest checkpoint — Invoice development CYID activation, 2026-10-12
 
 After #38/#39 preparation, the user confirmed original Windows invoices/settings/credentials continuity and authorized continuation. Invoice #420 head70514413/treec8fb38c1 passed all checks; [actual activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325), source8488ce3d/same tree, verified CYID_ENABLED=true, exact inherited settings and 100% reviewed business deployment. Original Invoice Workspace1/Device4/Token hashes/employee/history/FK/routes remain; migration skipped/private cleanup passed. Recovery UTC2026-10-12T05:05:10.603Z. Provider development0.3.7/contract1.0.4 unchanged. Original Windows live CYID Employee/Device validation, other roles/private transport/AA/AB/AC remain pending; no production/Release or direct Consumer Identity D1 access. The following #38/#39 evidence describes the earlier preparation stage.
