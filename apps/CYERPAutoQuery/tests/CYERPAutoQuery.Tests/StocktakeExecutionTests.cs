@@ -14,6 +14,7 @@ public class StocktakeExecutionTests
 
         public Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<StocktakeSheet>>([new("990001", new DateOnly(2026, 10, 1)), new("990002", new DateOnly(2026, 10, 2))]);
+        public Task CloseReportAsync() => Task.CompletedTask;
         public Task<StocktakeDetail> ReadSheetAsync(string sheetNo, CancellationToken ct)
         {
             Calls.Add("read " + sheetNo);
