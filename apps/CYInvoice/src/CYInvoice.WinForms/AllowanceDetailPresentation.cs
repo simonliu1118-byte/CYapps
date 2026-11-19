@@ -17,8 +17,16 @@ internal static class AllowanceDetailPresentation
                 new("原發票日期",InvoiceOperationHistoryControl.FormatAllowanceDate(original.InvoiceDate.ToString(CultureInfo.InvariantCulture))),
                 new("買受人",original.BuyerName),new("統一編號",original.BuyerIdentifier),new("原發票含稅金額",MoneyFormatter.Integer(original.Amount)),
                 new("使用環境",original.Environment==Environments.Test?"測試":"正式")]);
+            if(InvoiceAllowanceMetadata.HasCompleteSummary(original)) {
+                try { rows.Add(new("目前可折讓含稅額",InvoiceAllowanceMetadata.RemainingGross(original).ToString())); }
+                catch(Exception error)when(error is InvalidOperationException or InvalidDataException or OverflowException) {
+                    CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"AllowanceDetailPresentation");
+                    rows.Add(new("目前可折讓含稅額","未取得可確認金額"));
+                }
+            }
         }
         foreach(var field in fields) {
+            if(original is not null&&field.Key=="官方折讓歷史")continue;
             if(field.Key=="原折讓商品"&&tables.Any(table=>table.Title=="原折讓商品"))continue;
             if(original is not null && rows.Any(row=>row.Key==field.Key))continue;
             var value=field.Value;
@@ -28,7 +36,9 @@ internal static class AllowanceDetailPresentation
         }
         var all=tables.ToList();
         if(original is not null) {
-            all.Insert(0,BusinessDetailControl.Products("原發票商品",original.Items));
+            all.Insert(0,BusinessDetailControl.Products("原發票商品",original.Items) with {
+                Columns=["品名","數量",original.DetailVat==1?"含稅單價":"未稅單價",original.DetailVat==1?"含稅金額":"未稅金額"],
+            });
             all.Insert(1,History(InvoiceAllowanceMetadata.ReadOfficial(original)));
         }
         return(rows,all);
@@ -40,11 +50,11 @@ internal static class AllowanceDetailPresentation
             InvoiceOperationHistoryControl.InclusiveAmount(item),item.CancelDate>0?"已作廢":item.InvoiceStatus==UploadStatuses.Complete?"已完成":"待核對" }).ToArray());
 
     public static BusinessDetailTable Official(AllowanceQueryItem item) => new("原折讓商品",
-        ["品名","數量","單價","稅別","未稅金額","稅額"],item.ProductItems.EnumerateArray().Select(row=>(IReadOnlyList<string>)new[] {
+        ["品名","數量","未稅單價","稅別","未稅金額","稅額"],item.ProductItems.EnumerateArray().Select(row=>(IReadOnlyList<string>)new[] {
             "original_description","quantity","unit_price","tax_type","amount","tax" }.Select(key=>row.TryGetProperty(key,out var value)?value.ToString():"－").ToArray()).ToArray());
 
     public static BusinessDetailTable Draft(IReadOnlyList<AllowanceProductItem> items) => new("本次折讓商品",
-        ["品名","數量","單價","稅別","未稅金額","稅額"],items.Select(item=>(IReadOnlyList<string>)new[] {
+        ["品名","數量","未稅單價","稅別","未稅金額","稅額"],items.Select(item=>(IReadOnlyList<string>)new[] {
             item.OriginalDescription,item.Quantity.ToString(CultureInfo.InvariantCulture),item.UnitPrice.ToString(CultureInfo.InvariantCulture),item.TaxType.ToString(CultureInfo.InvariantCulture),
             item.Amount.ToString(CultureInfo.InvariantCulture),item.Tax.ToString(CultureInfo.InvariantCulture) }).ToArray());
 }

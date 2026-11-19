@@ -13,7 +13,8 @@ internal enum ManualReviewDetailAction
 
 internal sealed class ManualReviewDetailForm : Form
 {
-    private BusinessDetailControl content = null!;
+    private ScrollableControl content = null!;
+    private readonly bool allowanceDetails;
     private TableLayoutPanel layout = null!;
     public ManualReviewDetailForm(
         string title,
@@ -24,12 +25,14 @@ internal sealed class ManualReviewDetailForm : Form
         bool primaryDanger = false,
         string secondaryActionText = "",
         IReadOnlyList<InvoiceItem>? originalItems = null,
-        IReadOnlyList<BusinessDetailTable>? tables = null)
+        IReadOnlyList<BusinessDetailTable>? tables = null,
+        bool allowanceDetails = false)
     {
         Text = title;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(700, 640);
-        MinimumSize = new Size(500, 360);
+        this.allowanceDetails=allowanceDetails;
+        ClientSize = allowanceDetails ? new Size(840,700) : new Size(700,640);
+        MinimumSize = allowanceDetails ? new Size(720,500) : new Size(500,360);
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
@@ -40,11 +43,12 @@ internal sealed class ManualReviewDetailForm : Form
             fields = fields.Where(row => row.Key != "原發票商品").ToArray();
             allTables.Insert(0, BusinessDetailControl.Products("原發票商品", originalItems));
         }
-        content = new BusinessDetailControl(fields, allTables);
+        content = CreateContent(fields,allTables);
 
         var close = UiControls.StandardButton("關閉");
         close.Width = 96;
         close.DialogResult = DialogResult.Cancel;
+        if(allowanceDetails)Shown+=(_,_)=>close.Focus();
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -73,10 +77,17 @@ internal sealed class ManualReviewDetailForm : Form
         {
             var useDangerStyle = primaryDanger ||
                                  string.Equals(primaryActionText, "已人工處理", StringComparison.Ordinal);
-            var primary = useDangerStyle
+            var primary = allowanceDetails && !useDangerStyle ? UiControls.PrimaryIssueButton() : useDangerStyle
                 ? UiControls.DangerButton(primaryActionText)
                 : UiControls.StandardButton(primaryActionText);
             primary.Width = primaryActionText.Length >= 7 ? 132 : 112;
+            if(allowanceDetails) {
+                primary.Text=primaryActionText;
+                primary.Font=Font;
+                primary.Height=UiControls.StandardButtonHeight;
+                primary.Margin=new Padding(6,2,6,2);
+                if(primary is PrimaryActionButton themed)themed.SetEnvironment(true);
+            }
             primary.TabIndex = 0;
             primary.Click += (_, _) => Complete(ManualReviewDetailAction.Primary);
             actions.Controls.Add(primary);
@@ -89,7 +100,7 @@ internal sealed class ManualReviewDetailForm : Form
             actions.Controls.Add(secondary);
         }
         actions.Controls.Add(close);
-        actions.SizeChanged += (_, _) => CenterActions(actions);
+        actions.SizeChanged += (_, _) => CenterActions(actions,allowanceDetails);
 
         var root = new TableLayoutPanel
         {
@@ -116,7 +127,7 @@ internal sealed class ManualReviewDetailForm : Form
         layout.SuspendLayout();
         layout.Controls.Remove(content);
         content.Dispose();
-        content=new BusinessDetailControl(fields,tables);
+        content=CreateContent(fields,tables);
         layout.Controls.Add(content,0,0);
         layout.ResumeLayout(true);
         content.AutoScrollPosition=new Point(-position.X,-position.Y);
@@ -129,9 +140,12 @@ internal sealed class ManualReviewDetailForm : Form
         Close();
     }
 
-    private static void CenterActions(FlowLayoutPanel panel)
+    private ScrollableControl CreateContent(IReadOnlyList<KeyValuePair<string,string>> fields,IReadOnlyList<BusinessDetailTable> tables) =>
+        allowanceDetails ? new AllowanceDetailControl(fields,tables) : new BusinessDetailControl(fields,tables);
+
+    private static void CenterActions(FlowLayoutPanel panel,bool alignRight)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / (alignRight?1:2)), 4, 0, 0);
     }
 }
