@@ -1,6 +1,6 @@
 # 單一登入入口設計（CY Web 登入入口）
 
-> 狀態：**設計已定案，待實作**（使用者 2026-11-18 同意採方案 B，並決定第 10 節兩項）。本文件描述設計與驗收，不是規則來源；定案後的契約寫入 `AUTH_CONTRACT.md` 與 `CONSUMER_INTEGRATION_STANDARD.md`，並依 consumer 版本規則升版。
+> 狀態：**設計已定案；第 1 階段（CYID）已實作，待部署**（CYID 0.4.0／consumer contract 1.1.0，2026-11-19）。第 2 階段起尚未開始。使用者 2026-11-18 同意採方案 B，並決定第 10 節兩項。本文件描述設計與驗收，不是規則來源；定案後的契約寫入 `AUTH_CONTRACT.md` 與 `CONSUMER_INTEGRATION_STANDARD.md`，並依 consumer 版本規則升版。
 
 ## 1. 背景與目標
 
@@ -132,7 +132,7 @@ CY Web、CYAccountingWeb、CYPriceDesk 都使用 CYID 帳號，但各自實作�
 
 | 階段 | 內容 | 驗收 |
 | --- | --- | --- |
-| 1 | CYID：`sso_return_url`、`sso_handoffs`、issue／redeem、Audit、清除排程；consumer 標準與 AUTH_CONTRACT 更新 | 第 8 節 1–5、7、8、11、13 |
+| 1 | CYID：`sso_return_url`、`sso_handoffs`、issue／redeem、Audit、清除排程；consumer 標準與 AUTH_CONTRACT 更新（**已實作，待部署**：CYID 0.4.0、migration 0009、`tests/sso-handoff.test.mjs`；清除採發碼時有上限的刪除而非 Cron，見 `AUTH_CONTRACT.md` §13.4） | 第 8 節 1–5、7、8、11、13 |
 | 2 | CY Web：`/sso` 入口、App 登記欄位 | 第 8 節 6、9、10、12（入口端） |
 | 3 | CYPriceDesk 試行：callback、未登入導向入口、舊登入頁保留為備援 | 實機：已登入／未登入／無權限／首次登入四種情境 |
 | 4 | CYAccountingWeb 改用 | 同上 |

@@ -227,6 +227,45 @@ assert not any(access['application_id'] == 'APP_TEST_REGISTERED' for access in s
 assert call('/v1/admin/identity/applications', os.environ['SUPER_TOKEN'], {**body, 'displayName': 'Conflicting Name'})[0] == 409
 PY
 
+# SSO portal handoff on the real local Worker/D1 (migration 0009, real limiter binding).
+PORT="$PORT" SUPER_TOKEN="$SUPER_TOKEN" STATE_DIR="$STATE_DIR" python3 - <<'PY'
+import json, os, urllib.request, urllib.error
+base = 'http://127.0.0.1:' + os.environ['PORT']
+def call(path, body, token=None, app='APP_TEST_LOGIN'):
+    headers = {'content-type': 'application/json'}
+    if token: headers['authorization'] = 'Bearer ' + token
+    if app: headers['x-identity-application'] = app
+    request = urllib.request.Request(base + path, data=json.dumps(body).encode(), headers=headers)
+    try:
+        response = urllib.request.urlopen(request)
+    except urllib.error.HTTPError as error:
+        response = error
+    return response.status, json.load(response)
+token = os.environ['SUPER_TOKEN']
+url = 'https://sso.example.com/auth/sso/callback'
+status, result = call('/v1/admin/identity/applications', {'applicationId': 'APP_TEST_SSO', 'displayName': 'Synthetic SSO App', 'ssoReturnUrl': 'https://SSO.example.com/auth/sso/callback'}, token)
+assert status == 200 and result['application']['ssoReturnUrl'] == url, result
+assert call('/v1/admin/identity/applications', {'applicationId': 'APP_TEST_SSO', 'displayName': 'Synthetic SSO App', 'ssoReturnUrl': url + '?next=/'}, token)[0] == 400
+assert call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO'}, token, 'APP_TEST_SSO')[1]['error']['code'] == 'SSO_PORTAL_REQUIRED'
+assert call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO', 'returnUrl': 'https://sso.example.com.evil.com/auth/sso/callback'}, token)[0] == 400
+status, handoff = call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO'}, token)
+assert status == 200 and handoff['returnUrl'] == url and len(handoff['code']) == 43, handoff
+assert call('/v1/identity/sso/handoff/redeem', {'code': handoff['code']}, None, 'APP_TEST_EXTRA')[1]['error']['code'] == 'SSO_HANDOFF_INVALID'
+status, handoff = call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO'}, token)
+status, session = call('/v1/identity/sso/handoff/redeem', {'code': handoff['code']}, None, 'APP_TEST_SSO')
+assert status == 200 and session['principal']['workspaceRole'] == 'SUPER_ADMIN', session
+status, resolved = call('/v1/identity/session/resolve', {}, session['session']['token'], 'APP_TEST_SSO')
+assert status == 200 and resolved['principal'] == session['principal']
+status, replay = call('/v1/identity/sso/handoff/redeem', {'code': handoff['code']}, None, 'APP_TEST_SSO')
+assert status == 401 and replay['error'] == {'code': 'SSO_HANDOFF_INVALID', 'message': 'Single sign-on handoff is invalid.'}
+with open(os.path.join(os.environ['STATE_DIR'], 'sso-secrets.txt'), 'w') as f:
+    f.write('\n'.join([handoff['code'], session['session']['token']]))
+PY
+while IFS= read -r secret; do
+  if grep -rqF -- "$secret" "$WORKER_LOG"; then echo 'SSO code or Session token appeared in Worker log' >&2; exit 1; fi
+done < "$STATE_DIR/sso-secrets.txt"
+rm -f "$STATE_DIR/sso-secrets.txt"
+
 # Group access must no longer authorize a non-core App.
 LEGACY_STATUS="$(curl --silent --output "$STATE_DIR/legacy.json" --write-out '%{http_code}' \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
@@ -411,3 +450,4 @@ echo 'PASS create-time activation email failure preserves pending Employee'
 echo 'PASS admin snapshot exposes role/access model'
 echo 'PASS Super Admin protected lifecycle and security policy boundary'
 echo 'PASS revoked session rejection'
+echo 'PASS SSO return URL registration, portal-only issue, app-bound single-use redeem and no code/token in Worker log'

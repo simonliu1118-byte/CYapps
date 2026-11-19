@@ -23,7 +23,7 @@ type SessionAuthorityRow = {
   workspace_application_enabled: number;
 };
 
-function bearerSessionToken(request: Request): string | null {
+export function bearerSessionToken(request: Request): string | null {
   const raw = request.headers.get("authorization")?.trim() ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(raw);
   const token = match?.[1]?.trim() ?? "";

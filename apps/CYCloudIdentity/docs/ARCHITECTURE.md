@@ -75,6 +75,10 @@ Resolve checks current authority on every request: session state/expiry, Workspa
 
 No sliding-write heartbeat is used. Disable, role/access changes, credential changes, forced Email recovery and Super Admin transfer revoke or invalidate affected sessions.
 
+### 6.1 單一登入交換（0.4.0／contract 1.1.0）
+
+CY Web（core account portal）是唯一登入頁。其他 App 以一次性交換碼取得自己的新 Session：入口帶自己的 Session 呼叫 `sso/handoff/issue`，CYID 驗證後回傳交換碼與該 App 登記的 `applications.sso_return_url`；目標 App 以自己的 Service Binding 呼叫 `sso/handoff/redeem`，CYID 原子消耗交換碼（`sso_handoffs`，只存 SHA-256、60 秒、單次）、重新檢查權限後用與 login 相同的程式建立 Session。各 App Session 仍互相獨立，不共用 cookie。過期列於每次發碼時以有上限的刪除清除，不用 Cron。合約見 `AUTH_CONTRACT.md` §13 與 `CONSUMER_INTEGRATION_STANDARD.md` §21。
+
 ## 7. Email verification and first login
 
 New Employee lifecycle:

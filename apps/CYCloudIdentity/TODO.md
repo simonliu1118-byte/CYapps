@@ -2,6 +2,15 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## 單一登入入口第 1 階段（CYID）— 2026-11-19
+
+- Source **0.4.0 Build 0／consumer contract 1.1.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：migration `0009_sso_handoff.sql`（`applications.sso_return_url`、`sso_handoffs`）、§17.1 登記接口選填 `ssoReturnUrl`、`sso/handoff/issue`、`sso/handoff/redeem`、Audit、發碼時有上限的過期列清除。設計 `docs/SSO_PORTAL_DESIGN.md`；契約 `docs/AUTH_CONTRACT.md` §13、`docs/CONSUMER_INTEGRATION_STANDARD.md` §21。
+- [x] 本機：TypeScript、Node 測試（含 `tests/sso-handoff.test.mjs`，涵蓋設計第 8 節 1–5、7、8、10、11、13）、schema validators、public scan、本機 Worker/D1 auth（含 SSO 往返）與 first-login acceptance、CI config render／local migrations／dry-run bundle。
+- [ ] PR exact-head CI（PR 須標示 `CYID Consumer Impact: BACKWARD_COMPATIBLE`）與合併。
+- [ ] 合併後同步 CY Web canonical 鏡像（`CONSUMER_SYNC_MANIFEST.json` 所列 7 檔；本次變更 `CONSUMER_CONTRACT_VERSION`、`CONSUMER_INTEGRATION_STANDARD.md`、`CONSUMER_CONTRACT_CHANGELOG.md`、`AUTH_CONTRACT.md`、`ARCHITECTURE.md`）。
+- [ ] 經使用者另行同意的正式部署（forward migration 0009＋source）；部署後以 core Super Admin 登記第一個試行 App 的回跳網址。
+- [ ] 第 2 階段（CY Web `/sso` 入口、確認畫面、App 登記欄位）等 CY Web V0.22.0 部署後再開始；第 3 階段 CYPriceDesk 試行。上線前另做一次獨立安全審查（設計第 8 節）。
+
 ## 測試期帳號刪除與 Audit 暫停 — 2026-10-15
 
 - 使用者明確要求：為反覆測試新增／Email 驗證流程，暫時允許刪除已驗證帳號，並暫停新增／刪除帳號 Audit；一次性測試例外，不改永久 PROJECT_RULES。
