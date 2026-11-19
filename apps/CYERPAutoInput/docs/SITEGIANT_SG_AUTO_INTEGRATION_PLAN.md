@@ -2,7 +2,7 @@
 
 > 建立：2026-11-19（Asia/Taipei）  
 > 狀態：**需求與流程待使用者確認；尚未核准進入程式實作**  
-> 所屬專案：\`CYapps/apps/CYERPAutoInput\`；預計測試入口名稱：**SG全自動**  
+> 所屬專案：`CYapps/apps/CYERPAutoInput`；預計測試入口名稱：**SG全自動**  
 > 來源：2026-11-19 使用者討論，現有 CYERPAutoInput 原始碼／README／WORK_HANDOFF，以及 SiteGiant 公開文件。  
 > **阻擋條件：2026-11-20 使用者自行梳理並明確確認完整操作流程前，不得新增按鈕、不改程式碼、不開啟自動出貨／開票、不執行測試訂單、不合併或發布。日期到了不代表自動獲得開工授權。**
 
@@ -32,7 +32,7 @@
 | 跨通路安排出貨 | 官方文件支持 | 訂單處理可勾選不同商城訂單一起安排；各商城／物流仍可能有不同參數與處理方式 |
 | 批次取得物流寄件文件／PDF | **部分確認** | 官方允許批次列印物流標籤，但要**依商城分批**；是否能自動批次儲存為 PDF、是否能取得每張標籤與訂單編號的可靠對照、能否組成全部訂單 PDF，待使用者實際流程／樣本驗證。酷澎相關功能有提及 PDF 格式 |
 | 匯出全部訂單 Excel | 官方文件支持有匯出功能 | 「全部訂單 > 匯出訂單」提供選定訂單及依篩選結果匯出；舊版公告提到依篩選結果最多 31 天，仍以現行帳號的介面與匯出欄位為準。**未驗證**單一 Excel 能同時涵蓋所有所需通路與欄位 |
-| Excel 直接餵給 AutoInput | **目前不可直接使用** | 既有匯入器分別識別蝦皮官方 \`.xlsx\`、MO店+ OrderExport \`.xls\`、酷澎 DeliveryList \`.xlsx\` 的固定欄位；不能假設 SiteGiant Excel 與其格式相同 |
+| Excel 直接餵給 AutoInput | **目前不可直接使用** | 既有匯入器分別識別蝦皮官方 `.xlsx`、MO店+ OrderExport `.xls`、酷澎 DeliveryList `.xlsx` 的固定欄位；不能假設 SiteGiant Excel 與其格式相同 |
 | AutoInput 批次輸入 ERP | 已具備核心 | 已有共用預覽、驗證、批次、轉人工、ERP 新增／輸入／儲存、重複檢查與結果清單；SG 只需擴充進入此核心的來源適配 |
 | 發票處理 | **需要決策** | 現有 MO店+／酷澎透過 CYInvoice 與光貿；SiteGiant 亦有加購的 Amego 光貿串接。**同一訂單不得由兩套程式重複開立**；需選定權責並確認發票號碼／日期／金額回填方式 |
 
@@ -43,39 +43,39 @@
 3. 依通路處理及保存出貨文件（可能是分批標籤 PDF；**尚未確認一鍵取得全部 PDF**）。
 4. 從「全部訂單」取得對應本批訂單的完整 Excel；不可誤拿只有物流資料的「快遞簽單 Excel」或只有履約紀錄的 CSV。
 5. SG 專用解析器讀取資料，做通路識別、商品品號、實際應收／應開金額、折扣、運費、物流、拆包裹、防重複與發票核對。
-6. 轉換為既有 \`ImportedOrder\`／\`ImportedItem\`，進入共用預覽；需要人工處理者不自動輸入。
+6. 轉換為既有 `ImportedOrder`／`ImportedItem`，進入共用預覽；需要人工處理者不自動輸入。
 7. **發票權責與流程順序待定稿**；驗證完成後才由共用 ERP 批次核心輸入，儲存並核對 ERP 單號。
 8. 按現有機制列出成功、略過、需人工確認、物流待回補、失敗、未處理及停止原因；可對帳本批 SG 訂單筆數、PDF 張數、Excel 筆數及 ERP 完成張數。
 
 ## 2. AutoInput 原始碼現況與推薦介入點
 
-2026-11-19 檢查 \`CYapps\` 現有 C#／.NET 8／WinForms 原始碼及工作分支：
+2026-11-19 檢查 `CYapps` 現有 C#／.NET 8／WinForms 原始碼及工作分支：
 
-- \`MainForm.cs\`：「訂單匯入：」後排列 \`ImportButton("蝦皮")\`、\`ImportButton("MO店+")\`、\`ImportButton("酷澎商城")\`。
-- \`ImportButton\`：既有按鈕尺寸約 **120 × 38**、字體 **10.5 pt**、相同 Margin，三平台各有品牌風格按鈕與下拉選單。新 SG 入口應保持同區塊、同幾何尺寸、同操作風格。
-- \`XlsxReader.cs\`／\`XlsReader.cs\`：已有 Excel 讀取能力，使用前須核對 SG 匯出的格式、工作表與欄型（CSV 不能假定由 Excel 讀取器接受）。
-- \`ImportedOrder.cs\`：跨來源的 \`ImportedOrder\`／\`ImportedItem\`，包含訂單來源、原訂單編號、ERP 表頭、明細、物流號碼、發票欄位、人工接手原因與 \`LedgerKey\`。
-- \`OrderImportForm.cs\`／\`OrderLedger.cs\`：共用預覽、批次選擇、輸入前檢查與防重複。
-- \`ShopeeOrderImport.cs\`、\`MoOrderImport.cs\`、\`CoupangOrderImport.cs\`：目前三種平台匯出格式各自有欄位與金額規則，**SG 應獨立解析並轉進共用模型，不得偷塞成既有平台檔案格式**。
-- \`CyInvoiceLink.cs\`／\`MainForm.Invoice.cs\`：發票整合現有邊界。交接文件另指出 CYInvoice 版本相容性問題，新增 SG 前仍須核實實際可用版本。
+- `MainForm.cs`：「訂單匯入：」後排列 `ImportButton("蝦皮")`、`ImportButton("MO店+")`、`ImportButton("酷澎商城")`。
+- `ImportButton`：既有按鈕尺寸約 **120 × 38**、字體 **10.5 pt**、相同 Margin，三平台各有品牌風格按鈕與下拉選單。新 SG 入口應保持同區塊、同幾何尺寸、同操作風格。
+- `XlsxReader.cs`／`XlsReader.cs`：已有 Excel 讀取能力，使用前須核對 SG 匯出的格式、工作表與欄型（CSV 不能假定由 Excel 讀取器接受）。
+- `ImportedOrder.cs`：跨來源的 `ImportedOrder`／`ImportedItem`，包含訂單來源、原訂單編號、ERP 表頭、明細、物流號碼、發票欄位、人工接手原因與 `LedgerKey`。
+- `OrderImportForm.cs`／`OrderLedger.cs`：共用預覽、批次選擇、輸入前檢查與防重複。
+- `ShopeeOrderImport.cs`、`MoOrderImport.cs`、`CoupangOrderImport.cs`：目前三種平台匯出格式各自有欄位與金額規則，**SG 應獨立解析並轉進共用模型，不得偷塞成既有平台檔案格式**。
+- `CyInvoiceLink.cs`／`MainForm.Invoice.cs`：發票整合現有邊界。交接文件另指出 CYInvoice 版本相容性問題，新增 SG 前仍須核實實際可用版本。
 
-**設計建議（尚未批准實作）**：新增單一 SG 來源適配器（暫名 \`SiteGiantOrderImport.cs\`）與必要的流程協調程式；資料驗證與 UI 優先共用現有核心，不額外複製第二套 ERP、ledger 或批次結果流程。
+**設計建議（尚未批准實作）**：新增單一 SG 來源適配器（暫名 `SiteGiantOrderImport.cs`）與必要的流程協調程式；資料驗證與 UI 優先共用現有核心，不額外複製第二套 ERP、ledger 或批次結果流程。
 
 ## 3. 「SG全自動」入口與品牌色彩需求
 
 **未來第一項程式工作**：
 
 - 在 AutoInput 主畫面「訂單匯入：」同一排新增按鈕，預設文字為 **SG全自動**，與蝦皮／MO店+／酷澎並列。
-- 使用現有 \`ImportButton\` 所採用的按鈕尺寸、字體、Margin、圓角與互動慣例，視需要實作局部品牌色變體；**不重新設計整條工具列，也不修改其他通路的外觀**。
-- 依 SiteGiant 官方品牌指南使用 **主綠 \`#11AA4F\`**、**藍 \`#13387D\`** 作為 SG 專屬配色；文字顏色、滑過／按下／停用狀態需核對對比度。品牌配色只作用於 SG 入口，避免形成第二套全域 CY 介面風格。
+- 使用現有 `ImportButton` 所採用的按鈕尺寸、字體、Margin、圓角與互動慣例，視需要實作局部品牌色變體；**不重新設計整條工具列，也不修改其他通路的外觀**。
+- 依 SiteGiant 官方品牌指南使用 **主綠 `#11AA4F`**、**藍 `#13387D`** 作為 SG 專屬配色；文字顏色、滑過／按下／停用狀態需核對對比度。品牌配色只作用於 SG 入口，避免形成第二套全域 CY 介面風格。
 - 是否「單擊直接啟動 SG 全自動」或「按鈕點開選單（全自動／手動匯入／接續／重印）」由使用者明日流程決定；**現在不得擅自指定或連接實際執行事件**。
 - 尊重 SiteGiant 商標使用條件；目前只規劃色彩與文字入口，不預設下載或使用官方標誌圖像。UI 實作前仍需閱讀 AITeam 的 Desktop Visual Guide。
 
 ## 4. 介接中的核心安全與資料正確性
 
-1. **原始通路身份**：SG 訂單要保留來源通路＋原平台訂單編號。現有 \`LedgerKey = Source:OrderSn\`；若同一蝦皮／MO／酷澎訂單從新 SG 入口匯入，也必須與既有來源共用重複判斷，不能單純用 \`SiteGiant:SG內部ID\` 造成重複打單。
+1. **原始通路身份**：SG 訂單要保留來源通路＋原平台訂單編號。現有 `LedgerKey = Source:OrderSn`；若同一蝦皮／MO／酷澎訂單從新 SG 入口匯入，也必須與既有來源共用重複判斷，不能單純用 `SiteGiant:SG內部ID` 造成重複打單。
 2. **本批次範圍**：Excel 可能包含舊單；需有「本次處理的訂單 ID 清單」交叉比對，不能將篩選結果裡的所有歷史訂單當成新增單據。
-3. **一單多品項／多包裹**：合併商品明細與分包裹物流號碼時，維持一張訂單只依核准規則建立 ERP 銷貨單；現有單一 \`TrackingNumber\` 欄位不足以原生表示多包裹，資料模型調整須先決議。尤其需確認 MomoTW／Mo店+／酷澎的實際狀況。
+3. **一單多品項／多包裹**：合併商品明細與分包裹物流號碼時，維持一張訂單只依核准規則建立 ERP 銷貨單；現有單一 `TrackingNumber` 欄位不足以原生表示多包裹，資料模型調整須先決議。尤其需確認 MomoTW／Mo店+／酷澎的實際狀況。
 4. **金額核對**：須拆分商品標價、實際單價、數量、訂單級折扣、優惠券、賣家／買家負擔運費、補貼、發票總額；多品項訂單可能在每列重複整張總額，不能逐列相加。核不平即整張轉人工，不得猜測補差額。
 5. **品號轉換**：區別 SG 庫存 SKU、平台商品貨號、選項貨號及 ERP 品號；現有「箱」「贈」「+」「x數字」等命名規則可共用，但須核對 SG 匯出後保留的是哪一種 SKU。
 6. **物流／PDF 對應**：物流標籤、追蹤編號、原訂單 ID 與包裹 ID 要能核對；不能只依 PDF 頁碼或下載順序猜測對應。PDF 以列印／出貨文件為主，**不必在已具備完整 Excel 的情況下重複以 OCR 解析金額**。
@@ -101,7 +101,7 @@
 |---|---|---|
 | 0｜需求定稿 | 記錄使用者親自走過的完整 SG 操作與檔案格式 | 操作順序／例外／發票權責／輸出檔均明確 |
 | 1｜UI 入口 | 先新增同排的「SG全自動」品牌按鈕（不影響其他平台） | 配色、尺寸、位置、狀態及 UI 快照確認 |
-| 2｜檔案解析 | 以真實資料的去識別化 fixture 建立 SG Excel 解析及 \`ImportedOrder\` 對應 | 多品項、折扣、運費、重複與資料不全全部有測試 |
+| 2｜檔案解析 | 以真實資料的去識別化 fixture 建立 SG Excel 解析及 `ImportedOrder` 對應 | 多品項、折扣、運費、重複與資料不全全部有測試 |
 | 3｜訂單處理與文件 | 按定稿方式完成 SG 出貨、物流標籤／PDF 與匯出，必要時分商城 | 本批訂單數、Excel 單號、物流編號及 PDF 一一可對 |
 | 4｜發票與 ERP | 接通唯一開票流程、既有共用預覽／批次 ERP 輸入 | 正確金額、沒有重複開票／打單、失敗可安全接續 |
 | 5｜實機驗收 | Windows 測試包、日常小批次實單驗證 | 使用者確認後才提 PR／合併／Release |
@@ -112,10 +112,10 @@
 
 ### AutoInput 既有程式／文件
 
-- \`apps/CYERPAutoInput/README.md\`：平台匯入、ERP 流程、發票、商品、物流、批次。
-- \`apps/CYERPAutoInput/WORK_HANDOFF.md\`：V1.2.10／CYInvoice 未結事項／實機已知問題。
-- \`apps/CYERPAutoInput/MainForm.cs\`：\`ImportButton\` 及三平台入口。
-- \`apps/CYERPAutoInput/ImportedOrder.cs\`、\`XlsxReader.cs\`、\`XlsReader.cs\`、\`OrderImportForm.cs\`、\`OrderLedger.cs\`、\`CyInvoiceLink.cs\`。
+- `apps/CYERPAutoInput/README.md`：平台匯入、ERP 流程、發票、商品、物流、批次。
+- `apps/CYERPAutoInput/WORK_HANDOFF.md`：V1.2.10／CYInvoice 未結事項／實機已知問題。
+- `apps/CYERPAutoInput/MainForm.cs`：`ImportButton` 及三平台入口。
+- `apps/CYERPAutoInput/ImportedOrder.cs`、`XlsxReader.cs`、`XlsReader.cs`、`OrderImportForm.cs`、`OrderLedger.cs`、`CyInvoiceLink.cs`。
 
 ### SiteGiant 官方／公開資料（查核於 2026-11-19）
 
@@ -125,12 +125,12 @@
 - [快遞簽單 Excel 欄位（**不是**銷貨商品明細）](https://support.sitegiant.com/zh/knowledge-base/how-to-use-carrier-manifest-zh/)
 - [訂單處理記錄匯出 CSV（**不是**完整訂單 Excel）](https://support.sitegiant.com/zh/knowledge-base/how-to-use-order-fulfillment-log-zh/)
 - [SiteGiant 光貿電子發票串接說明](https://support.sitegiant.com/zh/knowledge-base/how-to-integrate-and-submit-orders-to-amego-for-e-invoice-issuance-via-sitegiant-erp-zh/)
-- [SiteGiant 品牌指南與官方主色](https://sitegiant.tw/brand-guidelines/)（\`#11AA4F\`、\`#13387D\`）
+- [SiteGiant 品牌指南與官方主色](https://sitegiant.tw/brand-guidelines/)（`#11AA4F`、`#13387D`）
 - [SiteGiant 酷澎與物流 PDF 功能公告](https://sitegiant.tw/blog/2025-%E5%B9%B4-11-12-%E6%9C%88-%E7%B3%BB%E7%B5%B1%E6%9C%80%E6%96%B0%E5%8A%9F%E8%83%BD%E8%88%87%E5%84%AA%E5%8C%96%E9%87%8D%E9%BB%9E%E5%9B%9E%E9%A1%A7/)
 
 ## 8. 本次操作邊界與後續接手提示
 
 - **本次（2026-11-19）只允許建立／更新這份規劃文件及在 WORK_HANDOFF 加入連結。**
-- **未修改任何 \`.cs\`、UI、設定、VERSION／BUILD、發行包、workflow 或執行中的業務流程；沒有建立可用的 SG 按鈕。**
+- **未修改任何 `.cs`、UI、設定、VERSION／BUILD、發行包、workflow 或執行中的業務流程；沒有建立可用的 SG 按鈕。**
 - **使用者明日確認流程之前，所有後續工作只能是需求釐清及文件更新，不得自動啟動程式實作。**
 - 後續接手者務必先讀本文件最新版本、使用者當日補充的操作流程，以及 CYapps 共通與專案規則；不得把此草案誤認為已定稿的工單或核准實作。
