@@ -83,7 +83,7 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 
 部署步驟（使用者授權後）：
 
-1. Vercel 建立專案，Root Directory 指到 `apps/CYPriceDesk/fetcher`（Python 3.12、`requirements.txt`、`vercel.json`）。
+1. Vercel 建立專案，Root Directory 指到 `apps/CYPriceDesk/fetcher`（Python 3.12、`requirements.txt`、`vercel.json`）。Production Branch 為 `main`；Settings 的 Ignored Build Step 選「Only build production」（2026-11-19 設定）。專案連的是整個 CYapps，否則其他專案分支推送也會建 Preview，而較舊的分支沒有 `fetcher/`，會以「Root Directory does not exist」失敗。這個設定只能在 Vercel 做，`vercel.json` 位於 Root Directory 內，對沒有該目錄的分支無效。
 2. 在 Vercel 專案設定環境變數 `CYPD_FETCHER_SECRET`（隨機長字串）。
 3. GitHub Environment `cypricedesk-production` 新增 secret `CYPD_FETCHER_SECRET`（同一個值）。fetcher 網址（HTTPS）設在 Cloudflare Worker 的變數 `CYPD_FETCHER_URL`（不放 GitHub variable）。部署 workflow 會在 deploy 後以 `wrangler secret put` 從 stdin 寫入 Worker secret，不印出。
 
