@@ -29,6 +29,7 @@ import { json, requestIdFrom } from "./http";
 import { enforceLoginRateLimit } from "./rate-limit";
 import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot, handleRegisterWorkspaceApplication } from "./role-admin";
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
+import { handleIssueSsoHandoff, handleRedeemSsoHandoff } from "./sso";
 import type { Env } from "./types";
 export { ConsumerAuthoritySync } from "./consumer-authority";
 export { ConsumerNotifications } from "./consumer-notifications-entrypoint";
@@ -68,6 +69,12 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/session/resolve") {
         return await handleResolveSession(request, env, requestId);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/identity/sso/handoff/issue") {
+        return await handleIssueSsoHandoff(request, env, requestId);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/identity/sso/handoff/redeem") {
+        return await handleRedeemSsoHandoff(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/logout") {
         return await handleLogout(request, env, requestId);

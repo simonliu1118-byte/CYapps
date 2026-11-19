@@ -4,7 +4,7 @@
 
 ## 目前基準
 
-- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel fetcher `cypricedesk-fetcher` 已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
+- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
 - V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則同步為 governance 2.3.61（#626）。
 
 ## 待辦
@@ -30,13 +30,12 @@
   - [ ] CYID（development／production）首次部署時同樣檢查（需先建立 secret，見下）。
   - [ ] 使用者可刪除 GitHub variables（CYPriceDesk Environment `cypricedesk-production`）：`CF_IDENTITY_SERVICE`、`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_CYID_APPLICATION_ID`、`CF_CYID_WORKSPACE_ID`、`CF_CYWEB_PORTAL_URL`、`CF_CYPD_FETCHER_URL`、`CF_CYPRICEDESK_CUSTOM_DOMAIN`。
   - [ ] CYAccountingWeb（Environment `development`）可刪除：`CF_WORKER_NAME`、`CF_D1_DATABASE_NAME`、`CF_D1_DATABASE_ID`、`CF_R2_BACKUP_BUCKET`、`CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN`；`CF_BACKUP_TOPOLOGY` 是模式開關（`legacy_gcs`／`parallel_dual_provider`），不是識別碼，保留。
-  - [ ] CYID：需先建立 secret `CYID_D1_DATABASE_ID`（值同現有 variable），確認 development／production 部署成功後再刪除同名 variable。
+  - [x] CYID：開發版 CYID 已不存在（2026-11-18 確認），開發版部署已移除，`CYID_D1_DATABASE_ID`（secret 與 variable）都不再使用（governance 2.3.63）。
 - [ ] `group_summaries` 自 V1.4.0 起前端不再使用（走勢圖改由 `price_observations` 計算），仍照常寫入；確認不需要後可移除。
 
 ### 待使用者手動處理
 
-- [x] 刪除 sandbox 分支 `governance/scrapling-probe-init`、`claude/upbeat-ramanujan-3fwh1c`（使用者 2026-11-18 完成）。
-- [x] 刪除 Vercel 舊專案 `momo-keyword-price-prototype`（使用者 2026-11-18 完成；正式抓價服務 `cypricedesk-fetcher` 保留）。
+- [x] 刪除 Vercel 舊原型專案與 sandbox 兩個原型分支（使用者 2026-11-18 完成）。
 
 ## 已知限制
 

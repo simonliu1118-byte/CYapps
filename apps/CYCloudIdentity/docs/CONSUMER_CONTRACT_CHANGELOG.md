@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.1.0 — 2026-11-19
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 新增選用的單一登入入口（§21，`AUTH_CONTRACT.md` §13，設計 `SSO_PORTAL_DESIGN.md` 第 1 階段）：`POST /v1/identity/sso/handoff/issue`（只限 core account portal 帶自己的 Session）與 `POST /v1/identity/sso/handoff/redeem`（目標 App 以自己的 binding 兌換成新的 App Session，回應形狀同 login）。交換碼 32 bytes、只存 SHA-256、60 秒、單次、綁定 App；兌換時重新檢查員工、Workspace、App、Application Access、憑證版本與入口 Session；所有兌換失敗一律 `SSO_HANDOFF_INVALID`，失敗次數依 App 限制。§17.1 登記接口新增選填 `ssoReturnUrl`（https、網域、無帳密／port／query／fragment，正規化儲存、完整字串比對），回應與管理 snapshot 新增對應欄位，新錯誤碼 `INVALID_SSO_RETURN_URL`、`SSO_RETURN_URL_SHARED_APPLICATION`。Provider 0.4.0 新增 migration `0009_sso_handoff.sql`。未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像（`CONSUMER_SYNC_MANIFEST.json`）後才進行第 2 階段。
+
 ## 1.0.6 — 2026-10-15
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional private `ConsumerNotifications.notifySuperAdmin` RPC (§20) for fixed generic backup-health alerts. Current Super Admin recipient resolution, Email transport and budgets stay provider-owned; backup/incident state stays app-owned. No public route, arbitrary recipient/body, Session, permission grant or business-data storage is added. Provider 0.3.10 introduces a bounded delivery slot migration; existing consumers and minimum 1.0.0 remain supported.

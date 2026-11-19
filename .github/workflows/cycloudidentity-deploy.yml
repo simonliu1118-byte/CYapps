@@ -1,4 +1,4 @@
-name: CYCloud Identity Development Deploy
+name: CYCloud Identity Development Validate
 
 on:
   pull_request:
@@ -7,18 +7,7 @@ on:
     paths:
       - "apps/CYCloudIdentity/**"
       - ".github/workflows/cycloudidentity-deploy.yml"
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Read-only preflight or preserve-existing development upgrade'
-        type: choice
-        options: [preflight, upgrade]
-        default: preflight
-        required: true
-  push:
-    branches:
-      - deploy/cycloudidentity-development
-      - deploy/cycloudidentity-development-preflight
+# The development CYID Worker and its D1 were removed (2026-10-29); only the PR validation job remains (2026-11-18).
 
 permissions:
   contents: read
@@ -81,68 +70,3 @@ jobs:
         if: always()
         run: rm -f wrangler.ci.generated.jsonc
 
-  deploy-development:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: development
-    defaults:
-      run:
-        working-directory: apps/CYCloudIdentity
-
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
-      CYID_D1_DATABASE_ID: ${{ secrets.CYID_D1_DATABASE_ID }}
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-
-      - name: Install development dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
-
-      - name: Read-only provider preflight and private recovery checkpoint
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-          node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyid-upgrade-audit.json"
-
-      - name: Validate preserved development bundle before mutation
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyid-upgrade-bundle" > "$RUNNER_TEMP/cyid-private-bundle.log" 2>&1; then
-            echo 'Preserved development bundle failed; no remote mutation performed.'
-            exit 1
-          fi
-
-      - name: Upgrade original development provider without secret or authority writes
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'upgrade')
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyid-private-deploy.log" 2>&1; then
-            echo 'Development upgrade failed; inspect existing Worker and private checkpoint. Do not restore D1 or replay bootstrap automatically.'
-            exit 1
-          fi
-          echo 'Development provider code upgraded with original runtime bindings and secrets retained.'
-
-      - name: Verify provider version and authority continuity
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'upgrade')
-        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyid-upgrade-audit.json"
-
-      - name: Remove private generated config and checkpoint
-        if: always()
-        shell: bash
-        run: |
-          rm -f wrangler.deploy.generated.jsonc "$RUNNER_TEMP/cyid-upgrade-audit.json" "$RUNNER_TEMP/cyid-private-bundle.log" "$RUNNER_TEMP/cyid-private-deploy.log"
-          rm -rf "$RUNNER_TEMP/cyid-upgrade-bundle"

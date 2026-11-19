@@ -51,7 +51,6 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DEV_CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
-      DEV_CYID_D1_DATABASE_ID: ${{ secrets.CYID_D1_DATABASE_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -62,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME DEV_CYID_D1_DATABASE_ID; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME; do
             [[ -n "${!name:-}" ]] || { echo "Missing protected production prerequisite." >&2; exit 1; }
           done
           PROD_CYID_WORKER_NAME="$(node --input-type=module -e 'import {productionWorkerName} from "./scripts/render-production-config.mjs"; process.stdout.write(productionWorkerName(process.env.DEV_CYID_WORKER_NAME))')"
@@ -71,7 +70,7 @@ jobs:
           export PROD_CYID_WORKER_NAME
           api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/workers/scripts/$PROD_CYID_WORKER_NAME/settings" > "$RUNNER_TEMP/cyid-prod-settings.json"
-          PROD_DB_ID="$(node --input-type=module -e 'import fs from "node:fs"; const s=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-prod-settings.json","utf8")); const id=s.result?.bindings?.find(b=>b.type==="d1"&&b.name==="DB")?.id; if(s.success!==true||!/^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$/.test(id??"")||id===process.env.DEV_CYID_D1_DATABASE_ID) throw new Error("PRODUCTION_DATABASE_ISOLATION_REQUIRED"); process.stdout.write(id)')"
+          PROD_DB_ID="$(node --input-type=module -e 'import fs from "node:fs"; const s=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-prod-settings.json","utf8")); const id=s.result?.bindings?.find(b=>b.type==="d1"&&b.name==="DB")?.id; if(s.success!==true||!/^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$/.test(id??"")) throw new Error("PRODUCTION_DATABASE_ISOLATION_REQUIRED"); process.stdout.write(id)')"
           echo "::add-mask::$PROD_DB_ID"
           curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/d1/database/$PROD_DB_ID" > "$RUNNER_TEMP/cyid-prod-database.json"
           node scripts/render-production-config.mjs "$RUNNER_TEMP/cyid-prod-settings.json" "$RUNNER_TEMP/cyid-prod-database.json" wrangler.production.generated.jsonc

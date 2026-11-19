@@ -3,6 +3,7 @@ import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSu
 import { sha256Hex } from "./crypto";
 import { json, readJsonObject } from "./http";
 import { effectiveWorkspaceRole, isCoreAccountApplication, type StoredEmployeeRole } from "./role-access";
+import { canonicalSsoReturnUrl } from "./sso-return-url";
 import type { Env, JsonValue } from "./types";
 
 type AccessTargetRow = {
@@ -40,15 +41,35 @@ export async function handleRegisterWorkspaceApplication(
   const body = await readJsonObject(request);
   const applicationId = normalizeApplicationId(body?.applicationId);
   const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-  if (!body || Object.keys(body).some(key => !["applicationId", "displayName"].includes(key))
+  if (!body || Object.keys(body).some(key => !["applicationId", "displayName", "ssoReturnUrl"].includes(key))
       || !applicationId || !displayName || [...displayName].length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
     return json(env, requestId, 400, {
       error: { code: "INVALID_APPLICATION_REGISTRATION", message: "Application ID and display name are required; Workspace and grants cannot be supplied." },
     });
   }
+  // ssoReturnUrl: absent = unchanged, null = clear, string = set (canonical form).
+  const ssoChange = Object.prototype.hasOwnProperty.call(body, "ssoReturnUrl");
+  const ssoReturnUrl = ssoChange && body.ssoReturnUrl !== null ? canonicalSsoReturnUrl(body.ssoReturnUrl) : null;
+  if (ssoChange && body.ssoReturnUrl !== null && !ssoReturnUrl) {
+    return json(env, requestId, 400, {
+      error: { code: "INVALID_SSO_RETURN_URL", message: "Single sign-on return URL must be an https URL on a domain name, without credentials, port, query or fragment." },
+    });
+  }
   if (isCoreAccountApplication(env, applicationId)) {
     return json(env, requestId, 409, {
       error: { code: "CORE_APPLICATION_ACCESS_LOCKED", message: "Core account application registration cannot be changed." },
+    });
+  }
+  // The return URL is global catalog metadata. A Super Admin may change it only
+  // while the application is not registered by any other Workspace, so one
+  // Workspace can never redirect another Workspace's handoff codes.
+  const sharedApplication = `SELECT 1 FROM workspace_applications other
+    WHERE other.application_id = ?6 AND other.workspace_id <> ?2`;
+  if (ssoChange && await env.DB.prepare(`${sharedApplication} LIMIT 1`).bind(
+    null, actor.workspaceId, null, null, null, applicationId,
+  ).first()) {
+    return json(env, requestId, 409, {
+      error: { code: "SSO_RETURN_URL_SHARED_APPLICATION", message: "Single sign-on return URL of an application registered by another Workspace cannot be changed here." },
     });
   }
 
@@ -69,10 +90,28 @@ export async function handleRegisterWorkspaceApplication(
     env.DB.prepare(`INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id, application_id, event_type, detail_json, created_at)
       SELECT ?8, ?2, ?3, ?6, 'workspace_application_registered', '{"enabled":true}', ?5
       WHERE EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})`).bind(...values, `audit_${crypto.randomUUID()}`),
+    ...(ssoChange ? [
+      // Audit first, under exactly the same guard as the update below, so an
+      // event exists only when the stored value really changes.
+      env.DB.prepare(`INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id, application_id, event_type, detail_json, created_at)
+        SELECT ?8, ?2, ?3, ?6, 'application_sso_return_url_updated', ?10, ?5
+        WHERE EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})
+          AND NOT EXISTS (${sharedApplication})
+          AND EXISTS (SELECT 1 FROM applications WHERE application_id = ?6 AND sso_return_url IS NOT ?9)`)
+        .bind(...values, `audit_${crypto.randomUUID()}`, ssoReturnUrl, JSON.stringify({ ssoReturnUrl })),
+      env.DB.prepare(`UPDATE applications SET sso_return_url = ?9, updated_at = ?5
+        WHERE application_id = ?6 AND display_name = ?7 AND status = 'active'
+          AND sso_return_url IS NOT ?9
+          AND EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})
+          AND NOT EXISTS (${sharedApplication})`)
+        .bind(...values, null, ssoReturnUrl),
+    ] : []),
     env.DB.prepare(`SELECT EXISTS (${liveCoreSuperAdmin}) AS authorized,
-      EXISTS (${registeredApplication}) AS registered`).bind(...values),
+      EXISTS (${registeredApplication}) AS registered,
+      (SELECT sso_return_url FROM applications WHERE application_id = ?6) AS sso_return_url`).bind(...values),
   ]);
-  const outcome = results[3].results?.[0] as { authorized?: number; registered?: number } | undefined;
+  const outcome = results[results.length - 1].results?.[0] as
+    { authorized?: number; registered?: number; sso_return_url?: string | null } | undefined;
   if (outcome?.authorized !== 1) {
     return json(env, requestId, 403, {
       error: { code: "CORE_SUPER_ADMIN_REQUIRED", message: "Workspace authority or Session changed before registration." },
@@ -83,9 +122,16 @@ export async function handleRegisterWorkspaceApplication(
       error: { code: "APPLICATION_REGISTRATION_CONFLICT", message: "Application ID already has another display name or is globally disabled; existing registration was preserved." },
     });
   }
+  const storedSsoReturnUrl = outcome.sso_return_url ?? null;
+  if (ssoChange && storedSsoReturnUrl !== ssoReturnUrl) {
+    // Another Workspace registered the application concurrently; the URL was not changed.
+    return json(env, requestId, 409, {
+      error: { code: "SSO_RETURN_URL_SHARED_APPLICATION", message: "Single sign-on return URL of an application registered by another Workspace cannot be changed here." },
+    });
+  }
   return json(env, requestId, 200, {
     workspaceId: actor.workspaceId,
-    application: { applicationId, displayName, enabled: true },
+    application: { applicationId, displayName, enabled: true, ssoReturnUrl: storedSsoReturnUrl },
   });
 }
 
@@ -153,6 +199,7 @@ export async function handleRoleAccessSnapshot(
       `SELECT wa.application_id,
               a.display_name,
               a.status AS application_status,
+              a.sso_return_url,
               wa.enabled
          FROM workspace_applications wa
          JOIN applications a ON a.application_id = wa.application_id
@@ -193,6 +240,7 @@ export async function handleRoleAccessSnapshot(
       application_id: string;
       display_name: string;
       application_status: string;
+      sso_return_url: string | null;
       enabled: number;
     };
     return {

@@ -10,6 +10,8 @@ test('production names preserve the established isolated target derivation',()=>
   assert.equal(productionWorkerName('identity-test-development'),'identity-test-production');
   assert.equal(productionWorkerName('identity-test-dev'),'identity-test-prod');
   assert.equal(productionWorkerName('identity-test'),'identity-test-prod');
+  assert.equal(productionWorkerName('identity-test-prod'),'identity-test-prod');
+  assert.equal(productionWorkerName('identity-test-production'),'identity-test-production');
 });
 test('ordinary production config preserves existing vars, DB and rate limit without secret material',()=>{
   const args=input(),config=buildProductionConfig(args);

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 
 const directory = mkdtempSync(join(tmpdir(), "cyid-authority-test-"));
-let worker, testing, notifySuperAdmin;
+let worker, testing, notifySuperAdmin, canonicalSsoReturnUrl;
 try {
   for (const file of readdirSync(new URL("../src/", import.meta.url)).filter(file => file.endsWith(".ts"))) {
     const source = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
@@ -19,6 +19,7 @@ try {
   worker = require("./index.js").default;
   testing = require("./account-lifecycle-testing.js").ACCOUNT_LIFECYCLE_TESTING;
   notifySuperAdmin = require("./consumer-notifications.js").notifySuperAdmin;
+  canonicalSsoReturnUrl = require("./sso-return-url.js").canonicalSsoReturnUrl;
 } finally { rmSync(directory, { recursive: true, force: true }); }
 
 const token = `cyid_${"b".repeat(64)}`;
@@ -45,7 +46,7 @@ function fixture(options = {}) {
       sql, values,
       async first() { return db.prepare(sql).get(...values) ?? null; },
       async all() { return { results: db.prepare(sql).all(...values) }; },
-      async run() { return { meta: { changes: Number(db.prepare(sql).run(...values).changes) } }; },
+      async run() { return { success: true, meta: { changes: Number(db.prepare(sql).run(...values).changes) } }; },
     }; } }; },
     async batch(statements) {
       beforeBatch?.(db); beforeBatch = null;
@@ -54,7 +55,7 @@ function fixture(options = {}) {
         const results = statements.map(({ sql, values }) => {
           if (sql.trim().startsWith("SELECT") || /RETURNING/i.test(sql)) return { results: db.prepare(sql).all(...values) };
           const result = db.prepare(sql).run(...values);
-          return { results: [], meta: { changes: Number(result.changes) } };
+          return { success: true, results: [], meta: { changes: Number(result.changes) } };
         });
         db.exec("COMMIT"); return results;
       } catch (error) { db.exec("ROLLBACK"); throw error; }
@@ -63,4 +64,4 @@ function fixture(options = {}) {
   return { db, env };
 }
 
-export { worker, fixture, token, testing, notifySuperAdmin };
+export { worker, fixture, token, tokenHash, testing, notifySuperAdmin, canonicalSsoReturnUrl };
