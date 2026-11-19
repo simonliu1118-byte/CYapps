@@ -30,6 +30,12 @@ type EmployeeAuthRow = {
   initial_credential_present: number;
 };
 
+// Minimal Employee authority needed to mint a normal Session. Login and SSO
+// handoff redeem both create Sessions through createSession with this shape.
+export type SessionSubject = Pick<EmployeeAuthRow,
+  | "employee_id" | "workspace_id" | "employee_no" | "name" | "email_verified_at"
+  | "role_key" | "identity_admin" | "revision" | "super_admin_employee_id" | "credential_version">;
+
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
 const MIN_SESSION_TTL_SECONDS = 15 * 60;
 const MAX_SESSION_TTL_SECONDS = 24 * 60 * 60;
@@ -119,7 +125,7 @@ async function workspaceApplicationAvailable(
   ).bind(workspaceId, applicationId).first<{ available: number }>());
 }
 
-async function principalFromEmployee(env: Env, employee: EmployeeAuthRow): Promise<IdentityPrincipal> {
+async function principalFromEmployee(env: Env, employee: SessionSubject): Promise<IdentityPrincipal> {
   const workspaceRole = effectiveWorkspaceRole(
     employee.employee_id,
     employee.super_admin_employee_id,
@@ -139,9 +145,9 @@ async function principalFromEmployee(env: Env, employee: EmployeeAuthRow): Promi
   };
 }
 
-async function createSession(
+export async function createSession(
   env: Env,
-  employee: EmployeeAuthRow,
+  employee: SessionSubject,
   applicationId: string,
 ): Promise<LoginSuccess> {
   const token = createSessionToken();

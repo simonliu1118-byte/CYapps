@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.6`
+> **Contract version:** `1.1.0`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -391,6 +391,13 @@ normal provider envelope. Stable errors are `CORE_SUPER_ADMIN_REQUIRED` (403),
 `INVALID_APPLICATION_REGISTRATION` (400), `CORE_APPLICATION_ACCESS_LOCKED` (409)
 and `APPLICATION_REGISTRATION_CONFLICT` (409).
 
+Contract 1.1.0 adds the optional body field `ssoReturnUrl` (string = set, `null` =
+clear, absent = unchanged), the response field `application.ssoReturnUrl` and the
+admin snapshot column `applications[].sso_return_url`. Validation, canonical form
+and the extra error codes `INVALID_SSO_RETURN_URL` (400) and
+`SSO_RETURN_URL_SHARED_APPLICATION` (409) are defined in §21.1. Consumers that do
+not send the field keep the 1.0.4 behavior.
+
 CY Web exposes this as an explicit Super Admin registration action and refreshes
 the existing application-access snapshot. Ordinary consumers continue to use the
 existing login/resolve/logout and App Access contracts. Registering an application
@@ -497,3 +504,46 @@ Contract 1.0.6 optionally exports the named private RPC entrypoint `ConsumerNoti
 The provider revalidates active Workspace, registered/enabled Application and the current protected Super Admin pointer with an enabled Employee and verified Email. It sends fixed generic text using the canonical Email adapter and shared global/Workspace budget. No Email address is returned or copied into app storage. A bounded delivery slot per Workspace/Application/type coalesces concurrent requests; successful incident IDs are idempotent while current, and new incidents are rate-limited to one delivery per hour. Return status is `delivered`, `already_delivered` or `deferred`; failures expose stable codes only. Consumer retries deferred/failed delivery with the same active incident ID, and keeps its login warning until its checks recover. An ambiguous transport failure can cause a repeated alert; it cannot authorize any account or business action.
 
 This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.
+
+## 21. 單一登入入口（SSO portal handoff，1.1.0）
+
+Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal）有登入頁；其他 App 需要登入時導向 CY Web，CY Web 確認後向 CYID 取得一次性交換碼並轉回該 App 已登記的回跳網址，該 App 再以自己的 `IDENTITY` binding 向 CYID 兌換成**自己的新 Session**。設計與驗收清單見 `SSO_PORTAL_DESIGN.md`；provider 接口細節見 `AUTH_CONTRACT.md` §13。
+
+**相容性：BACKWARD_COMPATIBLE。** 未採用的 consumer 照舊使用 login／resolve／logout；最低相容版本維持 1.0.0。各 App Session 仍互相獨立；不得改用跨子網域共用 cookie；CYID 不提供公開網頁或公開 API。
+
+### 21.1 回跳網址登記（Super Admin，經 §17.1）
+
+- 一個 App 只有一個回跳網址：`https://` 加該 App 自訂網域上的固定路徑，例如 `https://price.example.com/auth/sso/callback`。
+- 只接受網域名稱（不接受 IP、`localhost`、結尾點）；不得含帳密、port、query、fragment、`%` 編碼、`\`、`//` 或 `.`／`..` 路徑段。主機名轉小寫後儲存為 `https://<host><path>`；路徑大小寫保留。
+- 任何比對都是**完整字串相等**，不用前綴、萬用字元或再正規化。
+- 已被其他 Workspace 登記的 App 不能由單一 Workspace 變更回跳網址（`409 SSO_RETURN_URL_SHARED_APPLICATION`）。
+- 變更寫 Audit。未登記回跳網址的 App 不能使用單一登入。
+
+### 21.2 入口（CY Web）義務
+
+- 路由 `/sso?app=<APPLICATION_ID>&state=<state>`：`state` 只接受 32–128 字元 base64url，原樣帶回、不保存；不接受任何回跳網址參數。
+- 未登入：顯示同一份 CY Web 登入頁，登入成功後回到 `/sso` 繼續；首次登入、忘記密碼、變更 Email 都在 CY Web 完成後才繼續。剛在本流程輸入密碼登入者直接繼續，不再顯示確認畫面。
+- 已登入：**每次**先顯示確認畫面「以 <姓名>（<員工編號>）前往 <App 名稱>？」；按「前往」以 POST＋CSRF 保護送出後才呼叫 `POST /v1/identity/sso/handoff/issue`（帶入口自己的 Session 與 `x-identity-application`），body 只放 `applicationId`。按「取消」回首頁，不發碼。
+- 成功後以 `303` 轉到 CYID 回傳的 `returnUrl`，只附加 `?code=<code>&state=<state>`（各自 URL encode）。不得自行組合或替換回跳網址。
+- 錯誤對應：`FIRST_LOGIN_REQUIRED` → 引導完成首次登入；`APPLICATION_ACCESS_DENIED` → 顯示「此帳號沒有 <App 名稱> 的使用權限」，不轉址；`SSO_APPLICATION_UNAVAILABLE` → 顯示該 App 尚未設定單一登入，不轉址。
+- `/sso` 與確認畫面回應加 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。交換碼與 Session token 不得寫入 log、Audit、analytics 或瀏覽器儲存。
+
+### 21.3 目標 App 義務
+
+- 未登入的頁面請求：產生 state（32 bytes 隨機值 base64url），存 cookie `__Host-<app>_sso_state`（`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`，不設 `Domain`），`303` 到入口 `/sso?app=<自己的 application id>&state=<state>`。API 請求仍回 `401`，由前端導向。
+- 回跳路由（建議 `/auth/sso/callback`，須與登記值完全相同）：
+  1. 以常數時間比對 query `state` 與 state cookie；缺少、不符或 cookie 已過期 → 顯示錯誤頁，**不兌換**。
+  2. 不論成功與否立即刪除 state cookie。
+  3. 以自己的 `IDENTITY` binding 呼叫 `POST /v1/identity/sso/handoff/redeem`，header `x-identity-application` 為自己的 application id，body 只放 `{ "code": "<code>" }`。
+  4. 成功時依 §7／§10 驗證回應並設定自己的 Session cookie（`HttpOnly; Secure; SameSite=Lax`、不設 `Domain`、到期不超過 provider `expiresAt`），`303` 到 `/`，網址不留 code。
+  5. `401 SSO_HANDOFF_INVALID` → 顯示「登入連結已失效，請重新登入」並可重新導向入口；`429 AUTH_RATE_LIMITED` → 稍後再試；不得重送同一交換碼。
+- 回跳路由回應加 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`；不得把 code、state 或 Session token 寫入 log、Audit、analytics、錯誤訊息或瀏覽器儲存。
+- 兌換得到的是一般 Session：之後照 §11 resolve、§13 logout（只登出本 App）。first-login ticket 永遠不會由兌換取得。
+- 舊登入頁在試行期間保留為備援，不再是預設入口；之後依 `SSO_PORTAL_DESIGN.md` 第 5 階段移除。
+
+### 21.4 Provider 保證
+
+- 交換碼 32 bytes 隨機（43 字元 base64url），只存 SHA-256、60 秒、單次使用、綁定目標 App；第一次被出示即作廢。
+- 兌換時重新檢查員工、Workspace、App、Application Access、憑證版本與發碼用的入口 Session；發碼後被停用、撤銷權限、改密碼或登出入口的人換不到 Session。
+- 兌換失敗一律 `SSO_HANDOFF_INVALID`；失敗次數依 App 限制。
+- Audit 記錄發碼與兌換的成功／失敗（App、員工、結果、原因代碼），不記交換碼或 token。
