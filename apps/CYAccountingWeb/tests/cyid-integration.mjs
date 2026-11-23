@@ -6,11 +6,9 @@ import { fileURLToPath } from 'node:url';
 import {
   appUserFromPrincipal,
   canWriteAccounting,
-  loginWithCyid,
   cyWebPortalUrl,
-  passwordWithinCyidBounds,
-  resolveIdentitySession,
-  startPasswordRecovery
+  redeemSsoHandoff,
+  resolveIdentitySession
 } from '../src/identity-adapter.js';
 import app from '../src/app.js';
 
@@ -45,20 +43,11 @@ const env = {
         authorization: request.headers.get('authorization'),
         application: request.headers.get('x-identity-application')
       });
-      if (url.pathname === '/v1/identity/login') {
+      if (url.pathname === '/v1/identity/sso/handoff/redeem') {
         return Response.json({ principal: basePrincipal, session: { token, expiresAt } });
       }
       if (url.pathname === '/v1/identity/session/resolve') {
         return Response.json({ principal: basePrincipal, session: { expiresAt } });
-      }
-      if (url.pathname === '/v1/identity/password-recovery/start') {
-        return Response.json({
-          recovery: {
-            challengeId: 'challenge-ci',
-            expiresAt,
-            resendAfter: new Date(Date.now() + 60_000).toISOString()
-          }
-        }, { status: 202 });
       }
       return Response.json({ error: { code: 'NOT_FOUND' } }, { status: 404 });
     }
@@ -68,34 +57,19 @@ const env = {
 assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/start' }), 'https://portal.example.test/');
 assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'http://portal.example.test/' }), null);
 assert.equal(cyWebPortalUrl({ CYWEB_PORTAL_URL: 'https://portal.example.test/?token=secret' }), null);
-const portalResponse = await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {
-  CYWEB_PORTAL_URL: 'https://portal.example.test/',
-  IDENTITY: { fetch() { throw new Error('Portal metadata must not contact CYID'); } },
-  DB: { prepare() { throw new Error('Portal metadata must not query accounting'); } }
-});
-assert.equal(portalResponse.status, 200);
-assert.deepEqual(await portalResponse.json(), { ok: true, url: 'https://portal.example.test/' });
-assert.equal((await app.fetch(new Request('https://acc.example.com/api/auth/account-portal'), {})).status, 503);
-
-assert.equal(passwordWithinCyidBounds('12345678'), true);
-assert.equal(passwordWithinCyidBounds('1234567'), false);
-assert.equal(passwordWithinCyidBounds('😀😀😀😀😀😀😀😀'), true);
-assert.equal(passwordWithinCyidBounds('😀'.repeat(17)), false);
-
-const loginRequest = new Request('https://acc.example.com/login', {
-  method: 'POST',
+const redeemRequest = new Request('https://acc.example.com/auth/sso/callback', {
   headers: { 'cf-connecting-ip': '127.0.0.1' }
 });
-const login = await loginWithCyid(loginRequest, env, '0123', '12345678');
-assert.equal(login.ok, true);
-assert.equal(login.user.role, 'USER');
-assert.equal(login.user.canWriteAccounting, false);
-assert.match(login.cookie, /HttpOnly/);
-assert.match(login.cookie, /Secure/);
-assert.match(login.cookie, /SameSite=Lax/);
-assert.match(login.cookie, /Expires=/);
-assert.equal(calls[0].body.applicationId, 'CYACC_CI');
-assert.equal(calls[0].body.workspaceId, 'workspace-ci-placeholder');
+const redeemed = await redeemSsoHandoff(redeemRequest, env, 'handoff-code-ci');
+assert.equal(redeemed.ok, true);
+assert.equal(redeemed.user.role, 'USER');
+assert.equal(redeemed.user.canWriteAccounting, false);
+assert.match(redeemed.cookie, /^cyaccounting_session=cyid_[0-9a-f]{64}; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=\d+; Expires=/);
+assert.doesNotMatch(redeemed.cookie, /Domain=/i);
+assert.equal(calls[0].pathname, '/v1/identity/sso/handoff/redeem');
+assert.deepEqual(calls[0].body, { code: 'handoff-code-ci' });
+assert.equal(calls[0].application, 'CYACC_CI', 'redeem is made as this App');
+assert.equal(calls[0].authorization, null);
 
 const resolveRequest = new Request('https://acc.example.com/api/auth/me', {
   headers: { cookie: `cyaccounting_session=${token}` }
@@ -136,87 +110,46 @@ assert.equal(hangingRequestSignal?.aborted, true, 'timeout should still signal c
 
 const httpsAssetEnv = {
   ASSETS: {
-    async fetch(request) {
-      return new Response('<!doctype html><form action="/login" method="post"></form>', {
-        headers: { 'content-type': 'text/html; charset=utf-8' }
-      });
+    async fetch() {
+      return new Response('<!doctype html>', { headers: { 'content-type': 'text/html; charset=utf-8' } });
     }
   }
 };
 
-const httpGet = await app.fetch(new Request('http://acc.example.com/login'), httpsAssetEnv);
-assert.equal(httpGet.status, 308, 'HTTP login GET must redirect to HTTPS before serving credentials form');
-assert.equal(httpGet.headers.get('location'), 'https://acc.example.com/login');
+const httpGet = await app.fetch(new Request('http://acc.example.com/'), httpsAssetEnv);
+assert.equal(httpGet.status, 308, 'HTTP entry must redirect to HTTPS before any login step');
+assert.equal(httpGet.headers.get('location'), 'https://acc.example.com/');
 
-const httpPost = await app.fetch(new Request('http://acc.example.com/login', {
-  method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ employeeNo: '0123', password: '12345678' })
-}), httpsAssetEnv);
-assert.equal(httpPost.status, 308, 'HTTP login POST must redirect before credential processing');
-assert.equal(httpPost.headers.get('location'), 'https://acc.example.com/login');
+const httpCallback = await app.fetch(new Request('http://acc.example.com/auth/sso/callback?code=c&state=s'), httpsAssetEnv);
+assert.equal(httpCallback.status, 308, 'HTTP callback must redirect before the code is processed');
+assert.equal(httpCallback.headers.get('location'), 'https://acc.example.com/auth/sso/callback?code=c&state=s');
 
-const forwardedHttp = await app.fetch(new Request('https://acc.example.com/login', {
+const forwardedHttp = await app.fetch(new Request('https://acc.example.com/', {
   headers: { 'x-forwarded-proto': 'http' }
 }), httpsAssetEnv);
-assert.equal(forwardedHttp.status, 308, 'forwarded HTTP login must redirect to HTTPS');
-assert.equal(forwardedHttp.headers.get('location'), 'https://acc.example.com/login');
+assert.equal(forwardedHttp.status, 308, 'forwarded HTTP entry must redirect to HTTPS');
+assert.equal(forwardedHttp.headers.get('location'), 'https://acc.example.com/');
 
-const cfVisitorHttp = await app.fetch(new Request('https://acc.example.com/login', {
+const cfVisitorHttp = await app.fetch(new Request('https://acc.example.com/', {
   headers: { 'cf-visitor': '{"scheme":"http"}' }
 }), httpsAssetEnv);
-assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redirect to HTTPS');
+assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor entry must redirect to HTTPS');
 
-const apiLoginCallStart = calls.length;
-const apiLogin = await app.fetch(new Request('https://acc.example.com/api/auth/login', {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
-}), env);
-assert.equal(apiLogin.status, 200);
-assert.match(apiLogin.headers.get('set-cookie') || '', /cyaccounting_session=/);
-const apiLoginPayload = await apiLogin.json();
-assert.equal(apiLoginPayload.ok, true);
-assert.equal(apiLoginPayload.user.employeeNo, '0123');
-assert.equal('token' in apiLoginPayload, false);
-assert.deepEqual(
-  calls.slice(apiLoginCallStart).map(call => call.pathname),
-  ['/v1/identity/login', '/v1/identity/session/resolve'],
-  'login success must be returned only after the newly created CYID Session resolves successfully'
-);
-
-const loginThenHangEnv = {
-  CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
-  CYID_APPLICATION_ID: 'CYACC_CI',
-  CYID_PROVIDER_TIMEOUT_MS: '100',
-  IDENTITY: {
-    async fetch(request) {
-      const url = new URL(request.url);
-      if (url.pathname === '/v1/identity/login') {
-        return Response.json({ principal: basePrincipal, session: { token, expiresAt } });
-      }
-      return await new Promise(() => {});
-    }
-  }
-};
-const loginResolveStarted = Date.now();
-const loginResolveFailure = await app.fetch(new Request('https://acc.example.com/api/auth/login', {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
-}), loginThenHangEnv);
-const loginResolveElapsed = Date.now() - loginResolveStarted;
-assert.equal(loginResolveFailure.status, 503);
-assert.equal(loginResolveFailure.headers.get('set-cookie'), null, 'unverified Session must not be committed to browser');
-assert.ok(loginResolveElapsed >= 80 && loginResolveElapsed < 1000, `post-login Session verification must be bounded, got ${loginResolveElapsed}ms`);
-
-const secureLoginPage = await app.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
-assert.equal(secureLoginPage.status, 200);
-assert.equal(secureLoginPage.headers.get('strict-transport-security'), 'max-age=31536000');
-assert.equal(
-  secureLoginPage.headers.get('content-security-policy'),
-  'upgrade-insecure-requests; form-action https:'
-);
+// The retired password login surface is gone: no credential route, no API login, no recovery API.
+const oldLoginGet = await app.fetch(new Request('https://acc.example.com/login'), { ...env, ASSETS: httpsAssetEnv.ASSETS });
+assert.equal(oldLoginGet.status, 303);
+assert.equal(oldLoginGet.headers.get('location'), '/');
+const oldLoginPostCalls = calls.length;
+for (const [route, method] of [['/login', 'POST'], ['/api/auth/login', 'POST'], ['/api/auth/password-recovery/start', 'POST'], ['/api/auth/password-recovery/confirm', 'POST'], ['/api/auth/account-portal', 'GET']]) {
+  const response = await app.fetch(new Request('https://acc.example.com' + route, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: method === 'POST' ? JSON.stringify({ employeeNo: '0123', password: '12345678' }) : undefined
+  }), { ...env, ASSETS: { async fetch() { return new Response('missing', { status: 404 }); } } });
+  assert.ok([401, 404, 405, 503].includes(response.status), `${method} ${route} must not be a login route (got ${response.status})`);
+  assert.equal(response.headers.get('set-cookie'), null);
+}
+assert.equal(calls.length, oldLoginPostCalls, 'removed routes never reach the identity provider');
 
 const appEntryEnv = {
   ...env,
@@ -264,66 +197,23 @@ for (const [method, route, body] of [
   assert.equal(payload.code, 'READ_ONLY_USER');
 }
 
-const recovery = await startPasswordRecovery(new Request('https://acc.example.com/api/auth/password-recovery/start'), env, '0123');
-assert.equal(recovery.ok, true);
-assert.equal(recovery.recovery.challengeId, 'challenge-ci');
-assert.equal('maskedEmail' in recovery.recovery, false);
-
 const workerSource = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(workerSource, /web_sessions/);
 assert.match(workerSource, /identity-adapter|resolveIdentitySession/);
 assert.doesNotMatch(workerSource, /app-v\d+|handleV\d+Api/);
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
-const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
 const authJs = fs.readFileSync(path.join(ROOT, 'public/auth.js'), 'utf8');
 const authCss = fs.readFileSync(path.join(ROOT, 'public/auth.css'), 'utf8');
 const adaptiveUi = fs.readFileSync(path.join(ROOT, 'public/adaptive-ui.js'), 'utf8');
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
-assert.match(loginHtml, /action="\/login" method="post"/);
-assert.match(loginHtml, /id="loginForm"/);
-assert.match(loginHtml, /id="firstLoginHelp"/);
-assert.match(loginHtml, /id="firstLoginCyWebLink"/);
-const loginJs = fs.readFileSync(path.join(ROOT, 'public/login.js'), 'utf8');
-assert.match(loginJs, /\/api\/auth\/account-portal/);
-// Exercise the actual shared discovery function: no employee/password/ticket
-// reaches the portal link, and unsafe metadata never reveals a usable link.
-const discoverPortal = loginJs.slice(loginJs.indexOf('  async function loadFirstLoginPortal()'), loginJs.indexOf('  async function handleLoginSubmit('));
-for (const portal of ['https://portal.example.test/', 'http://portal.example.test/', 'https://user:pass@portal.example.test/', 'https://portal.example.test/?employee=0123', 'https://portal.example.test/#ticket', 'https://portal.example.test/path']) {
-  const link = { hidden: true, href: '#' };
-  const ctx = vm.createContext({ firstLoginLink: link, URL, fetch: async (url, options) => {
-    assert.equal(url, '/api/auth/account-portal'); assert.equal(options.method, 'GET');
-    assert.equal(options.body, undefined); assert.equal(options.credentials, 'same-origin');
-    return Response.json({ ok: true, url: portal });
-  } });
-  vm.runInContext(discoverPortal, ctx); await ctx.loadFirstLoginPortal();
-  assert.equal(link.hidden, portal !== 'https://portal.example.test/');
-  assert.equal(link.href, portal === 'https://portal.example.test/' ? portal : '#');
+for (const retired of ['public/login.html', 'public/login.js', 'public/login.css', 'scripts/smoke-cyid-development.mjs']) {
+  assert.equal(fs.existsSync(path.join(ROOT, retired)), false, `${retired} must stay removed`);
 }
-for (const [status, payload, expected, phrase] of [
-  [200, { firstLogin: { ticket: 'never-forward-ci-ticket' } }, 403, '完成 Email 驗證與正式密碼設定'],
-  [401, { error: { code: 'INVALID_CREDENTIALS' } }, 401, '如為首次登入'],
-  [503, { error: { code: 'PROVIDER_UNAVAILABLE' } }, 503, '中央帳號服務目前無法使用']
-]) {
-  const failureEnv = { ...env, IDENTITY: { fetch: async () => Response.json(payload, { status }) } };
-  const response = await app.fetch(new Request('https://acc.example.test/api/auth/login', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
-  }), failureEnv);
-  assert.equal(response.status, expected); assert.equal(response.headers.get('set-cookie'), null);
-  const result = await response.text(); assert.ok(result.includes(phrase));
-  assert.ok(!result.includes('never-forward-ci-ticket'), 'non-core never returns a first-login ticket');
-}
-assert.match(loginJs, /firstLoginLink\.href = url\.href/);
-assert.match(loginJs, /failed: '員工編號或密碼不正確。如為首次登入/);
-assert.match(loginJs, /service: '中央帳號服務目前無法使用/);
-assert.match(workerApp, /url\.pathname === '\/api\/auth\/login'/);
-assert.match(loginHtml, /window\.location\.protocol === 'http:'/);
-assert.match(loginHtml, /window\.location\.replace/);
-assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
-assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
-assert.match(workerApp, /upgrade-insecure-requests; form-action https:/);
+assert.doesNotMatch(workerApp, /loginWithCyid|startPasswordRecovery|confirmPasswordRecovery|handleApiLogin|handleNavigationLogin|secureLoginDocument/);
+assert.match(workerApp, /startSsoLogin\(env, '\/'\)/);
+assert.doesNotMatch(authJs, /'\/login'/);
 assert.match(authJs, /activateReadOnlyMobileLedger/);
 assert.doesNotMatch(authJs, /window\.__CYACC_BOOT_USER__/);
 assert.match(authJs, /window\.cyaccSessionPromise = checkSessionFallback\(\)/);

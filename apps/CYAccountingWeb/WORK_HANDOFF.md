@@ -2,6 +2,10 @@
 
 更新：2026/11/05（台灣時間）。現行正式基準與交接摘要在本節；下列舊版段落全屬**歷史工作紀錄**，不代表目前部署狀態。永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 及專案 `PROJECT_RULES.md`，本文件不另立規則。
 
+## 最新工作：V1.2.0 改由 CY Web 登入（2026/11/23）
+
+使用者決定 CYACC 登入改走 CY Web 並移除舊登入頁（無備援）。新增 `src/sso.js`（state／返回路徑 cookie、callback、已登出頁）與 `identity-adapter.js` 的 `redeemSsoHandoff`；移除 `/login`、`POST /login`、`/api/auth/login`、密碼重設 API、`/api/auth/account-portal`、`public/login.*` 與其測試／部署檢查。Session cookie 屬性不變。測試：`tests/sso-login.mjs`、更新後的 `tests/cyid-integration.mjs`。**部署前置：先在 CY Web「系統登記 → 設定」登記 `https://<記帳系統公開網域>/auth/sso/callback`，再部署。**尚待：登記後以真實 CY Web 做端到端與各裝置（含平板 Safari）登入驗收。
+
 ## V1.1.1 備份外部檢查與分時備援
 
 使用者 2026/11/05 明確授權 PR #596 合併部署。整合最新 V1.1.0 main，保留待確認功能及 schema 16；只有兩個驗證管道都異常才通知超管。正式發布版本改為 V1.1.1 Build 0，避免回退版本。詳細測試、用量與發布證據：[handoff](docs/handoff/BACKUP-EXTERNAL-FALLBACK-20261105.md)。PR #596 已合併，正式部署 42041834602 與首次外部試還原 42042206636 均成功；最新兩份 proof 完整回讀通過，健康 healthy。完整發布及用量證據見上述 handoff；分時備援正式 CPU 驗收仍待實際觸發。

@@ -51,8 +51,7 @@ assert.match(adaptiveCss, /\.ledger-card thead th \{\s*position: sticky;\s*top: 
 assert.match(ledgerSource, /ledgerHead\.append\(title, toolbar\)/);
 
 assert.match(markup, /志遠記帳系統 CYACC Web/);
-assert.match(read('public/login.html'), /id="firstLoginHelp"/);
-assert.match(read('public/login.html'), /cyacc-icon\.svg/);
+assert.equal(fs.existsSync(path.join(ROOT, 'public/login.html')), false, 'retired password login page must not remain');
 assert.match(read('public/auth.js'), /renderCyaccAccountMenu/);
 assert.doesNotMatch(read('public/auth.js'), /我的帳號（密碼、Email）/);
 assert.match(adaptive, /accountCluster\.className = 'cy-account-menu'/);
@@ -66,8 +65,6 @@ assert.match(appearanceCss, /\.cy-account-menu\[data-role="SUPER_ADMIN"\] \.cy-a
 assert.match(appearanceCss, /\.cy-account-menu:not\(\[data-identity-ready="true"\]\)/);
 assert.doesNotMatch(appearanceCss, /data-cy-dark|color-scheme:\s*dark|cy-segmented|cy-theme-toggle/);
 assert.doesNotMatch(markup, /data-cyacc-theme-switch|cyacc-appearance\.js|cyacc-appearance-slot/);
-assert.doesNotMatch(read('public/login.html'), /data-cyacc-theme-toggle|cyacc-appearance\.js/);
-assert.match(read('public/login.html'), /name="color-scheme" content="light"/);
 assert.equal(fs.existsSync(path.join(ROOT, 'public/cyacc-appearance.js')), false, 'retired theme runtime must not remain');
 assert.doesNotMatch(appearanceCss, /!important;\s*!\s*important/);
 assert.match(css, /@media \(min-width: 1360px\)/);

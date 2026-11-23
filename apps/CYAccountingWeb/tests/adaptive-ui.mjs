@@ -11,7 +11,6 @@ const css = read('public/adaptive-ui.css');
 const js = read('public/adaptive-ui.js');
 const ledger = read('public/ledger-tools.js');
 const backupUi = read('public/backup-ui.js');
-const loginHtml = read('public/login.html');
 const indexHtml = read('public/index.html');
 
 assert.match(css, /@media \(max-width: 767px\)/);
@@ -39,10 +38,6 @@ assert.match(css, /#settingsDialog\.mobile-utility-dialog\[data-mobile-utility="
 assert.match(css, /#mobileLockMonthControls \.mobile-lock-month-selects[\s\S]*?grid-template-columns:/);
 assert.match(css, /#settingsDialog\.mobile-utility-dialog\[data-mobile-utility="categories"\] #categoryManager[\s\S]*?overflow-y:\s*auto !important/);
 assert.match(css, /\.mobile-category-footer[\s\S]*?grid-template-columns:/);
-assert.doesNotMatch(loginHtml, /class="subtitle"/);
-assert.doesNotMatch(loginHtml, /class="identity-note"/);
-assert.doesNotMatch(loginHtml, /class="password-note"/);
-assert.doesNotMatch(loginHtml, />CYAccounting Web<\/p>/);
 
 assert.match(js, /trigger\.id = 'mobileAccountMenuButton'/);
 assert.match(js, /data-mobile-account-action="logout">登出/);

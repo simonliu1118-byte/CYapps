@@ -10,14 +10,11 @@ import { handleBackupApi, runScheduledBackup, recoveryLanding, handleBackupVerif
 import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
-  cyWebPortalUrl,
   clearProviderSessionCookie,
-  confirmPasswordRecovery,
-  loginWithCyid,
   logoutCyid,
-  resolveIdentitySession,
-  startPasswordRecovery
+  resolveIdentitySession
 } from './identity-adapter.js';
+import { handleSsoRoute, ssoServiceUnavailablePage, startSsoLogin } from './sso.js';
 
 const SUMMARY_MAX_UNITS = 40;
 const ACCOUNT_NAME_MAX_CHARS = 8;
@@ -26,7 +23,7 @@ const MIN_ASSET_TIMEOUT_MS = 100;
 const MAX_ASSET_TIMEOUT_MS = 15_000;
 
 function shouldDisableBrowserCache(pathname) {
-  return pathname === '/' || pathname === '/login' || pathname.endsWith('.html') || pathname.endsWith('.js');
+  return pathname === '/' || pathname.endsWith('.html') || pathname.endsWith('.js');
 }
 
 function requestUsesInsecureTransport(request, url) {
@@ -56,30 +53,24 @@ export default {
     try {
       const httpsRedirect = enforceHttps(request, url);
       if (httpsRedirect) return httpsRedirect;
-      if (url.pathname === '/login.html' && request.method === 'GET') {
-        return redirect('/login' + url.search);
+      if (url.pathname.startsWith('/auth/sso/')) {
+        return await handleSsoRoute(request, env, url);
       }
 
-      if (url.pathname === '/login' && request.method === 'GET') {
-        const resolved = await resolveIdentitySession(request, env);
-        if (resolved.ok) return redirect('/');
-        return fetchAsset(request, env, '/login.html');
-      }
-
-      if (url.pathname === '/login' && request.method === 'POST') {
-        return handleNavigationLogin(request, env);
+      // Bookmarks of the retired password login page continue into the CY Web portal login.
+      if ((url.pathname === '/login' || url.pathname === '/login.html') && ['GET', 'HEAD'].includes(request.method)) {
+        return redirect('/');
       }
 
       if(url.pathname==='/recovery'&&request.method==='GET') {
         const resolved=await resolveIdentitySession(request,env);
-        if(!resolved.ok)return redirect('/login');
+        if(!resolved.ok)return resolved.status>=500?ssoServiceUnavailablePage():startSsoLogin(env,'/recovery');
         return recoveryLanding(env,resolved.session);
       }
       if ((url.pathname === '/' || url.pathname === '/index.html') && request.method === 'GET') {
         const resolved = await resolveIdentitySession(request, env);
         if (!resolved.ok) {
-          const error = resolved.status >= 500 ? '?error=service' : '';
-          return redirect('/login' + error);
+          return resolved.status >= 500 ? ssoServiceUnavailablePage() : startSsoLogin(env, '/');
         }
         return fetchAsset(request, env, '/index.html');
       }
@@ -97,20 +88,6 @@ export default {
         return coreWorker.fetch(request, env);
       }
 
-      if (url.pathname === '/api/auth/account-portal' && request.method === 'GET') {
-        const portalUrl = cyWebPortalUrl(env);
-        return portalUrl ? json({ ok: true, url: portalUrl }) : json({ ok: false, code: 'ACCOUNT_PORTAL_NOT_CONFIGURED' }, 503);
-      }
-
-      if (url.pathname === '/api/auth/login' && request.method === 'POST') {
-        return handleApiLogin(request, env);
-      }
-      if (url.pathname === '/api/auth/password-recovery/start' && request.method === 'POST') {
-        return handlePasswordRecoveryStart(request, env);
-      }
-      if (url.pathname === '/api/auth/password-recovery/confirm' && request.method === 'POST') {
-        return handlePasswordRecoveryConfirm(request, env);
-      }
       if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
         return handleLogout(request, env);
       }
@@ -247,96 +224,6 @@ function normalizeAccountName(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
 
-async function handleNavigationLogin(request, env) {
-  const form = await request.formData().catch(() => null);
-  const employeeNo = String(form?.get('employeeNo') || '').trim();
-  const password = typeof form?.get('password') === 'string' ? form.get('password') : '';
-  const result = await loginWithCyid(request, env, employeeNo, password);
-  if (!result.ok) {
-    const error = loginErrorKey(result);
-    return redirect('/login?error=' + encodeURIComponent(error));
-  }
-
-  const verified = await verifyFreshLoginSession(request, env, result.token);
-  if (!verified.ok) {
-    const error = loginErrorKey(verified);
-    return redirect('/login?error=' + encodeURIComponent(error));
-  }
-
-  return redirect('/', { 'set-cookie': result.cookie });
-}
-
-async function handleApiLogin(request, env) {
-  const body = await request.json().catch(() => null);
-  const employeeNo = String(body?.employeeNo || '').trim();
-  const password = typeof body?.password === 'string' ? body.password : '';
-  const result = await loginWithCyid(request, env, employeeNo, password);
-  if (!result.ok) return apiLoginFailure(result);
-
-  const verified = await verifyFreshLoginSession(request, env, result.token);
-  if (!verified.ok) return apiLoginFailure(verified);
-
-  return json({
-    ok: true,
-    user: verified.user
-  }, 200, {
-    'set-cookie': result.cookie
-  });
-}
-
-async function verifyFreshLoginSession(request, env, token) {
-  const headers = new Headers();
-  const clientIp = request.headers.get('cf-connecting-ip');
-  if (clientIp) headers.set('cf-connecting-ip', clientIp);
-  const requestId = request.headers.get('x-request-id');
-  if (requestId) headers.set('x-request-id', requestId);
-  headers.set('cookie', `cyaccounting_session=${encodeURIComponent(String(token || ''))}`);
-  const verifyRequest = new Request(request.url, { method: 'GET', headers });
-  return resolveIdentitySession(verifyRequest, env);
-}
-
-function apiLoginFailure(result) {
-  const key = loginErrorKey(result);
-  const messages = {
-    invalid: '請輸入正確的 4 碼員工編號與密碼。',
-    failed: '員工編號或密碼不正確。如為首次登入，請先在 CY Web 完成 Email 驗證與正式密碼設定。',
-    access: '此員工帳號沒有記帳系統 App Access。',
-    rate: '登入嘗試次數過多，請稍後再試。',
-    service: '中央帳號服務目前無法使用，請稍後再試。',
-    'first-login': '請先前往 CY Web 完成 Email 驗證與正式密碼設定，再回來登入。'
-  };
-  const status = result.status >= 500 ? 503 : Math.max(400, Number(result.status) || 401);
-  return json({
-    ok: false,
-    error: messages[key] || messages.failed,
-    code: String(result.code || 'LOGIN_FAILED')
-  }, status);
-}
-
-async function handlePasswordRecoveryStart(request, env) {
-  const body = await request.json().catch(() => null);
-  const result = await startPasswordRecovery(request, env, body?.employeeNo);
-  if (!result.ok) return recoveryFailure(result);
-
-  return json({
-    ok: true,
-    recovery: result.recovery,
-    message: '若帳號符合條件，驗證碼已寄至登記且已驗證的 Email。'
-  }, 202);
-}
-
-async function handlePasswordRecoveryConfirm(request, env) {
-  const body = await request.json().catch(() => null);
-  const result = await confirmPasswordRecovery(request, env, {
-    employeeNo: body?.employeeNo,
-    challengeId: body?.challengeId,
-    code: body?.code,
-    newPassword: body?.newPassword
-  });
-  if (!result.ok) return recoveryFailure(result);
-  return json({ ok: true, passwordReset: true });
-}
-
 async function handleLogout(request, env) {
   const result = await logoutCyid(request, env);
   return json({
@@ -351,26 +238,6 @@ async function handleMe(request, env) {
   const result = await resolveIdentitySession(request, env);
   if (!result.ok) return authFailure(result);
   return json({ ok: true, user: result.user, session: { expiresAt: result.expiresAt } });
-}
-
-function loginErrorKey(result) {
-  if (result.code === 'FIRST_LOGIN_REQUIRED') return 'first-login';
-  if (result.status === 403 || result.code === 'APPLICATION_ACCESS_DENIED') return 'access';
-  if (result.status === 429) return 'rate';
-  if (result.status >= 500) return 'service';
-  if (result.status === 400) return 'invalid';
-  return 'failed';
-}
-
-function recoveryFailure(result) {
-  if (result.status === 429) {
-    const headers = result.retryAfter ? { 'retry-after': result.retryAfter } : {};
-    return json({ ok: false, error: '要求驗證碼或重設密碼的次數過多，請稍後再試。', code: result.code }, 429, headers);
-  }
-  if (result.status >= 500) {
-    return json({ ok: false, error: '帳號服務目前無法處理密碼重設。', code: result.code }, 503);
-  }
-  return json({ ok: false, error: '驗證資料或新密碼格式不正確。', code: result.code }, result.status || 400);
 }
 
 function authFailure(result) {
@@ -392,7 +259,7 @@ async function fetchAsset(request, env, pathname) {
     headers: request.headers
   });
   const response = noCache(await boundedAssetFetch(assetRequest, env));
-  return pathname === '/login.html' ? secureLoginDocument(response, request) : response;
+  return response;
 }
 
 async function boundedAssetFetch(request, env) {
@@ -423,19 +290,6 @@ function assetTimeoutMs(env) {
   const configured = Number(env?.CYACC_ASSET_TIMEOUT_MS);
   if (!Number.isFinite(configured)) return DEFAULT_ASSET_TIMEOUT_MS;
   return Math.max(MIN_ASSET_TIMEOUT_MS, Math.min(Math.trunc(configured), MAX_ASSET_TIMEOUT_MS));
-}
-
-function secureLoginDocument(response, request) {
-  const hostname = new URL(request.url).hostname;
-  if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) return response;
-
-  const headers = new Headers(response.headers);
-  headers.set('content-security-policy', 'upgrade-insecure-requests; form-action https:');
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
 }
 
 function noCache(response) {

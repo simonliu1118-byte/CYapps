@@ -55,7 +55,7 @@ try {
   assert.equal(rendered.vars.CYID_APPLICATION_ID, env.CF_CYID_APPLICATION_ID);
   assert.equal(rendered.vars.CYID_WORKSPACE_ID, env.CF_CYID_WORKSPACE_ID);
   assert.equal(rendered.vars.CYWEB_PORTAL_URL, env.CF_CYWEB_PORTAL_URL);
-  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/recovery', '/', '/index.html', '/login', '/login.html']);
+  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/recovery', '/', '/index.html', '/login', '/login.html', '/auth/*']);
   assert.deepEqual(rendered.triggers.crons, ['*/5 * * * *']);
   assert.equal(/__CF_[A-Z0-9_]+__/.test(renderedText), false);
 
