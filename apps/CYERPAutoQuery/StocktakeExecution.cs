@@ -3,8 +3,10 @@ namespace CYERPAutoQuery;
 /// <summary>The ERP steps of 庫存盤點; the Win32 one is <see cref="StocktakeWin32Driver"/>, tests use a fake.</summary>
 internal interface IStocktakeErpDriver
 {
-    /// <summary>INVR11 「選擇盤點底稿編號」 F2 list.</summary>
+    /// <summary>INVR11 「選擇盤點底稿編號」 F2 list; INVR11 stays open for <see cref="ReadSheetAsync"/>.</summary>
     Task<IReadOnlyList<StocktakeSheet>> ListSheetsAsync(CancellationToken ct);
+    /// <summary>Closes INVR11 after the list and reads.</summary>
+    Task CloseReportAsync();
     /// <summary>INVR11 report of one sheet (儲位／批號／盤點數量 shown) exported to Excel.</summary>
     Task<StocktakeDetail> ReadSheetAsync(string sheetNo, CancellationToken ct);
     /// <summary>INVI14: one existing line's 盤點數量 → 儲存.</summary>
@@ -25,17 +27,24 @@ internal sealed class StocktakeExecution(IStocktakeErpDriver driver)
     public async Task<StocktakeSyncResult> SyncAsync(ErpAgentJob job, CancellationToken ct)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var sheets = await driver.ListSheetsAsync(ct);
-        IEnumerable<StocktakeSheet> targets;
-        if (job.OnlySheet is { } only)
-            targets = [sheets.FirstOrDefault(s => s.SheetNo == only)
-                       ?? throw new InvalidDataException($"ERP 的盤點底稿清單沒有 {only}。")];
-        else
-            targets = sheets.Where(s => !job.SkipSheets.Contains(s.SheetNo));
-        var details = new List<StocktakeDetail>();
-        foreach (var sheet in targets)
-            details.Add(await driver.ReadSheetAsync(sheet.SheetNo, ct));
-        return new StocktakeSyncResult(sheets, details, watch.Elapsed);
+        try
+        {
+            var sheets = await driver.ListSheetsAsync(ct);
+            IEnumerable<StocktakeSheet> targets;
+            if (job.OnlySheet is { } only)
+                targets = [sheets.FirstOrDefault(s => s.SheetNo == only)
+                           ?? throw new InvalidDataException($"ERP 的盤點底稿清單沒有 {only}。")];
+            else
+                targets = sheets.Where(s => !job.SkipSheets.Contains(s.SheetNo));
+            var details = new List<StocktakeDetail>();
+            foreach (var sheet in targets)
+                details.Add(await driver.ReadSheetAsync(sheet.SheetNo, ct));
+            return new StocktakeSyncResult(sheets, details, watch.Elapsed);
+        }
+        finally
+        {
+            await driver.CloseReportAsync();
+        }
     }
 
     public async Task<StocktakeWriteResult> WriteAsync(ErpAgentJob job, Action<int, int>? progress, CancellationToken ct)

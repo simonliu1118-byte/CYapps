@@ -68,14 +68,19 @@ internal sealed partial class ItemQueryService
     /// failure or Esc). The export is deleted from TEMP once read. Null when ERP said nothing matched.
     /// </summary>
     /// <param name="prepare">Runs on the report window before the export (INVR11 shows hidden columns there).</param>
+    /// <param name="reuseConditions">Use the condition window already open (INVR11 after its F2 list) instead of opening it again.</param>
     private async Task<IReadOnlyList<(string Name, List<string[]> Rows)>?> RunReportAsync(ErpReport report, string conditions,
         Func<nint, CancellationToken, Task> fill, IProgress<string> progress, CancellationToken cancellationToken,
-        Func<nint, CancellationToken, Task>? prepare = null)
+        Func<nint, CancellationToken, Task>? prepare = null, bool reuseConditions = false)
     {
-        await CloseReportWindowsAsync(report, progress, leftover: true);
-        progress.Report($"ERP：開啟{report.Title}（作業速查）…");
-        await OpenFormAsync(report.Code, report.Title, () => FindReportConditions(report).Count > 0, cancellationToken);
         var found = FindReportConditions(report);
+        if (!reuseConditions || found.Count != 1 || FindReportWindows(report).Count != 1)
+        {
+            await CloseReportWindowsAsync(report, progress, leftover: true);
+            progress.Report($"ERP：開啟{report.Title}（作業速查）…");
+            await OpenFormAsync(report.Code, report.Title, () => FindReportConditions(report).Count > 0, cancellationToken);
+            found = FindReportConditions(report);
+        }
         if (found.Count != 1)
             throw new QueryFailure(ErpAgentErrorCode.ERP_STATE, $"開啟{report.Code}後找到 {found.Count} 個{report.Title}條件視窗，已停止。");
         var dialog = found[0];

@@ -1,6 +1,6 @@
 # CYERPAutoQuery Work Handoff
 
-> 更新：2026-10-29。目前正式版 **V1.3.0**（`VERSION=1.3.0`、`BUILD=0`，tag `cyerp-auto-query-v1.3.0`）；較舊的 Release 已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
+> 更新：2026-10-29。目前正式版 **V1.3.0**（tag `cyerp-auto-query-v1.3.0`）；`VERSION=1.3.1` 為庫存盤點實機修正，待發行；較舊的 Release 已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
 ## 現況
 
