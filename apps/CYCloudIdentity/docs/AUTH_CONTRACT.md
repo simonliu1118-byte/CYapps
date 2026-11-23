@@ -218,7 +218,7 @@ x-identity-application: <core account application id>
 
 交換碼為 32 bytes 隨機值（base64url、無 padding），D1 只存 SHA-256；有效 60 秒、單次使用，綁定 Workspace、員工、目標 App、發碼時的憑證版本與發碼用的入口 Session。
 
-### 13.2.1 預覽（consumer contract 1.2.0）
+### 13.2.1 預覽（consumer contract 1.2.0；1.3.0 起多 `displayNameZh`）
 
 `POST /v1/identity/sso/handoff/preview`，供入口確認畫面在按「前往」之前顯示 App 名稱與可否進入。唯讀：不產生交換碼、不寫 `sso_handoffs`、不寫 Audit，也不回傳回跳網址。
 
@@ -241,6 +241,12 @@ x-identity-application: <core account application id>
 ~~~
 
 `access` 規則與 issue 一致：未完成首次登入 → `first_login_required`；依 §6 沒有進入權 → `denied`；否則 `allowed`。預覽結果只供顯示，不構成授權；實際發碼仍須通過 §13.2 全部檢查。
+
+### 13.2.2 中文名稱與 App 清單（consumer contract 1.3.0）
+
+`applications.display_name_zh`（可空，1–60 字、無控制字元）是僅供顯示的中文名稱，由 core account portal 的 Super Admin 透過 §17.1 登記接口的選填欄位 `displayNameZh` 設定（`null` 清除、省略不變）。英文 `display_name` 仍是系統名稱；ID、比對與存取不使用中文名稱。無效值 → `400 INVALID_APPLICATION_ZH_NAME`；已被其他 Workspace 登記的 App 不能變更（`409 APPLICATION_SHARED_ACROSS_WORKSPACES`）；實際變更才寫 Audit `application_zh_name_updated`。預覽回應的 `application` 多一個 `displayNameZh`（字串或 `null`）。
+
+`POST /v1/identity/sso/applications`（入口、唯讀）回目前員工可進入的 App 清單：body 只能是 `{}`；回 `{applications:[{applicationId,displayName,displayNameZh,origin}]}`，條件同 issue（active、Workspace 啟用、已登記回跳網址、非 core app、有進入權；尚未完成首次登入回空清單）。只回 `origin`，不回回跳網址；不寫資料或 Audit。錯誤：`403 SSO_PORTAL_REQUIRED`、`401 SESSION_INVALID`、`400 INVALID_SSO_HANDOFF_REQUEST`。
 
 ### 13.3 兌換交換碼
 

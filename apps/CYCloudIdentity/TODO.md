@@ -2,6 +2,11 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## App 中文名稱與入口 App 清單（CYID 0.4.2）— 2026-11-23
+
+- Source **0.4.2 Build 0／consumer contract 1.3.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：migration `0010_application_localized_name.sql`（`applications.display_name_zh`）、§17.1 登記接口選填 `displayNameZh`、預覽回 `displayNameZh`、新增唯讀 `POST /v1/identity/sso/applications`（`AUTH_CONTRACT.md` §13.2.2、consumer standard §21.3）。
+- [ ] PR exact-head CI（PR 須標示 `CYID Consumer Impact: BACKWARD_COMPATIBLE`）、合併、套用 migration 0010 並部署 CYID 0.4.2；CY Web 同步 canonical 鏡像。
+
 ## 單一登入預覽接口（CYID 0.4.1）— 2026-11-23
 
 - Source **0.4.1 Build 0／consumer contract 1.2.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：新增唯讀 `POST /v1/identity/sso/handoff/preview`（`AUTH_CONTRACT.md` §13.2.1、consumer standard §21.2），無 migration。

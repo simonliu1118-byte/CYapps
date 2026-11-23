@@ -645,7 +645,7 @@ test("preview: allowed returns name and access, no returnUrl, and writes nothing
     const before = writeCounts(f);
     const result = await preview(f);
     assert.equal(result.status, 200, result.text);
-    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App", origin: new URL(OTHER_URL).origin });
+    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App", displayNameZh: null, origin: new URL(OTHER_URL).origin });
     assert.notEqual(result.body.application.origin, OTHER_URL, "only the origin, never the callback path");
     assert.equal(result.body.access, "allowed");
     assert.equal(result.headers.get("cache-control"), "no-store");
@@ -767,5 +767,139 @@ test("preview: GET is not routed and the session token never appears in the resp
     assert.equal(get.status, 404);
     const result = await preview(f);
     assert.equal(result.text.includes(userToken), false);
+  } finally { f.db.close(); }
+});
+
+
+// ---------------------------------------------------------------------------
+// Chinese display name (contract 1.3.0) and portal application list.
+
+const zhAudits = f => audits(f, "application_zh_name_updated");
+
+test("registration sets, keeps, clears and audits the Chinese name only on real change", async () => {
+  const f = setup();
+  try {
+    let result = await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh: "  新系統  " });
+    assert.equal(result.status, 200, result.text);
+    assert.equal(result.body.application.displayNameZh, "新系統");
+    assert.equal(f.db.prepare("SELECT display_name_zh FROM applications WHERE application_id = 'APP_NEW'").get().display_name_zh, "新系統");
+    assert.equal(zhAudits(f).length, 1);
+    assert.deepEqual(zhAudits(f)[0].detail, { displayNameZh: "新系統" });
+    assert.equal(zhAudits(f)[0].actor_employee_id, "employee-one");
+    // Same value: no new audit. Omitted: unchanged.
+    result = await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh: "新系統" });
+    assert.equal(result.status, 200);
+    assert.equal(zhAudits(f).length, 1);
+    result = await register(f, { applicationId: "APP_NEW", displayName: "New App" });
+    assert.equal(result.body.application.displayNameZh, "新系統");
+    assert.equal(result.body.application.displayName, "New App");
+    // Changing the Chinese name does not touch the return URL.
+    assert.equal(result.body.application.ssoReturnUrl, null);
+    result = await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh: null });
+    assert.equal(result.body.application.displayNameZh, null);
+    assert.equal(zhAudits(f).length, 2);
+    assert.deepEqual(zhAudits(f)[1].detail, { displayNameZh: null });
+    // Clearing an already-empty name is not a change.
+    await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh: null });
+    assert.equal(zhAudits(f).length, 2);
+    const snapshot = await (await worker.fetch(new Request("https://identity.test/v1/admin/identity/snapshot", {
+      headers: { authorization: `Bearer ${token}`, "x-identity-application": CORE },
+    }), f.env)).json();
+    assert.equal(snapshot.applications.find(a => a.application_id === "APP_NEW").display_name_zh, null);
+    assert.equal(snapshot.applications.find(a => a.application_id === "OTHER_APP").display_name_zh, null);
+  } finally { f.db.close(); }
+});
+
+test("registration rejects invalid Chinese names without any write", async () => {
+  const f = setup();
+  try {
+    for (const displayNameZh of ["", "   ", "a".repeat(61), "bad\u0007name", "bad\nname", 7, true, {}]) {
+      const result = await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh });
+      assert.equal(result.status, 400, String(displayNameZh));
+      assert.equal(result.body.error.code, "INVALID_APPLICATION_ZH_NAME");
+    }
+    assert.equal((await register(f, { applicationId: "APP_NEW", displayName: "New App", displayNameZh: "中".repeat(60) })).status, 200);
+    assert.equal(count(f, "applications WHERE application_id = 'APP_NEW'"), 1);
+    assert.equal(zhAudits(f).length, 1);
+    // The database CHECK also refuses untrimmed / empty values.
+    assert.throws(() => f.db.exec("UPDATE applications SET display_name_zh = ' x' WHERE application_id = 'APP_NEW'"));
+    assert.throws(() => f.db.exec("UPDATE applications SET display_name_zh = '' WHERE application_id = 'APP_NEW'"));
+  } finally { f.db.close(); }
+});
+
+test("registration refuses Chinese name changes for shared applications or non-Super-Admin", async () => {
+  const f = setup();
+  try {
+    const result = await register(f, { applicationId: "OTHER_APP", displayName: "Other App", displayNameZh: "他人" });
+    assert.equal(result.status, 409);
+    assert.equal(result.body.error.code, "APPLICATION_SHARED_ACROSS_WORKSPACES");
+    assert.equal(f.db.prepare("SELECT display_name_zh FROM applications WHERE application_id = 'OTHER_APP'").get().display_name_zh, null);
+    const denied = await register(f, { applicationId: "THIRD_APP", displayName: "Third App", displayNameZh: "第三" }, userToken);
+    assert.equal(denied.status, 403);
+    assert.equal(f.db.prepare("SELECT display_name_zh FROM applications WHERE application_id = 'THIRD_APP'").get().display_name_zh, null);
+    assert.equal(zhAudits(f).length, 0);
+  } finally { f.db.close(); }
+});
+
+test("preview returns displayNameZh (null when unset) and nothing else changes", async () => {
+  const f = setup();
+  try {
+    f.db.exec("UPDATE applications SET display_name_zh = '其他系統' WHERE application_id = 'OTHER_APP'");
+    const result = await preview(f);
+    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App", displayNameZh: "其他系統", origin: new URL(OTHER_URL).origin });
+    assert.equal((await preview(f, { applicationId: "THIRD_APP" }, { bearer: token })).body.application.displayNameZh, null);
+  } finally { f.db.close(); }
+});
+
+const listApps = (f, body = {}, { bearer = userToken, application = CORE } = {}) =>
+  call(f, new Request("https://identity.test/v1/identity/sso/applications", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...(application ? { "x-identity-application": application } : {}) },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  }));
+
+test("application list: only enterable Apps with a return URL, origin only, read-only", async () => {
+  const f = setup();
+  try {
+    f.db.exec("UPDATE applications SET display_name_zh = '其他系統' WHERE application_id = 'OTHER_APP'");
+    const before = writeCounts(f);
+    let result = await listApps(f);
+    assert.equal(result.status, 200, result.text);
+    // USER: OTHER_APP only (THIRD_APP not granted; NO_SSO_APP has no URL; core excluded).
+    assert.deepEqual(result.body.applications, [
+      { applicationId: "OTHER_APP", displayName: "Other App", displayNameZh: "其他系統", origin: new URL(OTHER_URL).origin },
+    ]);
+    assert.equal(result.headers.get("cache-control"), "no-store");
+    assert.equal(result.text.includes("callback"), false);
+    assert.deepEqual(writeCounts(f), before);
+    // Super Admin sees every Workspace-enabled App that has a return URL.
+    result = await listApps(f, {}, { bearer: token });
+    assert.deepEqual(result.body.applications.map(a => a.applicationId), ["OTHER_APP", "THIRD_APP"]);
+    assert.equal(result.body.applications[1].displayNameZh, null);
+    // Disabled grant / disabled Workspace App / disabled global App drop out.
+    f.db.exec("UPDATE employee_application_access SET enabled = 0 WHERE employee_id = 'employee-user' AND application_id = 'OTHER_APP'");
+    assert.deepEqual((await listApps(f)).body.applications, []);
+    f.db.exec("UPDATE workspace_applications SET enabled = 0 WHERE workspace_id = 'workspace-one' AND application_id = 'THIRD_APP'");
+    assert.deepEqual((await listApps(f, {}, { bearer: token })).body.applications.map(a => a.applicationId), ["OTHER_APP"]);
+    f.db.exec("UPDATE applications SET status = 'disabled' WHERE application_id = 'OTHER_APP'");
+    assert.deepEqual((await listApps(f, {}, { bearer: token })).body.applications, []);
+    assert.deepEqual(writeCounts(f), before);
+  } finally { f.db.close(); }
+});
+
+test("application list: portal-only, session required, empty body, first login incomplete", async () => {
+  const f = setup();
+  try {
+    assert.equal((await listApps(f, {}, { application: "OTHER_APP" })).body.error.code, "SSO_PORTAL_REQUIRED");
+    assert.equal((await listApps(f, {}, { application: null })).body.error.code, "SSO_PORTAL_REQUIRED");
+    assert.equal((await listApps(f, {}, { bearer: null })).body.error.code, "SESSION_INVALID");
+    assert.equal((await listApps(f, {}, { bearer: `cyid_${"d".repeat(64)}` })).body.error.code, "SESSION_INVALID");
+    for (const body of [{ applicationId: "OTHER_APP" }, "not json", "[]"]) {
+      const result = await listApps(f, body);
+      assert.equal(result.status, 400, String(body));
+      assert.equal(result.body.error.code, "INVALID_SSO_HANDOFF_REQUEST");
+    }
+    f.db.exec("UPDATE employees SET activated_at = NULL WHERE employee_id = 'employee-user'");
+    assert.deepEqual((await listApps(f)).body.applications, []);
   } finally { f.db.close(); }
 });

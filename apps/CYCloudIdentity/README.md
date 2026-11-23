@@ -43,6 +43,10 @@ Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete 
 
 架構以可用免費額度為預設，不自動啟用付費方案。實際 quota、deployment state 與 rollout gate 只記錄在 `TODO.md`／deployment docs。
 
+### 0.4.2 App 中文名稱與入口 App 清單
+
+migration `0010` 新增 `applications.display_name_zh`（僅供顯示；英文 `display_name` 仍是系統名稱）。登記接口選填 `displayNameZh`；預覽回 `displayNameZh`；新增唯讀 `POST /v1/identity/sso/applications` 回目前員工可進入的 App 清單（名稱、中文名稱、`origin`）。consumer contract 1.3.0（向下相容，最低 1.0.0）。
+
 ### 0.4.1 單一登入預覽接口
 
 新增唯讀 `POST /v1/identity/sso/handoff/preview`（只限 core account portal 帶自己的 Session）：回目標 App 名稱與 `access`（`allowed`／`denied`／`first_login_required`），讓 CY Web 確認畫面在按「前往」前顯示。不發碼、不寫資料或 Audit、不回回跳網址。無 migration；consumer contract 1.2.0（向下相容，最低 1.0.0）。
