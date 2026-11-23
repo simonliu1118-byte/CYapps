@@ -12,7 +12,6 @@ const html = read('public/index.html');
 const auth = read('public/auth.js');
 const app = read('public/app.js');
 const ledger = read('public/ledger-tools.js');
-const login = read('public/login.js');
 const core = read('src/index.js');
 const features = [
   'quick-entry.js',
@@ -44,12 +43,6 @@ assert.match(app, /12_000/);
 assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
 assert.match(app, /error\?\.message \|\| '載入失敗，請重新整理後再試。'/);
 assert.match(ledger, /window\.cyaccRefreshLedgerView = loadLedgerOpeningAndRender/);
-assert.match(login, /\/api\/auth\/login/);
-assert.match(login, /AbortController/);
-assert.match(login, /8_000/);
-assert.match(login, /Promise\.race\(\[request, timeout\]\)/);
-assert.match(login, /TimeoutError/);
-assert.match(login, /window\.location\.replace\('\/'\)/);
 assert.match(html, /auth\.js\?rev=cyweb-theme-owner/);
 const appAsset = /src="(\/app\.js\?rev=[^"]+)"/.exec(html)?.[1];
 assert.ok(appAsset, 'the current app asset must have a cache revision');
@@ -147,7 +140,7 @@ const expiryScope = vm.createContext({
 vm.runInContext(auth.slice(0, auth.indexOf('let cyaccAuthStarted')), expiryScope);
 assert.equal(vm.runInContext('window.cyaccHandleAuthResponse({status:403})', expiryScope), false, 'permission denial must not log out a valid user');
 assert.equal(vm.runInContext('window.cyaccHandleAuthResponse({status:401})', expiryScope), true);
-assert.deepEqual(redirects, ['/login']);
+assert.deepEqual(redirects, ['/auth/sso/start']);
 redirects.length = 0;
 const expirySource = auth.slice(auth.indexOf('  function scheduleSessionExpiry'), auth.indexOf('  function validBootUser'));
 vm.runInContext(expirySource, expiryScope);
@@ -155,7 +148,7 @@ vm.runInContext("scheduleSessionExpiry('1970-01-01T00:00:02.000Z')", expiryScope
 assert.equal(expiryTimers[0].delay, 1000);
 browserNow = 2001;
 expiryTimers[0].fn();
-assert.deepEqual(redirects, ['/login'], 'idle page navigates at the provider expiry');
+assert.deepEqual(redirects, ['/auth/sso/start'], 'idle page navigates at the provider expiry');
 redirects.length = 0;
 expiryListeners.visibilitychange();
-assert.deepEqual(redirects, ['/login'], 'resuming a suspended expired tab navigates immediately');
+assert.deepEqual(redirects, ['/auth/sso/start'], 'resuming a suspended expired tab navigates immediately');

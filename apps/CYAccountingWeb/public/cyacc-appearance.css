@@ -1,7 +1,7 @@
 /* CYACC light-only appearance owner.
  * CY Web account menu styling, canonical light color tokens, and CYACC light surfaces.
  * The theme switch and dark palette are intentionally deferred to TODO.md.
- * Layout ownership remains in login.css, adaptive-ui.css and accounting-ui.css.
+ * Layout ownership remains in adaptive-ui.css and accounting-ui.css.
  */
 :root {
   color-scheme: light;
@@ -96,37 +96,6 @@
 .cy-account-menu > #currentUser,
 .cy-account-menu > #logoutButton { display: none !important; }
 .cy-account-menu:not([data-identity-ready="true"]) { visibility: hidden; }
-
-.login-card .login-subtitle, .login-card .brand-block p { color: var(--cy-text-muted); }
-.login-card .message.error { color: var(--cy-danger); }
-.login-card .login-shell { background: var(--cy-bg); }
-
-/* Sign-in: preserve CYACC's independent CYID contract and first-login guidance. */
-.login-card { position: relative; border-color: var(--cy-border); background: var(--cy-surface); color: var(--cy-text); }
-.login-card .brand-mark { padding: 0; background: transparent; }
-.login-card .brand-block { padding-bottom: 18px; border-bottom: 1px solid var(--cy-border); }
-.login-card .login-form label:not(.cyacc-remember-label) { color: var(--cy-text); font-weight: 600; }
-.login-card .login-form input:not([type="checkbox"]) {
-  background: var(--cy-surface); color: var(--cy-text);
-  border-color: var(--cy-border-input);
-}
-.login-card .login-form input:focus { border-color: var(--cy-accent); box-shadow: 0 0 0 3px var(--cy-focus); }
-.login-card .login-form .primary { width: 100%; background: var(--cy-accent); color: var(--cy-on-accent); }
-.login-card .login-form .secondary { background: var(--cy-surface); border-color: var(--cy-border-strong); color: var(--cy-text); }
-.login-card .login-form .link-button, .login-card .first-login-help a { color: var(--cy-accent); }
-.login-card .first-login-help { border-color: var(--cy-border); color: var(--cy-text-muted); }
-.login-card .first-login-help strong { color: var(--cy-text); }
-.login-card .message:not(.error), .login-card .delivery-note { color: var(--cy-text-muted); }
-.login-card .delivery-note { background: var(--cy-surface-muted); }
-.cyacc-login-options { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.login-form .cyacc-remember-label {
-  display:flex; align-items:center; gap:7px; color:var(--cy-text);
-  font-size:13px; font-weight:500; cursor:pointer;
-}
-.login-form .cyacc-remember-label input {
-  width:16px; height:16px; min-height:16px; margin:0; padding:0; accent-color:var(--cy-accent);
-}
-.cyacc-login-options .link-button { font-weight:600; font-size:13px; }
 
 /* Accounting product skin: all colors are references to the same CY Web tokens. */
 body { background: var(--cy-bg); color: var(--cy-text); }
