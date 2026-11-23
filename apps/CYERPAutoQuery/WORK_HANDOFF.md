@@ -2,6 +2,11 @@
 
 > 更新：2026-10-29。目前正式版 **V1.3.0**（`VERSION=1.3.0`、`BUILD=0`，tag `cyerp-auto-query-v1.3.0`）；較舊的 Release 已依使用者要求刪除，各版內容在 `CHANGELOG.md`。本文件只描述現況與待辦；規則以根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md` 為準，各版變更見 `CHANGELOG.md`。之後的修改依規則升 Z 或 Build；使用者指示轉交 GPT 時依 `REPOSITORY_RULES.md` §11.4 與 `docs/work-orders/README.md`。
 
+## 待 Claude：ERP 盤點完整清單配套（2026-11-07）
+
+- 使用者指定只留 [需求 handoff](docs/handoff/CYERPAutoQuery-STOCKTAKE-ARCHIVE-HANDOFF-20261107.md)，CYERPAutoQuery 由 Claude 實作；GPT 原先程式／測試／版本變更已撤回，本 PR 僅文件。此對話只授權合併部署 WEB，不合併或發行 Agent。
+- 配合 WEB PR #443 的 `listComplete:true` 完整清單契約；現有 Agent 仍同步，但不觸發 WEB 自動歸檔。待 Claude 完成完整性驗證、空清單及翻頁實機測試後，再由使用者授權發行。
+
 ## 現況
 
 - SMART ERP 唯讀查詢工具，本機視窗與 CY Web Agent 共用同一條查詢流程（`MainForm.ExecuteQueryAsync` → `ItemQueryService`），不另寫第二套。
