@@ -8,9 +8,8 @@ import {installFakeFetcher} from './support/fake-fetcher.js';
 const ORIGIN = 'https://pricedesk.test';
 
 async function setup() {
-  const shared = createTestEnv({acceptAnyLogin: true});
-  const login = await worker.fetch(new Request(ORIGIN + '/api/auth/login', {method: 'POST', body: new URLSearchParams({employeeNo: '0001', password: 'password1'})}), shared.env);
-  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const shared = createTestEnv();
+  const cookie = shared.identity.cookieFor('0001');
   const fetcher = installFakeFetcher();
   const call = (method, path, json) => worker.fetch(new Request(ORIGIN + path, {
     method, redirect: 'manual',

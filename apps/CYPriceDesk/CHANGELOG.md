@@ -2,6 +2,16 @@
 
 > 本文件只記錄歷史，不是規則來源。版本來源為 `VERSION` 與 `BUILD`。
 
+## V1.5.0（Build 0）— 2026-11-23
+
+升 Minor：改為經 CY Web 登入（使用者 2026-11-23：不保留備用，直接切換並拿掉舊的）。依據 `apps/CYCloudIdentity/docs/SSO_PORTAL_DESIGN.md` §6、`CONSUMER_INTEGRATION_STANDARD.md` §21.3。
+
+- 未登入的頁面請求產生 `state`（cookie `__Host-cypd_sso_state`，10 分鐘）後 303 到 CY Web；`/auth/sso/callback` 驗證 `state`、以 IDENTITY binding 兌換交換碼、設定與舊登入完全相同屬性的 `cypd_session` cookie，並回到原本要去的同源路徑。`/auth/*` 回應一律 `no-store`、`no-referrer`。
+- 移除：獨立登入頁（`public/login.html`、`/login`）、`POST /api/auth/login`、`GET /api/auth/portal`、`loginWithCyid`、密碼長度檢查、員工編號／密碼表單、記住我與忘記密碼。首次登入與密碼相關畫面由 CY Web 負責。
+- 登出只登出本 App，之後顯示「已登出」頁與「重新登入」按鈕（不自動導向，避免迴圈）。
+- `CYID_CONSUMER_VERSION` 1.0.6 → 1.2.0。
+- **部署前置**：先在 CY Web「系統登記」→ 設定，為價格觀測室登記登入回跳網址 `https://price.chihyuancm.com/auth/sso/callback`，再部署本版；未登記時使用者無法登入。
+
 ## V1.4.0（Build 0）— 2026-11-17
 
 升 Minor：介面改版與三平台比價。依據 `docs/work-orders/WO-1.4.0.md`。

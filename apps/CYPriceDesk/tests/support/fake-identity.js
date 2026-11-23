@@ -4,9 +4,13 @@ import {randomBytes} from 'node:crypto';
 export const WORKSPACE_ID = 'workspace-test';
 export const APPLICATION_ID = 'CYPD_TEST';
 
-export function createFakeIdentity({acceptAnyLogin = false} = {}) {
+// Handoff codes are 43-character base64url strings; `issueCode` registers one that redeem accepts exactly once.
+export function createFakeIdentity() {
   const sessions = new Map();
+  const codes = new Map();
   const calls = [];
+  const redeemHeaders = [];
+  const state = {rateLimited: false, unavailable: false};
   const principal = employeeNo => ({
     workspaceId: WORKSPACE_ID, employeeId: `emp-${employeeNo}`, employeeNo, displayName: '測試員工',
     workspaceRole: 'USER', isIdentityAdmin: false, emailVerified: true, isWorkspaceSuperAdmin: false,
@@ -16,17 +20,33 @@ export function createFakeIdentity({acceptAnyLogin = false} = {}) {
   return {
     calls,
     sessions,
+    redeemHeaders,
+    state,
+    // A ready-made Session for tests that are not about sign-in; returns the cookie header value.
+    cookieFor(employeeNo = '0001') {
+      const token = `cyid_${randomBytes(32).toString('hex')}`;
+      sessions.set(token, principal(employeeNo));
+      return `cypd_session=${token}`;
+    },
+    issueCode(employeeNo = '0001') {
+      const code = randomBytes(32).toString('base64url');
+      codes.set(code, employeeNo);
+      return code;
+    },
     async fetch(request) {
       const path = new URL(request.url).pathname;
       calls.push(path);
-      if (path === '/v1/identity/login') {
-        const body = await request.json();
-        const known = acceptAnyLogin || (['0001', '0002'].includes(body.employeeNo) && body.password === 'password1');
-        if (!known) return reply(401, {error: {code: 'INVALID_CREDENTIALS'}});
-        if (!acceptAnyLogin && body.employeeNo === '0002') return reply(200, {passwordChangeRequired: true, principal: principal('0002')});
+      if (path === '/v1/identity/sso/handoff/redeem') {
+        redeemHeaders.push(request.headers.get('x-identity-application'));
+        if (state.rateLimited) return reply(429, {error: {code: 'AUTH_RATE_LIMITED'}});
+        if (state.unavailable) return reply(503, {error: {code: 'IDENTITY_UNAVAILABLE'}});
+        const {code} = await request.json();
+        const employeeNo = codes.get(code);
+        if (!employeeNo || request.headers.get('x-identity-application') !== APPLICATION_ID) return reply(401, {error: {code: 'SSO_HANDOFF_INVALID'}});
+        codes.delete(code);
         const token = `cyid_${randomBytes(32).toString('hex')}`;
-        sessions.set(token, principal(body.employeeNo));
-        return reply(200, {principal: principal(body.employeeNo), session: {token, expiresAt: new Date(Date.now() + 8 * 3600_000).toISOString()}});
+        sessions.set(token, principal(employeeNo));
+        return reply(200, {ok: true, principal: principal(employeeNo), session: {token, expiresAt: new Date(Date.now() + 8 * 3600_000).toISOString()}});
       }
       const token = (request.headers.get('authorization') || '').replace(/^Bearer /, '');
       if (request.headers.get('x-identity-application') !== APPLICATION_ID) return reply(403, {error: {code: 'APPLICATION_ACCESS_DENIED'}});

@@ -26,5 +26,5 @@ route();
     document.querySelectorAll('[data-user-name]').forEach(x => { x.textContent = name; });
     document.querySelectorAll('[data-user-avatar]').forEach(x => { x.textContent = [...name][0] || ''; });
     await loadPending();
-  } catch { /* api() already redirects to /login on 401 */ }
+  } catch { /* api() already sends the browser back to / on 401 (the Worker then starts the CY Web sign-in) */ }
 })();

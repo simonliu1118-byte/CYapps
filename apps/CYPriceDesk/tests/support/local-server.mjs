@@ -1,4 +1,4 @@
-// Local server for browser checks: the real Worker with a fake IDENTITY (accepts any login as 「測試員工」)
+// Local server for browser checks: the real Worker with a fake IDENTITY (a stand-in CY Web portal below hands out a code for 「測試員工」)
 // and an in-memory node:sqlite D1. The price fetcher is a fake returning fixture data (no network).
 // Usage: PORT=4173 SEED=1 [NO_GAP=1] node tests/support/local-server.mjs   (NO_GAP drops the 15 s upstream spacing, for screenshots)
 import http from 'node:http';
@@ -6,7 +6,7 @@ import worker from '../../src/index.js';
 import {createTestEnv} from './env.js';
 import {installFakeFetcher} from './fake-fetcher.js';
 
-const {env} = createTestEnv({acceptAnyLogin: true});
+const {env, identity} = createTestEnv();
 const fetcher = installFakeFetcher();
 if (process.env.SEED) seedTracked();
 
@@ -74,11 +74,21 @@ http.createServer(async (req, res) => {
   for await (const chunk of req) chunks.push(chunk);
   if (process.env.NO_GAP) env.DB.sqlite.exec('UPDATE upstream_state SET last_request_at=0');
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks);
+  // Stand-in for the CY Web portal: /__portal/sso immediately sends the browser back with a fresh one-time code.
+  const portalUrl = new URL(req.url, `http://localhost:${port}`);
+  if (portalUrl.pathname === '/__portal/sso') {
+    const back = new URL('/auth/sso/callback', `http://localhost:${port}`);
+    back.searchParams.set('code', identity.issueCode('0001'));
+    back.searchParams.set('state', portalUrl.searchParams.get('state') || '');
+    res.writeHead(303, {location: back.pathname + back.search});
+    return res.end();
+  }
   const response = await worker.fetch(new Request(`http://localhost:${port}${req.url}`, {method: req.method, headers: req.headers, body, redirect: 'manual'}), env);
   const headers = {};
   for (const [key, value] of response.headers) headers[key] = value;
   const cookies = response.headers.getSetCookie?.() ?? [];
   if (cookies.length) headers['set-cookie'] = cookies;
+  if (headers.location?.startsWith(env.CYWEB_PORTAL_URL)) headers.location = headers.location.replace(env.CYWEB_PORTAL_URL.replace(/\/$/, ''), '/__portal');
   res.writeHead(response.status, headers);
   res.end(Buffer.from(await response.arrayBuffer()));
 }).listen(port, '127.0.0.1');

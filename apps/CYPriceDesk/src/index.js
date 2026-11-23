@@ -1,10 +1,5 @@
-import {
-  clearProviderSessionCookie,
-  cyWebPortalUrl,
-  loginWithCyid,
-  logoutCyid,
-  resolveIdentitySession
-} from './identity.js';
+import {clearProviderSessionCookie, logoutCyid, resolveIdentitySession} from './identity.js';
+import {SIGNED_OUT_PATH, SSO_CALLBACK_PATH, SSO_START_PATH, errorPage, handleSsoCallback, safeReturnPath, signedOutPage, startSso} from './sso.js';
 import {handleAuditApi} from './audit.js';
 import {handlePendingApi} from './pending.js';
 import {handleSearchApi} from './search.js';
@@ -24,27 +19,23 @@ export default {
     const {pathname} = url;
     const method = request.method;
 
-    if (pathname === '/login.html' && method === 'GET') return redirect('/login' + url.search);
-
-    if (pathname === '/login' && method === 'GET') {
-      if ((await resolveIdentitySession(request, env)).ok) return redirect('/');
-      return asset(request, env, '/login.html');
-    }
+    // Sign-in goes through CY Web only (src/sso.js); this App has no login page of its own.
+    if (method === 'GET' && pathname === SSO_CALLBACK_PATH) return handleSsoCallback(request, env, url);
+    if (method === 'GET' && pathname === SSO_START_PATH) return startSso(env, safeReturnPath(url.searchParams.get('next')));
+    if (method === 'GET' && pathname === SIGNED_OUT_PATH) return signedOutPage();
 
     if ((pathname === '/' || pathname === '/index.html') && method === 'GET') {
       const resolved = await resolveIdentitySession(request, env);
-      if (!resolved.ok) return redirect(resolved.status >= 500 ? '/login?error=service' : '/login', rejectedCookie(resolved));
+      if (!resolved.ok) {
+        if (resolved.status >= 500) return errorPage(503, '中央帳號服務目前無法驗證登入狀態，請稍後再試。');
+        return startSso(env, '/', [clearProviderSessionCookie()]);
+      }
       return asset(request, env, '/index.html');
     }
 
     if (!pathname.startsWith('/api/')) return noCache(await env.ASSETS.fetch(request));
 
-    if (pathname === '/api/auth/login' && method === 'POST') return handleLogin(request, env);
     if (pathname === '/api/auth/logout' && method === 'POST') return handleLogout(request, env);
-    if (pathname === '/api/auth/portal' && method === 'GET') {
-      const portal = cyWebPortalUrl(env);
-      return portal ? json({url: portal}) : json({error: 'CY Web 入口尚未設定'}, 503);
-    }
 
     const resolved = await resolveIdentitySession(request, env);
     if (!resolved.ok) return authFailure(resolved);
@@ -67,27 +58,9 @@ export default {
   }
 };
 
-async function handleLogin(request, env) {
-  const form = await request.formData().catch(() => null);
-  const employeeNo = String(form?.get('employeeNo') || '').trim();
-  const password = typeof form?.get('password') === 'string' ? form.get('password') : '';
-  const result = await loginWithCyid(request, env, employeeNo, password);
-  if (!result.ok) return redirect('/login?error=' + loginErrorKey(result));
-  return redirect('/', {'set-cookie': result.cookie});
-}
-
 async function handleLogout(request, env) {
   await logoutCyid(request, env);
-  return redirect('/login', {'set-cookie': clearProviderSessionCookie()});
-}
-
-function loginErrorKey(result) {
-  if (result.code === 'FIRST_LOGIN_REQUIRED') return 'first-login';
-  if (result.status === 403 || result.code === 'APPLICATION_ACCESS_DENIED') return 'access';
-  if (result.status === 429) return 'rate';
-  if (result.status >= 500) return 'service';
-  if (result.status === 400) return 'invalid';
-  return 'failed';
+  return redirect(SIGNED_OUT_PATH, {'set-cookie': clearProviderSessionCookie()});
 }
 
 // A provider outage is not a rejection: keep the cookie and fail closed with 503.
@@ -114,7 +87,7 @@ function noCache(response) {
 
 function redirect(location, extraHeaders = {}) {
   return new Response(null, {
-    status: 302,
+    status: 303,
     headers: {location, 'cache-control': 'no-store', 'strict-transport-security': 'max-age=31536000', ...extraHeaders}
   });
 }
