@@ -80,6 +80,9 @@ public sealed class EnvelopeFormat
     public double HeightMm { get; set; } = 222;
     public bool Landscape { get; set; }
     public bool IsDefault { get; set; } = true;
+    // Fixed preprinted reference artwork, shown ONLY in preview (never sent to the printer).
+    // Empty means the legacy 15K procedural preview.
+    public string PreviewArtwork { get; set; } = "";
     // One font for every text of this format (see FontCatalog); a format is a complete "版型": positions, sizes and font.
     public string FontFamily { get; set; } = "DFKai-SB";
     public double OffsetX { get; set; }
@@ -102,6 +105,29 @@ public sealed class EnvelopeFormat
         new() { Id = "delivery-6", Label = "航空", X = 7, Y = 84 },
         new() { Id = "delivery-7", Label = "其他", X = 7, Y = 88 }
     ];
+    public const string StandardLargeId = "format-standard-large";
+    public const string StandardLargeArtworkId = "standard-large-120x230";
+
+    // A second built-in alongside 15K. All dimensions are physical mm from the paper top-left.
+    public static EnvelopeFormat CreateStandardLarge() => new()
+    {
+        Id = StandardLargeId,
+        Name = "標準大信封", WidthMm = 120, HeightMm = 230,
+        IsDefault = false, PreviewArtwork = StandardLargeArtworkId,
+        Recipient = new() { Rect = new(44, 29, 29, 168), FontSize = 24, CenterHorizontally = true },
+        Address = new() { Rect = new(87, 36, 27, 157), FontSize = 14, Columns = 2 },
+        Phone = new() { Rect = new(77, 36, 9, 139), FontSize = 10 },
+        PostalCode = new() { Rect = new(76, 12, 40, 8), FontSize = 12, Vertical = false },
+        Frame = new(7, 85, 12, 30),
+        Delivery =
+        [
+            new() { Id = "delivery-5", Label = "印刷品", X = 7, Y = 41 },
+            new() { Id = "delivery-1", Label = "平信", X = 7, Y = 45 },
+            new() { Id = "delivery-2", Label = "限時", X = 7, Y = 49 },
+            new() { Id = "delivery-3", Label = "掛號", X = 7, Y = 53 },
+            new() { Id = "delivery-6", Label = "雙掛號", X = 7, Y = 57 }
+        ]
+    };
 }
 
 public sealed class AppSettings
