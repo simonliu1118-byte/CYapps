@@ -41,7 +41,7 @@ export async function handleRegisterWorkspaceApplication(
   const body = await readJsonObject(request);
   const applicationId = normalizeApplicationId(body?.applicationId);
   const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-  if (!body || Object.keys(body).some(key => !["applicationId", "displayName", "ssoReturnUrl"].includes(key))
+  if (!body || Object.keys(body).some(key => !["applicationId", "displayName", "ssoReturnUrl", "displayNameZh"].includes(key))
       || !applicationId || !displayName || [...displayName].length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
     return json(env, requestId, 400, {
       error: { code: "INVALID_APPLICATION_REGISTRATION", message: "Application ID and display name are required; Workspace and grants cannot be supplied." },
@@ -54,6 +54,18 @@ export async function handleRegisterWorkspaceApplication(
     return json(env, requestId, 400, {
       error: { code: "INVALID_SSO_RETURN_URL", message: "Single sign-on return URL must be an https URL on a domain name, without credentials, port, query or fragment." },
     });
+  }
+  // displayNameZh: absent = unchanged, null = clear, string = set (trimmed, 1-60 chars).
+  const zhChange = Object.prototype.hasOwnProperty.call(body, "displayNameZh");
+  let displayNameZh: string | null = null;
+  if (zhChange && body.displayNameZh !== null) {
+    const trimmed = typeof body.displayNameZh === "string" ? body.displayNameZh.trim() : "";
+    if (!trimmed || [...trimmed].length > 60 || /[\u0000-\u001f\u007f]/.test(trimmed)) {
+      return json(env, requestId, 400, {
+        error: { code: "INVALID_APPLICATION_ZH_NAME", message: "Chinese name must be 1 to 60 characters without control characters." },
+      });
+    }
+    displayNameZh = trimmed;
   }
   if (isCoreAccountApplication(env, applicationId)) {
     return json(env, requestId, 409, {
@@ -70,6 +82,14 @@ export async function handleRegisterWorkspaceApplication(
   ).first()) {
     return json(env, requestId, 409, {
       error: { code: "SSO_RETURN_URL_SHARED_APPLICATION", message: "Single sign-on return URL of an application registered by another Workspace cannot be changed here." },
+    });
+  }
+
+  if (zhChange && await env.DB.prepare(`${sharedApplication} LIMIT 1`).bind(
+    null, actor.workspaceId, null, null, null, applicationId,
+  ).first()) {
+    return json(env, requestId, 409, {
+      error: { code: "APPLICATION_SHARED_ACROSS_WORKSPACES", message: "Chinese name of an application registered by another Workspace cannot be changed here." },
     });
   }
 
@@ -106,12 +126,27 @@ export async function handleRegisterWorkspaceApplication(
           AND NOT EXISTS (${sharedApplication})`)
         .bind(...values, null, ssoReturnUrl),
     ] : []),
+    ...(zhChange ? [
+      env.DB.prepare(`INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id, application_id, event_type, detail_json, created_at)
+        SELECT ?8, ?2, ?3, ?6, 'application_zh_name_updated', ?10, ?5
+        WHERE EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})
+          AND NOT EXISTS (${sharedApplication})
+          AND EXISTS (SELECT 1 FROM applications WHERE application_id = ?6 AND display_name_zh IS NOT ?9)`)
+        .bind(...values, `audit_${crypto.randomUUID()}`, displayNameZh, JSON.stringify({ displayNameZh })),
+      env.DB.prepare(`UPDATE applications SET display_name_zh = ?9, updated_at = ?5
+        WHERE application_id = ?6 AND display_name = ?7 AND status = 'active'
+          AND display_name_zh IS NOT ?9
+          AND EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})
+          AND NOT EXISTS (${sharedApplication})`)
+        .bind(...values, null, displayNameZh),
+    ] : []),
     env.DB.prepare(`SELECT EXISTS (${liveCoreSuperAdmin}) AS authorized,
       EXISTS (${registeredApplication}) AS registered,
-      (SELECT sso_return_url FROM applications WHERE application_id = ?6) AS sso_return_url`).bind(...values),
+      (SELECT sso_return_url FROM applications WHERE application_id = ?6) AS sso_return_url,
+      (SELECT display_name_zh FROM applications WHERE application_id = ?6) AS display_name_zh`).bind(...values),
   ]);
   const outcome = results[results.length - 1].results?.[0] as
-    { authorized?: number; registered?: number; sso_return_url?: string | null } | undefined;
+    { authorized?: number; registered?: number; sso_return_url?: string | null; display_name_zh?: string | null } | undefined;
   if (outcome?.authorized !== 1) {
     return json(env, requestId, 403, {
       error: { code: "CORE_SUPER_ADMIN_REQUIRED", message: "Workspace authority or Session changed before registration." },
@@ -129,9 +164,15 @@ export async function handleRegisterWorkspaceApplication(
       error: { code: "SSO_RETURN_URL_SHARED_APPLICATION", message: "Single sign-on return URL of an application registered by another Workspace cannot be changed here." },
     });
   }
+  const storedZhName = outcome.display_name_zh ?? null;
+  if (zhChange && storedZhName !== displayNameZh) {
+    return json(env, requestId, 409, {
+      error: { code: "APPLICATION_SHARED_ACROSS_WORKSPACES", message: "Chinese name of an application registered by another Workspace cannot be changed here." },
+    });
+  }
   return json(env, requestId, 200, {
     workspaceId: actor.workspaceId,
-    application: { applicationId, displayName, enabled: true, ssoReturnUrl: storedSsoReturnUrl },
+    application: { applicationId, displayName, displayNameZh: storedZhName, enabled: true, ssoReturnUrl: storedSsoReturnUrl },
   });
 }
 
@@ -200,6 +241,7 @@ export async function handleRoleAccessSnapshot(
               a.display_name,
               a.status AS application_status,
               a.sso_return_url,
+              a.display_name_zh,
               wa.enabled
          FROM workspace_applications wa
          JOIN applications a ON a.application_id = wa.application_id
@@ -241,6 +283,7 @@ export async function handleRoleAccessSnapshot(
       display_name: string;
       application_status: string;
       sso_return_url: string | null;
+      display_name_zh: string | null;
       enabled: number;
     };
     return {

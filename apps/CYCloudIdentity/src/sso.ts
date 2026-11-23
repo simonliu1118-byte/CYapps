@@ -314,7 +314,7 @@ async function preview(request: Request, env: Env, requestId: string): Promise<R
   }
 
   const target = isCoreAccountApplication(env, targetApplicationId) ? null : await env.DB.prepare(
-    `SELECT a.display_name, a.sso_return_url
+    `SELECT a.display_name, a.display_name_zh, a.sso_return_url
        FROM applications a
        JOIN workspace_applications wa ON wa.application_id = a.application_id
       WHERE a.application_id = ?1
@@ -322,7 +322,8 @@ async function preview(request: Request, env: Env, requestId: string): Promise<R
         AND a.status = 'active'
         AND wa.enabled = 1
       LIMIT 1`
-  ).bind(targetApplicationId, principal.workspaceId).first<{ display_name: string; sso_return_url: string | null }>();
+  ).bind(targetApplicationId, principal.workspaceId)
+    .first<{ display_name: string; display_name_zh: string | null; sso_return_url: string | null }>();
   if (!target || !target.sso_return_url) return refuse("SSO_APPLICATION_UNAVAILABLE");
 
   const lifecycle = await env.DB.prepare(
@@ -347,9 +348,80 @@ async function preview(request: Request, env: Env, requestId: string): Promise<R
   return json(env, requestId, 200, {
     // Only the site origin (scheme + host) of the registered callback: lets the portal pick the App icon;
     // the full return URL stays undisclosed.
-    application: { applicationId: targetApplicationId, displayName: target.display_name, origin: new URL(target.sso_return_url).origin },
+    application: { applicationId: targetApplicationId, displayName: target.display_name, displayNameZh: target.display_name_zh ?? null, origin: new URL(target.sso_return_url).origin },
     access,
   });
+}
+
+/**
+ * Read-only list of the Apps the current Employee may enter through the portal
+ * (AUTH_CONTRACT.md §13.6). Same caller and Session rules as preview; no code,
+ * no write, no Audit event, and only the origin of each return URL is returned.
+ */
+export async function handleListSsoApplications(request: Request, env: Env, requestId: string): Promise<Response> {
+  try {
+    return await listApplications(request, env, requestId);
+  } catch {
+    throw new Error("sso_application_list_failed");
+  }
+}
+
+async function listApplications(request: Request, env: Env, requestId: string): Promise<Response> {
+  const refuse = (reason: PreviewFailureReason): Response => {
+    const failure = PREVIEW_FAILURES[reason];
+    return json(env, requestId, failure.status, { error: { code: reason, message: failure.message } });
+  };
+  const callerApplicationId = normalizeApplicationId(request.headers.get("x-identity-application"));
+  if (!callerApplicationId || !isCoreAccountApplication(env, callerApplicationId)) {
+    return refuse("SSO_PORTAL_REQUIRED");
+  }
+  const portal = await resolveIdentitySession(request, env);
+  if (!portal || !bearerSessionToken(request)) return refuse("SESSION_INVALID");
+  const principal = portal.principal;
+
+  const body = await readJsonObject(request);
+  if (!body || Object.keys(body).length > 0) return refuse("INVALID_SSO_HANDOFF_REQUEST");
+
+  const lifecycle = await env.DB.prepare(
+    `SELECT e.activated_at,
+            CASE WHEN i.employee_id IS NULL THEN 0 ELSE 1 END AS initial_credential_present
+       FROM employees e
+       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
+      WHERE e.employee_id = ?1 AND e.workspace_id = ?2
+      LIMIT 1`
+  ).bind(principal.employeeId, principal.workspaceId)
+    .first<{ activated_at: string | null; initial_credential_present: number }>();
+  if (!lifecycle || !lifecycle.activated_at || lifecycle.initial_credential_present === 1) {
+    return json(env, requestId, 200, { applications: [] });
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT a.application_id, a.display_name, a.display_name_zh, a.sso_return_url
+       FROM applications a
+       JOIN workspace_applications wa ON wa.application_id = a.application_id
+      WHERE wa.workspace_id = ?1
+        AND a.status = 'active'
+        AND wa.enabled = 1
+        AND a.sso_return_url IS NOT NULL
+      ORDER BY a.display_name, a.application_id`
+  ).bind(principal.workspaceId).all<{
+    application_id: string; display_name: string; display_name_zh: string | null; sso_return_url: string;
+  }>();
+
+  const applications: Array<{ applicationId: string; displayName: string; displayNameZh: string | null; origin: string }> = [];
+  for (const row of rows.results ?? []) {
+    if (isCoreAccountApplication(env, row.application_id)) continue;
+    if (!await hasApplicationEntry(
+      env, principal.workspaceId, principal.employeeId, row.application_id, principal.isWorkspaceSuperAdmin,
+    )) continue;
+    applications.push({
+      applicationId: row.application_id,
+      displayName: row.display_name,
+      displayNameZh: row.display_name_zh ?? null,
+      origin: new URL(row.sso_return_url).origin,
+    });
+  }
+  return json(env, requestId, 200, { applications });
 }
 
 export async function handleRedeemSsoHandoff(request: Request, env: Env, requestId: string): Promise<Response> {

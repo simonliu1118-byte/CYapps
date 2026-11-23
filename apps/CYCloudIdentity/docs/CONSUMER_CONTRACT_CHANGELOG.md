@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.3.0 — 2026-11-23
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 新增 App 中文名稱（僅供顯示）與入口 App 清單：§17.1 登記接口選填 `displayNameZh`（字串＝設定、`null`＝清除、省略＝不變；`400 INVALID_APPLICATION_ZH_NAME`、`409 APPLICATION_SHARED_ACROSS_WORKSPACES`；Audit `application_zh_name_updated`）、回應 `application.displayNameZh`、管理 snapshot `applications[].display_name_zh`；預覽回應 `application.displayNameZh`；新增唯讀 `POST /v1/identity/sso/applications`（只限入口，回目前員工可進入且已登記回跳網址的 App：`applicationId`、`displayName`、`displayNameZh`、`origin`）。見 `AUTH_CONTRACT.md` §13.2.2、consumer standard §17.1／§21。Provider 0.4.2，migration `0010_application_localized_name.sql`（新增可空欄位）。既有欄位與接口不變；未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像；provider 部署 0.4.2 之前，入口須將清單接口的 404 視為空清單、名稱退回英文。
+
 ## 1.2.0 — 2026-11-23
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 單一登入入口新增唯讀預覽 `POST /v1/identity/sso/handoff/preview`（只限 core account portal 帶自己的 Session；`AUTH_CONTRACT.md` §13.2.1、consumer standard §21.2）：body 只有 `applicationId`，回 `{application:{applicationId,displayName}, access}`，`access` 為 `allowed`／`denied`／`first_login_required`；不發碼、不寫資料或 Audit、不回回跳網址。讓入口確認畫面能在按「前往」前顯示 App 名稱與可否進入。Provider 0.4.1，無 migration。既有 issue／redeem 與其他接口不變；未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像（`CONSUMER_SYNC_MANIFEST.json`）；在 provider 部署 0.4.1 之前，入口須對預覽的 404 退回只顯示 App ID。

@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.2.0`
+> **Contract version:** `1.3.0`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -398,6 +398,15 @@ and the extra error codes `INVALID_SSO_RETURN_URL` (400) and
 `SSO_RETURN_URL_SHARED_APPLICATION` (409) are defined in §21.1. Consumers that do
 not send the field keep the 1.0.4 behavior.
 
+Contract 1.3.0 adds the optional body field `displayNameZh` (string = set, trimmed,
+1-60 characters, no control characters; `null` = clear; absent = unchanged), the
+response field `application.displayNameZh` and the admin snapshot column
+`applications[].display_name_zh`. It is a display-only Chinese name: the English
+`displayName` stays the system name, and IDs, matching and access never use it.
+Extra error codes: `INVALID_APPLICATION_ZH_NAME` (400) and
+`APPLICATION_SHARED_ACROSS_WORKSPACES` (409, the application is registered by
+another Workspace). A real change is audited as `application_zh_name_updated`.
+
 CY Web exposes this as an explicit Super Admin registration action and refreshes
 the existing application-access snapshot. Ordinary consumers continue to use the
 existing login/resolve/logout and App Access contracts. Registering an application
@@ -505,7 +514,7 @@ The provider revalidates active Workspace, registered/enabled Application and th
 
 This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.
 
-## 21. 單一登入入口（SSO portal handoff，1.1.0；預覽 1.2.0）
+## 21. 單一登入入口（SSO portal handoff，1.1.0；預覽 1.2.0；中文名稱與 App 清單 1.3.0）
 
 Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal）有登入頁；其他 App 需要登入時導向 CY Web，CY Web 確認後向 CYID 取得一次性交換碼並轉回該 App 已登記的回跳網址，該 App 再以自己的 `IDENTITY` binding 向 CYID 兌換成**自己的新 Session**。設計與驗收清單見 `SSO_PORTAL_DESIGN.md`；provider 接口細節見 `AUTH_CONTRACT.md` §13。
 
@@ -524,7 +533,11 @@ Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal
 - 路由 `/sso?app=<APPLICATION_ID>&state=<state>`：`state` 只接受 32–128 字元 base64url，原樣帶回、不保存；不接受任何回跳網址參數。
 - 未登入：顯示同一份 CY Web 登入頁，登入成功後回到 `/sso` 繼續；首次登入、忘記密碼、變更 Email 都在 CY Web 完成後才繼續。剛在本流程輸入密碼登入者直接繼續，不再顯示確認畫面。
 - 已登入：**每次**先顯示確認畫面「以 <姓名>（<員工編號>）前往 <App 名稱>？」；按「前往」以 POST＋CSRF 保護送出後才呼叫 `POST /v1/identity/sso/handoff/issue`（帶入口自己的 Session 與 `x-identity-application`），body 只放 `applicationId`。按「取消」回首頁，不發碼。
-- 確認畫面顯示 App 名稱與可否進入，改由 `POST /v1/identity/sso/handoff/preview`（1.2.0，只限入口、唯讀）取得：body 只放 `applicationId`；回 `{application:{applicationId,displayName,origin}, access}`（`origin` 只有回跳網址的 `https://網域`，供入口挑選 App 圖示），`access` 為 `allowed`／`denied`／`first_login_required`。`denied` 與 `first_login_required` 時直接顯示對應訊息、不顯示「前往」、不發 CSRF token；`404 SSO_APPLICATION_UNAVAILABLE` 顯示尚未設定單一登入。預覽不發碼、不寫資料、不回 `returnUrl`，不能取代發碼時的檢查（`issue` 仍是最終把關）。Provider 為 1.1.0 時預覽路由不存在，入口須退回顯示 App ID、access 未知，仍由 `issue` 把關。
+- 確認畫面顯示 App 名稱與可否進入，改由 `POST /v1/identity/sso/handoff/preview`（1.2.0，只限入口、唯讀）取得：body 只放 `applicationId`；回 `{application:{applicationId,displayName,displayNameZh,origin}, access}`（1.3.0 起多 `displayNameZh`，字串或 `null`；入口優先顯示中文名稱、沒有時顯示 `displayName`；`origin` 只有回跳網址的 `https://網域`，供入口挑選 App 圖示），`access` 為 `allowed`／`denied`／`first_login_required`。`denied` 與 `first_login_required` 時直接顯示對應訊息、不顯示「前往」、不發 CSRF token；`404 SSO_APPLICATION_UNAVAILABLE` 顯示尚未設定單一登入。預覽不發碼、不寫資料、不回 `returnUrl`，不能取代發碼時的檢查（`issue` 仍是最終把關）。Provider 為 1.1.0 時預覽路由不存在，入口須退回顯示 App ID、access 未知，仍由 `issue` 把關。
+
+### 21.3 App 清單（1.3.0）
+
+入口側欄的網頁 App 入口改由 `POST /v1/identity/sso/applications`（只限入口、唯讀）取得，不再寫死於入口程式：帶入口自己的 Session 與 `x-identity-application`，body 必須是 `{}`（任何其他欄位 → `400 INVALID_SSO_HANDOFF_REQUEST`）。回 `{applications:[{applicationId,displayName,displayNameZh,origin}]}`，只含 active、Workspace 已啟用、已登記回跳網址、非 core app，且目前員工有 Application Access（Super Admin 同 issue 規則）的 App；員工尚未完成首次登入時回空清單。`origin` 只有回跳網址的 `https://網域`，不回 `returnUrl`。不寫資料、不寫 Audit。呼叫者與 Session 錯誤同預覽（`403 SSO_PORTAL_REQUIRED`、`401 SESSION_INVALID`）。Provider 低於 1.3.0 時路由不存在（404），入口須視為空清單。
 - 成功後以 `303` 轉到 CYID 回傳的 `returnUrl`，只附加 `?code=<code>&state=<state>`（各自 URL encode）。不得自行組合或替換回跳網址。
 - 錯誤對應：`FIRST_LOGIN_REQUIRED` → 引導完成首次登入；`APPLICATION_ACCESS_DENIED` → 顯示「此帳號沒有 <App 名稱> 的使用權限」，不轉址；`SSO_APPLICATION_UNAVAILABLE` → 顯示該 App 尚未設定單一登入，不轉址。
 - `/sso` 與確認畫面回應加 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。交換碼與 Session token 不得寫入 log、Audit、analytics 或瀏覽器儲存。
