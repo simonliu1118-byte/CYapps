@@ -237,7 +237,7 @@ x-identity-application: <core account application id>
 成功：
 
 ~~~json
-{ "ok": true, "application": { "applicationId": "<目標 App id>", "displayName": "<App 名稱>" }, "access": "allowed | denied | first_login_required" }
+{ "ok": true, "application": { "applicationId": "<目標 App id>", "displayName": "<App 名稱>", "origin": "https://<App 網域>" }, "access": "allowed | denied | first_login_required" }
 ~~~
 
 `access` 規則與 issue 一致：未完成首次登入 → `first_login_required`；依 §6 沒有進入權 → `denied`；否則 `allowed`。預覽結果只供顯示，不構成授權；實際發碼仍須通過 §13.2 全部檢查。

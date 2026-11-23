@@ -645,7 +645,8 @@ test("preview: allowed returns name and access, no returnUrl, and writes nothing
     const before = writeCounts(f);
     const result = await preview(f);
     assert.equal(result.status, 200, result.text);
-    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App" });
+    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App", origin: new URL(OTHER_URL).origin });
+    assert.notEqual(result.body.application.origin, OTHER_URL, "only the origin, never the callback path");
     assert.equal(result.body.access, "allowed");
     assert.equal(result.headers.get("cache-control"), "no-store");
     assert.equal(result.headers.get("referrer-policy"), "no-referrer");

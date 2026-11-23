@@ -345,7 +345,9 @@ async function preview(request: Request, env: Env, requestId: string): Promise<R
   }
 
   return json(env, requestId, 200, {
-    application: { applicationId: targetApplicationId, displayName: target.display_name },
+    // Only the site origin (scheme + host) of the registered callback: lets the portal pick the App icon;
+    // the full return URL stays undisclosed.
+    application: { applicationId: targetApplicationId, displayName: target.display_name, origin: new URL(target.sso_return_url).origin },
     access,
   });
 }
