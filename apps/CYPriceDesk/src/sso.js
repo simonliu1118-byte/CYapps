@@ -86,8 +86,8 @@ font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-ser
 *{box-sizing:border-box}body{margin:0;background:var(--bg);font-size:14px;line-height:1.5}
 .screen{min-height:100dvh;display:grid;place-items:center;padding:24px 16px}
 .card{width:min(400px,100%);padding:32px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
-.heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}.heading img{width:40px;height:40px;display:block}
-h1{margin:0;font-size:22px;font-weight:400}p{margin:0 0 20px;color:var(--muted)}
+.heading{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px}.heading img{width:40px;height:40px;display:block}
+h1{margin:0;font-size:22px;font-weight:700}p{margin:0 0 20px;color:var(--muted);text-align:center}
 .primary{display:block;width:100%;min-height:42px;padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;text-align:center;text-decoration:none}
 .primary:hover{background:var(--accent-hover)}
 </style></head><body><main class="screen"><section class="card">
