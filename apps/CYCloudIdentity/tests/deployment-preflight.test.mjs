@@ -130,9 +130,16 @@ test('remote audit orchestration is read-only, private and refuses stale config 
   }
 });
 
-test('development workflow only validates pull requests: the development CYID was removed', () => {
-  const workflow = fs.readFileSync(path.join(root, '../..', '.github/workflows/cycloudidentity-deploy.yml'), 'utf8');
-  assert.match(workflow, /\n  pull_request:/);
-  assert.doesNotMatch(workflow, /workflow_dispatch|\n  push:|deploy-development:|secrets\.|vars\./);
-  assert.doesNotMatch(workflow, /secret put|--remote|wrangler deploy(?! --dry-run)/);
+test('development CYID workflow is gone; PR validation keeps migrations and bundle checks', () => {
+  const workflows = path.join(root, '../..', '.github/workflows');
+  assert.equal(fs.existsSync(path.join(workflows, 'cycloudidentity-deploy.yml')), false);
+  assert.equal(fs.existsSync(path.join(workflows, 'cycloudidentity-production.yml')), false);
+  const check = fs.readFileSync(path.join(workflows, 'cycloudidentity-check.yml'), 'utf8');
+  assert.match(check, /\n  pull_request:/);
+  assert.match(check, /wrangler d1 migrations apply DB --local/);
+  assert.match(check, /wrangler deploy --dry-run/);
+  assert.doesNotMatch(check, /secrets\.|--remote|wrangler deploy(?! --dry-run)/);
+  const production = fs.readFileSync(path.join(workflows, 'cycloudidentity-production-deploy.yml'), 'utf8');
+  assert.doesNotMatch(production, /secrets\.CYID_WORKER_NAME|DEV_CYID_WORKER_NAME|productionWorkerName/);
+  assert.match(production, /resolveProductionWorkerName/);
 });

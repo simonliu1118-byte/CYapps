@@ -3,6 +3,8 @@
 > Development only. Production deployment, production DNS/custom domain and paid-tier changes remain out of scope.
 
 > **2026-11-18：開發版 CYID 已不存在**（Worker 與 D1 於 2026-10-29 清除）。`cycloudidentity-deploy.yml` 只保留 PR 驗證工作（改名為 CYCloud Identity Development Validate），部署、預檢與 `CYID_D1_DATABASE_ID` 都已移除。以下內容為歷史紀錄。正式版部署仍用 secret `CYID_WORKER_NAME` 推得正式 Worker；該值現在可直接填正式名稱（`-prod`／`-production` 原樣使用），開發版名稱仍相容。
+>
+> **2026-11-23：** `cycloudidentity-deploy.yml`（Development Validate）與已退役的 `cycloudidentity-production.yml` 已刪除；PR 驗證（含本機 migration 與 bundle dry-run）併入 `cycloudidentity-check.yml`。正式部署 `cycloudidentity-production-deploy.yml` 不再讀 `CYID_WORKER_NAME`，改由 Cloudflare 查出帳號入口（CY Web）的 `IDENTITY` binding 指向的 Worker（REPO_POLICY 2.3.64）。CYACC、CYInvoice 仍使用 `CYID_WORKER_NAME` Secret，不可刪除。
 
 ## Latest checkpoint — Invoice development CYID activation, 2026-10-12
 

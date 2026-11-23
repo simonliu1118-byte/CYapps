@@ -2,13 +2,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export function productionWorkerName(developmentName) {
-  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(developmentName ?? '')) throw new Error('INVALID_DEVELOPMENT_WORKER_NAME');
-  // A production name is accepted as-is (naming cleanup 2026-11-18); development names still map for compatibility.
-  const name = /-(prod|production)$/.test(developmentName) ? developmentName
-    : developmentName.endsWith('-development') ? developmentName.replace(/-development$/, '-production')
-    : developmentName.endsWith('-dev') ? developmentName.replace(/-dev$/, '-prod') : `${developmentName}-prod`;
-  if (name.length > 63) throw new Error('INVALID_PRODUCTION_WORKER_NAME');
+/**
+ * The production CYID Worker is whatever the live account portal (CY Web, served on portalHostname) binds as
+ * IDENTITY. Resolving it from Cloudflare replaces the former development-name derivation (REPO_POLICY 2.3.64:
+ * no resource is inferred from a naming convention). Only a -prod/-production name is accepted; the provider is
+ * re-verified as production by buildProductionConfig and verify-production-core.
+ */
+export async function resolveProductionWorkerName({ accountId, apiToken, portalHostname, fetchImpl = fetch }) {
+  if (!accountId || !apiToken || !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(portalHostname ?? '')) throw new Error('PRODUCTION_WORKER_INPUT_INVALID');
+  const api = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}`;
+  const read = async resource => {
+    const response = await fetchImpl(api + resource, { method: 'GET', redirect: 'error', headers: { authorization: `Bearer ${apiToken}` } });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.success !== true) throw new Error('PRODUCTION_WORKER_LOOKUP_FAILED');
+    return data.result;
+  };
+  const served = ((await read(`/workers/domains?hostname=${encodeURIComponent(portalHostname)}`)) ?? [])
+    .filter(row => row.hostname === portalHostname && row.enabled !== false && [undefined, 'production'].includes(row.environment));
+  if (served.length !== 1 || !/^[a-z0-9][a-z0-9-]{1,62}$/.test(served[0].service ?? '')) throw new Error('PRODUCTION_PORTAL_UNVERIFIED');
+  const identity = ((await read(`/workers/scripts/${encodeURIComponent(served[0].service)}/settings`))?.bindings ?? [])
+    .filter(b => b.name === 'IDENTITY' && b.type === 'service');
+  const name = identity.length === 1 ? identity[0].service : '';
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(name ?? '') || !/-(prod|production)$/.test(name) || name === served[0].service) throw new Error('PRODUCTION_WORKER_UNRESOLVED');
   return name;
 }
 
