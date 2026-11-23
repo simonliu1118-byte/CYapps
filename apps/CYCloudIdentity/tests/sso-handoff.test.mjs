@@ -627,3 +627,145 @@ test("redeem fails closed when the rate limiter binding is missing", async () =>
     assert.equal(f.db.prepare("SELECT used_at FROM sso_handoffs").get().used_at, null);
   } finally { f.db.close(); }
 });
+
+// ---------------------------------------------------------------------------
+// Preview (contract 1.2.0): read-only, same checks as issue, no returnUrl.
+
+const preview = (f, body = { applicationId: "OTHER_APP" }, { bearer = userToken, application = CORE } = {}) =>
+  call(f, post("preview", { bearer, application, body }));
+const writeCounts = f => ({
+  handoffs: count(f, "sso_handoffs"),
+  audit: count(f, "identity_audit_events"),
+  sessions: count(f, "identity_sessions"),
+});
+
+test("preview: allowed returns name and access, no returnUrl, and writes nothing", async () => {
+  const f = setup();
+  try {
+    const before = writeCounts(f);
+    const result = await preview(f);
+    assert.equal(result.status, 200, result.text);
+    assert.deepEqual(result.body.application, { applicationId: "OTHER_APP", displayName: "Other App", origin: new URL(OTHER_URL).origin });
+    assert.notEqual(result.body.application.origin, OTHER_URL, "only the origin, never the callback path");
+    assert.equal(result.body.access, "allowed");
+    assert.equal(result.headers.get("cache-control"), "no-store");
+    assert.equal(result.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(result.text.includes("returnUrl"), false);
+    assert.equal(result.text.includes(OTHER_URL), false);
+    assert.equal("code" in result.body, false);
+    assert.deepEqual(writeCounts(f), before);
+    // Lowercase / padded application ids normalize like issue.
+    assert.equal((await preview(f, { applicationId: " other_app " })).body.application.applicationId, "OTHER_APP");
+    // Super Admin enters a Workspace-enabled App without a direct grant.
+    assert.equal((await preview(f, { applicationId: "THIRD_APP" }, { bearer: token })).body.access, "allowed");
+  } finally { f.db.close(); }
+});
+
+test("preview: denied when the Employee has no Application Access (same rule as issue)", async () => {
+  const f = setup();
+  try {
+    const before = writeCounts(f);
+    const result = await preview(f, { applicationId: "THIRD_APP" });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.access, "denied");
+    assert.equal(result.body.application.displayName, "Third App");
+    assert.equal(result.text.includes("returnUrl"), false);
+    assert.equal((await issue(f, { applicationId: "THIRD_APP" })).body.error.code, "APPLICATION_ACCESS_DENIED");
+    f.db.exec("UPDATE employee_application_access SET enabled = 0 WHERE employee_id = 'employee-user' AND application_id = 'OTHER_APP'");
+    assert.equal((await preview(f)).body.access, "denied");
+    assert.equal(count(f, "sso_handoffs"), before.handoffs);
+  } finally { f.db.close(); }
+});
+
+test("preview: first_login_required when first-login is incomplete (same rule as issue)", async () => {
+  for (const patch of [
+    "UPDATE employees SET activated_at = NULL WHERE employee_id = 'employee-user'",
+    "INSERT INTO employee_initial_credentials(employee_id, algorithm, verifier, issued_at, expires_at) VALUES ('employee-user', 'pbkdf2-sha256', 'synthetic', '2026-01-01', '2999-01-01')",
+  ]) {
+    const f = setup();
+    try {
+      f.db.exec(patch);
+      const before = writeCounts(f);
+      const result = await preview(f);
+      assert.equal(result.status, 200);
+      assert.equal(result.body.access, "first_login_required");
+      assert.equal(result.body.application.displayName, "Other App");
+      assert.equal((await issue(f)).body.error.code, "FIRST_LOGIN_REQUIRED");
+      assert.equal(count(f, "sso_handoffs"), before.handoffs);
+    } finally { f.db.close(); }
+  }
+});
+
+test("preview: unknown, disabled, URL-less and core targets are 404 SSO_APPLICATION_UNAVAILABLE without writes", async () => {
+  const f = setup();
+  try {
+    f.db.exec("UPDATE workspace_applications SET enabled = 0 WHERE workspace_id = 'workspace-one' AND application_id = 'THIRD_APP'");
+    f.db.exec("INSERT INTO applications(application_id, display_name, status, sso_return_url) VALUES ('GLOBAL_OFF', 'Global Off', 'disabled', 'https://off.example.com/cb')");
+    f.db.exec("INSERT INTO workspace_applications(workspace_id, application_id) VALUES ('workspace-one', 'GLOBAL_OFF')");
+    const before = writeCounts(f);
+    for (const applicationId of ["MISSING_APP", "THIRD_APP", "GLOBAL_OFF", "NO_SSO_APP", CORE]) {
+      const result = await preview(f, { applicationId });
+      assert.equal(result.status, 404, applicationId);
+      assert.equal(result.body.error.code, "SSO_APPLICATION_UNAVAILABLE");
+      assert.equal("application" in result.body, false);
+    }
+    assert.deepEqual(writeCounts(f), before);
+  } finally { f.db.close(); }
+});
+
+test("preview: only the core portal may call it (403) and a valid portal Session is required (401)", async () => {
+  const f = setup();
+  try {
+    const otherToken = `cyid_${"e".repeat(64)}`;
+    f.db.prepare(`INSERT INTO identity_sessions(session_hash, workspace_id, employee_id, application_id, credential_version, employee_revision, created_at, expires_at)
+      VALUES (?, 'workspace-one', 'employee-one', 'OTHER_APP', 1, 1, '2026-01-01', '2999-01-01')`).run(sha256(otherToken));
+    const before = writeCounts(f);
+    for (const [bearer, application] of [[otherToken, "OTHER_APP"], [token, "OTHER_APP"], [userToken, "THIRD_APP"], [userToken, null], [null, "OTHER_APP"]]) {
+      const result = await preview(f, { applicationId: "THIRD_APP" }, { bearer, application });
+      assert.equal(result.status, 403, String(application));
+      assert.equal(result.body.error.code, "SSO_PORTAL_REQUIRED");
+    }
+    for (const bearer of [null, `cyid_${"f".repeat(64)}`, "not-a-token"]) {
+      const result = await preview(f, undefined, { bearer });
+      assert.equal(result.status, 401);
+      assert.equal(result.body.error.code, "SESSION_INVALID");
+    }
+    f.db.exec(`UPDATE identity_sessions SET revoked_at = '2026-01-02' WHERE session_hash = '${sha256(userToken)}'`);
+    assert.equal((await preview(f)).status, 401);
+    assert.deepEqual(writeCounts(f), before);
+  } finally { f.db.close(); }
+});
+
+test("preview: body must be exactly {applicationId}", async () => {
+  const f = setup();
+  try {
+    const before = writeCounts(f);
+    for (const body of [
+      { applicationId: "OTHER_APP", returnUrl: OTHER_URL },
+      { applicationId: "OTHER_APP", redirectUri: "https://evil.example.net/cb" },
+      { applicationId: "OTHER_APP", workspaceId: "workspace-two" },
+      { applicationId: "!" },
+      { applicationId: 5 },
+      {},
+      [],
+      "not-json",
+    ]) {
+      const result = await call(f, post("preview", { bearer: userToken, application: CORE, body }));
+      assert.equal(result.status, 400, JSON.stringify(body));
+      assert.equal(result.body.error.code, "INVALID_SSO_HANDOFF_REQUEST");
+    }
+    assert.deepEqual(writeCounts(f), before);
+  } finally { f.db.close(); }
+});
+
+test("preview: GET is not routed and the session token never appears in the response", async () => {
+  const f = setup();
+  try {
+    const get = await worker.fetch(new Request("https://identity.test/v1/identity/sso/handoff/preview", {
+      method: "GET", headers: { authorization: `Bearer ${userToken}`, "x-identity-application": CORE },
+    }), f.env);
+    assert.equal(get.status, 404);
+    const result = await preview(f);
+    assert.equal(result.text.includes(userToken), false);
+  } finally { f.db.close(); }
+});

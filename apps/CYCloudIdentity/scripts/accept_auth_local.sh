@@ -247,6 +247,9 @@ status, result = call('/v1/admin/identity/applications', {'applicationId': 'APP_
 assert status == 200 and result['application']['ssoReturnUrl'] == url, result
 assert call('/v1/admin/identity/applications', {'applicationId': 'APP_TEST_SSO', 'displayName': 'Synthetic SSO App', 'ssoReturnUrl': url + '?next=/'}, token)[0] == 400
 assert call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO'}, token, 'APP_TEST_SSO')[1]['error']['code'] == 'SSO_PORTAL_REQUIRED'
+status, previewed = call('/v1/identity/sso/handoff/preview', {'applicationId': 'APP_TEST_SSO'}, token)
+assert status == 200 and previewed['application'] == {'applicationId': 'APP_TEST_SSO', 'displayName': 'Synthetic SSO App', 'origin': 'https://sso.example.com'} and previewed['access'] == 'allowed' and 'returnUrl' not in json.dumps(previewed), previewed
+assert call('/v1/identity/sso/handoff/preview', {'applicationId': 'APP_TEST_SSO'}, token, 'APP_TEST_SSO')[1]['error']['code'] == 'SSO_PORTAL_REQUIRED'
 assert call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO', 'returnUrl': 'https://sso.example.com.evil.com/auth/sso/callback'}, token)[0] == 400
 status, handoff = call('/v1/identity/sso/handoff/issue', {'applicationId': 'APP_TEST_SSO'}, token)
 assert status == 200 and handoff['returnUrl'] == url and len(handoff['code']) == 43, handoff
@@ -450,4 +453,4 @@ echo 'PASS create-time activation email failure preserves pending Employee'
 echo 'PASS admin snapshot exposes role/access model'
 echo 'PASS Super Admin protected lifecycle and security policy boundary'
 echo 'PASS revoked session rejection'
-echo 'PASS SSO return URL registration, portal-only issue, app-bound single-use redeem and no code/token in Worker log'
+echo 'PASS SSO return URL registration, portal-only read-only preview and issue, app-bound single-use redeem and no code/token in Worker log'

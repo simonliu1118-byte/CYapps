@@ -270,6 +270,88 @@ async function issue(request: Request, env: Env, requestId: string): Promise<Res
   return json(env, requestId, 200, { code, returnUrl, expiresAt });
 }
 
+type PreviewFailureReason = "SSO_PORTAL_REQUIRED" | "SESSION_INVALID" | "INVALID_SSO_HANDOFF_REQUEST" | "SSO_APPLICATION_UNAVAILABLE";
+
+const PREVIEW_FAILURES: Record<PreviewFailureReason, { status: number; message: string }> = {
+  SSO_PORTAL_REQUIRED: ISSUE_FAILURES.SSO_PORTAL_REQUIRED,
+  SESSION_INVALID: ISSUE_FAILURES.SESSION_INVALID,
+  INVALID_SSO_HANDOFF_REQUEST: ISSUE_FAILURES.INVALID_SSO_HANDOFF_REQUEST,
+  SSO_APPLICATION_UNAVAILABLE: ISSUE_FAILURES.SSO_APPLICATION_UNAVAILABLE,
+};
+
+/**
+ * Read-only preview for the portal confirmation screen (AUTH_CONTRACT.md §13.5).
+ * It applies the same caller, Session, target and access rules as issue, but it
+ * creates no code, writes no row and no Audit event, and never returns the
+ * return URL.
+ */
+export async function handlePreviewSsoHandoff(request: Request, env: Env, requestId: string): Promise<Response> {
+  try {
+    return await preview(request, env, requestId);
+  } catch {
+    throw new Error("sso_handoff_preview_failed");
+  }
+}
+
+async function preview(request: Request, env: Env, requestId: string): Promise<Response> {
+  const refuse = (reason: PreviewFailureReason): Response => {
+    const failure = PREVIEW_FAILURES[reason];
+    return json(env, requestId, failure.status, { error: { code: reason, message: failure.message } });
+  };
+
+  const callerApplicationId = normalizeApplicationId(request.headers.get("x-identity-application"));
+  if (!callerApplicationId || !isCoreAccountApplication(env, callerApplicationId)) {
+    return refuse("SSO_PORTAL_REQUIRED");
+  }
+  const portal = await resolveIdentitySession(request, env);
+  if (!portal || !bearerSessionToken(request)) return refuse("SESSION_INVALID");
+  const principal = portal.principal;
+
+  const body = await readJsonObject(request);
+  const targetApplicationId = normalizeApplicationId(body?.applicationId);
+  if (!body || !targetApplicationId || Object.keys(body).some(key => key !== "applicationId")) {
+    return refuse("INVALID_SSO_HANDOFF_REQUEST");
+  }
+
+  const target = isCoreAccountApplication(env, targetApplicationId) ? null : await env.DB.prepare(
+    `SELECT a.display_name, a.sso_return_url
+       FROM applications a
+       JOIN workspace_applications wa ON wa.application_id = a.application_id
+      WHERE a.application_id = ?1
+        AND wa.workspace_id = ?2
+        AND a.status = 'active'
+        AND wa.enabled = 1
+      LIMIT 1`
+  ).bind(targetApplicationId, principal.workspaceId).first<{ display_name: string; sso_return_url: string | null }>();
+  if (!target || !target.sso_return_url) return refuse("SSO_APPLICATION_UNAVAILABLE");
+
+  const lifecycle = await env.DB.prepare(
+    `SELECT e.activated_at,
+            CASE WHEN i.employee_id IS NULL THEN 0 ELSE 1 END AS initial_credential_present
+       FROM employees e
+       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
+      WHERE e.employee_id = ?1 AND e.workspace_id = ?2
+      LIMIT 1`
+  ).bind(principal.employeeId, principal.workspaceId)
+    .first<{ activated_at: string | null; initial_credential_present: number }>();
+
+  let access: "allowed" | "denied" | "first_login_required";
+  if (!lifecycle || !lifecycle.activated_at || lifecycle.initial_credential_present === 1) {
+    access = "first_login_required";
+  } else {
+    access = await hasApplicationEntry(
+      env, principal.workspaceId, principal.employeeId, targetApplicationId, principal.isWorkspaceSuperAdmin,
+    ) ? "allowed" : "denied";
+  }
+
+  return json(env, requestId, 200, {
+    // Only the site origin (scheme + host) of the registered callback: lets the portal pick the App icon;
+    // the full return URL stays undisclosed.
+    application: { applicationId: targetApplicationId, displayName: target.display_name, origin: new URL(target.sso_return_url).origin },
+    access,
+  });
+}
+
 export async function handleRedeemSsoHandoff(request: Request, env: Env, requestId: string): Promise<Response> {
   try {
     return await redeem(request, env, requestId);

@@ -218,6 +218,30 @@ x-identity-application: <core account application id>
 
 交換碼為 32 bytes 隨機值（base64url、無 padding），D1 只存 SHA-256；有效 60 秒、單次使用，綁定 Workspace、員工、目標 App、發碼時的憑證版本與發碼用的入口 Session。
 
+### 13.2.1 預覽（consumer contract 1.2.0）
+
+`POST /v1/identity/sso/handoff/preview`，供入口確認畫面在按「前往」之前顯示 App 名稱與可否進入。唯讀：不產生交換碼、不寫 `sso_handoffs`、不寫 Audit，也不回傳回跳網址。
+
+~~~text
+Authorization: Bearer <入口自己的 Session token>
+x-identity-application: <core account application id>
+~~~
+
+~~~json
+{ "applicationId": "<目標 App id>" }
+~~~
+
+- 呼叫者檢查、入口 Session 檢查與目標 App 可用性（含 core app、未登記回跳網址）與 §13.2 相同：`403 SSO_PORTAL_REQUIRED`、`401 SESSION_INVALID`、`404 SSO_APPLICATION_UNAVAILABLE`。body 只能有 `applicationId`，任何其他欄位（含 `returnUrl`）→ `400 INVALID_SSO_HANDOFF_REQUEST`。
+- 與 issue 不同：員工尚未完成首次登入、或沒有進入權，不是錯誤，而是 `200` 內的 `access` 值。
+
+成功：
+
+~~~json
+{ "ok": true, "application": { "applicationId": "<目標 App id>", "displayName": "<App 名稱>", "origin": "https://<App 網域>" }, "access": "allowed | denied | first_login_required" }
+~~~
+
+`access` 規則與 issue 一致：未完成首次登入 → `first_login_required`；依 §6 沒有進入權 → `denied`；否則 `allowed`。預覽結果只供顯示，不構成授權；實際發碼仍須通過 §13.2 全部檢查。
+
 ### 13.3 兌換交換碼
 
 `POST /v1/identity/sso/handoff/redeem`

@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.1.0`
+> **Contract version:** `1.2.0`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -505,7 +505,7 @@ The provider revalidates active Workspace, registered/enabled Application and th
 
 This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.
 
-## 21. 單一登入入口（SSO portal handoff，1.1.0）
+## 21. 單一登入入口（SSO portal handoff，1.1.0；預覽 1.2.0）
 
 Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal）有登入頁；其他 App 需要登入時導向 CY Web，CY Web 確認後向 CYID 取得一次性交換碼並轉回該 App 已登記的回跳網址，該 App 再以自己的 `IDENTITY` binding 向 CYID 兌換成**自己的新 Session**。設計與驗收清單見 `SSO_PORTAL_DESIGN.md`；provider 接口細節見 `AUTH_CONTRACT.md` §13。
 
@@ -524,6 +524,7 @@ Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal
 - 路由 `/sso?app=<APPLICATION_ID>&state=<state>`：`state` 只接受 32–128 字元 base64url，原樣帶回、不保存；不接受任何回跳網址參數。
 - 未登入：顯示同一份 CY Web 登入頁，登入成功後回到 `/sso` 繼續；首次登入、忘記密碼、變更 Email 都在 CY Web 完成後才繼續。剛在本流程輸入密碼登入者直接繼續，不再顯示確認畫面。
 - 已登入：**每次**先顯示確認畫面「以 <姓名>（<員工編號>）前往 <App 名稱>？」；按「前往」以 POST＋CSRF 保護送出後才呼叫 `POST /v1/identity/sso/handoff/issue`（帶入口自己的 Session 與 `x-identity-application`），body 只放 `applicationId`。按「取消」回首頁，不發碼。
+- 確認畫面顯示 App 名稱與可否進入，改由 `POST /v1/identity/sso/handoff/preview`（1.2.0，只限入口、唯讀）取得：body 只放 `applicationId`；回 `{application:{applicationId,displayName,origin}, access}`（`origin` 只有回跳網址的 `https://網域`，供入口挑選 App 圖示），`access` 為 `allowed`／`denied`／`first_login_required`。`denied` 與 `first_login_required` 時直接顯示對應訊息、不顯示「前往」、不發 CSRF token；`404 SSO_APPLICATION_UNAVAILABLE` 顯示尚未設定單一登入。預覽不發碼、不寫資料、不回 `returnUrl`，不能取代發碼時的檢查（`issue` 仍是最終把關）。Provider 為 1.1.0 時預覽路由不存在，入口須退回顯示 App ID、access 未知，仍由 `issue` 把關。
 - 成功後以 `303` 轉到 CYID 回傳的 `returnUrl`，只附加 `?code=<code>&state=<state>`（各自 URL encode）。不得自行組合或替換回跳網址。
 - 錯誤對應：`FIRST_LOGIN_REQUIRED` → 引導完成首次登入；`APPLICATION_ACCESS_DENIED` → 顯示「此帳號沒有 <App 名稱> 的使用權限」，不轉址；`SSO_APPLICATION_UNAVAILABLE` → 顯示該 App 尚未設定單一登入，不轉址。
 - `/sso` 與確認畫面回應加 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。交換碼與 Session token 不得寫入 log、Audit、analytics 或瀏覽器儲存。
