@@ -782,13 +782,13 @@ try {
 }
 console.log('Deployment audit: scope/authority/migrations/continuity/privacy/health regressions passed.');
 
-for (const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-deploy.yml']) {
+for (const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-check.yml']) {
   const workflow = fs.readFileSync(path.resolve('../../../.github/workflows',file),'utf8');
   assert.equal(/private-binding-probe|binding-version|binding-cleanup|binding-probe/.test(workflow),false);
 }
 assert.equal(fs.existsSync(path.resolve('../../CYCloudIdentity/scripts/private-binding-probe.mjs')),false);
 
-for(const file of ['cycloudidentity-production-deploy.yml','cyaccountingweb-deploy.yml']) {   // cycloudidentity-deploy.yml no longer deploys (development CYID removed, governance 2.3.63)
+for(const file of ['cyaccountingweb-deploy.yml']) {   // CYID production deploy resolves its Worker from Cloudflare (no CYID_WORKER_NAME); the development workflow was removed
   const workflow=fs.readFileSync(path.resolve('../../../.github/workflows',file),'utf8');
   assert.ok(workflow.includes('${{ secrets.CYID_WORKER_NAME }}'));
   assert.equal(workflow.includes('${{ vars.CYID_WORKER_NAME }}'),false);

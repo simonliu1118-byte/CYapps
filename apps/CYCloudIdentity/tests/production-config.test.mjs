@@ -1,17 +1,40 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildProductionConfig, productionWorkerName, requireProductionCoreConsumer } from '../scripts/render-production-config.mjs';
+import { buildProductionConfig, resolveProductionWorkerName, requireProductionCoreConsumer } from '../scripts/render-production-config.mjs';
 const id='11111111-1111-4111-8111-111111111111';
 function input(){
   const values={APP_ENV:'production',API_VERSION:'v1',SESSION_TTL_SECONDS:'3600',EMAIL_PROVIDER:'brevo',EMAIL_FROM:'Synthetic <test@example.test>',EMAIL_DAILY_BUDGET:'50',CORE_ACCOUNT_APPLICATION_ID:'APP_TEST',ACCOUNT_PORTAL_URL:'https://portal.example.test',CYACC_APPLICATION_ID:'APP_ACCOUNTING_TEST'};
   return {workerName:'identity-test-prod',developmentDatabaseId:'22222222-2222-4222-8222-222222222222',database:{uuid:id,name:'identity_test_prod'},settings:{bindings:[...Object.entries(values).map(([name,text])=>({type:'plain_text',name,text})),{type:'d1',name:'DB',id},{type:'ratelimit',name:'LOGIN_RATE_LIMITER',namespace_id:'900102',simple:{limit:10,period:60}},{type:'secret_text',name:'BREVO_API_KEY'}]}};
 }
-test('production names preserve the established isolated target derivation',()=>{
-  assert.equal(productionWorkerName('identity-test-development'),'identity-test-production');
-  assert.equal(productionWorkerName('identity-test-dev'),'identity-test-prod');
-  assert.equal(productionWorkerName('identity-test'),'identity-test-prod');
-  assert.equal(productionWorkerName('identity-test-prod'),'identity-test-prod');
-  assert.equal(productionWorkerName('identity-test-production'),'identity-test-production');
+function cloudflare({domains,bindings,status=200}){
+  const calls=[];
+  const fetchImpl=async url=>{calls.push(url);const u=new URL(url);
+    const result=u.pathname.endsWith('/workers/domains')?domains:{bindings};
+    return new Response(JSON.stringify({success:status===200,result}),{status});};
+  return {calls,fetchImpl};
+}
+const portal={accountId:'acct',apiToken:'token',portalHostname:'portal.example.test'};
+test('production Worker is the IDENTITY binding of the live portal, never a derived name',async()=>{
+  const cf=cloudflare({domains:[{hostname:'portal.example.test',service:'portal-test',environment:'production'}],bindings:[{type:'service',name:'IDENTITY',service:'identity-test-prod'}]});
+  assert.equal(await resolveProductionWorkerName({...portal,fetchImpl:cf.fetchImpl}),'identity-test-prod');
+  assert.match(cf.calls[0],/workers\/domains\?hostname=portal\.example\.test$/);
+  assert.match(cf.calls[1],/workers\/scripts\/portal-test\/settings$/);
+});
+for(const [label,domains,bindings] of [
+  ['non-production IDENTITY name',[{hostname:'portal.example.test',service:'portal-test'}],[{type:'service',name:'IDENTITY',service:'identity-test-dev'}]],
+  ['missing IDENTITY binding',[{hostname:'portal.example.test',service:'portal-test'}],[]],
+  ['duplicate IDENTITY binding',[{hostname:'portal.example.test',service:'portal-test'}],[{type:'service',name:'IDENTITY',service:'a-prod'},{type:'service',name:'IDENTITY',service:'b-prod'}]],
+  ['portal not served',[],[]],
+  ['ambiguous portal',[{hostname:'portal.example.test',service:'a'},{hostname:'portal.example.test',service:'b'}],[]],
+  ['portal binds itself',[{hostname:'portal.example.test',service:'portal-prod'}],[{type:'service',name:'IDENTITY',service:'portal-prod'}]],
+]) test('production Worker lookup fails closed: '+label,async()=>{
+  const cf=cloudflare({domains,bindings});
+  await assert.rejects(resolveProductionWorkerName({...portal,fetchImpl:cf.fetchImpl}),/PRODUCTION_(PORTAL_UNVERIFIED|WORKER_UNRESOLVED)/);
+});
+test('production Worker lookup rejects bad input and Cloudflare errors',async()=>{
+  await assert.rejects(resolveProductionWorkerName({...portal,portalHostname:'bad host'}),/PRODUCTION_WORKER_INPUT_INVALID/);
+  const cf=cloudflare({domains:[],bindings:[],status:403});
+  await assert.rejects(resolveProductionWorkerName({...portal,fetchImpl:cf.fetchImpl}),/PRODUCTION_WORKER_LOOKUP_FAILED/);
 });
 test('ordinary production config preserves existing vars, DB and rate limit without secret material',()=>{
   const args=input(),config=buildProductionConfig(args);
