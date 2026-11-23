@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.2.0 — 2026-11-23
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 單一登入入口新增唯讀預覽 `POST /v1/identity/sso/handoff/preview`（只限 core account portal 帶自己的 Session；`AUTH_CONTRACT.md` §13.2.1、consumer standard §21.2）：body 只有 `applicationId`，回 `{application:{applicationId,displayName}, access}`，`access` 為 `allowed`／`denied`／`first_login_required`；不發碼、不寫資料或 Audit、不回回跳網址。讓入口確認畫面能在按「前往」前顯示 App 名稱與可否進入。Provider 0.4.1，無 migration。既有 issue／redeem 與其他接口不變；未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像（`CONSUMER_SYNC_MANIFEST.json`）；在 provider 部署 0.4.1 之前，入口須對預覽的 404 退回只顯示 App ID。
+
 ## 1.1.0 — 2026-11-19
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 新增選用的單一登入入口（§21，`AUTH_CONTRACT.md` §13，設計 `SSO_PORTAL_DESIGN.md` 第 1 階段）：`POST /v1/identity/sso/handoff/issue`（只限 core account portal 帶自己的 Session）與 `POST /v1/identity/sso/handoff/redeem`（目標 App 以自己的 binding 兌換成新的 App Session，回應形狀同 login）。交換碼 32 bytes、只存 SHA-256、60 秒、單次、綁定 App；兌換時重新檢查員工、Workspace、App、Application Access、憑證版本與入口 Session；所有兌換失敗一律 `SSO_HANDOFF_INVALID`，失敗次數依 App 限制。§17.1 登記接口新增選填 `ssoReturnUrl`（https、網域、無帳密／port／query／fragment，正規化儲存、完整字串比對），回應與管理 snapshot 新增對應欄位，新錯誤碼 `INVALID_SSO_RETURN_URL`、`SSO_RETURN_URL_SHARED_APPLICATION`。Provider 0.4.0 新增 migration `0009_sso_handoff.sql`。未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像（`CONSUMER_SYNC_MANIFEST.json`）後才進行第 2 階段。

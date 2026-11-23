@@ -2,6 +2,11 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## 單一登入預覽接口（CYID 0.4.1）— 2026-11-23
+
+- Source **0.4.1 Build 0／consumer contract 1.2.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：新增唯讀 `POST /v1/identity/sso/handoff/preview`（`AUTH_CONTRACT.md` §13.2.1、consumer standard §21.2），無 migration。
+- [ ] PR exact-head CI（PR 須標示 `CYID Consumer Impact: BACKWARD_COMPATIBLE`）、合併、部署 CYID 0.4.1；CY Web 同步 canonical 鏡像。
+
 ## 單一登入入口第 1 階段（CYID）— 2026-11-19
 
 - Source **0.4.0 Build 0／consumer contract 1.1.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：migration `0009_sso_handoff.sql`（`applications.sso_return_url`、`sso_handoffs`）、§17.1 登記接口選填 `ssoReturnUrl`、`sso/handoff/issue`、`sso/handoff/redeem`、Audit、發碼時有上限的過期列清除。設計 `docs/SSO_PORTAL_DESIGN.md`；契約 `docs/AUTH_CONTRACT.md` §13、`docs/CONSUMER_INTEGRATION_STANDARD.md` §21。

@@ -75,6 +75,8 @@ CY Web、CYAccountingWeb、CYPriceDesk 都使用 CYID 帳號，但各自實作�
 | POST | `/v1/identity/sso/handoff/issue` | 入口（CY Web，帶自己的 Session token） | 驗入口 Session 有效；目標 App 存在、Workspace 啟用、有登記回跳網址；使用者有該 App 的 Application Access。回 `{code, returnUrl}` |
 | POST | `/v1/identity/sso/handoff/redeem` | 目標 App（`x-identity-application` 為自己） | 帶 `code`；驗雜湊、未用、未過期、綁定 App 等於呼叫者；原子標記已用；重驗權限；建立該 App 的新 Session（同 login）。回 `{sessionToken, expiresAt, principal}` |
 
+| POST | `/v1/identity/sso/handoff/preview` | 入口（同 issue） | 唯讀預覽（0.4.1／contract 1.2.0）：套用與 issue 相同的呼叫者、Session、目標 App 檢查，回 `{application:{applicationId,displayName}, access}`（`allowed`／`denied`／`first_login_required`）。不發碼、不寫資料或 Audit、不回 `returnUrl`。使用者 2026-11-23 決定：確認畫面須在按「前往」前顯示 App 名稱與可否進入，改由此接口提供，而非開放管理 snapshot |
+
 - 交換碼：32 bytes 隨機（base64url），只存 SHA-256；有效 60 秒；單次使用（`UPDATE … WHERE used_at IS NULL AND expires_at > now` 並檢查 `changes()`）。
 - 新表 `sso_handoffs(code_hash PK, application_id, employee_id, workspace_id, issued_session_id, created_at, expires_at, used_at)`；過期資料由既有排程清除。
 - 只有入口 App（core account application）能呼叫 issue；其他 App 呼叫回 403。

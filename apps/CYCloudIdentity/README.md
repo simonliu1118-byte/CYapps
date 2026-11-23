@@ -43,6 +43,10 @@ Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete 
 
 架構以可用免費額度為預設，不自動啟用付費方案。實際 quota、deployment state 與 rollout gate 只記錄在 `TODO.md`／deployment docs。
 
+### 0.4.1 單一登入預覽接口
+
+新增唯讀 `POST /v1/identity/sso/handoff/preview`（只限 core account portal 帶自己的 Session）：回目標 App 名稱與 `access`（`allowed`／`denied`／`first_login_required`），讓 CY Web 確認畫面在按「前往」前顯示。不發碼、不寫資料或 Audit、不回回跳網址。無 migration；consumer contract 1.2.0（向下相容，最低 1.0.0）。
+
 ### 0.4.0 單一登入入口（第 1 階段：CYID）
 
 新增 CY Web 單一登入入口的 provider 端：App 可登記一個 HTTPS 回跳網址（`applications.sso_return_url`，完整字串比對）；CY Web 以自己的 Session 呼叫 `POST /v1/identity/sso/handoff/issue` 取得 60 秒、單次、綁定 App 的交換碼；目標 App 以自己的 binding 呼叫 `POST /v1/identity/sso/handoff/redeem` 換成自己的新 Session（同 login）。兌換時重新檢查員工、Workspace、App、Application Access、憑證版本與入口 Session；失敗一律 `SSO_HANDOFF_INVALID` 並依 App 限制失敗次數；Audit 不含交換碼或 token。Migration `0009_sso_handoff.sql`；consumer contract 1.1.0（向下相容，最低 1.0.0）。設計見 `docs/SSO_PORTAL_DESIGN.md`，契約見 `docs/AUTH_CONTRACT.md` §13 與 `docs/CONSUMER_INTEGRATION_STANDARD.md` §21。尚未部署；CY Web（第 2 階段）未變更。
