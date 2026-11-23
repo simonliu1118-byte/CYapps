@@ -69,6 +69,9 @@ jobs:
           echo "PROD_CYID_WORKER_NAME=$PROD_CYID_WORKER_NAME" >> "$GITHUB_ENV"
           export PROD_CYID_WORKER_NAME
           api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          # wrangler deploy prints the workers.dev URL, which carries the account subdomain (REPO_POLICY 2.3.64).
+          ACCOUNT_SUBDOMAIN="$(curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/workers/subdomain" | node --input-type=module -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s).result?.subdomain??"";if(!/^[a-z0-9-]{1,63}$/i.test(v))throw new Error("PRODUCTION_PUBLIC_ENDPOINT_UNAVAILABLE");process.stdout.write(v)})')"
+          echo "::add-mask::$ACCOUNT_SUBDOMAIN"
           curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/workers/scripts/$PROD_CYID_WORKER_NAME/settings" > "$RUNNER_TEMP/cyid-prod-settings.json"
           PROD_DB_ID="$(node --input-type=module -e 'import fs from "node:fs"; const s=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-prod-settings.json","utf8")); const id=s.result?.bindings?.find(b=>b.type==="d1"&&b.name==="DB")?.id; if(s.success!==true||!/^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$/.test(id??"")) throw new Error("PRODUCTION_DATABASE_ISOLATION_REQUIRED"); process.stdout.write(id)')"
           echo "::add-mask::$PROD_DB_ID"
