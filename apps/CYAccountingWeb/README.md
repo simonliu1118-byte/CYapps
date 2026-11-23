@@ -19,6 +19,8 @@
 
 正式網站部署與 GitHub Release 分離：日常更新只透過經審核的 `main` source 前進 `deploy/cyaccountingweb-production`，**不必每次建立 Release**。由 0.x.x 進入 1.0.0 的 Major 決策已由使用者批准；版本身分已設定為 Build 0。正式 Release 仍須以同 SHA 部署、完整 CI、安全掃描、SHA-256、`V1.0.0.txt` 驗證後建立；**不能把 Merge 或 PR 綠燈視為已發布 Release**。
 
+**登入（V1.2.0）：**未登入時 Worker 導向 CY Web，回跳 `/auth/sso/callback` 兌換後建立原本的 `cyaccounting_session`；App 不再有帳密登入頁。**部署前置：**須先在 CY Web「系統登記 → 設定」登記登入回跳網址 `https://<記帳系統公開網域>/auth/sso/callback`，否則無法登入。
+
 首次登入、Session、CYID Application Access 仍以 CYID canonical consumer contract 為準；首次驗證／正式密碼建立依 CYWEB 路徑，CYACCweb 不自行接管 Identity authority。
 
 ## 待確認工作流程
@@ -48,7 +50,7 @@
 - 期初自動承接；人工調整須理由及 append-only audit。月份鎖帳與快速鎖帳共用邊界語意；**只有交易螢光標記**不受已鎖月份限制，原交易編輯／刪除仍禁止。
 - Excel 完整月份匯出、空白模板下載、匯入預覽與驗證；桌機 SUPER_ADMIN 可指定期間替換，先完成 R2＋GCS paired backup 及回讀，再以 snapshot guard 原子寫入，保留期間外資料及稽核。
 - Desktop SQLite 在瀏覽器本機解析，原始 `.db` 不上傳；SUPER_ADMIN 預覽及確認後寫入。
-- CYID 共用登入、Session、App Access、Password Recovery；USER 唯讀並可匯出 Excel，**無權更改螢光標記**。Session 逾時／401 沿用共用登入導頁。登入頁與帳本固定淺色；深色模式及外觀切換已退場，列入 TODO，未授權自動恢復。
+- CY Web 登入（V1.2.0 起，無本地登入頁）、CYID Session、App Access；USER 唯讀並可匯出 Excel，**無權更改螢光標記**。Session 逾時／401 導向 `/auth/sso/start` 重新經 CY Web 登入。登入頁與帳本固定淺色；深色模式及外觀切換已退場，列入 TODO，未授權自動恢復。
 - 交易操作欄提供螢光橘／粉／黃／綠與取消，擇一標記**科目或摘要文字**，只渲染文字網底，不修改科目、摘要或金額。顏色／位置分別保存於 `transactions.marker_color`／`marker_target`；備份與還原保留，舊備份預設標記摘要。
 - 單月分類／科目合計及收支圓餅圖、多月期間統計、單月左右式損益表。
 - D1 匯出一次，R2／GCS 保存及驗證同一 logical backup；受控還原至獨立 D1，正式 GCS 重建及完整對帳已通過；原正式帳本保留、promotion 另循維運手冊。
@@ -85,7 +87,7 @@ npm ci --no-audit --no-fund
 npm run dev
 ```
 
-`.github/workflows/cyaccountingweb-deploy.yml` 採 **合併與發布分離**：PR 自動驗證，合併 `main` 不會上線；Work 可依下面操作發布。原有 syntax、application／contract／metadata、D1 local migration、Worker dry-run、CYID contract、secure login 與 semantic assets 檢查全部保留。
+`.github/workflows/cyaccountingweb-deploy.yml` 採 **合併與發布分離**：PR 自動驗證，合併 `main` 不會上線；Work 可依下面操作發布。原有 syntax、application／contract／metadata、D1 local migration、Worker dry-run、CYID contract、CY Web 登入入口與 semantic assets 檢查全部保留。
 
 ## 正式部署操作
 
@@ -112,7 +114,7 @@ gh workflow run cyaccountingweb-deploy.yml --ref main
 
 GitHub UI 等效操作：CYapps → Actions → **CYAccountingWeb Validate and Deploy** → Run workflow → Branch 選 **main**。若目前授權不能 dispatch，可使用上面的發布分支方式；不要為此重建 Secret。
 
-**確認結果：**找對應 SHA 的 run，確認 `validate` 與 `deploy` 兩個 job 均為 success，且 deploy 內 Identity／migration／登入／資產驗證步驟完成。PR 的綠燈、單獨 validate 成功或 deploy=skipped 都不算上線。
+**確認結果：**找對應 SHA 的 run，確認 `validate` 與 `deploy` 兩個 job 均為 success，且 deploy 內 Identity／migration／CY Web 登入入口／資產驗證步驟完成。PR 的綠燈、單獨 validate 成功或 deploy=skipped 都不算上線。
 
 ```bash
 gh run list --workflow cyaccountingweb-deploy.yml --branch deploy/cyaccountingweb-production --event push --limit 5

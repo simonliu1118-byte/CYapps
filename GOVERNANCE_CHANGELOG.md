@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.66 — 2026/11/23
+
+- CYPriceDesk、CYAccountingWeb 的 `PROJECT_RULES.md` 改為「登入一律經 CY Web 入口（SSO），App 不再有自己的登入頁、改密碼、首次登入與忘記密碼」（使用者 2026-11-23：不保留備用，直接切換並移除舊登入）。部署前須先在 CY Web 登記各 App 的登入回跳網址。CYID Consumer Impact: NONE。
+
 ## 2.3.65 — 2026/11/18
 
 - CY Web 鏡像的 CYID 契約文件（`CONSUMER_SYNC_MANIFEST.json` 所列）變更後，須同輪在 chihyuan-web 同步鏡像；`cyweb-consumer-check.yml` 在這些檔案變更時提醒（起因：#632 補寫 CYID `ARCHITECTURE.md` 後，CY Web 所有 PR 的 Governance Check 因鏡像不一致而失敗）。CYID Consumer Impact: NONE。

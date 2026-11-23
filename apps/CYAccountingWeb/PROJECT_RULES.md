@@ -50,12 +50,11 @@
 - CYAccountingWeb 採用同 repository 的 `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 作為唯一 Shared Identity technical contract，並以 `CYID_CONSUMER_VERSION` 宣告目前實作的 consumer revision；不得另建 app-local Role／Session／App Access／Recovery 語意。
 - CYID 是 Workspace identity、permanent credential、Workspace Role、Identity Admin capability、Application Access 與 Identity Session authority。CYAccountingWeb 只保留帳務／domain authorization，不直接讀寫 CYID D1。
 - Workspace Role 直接採 `SUPER_ADMIN / ADMIN / USER`；Identity Admin 是 ADMIN capability，不是第四 Role。Role 與 CYACC Application Access 是獨立維度。
-- CYAccountingWeb 是 non-core consumer：不得接受首次登入密碼建立一般 Session、不得接收或保存 first-login ticket、不得建立平行「啟用帳號」流程。若 CYID 回傳 first-login-required，必須 fail closed 並引導使用者先到 CY Web 完成 Email 驗證／正式密碼設定。
-- 正常登入、Session resolve、logout 與 password recovery 一律透過 private `IDENTITY` Service Binding 呼叫 CYID canonical endpoint；raw provider Session token 只存在 HttpOnly + Secure cookie／受控 server transport，不得進 localStorage、sessionStorage、URL、log、Audit payload 或 CYAccountingWeb business tables。
+- CYAccountingWeb 是 non-core consumer：不接收任何密碼、不接受首次登入密碼建立一般 Session、不得接收或保存 first-login ticket、不得建立平行「啟用帳號」流程；首次登入、密碼設定與重設一律在 CY Web 完成。
+- 登入交換碼兌換、Session resolve 與 logout 一律透過 private `IDENTITY` Service Binding 呼叫 CYID canonical endpoint；raw provider Session token 只存在 HttpOnly + Secure cookie／受控 server transport，不得進 localStorage、sessionStorage、URL、log、Audit payload 或 CYAccountingWeb business tables。
 - CYAccountingWeb 不再 mint 第二個 Identity Session；CYID cutover 後既有 `web_sessions` 不得作 fallback authority。實體 table 的 DROP 必須等新 CYID runtime 完成 development／production acceptance 後，另以後續 forward migration 執行，不得和首次 authority cutover 綁在同一次「migration 先於 Worker deploy」流程。
 - CYID Application ID、Workspace ID、Identity provider service target 等 deployment-specific 值只由 Deployment Environment 注入；Public source 只保存 env name／placeholder。
-- 既有 Tablet Safari 相容條件保留：CYACC provider Session cookie 採 `SameSite=Lax`、明確 `Expires` 與 navigation-safe login completion，直到真實裝置驗收證明更嚴格 policy 安全為止；這只屬 browser transport presentation，不得形成 Tablet-specific Identity authority。
-- permanent password input 固定遵循 CYID 8–16 Unicode 字元邊界；password recovery 必須保持 non-enumerating，不得為顯示 masked Email 而重新洩漏帳號是否存在。
+- 既有 Tablet Safari 相容條件保留：CYACC provider Session cookie 採 `SameSite=Lax`、明確 `Expires` 與 navigation-safe login completion（callback 以 303 redirect 完成，不以 fetch 成功為必要條件），直到真實裝置驗收證明更嚴格 policy 安全為止；這只屬 browser transport presentation，不得形成 Tablet-specific Identity authority。
 
 ## 6. CYACC business authorization
 
@@ -68,11 +67,12 @@
 
 ## 7. 登入入口與 Adaptive UI 邊界
 
-- CYAccountingWeb 使用**獨立登入入口**取代主 App 內 auth overlay。未建立有效 CYID Session 時，主入口不得先載入完整記帳工作區再以 overlay 遮住。
-- PC／Tablet／Mobile 共用同一登入頁、同一 CYID login contract 與同一 Session；RWD 只改 presentation，不得建立三套登入流程。
-- 一般登入優先採 navigation-safe server flow：登入表單送至 Worker，Worker 完成 CYID permanent-password login、寫入 provider Session cookie 後，以 redirect 進入主 App；不得再以「登入成功後立即 fetch /me」作為 Tablet 成功的必要條件。
-- 主 App 入口由 server 先判斷目前 provider Session；沒有有效 Session 則導向獨立登入頁，有有效 Session 才提供主 App。
-- 登出必須先要求 CYID revoke provider Session，再清除 CYACC browser cookie；只刪 cookie 不算完整登出。
+- CYAccountingWeb 採 **CY Web 登入**：App 沒有自己的登入頁、密碼表單、密碼重設或首次登入畫面（不保留備援，使用者 2026/11/23 決定）。使用者與密碼流程全部由 CY Web 負責。
+- 未建立有效 CYID Session 的頁面請求（`/`、`/index.html`、`/recovery`）由 Worker 產生 state（32 bytes base64url）存入 `__Host-cyacc_sso_state`（HttpOnly、Secure、SameSite=Lax、Path=/、10 分鐘；同時保存經驗證的站內相對返回路徑），303 導向 CY Web `/sso?app=<CYID application id>&state=…`；API 請求仍回 401 JSON，前端遇 401 或 Session 到期導向 `/auth/sso/start`。不得先載入完整記帳工作區再以 overlay 遮住。
+- `/auth/sso/callback` 以常數時間比對 query state 與 cookie，缺少、不符或逾時一律不兌換；立即刪除 state cookie，經私有 `IDENTITY` Binding（`x-identity-application` 為本 App）兌換交換碼，成功後以**不變**的 `cyaccounting_session` Cookie 屬性（HttpOnly、Secure、SameSite=Lax、不設 Domain、明確 Expires）建立 Session 並 303 回返回路徑，網址不得保留 code。所有 `/auth/sso/*` 回應皆 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`，不得記錄 code、state 或 token。返回路徑只接受以 `/` 開頭的站內相對路徑，其餘回 `/`。
+- 登入回跳網址 `https://<公開網域>/auth/sso/callback` 必須先登記於 CY Web（系統登記 → 設定）才可部署；未登記則使用者無法登入。
+- 使用者介面文字使用「前往 CY Web 登入」「重新登入」，不使用「單一登入」。PC／Tablet／Mobile 共用同一流程與 Session，RWD 只改 presentation。
+- 登出必須先要求 CYID revoke provider Session，再清除 CYACC browser cookie，然後顯示「已登出」頁（`/auth/sso/signed-out`）與「重新登入」按鈕；不得自動再次導向登入。登出只影響本 App。
 
 ## 8. UI mutation 與 optimistic update 原則
 

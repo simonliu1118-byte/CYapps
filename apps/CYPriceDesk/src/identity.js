@@ -1,4 +1,4 @@
-// CYID consumer adapter (login / resolve / logout). Ported from apps/CYAccountingWeb/src/identity-adapter.js
+// CYID consumer adapter (SSO redeem / resolve / logout). Ported from apps/CYAccountingWeb/src/identity-adapter.js
 // without the CYACC-specific parts. CYID owns Session authority; this file only talks to the IDENTITY binding.
 export const SESSION_COOKIE = 'cypd_session';
 
@@ -31,34 +31,20 @@ export function identityRuntimeConfig(env) {
   return { ready: serviceReady && workspaceReady && applicationReady, workspaceId, applicationId };
 }
 
-export function passwordWithinCyidBounds(value) {
-  return typeof value === 'string' && Array.from(value).length >= 8 && Array.from(value).length <= 16;
-}
-
-export async function loginWithCyid(request, env, employeeNo, password) {
+/** Redeem a CY Web handoff code (AUTH_CONTRACT section 13). Every provider rejection is surfaced as 401 SSO_HANDOFF_INVALID. */
+export async function redeemSsoHandoff(request, env, code) {
   const config = identityRuntimeConfig(env);
   if (!config.ready) return failure(503, 'IDENTITY_NOT_CONFIGURED');
-  if (!/^\d{4}$/.test(String(employeeNo || '').trim()) || !passwordWithinCyidBounds(password)) {
-    return failure(400, 'INVALID_LOGIN_REQUEST');
-  }
+  if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(code)) return failure(401, 'SSO_HANDOFF_INVALID');
 
-  const response = await identityFetch(request, env, '/v1/identity/login', {
-    body: {
-      workspaceId: config.workspaceId,
-      applicationId: config.applicationId,
-      employeeNo: String(employeeNo).trim(),
-      password
-    }
-  });
+  const response = await identityFetch(request, env, '/v1/identity/sso/handoff/redeem', {application: true, body: {code}});
   const payload = await response.json().catch(() => ({}));
-
   if (!response.ok) {
-    return failure(response.status, String(payload?.error?.code || 'AUTHENTICATION_FAILED'), response);
+    if (response.status === 401) return failure(401, 'SSO_HANDOFF_INVALID', response);
+    return failure(response.status, String(payload?.error?.code || 'IDENTITY_REDEEM_FAILED'), response);
   }
   // CYID standard section 8: a non-core consumer fails closed on first-login and never creates a Session.
-  if (payload?.passwordChangeRequired || payload?.firstLogin) {
-    return failure(403, 'FIRST_LOGIN_REQUIRED');
-  }
+  if (payload?.passwordChangeRequired || payload?.firstLogin) return failure(403, 'FIRST_LOGIN_REQUIRED');
 
   const principal = normalizePrincipal(payload?.principal);
   const token = String(payload?.session?.token || '');
@@ -67,7 +53,7 @@ export async function loginWithCyid(request, env, employeeNo, password) {
     return failure(502, 'IDENTITY_INVALID_RESPONSE');
   }
 
-  return { ok: true, principal, token, expiresAt, cookie: providerSessionCookie(token, expiresAt) };
+  return {ok: true, principal, cookie: providerSessionCookie(token, expiresAt)};
 }
 
 export async function resolveIdentitySession(request, env) {
@@ -133,10 +119,8 @@ async function identityFetch(request, env, path, options = {}) {
   const requestId = request.headers.get('x-request-id');
   if (requestId) headers.set('x-request-id', requestId);
 
-  if (options.token) {
-    headers.set('authorization', `Bearer ${options.token}`);
-    headers.set('x-identity-application', config.applicationId);
-  }
+  if (options.token) headers.set('authorization', `Bearer ${options.token}`);
+  if (options.token || options.application) headers.set('x-identity-application', config.applicationId);
   if (options.body !== undefined) headers.set('content-type', 'application/json');
 
   const timeoutMs = identityProviderTimeoutMs(env);
@@ -203,7 +187,7 @@ function normalizePrincipal(value) {
   };
 }
 
-function cookieValue(request, name) {
+export function cookieValue(request, name) {
   const raw = request.headers.get('cookie') || '';
   for (const part of raw.split(';')) {
     const index = part.indexOf('=');

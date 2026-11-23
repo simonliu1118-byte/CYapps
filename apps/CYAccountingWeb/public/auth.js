@@ -1,7 +1,10 @@
 // Authentication navigation belongs to this module; callers only report server responses.
+// Signing in happens at the CY Web portal; the Worker issues the redirect from this route.
+const CYACC_SSO_START_URL = '/auth/sso/start';
+const CYACC_SIGNED_OUT_URL = '/auth/sso/signed-out';
 window.cyaccHandleAuthResponse = (response, data = {}) => {
   if (response.status !== 401 && data?.code !== 'AUTH_REQUIRED') return false;
-  location.replace('/login');
+  location.replace(CYACC_SSO_START_URL);
   return true;
 };
 
@@ -30,7 +33,7 @@ function startCyaccAuth() {
         cache: 'no-store'
       }, 8_000);
     } finally {
-      location.replace('/login');
+      location.replace(CYACC_SIGNED_OUT_URL);
     }
   });
 
@@ -76,13 +79,13 @@ function startCyaccAuth() {
     // Use only CYID's expiry timestamp. This is navigation, not a second session policy.
     const checkExpiry = () => {
       const remaining = deadline - Date.now();
-      if (remaining <= 0) { location.replace('/login'); return; }
+      if (remaining <= 0) { location.replace(CYACC_SSO_START_URL); return; }
       window.setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
     };
     checkExpiry();
-    window.addEventListener('pageshow', () => { if (Date.now() >= deadline) location.replace('/login'); });
+    window.addEventListener('pageshow', () => { if (Date.now() >= deadline) location.replace(CYACC_SSO_START_URL); });
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && Date.now() >= deadline) location.replace('/login');
+      if (document.visibilityState === 'visible' && Date.now() >= deadline) location.replace(CYACC_SSO_START_URL);
     });
   }
 

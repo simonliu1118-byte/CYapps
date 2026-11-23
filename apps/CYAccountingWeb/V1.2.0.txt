@@ -1,0 +1,9 @@
+CYAccountingWeb V1.2.0 — 改由 CY Web 登入
+
+- 未登入開啟記帳系統時，Worker 產生隨機 state，存入 10 分鐘有效的 `__Host-cyacc_sso_state` Cookie（HttpOnly、Secure、SameSite=Lax），再導向 CY Web 登入；登入後回到原本要開的頁面。
+- 回跳網址 `/auth/sso/callback`：比對 state（缺少、不符或逾時一律不兌換）、立即刪除 state Cookie，透過私有 IDENTITY Service Binding 兌換交換碼，設定與原登入完全相同的 `cyaccounting_session` Cookie，再 303 回原頁面（網址不含交換碼）。失敗顯示錯誤頁與「重新登入」按鈕。
+- 登出：先要求 CYID 撤銷本 App 的 Session，再清除 Cookie，顯示「已登出」頁與「重新登入」按鈕（不自動導向）。只登出本 App。
+- 移除舊的員工編號／密碼登入頁、`POST /login`、`/api/auth/login`、密碼重設 API 與首次登入說明頁；密碼、Email 與首次登入一律由 CY Web 處理。舊的 `/login` 書籤會導回首頁並走 CY Web 登入。
+- API 未登入仍回 401 JSON；前端遇 401 或 Session 到期時導向 `/auth/sso/start`。其他帳務、備份與權限行為不變；無 migration、D1 schema 維持 16。
+
+部署前置（務必先做）：先在 CY Web「系統登記 → 設定」登記本 App 的登入回跳網址 `https://<記帳系統公開網域>/auth/sso/callback`，再部署本版；未登記就部署，使用者將無法登入。

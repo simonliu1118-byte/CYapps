@@ -11,8 +11,7 @@
       "/api/*",
       "/",
       "/index.html",
-      "/login",
-      "/login.html"
+      "/auth/*"
     ]
   },
   "routes": [

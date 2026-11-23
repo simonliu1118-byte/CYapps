@@ -16,8 +16,8 @@ const ASSETS = {
   }
 };
 
-export function createTestEnv(options) {
-  const identity = createFakeIdentity(options);
+export function createTestEnv() {
+  const identity = createFakeIdentity();
   const DB = createD1();
   return {
     identity,

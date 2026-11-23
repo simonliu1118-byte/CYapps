@@ -64,6 +64,7 @@ jobs:
           node --check src/index.js
           node --check src/app.js
           node --check src/identity-adapter.js
+          node --check src/sso.js
           node --check src/backup-storage-provider.js
           node --check src/gcs-backup-provider.js
           node --check src/r2-backup-provider.js
@@ -94,9 +95,7 @@ jobs:
           node --check scripts/prepare-sqljs.mjs
           node --check scripts/validate-cyid-consumer-version.mjs
           node --check scripts/resolve-cyid-production-runtime.mjs
-          node --check scripts/smoke-cyid-development.mjs
           node --check public/auth.js
-          node --check public/login.js
           node --check public/app.js
           node --check public/quick-entry.js
           node --check public/ledger-tools.js
@@ -151,10 +150,10 @@ jobs:
           node tests/accounting-read-cost.mjs
           node tests/accounting-read-requests.mjs
           node tests/desktop-ui.mjs
-          node tests/login-ui.mjs
           node tests/deploy-config.mjs
           node tests/deployment-flow.mjs
           node tests/cyid-integration.mjs
+          node tests/sso-login.mjs
           node tests/startup.mjs
           node tests/frontend-architecture.mjs
           node tests/cyid-provider-contract.mjs
@@ -256,59 +255,43 @@ jobs:
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
 
-      - name: Verify production secure login entry
+      - name: Verify production CY Web login entry
         shell: bash
         run: |
           set -euo pipefail
           host="$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
 
-          http_code="$(curl -sS -o /tmp/cyacc-http-login.html -D /tmp/cyacc-http-login.headers -w '%{http_code}' "http://$host/login")"
+          http_code="$(curl -sS -o /dev/null -w '%{http_code}' "http://$host/")"
           case "$http_code" in
-            301|302|307|308)
-              location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
-              LOCATION="$location" HOST="$host" node -e '
-                const u = new URL(process.env.LOCATION);
-                const host = process.env.HOST;
-                if (u.protocol !== "https:" || u.hostname !== host || !["/login", "/login/"].includes(u.pathname)) process.exit(1);
-              ' || {
-                echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
-                exit 1
-              }
-              ;;
-            200)
-              grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-http-login.headers || {
-                echo "CYACC HTTP login document does not force secure form submission." >&2
-                exit 1
-              }
-              grep -Fq "window.location.protocol === 'http:'" /tmp/cyacc-http-login.html || {
-                echo "CYACC HTTP login document is missing the browser HTTPS bootstrap." >&2
-                exit 1
-              }
-              grep -Fq 'window.location.replace' /tmp/cyacc-http-login.html || {
-                echo "CYACC HTTP login browser bootstrap does not replace the insecure URL." >&2
-                exit 1
-              }
-              ;;
+            301|302|307|308) ;;
             *)
-              echo "CYACC HTTP login entry returned an unsafe status ($http_code)." >&2
+              echo "CYACC HTTP entry did not redirect to HTTPS ($http_code)." >&2
               exit 1
               ;;
           esac
 
-          curl -fsS -D /tmp/cyacc-https-login.headers -o /tmp/cyacc-https-login.html "https://$host/login"
-          grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000' /tmp/cyacc-https-login.headers || {
-            echo "CYACC HTTPS login response is missing HSTS." >&2
+          https_code="$(curl -sS -o /dev/null -D /tmp/cyacc-https-entry.headers -w '%{http_code}' "https://$host/")"
+          [ "$https_code" = "303" ] || {
+            echo "CYACC unauthenticated entry did not redirect to the CY Web portal ($https_code)." >&2
             exit 1
           }
-          grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-https-login.headers || {
-            echo "CYACC HTTPS login response is missing secure form CSP." >&2
+          grep -Eiq '^location:[[:space:]]*https://[^/]+/sso\?app=[A-Za-z0-9_-]+&state=[A-Za-z0-9_-]{43}' /tmp/cyacc-https-entry.headers || {
+            echo "CYACC login entry does not point at the CY Web portal." >&2
             exit 1
           }
-          grep -Fq 'action="/login" method="post"' /tmp/cyacc-https-login.html || {
-            echo "CYACC HTTPS login page is not the expected standalone login form." >&2
+          grep -Eiq '^set-cookie:[[:space:]]*__Host-cyacc_sso_state=.*HttpOnly.*Secure.*SameSite=Lax' /tmp/cyacc-https-entry.headers || {
+            echo "CYACC login entry did not set the expected state cookie." >&2
             exit 1
           }
-          echo "CYACC production secure login entry verified."
+          grep -Eiq '^cache-control:.*no-store' /tmp/cyacc-https-entry.headers || {
+            echo "CYACC login entry is cacheable." >&2
+            exit 1
+          }
+          grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000' /tmp/cyacc-https-entry.headers || {
+            echo "CYACC HTTPS entry is missing HSTS." >&2
+            exit 1
+          }
+          echo "CYACC production CY Web login entry verified."
 
       - name: Verify production semantic frontend assets
         shell: bash
@@ -340,9 +323,6 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=pending-entry-state" 'data-desktop-ui-date-value'
           verify_asset "$base/ledger-tools.js?rev=pending-confirmation-ledger" 'id="ledgerMonthLoading"'
           verify_asset "$base/app.js?rev=pending-confirmation-mutation" "const loadingLabel = document.querySelector('#ledgerMonthLoading')"
-          verify_asset "$base/login.css?rev=cyweb-login-alignment" '.first-login-help'
-          verify_asset "$base/login.js?rev=cyweb-login-alignment" 'async function loadFirstLoginPortal'
-          verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.js?rev=pending-entry-state" 'startSettingsCategoryPointerDrag'
           verify_asset "$base/adaptive-ui.js?rev=pending-entry-state" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=cyweb-theme-owner" 'window.cyaccSessionPromise = checkSessionFallback()'

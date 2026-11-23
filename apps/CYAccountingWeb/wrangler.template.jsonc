@@ -15,7 +15,8 @@
       "/",
       "/index.html",
       "/login",
-      "/login.html"
+      "/login.html",
+      "/auth/*"
     ]
   },
   "routes": [

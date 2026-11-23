@@ -33,10 +33,6 @@ export function identityRuntimeConfig(env) {
   };
 }
 
-export function passwordWithinCyidBounds(value) {
-  return typeof value === 'string' && Array.from(value).length >= 8 && Array.from(value).length <= 16;
-}
-
 export function canWriteAccounting(principal) {
   return principal?.workspaceRole === 'ADMIN' || principal?.workspaceRole === 'SUPER_ADMIN';
 }
@@ -64,28 +60,25 @@ export function appSessionFromPrincipal(principal) {
   };
 }
 
-export async function loginWithCyid(request, env, employeeNo, password) {
+/**
+ * Redeems a CY Web SSO handoff code for this App's own CYID Session (AUTH_CONTRACT section 13).
+ * The code is single use and never logged. Every provider rejection is reported as SSO_HANDOFF_INVALID.
+ */
+export async function redeemSsoHandoff(request, env, code) {
   const config = identityRuntimeConfig(env);
   if (!config.ready) return failure(503, 'IDENTITY_NOT_CONFIGURED');
-  if (!/^\d{4}$/.test(String(employeeNo || '').trim()) || !passwordWithinCyidBounds(password)) {
-    return failure(400, 'INVALID_LOGIN_REQUEST');
-  }
+  if (typeof code !== 'string' || !code || code.length > 512) return failure(401, 'SSO_HANDOFF_INVALID');
 
-  const response = await identityFetch(request, env, '/v1/identity/login', {
-    body: {
-      workspaceId: config.workspaceId,
-      applicationId: config.applicationId,
-      employeeNo: String(employeeNo).trim(),
-      password
-    }
+  const response = await identityFetch(request, env, '/v1/identity/sso/handoff/redeem', {
+    body: { code },
+    application: true
   });
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    return failure(response.status, String(payload?.error?.code || 'AUTHENTICATION_FAILED'), response);
-  }
-  if (payload?.passwordChangeRequired || payload?.firstLogin) {
-    return failure(403, 'FIRST_LOGIN_REQUIRED');
+    if (response.status === 429) return failure(429, 'AUTH_RATE_LIMITED', response);
+    if (response.status === 401) return failure(401, 'SSO_HANDOFF_INVALID');
+    return failure(response.status >= 500 ? 503 : response.status, String(payload?.error?.code || 'SSO_HANDOFF_FAILED'), response);
   }
 
   const principal = normalizePrincipal(payload?.principal);
@@ -153,64 +146,6 @@ export async function logoutCyid(request, env) {
   return { ok: true, cookie: clearProviderSessionCookie() };
 }
 
-export async function startPasswordRecovery(request, env, employeeNo) {
-  const config = identityRuntimeConfig(env);
-  if (!config.ready) return failure(503, 'IDENTITY_NOT_CONFIGURED');
-  if (!/^\d{4}$/.test(String(employeeNo || '').trim())) {
-    return failure(400, 'INVALID_PASSWORD_RECOVERY');
-  }
-
-  const response = await identityFetch(request, env, '/v1/identity/password-recovery/start', {
-    body: { workspaceId: config.workspaceId, employeeNo: String(employeeNo).trim() }
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return failure(response.status, String(payload?.error?.code || 'PASSWORD_RECOVERY_FAILED'), response);
-  }
-
-  const recovery = payload?.recovery;
-  if (!recovery?.challengeId || !recovery?.expiresAt || !recovery?.resendAfter) {
-    return failure(502, 'IDENTITY_INVALID_RESPONSE');
-  }
-
-  return {
-    ok: true,
-    recovery: {
-      challengeId: String(recovery.challengeId),
-      expiresAt: String(recovery.expiresAt),
-      resendAfter: String(recovery.resendAfter)
-    }
-  };
-}
-
-export async function confirmPasswordRecovery(request, env, input) {
-  const config = identityRuntimeConfig(env);
-  if (!config.ready) return failure(503, 'IDENTITY_NOT_CONFIGURED');
-
-  const employeeNo = String(input?.employeeNo || '').trim();
-  const challengeId = String(input?.challengeId || '').trim();
-  const code = String(input?.code || '').trim();
-  const newPassword = input?.newPassword;
-  if (!/^\d{4}$/.test(employeeNo) || !challengeId || !/^\d{6}$/.test(code) || !passwordWithinCyidBounds(newPassword)) {
-    return failure(400, 'INVALID_PASSWORD_RECOVERY');
-  }
-
-  const response = await identityFetch(request, env, '/v1/identity/password-recovery/confirm', {
-    body: {
-      workspaceId: config.workspaceId,
-      employeeNo,
-      challengeId,
-      code,
-      newPassword
-    }
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return failure(response.status, String(payload?.error?.code || 'PASSWORD_RECOVERY_FAILED'), response);
-  }
-  return { ok: true };
-}
-
 export function providerSessionCookie(token, expiresAt) {
   const expires = new Date(expiresAt);
   if (!SESSION_TOKEN_PATTERN.test(token) || Number.isNaN(expires.getTime())) {
@@ -232,10 +167,8 @@ async function identityFetch(request, env, path, options = {}) {
   const requestId = request.headers.get('x-request-id');
   if (requestId) headers.set('x-request-id', requestId);
 
-  if (options.token) {
-    headers.set('authorization', `Bearer ${options.token}`);
-    headers.set('x-identity-application', config.applicationId);
-  }
+  if (options.token) headers.set('authorization', `Bearer ${options.token}`);
+  if (options.token || options.application) headers.set('x-identity-application', config.applicationId);
   if (options.body !== undefined) headers.set('content-type', 'application/json');
 
   const timeoutMs = identityProviderTimeoutMs(env);

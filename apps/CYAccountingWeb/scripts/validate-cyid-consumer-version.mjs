@@ -40,6 +40,6 @@ if (compare(adopted, current) > 0) {
 const projectRules = fs.readFileSync(path.join(CYACC_ROOT, 'PROJECT_RULES.md'), 'utf8');
 if (!projectRules.includes('CONSUMER_INTEGRATION_STANDARD.md')) throw new Error('PROJECT_RULES.md must reference the canonical CYID consumer standard.');
 if (!projectRules.includes('USER') || !projectRules.includes('Excel')) throw new Error('PROJECT_RULES.md must preserve CYACC USER read-only/export authorization.');
-if (!projectRules.includes('獨立登入')) throw new Error('PROJECT_RULES.md must preserve the standalone login decision.');
+if (!projectRules.includes('CY Web 登入')) throw new Error('PROJECT_RULES.md must preserve the CY Web login decision.');
 
 console.log(`CYID consumer compatibility passed: adopted=${adoptedRaw}, supported=${minimumRaw}..${currentRaw}`);

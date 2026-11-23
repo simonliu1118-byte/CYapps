@@ -16,7 +16,7 @@
 ## 3. CYCloud Identity consumer contract
 
 - 採用同 repository 的 `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 作為唯一 Shared Identity technical contract，並以 `CYID_CONSUMER_VERSION` 宣告實作的 consumer revision；不得另建 app-local Role／Session／App Access 語意。
-- CYPriceDesk 是 non-core consumer：first-login-required 一律 fail closed 並引導至 CY Web，不建立 Session；登入、resolve、logout 只透過 private `IDENTITY` Service Binding。
+- CYPriceDesk 是 non-core consumer：first-login-required 一律 fail closed 並引導至 CY Web，不建立 Session；登入一律經 CY Web 入口（`/auth/sso/callback` 以交換碼兌換，本 App 不提供自己的登入頁），resolve、logout 與兌換都只透過 private `IDENTITY` Service Binding。
 - provider Session token 只存在 HttpOnly＋Secure cookie，不得進 localStorage、sessionStorage、URL、log 或 audit。
 
 ## 4. 業務授權與資料

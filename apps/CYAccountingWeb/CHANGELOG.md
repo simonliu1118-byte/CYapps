@@ -4,6 +4,13 @@
 >
 > 目前文件入口： [README.md](README.md)、[WORK_HANDOFF.md](WORK_HANDOFF.md)、[TODO.md](TODO.md)、[BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md)。
 
+## V1.2.0 — 2026/11/23（改由 CY Web 登入）
+
+- 登入改走 CY Web：未登入的頁面請求由 Worker 產生 state（`__Host-cyacc_sso_state`，10 分鐘）後 303 導向 CY Web；`/auth/sso/callback` 驗證 state、兌換交換碼並設定原本的 `cyaccounting_session` Cookie，再回到原頁面（僅接受站內相對路徑，其餘回 `/`）。`/auth/sso/*` 一律 no-store、no-referrer。
+- 登出維持只登出本 App；之後顯示「已登出」頁與「重新登入」按鈕，不自動導向。
+- 移除舊登入頁、`POST /login`、`/api/auth/login`、密碼重設 API、`/api/auth/account-portal`、首次登入說明與相關測試／部署檢查；`/login` 書籤導回 `/`。
+- **部署前置**：部署前須先在 CY Web「系統登記 → 設定」登記本 App 的登入回跳網址 `https://<記帳系統公開網域>/auth/sso/callback`，否則使用者無法登入。無 migration，schema 維持 16。詳見 [V1.2.0.txt](V1.2.0.txt)。
+
 ## V1.1.3 — 2026/11/10（外部備份檢查時段）
 
 - GitHub 定時排程每天都延遲 3～6.5 小時（11/6～11/10 實際啟動 07:36～10:40），外部檢查從未趕上 05:00 期限，因此每天顯示「外部備份檢查未完成」並改跑分時備援。

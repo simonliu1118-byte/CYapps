@@ -35,9 +35,8 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
   const text = selector => page.locator(selector).innerText();
   const rowOf = (selector, hasText) => page.locator(selector, {hasText}).first();
 
-  // ---- login, 查價 is the default page with exactly four nav items ----
-  await page.goto(base);
-  await page.fill('[name="employeeNo"]', '0001'); await page.fill('[name="password"]', 'password1'); await page.click('button[type="submit"]');
+  // ---- sign-in through the portal, 查價 is the default page with exactly four nav items ----
+  await page.goto(base);   // no Session: the Worker sends the browser through the stand-in CY Web portal and back signed in
   await page.waitForSelector('#s-form');
   assert.equal(await page.locator('.nav-page').count(), 4);
   assert.equal(await page.locator('#page-title').innerText(), '查價');

@@ -15,11 +15,9 @@ const consumerAdapter = read(CYACC_ROOT, 'src', 'identity-adapter.js');
 const consumerApp = read(CYACC_ROOT, 'src', 'app.js');
 
 for (const route of [
-  '/v1/identity/login',
+  '/v1/identity/sso/handoff/redeem',
   '/v1/identity/session/resolve',
-  '/v1/identity/logout',
-  '/v1/identity/password-recovery/start',
-  '/v1/identity/password-recovery/confirm'
+  '/v1/identity/logout'
 ]) {
   assert.match(providerIndex, new RegExp(route.replaceAll('/', '\\/')));
   assert.match(consumerAdapter, new RegExp(route.replaceAll('/', '\\/')));
@@ -33,7 +31,7 @@ assert.match(providerAuth, /employeeRevision/);
 assert.match(consumerAdapter, /employeeRevision/);
 assert.match(providerInitialAccess, /applicationId/);
 assert.match(providerInitialAccess, /CORE_ACCOUNT_APPLICATION_ID/);
-assert.match(consumerAdapter, /FIRST_LOGIN_REQUIRED/);
+assert.doesNotMatch(consumerAdapter, /\/v1\/identity\/(?:login|password-recovery)/, 'password login and recovery belong to CY Web');
 
 assert.doesNotMatch(consumerAdapter, /\/v1\/web-auth/);
 assert.doesNotMatch(consumerApp, /\/v1\/web-auth/);
