@@ -7,7 +7,7 @@ export const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&': 
 export async function api(method, path, body) {
   const res = await fetch(path, {method, headers: body === undefined ? {} : {'content-type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { location.href = '/login'; throw new Error(data.error || '尚未登入'); }
+  if (res.status === 401) { location.href = '/'; throw new Error(data.error || '尚未登入'); }
   if (!res.ok) { const error = new Error(data.error || '操作失敗，請稍後再試。'); error.status = res.status; throw error; }
   return data;
 }

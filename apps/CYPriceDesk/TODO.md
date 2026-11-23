@@ -9,6 +9,11 @@
 
 ## 待辦
 
+### V1.5.0 經 CY Web 登入
+
+- [ ] **部署前置（必做）**：在 CY Web「系統登記」→ 設定，為價格觀測室登記登入回跳網址 `https://price.chihyuancm.com/auth/sso/callback`，**再**部署 V1.5.0；未登記時所有人都無法登入。
+- [ ] 部署後實機驗證：未登入開網址 → 到 CY Web 登入或確認 → 回到價格觀測室；錯誤的 state／重放交換碼顯示錯誤頁；登出後顯示「已登出」頁且不會自動再登入；`cypd_session` cookie 屬性不變（HttpOnly、Secure、SameSite=Lax、無 Domain）。
+
 ### V1.4.0 上線
 
 - [x] 合併、從 `main` 手動部署、刪除該次部署 run 的 log（2026-11-17）。

@@ -31,5 +31,6 @@
 
 ## 驗證界線
 
+- 登入：V1.5.0 起只經 CY Web（`src/sso.js`、`src/identity.js` 的 `redeemSsoHandoff`），沒有自己的登入頁。部署前須先在 CY Web 登記回跳網址 `https://price.chihyuancm.com/auth/sso/callback`。本機瀏覽器測試的 `tests/support/local-server.mjs` 內建假入口 `/__portal/sso`。
 - 假 fetcher、假 IDENTITY＋node:sqlite 替身的測試、`wrangler deploy --dry-run` 與本機 Playwright 不能替代部署後的實機驗證（真實 CYID、真實 D1、自訂網域）。未實際執行前保持待驗收，不把推測寫成成功。
 - 舊 ChatGPT Sites 站與其 localStorage 資料不在本專案處理；搬遷方式見 `README.md`。

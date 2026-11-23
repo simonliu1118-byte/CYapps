@@ -1,9 +1,9 @@
 # CYPriceDesk — 價格觀測室
 
-價格觀測室：查詢 momo、蝦皮、酷澎的市場價格，並追蹤自己的商品——系統每 7～14 天自動查價一次，依同規格比較自己在三個平台的售價與市場最低價，作為調整定價的依據。正式站 https://price.chihyuancm.com/（V1.3.2 起上線，以 CYID 登入）。業務資料全站只有一份，有 CYPriceDesk Application Access 的人都能使用全部功能，每次寫入都留下 append-only 操作紀錄。各版內容見 `CHANGELOG.md`，路線見 `docs/work-orders/README.md`。
+價格觀測室：查詢 momo、蝦皮、酷澎的市場價格，並追蹤自己的商品——系統每 7～14 天自動查價一次，依同規格比較自己在三個平台的售價與市場最低價，作為調整定價的依據。正式站 https://price.chihyuancm.com/（V1.3.2 起上線；V1.5.0 起經 CY Web 登入）。業務資料全站只有一份，有 CYPriceDesk Application Access 的人都能使用全部功能，每次寫入都留下 append-only 操作紀錄。各版內容見 `CHANGELOG.md`，路線見 `docs/work-orders/README.md`。
 
 - 正式原始碼位置：`simonliu1118-byte/CYapps` 的 `apps/CYPriceDesk/`。
-- 版本來源：`VERSION`（`1.4.0`）、`BUILD`（`0`）；`CYID_CONSUMER_VERSION` 為 `1.0.6`。這只是工程識別，不表示已有正式 GitHub Release 或產品驗收。
+- 版本來源：`VERSION`（`1.5.0`）、`BUILD`（`0`）；`CYID_CONSUMER_VERSION` 為 `1.2.0`。這只是工程識別，不表示已有正式 GitHub Release 或產品驗收。
 - 規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與 `PROJECT_RULES.md`；本文件只描述現況。
 
 ## 架構
@@ -12,7 +12,7 @@
 瀏覽器 ── 原生 HTML／CSS／JS（public/）
    │
 Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
-   ├─ IDENTITY（private Service Binding）→ CYCloud Identity：login／resolve／logout
+   ├─ IDENTITY（private Service Binding）→ CYCloud Identity：SSO 兌換／resolve／logout
    ├─ DB（D1）：audit_log、manual_comparisons、search_cache、upstream_state、listing_classifications、tracked_*（見「追蹤商品」）
    ├─ Cron（*/10 * * * *）→ scheduled()：定期查價
    └─ CYPD_FETCHER_URL（HTTPS，HMAC 簽章）→ fetcher/（Vercel，Python）→ momo、飛比
@@ -20,8 +20,9 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 
 | 檔案 | 責任 |
 | --- | --- |
-| `src/index.js` | Worker 入口：路由、登入閘門（未登入 `/` 302 `/login`、`/api/*` 401） |
-| `src/identity.js` | CYID login／resolve／logout 與 `cypd_session` cookie，由 CYAccountingWeb 的 adapter 移植 |
+| `src/index.js` | Worker 入口：路由、登入閘門（未登入頁面 303 到 CY Web、`/api/*` 401） |
+| `src/sso.js` | 經 CY Web 登入：state／回跳路徑 cookie、`/auth/sso/*`、錯誤與已登出頁 |
+| `src/identity.js` | CYID 交換碼兌換／resolve／logout 與 `cypd_session` cookie，由 CYAccountingWeb 的 adapter 移植 |
 | `src/audit.js` | `auditStmt`（每個寫入與其 audit 在同一個 `DB.batch()`）與 `GET /api/audit` |
 | `src/manual.js`、`src/pending.js` | 手動比價 CRUD（revision＋audit）；`GET /api/pending` 待確認清單 |
 | `src/search.js`、`src/fetcher-client.js` | `GET /api/search`：D1 快取、間隔、冷卻，再以簽章呼叫 fetcher |
@@ -33,7 +34,7 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 | `public/compare.js` | 三平台比價、差距與注意度排序、手動比價計入規則、走勢圖資料整理的唯一實作；瀏覽器與 Worker 共用 |
 | `public/core.js` | 金額與臺北時間格式、連結驗證（Worker 與瀏覽器共用） |
 | `public/app.js`、`ui.js`、`chart.js`、`candidates.js`、`pending.js` | 使用者與操作紀錄頁、共用小工具、走勢圖（原生 SVG）、候選商品與判斷、待確認頁 |
-| `public/index.html`／`login.html`／`styles.css` | 主畫面、獨立登入頁（PC／手機共用）、RWD |
+| `public/index.html`／`styles.css` | 主畫面（PC／手機共用）、RWD |
 | `migrations/` | D1 schema（`0001` 價格紀錄、`0002` 自動查價、`0003` 追蹤商品、`0004` 改版：三平台售價、手動比價） |
 | `wrangler.template.jsonc`、`scripts/render-wrangler.mjs` | 只含 `__PLACEHOLDER__` 的設定模板，與部署時由環境變數產生設定的 script |
 | `scripts/build.mjs` | 產生可供 public-package scan 的 `dist/` |
@@ -41,10 +42,11 @@ Cloudflare Worker（src/index.js）── Workers Static Assets（ASSETS）
 
 ## 登入與授權
 
-- `/login` 為獨立登入頁，表單 POST `/api/auth/login`（員工編號＋密碼 8–16 字元），Worker 呼叫 CYID `POST /v1/identity/login`。成功設定 HttpOnly、Secure、SameSite=Lax、帶 `Expires` 的 `cypd_session` cookie。
-- 首次登入（尚未在 CY Web 完成 Email 驗證與密碼設定）一律 fail closed，不建立 Session，登入頁顯示前往 CY Web 的連結。
+- 本 App 沒有自己的登入頁，一律經 CY Web 登入。未登入的頁面請求（`/`）：Worker 產生 32 bytes 隨機 `state`（base64url），存 cookie `__Host-cypd_sso_state`（`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`，內容為 `state.<回跳路徑 base64url>`），303 到 `<CYWEB_PORTAL_URL>/sso?app=<CYID_APPLICATION_ID>&state=…`。`/api/*` 仍回 401，前端收到 401 就把整個視窗導回 `/`。
+- `GET /auth/sso/callback?code&state`：以常數時間比對 query `state` 與 cookie，缺少或不符不兌換；不論結果都清除 state cookie；以 `IDENTITY` binding 的 `POST /v1/identity/sso/handoff/redeem`（`x-identity-application` 為本 App 自己的 ID、body 只有 `{code}`）兌換，成功設定 HttpOnly、Secure、SameSite=Lax、不設 Domain、帶 `Expires` 的 `cypd_session` cookie，303 回原本要去的路徑（只接受同源相對路徑，其他一律 `/`，網址不留 code）；失敗顯示錯誤頁與「重新登入」按鈕。所有 `/auth/*` 回應 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`，不記錄 code、state、token。
+- 首次登入、忘記密碼、變更密碼都在 CY Web 處理；首次登入未完成者換不到交換碼。
 - 每個受保護請求都以 `POST /v1/identity/session/resolve` 重新驗證；被拒（停用、撤銷 Application Access 等）即清 cookie 並回 401／302。
-- 登出：先呼叫 provider logout，再清 cookie。瀏覽器看不到 provider token。
+- 登出：只登出本 App——先呼叫 provider logout，再清 cookie，303 到 `/auth/signed-out`（「已登出」頁，按「重新登入」才重新開始，不自動導向）。瀏覽器看不到 provider token。
 - 沒有 app-local 角色限制：通過 resolve（含 Application Access）即可使用全部功能。
 
 ## 資料與 API
