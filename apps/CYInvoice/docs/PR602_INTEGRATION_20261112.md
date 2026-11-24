@@ -1,33 +1,30 @@
-# CYInvoice PR #602 與最新主線整合紀錄（2026-11-12）
+# CYInvoice PR #602 與最新主線整合紀錄
+
+更新：2026-11-24（Asia/Taipei）。工程 V3.1.51／Cloud Source 0.9.15，PR [#616](https://github.com/simonliu1118-byte/CYapps/pull/616)。
 
 ## 範圍及限制
 
-- 僅允許編輯 `apps/CYInvoice/**` 的程式碼、測試與專案文件。本整合不操作其他專案的 PR、branch、worker、repo、資料庫或正式環境；若未來需要跨專案操作，必須再次徵求使用者同意。
-- **本輪嚴格只做本機端功能；Cloud 0.9.15、雲端提出者撤回、Worker／D1 修改與部署全部不在本輪工作範圍，另交使用者指定的本機 Work 處理。**
-- 以最新 `main` 的正式 CYInvoice V3.1.50 為基準；原 [PR #602](https://github.com/simonliu1118-byte/CYapps/pull/602) 為 V3.1.50 Build 7 的歷史 Draft，不能直接合併或整包 cherry-pick。
-- 特別不要把 #602 的 `StartupCheckOverlay`／舊開機轉圈程式、VERSION=3.1.50／BUILD=7、舊版 README 以及未發行的 Cloud 描述覆寫回主線。現行正式版已有 Claude #614 的啟動／匯入動畫修正。
-- #612 已關閉、未合併，內容被 #614 取代；已加上歸檔註記。舊分支可刪除，但目前 GitHub Connector 沒有 branch delete 操作，未執行刪除。
+- 基準為正式 V3.1.50；原 [PR #602](https://github.com/simonliu1118-byte/CYapps/pull/602) 是歷史 Draft，不整包合併或 cherry-pick。#612 已關閉且由已合併 #614 取代。保留正式版 BusySpinner、自動更新與 AutoInput。
+- 11/12 原範圍只做本機；11/24 使用者要求此對話繼續 Cloud 程式整合，並修鼎新贈品匯入及合併日誌路徑。本輪限定 `apps/CYInvoice/**`。僅修改 source、合成測試及文件，未授權正式交易、遠端部署、D1 migration、合併或正式 Release。
+- 原 Worker：Cloud0.9.14／API1／schema與marker23／CYID_ONLY，已部署 Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。新 Cloud Source0.9.15 尚未部署，schema23 不變；不改 Bindings、Secrets、旗標、Routes 或正式資料。
 
-## 主線確認的缺口
+## 本輪整合結果（原始碼狀態，非真人驗收）
 
-1. **本機 G0401 提出者撤回：** `EmployeeAllowanceWorkflowService.CancelManualReview` 目前只允許管理員；`SyncIssuesForm` 的待辦開啟也強制管理員登入。#602 允許已驗證提出者只讀取／撤回自己尚未核准的申請；主管原有權限保留，不擴大折讓作廢權限。
-2. **雲端 G0401 提出者撤回與安全條件（留待本機 Work）：** 目前 Cloud 僅有既有主管權限；#602 Cloud Source 0.9.15 的提出者權限、Workspace／Device／revision／Grant／Ledger 原子 guard，不在此 PR 實作、修改或部署。桌面端不得假設雲端已支援一般員工撤回。
-3. **本機狀態即時更新：** 使用現有本機已確認的撤回／退回結果刷新畫面與精確 application pending 投影；涉及未部署 Cloud 契約的雲端終態更新保留為交接項目，舊回應不可解鎖新申請、結果不明絕不清除。
-4. **折讓詳情與表格：** 尚缺三區式原發票／本次折讓／審核資訊畫面；缺共用原生 ListView 編輯器、序號、空資料與捲動布局。不能由資料缺口自行推算或填造稅額、提出者及官方查證資料。
-5. **摘要與原因：** 處理中顯示帳號及可信姓名與折讓原因（不增加逐筆 API 查詢）；折讓原因與取消退回原因使用單行最多 20 字。
+- Stage 0／1：比對原 PR、保留正式主線、實作本機提出者身分驗證與自身待核准申請撤回；保留主管及 Ledger 原限制。
+- Stage 2／3：已加入單筆本機 metadata 刷新、Cloud 終態精確帳戶／application 的 SQLite JSON pending marker 移除；未知結果不得解除，舊回應不得解鎖新申請。
+- Stage 4：已加入三區式折讓詳情、原生 ListView、編輯器、序號、處理中摘要及單行 20 字原因。雲端員工必須經伺服器驗證本人未核准 G0401 才可讀取／撤回；G0501、歷史詳情及核准仍保留主管權限。使用者可看自己待核准申請，不能核准或撤回他人。
+- Cloud Source：原 #602 Cloud 權限、revision／Workspace／Device／Grant／Ledger guard 已逐檔核對並移植，加入 Device authority state 原子檢查。更新 Worker health/package 版本與配套合成測試。未部署前，一般員工在 0.9.14 的撤回仍由舊 Worker 拒絕；不可繞過伺服器。
+- 鼎新贈品匯入：明確類型、正贈品量、銷貨量及全部已有金額／稅額為 0 才可使用實際贈品量建立零價明細；非明確贈品或不合法金額仍拒絕。維持原本整單合計核對與使用者確認流程。
+- 日誌：統一根目錄 `log` 寫入；主程序取得 mutex 後搬移已知舊 `Logs/import-error.log`，同名保留，空目錄才移除，未知檔案保留；Data 內既有舊 IssueDiagnostics 讀取相容性維持。新增合成回歸測試，未提交真實 Excel 或日誌。
 
-## 工作階段
+## 驗證與剩餘工作
 
-- [x] Stage 0：比對 main 與 PR #602，封存 #612 結案說明，建立此獨立 CYInvoice 工作分支。
-- [x] Stage 1（本次起始）：移植**本機** G0401 提出者撤回的身分／權限守門、最長 20 字單行原因，以及對應只讀詳情／撤回操作；建立 synthetic 測試，確認不能撤回他人、核准後、官方待查案件，且不增加 AMEGO 查詢。
-- [ ] Stage 2：完成本機立即狀態刷新、只處理精確對應的本機申請；不改 Cloud API 或雲端權限。
-- [ ] Stage 3：完成本機可確認的單筆 metadata 刷新；雲端終態投影／0.9.15 保留待本機 Work，結果不明保留 pending。
-- [ ] Stage 4：重構折讓頁面／三區詳情／原生表格／原因與序號；保留現行主線的最新動畫、自動更新與 AutoInput 契約。
-- [ ] Stage 5：Windows x64、現有 Cloud 契約相容性（不更動 Cloud source）、Governance CI、封裝與 96／125／150 DPI 視覺驗證；未完成真人測試另列清單，完成後把雲端交接文件交給本機 Work；只在得到明確授權後合併或發行桌面 Release。
+- 設定身分驗證 Smoke Test 的 Timer 輪詢逾時已於 `e5fcf5c894ff74e55d05afceeb6e4ca96b1edfaa` 修正，當時 Windows、Cloud Check、Governance 均通過。後續新提交不得沿用舊 CI 結果。
+- 鼎新與日誌合成測試已加入；Cloud Source 與桌面整合提交 `25fd5c92035c3b8b75869b3cb1013caf86d820ce`。必要 CI、Cloud dry-run、Windows x64、WinForms smoke、工程封裝以 PR 最新 head 的 Actions 實際結論為準。
+- [ ] Stage 5：最新精確 source 必要 CI 全通過、工程封裝與 96／125／150 DPI 視覺驗收；原真人驗收仍待依唯一清單追蹤。未經驗收不宣稱完成。
+- [ ] Cloud 0.9.15 正式部署：先取得當次明確授權，執行原 Worker／D1 唯讀核對、受控部署及平台版本／線上 bundle 後驗；不因 CI 綠燈自動部署。
+- [ ] Claude 審查、Ready for review、明確合併授權；正式 Release 另行授權。正式主線及 Release 仍 V3.1.50。
 
 ## 安全門檻
 
-- 一般員工不得核准折讓、撤回他人或擴大 G0501 折讓作廢權限。
-- 所有本機撤回必須以同一未核准申請、有效帳號及原有 ledger／pending guards 為依據；對 unknown／approved／issued／claimed 禁止擅自釋放。
-- 本輪不實作或啟用雲端提出者撤回；所有 Cloud 端的權限／終態更新需求僅記錄交接，不改 Cloud 原始碼，任何歧義都 fail-closed。
-- 不接觸正式個資、正式 AMEGO 開票或 Cloud D1、Worker deployment；測試使用合成資料。
+一般員工不得核准折讓、撤回他人或擴大 G0501 權限。撤回須以同一有效未核准申請、已驗證 actor、active Workspace／Device、revision 及既有 Grant／Ledger guards 為依據；對 unknown／approved／issued／claimed 不得擅自釋放。不得使用本輪上傳的正式營運資料作公開 fixture 或執行正式 AMEGO 交易。
