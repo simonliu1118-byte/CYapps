@@ -250,6 +250,7 @@ var tests = new (string Name, Action Run)[]
     ("Digiwin import preserves negative detail and original company reference", TestDigiwinNegativeDiscount),
     ("Digiwin consumer clears source buyer name", TestDigiwinConsumerClearsBuyerName),
     ("Digiwin import rejects detail total mismatch", TestDigiwinTotalMismatch),
+    ("Digiwin gift-only detail retains gift quantity at zero price", TestDigiwinFreeGift),
     ("MO converted workbook is rejected at the import boundary", TestMoConvertedRejected),
     ("MO raw export uses official invoice amounts", TestMoRawOfficialAmounts),
     ("MO official amounts reject scientific notation", TestMoScientificAmountRejected),
@@ -1291,6 +1292,32 @@ static void TestDigiwinConsumerClearsBuyerName()
     Equal(string.Empty, order.BuyerBan);
     Equal(string.Empty, order.BuyerName);
     Equal("鼎新一定有的客戶名稱", order.OriginalBuyerName);
+}
+
+static void TestDigiwinFreeGift()
+{
+    IReadOnlyList<IReadOnlyList<string>> head =
+    [
+        ["銷貨單號", "客戶全名", "統一編號", "本幣合計"],
+        ["SYNTHETIC-GIFT", "合成買家", "", "45000"],
+    ];
+    IReadOnlyList<IReadOnlyList<string>> Detail(string sold, string kind, string gift, string amount, string tax) =>
+    [
+        ["品名", "數量", "類型", "贈/備品量", "單位", "單價", "金額", "本幣未稅金額", "本幣稅額"],
+        ["合成商品", "9", "1.贈品量", "0", "件", "5000", "45000", "42857.143", "2142.857"],
+        ["合成贈品", sold, kind, gift, "包", "130", amount, "0", tax],
+    ];
+    var order = DigiwinImporter.ParseRows(head, Detail("0", "1.贈品量", "9", "0", "0"));
+    Equal(2, order.Items.Count);
+    Equal("9", order.Items[1].QuantityDecimal);
+    Equal("0", order.Items[1].UnitPriceDecimal);
+    Equal(0L, order.Items[1].Amount);
+    Equal(45000L, order.TotalAmount);
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, Detail("0", "1.贈品量", "9", "1", "0")));
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, Detail("0", "1.贈品量", "9", "0", "0.001")));
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, Detail("0", "1.贈品量", "0", "0", "0")));
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, Detail("0", "", "9", "0", "0")));
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, Detail("-1", "1.贈品量", "9", "0", "0")));
 }
 
 static void TestDigiwinTotalMismatch()
