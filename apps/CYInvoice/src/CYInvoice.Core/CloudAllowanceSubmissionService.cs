@@ -24,7 +24,7 @@ internal sealed record PendingCloudAllowanceMarker(
 
 public sealed class CloudAllowanceSubmissionService
 {
-    private const string PendingKey = "cyinvoice_pending_v32_cloud_allowance";
+    internal const string PendingKey = "cyinvoice_pending_v32_cloud_allowance";
     private static readonly HttpClient SharedHttp =
         new(new HttpClientHandler { AllowAutoRedirect = false });
     private readonly LocalRepository repository;
@@ -178,6 +178,12 @@ public sealed class CloudAllowanceSubmissionService
         fresh.ExtensionData[PendingKey] = JsonSerializer.SerializeToElement(marker);
         new InvoiceSyncRepository(repository.DataDirectory).UpsertMany([fresh],
             cancellationToken: cancellationToken);
+        // Bounded presentation metadata in the existing projection; credentials
+        // and the financial template are never saved here. No extra API read.
+        var applicant=repository.KnownEmployeeName(employeeNo)?.Trim();
+        new InvoiceSyncIssueStore(repository.DataDirectory).SaveCloudDetail(fresh.Environment+"|"+fresh.SellerInvoice,
+            new(id,"issue","open",1,[new("申請員工",employeeNo.Trim()+" "+(string.IsNullOrEmpty(applicant)?"（姓名未取得）":applicant)),
+                new("折讓原因",draft.Reason)],"",""));
         try
         {
             var receipt = await api.CreateAsync(draft, employeeNo, password,
@@ -217,9 +223,6 @@ public sealed class CloudAllowanceSubmissionService
             originalInvoiceNumber: record.InvoiceNumber, originalOrderId: record.OrderId);
         var issue = store.All(account).FirstOrDefault(x => x.OrderId == id &&
             x.IssueType.StartsWith("cloud_allowance_issue_", StringComparison.Ordinal));
-        if (state == "completed" || status is "withdrawn" or "rejected")
-            CompleteProjection(repository.DataDirectory, repository.Settings.LoadOrCreate().ProductionInvoice,
-                new HashSet<string>(StringComparer.Ordinal) { id });
         if (issue is null) return;
         try {
             IssueDiagnosticLog.Record(repository.DataDirectory, issue.Id, stage, issue.IssueType,
@@ -250,15 +253,6 @@ public sealed class CloudAllowanceSubmissionService
     internal static IReadOnlyList<string> PendingIds(string dataDirectory, string productionSeller) =>
         new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
             .Select(ReadPending).Where(p => p is not null).Select(p => p!.ApplicationId).ToArray();
-
-    internal static void CompleteProjection(string dataDirectory, string productionSeller, IReadOnlySet<string> applicationIds)
-    {
-        if (applicationIds.Count == 0) return;
-        var records = new InvoiceStore(dataDirectory, productionSeller).LoadOrCreate()
-            .Where(r => ReadPending(r) is { } pending && applicationIds.Contains(pending.ApplicationId)).ToArray();
-        foreach (var record in records) record.ExtensionData!.Remove(PendingKey);
-        if (records.Length > 0) new InvoiceSyncRepository(dataDirectory).UpsertMany(records);
-    }
 
     private static PendingCloudAllowanceMarker? ReadPending(InvoiceRecord record)
     {

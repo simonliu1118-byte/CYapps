@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, verifyPreparedCyId, providerConfiguration, resolveCyIdPreparation, resolveActiveCyId, preservedDeployConfig, resolveSchemaUpgrade, applyAllowanceActivation, requiredDeploymentMigrations } from '../scripts/deployment-preflight.mjs';
 
+const sourceVersion=JSON.parse(fs.readFileSync('package.json','utf8')).version;
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const workflow = fs.readFileSync('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml','utf8');
 assert.ok(workflow.includes("options: ['none', '18:19', '19:20', '20:21', '21:22', '22:23']"));
@@ -203,21 +204,21 @@ await assert.rejects(snapshot(async sql => {
 
 
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.14',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: sourceVersion,
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.14', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.14', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.14', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+checkHealth(health, { version: sourceVersion, schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: sourceVersion, schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: sourceVersion, schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
 for (const field of ['apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.14', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: sourceVersion, schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
 
 // The consumer label is never environment evidence. Real runtime version IDs
 // must agree with the active control-plane deployment when metadata is bound.
 checkSettings({bindings:settings.bindings.filter(b=>b.name!=='APP_ENV')},config);
 checkSettings({bindings:settings.bindings.map(b=>b.name==='APP_ENV'?{...b,text:'production'}:b)},config);
-checkHealth({...health,environment:undefined},{version:'0.9.14',schema:13});
+checkHealth({...health,environment:undefined},{version:sourceVersion,schema:13});
 const deployment={versionId:activeId,createdAt:'2026-11-05T00:00:00.000Z'};
-checkHealth({...health,deployment},{version:'0.9.14',schema:13,versionId:activeId});
+checkHealth({...health,deployment},{version:sourceVersion,schema:13,versionId:activeId});
 for(const value of [null,{...deployment,versionId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'}])
  assert.throws(()=>checkHealth({...health,deployment:value},{schema:13,versionId:activeId}),/CLOUD_DEPLOYMENT_VERSION_MISMATCH/);
 
@@ -553,7 +554,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.hostname.startsWith('synthetic-provider.') && u.pathname.endsWith('/v1/health')) return Response.json({ok:true,service:'cycloud-identity',environment:providerEnvironment,status:'ok',identity:'ready',serviceVersion:'0.3.6'});
-  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.14' });
+  else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: reportedStorageSchema ?? String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : sourceVersion });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
   else throw new Error('UNEXPECTED_TEST_REQUEST');
   return Response.json({ success: true, result });

@@ -505,6 +505,14 @@ internal sealed class SyncIssuesForm : Form
                 row.SubItems.Add(identity.Item1.Length == 0 ? "尚未取得" : identity.Item1);
                 row.SubItems.Add(identity.Item2.Length == 0 ? "尚未取得" : identity.Item2);
                 var summary = issue.Message;
+                if (processing && cloudAllowance && !issue.IssueType.Contains("_void_", StringComparison.Ordinal))
+                {
+                    var projection = issueStore.CloudProjection(accountKey, issue.OrderId);
+                    var applicant = projection?.DetailRows.FirstOrDefault(r => r.Key == "申請員工").Value;
+                    var reason = projection?.DetailRows.FirstOrDefault(r => r.Key == "折讓原因").Value;
+                    if (!string.IsNullOrWhiteSpace(applicant) && !string.IsNullOrWhiteSpace(reason))
+                        summary = $"{applicant}：{reason}";
+                }
                 if (processing && IsAllowanceManualReview(issue))
                 {
                     var original = invoiceRecords.FirstOrDefault(record =>
@@ -835,14 +843,16 @@ internal sealed class SyncIssuesForm : Form
         }
         using var authorization = needsManager || IsCloudAllowance(issue) || issue.ResolvedUtc is null && IsManualReview(issue)
             ? new EmployeeAdminLoginForm(repository,
-                requiredRole: IsAllowanceManualReview(issue) ? null : AppRole.Admin,
+                requiredRole: IsAllowanceManualReview(issue) ||
+                    IsCloudAllowance(issue) && !issue.IssueType.Contains("_void_", StringComparison.Ordinal)
+                    ? null : AppRole.Admin,
                 requireOnline: repository.Settings.LoadOrCreate().CloudMode != CloudModes.LocalOnly)
             : null;
         if (authorization is not null && authorization.ShowDialog(this) != DialogResult.OK) return;
         if (IsCloudAllowance(issue)) { await OpenCloudAllowanceAsync(issue, authorization!, readOnly: processing && !needsManager); return; }
         // A non-manager may view only their own unapproved LOCAL G0401 request,
         // with a withdraw button and no approval or other administrative action.
-        // Cloud G0401 uses manager-only until its 0.9.15 server authorization is deployed.
+        // Cloud G0401 separately requires server-verified owner authorization.
         if (IsAllowanceManualReview(issue) && authorization?.AuthenticatedPrincipal is { } principal &&
             !AppRoles.CanManageAccounts(principal.Role))
         {
@@ -1019,10 +1029,11 @@ internal sealed class SyncIssuesForm : Form
                 originalInvoiceNumber: Detail("原發票"), originalOrderId: Detail("訂單編號"));
             issueStore.SaveCloudDetail(accountKey,data);
             if (IsDisposed) return;
-            var canApprove = !readOnly && data.Status is ("open" or "review");
+            var pending = !readOnly && data.Status is ("open" or "review");
+            var canApprove = pending && login.AuthenticatedPrincipal is { } actor && AppRoles.CanManageAccounts(actor.Role);
             var presentation=AllowanceDetailPresentation.Build(TryFindIssueRecord(issue),issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.DetailRows??data.Rows,issueStore.CloudProjection(accountKey,data.ApplicationId,data.Operation)?.Tables??data.Tables);
             using var detail = new ManualReviewDetailForm(isVoid ? "折讓作廢詳情" : "折讓開立詳情",
-                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: canApprove && data.CanWithdraw, primaryDanger: true,tables:presentation.Tables);
+                presentation.Fields, canApprove ? isVoid ? "核准並作廢" : "核准並開立" : "", allowCancelReturn: pending && data.CanWithdraw, primaryDanger: isVoid, tables:presentation.Tables, allowanceDetails:true);
             if (detail.ShowDialog(this) != DialogResult.OK) return;
             if(detail.SelectedAction == ManualReviewDetailAction.CancelReturn)
             {
@@ -1031,14 +1042,16 @@ internal sealed class SyncIssuesForm : Form
                 operation = "withdraw";
                 await api.WithdrawOperationAsync(data,login.EnteredEmployeeNo,login.AuthenticatedPassword,returned.Reason);
                 issueStore.ApplyCloudAllowance(accountKey,issue.OrderId,isVoid?"void":"issue","completed","withdrawn","");
+                RefreshOpenInvoiceDetails();
                 ReloadAll();return;
             }
-            if(detail.SelectedAction != ManualReviewDetailAction.Primary)return;
+            if(detail.SelectedAction != ManualReviewDetailAction.Primary || !canApprove)return;
             operation = "approve";
             var result = await api.ApproveOperationAsync(data, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             var state = result.ExecutionState == "completed" ? "已完成" : result.ExecutionState == "processing" ? "處理中" : "上傳問題";
             issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue",
                 result.ExecutionState, "approved", result.ErrorCode);
+            RefreshOpenInvoiceDetails();
             if (!IsDisposed) { ReloadAll(); await ShowCloudProgressAsync(issue); }
         }
         catch (Exception error)
@@ -1074,7 +1087,10 @@ internal sealed class SyncIssuesForm : Form
             // Viewing details is read-only. A failed read cannot turn an open
             // application into a failed approval or overwrite its known state.
             if (operation != "detail")
+            {
                 issueStore.ApplyCloudAllowance(accountKey, issue.OrderId, isVoid ? "void" : "issue", state, status, code);
+                RefreshOpenInvoiceDetails();
+            }
             if (!IsDisposed) {
                 ReloadAll();
                 var title = operation == "detail" ? "讀取折讓詳情失敗" : operation == "withdraw" ? "取消退回未完成" : "折讓核准未完成";
@@ -1104,7 +1120,7 @@ internal sealed class SyncIssuesForm : Form
         if(IsDisposed)return;
         if(fields.Count==0)fields=CommonDetailRows(issue).Append(new("處理狀態",saved?.Progress.Length>0?saved.Progress:issue.Message)).ToArray();
         var dataView=AllowanceDetailPresentation.Build(TryFindIssueRecord(issue),fields,tables);
-        using var detail=new ManualReviewDetailForm(isVoid?"折讓作廢詳情":"折讓詳情",dataView.Fields,tables:dataView.Tables);
+        using var detail=new ManualReviewDetailForm(isVoid?"折讓作廢詳情":"折讓詳情",dataView.Fields,tables:dataView.Tables,allowanceDetails:true);
         using var refreshTimer=new System.Windows.Forms.Timer { Interval=1500 };
         var refreshing=false;
         var previous=System.Text.Json.JsonSerializer.Serialize(new { dataView.Fields,dataView.Tables });

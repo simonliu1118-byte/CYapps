@@ -230,7 +230,8 @@ try{
  } finally {environmentFixture.close();}
 
  assert.equal((await call(config(db,principal("USER","another")),"get",{applicationId:app1})).status,404);
- assert.equal((await call(employee,"detail",{applicationId:app1,operation:"issue"})).status,403);
+ assert.equal((await call(employee,"detail",{applicationId:app1,operation:"issue"})).status,200,"Requester can read own pending detail");
+ assert.notEqual((await call(config(db,principal("USER","another")),"detail",{applicationId:app1,operation:"issue"})).status,200);
  const provider=fakeOneShotProvider("A20261019001");globalThis.fetch=provider.transport;
  const detail=await call(manager,"detail",{applicationId:app1,operation:"issue"},rawDevB);
  assert.equal(detail.status,200);assert.equal(provider.calls.length,0);
@@ -267,6 +268,19 @@ try{
  await f.prepare(cancelledId);
  const manager22=config(db,principal("ADMIN","manager"),"true","23");
  const returnInput={applicationId:cancelledId,expectedRevision:3,operation:"issue",reason:"合成退回原因"};
+ const ownId="application_requester_return";
+ assert.equal((await call(employee,"create",{...input(ownId),workspaceId:undefined,deviceId:undefined},rawDevA)).status,200);
+ assert.equal((await call(config(db,principal("USER","another")),"withdraw",{...returnInput,applicationId:ownId,expectedRevision:1})).status,409,"Another employee cannot return someone else's application");
+ assert.equal((await call(employee,"withdraw",{...returnInput,applicationId:ownId,expectedRevision:1,reason:"長".repeat(21)})).status,400);
+ assert.equal((await call(employee,"withdraw",{...returnInput,applicationId:ownId,expectedRevision:1,reason:"換\n行"})).status,400);
+ assert.equal((await call({...employee,ALLOWANCE_G0401_SEND_ENABLED:"true"},"approve",{applicationId:ownId,expectedRevision:1})).status,403,"Own requester cannot approve");
+ assert.equal((await call(employee,"withdraw",{...returnInput,applicationId:ownId,expectedRevision:1,reason:"長".repeat(20)})).status,200,"Owner can withdraw with a 20-character reason");
+ assert.equal((await call(employee,"withdraw",{...returnInput,applicationId:ownId,expectedRevision:1})).status,409,"No repeated withdrawal");
+ assert.equal((await call(employee,"withdraw",{...returnInput,applicationId:cancelledId})).status,409,"Requester cannot withdraw an approved application");
+ const selfId="application_manager_own_return";
+ assert.equal((await call(manager22,"create",{...input(selfId),workspaceId:undefined,deviceId:undefined},rawDevB)).status,200);
+ assert.equal((await call(manager22,"detail",{applicationId:selfId,operation:"issue"},rawDevB)).status,200);
+ assert.equal((await call(manager22,"withdraw",{...returnInput,applicationId:selfId,expectedRevision:1},rawDevB)).status,200,"Manager keeps return on own application");
  assert.equal((await call(manager22,"withdraw",returnInput,rawDevB)).status,409,"Approval removes return immediately, even before sending");
  assert.equal(sql.prepare("SELECT status FROM allowance_number_ledger WHERE application_id=?").get(cancelledId).status,"reserved");
  const pendingId="application_pending_return";
