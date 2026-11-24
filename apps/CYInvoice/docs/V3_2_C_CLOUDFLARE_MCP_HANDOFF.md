@@ -1,3 +1,15 @@
+# 已完成：Cloud0.9.15／V3.1.52 配套（2026-11-24）
+
+使用者本批已批准原Worker更新、PR #616合併及正式Release，並確認發行版號V3.1.52／BUILD0。Cloud部署已完成，固定部署Source `abcf554809842973f218ee30d9dde484850d23b3`；後續版號與文件提交不改寫此部署身分。正式Release是否已完成以 `cyinvoice-v3.1.52` tag及Release workflow為準。
+
+- 沿原canonical deployment-preflight完成before→deploy→after，原Worker Cloud0.9.14→0.9.15、單一不可變版本100%流量；線上bundle與固定Source一致，health平台版本吻合，storage=ok、CYID_ONLY、schema／marker23、migration history及FK核對通過。
+- 原Workspace、5台Device、配對／邀請、雜湊與安全稽核連續性通過。正式CYID的兩個service binding、scope、Secrets繼承、Routes及全部設定保留；三個正常折讓旗標維持true，舊人工旗標維持關閉或未設定。
+- 原0.9.14不可變版本、程式副本與雜湊、設定checkpoint及D1 Time Travel bookmark均在本機私有保存。Worker回退不還原D1；不自動重送、清Claim、改CYID或整庫還原。
+- 本批使用者核准的停止界線為D1讀2000／寫0、服務請求12、管理API110。私有計量保留已取得SQL收據、一次本機收據保存失敗的保守讀取預留及共用帳號差額；共用差額不能全歸因本批，未為拆分用量重查。實際識別與完整紀錄不提交公開repo。
+- 未套migration、未操作CYID D1、未新增資源、未做真光貿交易。正式入口的空內容POST探測被自動審查拒絕而未執行；權限拒絕案例採已通過的隔離測試，不能冒充正式角色正向驗收。真人業務與DPI驗收仍按唯一清單追蹤。
+
+以下為歷史完成紀錄，不重跑。
+
 # 已完成配套：V3.1.46／Cloud0.9.14 實際部署識別
 
 2026-11-05本機MCP完成報告：固定程式Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 已部署原Worker Cloud0.9.14、100%流量。canonical before／deploy／after、原Workspace／Device／雜湊與安全稽核連續性、migration history、FK、原服務／Secrets／scope／Routes／財務旗標及線上bundle SHA均通過。schema／marker23保留，無migration或真交易；只退役consumer APP_ENV並加入原生版本資訊綁定，健康回應不再含environment且平台版本ID與控制面承接流量版本一致。

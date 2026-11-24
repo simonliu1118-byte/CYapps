@@ -1,6 +1,6 @@
 # CYInvoice Cloud Reference Backend
 
-Canonical migration為0023。本分支工程Source V3.1.51／Cloud0.9.15：移植提出者讀取與撤回自身未核准g0401、帳戶／Device／revision／Grant／Ledger防護，以及桌面精確申請投影。**僅Source整合，尚未部署；必要CI與真人驗收需另核對。** 原Worker仍為Cloud0.9.14／schema與marker23／CYID_ONLY，固定已部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9` 不變；原部署／前後查核記錄見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。本輪不改D1 migration、旗標、Binding或Secrets，不執行真交易，不自動合併或Release。正式桌面Release仍V3.1.50。
+Canonical migration為0023。桌面V3.1.52／Cloud0.9.15；使用者已批准本批合併及正式發行，Release結果以tag與workflow為準。2026-11-24本機MCP已完成原Worker受控更新與before／deploy／after、平台版本及線上bundle驗證，固定部署Source `abcf554809842973f218ee30d9dde484850d23b3`。schema與marker23／CYID_ONLY、正式CYID兩綁定、scope、Secrets、Routes與原折讓旗標保留，沒有migration或真交易。提出者可依原actor／Workspace／Device／revision／Grant／Ledger防護讀取與撤回本人未核准G0401，不擴大主管核准或G0501權限。詳見 [本機交接](../docs/V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)；真人業務及DPI驗收仍待完成。
 
 ## Environment labels and last verified identity target
 
