@@ -1,10 +1,10 @@
 CYInvoice 使用說明
-適用版本：V3.1.46（工程版；正式Release仍V3.1.0，Cloud0.9.14／schema23配套已部署）
+適用版本：V3.1.51 Build 1（工程版；正式 Release 仍 V3.1.50，原 Worker Cloud0.9.14／schema23；Cloud Source0.9.15 尚未部署）
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 本程式與原始碼之使用、修改與散布權利以 repository 根目錄 LICENSE 為準。
 
-本工程版提供同機折讓申請、主管一次核准、程式自動處理與完整詳情。雲端配套部署已完成，不代表真人業務流程全部驗收通過；跨機協同留下一版。升級仍須保留原安裝資料，版本內容見V3.1.46.txt，延期驗收見「發行後待驗收.md」。
+本工程版整合三區式折讓詳情、商品表序號與提出者撤回自己的待核准折讓。本機撤回沿既有權限驗證；Cloud 提出者撤回需待 0.9.15 配套部署，舊 Worker 的拒絕不得繞過。保留正式版啟動動畫、自動更新與 AutoInput，另修正鼎新零價贈品及日誌路徑。完整真人驗收尚未完成，跨機協同留下一版；升級須保留原安裝資料。版本內容見 CHANGELOG.md，工程整合狀態見 docs/PR602_INTEGRATION_20261112.md，延期驗收見「發行後待驗收.md」。
 
 一、啟動與資料
 1. 本程式適用 Windows 10/11 x64，請直接執行 CYInvoice.exe。

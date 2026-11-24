@@ -1,6 +1,6 @@
 # CYInvoice PR #602 與最新主線整合紀錄
 
-更新：2026-11-24（Asia/Taipei）。工程 V3.1.51／Cloud Source 0.9.15，PR [#616](https://github.com/simonliu1118-byte/CYapps/pull/616)。
+更新：2026-11-24（Asia/Taipei）。工程 V3.1.51 Build 1／Cloud Source 0.9.15，PR [#616](https://github.com/simonliu1118-byte/CYapps/pull/616)。
 
 ## 範圍及限制
 
@@ -19,6 +19,9 @@
 
 ## 驗證與剩餘工作
 
+- Build 1 修正 `2f4f0dce` 的 CS0117：runtime sync 殘留呼叫已移除的 `CloudAllowanceSubmissionService.CompleteProjection`。刪除該呼叫及其集合，沿用 `InvoiceSyncIssueStore.ApplyCloudAllowance` 的唯一精確終態處理，不恢復整庫載入／回寫或新增平行 owner。
+- 本機 Cloudflare MCP 認證與帳號唯讀 API 已實測成功；本批未執行 D1 SQL、Worker 部署或正式交易。連線可用不代表 Cloud Source 0.9.15 已部署。
+- Build 1 本機已通過 Windows x64 build、WinForms startup smoke、來源機密掃描，以及 Core 84／Allowance 29／Sync 38／SyncCoordinator 15／Void 13／VoidWorkflow 43／SQLite migration 14 項與全部 Cloud client 合成測試。既有 WebView2 WindowsBase MSB3277 警告未新增；這些檢查不代替最新提交的 CI 或真人 DPI／業務驗收。
 - 設定身分驗證 Smoke Test 的 Timer 輪詢逾時已於 `e5fcf5c894ff74e55d05afceeb6e4ca96b1edfaa` 修正，當時 Windows、Cloud Check、Governance 均通過。後續新提交不得沿用舊 CI 結果。
 - 鼎新與日誌合成測試已加入；Cloud Source 與桌面整合提交 `25fd5c92035c3b8b75869b3cb1013caf86d820ce`。必要 CI、Cloud dry-run、Windows x64、WinForms smoke、工程封裝以 PR 最新 head 的 Actions 實際結論為準。
 - [ ] Stage 5：最新精確 source 必要 CI 全通過、工程封裝與 96／125／150 DPI 視覺驗收；原真人驗收仍待依唯一清單追蹤。未經驗收不宣稱完成。

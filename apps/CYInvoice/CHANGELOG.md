@@ -1,4 +1,9 @@
 # CYInvoice 版本紀錄
+
+## V3.1.51 Build 1 — 2026/11/24（PR #616 整合編譯修正）
+
+- 移除 runtime sync 對已退役 `CompleteProjection` 的殘留呼叫與暫存集合；終態解除統一由 `InvoiceSyncIssueStore.ApplyCloudAllowance` 處理精確帳戶、原票及 application，不重新載入整份發票。未知結果及較新申請的保護維持。
+- Cloud Source 仍為 0.9.15、schema23，尚未部署；本批不操作正式資料、不合併或 Release。驗證及工程整合狀態見 `docs/PR602_INTEGRATION_20261112.md`。
  
 ## V3.1.51（Draft Engineering）— 2026/11/12（PR #602 分階段整合）
 
