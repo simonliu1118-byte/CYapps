@@ -251,6 +251,7 @@ var tests = new (string Name, Action Run)[]
     ("Digiwin consumer clears source buyer name", TestDigiwinConsumerClearsBuyerName),
     ("Digiwin import rejects detail total mismatch", TestDigiwinTotalMismatch),
     ("Digiwin gift-only detail retains gift quantity at zero price", TestDigiwinFreeGift),
+    ("Legacy import logs consolidate without overwriting", TestLegacyImportLogs),
     ("MO converted workbook is rejected at the import boundary", TestMoConvertedRejected),
     ("MO raw export uses official invoice amounts", TestMoRawOfficialAmounts),
     ("MO official amounts reject scientific notation", TestMoScientificAmountRejected),
@@ -1292,6 +1293,33 @@ static void TestDigiwinConsumerClearsBuyerName()
     Equal(string.Empty, order.BuyerBan);
     Equal(string.Empty, order.BuyerName);
     Equal("鼎新一定有的客戶名稱", order.OriginalBuyerName);
+}
+
+static void TestLegacyImportLogs()
+{
+    var root = Path.Combine(Path.GetTempPath(), "CYInvoice-log-test-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var data = Path.Combine(root, "Data");
+        var legacy = Path.Combine(root, "Logs");
+        var canonical = Path.Combine(root, "log");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(legacy);
+        Directory.CreateDirectory(canonical);
+        File.WriteAllText(Path.Combine(legacy, "import-error.log"), "legacy");
+        File.WriteAllText(Path.Combine(canonical, "import-error.log"), "current");
+        CYInvoice.Core.Storage.IssueDiagnosticLog.ConsolidateLegacyImportLog(data);
+        Equal(false, Directory.Exists(legacy));
+        Equal("current", File.ReadAllText(Path.Combine(canonical, "import-error.log")));
+        Equal("legacy", File.ReadAllText(Directory.GetFiles(canonical, "import-error-legacy-*.log").Single()));
+        CYInvoice.Core.Storage.IssueDiagnosticLog.ConsolidateLegacyImportLog(data);
+        Equal(2, Directory.GetFiles(canonical).Length);
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(legacy, "unrecognized.log"), "preserve");
+        CYInvoice.Core.Storage.IssueDiagnosticLog.ConsolidateLegacyImportLog(data);
+        Equal(true, File.Exists(Path.Combine(legacy, "unrecognized.log")));
+    }
+    finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
 }
 
 static void TestDigiwinFreeGift()
