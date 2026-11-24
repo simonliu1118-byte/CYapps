@@ -81,6 +81,7 @@ internal static class Program
                 return;
             }
             if (!RecoverPendingReset()) return;
+            IssueDiagnosticLog.ConsolidateLegacyImportLog(Path.Combine(AppContext.BaseDirectory, "Data"));
 
             Application.Run(new MainForm());
             RunScheduledResetAfterShutdown();
