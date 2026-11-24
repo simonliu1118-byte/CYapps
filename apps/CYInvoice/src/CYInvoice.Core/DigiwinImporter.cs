@@ -105,9 +105,31 @@ public static class DigiwinImporter
             CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error,"DigiwinImporter");
                 throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量格式錯誤", error);
             }
-            if (quantity.ScaledValue <= 0) throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量必須大於 0");
-
             var amount = ParseInteger(amountText, $"鼎新單身資料第 {rowIndex + 1} 列金額格式錯誤");
+            if (quantity.ScaledValue == 0 && amount == 0 &&
+                Value(row, detailColumns, "類型") == "1.贈品量" &&
+                !string.IsNullOrWhiteSpace(Value(row, detailColumns, "贈/備品量")))
+            {
+                // ERP separates sold quantity from free gifts. Only an explicitly
+                // identified free-gift row with zero financial amounts is eligible.
+                try
+                {
+                    quantity = FixedDecimal.Parse(CleanNumber(Value(row, detailColumns, "贈/備品量")));
+                    foreach (var header in new[] { "原幣未稅金額", "原幣稅額", "本幣未稅金額", "本幣稅額" })
+                    {
+                        if (detailColumns.ContainsKey(header) &&
+                            FixedDecimal.Parse(CleanNumber(Value(row, detailColumns, header))).ScaledValue != 0)
+                            throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列贈品金額／稅額必須為 0");
+                    }
+                }
+                catch (Exception error) when (error is FormatException or OverflowException)
+                {
+                    CYInvoice.Core.Storage.IssueDiagnosticLog.RecordProblem(error, "DigiwinImporter");
+                    throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列贈品數量／金額格式錯誤", error);
+                }
+                // Use gift quantity with zero unit price, not the ERP reference price.
+            }
+            if (quantity.ScaledValue <= 0) throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列數量必須大於 0");
             if (taxExcluded)
             {
                 var net = ParseInteger(Value(row, detailColumns, "本幣未稅金額"), $"鼎新單身第 {rowIndex + 1} 列未稅金額格式錯誤");

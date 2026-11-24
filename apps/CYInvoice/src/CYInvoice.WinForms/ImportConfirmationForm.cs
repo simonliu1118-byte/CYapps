@@ -554,7 +554,7 @@ internal sealed class ImportConfirmationForm : Form
     {
         try
         {
-            var directory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            var directory = CYInvoice.Core.Storage.IssueDiagnosticLog.LogDirectory(Path.Combine(AppContext.BaseDirectory, "Data"));
             Directory.CreateDirectory(directory);
             var record = $"[{DateTimeOffset.Now:O}] {source} 匯入失敗{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(directory, "import-error.log"), record);

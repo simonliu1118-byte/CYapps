@@ -654,12 +654,15 @@ public sealed class EmployeeAllowanceWorkflowService
         string actorPassword, string returnReason)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        var manager = EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
-        if(string.IsNullOrWhiteSpace(returnReason))throw new InvalidOperationException("請填寫退回原因");
+        var actor = EmployeeOperationAuthentication.AuthenticateEmployee(repository, actorEmployeeNo, actorPassword, now());
+        if (string.IsNullOrWhiteSpace(returnReason) || returnReason.Length > 20 || returnReason.Any(char.IsControl))
+            throw new InvalidOperationException("請填寫單行退回原因，最多 20 字");
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有待處理的申請資料");
+        if (!EmployeeRoles.CanManageAccounts(actor.Role) && actor.EmployeeNo != review.RequesterEmployeeNo)
+            throw new UnauthorizedAccessException("只能撤回自己提出且尚未核准的折讓申請");
         // Initialize the existing ledger before the atomic cancellation guard.
         _ = new LocalAllowanceNumberStore(repository.DataDirectory);
         if (review.LocalApprovedUtc is not null || review.AwaitingConfirmation || HasPendingMarker(record))
@@ -667,7 +670,7 @@ public sealed class EmployeeAllowanceWorkflowService
 
         record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
-            review with { CancelledUtc = now().ToUniversalTime(), CancelledByEmployeeNo = manager.EmployeeNo, ReturnReason=returnReason.Trim(), ReturnedByName=manager.Name });
+            review with { CancelledUtc = now().ToUniversalTime(), CancelledByEmployeeNo = actor.EmployeeNo, ReturnReason=returnReason.Trim(), ReturnedByName=actor.Name });
         ClearManualReview(record);
         ClearPending(record);
         syncRepository.UpsertMany([record], completedIssue: issue, cancelUnsentAllowance: true);

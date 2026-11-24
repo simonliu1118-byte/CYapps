@@ -1,6 +1,6 @@
 # CYInvoice Cloud Architecture Status
 
-更新：2026-11-05。工程V3.1.46／BUILD0、原Worker Cloud0.9.14／API1／schema與marker23／CYID_ONLY；固定部署Source `fb381f5140f92e240f1c405f5ad38ad5a3a5efc9`。2026-11-05本機MCP完整前後查核、平台版本與線上程式SHA核對通過，原production CYID、業務資料及旗標保留。正式Release仍V3.1.0；本次沒有新Release或桌面安裝覆寫。
+更新：2026-11-24。桌面發行目標V3.1.52／BUILD0；原Worker Cloud0.9.15／API1／schema與marker23／CYID_ONLY已由本機MCP完成100%流量部署，固定部署Source `abcf554809842973f218ee30d9dde484850d23b3`。完整前後查核、平台版本及線上程式SHA核對通過，正式CYID、原綁定／Secrets／旗標與資料保留。無migration或真交易；Release是否完成以tag及workflow為準，真人業務與DPI驗收仍追蹤。
 
 工程待辦以 [TODO](TODO.md) 為唯一看板；V3.2流程以 [實作計畫](V3_2_IMPLEMENTATION_PLAN.md) 為準；本機維護證據與停點見 [MCP交接](V3_2_C_CLOUDFLARE_MCP_HANDOFF.md)。V3.0／V3.1延期真人驗收只在 [發行後待驗收](POST_RELEASE_ACCEPTANCE.md) 追蹤，RC_TEST只保留案例。
 

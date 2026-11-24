@@ -36,6 +36,32 @@ public static class IssueDiagnosticLog
     public static string LogDirectory(string dataDirectory) =>
         Path.Combine(string.Equals(Path.GetFileName(Path.GetFullPath(dataDirectory)), "Data", StringComparison.OrdinalIgnoreCase)
             ? Path.GetDirectoryName(Path.GetFullPath(dataDirectory))! : dataDirectory, "log");
+    // The older importer wrote to a second directory beside the executable.
+    // Move only the known legacy log, never overwrite a current file, and
+    // remove the old folder only when empty. A locked file is retried next start.
+    public static void ConsolidateLegacyImportLog(string dataDirectory)
+    {
+        var directory = LogDirectory(dataDirectory);
+        var legacy = Path.Combine(Path.GetDirectoryName(directory)!, "Logs");
+        try
+        {
+            if (!Directory.Exists(legacy)) return;
+            var old = Path.Combine(legacy, "import-error.log");
+            if (File.Exists(old))
+            {
+                Directory.CreateDirectory(directory);
+                var destination = Path.Combine(directory, "import-error.log");
+                if (File.Exists(destination))
+                    destination = Path.Combine(directory, "import-error-legacy-" + Guid.NewGuid().ToString("N") + ".log");
+                File.Move(old, destination);
+            }
+            if (!Directory.EnumerateFileSystemEntries(legacy).Any()) Directory.Delete(legacy);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            RecordProblem(error, "LegacyImportLog");
+        }
+    }
     private static readonly Lock LogGate = new();
     private static string cleanedDay = "";
     public static void RecordProblem(Exception error, string module,

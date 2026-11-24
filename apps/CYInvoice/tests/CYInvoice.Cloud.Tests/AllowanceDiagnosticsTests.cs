@@ -8,6 +8,7 @@ internal static class AllowanceDiagnosticsTests
 {
     public static async Task RunAsync()
     {
+        VerifyTerminalProjection();
         using var temp=new AuthorityTemporaryDirectory();
         var data=Path.Combine(temp.Path,"Data");Directory.CreateDirectory(data);SqliteBootstrapper.EnsureMigrated(data);
         File.WriteAllText(Path.Combine(temp.Path,"VERSION"),"3.1.44");File.WriteAllText(Path.Combine(temp.Path,"BUILD"),"1");
@@ -74,6 +75,41 @@ internal static class AllowanceDiagnosticsTests
         using(var stream=new FileStream(current,FileMode.Open,FileAccess.Write)){stream.SetLength(4*1024*1024);}
         Check(IssueDiagnosticLog.RecordCloud(data,"status","rotation","synthetic_request"),"rotation succeeds");
         Check(File.Exists(Path.Combine(log,"cloud-"+day+"-previous.jsonl")),"bounded previous segment retained");
+    }
+    private static void VerifyTerminalProjection()
+    {
+        using var temp=new AuthorityTemporaryDirectory();
+        var data=Path.Combine(temp.Path,"Data");Directory.CreateDirectory(data);
+        const string pendingKey="cyinvoice_pending_v32_cloud_allowance";
+        var id="application_marker_test";
+        CYInvoice.Core.InvoiceRecord Record(string recordId,string seller)=>new() {
+            Id=recordId,OrderId=recordId,InvoiceState=CYInvoice.Core.InvoiceStates.Opened,
+            Environment=CYInvoice.Core.Environments.Test,SellerInvoice=seller,InvoiceNumber="AA00000001",Amount=1050,
+            ExtensionData=new() {
+                [pendingKey]=JsonSerializer.SerializeToElement(new{ApplicationId=id,TemplateSha256=new string('a',64)}),
+                ["unrelated"]=JsonSerializer.SerializeToElement("preserve"),
+            },
+        };
+        var invoice=Record("marker-one","12345678");
+        var other=Record("marker-other","87654321");
+        var invoices=new InvoiceStore(data);invoices.Save([invoice,other]);
+        var store=new InvoiceSyncIssueStore(data);
+        var account=invoice.Environment+"|"+invoice.SellerInvoice;
+        store.ApplyCloudAllowance(account,id,"issue","problem","unknown","timeout",originalInvoiceNumber:invoice.InvoiceNumber);
+        invoices.RefreshExtensionData(invoice);
+        Check(CloudAllowanceSubmissionService.HasPending(invoice),"Unknown withdrawal never unlocks an invoice");
+        store.ApplyCloudAllowance(account,id,"void","completed","withdrawn","");
+        invoices.RefreshExtensionData(invoice);
+        Check(CloudAllowanceSubmissionService.HasPending(invoice),"Void terminal state cannot unlock an issue application");
+        store.ApplyCloudAllowance(account,id,"issue","completed","withdrawn","");
+        invoices.RefreshExtensionData(invoice);invoices.RefreshExtensionData(other);
+        Check(!CloudAllowanceSubmissionService.HasPending(invoice)&&CloudAllowanceSubmissionService.HasPending(other),"Confirmed return immediately clears only exact account/application");
+        Check(invoice.Amount==1050&&invoice.ExtensionData!["unrelated"].GetString()=="preserve","Projection preserves all financial and unrelated metadata");
+        invoice.ExtensionData![pendingKey]=JsonSerializer.SerializeToElement(new{ApplicationId="application_newer",TemplateSha256=new string('b',64)});
+        invoices.Save([invoice,other]);
+        store.ApplyCloudAllowance(account,id,"issue","completed","withdrawn","");
+        invoices.RefreshExtensionData(invoice);
+        Check(CloudAllowanceSubmissionService.PendingApplicationId(invoice)=="application_newer","Old terminal response cannot clear a newer application");
     }
     private static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     private sealed class Handler:HttpMessageHandler

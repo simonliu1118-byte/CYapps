@@ -17,6 +17,58 @@ public sealed record StatusUpdate(
 
 public sealed class InvoiceStore
 {
+    // Read-only, single-record refresh for an already open invoice detail window.
+    // Never fetch Cloud/AMEGO or rewrite the whole invoice and items table.
+    public void RefreshExtensionData(InvoiceRecord record)
+    {
+        lock (gate)
+        {
+            using var db = Open(SqliteOpenMode.ReadOnly);
+            using var query = db.CreateCommand();
+            query.CommandText = """
+                SELECT extra_json FROM invoices
+                WHERE record_id=$id AND environment=$environment
+                  AND seller_invoice=$seller AND invoice_number=$invoice
+                LIMIT 1
+                """;
+            query.Parameters.AddWithValue("$id", record.Id);
+            query.Parameters.AddWithValue("$environment", record.Environment);
+            query.Parameters.AddWithValue("$seller", record.SellerInvoice);
+            query.Parameters.AddWithValue("$invoice", record.InvoiceNumber);
+            if (query.ExecuteScalar() is string json)
+                record.ExtensionData = ParseExtensionData(json);
+        }
+    }
+
+    // Compare the application identity inside the UPDATE. An older reply cannot
+    // overwrite a newer pending marker or unrelated financial information.
+    internal void ClearCloudAllowancePending(string accountKey, string invoiceNumber, string applicationId)
+    {
+        var account = accountKey.Split('|', 2);
+        if (account.Length != 2 || account.Any(string.IsNullOrWhiteSpace) ||
+            string.IsNullOrWhiteSpace(applicationId))
+            throw new InvalidDataException("折讓投影缺少帳戶／申請範圍");
+        lock (gate)
+        {
+            using var db = Open(SqliteOpenMode.ReadWrite);
+            ConfigureWritableConnection(db);
+            using var update = db.CreateCommand();
+            update.CommandText = """
+                UPDATE invoices SET extra_json=json_remove(extra_json,$path)
+                WHERE environment=$environment AND seller_invoice=$seller
+                  AND ($invoice='' OR invoice_number=$invoice)
+                  AND CASE WHEN json_valid(extra_json) THEN json_extract(extra_json,$idpath) END=$application
+                """;
+            update.Parameters.AddWithValue("$environment", account[0]);
+            update.Parameters.AddWithValue("$seller", account[1]);
+            update.Parameters.AddWithValue("$invoice", invoiceNumber);
+            update.Parameters.AddWithValue("$application", applicationId);
+            update.Parameters.AddWithValue("$path", "$." + CYInvoice.Core.Cloud.CloudAllowanceSubmissionService.PendingKey);
+            update.Parameters.AddWithValue("$idpath", "$." + CYInvoice.Core.Cloud.CloudAllowanceSubmissionService.PendingKey + ".ApplicationId");
+            update.ExecuteNonQuery();
+        }
+    }
+
     private readonly Lock gate = new();
     private readonly string dataDirectory;
     private readonly string databasePath;
