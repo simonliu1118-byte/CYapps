@@ -266,6 +266,7 @@ status, session = call('/v1/identity/sso/handoff/redeem', {'code': handoff['code
 assert status == 200 and session['principal']['workspaceRole'] == 'SUPER_ADMIN', session
 status, resolved = call('/v1/identity/session/resolve', {}, session['session']['token'], 'APP_TEST_SSO')
 assert status == 200 and resolved['principal'] == session['principal']
+assert 'email' not in resolved['principal'], resolved
 status, replay = call('/v1/identity/sso/handoff/redeem', {'code': handoff['code']}, None, 'APP_TEST_SSO')
 assert status == 401 and replay['error'] == {'code': 'SSO_HANDOFF_INVALID', 'message': 'Single sign-on handoff is invalid.'}
 with open(os.path.join(os.environ['STATE_DIR'], 'sso-secrets.txt'), 'w') as f:
@@ -404,6 +405,17 @@ NON_SUPER_POLICY_STATUS="$(curl --silent --output /dev/null --write-out '%{http_
   -H 'content-type: application/json' \
   --data '{"otpResendCooldownSeconds":90,"otpMaxAttempts":6,"otpMaxSentPerEmailPurposeHour":4,"emailDailyLimit":40}')"
 [[ "$NON_SUPER_POLICY_STATUS" == "403" ]]
+
+# Contract 1.4.0: only the core portal application (APP_TEST_LOGIN) receives the verified email.
+PORTAL_RESOLVE="$(curl --silent --show-error --fail-with-body \
+  -X POST "http://127.0.0.1:${PORT}/v1/identity/session/resolve" \
+  -H "authorization: Bearer ${USER_TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN')"
+PORTAL_RESOLVE="$PORTAL_RESOLVE" python3 - <<'PY'
+import json, os
+p = json.loads(os.environ['PORTAL_RESOLVE'])['principal']
+assert isinstance(p.get('email'), str) and '@' in p['email'] and p['emailVerified'] is True, p
+PY
 
 curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/logout" \

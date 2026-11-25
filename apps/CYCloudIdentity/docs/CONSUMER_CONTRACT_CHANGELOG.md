@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.4.0 — 2026-11-25
+
+CYID Consumer Impact: **BACKWARD_COMPATIBLE**. `POST /v1/identity/session/resolve` 的 `principal` 新增選填 `email`（字串，員工目前已驗證的登入 Email）。**只有 core account portal（CY Web）以自己的 Session 呼叫時才會出現**；其他 App 的回應與 1.3.0 完全相同（沒有 `email` 鍵）；員工沒有已驗證 Email 時也省略該鍵。見 `AUTH_CONTRACT.md` §2、§7。Provider 0.4.3，無 migration。既有欄位與接口不變；未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像（CY Web 已將 `principal.email` 視為選填字串，長度上限 320）。
+
 ## 1.3.0 — 2026-11-23
 
 CYID Consumer Impact: **BACKWARD_COMPATIBLE**. 新增 App 中文名稱（僅供顯示）與入口 App 清單：§17.1 登記接口選填 `displayNameZh`（字串＝設定、`null`＝清除、省略＝不變；`400 INVALID_APPLICATION_ZH_NAME`、`409 APPLICATION_SHARED_ACROSS_WORKSPACES`；Audit `application_zh_name_updated`）、回應 `application.displayNameZh`、管理 snapshot `applications[].display_name_zh`；預覽回應 `application.displayNameZh`；新增唯讀 `POST /v1/identity/sso/applications`（只限入口，回目前員工可進入且已登記回跳網址的 App：`applicationId`、`displayName`、`displayNameZh`、`origin`）。見 `AUTH_CONTRACT.md` §13.2.2、consumer standard §17.1／§21。Provider 0.4.2，migration `0010_application_localized_name.sql`（新增可空欄位）。既有欄位與接口不變；未採用的 consumer 不需變更；最低相容版本維持 1.0.0。CY Web 須同步 canonical 鏡像；provider 部署 0.4.2 之前，入口須將清單接口的 404 視為空清單、名稱退回英文。

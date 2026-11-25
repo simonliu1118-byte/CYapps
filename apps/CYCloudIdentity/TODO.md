@@ -2,6 +2,11 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
+## 入口顯示登入 Email（CYID 0.4.3）— 2026-11-25
+
+- Source **0.4.3 Build 0／consumer contract 1.4.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：`session/resolve` 的 `principal` 對 core portal（CY Web）多選填 `email`（已驗證登入 Email）；其他 App 回應不變（`AUTH_CONTRACT.md` §7）。另更新 `SSO_PORTAL_DESIGN.md` 第 5 階段為已完成與登入規則。
+- [ ] PR exact-head CI（PR 須標示 `CYID Consumer Impact: BACKWARD_COMPATIBLE`）、合併、部署 CYID 0.4.3；CY Web 同步 canonical 鏡像。
+
 ## App 中文名稱與入口 App 清單（CYID 0.4.2）— 2026-11-23
 
 - Source **0.4.2 Build 0／consumer contract 1.3.0**（minimum 1.0.0，**BACKWARD_COMPATIBLE**）：migration `0010_application_localized_name.sql`（`applications.display_name_zh`）、§17.1 登記接口選填 `displayNameZh`、預覽回 `displayNameZh`、新增唯讀 `POST /v1/identity/sso/applications`（`AUTH_CONTRACT.md` §13.2.2、consumer standard §21.3）。

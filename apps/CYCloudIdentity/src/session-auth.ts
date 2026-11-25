@@ -1,5 +1,5 @@
 import { isSessionToken, sha256Hex } from "./crypto";
-import { effectiveWorkspaceRole, hasApplicationEntry, type StoredEmployeeRole } from "./role-access";
+import { effectiveWorkspaceRole, hasApplicationEntry, isCoreAccountApplication, type StoredEmployeeRole } from "./role-access";
 import type { Env, IdentityPrincipal } from "./types";
 
 type SessionAuthorityRow = {
@@ -12,6 +12,7 @@ type SessionAuthorityRow = {
   employee_no: string;
   name: string;
   email_verified_at: string | null;
+  email_normalized: string;
   employee_enabled: number;
   employee_role_key: StoredEmployeeRole;
   employee_identity_admin: number;
@@ -39,7 +40,7 @@ function applicationHeader(request: Request): string | null {
 export async function resolveIdentitySession(
   request: Request,
   env: Env,
-): Promise<{ principal: IdentityPrincipal; expiresAt: string } | null> {
+): Promise<{ principal: IdentityPrincipal; expiresAt: string; portalEmail?: string } | null> {
   const token = bearerSessionToken(request);
   const applicationId = applicationHeader(request);
   if (!token || !applicationId) return null;
@@ -54,6 +55,7 @@ export async function resolveIdentitySession(
             e.employee_no,
             e.name,
             e.email_verified_at,
+            e.email_normalized,
             e.enabled AS employee_enabled,
             e.role_key AS employee_role_key,
             e.identity_admin AS employee_identity_admin,
@@ -109,7 +111,10 @@ export async function resolveIdentitySession(
     credentialVersion: row.current_credential_version,
     employeeRevision: row.employee_revision,
   };
-  return { principal, expiresAt: row.expires_at };
+  // Contract 1.4.0: only the core portal application learns the verified sign-in email.
+  const portalEmail = row.email_verified_at && isCoreAccountApplication(env, applicationId)
+    ? row.email_normalized : undefined;
+  return { principal, expiresAt: row.expires_at, ...(portalEmail ? { portalEmail } : {}) };
 }
 
 export async function requireIdentitySession(
