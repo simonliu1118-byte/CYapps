@@ -258,7 +258,9 @@ export async function handleResolveSession(
     });
   }
   return json(env, requestId, 200, {
-    principal: session.principal as unknown as JsonValue,
+    principal: (session.portalEmail
+      ? { ...session.principal, email: session.portalEmail }
+      : session.principal) as unknown as JsonValue,
     session: { expiresAt: session.expiresAt },
   });
 }

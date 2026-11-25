@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.3.0`
+> **Contract version:** `1.4.0`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -514,11 +514,13 @@ The provider revalidates active Workspace, registered/enabled Application and th
 
 This binding is a trusted machine capability, not an Identity Session or App Access grant. Deployments must restrict who can attach private bindings. Consumer credential storage, direct provider database access and a second mail credential in each app are unnecessary.
 
-## 21. 單一登入入口（SSO portal handoff，1.1.0；預覽 1.2.0；中文名稱與 App 清單 1.3.0）
+## 21. 單一登入入口（SSO portal handoff，1.1.0；預覽 1.2.0；中文名稱與 App 清單 1.3.0；入口 Email 1.4.0）
 
 Contract 1.1.0 新增選用的單一登入：只有 CY Web（core account portal）有登入頁；其他 App 需要登入時導向 CY Web，CY Web 確認後向 CYID 取得一次性交換碼並轉回該 App 已登記的回跳網址，該 App 再以自己的 `IDENTITY` binding 向 CYID 兌換成**自己的新 Session**。設計與驗收清單見 `SSO_PORTAL_DESIGN.md`；provider 接口細節見 `AUTH_CONTRACT.md` §13。
 
 **相容性：BACKWARD_COMPATIBLE。** 未採用的 consumer 照舊使用 login／resolve／logout；最低相容版本維持 1.0.0。各 App Session 仍互相獨立；不得改用跨子網域共用 cookie；CYID 不提供公開網頁或公開 API。
+
+**登入規則：** 網頁 App 一律使用 CY Web 單一入口登入（不再自建登入頁）；桌面程式（例如 CYInvoice）不使用入口，維持只在權限操作時驗證。
 
 ### 21.1 回跳網址登記（Super Admin，經 §17.1）
 

@@ -28,7 +28,7 @@ const valid = {
   workspace_id: "workspace-test", employee_id: "employee-test", application_id: "APP_TEST",
   session_credential_version: 1, current_credential_version: 1,
   expires_at: "2999-01-01T00:00:00.000Z", revoked_at: null,
-  employee_no: "0002", name: "Synthetic Employee", email_verified_at: "2026-01-01T00:00:00.000Z",
+  employee_no: "0002", name: "Synthetic Employee", email_verified_at: "2026-01-01T00:00:00.000Z", email_normalized: "synthetic@example.test",
   employee_enabled: 1, employee_role_key: "ADMIN", employee_identity_admin: 1, employee_revision: 2,
   workspace_status: "active", super_admin_employee_id: "other-employee",
   application_status: "active", workspace_application_enabled: 1,
@@ -38,7 +38,7 @@ function environment(row, access = true) {
     return { bind(...values) {
       if (sql.includes("FROM identity_sessions")) {
         assert.match(values[0], /^[0-9a-f]{64}$/);
-        assert.equal(values[1], "APP_TEST");
+        assert.equal(values[1], row?.application_id ?? "APP_TEST");
         return { first: async () => row };
       }
       if (sql.includes("FROM employee_application_access")) return { first: async () => access ? { allowed: 1 } : null };
@@ -63,6 +63,18 @@ test("resolve API and management guard expose the same current principal", async
   assert.equal("applicationRoleKey" in body.principal, false);
   assert.equal(body.principal.isIdentityAdmin, true);
   assert.equal(body.session.expiresAt, valid.expires_at);
+});
+test("resolve exposes verified email only to the core portal application", async () => {
+  const portalRow = { ...valid, application_id: "APP_PORTAL" };
+  const portalEnv = { ...environment(portalRow), CORE_ACCOUNT_APPLICATION_ID: "APP_PORTAL" };
+  const portalCall = async (env, app) => (await (await handleResolveSession(request(app), env, "test")).json()).principal;
+  assert.equal((await portalCall(portalEnv, "APP_PORTAL")).email, "synthetic@example.test");
+  const other = { ...environment(valid), CORE_ACCOUNT_APPLICATION_ID: "APP_PORTAL" };
+  assert.equal("email" in await portalCall(other, "APP_TEST"), false);
+  const unset = environment(valid);
+  assert.equal("email" in await portalCall(unset, "APP_TEST"), false);
+  const unverified = { ...environment({ ...portalRow, email_verified_at: null }), CORE_ACCOUNT_APPLICATION_ID: "APP_PORTAL" };
+  assert.equal("email" in await portalCall(unverified, "APP_PORTAL"), false);
 });
 for (const [name, patch, access] of [
   ["revoked", { revoked_at: "2026-01-01T00:00:00.000Z" }],

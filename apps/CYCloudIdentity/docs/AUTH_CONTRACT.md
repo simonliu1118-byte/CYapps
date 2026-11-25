@@ -24,6 +24,7 @@ interface IdentityPrincipal {
   isWorkspaceSuperAdmin: boolean;
   credentialVersion: number;
   employeeRevision: number;
+  email?: string; // contract 1.4.0, core portal (CY Web) only; see §7
 }
 ~~~
 
@@ -139,6 +140,8 @@ Role and App Access are independent. Legacy Identity Group grants do not authori
 ## 7. Resolve and logout
 
 `POST /v1/identity/session/resolve` re-checks current session, Workspace, Employee, credential version, Application, App Access, Workspace Role and Identity Admin capability on every request. Normal resolve is read-only.
+
+**Portal-only `email` (consumer contract 1.4.0).** When the calling application (`x-identity-application`, which must match the session's application) is the core account portal (CY Web), the resolve `principal` additionally carries `email`: the employee's current verified sign-in email, so the portal can show which email the account is bound to. Every other application receives exactly the 1.3.0 response, with no `email` key, because it does not need that personal data. If the employee has no verified email the key is omitted. The field is optional; consumers must accept its absence. Login responses and other endpoints are unchanged.
 
 `POST /v1/identity/logout` revokes the matching session. Consumer browser cookie clearing does not substitute for provider revocation.
 

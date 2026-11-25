@@ -43,6 +43,10 @@ Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete 
 
 架構以可用免費額度為預設，不自動啟用付費方案。實際 quota、deployment state 與 rollout gate 只記錄在 `TODO.md`／deployment docs。
 
+### 0.4.3 入口顯示登入 Email
+
+`session/resolve` 的 `principal` 對 core portal（CY Web）多選填 `email`（員工目前已驗證的登入 Email），讓入口顯示帳號綁定的 Email；其他 App 不會收到此欄位，無 migration（`AUTH_CONTRACT.md` §7）。
+
 ### 0.4.2 App 中文名稱與入口 App 清單
 
 migration `0010` 新增 `applications.display_name_zh`（僅供顯示；英文 `display_name` 仍是系統名稱）。登記接口選填 `displayNameZh`；預覽回 `displayNameZh`；新增唯讀 `POST /v1/identity/sso/applications` 回目前員工可進入的 App 清單（名稱、中文名稱、`origin`）。consumer contract 1.3.0（向下相容，最低 1.0.0）。
