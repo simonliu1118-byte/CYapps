@@ -1,8 +1,15 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-11-16（V1.2.10 正式 Release，tag `cyerp-auto-input-v1.2.10`，內容為 V1.2.9 Build 0–1：批次收尾時不能再開新輸入（避免結果清單與完成訊息互卡）、收尾直接跳紙本發票放紙提醒、ERP 狀態重讀、沒建單不放棄、紙本發票 PDF 背景轉圖、所有放紙「好了」按鈕共用，見 CHANGELOG）。待確認：CYInvoice V3.1.48（main 線）原始碼沒有 `--autoinput-*` 介面，使用者實際搭配的 CYInvoice 需同時有介面與酷澎金額修正，見 docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md。之後的修改依規則升 Z 或 Build；正式發布一律往前推新版本號（使用者 2026-11-04）。**新 session 接手先看 §0。**
+> 更新：2026-11-26（V1.2.12 正式 Release，tag `cyerp-auto-input-v1.2.12`，內容為 V1.2.11 Build 0–2：列印寄件單太靠下緣時先捲動再點並確認、長任選組合判讀、清單開錯單時跳過不停、庫存不足提示關掉後重試、放棄／備註／明細格子重試、MO 套裝售價高於原價依比例分配、另存為 PDF 從「顯示更多」選、酷澎狀態頁重新整理，見 CHANGELOG）。待確認：CYInvoice V3.1.48（main 線）原始碼沒有 `--autoinput-*` 介面，使用者實際搭配的 CYInvoice 需同時有介面與酷澎金額修正，見 docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md。之後的修改依規則升 Z 或 Build；正式發布一律往前推新版本號（使用者 2026-11-04）。**新 session 接手先看 §0。**
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
+
+## SG 全自動（SiteGiant）規劃：待使用者確認流程（2026-11-19）
+
+- 已整理完整規劃與可行性評估：[`docs/SITEGIANT_SG_AUTO_INTEGRATION_PLAN.md`](docs/SITEGIANT_SG_AUTO_INTEGRATION_PLAN.md)，包含 SG 訂單集中處理、各通路批量寄件單／PDF、全部訂單 Excel、AutoInput 匯入／ERP、CYInvoice 發票、安全防重複、拆包裹、已知限制、待驗事項、官方來源及分階段驗收。
+- **使用者要求：2026-11-20 自行把 SiteGiant 實際流程順好並確認之後才開始程式實作。日期到了不表示自動授權；確認之前只更新文件。**
+- **實作優先次序**：先在主畫面「訂單匯入：」同一排加「SG全自動」入口，沿用蝦皮／MO店+／酷澎按鈕幾何尺寸與元件風格，以 SiteGiant 官方主綠 `#11AA4F` 與藍 `#13387D` 配色；新功能先在該入口試做。按鈕實際觸發方式與完整自動化流程待使用者定稿，既有三平台不可被改動。
+- 本階段 **未修改程式、UI、版本、測試／發布流程，也沒有任何 SG 入口可操作**；下一位接手先讀上述規劃，不得推測為已開工或已實機驗證。
 
 ## 0. 目前進度與下一步（2026-11-11，給下一個 session）
 
@@ -13,7 +20,7 @@
 - 本機驗證：`dotnet test tests/CYERPAutoInput.Tests`（337 項）與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`（雲端容器沒有 `assets/Auto.ico` 時放一個不提交的暫時圖示即可編譯，該檔已在 .gitignore）。
 
 目前狀態：
-- 正式版 V1.2.10（2026-11-16）。蝦皮、MO店+、酷澎全自動與各匯入每天實機使用；功能說明見 README「全自動共通」「平台訂單匯入」。
+- 正式版 V1.2.12（2026-11-26）。蝦皮、MO店+、酷澎全自動與各匯入每天實機使用；功能說明見 README「全自動共通」「平台訂單匯入」。
 - **未結：CYInvoice 自動輸入介面**。2026-11-10 MO店+ 全自動在呼叫 CYInvoice 查詢後 2 分多鐘沒有回應（使用者按 Esc；當時 9 筆已出貨、寄件單已印，發票與 ERP 未做，可用匯入或訂單頁讀取輸入補）。CYInvoice V3.1.48（main 線，已含酷澎多品項金額修正）的原始碼找不到 `--autoinput-query／issue／pdf` 介面，介面只在 V2.6.21（`cyinvoice/feat-autoinput-interface`）。需使用者／CYInvoice 確認實際搭配的版本同時有介面與修正；交接檔 `docs/CYINVOICE_COUPANG_TOTAL_HANDOFF.md`。本程式對回報 3.1.48 以上的 CYInvoice 才自動開立「酷澎每列重複整張金額」的訂單。
 - 提議過、使用者未回覆：等 CYInvoice 時狀態列顯示秒數，CYInvoice 開了視窗卻沒回應時提早提示（避免乾等最多「每筆 60 秒＋60 秒」）。
 - 已知、未改（停下交人工，需更多畫面資訊）：ERP 單身格線辨識偶爾失敗、MO店+ 明細欄位捲動不到、MO店+ 配送中匯出偶爾沒出現另存新檔、酷澎「統一編號」欄偶爾拿不到焦點（皆 2026-11-05～09 LOG）。

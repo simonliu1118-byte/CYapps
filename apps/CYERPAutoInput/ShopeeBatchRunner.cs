@@ -499,10 +499,16 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>The first order of the list not passed over (orders left for a person stay in 待處理).</summary>
     private ShopeeListOrder? NextInList(Screen screen) =>
-        ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn));
+        ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn) && !_unopened.Contains(o.OrderSn));
 
     /// <summary>Times in a row the list's click opened another order.</summary>
     private int _wrongOpens;
+
+    /// <summary>
+    /// Orders whose row kept opening another order: left in 待出貨 for this run only, with no
+    /// note (user, 2026-11-26: close it, no need to mark it for a person); the next run tries again.
+    /// </summary>
+    private readonly HashSet<string> _unopened = [];
 
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
@@ -537,10 +543,16 @@ internal sealed partial class ShopeeBatchRunner
             // over, the next click opened a different order and the batch stopped): nothing is done
             // on a page only opened, so it is closed and the list read again, twice at most.
             _log.Warn("shopee-batch", $"opened order {shown} instead of {order.OrderSn} attempt={_wrongOpens + 1}");
-            if (_wrongOpens >= 2)
-                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}（已重試 2 次）；已停止。");
-            _wrongOpens++;
             await CloseOrderTabAsync(new ShopeeBatchOrder { OrderSn = shown });
+            if (_wrongOpens >= 2)
+            {
+                // Still the wrong one (user LOG 2026-11-12: the batch stopped here): this order is
+                // left for the next run and the batch goes on with the next.
+                _log.Warn("shopee-batch", $"order {order.OrderSn} kept opening {shown}; left for the next run");
+                _unopened.Add(order.OrderSn);
+                _wrongOpens = 0;
+            }
+            else _wrongOpens++;
             throw new ShopeeBatchRetry();
         }
         _wrongOpens = 0;
@@ -1577,8 +1589,8 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>
     /// Opens 目的地's list and clicks the set printer in it (read from the screen: the list is
-    /// drawn over the dialog). A printer not in the short list (only under 顯示更多…) stops the
-    /// batch: choosing among all printers is left to a person.
+    /// drawn over the dialog). A printer not in the short list is looked for under 顯示更多…;
+    /// not there either, the batch stops for a person.
     /// </summary>
     private async Task ChoosePrinterAsync(Screen screen, string shown, RectangleF part, string target)
     {
@@ -1586,17 +1598,47 @@ internal sealed partial class ShopeeBatchRunner
         _log.Info("shopee-batch", $"print destination is {shown}; choosing {target}");
         Click(screen, value, "目的地");
         await Task.Delay(700, _token);
-        using var list = await ReadAsync(part: part, ocr: true);
-        if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is not { } option)
+        var list = await ReadAsync(part: part, ocr: true);
+        try
         {
-            _inputs++;
-            InputSender.Press(NativeMethods.VK_ESCAPE);
-            await Task.Delay(400, _token);
-            throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{target}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
+            // User LOG 2026-11-13: the list read 0.7 s after the click held no 另存為 PDF. It is read
+            // once more, then 顯示更多… opens Chrome's full list and the printer is taken there.
+            if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is null)
+            {
+                await Task.Delay(700, _token);
+                list.Dispose();
+                list = await ReadAsync(part: part, ocr: true);
+            }
+            if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is { } option)
+            {
+                Click(list, option, $"印表機 {option.Text.Trim()}");
+                // Chrome redraws the preview for the new printer.
+                await Task.Delay(1500, _token);
+                return;
+            }
+            if (list.Boxes.FirstOrDefault(b => ShopeeScreenshot.Compact(b.Text).StartsWith("顯示更多", StringComparison.Ordinal)) is { } more)
+            {
+                _log.Info("shopee-batch", $"{target} not in the short list; 顯示更多");
+                Click(list, more, "顯示更多");
+                await Task.Delay(1500, _token);
+                using var all = await ReadAsync(ocr: true);
+                var choice = all.Boxes.Where(b => ShopeeBatchScreens.SamePrinter(b.Text, target)).OrderBy(b => b.Top).FirstOrDefault();
+                if (choice is not null)
+                {
+                    Click(all, choice, $"印表機 {choice.Text.Trim()}（顯示更多）");
+                    await Task.Delay(1500, _token);
+                    return;
+                }
+                _inputs++;
+                InputSender.Press(NativeMethods.VK_ESCAPE);
+                await Task.Delay(400, _token);
+            }
         }
-        Click(list, option, $"印表機 {option.Text.Trim()}");
-        // Chrome redraws the preview for the new printer.
-        await Task.Delay(1500, _token);
+        finally { list.Dispose(); }
+        _inputs++;
+        InputSender.Press(NativeMethods.VK_ESCAPE);
+        await Task.Delay(400, _token);
+        throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{target}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
     }
 
     /// <summary>Distance from a setting's value to the box typed into under it (縮放比例 自訂 → its number), else 38 px.</summary>
@@ -1648,15 +1690,25 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>「列印寄件單」 sits at the dialog's bottom; when the zoom hides it, the dialog is scrolled.</summary>
     private async Task ClickPrintLabelAsync(ShopeeBatchOrder order)
     {
-        for (var attempt = 0; attempt < 6; attempt++)
+        var clicks = 0;
+        for (var attempt = 0; attempt < 8; attempt++)
         {
             using var screen = await ReadAsync(reuse: attempt == 0);
             var title = ShopeeBatchScreens.TrackingDialogTitle(screen.Boxes) ?? throw new ShopeeBatchStop("「查看寄件編號」視窗不見了。", true);
+            // Well inside the page, not at its foot (user LOG 2026-11-12～25: a button read at
+            // y 1002–1014, by the bottom edge, took no click and the batch waited for the label).
             if (ShopeeBatchScreens.PrintLabelButton(screen.Boxes) is { } button &&
-                screen.Area.Contains(new Point(screen.Area.Left + button.CenterX, screen.Area.Top + button.CenterY)))
+                screen.Area.Contains(new Point(screen.Area.Left + button.CenterX, screen.Area.Top + button.CenterY)) &&
+                (button.CenterY < screen.Area.Height - 120 || attempt >= 3))
             {
-                Click(screen, button, "列印寄件單");
-                return;
+                Click(screen, button, "列印寄件單", hover: true);
+                clicks++;
+                // The label opens in a tab of its own; the dialog still in front means the click
+                // did not take: brought up again and clicked once more, twice at most.
+                var (opened, _) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null ? s : null);
+                if (opened is not null) { opened.Dispose(); return; }
+                if (clicks >= 3) throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「列印寄件單」按了 3 次都沒有開啟寄件單，請人工列印。", true);
+                _log.Warn("shopee-batch", $"列印寄件單 click did not open the label at y={screen.Area.Top + button.CenterY}; again");
             }
             // Scroll inside the dialog, below its title.
             var point = new Point(screen.Area.Left + title.Right + 40, screen.Area.Top + Math.Min(screen.Area.Height - 40, title.Bottom + 300));

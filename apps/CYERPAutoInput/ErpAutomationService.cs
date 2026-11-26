@@ -798,6 +798,23 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException("按 F12 儲存後 6 秒內未確認 ERP 回到檢視狀態；請人工確認單據是否已儲存。");
     }
 
+    /// <summary>What an ERP message window says (OCR of the window; empty when nothing is read).</summary>
+    private async Task<string> PeerTextAsync(nint peer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!NativeMethods.GetWindowRect(peer, out var rect) || rect.Width <= 0 || rect.Height <= 0) return string.Empty;
+            using var image = ScreenCapture.Capture(rect.ToRectangle());
+            var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            return string.Concat(tokens.OrderBy(t => t.Rect.Top / 12).ThenBy(t => t.Rect.Left).Select(t => t.Text)).Trim();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.Warn("window", $"peer text not read: {ex.GetType().Name}");
+            return string.Empty;
+        }
+    }
+
     private void LogPeerWindows(string context, IReadOnlyList<nint> peers)
     {
         foreach (var peer in peers)
@@ -826,6 +843,8 @@ internal sealed class ErpAutomationService
         if (root == 0) throw new InvalidOperationException("找不到要放棄的那個 COPI08 視窗；未執行放棄，請人工處理。");
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("放棄前無法把 COPI08 帶到前景。");
+        // A stock warning left open is only closed (user, 2026-11-26); any other window is for a person.
+        await AcknowledgeStockWarningIfShownAsync(root, 0, new DetailRow { ItemCode = "?" }, null, cancellationToken);
         if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
             throw new InvalidOperationException("ERP 有其他視窗開著；未執行放棄，請人工處理。");
         if (DetectMode(root) != ErpMode.Input)
@@ -837,23 +856,59 @@ internal sealed class ErpAutomationService
                 throw new InvalidOperationException("ERP 目前的單號與本程式建立的單據不同；未執行放棄，請人工處理。");
         }
 
-        var customer = ErpLayoutResolver.ResolveHeader(root, "customer_code");
-        var center = new Point((customer.Rect.Left + customer.Rect.Right) / 2, (customer.Rect.Top + customer.Rect.Bottom) / 2);
-        InputSender.Click(center);
-        if (await WaitFocusedEditAsync(root, customer.Rect, cancellationToken, 800) == 0)
-            throw new InvalidOperationException("無法把焦點放到客戶代號欄；未執行放棄，請人工處理。");
-        await Delay(150, cancellationToken);
-        InputSender.Press(NativeMethods.VK_ESCAPE);
-
+        // User LOGs 2026-11-06/13/14: the cursor was in the 單身 and the click on 客戶代號 did not
+        // take it (leaving the row brought ERP's stock warning, or the cell held it); 2026-11-21:
+        // Esc brought no 「是否放棄」. Each step is tried again, three times at most.
         nint confirm = 0;
-        var deadline = Environment.TickCount64 + 2500;
-        while (confirm == 0 && Environment.TickCount64 < deadline)
+        for (var escape = 1; escape <= 2 && confirm == 0; escape++)
         {
-            await Delay(120, cancellationToken);
-            confirm = Win32Automation.FindVisibleProcessPeerWindows(root).FirstOrDefault();
+            var focused = false;
+            for (var attempt = 1; attempt <= 3 && !focused; attempt++)
+            {
+                if (attempt > 1)
+                {
+                    await AcknowledgeStockWarningIfShownAsync(root, 0, new DetailRow { ItemCode = "?" }, null, cancellationToken);
+                    if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+                        throw new InvalidOperationException("ERP 有其他視窗開著；未執行放棄，請人工處理。");
+                    Win32Automation.PrepareForeground(root, _log);
+                    var grid = FindDetailGrid(root);
+                    var focus = NativeMethods.FocusedControlOfForeground(root);
+                    if (grid is not null && focus != 0 && Win32Automation.IsInside(focus, grid.Handle))
+                    {
+                        // Leaves the detail cell only (Esc in the grid never asks to abandon).
+                        InputSender.Press(NativeMethods.VK_ESCAPE);
+                        await Delay(250, cancellationToken);
+                    }
+                    _log.Info("document", $"abandon: 客戶代號 focus again attempt={attempt} focus_class={NativeMethods.ClassName(focus)}");
+                }
+                var customer = ErpLayoutResolver.ResolveHeader(root, "customer_code");
+                var center = new Point((customer.Rect.Left + customer.Rect.Right) / 2, (customer.Rect.Top + customer.Rect.Bottom) / 2);
+                InputSender.Click(center);
+                focused = await WaitFocusedEditAsync(root, customer.Rect, cancellationToken, 800) != 0;
+            }
+            if (!focused)
+                throw new InvalidOperationException("無法把焦點放到客戶代號欄（試了 3 次）；未執行放棄，請人工處理。");
+            await Delay(150, cancellationToken);
+            InputSender.Press(NativeMethods.VK_ESCAPE);
+
+            var deadline = Environment.TickCount64 + 2500;
+            while (confirm == 0 && Environment.TickCount64 < deadline)
+            {
+                await Delay(120, cancellationToken);
+                confirm = Win32Automation.FindVisibleProcessPeerWindows(root).FirstOrDefault();
+            }
+            if (confirm == 0 && escape == 1)
+            {
+                if (DetectMode(root) == ErpMode.Browse)
+                {
+                    _log.Info("document", $"input abandoned (no prompt) expected_sales_no={_log.Value(expectedSalesOrderNumber)}");
+                    return;
+                }
+                _log.Warn("document", "abandon: no 「是否放棄」 after Esc; trying once more");
+            }
         }
         if (confirm == 0)
-            throw new InvalidOperationException("按 Esc 後 ERP 沒有出現「是否放棄」確認；未放棄，請人工處理。");
+            throw new InvalidOperationException("按 Esc 兩次 ERP 都沒有出現「是否放棄」確認；未放棄，請人工處理。");
 
         var isAbandonPrompt = false;
         for (var attempt = 1; attempt <= 3 && !isAbandonPrompt; attempt++)
@@ -865,7 +920,9 @@ internal sealed class ErpAutomationService
         if (!isAbandonPrompt)
         {
             LogPeerWindows("abandon", [confirm]);
-            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；程式未代為處理，請人工確認。");
+            var text = await PeerTextAsync(confirm, cancellationToken);
+            _log.Warn("document", $"abandon: unexpected ERP window text={_log.Value(text)}");
+            throw new InvalidOperationException($"按 Esc 後 ERP 出現的不是「是否放棄」確認（訊息：「{text}」）；程式未代為處理，請人工確認。");
         }
 
         if (!Win32Automation.PrepareForeground(confirm, _log))
@@ -874,8 +931,8 @@ internal sealed class ErpAutomationService
         if (!await WaitWindowClosedAsync(confirm, 1500, cancellationToken))
             throw new InvalidOperationException("已對「是否放棄」按 Enter，但確認視窗沒有關閉；請人工處理。");
 
-        deadline = Environment.TickCount64 + 3500;
-        while (Environment.TickCount64 < deadline)
+        var browseBy = Environment.TickCount64 + 3500;
+        while (Environment.TickCount64 < browseBy)
         {
             await Delay(150, cancellationToken);
             if (DetectMode(root) == ErpMode.Browse)
@@ -1287,10 +1344,26 @@ internal sealed class ErpAutomationService
         }
 
         nint focus = 0;
-        for (var focusAttempt = 1; focusAttempt <= 2 && focus == 0; focusAttempt++)
+        // A third, later try (user LOGs 2026-11-16/19: 備註 right after the 交易資料 tab opened
+        // did not take the click twice); a window ERP put up in between is closed when it is
+        // the stock warning, otherwise named in the error.
+        for (var focusAttempt = 1; focusAttempt <= 3 && focus == 0; focusAttempt++)
         {
+            if (focusAttempt > 1)
+            {
+                await Delay(250 * focusAttempt, cancellationToken);
+                if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0 &&
+                    !await AcknowledgeStockWarningIfShownAsync(root, 0, new DetailRow { ItemCode = "?" }, null, cancellationToken))
+                {
+                    var peer = Win32Automation.FindVisibleProcessPeerWindows(root).First();
+                    var text = await PeerTextAsync(peer, cancellationToken);
+                    _log.Warn("field", $"ERP window in the way key={field.Key} text={_log.Value(text)}");
+                    throw new InvalidOperationException($"輸入「{field.Label}」時 ERP 跳出訊息「{text}」；程式未代為處理，請人工確認。");
+                }
+                Win32Automation.PrepareForeground(root, _log);
+            }
             InputSender.Click(center);
-            focus = await WaitFocusedEditAsync(root, target.Rect, cancellationToken, 700);
+            focus = await WaitFocusedEditAsync(root, target.Rect, cancellationToken, 900);
             if (focus != 0)
             {
                 _log.Info("field", $"focus confirmed key={field.Key} attempt={focusAttempt} class={NativeMethods.ClassName(focus)}");
@@ -1299,7 +1372,7 @@ internal sealed class ErpAutomationService
             _log.Warn("field", $"focus not ready key={field.Key} attempt={focusAttempt}; retrying same verified field");
             await Delay(90, cancellationToken);
         }
-        if (focus == 0) throw new InvalidOperationException($"ERP 欄位「{field.Label}」連續兩次都沒有取得可輸入焦點。");
+        if (focus == 0) throw new InvalidOperationException($"ERP 欄位「{field.Label}」連續三次都沒有取得可輸入焦點。");
 
         if (field.Kind == FieldKind.Date)
         {
@@ -1516,6 +1589,8 @@ internal sealed class ErpAutomationService
         // the gap to what each bundle sold for goes to the 促銷組合 line after them.
         var bundleList = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
         var bundleSold = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var bundleParts = new Dictionary<string, List<(int Row, decimal List, decimal Quantity)>>(StringComparer.OrdinalIgnoreCase);
+        var bundleSpread = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var gapRow = rows.ToList().FindIndex(r => r.TakesBundleGap);
         var lastBundleRow = rows.ToList().FindLastIndex(r => r.BundleKey.Length > 0);
         if (lastBundleRow >= 0 && gapRow < lastBundleRow)
@@ -1560,19 +1635,41 @@ internal sealed class ErpAutomationService
                 if (decimal.TryParse(row.BundleTotal, NumberStyles.Number, CultureInfo.InvariantCulture, out var sold))
                     bundleSold[row.BundleKey] = bundleSold.GetValueOrDefault(row.BundleKey) + sold;
                 _log.Info("detail", $"bundle part row={visibleRow + 1} item={_log.Value(row.ItemCode)} list_price={listPrice} quantity={quantity} bundle={_log.Value(row.BundleKey)}");
+                if (!bundleParts.TryGetValue(row.BundleKey, out var parts)) bundleParts[row.BundleKey] = parts = [];
+                parts.Add((visibleRow, listPrice, quantity));
             }
             var unitPrice = row.UnitPrice;
+            // A bundle sold above its parts' list prices (user, 2026-11-26: spread it over the parts):
+            // once its last part is in, each part's price is raised in proportion, the earlier
+            // parts' cells are typed again and this part's price is typed last, so ERP stays on
+            // this row for the next Down.
+            var spread = row.BundleKey.Length > 0 && string.IsNullOrWhiteSpace(row.UnitPrice) &&
+                !rows.Skip(rowIndex + 1).Any(r => r.BundleKey.Equals(row.BundleKey, StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(r.UnitPrice)) &&
+                bundleSold.TryGetValue(row.BundleKey, out var bundleTotal) && bundleTotal > bundleList[row.BundleKey]
+                ? BundlePrices.Spread(bundleParts[row.BundleKey].Select(p => (p.List, p.Quantity)).ToList(), bundleTotal)
+                : null;
+            if (spread is not null)
+            {
+                bundleSpread.Add(row.BundleKey);
+                var parts = bundleParts[row.BundleKey];
+                _log.Info("detail", $"bundle above list spread over parts bundle={_log.Value(row.BundleKey)} list={bundleList[row.BundleKey]} sold={bundleSold[row.BundleKey]} prices={string.Join("/", spread)}");
+                geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
+                for (var p = 0; p < parts.Count - 1; p++)
+                    geometry = await SetDetailCellAsync(root, grid, geometry, parts[p].Row, 7, Price(spread[p]), cancellationToken);
+                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, Price(spread[^1]), cancellationToken);
+                continue;
+            }
             if (row.TakesBundleGap && bundleList.Count > 0)
             {
                 var missing = bundleList.Keys.Where(k => !bundleSold.ContainsKey(k)).ToList();
                 if (missing.Count > 0)
                     throw new InvalidOperationException($"套裝 {string.Join("、", missing)} 少了套裝售價；未輸入促銷組合，請人工處理此單。");
-                // A bundle sold above its parts' list prices is for a person (user, 2026-10-12).
-                var dearer = bundleList.Where(p => p.Value < bundleSold[p.Key]).ToList();
+                // A bundle sold above its parts' list prices was spread over its parts above.
+                var dearer = bundleList.Where(p => p.Value < bundleSold[p.Key] && !bundleSpread.Contains(p.Key)).ToList();
                 if (dearer.Count > 0)
                     throw new InvalidOperationException("套裝售價高於 ERP 原價合計，轉人工處理：" +
                         string.Join("、", dearer.Select(p => $"{p.Key}（原價合計 {p.Value:0.##}，售價 {bundleSold[p.Key]:0.##}）")) + "。");
-                var gap = bundleList.Sum(p => p.Value - bundleSold[p.Key]);
+                var gap = bundleList.Where(p => !bundleSpread.Contains(p.Key)).Sum(p => p.Value - bundleSold[p.Key]);
                 var basePrice = decimal.Parse(row.UnitPrice.Length > 0 ? row.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
                 unitPrice = (basePrice - gap).ToString("0.####", CultureInfo.InvariantCulture);
                 _log.Info("detail", $"促銷組合 takes bundle gap={gap} base={basePrice} price={unitPrice}");
@@ -1583,6 +1680,8 @@ internal sealed class ErpAutomationService
             geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
         }
     }
+
+    private static string Price(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     private async Task PrimeDetailGridAsync(nint root, WindowControl grid, CancellationToken cancellationToken)
     {
@@ -1671,6 +1770,7 @@ internal sealed class ErpAutomationService
         // A third, later try (user's PC, 2026-10-13: after 品號 + Enter the 數量 cell twice did
         // not open while ERP was still busy with the item; the same order went through when run
         // again), each retry waiting longer first.
+        var closedWarnings = 0;
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1692,11 +1792,30 @@ internal sealed class ErpAutomationService
                 InputSender.Press(NativeMethods.VK_RETURN);
                 editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
             }
+            if (editor == 0 && await AcknowledgeStockWarningIfShownAsync(root, visibleRow + 1, new DetailRow { ItemCode = "?" }, null, cancellationToken))
+            {
+                // Leaving a row (going back to an earlier one) can bring ERP's stock warning: it is
+                // only closed (user, 2026-11-26) and the cell clicked again.
+                _log.Info("detail", $"stock warning closed while opening row={visibleRow + 1} col={column}");
+                attempt--;
+                if (++closedWarnings > 3) throw new InvalidOperationException("ERP 一直跳庫存不足提示，無法進入明細欄位；已停止避免錯位，請人工處理。");
+                continue;
+            }
             if (editor == 0)
             {
                 var focus = NativeMethods.FocusedControlOfForeground(root);
                 NativeMethods.GetWindowRect(focus, out var focusRect);
                 _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)} focus_rect={focusRect.Left},{focusRect.Top},{focusRect.Width}x{focusRect.Height} grid_top={freshRect.Top}");
+                // Still in another cell's editor (user LOG 2026-11-21: after 品號 + Enter the cursor
+                // stayed in 品號 and the 數量 cell never opened): its text is logged, and Tab asks
+                // ERP to leave it before the next try.
+                if (focus != 0 && Win32Automation.IsInside(focus, grid.Handle) &&
+                    (focusRect.Right < point.X || focusRect.Left > point.X))
+                {
+                    _log.Info("detail", $"another cell still in edit text={_log.Value((NativeMethods.ControlText(focus) ?? string.Empty).Trim())}; Tab");
+                    InputSender.Press(NativeMethods.VK_TAB);
+                    await Delay(250, cancellationToken);
+                }
                 continue;
             }
             if (NativeMethods.GetWindowRect(editor, out var editorRect) && editorRect.Height > 0)
@@ -1714,7 +1833,9 @@ internal sealed class ErpAutomationService
             return geometry;
         }
 
-        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續三次都沒有進入編輯模式。");
+        throw new InvalidOperationException(column == 1
+            ? $"ERP 明細第 {visibleRow + 1} 列：品號輸入後游標一直停在品號欄，數量欄進不去（品號可能不存在或 ERP 還在處理）；已停止，請人工確認。"
+            : $"ERP 明細 row={visibleRow + 1}, column={column} 連續三次都沒有進入編輯模式。");
     }
 
     /// <summary>
@@ -1987,8 +2108,8 @@ internal sealed class ErpAutomationService
     /// Handles ERP messages after Down to the next detail row. 「庫存量或批號量不足」 is
     /// acknowledged with Enter (its default OK) and recorded as a warning, as the user
     /// directed (2026-10-09: just press OK and finish the document). Whether ERP then created
-    /// the next row is read from the 序號 column: if it did not, Down is pressed once more,
-    /// and a second refusal stops the run. Any other window stops the run.
+    /// the next row is read from the 序號 column: if it did not, Down is pressed again (a
+    /// warning shown again is closed again), three times at most. Any other window stops the run.
     /// </summary>
     private async Task HandleRowTransitionDialogsAsync(
         nint root,
@@ -2002,20 +2123,28 @@ internal sealed class ErpAutomationService
         if (!await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken)) return;
         AddStockWarning(result, completedDetailRow, completedRow);
 
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("關閉庫存不足提示後無法回到 COPI08；已停止避免後續錯位。");
-        await Delay(200, cancellationToken);
+        // The warning is only closed with Enter (user, 2026-11-26: that is all it takes). ERP may
+        // take a moment to add the next row, or keep the cursor on the row and warn again on the
+        // next Down (user LOG 2026-11-14: a second warning stopped the order): each warning is
+        // closed again and Down pressed again, three times at most.
+        for (var attempt = 1; ; attempt++)
+        {
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("關閉庫存不足提示後無法回到 COPI08；已停止避免後續錯位。");
+            for (var wait = 0; wait < 4; wait++)
+            {
+                await Delay(wait == 0 ? 200 : 300, cancellationToken);
+                if (await DetailRowExistsAsync(grid, geometry, completedDetailRow + 1, attempt == 1 ? "after-stock-warning" : "after-down-again", cancellationToken)) return;
+            }
+            if (attempt > 3)
+                throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：庫存不足提示按確定後，ERP 試了 3 次仍沒有建立下一列；已停止避免錯位，請人工處理。");
 
-        if (await DetailRowExistsAsync(grid, geometry, completedDetailRow + 1, "after-stock-warning", cancellationToken)) return;
-
-        // ERP stayed in the completed row: ask for the next row once more.
-        InputSender.Press(NativeMethods.VK_DOWN);
-        await Delay(300, cancellationToken);
-        if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken))
-            throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：按確定後 ERP 仍不允許換到下一列（庫存量或批號量不足）；請檢查庫別、數量或批號後人工處理。");
-        Win32Automation.PrepareForeground(root, _log);
-        if (!await DetailRowExistsAsync(grid, geometry, completedDetailRow + 1, "after-second-down", cancellationToken))
-            throw new InvalidOperationException($"第 {completedDetailRow} 列之後 ERP 沒有建立下一列；已停止避免錯位。");
+            // ERP stayed in the completed row: ask for the next row once more.
+            InputSender.Press(NativeMethods.VK_DOWN);
+            await Delay(300, cancellationToken);
+            if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken))
+                _log.Info("document", $"stock warning shown again detail_row={completedDetailRow} attempt={attempt}");
+        }
     }
 
     private const string RowChangeUnexpected = "切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。";
@@ -2035,11 +2164,11 @@ internal sealed class ErpAutomationService
 
     /// <summary>
     /// Returns false when no ERP window is open; presses Enter on the stock warning and
-    /// returns true; throws for any other window. The message text is read from the Win32
+    /// returns true; throws for any other window (returns false when no message is given). The message text is read from the Win32
     /// tree or, retried while the box is still painting, by OCR.
     /// </summary>
     private async Task<bool> AcknowledgeStockWarningIfShownAsync(
-        nint root, int completedDetailRow, DetailRow completedRow, string unexpectedMessage, CancellationToken cancellationToken)
+        nint root, int completedDetailRow, DetailRow completedRow, string? unexpectedMessage, CancellationToken cancellationToken)
     {
         var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
         if (peers.Count == 0) return false;
@@ -2069,6 +2198,7 @@ internal sealed class ErpAutomationService
         }
 
         LogPeerWindows("unexpected", peers);
+        if (unexpectedMessage is null) return false;
         throw new InvalidOperationException(unexpectedMessage);
     }
 
