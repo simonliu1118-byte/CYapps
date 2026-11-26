@@ -499,10 +499,16 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>The first order of the list not passed over (orders left for a person stay in 待處理).</summary>
     private ShopeeListOrder? NextInList(Screen screen) =>
-        ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn));
+        ShopeeBatchScreens.Orders(screen.Boxes).FirstOrDefault(o => !Skipped.Contains(o.OrderSn) && !_unopened.Contains(o.OrderSn));
 
     /// <summary>Times in a row the list's click opened another order.</summary>
     private int _wrongOpens;
+
+    /// <summary>
+    /// Orders whose row kept opening another order: left in 待出貨 for this run only, with no
+    /// note (user, 2026-11-26: close it, no need to mark it for a person); the next run tries again.
+    /// </summary>
+    private readonly HashSet<string> _unopened = [];
 
     private async Task<ShopeeBatchOrder> OpenOrderAsync(Screen screen, ShopeeListOrder first)
     {
@@ -537,10 +543,16 @@ internal sealed partial class ShopeeBatchRunner
             // over, the next click opened a different order and the batch stopped): nothing is done
             // on a page only opened, so it is closed and the list read again, twice at most.
             _log.Warn("shopee-batch", $"opened order {shown} instead of {order.OrderSn} attempt={_wrongOpens + 1}");
-            if (_wrongOpens >= 2)
-                throw new ShopeeBatchStop($"開啟的訂單明細是 {shown}，不是清單上的 {order.OrderSn}（已重試 2 次）；已停止。");
-            _wrongOpens++;
             await CloseOrderTabAsync(new ShopeeBatchOrder { OrderSn = shown });
+            if (_wrongOpens >= 2)
+            {
+                // Still the wrong one (user LOG 2026-11-12: the batch stopped here): this order is
+                // left for the next run and the batch goes on with the next.
+                _log.Warn("shopee-batch", $"order {order.OrderSn} kept opening {shown}; left for the next run");
+                _unopened.Add(order.OrderSn);
+                _wrongOpens = 0;
+            }
+            else _wrongOpens++;
             throw new ShopeeBatchRetry();
         }
         _wrongOpens = 0;
