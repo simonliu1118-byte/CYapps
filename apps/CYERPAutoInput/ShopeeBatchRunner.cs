@@ -493,8 +493,10 @@ internal sealed partial class ShopeeBatchRunner
             return null;
         }
 
-        // Loaded: either an order or 「找不到訂單」 is on screen.
-        static bool Settled(List<OcrBox> boxes) => ShopeeBatchScreens.NoOrders(boxes) || ShopeeBatchScreens.FirstOrder(boxes) is not null;
+        // Loaded: either an order or 「找不到訂單」 is on screen, or 待處理 counts none (user,
+        // 2026-11-26: 待處理 (0) means everything is done).
+        static bool Settled(List<OcrBox> boxes) => ShopeeBatchScreens.NoOrders(boxes) || ShopeeBatchScreens.FirstOrder(boxes) is not null ||
+            ShopeeBatchScreens.PendingCount(boxes) == 0;
 
         // User LOG 2026-11-26 (13:02, 14:09): after the last order the emptied list's page text
         // held neither an order nor 「找不到訂單」 for 30 s and the batch stopped instead of
