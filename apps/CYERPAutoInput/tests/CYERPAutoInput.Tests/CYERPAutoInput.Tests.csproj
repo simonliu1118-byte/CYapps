@@ -41,6 +41,7 @@
     <Compile Include="..\..\BatchSummary.cs" Link="Linked\BatchSummary.cs" />
     <Compile Include="..\..\CoupangScreens.cs" Link="Linked\CoupangScreens.cs" />
     <Compile Include="..\..\UpdateCheck.cs" Link="Linked\UpdateCheck.cs" />
+    <Compile Include="..\..\LogRetention.cs" Link="Linked\LogRetention.cs" />
   </ItemGroup>
 
   <ItemGroup>
