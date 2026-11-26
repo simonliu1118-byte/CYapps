@@ -1648,15 +1648,25 @@ internal sealed partial class ShopeeBatchRunner
     /// <summary>「列印寄件單」 sits at the dialog's bottom; when the zoom hides it, the dialog is scrolled.</summary>
     private async Task ClickPrintLabelAsync(ShopeeBatchOrder order)
     {
-        for (var attempt = 0; attempt < 6; attempt++)
+        var clicks = 0;
+        for (var attempt = 0; attempt < 8; attempt++)
         {
             using var screen = await ReadAsync(reuse: attempt == 0);
             var title = ShopeeBatchScreens.TrackingDialogTitle(screen.Boxes) ?? throw new ShopeeBatchStop("「查看寄件編號」視窗不見了。", true);
+            // Well inside the page, not at its foot (user LOG 2026-11-12～25: a button read at
+            // y 1002–1014, by the bottom edge, took no click and the batch waited for the label).
             if (ShopeeBatchScreens.PrintLabelButton(screen.Boxes) is { } button &&
-                screen.Area.Contains(new Point(screen.Area.Left + button.CenterX, screen.Area.Top + button.CenterY)))
+                screen.Area.Contains(new Point(screen.Area.Left + button.CenterX, screen.Area.Top + button.CenterY)) &&
+                (button.CenterY < screen.Area.Height - 120 || attempt >= 3))
             {
-                Click(screen, button, "列印寄件單");
-                return;
+                Click(screen, button, "列印寄件單", hover: true);
+                clicks++;
+                // The label opens in a tab of its own; the dialog still in front means the click
+                // did not take: brought up again and clicked once more, twice at most.
+                var (opened, _) = await WaitOrNullAsync(10, s => ShopeeBatchScreens.TrackingDialogTitle(s.Boxes) is null ? s : null);
+                if (opened is not null) { opened.Dispose(); return; }
+                if (clicks >= 3) throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「列印寄件單」按了 3 次都沒有開啟寄件單，請人工列印。", true);
+                _log.Warn("shopee-batch", $"列印寄件單 click did not open the label at y={screen.Area.Top + button.CenterY}; again");
             }
             // Scroll inside the dialog, below its title.
             var point = new Point(screen.Area.Left + title.Right + 40, screen.Area.Top + Math.Min(screen.Area.Height - 40, title.Bottom + 300));

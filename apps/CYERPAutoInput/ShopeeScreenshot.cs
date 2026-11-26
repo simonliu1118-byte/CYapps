@@ -271,8 +271,18 @@ internal static partial class ShopeeScreenshot
         // No 編號 read at all (a lone 「1」 is often missed; user's PC, 2026-10-12): a table whose
         // 小計 column holds one group's price (and struck original) is that one group, 第 1 項.
         var singleGroup = anchors.Count == 0 && subtotalColumn.Count is >= 1 and <= 2;
-        int GroupOf(int centerY) => anchors.Count == 0 ? (singleGroup ? 1 : 0)
-            : int.Parse(Compact(anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First().Text), CultureInfo.InvariantCulture);
+        // A 編號 sits in the middle of its group's rows, so a long group's last rows can be nearer
+        // the next 編號 (user 2026-11-25: a five-item 任選 group lost its fifth item to 第 2 項).
+        // The rows are cut into consecutive groups whose middles best match the 編號.
+        var bounds = GroupBounds(unitColumn.Select(n => n.Box.CenterY).ToList(), anchors.Select(a => a.CenterY).ToList());
+        int GroupOf(int centerY)
+        {
+            if (anchors.Count == 0) return singleGroup ? 1 : 0;
+            var anchor = bounds is null
+                ? anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First()
+                : anchors[bounds.TakeWhile(b => centerY >= b).Count()];
+            return int.Parse(Compact(anchor.Text), CultureInfo.InvariantCulture);
+        }
 
         var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).OrderBy(l => l.Top).ToList();
         var previousBottom = int.MinValue;
@@ -393,6 +403,44 @@ internal static partial class ShopeeScreenshot
     /// a wrong document): when exactly one product's quantity, as some whole number, would make
     /// the group add up, the problem names that product and number so the check is quick.
     /// </summary>
+    /// <summary>
+    /// Splits the item rows (their centre y) into one run per 編號 so that each 編號 is as near as
+    /// can be to the middle of its run; gives the y where each next run starts, or null when the
+    /// rows cannot be split that way.
+    /// </summary>
+    internal static List<int>? GroupBounds(IReadOnlyList<int> rowCenters, IReadOnlyList<int> anchorCenters)
+    {
+        var rows = rowCenters.Distinct().Order().ToArray();
+        var k = anchorCenters.Count;
+        var n = rows.Length;
+        if (k < 2 || n < k) return null;
+        // cost[j, i]: best total for the first j 編號 taking the first i rows.
+        var cost = new double[k + 1, n + 1];
+        var from = new int[k + 1, n + 1];
+        for (var j = 0; j <= k; j++)
+            for (var i = 0; i <= n; i++) cost[j, i] = double.PositiveInfinity;
+        cost[0, 0] = 0;
+        for (var j = 1; j <= k; j++)
+            for (var i = j; i <= n - (k - j); i++)
+                for (var start = j - 1; start < i; start++)
+                {
+                    if (double.IsPositiveInfinity(cost[j - 1, start])) continue;
+                    var middle = (rows[start] + rows[i - 1]) / 2.0;
+                    var c = cost[j - 1, start] + Math.Abs(anchorCenters[j - 1] - middle);
+                    if (c < cost[j, i]) { cost[j, i] = c; from[j, i] = start; }
+                }
+        if (double.IsPositiveInfinity(cost[k, n])) return null;
+        var starts = new List<int>();
+        for (int j = k, i = n; j > 1; j--)
+        {
+            var start = from[j, i];
+            starts.Add((rows[start - 1] + rows[start]) / 2);
+            i = start;
+        }
+        starts.Reverse();
+        return starts;
+    }
+
     private static void SuggestQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string> problems)
     {
         foreach (var group in groups)
