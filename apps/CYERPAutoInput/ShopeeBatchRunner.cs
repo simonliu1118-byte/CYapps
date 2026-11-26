@@ -458,7 +458,7 @@ internal sealed partial class ShopeeBatchRunner
     /// </summary>
     private async Task<ShopeeBatchOrder?> NextOrderAsync()
     {
-        var (screen, _) = await WaitAsync("「我的銷售 › 待處理」頁面", 30, s => ShopeeBatchScreens.IsOrderList(s.Boxes) && Settled(s.Boxes) ? s : null);
+        var screen = await WaitListAsync();
         // An order done in this batch still first: the list may not have caught up yet; F5
         // again a few times before giving up (never the same order twice).
         for (var retry = 0; ShopeeBatchScreens.FirstOrder(screen.Boxes) is { } stale && Done.Contains(stale.OrderSn); retry++)
@@ -468,7 +468,7 @@ internal sealed partial class ShopeeBatchRunner
             await Task.Delay(2000, _token);
             Keys("F5", NativeMethods.VK_F5);
             await Task.Delay(1500, _token);
-            (screen, _) = await WaitAsync("「我的銷售 › 待處理」頁面", 30, s => ShopeeBatchScreens.IsOrderList(s.Boxes) && Settled(s.Boxes) ? s : null);
+            screen = await WaitListAsync();
         }
         using (screen)
         {
@@ -495,6 +495,28 @@ internal sealed partial class ShopeeBatchRunner
 
         // Loaded: either an order or 「找不到訂單」 is on screen.
         static bool Settled(List<OcrBox> boxes) => ShopeeBatchScreens.NoOrders(boxes) || ShopeeBatchScreens.FirstOrder(boxes) is not null;
+
+        // User LOG 2026-11-26 (13:02, 14:09): after the last order the emptied list's page text
+        // held neither an order nor 「找不到訂單」 for 30 s and the batch stopped instead of
+        // ending. The screen itself is read then, and the page reloaded once before stopping.
+        async Task<Screen> WaitListAsync()
+        {
+            static Screen? Probe(Screen s) => ShopeeBatchScreens.IsOrderList(s.Boxes) && Settled(s.Boxes) ? s : null;
+            var (early, _) = await WaitOrNullAsync(12, Probe);
+            if (early is not null) return early;
+            var seen = await ReadAsync(ocr: true);
+            _log.Info("shopee-batch", $"list not settled in page text; screen read: {string.Join(" | ", seen.Boxes.Where(b => b.Left > 240).Select(b => ShopeeScreenshot.Compact(b.Text)).Where(t => t.Length is > 0 and <= 30).Take(60))}");
+            if (Probe(seen) is not null) return seen;
+            seen.Dispose();
+            Keys("F5", NativeMethods.VK_F5);
+            await Task.Delay(1500, _token);
+            var (late, _) = await WaitOrNullAsync(20, Probe);
+            if (late is not null) return late;
+            var again = await ReadAsync(ocr: true);
+            if (Probe(again) is not null) return again;
+            again.Dispose();
+            return (await WaitAsync("「我的銷售 › 待處理」頁面", 10, Probe)).Screen;
+        }
     }
 
     /// <summary>The first order of the list not passed over (orders left for a person stay in 待處理).</summary>
