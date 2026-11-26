@@ -462,4 +462,11 @@ public sealed class ShopeeBatchScreensTests
         Assert.InRange(fold.Top + fold.Height / 2, 85, 105);
         Assert.False(ShopeeBatchScreens.ChatPanelOpen([B("關注", 830, 991, 98, 36), B("聊聊", 1027, 991, 90, 36)]));
     }
+
+    [Fact]
+    public void PendingZeroIsRead()
+    {
+        Assert.Equal(0, ShopeeBatchScreens.PendingCount([B("訂單狀態", 245, 366), B("全部", 343, 366), B("待處理 (0)", 419, 366), B("已處理 (45)", 544, 366)]));
+        Assert.Equal(0, ShopeeBatchScreens.PendingCount([B("待處理", 418, 246), B("(0)", 464, 246, 33)]));
+    }
 }

@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## 版本
 
-目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V1.2.12`，tag `cyerp-auto-input-v1.2.12`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V1.2.10.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
+目前版本見 `VERSION`／`BUILD`（最新正式 Release 為 `V1.2.14`，tag `cyerp-auto-input-v1.2.14`）。C# 重寫線於 2026-10-11 由 PR #104 合併進 `main`、取代舊 Go 線。正式版從 GitHub Release 下載 `CYERPAutoInput_V1.2.14.zip`（V0.3.1 起已安裝的會自動更新），解壓縮後執行 `CYERPAutoInput/CYERPAutoInput.exe`；開發中的測試包為 PR 的 CI Artifact。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
 
 ## 主要流程
 
@@ -302,6 +302,8 @@ CYERPAutoInput/
 ```
 
 Temp 自動清理（V1.2.3 起，程式啟動時在背景與 MO店+ 全自動開始時執行，LOG 記清掉幾個、釋放多少 MB）：下載的更新檔 `update-V*` 超過 1 小時刪；寄件單暫存 `slip-`、`note-slip-`、`blackcat-`、`coupang-slip-` 超過 1 天刪；MO店+、發票、酷澎資料夾與 ERP 轉出的 Excel 保留 7 天（重新列印寄件單、訂單頁讀取輸入會用到）。
+
+LOG 自動清理（V1.2.14 起，程式啟動時在背景執行；使用者 2026-11-26）：`logs/` 中超過 7 天的每日 LOG，當天若「無異常」就刪除；有異常的保留。異常指程式沒能自己做完：有 `[ERROR]`、全自動停下（`stopped:`）、等待逾時（`timeout waiting for`）、有人按 Esc、結果為停止或取消。ERP 庫存不足提示、印表機卡紙／缺紙、程式自己重試後成功的警告都不算異常。
 
 ## Build
 
