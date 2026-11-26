@@ -1589,8 +1589,8 @@ internal sealed partial class ShopeeBatchRunner
 
     /// <summary>
     /// Opens 目的地's list and clicks the set printer in it (read from the screen: the list is
-    /// drawn over the dialog). A printer not in the short list (only under 顯示更多…) stops the
-    /// batch: choosing among all printers is left to a person.
+    /// drawn over the dialog). A printer not in the short list is looked for under 顯示更多…;
+    /// not there either, the batch stops for a person.
     /// </summary>
     private async Task ChoosePrinterAsync(Screen screen, string shown, RectangleF part, string target)
     {
@@ -1598,17 +1598,47 @@ internal sealed partial class ShopeeBatchRunner
         _log.Info("shopee-batch", $"print destination is {shown}; choosing {target}");
         Click(screen, value, "目的地");
         await Task.Delay(700, _token);
-        using var list = await ReadAsync(part: part, ocr: true);
-        if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is not { } option)
+        var list = await ReadAsync(part: part, ocr: true);
+        try
         {
-            _inputs++;
-            InputSender.Press(NativeMethods.VK_ESCAPE);
-            await Task.Delay(400, _token);
-            throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{target}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
+            // User LOG 2026-11-13: the list read 0.7 s after the click held no 另存為 PDF. It is read
+            // once more, then 顯示更多… opens Chrome's full list and the printer is taken there.
+            if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is null)
+            {
+                await Task.Delay(700, _token);
+                list.Dispose();
+                list = await ReadAsync(part: part, ocr: true);
+            }
+            if (ShopeeBatchScreens.PrinterOption(list.Boxes, target) is { } option)
+            {
+                Click(list, option, $"印表機 {option.Text.Trim()}");
+                // Chrome redraws the preview for the new printer.
+                await Task.Delay(1500, _token);
+                return;
+            }
+            if (list.Boxes.FirstOrDefault(b => ShopeeScreenshot.Compact(b.Text).StartsWith("顯示更多", StringComparison.Ordinal)) is { } more)
+            {
+                _log.Info("shopee-batch", $"{target} not in the short list; 顯示更多");
+                Click(list, more, "顯示更多");
+                await Task.Delay(1500, _token);
+                using var all = await ReadAsync(ocr: true);
+                var choice = all.Boxes.Where(b => ShopeeBatchScreens.SamePrinter(b.Text, target)).OrderBy(b => b.Top).FirstOrDefault();
+                if (choice is not null)
+                {
+                    Click(all, choice, $"印表機 {choice.Text.Trim()}（顯示更多）");
+                    await Task.Delay(1500, _token);
+                    return;
+                }
+                _inputs++;
+                InputSender.Press(NativeMethods.VK_ESCAPE);
+                await Task.Delay(400, _token);
+            }
         }
-        Click(list, option, $"印表機 {option.Text.Trim()}");
-        // Chrome redraws the preview for the new printer.
-        await Task.Delay(1500, _token);
+        finally { list.Dispose(); }
+        _inputs++;
+        InputSender.Press(NativeMethods.VK_ESCAPE);
+        await Task.Delay(400, _token);
+        throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{target}」（目前是「{shown}」），請手動選好印表機再繼續，未列印。", true);
     }
 
     /// <summary>Distance from a setting's value to the box typed into under it (縮放比例 自訂 → its number), else 38 px.</summary>

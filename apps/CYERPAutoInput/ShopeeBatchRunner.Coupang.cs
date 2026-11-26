@@ -101,7 +101,20 @@ internal sealed partial class ShopeeBatchRunner
     {
         for (var round = 1; ; round++)
         {
-            var (page, card) = await WaitAsync("酷澎「我的訂單」的訂單狀態", 40, s => CoupangScreens.StatusCard(s.Boxes, "訂單確認") is { } c ? (object)c : null);
+            // User LOG 2026-11-12: the page stayed half drawn (11 lines) the whole 40 s; it is
+            // reloaded once after 25 s and waited for again.
+            static object? Card(Screen s) => CoupangScreens.StatusCard(s.Boxes, "訂單確認") is { } c ? c : null;
+            var (early, earlyCard) = await WaitOrNullAsync(25, Card);
+            Screen page;
+            object card;
+            if (early is not null && earlyCard is not null) (page, card) = (early, earlyCard);
+            else
+            {
+                early?.Dispose();
+                _log.Warn("coupang-batch", "「我的訂單」 status not shown in 25 s; F5");
+                Keys("F5", NativeMethods.VK_F5);
+                (page, card) = await WaitAsync("酷澎「我的訂單」的訂單狀態（重新整理後）", 40, Card);
+            }
             var (label, count) = ((OcrBox, int))card;
             _log.Info("coupang-batch", $"訂單確認 count={count} round={round}");
             if (count == 0) { page.Dispose(); return; }
@@ -416,19 +429,7 @@ internal sealed partial class ShopeeBatchRunner
             if (!ShopeeBatchScreens.SamePrinter(shown, pdfPrinter))
             {
                 if (tries++ >= 2) throw new ShopeeBatchStop($"Chrome 列印的目的地是「{shown}」，換不成「{pdfPrinter}」，未列印。", true);
-                var value = ShopeeBatchScreens.PrintRowValue(boxes, "目的地") ?? throw new ShopeeBatchStop("讀不到 Chrome 列印的目的地。", true);
-                _log.Info("coupang-batch", $"print destination is {shown}; choosing {pdfPrinter}");
-                Click(screen, value, "目的地");
-                await Task.Delay(700, _token);
-                using var list = await ReadAsync(part: panel, ocr: true);
-                if (ShopeeBatchScreens.PrinterOption(list.Boxes, pdfPrinter) is not { } option)
-                {
-                    _inputs++;
-                    InputSender.Press(NativeMethods.VK_ESCAPE);
-                    throw new ShopeeBatchStop($"Chrome 列印目的地的清單裡沒有「{pdfPrinter}」，未列印。", true);
-                }
-                Click(list, option, pdfPrinter);
-                await Task.Delay(1500, _token);
+                await ChoosePrinterAsync(screen, shown, panel, pdfPrinter);
                 continue;
             }
             if (ShopeeBatchScreens.SaveButton(boxes) is not { } save) { await Task.Delay(600, _token); continue; }

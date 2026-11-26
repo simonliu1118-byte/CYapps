@@ -276,3 +276,29 @@ internal static class FreightCarriers
     private static string Compact(string value) =>
         new((value ?? string.Empty).Where(c => !char.IsWhiteSpace(c)).ToArray());
 }
+
+internal static class BundlePrices
+{
+    /// <summary>
+    /// Unit prices for a bundle's parts when it sold above their list prices: each line gets its
+    /// share of <paramref name="sold"/> in proportion to its list amount, rounded to whole dollars,
+    /// and the last line takes what is left, so the lines add up to what the bundle sold for.
+    /// </summary>
+    public static decimal[] Spread(IReadOnlyList<(decimal List, decimal Quantity)> parts, decimal sold)
+    {
+        var listTotal = parts.Sum(p => p.List * p.Quantity);
+        var prices = new decimal[parts.Count];
+        var given = 0m;
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var quantity = parts[i].Quantity <= 0 ? 1 : parts[i].Quantity;
+            var line = i == parts.Count - 1
+                ? sold - given
+                : listTotal <= 0 ? Math.Round(sold / parts.Count, 0, MidpointRounding.AwayFromZero)
+                : Math.Round(parts[i].List * parts[i].Quantity * sold / listTotal, 0, MidpointRounding.AwayFromZero);
+            given += line;
+            prices[i] = Math.Round(line / quantity, 4, MidpointRounding.AwayFromZero);
+        }
+        return prices;
+    }
+}

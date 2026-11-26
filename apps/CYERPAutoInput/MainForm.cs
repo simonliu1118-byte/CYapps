@@ -109,9 +109,12 @@ internal sealed partial class MainForm : Form
     /// </summary>
     private void OnPrintProblem(string message)
     {
-        Alarm(needsPerson: true);
+        var running = BatchRunning || _automationSession?.Active == true;
+        // While a run types into ERP the mouse stays locked (user LOG 2026-11-14: the printer
+        // alarm let the mouse go in the middle of an order's 單身).
+        Alarm(needsPerson: true, keepRun: running);
         SetStatus(message);
-        if (BatchRunning || _automationSession?.Active == true)
+        if (running)
         {
             if (!_printProblems.Contains(message)) _printProblems.Add(message);
             return;
