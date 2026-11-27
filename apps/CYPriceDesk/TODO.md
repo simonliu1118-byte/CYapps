@@ -4,15 +4,15 @@
 
 ## 目前基準
 
-- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
-- V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則同步為 governance 2.3.61（#626）。
+- 正式站：**V1.5.0（Build 0）**（https://price.chihyuancm.com/），2026-11-23 由 CYapps #643 合併並從 `main` 部署；登入改經 CY Web 單一登入。D1 已套用 `0001`～`0004`。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
+- V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則目前為 governance 2.3.66。
 
 ## 待辦
 
 ### V1.5.0 經 CY Web 登入
 
-- [ ] **部署前置（必做）**：在 CY Web「系統登記」→ 設定，為價格觀測室登記登入回跳網址 `https://price.chihyuancm.com/auth/sso/callback`，**再**部署 V1.5.0；未登記時所有人都無法登入。
-- [ ] 部署後實機驗證：未登入開網址 → 到 CY Web 登入或確認 → 回到價格觀測室；錯誤的 state／重放交換碼顯示錯誤頁；登出後顯示「已登出」頁且不會自動再登入；`cypd_session` cookie 屬性不變（HttpOnly、Secure、SameSite=Lax、無 Domain）。
+- [x] 在 CY Web 登記登入回跳網址並部署 V1.5.0（2026-11-23，由 CY Web 對話完成；使用者 2026-11-27 確認已是單一登入）。
+- [ ] 部署後實機驗證（正常登入已可用，其餘未逐項確認）：未登入開網址 → 到 CY Web 登入或確認 → 回到價格觀測室；錯誤的 state／重放交換碼顯示錯誤頁；登出後顯示「已登出」頁且不會自動再登入；`cypd_session` cookie 屬性不變（HttpOnly、Secure、SameSite=Lax、無 Domain）。
 
 ### V1.4.0 上線
 
