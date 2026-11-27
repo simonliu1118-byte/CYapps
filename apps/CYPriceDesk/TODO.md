@@ -4,15 +4,15 @@
 
 ## 目前基準
 
-- 正式站：**V1.4.0（Build 0）**（https://price.chihyuancm.com/），2026-11-17 由 CYapps #625 合併並部署，D1 已套用 `0001`～`0004`；部署 run 的 log 已刪除。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
-- V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則同步為 governance 2.3.61（#626）。
+- 正式站：**V1.5.0（Build 0）**（https://price.chihyuancm.com/），2026-11-23 由 CYapps #643 合併並從 `main` 部署；登入改經 CY Web 單一登入。D1 已套用 `0001`～`0004`。Vercel 抓價服務已連線（V1.3.2 時使用者實測 momo、飛比蝦皮查得到結果）。
+- V1.4.0 內容：介面改版（統一查價、三平台售價比價、單張多線走勢圖、待確認頁、手動比價），見 [`WO-1.4.0.md`](docs/work-orders/WO-1.4.0.md)。專案規則目前為 governance 2.3.66。
 
 ## 待辦
 
 ### V1.5.0 經 CY Web 登入
 
-- [ ] **部署前置（必做）**：在 CY Web「系統登記」→ 設定，為價格觀測室登記登入回跳網址 `https://price.chihyuancm.com/auth/sso/callback`，**再**部署 V1.5.0；未登記時所有人都無法登入。
-- [ ] 部署後實機驗證：未登入開網址 → 到 CY Web 登入或確認 → 回到價格觀測室；錯誤的 state／重放交換碼顯示錯誤頁；登出後顯示「已登出」頁且不會自動再登入；`cypd_session` cookie 屬性不變（HttpOnly、Secure、SameSite=Lax、無 Domain）。
+- [x] 在 CY Web 登記登入回跳網址並部署 V1.5.0（2026-11-23，由 CY Web 對話完成；使用者 2026-11-27 確認已是單一登入）。
+- [ ] 部署後實機驗證（正常登入已可用，其餘未逐項確認）：未登入開網址 → 到 CY Web 登入或確認 → 回到價格觀測室；錯誤的 state／重放交換碼顯示錯誤頁；登出後顯示「已登出」頁且不會自動再登入；`cypd_session` cookie 屬性不變（HttpOnly、Secure、SameSite=Lax、無 Domain）。
 
 ### V1.4.0 上線
 
@@ -24,6 +24,16 @@
 - [ ] **從 CY Web 匯入追蹤商品**：價格觀測室以 Cloudflare Service Binding 讀 CY Web 商品（品號、品名、規格、單位）與網路平台售價（CY Web `item_online_prices`：蝦／MO／酷…）；CY Web 需新增只供內部呼叫的讀取接口（chihyuan-web 另開 PR）。
 - [ ] **我的售價改以 CY Web 為準**：價格觀測室不再手動輸入，只負責市場價、比價與走勢；調價紀錄保存在哪一邊，開工時再與使用者確認。V1.4.0 的「CY Web 品號」欄位用來對應。
 - 取代原規劃的 CSV／Excel 批次匯入（不做）。
+
+### Grok Bot 建檔補完與候選規格判讀（設計中，見 [`docs/GROK_BOT_DESIGN.md`](docs/GROK_BOT_DESIGN.md)）
+
+- [x] 使用者在 Grok 手動試 1530-1：可開 momo 與酷澎商品頁、選規格、讀到價格（2026-11-27）。
+- [ ] 確認 Grok routine 的 webhook 觸發與帶憑證呼叫價格觀測室 API 可行（實作第一步先打通）。
+- [ ] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替（CYapps #650）。
+- [ ] V1.6.0 試點：工作單 [`WO-1.6.0.md`](docs/work-orders/WO-1.6.0.md)（試點：momo、酷澎；Grok 不自行搜尋）。
+- [ ] 試點跑通後訂用量上限（每次任務筆數、每日任務數、再查次數；使用者 2026-11-27：先不設）。
+- [ ] 蝦皮：使用者替 Bot 準備蝦皮帳號後加入判讀。
+- [ ] 商品照片輔助建檔（需 R2）。
 
 ### 之後
 
