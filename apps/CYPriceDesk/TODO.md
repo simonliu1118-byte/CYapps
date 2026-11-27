@@ -27,8 +27,9 @@
 
 ### Grok Bot 建檔補完與候選規格判讀（設計中，見 [`docs/GROK_BOT_DESIGN.md`](docs/GROK_BOT_DESIGN.md)）
 
-- [ ] 使用者先在 Grok 手動試 1530-1：開 momo 與酷澎商品頁、選規格、讀到價格；確認 webhook 與帶憑證呼叫外部 API 可行。
-- [ ] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替。
+- [x] 使用者在 Grok 手動試 1530-1：可開 momo 與酷澎商品頁、選規格、讀到價格（2026-11-27）。
+- [ ] 確認 Grok routine 的 webhook 觸發與帶憑證呼叫價格觀測室 API 可行（實作第一步先打通）。
+- [ ] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替（CYapps #650 待合併）。
 - [ ] 設計定案後開工作單（試點：momo、酷澎；Grok 不自行搜尋）。
 - [ ] 試點跑通後訂用量上限（每次任務筆數、每日任務數、再查次數；使用者 2026-11-27：先不設）。
 - [ ] 蝦皮：使用者替 Bot 準備蝦皮帳號後加入判讀。

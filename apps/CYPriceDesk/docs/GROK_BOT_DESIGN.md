@@ -139,9 +139,9 @@
 
 ## 需要先處理的治理事項
 
-- **機器身分寫入**：`PROJECT_RULES.md` §4 規定寫入操作者只取自 CYID principal。Grok 回填雖然只進待確認資料，仍屬寫入，需先以 `governance/*` PR 在 `PROJECT_RULES.md` 寫明：Grok 機器憑證只能寫任務與待確認資料表、稽核記錄方式、憑證保管與輪替。
+- **機器身分寫入**：`PROJECT_RULES.md` §4 規定寫入操作者只取自 CYID principal。Grok 回填雖然只進待確認資料，仍屬寫入，以 governance 2.3.67（CYapps #650）在 `PROJECT_RULES.md` 寫明：Grok 機器憑證只能寫任務與待確認資料表、稽核記錄方式、憑證保管與輪替。
 - **用量上限**：依使用者 2026-11-27 指示，試點先不設上限，測試流程跑通後再定（共通規則 §11.3 要求排程與重試有上限，正式啟用前必須補上）。
-- **Grok Bot 能力**：webhook、Bearer 金鑰、瀏覽器操作與帶憑證呼叫外部 API 尚未核實（官方說明：[Grok Bot webhooks](https://docs.x.ai/grok-bot/skills-routines-and-automations#webhooks)）。實作前先由使用者在 Grok 手動試 1530-1：開 momo 與酷澎商品頁、選規格、讀到價格。
+- **Grok Bot 能力**：瀏覽器操作已由使用者手動試 1530-1 確認（2026-11-27：可開 momo 與酷澎商品頁、選規格、讀到價格）。webhook 觸發與帶憑證呼叫價格觀測室 API 尚未實測（官方說明：[Grok Bot webhooks](https://docs.x.ai/grok-bot/skills-routines-and-automations#webhooks)），實作第一步先打通。
 
 ## 試點驗收
 
