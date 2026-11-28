@@ -4,7 +4,10 @@ import {$, api, esc} from './ui.js';
 import {loadPending} from './pending.js';
 
 const ACTION_LABELS = {'classification.update': '設定規格', 'classification.delete': '清除規格', 'tracked.create': '追蹤新增', 'tracked.update': '追蹤修改', 'tracked.price': '調整售價', 'tracked.run': '立即查價',
-  'manual.create': '手動比價新增', 'manual.update': '手動比價修改', 'manual.delete': '手動比價刪除', 'judgment.update': '判斷', 'judgment.delete': '恢復判斷'};
+  'manual.create': '手動比價新增', 'manual.update': '手動比價修改', 'manual.delete': '手動比價刪除', 'judgment.update': '判斷', 'judgment.delete': '恢復判斷',
+  'candidate.delete':'刪除當輪候選','grok.dispatch':'Grok 派工結果','grok.create':'Grok 派工','grok.claim':'Grok 領取','grok.progress':'Grok 進度',
+  'grok.draft':'Grok 補完','grok.results':'Grok 判讀','grok.questions':'Grok 提問','grok.answer':'回答 Grok',
+  'grok.review':'複審 Grok 判讀','grok.expired':'Grok 過期','grok.recheck':'Grok 再查','grok.discard':'捨棄補完','grok.resend':'重送 Grok'};
 
 async function loadAudit() {
   $('audit-list').innerHTML = '<p class="muted">載入中…</p>';

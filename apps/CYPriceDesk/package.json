@@ -1,11 +1,11 @@
 {
   "name": "cypricedesk",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "CYPriceDesk - Cloudflare Workers + D1 + CYID",
   "scripts": {
-    "test": "node --test tests/compare.test.js tests/catalog-core.test.js tests/worker.test.js tests/search.test.js tests/tracking.test.js tests/deploy-workflow.test.js",
+    "test": "node --test tests/compare.test.js tests/catalog-core.test.js tests/worker.test.js tests/search.test.js tests/tracking.test.js tests/grok.test.js tests/deploy-workflow.test.js",
     "build": "node scripts/build.mjs",
     "config:render": "node scripts/render-wrangler.mjs --output wrangler.generated.jsonc",
     "dev": "npm run config:render && wrangler dev --config wrangler.generated.jsonc --port 8787 --local-upstream localhost:8787",

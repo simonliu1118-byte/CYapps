@@ -58,6 +58,7 @@
           <div class="toolbar-group"><label class="search"><input id="tr-search" type="search" placeholder="搜尋名稱或型號" aria-label="搜尋追蹤商品"></label><select id="tr-sort" aria-label="排序"><option value="attention">最需要注意</option><option value="name">名稱</option><option value="last">上次查價</option></select></div>
           <div class="toolbar-group"><div class="segmented" role="group" aria-label="篩選"><button class="selected" data-tr-filter="all" type="button">全部</button><button data-tr-filter="attention" type="button">需注意</button><button data-tr-filter="pending" type="button">有待確認</button><button data-tr-filter="inactive" type="button">已停用</button></div><button class="btn primary" id="tr-add" type="button">新增追蹤商品</button></div>
         </div>
+        <section id="grok-drafts" class="panel" hidden><div class="panel-head"><h2>Grok 補完</h2></div><div id="grok-draft-list"></div></section>
         <div id="tr-list"></div>
       </section>
       <section id="tracked-detail-view" class="sections" hidden></section>
@@ -96,6 +97,11 @@
   <form id="tracked-form" class="dialog-surface">
     <div class="dialog-header"><h2 id="tracked-title">新增追蹤商品</h2><button type="button" class="dialog-close" data-close="tracked-dialog" aria-label="關閉">×</button></div>
     <div class="dialog-body">
+      <section id="grok-draft-controls" class="grok-draft-controls" hidden>
+        <label>條件<textarea name="grokCondition" rows="2" placeholder="例如 3M 紙膠 1530-1，1 吋，一盒 12 捲，以盒賣"></textarea></label>
+        <div class="toolbar-group"><button class="btn" type="button" id="grok-draft-send" disabled>交給 Grok 補完</button><small id="grok-draft-unconfigured" hidden>Grok 尚未設定</small></div>
+        <div id="grok-draft-state" aria-live="polite"></div>
+      </section>
       <div class="form-grid">
         <label class="wide"><span>名稱 <span class="required">*</span></span><input name="name" required maxlength="200"></label>
         <label><span>型號 <span class="required">*</span></span><input name="model" required maxlength="80" placeholder="例如 1530-0"></label>
@@ -172,12 +178,27 @@
     <div class="dialog-header"><h2 id="package-title">其他包裝</h2><button type="button" class="dialog-close" data-close="package-dialog" aria-label="關閉">×</button></div>
     <div class="dialog-body">
       <div class="form-grid">
-        <label class="wide">數量<input name="quantity" type="number" min="1" step="any" max="100000" required></label>
-        <label class="wide">單位<input name="unit" required maxlength="20" placeholder="入、捲、盒"></label>
+        <label class="wide" id="judge-verdict" hidden>判讀<select name="verdict" required>
+          <option value="">選擇判讀</option><option value="same">同規格</option><option value="other_package">其他包裝</option><option value="not_same">不是同一商品</option>
+        </select></label>
+        <label class="wide" id="judge-quantity">數量<input name="quantity" type="number" min="1" step="any" max="100000" required></label>
+        <label class="wide" id="judge-unit">單位<input name="unit" required maxlength="20" placeholder="入、捲、盒"></label>
+        <label class="wide" id="judge-price" hidden>價格（NT$）<input name="price" type="number" min="0" step="0.01"></label>
       </div>
       <div class="form-error" id="package-error" role="alert" hidden></div>
     </div>
     <div class="dialog-footer"><button class="btn" type="button" data-close="package-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
+  </form>
+</dialog>
+<dialog id="candidate-action-dialog" class="dialog-small" aria-labelledby="candidate-action-title">
+  <form id="candidate-action-form" class="dialog-surface">
+    <div class="dialog-header"><h2 id="candidate-action-title"></h2><button type="button" class="dialog-close" data-close="candidate-action-dialog" aria-label="關閉">×</button></div>
+    <div class="dialog-body">
+      <p id="candidate-action-summary"></p>
+      <label id="candidate-reason" hidden>再查原因<textarea name="reason" rows="3"></textarea></label>
+      <div class="form-error" id="candidate-action-error" role="alert" hidden></div>
+    </div>
+    <div class="dialog-footer"><button class="btn" type="button" data-close="candidate-action-dialog">取消</button><button class="btn" id="candidate-action-submit" type="submit"></button></div>
   </form>
 </dialog>
 <div id="toast" role="status" aria-live="polite"></div>

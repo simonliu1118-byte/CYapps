@@ -68,6 +68,16 @@ jobs:
         run: |
           if [ -z "$CYPD_FETCHER_SECRET" ]; then echo "CYPD_FETCHER_SECRET not set; auto query stays disabled."; exit 0; fi
           printf '%s' "$CYPD_FETCHER_SECRET" | npx wrangler secret put CYPD_FETCHER_SECRET --config wrangler.deploy.jsonc
+      - name: Set optional Grok secrets
+        env:
+          GROK_WEBHOOK_URL: ${{ secrets.GROK_WEBHOOK_URL }}
+          GROK_WEBHOOK_TOKEN: ${{ secrets.GROK_WEBHOOK_TOKEN }}
+          GROK_API_TOKEN: ${{ secrets.GROK_API_TOKEN }}
+        run: |
+          for name in GROK_WEBHOOK_URL GROK_WEBHOOK_TOKEN GROK_API_TOKEN; do
+            if [ -z "${!name}" ]; then echo "$name not set; skipping."; continue; fi
+            printf '%s' "${!name}" | npx wrangler secret put "$name" --config wrangler.deploy.jsonc
+          done
 
       - name: Remove production generated files
         if: always()

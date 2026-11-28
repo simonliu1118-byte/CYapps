@@ -25,12 +25,12 @@
 - [ ] **我的售價改以 CY Web 為準**：價格觀測室不再手動輸入，只負責市場價、比價與走勢；調價紀錄保存在哪一邊，開工時再與使用者確認。V1.4.0 的「CY Web 品號」欄位用來對應。
 - 取代原規劃的 CSV／Excel 批次匯入（不做）。
 
-### Grok Bot 建檔補完與候選規格判讀（設計中，見 [`docs/GROK_BOT_DESIGN.md`](docs/GROK_BOT_DESIGN.md)）
+### V1.6.0 Grok Bot 建檔補完與候選規格判讀（見 [`docs/GROK_BOT_DESIGN.md`](docs/GROK_BOT_DESIGN.md)）
 
 - [x] 使用者在 Grok 手動試 1530-1：可開 momo 與酷澎商品頁、選規格、讀到價格（2026-11-27）。
-- [ ] 確認 Grok routine 的 webhook 觸發與帶憑證呼叫價格觀測室 API 可行（實作第一步先打通）。
-- [ ] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替（CYapps #650）。
-- [ ] V1.6.0 試點：工作單 [`WO-1.6.0.md`](docs/work-orders/WO-1.6.0.md)（試點：momo、酷澎；Grok 不自行搜尋）。
+- [ ] 部署後確認實際 Grok routine 可接收 webhook，並帶憑證呼叫價格觀測室 API。
+- [x] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替（CYapps #650）。
+- [x] V1.6.0 試點實作，待審查。工作單 [`WO-1.6.0.md`](docs/work-orders/WO-1.6.0.md)（試點：momo、酷澎；Grok 不自行搜尋）。
 - [ ] 試點跑通後訂用量上限（每次任務筆數、每日任務數、再查次數；使用者 2026-11-27：先不設）。
 - [ ] 蝦皮：使用者替 Bot 準備蝦皮帳號後加入判讀。
 - [ ] 商品照片輔助建檔（需 R2）。

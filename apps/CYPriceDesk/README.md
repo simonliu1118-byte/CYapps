@@ -113,13 +113,35 @@ python3 ../../.github/scripts/scan-public-package.py dist
 - `npm run dev` 以 `wrangler dev` 啟動 Worker 與本機 D1，需要先設好 `CF_*` 環境變數（值與部署相同，本機測試可用假值；`CF_IDENTITY_SERVICE` 必須是可用的 CYID Worker 才能真正登入）。先以 `npm run db:migrate:local` 套用 migration。
 - 沒有 CYID 時，可用測試替身起本機 server：`PORT=4173 SEED=1 NO_GAP=1 node tests/support/local-server.mjs`（任何員工編號與密碼都能登入，資料為記憶體內假資料），本機 server 的 fetcher 是回傳 fixture 的假實作，不連任何外部網站（`NO_GAP=1` 可略過 15 秒間隔，供截圖用）。再用 Playwright 執行 `NODE_PATH=<playwright 套件目錄> TEST_BASE_URL=http://localhost:4173 node tests/ui.test.cjs`（需帶 `SEED=1`；加 `SHOT_DIR=<目錄>` 會輸出 1440／390 截圖）。
 
+## Grok Bot 試點
+
+新增追蹤商品時可輸入條件，請 Grok 補完欄位及關鍵字。商品詳情與待確認頁可送 momo 及飛比酷澎候選判讀。Worker 送 webhook 通知，Grok 領取任務後可回填或提問，使用者在 PriceDesk 複審後才會更新正式資料。
+
+| 接口 | 驗證與用途 |
+| --- | --- |
+| 對外 webhook | Worker 用 `GROK_WEBHOOK_TOKEN` 送任務、答覆與再查通知給 routine |
+| `/api/grok/tasks/:taskId` 及子路徑 | Grok 用 `GROK_API_TOKEN` 領取、回報進度、提問與回填 |
+| `/api/grok-tasks` 及子路徑 | 使用者經 CYID 派工、回答、重送、同意與再查 |
+| `PUT /api/tracked/:id/judgments` | 使用者經 CYID 修正並採用候選判讀 |
+| `DELETE /api/tracked/:id/candidates/:source/:listingKey` | 使用者經 CYID 以 `runId` 刪除當輪候選 |
+
+完整請求和回填範例見 [Grok routine 說明](docs/GROK_ROUTINE.md)。本機運行瀏覽器測試時，為假資料 server 加上 `FAKE_GROK=1` 可啟用 Grok 流程。
+
 ## 部署
 
 部署採合併與發布分離：PR 只驗證；合併 `main` 不會部署；只有從 `main` 手動觸發 `CYPriceDesk Deploy`（`workflow_dispatch`）才會部署。它會核對 `github.sha` 等於遠端 `main`、由 GitHub Environment 產生部署設定、套用 D1 migration 後 `wrangler deploy`。部署用的 Worker 名稱、D1 名稱與 ID、Identity service 名稱、Application／Workspace ID、入口網址與 fetcher 網址**不經 GitHub variables**（公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job `env`）：workflow 只帶公開主機名稱 `price.chihyuancm.com`，由 `.github/scripts/resolve-deploy-runtime.mjs` 以 Cloudflare API（唯讀 GET）查出目前服務該主機名稱的 Worker 與其 bindings（`DB` d1、`IDENTITY` service、`CYID_APPLICATION_ID`／`CYID_WORKSPACE_ID`／`CYWEB_PORTAL_URL`／`CYPD_FETCHER_URL` plain_text）、`/d1/database/{id}` 與帳號 workers.dev 子網域，先全部 `::add-mask::` 再寫入 `GITHUB_ENV`，之後才渲染設定。要改任何 binding，須先在 Cloudflare 改，部署才會沿用；source 只放 placeholder，不得 commit。
 
 ### GitHub Environment `cypricedesk-production`
 
-Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`
+Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CYPD_FETCHER_SECRET`。
+
+啟用 Grok 時，在 GitHub Environment 新增以下 secrets，部署時 workflow 會將已設定的值寫入 Worker。
+
+- `GROK_WEBHOOK_URL` 為 routine 接收事件的 URL。
+- `GROK_WEBHOOK_TOKEN` 為 routine 驗證 PriceDesk 派工所用的 token。
+- `GROK_API_TOKEN` 為 PriceDesk 驗證 routine 請求所用的獨立 token。
+
+在 routine 保存相同的兩個 token，貼上 [Grok routine 說明](docs/GROK_ROUTINE.md) 並填入價格觀測室網域。三項設定齊備後，PriceDesk 顯示可用的派工按鈕。首次部署請依工作單 §7 驗證。
 
 Variables：無（部署識別碼全部在部署時從 Cloudflare 解析並先遮蔽；舊的 `CF_*` variables 待首次部署 log 驗證乾淨後可刪除，清單見 `TODO.md`）。
 

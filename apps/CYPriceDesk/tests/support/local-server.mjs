@@ -8,6 +8,13 @@ import {installFakeFetcher} from './fake-fetcher.js';
 
 const {env, identity} = createTestEnv();
 const fetcher = installFakeFetcher();
+if (process.env.FAKE_GROK) {
+  Object.assign(env, {GROK_WEBHOOK_URL:'https://grok.example.test/hook', GROK_WEBHOOK_TOKEN:'ui-hook', GROK_API_TOKEN:'ui-grok'});
+  const fakeFetcher = globalThis.fetch;
+  globalThis.fetch = (url, options) => url === env.GROK_WEBHOOK_URL
+    ? Promise.resolve(new Response(null, {status:204}))
+    : fakeFetcher(url, options);
+}
 if (process.env.SEED) seedTracked();
 
 // Screenshot / UI-test data: tracked products with same-spec, other-package, pending, unrelated and excluded candidates,
@@ -46,17 +53,19 @@ function seedTracked() {
   [['m-1', 'shopee', '示範特賣店', 'https://shopee.tw/shop/demo', 255, 3, '促銷價'], ['m-2', 'momo', '示範旗艦店', '', 249, 40, '舊價格'], ['m-3', 'other', 'PChome 24h', 'https://24h.pchome.com.tw/prod/demo', 230, 2, '']]
     .forEach(([id, platform, seller, url, price, ago, note]) => manual.run(id, platform, seller, url, price, ymd(now - ago * day), note, iso(now - ago * day), iso(now - ago * day)));
 
-  const cand = db.prepare("INSERT INTO latest_candidates VALUES (?,?,?,?,?,?,?,?,?)");
+  const cand = db.prepare("INSERT INTO latest_candidates(product_id,source,listing_key,title,price,seller,url,grp,parsed_json,run_id) VALUES (?,?,?,?,?,?,?,?,?,?)");
   const parsed = (quantity, unit, reason = '') => JSON.stringify({model: '1530-0', attributes: {}, quantity, unit, issues: [], reason});
   const rows = [['momo', 'M1', momo[0][0], 259, '', 'same', parsed(12, '入')], ['momo', 'M2', momo[1][0], 275, '', 'same', parsed(12, '入', '人工確認')],
     ['shopee', 'https://feebee.com.tw/p/s1', '3M 1530-0 通氣膠帶 半吋 12入', 262, '示範藥局', 'same', parsed(12, '入')], ['coupang', 'https://feebee.com.tw/p/c1', '3M 1530-0 通氣膠帶 半吋 12入', 285, '', 'same', parsed(12, '入')],
     ['momo', 'M3', momo[2][0], 140, '', 'other', parsed(6, '入')], ['shopee', 'https://feebee.com.tw/p/s2', '3M 1530-0 通氣膠帶 半吋 24入', 480, '示範生活', 'other', parsed(24, '入')],
     ['momo', 'M4', momo[3][0], 255, '', 'pending', parsed(12, '入', '尺寸出現多種選項')], ['shopee', 'https://feebee.com.tw/p/s3', '3M 1530-0 通氣膠帶 半吋', 230, '示範百貨', 'pending', parsed(null, '', '無法辨識包裝數量')],
     ['momo', 'M5', momo[4][0], 99, '', 'unrelated', parsed(12, '入')], ['momo', 'M6', momo[5][0], 88, '', 'excluded', parsed(12, '入')]];
-  rows.forEach(([source, key, title, price, seller, grp, json]) => cand.run('t-1', source, key, title, price, seller, source === 'momo' ? 'https://www.momoshop.com.tw/product/' + key : key, grp, json));
+  rows.forEach(([source, key, title, price, seller, grp, json]) => cand.run('t-1', source, key, title, price, seller, source === 'momo' ? 'https://www.momoshop.com.tw/product/' + key : key, grp, json, 'r6'));
+  if (process.env.FAKE_GROK) cand.run('t-1','coupang','https://market.example.test/other',
+    '3M 1530-0 通氣膠帶 半吋 6入',149,'酷澎','https://market.example.test/other','other',parsed(6,'入'),'r6');
   const m331 = JSON.stringify({model: 'M331', attributes: {}, quantity: 1, unit: '個', issues: [], reason: ''});
-  cand.run('t-2', 'momo', 'L1', '羅技 M331 靜音滑鼠 黑色', 429, '', 'https://www.momoshop.com.tw/product/L1', 'same', m331);
-  cand.run('t-2', 'momo', 'L2', '羅技 M331 靜音滑鼠 黑色／藍色 任選', 399, '', 'https://www.momoshop.com.tw/product/L2', 'pending', JSON.stringify({model: 'M331', attributes: {}, quantity: 1, unit: '個', issues: [], reason: '可能有多規格或多種商品選項'}));
+  cand.run('t-2', 'momo', 'L1', '羅技 M331 靜音滑鼠 黑色', 429, '', 'https://www.momoshop.com.tw/product/L1', 'same', m331, 'r-l2');
+  cand.run('t-2', 'momo', 'L2', '羅技 M331 靜音滑鼠 黑色／藍色 任選', 399, '', 'https://www.momoshop.com.tw/product/L2', 'pending', JSON.stringify({model: 'M331', attributes: {}, quantity: 1, unit: '個', issues: [], reason: '可能有多規格或多種商品選項'}), 'r-l2');
   db.prepare("INSERT INTO listing_judgments VALUES ('t-1','momo','M6','not_same',NULL,'',?,?,'seed')").run(momo[5][0], iso(now - 2 * day));
   db.prepare("INSERT INTO listing_judgments VALUES ('t-1','momo','M2','same',NULL,'',?,?,'seed')").run(momo[1][0], iso(now - 20 * day));
 
