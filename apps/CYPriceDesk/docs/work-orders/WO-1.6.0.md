@@ -1,7 +1,7 @@
 # WO-1.6.0 Grok Bot 建檔補完與候選規格判讀（試點）
 
-- 狀態：待執行
-- 分支：`cypricedesk/v1.6.0-grok`（自 `main` 分出）　PR：#（執行者填）
+- 狀態：實作完成，待審查
+- 分支：`cypricedesk/v1.6.0-grok`（自 `main` 分出）　PR：[#651](https://github.com/simonliu1118-byte/CYapps/pull/651)
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`（含 governance 2.3.67 的 Grok 機器寫入例外，CYapps #650）、`apps/CYPriceDesk/docs/GROK_BOT_DESIGN.md`、WO-1.3.0～WO-1.4.0、本目錄 `README.md`
 - 開工前提：#650 與本工作單所在 PR 已合併 `main`。
 
@@ -161,15 +161,15 @@
 
 ## 6. 驗收清單
 
-- [ ] §2.1～2.6 全部符合。
-- [ ] Grok 機器接口只寫 `grok_*` 表與 audit；正式資料只由使用者操作寫入，且與 audit 同 batch。
-- [ ] `wrangler d1 migrations apply DB --local` 從空庫套用 0001～0005 成功。
-- [ ] `npm test`、`tests/ui.test.cjs`、fetcher unittest、build、public-package scan、`wrangler deploy --dry-run` 通過。
-- [ ] `docs/GROK_ROUTINE.md` 完成，且不含真實金鑰或網域以外的部署識別值。
-- [ ] 部署 workflow 依 §3.5 更新，不印出 secret。
-- [ ] 文件依 §3.6 更新。
-- [ ] 截圖如 §5。
-- [ ] commit 身分 `simonliu1118-byte`（noreply email）。
+- [x] §2.1～2.6 全部符合。
+- [x] Grok 機器接口只寫 `grok_*` 表與 audit；正式資料只由使用者操作寫入，且與 audit 同 batch。
+- [x] `wrangler d1 migrations apply DB --local` 從空庫套用 0001～0005 成功。
+- [x] `npm test`、`tests/ui.test.cjs`、fetcher unittest、build、public-package scan、`wrangler deploy --dry-run` 通過。
+- [x] `docs/GROK_ROUTINE.md` 完成，且不含真實金鑰或網域以外的部署識別值。
+- [x] 部署 workflow 依 §3.5 更新，不印出 secret。
+- [x] 文件依 §3.6 更新。
+- [x] 截圖如 §5。
+- [x] commit 身分 `simonliu1118-byte`（noreply email）。
 
 ## 7. 實機驗證（合併部署後，使用者與 Claude）
 
@@ -180,5 +180,28 @@
 5. 記錄這輪 Grok 實際任務數、候選數與耗時，作為訂用量上限的依據。
 
 ## 8. 完成報告（執行者填）
+
+2026-11-28 完成 V1.6.0 Build 0，基準為 `main` 的 `5084f0d`。由 `cypricedesk/v1.6.0-grok` 送審，含 Grok 補完、判讀、人工複審、候選刪除與部署所需設定。
+
+### 實作與資料欄位
+
+- `latest_candidates.run_id` 隨每個有更新的來源寫入。遷移以各來源最後一個可用的查價輪次回填舊候選。刪除以商品、來源、候選識別與輪次定位，保留歷史觀測。
+- `grok_tasks` 在清單欄位外另存 `event_json`，讓派工失敗時以原事件重送。草稿另用 `applied` 和 `discarded` 狀態保存已使用及捨棄紀錄。
+- `grok_task_items` 另存派工當下的候選資訊 `snapshot_json` 及再查原因 `recheck_reason`，人工複審結果保存在 `review_json`。再查事件的 `resultId` 以 `source`、`listingKey` 定位。`grok_questions` 以可空的 `source`、`listing_key` 關聯候選。
+- Grok 回填與稽核同批寫入。人工同意及修正採用走既有判斷寫入，同批更新當輪候選、同規格價格觀測、Grok 複審與稽核。當輪價格觀測採查價輪次時間，Grok 實際查看時間保留在原回填。
+- [Grok routine](../GROK_ROUTINE.md) 說明機器接口、Webhook、試搜、規格判讀及問答。部署 workflow 自 Environment 讀取三項選填 secret，缺值略過並只印出名稱。
+
+### 驗證
+
+| 檢查 | 結果 |
+| --- | --- |
+| `npm test` | 46 項通過，含派工與原事件重送、機器 actor、過期、同意、修正、問答、刪除後 18 → 17 與下一輪回復 |
+| `tests/ui.test.cjs` | 1440／390 通過。含 1530-1 建檔補完、選答、重開草稿並儲存、候選判讀及同意、平台受阻、刪除確認與徽章更新 |
+| Fetcher unittest | 18 項通過 |
+| D1 本機空庫遷移 | Wrangler 套用 0001～0005 通過 |
+| 靜態產物與 Worker | JavaScript 語法檢查、build、公開產物掃描與 Wrangler dry-run 通過 |
+| 提交作者 | `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>` |
+
+使用本機假資料、假 fetcher 及假 Grok。18 張試點截圖在執行者 scratchpad 的 `wo160/`，檔名以 `wo160-` 開頭，各有 `desktop` 與 `mobile`。正式環境和實際 Grok routine 驗證依 §7 進行。
 
 ## 9. 審查紀錄（審查者填）
