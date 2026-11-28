@@ -123,6 +123,9 @@ python3 ../../.github/scripts/scan-public-package.py dist
 | `/api/grok/tasks/:taskId` 及子路徑 | Grok 用 `GROK_API_TOKEN` 領取、回報進度、提問與回填 |
 | `/api/grok-tasks` 及子路徑 | 使用者經 CYID 派工、回答、重送、同意與再查 |
 | `PUT /api/tracked/:id/judgments` | 使用者經 CYID 修正並採用候選判讀 |
+| `DELETE /api/tracked/:id?revision=…` | 刪除追蹤項目，保留歷史並停止排程與目前判讀 |
+| `DELETE /api/tracked/:id/candidates?group=pending` | 依確認時的候選快照清除單一商品全部待確認 |
+| `DELETE /api/grok-tasks?productId=…` | 清除指定商品的 Grok 批次及待複審回填 |
 | `DELETE /api/tracked/:id/candidates/:source/:listingKey` | 使用者經 CYID 以 `runId` 刪除當輪候選 |
 
 完整請求和回填範例見 [Grok routine 說明](docs/GROK_ROUTINE.md)。本機運行瀏覽器測試時，為假資料 server 加上 `FAKE_GROK=1` 可啟用 Grok 流程。

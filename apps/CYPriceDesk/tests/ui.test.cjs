@@ -107,6 +107,8 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
   await page.locator('[data-tr-filter="inactive"]').click();
   assert.equal(await page.locator('#tr-list tr[data-id]').count(), 1);
   await page.locator('[data-tr-filter="all"]').click();
+  assert.deepEqual(await page.locator('.tracked-table .tracked-number').allInnerTexts(),['項次','1','2','3','4']);
+  assert((await page.locator('.tracked-table .tracked-spec').nth(1).innerText()).includes('型號 1530-0'));
   await snap('tracked-list');
 
   // ---- detail: platform cards, chart toggles, tooltip ----
@@ -183,8 +185,28 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
   // ---- judging in the detail page updates the nav badge ----
   assert.equal(await page.locator('#pending-badge').innerText(), '3');
   if (grok) {
-    const id = await dispatch(page.locator('#tracked-detail-view [data-grok-judge]'));
+    const send = page.locator('#tracked-detail-view [data-grok-judge]');
+    await page.locator('#tracked-detail-view [data-grok-select]').click();
+    await rowOf('#tracked-detail-view tr','0.5吋／1吋').locator('.grok-selection input').check();
+    const selected = await dispatch(send);
+    assert.equal((await bot(selected)).items.length,1);
+    await page.locator('#tracked-detail-view [data-grok-stop]').waitFor();
+    assert(await send.isDisabled());
+    await page.locator('#tracked-detail-view [data-grok-stop]').click();
+    await page.waitForFunction(() => !document.querySelector('#tracked-detail-view [data-grok-judge]').disabled);
+
+    const id = await dispatch(send);
     const job = await bot(id);
+    await bot(id,'/questions','POST',{question:'需要原盒，還是可以接受分裝？',options:['只收原盒','接受分裝']});
+    const judgeQuestion = page.locator('#tracked-detail-view .grok-question');
+    await judgeQuestion.waitFor();
+    assert(await judgeQuestion.getByRole('button',{name:'送出回答'}).isDisabled());
+    await judgeQuestion.getByText('自填答案',{exact:true}).click();
+    await judgeQuestion.getByRole('textbox').fill('只接受未拆封原盒');
+    await snap('fix-judge-question',{locator:'#tracked-detail-view .candidate-grok'});
+    await judgeQuestion.getByRole('button',{name:'送出回答'}).click();
+    await judgeQuestion.waitFor({state:'hidden'});
+    assert.equal((await bot(id)).questions[0].answer,'只接受未拆封原盒');
     assert(job.items.some(i => i.source === 'coupang'));
     await bot(id, '/results/momo/M4', 'PUT', {verdict:'same',option:'半吋 12 入原盒',
       spec:{model:'1530-0',attributes:{尺寸:'0.5吋'},packageQuantity:12,packageUnit:'入'},price:241,
@@ -205,7 +227,9 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
     await page.locator('#pending-list a[href="#tracked/t-1"]').click();
     await page.waitForFunction(() => document.querySelector('#tracked-detail-view [data-tab="pending"]')?.textContent.trim() === '待確認 1');
   } else {
-    await rowOf('#tracked-detail-view tr', '0.5吋／1吋').locator('[data-candidate-action="same"]').click();
+    const row = rowOf('#tracked-detail-view tr','0.5吋／1吋');
+    await row.locator('.candidate-menu summary').click();
+    await row.locator('[data-candidate-action="same"]').click();
   }
   await page.waitForFunction(() => document.getElementById('pending-badge').textContent === '2');
   assert((await text('[data-tab="pending"]')).includes('1'));
@@ -215,18 +239,29 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
   await page.waitForFunction(() => document.querySelectorAll('#pending-list .panel').length === 2);
   assert.equal(await page.locator('#pending-list .panel a[href^="#tracked/"]').count(), 2);
   await snap('pending');
-  await rowOf('#pending-list .panel', '羅技').locator('[data-candidate-action="not_same"]').click();
+  const logitech = rowOf('#pending-list .panel','羅技');
+  await logitech.locator('.candidate-menu summary').click();
+  await logitech.locator('[data-candidate-action="not_same"]').click();
   await page.waitForFunction(() => document.querySelectorAll('#pending-list .panel').length === 1);
   assert.equal(await page.locator('#pending-badge').innerText(), '1');
 
   if (grok) {
-    const row = page.locator('#pending-list [data-candidate]').first();
-    await row.locator('[data-candidate-action="delete"]').click();
+    await page.locator('#pending-list [data-grok-batches]').click();
+    await page.locator('#grok-batches-list li').first().waitFor();
+    await snap('fix-grok-batches',{full:false});
+    await page.locator('#grok-batches-clear').click();
+    await page.locator('#grok-batches-submit').click();
+    await page.getByText('目前沒有 Grok 批次。').waitFor();
+    await page.locator('#grok-batches-dialog .dialog-close').click();
+    assert.equal(await page.locator('#pending-badge').innerText(),'1');
+
+    await page.locator('#pending-list [data-clear-pending]').click();
     const description = await text('#candidate-action-summary');
-    for (const piece of ['蝦皮', '3M 1530-0', '$230.00']) assert(description.includes(piece), piece);
-    await snap('wo160-delete', {full:false});
+    assert(description.includes('3M 紙膠帶') && description.includes('1 筆'),description);
+    await snap('fix-clear-pending',{full:false});
     await page.locator('#candidate-action-submit').click();
     await page.waitForFunction(() => document.getElementById('pending-badge').hidden);
+
   }
 
   // ---- 操作紀錄 ----
@@ -236,7 +271,7 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
   for (const part of ['調整售價', '手動比價新增', '手動比價刪除', '判斷', '追蹤新增', '設定規格']) assert(audit.includes(part), part);
   await snap('audit');
   if (grok) {
-    for (const piece of ['Grok Bot', '回填判讀', '採用判讀', '刪除當輪候選']) assert(audit.includes(piece), piece);
+    for (const piece of ['Grok Bot', '回填判讀', '採用判讀', '清除全部待確認', '清除全部判讀批次']) assert(audit.includes(piece), piece);
     await snap('wo160-audit');
 
     await nav('#tracked');
@@ -249,9 +284,9 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
     await bot(draftId, '/questions', 'POST', {question:'需要原盒嗎？',options:['原盒','散裝可']});
     const question = page.locator('#grok-draft-state .grok-question');
     await question.waitFor();
-    await question.getByLabel('選擇答案').selectOption('原盒');
+    await question.getByText('原盒',{exact:true}).click();
     await snap('wo160-question', {full:false});
-    await question.getByRole('button',{name:'送出答案'}).click();
+    await question.getByRole('button',{name:'送出回答'}).click();
     await question.waitFor({state:'hidden'});
     const job = await bot(draftId);
     assert.equal(job.questions[0].answer,'原盒');
@@ -274,6 +309,15 @@ const DESKTOP = {width: 1440, height: 1000}, MOBILE = {width: 390, height: 844};
     await page.locator('#tracked-dialog').waitFor({state:'hidden'});
     await page.locator('#grok-drafts').waitFor({state:'hidden'});
   }
+
+  await nav('#tracked');
+  const inactive = rowOf('#tr-list tr','舊款膠台');
+  await inactive.getByRole('button',{name:/刪除追蹤商品/}).click();
+  assert.equal(new URL(page.url()).hash,'#tracked');
+  assert((await text('#tracked-delete-name')).includes('舊款膠台'));
+  await snap('fix-tracked-delete',{full:false});
+  await page.locator('#tracked-delete-form button[type=submit]').click();
+  await inactive.waitFor({state:'detached'});
 
   assert.deepEqual(failures, []);
   console.log(JSON.stringify({passed: true, checks: ['查價合併表格與排序、篩選', '設定規格、不使用、加入追蹤', '追蹤商品列表三平台與注意度排序', '走勢圖切換與浮動框', '調整售價', '手動比價新增修改刪除', '判斷與待確認頁、導覽徽章', '操作紀錄', '390px 無橫向捲動']}, null, 2));

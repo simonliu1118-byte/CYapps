@@ -12,7 +12,8 @@ const VERDICT = {same: '同規格', other_package: '其他包裝', not_same: '�
 
 function detailOf(action, before, after) {
   const record = after || before;
-  if (action.startsWith('grok.')) return ({create:'建立任務',dispatch:after.status === 'sent' ? '派工已送出' : '派工失敗',claim:'領取任務',progress:'平台進度',draft:'回填建檔',results:'回填判讀',questions:'提出問題',answer:'回答問題',review:'採用判讀',expired:'條件已過期',recheck:'要求再查',discard:'捨棄補完',resend:'重送任務'}[action.slice(5)] || action) + ' · Grok';
+  if (action.startsWith('grok.')) return ({create:'建立任務',stop:'停止判讀',discard_judge:after.taskId ? '刪除判讀批次' : '清除全部判讀批次',dispatch:after.status === 'sent' ? '派工已送出' : '派工失敗',claim:'領取任務',progress:'平台進度',draft:'回填建檔',results:'回填判讀',questions:'提出問題',answer:'回答問題',review:'採用判讀',expired:'條件已過期',recheck:'要求再查',discard:'捨棄補完',resend:'重送任務'}[action.slice(5)] || action) + ' · Grok';
+  if (action==='candidate.clear_pending') return `${after.name} · 清除 ${after.count} 筆待確認候選`;
   if (action==='candidate.delete') return '刪除當輪候選 · '+(PLATFORM_LABEL[record.source]||record.source)+' '+record.listingKey;
   if (action.startsWith('tracked.') && action !== 'tracked.price') return `${record.name}（${record.model}）`;
   if (action === 'tracked.price') return `${record.name} · ${PLATFORM_LABEL[record.platform]}：${before?.myPrice ?? '未設定'} → ${after.myPrice ?? '停止比價'}`;

@@ -15,6 +15,7 @@ const TABS = [['pending', '待確認'], ['same', '同規格'], ['other', '其他
 let products = [], filter = 'all', detail = null, candTab = 'pending', chartState = {}, editing = null, priceFor = null, manualEditing = null, deleting = null, busy = false;
 
 const attrText = attrs => Object.entries(attrs || {}).map(([k, v]) => `${esc(k)}：${esc(v)}`).join('、') || '—';
+const trashIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></svg>';
 const attrLines = attrs => Object.entries(attrs || {}).map(([k, v]) => `${k}=${v}`).join('\n');
 const packText = p => `${p.packageQuantity} ${esc(p.packageUnit)}`;
 const when = value => value ? esc(displayTime(value)) : '—';
@@ -41,11 +42,13 @@ function renderList() {
     $('tr-list').innerHTML = `<div class="empty"><strong>${products.length ? '沒有符合條件的追蹤商品' : '尚無追蹤商品'}</strong><p>${products.length ? '換個搜尋詞或篩選條件。' : '在「查價」頁加入追蹤，或按右上角「新增追蹤商品」。'}</p></div>`;
     return;
   }
-  $('tr-list').innerHTML = `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>商品</th>${PLATFORMS.map(p => `<th>${tag(p)}</th>`).join('')}<th class="num">待確認</th><th>上次查價</th><th>下次查價</th></tr></thead><tbody>${rows.map(p => `<tr class="clickable" data-id="${esc(p.id)}" tabindex="0">
-    <td><strong>${esc(p.name)}</strong> ${p.active ? '' : '<span class="chip">停用</span>'}<small>型號 ${esc(p.model)} · ${packText(p)}${Object.keys(p.attributes).length ? ` · ${attrText(p.attributes)}` : ''}</small></td>
-    ${PLATFORMS.map(pl => `<td>${platformCell(p, pl)}</td>`).join('')}
-    <td class="num">${p.pendingCount ? `<span class="chip warning">${p.pendingCount}</span>` : '0'}</td>
-    <td>${when(p.lastRunAt)}</td><td>${p.active ? when(p.nextRunAt) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+  $('tr-list').innerHTML = `<div class="table-wrap"><table class="data-table wide tracked-table"><thead><tr><th class="tracked-number">項次</th><th>商品</th><th class="tracked-spec">規格</th>${PLATFORMS.map(p => `<th>${tag(p)}</th>`).join('')}<th class="num">待確認</th><th>上次查價</th><th>下次查價</th><th class="tracked-delete" aria-label="操作"></th></tr></thead><tbody>${rows.map((p, index) => `<tr class="clickable" data-id="${esc(p.id)}" tabindex="0">
+    <td class="tracked-number">${index + 1}</td><td class="tracked-name"><strong>${esc(p.name)}</strong> ${p.active ? '' : '<span class="chip">停用</span>'}</td>
+    <td class="tracked-spec">型號 ${esc(p.model)} · ${packText(p)}${Object.keys(p.attributes).length ? ` · ${attrText(p.attributes)}` : ''}</td>
+    ${PLATFORMS.map(pl => `<td data-mobile-label="${esc(PLATFORM_LABEL[pl])}">${platformCell(p, pl)}</td>`).join('')}
+    <td class="num" data-mobile-label="待確認">${p.pendingCount ? `<span class="chip warning">${p.pendingCount}</span>` : '0'}</td>
+    <td data-mobile-label="上次查價">${when(p.lastRunAt)}</td><td data-mobile-label="下次查價">${p.active ? when(p.nextRunAt) : '—'}</td>
+    <td class="tracked-delete"><button type="button" class="btn small tracked-trash" data-delete-tracked aria-label="刪除追蹤商品 ${esc(p.name)}" title="刪除追蹤商品">${trashIcon}</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 $('tr-search').addEventListener('input', renderList);
 $('tr-sort').addEventListener('change', renderList);
@@ -54,7 +57,35 @@ for (const b of document.querySelectorAll('[data-tr-filter]')) b.onclick = () =>
   document.querySelectorAll('[data-tr-filter]').forEach(x => x.classList.toggle('selected', x === b));
   renderList();
 };
-const openFromRow = e => { const row = e.target.closest('tr[data-id]'); if (row) location.hash = `#tracked/${row.dataset.id}`; };
+let deletingProduct;
+const openFromRow = e => {
+  const row = e.target.closest('tr[data-id]');
+  if (!row) return;
+  if (e.target.closest('[data-delete-tracked]')) {
+    if (e.type!=='click') return;
+    deletingProduct = products.find(p => p.id===row.dataset.id);
+    $('tracked-delete-name').textContent = deletingProduct.name + ' · ' + deletingProduct.model;
+    $('tracked-delete-error').hidden = true;
+    $('tracked-delete-dialog').showModal();
+    return;
+  }
+  location.hash = `#tracked/${row.dataset.id}`;
+};
+$('tracked-delete-form').addEventListener('submit',async e => {
+  e.preventDefault();
+  const submit = e.submitter;
+  submit.disabled = true;
+  $('tracked-delete-error').hidden = true;
+  try {
+    await api('DELETE',`/api/tracked/${encodeURIComponent(deletingProduct.id)}?revision=${deletingProduct.revision}`);
+    $('tracked-delete-dialog').close();
+    await Promise.all([loadList(),loadPending()]);
+    toast('已刪除追蹤商品');
+  } catch (error) {
+    showError('tracked-delete-error',error);
+    if (error.status===409) await loadList();
+  } finally { submit.disabled = false; }
+});
 $('tr-list').addEventListener('click', openFromRow);
 $('tr-list').addEventListener('keydown', e => { if (e.key === 'Enter') openFromRow(e); });
 
@@ -113,7 +144,7 @@ function renderDetail() {
   <section class="pcards">${PLATFORMS.map(platformCard).join('')}</section>
   <section class="panel"><div class="panel-head"><h2>價格走勢 <small>市場為同規格商品；虛線為中位數，粗線為我的售價</small></h2></div><div id="chart-box"></div></section>
   <section class="panel"><div class="panel-head"><h2>候選商品</h2><div class="segmented" role="group" aria-label="候選分類">${TABS.map(([k, label]) => `<button type="button" data-tab="${k}" class="${candTab === k ? 'selected' : ''}">${label} ${groupOf(k).length}</button>`).join('')}</div></div>
-    ${candidateTasks(p.id, candidates.some(c => ['momo', 'coupang'].includes(c.source) && ['pending','other'].includes(c.group)))}
+    ${candidateTasks(p.id,p.name,candidates.some(c => ['momo','coupang'].includes(c.source) && ['pending','other'].includes(c.group)),candTab==='pending' && shown.length>0)}
     ${shown.length ? candidateTable(shown, p.id) : '<p class="muted">這個分類目前沒有商品。</p>'}</section>
   <section class="panel"><div class="panel-head"><h2>手動比價 <small>平台為蝦皮、momo、酷澎者，30 天內計入該平台比較</small></h2><button class="btn" id="manual-add" type="button">新增手動比價</button></div>
     ${manual.length ? `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>平台</th><th>賣家</th><th class="num">價格</th><th>查價日期</th><th>狀態</th><th>備註</th><th>操作</th></tr></thead><tbody>${manual.map(m => `<tr class="${m.counted || !['shopee', 'momo', 'coupang'].includes(m.platform) ? '' : 'muted-row'}">

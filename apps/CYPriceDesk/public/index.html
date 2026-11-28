@@ -165,6 +165,18 @@
   </form>
 </dialog>
 
+<dialog id="tracked-delete-dialog" class="dialog-small" aria-labelledby="tracked-delete-title">
+  <form id="tracked-delete-form" class="dialog-surface">
+    <div class="dialog-header"><h2 id="tracked-delete-title">刪除追蹤商品？</h2><button type="button" class="dialog-close" data-close="tracked-delete-dialog" aria-label="關閉">×</button></div>
+    <div class="dialog-body">
+      <p><strong id="tracked-delete-name"></strong></p>
+      <p>商品將移出追蹤清單，停止定期查價和這個商品的 Grok 任務。既有查價紀錄會保留。</p>
+      <div id="tracked-delete-error" class="form-error" role="alert" hidden></div>
+    </div>
+    <div class="dialog-footer"><button class="btn" type="button" data-close="tracked-delete-dialog">取消</button><button class="btn danger" type="submit">刪除追蹤商品</button></div>
+  </form>
+</dialog>
+
 <dialog id="delete-dialog" class="dialog-mini" aria-labelledby="delete-title">
   <div class="dialog-surface">
     <div class="dialog-header"><h2 id="delete-title">刪除手動比價？</h2><button class="dialog-close" data-close="delete-dialog" aria-label="關閉" type="button">×</button></div>
@@ -189,6 +201,23 @@
     </div>
     <div class="dialog-footer"><button class="btn" type="button" data-close="package-dialog">取消</button><button class="btn primary" type="submit">儲存</button></div>
   </form>
+</dialog>
+<dialog id="grok-batches-dialog" class="dialog-large" aria-labelledby="grok-batches-title">
+  <div class="dialog-surface">
+    <div class="dialog-header"><h2 id="grok-batches-title">Grok 判讀批次</h2><button class="dialog-close" data-close="grok-batches-dialog" type="button" aria-label="關閉">×</button></div>
+    <div class="dialog-body">
+      <p id="grok-batches-product"></p>
+      <div id="grok-batches-list"></div>
+      <div id="grok-batches-confirm" class="notice" hidden></div>
+      <div id="grok-batches-error" class="form-error" role="alert" hidden></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" data-close="grok-batches-dialog" type="button">關閉</button>
+      <button class="btn" id="grok-batches-back" type="button" hidden>返回清單</button>
+      <button class="btn" id="grok-batches-clear" type="button">清除全部批次</button>
+      <button class="btn danger" id="grok-batches-submit" type="button" hidden>確認清除</button>
+    </div>
+  </div>
 </dialog>
 <dialog id="candidate-action-dialog" class="dialog-small" aria-labelledby="candidate-action-title">
   <form id="candidate-action-form" class="dialog-surface">

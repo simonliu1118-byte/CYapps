@@ -58,9 +58,23 @@ test('judge 派工、重送、領取、回填、稽核及過期檢查', async t 
   const first = f.deliveries[0];
   assert.equal(first.headers.authorization,'Bearer test-hook');
   assert.deepEqual(first.body,{schemaVersion:1,event:'pricedesk.task.ready',eventId:first.body.eventId,taskId:one.id,taskVersion:1});
+  const duplicate = () => f.human('POST','/api/grok-tasks',{kind:'judge',productId:f.id});
+  assert.equal((await duplicate()).status,409);
+  assert.equal(f.deliveries.length,1);
+  // A second pending row can exist from builds without the product lock.
+  f.sql.prepare(`INSERT INTO grok_tasks(id,kind,product_id,status,event_id,event_json,conditions_json,
+    platform_status_json,created_at,created_by,updated_at)
+    SELECT 'older-task',kind,product_id,'send_failed','old-event',event_json,conditions_json,
+      platform_status_json,created_at,created_by,updated_at FROM grok_tasks WHERE id=?`).run(one.id);
+  const stopped = await f.human('POST',humanTask(one.id)+'/stop');
+  assert.equal((await stopped.json()).stopped,2);
+  assert.equal((await f.bot('GET',one.id)).status,410);
+  assert.equal((await f.bot('PUT',one.id+'/results/momo/M0',suggestion)).status,410);
+  assert.equal((await f.bot('POST',one.id+'/progress',{source:'momo',status:'done'})).status,410);
   f.fail();
   const two = await f.judge();
   assert.equal(two.status,'send_failed');
+  assert.equal((await duplicate()).status,409);
   assert.equal((await (await f.human('GET',humanTask(two.id))).json()).error,'派工未確認（HTTP 502），請重送');
   f.recover();
   assert.equal((await (await f.human('POST',humanTask(two.id)+'/resend')).json()).status,'sent');
@@ -146,4 +160,72 @@ test('刪除單輪候選：18 變 17，拒絕舊 run 與晚到回填，來源下
   assert.equal(await pending(),18);
   assert.notEqual(f.sql.prepare("SELECT run_id FROM latest_candidates WHERE listing_key='M0'").get().run_id,runId);
   assert.equal(f.sql.prepare("SELECT count(*) n FROM audit_log WHERE action='candidate.delete'").get().n,1);
+});
+
+test('所有選送候選已回填時，自動完成判讀並釋放派工', async t => {
+  const f = await setup(t);
+  await f.run();
+  const candidate = f.sql.prepare("SELECT run_id FROM latest_candidates WHERE listing_key='M0'").get();
+  const {id} = await f.judge([{source:'momo',listingKey:'M0',runId:candidate.run_id}]);
+  await f.bot('GET',id);
+  assert.equal((await f.bot('PUT',id+'/results/momo/M0',suggestion)).status,200);
+  const details = await (await f.human('GET',humanTask(id))).json();
+  assert.equal(details.status,'done');
+  assert.equal(details.platforms.momo.status,'done');
+  assert.equal((await f.judge()).status,'sent');
+});
+
+test('刪除追蹤商品會停止任務、移出清單與待確認並保留歷史', async t => {
+  const f = await setup(t);
+  await f.run();
+  const {id} = await f.judge();
+  const path = '/api/tracked/'+f.id;
+  const tracked = (await (await f.human('GET',path)).json()).product;
+  const other = await f.human('POST','/api/tracked',{...tracked,name:'其他商品'});
+  assert.equal(other.status,201);
+  const old = f.sql.prepare('SELECT count(*) n FROM tracked_runs').get().n;
+  assert.equal((await f.human('DELETE',path+'?revision=99')).status,409);
+  assert.equal((await f.human('DELETE',path+'?revision='+tracked.revision)).status,200);
+  assert.equal((await f.human('GET',path)).status,404);
+  assert.equal((await f.human('POST',path+'/run')).status,404);
+  assert.equal((await f.bot('GET',id)).status,410);
+  assert.equal((await (await f.human('GET','/api/pending')).json()).count,0);
+  const {products} = await (await f.human('GET','/api/tracked')).json();
+  assert.deepEqual(products.map(p=>p.name),['其他商品']);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM tracked_runs').get().n,old);
+  assert.equal(f.sql.prepare("SELECT actor_employee_id FROM audit_log WHERE action='tracked.delete'").get().actor_employee_id,'emp-0001');
+});
+
+test('清除 Grok 批次和清除全部待確認各自獨立，保留其餘分組與採用的價格', async t => {
+  const f = await setup(t);
+  await f.run();
+  const {id} = await f.judge();
+  await f.bot('GET',id);
+  for (const key of ['M0','M1']) assert.equal((await f.bot('PUT',id+'/results/momo/'+key,suggestion)).status,200);
+  assert.equal((await f.human('POST',humanTask(id)+'/items/momo/M0/approve')).status,200);
+  const batches = '/api/grok-tasks?productId='+f.id;
+  assert.equal((await (await f.human('GET',batches)).json()).tasks.length,1);
+  assert.equal((await (await f.human('DELETE',batches)).json()).discarded,1);
+  assert.equal((await (await f.human('GET',batches)).json()).tasks.length,0);
+  assert.equal((await f.bot('PUT',id+'/results/momo/M1',suggestion)).status,410);
+  const trackedPath = '/api/tracked/'+f.id;
+  const detail = await (await f.human('GET',trackedPath)).json();
+  assert.equal(detail.candidates.find(c=>c.listingKey==='M1').grok,null);
+  assert.equal(detail.candidates.find(c=>c.listingKey==='M0').price,189);
+  assert.equal(f.sql.prepare('SELECT price FROM price_observations').get().price,189);
+
+  f.sql.prepare(`INSERT INTO latest_candidates (product_id,source,listing_key,title,price,seller,url,grp,parsed_json,run_id)
+    SELECT product_id,'shopee','extra',title,price,seller,url,'pending',parsed_json,run_id FROM latest_candidates WHERE listing_key='M1'`).run();
+  const judge = await f.judge();
+  const {count,products:[pending]} = await (await f.human('GET','/api/pending')).json();
+  assert.equal(count,18);
+  const items = pending.candidates.map(({source,listingKey,runId})=>({source,listingKey,runId}));
+  const clear = trackedPath+'/candidates?group=pending';
+  assert.equal((await f.human('DELETE',clear,{items:items.slice(1)})).status,409);
+  assert.equal((await (await f.human('DELETE',clear,{items})).json()).removed,18);
+  assert.equal((await (await f.human('GET','/api/pending')).json()).count,0);
+  assert.equal((await f.bot('PUT',judge.id+'/results/momo/M1',suggestion)).status,410);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM latest_candidates WHERE grp='same'").get().n,1);
+  assert.equal(f.sql.prepare('SELECT price FROM price_observations').get().price,189);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM audit_log WHERE action='candidate.clear_pending'").get().n,1);
 });
