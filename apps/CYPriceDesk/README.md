@@ -132,7 +132,9 @@ python3 ../../.github/scripts/scan-public-package.py dist
 
 ## 部署
 
-部署採合併與發布分離：PR 只驗證；合併 `main` 不會部署；只有從 `main` 手動觸發 `CYPriceDesk Deploy`（`workflow_dispatch`）才會部署。它會核對 `github.sha` 等於遠端 `main`、由 GitHub Environment 產生部署設定、套用 D1 migration 後 `wrangler deploy`。部署用的 Worker 名稱、D1 名稱與 ID、Identity service 名稱、Application／Workspace ID、入口網址與 fetcher 網址**不經 GitHub variables**（公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job `env`）：workflow 只帶公開主機名稱 `price.chihyuancm.com`，由 `.github/scripts/resolve-deploy-runtime.mjs` 以 Cloudflare API（唯讀 GET）查出目前服務該主機名稱的 Worker 與其 bindings（`DB` d1、`IDENTITY` service、`CYID_APPLICATION_ID`／`CYID_WORKSPACE_ID`／`CYWEB_PORTAL_URL`／`CYPD_FETCHER_URL` plain_text）、`/d1/database/{id}` 與帳號 workers.dev 子網域，先全部 `::add-mask::` 再寫入 `GITHUB_ENV`，之後才渲染設定。要改任何 binding，須先在 Cloudflare 改，部署才會沿用；source 只放 placeholder，不得 commit。
+部署需使用者授權。從 `main` 手動觸發 `CYPriceDesk Deploy`，或用 GitHub Connector 的 `update_ref` 將 `deploy/cypricedesk-production` 以 `force=false` 快轉到最新 `main` 的完整 SHA。快轉會觸發同一份 workflow。它會核對事件 SHA、checkout 及遠端 `main` 完全相同，套用 D1 migration 並部署 Worker，最後讀取正式站的 `/release.json` 核對版本、Build 與提交。
+
+部署用的 Worker 名稱、D1 名稱與 ID、Identity service 名稱、Application／Workspace ID、入口網址與 fetcher 網址**不經 GitHub variables**（公開 repo 的 Actions log 會在 `::add-mask::` 之前明文印出 job `env`）：workflow 只帶公開主機名稱 `price.chihyuancm.com`，由 `.github/scripts/resolve-deploy-runtime.mjs` 以 Cloudflare API（唯讀 GET）查出目前服務該主機名稱的 Worker 與其 bindings（`DB` d1、`IDENTITY` service、`CYID_APPLICATION_ID`／`CYID_WORKSPACE_ID`／`CYWEB_PORTAL_URL`／`CYPD_FETCHER_URL` plain_text）、`/d1/database/{id}` 與帳號 workers.dev 子網域，先全部 `::add-mask::` 再寫入 `GITHUB_ENV`，之後才渲染設定。要改任何 binding，須先在 Cloudflare 改，部署才會沿用；source 只放 placeholder，不得 commit。
 
 ### GitHub Environment `cypricedesk-production`
 

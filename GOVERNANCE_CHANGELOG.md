@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.68 — 2026/11/29
+
+- CYPriceDesk 增加由 GitHub Connector 更新發布分支的入口。部署由使用者授權，以非強制快轉更新 `deploy/cypricedesk-production`。執行前驗證來源為當前 `main`，完成後驗證公開版本資訊。不變更 App 版本。CYID Consumer Impact: NONE。
+
 ## 2.3.67 — 2026/11/27
 
 - CYPriceDesk `PROJECT_RULES.md` 新增 Grok Bot 機器寫入例外（使用者 2026-11-27，設計見 `apps/CYPriceDesk/docs/GROK_BOT_DESIGN.md`）：Grok 以專屬機器憑證只能寫 Grok 任務與待確認資料，正式資料仍須由使用者同意後以 CYID principal 寫入；機器寫入照樣寫 audit，操作者記為固定機器身分。機器憑證與 webhook 金鑰只存在 Worker secret。不變更 App 版本。CYID Consumer Impact: NONE。

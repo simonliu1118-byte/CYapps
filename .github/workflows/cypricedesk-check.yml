@@ -5,6 +5,7 @@ on:
     paths:
       - "apps/CYPriceDesk/**"
       - ".github/workflows/cypricedesk-check.yml"
+      - ".github/workflows/cypricedesk-deploy.yml"
   workflow_dispatch:
 
 permissions:
