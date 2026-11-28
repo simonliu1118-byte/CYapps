@@ -1,6 +1,6 @@
 # WO-1.6.0 Grok Bot 建檔補完與候選規格判讀（試點）
 
-- 狀態：實作完成，待審查
+- 狀態：審查通過，待合併
 - 分支：`cypricedesk/v1.6.0-grok`（自 `main` 分出）　PR：[#651](https://github.com/simonliu1118-byte/CYapps/pull/651)
 - 依據：`apps/CYPriceDesk/PROJECT_RULES.md`（含 governance 2.3.67 的 Grok 機器寫入例外，CYapps #650）、`apps/CYPriceDesk/docs/GROK_BOT_DESIGN.md`、WO-1.3.0～WO-1.4.0、本目錄 `README.md`
 - 開工前提：#650 與本工作單所在 PR 已合併 `main`。
@@ -205,3 +205,19 @@
 使用本機假資料、假 fetcher 及假 Grok。18 張試點截圖在執行者 scratchpad 的 `wo160/`，檔名以 `wo160-` 開頭，各有 `desktop` 與 `mobile`。正式環境和實際 Grok routine 驗證依 §7 進行。
 
 ## 9. 審查紀錄（審查者填）
+
+### 2026-11-28 審查（Claude）— 結論：通過
+
+- 對照 §2～§3 檢視主要程式（`src/grok-api.js`、`grok-tasks.js`、`grok-store.js`、`grok-client.js`、`tracking.js` 的 `writeJudgment`、`tracking-run.js`、`0005_grok.sql`、部署 workflow）與 `docs/GROK_ROUTINE.md`：
+  - Grok 機器接口在 CYID 之前分派，以固定時間比對 `GROK_API_TOKEN`；只寫 `grok_*` 表與 audit（actor `grok-bot`），符合 PROJECT_RULES §4 例外。
+  - 同意與修正並採用走共用的 `writeJudgment`，`listing_judgments`、當輪 `price_observations`（Grok 價格）、`grok_task_items` 與 audit 同一 batch；條件已變或候選已刪除時回 409／404。
+  - 刪除當輪候選以 `runId` 定位，不留名單、不刪歷史觀測。部署 workflow 三個 secret 皆選填、不印值。
+  - Routine 說明明訂只開任務提供的候選連結、以公開頁面瀏覽、遇登入牆即回報；未自行搜尋新候選。
+- 驗證（審查者重跑）：`npm test` 46／46；`tests/ui.test.cjs`（`SEED=1 NO_GAP=1 FAKE_GROK=1`）通過並重新產生 36 張截圖逐張檢視；build、public-package scan、語法檢查通過；`wrangler d1 migrations apply --local` 0001～0005 成功；`wrangler deploy --dry-run` 通過；PR CI（governance、check）通過。
+- 另以本機 Wrangler D1 實測「`changes()=0` 時以 `json('…')` 中止 batch」的寫法（草稿重複套用、複審衝突用），確認第二次執行整批回滾。
+- 接受的差異：回填欄位名稱為 `option`、`priceConditions`（工作單示例為 `selectedOption`、`priceCondition`），Worker 與 routine 說明一致即可。
+- 建議（不阻擋合併，列入後續）：
+  1. 操作紀錄中 Grok 動作只顯示「建立任務 · Grok」等通用文字，沒有商品名稱；刪除當輪候選顯示候選識別而非商品名稱。之後可在 audit 的 after 資料帶商品名稱。
+  2. 新增的 Grok 模組多為壓縮寫法（少空白、多個敘述擠在一行），與既有程式風格不同；之後修改這些檔案時順手整理。
+  3. 以 `malformed JSON` 錯誤訊息判斷中止 batch 並轉為 409，日後若有其他 JSON 解析錯誤也會被顯示為 409；之後有更直接的寫法時再替換。
+
