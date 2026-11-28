@@ -1,4 +1,4 @@
-import {candidateJoin,candidateCols,currentItem,taskById} from './grok-store.js';
+import {candidateJoin,candidateCols,currentItem,stopJudges,taskById} from './grok-store.js';
 // Tracked products API: CRUD with revision checks, per-platform own selling price (with history), manual judgments,
 // list / detail with the per-platform comparison and trend chart data, and manual run. Every write is audited in the same D1 batch.
 import {ApiError, json, readBody} from './http.js';
@@ -55,7 +55,7 @@ export const toCandidate = row => ({runId:row.run_id, grok:row.grok_id ? {taskId
 const auditFields = p => ({name: p.name, model: p.model, attributes: p.attributes, packageQuantity: p.packageQuantity, packageUnit: p.packageUnit, cywebItemNo: p.cywebItemNo, keyword: p.keyword, momoKeyword: p.momoKeyword, feebeeKeyword: p.feebeeKeyword, myPrices: p.myPrices, myUrls: p.myUrls, active: p.active});
 
 async function getProduct(DB, id) {
-  const row = await DB.prepare('SELECT * FROM tracked_products WHERE id=?').bind(id).first();
+  const row = await DB.prepare('SELECT * FROM tracked_products WHERE id=? AND deleted_at IS NULL').bind(id).first();
   if (!row) throw new ApiError(404, '找不到這個追蹤商品');
   return row;
 }
@@ -68,7 +68,7 @@ const samePrices = rows => {
 };
 
 async function list(DB) {
-  const products = (await DB.prepare('SELECT * FROM tracked_products ORDER BY name, id').all()).results.map(toTracked);
+  const products = (await DB.prepare('SELECT * FROM tracked_products WHERE deleted_at IS NULL ORDER BY name, id').all()).results.map(toTracked);
   const same = new Map();
   for (const r of (await DB.prepare("SELECT product_id, source, price FROM latest_candidates WHERE grp='same' AND price IS NOT NULL").all()).results) {
     same.set(r.product_id, [...(same.get(r.product_id) || []), r]);
@@ -138,9 +138,35 @@ export async function handleTrackingApi(request, env, url, actor) {
       return json({product: toTracked(await getProduct(DB, id))}, 201);
     }
 
+    const pendingGroup = path.match(/^\/api\/tracked\/([^/]+)\/candidates$/);
+    if (pendingGroup && method==='DELETE' && url.searchParams.get('group')==='pending') {
+      const id = decodeURIComponent(pendingGroup[1]);
+      const product = await getProduct(DB,id);
+      const {items} = await readBody(request);
+      if (!Array.isArray(items) || !items.length) throw new ApiError(400,'請提供待確認候選清單');
+      const now = new Date().toISOString();
+      const [removed] = await DB.batch([
+        DB.prepare(`DELETE FROM latest_candidates WHERE product_id=? AND grp='pending'
+          AND EXISTS(SELECT 1 FROM tracked_products WHERE id=? AND deleted_at IS NULL)
+          AND (SELECT count(*) FROM latest_candidates WHERE product_id=? AND grp='pending')=?
+          AND NOT EXISTS(
+            SELECT 1 FROM latest_candidates c WHERE c.product_id=? AND c.grp='pending' AND NOT EXISTS(
+              SELECT 1 FROM json_each(?) i WHERE json_extract(i.value,'$.source')=c.source
+                AND json_extract(i.value,'$.listingKey')=c.listing_key AND json_extract(i.value,'$.runId')=c.run_id
+            )
+          )`).bind(id,id,id,items.length,id,JSON.stringify(items)),
+        auditStmt(DB,actor,now,'candidate.clear_pending',id,null,{name:product.name,count:items.length},true),
+        stopJudges(DB,id,now,{emptyOnly:true}),
+        auditStmt(DB,actor,now,'grok.stop',id,null,{reason:'已無本輪待判讀候選'},true)
+      ]);
+      if (!removed.meta.changes) throw new ApiError(409,'待確認清單已更新，請重新整理後再清除');
+      return json({removed:removed.meta.changes});
+    }
+
     const deletion = path.match(/^\/api\/tracked\/([^/]+)\/candidates\/([^/]+)\/([^/]+)$/);
     if (deletion && method === 'DELETE') {
       const [id,source,key] = deletion.slice(1).map(decodeURIComponent);
+      await getProduct(DB,id);
       const {runId} = await readBody(request);
       const [removed] = await DB.batch([
         DB.prepare('DELETE FROM latest_candidates WHERE product_id=? AND source=? AND listing_key=? AND run_id=?').bind(id,source,key,runId??null),
@@ -157,6 +183,19 @@ export async function handleTrackingApi(request, env, url, actor) {
     if (part === 'manual') return await handleManual(request, env, actor, await getProduct(DB, id), match[3] && decodeURIComponent(match[3]));
 
     if (!part && method === 'GET') return json(await detail(DB, id));
+    if (!part && method === 'DELETE') {
+      const before = toTracked(await getProduct(DB, id));
+      if (Number(url.searchParams.get('revision')) !== before.revision) throw conflict();
+      const now = new Date().toISOString();
+      const [removed] = await DB.batch([
+        DB.prepare('UPDATE tracked_products SET deleted_at=?,active=0,revision=revision+1,updated_at=?,updated_by=? WHERE id=? AND revision=? AND deleted_at IS NULL')
+          .bind(now,now,actor.employeeId,id,before.revision),
+        auditStmt(DB,actor,now,'tracked.delete',id,auditFields(before),null,true),
+        stopJudges(DB,id,now,{deletedRevision:before.revision + 1})
+      ]);
+      if (!removed.meta.changes) throw conflict();
+      return json({ok:true});
+    }
 
     if (!part && method === 'PUT') {
       const body = await readBody(request);
@@ -245,15 +284,16 @@ export async function writeJudgment(DB, actor, id, method, body, expectedResult)
   let reviewedPrice;
   if (body.grokTaskId) {
     const task=await taskById(DB,body.grokTaskId);
-    if(task.product_id!==id) throw new ApiError(404,'任務商品不符');
+    if(task.product_id!==id || task.status==='discarded') throw new ApiError(404,'任務商品不符');
     const {item}=await currentItem(DB,task,body.source,body.listingKey);
     if(item.status!=='answered' || (expectedResult!==undefined && item.result_json!==expectedResult)) throw conflict();
     reviewedPrice=body.price==null ? null : price(body.price,'選項價格');
     const review={verdict:body.verdict,packageQuantity:judgment.packageQuantity,packageUnit:judgment.packageUnit,price:reviewedPrice};
     reviewWrites.push(DB.prepare(`UPDATE grok_task_items SET status='reviewed',review_json=?,reviewed_at=?,reviewed_by=?
       WHERE task_id=? AND source=? AND listing_key=? AND status='answered' AND result_json=?
+      AND EXISTS(SELECT 1 FROM grok_tasks WHERE id=grok_task_items.task_id AND status<>'discarded')
       AND EXISTS(SELECT 1 FROM latest_candidates WHERE product_id=? AND source=? AND listing_key=? AND run_id=?)
-      AND EXISTS(SELECT 1 FROM tracked_products WHERE id=? AND model=? AND attributes_json=? AND package_quantity=? AND package_unit=?)`)
+      AND EXISTS(SELECT 1 FROM tracked_products WHERE id=? AND deleted_at IS NULL AND model=? AND attributes_json=? AND package_quantity=? AND package_unit=?)`)
       .bind(JSON.stringify(review),now,actor.employeeId,task.id,body.source,body.listingKey,item.result_json,id,body.source,body.listingKey,item.run_id,id,row.model,row.attributes_json,row.package_quantity,row.package_unit),
       DB.prepare("SELECT CASE WHEN changes()=0 THEN json('review_conflict') ELSE 1 END"));
     if(body.verdict==='same') {

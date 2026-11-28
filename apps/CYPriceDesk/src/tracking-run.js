@@ -1,3 +1,4 @@
+import {ApiError} from './http.js';
 // One price check of a tracked product, and the scheduled entry point (WO-1.3.0 §2.6, §2.7; keywords per WO-1.4.0 §2.3).
 import {querySource} from './search.js';
 import {classifyListing} from './grouping.js';
@@ -93,8 +94,10 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
   const nextRunAt = Object.values(statuses).every(s => USABLE.includes(s))
     ? randomRunTime(now, 7, 14, rand) : now + HOUR_MS;
   const statements = [
-    DB.prepare('INSERT INTO tracked_runs (id,product_id,started_at,finished_at,momo_status,feebee_status,trigger) VALUES (?,?,?,?,?,?,?)')
-      .bind(runId, product.id, started, finished, statuses.momo, statuses.feebee, trigger),
+    DB.prepare(`INSERT INTO tracked_runs (id,product_id,started_at,finished_at,momo_status,feebee_status,trigger)
+      SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM tracked_products WHERE id=? AND deleted_at IS NULL)`)
+      .bind(runId,product.id,started,finished,statuses.momo,statuses.feebee,trigger,product.id),
+    DB.prepare("SELECT CASE WHEN changes()=0 THEN json('tracking_removed') ELSE 1 END"),
     ...sources.map(source => DB.prepare('DELETE FROM latest_candidates WHERE product_id=? AND source=?').bind(product.id, source)),
     ...candidates.map(c => DB.prepare('INSERT OR REPLACE INTO latest_candidates (product_id,source,listing_key,title,price,seller,url,grp,parsed_json,run_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .bind(product.id, c.source, c.key, c.title, c.price, c.seller, c.url, c.group, JSON.stringify({...c.parsed, quantity: c.quantity, unit: c.unit, reason: c.reason}),runId)),
@@ -105,7 +108,14 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
     DB.prepare('UPDATE tracked_products SET last_run_at=?, next_run_at=? WHERE id=?').bind(now, nextRunAt, product.id)
   ];
   if (actor) statements.push(auditStmt(DB, actor, finished, 'tracked.run', product.id, null, {name: product.name, model: product.model, momo: statuses.momo, feebee: statuses.feebee}));
-  await DB.batch(statements);
+  // A product may be removed while the external lookups are in flight.
+  try { await DB.batch(statements); } catch (error) {
+    if (!String(error.message).includes('malformed JSON')) throw error;
+    const live = await DB.prepare('SELECT id FROM tracked_products WHERE id=? AND deleted_at IS NULL').bind(product.id).first();
+    if (live) throw error;
+    if (actor) throw new ApiError(404,'找不到這個追蹤商品');
+    return null;
+  }
   return {runId, momoStatus: statuses.momo, feebeeStatus: statuses.feebee, nextRunAt, sameCount: priced('same').length};
 }
 
@@ -113,9 +123,10 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
 // the product against an overlapping tick and retries it in an hour if the run dies midway.
 export async function runScheduled(env, {now = Date.now(), rand = Math.random} = {}) {
   if (!inRunWindow(now) || !fetcherConfigured(env)) return null;
-  const row = await env.DB.prepare('SELECT * FROM tracked_products WHERE active=1 AND next_run_at<=? ORDER BY next_run_at LIMIT 1').bind(now).first();
+  const row = await env.DB.prepare('SELECT * FROM tracked_products WHERE active=1 AND deleted_at IS NULL AND next_run_at<=? ORDER BY next_run_at LIMIT 1').bind(now).first();
   if (!row) return null;
-  const claim = await env.DB.prepare('UPDATE tracked_products SET next_run_at=? WHERE id=? AND next_run_at=?').bind(now + HOUR_MS, row.id, row.next_run_at).run();
+  const claim = await env.DB.prepare('UPDATE tracked_products SET next_run_at=? WHERE id=? AND deleted_at IS NULL AND next_run_at=?').bind(now + HOUR_MS, row.id, row.next_run_at).run();
   if (!claim.meta.changes) return null;
-  return {id: row.id, ...await runTracked(env, row, 'schedule', {now, rand})};
+  const result = await runTracked(env,row,'schedule',{now,rand});
+  return result && {id:row.id,...result};
 }

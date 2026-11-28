@@ -6,7 +6,7 @@ export async function loadPending() {
   const {count, products} = await api('GET', '/api/pending');
   setBadge(count);
   $('pending-list').innerHTML = products.length
-    ? products.map(p => `<section class="panel"><div class="panel-head"><h2><a href="#tracked/${esc(p.id)}">${esc(p.name)}</a> <small>型號 ${esc(p.model)} · ${p.packageQuantity} ${esc(p.packageUnit)} · ${p.candidates.length} 筆待確認</small></h2></div>${candidateTasks(p.id, p.candidates.some(c => ['momo', 'coupang'].includes(c.source)))}${candidateTable(p.candidates, p.id)}</section>`).join('')
+    ? products.map(p => `<section class="panel"><div class="panel-head"><h2><a href="#tracked/${esc(p.id)}">${esc(p.name)}</a> <small>型號 ${esc(p.model)} · ${p.packageQuantity} ${esc(p.packageUnit)} · ${p.candidates.length} 筆待確認</small></h2></div>${candidateTasks(p.id,p.name,p.canJudge,true)}${candidateTable(p.candidates, p.id)}</section>`).join('')
     : '<div class="empty"><strong>沒有待確認的商品</strong><p>新的查價結果若有程式無法判斷的商品，會出現在這裡。</p></div>';
   refreshCandidateTasks($('pending-list'));
 }

@@ -1,6 +1,7 @@
 import {ApiError,json,readBody} from './http.js';
-import {bot,audit,currentItem,taskById,taskDetail,draftFields} from './grok-store.js';
+import {bot,currentItem,taskById,taskDetail,draftFields} from './grok-store.js';
 import {validateLink} from '../public/core.js';
+import {auditStmt} from './audit.js';
 
 async function authenticated(request,env) {
   if (!env.GROK_API_TOKEN) return false;
@@ -12,6 +13,8 @@ async function authenticated(request,env) {
   for (let i=0;i<left.length;i++) different |= left[i]^right[i];
   return different===0;
 }
+const stopped = task => task.status==='cancelled' || (task.kind==='judge' && task.status==='discarded');
+const gone = () => new ApiError(410,'使用者已停止或刪除這個任務');
 function invalid(){throw new ApiError(400,'回填資料不完整');}
 function validateResult(data) {
   if (!['same','other_package','not_same','insufficient'].includes(data.verdict) || !data.evidence?.trim?.() ||
@@ -26,17 +29,24 @@ export async function handleGrokApi(request,env,url) {
   const db=env.DB, now=new Date().toISOString();
   try {
     const t=await taskById(db,id);
+    if (stopped(t)) throw gone();
     if (!action && !source && !key && !extra.length && request.method==='GET') {
       if (['sent','queued','send_failed'].includes(t.status)) {
         const [changed]=await db.batch([db.prepare("UPDATE grok_tasks SET status='working',updated_at=? WHERE id=? AND status IN ('sent','queued','send_failed')").bind(now,id),
           auditStmtAfter(db,now,'grok.claim',id)]);
         if (changed.meta.changes) t.status='working';
+        else {
+          const latest = await taskById(db,id);
+          if (stopped(latest)) throw gone();
+          return json(await taskDetail(db,latest));
+        }
       }
       return json(await taskDetail(db,t));
     }
     if (['applied','discarded'].includes(t.status)) throw new ApiError(409,'任務已結束');
     const data=await readBody(request);
     let stmt;
+    const followup = [];
     if (action==='draft' && request.method==='PUT' && t.kind==='draft' && !source) {
       if (!data.fields || typeof data.fields!=='object' || !data.evidence || typeof data.evidence!=='object' || !Array.isArray(data.searches)) invalid();
       const draft={fields:Object.fromEntries(draftFields.filter(k=>k in data.fields).map(k=>[k,data.fields[k]])),evidence:data.evidence,searches:data.searches};
@@ -47,33 +57,54 @@ export async function handleGrokApi(request,env,url) {
       if(current.item.status==='reviewed') throw new ApiError(409,'候選已複審');
       stmt=db.prepare(`UPDATE grok_task_items SET result_json=?,status='answered' WHERE task_id=? AND source=? AND listing_key=? AND status IN ('waiting','answered')
         AND EXISTS(SELECT 1 FROM latest_candidates c WHERE c.product_id=grok_task_items.product_id AND c.source=grok_task_items.source AND c.listing_key=grok_task_items.listing_key AND c.run_id=grok_task_items.run_id)
-        AND EXISTS(SELECT 1 FROM tracked_products p WHERE p.id=grok_task_items.product_id AND p.model=? AND p.attributes_json=? AND p.package_quantity=? AND p.package_unit=?)`)
+        AND EXISTS(SELECT 1 FROM grok_tasks WHERE id=grok_task_items.task_id AND status NOT IN ('cancelled','discarded'))
+        AND EXISTS(SELECT 1 FROM tracked_products p WHERE p.id=grok_task_items.product_id AND p.deleted_at IS NULL AND p.model=? AND p.attributes_json=? AND p.package_quantity=? AND p.package_unit=?)`)
         .bind(JSON.stringify({verdict:data.verdict,option:data.option??'',spec:data.spec,price:data.price,
           priceConditions:data.priceConditions??'',seller:data.seller??'',url:data.url,checkedAt:data.checkedAt,evidence:data.evidence}),id,source,key,current.product.model,current.product.attributes_json,current.product.package_quantity,current.product.package_unit);
+      const platformKey = '$.'+source;
+      followup.push(db.prepare(`UPDATE grok_tasks SET updated_at=?,status=CASE WHEN status IN ('queued','sent','send_failed') THEN 'working' ELSE status END,
+        platform_status_json=CASE WHEN json_extract(platform_status_json,?)='working'
+          AND NOT EXISTS(SELECT 1 FROM grok_task_items i JOIN latest_candidates c
+            ON c.product_id=i.product_id AND c.source=i.source AND c.listing_key=i.listing_key AND c.run_id=i.run_id
+            WHERE i.task_id=? AND i.source=? AND i.status='waiting')
+          THEN json_set(platform_status_json,?,json('{"status":"done"}')) ELSE platform_status_json END
+        WHERE id=? AND changes()>0`).bind(now,platformKey+'.status',id,source,platformKey,id),
+        finishJudge(db,id));
     } else if (action==='questions' && request.method==='POST' && !source) {
       if (!data.question?.trim?.() || !Array.isArray(data.options??[])) invalid();
-      stmt=db.prepare('INSERT INTO grok_questions(id,task_id,source,listing_key,question,options_json,created_at) VALUES(?,?,?,?,?,?,?)')
-        .bind(crypto.randomUUID(),id,data.source??null,data.listingKey??null,data.question,JSON.stringify(data.options??[]),now);
+      stmt=db.prepare(`INSERT INTO grok_questions(id,task_id,source,listing_key,question,options_json,created_at)
+        SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM grok_tasks WHERE id=? AND status NOT IN ('cancelled','applied','discarded'))`)
+        .bind(crypto.randomUUID(),id,data.source??null,data.listingKey??null,data.question,JSON.stringify(data.options??[]),now,id);
+      followup.push(db.prepare('UPDATE grok_tasks SET updated_at=? WHERE id=? AND changes()>0').bind(now,id));
     } else if (action==='progress' && request.method==='POST' && t.kind==='judge' && !source) {
       const platforms=JSON.parse(t.platform_status_json);
       if (!Object.hasOwn(platforms,data.source) || !['working','done','blocked'].includes(data.status)) invalid();
-      const update=db.prepare('UPDATE grok_tasks SET platform_status_json=json_set(platform_status_json,?,json(?)),updated_at=? WHERE id=?')
-        .bind('$.'+data.source,JSON.stringify({status:data.status,reason:data.reason||''}),now,id);
-      const finish=db.prepare(`UPDATE grok_tasks SET status=CASE
-        WHEN EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='working') THEN 'working'
-        WHEN NOT EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='blocked') THEN 'done'
-        WHEN NOT EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='done') THEN 'blocked' ELSE 'partial' END WHERE id=?`).bind(id);
-      await db.batch([update,finish,audit(db,bot,'grok.progress',id,data)]);return json({ok:true});
+      // A routine may finish by returning the last result before sending its final platform update.
+      stmt=db.prepare(`UPDATE grok_tasks SET platform_status_json=json_set(platform_status_json,?,json(?)),updated_at=?,
+        status=CASE WHEN status IN ('queued','sent','send_failed') THEN 'working' ELSE status END
+        WHERE id=? AND status NOT IN ('cancelled','discarded')
+        AND (?<>'working' OR status IN ('queued','sent','working','send_failed'))`)
+        .bind('$.'+data.source,JSON.stringify({status:data.status,reason:data.reason||''}),now,id,data.status);
+      followup.push(finishJudge(db,id));
     } else return json({error:'找不到接口'},404);
-    const [change]=await db.batch([stmt,auditStmtAfter(db,now,'grok.'+action,id)]);
+    const [change]=await db.batch([stmt,...followup,auditStmtAfter(db,now,'grok.'+action,id)]);
     if (!change.meta.changes) {
+      if (stopped(await taskById(db,id))) throw gone();
       if (action==='results') await readCurrentItem(db,t,source,key,now);
       throw new ApiError(409,'任務或候選已更新');
     }
     return json({ok:true});
   } catch(e){if(e instanceof ApiError)return json({error:e.message},e.status);throw e;}
 }
-import {auditStmt} from './audit.js';
+function finishJudge(db,id) {
+  return db.prepare(`UPDATE grok_tasks SET status=CASE
+    WHEN EXISTS(SELECT 1 FROM grok_questions WHERE task_id=grok_tasks.id AND answer IS NULL) THEN status
+    WHEN EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='working') THEN status
+    WHEN NOT EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='blocked') THEN 'done'
+    WHEN NOT EXISTS(SELECT 1 FROM json_each(platform_status_json) WHERE json_extract(value,'$.status')='done') THEN 'blocked'
+    ELSE 'partial' END WHERE id=? AND changes()>0`).bind(id);
+}
+
 const auditStmtAfter=(db,now,action,id)=>auditStmt(db,bot,now,action,id,null,{name:'Grok 任務'},true);
 
 async function readCurrentItem(db, task, source, key, now) {
@@ -82,7 +113,7 @@ async function readCurrentItem(db, task, source, key, now) {
   } catch (error) {
     if (error.status===409) {
       await db.batch([
-        db.prepare("UPDATE grok_task_items SET status='expired' WHERE task_id=? AND source=? AND listing_key=? AND status NOT IN ('reviewed','expired')").bind(task.id,source,key),
+        db.prepare("UPDATE grok_task_items SET status='expired' WHERE task_id=? AND source=? AND listing_key=? AND status NOT IN ('reviewed','expired') AND EXISTS(SELECT 1 FROM grok_tasks WHERE id=grok_task_items.task_id AND status NOT IN ('cancelled','discarded'))").bind(task.id,source,key),
         auditStmtAfter(db,now,'grok.expired',task.id)
       ]);
     }
