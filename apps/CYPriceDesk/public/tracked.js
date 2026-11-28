@@ -5,8 +5,9 @@ import {sanitizeAttributes} from './catalog-core.js';
 import {PLATFORMS, PLATFORM_COLOR, PLATFORM_LABEL, byAttention, needsAttention} from './compare.js';
 import {$, api, esc, showError, tag, toast} from './ui.js';
 import {createChart} from './chart.js';
-import {candidateTable, bindJudging} from './candidates.js';
+import {candidateTable, bindJudging, candidateTasks, refreshCandidateTasks} from './candidates.js';
 import {loadPending} from './pending.js';
+import {bindDraft, prepareDraft, refreshDrafts} from './grok-draft.js';
 
 const STATUS = {ok: '完成', no_match: '無符合結果', no_price: '無價格', rate_limited: '查詢間隔未到，1 小時後重試', blocked_cooldown: '冷卻中，1 小時後重試', blocked: '被限制，1 小時後重試', provider_refused: '被拒絕，1 小時後重試', network_error: '連線失敗，1 小時後重試'};
 const TABS = [['pending', '待確認'], ['same', '同規格'], ['other', '其他包裝'], ['unrelated', '不相關'], ['excluded', '不是同一商品']];
@@ -68,6 +69,7 @@ function showList() {
   $('tracked-detail-view').hidden = true;
   $('tracked-list-view').hidden = false;
   loadList();
+  refreshDrafts();
 }
 window.addEventListener('hashchange', route);
 route();
@@ -111,6 +113,7 @@ function renderDetail() {
   <section class="pcards">${PLATFORMS.map(platformCard).join('')}</section>
   <section class="panel"><div class="panel-head"><h2>價格走勢 <small>市場為同規格商品；虛線為中位數，粗線為我的售價</small></h2></div><div id="chart-box"></div></section>
   <section class="panel"><div class="panel-head"><h2>候選商品</h2><div class="segmented" role="group" aria-label="候選分類">${TABS.map(([k, label]) => `<button type="button" data-tab="${k}" class="${candTab === k ? 'selected' : ''}">${label} ${groupOf(k).length}</button>`).join('')}</div></div>
+    ${candidateTasks(p.id, candidates.some(c => ['momo', 'coupang'].includes(c.source) && ['pending','other'].includes(c.group)))}
     ${shown.length ? candidateTable(shown, p.id) : '<p class="muted">這個分類目前沒有商品。</p>'}</section>
   <section class="panel"><div class="panel-head"><h2>手動比價 <small>平台為蝦皮、momo、酷澎者，30 天內計入該平台比較</small></h2><button class="btn" id="manual-add" type="button">新增手動比價</button></div>
     ${manual.length ? `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>平台</th><th>賣家</th><th class="num">價格</th><th>查價日期</th><th>狀態</th><th>備註</th><th>操作</th></tr></thead><tbody>${manual.map(m => `<tr class="${m.counted || !['shopee', 'momo', 'coupang'].includes(m.platform) ? '' : 'muted-row'}">
@@ -120,6 +123,7 @@ function renderDetail() {
   <section class="panel"><div class="panel-head"><h2>售價調整紀錄</h2></div>
     ${priceChanges.length ? `<div class="table-wrap"><table class="data-table wide"><thead><tr><th>時間</th><th>平台</th><th>操作者</th><th class="num">改前</th><th class="num">改後</th><th>備註</th></tr></thead><tbody>${priceChanges.map(c => `<tr><td>${when(c.at)}</td><td>${tag(c.platform)}</td><td>${esc(c.actorName)}</td><td class="num">${money0(c.oldPrice)}</td><td class="num">${c.newPrice === null ? '停止比價' : money(c.newPrice)}</td><td>${esc(c.note) || '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">尚無售價紀錄。</p>'}</section>`;
   createChart($('chart-box'), detail.chart, detail.today, chartState);
+  refreshCandidateTasks($('tracked-detail-view'));
 }
 
 bindJudging($('tracked-detail-view'), async () => { await refreshDetail(); await loadPending(); });
@@ -180,11 +184,13 @@ function openForm(p, prefill = {}) {
   f.feebeeKeyword.value = p?.feebeeKeyword ?? '';
   f.active.checked = p?.active ?? true;
   document.querySelector('#tracked-form .advanced').open = Boolean(p?.momoKeyword || p?.feebeeKeyword);
+  prepareDraft(!p);
   $('tracked-dialog').showModal();
 }
 const openEdit = p => openForm(p);
 export const openTrackedForm = prefill => openForm(null, prefill);   // used by 查價 → 加入追蹤
 $('tr-add').onclick = () => openForm(null);
+const appliedDraft = bindDraft(openForm, parseAttributes, attrLines);
 $('tracked-form').addEventListener('submit', async e => {
   e.preventDefault();
   $('tracked-error').hidden = true;
@@ -194,7 +200,7 @@ $('tracked-form').addEventListener('submit', async e => {
       keyword: f.keyword.value, momoKeyword: f.momoKeyword.value, feebeeKeyword: f.feebeeKeyword.value, active: f.active.checked,
       myPrices: Object.fromEntries(PLATFORMS.map(p => [p, f[`price_${p}`].value])), myUrls: Object.fromEntries(PLATFORMS.map(p => [p, f[`url_${p}`].value]))};
     if (editing) { await api('PUT', `/api/tracked/${editing.id}`, {...body, revision: editing.revision}); await refreshDetail(); }
-    else { await api('POST', '/api/tracked', body); await loadList(); }
+    else { await api('POST', '/api/tracked', {...body, grokDraftId:appliedDraft()}); await loadList(); await refreshDrafts(); }
     $('tracked-dialog').close();
     toast(editing ? '已更新' : '已新增追蹤商品，系統會自動安排查價時間');
   } catch (error) {

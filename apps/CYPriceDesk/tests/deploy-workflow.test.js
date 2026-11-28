@@ -16,5 +16,5 @@ test('deploy workflow resolves identifiers from Cloudflare and never reads them 
 
 test('the only GitHub-held deployment inputs are secrets', () => {
   const refs = [...workflow.matchAll(/\$\{\{\s*(secrets|vars)\.([A-Z0-9_]+)/g)].map(m => `${m[1]}.${m[2]}`).sort();
-  assert.deepEqual([...new Set(refs)], ['secrets.CLOUDFLARE_ACCOUNT_ID', 'secrets.CLOUDFLARE_API_TOKEN', 'secrets.CYPD_FETCHER_SECRET']);
+  assert.deepEqual([...new Set(refs)], ['secrets.CLOUDFLARE_ACCOUNT_ID', 'secrets.CLOUDFLARE_API_TOKEN', 'secrets.CYPD_FETCHER_SECRET', 'secrets.GROK_API_TOKEN', 'secrets.GROK_WEBHOOK_TOKEN', 'secrets.GROK_WEBHOOK_URL']);
 });

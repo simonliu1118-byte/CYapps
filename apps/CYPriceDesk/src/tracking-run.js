@@ -96,8 +96,8 @@ export async function runTracked(env, productRow, trigger, {actor = null, now = 
     DB.prepare('INSERT INTO tracked_runs (id,product_id,started_at,finished_at,momo_status,feebee_status,trigger) VALUES (?,?,?,?,?,?,?)')
       .bind(runId, product.id, started, finished, statuses.momo, statuses.feebee, trigger),
     ...sources.map(source => DB.prepare('DELETE FROM latest_candidates WHERE product_id=? AND source=?').bind(product.id, source)),
-    ...candidates.map(c => DB.prepare('INSERT OR REPLACE INTO latest_candidates (product_id,source,listing_key,title,price,seller,url,grp,parsed_json) VALUES (?,?,?,?,?,?,?,?,?)')
-      .bind(product.id, c.source, c.key, c.title, c.price, c.seller, c.url, c.group, JSON.stringify({...c.parsed, quantity: c.quantity, unit: c.unit, reason: c.reason}))),
+    ...candidates.map(c => DB.prepare('INSERT OR REPLACE INTO latest_candidates (product_id,source,listing_key,title,price,seller,url,grp,parsed_json,run_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .bind(product.id, c.source, c.key, c.title, c.price, c.seller, c.url, c.group, JSON.stringify({...c.parsed, quantity: c.quantity, unit: c.unit, reason: c.reason}),runId)),
     ...priced('same').map(c => DB.prepare('INSERT INTO price_observations (run_id,product_id,source,listing_key,seller,title,price,url,observed_at) VALUES (?,?,?,?,?,?,?,?,?)')
       .bind(runId, product.id, c.source, c.key, c.seller, c.title, c.price, c.url, observedAt)),
     ...summaries.map(s => DB.prepare('INSERT INTO group_summaries (run_id,product_id,group_key,label,count,min_price,median_price,max_price) VALUES (?,?,?,?,?,?,?,?)')

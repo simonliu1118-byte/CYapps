@@ -1,11 +1,12 @@
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {createD1} from './fake-d1.js';
 import {createFakeIdentity, APPLICATION_ID, WORKSPACE_ID} from './fake-identity.js';
 
 export const FETCHER_SECRET = 'test-secret';
 
-const PUBLIC_DIR = new URL('../../public/', import.meta.url).pathname;
+const PUBLIC_DIR = fileURLToPath(new URL('../../public/', import.meta.url));
 const TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png'};
 
 const ASSETS = {

@@ -2,6 +2,13 @@
 
 > 本文件只記錄歷史，不是規則來源。版本來源為 `VERSION` 與 `BUILD`。
 
+## V1.6.0（Build 0）— 2026-11-28
+
+- Grok 依商品條件補完新增追蹤欄位，附欄位依據和關鍵字試搜結果。草稿可再開啟、回答提問或捨棄。
+- momo 與飛比酷澎候選可派工判讀規格及選項價格。人工可同意、修正採用或要求再查。同規格價格在複審後更新當輪觀測。
+- 商品詳情及待確認頁可刪除當輪候選，並同步更新待確認筆數。
+- 新增 D1 migration `0005_grok.sql`、Grok webhook 及機器接口。部署設定見 README，操作約定見 [Grok routine 說明](docs/GROK_ROUTINE.md)。
+
 ## V1.5.0（Build 0）— 2026-11-23
 
 升 Minor：改為經 CY Web 登入（使用者 2026-11-23：不保留備用，直接切換並拿掉舊的）。依據 `apps/CYCloudIdentity/docs/SSO_PORTAL_DESIGN.md` §6、`CONSUMER_INTEGRATION_STANDARD.md` §21.3。

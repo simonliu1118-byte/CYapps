@@ -7,6 +7,8 @@ import {handleClassificationsApi} from './classifications.js';
 import {handleTrackingApi} from './tracking.js';
 import {runScheduled} from './tracking-run.js';
 
+import {handleGrokApi} from './grok-api.js';
+import {handleGrokTasks} from './grok-tasks.js';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export default {
@@ -35,6 +37,7 @@ export default {
 
     if (!pathname.startsWith('/api/')) return noCache(await env.ASSETS.fetch(request));
 
+    if (pathname.startsWith('/api/grok/tasks/')) return handleGrokApi(request,env,url);
     if (pathname === '/api/auth/logout' && method === 'POST') return handleLogout(request, env);
 
     const resolved = await resolveIdentitySession(request, env);
@@ -44,7 +47,8 @@ export default {
     if (pathname === '/api/me' && method === 'GET') {
       return json({employeeNo: principal.employeeNo, displayName: principal.displayName, workspaceRole: principal.workspaceRole});
     }
-    const response = await handleAuditApi(request, env, url)
+    const response = await handleGrokTasks(request,env,url,principal)
+      || await handleAuditApi(request, env, url)
       || await handleSearchApi(request, env, url)
       || await handleClassificationsApi(request, env, url, principal)
       || await handleTrackingApi(request, env, url, principal)
