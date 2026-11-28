@@ -28,7 +28,7 @@
 
 ## 5. 公開安全與部署
 
-- 合併與發布分離：PR 只驗證，合併 `main` 不部署；只有從 `main` 手動啟動的部署 workflow 才發布，且部署前核對 commit 為遠端 `main`。
+- 合併與發布分離。經使用者授權後，可從 `main` 手動啟動部署 workflow，或將 `deploy/cypricedesk-production` 非強制快轉至最新 `main` 的完整 SHA。兩個入口共用同一部署工作，在遠端遷移及發布前核對事件 SHA 和 checkout 皆為最新遠端 `main`。發布分支只用於指向已核對的 `main`。PR 與一般分支 push 只作驗證。
 - D1 database ID／name、Identity service 名稱、Workspace／Application ID、自訂網域等 deployment-specific 值只由 GitHub Deployment Environment 注入；source 只放 placeholder。
 - Cloudflare API token 只存在 GitHub Environment secret，不得寫入 source、log 或 artifact。
 - Grok 機器憑證與 Grok routine webhook 金鑰只存在 Worker secret（由 GitHub Environment secret 於部署時寫入），不得寫入 source、log、audit 或 Grok 回填資料；輪替以更換 secret 並重新部署為之。
