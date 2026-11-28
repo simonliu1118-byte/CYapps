@@ -6,18 +6,21 @@ export function eventFor(taskId, event, extra = {}) {
 }
 export async function dispatch(env, event, actor) {
   if (!configured(env)) throw new ApiError(503,'Grok 尚未設定');
-  let ok = false;
+  // An uncertain delivery is retried with its original event ID; the reason is shown so a wrong URL or key can be told apart.
+  let ok = false, reason = '';
   try {
-    const response = await fetch(env.GROK_WEBHOOK_URL, {method:'POST', redirect:'error',
+    const response = await fetch(env.GROK_WEBHOOK_URL, {method:'POST', redirect:'manual',
       headers:{authorization:'Bearer ' + env.GROK_WEBHOOK_TOKEN,'content-type':'application/json'},
       body:JSON.stringify(event)});
     ok = response.ok;
-  } catch { /* An uncertain delivery is retried with its original event ID. */ }
+    reason = 'HTTP ' + response.status;
+    await response.body?.cancel().catch(() => {});
+  } catch (error) { reason = '連線失敗：' + (error?.name || 'Error'); }
   const status = ok ? 'sent' : 'send_failed';
   const now = new Date().toISOString(), db = env.DB;
   await db.batch([
     db.prepare("UPDATE grok_tasks SET status=?,error=?,updated_at=? WHERE id=? AND event_id=? AND status IN ('queued','send_failed')")
-      .bind(status,ok ? '' : '派工未確認，請重送',now,event.taskId,event.eventId),
+      .bind(status,ok ? '' : `派工未確認（${reason}），請重送`,now,event.taskId,event.eventId),
     auditStmt(db,actor,now,'grok.dispatch',event.taskId,null,{status},true)
   ]);
   return {id:event.taskId,status};
