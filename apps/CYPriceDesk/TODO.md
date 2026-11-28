@@ -28,7 +28,7 @@
 ### V1.6.0 Grok Bot 建檔補完與候選規格判讀（見 [`docs/GROK_BOT_DESIGN.md`](docs/GROK_BOT_DESIGN.md)）
 
 - [x] 使用者在 Grok 手動試 1530-1：可開 momo 與酷澎商品頁、選規格、讀到價格（2026-11-27）。
-- [ ] 部署後確認實際 Grok routine 可接收 webhook，並帶憑證呼叫價格觀測室 API。
+- [ ] 部署後確認實際 Grok routine 可接收 webhook，並帶憑證呼叫價格觀測室 API（2026-11-28 V1.6.0 已部署；首次派工失敗、Grok 未收到請求，Build 1 加上失敗原因顯示）。
 - [x] `governance/*` PR：`PROJECT_RULES.md` 寫明 Grok 機器憑證只能寫任務與待確認資料表、稽核方式、憑證保管與輪替（CYapps #650）。
 - [x] V1.6.0 試點實作，2026-11-28 審查通過。工作單 [`WO-1.6.0.md`](docs/work-orders/WO-1.6.0.md)（試點：momo、酷澎；Grok 不自行搜尋）。
 - [ ] 操作紀錄的 Grok 動作帶商品名稱；Grok 模組程式風格整理（WO-1.6.0 審查建議）。

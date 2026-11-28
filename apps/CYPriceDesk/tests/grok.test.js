@@ -61,6 +61,7 @@ test('judge 派工、重送、領取、回填、稽核及過期檢查', async t 
   f.fail();
   const two = await f.judge();
   assert.equal(two.status,'send_failed');
+  assert.equal((await (await f.human('GET',humanTask(two.id))).json()).error,'派工未確認（HTTP 502），請重送');
   f.recover();
   assert.equal((await (await f.human('POST',humanTask(two.id)+'/resend')).json()).status,'sent');
   assert.deepEqual(f.deliveries[1],f.deliveries[2]);
